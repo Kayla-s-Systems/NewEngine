@@ -3,7 +3,6 @@ use std::sync::{
     Arc,
 };
 
-/// Глобальный сигнал "попросили выйти".
 #[derive(Clone)]
 pub struct ExitSignal {
     flag: Arc<AtomicBool>,
@@ -26,9 +25,7 @@ impl ExitSignal {
 
     pub fn install_ctrlc_handler(&self) -> anyhow::Result<()> {
         let s = self.clone();
-        ctrlc::set_handler(move || {
-            s.request_exit();
-        })?;
+        ctrlc::set_handler(move || s.request_exit())?;
         Ok(())
     }
 }

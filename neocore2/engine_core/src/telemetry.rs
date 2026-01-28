@@ -2,8 +2,6 @@ use std::time::{Duration, Instant};
 
 use crate::log::Logger;
 
-/// Минимальная телеметрия/профайлер.
-/// Это "скелет": позже можно расширить до Tracy/Chrome trace и т.п.
 pub struct Telemetry {
     log: Logger,
 
@@ -12,15 +10,10 @@ pub struct Telemetry {
     pub fixed_alpha: f32,
     pub fixed_tick: u64,
 
-    // fps accumulation
     fps_last: Instant,
     fps_frames: u32,
     fps_period_sec: f32,
     fps_enabled: bool,
-
-    // last recorded scopes (cheap, for debug/inspection later)
-    last_scope_name: &'static str,
-    last_scope_ms: f32,
 }
 
 impl Telemetry {
@@ -35,8 +28,6 @@ impl Telemetry {
             fps_frames: 0,
             fps_period_sec: 1.0,
             fps_enabled: true,
-            last_scope_name: "none",
-            last_scope_ms: 0.0,
         }
     }
 
@@ -71,21 +62,9 @@ impl Telemetry {
         }
     }
 
-    /// Записать измерение секции (фазы/системы).
-    /// Сейчас хранит только последнее значение (дёшево).
-    /// Дальше сюда легко добавить агрегацию/скользящие средние/трейс.
     #[inline]
-    pub fn record_scope(&mut self, name: &'static str, dur: Duration) {
-        self.last_scope_name = name;
-        self.last_scope_ms = dur.as_secs_f32() * 1000.0;
-
-        // Чтобы не шуметь — не логируем каждую фазу.
-        // Если захочешь: включим порог (например > 2ms) и будем warn/debug.
-        // if self.last_scope_ms > 2.0 { self.log.debug(format!("scope {name} {:.3}ms", self.last_scope_ms)); }
-    }
-
-    #[allow(dead_code)]
-    pub fn last_scope(&self) -> (&'static str, f32) {
-        (self.last_scope_name, self.last_scope_ms)
+    pub fn record_scope(&mut self, _name: &'static str, _dur: Duration) {
+        // Сейчас молча сохраняем/можем расширить.
+        // Для демонстрации завтра важнее стабильность и архитектура.
     }
 }

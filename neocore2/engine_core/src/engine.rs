@@ -1,6 +1,6 @@
-use std::time::Instant;
+use std::{collections::HashMap, fs, path::Path, time::Instant};
 
-use anyhow::Result;
+use anyhow::{anyhow, Result};
 use winit::{
     application::ApplicationHandler,
     dpi::LogicalSize,
@@ -11,8 +11,10 @@ use winit::{
 };
 
 use crate::{
+    config::{EngineConfig, ModuleConfig},
     frame::{FrameConstitution, FrameContext},
     log::Logger,
+    module::Module,
     phase::FramePhase,
     schedule::FrameSchedule,
     signals::ExitSignal,
@@ -20,29 +22,17 @@ use crate::{
     time::Time,
 };
 
-pub struct EngineConfig {
-    pub title: String,
-    pub width: u32,
-    pub height: u32,
+// ✅ Лучший фасад: внешний код импортирует EngineConfig через engine модуль.
+// app может писать: use engine_core::engine::{Engine, EngineConfig};
+pub use crate::config::EngineConfig as EngineConfigPublic;
 
-    pub frame: FrameConstitution,
-}
-
-impl Default for EngineConfig {
-    fn default() -> Self {
-        Self {
-            title: "NEOCORE2".to_string(),
-            width: 1280,
-            height: 720,
-            frame: FrameConstitution::default(),
-        }
-    }
-}
+pub type ModuleFactory = fn(&toml::Value) -> Result<Box<dyn Module>>;
 
 pub struct Engine {
     cfg: EngineConfig,
     log: Logger,
     schedule: FrameSchedule,
+    factories: HashMap<String, ModuleFactory>,
 }
 
 impl Engine {
@@ -51,21 +41,71 @@ impl Engine {
             cfg,
             log: Logger::new("Engine"),
             schedule: FrameSchedule::new(),
+            factories: HashMap::new(),
         }
     }
 
-    pub fn add_module<M: crate::module::Module + 'static>(&mut self, m: M) {
-        self.schedule.add_module(m);
+    /// ✅ Публичный доступ к конфигу (только чтение) — полезно для app/инструментов.
+    pub fn config(&self) -> &EngineConfig {
+        &self.cfg
     }
 
-    pub fn run(self) -> Result<()> {
+    /// ✅ Dev/Tests/Bootstrap: добавить модуль напрямую (без TOML).
+    /// Это не ломает "интерпретируемость": конфиг остаётся главным,
+    /// но мы оставляем быстрый путь для прототипов и внутренних модулей.
+    pub fn add_module<M: Module + 'static>(&mut self, m: M) {
+        self.schedule.add_boxed(Box::new(m));
+    }
+
+    /// Регистрация модулей платформы (движка).
+    /// Ядро не зависит от модулей: модули подключаются по id через конфиг.
+    pub fn register_module_factory(&mut self, id: &str, f: ModuleFactory) {
+        self.factories.insert(id.to_string(), f);
+    }
+
+    /// Сборка пайплайна из конфигурации (интерпретируемо).
+    /// ВАЖНО: если кто-то уже добавил модули вручную — они останутся первыми.
+    pub fn build_schedule_from_config(&mut self) -> Result<()> {
+        for m in self.cfg.modules.iter() {
+            if !m.enabled {
+                self.log.info(format!("module '{}' disabled by config", m.id));
+                continue;
+            }
+            let boxed = self.instantiate_module(m)?;
+            self.log.info(format!("module '{}' loaded", m.id));
+            self.schedule.add_boxed(boxed);
+        }
+        Ok(())
+    }
+
+    fn instantiate_module(&self, m: &ModuleConfig) -> Result<Box<dyn Module>> {
+        let Some(f) = self.factories.get(&m.id) else {
+            return Err(anyhow!("module factory not registered for id='{}'", m.id));
+        };
+        f(&m.settings)
+    }
+
+    pub fn run(mut self) -> Result<()> {
+        // ✅ Конфиг-модули достраиваются при старте.
+        // Ручные модули (add_module) уже лежат в schedule.
+        self.build_schedule_from_config()?;
+
         let event_loop = EventLoop::new()?;
         let mut app = EngineApp::new(self);
         event_loop.run_app(&mut app)?;
         Ok(())
     }
+
+    pub fn load_config_toml(path: impl AsRef<Path>) -> Result<EngineConfig> {
+        let text = fs::read_to_string(path)?;
+        let cfg: EngineConfig = toml::from_str(&text)?;
+        Ok(cfg)
+    }
 }
 
+/// EngineApp — runtime-обвязка вокруг winit.
+/// Важно: хранит snapshot нужных runtime-параметров,
+/// чтобы не лезть в приватности Engine и не держать лишние borrow’ы.
 struct EngineApp {
     engine: Engine,
 
@@ -84,21 +124,46 @@ struct EngineApp {
     accumulator: f32,
 
     exit_signal: ExitSignal,
-
-    // debug counters for logs like "fixed tick 60"
     last_fixed_tick_logged: u64,
+
+    // runtime snapshot
+    control_flow_poll: bool,
+    window_title: String,
+    window_w: u32,
+    window_h: u32,
 }
 
 impl EngineApp {
     fn new(engine: Engine) -> Self {
-        let constitution = engine.cfg.frame.clone();
-        let fixed_dt = constitution.fixed_dt_sec;
+        // ✅ Снимаем snapshot того, что нужно рантайму
+        let title = engine.cfg.window.title.clone();
+        let w = engine.cfg.window.width;
+        let h = engine.cfg.window.height;
+
+        let fixed_hz = engine.cfg.frame.fixed_hz.max(1);
+        let fixed_dt = 1.0 / (fixed_hz as f32);
+
+        let constitution = FrameConstitution {
+            fixed_dt_sec: fixed_dt,
+            max_fixed_steps_per_frame: engine.cfg.frame.max_fixed_steps_per_frame.max(1),
+            max_dt_sec: (engine.cfg.frame.max_dt_ms as f32 / 1000.0).max(0.001),
+            log_fps: engine.cfg.frame.log_fps,
+            fps_log_period_sec: (engine.cfg.frame.fps_log_period_ms as f32 / 1000.0).max(0.25),
+        };
 
         let exit_signal = ExitSignal::new();
         let _ = exit_signal.install_ctrlc_handler();
 
         let mut telemetry = Telemetry::new();
         telemetry.configure_fps_logging(constitution.log_fps, constitution.fps_log_period_sec);
+
+        let control_flow_poll = engine
+            .cfg
+            .runtime
+            .control_flow
+            .to_ascii_lowercase()
+            .trim()
+            == "poll";
 
         Self {
             engine,
@@ -118,8 +183,12 @@ impl EngineApp {
             accumulator: 0.0,
 
             exit_signal,
-
             last_fixed_tick_logged: 0,
+
+            control_flow_poll,
+            window_title: title,
+            window_w: w,
+            window_h: h,
         }
     }
 
@@ -131,9 +200,9 @@ impl EngineApp {
 
         self.engine.log.info("boot");
 
-        // ctx живёт только на период вызова register/start
         let mut ctx = FrameContext {
             window,
+            log: &self.engine.log,
             time: &mut self.time,
             telemetry: &mut self.telemetry,
             exit_requested: &mut self.exit_requested,
@@ -158,6 +227,7 @@ impl EngineApp {
         if let Some(window) = self.window.as_ref() {
             let mut ctx = FrameContext {
                 window,
+                log: &self.engine.log,
                 time: &mut self.time,
                 telemetry: &mut self.telemetry,
                 exit_requested: &mut self.exit_requested,
@@ -177,8 +247,8 @@ impl ApplicationHandler for EngineApp {
         }
 
         let attrs = WindowAttributes::default()
-            .with_title(self.engine.cfg.title.clone())
-            .with_inner_size(LogicalSize::new(self.engine.cfg.width, self.engine.cfg.height));
+            .with_title(self.window_title.clone())
+            .with_inner_size(LogicalSize::new(self.window_w, self.window_h));
 
         let window = match el.create_window(attrs) {
             Ok(w) => w,
@@ -216,17 +286,19 @@ impl ApplicationHandler for EngineApp {
     }
 
     fn about_to_wait(&mut self, el: &ActiveEventLoop) {
-        el.set_control_flow(ControlFlow::Poll);
+        el.set_control_flow(if self.control_flow_poll {
+            ControlFlow::Poll
+        } else {
+            ControlFlow::Wait
+        });
 
         if !self.started {
             return;
         }
 
-        // Ctrl+C → мягкий выход через нашу конституцию shutdown.
         if self.exit_signal.is_exit_requested() {
             self.exit_requested = true;
         }
-
         if self.exit_requested {
             self.shutdown_once(el);
             return;
@@ -236,10 +308,8 @@ impl ApplicationHandler for EngineApp {
         let raw_dt = now.duration_since(self.last);
         self.last = now;
 
-        // clamp dt
         let dt_sec = raw_dt.as_secs_f32().min(self.constitution.max_dt_sec);
 
-        // Эти поля можно обновлять до ctx (пока time не заняли borrow'ом)
         self.time.dt_sec = dt_sec;
         self.time.t_sec += raw_dt.as_secs_f64();
         self.time.frame_index += 1;
@@ -248,9 +318,9 @@ impl ApplicationHandler for EngineApp {
 
         let Some(window) = self.window.as_ref() else { return; };
 
-        // Теперь создаём ctx и дальше трогаем time/telemetry/exit только через ctx
         let mut ctx = FrameContext {
             window,
+            log: &self.engine.log,
             time: &mut self.time,
             telemetry: &mut self.telemetry,
             exit_requested: &mut self.exit_requested,
@@ -263,8 +333,8 @@ impl ApplicationHandler for EngineApp {
         let mut steps: u32 = 0;
         while self.accumulator >= self.constitution.fixed_dt_sec {
             if steps >= self.constitution.max_fixed_steps_per_frame {
-                // не пытаемся “догонять” бесконечно
                 self.accumulator = 0.0;
+                ctx.log.warn("fixed cap reached (spiral prevented)");
                 break;
             }
 
@@ -274,11 +344,10 @@ impl ApplicationHandler for EngineApp {
             self.accumulator -= self.constitution.fixed_dt_sec;
             steps += 1;
 
-            // debug tick log каждые 60
             let tick = ctx.time.fixed_tick_index;
             if tick / 60 != self.last_fixed_tick_logged / 60 && (tick % 60 == 0) {
                 self.last_fixed_tick_logged = tick;
-                self.engine.log.debug(format!("fixed tick {}", tick));
+                ctx.log.debug(format!("fixed tick {}", tick));
             }
         }
 
@@ -287,18 +356,19 @@ impl ApplicationHandler for EngineApp {
 
         self.engine.schedule.run_phase(FramePhase::Update, &mut ctx);
         self.engine.schedule.run_phase(FramePhase::LateUpdate, &mut ctx);
+
+        // AAA boundary: two-world pipeline (Extract/Prepare/Render)
+        self.engine.schedule.run_phase(FramePhase::Extract, &mut ctx);
+        self.engine.schedule.run_phase(FramePhase::Prepare, &mut ctx);
         self.engine.schedule.run_phase(FramePhase::Render, &mut ctx);
+
         self.engine.schedule.run_phase(FramePhase::Present, &mut ctx);
         self.engine.schedule.run_phase(FramePhase::EndFrame, &mut ctx);
 
-        // Telemetry tick (fps log и т.п.) — тоже через ctx.telemetry
         ctx.telemetry
             .frame_tick(raw_dt, ctx.time.fixed_alpha, ctx.time.fixed_tick_index);
 
-        // Сохраняем флаг выхода, пока ctx ещё жив (он владеет &mut exit_requested)
         let exit_now = *ctx.exit_requested;
-
-        // Освобождаем borrows time/telemetry/exit_requested
         drop(ctx);
 
         if exit_now {

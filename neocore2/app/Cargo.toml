@@ -4,5 +4,7 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-engine_core = { path = "../engine_core" }
 anyhow = "1"
+engine_core = { path = "../engine_core" }
+serde = { version = "1", features = ["derive"] }
+toml = "0.8"

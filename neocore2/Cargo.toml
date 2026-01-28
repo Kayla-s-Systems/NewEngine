@@ -1,3 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["engine_core", "app"]
+members = [
+    "engine_core",
+    "app"
+]

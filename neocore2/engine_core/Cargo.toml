@@ -4,6 +4,8 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-winit = "0.30"
 anyhow = "1"
-ctrlc = "3.5.1"
+winit = "0.30"
+ctrlc = "3"
+serde = { version = "1", features = ["derive"] }
+toml = "0.8"

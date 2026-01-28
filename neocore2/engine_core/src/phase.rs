@@ -2,11 +2,16 @@
 pub enum FramePhase {
     BeginFrame,
     Input,
+
     FixedUpdate,
     Update,
     LateUpdate,
+
+    Extract,
+    Prepare,
     Render,
     Present,
+
     EndFrame,
 }
 
@@ -18,6 +23,8 @@ impl FramePhase {
             FramePhase::FixedUpdate => "FixedUpdate",
             FramePhase::Update => "Update",
             FramePhase::LateUpdate => "LateUpdate",
+            FramePhase::Extract => "Extract",
+            FramePhase::Prepare => "Prepare",
             FramePhase::Render => "Render",
             FramePhase::Present => "Present",
             FramePhase::EndFrame => "EndFrame",

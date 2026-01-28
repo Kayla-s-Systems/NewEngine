@@ -1,0 +1,32 @@
+[window]
+title = "NEOCORE2 — AAA Foundation"
+width = 1280
+height = 720
+
+[frame]
+fixed_hz = 60
+max_fixed_steps_per_frame = 8
+max_dt_ms = 250
+log_fps = true
+fps_log_period_ms = 1000
+
+[runtime]
+control_flow = "poll" # "poll" или "wait"
+
+# МОДУЛИ: подключение = чисто конфиг.
+# Никакого хардкода. Хотите выключить — enabled=false.
+[[modules]]
+id = "debug"
+enabled = true
+[modules.settings]
+log_first_frame = true
+fixed_tick_log_mod = 60
+
+[[modules]]
+id = "render_pipeline"
+enabled = true
+[modules.settings]
+objects = 2500
+simulate_work_ms_extract = 0
+simulate_work_ms_prepare = 0
+simulate_work_ms_render = 0
