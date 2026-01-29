@@ -1,4 +1,3 @@
-use env_logger::fmt::Color;
 use env_logger::Builder;
 use log::LevelFilter;
 use newengine_core::{EngineError, EngineResult, Module, ModuleCtx};
@@ -18,10 +17,12 @@ impl ConsoleLoggerConfig {
             .ok()
             .and_then(|v| v.parse::<LevelFilter>().ok())
             .unwrap_or(LevelFilter::Info);
+
         let colors = std::env::var("NEWENGINE_LOG_COLORS")
             .ok()
             .map(|v| v != "0")
             .unwrap_or(true);
+
         let include_module = std::env::var("NEWENGINE_LOG_MODULE")
             .ok()
             .map(|v| v != "0")
@@ -70,31 +71,40 @@ impl<E: Send + 'static> Module<E> for ConsoleLoggerModule {
         builder.filter_level(self.config.level);
 
         let config = self.config.clone();
+
         builder.format(move |buf, record| {
-            let mut level_style = buf.style();
-            if config.colors {
+            let level_str = record.level().as_str();
+            let reset = if config.colors { "\x1b[0m" } else { "" };
+
+            let level_prefix = if config.colors {
                 match record.level() {
-                    log::Level::Error => level_style.set_color(Color::Red).set_bold(true),
-                    log::Level::Warn => level_style.set_color(Color::Yellow).set_bold(true),
-                    log::Level::Info => level_style.set_color(Color::Green),
-                    log::Level::Debug => level_style.set_color(Color::Blue),
-                    log::Level::Trace => level_style.set_color(Color::Magenta),
-                };
-            }
+                    log::Level::Error => "\x1b[1;31m", // bold red
+                    log::Level::Warn => "\x1b[1;33m",  // bold yellow
+                    log::Level::Info => "\x1b[0;32m",  // green
+                    log::Level::Debug => "\x1b[0;34m", // blue
+                    log::Level::Trace => "\x1b[0;35m", // magenta
+                }
+            } else {
+                ""
+            };
 
             if config.include_module {
                 writeln!(
                     buf,
-                    "[{:<5}] {:<25} {}",
-                    level_style.value(record.level()),
+                    "[{}{: <5}{}] {: <25} {}",
+                    level_prefix,
+                    level_str,
+                    reset,
                     record.target(),
                     record.args()
                 )
             } else {
                 writeln!(
                     buf,
-                    "[{:<5}] {}",
-                    level_style.value(record.level()),
+                    "[{}{: <5}{}] {}",
+                    level_prefix,
+                    level_str,
+                    reset,
                     record.args()
                 )
             }

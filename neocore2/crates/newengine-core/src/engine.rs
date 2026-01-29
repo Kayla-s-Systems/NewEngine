@@ -4,7 +4,7 @@ use crate::module::{Bus, Module, ModuleCtx, Resources, Services};
 use crate::sched::Scheduler;
 use crate::sync::ShutdownToken;
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet, VecDeque};
 use std::time::{Duration, Instant};
 
 pub struct Engine<E: Send + 'static> {
@@ -63,15 +63,6 @@ impl<E: Send + 'static> Engine<E> {
     }
 
     #[inline]
-    pub fn new_default_shutdown(
-        fixed_dt_ms: u32,
-        services: Box<dyn Services>,
-        bus: Bus<E>,
-    ) -> EngineResult<Self> {
-        Self::new(fixed_dt_ms, services, bus, ShutdownToken::new())
-    }
-
-    #[inline]
     pub fn resources_mut(&mut self) -> &mut Resources {
         &mut self.resources
     }
@@ -81,37 +72,14 @@ impl<E: Send + 'static> Engine<E> {
         &self.bus
     }
 
-    pub fn register_module(&mut self, mut module: Box<dyn Module<E>>) -> EngineResult<()> {
+    pub fn register_module(&mut self, module: Box<dyn Module<E>>) -> EngineResult<()> {
         self.sync_shutdown_state();
 
         let id = module.id();
         if self.module_ids.contains(id) {
-            return Err(EngineError::Other(format!(
-                "module already registered: {id}"
-            )));
+            return Err(EngineError::Other(format!("module already registered: {id}")));
         }
 
-        for dep in module.dependencies() {
-            if !self.module_ids.contains(dep) {
-                return Err(EngineError::Other(format!(
-                    "module dependency missing: {id} -> {dep}"
-                )));
-            }
-        }
-
-        let mut ctx = ModuleCtx::new(
-            self.services.as_ref(),
-            &mut self.resources,
-            &self.bus,
-            &mut self.scheduler,
-            &mut self.exit_requested,
-        );
-
-        module
-            .init(&mut ctx)
-            .map_err(|e| EngineError::with_stage(ModuleStage::Init, e))?;
-
-        self.propagate_shutdown_request();
         self.modules.push(module);
         self.module_ids.insert(id);
         Ok(())
@@ -122,29 +90,109 @@ impl<E: Send + 'static> Engine<E> {
         self.last = Instant::now();
         self.sync_shutdown_state();
 
-        let mut modules = std::mem::take(&mut self.modules);
-
-        for m in &mut modules {
-            let mut ctx = ModuleCtx::new(
-                self.services.as_ref(),
-                &mut self.resources,
-                &self.bus,
-                &mut self.scheduler,
-                &mut self.exit_requested,
-            );
-
-            m.start(&mut ctx)
-                .map_err(|e| EngineError::with_stage(ModuleStage::Start, e))?;
-
-            self.propagate_shutdown_request();
-
-            if self.is_exit_requested() {
-                self.modules = modules;
-                return Err(EngineError::ExitRequested);
+        // 1) Build id -> index map
+        let n = self.modules.len();
+        let mut id_to_index: HashMap<&'static str, usize> = HashMap::with_capacity(n);
+        for (i, m) in self.modules.iter().enumerate() {
+            let id = m.id();
+            if id_to_index.insert(id, i).is_some() {
+                return Err(EngineError::Other(format!("duplicate module id: {id}")));
             }
         }
 
-        self.modules = modules;
+        // 2) Validate dependencies exist + build graph
+        // Edge: dep -> module (so indegree[module]++)
+        let mut indegree = vec![0usize; n];
+        let mut rev_edges: Vec<Vec<usize>> = vec![Vec::new(); n];
+
+        for (i, m) in self.modules.iter().enumerate() {
+            for &dep in m.dependencies() {
+                let Some(&dep_i) = id_to_index.get(dep) else {
+                    return Err(EngineError::Other(format!(
+                        "module dependency missing: {} -> {dep}",
+                        m.id()
+                    )));
+                };
+                indegree[i] += 1;
+                rev_edges[dep_i].push(i);
+            }
+        }
+
+        // 3) Kahn topological sort (stable by registration order)
+        let mut q: VecDeque<usize> = VecDeque::new();
+        for i in 0..n {
+            if indegree[i] == 0 {
+                q.push_back(i);
+            }
+        }
+
+        let mut order: Vec<usize> = Vec::with_capacity(n);
+        while let Some(i) = q.pop_front() {
+            order.push(i);
+            for &to in rev_edges[i].iter() {
+                indegree[to] = indegree[to].saturating_sub(1);
+                if indegree[to] == 0 {
+                    q.push_back(to);
+                }
+            }
+        }
+
+        if order.len() != n {
+            // cycle detection diagnostics (best-effort)
+            let mut cyclic = Vec::new();
+            for (i, deg) in indegree.iter().enumerate() {
+                if *deg != 0 {
+                    cyclic.push(self.modules[i].id());
+                }
+            }
+            return Err(EngineError::Other(format!(
+                "module dependency cycle detected among: {:?}",
+                cyclic
+            )));
+        }
+
+        // 4) Reorder modules into sorted order
+        let mut sorted: Vec<Box<dyn Module<E>>> = Vec::with_capacity(n);
+        let mut old = std::mem::take(&mut self.modules);
+        // move out by index: easiest is take ownership via Option
+        let mut slots: Vec<Option<Box<dyn Module<E>>>> = old.drain(..).map(Some).collect();
+
+        for idx in order {
+            let m = slots[idx].take().expect("module slot already moved");
+            sorted.push(m);
+        }
+
+        // 5) Run init() then start() in dependency order
+        for stage in [ModuleStage::Init, ModuleStage::Start] {
+            for m in sorted.iter_mut() {
+                self.sync_shutdown_state();
+
+                let mut ctx = ModuleCtx::new(
+                    self.services.as_ref(),
+                    &mut self.resources,
+                    &self.bus,
+                    &mut self.scheduler,
+                    &mut self.exit_requested,
+                );
+
+                let r = match stage {
+                    ModuleStage::Init => m.init(&mut ctx),
+                    ModuleStage::Start => m.start(&mut ctx),
+                    _ => Ok(()),
+                };
+
+                r.map_err(|e| EngineError::with_stage(stage, e))?;
+
+                self.propagate_shutdown_request();
+                if self.is_exit_requested() {
+                    self.modules = sorted;
+                    self.module_ids = self.modules.iter().map(|mm| mm.id()).collect();
+                    return Err(EngineError::ExitRequested);
+                }
+            }
+        }
+
+        self.modules = sorted;
         self.module_ids = self.modules.iter().map(|m| m.id()).collect();
         Ok(())
     }
@@ -243,21 +291,13 @@ impl<E: Send + 'static> Engine<E> {
                 fixed_steps,
             };
 
-            run_stage(
-                self,
-                modules.as_mut_slice(),
-                &frame,
-                ModuleStage::Update,
-                |m, ctx| m.update(ctx),
-            )?;
+            run_stage(self, modules.as_mut_slice(), &frame, ModuleStage::Update, |m, ctx| {
+                m.update(ctx)
+            })?;
 
-            run_stage(
-                self,
-                modules.as_mut_slice(),
-                &frame,
-                ModuleStage::Render,
-                |m, ctx| m.render(ctx),
-            )?;
+            run_stage(self, modules.as_mut_slice(), &frame, ModuleStage::Render, |m, ctx| {
+                m.render(ctx)
+            })?;
 
             self.scheduler.tick(Duration::from_secs_f32(dt));
             self.frame_index = self.frame_index.wrapping_add(1);
