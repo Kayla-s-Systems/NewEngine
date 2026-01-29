@@ -1,3 +1,3 @@
-mod shed;
+mod sched;
 
-pub use shed::Scheduler;
+pub use sched::Scheduler;

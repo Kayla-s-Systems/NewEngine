@@ -1,6 +1,6 @@
+use crate::frame::Frame;
+use crate::module::{Bus, Resources, Services};
 use crate::sched::Scheduler;
-
-use super::{Bus, Resources, Services};
 
 /// Context passed to modules.
 ///
@@ -11,6 +11,9 @@ pub struct ModuleCtx<'a, E: Send + 'static> {
     bus: &'a Bus<E>,
     scheduler: &'a mut Scheduler,
     exit: &'a mut bool,
+
+    /// Frame snapshot for the current stage (stored by value).
+    frame: Option<Frame>,
 }
 
 impl<'a, E: Send + 'static> ModuleCtx<'a, E> {
@@ -22,7 +25,26 @@ impl<'a, E: Send + 'static> ModuleCtx<'a, E> {
         scheduler: &'a mut Scheduler,
         exit: &'a mut bool,
     ) -> Self {
-        Self { services, resources, bus, scheduler, exit }
+        Self {
+            services,
+            resources,
+            bus,
+            scheduler,
+            exit,
+            frame: None,
+        }
+    }
+
+    /// Attaches a frame snapshot to the context.
+    #[inline]
+    pub fn set_frame(&mut self, frame: &Frame) {
+        self.frame = Some(*frame);
+    }
+
+    /// Returns the current frame snapshot, if attached.
+    #[inline]
+    pub fn frame(&self) -> Option<&Frame> {
+        self.frame.as_ref()
     }
 
     #[inline]
@@ -48,5 +70,10 @@ impl<'a, E: Send + 'static> ModuleCtx<'a, E> {
     #[inline]
     pub fn request_exit(&mut self) {
         *self.exit = true;
+    }
+
+    #[inline]
+    pub fn is_exit_requested(&self) -> bool {
+        *self.exit
     }
 }

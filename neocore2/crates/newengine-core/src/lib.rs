@@ -3,6 +3,7 @@ pub mod frame;
 pub mod error;
 pub mod module;
 pub mod sched;
+
 pub mod sync;
 mod bus;
 

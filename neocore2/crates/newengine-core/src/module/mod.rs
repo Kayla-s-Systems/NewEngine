@@ -1,11 +1,11 @@
-mod bus;
-mod ctx;
-mod module;
-mod resources;
-mod services;
+pub mod ctx;
+pub mod module;
+pub mod resources;
+pub mod services;
 
-pub use bus::Bus;
 pub use ctx::ModuleCtx;
 pub use module::Module;
 pub use resources::Resources;
 pub use services::Services;
+
+pub use crate::bus::Bus;

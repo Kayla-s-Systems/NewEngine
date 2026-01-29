@@ -1,18 +1,13 @@
+use super::ctx::ModuleCtx;
 use crate::error::EngineResult;
-use crate::frame::Frame;
 
-use super::ModuleCtx;
+use std::any::Any;
 
-/// Module lifecycle contract.
-///
-/// Modules must be self-contained and communicate only via:
-/// - Resources (typed APIs/handles)
-/// - Bus events
-/// - external events injected by platform adapter
-///
-/// Object-safe: can be used as `Box<dyn Module<E>>`.
+/// A single engine module.
 pub trait Module<E: Send + 'static>: Send {
-    fn id(&self) -> &'static str;
+    fn id(&self) -> &'static str {
+        "module"
+    }
 
     fn init(&mut self, _ctx: &mut ModuleCtx<'_, E>) -> EngineResult<()> {
         Ok(())
@@ -22,23 +17,19 @@ pub trait Module<E: Send + 'static>: Send {
         Ok(())
     }
 
-    fn fixed_update(&mut self, _ctx: &mut ModuleCtx<'_, E>, _frame: &Frame) -> EngineResult<()> {
+    fn fixed_update(&mut self, _ctx: &mut ModuleCtx<'_, E>) -> EngineResult<()> {
         Ok(())
     }
 
-    fn update(&mut self, _ctx: &mut ModuleCtx<'_, E>, _frame: &Frame) -> EngineResult<()> {
+    fn update(&mut self, _ctx: &mut ModuleCtx<'_, E>) -> EngineResult<()> {
         Ok(())
     }
 
-    fn render(&mut self, _ctx: &mut ModuleCtx<'_, E>, _frame: &Frame) -> EngineResult<()> {
+    fn render(&mut self, _ctx: &mut ModuleCtx<'_, E>) -> EngineResult<()> {
         Ok(())
     }
 
-    fn on_external_event(
-        &mut self,
-        _ctx: &mut ModuleCtx<'_, E>,
-        _event: &dyn std::any::Any,
-    ) -> EngineResult<()> {
+    fn on_external_event(&mut self, _ctx: &mut ModuleCtx<'_, E>, _event: &dyn Any) -> EngineResult<()> {
         Ok(())
     }
 

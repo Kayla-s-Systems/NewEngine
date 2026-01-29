@@ -1,4 +1,4 @@
-use crate::error::{EngineError, EngineResult};
+use crate::error::{EngineError, EngineResult, ModuleStage};
 use crate::frame::Frame;
 use crate::module::{Bus, Module, ModuleCtx, Resources, Services};
 use crate::sched::Scheduler;
@@ -59,7 +59,6 @@ impl<E: Send + 'static> Engine<E> {
         })
     }
 
-    /// Convenience constructor that creates a fresh shutdown token.
     #[inline]
     pub fn new_default_shutdown(
         fixed_dt_ms: u32,
@@ -81,6 +80,7 @@ impl<E: Send + 'static> Engine<E> {
 
     pub fn register_module(&mut self, mut module: Box<dyn Module<E>>) -> EngineResult<()> {
         self.sync_shutdown_state();
+
         let mut ctx = ModuleCtx::new(
             self.services.as_ref(),
             &mut self.resources,
@@ -88,7 +88,11 @@ impl<E: Send + 'static> Engine<E> {
             &mut self.scheduler,
             &mut self.exit_requested,
         );
-        module.init(&mut ctx)?;
+
+        module
+            .init(&mut ctx)
+            .map_err(|e| EngineError::with_stage(ModuleStage::Init, e))?;
+
         self.propagate_shutdown_request();
         self.modules.push(module);
         Ok(())
@@ -99,31 +103,20 @@ impl<E: Send + 'static> Engine<E> {
         self.last = Instant::now();
         self.sync_shutdown_state();
 
-        // Take modules out to avoid holding a mutable borrow of self.modules for the whole loop.
         let mut modules = std::mem::take(&mut self.modules);
 
         for m in &mut modules {
-            {
-                let mut ctx = ModuleCtx::new(
-                    self.services.as_ref(),
-                    &mut self.resources,
-                    &self.bus,
-                    &mut self.scheduler,
-                    &mut self.exit_requested,
-                );
+            let mut ctx = ModuleCtx::new(
+                self.services.as_ref(),
+                &mut self.resources,
+                &self.bus,
+                &mut self.scheduler,
+                &mut self.exit_requested,
+            );
 
-                m.start(&mut ctx)?;
-                self.propagate_shutdown_request();
+            m.start(&mut ctx)
+                .map_err(|e| EngineError::with_stage(ModuleStage::Start, e))?;
 
-                if self.is_exit_requested() {
-                    // Put modules back before returning.
-                    self.modules = modules;
-                    return Err(EngineError::ExitRequested);
-                }
-            }
-
-            // If propagate/is_exit_requested require &mut self, ctx must be dropped before them.
-            // (The block above ensures ctx is dropped here.)
             self.propagate_shutdown_request();
 
             if self.is_exit_requested() {
@@ -132,15 +125,10 @@ impl<E: Send + 'static> Engine<E> {
             }
         }
 
-        // Put modules back.
         self.modules = modules;
         Ok(())
     }
 
-
-    /// Advance one frame.
-    ///
-    /// Platform code calls this from its event loop.
     pub fn step(&mut self) -> EngineResult<Frame> {
         self.sync_shutdown_state();
         if self.is_exit_requested() {
@@ -152,7 +140,7 @@ impl<E: Send + 'static> Engine<E> {
         let now = Instant::now();
 
         if !self.started {
-            self.started = true;
+            self.start()?;
             self.last = now;
         }
 
@@ -166,18 +154,18 @@ impl<E: Send + 'static> Engine<E> {
 
         self.acc = (self.acc + dt).min(self.fixed_dt * 8.0);
 
-        // Take modules out: no borrow of self.modules during the whole step.
         let mut modules: Vec<Box<dyn Module<E>>> = std::mem::take(&mut self.modules);
 
         fn run_stage<E, F>(
             engine: &mut Engine<E>,
             modules: &mut [Box<dyn Module<E>>],
             frame: &Frame,
+            stage: ModuleStage,
             mut call: F,
         ) -> EngineResult<()>
         where
             E: Send + 'static,
-            F: FnMut(&mut dyn Module<E>, &mut ModuleCtx<'_, E>, &Frame) -> EngineResult<()>,
+            F: FnMut(&mut dyn Module<E>, &mut ModuleCtx<'_, E>) -> EngineResult<()>,
         {
             for m in modules.iter_mut() {
                 engine.sync_shutdown_state();
@@ -190,7 +178,10 @@ impl<E: Send + 'static> Engine<E> {
                         &mut engine.scheduler,
                         &mut engine.exit_requested,
                     );
-                    call(m.as_mut(), &mut ctx, frame)?;
+                    ctx.set_frame(frame);
+
+                    call(m.as_mut(), &mut ctx)
+                        .map_err(|e| EngineError::with_stage(stage, e))?;
                 }
 
                 engine.propagate_shutdown_request();
@@ -201,7 +192,6 @@ impl<E: Send + 'static> Engine<E> {
             Ok(())
         }
 
-        // "try/finally": run everything, then always put modules back.
         let result: EngineResult<Frame> = (|| {
             let mut fixed_steps = 0u32;
 
@@ -217,9 +207,13 @@ impl<E: Send + 'static> Engine<E> {
                     fixed_steps: 1,
                 };
 
-                run_stage(self, modules.as_mut_slice(), &fixed_frame, |m, ctx, f| {
-                    m.fixed_update(ctx, f)
-                })?;
+                run_stage(
+                    self,
+                    modules.as_mut_slice(),
+                    &fixed_frame,
+                    ModuleStage::FixedUpdate,
+                    |m, ctx| m.fixed_update(ctx),
+                )?;
             }
 
             let frame = Frame {
@@ -230,8 +224,13 @@ impl<E: Send + 'static> Engine<E> {
                 fixed_steps,
             };
 
-            run_stage(self, modules.as_mut_slice(), &frame, |m, ctx, f| m.update(ctx, f))?;
-            run_stage(self, modules.as_mut_slice(), &frame, |m, ctx, f| m.render(ctx, f))?;
+            run_stage(self, modules.as_mut_slice(), &frame, ModuleStage::Update, |m, ctx| {
+                m.update(ctx)
+            })?;
+
+            run_stage(self, modules.as_mut_slice(), &frame, ModuleStage::Render, |m, ctx| {
+                m.render(ctx)
+            })?;
 
             self.scheduler.tick(Duration::from_secs_f32(dt));
             self.frame_index = self.frame_index.wrapping_add(1);
@@ -239,20 +238,13 @@ impl<E: Send + 'static> Engine<E> {
             Ok(frame)
         })();
 
-        // Always restore modules (even on error).
         self.modules = modules;
-
         result
     }
 
-
-    /// Inject an external event into the engine.
-    ///
-    /// The engine treats it as opaque; modules downcast as needed.
     pub fn dispatch_external_event(&mut self, event: &dyn std::any::Any) -> EngineResult<()> {
         self.sync_shutdown_state();
 
-        // Take modules out to avoid holding &mut self.modules across calls to self.*().
         let mut modules: Vec<Box<dyn Module<E>>> = std::mem::take(&mut self.modules);
 
         let result: EngineResult<()> = (|| {
@@ -267,8 +259,10 @@ impl<E: Send + 'static> Engine<E> {
                         &mut self.scheduler,
                         &mut self.exit_requested,
                     );
-                    m.on_external_event(&mut ctx, event)?;
-                } // ctx dropped here
+
+                    m.on_external_event(&mut ctx, event)
+                        .map_err(|e| EngineError::with_stage(ModuleStage::ExternalEvent, e))?;
+                }
 
                 self.propagate_shutdown_request();
                 if self.is_exit_requested() {
@@ -278,9 +272,7 @@ impl<E: Send + 'static> Engine<E> {
             Ok(())
         })();
 
-        // Always restore modules.
         self.modules = modules;
-
         result
     }
 
@@ -295,7 +287,10 @@ impl<E: Send + 'static> Engine<E> {
                 &mut self.scheduler,
                 &mut self.exit_requested,
             );
-            let _ = m.shutdown(&mut ctx);
+
+            let _ = m
+                .shutdown(&mut ctx)
+                .map_err(|e| EngineError::with_stage(ModuleStage::Shutdown, e));
         }
 
         Ok(())

@@ -16,7 +16,7 @@ impl<E: Send + 'static> Bus<E> {
     /// Returns `true` if the event was accepted by the channel.
     #[inline]
     pub fn try_send(&self, ev: E) -> bool {
-        self.tx.send(ev).is_ok()
+        self.tx.try_send(ev).is_ok()
     }
 
     /// Fire-and-forget send.
