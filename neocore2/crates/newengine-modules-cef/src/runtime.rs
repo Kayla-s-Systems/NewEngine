@@ -1,4 +1,5 @@
 use crate::{CefApi, CefApiRef, CefViewId};
+use log::info;
 use parking_lot::Mutex;
 use raw_window_handle::{RawDisplayHandle, RawWindowHandle};
 
@@ -16,6 +17,7 @@ struct State {
     ready: AtomicBool,
     view_id: AtomicU64,
     host: Mutex<HostState>,
+    content: Mutex<ContentState>,
 }
 
 #[derive(Default)]
@@ -32,15 +34,24 @@ struct HostState {
     hwnd_frame: isize,
 }
 
+#[derive(Default)]
+struct ContentState {
+    last_url: Option<String>,
+    last_html: Option<String>,
+}
+
 impl CefRuntime {
     pub fn new() -> Result<Self, String> {
         let state = Arc::new(State {
             ready: AtomicBool::new(false),
             view_id: AtomicU64::new(1),
             host: Mutex::new(HostState::default()),
+            content: Mutex::new(ContentState::default()),
         });
 
-        let api: CefApiRef = Arc::new(CefApiImpl { state: state.clone() });
+        let api: CefApiRef = Arc::new(CefApiImpl {
+            state: state.clone(),
+        });
 
         state.ready.store(true, Ordering::Release);
 
@@ -145,9 +156,19 @@ impl CefApi for CefApiImpl {
         CefViewId(self.state.view_id.load(Ordering::Relaxed))
     }
 
-    fn load_local_html(&self, _html: &str) {}
+    fn load_local_html(&self, html: &str) {
+        let mut content = self.state.content.lock();
+        content.last_html = Some(html.to_string());
+        content.last_url = None;
+        info!("CEF HTML content updated ({} bytes)", html.len());
+    }
 
-    fn load_url(&self, _url: &str) {}
+    fn load_url(&self, url: &str) {
+        let mut content = self.state.content.lock();
+        content.last_url = Some(url.to_string());
+        content.last_html = None;
+        info!("CEF URL updated: {url}");
+    }
 
     fn eval_js(&self, _js: &str) {}
 
@@ -180,10 +201,8 @@ unsafe fn win_create_child_frame(parent_hwnd: isize, width: u32, height: u32) ->
     use windows_sys::Win32::Foundation::HWND;
     use windows_sys::Win32::System::LibraryLoader::GetModuleHandleW;
     use windows_sys::Win32::UI::WindowsAndMessaging::{
-        CreateWindowExW, SetWindowPos, ShowWindow,
-        HMENU, HWND_TOP, SW_SHOW,
-        WS_CHILD, WS_CLIPCHILDREN, WS_CLIPSIBLINGS, WS_VISIBLE,
-        WS_EX_NOPARENTNOTIFY,
+        CreateWindowExW, SetWindowPos, ShowWindow, HMENU, HWND_TOP, SW_SHOW, WS_CHILD,
+        WS_CLIPCHILDREN, WS_CLIPSIBLINGS, WS_EX_NOPARENTNOTIFY, WS_VISIBLE,
     };
 
     let hinstance = GetModuleHandleW(null());

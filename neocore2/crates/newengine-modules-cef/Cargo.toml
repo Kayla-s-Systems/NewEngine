@@ -8,6 +8,7 @@ newengine-core = { path = "../newengine-core" }
 raw-window-handle = "0.6"
 parking_lot = "0.12"
 log = "0.4.29"
+ureq = "2.9"
 
 # Real CEF runtime (optional)
 cef = { version = "=144.2.0", optional = true }

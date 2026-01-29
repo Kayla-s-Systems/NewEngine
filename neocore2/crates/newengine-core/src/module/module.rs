@@ -9,6 +9,11 @@ pub trait Module<E: Send + 'static>: Send {
         "module"
     }
 
+    /// Declares static module dependencies by module id.
+    fn dependencies(&self) -> &'static [&'static str] {
+        &[]
+    }
+
     fn init(&mut self, _ctx: &mut ModuleCtx<'_, E>) -> EngineResult<()> {
         Ok(())
     }
@@ -29,7 +34,11 @@ pub trait Module<E: Send + 'static>: Send {
         Ok(())
     }
 
-    fn on_external_event(&mut self, _ctx: &mut ModuleCtx<'_, E>, _event: &dyn Any) -> EngineResult<()> {
+    fn on_external_event(
+        &mut self,
+        _ctx: &mut ModuleCtx<'_, E>,
+        _event: &dyn Any,
+    ) -> EngineResult<()> {
         Ok(())
     }
 

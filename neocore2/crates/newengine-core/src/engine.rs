@@ -4,12 +4,14 @@ use crate::module::{Bus, Module, ModuleCtx, Resources, Services};
 use crate::sched::Scheduler;
 use crate::sync::ShutdownToken;
 
+use std::collections::HashSet;
 use std::time::{Duration, Instant};
 
 pub struct Engine<E: Send + 'static> {
     fixed_dt: f32,
     services: Box<dyn Services>,
     modules: Vec<Box<dyn Module<E>>>,
+    module_ids: HashSet<&'static str>,
 
     resources: Resources,
     bus: Bus<E>,
@@ -47,6 +49,7 @@ impl<E: Send + 'static> Engine<E> {
             fixed_dt,
             services,
             modules: Vec::new(),
+            module_ids: HashSet::new(),
             resources: Resources::default(),
             bus,
             scheduler: Scheduler::new(),
@@ -81,6 +84,21 @@ impl<E: Send + 'static> Engine<E> {
     pub fn register_module(&mut self, mut module: Box<dyn Module<E>>) -> EngineResult<()> {
         self.sync_shutdown_state();
 
+        let id = module.id();
+        if self.module_ids.contains(id) {
+            return Err(EngineError::Other(format!(
+                "module already registered: {id}"
+            )));
+        }
+
+        for dep in module.dependencies() {
+            if !self.module_ids.contains(dep) {
+                return Err(EngineError::Other(format!(
+                    "module dependency missing: {id} -> {dep}"
+                )));
+            }
+        }
+
         let mut ctx = ModuleCtx::new(
             self.services.as_ref(),
             &mut self.resources,
@@ -95,6 +113,7 @@ impl<E: Send + 'static> Engine<E> {
 
         self.propagate_shutdown_request();
         self.modules.push(module);
+        self.module_ids.insert(id);
         Ok(())
     }
 
@@ -126,6 +145,7 @@ impl<E: Send + 'static> Engine<E> {
         }
 
         self.modules = modules;
+        self.module_ids = self.modules.iter().map(|m| m.id()).collect();
         Ok(())
     }
 
@@ -180,8 +200,7 @@ impl<E: Send + 'static> Engine<E> {
                     );
                     ctx.set_frame(frame);
 
-                    call(m.as_mut(), &mut ctx)
-                        .map_err(|e| EngineError::with_stage(stage, e))?;
+                    call(m.as_mut(), &mut ctx).map_err(|e| EngineError::with_stage(stage, e))?;
                 }
 
                 engine.propagate_shutdown_request();
@@ -224,13 +243,21 @@ impl<E: Send + 'static> Engine<E> {
                 fixed_steps,
             };
 
-            run_stage(self, modules.as_mut_slice(), &frame, ModuleStage::Update, |m, ctx| {
-                m.update(ctx)
-            })?;
+            run_stage(
+                self,
+                modules.as_mut_slice(),
+                &frame,
+                ModuleStage::Update,
+                |m, ctx| m.update(ctx),
+            )?;
 
-            run_stage(self, modules.as_mut_slice(), &frame, ModuleStage::Render, |m, ctx| {
-                m.render(ctx)
-            })?;
+            run_stage(
+                self,
+                modules.as_mut_slice(),
+                &frame,
+                ModuleStage::Render,
+                |m, ctx| m.render(ctx),
+            )?;
 
             self.scheduler.tick(Duration::from_secs_f32(dt));
             self.frame_index = self.frame_index.wrapping_add(1);
@@ -239,6 +266,7 @@ impl<E: Send + 'static> Engine<E> {
         })();
 
         self.modules = modules;
+        self.module_ids = self.modules.iter().map(|m| m.id()).collect();
         result
     }
 
@@ -273,6 +301,7 @@ impl<E: Send + 'static> Engine<E> {
         })();
 
         self.modules = modules;
+        self.module_ids = self.modules.iter().map(|m| m.id()).collect();
         result
     }
 

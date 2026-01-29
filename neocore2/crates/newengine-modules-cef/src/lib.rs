@@ -1,7 +1,11 @@
 mod api;
+mod content;
 mod runtime;
 
 pub use api::{CefApi, CefApiRef, CefViewId};
+pub use content::{
+    CefContentApi, CefContentApiRef, CefContentModule, CefContentRequest, CefHttpRequest,
+};
 use runtime::CefRuntime;
 
 use newengine_core::{EngineResult, Module, ModuleCtx, WindowHostEvent};
@@ -39,7 +43,11 @@ impl<E: Send + 'static> Module<E> for CefModule {
         Ok(())
     }
 
-    fn on_external_event(&mut self, _ctx: &mut ModuleCtx<'_, E>, event: &dyn std::any::Any) -> EngineResult<()> {
+    fn on_external_event(
+        &mut self,
+        _ctx: &mut ModuleCtx<'_, E>,
+        event: &dyn std::any::Any,
+    ) -> EngineResult<()> {
         let Some(ev) = event.downcast_ref::<WindowHostEvent>() else {
             return Ok(());
         };
@@ -49,7 +57,12 @@ impl<E: Send + 'static> Module<E> for CefModule {
         };
 
         match *ev {
-            WindowHostEvent::Ready { window, display, width, height } => {
+            WindowHostEvent::Ready {
+                window,
+                display,
+                width,
+                height,
+            } => {
                 rt.attach_window(window, display, width, height)
                     .map_err(|e| newengine_core::EngineError::Other(e))?;
             }
