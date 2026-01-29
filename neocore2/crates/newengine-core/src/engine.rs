@@ -162,33 +162,73 @@ impl<E: Send + 'static> Engine<E> {
             sorted.push(m);
         }
 
-        // 5) Run init() then start() in dependency order
-        for stage in [ModuleStage::Init, ModuleStage::Start] {
-            for m in sorted.iter_mut() {
-                self.sync_shutdown_state();
-
+        fn shutdown_modules<E: Send + 'static>(
+            engine: &mut Engine<E>,
+            modules: &mut [Box<dyn Module<E>>],
+        ) {
+            for m in modules.iter_mut().rev() {
                 let mut ctx = ModuleCtx::new(
-                    self.services.as_ref(),
-                    &mut self.resources,
-                    &self.bus,
-                    &mut self.scheduler,
-                    &mut self.exit_requested,
+                    engine.services.as_ref(),
+                    &mut engine.resources,
+                    &engine.bus,
+                    &mut engine.scheduler,
+                    &mut engine.exit_requested,
                 );
+                let _ = m.shutdown(&mut ctx);
+            }
+        }
 
-                let r = match stage {
-                    ModuleStage::Init => m.init(&mut ctx),
-                    ModuleStage::Start => m.start(&mut ctx),
-                    _ => Ok(()),
-                };
+        let mut initialized = 0usize;
 
-                r.map_err(|e| EngineError::with_stage(stage, e))?;
+        // 5) Run init() in dependency order
+        for m in sorted.iter_mut() {
+            self.sync_shutdown_state();
 
-                self.propagate_shutdown_request();
-                if self.is_exit_requested() {
-                    self.modules = sorted;
-                    self.module_ids = self.modules.iter().map(|mm| mm.id()).collect();
-                    return Err(EngineError::ExitRequested);
-                }
+            let mut ctx = ModuleCtx::new(
+                self.services.as_ref(),
+                &mut self.resources,
+                &self.bus,
+                &mut self.scheduler,
+                &mut self.exit_requested,
+            );
+
+            if let Err(err) = m.init(&mut ctx) {
+                shutdown_modules(self, &mut sorted[..initialized]);
+                return Err(EngineError::with_stage(ModuleStage::Init, err));
+            }
+            initialized = initialized.saturating_add(1);
+
+            self.propagate_shutdown_request();
+            if self.is_exit_requested() {
+                shutdown_modules(self, &mut sorted[..initialized]);
+                self.modules = sorted;
+                self.module_ids = self.modules.iter().map(|mm| mm.id()).collect();
+                return Err(EngineError::ExitRequested);
+            }
+        }
+
+        // 6) Run start() in dependency order
+        for m in sorted.iter_mut() {
+            self.sync_shutdown_state();
+
+            let mut ctx = ModuleCtx::new(
+                self.services.as_ref(),
+                &mut self.resources,
+                &self.bus,
+                &mut self.scheduler,
+                &mut self.exit_requested,
+            );
+
+            if let Err(err) = m.start(&mut ctx) {
+                shutdown_modules(self, &mut sorted[..initialized]);
+                return Err(EngineError::with_stage(ModuleStage::Start, err));
+            }
+            self.propagate_shutdown_request();
+            if self.is_exit_requested() {
+                shutdown_modules(self, &mut sorted[..initialized]);
+                self.modules = sorted;
+                self.module_ids = self.modules.iter().map(|mm| mm.id()).collect();
+                return Err(EngineError::ExitRequested);
             }
         }
 
