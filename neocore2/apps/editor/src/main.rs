@@ -1,4 +1,5 @@
 use crossbeam_channel::unbounded;
+use log::{error, info, warn};
 
 use newengine_core::{Bus, Engine, EngineResult, Module, ModuleCtx, Services, ShutdownToken};
 use newengine_modules_cef::{CefContentApiRef, CefContentModule, CefContentRequest, CefHttpRequest, CefModule};
@@ -50,13 +51,7 @@ fn main() -> EngineResult<()> {
     // 3) start всех модулей по зависимостям
     engine.start()?;
 
-    // Операторские команды приходят из main.rs
-    // (можешь заменить на чтение конфига/CLI/скрипта).
-    if let Ok(url) = std::env::var("NEO_CEF_URL") {
-        tx_cmd.send(EditorEvent::LoadUrl(url)).ok();
-    } else {
-        tx_cmd.send(EditorEvent::LoadUrl("https://example.com".to_string())).ok();
-    }
+    EditorStartupConfig::from_env().dispatch(&tx_cmd);
 
     run_winit_app(engine)
 }
@@ -132,4 +127,64 @@ unsafe fn any_to_editor_event<E: Send + 'static>(ev: E) -> Option<EditorEvent> {
         return boxed.downcast::<EditorEvent>().ok().map(|b| *b);
     }
     None
+}
+
+struct EditorStartupConfig {
+    command: Option<EditorEvent>,
+}
+
+impl EditorStartupConfig {
+    fn from_env() -> Self {
+        if let Ok(url) = std::env::var("NEO_CEF_URL") {
+            info!("editor startup: loading URL from NEO_CEF_URL");
+            return Self {
+                command: Some(EditorEvent::LoadUrl(url)),
+            };
+        }
+
+        if let Ok(path) = std::env::var("NEO_CEF_HTML_PATH") {
+            match std::fs::read_to_string(&path) {
+                Ok(html) => {
+                    info!("editor startup: loading HTML from NEO_CEF_HTML_PATH");
+                    return Self {
+                        command: Some(EditorEvent::LoadHtml(html)),
+                    };
+                }
+                Err(err) => {
+                    error!("editor startup: failed to read HTML file {path}: {err}");
+                    return Self { command: None };
+                }
+            }
+        }
+
+        if let Ok(url) = std::env::var("NEO_CEF_HTTP_URL") {
+            info!("editor startup: fetching HTTP content from NEO_CEF_HTTP_URL");
+            return Self {
+                command: Some(EditorEvent::LoadHttp(CefHttpRequest {
+                    method: std::env::var("NEO_CEF_HTTP_METHOD").unwrap_or_else(|_| "GET".into()),
+                    url,
+                    headers: Vec::new(),
+                    body: std::env::var("NEO_CEF_HTTP_BODY").ok(),
+                })),
+            };
+        }
+
+        if let Ok(exit) = std::env::var("NEO_EDITOR_EXIT") {
+            if exit == "1" {
+                warn!("editor startup: exit requested via NEO_EDITOR_EXIT");
+                return Self {
+                    command: Some(EditorEvent::Exit),
+                };
+            }
+        }
+
+        warn!("editor startup: no startup content configured; set NEO_CEF_URL, NEO_CEF_HTML_PATH, or NEO_CEF_HTTP_URL");
+        Self { command: None }
+    }
+
+    fn dispatch(&self, tx: &crossbeam_channel::Sender<EditorEvent>) {
+        if let Some(command) = self.command.clone() {
+            let _ = tx.send(command);
+        }
+    }
 }

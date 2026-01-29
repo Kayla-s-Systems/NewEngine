@@ -1,5 +1,5 @@
 use crate::{CefApi, CefApiRef, CefViewId};
-use log::info;
+use log::{info, warn};
 use parking_lot::Mutex;
 use raw_window_handle::{RawDisplayHandle, RawWindowHandle};
 
@@ -53,7 +53,8 @@ impl CefRuntime {
             state: state.clone(),
         });
 
-        state.ready.store(true, Ordering::Release);
+        #[cfg(not(feature = "cef-runtime"))]
+        warn!("CEF runtime backend is disabled; enable the 'cef-runtime' feature to render content.");
 
         Ok(Self { api, state })
     }
@@ -99,6 +100,7 @@ impl CefRuntime {
         }
 
         host.attached = true;
+        self.state.ready.store(true, Ordering::Release);
         Ok(())
     }
 
