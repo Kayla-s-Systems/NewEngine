@@ -1,7 +1,8 @@
 use crate::error::{EngineError, EngineResult, ModuleStage};
 use crate::events::EventHub;
 use crate::frame::Frame;
-use crate::module::{Bus, Module, ModuleCtx, Resources, Services};
+use crate::module::{ApiVersion, Bus, Module, ModuleCtx, Resources, Services};
+
 use crate::sched::Scheduler;
 use crate::sync::ShutdownToken;
 
@@ -46,13 +47,9 @@ impl<E: Send + 'static> Engine<E> {
         &self.events
     }
 
-    /// Emit a typed engine-wide event to the multicast event hub.
-    ///
-    /// This is the preferred way for platform code (winit/CEF/etc.) to deliver host events.
-    #[inline]
     pub fn emit<T>(&self, event: T) -> EngineResult<()>
     where
-        T: Any + Send + Sync + 'static,
+        T: Any + Send + 'static + std::marker::Sync,
     {
         self.events.publish(event)
     }
@@ -95,10 +92,8 @@ impl<E: Send + 'static> Engine<E> {
 
     pub fn register_module(&mut self, module: Box<dyn Module<E>>) -> EngineResult<()> {
         self.sync_shutdown_state();
-        self.ensure_not_started()?;
 
         let id = module.id();
-        self.validate_module_descriptor(id, module.dependencies())?;
         if self.module_ids.contains(id) {
             return Err(EngineError::Other(format!("module already registered: {id}")));
         }
@@ -109,10 +104,11 @@ impl<E: Send + 'static> Engine<E> {
     }
 
     pub fn start(&mut self) -> EngineResult<()> {
-        self.ensure_not_started()?;
         self.started = true;
         self.last = Instant::now();
         self.sync_shutdown_state();
+
+        self.validate_api_contracts()?;
 
         let n = self.modules.len();
 
@@ -198,8 +194,8 @@ impl<E: Send + 'static> Engine<E> {
             }
         }
 
-        // init() in dependency order
         let mut initialized = 0usize;
+
         for i in 0..sorted.len() {
             self.sync_shutdown_state();
 
@@ -232,7 +228,6 @@ impl<E: Send + 'static> Engine<E> {
             }
         }
 
-        // start() in dependency order
         for i in 0..sorted.len() {
             self.sync_shutdown_state();
 
@@ -264,47 +259,6 @@ impl<E: Send + 'static> Engine<E> {
         }
 
         self.modules = sorted;
-        Ok(())
-    }
-
-
-    #[inline]
-    fn ensure_not_started(&self) -> EngineResult<()> {
-        if self.started {
-            return Err(EngineError::other("engine already started"));
-        }
-        Ok(())
-    }
-
-    #[inline]
-    fn validate_module_descriptor(
-        &self,
-        id: &'static str,
-        deps: &'static [&'static str],
-    ) -> EngineResult<()> {
-        if id.trim().is_empty() {
-            return Err(EngineError::other("module id must not be empty"));
-        }
-
-        let mut seen = HashSet::with_capacity(deps.len());
-        for &dep in deps {
-            if dep.trim().is_empty() {
-                return Err(EngineError::other(format!(
-                    "module '{id}' has empty dependency id"
-                )));
-            }
-            if dep == id {
-                return Err(EngineError::other(format!(
-                    "module '{id}' cannot depend on itself"
-                )));
-            }
-            if !seen.insert(dep) {
-                return Err(EngineError::other(format!(
-                    "module '{id}' has duplicate dependency '{dep}'"
-                )));
-            }
-        }
-
         Ok(())
     }
 
@@ -368,13 +322,12 @@ impl<E: Send + 'static> Engine<E> {
     }
 
     #[deprecated(note = "Use Engine::emit(...) + EventHub subscriptions instead of synchronous fan-out")]
-    pub fn dispatch_external_event(&mut self, event: &dyn std::any::Any) -> EngineResult<()> {
+    pub fn dispatch_external_event(&mut self, event: &dyn Any) -> EngineResult<()> {
         self.sync_shutdown_state();
         if self.is_exit_requested() {
             return Err(EngineError::ExitRequested);
         }
 
-        // Split borrows once. No &mut self calls during iteration.
         let services = self.services.as_ref();
         let bus = &self.bus;
         let events = &self.events;
@@ -394,9 +347,9 @@ impl<E: Send + 'static> Engine<E> {
             }
 
             let module_id = m.id();
-
             let mut ctx = ModuleCtx::new(services, resources, bus, events, scheduler, exit_requested);
 
+            #[allow(deprecated)]
             m.on_external_event(&mut ctx, event).map_err(|e| {
                 EngineError::with_module_stage(module_id, ModuleStage::ExternalEvent, e)
             })?;
@@ -434,11 +387,6 @@ impl<E: Send + 'static> Engine<E> {
     }
 
     #[inline]
-    pub fn exit_requested(&self) -> bool {
-        self.is_exit_requested()
-    }
-
-    #[inline]
     fn run_stage<F>(&mut self, frame: &Frame, stage: ModuleStage, mut call: F) -> EngineResult<()>
     where
         F: FnMut(&mut dyn Module<E>, &mut ModuleCtx<'_, E>) -> EngineResult<()>,
@@ -448,7 +396,6 @@ impl<E: Send + 'static> Engine<E> {
             return Err(EngineError::ExitRequested);
         }
 
-        // Split borrows once. No &mut self calls during iteration.
         let services = self.services.as_ref();
         let bus = &self.bus;
         let events = &self.events;
@@ -501,5 +448,55 @@ impl<E: Send + 'static> Engine<E> {
         if self.exit_requested {
             self.shutdown.request();
         }
+    }
+
+    fn validate_api_contracts(&self) -> EngineResult<()> {
+        let mut provided: HashMap<&'static str, ApiVersion> = HashMap::new();
+        let mut provider: HashMap<&'static str, &'static str> = HashMap::new();
+
+        for m in self.modules.iter() {
+            for p in m.provides().iter() {
+                match provided.get(p.id) {
+                    Some(v) if *v >= p.version => {}
+                    _ => {
+                        provided.insert(p.id, p.version);
+                        provider.insert(p.id, m.id());
+                    }
+                }
+            }
+        }
+
+        for m in self.modules.iter() {
+            for r in m.requires().iter() {
+                let Some(have) = provided.get(r.id) else {
+                    return Err(EngineError::Other(format!(
+                        "module '{}' requires API '{}' >= {}.{}.{} but it is not provided",
+                        m.id(),
+                        r.id,
+                        r.min_version.major,
+                        r.min_version.minor,
+                        r.min_version.patch,
+                    )));
+                };
+
+                if *have < r.min_version {
+                    let prov = provider.get(r.id).copied().unwrap_or("<unknown>");
+                    return Err(EngineError::Other(format!(
+                        "module '{}' requires API '{}' >= {}.{}.{} but provider '{}' offers {}.{}.{}",
+                        m.id(),
+                        r.id,
+                        r.min_version.major,
+                        r.min_version.minor,
+                        r.min_version.patch,
+                        prov,
+                        have.major,
+                        have.minor,
+                        have.patch,
+                    )));
+                }
+            }
+        }
+
+        Ok(())
     }
 }

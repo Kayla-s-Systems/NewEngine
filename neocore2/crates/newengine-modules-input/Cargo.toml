@@ -1,0 +1,15 @@
+[package]
+name = "newengine-modules-input"
+version = "0.1.0"
+edition = "2021"
+
+[features]
+default = ["gamepad"]
+gamepad = ["dep:gilrs"]
+
+[dependencies]
+newengine-core = { path = "../../crates/newengine-core" }
+newengine-modules-logging = { path = "../../crates/newengine-modules-logging" }
+
+gilrs = { version = "0.11.1", optional = true }
+log = "0.4.29"

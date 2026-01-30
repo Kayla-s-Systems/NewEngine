@@ -1,20 +1,19 @@
+pub mod bus;
 pub mod engine;
-pub mod frame;
 pub mod error;
+pub mod events;
+pub mod frame;
+pub mod host_events;
 pub mod module;
 pub mod sched;
-
 pub mod sync;
-mod bus;
-mod host_events;
-mod events;
 
-pub use host_events::WindowHostEvent;
-
-
+pub use bus::Bus;
 pub use engine::Engine;
+pub use error::{EngineError, EngineResult, ModuleStage};
+pub use events::{EventHub, EventSub};
 pub use frame::Frame;
-pub use error::{EngineError, EngineResult};
-pub use module::{Bus, Module, ModuleCtx, Resources, Services};
+pub use host_events::WindowHostEvent;
+pub use module::{ApiProvide, ApiRequire, ApiVersion, Module, ModuleCtx, Resources, Services};
 pub use sched::Scheduler;
 pub use sync::ShutdownToken;

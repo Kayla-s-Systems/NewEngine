@@ -10,6 +10,7 @@
       <sourceFolder url="file://$MODULE_DIR$/neocore2/crates/newengine-modules-logging/src" isTestSource="false" />
       <sourceFolder url="file://$MODULE_DIR$/neocore2/crates/newengine-modules-window-winit/src" isTestSource="false" />
       <sourceFolder url="file://$MODULE_DIR$/neocore2/crates/newengine-platform-winit/src" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/neocore2/crates/newengine-modules-input/src" isTestSource="false" />
       <excludeFolder url="file://$MODULE_DIR$/neocore2/target" />
     </content>
     <orderEntry type="inheritedJdk" />

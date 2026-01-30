@@ -10,15 +10,9 @@ use std::sync::{
 
 /// Multicast event hub with typed subscriptions and optional filters.
 ///
-/// Publish:
-///   hub.publish(MyEvent { .. });
-///
-/// Subscribe:
-///   let sub = hub.subscribe::<MyEvent>();
-///   sub.drain(|ev| { ... });
-///
-/// Filtered subscribe:
-///   let sub = hub.subscribe_filtered::<MyEvent>(|ev| ev.kind == 42);
+/// Optimized for cheap publish:
+/// - subscriber lists are stored as `Arc<Vec<Subscriber>>`
+/// - subscribe/unsubscribe uses copy-on-write
 pub struct EventHub {
     inner: Arc<Inner>,
 }
@@ -62,7 +56,7 @@ impl EventHub {
 
     /// Subscribe with a filter predicate.
     ///
-    /// Filter is executed on publisher thread.
+    /// Filter is executed on the publisher thread.
     #[inline]
     pub fn subscribe_filtered<T, F>(&self, filter: F) -> EventSub<T>
     where
@@ -165,9 +159,6 @@ struct SubInner {
 
 struct Inner {
     next_id: AtomicU64,
-    /// Subscriptions are stored as `Arc<Vec<..>>` to make publish fast.
-    ///
-    /// Subscribe/unsubscribe is expected to be rare compared to publish.
     chans: RwLock<HashMap<TypeId, Arc<Vec<Subscriber>>>>,
 }
 
@@ -188,10 +179,6 @@ impl Inner {
     fn remove_subscriber(&self, type_id: TypeId, sub_id: u64) {
         let mut map = self.chans.write().unwrap();
         let Some(cur) = map.get(&type_id) else { return };
-        if cur.is_empty() {
-            map.remove(&type_id);
-            return;
-        }
 
         let mut v: Vec<Subscriber> = Vec::with_capacity(cur.len().saturating_sub(1));
         for s in cur.iter() {

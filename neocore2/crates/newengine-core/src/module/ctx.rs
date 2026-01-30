@@ -13,7 +13,6 @@ pub struct ModuleCtx<'a, E: Send + 'static> {
     events: &'a EventHub,
     scheduler: &'a mut Scheduler,
     exit: &'a mut bool,
-
     frame: Option<Frame>,
 }
 
@@ -54,17 +53,36 @@ impl<'a, E: Send + 'static> ModuleCtx<'a, E> {
     }
 
     #[inline]
-    pub fn resources(&mut self) -> &mut Resources {
+    pub fn resources(&self) -> &Resources {
         self.resources
     }
 
-    /// Commands queue (single-consumer by rules).
+    #[inline]
+    pub fn resources_mut(&mut self) -> &mut Resources {
+        self.resources
+    }
+
+    #[inline]
+    pub fn api<T>(&self, id: &'static str) -> Option<&T>
+    where
+        T: std::any::Any + Send + Sync + 'static,
+    {
+        self.resources.api::<T>(id)
+    }
+
+    #[inline]
+    pub fn api_required<T>(&self, id: &'static str) -> crate::error::EngineResult<&T>
+    where
+        T: std::any::Any + Send + Sync + 'static,
+    {
+        self.resources.api_required::<T>(id)
+    }
+
     #[inline]
     pub fn bus(&self) -> &Bus<E> {
         self.bus
     }
 
-    /// Multicast events hub (pub/sub).
     #[inline]
     pub fn events(&self) -> &EventHub {
         self.events
