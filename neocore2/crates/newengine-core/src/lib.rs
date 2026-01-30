@@ -8,6 +8,7 @@ pub mod module;
 pub mod sched;
 pub mod sync;
 mod plugins;
+mod system_info;
 
 pub use bus::Bus;
 pub use engine::Engine;

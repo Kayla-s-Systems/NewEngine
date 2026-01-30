@@ -2,9 +2,10 @@ use crate::error::{EngineError, EngineResult, ModuleStage};
 use crate::events::EventHub;
 use crate::frame::Frame;
 use crate::module::{ApiVersion, Bus, Module, ModuleCtx, Resources, Services};
-
+use crate::plugins::{default_host_api, PluginManager};
 use crate::sched::Scheduler;
 use crate::sync::ShutdownToken;
+use crate::system_info::SystemInfo;
 
 use std::any::Any;
 use std::collections::{HashMap, HashSet, VecDeque};
@@ -20,6 +21,9 @@ pub struct Engine<E: Send + 'static> {
     bus: Bus<E>,
     events: EventHub,
     scheduler: Scheduler,
+
+    plugins: PluginManager,
+    plugins_loaded: bool,
 
     shutdown: ShutdownToken,
     exit_requested: bool,
@@ -68,12 +72,18 @@ impl<E: Send + 'static> Engine<E> {
             services,
             modules: Vec::new(),
             module_ids: HashSet::new(),
+
             resources: Resources::default(),
             bus,
             events: EventHub::new(),
             scheduler: Scheduler::new(),
+
+            plugins: PluginManager::new(),
+            plugins_loaded: false,
+
             shutdown,
             exit_requested: false,
+
             frame_index: 0,
             fixed_tick: 0,
             started: false,
@@ -97,7 +107,9 @@ impl<E: Send + 'static> Engine<E> {
 
         let id = module.id();
         if self.module_ids.contains(id) {
-            return Err(EngineError::Other(format!("module already registered: {id}")));
+            return Err(EngineError::Other(format!(
+                "module already registered: {id}"
+            )));
         }
 
         self.modules.push(module);
@@ -105,10 +117,29 @@ impl<E: Send + 'static> Engine<E> {
         Ok(())
     }
 
+    fn try_load_plugins_once(&mut self) -> EngineResult<()> {
+        if self.plugins_loaded {
+            return Ok(());
+        }
+
+        let host = default_host_api();
+
+        if let Err(e) = self.plugins.load_default(host) {
+            return Err(EngineError::Other(format!("plugins: load failed: {e}")));
+        }
+
+        self.plugins_loaded = true;
+        Ok(())
+    }
+
     pub fn start(&mut self) -> EngineResult<()> {
         self.started = true;
         self.last = Instant::now();
         self.sync_shutdown_state();
+
+        if self.is_exit_requested() {
+            return Err(EngineError::ExitRequested);
+        }
 
         self.validate_api_contracts()?;
 
@@ -216,7 +247,11 @@ impl<E: Send + 'static> Engine<E> {
 
             if let Err(err) = init_result {
                 shutdown_modules(self, &mut sorted[..initialized]);
-                return Err(EngineError::with_module_stage(sorted[i].id(), ModuleStage::Init, err));
+                return Err(EngineError::with_module_stage(
+                    sorted[i].id(),
+                    ModuleStage::Init,
+                    err,
+                ));
             }
 
             initialized = initialized.saturating_add(1);
@@ -248,7 +283,11 @@ impl<E: Send + 'static> Engine<E> {
 
             if let Err(err) = start_result {
                 shutdown_modules(self, &mut sorted[..initialized]);
-                return Err(EngineError::with_module_stage(sorted[i].id(), ModuleStage::Start, err));
+                return Err(EngineError::with_module_stage(
+                    sorted[i].id(),
+                    ModuleStage::Start,
+                    err,
+                ));
             }
 
             self.propagate_shutdown_request();
@@ -261,6 +300,31 @@ impl<E: Send + 'static> Engine<E> {
         }
 
         self.modules = sorted;
+        log::info!(
+                "engine: starting fixed_dt_ms={} modules={}",
+                (self.fixed_dt * 1000.0).round() as u32,
+                self.modules.len()
+            );
+        let si = SystemInfo::collect();
+        si.log();
+        // IMPORTANT: plugins are loaded after modules start, so the logger module is already installed.
+        self.try_load_plugins_once()?;
+
+        let mut loaded_count: usize = 0;
+        for p in self.plugins.iter() {
+            loaded_count = loaded_count.saturating_add(1);
+            log::info!(
+                "plugins: active id='{}' ver='{}'",
+                p.info().id,
+                p.info().version
+            );
+        }
+        log::info!("plugins: loaded={}", loaded_count);
+
+        if let Err(e) = self.plugins.start_all() {
+            return Err(EngineError::Other(format!("plugins: start failed: {e}")));
+        }
+
         Ok(())
     }
 
@@ -289,17 +353,17 @@ impl<E: Send + 'static> Engine<E> {
 
         self.acc = (self.acc + dt).min(self.fixed_dt * 8.0);
 
-        // Timing contract:
-        // - begin_frame() runs first (can enqueue work for this frame)
-        // - then fixed_update() substeps
-        // - then update() and render()
-        // - finally end_frame()
         self.scheduler.begin_frame(Duration::from_secs_f32(dt));
 
         let mut steps_to_run = (self.acc / self.fixed_dt).floor() as u32;
         steps_to_run = steps_to_run.min(8);
 
         for step_index in 0..steps_to_run {
+            self.sync_shutdown_state();
+            if self.is_exit_requested() {
+                return Err(EngineError::ExitRequested);
+            }
+
             self.acc -= self.fixed_dt;
             self.fixed_tick = self.fixed_tick.wrapping_add(1);
 
@@ -313,7 +377,15 @@ impl<E: Send + 'static> Engine<E> {
                 fixed_tick: self.fixed_tick,
             };
 
-            self.run_stage(&fixed_frame, ModuleStage::FixedUpdate, |m, ctx| m.fixed_update(ctx))?;
+            if let Err(e) = self.plugins.fixed_update_all(self.fixed_dt) {
+                return Err(EngineError::Other(format!(
+                    "plugins: fixed_update failed: {e}"
+                )));
+            }
+
+            self.run_stage(&fixed_frame, ModuleStage::FixedUpdate, |m, ctx| {
+                m.fixed_update(ctx)
+            })?;
         }
 
         let frame = Frame {
@@ -326,15 +398,25 @@ impl<E: Send + 'static> Engine<E> {
             fixed_tick: self.fixed_tick,
         };
 
+        if let Err(e) = self.plugins.update_all(dt) {
+            return Err(EngineError::Other(format!("plugins: update failed: {e}")));
+        }
         self.run_stage(&frame, ModuleStage::Update, |m, ctx| m.update(ctx))?;
+
+        if let Err(e) = self.plugins.render_all(dt) {
+            return Err(EngineError::Other(format!("plugins: render failed: {e}")));
+        }
         self.run_stage(&frame, ModuleStage::Render, |m, ctx| m.render(ctx))?;
+
         self.scheduler.end_frame(Duration::from_secs_f32(dt));
         self.frame_index = self.frame_index.wrapping_add(1);
 
         Ok(frame)
     }
 
-    #[deprecated(note = "Use Engine::emit(...) + EventHub subscriptions instead of synchronous fan-out")]
+    #[deprecated(
+        note = "Use Engine::emit(...) + EventHub subscriptions instead of synchronous fan-out"
+    )]
     pub fn dispatch_external_event(&mut self, event: &dyn Any) -> EngineResult<()> {
         self.sync_shutdown_state();
         if self.is_exit_requested() {
@@ -360,7 +442,8 @@ impl<E: Send + 'static> Engine<E> {
             }
 
             let module_id = m.id();
-            let mut ctx = ModuleCtx::new(services, resources, bus, events, scheduler, exit_requested);
+            let mut ctx =
+                ModuleCtx::new(services, resources, bus, events, scheduler, exit_requested);
 
             #[allow(deprecated)]
             m.on_external_event(&mut ctx, event).map_err(|e| {
@@ -378,6 +461,8 @@ impl<E: Send + 'static> Engine<E> {
 
     pub fn shutdown(&mut self) -> EngineResult<()> {
         self.sync_shutdown_state();
+
+        self.plugins.shutdown();
 
         for m in self.modules.iter_mut().rev() {
             let module_id = m.id();
@@ -429,7 +514,8 @@ impl<E: Send + 'static> Engine<E> {
 
             let module_id = m.id();
 
-            let mut ctx = ModuleCtx::new(services, resources, bus, events, scheduler, exit_requested);
+            let mut ctx =
+                ModuleCtx::new(services, resources, bus, events, scheduler, exit_requested);
             ctx.set_frame(frame);
 
             call(m.as_mut(), &mut ctx)

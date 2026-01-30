@@ -1,4 +1,7 @@
 #![forbid(unsafe_op_in_unsafe_fn)]
+#![forbid(unsafe_op_in_unsafe_fn)]
+#![allow(non_camel_case_types)]
+#![allow(non_local_definitions)]
 
 use abi_stable::library::RootModule;
 use abi_stable::sabi_trait;
