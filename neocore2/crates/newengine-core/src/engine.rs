@@ -31,8 +31,8 @@ pub struct Engine<E: Send + 'static> {
 impl<E: Send + 'static> Engine<E> {
     #[inline]
     pub fn request_exit(&mut self) {
-        self.shutdown.request();
         self.exit_requested = true;
+        self.shutdown.request();
     }
 
     #[inline]
@@ -252,7 +252,6 @@ impl<E: Send + 'static> Engine<E> {
         Ok(())
     }
 
-
     pub fn step(&mut self) -> EngineResult<Frame> {
         self.sync_shutdown_state();
         if self.is_exit_requested() {
@@ -313,29 +312,31 @@ impl<E: Send + 'static> Engine<E> {
     }
 
     pub fn dispatch_external_event(&mut self, event: &dyn std::any::Any) -> EngineResult<()> {
-        // Fast sync without calling methods while iterating modules.
-        if self.shutdown.is_requested() {
-            self.exit_requested = true;
-        }
-        if self.exit_requested {
+        self.sync_shutdown_state();
+        if self.is_exit_requested() {
             return Err(EngineError::ExitRequested);
         }
 
-        // Split borrows: take references to fields we need.
+        // Split borrows once. No &mut self calls during iteration.
         let services = self.services.as_ref();
         let bus = &self.bus;
         let events = &self.events;
+        let shutdown = &self.shutdown;
 
         let resources = &mut self.resources;
         let scheduler = &mut self.scheduler;
         let exit_requested = &mut self.exit_requested;
-        let shutdown = self.shutdown.clone();
 
         for m in self.modules.iter_mut() {
-            // Keep shutdown state in sync (no &mut self calls).
             if shutdown.is_requested() {
                 *exit_requested = true;
             }
+            if *exit_requested {
+                shutdown.request();
+                return Err(EngineError::ExitRequested);
+            }
+
+            let module_id = m.id();
 
             let mut ctx = ModuleCtx::new(
                 services,
@@ -346,11 +347,10 @@ impl<E: Send + 'static> Engine<E> {
                 exit_requested,
             );
 
-            let module_id = m.id();
-            m.on_external_event(&mut ctx, event)
-                .map_err(|e| EngineError::with_module_stage(module_id, ModuleStage::ExternalEvent, e))?;
+            m.on_external_event(&mut ctx, event).map_err(|e| {
+                EngineError::with_module_stage(module_id, ModuleStage::ExternalEvent, e)
+            })?;
 
-            // propagate shutdown request (no &mut self calls).
             if *exit_requested {
                 shutdown.request();
                 return Err(EngineError::ExitRequested);
@@ -360,11 +360,12 @@ impl<E: Send + 'static> Engine<E> {
         Ok(())
     }
 
-
     pub fn shutdown(&mut self) -> EngineResult<()> {
         self.sync_shutdown_state();
 
         for m in self.modules.iter_mut().rev() {
+            let module_id = m.id();
+
             let mut ctx = ModuleCtx::new(
                 self.services.as_ref(),
                 &mut self.resources,
@@ -376,7 +377,7 @@ impl<E: Send + 'static> Engine<E> {
 
             let _ = m
                 .shutdown(&mut ctx)
-                .map_err(|e| EngineError::with_module_stage(m.id(), ModuleStage::Shutdown, e));
+                .map_err(|e| EngineError::with_module_stage(module_id, ModuleStage::Shutdown, e));
         }
 
         Ok(())
@@ -392,29 +393,28 @@ impl<E: Send + 'static> Engine<E> {
     where
         F: FnMut(&mut dyn Module<E>, &mut ModuleCtx<'_, E>) -> EngineResult<()>,
     {
-        // sync shutdown without touching self inside the modules iteration
-        if self.shutdown.is_requested() {
-            self.exit_requested = true;
-        }
-        if self.exit_requested {
+        self.sync_shutdown_state();
+        if self.is_exit_requested() {
             return Err(EngineError::ExitRequested);
         }
 
-        // Split borrows
+        // Split borrows once. No &mut self calls during iteration.
         let services = self.services.as_ref();
         let bus = &self.bus;
         let events = &self.events;
+        let shutdown = &self.shutdown;
 
         let resources = &mut self.resources;
         let scheduler = &mut self.scheduler;
         let exit_requested = &mut self.exit_requested;
 
-        // Use clone to avoid borrowing self.shutdown during iteration.
-        let shutdown = self.shutdown.clone();
-
         for m in self.modules.iter_mut() {
             if shutdown.is_requested() {
                 *exit_requested = true;
+            }
+            if *exit_requested {
+                shutdown.request();
+                return Err(EngineError::ExitRequested);
             }
 
             let module_id = m.id();
@@ -432,7 +432,6 @@ impl<E: Send + 'static> Engine<E> {
             call(m.as_mut(), &mut ctx)
                 .map_err(|e| EngineError::with_module_stage(module_id, stage, e))?;
 
-            // propagate shutdown request without touching &mut self
             if *exit_requested {
                 shutdown.request();
                 return Err(EngineError::ExitRequested);
@@ -441,7 +440,6 @@ impl<E: Send + 'static> Engine<E> {
 
         Ok(())
     }
-
 
     #[inline]
     fn is_exit_requested(&self) -> bool {

@@ -184,32 +184,31 @@ impl Inner {
     }
 
     fn publish_typed(&self, type_id: TypeId, ev: Arc<dyn Any + Send + Sync>) -> EngineResult<()> {
-        let subs = {
+        let subs_snapshot = {
             let map = self.chans.lock().unwrap();
             map.get(&type_id).cloned()
         };
 
-        let Some(mut subs) = subs else { return Ok(()) };
+        let Some(subs) = subs_snapshot else { return Ok(()) };
 
-        // Best-effort cleanup of dead senders.
-        let mut any_failed = false;
+        let mut failed_ids: Vec<u64> = Vec::new();
 
-        for s in subs.iter_mut() {
+        for s in subs.iter() {
             if let Some(filter) = &s.filter {
                 if !filter(&ev) {
                     continue;
                 }
             }
+
             if s.tx.send(ev.clone()).is_err() {
-                any_failed = true;
+                failed_ids.push(s.id);
             }
         }
 
-        if any_failed {
-            // Clean dead senders.
+        if !failed_ids.is_empty() {
             let mut map = self.chans.lock().unwrap();
             if let Some(list) = map.get_mut(&type_id) {
-                list.retain(|s| !s.tx.is_disconnected());
+                list.retain(|s| !failed_ids.contains(&s.id));
                 if list.is_empty() {
                     map.remove(&type_id);
                 }
