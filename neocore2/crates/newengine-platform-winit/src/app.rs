@@ -1,16 +1,16 @@
-use crate::events::{KeyCode, KeyState, MouseButton, WinitExternalEvent};
-
-use newengine_core::{Engine, EngineError, EngineResult, WindowHostEvent};
+use newengine_core::host_events::{
+    HostEvent, InputHostEvent, KeyCode, KeyState, MouseButton, TextHostEvent, WindowHostEvent,
+};
+use newengine_core::{Engine, EngineError, EngineResult};
 use raw_window_handle::{HasDisplayHandle, HasWindowHandle, RawDisplayHandle, RawWindowHandle};
 use winit::{
     application::ApplicationHandler,
     dpi::PhysicalSize,
-    event::{ElementState, MouseScrollDelta, WindowEvent},
+    event::{ElementState, Ime, MouseScrollDelta, WindowEvent},
     event_loop::{ActiveEventLoop, EventLoop},
     keyboard::{KeyCode as WKeyCode, PhysicalKey},
     window::{Window, WindowAttributes, WindowId},
 };
-use newengine_core::host_events::HostEvent;
 
 /// Engine-thread local window handles (not Send/Sync on some platforms).
 #[derive(Debug, Clone, Copy)]
@@ -23,12 +23,17 @@ pub struct WinitWindowHandles {
 struct App<E: Send + 'static> {
     engine: Engine<E>,
     window: Option<Window>,
+    last_cursor_pos: Option<(f32, f32)>,
 }
 
 impl<E: Send + 'static> App<E> {
     #[inline]
     fn new(engine: Engine<E>) -> Self {
-        Self { engine, window: None }
+        Self {
+            engine,
+            window: None,
+            last_cursor_pos: None,
+        }
     }
 
     #[inline]
@@ -79,12 +84,12 @@ impl<E: Send + 'static> App<E> {
 
     #[inline]
     fn emit_resized(&mut self, width: u32, height: u32) {
-        let _ = self.engine.emit(WinitExternalEvent::WindowResized { width, height });
+        let _ = self.engine.emit(HostEvent::Window(WindowHostEvent::Resized { width, height }));
     }
 
     #[inline]
     fn emit_focused(&mut self, focused: bool) {
-        let _ = self.engine.emit(WinitExternalEvent::WindowFocused(focused));
+        let _ = self.engine.emit(HostEvent::Window(WindowHostEvent::Focused(focused)));
     }
 
     #[inline]
@@ -193,7 +198,9 @@ impl<E: Send + 'static> ApplicationHandler for App<E> {
     fn window_event(&mut self, event_loop: &ActiveEventLoop, _id: WindowId, event: WindowEvent) {
         match event {
             WindowEvent::CloseRequested => {
-                let _ = self.engine.emit(WinitExternalEvent::CloseRequested);
+                let _ = self
+                    .engine
+                    .emit(HostEvent::Window(WindowHostEvent::CloseRequested));
                 Self::exit(event_loop);
                 return;
             }
@@ -222,21 +229,31 @@ impl<E: Send + 'static> ApplicationHandler for App<E> {
                     PhysicalKey::Unidentified(_) => KeyCode::Unknown,
                 };
 
-                let _ = self.engine.emit(WinitExternalEvent::Key { code, state, repeat });
+                let _ = self.engine.emit(HostEvent::Input(InputHostEvent::Key {
+                    code,
+                    state,
+                    repeat,
+                }));
 
                 if code == KeyCode::Escape && state == KeyState::Pressed {
                     Self::exit(event_loop);
                     return;
                 }
 
+                if let Some(text) = event.text.as_ref() {
+                    for ch in text.chars() {
+                        let _ = self.engine.emit(HostEvent::Text(TextHostEvent::Char(ch)));
+                    }
+                }
+
                 let _ = &event.logical_key;
             }
 
             WindowEvent::MouseInput { state, button, .. } => {
-                let _ = self.engine.emit(WinitExternalEvent::MouseButton {
+                let _ = self.engine.emit(HostEvent::Input(InputHostEvent::MouseButton {
                     button: Self::map_mouse_button(button),
                     state: Self::map_state(state),
-                });
+                }));
             }
 
             WindowEvent::MouseWheel { delta, .. } => {
@@ -244,17 +261,34 @@ impl<E: Send + 'static> ApplicationHandler for App<E> {
                     MouseScrollDelta::LineDelta(x, y) => (x * 120.0, y * 120.0),
                     MouseScrollDelta::PixelDelta(p) => (p.x as f32, p.y as f32),
                 };
-                let _ = self.engine.emit(WinitExternalEvent::MouseWheel {
-                    delta_x: dx.round() as i32,
-                    delta_y: dy.round() as i32,
-                });
+                let _ = self.engine.emit(HostEvent::Input(InputHostEvent::MouseWheel {
+                    dx,
+                    dy,
+                }));
             }
 
             WindowEvent::CursorMoved { position, .. } => {
-                let _ = self.engine.emit(WinitExternalEvent::CursorMoved {
-                    x: position.x as f32,
-                    y: position.y as f32,
-                });
+                let x = position.x as f32;
+                let y = position.y as f32;
+                if let Some((px, py)) = self.last_cursor_pos {
+                    let _ = self.engine.emit(HostEvent::Input(InputHostEvent::MouseDelta {
+                        dx: x - px,
+                        dy: y - py,
+                    }));
+                }
+                self.last_cursor_pos = Some((x, y));
+                let _ = self.engine.emit(HostEvent::Input(InputHostEvent::MouseMove { x, y }));
+            }
+
+            WindowEvent::Ime(ime) => match ime {
+                Ime::Commit(text) => {
+                    let _ = self.engine.emit(HostEvent::Text(TextHostEvent::ImeCommit(text)));
+                }
+                Ime::Preedit(text, _) => {
+                    let _ = self.engine.emit(HostEvent::Text(TextHostEvent::ImePreedit(text)));
+                }
+                Ime::Enabled => {}
+                Ime::Disabled => {}
             }
 
             _ => {}
