@@ -7,6 +7,7 @@
       <sourceFolder url="file://$MODULE_DIR$/neocore2/apps/editor/src" isTestSource="false" />
       <sourceFolder url="file://$MODULE_DIR$/neocore2/crates/newengine-core/src" isTestSource="false" />
       <sourceFolder url="file://$MODULE_DIR$/neocore2/crates/newengine-modules-cef/src" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/neocore2/crates/newengine-modules-logging/src" isTestSource="false" />
       <sourceFolder url="file://$MODULE_DIR$/neocore2/crates/newengine-modules-window-winit/src" isTestSource="false" />
       <sourceFolder url="file://$MODULE_DIR$/neocore2/crates/newengine-platform-winit/src" isTestSource="false" />
       <excludeFolder url="file://$MODULE_DIR$/neocore2/target" />

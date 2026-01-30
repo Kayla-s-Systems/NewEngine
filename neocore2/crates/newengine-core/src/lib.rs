@@ -7,6 +7,8 @@ pub mod sched;
 pub mod sync;
 mod bus;
 mod host_events;
+mod native;
+
 pub use host_events::WindowHostEvent;
 
 

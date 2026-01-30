@@ -9,6 +9,4 @@ log = "0.4"
 
 newengine-core = { path = "../../crates/newengine-core" }
 newengine-platform-winit = { path = "../../crates/newengine-platform-winit" }
-newengine-modules-cef = { path = "../../crates/newengine-modules-cef" }
 newengine-modules-logging = { path = "../../crates/newengine-modules-logging" }
-newengine-modules-window-winit = { path = "../../crates/newengine-modules-window-winit" }
