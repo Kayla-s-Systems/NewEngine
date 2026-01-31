@@ -969,6 +969,7 @@ dependencies = [
  "libc 1.0.0-alpha.2",
  "log",
  "newengine-plugin-api",
+ "parking_lot",
  "raw-window-handle",
  "serde",
  "serde_json",

@@ -65,7 +65,7 @@ impl<'a, E: Send + 'static> ModuleCtx<'a, E> {
     #[inline]
     pub fn api<T>(&self, id: &'static str) -> Option<&T>
     where
-        T: std::any::Any + Send + Sync + 'static,
+        T: std::any::Any + 'static,
     {
         self.resources.api::<T>(id)
     }
@@ -73,7 +73,7 @@ impl<'a, E: Send + 'static> ModuleCtx<'a, E> {
     #[inline]
     pub fn api_required<T>(&self, id: &'static str) -> crate::error::EngineResult<&T>
     where
-        T: std::any::Any + Send + Sync + 'static,
+        T: std::any::Any + 'static,
     {
         self.resources.api_required::<T>(id)
     }

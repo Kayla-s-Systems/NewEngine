@@ -9,6 +9,7 @@ mod plugins;
 pub mod sched;
 pub mod sync;
 mod system_info;
+pub mod render;
 mod startup_config;
 mod startup_loader;
 
@@ -21,6 +22,11 @@ pub use host_events::WindowHostEvent;
 pub use module::{ApiProvide, ApiRequire, ApiVersion, Module, ModuleCtx, Resources, Services};
 pub use sched::Scheduler;
 pub use sync::ShutdownToken;
+
+pub use render::{
+    BeginFrameDesc, Color4, RenderApi, RenderApiRef, RENDER_API_ID, RENDER_API_PROVIDE,
+    RENDER_API_VERSION,
+};
 
 
 pub use startup_config::{ConfigPaths, StartupConfig, StartupConfigSource, StartupDefaults, StartupLoadReport, StartupOverride};

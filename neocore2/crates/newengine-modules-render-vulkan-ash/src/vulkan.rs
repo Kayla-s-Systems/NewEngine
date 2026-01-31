@@ -44,7 +44,7 @@ impl VulkanRenderer {
         width: u32,
         height: u32,
     ) -> VkResult<Self> {
-        let entry = unsafe { Entry::load().map_err(|e| VkRenderError::AshWindow(e.to_string()))? };
+        let entry = Entry::load().map_err(|e| VkRenderError::AshWindow(e.to_string()))?;
 
         let app_name = CString::new("newengine").unwrap();
         let engine_name = CString::new("newengine").unwrap();
@@ -56,43 +56,37 @@ impl VulkanRenderer {
             .engine_version(vk::make_api_version(0, 0, 1, 0))
             .api_version(vk::API_VERSION_1_2);
 
-        let mut extension_names =
-            ash_window::enumerate_required_extensions(display)
-                .map_err(|e| VkRenderError::AshWindow(e.to_string()))?
-                .to_vec();
+        let mut extension_names = ash_window::enumerate_required_extensions(display)
+            .map_err(|e| VkRenderError::AshWindow(e.to_string()))?
+            .to_vec();
 
-        // Debug utils is optional; keep it only for debug builds.
         if cfg!(debug_assertions) {
             extension_names.push(ash::ext::debug_utils::NAME.as_ptr());
         }
 
         let validation_layer = CString::new("VK_LAYER_KHRONOS_validation").unwrap();
-        let enable_validation = cfg!(debug_assertions) && has_instance_layer(&entry, validation_layer.as_c_str());
-        let mut layer_ptrs: Vec<*const i8> = Vec::new();
+        let enable_validation =
+            cfg!(debug_assertions) && has_instance_layer(&entry, validation_layer.as_c_str());
 
+        let mut layer_ptrs: Vec<*const i8> = Vec::new();
         if enable_validation {
             layer_ptrs.push(validation_layer.as_ptr());
         } else if cfg!(debug_assertions) {
             log::warn!("Vulkan validation layer not found; running without validation.");
         }
 
-        let create_info = if enable_validation {
-            vk::InstanceCreateInfo::default()
-                .application_info(&app_info)
-                .enabled_layer_names(&layer_ptrs)
-                .enabled_extension_names(&extension_names)
-        } else {
-            vk::InstanceCreateInfo::default()
-                .application_info(&app_info)
-                .enabled_extension_names(&extension_names)
-        };
+        let mut create_info = vk::InstanceCreateInfo::default()
+            .application_info(&app_info)
+            .enabled_extension_names(&extension_names);
 
-        let instance = unsafe { entry.create_instance(&create_info, None)? };
+        if enable_validation {
+            create_info = create_info.enabled_layer_names(&layer_ptrs);
+        }
 
-        let surface = unsafe {
-            ash_window::create_surface(&entry, &instance, display, window, None)
-                .map_err(|e| VkRenderError::AshWindow(e.to_string()))?
-        };
+        let instance = entry.create_instance(&create_info, None)?;
+
+        let surface = ash_window::create_surface(&entry, &instance, display, window, None)
+            .map_err(|e| VkRenderError::AshWindow(e.to_string()))?;
 
         let surface_loader = ash::khr::surface::Instance::new(&entry, &instance);
 
@@ -100,7 +94,6 @@ impl VulkanRenderer {
             pick_physical_device(&instance, &surface_loader, surface)?;
 
         let (device, queue) = create_device(&instance, physical_device, queue_family_index)?;
-
         let swapchain_loader = ash::khr::swapchain::Device::new(&instance, &device);
 
         let (swapchain, swapchain_images, swapchain_format, extent) = create_swapchain(
@@ -118,34 +111,26 @@ impl VulkanRenderer {
 
         let image_layouts = vec![vk::ImageLayout::UNDEFINED; swapchain_images.len()];
 
-        let command_pool = unsafe {
-            device.create_command_pool(
-                &vk::CommandPoolCreateInfo::default()
-                    .queue_family_index(queue_family_index)
-                    .flags(vk::CommandPoolCreateFlags::RESET_COMMAND_BUFFER),
-                None,
-            )?
-        };
+        let command_pool = device.create_command_pool(
+            &vk::CommandPoolCreateInfo::default()
+                .queue_family_index(queue_family_index)
+                .flags(vk::CommandPoolCreateFlags::RESET_COMMAND_BUFFER),
+            None,
+        )?;
 
-        let command_buffers = unsafe {
-            device.allocate_command_buffers(
-                &vk::CommandBufferAllocateInfo::default()
-                    .command_pool(command_pool)
-                    .level(vk::CommandBufferLevel::PRIMARY)
-                    .command_buffer_count(swapchain_images.len() as u32),
-            )?
-        };
+        let command_buffers = device.allocate_command_buffers(
+            &vk::CommandBufferAllocateInfo::default()
+                .command_pool(command_pool)
+                .level(vk::CommandBufferLevel::PRIMARY)
+                .command_buffer_count(swapchain_images.len() as u32),
+        )?;
 
-        let image_available =
-            unsafe { device.create_semaphore(&vk::SemaphoreCreateInfo::default(), None)? };
-        let render_finished =
-            unsafe { device.create_semaphore(&vk::SemaphoreCreateInfo::default(), None)? };
-        let in_flight = unsafe {
-            device.create_fence(
-                &vk::FenceCreateInfo::default().flags(vk::FenceCreateFlags::SIGNALED),
-                None,
-            )?
-        };
+        let image_available = device.create_semaphore(&vk::SemaphoreCreateInfo::default(), None)?;
+        let render_finished = device.create_semaphore(&vk::SemaphoreCreateInfo::default(), None)?;
+        let in_flight = device.create_fence(
+            &vk::FenceCreateInfo::default().flags(vk::FenceCreateFlags::SIGNALED),
+            None,
+        )?;
 
         Ok(Self {
             instance,
@@ -185,8 +170,22 @@ impl VulkanRenderer {
         self.target_height = height;
     }
 
+    #[inline]
+    pub fn extent(&self) -> vk::Extent2D {
+        self.extent
+    }
+
+    #[inline]
+    pub fn format(&self) -> vk::Format {
+        self.swapchain_format
+    }
+
+    #[inline]
     pub fn draw_clear(&mut self) -> VkResult<()> {
-        // Minimized window -> skip
+        self.draw_clear_color([0.10, 0.12, 0.16, 1.0])
+    }
+
+    pub fn draw_clear_color(&mut self, rgba: [f32; 4]) -> VkResult<()> {
         if self.target_width == 0 || self.target_height == 0 {
             return Ok(());
         }
@@ -228,6 +227,7 @@ impl VulkanRenderer {
             )?;
 
             let old_layout = self.image_layouts[idx];
+
             transition_image(
                 &self.device,
                 cmd,
@@ -236,18 +236,14 @@ impl VulkanRenderer {
                 vk::ImageLayout::TRANSFER_DST_OPTIMAL,
             );
 
-            // Fixed color => no flicker
-            let clear_color = vk::ClearColorValue {
-                float32: [0.10, 0.12, 0.16, 1.0],
-            };
+            let clear_color = vk::ClearColorValue { float32: rgba };
 
-            let ranges = [vk::ImageSubresourceRange {
-                aspect_mask: vk::ImageAspectFlags::COLOR,
-                base_mip_level: 0,
-                level_count: 1,
-                base_array_layer: 0,
-                layer_count: 1,
-            }];
+            let ranges = [vk::ImageSubresourceRange::default()
+                .aspect_mask(vk::ImageAspectFlags::COLOR)
+                .base_mip_level(0)
+                .level_count(1)
+                .base_array_layer(0)
+                .layer_count(1)];
 
             self.device.cmd_clear_color_image(
                 cmd,
@@ -333,7 +329,6 @@ impl VulkanRenderer {
         let swapchain_image_views =
             create_image_views(&self.device, &swapchain_images, swapchain_format)?;
 
-        // Command buffers count must match images count
         unsafe {
             self.device
                 .free_command_buffers(self.command_pool, &self.command_buffers);
@@ -389,7 +384,7 @@ unsafe fn has_instance_layer(entry: &Entry, name: &CStr) -> bool {
     };
 
     props.iter().any(|p| {
-        let layer = unsafe { CStr::from_ptr(p.layer_name.as_ptr()) };
+        let layer = CStr::from_ptr(p.layer_name.as_ptr());
         layer == name
     })
 }
@@ -454,7 +449,7 @@ fn create_swapchain(
     let present_modes =
         unsafe { surface_loader.get_physical_device_surface_present_modes(pd, surface)? };
 
-    let format = formats
+    let surface_format = formats
         .iter()
         .find(|f| f.format == vk::Format::B8G8R8A8_UNORM)
         .cloned()
@@ -485,14 +480,16 @@ fn create_swapchain(
 
     let queue_family_indices = [qfi];
 
+    let image_usage = vk::ImageUsageFlags::TRANSFER_DST | vk::ImageUsageFlags::COLOR_ATTACHMENT;
+
     let sci = vk::SwapchainCreateInfoKHR::default()
         .surface(surface)
         .min_image_count(image_count)
-        .image_format(format.format)
-        .image_color_space(format.color_space)
+        .image_format(surface_format.format)
+        .image_color_space(surface_format.color_space)
         .image_extent(extent)
         .image_array_layers(1)
-        .image_usage(vk::ImageUsageFlags::TRANSFER_DST)
+        .image_usage(image_usage)
         .image_sharing_mode(vk::SharingMode::EXCLUSIVE)
         .pre_transform(caps.current_transform)
         .composite_alpha(vk::CompositeAlphaFlagsKHR::OPAQUE)
@@ -503,7 +500,7 @@ fn create_swapchain(
     let swapchain = unsafe { swapchain_loader.create_swapchain(&sci, None)? };
     let images = unsafe { swapchain_loader.get_swapchain_images(swapchain)? };
 
-    Ok((swapchain, images, format.format, extent))
+    Ok((swapchain, images, surface_format.format, extent))
 }
 
 fn create_image_views(
@@ -535,6 +532,34 @@ fn create_image_views(
     Ok(views)
 }
 
+#[inline]
+fn stage_access_for_layout(
+    layout: vk::ImageLayout,
+) -> (vk::PipelineStageFlags, vk::AccessFlags) {
+    match layout {
+        vk::ImageLayout::UNDEFINED => (
+            vk::PipelineStageFlags::TOP_OF_PIPE,
+            vk::AccessFlags::empty(),
+        ),
+        vk::ImageLayout::TRANSFER_DST_OPTIMAL => (
+            vk::PipelineStageFlags::TRANSFER,
+            vk::AccessFlags::TRANSFER_WRITE,
+        ),
+        vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL => (
+            vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT,
+            vk::AccessFlags::COLOR_ATTACHMENT_WRITE,
+        ),
+        vk::ImageLayout::PRESENT_SRC_KHR => (
+            vk::PipelineStageFlags::ALL_COMMANDS,
+            vk::AccessFlags::MEMORY_READ,
+        ),
+        _ => (
+            vk::PipelineStageFlags::ALL_COMMANDS,
+            vk::AccessFlags::MEMORY_READ | vk::AccessFlags::MEMORY_WRITE,
+        ),
+    }
+}
+
 fn transition_image(
     device: &Device,
     cmd: vk::CommandBuffer,
@@ -542,26 +567,14 @@ fn transition_image(
     old: vk::ImageLayout,
     new: vk::ImageLayout,
 ) {
-    let (src_stage, src_access) = match old {
-        vk::ImageLayout::UNDEFINED => (vk::PipelineStageFlags::TOP_OF_PIPE, vk::AccessFlags::empty()),
-        vk::ImageLayout::PRESENT_SRC_KHR => (vk::PipelineStageFlags::BOTTOM_OF_PIPE, vk::AccessFlags::empty()),
-        vk::ImageLayout::TRANSFER_DST_OPTIMAL => (
-            vk::PipelineStageFlags::TRANSFER,
-            vk::AccessFlags::TRANSFER_WRITE,
-        ),
-        _ => (vk::PipelineStageFlags::ALL_COMMANDS, vk::AccessFlags::MEMORY_WRITE),
-    };
+    if old == new {
+        return;
+    }
 
-    let (dst_stage, dst_access) = match new {
-        vk::ImageLayout::TRANSFER_DST_OPTIMAL => (
-            vk::PipelineStageFlags::TRANSFER,
-            vk::AccessFlags::TRANSFER_WRITE,
-        ),
-        vk::ImageLayout::PRESENT_SRC_KHR => (vk::PipelineStageFlags::BOTTOM_OF_PIPE, vk::AccessFlags::empty()),
-        _ => (vk::PipelineStageFlags::ALL_COMMANDS, vk::AccessFlags::MEMORY_READ),
-    };
+    let (src_stage, src_access) = stage_access_for_layout(old);
+    let (dst_stage, dst_access) = stage_access_for_layout(new);
 
-    let barriers = [vk::ImageMemoryBarrier::default()
+    let barrier = vk::ImageMemoryBarrier::default()
         .old_layout(old)
         .new_layout(new)
         .src_access_mask(src_access)
@@ -574,7 +587,7 @@ fn transition_image(
                 .level_count(1)
                 .base_array_layer(0)
                 .layer_count(1),
-        )];
+        );
 
     unsafe {
         device.cmd_pipeline_barrier(
@@ -584,7 +597,7 @@ fn transition_image(
             vk::DependencyFlags::empty(),
             &[],
             &[],
-            &barriers,
+            &[barrier],
         );
     }
 }

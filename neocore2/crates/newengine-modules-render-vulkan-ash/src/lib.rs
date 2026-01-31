@@ -1,19 +1,27 @@
-mod error;
+mod render_api;
 mod vulkan;
+mod error;
 
-use crate::error::VkRenderError;
-use crate::vulkan::VulkanRenderer;
+use newengine_core::render::{BeginFrameDesc, RenderApiRef, RENDER_API_ID, RENDER_API_PROVIDE};
+use newengine_core::{ApiProvide, EngineError, EngineResult, Module, ModuleCtx};
 
-use newengine_core::{EngineError, EngineResult, Module, ModuleCtx};
 use newengine_platform_winit::{WinitWindowHandles, WinitWindowInitSize};
 
+use render_api::VulkanRenderApi;
+
 pub struct VulkanAshRenderModule {
-    renderer: Option<VulkanRenderer>,
+    api: Option<RenderApiRef>,
+    last_w: u32,
+    last_h: u32,
 }
 
 impl Default for VulkanAshRenderModule {
     fn default() -> Self {
-        Self { renderer: None }
+        Self {
+            api: None,
+            last_w: 0,
+            last_h: 0,
+        }
     }
 }
 
@@ -22,40 +30,68 @@ impl<E: Send + 'static> Module<E> for VulkanAshRenderModule {
         "render.vulkan.ash"
     }
 
+    fn provides(&self) -> &'static [ApiProvide] {
+        &[RENDER_API_PROVIDE]
+    }
+
     fn init(&mut self, ctx: &mut ModuleCtx<'_, E>) -> EngineResult<()> {
-        let handles = ctx
-            .resources()
-            .get::<WinitWindowHandles>()
-            .ok_or_else(|| EngineError::Other(VkRenderError::MissingWindow.to_string()))?;
+        let (display, window, w, h) = {
+            let handles = ctx
+                .resources()
+                .get::<WinitWindowHandles>()
+                .ok_or_else(|| EngineError::other("Missing WinitWindowHandles in Resources"))?;
 
-        let size = ctx
-            .resources()
-            .get::<WinitWindowInitSize>()
-            .ok_or_else(|| EngineError::Other("Missing WinitWindowInitSize".to_string()))?;
+            let size = ctx
+                .resources()
+                .get::<WinitWindowInitSize>()
+                .ok_or_else(|| EngineError::other("Missing WinitWindowInitSize in Resources"))?;
 
-        let renderer = unsafe { VulkanRenderer::new(handles.display, handles.window, size.width, size.height) }
-            .map_err(|e| EngineError::Other(e.to_string()))?;
+            (handles.display, handles.window, size.width, size.height)
+        };
 
-        self.renderer = Some(renderer);
+        let renderer = unsafe { vulkan::VulkanRenderer::new(display, window, w, h) }
+            .map_err(|e| EngineError::other(e.to_string()))?;
+
+        let api = RenderApiRef::new(VulkanRenderApi::new(renderer));
+
+        ctx.resources_mut().register_api(RENDER_API_ID, api.clone())?;
+
+        self.api = Some(api);
+        self.last_w = w;
+        self.last_h = h;
+
         Ok(())
     }
 
     fn render(&mut self, ctx: &mut ModuleCtx<'_, E>) -> EngineResult<()> {
-        let Some(r) = self.renderer.as_mut() else {
-            return Ok(());
-        };
+        let Some(api) = self.api.as_ref() else { return Ok(()); };
 
-        // Always track latest window size from platform resource.
-        if let Some(sz) = ctx.resources().get::<WinitWindowInitSize>() {
-            r.set_target_size(sz.width, sz.height);
+        let (w, h) = ctx
+            .resources()
+            .get::<WinitWindowInitSize>()
+            .map(|s| (s.width, s.height))
+            .unwrap_or((0, 0));
+
+        if w != self.last_w || h != self.last_h {
+            self.last_w = w;
+            self.last_h = h;
+            api.lock().resize(w, h)?;
         }
 
-        r.draw_clear().map_err(|e| EngineError::Other(e.to_string()))?;
+        {
+            let mut r = api.lock();
+            r.begin_frame(BeginFrameDesc::new([0.0, 0.0, 0.0, 1.0]))?;
+            r.end_frame()?;
+        }
+
         Ok(())
     }
 
-    fn shutdown(&mut self, _ctx: &mut ModuleCtx<'_, E>) -> EngineResult<()> {
-        self.renderer = None;
+    fn shutdown(&mut self, ctx: &mut ModuleCtx<'_, E>) -> EngineResult<()> {
+        let _ = ctx
+            .resources_mut()
+            .unregister_api::<RenderApiRef>(RENDER_API_ID);
+        self.api = None;
         Ok(())
     }
 }
