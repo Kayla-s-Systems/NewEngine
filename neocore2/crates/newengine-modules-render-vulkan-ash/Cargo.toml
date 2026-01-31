@@ -6,12 +6,11 @@ edition = "2021"
 [dependencies]
 newengine-core = { path = "../newengine-core" }
 newengine-platform-winit = { path = "../newengine-platform-winit" }
-
 ash = "0.38"
 ash-window = "0.13"
-
 raw-window-handle = "0.6"
-winit = "0.29"
-
 thiserror = "1.0"
 log = "0.4.29"
+
+[build-dependencies]
+shaderc = "0.8"

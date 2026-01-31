@@ -8,6 +8,12 @@ use std::ffi::{CStr, CString};
 pub struct VulkanRenderer {
     instance: Instance,
 
+    render_pass: vk::RenderPass,
+    framebuffers: Vec<vk::Framebuffer>,
+
+    pipeline_layout: vk::PipelineLayout,
+    pipeline: vk::Pipeline,
+
     surface_loader: ash::khr::surface::Instance,
     surface: vk::SurfaceKHR,
 
@@ -111,6 +117,10 @@ impl VulkanRenderer {
 
         let image_layouts = vec![vk::ImageLayout::UNDEFINED; swapchain_images.len()];
 
+        let render_pass = create_render_pass(&device, swapchain_format)?;
+        let (pipeline_layout, pipeline) = create_pipeline(&device, render_pass)?;
+        let framebuffers = create_framebuffers(&device, render_pass, &swapchain_image_views, extent)?;
+
         let command_pool = device.create_command_pool(
             &vk::CommandPoolCreateInfo::default()
                 .queue_family_index(queue_family_index)
@@ -134,6 +144,13 @@ impl VulkanRenderer {
 
         Ok(Self {
             instance,
+
+            render_pass,
+            framebuffers,
+
+            pipeline_layout,
+            pipeline,
+
             surface_loader,
             surface,
 
@@ -170,16 +187,19 @@ impl VulkanRenderer {
         self.target_height = height;
     }
 
+    #[allow(dead_code)]
     #[inline]
     pub fn extent(&self) -> vk::Extent2D {
         self.extent
     }
 
+    #[allow(dead_code)]
     #[inline]
     pub fn format(&self) -> vk::Format {
         self.swapchain_format
     }
 
+    #[allow(dead_code)]
     #[inline]
     pub fn draw_clear(&mut self) -> VkResult<()> {
         self.draw_clear_color([0.10, 0.12, 0.16, 1.0])
@@ -205,7 +225,7 @@ impl VulkanRenderer {
             )
         } {
             Ok(v) => v,
-            Err(vk::Result::ERROR_OUT_OF_DATE_KHR) => {
+            Err(vk::Result::ERROR_OUT_OF_DATE_KHR) => unsafe {
                 self.recreate_swapchain()?;
                 return Ok(());
             }
@@ -233,31 +253,53 @@ impl VulkanRenderer {
                 cmd,
                 image,
                 old_layout,
-                vk::ImageLayout::TRANSFER_DST_OPTIMAL,
+                vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL,
             );
 
-            let clear_color = vk::ClearColorValue { float32: rgba };
+            let clear = vk::ClearValue {
+                color: vk::ClearColorValue { float32: rgba },
+            };
 
-            let ranges = [vk::ImageSubresourceRange::default()
-                .aspect_mask(vk::ImageAspectFlags::COLOR)
-                .base_mip_level(0)
-                .level_count(1)
-                .base_array_layer(0)
-                .layer_count(1)];
+            let rp_begin = vk::RenderPassBeginInfo::default()
+                .render_pass(self.render_pass)
+                .framebuffer(self.framebuffers[idx])
+                .render_area(vk::Rect2D {
+                    offset: vk::Offset2D { x: 0, y: 0 },
+                    extent: self.extent,
+                })
+                .clear_values(std::slice::from_ref(&clear));
 
-            self.device.cmd_clear_color_image(
-                cmd,
-                image,
-                vk::ImageLayout::TRANSFER_DST_OPTIMAL,
-                &clear_color,
-                &ranges,
-            );
+            self.device
+                .cmd_begin_render_pass(cmd, &rp_begin, vk::SubpassContents::INLINE);
+
+            self.device
+                .cmd_bind_pipeline(cmd, vk::PipelineBindPoint::GRAPHICS, self.pipeline);
+
+            let viewport = vk::Viewport {
+                x: 0.0,
+                y: 0.0,
+                width: self.extent.width as f32,
+                height: self.extent.height as f32,
+                min_depth: 0.0,
+                max_depth: 1.0,
+            };
+            let scissor = vk::Rect2D {
+                offset: vk::Offset2D { x: 0, y: 0 },
+                extent: self.extent,
+            };
+
+            self.device.cmd_set_viewport(cmd, 0, std::slice::from_ref(&viewport));
+            self.device.cmd_set_scissor(cmd, 0, std::slice::from_ref(&scissor));
+
+            self.device.cmd_draw(cmd, 3, 1, 0, 0);
+
+            self.device.cmd_end_render_pass(cmd);
 
             transition_image(
                 &self.device,
                 cmd,
                 image,
-                vk::ImageLayout::TRANSFER_DST_OPTIMAL,
+                vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL,
                 vk::ImageLayout::PRESENT_SRC_KHR,
             );
 
@@ -265,7 +307,7 @@ impl VulkanRenderer {
 
             self.device.end_command_buffer(cmd)?;
 
-            let wait_stages = [vk::PipelineStageFlags::TRANSFER];
+            let wait_stages = [vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT];
             let wait_sems = [self.image_available];
             let signal_sems = [self.render_finished];
             let cmd_bufs = [cmd];
@@ -287,7 +329,10 @@ impl VulkanRenderer {
                 .swapchains(&swapchains)
                 .image_indices(&indices);
 
-            match self.swapchain_loader.queue_present(self.queue, &present_info) {
+            match self
+                .swapchain_loader
+                .queue_present(self.queue, &present_info)
+            {
                 Ok(_) => {}
                 Err(vk::Result::ERROR_OUT_OF_DATE_KHR) | Err(vk::Result::SUBOPTIMAL_KHR) => {
                     self.recreate_swapchain()?;
@@ -300,20 +345,28 @@ impl VulkanRenderer {
         Ok(())
     }
 
-    fn recreate_swapchain(&mut self) -> VkResult<()> {
+    unsafe fn recreate_swapchain(&mut self) -> VkResult<()> {
         if self.target_width == 0 || self.target_height == 0 {
             return Ok(());
         }
 
         unsafe {
             let _ = self.device.device_wait_idle();
+        }
+
+        unsafe {
+            for &fb in &self.framebuffers {
+                self.device.destroy_framebuffer(fb, None);
+            }
+            self.framebuffers.clear();
 
             for &iv in &self.swapchain_image_views {
                 self.device.destroy_image_view(iv, None);
             }
             self.swapchain_image_views.clear();
 
-            self.swapchain_loader.destroy_swapchain(self.swapchain, None);
+            self.swapchain_loader
+                .destroy_swapchain(self.swapchain, None);
         }
 
         let (swapchain, swapchain_images, swapchain_format, extent) = create_swapchain(
@@ -329,6 +382,27 @@ impl VulkanRenderer {
         let swapchain_image_views =
             create_image_views(&self.device, &swapchain_images, swapchain_format)?;
 
+        let format_changed = swapchain_format != self.swapchain_format;
+
+        if format_changed {
+            unsafe {
+                self.device.destroy_pipeline(self.pipeline, None);
+                self.device.destroy_pipeline_layout(self.pipeline_layout, None);
+                self.device.destroy_render_pass(self.render_pass, None);
+            }
+
+            self.swapchain_format = swapchain_format;
+            self.render_pass = create_render_pass(&self.device, self.swapchain_format)?;
+            let (pl, p) = create_pipeline(&self.device, self.render_pass)?;
+            self.pipeline_layout = pl;
+            self.pipeline = p;
+        } else {
+            self.swapchain_format = swapchain_format;
+        }
+
+        let framebuffers =
+            create_framebuffers(&self.device, self.render_pass, &swapchain_image_views, extent)?;
+
         unsafe {
             self.device
                 .free_command_buffers(self.command_pool, &self.command_buffers);
@@ -343,9 +417,9 @@ impl VulkanRenderer {
 
         self.swapchain = swapchain;
         self.swapchain_images = swapchain_images;
-        self.swapchain_format = swapchain_format;
         self.extent = extent;
         self.swapchain_image_views = swapchain_image_views;
+        self.framebuffers = framebuffers;
         self.image_layouts = vec![vk::ImageLayout::UNDEFINED; self.swapchain_images.len()];
 
         Ok(())
@@ -365,11 +439,19 @@ impl Drop for VulkanRenderer {
                 .free_command_buffers(self.command_pool, &self.command_buffers);
             self.device.destroy_command_pool(self.command_pool, None);
 
+            for &fb in &self.framebuffers {
+                self.device.destroy_framebuffer(fb, None);
+            }
+            self.device.destroy_pipeline(self.pipeline, None);
+            self.device.destroy_pipeline_layout(self.pipeline_layout, None);
+            self.device.destroy_render_pass(self.render_pass, None);
+
             for &iv in &self.swapchain_image_views {
                 self.device.destroy_image_view(iv, None);
             }
 
-            self.swapchain_loader.destroy_swapchain(self.swapchain, None);
+            self.swapchain_loader
+                .destroy_swapchain(self.swapchain, None);
             self.surface_loader.destroy_surface(self.surface, None);
 
             self.device.destroy_device(None);
@@ -532,10 +614,154 @@ fn create_image_views(
     Ok(views)
 }
 
+unsafe fn create_render_pass(device: &Device, format: vk::Format) -> VkResult<vk::RenderPass> {
+    let color_attach = vk::AttachmentDescription::default()
+        .format(format)
+        .samples(vk::SampleCountFlags::TYPE_1)
+        .load_op(vk::AttachmentLoadOp::CLEAR)
+        .store_op(vk::AttachmentStoreOp::STORE)
+        .stencil_load_op(vk::AttachmentLoadOp::DONT_CARE)
+        .stencil_store_op(vk::AttachmentStoreOp::DONT_CARE)
+        .initial_layout(vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL)
+        .final_layout(vk::ImageLayout::PRESENT_SRC_KHR);
+
+    let color_ref = vk::AttachmentReference::default()
+        .attachment(0)
+        .layout(vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL);
+
+    let subpass = vk::SubpassDescription::default()
+        .pipeline_bind_point(vk::PipelineBindPoint::GRAPHICS)
+        .color_attachments(std::slice::from_ref(&color_ref));
+
+    let dep = vk::SubpassDependency::default()
+        .src_subpass(vk::SUBPASS_EXTERNAL)
+        .dst_subpass(0)
+        .src_stage_mask(vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT)
+        .dst_stage_mask(vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT)
+        .dst_access_mask(vk::AccessFlags::COLOR_ATTACHMENT_WRITE);
+
+    let rp = vk::RenderPassCreateInfo::default()
+        .attachments(std::slice::from_ref(&color_attach))
+        .subpasses(std::slice::from_ref(&subpass))
+        .dependencies(std::slice::from_ref(&dep));
+
+    Ok(device.create_render_pass(&rp, None)?)
+}
+
+unsafe fn create_framebuffers(
+    device: &Device,
+    render_pass: vk::RenderPass,
+    views: &[vk::ImageView],
+    extent: vk::Extent2D,
+) -> VkResult<Vec<vk::Framebuffer>> {
+    let mut fbs = Vec::with_capacity(views.len());
+    for &view in views {
+        let attachments = [view];
+        let fb_info = vk::FramebufferCreateInfo::default()
+            .render_pass(render_pass)
+            .attachments(&attachments)
+            .width(extent.width)
+            .height(extent.height)
+            .layers(1);
+        fbs.push(device.create_framebuffer(&fb_info, None)?);
+    }
+    Ok(fbs)
+}
+
+unsafe fn create_shader_module(device: &Device, bytes: &[u8]) -> VkResult<vk::ShaderModule> {
+    let words = ash::util::read_spv(&mut std::io::Cursor::new(bytes))
+        .map_err(|e| VkRenderError::AshWindow(e.to_string()))?;
+    let ci = vk::ShaderModuleCreateInfo::default().code(&words);
+    Ok(device.create_shader_module(&ci, None)?)
+}
+
+unsafe fn create_pipeline(
+    device: &Device,
+    render_pass: vk::RenderPass,
+) -> VkResult<(vk::PipelineLayout, vk::Pipeline)> {
+    let vert = create_shader_module(
+        device,
+        include_bytes!(concat!(env!("OUT_DIR"), "/tri.vert.spv")),
+    )?;
+    let frag = create_shader_module(
+        device,
+        include_bytes!(concat!(env!("OUT_DIR"), "/tri.frag.spv")),
+    )?;
+
+    let entry = CString::new("main").unwrap();
+
+    let stages = [
+        vk::PipelineShaderStageCreateInfo::default()
+            .stage(vk::ShaderStageFlags::VERTEX)
+            .module(vert)
+            .name(&entry),
+        vk::PipelineShaderStageCreateInfo::default()
+            .stage(vk::ShaderStageFlags::FRAGMENT)
+            .module(frag)
+            .name(&entry),
+    ];
+
+    let vi = vk::PipelineVertexInputStateCreateInfo::default();
+    let ia = vk::PipelineInputAssemblyStateCreateInfo::default()
+        .topology(vk::PrimitiveTopology::TRIANGLE_LIST);
+
+    let vp = vk::PipelineViewportStateCreateInfo::default()
+        .viewport_count(1)
+        .scissor_count(1);
+
+    let rs = vk::PipelineRasterizationStateCreateInfo::default()
+        .polygon_mode(vk::PolygonMode::FILL)
+        .cull_mode(vk::CullModeFlags::NONE)
+        .front_face(vk::FrontFace::COUNTER_CLOCKWISE)
+        .line_width(1.0);
+
+    let ms = vk::PipelineMultisampleStateCreateInfo::default()
+        .rasterization_samples(vk::SampleCountFlags::TYPE_1);
+
+    let ca = vk::PipelineColorBlendAttachmentState::default()
+        .blend_enable(false)
+        .color_write_mask(
+            vk::ColorComponentFlags::R
+                | vk::ColorComponentFlags::G
+                | vk::ColorComponentFlags::B
+                | vk::ColorComponentFlags::A,
+        );
+
+    let cb = vk::PipelineColorBlendStateCreateInfo::default()
+        .attachments(std::slice::from_ref(&ca));
+
+    let dyn_states = [vk::DynamicState::VIEWPORT, vk::DynamicState::SCISSOR];
+    let ds = vk::PipelineDynamicStateCreateInfo::default().dynamic_states(&dyn_states);
+
+    let layout = device.create_pipeline_layout(&vk::PipelineLayoutCreateInfo::default(), None)?;
+
+    let gp = vk::GraphicsPipelineCreateInfo::default()
+        .stages(&stages)
+        .vertex_input_state(&vi)
+        .input_assembly_state(&ia)
+        .viewport_state(&vp)
+        .rasterization_state(&rs)
+        .multisample_state(&ms)
+        .color_blend_state(&cb)
+        .dynamic_state(&ds)
+        .layout(layout)
+        .render_pass(render_pass)
+        .subpass(0);
+
+    let pipelines = device.create_graphics_pipelines(vk::PipelineCache::null(), &[gp], None);
+    let pipeline = match pipelines {
+        Ok(v) => v[0],
+        Err((_, e)) => return Err(e.into()),
+    };
+
+    device.destroy_shader_module(vert, None);
+    device.destroy_shader_module(frag, None);
+
+    Ok((layout, pipeline))
+}
+
 #[inline]
-fn stage_access_for_layout(
-    layout: vk::ImageLayout,
-) -> (vk::PipelineStageFlags, vk::AccessFlags) {
+fn stage_access_for_layout(layout: vk::ImageLayout) -> (vk::PipelineStageFlags, vk::AccessFlags) {
     match layout {
         vk::ImageLayout::UNDEFINED => (
             vk::PipelineStageFlags::TOP_OF_PIPE,

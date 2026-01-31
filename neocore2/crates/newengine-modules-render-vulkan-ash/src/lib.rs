@@ -7,6 +7,7 @@ use newengine_core::{ApiProvide, EngineError, EngineResult, Module, ModuleCtx};
 
 use newengine_platform_winit::{WinitWindowHandles, WinitWindowInitSize};
 
+use crate::error::VkRenderError;
 use render_api::VulkanRenderApi;
 
 pub struct VulkanAshRenderModule {
@@ -39,15 +40,16 @@ impl<E: Send + 'static> Module<E> for VulkanAshRenderModule {
             let handles = ctx
                 .resources()
                 .get::<WinitWindowHandles>()
-                .ok_or_else(|| EngineError::other("Missing WinitWindowHandles in Resources"))?;
+                .ok_or_else(|| EngineError::other(VkRenderError::MissingWindowHandles.to_string()))?;
 
             let size = ctx
                 .resources()
                 .get::<WinitWindowInitSize>()
-                .ok_or_else(|| EngineError::other("Missing WinitWindowInitSize in Resources"))?;
+                .ok_or_else(|| EngineError::other(VkRenderError::MissingWindowSize.to_string()))?;
 
             (handles.display, handles.window, size.width, size.height)
         };
+
 
         let renderer = unsafe { vulkan::VulkanRenderer::new(display, window, w, h) }
             .map_err(|e| EngineError::other(e.to_string()))?;
