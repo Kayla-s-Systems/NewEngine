@@ -5,12 +5,44 @@ use newengine_core::{Engine, EngineError, EngineResult};
 use raw_window_handle::{HasDisplayHandle, HasWindowHandle, RawDisplayHandle, RawWindowHandle};
 use winit::{
     application::ApplicationHandler,
+    dpi::PhysicalPosition,
     dpi::PhysicalSize,
     event::{ElementState, Ime, MouseScrollDelta, WindowEvent},
     event_loop::{ActiveEventLoop, EventLoop},
     keyboard::{KeyCode as WKeyCode, PhysicalKey},
     window::{Window, WindowAttributes, WindowId},
 };
+
+/// Window placement policy.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum WinitWindowPlacement {
+    /// Let the OS decide.
+    OsDefault,
+    /// Place the window in the center of the primary monitor.
+    /// `offset` allows fine-tuning (e.g. move slightly up).
+    Centered { offset: (i32, i32) },
+    /// Place the window at an absolute physical position on screen.
+    Absolute { x: i32, y: i32 },
+}
+
+/// Winit host configuration.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct WinitAppConfig {
+    pub title: String,
+    pub size: (u32, u32),
+    pub placement: WinitWindowPlacement,
+}
+
+impl Default for WinitAppConfig {
+    #[inline]
+    fn default() -> Self {
+        Self {
+            title: "NewEngine".to_owned(),
+            size: (1280, 720),
+            placement: WinitWindowPlacement::Centered { offset: (0, 0) },
+        }
+    }
+}
 
 /// Engine-thread local window handles (not Send/Sync on some platforms).
 #[derive(Debug, Clone, Copy)]
@@ -35,6 +67,7 @@ where
 {
     engine: Engine<E>,
     after_window: Option<F>,
+    config: WinitAppConfig,
     started: bool,
     fatal: Option<EngineError>,
 
@@ -48,14 +81,55 @@ where
     F: FnOnce(&mut Engine<E>) -> EngineResult<()> + 'static,
 {
     #[inline]
-    fn new(engine: Engine<E>, after_window: F) -> Self {
+    fn new(engine: Engine<E>, config: WinitAppConfig, after_window: F) -> Self {
         Self {
             engine,
             after_window: Some(after_window),
+            config,
             started: false,
             fatal: None,
             window: None,
             last_cursor_pos: None,
+        }
+    }
+
+    #[inline]
+    fn build_window_attributes(
+        event_loop: &ActiveEventLoop,
+        config: &WinitAppConfig,
+    ) -> WindowAttributes {
+        let (width, height) = config.size;
+        let mut attrs = WindowAttributes::default()
+            .with_title(config.title.clone())
+            .with_inner_size(PhysicalSize::new(width, height));
+
+        match config.placement {
+            WinitWindowPlacement::OsDefault => attrs,
+
+            WinitWindowPlacement::Absolute { x, y } => {
+                attrs = attrs.with_position(PhysicalPosition::new(x, y));
+                attrs
+            }
+
+            WinitWindowPlacement::Centered { offset: (ox, oy) } => {
+                let Some(monitor) = event_loop.primary_monitor() else {
+                    return attrs;
+                };
+
+                let ms = monitor.size();
+                let mp = monitor.position();
+
+                let cx =
+                    mp.x.saturating_add(((ms.width as i32).saturating_sub(width as i32)) / 2);
+                let cy =
+                    mp.y.saturating_add(((ms.height as i32).saturating_sub(height as i32)) / 2);
+
+                attrs = attrs.with_position(PhysicalPosition::new(
+                    cx.saturating_add(ox),
+                    cy.saturating_add(oy),
+                ));
+                attrs
+            }
         }
     }
 
@@ -121,10 +195,7 @@ where
     fn emit_resized(&mut self, width: u32, height: u32) {
         let _ = self
             .engine
-            .emit(HostEvent::Window(WindowHostEvent::Resized {
-                width,
-                height,
-            }));
+            .emit(HostEvent::Window(WindowHostEvent::Resized { width, height }));
     }
 
     #[inline]
@@ -236,7 +307,8 @@ where
     F: FnOnce(&mut Engine<E>) -> EngineResult<()> + 'static,
 {
     fn resumed(&mut self, event_loop: &ActiveEventLoop) {
-        let window = match event_loop.create_window(WindowAttributes::default()) {
+        let attrs = Self::build_window_attributes(event_loop, &self.config);
+        let window = match event_loop.create_window(attrs) {
             Ok(w) => w,
             Err(e) => {
                 self.set_fatal_and_exit(event_loop, EngineError::Other(e.to_string()));
@@ -408,8 +480,24 @@ where
     E: Send + 'static,
     F: FnOnce(&mut Engine<E>) -> EngineResult<()> + 'static,
 {
+    run_winit_app_with_config(engine, WinitAppConfig::default(), after_window)
+}
+
+/// Runs winit host with the provided window configuration and starts the engine *after* the window is created.
+///
+/// `after_window` is called once, right after inserting `WinitWindowHandles` + `WinitWindowInitSize` into Resources.
+/// Use it to register modules that require window handles (Vulkan, CEF, etc.).
+pub fn run_winit_app_with_config<E, F>(
+    engine: Engine<E>,
+    config: WinitAppConfig,
+    after_window: F,
+) -> EngineResult<()>
+where
+    E: Send + 'static,
+    F: FnOnce(&mut Engine<E>) -> EngineResult<()> + 'static,
+{
     let event_loop = EventLoop::new().map_err(|e| EngineError::Other(e.to_string()))?;
-    let mut app = App::new(engine, after_window);
+    let mut app = App::new(engine, config, after_window);
 
     event_loop
         .run_app(&mut app)

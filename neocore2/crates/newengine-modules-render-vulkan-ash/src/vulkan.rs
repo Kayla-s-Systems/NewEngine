@@ -6,7 +6,6 @@ use raw_window_handle::{RawDisplayHandle, RawWindowHandle};
 use std::ffi::{CStr, CString};
 
 pub struct VulkanRenderer {
-    entry: Entry,
     instance: Instance,
 
     surface_loader: ash::khr::surface::Instance,
@@ -149,7 +148,6 @@ impl VulkanRenderer {
         };
 
         Ok(Self {
-            entry,
             instance,
             surface_loader,
             surface,
