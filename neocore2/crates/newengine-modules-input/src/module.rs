@@ -1,243 +1,329 @@
-use crate::api::{InputApi, InputApiImpl};
-use crate::state::{GamepadAxis, GamepadButton, GamepadEvent, GamepadId, InputState};
+#![forbid(unsafe_op_in_unsafe_fn)]
 
-use std::collections::HashMap;
-use std::sync::Arc;
+use abi_stable::sabi_trait::TD_Opaque;
+use abi_stable::std_types::{RResult, RString};
+use abi_stable::StableAbi;
 
-use log::{info, warn};
-use newengine_core::events::OverflowPolicy;
-use newengine_core::host_events::{HostEvent, KeyCode};
-use newengine_core::{EngineResult, Module, ModuleCtx};
+use newengine_plugin_api::{
+    HostApiV1, HostEventAbi, HostEventSink, HostEventSinkDyn, HostEventSink_TO, InputApiV1,
+    InputApiV1Dyn, InputApiV1_TO, InputHostEventAbi, KeyCodeAbi, KeyStateAbi, MouseButtonAbi,
+    PluginInfo, PluginModule, TextHostEventAbi, Vec2fAbi,
+};
 
-#[derive(Debug, Clone)]
-pub struct InputModuleConfig {
-    pub enable_ime: bool,
-    pub max_text_chars_per_frame: usize,
+use std::sync::{Mutex, OnceLock};
+
+struct State {
+    keys_down: [bool; 256],
+    keys_pressed: [bool; 256],
+    keys_released: [bool; 256],
+
+    mouse_pos: Vec2fAbi,
+    mouse_delta: Vec2fAbi,
+    wheel_delta: Vec2fAbi,
+
+    mouse_down_bits: u32,
+    mouse_pressed_bits: u32,
+    mouse_released_bits: u32,
+
+    text: String,
+    ime_preedit: String,
+    ime_commit: String,
 }
 
-impl Default for InputModuleConfig {
+impl Default for State {
+    #[inline]
     fn default() -> Self {
         Self {
-            enable_ime: true,
-            max_text_chars_per_frame: 128,
+            keys_down: [false; 256],
+            keys_pressed: [false; 256],
+            keys_released: [false; 256],
+
+            mouse_pos: Vec2fAbi::new(0.0, 0.0),
+            mouse_delta: Vec2fAbi::new(0.0, 0.0),
+            wheel_delta: Vec2fAbi::new(0.0, 0.0),
+
+            mouse_down_bits: 0,
+            mouse_pressed_bits: 0,
+            mouse_released_bits: 0,
+
+            text: String::new(),
+            ime_preedit: String::new(),
+            ime_commit: String::new(),
         }
     }
 }
 
-pub struct InputHandlerModule {
-    cfg: InputModuleConfig,
-    state: InputState,
-    api: Arc<InputApiImpl>,
-    sub: Option<newengine_core::events::EventSub<HostEvent>>,
-    queue: Vec<std::sync::Arc<HostEvent>>,
+static STATE: OnceLock<Mutex<State>> = OnceLock::new();
 
-    #[cfg(feature = "gamepad")]
-    gilrs: Option<gilrs::Gilrs>,
-    #[cfg(feature = "gamepad")]
-    next_gamepad_id: u32,
-    #[cfg(feature = "gamepad")]
-    gamepad_ids: HashMap<gilrs::GamepadId, GamepadId>,
+#[inline(always)]
+fn state_opt() -> Option<&'static Mutex<State>> {
+    STATE.get()
 }
 
-impl InputHandlerModule {
-    #[inline]
-    pub fn new(cfg: InputModuleConfig) -> Self {
-        let key_count = (KeyCode::Unknown.to_index() + 1).max(256);
-        let text_cap = cfg.max_text_chars_per_frame;
-
-        let api = Arc::new(InputApiImpl::new(key_count));
-
-        #[cfg(feature = "gamepad")]
-        let gilrs = match gilrs::Gilrs::new() {
-            Ok(g) => Some(g),
-            Err(e) => {
-                warn!("gilrs init failed: {}", e);
-                None
-            }
-        };
-
-        Self {
-            cfg,
-            state: InputState::new(key_count, text_cap),
-            api,
-            sub: None,
-            queue: Vec::new(),
-            #[cfg(feature = "gamepad")]
-            gilrs,
-            #[cfg(feature = "gamepad")]
-            next_gamepad_id: 1,
-            #[cfg(feature = "gamepad")]
-            gamepad_ids: HashMap::new(),
-        }
-    }
+#[inline(always)]
+fn key_idx(k: KeyCodeAbi) -> usize {
+    (k as usize).min(255)
 }
 
-impl<E: Send + 'static> Module<E> for InputHandlerModule {
-    fn id(&self) -> &'static str {
-        "input-handler"
-    }
-
-    fn dependencies(&self) -> &'static [&'static str] {
-        &[]
-    }
-
-    fn init(&mut self, ctx: &mut ModuleCtx<'_, E>) -> EngineResult<()> {
-        // Input events can burst during focus changes or IME composition.
-        // Bounded subscription prevents unbounded memory growth if the module stalls.
-        self.sub = Some(ctx.events().subscribe_bounded::<HostEvent>(4096, OverflowPolicy::DropNewest));
-
-        let api: Arc<dyn InputApi> = self.api.clone();
-        ctx.resources_mut().insert::<Arc<dyn InputApi>>(api);
-
-        Ok(())
-    }
-
-    fn update(&mut self, _ctx: &mut ModuleCtx<'_, E>) -> EngineResult<()> {
-        self.state.begin_frame();
-
-        if let Some(sub) = &self.sub {
-            self.queue.clear();
-            sub.drain_into(&mut self.queue);
-
-            for ev in self.queue.iter() {
-                self.state.apply(ev.as_ref(), self.cfg.enable_ime);
-            }
-        }
-
-        #[cfg(feature = "gamepad")]
-        {
-            if let Some(g) = self.gilrs.as_mut() {
-                poll_gilrs(
-                    g,
-                    &mut self.next_gamepad_id,
-                    &mut self.gamepad_ids,
-                    &mut self.state.gamepad_events,
-                );
-            }
-        }
-
-        self.api.publish_from_state(&self.state);
-        Ok(())
-    }
-}
-
-#[cfg(feature = "gamepad")]
-#[inline]
-fn poll_gilrs(
-    g: &mut gilrs::Gilrs,
-    next_id: &mut u32,
-    ids: &mut HashMap<gilrs::GamepadId, GamepadId>,
-    out: &mut Vec<GamepadEvent>,
-) {
-    while let Some(ev) = g.next_event() {
-        if let Some(mapped) = map_gilrs_event(&ev, next_id, ids) {
-            match &mapped {
-                GamepadEvent::Connected { id } => info!("gamepad connected: {:?}", id),
-                GamepadEvent::Disconnected { id } => info!("gamepad disconnected: {:?}", id),
-                _ => {}
-            }
-            out.push(mapped);
-        }
-    }
-}
-
-#[cfg(feature = "gamepad")]
-#[inline]
-fn map_engine_gamepad_id(
-    next_id: &mut u32,
-    ids: &mut HashMap<gilrs::GamepadId, GamepadId>,
-    gid: gilrs::GamepadId,
-) -> GamepadId {
-    if let Some(v) = ids.get(&gid) {
-        return *v;
-    }
-    let v = GamepadId(*next_id);
-    *next_id = next_id.wrapping_add(1).max(1);
-    ids.insert(gid, v);
-    v
-}
-
-#[cfg(feature = "gamepad")]
-#[inline]
-fn map_gilrs_event(
-    ev: &gilrs::Event,
-    next_id: &mut u32,
-    ids: &mut HashMap<gilrs::GamepadId, GamepadId>,
-) -> Option<GamepadEvent> {
-    use gilrs::EventType;
-
-    let id = map_engine_gamepad_id(next_id, ids, ev.id);
-
-    match ev.event {
-        EventType::Connected => Some(GamepadEvent::Connected { id }),
-        EventType::Disconnected => {
-            ids.remove(&ev.id);
-            Some(GamepadEvent::Disconnected { id })
-        }
-
-        EventType::ButtonPressed(b, _) => Some(GamepadEvent::Button {
-            id,
-            button: map_gilrs_button(b),
-            pressed: true,
-        }),
-        EventType::ButtonReleased(b, _) => Some(GamepadEvent::Button {
-            id,
-            button: map_gilrs_button(b),
-            pressed: false,
-        }),
-
-        EventType::AxisChanged(a, v, _) => Some(GamepadEvent::Axis {
-            id,
-            axis: map_gilrs_axis(a),
-            value: v,
-        }),
-
-        _ => None,
-    }
-}
-
-#[cfg(feature = "gamepad")]
-#[inline]
-fn map_gilrs_button(b: gilrs::Button) -> GamepadButton {
-    use gilrs::Button::*;
+#[inline(always)]
+fn mouse_bit(b: MouseButtonAbi) -> u32 {
     match b {
-        South => GamepadButton::South,
-        East => GamepadButton::East,
-        West => GamepadButton::West,
-        North => GamepadButton::North,
-        Start => GamepadButton::Start,
-        Select => GamepadButton::Select,
-        Mode => GamepadButton::Mode,
-        LeftTrigger => GamepadButton::L1,
-        RightTrigger => GamepadButton::R1,
-        LeftTrigger2 => GamepadButton::L2,
-        RightTrigger2 => GamepadButton::R2,
-        LeftThumb => GamepadButton::L3,
-        RightThumb => GamepadButton::R3,
-        DPadUp => GamepadButton::DPadUp,
-        DPadDown => GamepadButton::DPadDown,
-        DPadLeft => GamepadButton::DPadLeft,
-        DPadRight => GamepadButton::DPadRight,
-        Unknown => GamepadButton::Other(0),
-        _ => GamepadButton::Other(1),
+        MouseButtonAbi::Left => 1 << 0,
+        MouseButtonAbi::Right => 1 << 1,
+        MouseButtonAbi::Middle => 1 << 2,
+        MouseButtonAbi::Other(n) => {
+            let v = (n as u32).min(28);
+            1 << (3 + v)
+        }
     }
 }
 
-#[cfg(feature = "gamepad")]
-#[inline]
-#[allow(unreachable_patterns)]
-fn map_gilrs_axis(a: gilrs::Axis) -> GamepadAxis {
-    use gilrs::Axis::*;
-    match a {
-        LeftStickX => GamepadAxis::LeftStickX,
-        LeftStickY => GamepadAxis::LeftStickY,
-        RightStickX => GamepadAxis::RightStickX,
-        RightStickY => GamepadAxis::RightStickY,
-        LeftZ => GamepadAxis::LeftZ,
-        RightZ => GamepadAxis::RightZ,
-        DPadX => GamepadAxis::DPadX,
-        DPadY => GamepadAxis::DPadY,
-        Unknown => GamepadAxis::Other(0),
-        _ => GamepadAxis::Other(1),
+#[inline(always)]
+fn ok_unit() -> RResult<(), RString> {
+    RResult::ROk(())
+}
+
+#[derive(StableAbi)]
+#[repr(C)]
+pub struct InputPlugin;
+
+impl Default for InputPlugin {
+    #[inline]
+    fn default() -> Self {
+        Self
+    }
+}
+
+impl PluginModule for InputPlugin {
+    fn info(&self) -> PluginInfo {
+        PluginInfo {
+            id: RString::from(env!("CARGO_PKG_NAME")),
+            version: RString::from(env!("CARGO_PKG_VERSION")),
+        }
+    }
+
+    fn init(&mut self, host: HostApiV1) -> RResult<(), RString> {
+        // Initialize global state once. If it already exists (hot reload / re-init), reset it.
+        if STATE.set(Mutex::new(State::default())).is_err() {
+            if let Some(m) = state_opt() {
+                if let Ok(mut g) = m.lock() {
+                    *g = State::default();
+                }
+            }
+        }
+
+        let sink: HostEventSinkDyn<'static> =
+            HostEventSink_TO::from_value(InputHostSink, TD_Opaque);
+
+        match (host.subscribe_host_events)(sink).into_result() {
+            Ok(()) => {}
+            Err(e) => return RResult::RErr(e),
+        }
+
+        let api: InputApiV1Dyn<'static> = InputApiV1_TO::from_value(InputApi, TD_Opaque);
+
+        match (host.provide_input_api_v1)(api).into_result() {
+            Ok(()) => {}
+            Err(e) => return RResult::RErr(e),
+        }
+
+        ok_unit()
+    }
+
+    fn start(&mut self) -> RResult<(), RString> {
+        ok_unit()
+    }
+
+    fn fixed_update(&mut self, _dt: f32) -> RResult<(), RString> {
+        ok_unit()
+    }
+
+    fn update(&mut self, _dt: f32) -> RResult<(), RString> {
+        // Per-frame cleanup: deltas + edge flags.
+        let Some(m) = state_opt() else { return ok_unit(); };
+        let Ok(mut g) = m.lock() else { return ok_unit(); };
+
+        g.mouse_delta = Vec2fAbi::new(0.0, 0.0);
+        g.wheel_delta = Vec2fAbi::new(0.0, 0.0);
+
+        g.mouse_pressed_bits = 0;
+        g.mouse_released_bits = 0;
+
+        for v in g.keys_pressed.iter_mut() {
+            *v = false;
+        }
+        for v in g.keys_released.iter_mut() {
+            *v = false;
+        }
+
+        ok_unit()
+    }
+
+    fn render(&mut self, _dt: f32) -> RResult<(), RString> {
+        ok_unit()
+    }
+
+    fn shutdown(&mut self) {
+        // Keep STATE allocated; the DLL will be unloaded anyway.
+    }
+}
+
+#[derive(StableAbi)]
+#[repr(C)]
+struct InputHostSink;
+
+impl HostEventSink for InputHostSink {
+    fn on_host_event(&mut self, ev: HostEventAbi) {
+        let Some(m) = state_opt() else { return; };
+        let Ok(mut g) = m.lock() else { return; };
+
+        match ev {
+            HostEventAbi::Input(ie) => match ie {
+                InputHostEventAbi::Key { code, state, repeat } => {
+                    let i = key_idx(code);
+                    let was_down = g.keys_down[i];
+                    let is_down = state == KeyStateAbi::Pressed;
+
+                    g.keys_down[i] = is_down;
+
+                    if repeat {
+                        // Repeat does not emit edges.
+                        return;
+                    }
+
+                    g.keys_pressed[i] = is_down && !was_down;
+                    g.keys_released[i] = !is_down && was_down;
+                }
+
+                InputHostEventAbi::MouseMove { pos } => {
+                    g.mouse_pos = pos;
+                }
+
+                InputHostEventAbi::MouseDelta { delta } => {
+                    g.mouse_delta =
+                        Vec2fAbi::new(g.mouse_delta.x + delta.x, g.mouse_delta.y + delta.y);
+                }
+
+                InputHostEventAbi::MouseWheel { delta } => {
+                    g.wheel_delta =
+                        Vec2fAbi::new(g.wheel_delta.x + delta.x, g.wheel_delta.y + delta.y);
+                }
+
+                InputHostEventAbi::MouseButton { button, state } => {
+                    let bit = mouse_bit(button);
+                    let was = (g.mouse_down_bits & bit) != 0;
+                    let is = state == KeyStateAbi::Pressed;
+
+                    if is {
+                        g.mouse_down_bits |= bit;
+                    } else {
+                        g.mouse_down_bits &= !bit;
+                    }
+
+                    if is && !was {
+                        g.mouse_pressed_bits |= bit;
+                    }
+                    if !is && was {
+                        g.mouse_released_bits |= bit;
+                    }
+                }
+            },
+
+            HostEventAbi::Text(te) => match te {
+                TextHostEventAbi::CharU32(cp) => {
+                    if let Some(ch) = char::from_u32(cp) {
+                        g.text.push(ch);
+                    }
+                }
+                TextHostEventAbi::ImePreedit(s) => {
+                    g.ime_preedit.clear();
+                    g.ime_preedit.push_str(&s);
+                }
+                TextHostEventAbi::ImeCommit(s) => {
+                    g.ime_commit.clear();
+                    g.ime_commit.push_str(&s);
+                }
+            },
+
+            HostEventAbi::Window(_) => {}
+        }
+    }
+}
+
+#[derive(StableAbi)]
+#[repr(C)]
+struct InputApi;
+
+impl InputApiV1 for InputApi {
+    fn key_down(&self, key: KeyCodeAbi) -> bool {
+        let Some(m) = state_opt() else { return false; };
+        let Ok(g) = m.lock() else { return false; };
+        g.keys_down[key_idx(key)]
+    }
+
+    fn key_pressed(&self, key: KeyCodeAbi) -> bool {
+        let Some(m) = state_opt() else { return false; };
+        let Ok(g) = m.lock() else { return false; };
+        g.keys_pressed[key_idx(key)]
+    }
+
+    fn key_released(&self, key: KeyCodeAbi) -> bool {
+        let Some(m) = state_opt() else { return false; };
+        let Ok(g) = m.lock() else { return false; };
+        g.keys_released[key_idx(key)]
+    }
+
+    fn mouse_pos(&self) -> Vec2fAbi {
+        let Some(m) = state_opt() else { return Vec2fAbi::new(0.0, 0.0); };
+        let Ok(g) = m.lock() else { return Vec2fAbi::new(0.0, 0.0); };
+        g.mouse_pos
+    }
+
+    fn mouse_delta(&self) -> Vec2fAbi {
+        let Some(m) = state_opt() else { return Vec2fAbi::new(0.0, 0.0); };
+        let Ok(g) = m.lock() else { return Vec2fAbi::new(0.0, 0.0); };
+        g.mouse_delta
+    }
+
+    fn wheel_delta(&self) -> Vec2fAbi {
+        let Some(m) = state_opt() else { return Vec2fAbi::new(0.0, 0.0); };
+        let Ok(g) = m.lock() else { return Vec2fAbi::new(0.0, 0.0); };
+        g.wheel_delta
+    }
+
+    fn mouse_down(&self, btn: MouseButtonAbi) -> bool {
+        let Some(m) = state_opt() else { return false; };
+        let Ok(g) = m.lock() else { return false; };
+        (g.mouse_down_bits & mouse_bit(btn)) != 0
+    }
+
+    fn mouse_pressed(&self, btn: MouseButtonAbi) -> bool {
+        let Some(m) = state_opt() else { return false; };
+        let Ok(g) = m.lock() else { return false; };
+        (g.mouse_pressed_bits & mouse_bit(btn)) != 0
+    }
+
+    fn mouse_released(&self, btn: MouseButtonAbi) -> bool {
+        let Some(m) = state_opt() else { return false; };
+        let Ok(g) = m.lock() else { return false; };
+        (g.mouse_released_bits & mouse_bit(btn)) != 0
+    }
+
+    fn text_take(&self) -> RString {
+        let Some(m) = state_opt() else { return RString::new(); };
+        let Ok(mut g) = m.lock() else { return RString::new(); };
+        RString::from(std::mem::take(&mut g.text))
+    }
+
+    fn ime_preedit(&self) -> RString {
+        let Some(m) = state_opt() else { return RString::new(); };
+        let Ok(g) = m.lock() else { return RString::new(); };
+        RString::from(g.ime_preedit.as_str())
+    }
+
+    fn ime_commit_take(&self) -> RString {
+        let Some(m) = state_opt() else { return RString::new(); };
+        let Ok(mut g) = m.lock() else { return RString::new(); };
+        RString::from(std::mem::take(&mut g.ime_commit))
     }
 }
