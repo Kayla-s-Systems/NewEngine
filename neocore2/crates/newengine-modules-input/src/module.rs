@@ -450,7 +450,7 @@ impl PluginModule for InputPlugin {
             )));
         }
 
-        //(host.log_info)(RString::from("input: initialized (events + gilrs)"));
+        (host.log_info)(RString::from("input: initialized (events + gilrs)"));
         RResult::ROk(())
     }
 
