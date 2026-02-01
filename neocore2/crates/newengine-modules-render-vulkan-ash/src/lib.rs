@@ -1,14 +1,14 @@
+mod error;
 mod render_api;
 mod vulkan;
-mod error;
 
 use newengine_core::render::{BeginFrameDesc, RenderApiRef, RENDER_API_ID, RENDER_API_PROVIDE};
-use newengine_core::{ApiProvide, EngineError, EngineResult, Module, ModuleCtx};
+use newengine_core::{EngineError, EngineResult, Module, ModuleCtx};
 
 use newengine_platform_winit::{WinitWindowHandles, WinitWindowInitSize};
 
 use crate::error::VkRenderError;
-use render_api::VulkanRenderApi;
+use crate::render_api::VulkanRenderApi;
 
 pub struct VulkanAshRenderModule {
     api: Option<RenderApiRef>,
@@ -31,7 +31,7 @@ impl<E: Send + 'static> Module<E> for VulkanAshRenderModule {
         "render.vulkan.ash"
     }
 
-    fn provides(&self) -> &'static [ApiProvide] {
+    fn provides(&self) -> &'static [newengine_core::ApiProvide] {
         &[RENDER_API_PROVIDE]
     }
 
@@ -50,11 +50,10 @@ impl<E: Send + 'static> Module<E> for VulkanAshRenderModule {
             (handles.display, handles.window, size.width, size.height)
         };
 
-
         let renderer = unsafe { vulkan::VulkanRenderer::new(display, window, w, h) }
             .map_err(|e| EngineError::other(e.to_string()))?;
 
-        let api = RenderApiRef::new(VulkanRenderApi::new(renderer));
+        let api = RenderApiRef::new(VulkanRenderApi::new(renderer, w, h));
 
         ctx.resources_mut().register_api(RENDER_API_ID, api.clone())?;
 
@@ -66,7 +65,9 @@ impl<E: Send + 'static> Module<E> for VulkanAshRenderModule {
     }
 
     fn render(&mut self, ctx: &mut ModuleCtx<'_, E>) -> EngineResult<()> {
-        let Some(api) = self.api.as_ref() else { return Ok(()); };
+        let Some(api) = self.api.as_ref() else {
+            return Ok(());
+        };
 
         let (w, h) = ctx
             .resources()
