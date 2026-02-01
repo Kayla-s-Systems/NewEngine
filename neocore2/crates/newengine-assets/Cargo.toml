@@ -1,0 +1,10 @@
+[package]
+name = "newengine-assets"
+version = "0.1.0"
+edition = "2021"
+description = "NewEngine asset system (CPU-side): sources, importers, store, handles"
+license = "MIT OR Apache-2.0"
+
+[dependencies]
+blake3 = "1.5"
+parking_lot = "0.12"
