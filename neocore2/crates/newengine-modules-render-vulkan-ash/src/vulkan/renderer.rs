@@ -4,12 +4,22 @@ use ash::vk;
 use ash::{Device, Entry, Instance};
 use raw_window_handle::{RawDisplayHandle, RawWindowHandle};
 use std::ffi::CString;
+use std::time::Instant;
 
 use super::device::*;
 use super::instance::*;
 use super::pipeline::*;
 use super::swapchain::*;
 use super::util::*;
+
+const FRAMES_IN_FLIGHT: usize = 2;
+
+#[derive(Clone, Copy)]
+struct FrameSync {
+    image_available: vk::Semaphore,
+    render_finished: vk::Semaphore,
+    in_flight: vk::Fence,
+}
 
 pub struct VulkanRenderer {
     pub(super) instance: Instance,
@@ -37,19 +47,20 @@ pub struct VulkanRenderer {
     pub(super) swapchain_format: vk::Format,
     pub(super) extent: vk::Extent2D,
 
-
     pub(super) upload_command_pool: vk::CommandPool,
     pub(super) image_layouts: Vec<vk::ImageLayout>,
 
     pub(super) command_pool: vk::CommandPool,
     pub(super) command_buffers: Vec<vk::CommandBuffer>,
 
-    pub(super) image_available: vk::Semaphore,
-    pub(super) render_finished: vk::Semaphore,
-    pub(super) in_flight: vk::Fence,
+    pub(super) frames: [FrameSync; FRAMES_IN_FLIGHT],
+    pub(super) frame_index: usize,
+    pub(super) images_in_flight: Vec<vk::Fence>,
 
     pub(super) target_width: u32,
     pub(super) target_height: u32,
+
+    pub(super) start_time: Instant,
 
     pub(super) text_pipeline_layout: vk::PipelineLayout,
     pub(super) text_pipeline: vk::Pipeline,
@@ -160,6 +171,7 @@ impl VulkanRenderer {
                 .level(vk::CommandBufferLevel::PRIMARY)
                 .command_buffer_count(swapchain_images.len() as u32),
         )?;
+
         let upload_command_pool = device.create_command_pool(
             &vk::CommandPoolCreateInfo::default()
                 .queue_family_index(queue_family_index)
@@ -167,13 +179,24 @@ impl VulkanRenderer {
             None,
         )?;
 
+        let make_frame = |device: &Device| -> VkResult<FrameSync> {
+            let image_available =
+                device.create_semaphore(&vk::SemaphoreCreateInfo::default(), None)?;
+            let render_finished =
+                device.create_semaphore(&vk::SemaphoreCreateInfo::default(), None)?;
+            let in_flight = device.create_fence(
+                &vk::FenceCreateInfo::default().flags(vk::FenceCreateFlags::SIGNALED),
+                None,
+            )?;
+            Ok(FrameSync {
+                image_available,
+                render_finished,
+                in_flight,
+            })
+        };
 
-        let image_available = device.create_semaphore(&vk::SemaphoreCreateInfo::default(), None)?;
-        let render_finished = device.create_semaphore(&vk::SemaphoreCreateInfo::default(), None)?;
-        let in_flight = device.create_fence(
-            &vk::FenceCreateInfo::default().flags(vk::FenceCreateFlags::SIGNALED),
-            None,
-        )?;
+        let frames = [make_frame(&device)?, make_frame(&device)?];
+        let images_in_flight = vec![vk::Fence::null(); swapchain_images.len()];
 
         let mut me = Self {
             instance,
@@ -207,12 +230,14 @@ impl VulkanRenderer {
             command_pool,
             command_buffers,
 
-            image_available,
-            render_finished,
-            in_flight,
+            frames,
+            frame_index: 0,
+            images_in_flight,
 
             target_width: width,
             target_height: height,
+
+            start_time: Instant::now(),
 
             text_pipeline_layout: vk::PipelineLayout::null(),
             text_pipeline: vk::Pipeline::null(),
@@ -272,17 +297,17 @@ impl VulkanRenderer {
             return Ok(());
         }
 
+        let frame = self.frames[self.frame_index];
+
         unsafe {
-            self.device
-                .wait_for_fences(&[self.in_flight], true, u64::MAX)?;
-            self.device.reset_fences(&[self.in_flight])?;
+            self.device.wait_for_fences(&[frame.in_flight], true, u64::MAX)?;
         }
 
         let (image_index, _suboptimal) = match unsafe {
             self.swapchain_loader.acquire_next_image(
                 self.swapchain,
                 u64::MAX,
-                self.image_available,
+                frame.image_available,
                 vk::Fence::null(),
             )
         } {
@@ -295,6 +320,16 @@ impl VulkanRenderer {
         };
 
         let idx = image_index as usize;
+
+        unsafe {
+            let inflight = self.images_in_flight[idx];
+            if inflight != vk::Fence::null() {
+                self.device.wait_for_fences(&[inflight], true, u64::MAX)?;
+            }
+            self.images_in_flight[idx] = frame.in_flight;
+            self.device.reset_fences(&[frame.in_flight])?;
+        }
+
         let cmd = self.command_buffers[idx];
         let image = self.swapchain_images[idx];
 
@@ -350,14 +385,32 @@ impl VulkanRenderer {
                 extent: self.extent,
             };
 
-            self.device.cmd_set_viewport(cmd, 0, std::slice::from_ref(&viewport));
-            self.device.cmd_set_scissor(cmd, 0, std::slice::from_ref(&scissor));
+            self.device
+                .cmd_set_viewport(cmd, 0, std::slice::from_ref(&viewport));
+            self.device
+                .cmd_set_scissor(cmd, 0, std::slice::from_ref(&scissor));
+
+            let t = self.start_time.elapsed().as_secs_f32();
+            let aspect = self.extent.width as f32 / self.extent.height.max(1) as f32;
+            let pc: [f32; 4] = [t, aspect, 0.0, 0.0];
+
+            let pc_bytes: &[u8] = std::slice::from_raw_parts(
+                pc.as_ptr() as *const u8,
+                std::mem::size_of_val(&pc),
+            );
+
+            self.device.cmd_push_constants(
+                cmd,
+                self.pipeline_layout,
+                vk::ShaderStageFlags::FRAGMENT,
+                0,
+                pc_bytes,
+            );
 
             self.device.cmd_draw(cmd, 3, 1, 0, 0);
+
             let dbg = self.debug_text.clone();
             self.draw_text_overlay(cmd, &dbg)?;
-
-
 
             self.device.cmd_end_render_pass(cmd);
 
@@ -374,8 +427,8 @@ impl VulkanRenderer {
             self.device.end_command_buffer(cmd)?;
 
             let wait_stages = [vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT];
-            let wait_sems = [self.image_available];
-            let signal_sems = [self.render_finished];
+            let wait_sems = [frame.image_available];
+            let signal_sems = [frame.render_finished];
             let cmd_bufs = [cmd];
 
             let submit_infos = [vk::SubmitInfo::default()
@@ -385,7 +438,7 @@ impl VulkanRenderer {
                 .signal_semaphores(&signal_sems)];
 
             self.device
-                .queue_submit(self.queue, &submit_infos, self.in_flight)?;
+                .queue_submit(self.queue, &submit_infos, frame.in_flight)?;
 
             let swapchains = [self.swapchain];
             let indices = [image_index];
@@ -402,12 +455,14 @@ impl VulkanRenderer {
                 Ok(_) => {}
                 Err(vk::Result::ERROR_OUT_OF_DATE_KHR) | Err(vk::Result::SUBOPTIMAL_KHR) => {
                     self.recreate_swapchain()?;
+                    self.frame_index = (self.frame_index + 1) % FRAMES_IN_FLIGHT;
                     return Ok(());
                 }
                 Err(e) => return Err(e.into()),
             }
         }
 
+        self.frame_index = (self.frame_index + 1) % FRAMES_IN_FLIGHT;
         Ok(())
     }
 }
@@ -420,10 +475,11 @@ impl Drop for VulkanRenderer {
             self.destroy_text_overlay();
             self.device.destroy_command_pool(self.upload_command_pool, None);
 
-
-            self.device.destroy_fence(self.in_flight, None);
-            self.device.destroy_semaphore(self.render_finished, None);
-            self.device.destroy_semaphore(self.image_available, None);
+            for f in &self.frames {
+                self.device.destroy_fence(f.in_flight, None);
+                self.device.destroy_semaphore(f.render_finished, None);
+                self.device.destroy_semaphore(f.image_available, None);
+            }
 
             self.device
                 .free_command_buffers(self.command_pool, &self.command_buffers);

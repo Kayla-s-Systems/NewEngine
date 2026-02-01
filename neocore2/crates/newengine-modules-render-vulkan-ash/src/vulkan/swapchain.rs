@@ -193,6 +193,8 @@ impl VulkanRenderer {
         self.framebuffers = framebuffers;
         self.image_layouts = vec![vk::ImageLayout::UNDEFINED; self.swapchain_images.len()];
 
+        self.images_in_flight = vec![vk::Fence::null(); self.swapchain_images.len()];
+
         Ok(())
     }
 }

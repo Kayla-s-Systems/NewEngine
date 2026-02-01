@@ -90,7 +90,21 @@ pub(super) unsafe fn create_pipeline(
             .name(&entry),
     ];
 
+    // Push constants: vec4 (time, aspect, 0, 0)
+    let push_ranges = [vk::PushConstantRange::default()
+        .stage_flags(vk::ShaderStageFlags::FRAGMENT)
+        .offset(0)
+        .size(16)];
+
+    let layout = device.create_pipeline_layout(
+        &vk::PipelineLayoutCreateInfo::default()
+            .set_layouts(&[])
+            .push_constant_ranges(&push_ranges),
+        None,
+    )?;
+
     let vi = vk::PipelineVertexInputStateCreateInfo::default();
+
     let ia = vk::PipelineInputAssemblyStateCreateInfo::default()
         .topology(vk::PrimitiveTopology::TRIANGLE_LIST);
 
@@ -121,8 +135,6 @@ pub(super) unsafe fn create_pipeline(
 
     let dyn_states = [vk::DynamicState::VIEWPORT, vk::DynamicState::SCISSOR];
     let ds = vk::PipelineDynamicStateCreateInfo::default().dynamic_states(&dyn_states);
-
-    let layout = device.create_pipeline_layout(&vk::PipelineLayoutCreateInfo::default(), None)?;
 
     let gp = vk::GraphicsPipelineCreateInfo::default()
         .stages(&stages)
