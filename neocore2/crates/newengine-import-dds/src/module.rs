@@ -51,7 +51,6 @@ impl DdsImporter {
         let depth = dds.get_depth();
         let mips = dds.get_num_mipmap_levels();
 
-        // Cube map is represented via caps2 in the DDS header (works for DX10 too in practice).
         let is_cube = dds.header.caps2.contains(Caps2::CUBEMAP);
 
         let fmt = if let Some(dxgi) = dds.get_dxgi_format() {
@@ -76,10 +75,7 @@ impl DdsImporter {
             Err(e) => return err(format!("dds: read failed: {e}")),
         };
 
-        // ddsfile parses headers; payload presence depends on container consistency.
-        // For MVP we return container-preserving bytes regardless, plus metadata.
         let meta = Self::build_meta_json(&dds);
-
         ok_blob(pack(&meta, bytes))
     }
 }
@@ -101,6 +97,14 @@ impl ServiceV1 for DdsImporterService {
         RString::from(
             r#"{
   "id":"kalitech.import.dds.v1",
+  "kind":"asset_importer",
+  "asset_importer":{
+    "extensions":["dds"],
+    "output_type_id":"kalitech.asset.texture",
+    "format":"dds",
+    "method":"import_dds_v1",
+    "wire":"u32_meta_len_le + meta_utf8 + payload"
+  },
   "methods":{
     "import_dds_v1":{
       "in":"dds bytes",
