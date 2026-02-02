@@ -12,3 +12,6 @@ crate-type = ["cdylib"]
 abi_stable = "0.11"
 newengine-plugin-api = { path = "../newengine-plugin-api" }
 png = "0.17"
+
+[build-dependencies]
+embed-resource = "2"
