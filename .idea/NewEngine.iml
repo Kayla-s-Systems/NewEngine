@@ -18,6 +18,7 @@
       <sourceFolder url="file://$MODULE_DIR$/neocore2/crates/newengine-import-dds/src" isTestSource="false" />
       <sourceFolder url="file://$MODULE_DIR$/neocore2/crates/newengine-AssetManager/src" isTestSource="false" />
       <sourceFolder url="file://$MODULE_DIR$/neocore2/crates/newengine-ui/src" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/neocore2/crates/newengine-import-png/src" isTestSource="false" />
       <excludeFolder url="file://$MODULE_DIR$/neocore2/target" />
     </content>
     <orderEntry type="inheritedJdk" />

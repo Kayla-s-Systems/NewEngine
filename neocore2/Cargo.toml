@@ -8,6 +8,7 @@ members = [
   "crates/newengine-plugin-api",
   "crates/newengine-AssetManager",
   "crates/newengine-import-dds",
+  "crates/newengine-import-png",
   "crates/newengine-ui",
   "apps/editor",
 ]
