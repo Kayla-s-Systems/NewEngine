@@ -1,10 +1,20 @@
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone)]
 pub struct ConfigPaths {
-    pub startup: Option<PathBuf>,
+    pub startup: PathBuf,
     pub root_dir: Option<PathBuf>,
+}
+
+impl Default for ConfigPaths {
+    #[inline]
+    fn default() -> Self {
+        Self {
+            startup: PathBuf::from("config.json"),
+            root_dir: None,
+        }
+    }
 }
 
 impl ConfigPaths {
@@ -15,15 +25,16 @@ impl ConfigPaths {
         P: Into<PathBuf>,
     {
         Self {
-            startup: Some(startup.into()),
+            startup: startup.into(),
             root_dir,
         }
     }
 
+    /// Uses default startup file name ("config.json") and optional root directory.
     #[inline]
-    pub fn none(root_dir: Option<PathBuf>) -> Self {
+    pub fn with_root(root_dir: Option<PathBuf>) -> Self {
         Self {
-            startup: None,
+            startup: PathBuf::from("config.json"),
             root_dir,
         }
     }
@@ -34,15 +45,6 @@ impl ConfigPaths {
         Self::new(startup, None)
     }
 
-    /// Optional startup path helper.
-    #[inline]
-    pub fn startup_optional(startup: Option<&str>, root_dir: Option<PathBuf>) -> Self {
-        Self {
-            startup: startup.map(PathBuf::from),
-            root_dir,
-        }
-    }
-
     #[inline]
     pub fn with_root_dir(mut self, root_dir: impl Into<PathBuf>) -> Self {
         self.root_dir = Some(root_dir.into());
@@ -50,8 +52,8 @@ impl ConfigPaths {
     }
 
     #[inline]
-    pub fn startup_path(&self) -> Option<&Path> {
-        self.startup.as_deref()
+    pub fn startup_path(&self) -> &Path {
+        &self.startup
     }
 }
 
@@ -85,21 +87,26 @@ impl Default for WindowPlacement {
     }
 }
 
+/// Normalized startup configuration.
+/// All fields have concrete defaults (no Option).
 #[derive(Debug, Clone)]
 pub struct StartupConfig {
     pub source: StartupConfigSource,
 
-    pub log_level: Option<String>,
-    pub window_title: Option<String>,
-    pub window_size: Option<(u32, u32)>,
-    pub window_placement: Option<WindowPlacement>,
-    pub modules_dir: Option<PathBuf>,
-    pub assets_root: Option<PathBuf>,
-    pub asset_pump_steps: Option<u32>,
-    pub asset_filesystem_source: Option<bool>,
-    pub render_backend: Option<String>,
-    pub render_clear_color: Option<[f32; 4]>,
-    pub render_debug_text: Option<String>,
+    pub log_level: String,
+    pub window_title: String,
+    pub window_size: (u32, u32),
+    pub window_placement: WindowPlacement,
+
+    pub modules_dir: PathBuf,
+
+    pub assets_root: PathBuf,
+    pub asset_pump_steps: u32,
+    pub asset_filesystem_source: bool,
+
+    pub render_backend: String,
+    pub render_clear_color: [f32; 4],
+    pub render_debug_text: String,
 
     pub extra: HashMap<String, String>,
 }
@@ -109,35 +116,25 @@ impl Default for StartupConfig {
     fn default() -> Self {
         Self {
             source: StartupConfigSource::Defaults,
-            log_level: None,
-            window_title: None,
-            window_size: None,
-            window_placement: None,
-            modules_dir: None,
-            assets_root: None,
-            asset_pump_steps: None,
-            asset_filesystem_source: None,
-            render_backend: None,
-            render_clear_color: None,
-            render_debug_text: None,
+
+            log_level: "info".to_owned(),
+            window_title: "NewEngine".to_owned(),
+            window_size: (1600, 900),
+            window_placement: WindowPlacement::Default,
+
+            modules_dir: PathBuf::from(""),
+
+            assets_root: PathBuf::from("assets"),
+            asset_pump_steps: 8,
+            asset_filesystem_source: true,
+
+            render_backend: "vulkan".to_owned(),
+            render_clear_color: [0.02, 0.02, 0.03, 1.0],
+            render_debug_text: "NewEngine".to_owned(),
+
             extra: HashMap::new(),
         }
     }
-}
-
-#[derive(Debug, Clone, Default)]
-pub struct StartupDefaults {
-    pub log_level: Option<String>,
-    pub window_title: Option<String>,
-    pub window_size: Option<(u32, u32)>,
-    pub window_placement: Option<WindowPlacement>,
-    pub modules_dir: Option<PathBuf>,
-    pub assets_root: Option<PathBuf>,
-    pub asset_pump_steps: Option<u32>,
-    pub asset_filesystem_source: Option<bool>,
-    pub render_backend: Option<String>,
-    pub render_clear_color: Option<[f32; 4]>,
-    pub render_debug_text: Option<String>,
 }
 
 #[derive(Debug, Clone)]

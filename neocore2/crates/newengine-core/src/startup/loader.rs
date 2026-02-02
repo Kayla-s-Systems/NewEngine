@@ -1,7 +1,7 @@
 use crate::error::{EngineError, EngineResult};
 use crate::startup::{
-    ConfigPaths, StartupConfig, StartupConfigSource, StartupDefaults, StartupLoadReport,
-    StartupOverride, StartupResolvedFrom, WindowPlacement,
+    ConfigPaths, StartupConfig, StartupConfigSource, StartupLoadReport, StartupOverride,
+    StartupResolvedFrom, WindowPlacement,
 };
 use serde::Deserialize;
 use std::fs;
@@ -13,10 +13,7 @@ impl StartupLoader {
     /// Optional startup config:
     /// - if file missing => fall back to defaults (no error)
     /// - if file exists but invalid/unreadable => return error
-    pub fn load_json(
-        paths: &ConfigPaths,
-        defaults: &StartupDefaults,
-    ) -> EngineResult<(StartupConfig, StartupLoadReport)> {
+    pub fn load_json(paths: &ConfigPaths) -> EngineResult<(StartupConfig, StartupLoadReport)> {
         let mut cfg = StartupConfig::default();
         let mut report = StartupLoadReport {
             source: StartupConfigSource::Defaults,
@@ -25,53 +22,42 @@ impl StartupLoader {
             overrides: Vec::new(),
         };
 
-        cfg.log_level = defaults.log_level.clone();
-        cfg.window_title = defaults.window_title.clone();
-        cfg.window_size = defaults.window_size;
-        cfg.window_placement = defaults.window_placement.clone();
-        cfg.modules_dir = defaults.modules_dir.clone();
-        cfg.assets_root = defaults.assets_root.clone();
-        cfg.asset_pump_steps = defaults.asset_pump_steps;
-        cfg.asset_filesystem_source = defaults.asset_filesystem_source;
-        cfg.render_backend = defaults.render_backend.clone();
-        cfg.render_clear_color = defaults.render_clear_color;
-        cfg.render_debug_text = defaults.render_debug_text.clone();
-        cfg.source = StartupConfigSource::Defaults;
+        // Now `ConfigPaths.startup` is always present.
+        let raw_path = paths.startup_path();
 
-        if let Some(raw_path) = paths.startup_path() {
-            match resolve_startup_file_optional(paths, raw_path) {
-                Ok(Some((resolved, from))) => {
-                    report.file = Some(resolved.clone());
-                    report.resolved_from = from;
+        match resolve_startup_file_optional(paths, raw_path) {
+            Ok(Some((resolved, from))) => {
+                report.file = Some(resolved.clone());
+                report.resolved_from = from;
 
-                    let data = fs::read_to_string(&resolved).map_err(|e| {
-                        EngineError::Other(format!(
-                            "startup config read failed: path={:?} err={}",
-                            resolved, e
-                        ))
-                    })?;
+                let data = fs::read_to_string(&resolved).map_err(|e| {
+                    EngineError::Other(format!(
+                        "startup config read failed: path={:?} err={}",
+                        resolved, e
+                    ))
+                })?;
 
-                    let parsed: RootJson = serde_json::from_str(&data).map_err(|e| {
-                        EngineError::Other(format!(
-                            "startup config parse failed (json): path={:?} err={}",
-                            resolved, e
-                        ))
-                    })?;
+                let parsed: RootJson = serde_json::from_str(&data).map_err(|e| {
+                    EngineError::Other(format!(
+                        "startup config parse failed (json): path={:?} err={}",
+                        resolved, e
+                    ))
+                })?;
 
-                    apply_root(&mut cfg, &mut report, parsed);
+                apply_root(&mut cfg, &mut report, parsed);
 
-                    cfg.source = StartupConfigSource::File {
-                        path: resolved.clone(),
-                    };
-                    report.source = cfg.source.clone();
-                }
-                Ok(None) => {
-                    report.source = StartupConfigSource::Defaults;
-                    report.file = None;
-                    report.resolved_from = StartupResolvedFrom::NotProvided;
-                }
-                Err(e) => return Err(e),
+                cfg.source = StartupConfigSource::File {
+                    path: resolved.clone(),
+                };
+                report.source = cfg.source.clone();
             }
+            Ok(None) => {
+                // Defaults only; keep cfg as StartupConfig::default()
+                report.source = StartupConfigSource::Defaults;
+                report.file = None;
+                report.resolved_from = StartupResolvedFrom::NotProvided;
+            }
+            Err(e) => return Err(e),
         }
 
         Ok((cfg, report))
@@ -149,7 +135,7 @@ fn apply_root(cfg: &mut StartupConfig, report: &mut StartupLoadReport, src: Root
                 }
                 (Some(_), None) | (None, Some(_)) => report.overrides.push(StartupOverride {
                     key: "window_size",
-                    from: format_opt_size(cfg.window_size),
+                    from: format_size(cfg.window_size),
                     to: "ignored (width/height must both be present)".to_owned(),
                 }),
                 (None, None) => {}
@@ -214,44 +200,35 @@ fn parse_placement(p: WindowPlacementJson) -> Option<WindowPlacement> {
     }
 }
 
-fn apply_string(
-    report: &mut StartupLoadReport,
-    key: &'static str,
-    slot: &mut Option<String>,
-    to: String,
-) {
-    let from = slot.clone().unwrap_or_else(|| "<unset>".to_owned());
-    *slot = Some(to.clone());
+fn apply_string(report: &mut StartupLoadReport, key: &'static str, slot: &mut String, to: String) {
+    let from = slot.clone();
+    *slot = to.clone();
     report.overrides.push(StartupOverride { key, from, to });
 }
 
 fn apply_size(
     report: &mut StartupLoadReport,
     key: &'static str,
-    slot: &mut Option<(u32, u32)>,
+    slot: &mut (u32, u32),
     to: (u32, u32),
 ) {
-    let from = format_opt_size(*slot);
-    *slot = Some(to);
+    let from = format_size(*slot);
+    *slot = to;
     report.overrides.push(StartupOverride {
         key,
         from,
-        to: format!("{}x{}", to.0, to.1),
+        to: format_size(to),
     });
 }
 
 fn apply_placement(
     report: &mut StartupLoadReport,
     key: &'static str,
-    slot: &mut Option<WindowPlacement>,
+    slot: &mut WindowPlacement,
     to: WindowPlacement,
 ) {
-    let from = slot
-        .as_ref()
-        .map(format_placement)
-        .unwrap_or_else(|| "<unset>".to_owned());
-
-    *slot = Some(to.clone());
+    let from = format_placement(slot);
+    *slot = to.clone();
     report.overrides.push(StartupOverride {
         key,
         from,
@@ -259,61 +236,40 @@ fn apply_placement(
     });
 }
 
-fn apply_path(
-    report: &mut StartupLoadReport,
-    key: &'static str,
-    slot: &mut Option<PathBuf>,
-    to: String,
-) {
-    let from = slot
-        .as_ref()
-        .map(|p| p.display().to_string())
-        .unwrap_or_else(|| "<unset>".to_owned());
-    let to_path = PathBuf::from(&to);
-    *slot = Some(to_path);
+fn apply_path(report: &mut StartupLoadReport, key: &'static str, slot: &mut PathBuf, to: String) {
+    let from = slot.display().to_string();
+    *slot = PathBuf::from(&to);
     report.overrides.push(StartupOverride { key, from, to });
 }
 
-fn apply_u32(
-    report: &mut StartupLoadReport,
-    key: &'static str,
-    slot: &mut Option<u32>,
-    to: u32,
-) {
-    let from = slot
-        .map(|v| v.to_string())
-        .unwrap_or_else(|| "<unset>".to_owned());
-    *slot = Some(to);
-    report
-        .overrides
-        .push(StartupOverride { key, from, to: to.to_string() });
+fn apply_u32(report: &mut StartupLoadReport, key: &'static str, slot: &mut u32, to: u32) {
+    let from = slot.to_string();
+    *slot = to;
+    report.overrides.push(StartupOverride {
+        key,
+        from,
+        to: to.to_string(),
+    });
 }
 
-fn apply_bool(
-    report: &mut StartupLoadReport,
-    key: &'static str,
-    slot: &mut Option<bool>,
-    to: bool,
-) {
-    let from = slot
-        .map(|v| v.to_string())
-        .unwrap_or_else(|| "<unset>".to_owned());
-    *slot = Some(to);
-    report
-        .overrides
-        .push(StartupOverride { key, from, to: to.to_string() });
+fn apply_bool(report: &mut StartupLoadReport, key: &'static str, slot: &mut bool, to: bool) {
+    let from = slot.to_string();
+    *slot = to;
+    report.overrides.push(StartupOverride {
+        key,
+        from,
+        to: to.to_string(),
+    });
 }
 
 fn apply_color(
     report: &mut StartupLoadReport,
     key: &'static str,
-    slot: &mut Option<[f32; 4]>,
+    slot: &mut [f32; 4],
     to: [f32; 4],
 ) {
-    let from = slot
-        .map(format_color)
-        .unwrap_or_else(|| "<unset>".to_owned());
-    *slot = Some(to);
+    let from = format_color(*slot);
+    *slot = to;
     report.overrides.push(StartupOverride {
         key,
         from,
@@ -330,9 +286,8 @@ fn format_placement(p: &WindowPlacement) -> String {
     }
 }
 
-fn format_opt_size(v: Option<(u32, u32)>) -> String {
-    v.map(|(w, h)| format!("{}x{}", w, h))
-        .unwrap_or_else(|| "<unset>".to_owned())
+fn format_size(v: (u32, u32)) -> String {
+    format!("{}x{}", v.0, v.1)
 }
 
 fn format_color(v: [f32; 4]) -> String {
