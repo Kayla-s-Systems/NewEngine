@@ -122,7 +122,7 @@ impl Default for StartupConfig {
             window_size: (1600, 900),
             window_placement: WindowPlacement::Default,
 
-            modules_dir: PathBuf::from(""),
+            modules_dir: PathBuf::from("./"),
 
             assets_root: PathBuf::from("assets"),
             asset_pump_steps: 8,

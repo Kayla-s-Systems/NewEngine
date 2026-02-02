@@ -2,11 +2,11 @@ use crossbeam_channel::unbounded;
 
 use newengine_core::{
     AssetManagerConfig, Bus, ConfigPaths, Engine, EngineConfig, EngineError, EngineResult, Services,
-    ShutdownToken, StartupConfig, StartupLoader, WindowPlacement,
+    ShutdownToken, StartupConfig, StartupLoader,
 };
 use newengine_modules_logging::{ConsoleLoggerConfig, ConsoleLoggerModule};
 use newengine_modules_render_vulkan_ash::{VulkanAshRenderModule, VulkanRenderConfig};
-use newengine_platform_winit::{run_winit_app_with_config, WinitAppConfig, WinitWindowPlacement};
+use newengine_platform_winit::{run_winit_app_with_config, WinitAppConfig};
 
 struct AppServices;
 

@@ -97,10 +97,6 @@ impl ServiceBlobImporter {
             .map_err(|e| AssetError::new(e.to_string()))
     }
 
-    fn priority(&self) -> ImporterPriority {
-        self.priority
-    }
-
     #[inline]
     fn unpack_wire_v1(frame: &[u8]) -> Result<(Arc<str>, Vec<u8>), AssetError> {
         if frame.len() < 4 {
@@ -294,8 +290,7 @@ impl std::error::Error for PluginLoadError {}
 struct LoadedPlugin {
     _lib: Library,
     module: PluginModuleDyn<'static>,
-    info: PluginInfo,
-    path: PathBuf,
+    info: PluginInfo
 }
 
 pub struct PluginManager {
@@ -447,8 +442,7 @@ impl PluginManager {
         self.loaded.push(LoadedPlugin {
             _lib: lib,
             module,
-            info,
-            path: path.to_path_buf(),
+            info
         });
 
         Ok(())
