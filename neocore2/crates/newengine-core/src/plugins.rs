@@ -319,17 +319,18 @@ impl PluginManager {
     }
 
     pub fn load_from_dir(&mut self, dir: &Path, host: HostApiV1) -> Result<(), PluginLoadError> {
+        let dir = resolve_plugins_dir(dir)?;
         log::info!("plugins: scanning directory '{}'", dir.display());
 
         let mut candidates = Vec::new();
-        let rd = std::fs::read_dir(dir).map_err(|e| PluginLoadError {
-            path: dir.to_path_buf(),
+        let rd = std::fs::read_dir(&dir).map_err(|e| PluginLoadError {
+            path: dir.clone(),
             message: format!("read_dir failed: {e}"),
         })?;
 
         for ent in rd {
             let ent = ent.map_err(|e| PluginLoadError {
-                path: dir.to_path_buf(),
+                path: dir.clone(),
                 message: format!("read_dir entry failed: {e}"),
             })?;
 
@@ -342,7 +343,11 @@ impl PluginManager {
 
         candidates.sort();
 
-        log::info!("plugins: found {} candidate(s) in '{}'", candidates.len(), dir.display());
+        log::info!(
+            "plugins: found {} candidate(s) in '{}'",
+            candidates.len(),
+            dir.display()
+        );
 
         for path in candidates {
             match self.load_one(&path, host.clone()) {
@@ -355,6 +360,7 @@ impl PluginManager {
 
         Ok(())
     }
+
 
     pub fn start_all(&mut self) -> Result<(), String> {
         for p in self.loaded.iter_mut() {
@@ -447,6 +453,29 @@ impl PluginManager {
 
         Ok(())
     }
+}
+
+fn resolve_plugins_dir(dir: &Path) -> Result<PathBuf, PluginLoadError> {
+    // 1) Empty path => default to exe directory.
+    if dir.as_os_str().is_empty() {
+        return default_plugins_dir();
+    }
+
+    // 2) "." is acceptable, but we still resolve it relative to exe dir for stability.
+    let is_dot = dir == Path::new(".");
+
+    // 3) Absolute path => use as-is.
+    if dir.is_absolute() && !is_dot {
+        return Ok(dir.to_path_buf());
+    }
+
+    // 4) Relative => resolve against exe dir (not cwd).
+    let base = default_plugins_dir()?;
+    if is_dot {
+        return Ok(base);
+    }
+
+    Ok(base.join(dir))
 }
 
 fn is_dynamic_lib(p: &Path) -> bool {

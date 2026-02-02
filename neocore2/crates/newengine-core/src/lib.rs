@@ -34,7 +34,6 @@ pub use startup::{
     ConfigPaths,
     StartupConfig,
     StartupConfigSource,
-    StartupDefaults,
     StartupLoadReport,
     StartupOverride,
     StartupResolvedFrom,

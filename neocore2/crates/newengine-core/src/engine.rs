@@ -74,7 +74,10 @@ impl Elapsed {
     fn from_duration(d: Duration) -> Self {
         let us = d.as_micros();
         if us < 1000 {
-            Self { value: us, unit: "us" }
+            Self {
+                value: us,
+                unit: "us",
+            }
         } else {
             Self {
                 value: d.as_millis(),
@@ -189,7 +192,9 @@ impl<E: Send + 'static> Engine<E> {
 
         let id = module.id();
         if self.module_ids.contains(id) {
-            return Err(EngineError::Other(format!("module already registered: {id}")));
+            return Err(EngineError::Other(format!(
+                "module already registered: {id}"
+            )));
         }
 
         self.modules.push(module);
@@ -211,7 +216,12 @@ impl<E: Send + 'static> Engine<E> {
     }
 
     #[inline]
-    fn log_phase_ok(scope: &'static str, phase: &'static str, count: Option<usize>, elapsed: Elapsed) {
+    fn log_phase_ok(
+        scope: &'static str,
+        phase: &'static str,
+        count: Option<usize>,
+        elapsed: Elapsed,
+    ) {
         match count {
             Some(n) => log::info!("{scope}: done (phase={phase} count={n} {elapsed})"),
             None => log::info!("{scope}: done (phase={phase} {elapsed})"),
@@ -255,36 +265,75 @@ impl<E: Send + 'static> Engine<E> {
         Self::log_phase_ok("plugins", phase, Some(loaded), Self::elapsed_since(t0));
 
         // Diagnostics: expose the effective asset importer registry after plugins loaded.
+        // Diagnostics: expose the effective asset importer registry after plugins loaded.
         if let Some(am) = self.resources.get::<crate::assets::AssetManager>() {
             let bindings = am.store().importer_bindings();
+
             if bindings.is_empty() {
                 log::info!(target: "assets", "importer.registry empty (no bindings)");
+                log::info!(target: "assets", "importer.formats readable=<none>");
             } else {
                 log::info!(
-            target: "assets",
-            "importer.registry bindings={} (after plugins load)",
-            bindings.len()
-        );
+                    target: "assets",
+                    "importer.registry bindings={} (after plugins load)",
+                    bindings.len()
+                );
+
+                // Summarize readable formats.
+                // We do not assume ordering/priority semantics; we report:
+                // - unique extensions
+                // - and (for each extension) list unique importers that can handle it.
+                use std::collections::{BTreeMap, BTreeSet};
+
+                let mut exts: BTreeSet<String> = BTreeSet::new();
+                let mut by_ext: BTreeMap<String, Vec<&_>> = BTreeMap::new();
+
+                for b in bindings.iter() {
+                    // Normalize: always show with leading dot in summary.
+                    let ext = format!(".{}", b.ext.trim_start_matches('.').to_ascii_lowercase());
+                    exts.insert(ext.clone());
+                    by_ext.entry(ext).or_default().push(b);
+                }
+
+                // One-line formats list: ".dds, .png, .obj"
+                let formats_line = exts.iter().cloned().collect::<Vec<_>>().join(", ");
+                log::info!(target: "assets", "importer.formats readable=[{}]", formats_line);
+
+                // Optional: per-extension breakdown (still INFO, but compact).
+                // Shows which plugin/importer ids provide the capability for a given extension.
+                for (ext, list) in by_ext.iter() {
+                    // Deduplicate by stable_id/type/priority to avoid spam.
+                    let mut uniq: BTreeSet<String> = BTreeSet::new();
+                    for b in list.iter() {
+                        uniq.insert(format!(
+                            "id='{}' type='{}' prio={}",
+                            b.stable_id, b.output_type_id, b.priority.0
+                        ));
+                    }
+                    let providers = uniq.into_iter().collect::<Vec<_>>().join("; ");
+                    log::info!(target: "assets", "importer.format {} -> {}", ext, providers);
+                }
+
+                // Existing detailed debug dump remains for deep inspection.
                 if log::log_enabled!(log::Level::Debug) {
                     for b in bindings {
                         log::debug!(
-                    target: "assets",
-                    "importer.binding ext='.{}' id='{}' type='{}' priority={}",
-                    b.ext,
-                    b.stable_id,
-                    b.output_type_id,
-                    b.priority.0
-                );
+                            target: "assets",
+                            "importer.binding ext='.{}' id='{}' type='{}' priority={}",
+                            b.ext,
+                            b.stable_id,
+                            b.output_type_id,
+                            b.priority.0
+                        );
                     }
                 }
             }
         }
 
-
         Ok(())
     }
 
-pub fn start(&mut self) -> EngineResult<()> {
+    pub fn start(&mut self) -> EngineResult<()> {
         self.started = true;
         self.last = Instant::now();
         self.sync_shutdown_state();
