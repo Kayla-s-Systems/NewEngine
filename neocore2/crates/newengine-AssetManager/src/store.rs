@@ -39,11 +39,32 @@ pub trait BlobImporterDispatch: Send + Sync + 'static {
     fn stable_id(&self) -> Arc<str>;
 }
 
-#[derive(Debug)]
 struct PendingRequest {
     id: AssetId,
     key: AssetKey,
     type_id: Arc<str>,
+    importer: Arc<dyn BlobImporterDispatch>,
+    importer_id: Arc<str>,
+}
+
+impl std::fmt::Debug for PendingRequest {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("PendingRequest")
+            .field("id", &self.id)
+            .field("key", &self.key)
+            .field("type_id", &self.type_id)
+            .field("importer_id", &self.importer_id)
+            .finish()
+    }
+}
+
+
+#[derive(Debug, Clone)]
+pub struct ImporterBindingInfo {
+    pub ext: String,
+    pub stable_id: Arc<str>,
+    pub output_type_id: Arc<str>,
+    pub priority: ImporterPriority,
 }
 
 #[derive(Default, Debug, Clone)]
@@ -133,6 +154,31 @@ impl AssetStore {
         }
     }
 
+    /// Returns a snapshot of registered importer bindings.
+    ///
+    /// Intended for diagnostics/UI; avoids exposing internal storage structures.
+    pub fn importer_bindings(&self) -> Vec<ImporterBindingInfo> {
+        let g = self.inner.lock();
+        let mut out = Vec::new();
+        for (ext, list) in g.importers_by_ext.iter() {
+            for imp in list.iter() {
+                out.push(ImporterBindingInfo {
+                    ext: ext.clone(),
+                    stable_id: imp.stable_id(),
+                    output_type_id: imp.output_type_id(),
+                    priority: imp.priority(),
+                });
+            }
+        }
+        out.sort_by(|a, b| {
+            a.ext
+                .cmp(&b.ext)
+                .then_with(|| b.priority.cmp(&a.priority))
+                .then_with(|| a.stable_id.cmp(&b.stable_id))
+        });
+        out
+    }
+
     #[inline]
     pub fn state(&self, id: AssetId) -> AssetState {
         let g = self.inner.lock();
@@ -172,8 +218,7 @@ impl AssetStore {
         let ext = extension_ascii_lower(&key.logical_path)
             .ok_or_else(|| AssetError::new("AssetStore: asset path has no extension"))?;
 
-        let importers = g.importers_by_ext.get(&ext).cloned().unwrap_or_default();
-        if importers.is_empty() {
+        let Some(list) = g.importers_by_ext.get(&ext) else {
             warn!(
                 target: "assets",
                 "asset.load rejected id={:032x} path='{}' reason='no_importer' ext='{}'",
@@ -186,12 +231,43 @@ impl AssetStore {
                 "AssetStore: no importer registered for extension '.{}'",
                 ext
             )));
-        }
+        };
 
-        let type_id = importers[0].output_type_id();
+        let Some(importer) = list.first().cloned() else {
+            warn!(
+                target: "assets",
+                "asset.load rejected id={:032x} path='{}' reason='no_importer' ext='{}'",
+                id.to_u128(),
+                key.logical_path.display(),
+                ext
+            );
+
+            return Err(AssetError::new(format!(
+                "AssetStore: no importer registered for extension '.{}'",
+                ext
+            )));
+        };
+
+        let type_id = importer.output_type_id();
+
+        info!(
+            target: "assets::import",
+            "importer.select path='{}' ext='.{}' winner='{}'",
+            key.logical_path.display(),
+            ext,
+            importer.stable_id()
+        );
 
         g.state.insert(id, AssetState::Loading);
-        g.queue.push_back(PendingRequest { id, key, type_id });
+        let importer_id = importer.stable_id();
+        g.queue.push_back(PendingRequest {
+            id,
+            key,
+            type_id,
+            importer,
+            importer_id,
+        });
+
         Ok(id)
     }
 
@@ -270,11 +346,20 @@ impl AssetStore {
     }
 
     fn process_one(&self, req: PendingRequest) -> Result<(), ProcessError> {
+        let sources = {
+            let g = self.inner.lock();
+            g.sources.clone()
+        };
+
+        let importer = req.importer;
+
         let io_t0 = Instant::now();
-        let bytes = self.read_from_any_source(&req.key.logical_path).map_err(|e| ProcessError {
-            id: req.id,
-            type_id: req.type_id.clone(),
-            error: Arc::from(e.msg().to_string()),
+        let bytes = read_from_any_source_list(&sources, &req.key.logical_path).map_err(|e| {
+            ProcessError {
+                id: req.id,
+                type_id: req.type_id.clone(),
+                error: Arc::from(e.msg().to_string()),
+            }
         })?;
         let io_dt = io_t0.elapsed();
 
@@ -292,12 +377,6 @@ impl AssetStore {
             bytes.len(),
             io_dt.as_micros()
         );
-
-        let importer = self.select_importer(&req.key).ok_or_else(|| ProcessError {
-            id: req.id,
-            type_id: req.type_id.clone(),
-            error: Arc::from("AssetStore: importer not found at dispatch time"),
-        })?;
 
         let imp_t0 = Instant::now();
         let blob = importer.import_blob(&bytes, &req.key).map_err(|e| ProcessError {
@@ -349,62 +428,6 @@ impl AssetStore {
 
         Ok(())
     }
-
-    fn select_importer(&self, key: &AssetKey) -> Option<Arc<dyn BlobImporterDispatch>> {
-        let ext = extension_ascii_lower(&key.logical_path)?;
-        let g = self.inner.lock();
-        let list = g.importers_by_ext.get(&ext)?.clone();
-
-        if log::log_enabled!(log::Level::Debug) {
-            let mut s = String::new();
-            for (i, imp) in list.iter().enumerate() {
-                if i != 0 {
-                    s.push_str(", ");
-                }
-                s.push_str(&format!("{}(p={})", imp.stable_id(), imp.priority().0));
-            }
-
-            debug!(
-                target: "assets::import",
-                "importer.candidates path='{}' ext='.{}' list='{}'",
-                key.logical_path.display(),
-                ext,
-                s
-            );
-        }
-
-        let winner = list.first().cloned();
-
-        if let Some(ref imp) = winner {
-            info!(
-                target: "assets::import",
-                "importer.select path='{}' ext='.{}' winner='{}'",
-                key.logical_path.display(),
-                ext,
-                imp.stable_id()
-            );
-        }
-
-        winner
-    }
-
-    fn read_from_any_source(&self, logical_path: &Path) -> Result<Vec<u8>, AssetError> {
-        let g = self.inner.lock();
-        if g.sources.is_empty() {
-            return Err(AssetError::new("AssetStore: no sources registered"));
-        }
-
-        for s in &g.sources {
-            if s.exists(logical_path) {
-                return s.read(logical_path);
-            }
-        }
-
-        Err(AssetError::new(format!(
-            "AssetStore: asset not found in any source: '{}'",
-            logical_path.to_string_lossy()
-        )))
-    }
 }
 
 #[derive(Debug)]
@@ -426,4 +449,25 @@ fn extension_ascii_lower(p: &Path) -> Option<String> {
 #[inline]
 fn normalize_ext(ext: &str) -> String {
     ext.trim().trim_start_matches('.').to_ascii_lowercase()
+}
+
+#[inline]
+fn read_from_any_source_list(
+    sources: &[Arc<dyn AssetSource>],
+    logical_path: &Path,
+) -> Result<Vec<u8>, AssetError> {
+    if sources.is_empty() {
+        return Err(AssetError::new("AssetStore: no sources registered"));
+    }
+
+    for s in sources {
+        if s.exists(logical_path) {
+            return s.read(logical_path);
+        }
+    }
+
+    Err(AssetError::new(format!(
+        "AssetStore: asset not found in any source: '{}'",
+        logical_path.to_string_lossy()
+    )))
 }

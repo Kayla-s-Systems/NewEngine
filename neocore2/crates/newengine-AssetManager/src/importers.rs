@@ -1,5 +1,5 @@
 use crate::types::{Asset, AssetError, AssetKey};
-use std::any::TypeId;
+use std::any::{TypeId, Any};
 use std::sync::Arc;
 
 /// Typed importer: bytes -> T.
@@ -14,7 +14,7 @@ pub trait Importer<T: Asset>: Send + Sync + 'static {
 pub(crate) trait AnyImporter: Send + Sync + 'static {
     fn output_type(&self) -> TypeId;
     fn supported_extensions(&self) -> &'static [&'static str];
-    fn import_dyn(&self, bytes: &[u8], key: &AssetKey) -> Result<Arc<dyn std::any::Any + Send + Sync>, AssetError>;
+    fn import_dyn(&self, bytes: &[u8], key: &AssetKey) -> Result<Arc<dyn Any + Send + Sync>, AssetError>;
 }
 
 pub(crate) struct ImporterBox<T: Asset> {
@@ -43,8 +43,8 @@ impl<T: Asset> AnyImporter for ImporterBox<T> {
         &self,
         bytes: &[u8],
         key: &AssetKey,
-    ) -> Result<Arc<dyn std::any::Any + Send + Sync>, AssetError> {
+    ) -> Result<Arc<dyn Any + Send + Sync>, AssetError> {
         let v = self.inner.import(bytes, key)?;
-        Ok(Arc::new(v))
+        Ok(Arc::new(v) as Arc<dyn Any + Send + Sync>)
     }
 }
