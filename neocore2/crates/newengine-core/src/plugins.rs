@@ -62,6 +62,8 @@ struct AssetImporterDesc {
     format: String,
     method: String,
     #[serde(default)]
+    priority: Option<i32>,
+    #[serde(default)]
     wire: Option<String>,
 }
 
@@ -78,6 +80,7 @@ struct ServiceBlobImporter {
     format: Arc<str>,
     method: Arc<str>,
     service_id: Arc<str>,
+    priority: ImporterPriority,
 }
 
 impl ServiceBlobImporter {
@@ -92,6 +95,10 @@ impl ServiceBlobImporter {
         out.into_result()
             .map(|b| b.into_vec())
             .map_err(|e| AssetError::new(e.to_string()))
+    }
+
+    fn priority(&self) -> ImporterPriority {
+        self.priority
     }
 
     #[inline]
@@ -140,7 +147,7 @@ impl BlobImporterDispatch for ServiceBlobImporter {
     }
 
     fn priority(&self) -> ImporterPriority {
-        ImporterPriority::new(0)
+        self.priority
     }
 
     fn stable_id(&self) -> Arc<str> {
@@ -172,6 +179,7 @@ fn try_auto_register_importer(service_id: &str, describe_json: &str) {
         format: Arc::from(imp.format),
         method: Arc::from(imp.method),
         service_id: Arc::from(service_id.to_string()),
+        priority: ImporterPriority::new(imp.priority.unwrap_or(0)),
     };
 
     let ctx = ctx();

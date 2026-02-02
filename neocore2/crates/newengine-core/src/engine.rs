@@ -214,6 +214,33 @@ impl<E: Send + 'static> Engine<E> {
         let loaded = self.plugins.iter().count();
         Self::log_phase_ok("plugins", phase, Some(loaded), Self::elapsed_since(t0));
 
+        // Diagnostics: expose the effective asset importer registry after plugins loaded.
+        if let Some(am) = self.resources.get::<crate::assets::AssetManager>() {
+            let bindings = am.store().importer_bindings();
+            if bindings.is_empty() {
+                log::info!(target: "assets", "importer.registry empty (no bindings)");
+            } else {
+                log::info!(
+            target: "assets",
+            "importer.registry bindings={} (after plugins load)",
+            bindings.len()
+        );
+                if log::log_enabled!(log::Level::Debug) {
+                    for b in bindings {
+                        log::debug!(
+                    target: "assets",
+                    "importer.binding ext='.{}' id='{}' type='{}' priority={}",
+                    b.ext,
+                    b.stable_id,
+                    b.output_type_id,
+                    b.priority.0
+                );
+                    }
+                }
+            }
+        }
+
+
         Ok(())
     }
 

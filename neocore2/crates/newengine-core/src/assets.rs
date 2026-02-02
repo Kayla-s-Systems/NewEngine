@@ -1,5 +1,8 @@
 use log::info;
-use newengine_assets::{AssetStore, FileSystemSource, PumpBudget};
+use newengine_assets::{
+    AssetBlob, AssetError, AssetEvent, AssetId, AssetKey, AssetSource, AssetState, AssetStore,
+    BlobImporterDispatch, FileSystemSource, PumpBudget,
+};
 use std::path::PathBuf;
 use std::sync::Arc;
 
@@ -28,9 +31,43 @@ impl AssetManager {
         Self { store, budget }
     }
 
+    /// Returns a shared handle to the underlying store.
     #[inline]
     pub fn store(&self) -> &Arc<AssetStore> {
         &self.store
+    }
+
+    /// Registers an additional asset source.
+    #[inline]
+    pub fn add_source(&self, source: Arc<dyn AssetSource>) {
+        self.store.add_source(source);
+    }
+
+    /// Registers a type-erased importer dispatch (usually a plugin-backed service adapter).
+    #[inline]
+    pub fn add_importer(&self, importer: Arc<dyn BlobImporterDispatch>) {
+        self.store.add_importer(importer);
+    }
+
+    /// Enqueues an import request.
+    #[inline]
+    pub fn load(&self, key: AssetKey) -> Result<AssetId, AssetError> {
+        self.store.load(key)
+    }
+
+    #[inline]
+    pub fn state(&self, id: AssetId) -> AssetState {
+        self.store.state(id)
+    }
+
+    #[inline]
+    pub fn get_blob(&self, id: AssetId) -> Option<Arc<AssetBlob>> {
+        self.store.get_blob(id)
+    }
+
+    #[inline]
+    pub fn drain_events(&self) -> Vec<AssetEvent> {
+        self.store.drain_events()
     }
 
     #[inline]
@@ -43,5 +80,12 @@ impl AssetManager {
     #[inline]
     pub fn pump(&self) {
         self.store.pump(self.budget);
+    }
+
+    /// Convenience: pump and return any produced events.
+    #[inline]
+    pub fn pump_and_drain(&self) -> Vec<AssetEvent> {
+        self.pump();
+        self.drain_events()
     }
 }
