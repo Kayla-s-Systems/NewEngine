@@ -294,7 +294,6 @@ impl VulkanRenderer {
         self.device
             .bind_image_memory(self.font_image, self.font_image_mem, 0)?;
 
-        // CRITICAL: use dedicated upload command pool (avoid UB / driver crash)
         immediate_submit(&self.device, self.upload_command_pool, self.queue, |cmd| {
             transition_image_layout(
                 &self.device,
@@ -444,11 +443,7 @@ impl VulkanRenderer {
         ptr::copy_nonoverlapping(vertices.as_ptr() as *const u8, dst, bytes as usize);
         self.device.unmap_memory(self.text_vb_mem);
 
-        self.device.cmd_bind_pipeline(
-            cmd,
-            vk::PipelineBindPoint::GRAPHICS,
-            self.text_pipeline,
-        );
+        self.device.cmd_bind_pipeline(cmd, vk::PipelineBindPoint::GRAPHICS, self.text_pipeline);
 
         self.device.cmd_bind_descriptor_sets(
             cmd,
@@ -532,6 +527,7 @@ pub(super) fn build_font_atlas_128_r8() -> Vec<u8> {
         for row in 0..8 {
             let bits = glyph[row];
             for col in 0..8 {
+                // IMPORTANT: font8x8_ascii.inl defines "Bit 0 is leftmost pixel."
                 let on = (bits & (1u8 << col)) != 0;
                 atlas[(oy + row) * 128 + (ox + col)] = if on { 255 } else { 0 };
             }
@@ -541,16 +537,24 @@ pub(super) fn build_font_atlas_128_r8() -> Vec<u8> {
     atlas
 }
 
+/// Extract glyph from table and fix only vertical orientation.
+/// Do NOT reverse bits: the table defines bit0 as leftmost pixel.
 pub(super) fn font8x8(ch: u8) -> [u8; 8] {
-    let c = ch as usize;
     let mut out = [0u8; 8];
 
+    let c = ch as usize;
     if c < 32 || c > 126 {
         return out;
     }
 
     let idx = c - 32;
     let table: &[[u8; 8]; 95] = &font8x8::FONT8X8_ASCII;
-    out.copy_from_slice(&table[idx]);
+    let src = &table[idx];
+
+    // FIX ONLY Y: flip row order
+    for y in 0..8 {
+        out[y] = src[7 - y];
+    }
+
     out
 }

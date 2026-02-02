@@ -27,7 +27,7 @@ impl VulkanRenderApi {
 
 impl RenderApi for VulkanRenderApi {
     fn begin_frame(&mut self, desc: BeginFrameDesc) -> EngineResult<()> {
-        self.renderer.set_debug_text("Vulkan OK");
+        self.renderer.set_debug_text("TEST OK");
 
         self.renderer
             .draw_clear_color(desc.clear_color)
