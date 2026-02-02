@@ -8,6 +8,8 @@ pub use config::{
     StartupDefaults,
     StartupLoadReport,
     StartupOverride,
+    StartupOverrideSource,
+    StartupOverrides,
     StartupResolvedFrom,
     WindowPlacement,
 };

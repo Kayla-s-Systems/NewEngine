@@ -1,0 +1,23 @@
+{
+  "logging": {
+    "level": "info"
+  },
+  "window": {
+    "title": "NewEngine",
+    "size": [1600, 900],
+    "placement": { "type": "centered", "offset": [0, -24] }
+  },
+  "engine": {
+    "fixed_dt_ms": 16,
+    "assets_root": "assets",
+    "asset_budget": 8,
+    "init_host_context": true
+  },
+  "modules": {
+    "dir": ""
+  },
+  "extra": {
+    "editor.theme": "neo",
+    "render.vsync": "1"
+  }
+}

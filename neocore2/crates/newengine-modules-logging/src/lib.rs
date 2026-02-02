@@ -4,6 +4,10 @@ use log::LevelFilter;
 use newengine_core::{EngineResult, Module, ModuleCtx};
 
 use std::env;
+use std::sync::Once;
+
+// Флаг для проверки, инициализирован ли логгер
+static INIT_LOGGER: Once = Once::new();
 
 /// Logger output destination that is trivially cloneable.
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
@@ -169,56 +173,59 @@ impl<E: Send + 'static> Module<E> for ConsoleLoggerModule {
 
     fn init(&mut self, _ctx: &mut ModuleCtx<'_, E>) -> EngineResult<()> {
         if self.initialized {
-            return Ok(());
+            return Ok(()); // Логгер уже инициализирован
         }
 
-        let mut builder = Builder::new();
+        // Используем Once для однократной инициализации
+        INIT_LOGGER.call_once(|| {
+            let mut builder = Builder::new();
 
-        if let Some(ref filters) = self.config.filter {
-            builder.parse_filters(filters);
-        } else {
-            builder.filter_level(self.config.level);
-        }
-
-        if let Some(out) = self.config.output {
-            builder.target(out.to_env_target());
-        }
-
-        if let Some(style) = self.config.write_style {
-            builder.write_style(style);
-        } else if !self.config.colors {
-            builder.write_style(WriteStyle::Never);
-        } else {
-            builder.write_style(WriteStyle::Auto);
-        }
-
-        builder
-            .format_module_path(self.config.include_module_path)
-            .format_target(self.config.include_target);
-
-        if self.config.include_file && self.config.include_line_number {
-            builder.format_source_path(true);
-        } else {
-            builder.format_file(self.config.include_file);
-            builder.format_line_number(self.config.include_line_number);
-        }
-
-        builder.format_indent(self.config.indent);
-
-        match self.config.timestamp {
-            Some(TimestampPrecision::Seconds) => builder.format_timestamp_secs(),
-            Some(TimestampPrecision::Millis) => builder.format_timestamp_millis(),
-            Some(TimestampPrecision::Micros) => builder.format_timestamp_micros(),
-            Some(TimestampPrecision::Nanos) => builder.format_timestamp_nanos(),
-            None => builder.format_timestamp(None::<TimestampPrecision>),
-        };
-
-        match builder.try_init() {
-            Ok(()) => {}
-            Err(_e) => {
-                // Most likely "logger already initialized". Treat as non-fatal.
+            if let Some(ref filters) = self.config.filter {
+                builder.parse_filters(filters);
+            } else {
+                builder.filter_level(self.config.level);
             }
-        }
+
+            if let Some(out) = self.config.output {
+                builder.target(out.to_env_target());
+            }
+
+            if let Some(style) = self.config.write_style {
+                builder.write_style(style);
+            } else if !self.config.colors {
+                builder.write_style(WriteStyle::Never);
+            } else {
+                builder.write_style(WriteStyle::Auto);
+            }
+
+            builder
+                .format_module_path(self.config.include_module_path)
+                .format_target(self.config.include_target);
+
+            if self.config.include_file && self.config.include_line_number {
+                builder.format_source_path(true);
+            } else {
+                builder.format_file(self.config.include_file);
+                builder.format_line_number(self.config.include_line_number);
+            }
+
+            builder.format_indent(self.config.indent);
+
+            match self.config.timestamp {
+                Some(TimestampPrecision::Seconds) => builder.format_timestamp_secs(),
+                Some(TimestampPrecision::Millis) => builder.format_timestamp_millis(),
+                Some(TimestampPrecision::Micros) => builder.format_timestamp_micros(),
+                Some(TimestampPrecision::Nanos) => builder.format_timestamp_nanos(),
+                None => builder.format_timestamp(None::<TimestampPrecision>),
+            };
+
+            match builder.try_init() {
+                Ok(()) => {}
+                Err(_e) => {
+                    // Most likely "logger already initialized". Treat as non-fatal.
+                }
+            }
+        });
 
         self.initialized = true;
         Ok(())

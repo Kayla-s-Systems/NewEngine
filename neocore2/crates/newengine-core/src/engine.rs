@@ -244,7 +244,24 @@ impl<E: Send + 'static> Engine<E> {
         Ok(())
     }
 
-pub fn start(&mut self) -> EngineResult<()> {
+    /// Loads DLL plugins and allows them to register services/importers,
+    /// without running module init/start.
+    ///
+    /// This is safe to call before the window is created (e.g. in main),
+    /// and avoids double-initializing render modules.
+    pub fn load_plugins_only(&mut self) -> EngineResult<()> {
+        self.sync_shutdown_state();
+
+        if self.is_exit_requested() {
+            return Err(EngineError::ExitRequested);
+        }
+
+        self.try_load_plugins_once()?;
+        Ok(())
+    }
+
+
+    pub fn start(&mut self) -> EngineResult<()> {
         self.started = true;
         self.last = Instant::now();
         self.sync_shutdown_state();

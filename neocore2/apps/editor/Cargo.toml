@@ -11,3 +11,4 @@ newengine-core = { path = "../../crates/newengine-core" }
 newengine-platform-winit = { path = "../../crates/newengine-platform-winit" }
 newengine-modules-logging = { path = "../../crates/newengine-modules-logging" }
 newengine-modules-render-vulkan-ash = { path = "../../crates/newengine-modules-render-vulkan-ash" }
+newengine-assets = { path = "../../crates/newengine-AssetManager" }

@@ -312,13 +312,32 @@ impl ServiceV1 for InputService {
     }
 
     fn describe(&self) -> RString {
+        // IMPORTANT: this service is NOT an asset importer. The host should never treat it as such.
         RString::from(
             r#"{
   "id":"kalitech.input.v1",
+  "kind":"input",
+  "summary":"Runtime input aggregation service (keyboard/mouse/text/gamepad). NOT an asset importer.",
+  "not_asset_importer":true,
+  "does_not_provide":["asset_importer","asset_pipeline","asset_decoder","asset_transform"],
+  "wire":{
+    "encoding":"utf8_json",
+    "payload":"ignored",
+    "response":"utf8_json"
+  },
   "methods":{
-    "state_json":{"in":"{}","out":"input state snapshot as JSON"},
-    "text_take_json":{"in":"{}","out":"{text:string} and clears internal text buffer"},
-    "ime_commit_take_json":{"in":"{}","out":"{ime_commit:string} and clears internal commit buffer"}
+    "state_json":{
+      "in":"{}",
+      "out":"Full input snapshot (keys/mouse/text/gamepads) as JSON. Frame-local fields are reset at end of update()."
+    },
+    "text_take_json":{
+      "in":"{}",
+      "out":"{text:string}. Returns and clears internal text buffer."
+    },
+    "ime_commit_take_json":{
+      "in":"{}",
+      "out":"{ime_commit:string}. Returns and clears internal IME commit buffer."
+    }
   },
   "events_expected":{
     "winit.key":"{key:u32, scancode?:u32, state:'pressed'|'released', repeat?:bool}",
@@ -329,7 +348,11 @@ impl ServiceV1 for InputService {
     "winit.text_char":"{cp:u32}",
     "winit.ime_preedit":"{text:string}",
     "winit.ime_commit":"{text:string}"
-  }
+  },
+  "notes":[
+    "This service consumes host/platform events and exposes a pull-based API for gameplay.",
+    "If you need asset importing, provide kind='asset_importer' with an asset_importer{...} block."
+  ]
 }"#,
         )
     }
@@ -354,7 +377,6 @@ impl ServiceV1 for InputService {
    ============================================================================================= */
 
 pub struct InputPlugin {
-    // FIX: Gilrs is not Sync; keep it behind a Mutex so InputPlugin becomes Sync.
     gilrs: Mutex<Option<Gilrs>>,
 }
 
@@ -419,7 +441,6 @@ impl InputPlugin {
         g.mouse.wheel_x = 0.0;
         g.mouse.wheel_y = 0.0;
 
-        // Keep commit until taken; preedit is frame-local.
         g.text.ime_preedit.clear();
     }
 }
