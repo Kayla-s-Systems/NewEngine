@@ -18,7 +18,6 @@ impl Default for ConfigPaths {
 }
 
 impl ConfigPaths {
-    /// Universal constructor. App may pass PathBuf, String, &str, etc.
     #[inline]
     pub fn new<P>(startup: P, root_dir: Option<PathBuf>) -> Self
     where
@@ -30,7 +29,6 @@ impl ConfigPaths {
         }
     }
 
-    /// Uses default startup file name ("config.json") and optional root directory.
     #[inline]
     pub fn with_root(root_dir: Option<PathBuf>) -> Self {
         Self {
@@ -39,7 +37,6 @@ impl ConfigPaths {
         }
     }
 
-    /// "One-liner" for main.rs.
     #[inline]
     pub fn from_startup_str(startup: &str) -> Self {
         Self::new(startup, None)
@@ -74,9 +71,7 @@ impl Default for StartupConfigSource {
 /// Window placement policy (boot-level).
 #[derive(Debug, Clone)]
 pub enum WindowPlacement {
-    /// Center window on the current monitor, applying offset in physical pixels.
     Centered { offset: (i32, i32) },
-    /// Platform/default placement.
     Default,
 }
 
@@ -84,6 +79,33 @@ impl Default for WindowPlacement {
     #[inline]
     fn default() -> Self {
         Self::Default
+    }
+}
+
+/// UI backend selection at boot.
+/// This is a boot-level preference, not an implementation binding.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum UiBackend {
+    Disabled,
+    Egui,
+    Custom(String),
+}
+
+impl UiBackend {
+    #[inline]
+    pub fn as_str(&self) -> &str {
+        match self {
+            UiBackend::Disabled => "disabled",
+            UiBackend::Egui => "egui",
+            UiBackend::Custom(s) => s.as_str(),
+        }
+    }
+}
+
+impl Default for UiBackend {
+    #[inline]
+    fn default() -> Self {
+        UiBackend::Egui
     }
 }
 
@@ -107,6 +129,8 @@ pub struct StartupConfig {
     pub render_backend: String,
     pub render_clear_color: [f32; 4],
     pub render_debug_text: String,
+
+    pub ui_backend: UiBackend,
 
     pub extra: HashMap<String, String>,
 }
@@ -132,6 +156,8 @@ impl Default for StartupConfig {
             render_clear_color: [0.02, 0.02, 0.03, 1.0],
             render_debug_text: "NewEngine".to_owned(),
 
+            ui_backend: UiBackend::default(),
+
             extra: HashMap::new(),
         }
     }
@@ -146,17 +172,11 @@ pub struct StartupOverride {
 
 #[derive(Debug, Clone)]
 pub enum StartupResolvedFrom {
-    /// Path was absolute and existed.
     Absolute,
-    /// Found as `cwd/<file>`.
     Cwd,
-    /// Found as `exe_dir/<file>`.
     ExeDir,
-    /// Found as `root_dir/<file>`.
     RootDir,
-    /// Found as-is (relative) in OS resolution.
     AsIs,
-    /// No file path was provided.
     NotProvided,
 }
 
@@ -170,9 +190,7 @@ impl Default for StartupResolvedFrom {
 #[derive(Debug, Clone)]
 pub struct StartupLoadReport {
     pub source: StartupConfigSource,
-    /// The actual file used (absolute when found).
     pub file: Option<PathBuf>,
-    /// Where the file was resolved from.
     pub resolved_from: StartupResolvedFrom,
     pub overrides: Vec<StartupOverride>,
 }

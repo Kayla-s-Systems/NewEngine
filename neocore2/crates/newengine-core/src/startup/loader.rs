@@ -6,13 +6,11 @@ use crate::startup::{
 use serde::Deserialize;
 use std::fs;
 use std::path::{Path, PathBuf};
+use crate::startup::config::UiBackend;
 
 pub struct StartupLoader;
 
 impl StartupLoader {
-    /// Optional startup config:
-    /// - if file missing => fall back to defaults (no error)
-    /// - if file exists but invalid/unreadable => return error
     pub fn load_json(paths: &ConfigPaths) -> EngineResult<(StartupConfig, StartupLoadReport)> {
         let mut cfg = StartupConfig::default();
         let mut report = StartupLoadReport {
@@ -22,7 +20,6 @@ impl StartupLoader {
             overrides: Vec::new(),
         };
 
-        // Now `ConfigPaths.startup` is always present.
         let raw_path = paths.startup_path();
 
         match resolve_startup_file_optional(paths, raw_path) {
@@ -52,7 +49,6 @@ impl StartupLoader {
                 report.source = cfg.source.clone();
             }
             Ok(None) => {
-                // Defaults only; keep cfg as StartupConfig::default()
                 report.source = StartupConfigSource::Defaults;
                 report.file = None;
                 report.resolved_from = StartupResolvedFrom::NotProvided;
@@ -70,6 +66,7 @@ struct RootJson {
     logging: Option<LoggingJson>,
     engine: Option<EngineJson>,
     render: Option<RenderJson>,
+    ui: Option<UiJson>,
 }
 
 #[derive(Deserialize)]
@@ -112,6 +109,11 @@ struct RenderJson {
     backend: Option<String>,
     clear_color: Option<[f32; 4]>,
     debug_text: Option<String>,
+}
+
+#[derive(Deserialize)]
+struct UiJson {
+    backend: Option<String>,
 }
 
 fn apply_root(cfg: &mut StartupConfig, report: &mut StartupLoadReport, src: RootJson) {
@@ -180,6 +182,13 @@ fn apply_root(cfg: &mut StartupConfig, report: &mut StartupLoadReport, src: Root
             apply_string(report, "render_debug_text", &mut cfg.render_debug_text, text);
         }
     }
+
+    if let Some(ui) = src.ui {
+        if let Some(backend) = ui.backend {
+            let parsed = parse_ui_backend(&backend);
+            apply_ui_backend(report, "ui_backend", &mut cfg.ui_backend, parsed);
+        }
+    }
 }
 
 fn parse_placement(p: WindowPlacementJson) -> Option<WindowPlacement> {
@@ -197,6 +206,15 @@ fn parse_placement(p: WindowPlacementJson) -> Option<WindowPlacement> {
         }
         "default" => Some(WindowPlacement::Default),
         _ => None,
+    }
+}
+
+fn parse_ui_backend(s: &str) -> UiBackend {
+    let v = s.trim().to_ascii_lowercase();
+    match v.as_str() {
+        "egui" => UiBackend::Egui,
+        "none" | "null" | "off" | "disabled" => UiBackend::Disabled,
+        _ => UiBackend::Custom(s.trim().to_owned()),
     }
 }
 
@@ -275,6 +293,18 @@ fn apply_color(
         from,
         to: format_color(to),
     });
+}
+
+fn apply_ui_backend(
+    report: &mut StartupLoadReport,
+    key: &'static str,
+    slot: &mut UiBackend,
+    to: UiBackend,
+) {
+    let from = slot.as_str().to_owned();
+    let to_s = to.as_str().to_owned();
+    *slot = to;
+    report.overrides.push(StartupOverride { key, from, to: to_s });
 }
 
 fn format_placement(p: &WindowPlacement) -> String {
