@@ -8,10 +8,13 @@ use newengine_plugin_api::{
     Blob, HostApiV1, MethodName, PluginInfo, PluginModule, ServiceV1, ServiceV1Dyn, ServiceV1_TO,
 };
 
-//use quick_xml::Reader;
+use std::io::Cursor;
+
+const META_SCHEMA_V1: &str = "kalitech.text.meta.v1";
 
 /* =============================================================================================
    Binary frame helpers
+   wire = [u32 meta_len_le][meta_json utf8][payload bytes]
    ============================================================================================= */
 
 #[inline]
@@ -37,7 +40,7 @@ fn err(msg: impl Into<String>) -> RResult<RVec<u8>, RString> {
 }
 
 /* =============================================================================================
-   Text importer (plugin-owned schema)
+   Text importer implementation
    ============================================================================================= */
 
 #[derive(Default)]
@@ -55,10 +58,10 @@ impl TextImporter {
             .map_err(|e| format!("json: {e}"))
     }
 
-    fn validate_xml(bytes: &[u8]) -> Result<(), String> {
-        std::str::from_utf8(bytes).map_err(|e| format!("utf8: {e}"))?;
+    fn validate_xml_bytes(bytes: &[u8]) -> Result<(), String> {
+        Self::ensure_utf8(bytes)?;
 
-        let mut r = quick_xml::Reader::from_reader(bytes);
+        let mut r = quick_xml::Reader::from_reader(Cursor::new(bytes));
         let mut buf = Vec::new();
 
         loop {
@@ -75,7 +78,10 @@ impl TextImporter {
 
     fn build_meta_json(container: &str, byte_len: usize) -> String {
         format!(
-            "{{\"schema\":\"kalitech.text.meta.v1\",\"container\":\"{container}\",\"encoding\":\"utf-8\",\"byte_len\":{byte_len}}}"
+            "{{\"schema\":\"{schema}\",\"container\":\"{container}\",\"encoding\":\"utf-8\",\"byte_len\":{byte_len}}}",
+            schema = META_SCHEMA_V1,
+            container = container,
+            byte_len = byte_len
         )
     }
 
@@ -83,7 +89,7 @@ impl TextImporter {
         if validate {
             let r = match container {
                 "json" => Self::validate_json(bytes),
-                "xml" => Self::validate_xml(bytes),
+                "xml" | "ui" => Self::validate_xml_bytes(bytes),
                 "html" | "txt" => Self::ensure_utf8(bytes),
                 _ => Ok(()),
             };
@@ -100,7 +106,7 @@ impl TextImporter {
 }
 
 /* =============================================================================================
-   Service capabilities
+   Services
    ============================================================================================= */
 
 #[derive(StableAbi)]
@@ -122,15 +128,11 @@ impl ServiceV1 for JsonImporterService {
     "output_type_id":"kalitech.asset.text",
     "format":"json",
     "method":"import_json_v1",
-    "wire":"u32_meta_len_le + meta_utf8 + payload"
+    "wire":"u32_meta_len_le + meta_json_utf8 + payload"
   },
-  "methods":{
-    "import_json_v1":{
-      "in":"json bytes (utf-8)",
-      "out":"[u32 meta_len_le][meta_json utf8][original json bytes]"
-    }
-  },
-  "meta_schema":"kalitech.text.meta.v1"
+  "meta_schema":"kalitech.text.meta.v1",
+  "container":"json",
+  "validation":"serde_json"
 }"#,
         )
     }
@@ -142,7 +144,7 @@ impl ServiceV1 for JsonImporterService {
                 TextImporter::import_text(&bytes, "json", true).map(|v| v)
             }
             _ => RResult::RErr(RString::from(format!(
-                "text-importer: unknown method '{}'",
+                "textimporter: unknown method '{}'",
                 method
             ))),
         }
@@ -168,15 +170,11 @@ impl ServiceV1 for XmlImporterService {
     "output_type_id":"kalitech.asset.text",
     "format":"xml",
     "method":"import_xml_v1",
-    "wire":"u32_meta_len_le + meta_utf8 + payload"
+    "wire":"u32_meta_len_le + meta_json_utf8 + payload"
   },
-  "methods":{
-    "import_xml_v1":{
-      "in":"xml bytes (utf-8)",
-      "out":"[u32 meta_len_le][meta_json utf8][original xml bytes]"
-    }
-  },
-  "meta_schema":"kalitech.text.meta.v1"
+  "meta_schema":"kalitech.text.meta.v1",
+  "container":"xml",
+  "validation":"quick-xml"
 }"#,
         )
     }
@@ -188,7 +186,50 @@ impl ServiceV1 for XmlImporterService {
                 TextImporter::import_text(&bytes, "xml", true).map(|v| v)
             }
             _ => RResult::RErr(RString::from(format!(
-                "text-importer: unknown method '{}'",
+                "textimporter: unknown method '{}'",
+                method
+            ))),
+        }
+    }
+}
+
+#[derive(StableAbi)]
+#[repr(C)]
+struct UiImporterService;
+
+impl ServiceV1 for UiImporterService {
+    fn id(&self) -> RString {
+        RString::from("kalitech.import.ui.v1")
+    }
+
+    fn describe(&self) -> RString {
+        RString::from(
+            r#"{
+  "id":"kalitech.import.ui.v1",
+  "kind":"asset_importer",
+  "asset_importer":{
+    "extensions":["ui"],
+    "output_type_id":"kalitech.asset.text",
+    "format":"ui",
+    "method":"import_ui_v1",
+    "wire":"u32_meta_len_le + meta_json_utf8 + payload"
+  },
+  "meta_schema":"kalitech.text.meta.v1",
+  "container":"ui",
+  "validation":"xml-subset (quick-xml)"
+}"#,
+        )
+    }
+
+    fn call(&self, method: MethodName, payload: Blob) -> RResult<Blob, RString> {
+        match method.as_str() {
+            "import_ui_v1" => {
+                let bytes: Vec<u8> = payload.into_vec();
+                // UI markup must be well-formed XML subset => validate strictly
+                TextImporter::import_text(&bytes, "ui", true).map(|v| v)
+            }
+            _ => RResult::RErr(RString::from(format!(
+                "textimporter: unknown method '{}'",
                 method
             ))),
         }
@@ -214,15 +255,11 @@ impl ServiceV1 for HtmlImporterService {
     "output_type_id":"kalitech.asset.text",
     "format":"html",
     "method":"import_html_v1",
-    "wire":"u32_meta_len_le + meta_utf8 + payload"
+    "wire":"u32_meta_len_le + meta_json_utf8 + payload"
   },
-  "methods":{
-    "import_html_v1":{
-      "in":"html bytes (utf-8)",
-      "out":"[u32 meta_len_le][meta_json utf8][original html bytes]"
-    }
-  },
-  "meta_schema":"kalitech.text.meta.v1"
+  "meta_schema":"kalitech.text.meta.v1",
+  "container":"html",
+  "validation":"utf8-only"
 }"#,
         )
     }
@@ -234,7 +271,7 @@ impl ServiceV1 for HtmlImporterService {
                 TextImporter::import_text(&bytes, "html", false).map(|v| v)
             }
             _ => RResult::RErr(RString::from(format!(
-                "text-importer: unknown method '{}'",
+                "textimporter: unknown method '{}'",
                 method
             ))),
         }
@@ -256,19 +293,15 @@ impl ServiceV1 for TxtImporterService {
   "id":"kalitech.import.txt.v1",
   "kind":"asset_importer",
   "asset_importer":{
-    "extensions":["txt","ui","md"],
+    "extensions":["txt","md"],
     "output_type_id":"kalitech.asset.text",
     "format":"txt",
     "method":"import_txt_v1",
-    "wire":"u32_meta_len_le + meta_utf8 + payload"
+    "wire":"u32_meta_len_le + meta_json_utf8 + payload"
   },
-  "methods":{
-    "import_txt_v1":{
-      "in":"text bytes (utf-8)",
-      "out":"[u32 meta_len_le][meta_json utf8][original text bytes]"
-    }
-  },
-  "meta_schema":"kalitech.text.meta.v1"
+  "meta_schema":"kalitech.text.meta.v1",
+  "container":"txt",
+  "validation":"utf8-only"
 }"#,
         )
     }
@@ -280,7 +313,7 @@ impl ServiceV1 for TxtImporterService {
                 TextImporter::import_text(&bytes, "txt", false).map(|v| v)
             }
             _ => RResult::RErr(RString::from(format!(
-                "text-importer: unknown method '{}'",
+                "textimporter: unknown method '{}'",
                 method
             ))),
         }
@@ -304,9 +337,10 @@ impl PluginModule for TextImporterPlugin {
     }
 
     fn init(&mut self, host: HostApiV1) -> RResult<(), RString> {
-        let services: [ServiceV1Dyn<'static>; 4] = [
+        let services: [ServiceV1Dyn<'static>; 5] = [
             ServiceV1_TO::from_value(JsonImporterService, TD_Opaque),
             ServiceV1_TO::from_value(XmlImporterService, TD_Opaque),
+            ServiceV1_TO::from_value(UiImporterService, TD_Opaque),
             ServiceV1_TO::from_value(HtmlImporterService, TD_Opaque),
             ServiceV1_TO::from_value(TxtImporterService, TD_Opaque),
         ];
@@ -315,7 +349,7 @@ impl PluginModule for TextImporterPlugin {
             let r = (host.register_service_v1)(svc);
             if let Err(e) = r.clone().into_result() {
                 (host.log_warn)(RString::from(format!(
-                    "text-importer: register_service_v1 failed: {}",
+                    "textimporter: register_service_v1 failed: {}",
                     e
                 )));
                 return RResult::RErr(e);

@@ -1,6 +1,6 @@
 [package]
 name = "textimporter"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2021"
 description = "NewEngine Text importer plugin (DLL)"
 license = "MIT OR Apache-2.0"
