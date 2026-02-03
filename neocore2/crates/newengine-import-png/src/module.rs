@@ -72,7 +72,7 @@ impl PngImporter {
 
     fn import_png_v1(bytes: &[u8]) -> RResult<RVec<u8>, RString> {
         let dec = png::Decoder::new(Cursor::new(bytes));
-        let mut reader = match dec.read_info() {
+        let reader = match dec.read_info() {
             Ok(r) => r,
             Err(e) => return err(format!("png: read_info failed: {e}")),
         };
