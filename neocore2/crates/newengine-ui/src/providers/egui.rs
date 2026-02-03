@@ -54,8 +54,12 @@ impl UiProvider for EguiUiProvider {
     }
 
     fn on_platform_event(&mut self, window: &dyn Any, event: &dyn Any) {
-        let Some(w) = window.downcast_ref::<winit::window::Window>() else { return };
-        let Some(ev) = event.downcast_ref::<winit::event::WindowEvent>() else { return };
+        let Some(w) = window.downcast_ref::<winit::window::Window>() else {
+            return;
+        };
+        let Some(ev) = event.downcast_ref::<winit::event::WindowEvent>() else {
+            return;
+        };
 
         let state = self.ensure_state(w);
         let _ = state.on_window_event(w, ev);

@@ -10,7 +10,9 @@ provider-egui = ["dep:winit", "dep:egui", "dep:egui-winit"]
 provider-null = []
 
 [dependencies]
+newengine-assets = { path = "../newengine-AssetManager" }
 ahash = "0.8"
+roxmltree = "0.19"
 smallvec = "1.13"
 bytemuck = { version = "1.16", features = ["derive"] }
 
