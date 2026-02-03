@@ -1,5 +1,12 @@
+#![forbid(unsafe_op_in_unsafe_fn)]
+
 pub mod draw;
 pub mod texture;
 
-#[cfg(feature = "egui")]
-pub mod egui_provider;
+pub mod provider;
+pub mod providers;
+
+pub use provider::{
+    UiBuildFn, UiFrameDesc, UiFrameOutput, UiProvider, UiProviderKind, UiProviderOptions,
+};
+pub use providers::create_provider;

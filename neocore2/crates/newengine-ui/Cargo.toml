@@ -4,17 +4,16 @@ version = "0.1.0"
 edition = "2021"
 
 [features]
-default = []
-winit = ["dep:winit"]
-egui = ["winit", "dep:egui", "dep:egui-winit"]
+default = ["egui"]
+egui = ["provider-egui"]
+provider-egui = ["dep:winit", "dep:egui", "dep:egui-winit"]
+provider-null = []
 
 [dependencies]
 ahash = "0.8"
 smallvec = "1.13"
 bytemuck = { version = "1.16", features = ["derive"] }
 
-# IMPORTANT: keep egui + egui-winit on the same version line
-egui = { version = "0.33.3", optional = true, features = ["bytemuck"] }
-egui-winit = { version = "0.33.3", optional = true }
-
 winit = { version = "0.30", optional = true }
+egui = { version = "0.29", optional = true }
+egui-winit = { version = "0.29", optional = true }
