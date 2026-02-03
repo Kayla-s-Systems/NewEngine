@@ -137,10 +137,11 @@ impl VulkanRenderer {
 
             if self.pipelines.text_pipeline != vk::Pipeline::null()
                 && self.pipelines.text_pipeline_layout != vk::PipelineLayout::null()
-                && self.text.desc_set != vk::DescriptorSet::null()
-                && self.text.vb != vk::Buffer::null()
             {
-                self.draw_text_overlay(cmd, &self.debug.debug_text)?;
+                let debug_text = std::mem::take(&mut self.debug.debug_text);
+                let res = self.draw_text_overlay(cmd, &debug_text);
+                self.debug.debug_text = debug_text;
+                res?;
             }
 
             if let Some(list) = self.debug.pending_ui.take() {

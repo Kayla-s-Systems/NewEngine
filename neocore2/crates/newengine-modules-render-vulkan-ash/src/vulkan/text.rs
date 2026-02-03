@@ -14,6 +14,11 @@ mod font8x8 {
         env!("CARGO_MANIFEST_DIR"),
         "/src/vulkan/font8x8_ascii.inl"
     ));
+
+    #[inline]
+    pub(super) fn table() -> &'static [[u8; 8]] {
+        &FONT8X8_ASCII
+    }
 }
 
 #[repr(C)]
@@ -267,10 +272,12 @@ impl VulkanRenderer {
             vk::MemoryPropertyFlags::HOST_VISIBLE | vk::MemoryPropertyFlags::HOST_COHERENT,
         )?;
 
-        let ptr_map =
-            self.device
-                .map_memory(staging_mem, 0, staging_size, vk::MemoryMapFlags::empty())?
-                as *mut u8;
+        let ptr_map = self.core.device.map_memory(
+            staging_mem,
+            0,
+            staging_size,
+            vk::MemoryMapFlags::empty(),
+        )? as *mut u8;
 
         ptr::copy_nonoverlapping(atlas_r8.as_ptr(), ptr_map, atlas_r8.len());
         self.core.device.unmap_memory(staging_mem);
@@ -450,7 +457,7 @@ impl VulkanRenderer {
             return Ok(());
         }
 
-        let vertices = build_text_vertices(text, self.extent);
+        let vertices = build_text_vertices(text, self.swapchain.extent);
         if vertices.is_empty() {
             return Ok(());
         }
@@ -460,10 +467,11 @@ impl VulkanRenderer {
             return Ok(());
         }
 
-        let dst = self
-            .device
-            .map_memory(self.text.vb_mem, 0, bytes, vk::MemoryMapFlags::empty())?
-            as *mut u8;
+        let dst =
+            self.core
+                .device
+                .map_memory(self.text.vb_mem, 0, bytes, vk::MemoryMapFlags::empty())?
+                as *mut u8;
 
         ptr::copy_nonoverlapping(vertices.as_ptr() as *const u8, dst, bytes as usize);
         self.core.device.unmap_memory(self.text.vb_mem);
@@ -550,7 +558,7 @@ pub(super) fn build_font_atlas_128_r8() -> Vec<u8> {
     let mut atlas = vec![0u8; 128 * 128];
 
     for ch in 0u8..=127u8 {
-        let glyph = font8x8(ch);
+        let glyph = glyph8x8(ch);
         let gx = (ch & 0x0F) as usize;
         let gy = (ch >> 4) as usize;
 
@@ -560,7 +568,6 @@ pub(super) fn build_font_atlas_128_r8() -> Vec<u8> {
         for row in 0..8 {
             let bits = glyph[row];
             for col in 0..8 {
-                // IMPORTANT: font8x8_ascii.inl defines "Bit 0 is leftmost pixel."
                 let on = (bits & (1u8 << col)) != 0;
                 atlas[(oy + row) * 128 + (ox + col)] = if on { 255 } else { 0 };
             }
@@ -572,7 +579,7 @@ pub(super) fn build_font_atlas_128_r8() -> Vec<u8> {
 
 /// Extract glyph from table and fix only vertical orientation.
 /// Do NOT reverse bits: the table defines bit0 as leftmost pixel.
-pub(super) fn font8x8(ch: u8) -> [u8; 8] {
+pub(super) fn glyph8x8(ch: u8) -> [u8; 8] {
     let mut out = [0u8; 8];
 
     let c = ch as usize;
@@ -581,10 +588,9 @@ pub(super) fn font8x8(ch: u8) -> [u8; 8] {
     }
 
     let idx = c - 32;
-    let table: &[[u8; 8]; 95] = &font8x8::FONT8X8_ASCII;
+    let table = font8x8::table();
     let src = &table[idx];
 
-    // FIX ONLY Y: flip row order
     for y in 0..8 {
         out[y] = src[7 - y];
     }

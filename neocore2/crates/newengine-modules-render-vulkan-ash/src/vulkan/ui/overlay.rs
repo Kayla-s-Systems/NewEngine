@@ -94,6 +94,7 @@ impl VulkanRenderer {
                 && self.ui.desc_pool != vk::DescriptorPool::null()
             {
                 let _ = self
+                    .core
                     .device
                     .free_descriptor_sets(self.ui.desc_pool, &[tex.desc_set]);
             }
@@ -175,7 +176,7 @@ impl VulkanRenderer {
         if total_bytes != 0 {
             self.ui_ensure_staging(total_bytes)?;
 
-            let mapped = self.device.map_memory(
+            let mapped = self.core.device.map_memory(
                 self.ui.staging_mem,
                 0,
                 total_bytes,
@@ -319,6 +320,7 @@ impl VulkanRenderer {
                 && self.ui.desc_pool != vk::DescriptorPool::null()
             {
                 let _ = self
+                    .core
                     .device
                     .free_descriptor_sets(self.ui.desc_pool, &[tex.desc_set]);
             }
@@ -511,10 +513,12 @@ impl VulkanRenderer {
         self.ui_ensure_buffers(vb_bytes, ib_bytes)?;
 
         if !list.mesh.vertices.is_empty() {
-            let mapped =
-                self.device
-                    .map_memory(self.ui.vb_mem, 0, vb_bytes, vk::MemoryMapFlags::empty())?
-                    as *mut u8;
+            let mapped = self.core.device.map_memory(
+                self.ui.vb_mem,
+                0,
+                vb_bytes,
+                vk::MemoryMapFlags::empty(),
+            )? as *mut u8;
             ptr::copy_nonoverlapping(
                 list.mesh.vertices.as_ptr() as *const u8,
                 mapped,
@@ -524,10 +528,12 @@ impl VulkanRenderer {
         }
 
         if !list.mesh.indices.is_empty() {
-            let mapped =
-                self.device
-                    .map_memory(self.ui.ib_mem, 0, ib_bytes, vk::MemoryMapFlags::empty())?
-                    as *mut u8;
+            let mapped = self.core.device.map_memory(
+                self.ui.ib_mem,
+                0,
+                ib_bytes,
+                vk::MemoryMapFlags::empty(),
+            )? as *mut u8;
             ptr::copy_nonoverlapping(
                 list.mesh.indices.as_ptr() as *const u8,
                 mapped,
