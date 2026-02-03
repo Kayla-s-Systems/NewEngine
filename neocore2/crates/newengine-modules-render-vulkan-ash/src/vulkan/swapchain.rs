@@ -114,137 +114,153 @@ impl VulkanRenderer {
     ///
     /// Safety: must be called only when no command buffers are executing that reference old resources.
     pub(super) unsafe fn recreate_swapchain(&mut self) -> VkResult<()> {
-        if self.target_width == 0 || self.target_height == 0 {
+        if self.debug.target_width == 0 || self.debug.target_height == 0 {
             return Ok(());
         }
 
-        // Hard sync: simplest correctness. Later можно заменить на per-frame fences + device idle only when needed.
-        let _ = self.device.device_wait_idle();
+        let _ = self.core.device.device_wait_idle();
 
-        for &fb in &self.framebuffers {
-            self.device.destroy_framebuffer(fb, None);
+        for &fb in &self.swapchain.framebuffers {
+            self.core.device.destroy_framebuffer(fb, None);
         }
-        self.framebuffers.clear();
+        self.swapchain.framebuffers.clear();
 
-        for &iv in &self.swapchain_image_views {
-            self.device.destroy_image_view(iv, None);
+        for &iv in &self.swapchain.image_views {
+            self.core.device.destroy_image_view(iv, None);
         }
-        self.swapchain_image_views.clear();
+        self.swapchain.image_views.clear();
 
-        // Keep old swapchain alive until new one is created.
-        let old_swapchain = self.swapchain;
+        let old_swapchain = self.swapchain.swapchain;
 
         let (new_swapchain, new_images, new_format, new_extent) = create_swapchain(
-            &self.swapchain_loader,
-            &self.surface_loader,
-            self.surface,
-            self.physical_device,
-            self.target_width,
-            self.target_height,
-            self.queue_family_index,
+            &self.core.swapchain_loader,
+            &self.core.surface_loader,
+            self.core.surface,
+            self.core.physical_device,
+            self.debug.target_width,
+            self.debug.target_height,
+            self.core.queue_family_index,
             old_swapchain,
         )?;
 
-        // Now it's safe to destroy old swapchain.
         if old_swapchain != vk::SwapchainKHR::null() {
-            self.swapchain_loader.destroy_swapchain(old_swapchain, None);
+            self.core
+                .swapchain_loader
+                .destroy_swapchain(old_swapchain, None);
         }
 
-        let new_image_views = create_image_views(&self.device, &new_images, new_format)?;
+        let new_image_views = create_image_views(&self.core.device, &new_images, new_format)?;
         let new_image_count = new_images.len();
-        let format_changed = new_format != self.swapchain_format;
+        let format_changed = new_format != self.swapchain.format;
 
         if format_changed {
-            if self.pipeline != vk::Pipeline::null() {
-                self.device.destroy_pipeline(self.pipeline, None);
-                self.pipeline = vk::Pipeline::null();
+            if self.pipelines.tri_pipeline != vk::Pipeline::null() {
+                self.core
+                    .device
+                    .destroy_pipeline(self.pipelines.tri_pipeline, None);
+                self.pipelines.tri_pipeline = vk::Pipeline::null();
             }
-            if self.pipeline_layout != vk::PipelineLayout::null() {
-                self.device
-                    .destroy_pipeline_layout(self.pipeline_layout, None);
-                self.pipeline_layout = vk::PipelineLayout::null();
-            }
-
-            if self.text_pipeline != vk::Pipeline::null() {
-                self.device.destroy_pipeline(self.text_pipeline, None);
-                self.text_pipeline = vk::Pipeline::null();
-            }
-            if self.text_pipeline_layout != vk::PipelineLayout::null() {
-                self.device
-                    .destroy_pipeline_layout(self.text_pipeline_layout, None);
-                self.text_pipeline_layout = vk::PipelineLayout::null();
+            if self.pipelines.tri_pipeline_layout != vk::PipelineLayout::null() {
+                self.core
+                    .device
+                    .destroy_pipeline_layout(self.pipelines.tri_pipeline_layout, None);
+                self.pipelines.tri_pipeline_layout = vk::PipelineLayout::null();
             }
 
-            if self.ui_pipeline != vk::Pipeline::null() {
-                self.device.destroy_pipeline(self.ui_pipeline, None);
-                self.ui_pipeline = vk::Pipeline::null();
+            if self.pipelines.text_pipeline != vk::Pipeline::null() {
+                self.core
+                    .device
+                    .destroy_pipeline(self.pipelines.text_pipeline, None);
+                self.pipelines.text_pipeline = vk::Pipeline::null();
             }
-            if self.ui_pipeline_layout != vk::PipelineLayout::null() {
-                self.device
-                    .destroy_pipeline_layout(self.ui_pipeline_layout, None);
-                self.ui_pipeline_layout = vk::PipelineLayout::null();
-            }
-
-            if self.render_pass != vk::RenderPass::null() {
-                self.device.destroy_render_pass(self.render_pass, None);
-                self.render_pass = vk::RenderPass::null();
+            if self.pipelines.text_pipeline_layout != vk::PipelineLayout::null() {
+                self.core
+                    .device
+                    .destroy_pipeline_layout(self.pipelines.text_pipeline_layout, None);
+                self.pipelines.text_pipeline_layout = vk::PipelineLayout::null();
             }
 
-            self.swapchain_format = new_format;
-            self.render_pass = create_render_pass(&self.device, self.swapchain_format)?;
+            if self.pipelines.ui_pipeline != vk::Pipeline::null() {
+                self.core
+                    .device
+                    .destroy_pipeline(self.pipelines.ui_pipeline, None);
+                self.pipelines.ui_pipeline = vk::Pipeline::null();
+            }
+            if self.pipelines.ui_pipeline_layout != vk::PipelineLayout::null() {
+                self.core
+                    .device
+                    .destroy_pipeline_layout(self.pipelines.ui_pipeline_layout, None);
+                self.pipelines.ui_pipeline_layout = vk::PipelineLayout::null();
+            }
 
-            let (pl, p) = create_pipeline(&self.device, self.render_pass)?;
-            self.pipeline_layout = pl;
-            self.pipeline = p;
+            if self.pipelines.render_pass != vk::RenderPass::null() {
+                self.core
+                    .device
+                    .destroy_render_pass(self.pipelines.render_pass, None);
+                self.pipelines.render_pass = vk::RenderPass::null();
+            }
 
-            // Text pipeline depends on render pass.
-            if self.text_desc_set_layout != vk::DescriptorSetLayout::null() {
+            self.swapchain.format = new_format;
+            self.pipelines.render_pass =
+                create_render_pass(&self.core.device, self.swapchain.format)?;
+
+            let (pl, p) = create_pipeline(&self.core.device, self.pipelines.render_pass)?;
+            self.pipelines.tri_pipeline_layout = pl;
+            self.pipelines.tri_pipeline = p;
+
+            if self.text.desc_set_layout != vk::DescriptorSetLayout::null() {
                 let (tpl, tp) = create_text_pipeline(
-                    &self.device,
-                    self.render_pass,
-                    self.text_desc_set_layout,
+                    &self.core.device,
+                    self.pipelines.render_pass,
+                    self.text.desc_set_layout,
                 )?;
-                self.text_pipeline_layout = tpl;
-                self.text_pipeline = tp;
+                self.pipelines.text_pipeline_layout = tpl;
+                self.pipelines.text_pipeline = tp;
             }
 
-            // UI pipeline depends on render pass too.
-            if self.ui_desc_set_layout != vk::DescriptorSetLayout::null() {
+            if self.ui.desc_set_layout != vk::DescriptorSetLayout::null() {
                 let (upl, up) = super::ui::create_ui_pipeline(
-                    &self.device,
-                    self.render_pass,
-                    self.ui_desc_set_layout,
+                    &self.core.device,
+                    self.pipelines.render_pass,
+                    self.ui.desc_set_layout,
                 )?;
-                self.ui_pipeline_layout = upl;
-                self.ui_pipeline = up;
+                self.pipelines.ui_pipeline_layout = upl;
+                self.pipelines.ui_pipeline = up;
             }
         } else {
-            self.swapchain_format = new_format;
+            self.swapchain.format = new_format;
         }
 
-        let new_framebuffers =
-            create_framebuffers(&self.device, self.render_pass, &new_image_views, new_extent)?;
+        let new_framebuffers = create_framebuffers(
+            &self.core.device,
+            self.pipelines.render_pass,
+            &new_image_views,
+            new_extent,
+        )?;
 
-        if self.command_pool != vk::CommandPool::null() && !self.command_buffers.is_empty() {
-            self.device
-                .free_command_buffers(self.command_pool, &self.command_buffers);
+        if self.frames.command_pool != vk::CommandPool::null()
+            && !self.frames.command_buffers.is_empty()
+        {
+            self.core
+                .device
+                .free_command_buffers(self.frames.command_pool, &self.frames.command_buffers);
         }
 
-        self.command_buffers = self.device.allocate_command_buffers(
+        self.frames.command_buffers = self.core.device.allocate_command_buffers(
             &vk::CommandBufferAllocateInfo::default()
-                .command_pool(self.command_pool)
+                .command_pool(self.frames.command_pool)
                 .level(vk::CommandBufferLevel::PRIMARY)
                 .command_buffer_count(new_image_count as u32),
         )?;
 
-        self.swapchain = new_swapchain;
-        self.swapchain_images = new_images;
-        self.extent = new_extent;
-        self.swapchain_image_views = new_image_views;
-        self.framebuffers = new_framebuffers;
+        self.swapchain.swapchain = new_swapchain;
+        self.swapchain.images = new_images;
+        self.swapchain.extent = new_extent;
+        self.swapchain.image_views = new_image_views;
+        self.swapchain.framebuffers = new_framebuffers;
 
-        self.image_layouts = vec![vk::ImageLayout::UNDEFINED; new_image_count];
-        self.images_in_flight = vec![vk::Fence::null(); new_image_count];
+        self.swapchain.image_layouts = vec![vk::ImageLayout::UNDEFINED; new_image_count];
+        self.frames.images_in_flight = vec![vk::Fence::null(); new_image_count];
 
         Ok(())
     }

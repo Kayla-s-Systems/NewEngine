@@ -6,8 +6,8 @@ use super::state::VulkanRenderer;
 impl VulkanRenderer {
     #[inline]
     pub fn set_debug_text(&mut self, text: &str) {
-        self.debug_text.clear();
-        self.debug_text.push_str(text);
+        self.debug.debug_text.clear();
+        self.debug.debug_text.push_str(text);
     }
 
     pub fn resize(&mut self, width: u32, height: u32) -> VkResult<()> {
@@ -17,13 +17,13 @@ impl VulkanRenderer {
 
     #[inline]
     pub fn set_target_size(&mut self, width: u32, height: u32) {
-        self.target_width = width;
-        self.target_height = height;
+        self.debug.target_width = width;
+        self.debug.target_height = height;
     }
 
     /// Stores UI draw list for the next presented frame.
     #[inline]
     pub fn set_ui_draw_list(&mut self, ui: UiDrawList) {
-        self.pending_ui = Some(ui);
+        self.debug.pending_ui = Some(ui);
     }
 }

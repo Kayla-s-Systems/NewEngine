@@ -6,14 +6,16 @@ use raw_window_handle::{RawDisplayHandle, RawWindowHandle};
 use std::ffi::CString;
 use std::time::Instant;
 
-use super::state::VulkanRenderer;
+use super::state::{
+    CoreContext, DebugState, FrameManager, PipelinePack, SwapchainContext, TextOverlayResources,
+    UiOverlayResources, VulkanRenderer,
+};
 use super::types::{FrameSync, FRAMES_IN_FLIGHT};
 
 use super::super::device::*;
 use super::super::instance::*;
 use super::super::pipeline::*;
 use super::super::swapchain::*;
-use super::super::util::*;
 
 impl VulkanRenderer {
     pub unsafe fn new(
@@ -74,7 +76,7 @@ impl VulkanRenderer {
         let (device, queue) = create_device(&instance, physical_device, queue_family_index)?;
         let swapchain_loader = ash::khr::swapchain::Device::new(&instance, &device);
 
-        let (swapchain, swapchain_images, swapchain_format, extent) = create_swapchain(
+        let (swapchain, images, format, extent) = create_swapchain(
             &swapchain_loader,
             &surface_loader,
             surface,
@@ -85,15 +87,12 @@ impl VulkanRenderer {
             vk::SwapchainKHR::null(),
         )?;
 
-        let swapchain_image_views =
-            create_image_views(&device, &swapchain_images, swapchain_format)?;
+        let image_views = create_image_views(&device, &images, format)?;
+        let image_layouts = vec![vk::ImageLayout::UNDEFINED; images.len()];
 
-        let image_layouts = vec![vk::ImageLayout::UNDEFINED; swapchain_images.len()];
-
-        let render_pass = create_render_pass(&device, swapchain_format)?;
-        let (pipeline_layout, pipeline) = create_pipeline(&device, render_pass)?;
-        let framebuffers =
-            create_framebuffers(&device, render_pass, &swapchain_image_views, extent)?;
+        let render_pass = create_render_pass(&device, format)?;
+        let (tri_pipeline_layout, tri_pipeline) = create_pipeline(&device, render_pass)?;
+        let framebuffers = create_framebuffers(&device, render_pass, &image_views, extent)?;
 
         let command_pool = device.create_command_pool(
             &vk::CommandPoolCreateInfo::default()
@@ -106,7 +105,7 @@ impl VulkanRenderer {
             &vk::CommandBufferAllocateInfo::default()
                 .command_pool(command_pool)
                 .level(vk::CommandBufferLevel::PRIMARY)
-                .command_buffer_count(swapchain_images.len() as u32),
+                .command_buffer_count(images.len() as u32),
         )?;
 
         let upload_command_pool = device.create_command_pool(
@@ -133,87 +132,96 @@ impl VulkanRenderer {
         };
 
         let frames = [make_frame(&device)?, make_frame(&device)?];
-        let images_in_flight = vec![vk::Fence::null(); swapchain_images.len()];
+        let images_in_flight = vec![vk::Fence::null(); images.len()];
 
-        let mut me = Self {
+        let core = CoreContext {
             instance,
-
-            debug_text: String::new(),
-            render_pass,
-            framebuffers,
-
-            pipeline_layout,
-            pipeline,
-
             surface_loader,
             surface,
-
             physical_device,
             device,
-
             queue_family_index,
             queue,
-
             swapchain_loader,
+        };
+
+        let swapchain = SwapchainContext {
             swapchain,
-            swapchain_images,
-            swapchain_image_views,
-            swapchain_format,
+            images,
+            image_views,
+            format,
             extent,
-
-            upload_command_pool,
+            framebuffers,
             image_layouts,
+        };
 
-            command_pool,
-            command_buffers,
-
-            frames,
-            frame_index: 0,
-            images_in_flight,
-
-            target_width: width,
-            target_height: height,
-
-            start_time: Instant::now(),
-
+        let pipelines = PipelinePack {
+            render_pass,
+            tri_pipeline_layout,
+            tri_pipeline,
             text_pipeline_layout: vk::PipelineLayout::null(),
             text_pipeline: vk::Pipeline::null(),
+            ui_pipeline_layout: vk::PipelineLayout::null(),
+            ui_pipeline: vk::Pipeline::null(),
+        };
 
-            text_desc_set_layout: vk::DescriptorSetLayout::null(),
-            text_desc_pool: vk::DescriptorPool::null(),
-            text_desc_set: vk::DescriptorSet::null(),
+        let text = TextOverlayResources {
+            desc_set_layout: vk::DescriptorSetLayout::null(),
+            desc_pool: vk::DescriptorPool::null(),
+            desc_set: vk::DescriptorSet::null(),
 
             font_image: vk::Image::null(),
             font_image_mem: vk::DeviceMemory::null(),
             font_image_view: vk::ImageView::null(),
             font_sampler: vk::Sampler::null(),
 
-            text_vb: vk::Buffer::null(),
-            text_vb_mem: vk::DeviceMemory::null(),
-            text_vb_size: 0,
+            vb: vk::Buffer::null(),
+            vb_mem: vk::DeviceMemory::null(),
+            vb_size: 0,
+        };
 
+        let ui = UiOverlayResources {
+            desc_set_layout: vk::DescriptorSetLayout::null(),
+            desc_pool: vk::DescriptorPool::null(),
+            sampler: vk::Sampler::null(),
+            textures: std::collections::HashMap::new(),
+
+            vb: vk::Buffer::null(),
+            vb_mem: vk::DeviceMemory::null(),
+            vb_size: 0,
+
+            ib: vk::Buffer::null(),
+            ib_mem: vk::DeviceMemory::null(),
+            ib_size: 0,
+
+            staging_buf: vk::Buffer::null(),
+            staging_mem: vk::DeviceMemory::null(),
+            staging_size: 0,
+        };
+
+        let debug = DebugState {
+            debug_text: String::new(),
+            start_time: Instant::now(),
             pending_ui: None,
+            target_width: width,
+            target_height: height,
+        };
 
-            ui_pipeline_layout: vk::PipelineLayout::null(),
-            ui_pipeline: vk::Pipeline::null(),
-
-            ui_desc_set_layout: vk::DescriptorSetLayout::null(),
-            ui_desc_pool: vk::DescriptorPool::null(),
-            ui_sampler: vk::Sampler::null(),
-
-            ui_textures: std::collections::HashMap::new(),
-
-            ui_vb: vk::Buffer::null(),
-            ui_vb_mem: vk::DeviceMemory::null(),
-            ui_vb_size: 0,
-
-            ui_ib: vk::Buffer::null(),
-            ui_ib_mem: vk::DeviceMemory::null(),
-            ui_ib_size: 0,
-
-            ui_staging_buf: vk::Buffer::null(),
-            ui_staging_mem: vk::DeviceMemory::null(),
-            ui_staging_size: 0,
+        let mut me = Self {
+            core,
+            swapchain,
+            pipelines,
+            frames: FrameManager {
+                frames,
+                frame_index: 0,
+                images_in_flight,
+                command_pool,
+                command_buffers,
+                upload_command_pool,
+            },
+            text,
+            ui,
+            debug,
         };
 
         me.init_text_overlay()?;

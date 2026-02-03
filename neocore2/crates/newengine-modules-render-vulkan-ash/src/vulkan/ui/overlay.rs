@@ -25,10 +25,13 @@ impl VulkanRenderer {
     pub(crate) fn init_ui_overlay(&mut self) -> VkResult<()> {
         unsafe {
             self.create_ui_descriptor()?;
-            let (pl, p) =
-                create_ui_pipeline(&self.device, self.render_pass, self.ui_desc_set_layout)?;
-            self.ui_pipeline_layout = pl;
-            self.ui_pipeline = p;
+            let (pl, p) = create_ui_pipeline(
+                &self.core.device,
+                self.pipelines.render_pass,
+                self.ui.desc_set_layout,
+            )?;
+            self.pipelines.ui_pipeline_layout = pl;
+            self.pipelines.ui_pipeline = p;
         }
         Ok(())
     }
@@ -36,66 +39,72 @@ impl VulkanRenderer {
     pub(crate) unsafe fn destroy_ui_overlay(&mut self) {
         self.destroy_ui_resources();
 
-        if self.ui_pipeline != vk::Pipeline::null() {
-            self.device.destroy_pipeline(self.ui_pipeline, None);
+        if self.pipelines.ui_pipeline != vk::Pipeline::null() {
+            self.core
+                .device
+                .destroy_pipeline(self.pipelines.ui_pipeline, None);
         }
-        if self.ui_pipeline_layout != vk::PipelineLayout::null() {
-            self.device
-                .destroy_pipeline_layout(self.ui_pipeline_layout, None);
-        }
-
-        if self.ui_desc_pool != vk::DescriptorPool::null() {
-            self.device.destroy_descriptor_pool(self.ui_desc_pool, None);
-        }
-        if self.ui_desc_set_layout != vk::DescriptorSetLayout::null() {
-            self.device
-                .destroy_descriptor_set_layout(self.ui_desc_set_layout, None);
-        }
-        if self.ui_sampler != vk::Sampler::null() {
-            self.device.destroy_sampler(self.ui_sampler, None);
+        if self.pipelines.ui_pipeline_layout != vk::PipelineLayout::null() {
+            self.core
+                .device
+                .destroy_pipeline_layout(self.pipelines.ui_pipeline_layout, None);
         }
 
-        if self.ui_vb != vk::Buffer::null() {
-            self.device.destroy_buffer(self.ui_vb, None);
+        if self.ui.desc_pool != vk::DescriptorPool::null() {
+            self.core
+                .device
+                .destroy_descriptor_pool(self.ui.desc_pool, None);
         }
-        if self.ui_vb_mem != vk::DeviceMemory::null() {
-            self.device.free_memory(self.ui_vb_mem, None);
+        if self.ui.desc_set_layout != vk::DescriptorSetLayout::null() {
+            self.core
+                .device
+                .destroy_descriptor_set_layout(self.ui.desc_set_layout, None);
         }
-        if self.ui_ib != vk::Buffer::null() {
-            self.device.destroy_buffer(self.ui_ib, None);
-        }
-        if self.ui_ib_mem != vk::DeviceMemory::null() {
-            self.device.free_memory(self.ui_ib_mem, None);
+        if self.ui.sampler != vk::Sampler::null() {
+            self.core.device.destroy_sampler(self.ui.sampler, None);
         }
 
-        if self.ui_staging_buf != vk::Buffer::null() {
-            self.device.destroy_buffer(self.ui_staging_buf, None);
-            self.ui_staging_buf = vk::Buffer::null();
+        if self.ui.vb != vk::Buffer::null() {
+            self.core.device.destroy_buffer(self.ui.vb, None);
         }
-        if self.ui_staging_mem != vk::DeviceMemory::null() {
-            self.device.free_memory(self.ui_staging_mem, None);
-            self.ui_staging_mem = vk::DeviceMemory::null();
+        if self.ui.vb_mem != vk::DeviceMemory::null() {
+            self.core.device.free_memory(self.ui.vb_mem, None);
         }
-        self.ui_staging_size = 0;
+        if self.ui.ib != vk::Buffer::null() {
+            self.core.device.destroy_buffer(self.ui.ib, None);
+        }
+        if self.ui.ib_mem != vk::DeviceMemory::null() {
+            self.core.device.free_memory(self.ui.ib_mem, None);
+        }
+
+        if self.ui.staging_buf != vk::Buffer::null() {
+            self.core.device.destroy_buffer(self.ui.staging_buf, None);
+            self.ui.staging_buf = vk::Buffer::null();
+        }
+        if self.ui.staging_mem != vk::DeviceMemory::null() {
+            self.core.device.free_memory(self.ui.staging_mem, None);
+            self.ui.staging_mem = vk::DeviceMemory::null();
+        }
+        self.ui.staging_size = 0;
     }
 
     unsafe fn destroy_ui_resources(&mut self) {
-        for (_id, tex) in self.ui_textures.drain() {
+        for (_id, tex) in self.ui.textures.drain() {
             if tex.desc_set != vk::DescriptorSet::null()
-                && self.ui_desc_pool != vk::DescriptorPool::null()
+                && self.ui.desc_pool != vk::DescriptorPool::null()
             {
                 let _ = self
                     .device
-                    .free_descriptor_sets(self.ui_desc_pool, &[tex.desc_set]);
+                    .free_descriptor_sets(self.ui.desc_pool, &[tex.desc_set]);
             }
             if tex.view != vk::ImageView::null() {
-                self.device.destroy_image_view(tex.view, None);
+                self.core.device.destroy_image_view(tex.view, None);
             }
             if tex.image != vk::Image::null() {
-                self.device.destroy_image(tex.image, None);
+                self.core.device.destroy_image(tex.image, None);
             }
             if tex.mem != vk::DeviceMemory::null() {
-                self.device.free_memory(tex.mem, None);
+                self.core.device.free_memory(tex.mem, None);
             }
         }
     }
@@ -109,7 +118,7 @@ impl VulkanRenderer {
             .address_mode_v(vk::SamplerAddressMode::CLAMP_TO_EDGE)
             .address_mode_w(vk::SamplerAddressMode::CLAMP_TO_EDGE);
 
-        self.ui_sampler = self.device.create_sampler(&sampler_info, None)?;
+        self.ui.sampler = self.core.device.create_sampler(&sampler_info, None)?;
 
         let binding = vk::DescriptorSetLayoutBinding::default()
             .binding(0)
@@ -117,7 +126,7 @@ impl VulkanRenderer {
             .descriptor_count(1)
             .stage_flags(vk::ShaderStageFlags::FRAGMENT);
 
-        self.ui_desc_set_layout = self.device.create_descriptor_set_layout(
+        self.ui.desc_set_layout = self.core.device.create_descriptor_set_layout(
             &vk::DescriptorSetLayoutCreateInfo::default().bindings(std::slice::from_ref(&binding)),
             None,
         )?;
@@ -126,7 +135,7 @@ impl VulkanRenderer {
             .ty(vk::DescriptorType::COMBINED_IMAGE_SAMPLER)
             .descriptor_count(1024);
 
-        self.ui_desc_pool = self.device.create_descriptor_pool(
+        self.ui.desc_pool = self.core.device.create_descriptor_pool(
             &vk::DescriptorPoolCreateInfo::default()
                 .flags(vk::DescriptorPoolCreateFlags::FREE_DESCRIPTOR_SET)
                 .max_sets(1024)
@@ -167,7 +176,7 @@ impl VulkanRenderer {
             self.ui_ensure_staging(total_bytes)?;
 
             let mapped = self.device.map_memory(
-                self.ui_staging_mem,
+                self.ui.staging_mem,
                 0,
                 total_bytes,
                 vk::MemoryMapFlags::empty(),
@@ -203,7 +212,7 @@ impl VulkanRenderer {
 
             // Schedules patches.
             for p in &delta.patches {
-                let Some(tex) = self.ui_textures.get(&p.id.0) else {
+                let Some(tex) = self.ui.textures.get(&p.id.0) else {
                     continue;
                 };
 
@@ -231,59 +240,64 @@ impl VulkanRenderer {
 
             debug_assert!(cursor == total_bytes);
 
-            self.device.unmap_memory(self.ui_staging_mem);
+            self.core.device.unmap_memory(self.ui.staging_mem);
 
             // One submit for the whole delta.
-            immediate_submit(&self.device, self.upload_command_pool, self.queue, |cmd| {
-                for op in &ops {
-                    transition_image_layout(
-                        &self.device,
-                        cmd,
-                        op.image,
-                        op.old_layout,
-                        vk::ImageLayout::TRANSFER_DST_OPTIMAL,
-                    );
+            immediate_submit(
+                &self.core.device,
+                self.frames.upload_command_pool,
+                self.core.queue,
+                |cmd| {
+                    for op in &ops {
+                        transition_image_layout(
+                            &self.core.device,
+                            cmd,
+                            op.image,
+                            op.old_layout,
+                            vk::ImageLayout::TRANSFER_DST_OPTIMAL,
+                        );
 
-                    let mut region = vk::BufferImageCopy::default()
-                        .buffer_offset(op.offset)
-                        .buffer_row_length(0)
-                        .buffer_image_height(0)
-                        .image_subresource(
-                            vk::ImageSubresourceLayers::default()
-                                .aspect_mask(vk::ImageAspectFlags::COLOR)
-                                .mip_level(0)
-                                .base_array_layer(0)
-                                .layer_count(1),
-                        )
-                        .image_extent(op.extent);
+                        let mut region = vk::BufferImageCopy::default()
+                            .buffer_offset(op.offset)
+                            .buffer_row_length(0)
+                            .buffer_image_height(0)
+                            .image_subresource(
+                                vk::ImageSubresourceLayers::default()
+                                    .aspect_mask(vk::ImageAspectFlags::COLOR)
+                                    .mip_level(0)
+                                    .base_array_layer(0)
+                                    .layer_count(1),
+                            )
+                            .image_extent(op.extent);
 
-                    if let UploadKind::Patch { origin } = op.kind {
-                        region = region.image_offset(vk::Offset3D {
-                            x: origin[0] as i32,
-                            y: origin[1] as i32,
-                            z: 0,
-                        });
-                    } else {
-                        region = region.image_offset(vk::Offset3D { x: 0, y: 0, z: 0 });
+                        if let UploadKind::Patch { origin } = op.kind {
+                            region = region.image_offset(vk::Offset3D {
+                                x: origin[0] as i32,
+                                y: origin[1] as i32,
+                                z: 0,
+                            });
+                        } else {
+                            region = region.image_offset(vk::Offset3D { x: 0, y: 0, z: 0 });
+                        }
+
+                        self.core.device.cmd_copy_buffer_to_image(
+                            cmd,
+                            self.ui.staging_buf,
+                            op.image,
+                            vk::ImageLayout::TRANSFER_DST_OPTIMAL,
+                            std::slice::from_ref(&region),
+                        );
+
+                        transition_image_layout(
+                            &self.core.device,
+                            cmd,
+                            op.image,
+                            vk::ImageLayout::TRANSFER_DST_OPTIMAL,
+                            vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL,
+                        );
                     }
-
-                    self.device.cmd_copy_buffer_to_image(
-                        cmd,
-                        self.ui_staging_buf,
-                        op.image,
-                        vk::ImageLayout::TRANSFER_DST_OPTIMAL,
-                        std::slice::from_ref(&region),
-                    );
-
-                    transition_image_layout(
-                        &self.device,
-                        cmd,
-                        op.image,
-                        vk::ImageLayout::TRANSFER_DST_OPTIMAL,
-                        vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL,
-                    );
-                }
-            })?;
+                },
+            )?;
         } else {
             // No uploads, but we still may free textures.
             for (id, tex) in &delta.set {
@@ -300,46 +314,46 @@ impl VulkanRenderer {
     }
 
     unsafe fn ui_free_texture(&mut self, id: UiTexId) {
-        if let Some(tex) = self.ui_textures.remove(&id.0) {
+        if let Some(tex) = self.ui.textures.remove(&id.0) {
             if tex.desc_set != vk::DescriptorSet::null()
-                && self.ui_desc_pool != vk::DescriptorPool::null()
+                && self.ui.desc_pool != vk::DescriptorPool::null()
             {
                 let _ = self
                     .device
-                    .free_descriptor_sets(self.ui_desc_pool, &[tex.desc_set]);
+                    .free_descriptor_sets(self.ui.desc_pool, &[tex.desc_set]);
             }
-            self.device.destroy_image_view(tex.view, None);
-            self.device.destroy_image(tex.image, None);
-            self.device.free_memory(tex.mem, None);
+            self.core.device.destroy_image_view(tex.view, None);
+            self.core.device.destroy_image(tex.image, None);
+            self.core.device.free_memory(tex.mem, None);
         }
     }
 
     unsafe fn ui_ensure_staging(&mut self, required: vk::DeviceSize) -> VkResult<()> {
-        if self.ui_staging_buf != vk::Buffer::null() && required <= self.ui_staging_size {
+        if self.ui.staging_buf != vk::Buffer::null() && required <= self.ui.staging_size {
             return Ok(());
         }
 
-        if self.ui_staging_buf != vk::Buffer::null() {
-            self.device.destroy_buffer(self.ui_staging_buf, None);
-            self.ui_staging_buf = vk::Buffer::null();
+        if self.ui.staging_buf != vk::Buffer::null() {
+            self.core.device.destroy_buffer(self.ui.staging_buf, None);
+            self.ui.staging_buf = vk::Buffer::null();
         }
-        if self.ui_staging_mem != vk::DeviceMemory::null() {
-            self.device.free_memory(self.ui_staging_mem, None);
-            self.ui_staging_mem = vk::DeviceMemory::null();
+        if self.ui.staging_mem != vk::DeviceMemory::null() {
+            self.core.device.free_memory(self.ui.staging_mem, None);
+            self.ui.staging_mem = vk::DeviceMemory::null();
         }
 
-        self.ui_staging_size = required.max(64 * 1024);
+        self.ui.staging_size = required.max(64 * 1024);
         let (buf, mem) = create_buffer(
-            &self.instance,
-            self.physical_device,
-            &self.device,
-            self.ui_staging_size,
+            &self.core.instance,
+            self.core.physical_device,
+            &self.core.device,
+            self.ui.staging_size,
             vk::BufferUsageFlags::TRANSFER_SRC,
             vk::MemoryPropertyFlags::HOST_VISIBLE | vk::MemoryPropertyFlags::HOST_COHERENT,
         )?;
 
-        self.ui_staging_buf = buf;
-        self.ui_staging_mem = mem;
+        self.ui.staging_buf = buf;
+        self.ui.staging_mem = mem;
         Ok(())
     }
 
@@ -367,12 +381,12 @@ impl VulkanRenderer {
             .sharing_mode(vk::SharingMode::EXCLUSIVE)
             .initial_layout(vk::ImageLayout::UNDEFINED);
 
-        let image = self.device.create_image(&image_info, None)?;
-        let req = self.device.get_image_memory_requirements(image);
+        let image = self.core.device.create_image(&image_info, None)?;
+        let req = self.core.device.get_image_memory_requirements(image);
 
         let mem_type = find_memory_type(
-            &self.instance,
-            self.physical_device,
+            &self.core.instance,
+            self.core.physical_device,
             req.memory_type_bits,
             vk::MemoryPropertyFlags::DEVICE_LOCAL,
         )?;
@@ -381,8 +395,8 @@ impl VulkanRenderer {
             .allocation_size(req.size)
             .memory_type_index(mem_type);
 
-        let mem = self.device.allocate_memory(&alloc, None)?;
-        self.device.bind_image_memory(image, mem, 0)?;
+        let mem = self.core.device.allocate_memory(&alloc, None)?;
+        self.core.device.bind_image_memory(image, mem, 0)?;
 
         let view_info = vk::ImageViewCreateInfo::default()
             .image(image)
@@ -397,17 +411,17 @@ impl VulkanRenderer {
                     .layer_count(1),
             );
 
-        let view = self.device.create_image_view(&view_info, None)?;
+        let view = self.core.device.create_image_view(&view_info, None)?;
 
-        let layouts = [self.ui_desc_set_layout];
-        let desc_set = self.device.allocate_descriptor_sets(
+        let layouts = [self.ui.desc_set_layout];
+        let desc_set = self.core.device.allocate_descriptor_sets(
             &vk::DescriptorSetAllocateInfo::default()
-                .descriptor_pool(self.ui_desc_pool)
+                .descriptor_pool(self.ui.desc_pool)
                 .set_layouts(&layouts),
         )?[0];
 
         let image_info = vk::DescriptorImageInfo::default()
-            .sampler(self.ui_sampler)
+            .sampler(self.ui.sampler)
             .image_view(view)
             .image_layout(vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL);
 
@@ -417,7 +431,8 @@ impl VulkanRenderer {
             .descriptor_type(vk::DescriptorType::COMBINED_IMAGE_SAMPLER)
             .image_info(std::slice::from_ref(&image_info));
 
-        self.device
+        self.core
+            .device
             .update_descriptor_sets(std::slice::from_ref(&write), &[]);
 
         let gpu = GpuUiTexture {
@@ -428,7 +443,7 @@ impl VulkanRenderer {
             size,
         };
 
-        self.ui_textures.insert(id.0, gpu);
+        self.ui.textures.insert(id.0, gpu);
         Ok(gpu)
     }
 
@@ -437,46 +452,46 @@ impl VulkanRenderer {
         vb_bytes: vk::DeviceSize,
         ib_bytes: vk::DeviceSize,
     ) -> VkResult<()> {
-        if self.ui_vb == vk::Buffer::null() || vb_bytes > self.ui_vb_size {
-            if self.ui_vb != vk::Buffer::null() {
-                self.device.destroy_buffer(self.ui_vb, None);
+        if self.ui.vb == vk::Buffer::null() || vb_bytes > self.ui.vb_size {
+            if self.ui.vb != vk::Buffer::null() {
+                self.core.device.destroy_buffer(self.ui.vb, None);
             }
-            if self.ui_vb_mem != vk::DeviceMemory::null() {
-                self.device.free_memory(self.ui_vb_mem, None);
+            if self.ui.vb_mem != vk::DeviceMemory::null() {
+                self.core.device.free_memory(self.ui.vb_mem, None);
             }
 
-            self.ui_vb_size = vb_bytes.max(64 * 1024);
+            self.ui.vb_size = vb_bytes.max(64 * 1024);
             let (buf, mem) = create_buffer(
-                &self.instance,
-                self.physical_device,
-                &self.device,
-                self.ui_vb_size,
+                &self.core.instance,
+                self.core.physical_device,
+                &self.core.device,
+                self.ui.vb_size,
                 vk::BufferUsageFlags::VERTEX_BUFFER,
                 vk::MemoryPropertyFlags::HOST_VISIBLE | vk::MemoryPropertyFlags::HOST_COHERENT,
             )?;
-            self.ui_vb = buf;
-            self.ui_vb_mem = mem;
+            self.ui.vb = buf;
+            self.ui.vb_mem = mem;
         }
 
-        if self.ui_ib == vk::Buffer::null() || ib_bytes > self.ui_ib_size {
-            if self.ui_ib != vk::Buffer::null() {
-                self.device.destroy_buffer(self.ui_ib, None);
+        if self.ui.ib == vk::Buffer::null() || ib_bytes > self.ui.ib_size {
+            if self.ui.ib != vk::Buffer::null() {
+                self.core.device.destroy_buffer(self.ui.ib, None);
             }
-            if self.ui_ib_mem != vk::DeviceMemory::null() {
-                self.device.free_memory(self.ui_ib_mem, None);
+            if self.ui.ib_mem != vk::DeviceMemory::null() {
+                self.core.device.free_memory(self.ui.ib_mem, None);
             }
 
-            self.ui_ib_size = ib_bytes.max(64 * 1024);
+            self.ui.ib_size = ib_bytes.max(64 * 1024);
             let (buf, mem) = create_buffer(
-                &self.instance,
-                self.physical_device,
-                &self.device,
-                self.ui_ib_size,
+                &self.core.instance,
+                self.core.physical_device,
+                &self.core.device,
+                self.ui.ib_size,
                 vk::BufferUsageFlags::INDEX_BUFFER,
                 vk::MemoryPropertyFlags::HOST_VISIBLE | vk::MemoryPropertyFlags::HOST_COHERENT,
             )?;
-            self.ui_ib = buf;
-            self.ui_ib_mem = mem;
+            self.ui.ib = buf;
+            self.ui.ib_mem = mem;
         }
 
         Ok(())
@@ -498,27 +513,27 @@ impl VulkanRenderer {
         if !list.mesh.vertices.is_empty() {
             let mapped =
                 self.device
-                    .map_memory(self.ui_vb_mem, 0, vb_bytes, vk::MemoryMapFlags::empty())?
+                    .map_memory(self.ui.vb_mem, 0, vb_bytes, vk::MemoryMapFlags::empty())?
                     as *mut u8;
             ptr::copy_nonoverlapping(
                 list.mesh.vertices.as_ptr() as *const u8,
                 mapped,
                 vb_bytes as usize,
             );
-            self.device.unmap_memory(self.ui_vb_mem);
+            self.core.device.unmap_memory(self.ui.vb_mem);
         }
 
         if !list.mesh.indices.is_empty() {
             let mapped =
                 self.device
-                    .map_memory(self.ui_ib_mem, 0, ib_bytes, vk::MemoryMapFlags::empty())?
+                    .map_memory(self.ui.ib_mem, 0, ib_bytes, vk::MemoryMapFlags::empty())?
                     as *mut u8;
             ptr::copy_nonoverlapping(
                 list.mesh.indices.as_ptr() as *const u8,
                 mapped,
                 ib_bytes as usize,
             );
-            self.device.unmap_memory(self.ui_ib_mem);
+            self.core.device.unmap_memory(self.ui.ib_mem);
         }
 
         if list.mesh.indices.is_empty()
@@ -528,24 +543,30 @@ impl VulkanRenderer {
             return Ok(());
         }
 
-        self.device
-            .cmd_bind_pipeline(cmd, vk::PipelineBindPoint::GRAPHICS, self.ui_pipeline);
+        self.core.device.cmd_bind_pipeline(
+            cmd,
+            vk::PipelineBindPoint::GRAPHICS,
+            self.pipelines.ui_pipeline,
+        );
 
         let pc = ui_pc_bytes(list.screen_size_px);
 
-        self.device.cmd_push_constants(
+        self.core.device.cmd_push_constants(
             cmd,
-            self.ui_pipeline_layout,
+            self.pipelines.ui_pipeline_layout,
             vk::ShaderStageFlags::VERTEX,
             0,
             &pc,
         );
 
-        let vb = [self.ui_vb];
+        let vb = [self.ui.vb];
         let offsets = [0u64];
-        self.device.cmd_bind_vertex_buffers(cmd, 0, &vb, &offsets);
-        self.device
-            .cmd_bind_index_buffer(cmd, self.ui_ib, 0, vk::IndexType::UINT32);
+        self.core
+            .device
+            .cmd_bind_vertex_buffers(cmd, 0, &vb, &offsets);
+        self.core
+            .device
+            .cmd_bind_index_buffer(cmd, self.ui.ib, 0, vk::IndexType::UINT32);
 
         for c in &list.mesh.cmds {
             self.ui_draw_cmd(cmd, c)?;
@@ -555,7 +576,7 @@ impl VulkanRenderer {
     }
 
     unsafe fn ui_draw_cmd(&mut self, cmd: vk::CommandBuffer, c: &UiDrawCmd) -> VkResult<()> {
-        let Some(tex) = self.ui_textures.get(&c.texture.0) else {
+        let Some(tex) = self.ui.textures.get(&c.texture.0) else {
             return Ok(());
         };
 
@@ -564,10 +585,10 @@ impl VulkanRenderer {
         let mut x1 = c.clip_rect.max_x.ceil() as i32;
         let mut y1 = c.clip_rect.max_y.ceil() as i32;
 
-        x0 = x0.clamp(0, self.extent.width as i32);
-        y0 = y0.clamp(0, self.extent.height as i32);
-        x1 = x1.clamp(0, self.extent.width as i32);
-        y1 = y1.clamp(0, self.extent.height as i32);
+        x0 = x0.clamp(0, self.swapchain.extent.width as i32);
+        y0 = y0.clamp(0, self.swapchain.extent.height as i32);
+        x1 = x1.clamp(0, self.swapchain.extent.width as i32);
+        y1 = y1.clamp(0, self.swapchain.extent.height as i32);
 
         if x1 <= x0 || y1 <= y0 {
             return Ok(());
@@ -581,13 +602,14 @@ impl VulkanRenderer {
             },
         };
 
-        self.device
+        self.core
+            .device
             .cmd_set_scissor(cmd, 0, std::slice::from_ref(&sc));
 
-        self.device.cmd_bind_descriptor_sets(
+        self.core.device.cmd_bind_descriptor_sets(
             cmd,
             vk::PipelineBindPoint::GRAPHICS,
-            self.ui_pipeline_layout,
+            self.pipelines.ui_pipeline_layout,
             0,
             std::slice::from_ref(&tex.desc_set),
             &[],
@@ -600,7 +622,8 @@ impl VulkanRenderer {
             return Ok(());
         }
 
-        self.device
+        self.core
+            .device
             .cmd_draw_indexed(cmd, index_count, 1, first_index, 0, 0);
         Ok(())
     }

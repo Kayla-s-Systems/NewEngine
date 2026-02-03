@@ -11,8 +11,8 @@ use super::VulkanRenderer;
 
 mod font8x8 {
     include!(concat!(
-    env!("CARGO_MANIFEST_DIR"),
-    "/src/vulkan/font8x8_ascii.inl"
+        env!("CARGO_MANIFEST_DIR"),
+        "/src/vulkan/font8x8_ascii.inl"
     ));
 }
 
@@ -116,8 +116,8 @@ pub(super) unsafe fn create_text_pipeline(
                 | vk::ColorComponentFlags::A,
         );
 
-    let cb = vk::PipelineColorBlendStateCreateInfo::default()
-        .attachments(std::slice::from_ref(&ca));
+    let cb =
+        vk::PipelineColorBlendStateCreateInfo::default().attachments(std::slice::from_ref(&ca));
 
     let dyn_states = [vk::DynamicState::VIEWPORT, vk::DynamicState::SCISSOR];
     let ds = vk::PipelineDynamicStateCreateInfo::default().dynamic_states(&dyn_states);
@@ -163,12 +163,12 @@ impl VulkanRenderer {
             self.create_text_descriptor()?;
 
             let (tpl, tp) = create_text_pipeline(
-                &self.device,
-                self.render_pass,
-                self.text_desc_set_layout,
+                &self.core.device,
+                self.pipelines.render_pass,
+                self.text.desc_set_layout,
             )?;
-            self.text_pipeline_layout = tpl;
-            self.text_pipeline = tp;
+            self.pipelines.text_pipeline_layout = tpl;
+            self.pipelines.text_pipeline = tp;
 
             self.create_text_vertex_buffer(6 * 2048)?;
         }
@@ -176,57 +176,70 @@ impl VulkanRenderer {
     }
 
     pub(super) unsafe fn destroy_text_overlay(&mut self) {
-        if self.text_vb != vk::Buffer::null() {
-            self.device.destroy_buffer(self.text_vb, None);
+        if self.text.vb != vk::Buffer::null() {
+            self.core.device.destroy_buffer(self.text.vb, None);
         }
-        if self.text_vb_mem != vk::DeviceMemory::null() {
-            self.device.free_memory(self.text_vb_mem, None);
-        }
-
-        if self.text_pipeline != vk::Pipeline::null() {
-            self.device.destroy_pipeline(self.text_pipeline, None);
-        }
-        if self.text_pipeline_layout != vk::PipelineLayout::null() {
-            self.device
-                .destroy_pipeline_layout(self.text_pipeline_layout, None);
+        if self.text.vb_mem != vk::DeviceMemory::null() {
+            self.core.device.free_memory(self.text.vb_mem, None);
         }
 
-        if self.text_desc_pool != vk::DescriptorPool::null() {
-            self.device.destroy_descriptor_pool(self.text_desc_pool, None);
+        if self.pipelines.text_pipeline != vk::Pipeline::null() {
+            self.core
+                .device
+                .destroy_pipeline(self.pipelines.text_pipeline, None);
         }
-        if self.text_desc_set_layout != vk::DescriptorSetLayout::null() {
-            self.device
-                .destroy_descriptor_set_layout(self.text_desc_set_layout, None);
+        if self.pipelines.text_pipeline_layout != vk::PipelineLayout::null() {
+            self.core
+                .device
+                .destroy_pipeline_layout(self.pipelines.text_pipeline_layout, None);
         }
 
-        if self.font_sampler != vk::Sampler::null() {
-            self.device.destroy_sampler(self.font_sampler, None);
+        if self.text.desc_pool != vk::DescriptorPool::null() {
+            self.core
+                .device
+                .destroy_descriptor_pool(self.text.desc_pool, None);
         }
-        if self.font_image_view != vk::ImageView::null() {
-            self.device.destroy_image_view(self.font_image_view, None);
+        if self.text.desc_set_layout != vk::DescriptorSetLayout::null() {
+            self.core
+                .device
+                .destroy_descriptor_set_layout(self.text.desc_set_layout, None);
         }
-        if self.font_image != vk::Image::null() {
-            self.device.destroy_image(self.font_image, None);
+
+        if self.text.font_sampler != vk::Sampler::null() {
+            self.core
+                .device
+                .destroy_sampler(self.text.font_sampler, None);
         }
-        if self.font_image_mem != vk::DeviceMemory::null() {
-            self.device.free_memory(self.font_image_mem, None);
+        if self.text.font_image_view != vk::ImageView::null() {
+            self.core
+                .device
+                .destroy_image_view(self.text.font_image_view, None);
+        }
+        if self.text.font_image != vk::Image::null() {
+            self.core.device.destroy_image(self.text.font_image, None);
+        }
+        if self.text.font_image_mem != vk::DeviceMemory::null() {
+            self.core.device.free_memory(self.text.font_image_mem, None);
         }
     }
 
     unsafe fn create_text_vertex_buffer(&mut self, max_vertices: usize) -> VkResult<()> {
-        self.text_vb_size = (mem::size_of::<TextVertex>() * max_vertices) as vk::DeviceSize;
+        self.text.vb_size = (mem::size_of::<TextVertex>() * max_vertices) as vk::DeviceSize;
 
         let info = vk::BufferCreateInfo::default()
-            .size(self.text_vb_size)
+            .size(self.text.vb_size)
             .usage(vk::BufferUsageFlags::VERTEX_BUFFER)
             .sharing_mode(vk::SharingMode::EXCLUSIVE);
 
-        self.text_vb = self.device.create_buffer(&info, None)?;
-        let req = self.device.get_buffer_memory_requirements(self.text_vb);
+        self.text.vb = self.core.device.create_buffer(&info, None)?;
+        let req = self
+            .core
+            .device
+            .get_buffer_memory_requirements(self.text.vb);
 
         let mem_type = find_memory_type(
-            &self.instance,
-            self.physical_device,
+            &self.core.instance,
+            self.core.physical_device,
             req.memory_type_bits,
             vk::MemoryPropertyFlags::HOST_VISIBLE | vk::MemoryPropertyFlags::HOST_COHERENT,
         )?;
@@ -235,8 +248,10 @@ impl VulkanRenderer {
             .allocation_size(req.size)
             .memory_type_index(mem_type);
 
-        self.text_vb_mem = self.device.allocate_memory(&alloc, None)?;
-        self.device.bind_buffer_memory(self.text_vb, self.text_vb_mem, 0)?;
+        self.text.vb_mem = self.core.device.allocate_memory(&alloc, None)?;
+        self.core
+            .device
+            .bind_buffer_memory(self.text.vb, self.text.vb_mem, 0)?;
         Ok(())
     }
 
@@ -244,21 +259,21 @@ impl VulkanRenderer {
         let staging_size = atlas_r8.len() as vk::DeviceSize;
 
         let (staging_buf, staging_mem) = create_buffer(
-            &self.instance,
-            self.physical_device,
-            &self.device,
+            &self.core.instance,
+            self.core.physical_device,
+            &self.core.device,
             staging_size,
             vk::BufferUsageFlags::TRANSFER_SRC,
             vk::MemoryPropertyFlags::HOST_VISIBLE | vk::MemoryPropertyFlags::HOST_COHERENT,
         )?;
 
-        let ptr_map = self
-            .device
-            .map_memory(staging_mem, 0, staging_size, vk::MemoryMapFlags::empty())?
-            as *mut u8;
+        let ptr_map =
+            self.device
+                .map_memory(staging_mem, 0, staging_size, vk::MemoryMapFlags::empty())?
+                as *mut u8;
 
         ptr::copy_nonoverlapping(atlas_r8.as_ptr(), ptr_map, atlas_r8.len());
-        self.device.unmap_memory(staging_mem);
+        self.core.device.unmap_memory(staging_mem);
 
         let image_info = vk::ImageCreateInfo::default()
             .image_type(vk::ImageType::TYPE_2D)
@@ -276,12 +291,15 @@ impl VulkanRenderer {
             .sharing_mode(vk::SharingMode::EXCLUSIVE)
             .initial_layout(vk::ImageLayout::UNDEFINED);
 
-        self.font_image = self.device.create_image(&image_info, None)?;
-        let req = self.device.get_image_memory_requirements(self.font_image);
+        self.text.font_image = self.core.device.create_image(&image_info, None)?;
+        let req = self
+            .core
+            .device
+            .get_image_memory_requirements(self.text.font_image);
 
         let mem_type = find_memory_type(
-            &self.instance,
-            self.physical_device,
+            &self.core.instance,
+            self.core.physical_device,
             req.memory_type_bits,
             vk::MemoryPropertyFlags::DEVICE_LOCAL,
         )?;
@@ -290,60 +308,66 @@ impl VulkanRenderer {
             .allocation_size(req.size)
             .memory_type_index(mem_type);
 
-        self.font_image_mem = self.device.allocate_memory(&alloc, None)?;
-        self.device
-            .bind_image_memory(self.font_image, self.font_image_mem, 0)?;
+        self.text.font_image_mem = self.core.device.allocate_memory(&alloc, None)?;
+        self.core
+            .device
+            .bind_image_memory(self.text.font_image, self.text.font_image_mem, 0)?;
 
-        immediate_submit(&self.device, self.upload_command_pool, self.queue, |cmd| {
-            transition_image_layout(
-                &self.device,
-                cmd,
-                self.font_image,
-                vk::ImageLayout::UNDEFINED,
-                vk::ImageLayout::TRANSFER_DST_OPTIMAL,
-            );
+        immediate_submit(
+            &self.core.device,
+            self.frames.upload_command_pool,
+            self.core.queue,
+            |cmd| {
+                transition_image_layout(
+                    &self.core.device,
+                    cmd,
+                    self.text.font_image,
+                    vk::ImageLayout::UNDEFINED,
+                    vk::ImageLayout::TRANSFER_DST_OPTIMAL,
+                );
 
-            let region = vk::BufferImageCopy::default()
-                .buffer_offset(0)
-                .buffer_row_length(0)
-                .buffer_image_height(0)
-                .image_subresource(
-                    vk::ImageSubresourceLayers::default()
-                        .aspect_mask(vk::ImageAspectFlags::COLOR)
-                        .mip_level(0)
-                        .base_array_layer(0)
-                        .layer_count(1),
-                )
-                .image_offset(vk::Offset3D { x: 0, y: 0, z: 0 })
-                .image_extent(vk::Extent3D {
-                    width: 128,
-                    height: 128,
-                    depth: 1,
-                });
+                let region = vk::BufferImageCopy::default()
+                    .buffer_offset(0)
+                    .buffer_row_length(0)
+                    .buffer_image_height(0)
+                    .image_subresource(
+                        vk::ImageSubresourceLayers::default()
+                            .aspect_mask(vk::ImageAspectFlags::COLOR)
+                            .mip_level(0)
+                            .base_array_layer(0)
+                            .layer_count(1),
+                    )
+                    .image_offset(vk::Offset3D { x: 0, y: 0, z: 0 })
+                    .image_extent(vk::Extent3D {
+                        width: 128,
+                        height: 128,
+                        depth: 1,
+                    });
 
-            self.device.cmd_copy_buffer_to_image(
-                cmd,
-                staging_buf,
-                self.font_image,
-                vk::ImageLayout::TRANSFER_DST_OPTIMAL,
-                std::slice::from_ref(&region),
-            );
+                self.core.device.cmd_copy_buffer_to_image(
+                    cmd,
+                    staging_buf,
+                    self.text.font_image,
+                    vk::ImageLayout::TRANSFER_DST_OPTIMAL,
+                    std::slice::from_ref(&region),
+                );
 
-            transition_image_layout(
-                &self.device,
-                cmd,
-                self.font_image,
-                vk::ImageLayout::TRANSFER_DST_OPTIMAL,
-                vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL,
-            );
-        })?;
+                transition_image_layout(
+                    &self.core.device,
+                    cmd,
+                    self.text.font_image,
+                    vk::ImageLayout::TRANSFER_DST_OPTIMAL,
+                    vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL,
+                );
+            },
+        )?;
 
-        self.device.destroy_buffer(staging_buf, None);
-        self.device.free_memory(staging_mem, None);
+        self.core.device.destroy_buffer(staging_buf, None);
+        self.core.device.free_memory(staging_mem, None);
 
-        self.font_image_view = self.device.create_image_view(
+        self.text.font_image_view = self.core.device.create_image_view(
             &vk::ImageViewCreateInfo::default()
-                .image(self.font_image)
+                .image(self.text.font_image)
                 .view_type(vk::ImageViewType::TYPE_2D)
                 .format(vk::Format::R8_UNORM)
                 .subresource_range(
@@ -357,7 +381,7 @@ impl VulkanRenderer {
             None,
         )?;
 
-        self.font_sampler = self.device.create_sampler(
+        self.text.font_sampler = self.core.device.create_sampler(
             &vk::SamplerCreateInfo::default()
                 .mag_filter(vk::Filter::NEAREST)
                 .min_filter(vk::Filter::NEAREST)
@@ -378,9 +402,8 @@ impl VulkanRenderer {
             .descriptor_count(1)
             .stage_flags(vk::ShaderStageFlags::FRAGMENT);
 
-        self.text_desc_set_layout = self.device.create_descriptor_set_layout(
-            &vk::DescriptorSetLayoutCreateInfo::default()
-                .bindings(std::slice::from_ref(&binding)),
+        self.text.desc_set_layout = self.core.device.create_descriptor_set_layout(
+            &vk::DescriptorSetLayoutCreateInfo::default().bindings(std::slice::from_ref(&binding)),
             None,
         )?;
 
@@ -388,31 +411,33 @@ impl VulkanRenderer {
             .ty(vk::DescriptorType::COMBINED_IMAGE_SAMPLER)
             .descriptor_count(1);
 
-        self.text_desc_pool = self.device.create_descriptor_pool(
+        self.text.desc_pool = self.core.device.create_descriptor_pool(
             &vk::DescriptorPoolCreateInfo::default()
                 .max_sets(1)
                 .pool_sizes(std::slice::from_ref(&pool_size)),
             None,
         )?;
 
-        self.text_desc_set = self.device.allocate_descriptor_sets(
+        self.text.desc_set = self.core.device.allocate_descriptor_sets(
             &vk::DescriptorSetAllocateInfo::default()
-                .descriptor_pool(self.text_desc_pool)
-                .set_layouts(std::slice::from_ref(&self.text_desc_set_layout)),
+                .descriptor_pool(self.text.desc_pool)
+                .set_layouts(std::slice::from_ref(&self.text.desc_set_layout)),
         )?[0];
 
         let img = vk::DescriptorImageInfo::default()
-            .sampler(self.font_sampler)
-            .image_view(self.font_image_view)
+            .sampler(self.text.font_sampler)
+            .image_view(self.text.font_image_view)
             .image_layout(vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL);
 
         let write = vk::WriteDescriptorSet::default()
-            .dst_set(self.text_desc_set)
+            .dst_set(self.text.desc_set)
             .dst_binding(0)
             .descriptor_type(vk::DescriptorType::COMBINED_IMAGE_SAMPLER)
             .image_info(std::slice::from_ref(&img));
 
-        self.device.update_descriptor_sets(std::slice::from_ref(&write), &[]);
+        self.core
+            .device
+            .update_descriptor_sets(std::slice::from_ref(&write), &[]);
         Ok(())
     }
 
@@ -431,34 +456,42 @@ impl VulkanRenderer {
         }
 
         let bytes = (vertices.len() * mem::size_of::<TextVertex>()) as vk::DeviceSize;
-        if bytes > self.text_vb_size {
+        if bytes > self.text.vb_size {
             return Ok(());
         }
 
         let dst = self
             .device
-            .map_memory(self.text_vb_mem, 0, bytes, vk::MemoryMapFlags::empty())?
+            .map_memory(self.text.vb_mem, 0, bytes, vk::MemoryMapFlags::empty())?
             as *mut u8;
 
         ptr::copy_nonoverlapping(vertices.as_ptr() as *const u8, dst, bytes as usize);
-        self.device.unmap_memory(self.text_vb_mem);
+        self.core.device.unmap_memory(self.text.vb_mem);
 
-        self.device.cmd_bind_pipeline(cmd, vk::PipelineBindPoint::GRAPHICS, self.text_pipeline);
-
-        self.device.cmd_bind_descriptor_sets(
+        self.core.device.cmd_bind_pipeline(
             cmd,
             vk::PipelineBindPoint::GRAPHICS,
-            self.text_pipeline_layout,
+            self.pipelines.text_pipeline,
+        );
+
+        self.core.device.cmd_bind_descriptor_sets(
+            cmd,
+            vk::PipelineBindPoint::GRAPHICS,
+            self.pipelines.text_pipeline_layout,
             0,
-            std::slice::from_ref(&self.text_desc_set),
+            std::slice::from_ref(&self.text.desc_set),
             &[],
         );
 
-        let vb = [self.text_vb];
+        let vb = [self.text.vb];
         let offsets = [0u64];
-        self.device.cmd_bind_vertex_buffers(cmd, 0, &vb, &offsets);
+        self.core
+            .device
+            .cmd_bind_vertex_buffers(cmd, 0, &vb, &offsets);
 
-        self.device.cmd_draw(cmd, vertices.len() as u32, 1, 0, 0);
+        self.core
+            .device
+            .cmd_draw(cmd, vertices.len() as u32, 1, 0, 0);
         Ok(())
     }
 }
