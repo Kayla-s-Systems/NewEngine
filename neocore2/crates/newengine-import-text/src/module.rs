@@ -2,17 +2,12 @@
 
 use abi_stable::sabi_trait::TD_Opaque;
 use abi_stable::std_types::{RResult, RString, RVec};
-use abi_stable::StableAbi;
 
 use newengine_plugin_api::{
     Blob, HostApiV1, MethodName, PluginInfo, PluginModule, ServiceV1, ServiceV1Dyn, ServiceV1_TO,
 };
 
-use serde_json::json;
-
-/* =============================================================================================
-   Wire helpers: [u32 meta_len_le][meta_json utf8][payload]
-   ============================================================================================= */
+use crate::providers::{self, TextMetaV1};
 
 #[inline]
 fn pack(meta_json: &str, payload: &[u8]) -> RVec<u8> {
@@ -27,7 +22,7 @@ fn pack(meta_json: &str, payload: &[u8]) -> RVec<u8> {
 }
 
 #[inline]
-fn ok_blob(v: RVec<u8>) -> RResult<RVec<u8>, RString> {
+fn ok(v: RVec<u8>) -> RResult<RVec<u8>, RString> {
     RResult::ROk(v)
 }
 
@@ -37,260 +32,112 @@ fn err(msg: impl Into<String>) -> RResult<RVec<u8>, RString> {
 }
 
 #[inline]
-fn strip_utf8_bom_bytes(bytes: &[u8]) -> &[u8] {
-    // UTF-8 BOM: EF BB BF
-    if bytes.len() >= 3 && bytes[0] == 0xEF && bytes[1] == 0xBB && bytes[2] == 0xBF {
-        &bytes[3..]
-    } else {
-        bytes
+fn escape_json_string(s: &str) -> String {
+    let mut out = String::with_capacity(s.len() + 8);
+    for ch in s.chars() {
+        match ch {
+            '\\' => out.push_str("\\\\"),
+            '"' => out.push_str("\\\""),
+            '\n' => out.push_str("\\n"),
+            '\r' => out.push_str("\\r"),
+            '\t' => out.push_str("\\t"),
+            _ => out.push(ch),
+        }
     }
+    out
 }
 
 #[inline]
-fn meta(schema: &str, container: &str, byte_len: usize) -> String {
-    json!({
-        "schema": schema,
-        "container": container,
-        "encoding": "utf-8",
-        "byte_len": byte_len as u64
-    })
-        .to_string()
+fn meta_to_json(m: &TextMetaV1) -> String {
+    format!(
+        "{{\"schema\":\"kalitech.text.meta.v1\",\"container\":\"{}\",\"mime\":\"{}\",\"encoding\":\"{}\",\"is_utf8\":{}}}",
+        m.container,
+        escape_json_string(m.mime),
+        escape_json_string(m.encoding),
+        if m.is_utf8 { "true" } else { "false" }
+    )
+}
+struct TextService {
+    id: &'static str,
+    provider: &'static dyn providers::TextProviderV1,
 }
 
-/* =============================================================================================
-   Import implementations
-   ============================================================================================= */
-
-fn import_txt(bytes: &[u8], container: &str, schema: &str) -> RResult<RVec<u8>, RString> {
-    let payload = strip_utf8_bom_bytes(bytes);
-
-    // Validate UTF-8 early: contract says payload is UTF-8.
-    if let Err(e) = std::str::from_utf8(payload) {
-        return err(format!("textimporter: utf8: {e}"));
-    }
-
-    let meta_json = meta(schema, container, payload.len());
-    ok_blob(pack(&meta_json, payload))
-}
-
-fn import_json(bytes: &[u8]) -> RResult<RVec<u8>, RString> {
-    let payload = strip_utf8_bom_bytes(bytes);
-
-    // Validate UTF-8 + JSON.
-    let s = match std::str::from_utf8(payload) {
-        Ok(v) => v,
-        Err(e) => return err(format!("textimporter: utf8: {e}")),
-    };
-
-    if let Err(e) = serde_json::from_str::<serde_json::Value>(s) {
-        return err(format!("textimporter: json parse: {e}"));
-    }
-
-    let meta_json = meta("kalitech.text.meta.v1", "json", payload.len());
-    ok_blob(pack(&meta_json, payload))
-}
-
-fn import_xml(bytes: &[u8]) -> RResult<RVec<u8>, RString> {
-    let payload = strip_utf8_bom_bytes(bytes);
-
-    // Validate UTF-8 + XML well-formedness.
-    let s = match std::str::from_utf8(payload) {
-        Ok(v) => v,
-        Err(e) => return err(format!("textimporter: utf8: {e}")),
-    };
-
-    let mut r = quick_xml::Reader::from_reader(s.as_bytes());
-    let mut buf = Vec::new();
-    loop {
-        match r.read_event_into(&mut buf) {
-            Ok(quick_xml::events::Event::Eof) => break,
-            Ok(_) => {}
-            Err(e) => return err(format!("textimporter: xml parse: {e}")),
+impl TextService {
+    fn describe(provider: &'static dyn providers::TextProviderV1) -> RString {
+        // Host читает JSON и сам биндит расширения.
+        // priority=100, чтобы unified побеждал при дублях.
+        // meta_schema фиксируем под текст.
+        let mut exts_json = String::new();
+        exts_json.push('[');
+        for (i, e) in provider.extensions().iter().enumerate() {
+            if i != 0 {
+                exts_json.push(',');
+            }
+            exts_json.push('"');
+            exts_json.push_str(e);
+            exts_json.push('"');
         }
-        buf.clear();
-    }
+        exts_json.push(']');
 
-    let meta_json = meta("kalitech.text.meta.v1", "xml", payload.len());
-    ok_blob(pack(&meta_json, payload))
+        RString::from(format!(
+            r#"{{
+  "id":"{id}",
+  "kind":"asset_importer",
+  "asset_importer":{{
+    "priority":100,
+    "extensions":{exts},
+    "output_type_id":"kalitech.asset.text",
+    "format":"{container}",
+    "method":"import_text_v1",
+    "wire":"u32_meta_len_le + meta_utf8 + payload"
+  }},
+  "methods":{{
+    "import_text_v1":{{"in":"bytes","out":"[u32 meta_len_le][meta_json utf8][original bytes]"}}
+  }},
+  "meta_schema":"kalitech.text.meta.v1",
+  "provider":{provider_desc}
+}}"#,
+            id = provider.service_id(),
+            exts = exts_json,
+            container = provider.container(),
+            provider_desc = provider.describe_json(),
+        ))
+    }
 }
 
-/* =============================================================================================
-   Service definitions
-   ============================================================================================= */
-
-#[derive(StableAbi)]
-#[repr(C)]
-struct TextJsonService;
-
-impl ServiceV1 for TextJsonService {
+impl ServiceV1 for TextService {
     fn id(&self) -> RString {
-        RString::from("kalitech.import.json.v1")
+        RString::from(self.id)
     }
 
     fn describe(&self) -> RString {
-        RString::from(
-            r#"{
-  "id":"kalitech.import.json.v1",
-  "kind":"asset_importer",
-  "asset_importer":{
-    "extensions":["json"],
-    "output_type_id":"kalitech.asset.text",
-    "format":"json",
-    "method":"import_json_v1",
-    "wire":"u32_meta_len_le + meta_utf8 + payload_utf8"
-  },
-  "meta_schema":"kalitech.text.meta.v1"
-}"#,
-        )
+        Self::describe(self.provider)
     }
 
     fn call(&self, method: MethodName, payload: Blob) -> RResult<Blob, RString> {
+        let bytes: Vec<u8> = payload.into_vec();
+
         match method.as_str() {
-            "import_json_v1" => import_json(&payload.into_vec()).map(|v| v),
-            _ => err(format!("textimporter(json): unknown method '{method}'")),
+            "import_text_v1" => {
+                if !self.provider.sniff(&bytes) {
+                    return err(format!(
+                        "text: sniff failed for container '{}'",
+                        self.provider.container()
+                    ))
+                    .map(|v| v);
+                }
+
+                let meta = self.provider.meta(&bytes);
+                let meta_json = meta_to_json(&meta);
+                ok(pack(&meta_json, &bytes)).map(|v| v)
+            }
+            _ => RResult::RErr(RString::from(format!(
+                "text-importer({}): unknown method '{}'",
+                self.id, method
+            ))),
         }
     }
 }
-
-#[derive(StableAbi)]
-#[repr(C)]
-struct TextXmlService;
-
-impl ServiceV1 for TextXmlService {
-    fn id(&self) -> RString {
-        RString::from("kalitech.import.xml.v1")
-    }
-
-    fn describe(&self) -> RString {
-        RString::from(
-            r#"{
-  "id":"kalitech.import.xml.v1",
-  "kind":"asset_importer",
-  "asset_importer":{
-    "extensions":["xml"],
-    "output_type_id":"kalitech.asset.text",
-    "format":"xml",
-    "method":"import_xml_v1",
-    "wire":"u32_meta_len_le + meta_utf8 + payload_utf8"
-  },
-  "meta_schema":"kalitech.text.meta.v1"
-}"#,
-        )
-    }
-
-    fn call(&self, method: MethodName, payload: Blob) -> RResult<Blob, RString> {
-        match method.as_str() {
-            "import_xml_v1" => import_xml(&payload.into_vec()).map(|v| v),
-            _ => err(format!("textimporter(xml): unknown method '{method}'")),
-        }
-    }
-}
-
-#[derive(StableAbi)]
-#[repr(C)]
-struct TextHtmlService;
-
-impl ServiceV1 for TextHtmlService {
-    fn id(&self) -> RString {
-        RString::from("kalitech.import.html.v1")
-    }
-
-    fn describe(&self) -> RString {
-        RString::from(
-            r#"{
-  "id":"kalitech.import.html.v1",
-  "kind":"asset_importer",
-  "asset_importer":{
-    "extensions":["html","htm"],
-    "output_type_id":"kalitech.asset.text",
-    "format":"html",
-    "method":"import_html_v1",
-    "wire":"u32_meta_len_le + meta_utf8 + payload_utf8"
-  },
-  "meta_schema":"kalitech.text.meta.v1"
-}"#,
-        )
-    }
-
-    fn call(&self, method: MethodName, payload: Blob) -> RResult<Blob, RString> {
-        match method.as_str() {
-            "import_html_v1" => import_txt(&payload.into_vec(), "html", "kalitech.text.meta.v1").map(|v| v),
-            _ => err(format!("textimporter(html): unknown method '{method}'")),
-        }
-    }
-}
-
-#[derive(StableAbi)]
-#[repr(C)]
-struct TextTxtService;
-
-impl ServiceV1 for TextTxtService {
-    fn id(&self) -> RString {
-        RString::from("kalitech.import.txt.v1")
-    }
-
-    fn describe(&self) -> RString {
-        RString::from(
-            r#"{
-  "id":"kalitech.import.txt.v1",
-  "kind":"asset_importer",
-  "asset_importer":{
-    "extensions":["txt","md"],
-    "output_type_id":"kalitech.asset.text",
-    "format":"txt",
-    "method":"import_txt_v1",
-    "wire":"u32_meta_len_le + meta_utf8 + payload_utf8"
-  },
-  "meta_schema":"kalitech.text.meta.v1"
-}"#,
-        )
-    }
-
-    fn call(&self, method: MethodName, payload: Blob) -> RResult<Blob, RString> {
-        match method.as_str() {
-            "import_txt_v1" => import_txt(&payload.into_vec(), "txt", "kalitech.text.meta.v1").map(|v| v),
-            _ => err(format!("textimporter(txt): unknown method '{method}'")),
-        }
-    }
-}
-
-#[derive(StableAbi)]
-#[repr(C)]
-struct TextUiService;
-
-impl ServiceV1 for TextUiService {
-    fn id(&self) -> RString {
-        RString::from("kalitech.import.ui.v1")
-    }
-
-    fn describe(&self) -> RString {
-        RString::from(
-            r#"{
-  "id":"kalitech.import.ui.v1",
-  "kind":"asset_importer",
-  "asset_importer":{
-    "extensions":["ui"],
-    "output_type_id":"kalitech.asset.text",
-    "format":"ui",
-    "method":"import_ui_v1",
-    "wire":"u32_meta_len_le + meta_utf8 + payload_utf8"
-  },
-  "meta_schema":"kalitech.text.meta.v1"
-}"#,
-        )
-    }
-
-    fn call(&self, method: MethodName, payload: Blob) -> RResult<Blob, RString> {
-        match method.as_str() {
-            "import_ui_v1" => import_txt(&payload.into_vec(), "ui", "kalitech.text.meta.v1").map(|v| v),
-            _ => err(format!("textimporter(ui): unknown method '{method}'")),
-        }
-    }
-}
-
-/* =============================================================================================
-   Plugin module
-   ============================================================================================= */
 
 #[derive(Default)]
 pub struct TextImporterPlugin;
@@ -299,30 +146,39 @@ impl PluginModule for TextImporterPlugin {
     fn info(&self) -> PluginInfo {
         PluginInfo {
             id: RString::from("import.text"),
-            name: RString::from("Text Importer"),
+            name: RString::from("Text Importer (Provider-based)"),
             version: RString::from(env!("CARGO_PKG_VERSION")),
         }
     }
 
     fn init(&mut self, host: HostApiV1) -> RResult<(), RString> {
-        let svcs: [ServiceV1Dyn<'static>; 5] = [
-            ServiceV1_TO::from_value(TextJsonService, TD_Opaque),
-            ServiceV1_TO::from_value(TextXmlService, TD_Opaque),
-            ServiceV1_TO::from_value(TextHtmlService, TD_Opaque),
-            ServiceV1_TO::from_value(TextTxtService, TD_Opaque),
-            ServiceV1_TO::from_value(TextUiService, TD_Opaque),
-        ];
+        let mut registered = 0usize;
 
-        for svc in svcs {
-            let r = (host.register_service_v1)(svc);
+        for p in providers::iter_providers() {
+            let svc = TextService {
+                id: p.service_id(),
+                provider: p,
+            };
+
+            let dyn_svc: ServiceV1Dyn<'static> = ServiceV1_TO::from_value(svc, TD_Opaque);
+
+            let r = (host.register_service_v1)(dyn_svc);
             if let Err(e) = r.clone().into_result() {
                 (host.log_warn)(RString::from(format!(
-                    "textimporter: register_service_v1 failed: {e}"
+                    "text-importer: register_service_v1 failed for id='{}': {}",
+                    p.service_id(),
+                    e
                 )));
-                return RResult::RErr(RString::from(format!(
-                    "textimporter: register_service_v1 failed: {e}"
-                )));
+                return r;
             }
+
+            registered += 1;
+        }
+
+        if registered == 0 {
+            (host.log_warn)(RString::from(
+                "text-importer: no providers registered (inventory empty)".to_string(),
+            ));
         }
 
         RResult::ROk(())

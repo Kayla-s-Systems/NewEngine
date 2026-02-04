@@ -2,3 +2,4 @@
 
 pub mod module;
 pub mod plugin;
+pub mod providers;
