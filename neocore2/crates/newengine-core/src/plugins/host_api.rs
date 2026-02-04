@@ -1,14 +1,11 @@
 #![forbid(unsafe_op_in_unsafe_fn)]
 
 use crate::plugins::describe::is_asset_importer;
-use crate::plugins::host_context::ctx;
+use crate::plugins::host_context::{bump_services_generation, ctx};
 use crate::plugins::importer::try_auto_register_importer;
 use abi_stable::std_types::{RResult, RString};
-use newengine_plugin_api::{
-    Blob, CapabilityId, EventSinkV1Dyn, HostApiV1, MethodName, ServiceV1Dyn,
-};
+use newengine_plugin_api::{Blob, EventSinkV1Dyn, HostApiV1, MethodName, ServiceV1Dyn};
 use std::cell::Cell;
-use std::sync::Arc;
 
 pub(crate) struct ImporterLoadState {
     pub saw_importer: bool,
@@ -35,11 +32,9 @@ pub(crate) fn with_importer_load_state<R>(
 extern "C" fn host_log_info(s: RString) {
     log::info!("{}", s);
 }
-
 extern "C" fn host_log_warn(s: RString) {
     log::warn!("{}", s);
 }
-
 extern "C" fn host_log_error(s: RString) {
     log::error!("{}", s);
 }
@@ -52,22 +47,17 @@ pub(crate) fn host_register_service_impl(
     let describe_json = svc.describe().to_string();
 
     let c = ctx();
-
     {
-        let mut g = match c.services.lock() {
+        let mut reg = match c.services.lock() {
             Ok(v) => v,
             Err(_) => return RResult::RErr(RString::from("services mutex poisoned")),
         };
 
-        if g.contains_key(&service_id) {
-            return RResult::RErr(RString::from(format!(
-                "service already registered: {}",
-                service_id
-            )));
+        if let Err(e) = reg.register(svc) {
+            return RResult::RErr(RString::from(e));
         }
 
-        g.insert(service_id.clone(), Arc::from(svc));
-        crate::plugins::host_context::bump_services_generation();
+        bump_services_generation();
     }
 
     if auto_register_importer {
@@ -91,34 +81,32 @@ extern "C" fn host_register_service_v1_importers(
         }
 
         let st = unsafe { &mut *p };
-
         let describe_json = svc.describe().to_string();
+
         if is_asset_importer(&describe_json) {
             st.saw_importer = true;
+            st.staged.push(svc);
+            return RResult::ROk(());
         }
 
-        st.staged.push(svc);
-        RResult::ROk(())
+        host_register_service_impl(svc, false)
     })
 }
 
 pub(crate) extern "C" fn call_service_v1(
-    cap_id: CapabilityId,
+    id: RString,
     method: MethodName,
     payload: Blob,
 ) -> RResult<Blob, RString> {
-    let id = cap_id.to_string();
     let c = ctx();
-
-    // Clone the service under lock, then drop the lock before calling.
     let svc = {
-        let g = match c.services.lock() {
+        let reg = match c.services.lock() {
             Ok(v) => v,
             Err(_) => return RResult::RErr(RString::from("services mutex poisoned")),
         };
 
-        match g.get(&id) {
-            Some(v) => v.clone(),
+        match reg.get(id.as_str()) {
+            Some(v) => v,
             None => return RResult::RErr(RString::from(format!("service not found: {id}"))),
         }
     };
@@ -126,12 +114,16 @@ pub(crate) extern "C" fn call_service_v1(
     svc.call(method, payload)
 }
 
-extern "C" fn host_emit_event_v1(_topic: RString, _payload: Blob) -> RResult<(), RString> {
+extern "C" fn host_emit_event_v1(topic: RString, payload: Blob) -> RResult<(), RString> {
+    crate::plugins::host_context::emit_event_v1(topic.as_str(), payload);
     RResult::ROk(())
 }
 
-extern "C" fn host_subscribe_events_v1(_sink: EventSinkV1Dyn<'static>) -> RResult<(), RString> {
-    RResult::ROk(())
+extern "C" fn host_subscribe_events_v1(sink: EventSinkV1Dyn<'static>) -> RResult<(), RString> {
+    match crate::plugins::host_context::subscribe_events_v1(sink) {
+        Ok(()) => RResult::ROk(()),
+        Err(e) => RResult::RErr(RString::from(e)),
+    }
 }
 
 pub fn default_host_api() -> HostApiV1 {

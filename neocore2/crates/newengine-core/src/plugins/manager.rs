@@ -49,6 +49,11 @@ impl PluginManager {
         self.load_from_dir(&dir, host)
     }
 
+    pub fn load_importers_default(&mut self, host: HostApiV1) -> Result<(), PluginLoadError> {
+        let dir = default_plugins_dir()?;
+        self.load_importers_from_dir(&dir.join("importers"), host)
+    }
+
     pub fn load_importers_from_dir(
         &mut self,
         dir: &Path,
