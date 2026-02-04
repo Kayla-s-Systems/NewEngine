@@ -1,6 +1,6 @@
 [package]
-name = "newengine-import-image"
-version = "0.1.0"
+name = "imageImporter"
+version = "0.1.3"
 edition = "2021"
 description = "NewEngine extensible image importer plugin"
 license = "MIT OR Apache-2.0"
