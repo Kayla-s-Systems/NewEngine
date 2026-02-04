@@ -1,0 +1,19 @@
+[package]
+name = "audioimporter"
+version = "0.1.0"
+edition = "2021"
+description = "NewEngine Audio importer plugin (DLL)"
+license = "MIT OR Apache-2.0"
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+abi_stable = "0.11"
+newengine-plugin-api = { path = "../newengine-plugin-api" }
+
+# Robust header/probe for many formats without full decode
+symphonia = { version = "0.5", default-features = true, features = ["aac", "mp3", "flac", "vorbis", "ogg"] }
+
+[build-dependencies]
+embed-resource = "2"
