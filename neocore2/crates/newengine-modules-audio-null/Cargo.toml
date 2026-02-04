@@ -1,0 +1,15 @@
+[package]
+name = "newengine-modules-audio-null"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+abi_stable = "0.11"
+
+newengine-plugin-api = { path = "../newengine-plugin-api" }
+newengine-audio-api = { path = "../newengine-audio-api" }
+
+bytemuck = { version = "1.16", features = ["derive"] }
