@@ -1,0 +1,21 @@
+[package]
+name = "newengine-import-image"
+version = "0.1.0"
+edition = "2021"
+description = "NewEngine extensible image importer plugin"
+license = "MIT OR Apache-2.0"
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+abi_stable = "0.11"
+newengine-plugin-api = { path = "../newengine-plugin-api" }
+
+inventory = "0.3"
+
+ddsfile = "0.5"
+png = "0.17"
+
+[build-dependencies]
+embed-resource = "2"
