@@ -1,14 +1,14 @@
 #![forbid(unsafe_op_in_unsafe_fn)]
 
+use crate::plugins::describe::is_asset_importer;
+use crate::plugins::host_context::ctx;
+use crate::plugins::importer::try_auto_register_importer;
 use abi_stable::std_types::{RResult, RString};
 use newengine_plugin_api::{
     Blob, CapabilityId, EventSinkV1Dyn, HostApiV1, MethodName, ServiceV1Dyn,
 };
 use std::cell::Cell;
 use std::sync::Arc;
-use crate::plugins::describe::is_asset_importer;
-use crate::plugins::host_context::ctx;
-use crate::plugins::importer::try_auto_register_importer;
 
 pub(crate) struct ImporterLoadState {
     pub saw_importer: bool,
@@ -110,14 +110,17 @@ pub(crate) extern "C" fn call_service_v1(
     let id = cap_id.to_string();
     let c = ctx();
 
-    let g = match c.services.lock() {
-        Ok(v) => v,
-        Err(_) => return RResult::RErr(RString::from("services mutex poisoned")),
-    };
+    // Clone the service under lock, then drop the lock before calling.
+    let svc = {
+        let g = match c.services.lock() {
+            Ok(v) => v,
+            Err(_) => return RResult::RErr(RString::from("services mutex poisoned")),
+        };
 
-    let svc = match g.get(&id) {
-        Some(v) => v,
-        None => return RResult::RErr(RString::from(format!("service not found: {id}"))),
+        match g.get(&id) {
+            Some(v) => v.clone(),
+            None => return RResult::RErr(RString::from(format!("service not found: {id}"))),
+        }
     };
 
     svc.call(method, payload)
