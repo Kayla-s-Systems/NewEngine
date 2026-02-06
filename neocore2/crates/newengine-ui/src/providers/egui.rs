@@ -105,10 +105,20 @@ impl EguiUiProvider {
     fn inject_input_events(raw: &mut egui::RawInput, input: &UiInputFrame) {
         raw.modifiers = Self::compute_modifiers(input);
 
-        if let Some((x, y)) = input.mouse_pos {
-            raw.events.push(egui::Event::PointerMoved(egui::pos2(x, y)));
+        // egui expects positions in "points" (logical units).
+        // INPUT plugin usually reports physical pixels.
+        let ppp = raw.viewport().native_pixels_per_point.unwrap_or(1.0).max(0.0001);
+        let to_pt = |v: f32| v / ppp;
+
+        let mouse_pos_pt = input
+            .mouse_pos
+            .map(|(x, y)| egui::pos2(to_pt(x), to_pt(y)));
+
+        if let Some(pos) = mouse_pos_pt {
+            raw.events.push(egui::Event::PointerMoved(pos));
         }
 
+        // Buttons: 1=Left,2=Right,3=Middle (host schema).
         let map_btn = |b: u32| -> Option<egui::PointerButton> {
             match b {
                 1 => Some(egui::PointerButton::Primary),
@@ -118,14 +128,12 @@ impl EguiUiProvider {
             }
         };
 
+        let btn_pos = mouse_pos_pt.unwrap_or_else(|| egui::pos2(0.0, 0.0));
+
         for &b in input.mouse_pressed.iter() {
             if let Some(btn) = map_btn(b) {
-                let pos = input
-                    .mouse_pos
-                    .map(|(x, y)| egui::pos2(x, y))
-                    .unwrap_or_else(|| egui::pos2(0.0, 0.0));
                 raw.events.push(egui::Event::PointerButton {
-                    pos,
+                    pos: btn_pos,
                     button: btn,
                     pressed: true,
                     modifiers: raw.modifiers,
@@ -135,12 +143,8 @@ impl EguiUiProvider {
 
         for &b in input.mouse_released.iter() {
             if let Some(btn) = map_btn(b) {
-                let pos = input
-                    .mouse_pos
-                    .map(|(x, y)| egui::pos2(x, y))
-                    .unwrap_or_else(|| egui::pos2(0.0, 0.0));
                 raw.events.push(egui::Event::PointerButton {
-                    pos,
+                    pos: btn_pos,
                     button: btn,
                     pressed: false,
                     modifiers: raw.modifiers,
@@ -148,15 +152,15 @@ impl EguiUiProvider {
             }
         }
 
+        // Wheel: convert to points as well.
         if input.mouse_wheel.0 != 0.0 || input.mouse_wheel.1 != 0.0 {
             raw.events.push(egui::Event::MouseWheel {
                 unit: egui::MouseWheelUnit::Point,
-                delta: egui::vec2(input.mouse_wheel.0, input.mouse_wheel.1),
+                delta: egui::vec2(to_pt(input.mouse_wheel.0), to_pt(input.mouse_wheel.1)),
                 modifiers: raw.modifiers,
             });
         }
 
-        // IMPORTANT: your egui version requires `physical_key` field.
         for &k in input.keys_pressed.iter() {
             if let Some(key) = Self::egui_key_from_input(k) {
                 raw.events.push(egui::Event::Key {
