@@ -13,6 +13,9 @@ pub enum VkRenderError {
     #[error("{0}")]
     AshWindow(String),
 
+    #[error("Invalid render state: {0}")]
+    InvalidState(&'static str),
+
     #[error("Vulkan error: {0}")]
     Vk(#[from] ash::vk::Result),
 }

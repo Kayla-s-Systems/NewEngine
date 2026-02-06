@@ -6,9 +6,6 @@ use std::time::Instant;
 use super::types::{FrameSync, FRAMES_IN_FLIGHT};
 use crate::vulkan::ui::GpuUiTexture;
 
-/// Long-lived Vulkan handles (instance/device/queue/surface).
-///
-/// This block is intentionally independent from swapchain-dependent objects.
 pub struct CoreContext {
     pub(crate) instance: ash::Instance,
 
@@ -94,9 +91,19 @@ pub struct UiOverlayResources {
 pub struct DebugState {
     pub(crate) debug_text: String,
     pub(crate) start_time: Instant,
+
     pub(crate) pending_ui: Option<UiDrawList>,
+
     pub(crate) target_width: u32,
     pub(crate) target_height: u32,
+
+    // Deferred swapchain resize.
+    pub(crate) swapchain_dirty: bool,
+
+    // Per-frame recording state.
+    pub(crate) in_frame: bool,
+    pub(crate) current_image_index: u32,
+    pub(crate) current_swapchain_idx: usize,
 }
 
 pub struct VulkanRenderer {

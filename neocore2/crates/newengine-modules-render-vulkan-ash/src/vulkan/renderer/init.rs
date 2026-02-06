@@ -10,7 +10,6 @@ use super::state::{
     CoreContext, DebugState, FrameManager, PipelinePack, SwapchainContext, TextOverlayResources,
     UiOverlayResources, VulkanRenderer,
 };
-#[warn(unused_imports)]
 use super::types::{FrameSync, FRAMES_IN_FLIGHT};
 
 use super::super::device::*;
@@ -206,7 +205,14 @@ impl VulkanRenderer {
             pending_ui: None,
             target_width: width,
             target_height: height,
+
+            swapchain_dirty: false,
+
+            in_frame: false,
+            current_image_index: 0,
+            current_swapchain_idx: 0,
         };
+
 
         let mut me = Self {
             core,

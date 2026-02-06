@@ -10,9 +10,17 @@ impl VulkanRenderer {
         self.debug.debug_text.push_str(text);
     }
 
+    /// Resize request from the host. This is deferred and applied in begin_frame().
     pub fn resize(&mut self, width: u32, height: u32) -> VkResult<()> {
+        if self.debug.target_width == width && self.debug.target_height == height {
+            return Ok(());
+        }
+
         self.set_target_size(width, height);
-        unsafe { self.recreate_swapchain() }
+
+        // Defer swapchain recreation; it is expensive and must not be spammed during window drag.
+        self.debug.swapchain_dirty = true;
+        Ok(())
     }
 
     #[inline]

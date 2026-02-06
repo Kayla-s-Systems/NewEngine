@@ -1,21 +1,19 @@
+use crate::vulkan::VulkanRenderer;
 use newengine_core::render::*;
 use newengine_core::{EngineError, EngineResult};
 use newengine_ui::draw::UiDrawList;
-use crate::vulkan::VulkanRenderer;
 
 pub struct VulkanRenderApi {
     renderer: VulkanRenderer,
     target: Extent2D,
-    debug_text: Option<String>,
 }
 
 impl VulkanRenderApi {
     #[inline]
-    pub fn new(renderer: VulkanRenderer, width: u32, height: u32, debug_text: Option<String>) -> Self {
+    pub fn new(renderer: VulkanRenderer, width: u32, height: u32) -> Self {
         Self {
             renderer,
             target: Extent2D::new(width, height),
-            debug_text,
         }
     }
 
@@ -34,15 +32,10 @@ impl VulkanRenderApi {
 
 impl RenderApi for VulkanRenderApi {
     fn begin_frame(&mut self, desc: BeginFrameDesc) -> EngineResult<()> {
-        if let Some(text) = &self.debug_text {
-            self.renderer.set_debug_text(text);
-        }
-
+        // Caller-driven: begin_frame only starts the frame + clears.
         self.renderer
-            .draw_clear_color(desc.clear_color)
-            .map_err(|e| EngineError::other(e.to_string()))?;
-
-        Ok(())
+            .begin_frame(desc.clear_color)
+            .map_err(|e| EngineError::other(e.to_string()))
     }
 
     #[inline]
@@ -51,7 +44,9 @@ impl RenderApi for VulkanRenderApi {
     }
 
     fn end_frame(&mut self) -> EngineResult<()> {
-        Ok(())
+        self.renderer
+            .end_frame()
+            .map_err(|e| EngineError::other(e.to_string()))
     }
 
     fn resize(&mut self, width: u32, height: u32) -> EngineResult<()> {

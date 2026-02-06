@@ -1,16 +1,27 @@
-use crate::error::VkResult;
+use crate::error::{VkRenderError, VkResult};
+use crate::vulkan::util::transition_image;
 
 use ash::vk;
 
 use super::state::VulkanRenderer;
 use super::types::FRAMES_IN_FLIGHT;
 
-use super::super::util::transition_image;
-
 impl VulkanRenderer {
-    pub fn draw_clear_color(&mut self, rgba: [f32; 4]) -> VkResult<()> {
+    pub fn begin_frame(&mut self, clear_rgba: [f32; 4]) -> VkResult<()> {
+        if self.debug.in_frame {
+            return Err(VkRenderError::InvalidState("begin_frame called while already in frame"));
+        }
+
+        // If window is minimized or has no drawable area: keep state clean and do nothing.
         if self.debug.target_width == 0 || self.debug.target_height == 0 {
+            self.debug.swapchain_dirty = true;
             return Ok(());
+        }
+
+        // Apply deferred swapchain recreation exactly once at a safe point.
+        if self.debug.swapchain_dirty {
+            self.debug.swapchain_dirty = false;
+            unsafe { self.recreate_swapchain()? };
         }
 
         let frame = self.frames.frames[self.frames.frame_index];
@@ -30,10 +41,10 @@ impl VulkanRenderer {
             )
         } {
             Ok(v) => v,
-            Err(vk::Result::ERROR_OUT_OF_DATE_KHR) => unsafe {
-                self.recreate_swapchain()?;
+            Err(vk::Result::ERROR_OUT_OF_DATE_KHR) | Err(vk::Result::SUBOPTIMAL_KHR) => {
+                self.debug.swapchain_dirty = true;
                 return Ok(());
-            },
+            }
             Err(e) => return Err(e.into()),
         };
 
@@ -65,7 +76,6 @@ impl VulkanRenderer {
             )?;
 
             let old_layout = self.swapchain.image_layouts[idx];
-
             transition_image(
                 &self.core.device,
                 cmd,
@@ -75,7 +85,7 @@ impl VulkanRenderer {
             );
 
             let clear = vk::ClearValue {
-                color: vk::ClearColorValue { float32: rgba },
+                color: vk::ClearColorValue { float32: clear_rgba },
             };
 
             let rp_begin = vk::RenderPassBeginInfo::default()
@@ -90,12 +100,6 @@ impl VulkanRenderer {
             self.core
                 .device
                 .cmd_begin_render_pass(cmd, &rp_begin, vk::SubpassContents::INLINE);
-
-            self.core.device.cmd_bind_pipeline(
-                cmd,
-                vk::PipelineBindPoint::GRAPHICS,
-                self.pipelines.tri_pipeline,
-            );
 
             let viewport = vk::Viewport {
                 x: 0.0,
@@ -116,27 +120,29 @@ impl VulkanRenderer {
             self.core
                 .device
                 .cmd_set_scissor(cmd, 0, std::slice::from_ref(&scissor));
+        }
 
-            let t = self.debug.start_time.elapsed().as_secs_f32();
-            let aspect =
-                self.swapchain.extent.width as f32 / self.swapchain.extent.height.max(1) as f32;
-            let pc: [f32; 4] = [t, aspect, 0.0, 0.0];
+        self.debug.in_frame = true;
+        self.debug.current_image_index = image_index;
+        self.debug.current_swapchain_idx = idx;
+        Ok(())
+    }
 
-            let pc_bytes: &[u8] =
-                std::slice::from_raw_parts(pc.as_ptr() as *const u8, std::mem::size_of_val(&pc));
+    pub fn end_frame(&mut self) -> VkResult<()> {
+        if !self.debug.in_frame {
+            return Err(VkRenderError::InvalidState("end_frame called without begin_frame"));
+        }
 
-            self.core.device.cmd_push_constants(
-                cmd,
-                self.pipelines.tri_pipeline_layout,
-                vk::ShaderStageFlags::FRAGMENT,
-                0,
-                pc_bytes,
-            );
+        let frame = self.frames.frames[self.frames.frame_index];
+        let idx = self.debug.current_swapchain_idx;
+        let cmd = self.frames.command_buffers[idx];
+        let image = self.swapchain.images[idx];
+        let image_index = self.debug.current_image_index;
 
-            self.core.device.cmd_draw(cmd, 3, 1, 0, 0);
-
+        unsafe {
             if self.pipelines.text_pipeline != vk::Pipeline::null()
                 && self.pipelines.text_pipeline_layout != vk::PipelineLayout::null()
+                && !self.debug.debug_text.is_empty()
             {
                 let debug_text = std::mem::take(&mut self.debug.debug_text);
                 let res = self.draw_text_overlay(cmd, &debug_text);
@@ -164,7 +170,6 @@ impl VulkanRenderer {
                 vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL,
                 vk::ImageLayout::PRESENT_SRC_KHR,
             );
-
             self.swapchain.image_layouts[idx] = vk::ImageLayout::PRESENT_SRC_KHR;
 
             self.core.device.end_command_buffer(cmd)?;
@@ -199,15 +204,14 @@ impl VulkanRenderer {
             {
                 Ok(_) => {}
                 Err(vk::Result::ERROR_OUT_OF_DATE_KHR) | Err(vk::Result::SUBOPTIMAL_KHR) => {
-                    self.recreate_swapchain()?;
-                    self.frames.frame_index = (self.frames.frame_index + 1) % FRAMES_IN_FLIGHT;
-                    return Ok(());
+                    self.debug.swapchain_dirty = true;
                 }
                 Err(e) => return Err(e.into()),
             }
         }
 
         self.frames.frame_index = (self.frames.frame_index + 1) % FRAMES_IN_FLIGHT;
+        self.debug.in_frame = false;
         Ok(())
     }
 }
