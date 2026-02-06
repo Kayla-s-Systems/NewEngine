@@ -4,6 +4,16 @@ use serde::Deserialize;
 use std::any::Any;
 use std::sync::{Arc, Mutex};
 
+use newengine_core::host_events::KeyCode;
+
+#[derive(Debug, Deserialize, Default)]
+struct InputKeysTakeResponse {
+    #[serde(default)]
+    pressed: Vec<u32>,
+    #[serde(default)]
+    released: Vec<u32>,
+}
+
 #[derive(Debug, Deserialize)]
 struct CommandExecResponse {
     ok: bool,
@@ -40,6 +50,9 @@ struct ConsoleUi {
     open: bool,
     input: String,
 
+    // Keyboard edges are sourced from the Input plugin (DLL), not from egui/winit.
+    frame_keys_pressed: Vec<u32>,
+
     lines: Vec<String>,
     stick_to_bottom: bool,
 
@@ -59,6 +72,8 @@ impl Default for ConsoleUi {
         Self {
             open: false,
             input: String::new(),
+
+            frame_keys_pressed: Vec::new(),
 
             lines: Vec::new(),
             stick_to_bottom: true,
@@ -80,16 +95,50 @@ impl Default for ConsoleUi {
 }
 
 impl ConsoleUi {
-    fn toggle_hotkey(&mut self, ctx: &egui::Context) {
-        let pressed = ctx.input(|i| i.key_pressed(egui::Key::Backtick));
-        if pressed {
+    #[inline]
+    fn poll_input_keys(&mut self) {
+        self.frame_keys_pressed.clear();
+
+        // Keys must come from the Input plugin (DLL). This keeps the console independent from
+        // winit/egui key handling and makes it work with any future platform backend.
+        let Ok(bytes) = newengine_core::call_service_v1("kalitech.input.v1", "keys_take_json", &[])
+        else {
+            return;
+        };
+
+        let Ok(r) = serde_json::from_slice::<InputKeysTakeResponse>(&bytes) else {
+            return;
+        };
+
+        self.frame_keys_pressed = r.pressed;
+    }
+
+    #[inline]
+    fn key_pressed_any(&self, codes: &[u32]) -> bool {
+        self.frame_keys_pressed
+            .iter()
+            .any(|k| codes.iter().any(|c| c == k))
+    }
+
+    #[inline]
+    fn key_pressed(&self, code: u32) -> bool {
+        self.frame_keys_pressed.iter().any(|k| *k == code)
+    }
+
+    fn toggle_hotkey(&mut self) {
+        // Backtick is not part of newengine_core::host_events::KeyCode by design.
+        // We support several common encodings and rely on the platform layer to feed a stable
+        // key code into the input plugin.
+        const BACKTICK: [u32; 3] = [192, 96, 41];
+        if self.key_pressed_any(&BACKTICK) {
             self.open = !self.open;
             self.suggest_open = false;
         }
     }
 
     fn ui(&mut self, ctx: &egui::Context) {
-        self.toggle_hotkey(ctx);
+        self.poll_input_keys();
+        self.toggle_hotkey();
 
         if !self.open {
             return;
@@ -223,11 +272,11 @@ impl ConsoleUi {
 
             let has_focus = resp.has_focus();
 
-            let enter = ui.input(|i| i.key_pressed(egui::Key::Enter));
-            let tab = ui.input(|i| i.key_pressed(egui::Key::Tab));
-            let up = ui.input(|i| i.key_pressed(egui::Key::ArrowUp));
-            let down = ui.input(|i| i.key_pressed(egui::Key::ArrowDown));
-            let esc = ui.input(|i| i.key_pressed(egui::Key::Escape));
+            let enter = self.key_pressed(KeyCode::Enter as u32);
+            let tab = self.key_pressed(KeyCode::Tab as u32);
+            let up = self.key_pressed(KeyCode::ArrowUp as u32);
+            let down = self.key_pressed(KeyCode::ArrowDown as u32);
+            let esc = self.key_pressed(KeyCode::Escape as u32);
 
             if resp.changed() {
                 self.refresh_suggest();
@@ -243,15 +292,24 @@ impl ConsoleUi {
                 self.suggest_open = false;
             }
 
-            if tab {
+            if has_focus && tab {
+                // Tab = accept the currently selected suggestion.
+                // It does not cycle selection (Unreal-style: arrows navigate, Tab commits).
                 self.refresh_suggest();
                 if !self.suggest.items.is_empty() {
-                    if !self.suggest_open {
+                    self.suggest_open = true;
+                    self.suggest_selected = self
+                        .suggest_selected
+                        .min(self.suggest.items.len().saturating_sub(1));
+
+                    let idx = self.suggest_selected;
+                    let ins = self.suggest.items[idx].insert.clone();
+                    if !ins.is_empty() {
+                        self.input = ins;
+                        self.refresh_suggest();
+                        // Keep panel open so user can continue completing args.
                         self.suggest_open = true;
                         self.suggest_selected = 0;
-                    } else {
-                        self.suggest_selected =
-                            (self.suggest_selected + 1) % self.suggest.items.len();
                     }
                 }
                 resp.request_focus();
@@ -279,20 +337,7 @@ impl ConsoleUi {
             }
 
             if has_focus && enter {
-                if self.suggest_open && !self.suggest.items.is_empty() {
-                    let idx =
-                        self.suggest_selected.min(self.suggest.items.len().saturating_sub(1));
-                    let ins = self.suggest.items[idx].insert.clone();
-                    if !ins.is_empty() {
-                        self.input = ins;
-                        self.refresh_suggest();
-                        self.suggest_open = true;
-                        self.suggest_selected = 0;
-                    }
-                    resp.request_focus();
-                    return;
-                }
-
+                // Enter always executes current line. Autocomplete is on Tab.
                 let line = self.input.trim().to_string();
                 self.input.clear();
                 self.suggest_open = false;
@@ -390,7 +435,7 @@ impl ConsoleUi {
                         }
                     }
 
-                    // ВАЖНО: snapshot выбранного элемента после возможных изменений
+                    // Important: snapshot the selected element after potential mutations.
                     if self.suggest.items.is_empty() {
                         self.suggest_open = false;
                         self.suggest_selected = 0;
@@ -443,8 +488,7 @@ impl ConsoleUi {
             items: Vec::new(),
         };
 
-        match newengine_core::call_service_v1("engine.command", "command.suggest", input.as_bytes())
-        {
+        match newengine_core::call_service_v1("engine.command", "command.suggest", input.as_bytes()) {
             Ok(bytes) => {
                 if let Ok(r) = serde_json::from_slice::<SuggestResponse>(&bytes) {
                     self.suggest = r;

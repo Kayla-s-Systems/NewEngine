@@ -6,7 +6,7 @@ use newengine_core::{
 };
 
 use newengine_modules_logging::{ConsoleLoggerConfig, ConsoleLoggerModule};
-use newengine_modules_render_vulkan_ash::{VulkanAshRenderModule, VulkanRenderConfig};
+use newengine_modules_render_vulkan_ash::VulkanAshRenderModule;
 use newengine_platform_winit::{
     run_winit_app_with_config, UiBuildFn, WinitAppConfig, WinitWindowPlacement,
 };
@@ -16,6 +16,7 @@ use newengine_ui::markup::UiMarkupDoc;
 use std::sync::{Arc, Mutex};
 
 mod ui;
+mod render_controller;
 
 const FIXED_DT_MS: u32 = 16;
 const UI_MARKUP_PATH: &str = "ui/editor.xml";
@@ -60,13 +61,13 @@ fn register_render_from_startup(
 ) -> EngineResult<()> {
     let backend = startup.render_backend.trim();
     if backend.eq_ignore_ascii_case("vulkan_ash") || backend.eq_ignore_ascii_case("vulkan") {
-        let debug_text = startup.render_debug_text.trim();
-        let config = VulkanRenderConfig {
-            clear_color: startup.render_clear_color,
-            debug_text: (!debug_text.is_empty()).then(|| debug_text.to_owned()),
-        };
+        // Backend: only provides RenderApi.
+        engine.register_module(Box::new(VulkanAshRenderModule::new()))?;
 
-        engine.register_module(Box::new(VulkanAshRenderModule::new(config)))?;
+        // Controller: owns the render policy (begin/end frame, ui consumption, resize).
+        engine.register_module(Box::new(
+            render_controller::EditorRenderController::new(startup.render_clear_color),
+        ))?;
         return Ok(());
     }
 
@@ -124,10 +125,10 @@ fn main() -> EngineResult<()> {
     };
 
     run_winit_app_with_config(engine, winit_cfg, ui_build, move |engine| {
-        // 1) Зарегистрировать рендер-модуль (не стартовать!)
+        // 1) Зарегистрировать рендер (backend + controller)
         register_render_from_startup(engine, &startup)?;
 
-        // 2) Поднять плагины/импортёры, но без старта модулей/рендера
+        // 2) Поднять плагины/импортёры
         engine.load_plugins_once()?;
 
         // 3) Теперь импортёр .xml точно зарегистрирован -> грузим markup через AssetManager
