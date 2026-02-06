@@ -2,71 +2,27 @@
 
 use std::time::Instant;
 
-use abi_stable::std_types::{RString, RVec};
 use newengine_core::host_events::{HostEvent, WindowHostEvent};
 use newengine_core::startup::UiBackend;
 use newengine_core::{Engine, EngineError, EngineResult};
-use newengine_plugin_api::Blob;
-use raw_window_handle::{HasDisplayHandle, HasWindowHandle, RawDisplayHandle, RawWindowHandle};
+use raw_window_handle::{HasDisplayHandle, HasWindowHandle};
 use winit::{
     application::ApplicationHandler,
     dpi::{PhysicalPosition, PhysicalSize},
     event::{ElementState, Ime, MouseScrollDelta, WindowEvent},
-    event_loop::{ActiveEventLoop, EventLoop},
+    event_loop::ActiveEventLoop,
     keyboard::PhysicalKey,
     window::{Window, WindowAttributes, WindowId},
 };
 
 use newengine_ui::draw::UiDrawList;
-use newengine_ui::{
-    create_provider, UiBuildFn, UiFrameDesc, UiInputFrame, UiProvider, UiProviderKind,
-    UiProviderOptions,
-};
+use newengine_ui::{create_provider, UiBuildFn, UiFrameDesc, UiProvider, UiProviderKind, UiProviderOptions};
 
-/// Window placement policy.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum WinitWindowPlacement {
-    OsDefault,
-    Centered { offset: (i32, i32) },
-    Absolute { x: i32, y: i32 },
-}
+use crate::app::config::{WinitAppConfig, WinitWindowPlacement};
+use crate::app::input_bridge::{emit_plugin_json, poll_input_frame};
+use crate::app::resources::{WinitWindowHandles, WinitWindowInitSize};
 
-/// Winit host configuration.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct WinitAppConfig {
-    pub title: String,
-    pub size: (u32, u32),
-    pub placement: WinitWindowPlacement,
-    pub ui_backend: UiBackend,
-}
-
-impl Default for WinitAppConfig {
-    #[inline]
-    fn default() -> Self {
-        Self {
-            title: "NewEngine".to_owned(),
-            size: (1280, 720),
-            placement: WinitWindowPlacement::Centered { offset: (0, 0) },
-            ui_backend: UiBackend::Egui,
-        }
-    }
-}
-
-/// Engine-thread local window handles.
-#[derive(Debug, Clone, Copy)]
-pub struct WinitWindowHandles {
-    pub window: RawWindowHandle,
-    pub display: RawDisplayHandle,
-}
-
-/// Initial window size snapshot.
-#[derive(Debug, Clone, Copy)]
-pub struct WinitWindowInitSize {
-    pub width: u32,
-    pub height: u32,
-}
-
-struct App<E, F>
+pub(crate) struct App<E, F>
 where
     E: Send + 'static,
     F: FnOnce(&mut Engine<E>) -> EngineResult<()> + 'static,
@@ -102,7 +58,7 @@ where
     }
 
     #[inline]
-    fn new(
+    pub(crate) fn new(
         engine: Engine<E>,
         config: WinitAppConfig,
         ui_build: Option<Box<dyn UiBuildFn>>,
@@ -135,10 +91,7 @@ where
     }
 
     #[inline]
-    fn build_window_attributes(
-        event_loop: &ActiveEventLoop,
-        config: &WinitAppConfig,
-    ) -> WindowAttributes {
+    fn build_window_attributes(event_loop: &ActiveEventLoop, config: &WinitAppConfig) -> WindowAttributes {
         let (width, height) = config.size;
         let mut attrs = WindowAttributes::default()
             .with_title(config.title.clone())
@@ -161,8 +114,7 @@ where
                 let mp = monitor.position();
 
                 let cx = mp.x.saturating_add(((ms.width as i32).saturating_sub(width as i32)) / 2);
-                let cy =
-                    mp.y.saturating_add(((ms.height as i32).saturating_sub(height as i32)) / 2);
+                let cy = mp.y.saturating_add(((ms.height as i32).saturating_sub(height as i32)) / 2);
 
                 attrs = attrs.with_position(PhysicalPosition::new(
                     cx.saturating_add(ox),
@@ -190,19 +142,12 @@ where
 
     #[inline]
     fn emit_resized(&mut self, width: u32, height: u32) {
-        self.engine
-            .resources_mut()
-            .insert(WinitWindowInitSize { width, height });
-
-        let _ = self
-            .engine
-            .emit(HostEvent::Window(WindowHostEvent::Resized { width, height }));
+        self.engine.resources_mut().insert(WinitWindowInitSize { width, height });
+        let _ = self.engine.emit(HostEvent::Window(WindowHostEvent::Resized { width, height }));
     }
 
     fn install_window_handles_resource(&mut self) {
-        let Some(w) = &self.window else {
-            return;
-        };
+        let Some(w) = &self.window else { return; };
 
         let window = match w.window_handle() {
             Ok(h) => h.as_raw(),
@@ -214,25 +159,16 @@ where
             Err(_) => return,
         };
 
-        self.engine
-            .resources_mut()
-            .insert(WinitWindowHandles { window, display });
+        self.engine.resources_mut().insert(WinitWindowHandles { window, display });
     }
 
     fn install_window_init_size_resource(&mut self) {
-        let Some((width, height)) = self.window_size() else {
-            return;
-        };
-        self.engine
-            .resources_mut()
-            .insert(WinitWindowInitSize { width, height });
+        let Some((width, height)) = self.window_size() else { return; };
+        self.engine.resources_mut().insert(WinitWindowInitSize { width, height });
     }
 
     fn emit_ready(&mut self) {
-        let Some((width, height)) = self.window_size() else {
-            return;
-        };
-
+        let Some((width, height)) = self.window_size() else { return; };
         let _ = self
             .engine
             .events()
@@ -251,19 +187,6 @@ where
             Some(prev) => now.duration_since(prev).as_secs_f32(),
             None => 0.0,
         }
-    }
-
-    #[inline]
-    fn emit_plugin_json(topic: &'static str, value: serde_json::Value) {
-        let bytes = match serde_json::to_vec(&value) {
-            Ok(b) => b,
-            Err(_) => return,
-        };
-
-        let _ = newengine_core::plugins::host_context::emit_plugin_event(
-            RString::from(topic),
-            Blob::from(bytes),
-        );
     }
 
     #[inline]
@@ -308,10 +231,7 @@ where
 
         self.shutting_down = true;
 
-        let _ = self
-            .engine
-            .emit(HostEvent::Window(WindowHostEvent::CloseRequested));
-
+        let _ = self.engine.emit(HostEvent::Window(WindowHostEvent::CloseRequested));
         let _ = self.engine.request_exit();
 
         if let Err(e) = self.engine.shutdown() {
@@ -319,103 +239,6 @@ where
         }
 
         event_loop.exit();
-    }
-
-    fn call_service_utf8(&self, service_id: &str, method: &str) -> Option<String> {
-        let c = newengine_core::plugins::host_context::ctx();
-        let g = c.services.lock().ok()?;
-        let svc = g.get(service_id)?.clone();
-        drop(g);
-
-        let res = svc.call(RString::from(method), Blob::from(Vec::new()));
-        let blob = res.into_result().ok()?;
-        let bytes: Vec<u8> = blob.into_vec();
-        Some(String::from_utf8_lossy(&bytes).to_string())
-    }
-
-    fn poll_input_frame(&self) -> Option<UiInputFrame> {
-        // Canonical input service
-        const SID: &str = "kalitech.input.v1";
-
-        let state_json = self.call_service_utf8(SID, "state_json")?;
-        let text_json = self.call_service_utf8(SID, "text_take_json").unwrap_or_else(|| "{}".into());
-        let ime_json = self
-            .call_service_utf8(SID, "ime_commit_take_json")
-            .unwrap_or_else(|| "{}".into());
-
-        let mut out = UiInputFrame::default();
-
-        let st: serde_json::Value = serde_json::from_str(&state_json).ok()?;
-
-        // keys
-        if let Some(keys) = st.get("keys") {
-            for (field, target) in [
-                ("down", &mut out.keys_down),
-                ("pressed", &mut out.keys_pressed),
-                ("released", &mut out.keys_released),
-            ] {
-                if let Some(arr) = keys.get(field).and_then(|v| v.as_array()) {
-                    for x in arr {
-                        if let Some(u) = x.as_u64() {
-                            target.insert(u as u32);
-                        }
-                    }
-                }
-            }
-        }
-
-        // mouse
-        if let Some(mouse) = st.get("mouse") {
-            if let Some(pos) = mouse.get("pos") {
-                let x = pos.get("x").and_then(|v| v.as_f64()).unwrap_or(0.0) as f32;
-                let y = pos.get("y").and_then(|v| v.as_f64()).unwrap_or(0.0) as f32;
-                out.mouse_pos = Some((x, y));
-            }
-            if let Some(delta) = mouse.get("delta") {
-                out.mouse_delta.0 = delta.get("x").and_then(|v| v.as_f64()).unwrap_or(0.0) as f32;
-                out.mouse_delta.1 = delta.get("y").and_then(|v| v.as_f64()).unwrap_or(0.0) as f32;
-            }
-            if let Some(wheel) = mouse.get("wheel") {
-                out.mouse_wheel.0 = wheel.get("x").and_then(|v| v.as_f64()).unwrap_or(0.0) as f32;
-                out.mouse_wheel.1 = wheel.get("y").and_then(|v| v.as_f64()).unwrap_or(0.0) as f32;
-            }
-
-            for (field, target) in [
-                ("down", &mut out.mouse_down),
-                ("pressed", &mut out.mouse_pressed),
-                ("released", &mut out.mouse_released),
-            ] {
-                if let Some(arr) = mouse.get(field).and_then(|v| v.as_array()) {
-                    for x in arr {
-                        if let Some(u) = x.as_u64() {
-                            target.insert(u as u32);
-                        }
-                    }
-                }
-            }
-        }
-
-        // text buffers
-        if let Ok(v) = serde_json::from_str::<serde_json::Value>(&text_json) {
-            if let Some(s) = v.get("text").and_then(|x| x.as_str()) {
-                out.text.push_str(s);
-            }
-        }
-
-        if let Ok(v) = serde_json::from_str::<serde_json::Value>(&ime_json) {
-            if let Some(s) = v.get("ime_commit").and_then(|x| x.as_str()) {
-                out.ime_commit.push_str(s);
-            }
-        }
-
-        // optional from snapshot:
-        if let Some(text) = st.get("text") {
-            if let Some(s) = text.get("ime_preedit").and_then(|x| x.as_str()) {
-                out.ime_preedit.push_str(s);
-            }
-        }
-
-        Some(out)
     }
 }
 
@@ -489,7 +312,7 @@ where
                 let state = Self::map_state_str(event.state);
                 let repeat = event.repeat;
 
-                Self::emit_plugin_json(
+                emit_plugin_json(
                     "winit.key",
                     serde_json::json!({
                         "key": key,
@@ -501,7 +324,7 @@ where
 
                 if let Some(text) = event.text.as_ref() {
                     for ch in text.chars() {
-                        Self::emit_plugin_json(
+                        emit_plugin_json(
                             "winit.text_char",
                             serde_json::json!({
                                 "cp": ch as u32
@@ -515,7 +338,7 @@ where
                 let b = Self::map_mouse_button_u32(button);
                 let st = Self::map_state_str(state);
 
-                Self::emit_plugin_json(
+                emit_plugin_json(
                     "winit.mouse_button",
                     serde_json::json!({
                         "button": b,
@@ -530,7 +353,7 @@ where
                     MouseScrollDelta::PixelDelta(p) => (p.x as f32, p.y as f32),
                 };
 
-                Self::emit_plugin_json(
+                emit_plugin_json(
                     "winit.mouse_wheel",
                     serde_json::json!({
                         "dx": dx,
@@ -544,7 +367,7 @@ where
                 let y = position.y as f32;
 
                 if let Some((px, py)) = self.last_cursor_pos {
-                    Self::emit_plugin_json(
+                    emit_plugin_json(
                         "winit.mouse_delta",
                         serde_json::json!({
                             "dx": x - px,
@@ -555,7 +378,7 @@ where
 
                 self.last_cursor_pos = Some((x, y));
 
-                Self::emit_plugin_json(
+                emit_plugin_json(
                     "winit.mouse_move",
                     serde_json::json!({
                         "x": x,
@@ -566,7 +389,7 @@ where
 
             WindowEvent::Ime(ime) => match ime {
                 Ime::Commit(text) => {
-                    Self::emit_plugin_json(
+                    emit_plugin_json(
                         "winit.ime_commit",
                         serde_json::json!({
                             "text": text
@@ -574,7 +397,7 @@ where
                     );
                 }
                 Ime::Preedit(text, _) => {
-                    Self::emit_plugin_json(
+                    emit_plugin_json(
                         "winit.ime_preedit",
                         serde_json::json!({
                             "text": text
@@ -607,8 +430,7 @@ where
         }
 
         let dt = self.frame_dt_seconds();
-
-        let input = self.poll_input_frame();
+        let input = poll_input_frame(&self.engine);
 
         if let (Some(w), Some(build)) = (self.window.as_ref(), self.ui_build.as_deref_mut()) {
             let mut desc = UiFrameDesc::new(dt);
@@ -629,32 +451,4 @@ where
             }
         }
     }
-}
-
-/// Runs winit host and starts the engine *after* the window is created.
-pub fn run_winit_app<E, F>(engine: Engine<E>, after_window: F) -> EngineResult<()>
-where
-    E: Send + 'static,
-    F: FnOnce(&mut Engine<E>) -> EngineResult<()> + 'static,
-{
-    run_winit_app_with_config(engine, WinitAppConfig::default(), None, after_window)
-}
-
-/// Runs winit host with the provided window configuration and starts the engine *after* the window is created.
-pub fn run_winit_app_with_config<E, F>(
-    engine: Engine<E>,
-    config: WinitAppConfig,
-    ui_build: Option<Box<dyn UiBuildFn>>,
-    after_window: F,
-) -> EngineResult<()>
-where
-    E: Send + 'static,
-    F: FnOnce(&mut Engine<E>) -> EngineResult<()> + 'static,
-{
-    let event_loop = EventLoop::new().map_err(|e| EngineError::Other(e.to_string()))?;
-    let mut app = App::new(engine, config, ui_build, after_window);
-
-    event_loop
-        .run_app(&mut app)
-        .map_err(|e| EngineError::Other(e.to_string()))
 }
