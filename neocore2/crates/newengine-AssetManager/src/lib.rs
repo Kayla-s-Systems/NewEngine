@@ -10,6 +10,7 @@ pub mod types;
 
 pub mod text_reader;
 pub mod audio;
+pub mod model3d;
 
 pub use events::AssetEvent;
 pub use id::AssetId;
@@ -28,3 +29,5 @@ pub use types::{
 pub use text_reader::{TextDocument, TextFormat, TextMeta, TextReadError, TextReader};
 
 pub use audio::{AudioAsset, AudioFormat, AudioMeta, AudioReadError, AudioReader};
+
+pub use model3d::{Model3dAsset, Model3dFormat, Model3dMeta, Model3dReadError, Model3dReader};
