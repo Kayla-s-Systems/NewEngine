@@ -270,6 +270,7 @@ pub struct PipelineDesc {
     pub fs: ShaderId,
     pub topology: PrimitiveTopology,
     pub vertex_layouts: Vec<VertexLayout>,
+    pub bind_group_layouts: Vec<BindGroupLayoutId>,
     pub color_format: TextureFormat,
     pub depth_format: Option<TextureFormat>,
 }
@@ -283,6 +284,7 @@ impl PipelineDesc {
             fs,
             topology: PrimitiveTopology::TriangleList,
             vertex_layouts: Vec::new(),
+            bind_group_layouts: Vec::new(),
             color_format,
             depth_format: None,
         }
@@ -303,6 +305,18 @@ impl PipelineDesc {
     #[inline]
     pub fn with_vertex_layouts(mut self, layouts: Vec<VertexLayout>) -> Self {
         self.vertex_layouts = layouts;
+        self
+    }
+
+    #[inline]
+    pub fn with_bind_group_layouts(mut self, layouts: Vec<BindGroupLayoutId>) -> Self {
+        self.bind_group_layouts = layouts;
+        self
+    }
+
+    #[inline]
+    pub fn push_bind_group_layout(mut self, layout: BindGroupLayoutId) -> Self {
+        self.bind_group_layouts.push(layout);
         self
     }
 
@@ -408,7 +422,7 @@ impl ShaderId {
 #[allow(dead_code)]
 impl PipelineId {
     #[inline]
-    pub(crate) fn new(v: u32) -> Self {
+    pub fn new(v: u32) -> Self {
         Self(NonZeroU32::new(v).expect("PipelineId must be non-zero"))
     }
 }
@@ -488,6 +502,22 @@ impl DrawIndexedArgs {
 pub enum BindingKind {
     Texture2D,
     Sampler,
+    UniformBuffer,
+    StorageBuffer,
+}
+
+#[derive(Debug, Clone, Copy)]
+pub struct BufferBinding {
+    pub buffer: BufferId,
+    pub offset: u64,
+    pub size: u64,
+}
+
+impl BufferBinding {
+    #[inline]
+    pub const fn new(buffer: BufferId, offset: u64, size: u64) -> Self {
+        Self { buffer, offset, size }
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -516,8 +546,11 @@ impl BindGroupLayoutDesc {
 pub struct BindGroupDesc {
     pub label: Option<&'static str>,
     pub layout: BindGroupLayoutId,
+
     pub texture0: Option<TextureId>,
     pub sampler0: Option<SamplerId>,
+    pub uniform0: Option<BufferBinding>,
+    pub storage0: Option<BufferBinding>,
 }
 
 impl BindGroupDesc {
@@ -528,6 +561,8 @@ impl BindGroupDesc {
             layout,
             texture0: None,
             sampler0: None,
+            uniform0: None,
+            storage0: None,
         }
     }
 
@@ -546,6 +581,18 @@ impl BindGroupDesc {
     #[inline]
     pub fn with_sampler0(mut self, s: SamplerId) -> Self {
         self.sampler0 = Some(s);
+        self
+    }
+
+    #[inline]
+    pub fn with_uniform0(mut self, b: BufferBinding) -> Self {
+        self.uniform0 = Some(b);
+        self
+    }
+
+    #[inline]
+    pub fn with_storage0(mut self, b: BufferBinding) -> Self {
+        self.storage0 = Some(b);
         self
     }
 }
@@ -572,7 +619,8 @@ pub trait RenderApi: Send {
     fn create_pipeline(&mut self, desc: PipelineDesc) -> EngineResult<PipelineId>;
     fn destroy_pipeline(&mut self, id: PipelineId);
 
-    fn create_bind_group_layout(&mut self, desc: BindGroupLayoutDesc) -> EngineResult<BindGroupLayoutId>;
+    fn create_bind_group_layout(&mut self, desc: BindGroupLayoutDesc)
+                                -> EngineResult<BindGroupLayoutId>;
     fn destroy_bind_group_layout(&mut self, id: BindGroupLayoutId);
 
     fn create_bind_group(&mut self, desc: BindGroupDesc) -> EngineResult<BindGroupId>;

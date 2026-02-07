@@ -3,6 +3,7 @@ use std::fs;
 use std::path::PathBuf;
 
 fn main() {
+    // NOTE: Keep build scripts deterministic: only read Cargo-provided env vars.
     let target = env::var("TARGET").unwrap_or_default();
     let is_windows = target.contains("windows");
     let is_msvc = target.contains("msvc");
@@ -12,16 +13,25 @@ fn main() {
     let pkg_desc = env::var("CARGO_PKG_DESCRIPTION").unwrap_or_else(|_| "NewEngine plugin".to_owned());
     let pkg_authors = env::var("CARGO_PKG_AUTHORS").unwrap_or_else(|_| "NewEngine".to_owned());
 
-    // Normalize file stem: keep stable and filesystem-friendly.
-    let stem = pkg_name.replace('-', "_");
-    let dll_name = format!("{stem}-{pkg_version}.dll");
+    // Cargo profile name: debug/release/test/bench/custom.
+    // User-facing convention: dev == debug.
+    let profile_raw = env::var("PROFILE").unwrap_or_else(|_| "debug".to_owned());
+    let profile = match profile_raw.as_str() {
+        "debug" => "dev".to_owned(),
+        other => other.to_owned(),
+    };
+
+    // Required convention: {name}-{version}-{profile}.dll
+    // Keep `name` exactly as in Cargo.toml to match plugin IDs and diagnostics.
+    let stem = format!("{pkg_name}-{pkg_version}-{profile}");
+    let dll_name = format!("{stem}.dll");
 
     if is_windows && is_msvc {
-        // Produce only versioned DLL
+        // MSVC: force exact output filename (no hash), avoid import lib and pdb.
         println!("cargo:warning=Setting DLL output name to {dll_name}");
         println!("cargo:rustc-cdylib-link-arg=/OUT:{dll_name}");
 
-        // Do not generate .lib/.exp
+        // Do not generate .lib/.exp (we load via GetProcAddress, not import lib).
         println!("cargo:rustc-link-arg=/NOIMPLIB");
 
         // Do not generate .pdb
@@ -31,17 +41,18 @@ fn main() {
         println!("cargo:rustc-link-arg=/OPT:REF");
         println!("cargo:rustc-link-arg=/OPT:ICF");
     } else if is_windows {
-        // Non-MSVC (gnu) still set output name where applicable.
-        println!("cargo:warning=Setting DLL output name to {dll_name}");
+        // Non-MSVC toolchains might ignore /OUT, but keep a visible hint.
+        println!("cargo:warning=Desired DLL output name: {dll_name}");
     }
 
     if is_windows {
-        embed_windows_version_info(&pkg_name, &pkg_version, &pkg_desc, &pkg_authors);
+        embed_windows_version_info(&stem, &dll_name, &pkg_version, &pkg_desc, &pkg_authors);
     }
 }
 
 fn embed_windows_version_info(
-    pkg_name: &str,
+    internal_stem: &str,
+    dll_name: &str,
     pkg_version: &str,
     pkg_desc: &str,
     pkg_authors: &str,
@@ -51,10 +62,9 @@ fn embed_windows_version_info(
     let company = first_author_or(pkg_authors, "NewEngine");
     let product_name = "NewEngine";
     let file_desc = pkg_desc;
-    let internal_name = pkg_name;
-    let original_filename = format!("{}.dll", pkg_name.replace('-', "_"));
+    let internal_name = internal_stem;
+    let original_filename = dll_name;
 
-    // Windows resource strings must be UTF-16-ish in the PE; rc accepts quoted UTF-8 in practice.
     let rc = format!(
         r#"#include <windows.h>
 
@@ -97,25 +107,26 @@ END
         min = min,
         pat = pat,
         bld = bld,
-        company = escape_rc(&*company),
+        company = escape_rc(&company),
         file_desc = escape_rc(file_desc),
         pkg_version = escape_rc(pkg_version),
         internal_name = escape_rc(internal_name),
-        original_filename = escape_rc(&original_filename),
+        original_filename = escape_rc(original_filename),
         product_name = escape_rc(product_name),
     );
+
 
     let out_dir = PathBuf::from(env::var("OUT_DIR").expect("OUT_DIR not set"));
     let rc_path = out_dir.join("plugin_versioninfo.rc");
 
     fs::write(&rc_path, rc).expect("failed to write rc");
 
-    // Compile and embed into the resulting DLL.
+    // This compiles the rc into the final binary on Windows.
     embed_resource::compile(rc_path.to_str().unwrap(), embed_resource::NONE);
 }
 
 fn parse_semver_4(v: &str) -> (u16, u16, u16, u16) {
-    // Accept "x.y.z" or "x.y.z+build" or "x.y.z-bla"
+    // Accept "x.y.z" or "x.y.z+build" or "x.y.z-bla".
     let mut core = v;
     if let Some(i) = core.find('+') {
         core = &core[..i];
@@ -132,12 +143,11 @@ fn parse_semver_4(v: &str) -> (u16, u16, u16, u16) {
 }
 
 fn first_author_or(authors: &str, fallback: &str) -> String {
-    // CARGO_PKG_AUTHORS is "Name <mail>; Name2 <mail2>"
+    // CARGO_PKG_AUTHORS is "Name <mail>; Name2 <mail2>".
     let first = authors.split(';').next().unwrap_or("").trim();
     if first.is_empty() {
         fallback.to_owned()
     } else {
-        // Remove email part for display
         match first.find('<') {
             Some(i) => first[..i].trim().to_owned(),
             None => first.to_owned(),
@@ -146,5 +156,5 @@ fn first_author_or(authors: &str, fallback: &str) -> String {
 }
 
 fn escape_rc(s: &str) -> String {
-    s.replace('\\', "\\\\").replace('\"', "\\\"")
+    s.replace('\\', "\\\\").replace('"', "\\\"")
 }
