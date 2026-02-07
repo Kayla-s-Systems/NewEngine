@@ -1,64 +1,12 @@
+#![forbid(unsafe_op_in_unsafe_fn)]
+
 use std::collections::HashMap;
-use std::path::{Path, PathBuf};
-
-#[derive(Debug, Clone)]
-pub struct ConfigPaths {
-    pub startup: PathBuf,
-    pub root_dir: Option<PathBuf>,
-}
-
-impl Default for ConfigPaths {
-    #[inline]
-    fn default() -> Self {
-        Self {
-            startup: PathBuf::from("config.json"),
-            root_dir: None,
-        }
-    }
-}
-
-impl ConfigPaths {
-    #[inline]
-    pub fn new<P>(startup: P, root_dir: Option<PathBuf>) -> Self
-    where
-        P: Into<PathBuf>,
-    {
-        Self {
-            startup: startup.into(),
-            root_dir,
-        }
-    }
-
-    #[inline]
-    pub fn with_root(root_dir: Option<PathBuf>) -> Self {
-        Self {
-            startup: PathBuf::from("config.json"),
-            root_dir,
-        }
-    }
-
-    #[inline]
-    pub fn from_startup_str(startup: &str) -> Self {
-        Self::new(startup, None)
-    }
-
-    #[inline]
-    pub fn with_root_dir(mut self, root_dir: impl Into<PathBuf>) -> Self {
-        self.root_dir = Some(root_dir.into());
-        self
-    }
-
-    #[inline]
-    pub fn startup_path(&self) -> &Path {
-        &self.startup
-    }
-}
+use std::path::PathBuf;
 
 #[derive(Debug, Clone)]
 pub enum StartupConfigSource {
     Defaults,
     File { path: PathBuf },
-    Mixed,
 }
 
 impl Default for StartupConfigSource {
@@ -68,11 +16,24 @@ impl Default for StartupConfigSource {
     }
 }
 
-/// Window placement policy (boot-level).
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum UiBackend {
+    Disabled,
+    Egui,
+    Custom(String),
+}
+
+impl Default for UiBackend {
+    #[inline]
+    fn default() -> Self {
+        Self::Egui
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum WindowPlacement {
-    Centered { offset: (i32, i32) },
     Default,
+    Centered { offset: (i32, i32) },
 }
 
 impl Default for WindowPlacement {
@@ -82,35 +43,6 @@ impl Default for WindowPlacement {
     }
 }
 
-/// UI backend selection at boot.
-/// This is a boot-level preference, not an implementation binding.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum UiBackend {
-    Disabled,
-    Egui,
-    Custom(String),
-}
-
-impl UiBackend {
-    #[inline]
-    pub fn as_str(&self) -> &str {
-        match self {
-            UiBackend::Disabled => "disabled",
-            UiBackend::Egui => "egui",
-            UiBackend::Custom(s) => s.as_str(),
-        }
-    }
-}
-
-impl Default for UiBackend {
-    #[inline]
-    fn default() -> Self {
-        UiBackend::Egui
-    }
-}
-
-/// Normalized startup configuration.
-/// All fields have concrete defaults (no Option).
 #[derive(Debug, Clone)]
 pub struct StartupConfig {
     pub source: StartupConfigSource,
@@ -119,6 +51,10 @@ pub struct StartupConfig {
     pub window_title: String,
     pub window_size: (u32, u32),
     pub window_placement: WindowPlacement,
+
+    /// Path inside assets root, resolved via AssetManager + existing importers.
+    /// Example: "ui/icon.png".
+    pub window_icon_path: Option<String>,
 
     pub modules_dir: PathBuf,
 
@@ -133,6 +69,9 @@ pub struct StartupConfig {
     pub ui_backend: UiBackend,
 
     pub extra: HashMap<String, String>,
+
+    /// Legacy (kept for backward compat). Prefer `window_icon_path`.
+    pub window_icon_png: Option<Vec<u8>>,
 }
 
 impl Default for StartupConfig {
@@ -145,6 +84,8 @@ impl Default for StartupConfig {
             window_title: "NewEngine".to_owned(),
             window_size: (1600, 900),
             window_placement: WindowPlacement::Default,
+
+            window_icon_path: None,
 
             modules_dir: PathBuf::from("./"),
 
@@ -159,6 +100,8 @@ impl Default for StartupConfig {
             ui_backend: UiBackend::default(),
 
             extra: HashMap::new(),
+
+            window_icon_png: None,
         }
     }
 }
@@ -197,35 +140,31 @@ pub struct StartupLoadReport {
 
 impl StartupLoadReport {
     #[inline]
-    pub fn has_overrides(&self) -> bool {
-        !self.overrides.is_empty()
-    }
-
-    #[inline]
-    pub fn is_defaults(&self) -> bool {
-        matches!(self.source, StartupConfigSource::Defaults)
-    }
-
-    #[inline]
-    pub fn used_file(&self) -> Option<&Path> {
-        self.file.as_deref()
-    }
-
-    /// Prints a deterministic, greppable startup report to stdout.
-    ///
-    /// This is intentionally IO-only (no logging dependency) so apps can call it
-    /// before the logger module is registered.
-    #[inline]
-    pub fn print_to_stdout(&self) {
-        println!(
-            "startup: loaded source={:?} file={:?} resolved_from={:?} overrides={}",
-            self.source,
-            self.file,
-            self.resolved_from,
-            self.overrides.len()
-        );
-        for ov in self.overrides.iter() {
-            println!("startup: override {}: '{}' -> '{}'", ov.key, ov.from, ov.to);
+    pub fn new() -> Self {
+        Self {
+            source: StartupConfigSource::Defaults,
+            file: None,
+            resolved_from: StartupResolvedFrom::NotProvided,
+            overrides: Vec::new(),
         }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct ConfigPaths {
+    startup_path: String,
+}
+
+impl ConfigPaths {
+    #[inline]
+    pub fn from_startup_str(path: &str) -> Self {
+        Self {
+            startup_path: path.to_owned(),
+        }
+    }
+
+    #[inline]
+    pub fn startup_path(&self) -> &str {
+        &self.startup_path
     }
 }

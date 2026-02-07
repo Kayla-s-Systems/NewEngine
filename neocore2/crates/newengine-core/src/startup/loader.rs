@@ -1,4 +1,7 @@
+#![forbid(unsafe_op_in_unsafe_fn)]
+
 use crate::error::{EngineError, EngineResult};
+use crate::startup::config::UiBackend;
 use crate::startup::{
     ConfigPaths, StartupConfig, StartupConfigSource, StartupLoadReport, StartupOverride,
     StartupResolvedFrom, WindowPlacement,
@@ -6,19 +9,13 @@ use crate::startup::{
 use serde::Deserialize;
 use std::fs;
 use std::path::{Path, PathBuf};
-use crate::startup::config::UiBackend;
 
 pub struct StartupLoader;
 
 impl StartupLoader {
     pub fn load_json(paths: &ConfigPaths) -> EngineResult<(StartupConfig, StartupLoadReport)> {
         let mut cfg = StartupConfig::default();
-        let mut report = StartupLoadReport {
-            source: StartupConfigSource::Defaults,
-            file: None,
-            resolved_from: StartupResolvedFrom::NotProvided,
-            overrides: Vec::new(),
-        };
+        let mut report = StartupLoadReport::new();
 
         let raw_path = paths.startup_path();
 
@@ -87,6 +84,9 @@ struct WindowJson {
     height: Option<u32>,
 
     placement: Option<WindowPlacementJson>,
+
+    /// Logical path inside assets, e.g. "ui/icon.png"
+    icon: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -148,6 +148,10 @@ fn apply_root(cfg: &mut StartupConfig, report: &mut StartupLoadReport, src: Root
             if let Some(pl) = parse_placement(p) {
                 apply_placement(report, "window_placement", &mut cfg.window_placement, pl);
             }
+        }
+
+        if let Some(icon) = w.icon {
+            apply_opt_string(report, "window_icon", &mut cfg.window_icon_path, icon);
         }
     }
 
@@ -218,150 +222,151 @@ fn parse_ui_backend(s: &str) -> UiBackend {
     }
 }
 
-fn apply_string(report: &mut StartupLoadReport, key: &'static str, slot: &mut String, to: String) {
-    let from = slot.clone();
-    *slot = to.clone();
-    report.overrides.push(StartupOverride { key, from, to });
+#[inline]
+fn apply_string(report: &mut StartupLoadReport, key: &'static str, dst: &mut String, v: String) {
+    let from = dst.clone();
+    if from != v {
+        *dst = v.clone();
+        report.overrides.push(StartupOverride {
+            key,
+            from,
+            to: v,
+        });
+    }
 }
 
+#[inline]
+fn apply_opt_string(
+    report: &mut StartupLoadReport,
+    key: &'static str,
+    dst: &mut Option<String>,
+    v: String,
+) {
+    let from = dst.clone().unwrap_or_else(|| "null".to_owned());
+    let to = v.clone();
+
+    let changed = match dst {
+        Some(cur) => cur != &v,
+        None => true,
+    };
+
+    if changed {
+        *dst = Some(v);
+        report.overrides.push(StartupOverride { key, from, to });
+    }
+}
+
+#[inline]
+fn apply_u32(report: &mut StartupLoadReport, key: &'static str, dst: &mut u32, v: u32) {
+    let from = dst.to_string();
+    let to = v.to_string();
+    if *dst != v {
+        *dst = v;
+        report.overrides.push(StartupOverride { key, from, to });
+    }
+}
+
+#[inline]
+fn apply_bool(report: &mut StartupLoadReport, key: &'static str, dst: &mut bool, v: bool) {
+    let from = dst.to_string();
+    let to = v.to_string();
+    if *dst != v {
+        *dst = v;
+        report.overrides.push(StartupOverride { key, from, to });
+    }
+}
+
+#[inline]
 fn apply_size(
     report: &mut StartupLoadReport,
     key: &'static str,
-    slot: &mut (u32, u32),
-    to: (u32, u32),
+    dst: &mut (u32, u32),
+    v: (u32, u32),
 ) {
-    let from = format_size(*slot);
-    *slot = to;
-    report.overrides.push(StartupOverride {
-        key,
-        from,
-        to: format_size(to),
-    });
+    let from = format_size(*dst);
+    let to = format_size(v);
+    if *dst != v {
+        *dst = v;
+        report.overrides.push(StartupOverride { key, from, to });
+    }
 }
 
+#[inline]
 fn apply_placement(
     report: &mut StartupLoadReport,
     key: &'static str,
-    slot: &mut WindowPlacement,
-    to: WindowPlacement,
+    dst: &mut WindowPlacement,
+    v: WindowPlacement,
 ) {
-    let from = format_placement(slot);
-    *slot = to.clone();
-    report.overrides.push(StartupOverride {
-        key,
-        from,
-        to: format_placement(&to),
-    });
+    let from = format!("{:?}", dst);
+    let to = format!("{:?}", v);
+    if *dst != v {
+        *dst = v;
+        report.overrides.push(StartupOverride { key, from, to });
+    }
 }
 
-fn apply_path(report: &mut StartupLoadReport, key: &'static str, slot: &mut PathBuf, to: String) {
-    let from = slot.display().to_string();
-    *slot = PathBuf::from(&to);
-    report.overrides.push(StartupOverride { key, from, to });
+#[inline]
+fn apply_ui_backend(report: &mut StartupLoadReport, key: &'static str, dst: &mut UiBackend, v: UiBackend) {
+    let from = format!("{:?}", dst);
+    let to = format!("{:?}", v);
+    if *dst != v {
+        *dst = v;
+        report.overrides.push(StartupOverride { key, from, to });
+    }
 }
 
-fn apply_u32(report: &mut StartupLoadReport, key: &'static str, slot: &mut u32, to: u32) {
-    let from = slot.to_string();
-    *slot = to;
-    report.overrides.push(StartupOverride {
-        key,
-        from,
-        to: to.to_string(),
-    });
+#[inline]
+fn apply_path(report: &mut StartupLoadReport, key: &'static str, dst: &mut PathBuf, v: String) {
+    let from = dst.display().to_string();
+    let pb = PathBuf::from(v);
+    let to = pb.display().to_string();
+    if *dst != pb {
+        *dst = pb;
+        report.overrides.push(StartupOverride { key, from, to });
+    }
 }
 
-fn apply_bool(report: &mut StartupLoadReport, key: &'static str, slot: &mut bool, to: bool) {
-    let from = slot.to_string();
-    *slot = to;
-    report.overrides.push(StartupOverride {
-        key,
-        from,
-        to: to.to_string(),
-    });
-}
-
+#[inline]
 fn apply_color(
     report: &mut StartupLoadReport,
     key: &'static str,
-    slot: &mut [f32; 4],
-    to: [f32; 4],
+    dst: &mut [f32; 4],
+    v: [f32; 4],
 ) {
-    let from = format_color(*slot);
-    *slot = to;
-    report.overrides.push(StartupOverride {
-        key,
-        from,
-        to: format_color(to),
-    });
-}
-
-fn apply_ui_backend(
-    report: &mut StartupLoadReport,
-    key: &'static str,
-    slot: &mut UiBackend,
-    to: UiBackend,
-) {
-    let from = slot.as_str().to_owned();
-    let to_s = to.as_str().to_owned();
-    *slot = to;
-    report.overrides.push(StartupOverride { key, from, to: to_s });
-}
-
-fn format_placement(p: &WindowPlacement) -> String {
-    match p {
-        WindowPlacement::Centered { offset } => {
-            format!("centered(offset={} {})", offset.0, offset.1)
-        }
-        WindowPlacement::Default => "default".to_owned(),
+    let from = format!("{:.3},{:.3},{:.3},{:.3}", dst[0], dst[1], dst[2], dst[3]);
+    let to = format!("{:.3},{:.3},{:.3},{:.3}", v[0], v[1], v[2], v[3]);
+    if *dst != v {
+        *dst = v;
+        report.overrides.push(StartupOverride { key, from, to });
     }
 }
 
-fn format_size(v: (u32, u32)) -> String {
-    format!("{}x{}", v.0, v.1)
-}
-
-fn format_color(v: [f32; 4]) -> String {
-    format!("{:.3},{:.3},{:.3},{:.3}", v[0], v[1], v[2], v[3])
+#[inline]
+fn format_size(s: (u32, u32)) -> String {
+    format!("{}x{}", s.0, s.1)
 }
 
 fn resolve_startup_file_optional(
-    paths: &ConfigPaths,
-    raw: &Path,
+    _paths: &ConfigPaths,
+    raw: &str,
 ) -> EngineResult<Option<(PathBuf, StartupResolvedFrom)>> {
-    if raw.is_absolute() {
-        return Ok(if raw.is_file() {
-            Some((raw.to_path_buf(), StartupResolvedFrom::Absolute))
-        } else {
-            None
-        });
-    }
+    let p = Path::new(raw);
 
-    if let Ok(cwd) = std::env::current_dir() {
-        let p = cwd.join(raw);
-        if p.is_file() {
-            return Ok(Some((p, StartupResolvedFrom::Cwd)));
+    if p.is_absolute() {
+        if p.exists() {
+            return Ok(Some((p.to_path_buf(), StartupResolvedFrom::Absolute)));
         }
+        return Ok(None);
     }
 
-    if let Ok(exe) = std::env::current_exe() {
-        if let Some(dir) = exe.parent() {
-            let p = dir.join(raw);
-            if p.is_file() {
-                return Ok(Some((p, StartupResolvedFrom::ExeDir)));
-            }
-        }
-    }
-
-    if let Some(root) = paths.root_dir.as_deref() {
-        let p = root.join(raw);
-        if p.is_file() {
-            return Ok(Some((p, StartupResolvedFrom::RootDir)));
-        }
-    }
-
-    let as_is = raw.to_path_buf();
-    if as_is.is_file() {
-        return Ok(Some((as_is, StartupResolvedFrom::AsIs)));
+    // CWD
+    let cwd = std::env::current_dir().map_err(|e| {
+        EngineError::Other(format!("startup: current_dir failed err={}", e))
+    })?;
+    let in_cwd = cwd.join(p);
+    if in_cwd.exists() {
+        return Ok(Some((in_cwd, StartupResolvedFrom::Cwd)));
     }
 
     Ok(None)

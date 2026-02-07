@@ -1,0 +1,21 @@
+[package]
+name = "audioimporter"
+version = "0.1.4"
+edition = "2021"
+description = "NewEngine extensible audio importer plugin"
+license = "MIT OR Apache-2.0"
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+abi_stable = "0.11"
+newengine-plugin-api = { path = "../newengine-plugin-api" }
+
+inventory = "0.3"
+
+# Symphonia is used to probe codec params consistently across formats.
+symphonia = { version = "0.5", features = ["all"] }
+
+[build-dependencies]
+embed-resource = "2"

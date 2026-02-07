@@ -1,0 +1,13 @@
+{
+  "hello": "world",
+  "answer": 42,
+  "nested": {
+    "ok": true
+  },
+  "arr": [
+    1,
+    2,
+    3
+  ],
+  "text": "line1\r\nline2"
+}

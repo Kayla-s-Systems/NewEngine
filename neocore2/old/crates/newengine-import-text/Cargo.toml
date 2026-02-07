@@ -1,0 +1,18 @@
+[package]
+name = "textimporter"
+version = "0.1.3"
+edition = "2021"
+description = "NewEngine extensible text importer plugin"
+license = "MIT OR Apache-2.0"
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+abi_stable = "0.11"
+newengine-plugin-api = { path = "../newengine-plugin-api" }
+
+inventory = "0.3"
+
+[build-dependencies]
+embed-resource = "2"

@@ -1,0 +1,10 @@
+[package]
+name = "newengine-modules-logging"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+newengine-core = { path = "../newengine-core" }
+log = "0.4"
+env_logger = "0.11.8"
+

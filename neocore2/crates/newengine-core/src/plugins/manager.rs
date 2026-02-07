@@ -2,6 +2,7 @@
 
 use libloading::Library;
 use newengine_plugin_api::{HostApiV1, PluginInfo, PluginModuleDyn, PluginRootV1Ref, ServiceV1Dyn};
+use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 
 use crate::plugins::host_api::{
@@ -31,12 +32,16 @@ struct LoadedPlugin {
 
 pub struct PluginManager {
     loaded: Vec<LoadedPlugin>,
+    loaded_ids: HashSet<String>,
 }
 
 impl PluginManager {
     #[inline]
     pub fn new() -> Self {
-        Self { loaded: Vec::new() }
+        Self {
+            loaded: Vec::new(),
+            loaded_ids: HashSet::new(),
+        }
     }
 
     #[inline]
@@ -128,6 +133,14 @@ impl PluginManager {
         let dir = resolve_plugins_dir(dir)?;
         log::info!("plugins: scanning directory '{}'", dir.display());
 
+        // Keep behavior symmetric with importer loading: create directory if missing.
+        if let Err(e) = std::fs::create_dir_all(&dir) {
+            return Err(PluginLoadError {
+                path: dir.clone(),
+                message: format!("create_dir_all failed: {e}"),
+            });
+        }
+
         let mut candidates = Vec::new();
         let rd = std::fs::read_dir(&dir).map_err(|e| PluginLoadError {
             path: dir.clone(),
@@ -208,6 +221,7 @@ impl PluginManager {
             p.module.shutdown();
         }
         self.loaded.clear();
+        self.loaded_ids.clear();
     }
 
     fn load_one(&mut self, path: &Path, host: HostApiV1) -> Result<(), PluginLoadError> {
@@ -228,6 +242,19 @@ impl PluginManager {
         let mut module = root.create()();
 
         let info = module.info();
+        let id_str = info.id.to_string();
+
+        // Prevent accidental double-load of the same plugin id (can cause duplicated services).
+        if self.loaded_ids.contains(&id_str) {
+            log::warn!(
+            "plugins: duplicate id='{}' from '{}' ignored (already loaded)",
+            id_str,
+            path.display()
+        );
+            module.shutdown();
+            return Ok(());
+        }
+
         if let Err(e) = module.init(host).into_result() {
             return Err(PluginLoadError {
                 path: path.to_path_buf(),
@@ -236,12 +263,13 @@ impl PluginManager {
         }
 
         log::info!(
-            "plugins: loaded id='{}' ver='{}' from '{}'",
-            info.id,
-            info.version,
-            path.display()
-        );
+        "plugins: loaded id='{}' ver='{}' from '{}'",
+        info.id,
+        info.version,
+        path.display()
+    );
 
+        self.loaded_ids.insert(id_str);
         self.loaded.push(LoadedPlugin {
             _lib: lib,
             module,
@@ -304,6 +332,21 @@ impl PluginManager {
         }
 
         let info = module.info();
+
+        // Importers are regular plugins too, but are loaded in a separate phase. Prevent duplicates.
+        let id_str = info.id.to_string();
+        if self.loaded_ids.contains(&id_str) {
+            log::warn!(
+                target: "assets",
+                "importers: duplicate id='{}' from '{}' ignored (already loaded)",
+                id_str,
+                path.display()
+            );
+            module.shutdown();
+            return Ok(ImporterLoadOutcome::SkippedNotImporter);
+        }
+
+        self.loaded_ids.insert(id_str);
 
         self.loaded.push(LoadedPlugin {
             _lib: lib,

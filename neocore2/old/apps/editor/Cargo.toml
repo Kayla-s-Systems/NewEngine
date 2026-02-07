@@ -1,0 +1,15 @@
+[package]
+name = "editor"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+crossbeam-channel = "0.5"
+log = "0.4"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+newengine-core = { path = "../../crates/newengine-core" }
+newengine-ui = { path = "../../crates/newengine-ui" }
+newengine-platform-winit = { path = "../../crates/newengine-platform-winit" }
+newengine-modules-logging = { path = "../../crates/newengine-modules-logging" }
+newengine-modules-render-vulkan-ash = { path = "../../crates/newengine-modules-render-vulkan-ash" }

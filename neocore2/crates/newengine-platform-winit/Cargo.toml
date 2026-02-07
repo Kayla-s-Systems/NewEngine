@@ -9,6 +9,7 @@ newengine-core = { path = "../newengine-core" }
 newengine-ui = { path = "../newengine-ui"}
 abi_stable = "0.11"
 newengine-plugin-api = { path = "../newengine-plugin-api" }
+image = { version = "0.25", default-features = false, features = ["png"] }
 egui = { version = "0.29" }
 raw-window-handle = "0.6.2"
 log = "0.4.29"

@@ -1,0 +1,63 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ui>
+
+    <!-- ================= TOP BAR ================= -->
+    <topbar>
+        <label text="NewEngine Editor"/>
+        <spacer/>
+        <button id="btn_reload" text="Reload UI"/>
+        <button id="btn_quit" text="Quit"/>
+    </topbar>
+
+    <!-- ================= STATS WINDOW ================= -->
+    <window title="Stats" open="true">
+        <row>
+            <label text="Status:"/>
+            <label text="Online"/>
+        </row>
+
+        <row>
+            <label text="FPS:"/>
+            <label text="$fps"/>
+        </row>
+
+        <row>
+            <label text="Frame time (ms):"/>
+            <label text="$frame_ms"/>
+        </row>
+    </window>
+
+    <!-- ================= CONSOLE / FILTER ================= -->
+    <window title="Console" open="true">
+        <row>
+            <label text="Filter"/>
+        </row>
+
+        <row>
+            <textbox
+                    id="filter"
+                    bind="filter"
+                    hint="type to filter log..."
+            />
+        </row>
+
+        <row>
+            <button id="btn_clear_log" text="Clear"/>
+            <button id="btn_copy_log" text="Copy"/>
+        </row>
+    </window>
+
+    <!-- ================= SETTINGS ================= -->
+    <window title="Settings" open="false">
+        <row>
+            <label text="VSync"/>
+            <button id="btn_vsync_toggle" text="$vsync"/>
+        </row>
+
+        <row>
+            <label text="Render backend"/>
+            <label text="$render_backend"/>
+        </row>
+    </window>
+
+</ui>

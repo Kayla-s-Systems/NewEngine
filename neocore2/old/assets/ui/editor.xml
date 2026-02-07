@@ -1,0 +1,20 @@
+<ui>
+    <topbar>
+        <label text="$app.name"/>
+        <spacer/>
+        <button id="quit" text="Quit"/>
+    </topbar>
+
+    <window title="Stats" open="true">
+        <column>
+            <label text="UI loaded from asset file"/>
+            <spacer/>
+            <row>
+                <label text="Command:"/>
+                <textbox id="cmd" bind="cmd" hint="Type here..." multiline="false"/>
+            </row>
+            <spacer/>
+            <textbox id="log" bind="log" hint="Output..." multiline="true"/>
+        </column>
+    </window>
+</ui>

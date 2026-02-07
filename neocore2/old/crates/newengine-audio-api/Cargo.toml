@@ -1,0 +1,9 @@
+[package]
+name = "newengine-audio-api"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+bitflags = "2.6"
+bytemuck = { version = "1.16", features = ["derive"] }
+abi_stable = "0.11"

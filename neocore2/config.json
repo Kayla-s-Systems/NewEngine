@@ -5,6 +5,7 @@
 
   "window": {
     "title": "NewEngine Editor",
+    "icon": "ui/app_icon.png",
     "size": [1600, 900],
     "placement": {
       "type": "centered",

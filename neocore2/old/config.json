@@ -1,0 +1,39 @@
+{
+  "logging": {
+    "level": "debug"
+  },
+  "window": {
+    "title": "NewEngine Editor",
+    "windowIconPath": "assets/ui/app_icon.png",
+    "size": [
+      1600,
+      900
+    ],
+    "placement": {
+      "type": "centered",
+      "offset": [
+        0,
+        -24
+      ]
+    }
+  },
+  "ui": {
+    "backend": "egui"
+  },
+  "engine": {
+    "modules_dir": ".",
+    "assets_root": "assets",
+    "asset_pump_steps": 16,
+    "asset_filesystem_source": true
+  },
+  "render": {
+    "backend": "vulkan_ash",
+    "clear_color": [
+      1.00,
+      0.22,
+      0.03,
+      1.0
+    ],
+    "debug_text": "NewEngine | Vulkan"
+  }
+}
