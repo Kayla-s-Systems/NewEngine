@@ -13,7 +13,7 @@ pub struct ModuleCtx<'a, E: Send + 'static> {
     events: &'a EventHub,
     scheduler: &'a mut Scheduler,
     exit: &'a mut bool,
-    frame: Option<Frame>,
+    pub frame: Option<Frame>,
 }
 
 impl<'a, E: Send + 'static> ModuleCtx<'a, E> {
