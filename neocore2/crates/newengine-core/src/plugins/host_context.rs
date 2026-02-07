@@ -1,6 +1,7 @@
 #![forbid(unsafe_op_in_unsafe_fn)]
 
 use abi_stable::std_types::RString;
+#[cfg(feature = "runtime")]
 use newengine_assets::AssetStore;
 use newengine_plugin_api::{Blob, EventSinkV1Dyn, ServiceV1Dyn};
 
@@ -42,6 +43,7 @@ pub(crate) fn current_plugin_id() -> Option<String> {
 
 pub struct HostContext {
     pub services: Mutex<HashMap<String, ServiceEntry>>,
+    #[cfg(feature = "runtime")]
     pub(crate) asset_store: Arc<AssetStore>,
     services_generation: AtomicU64,
 
@@ -50,10 +52,21 @@ pub struct HostContext {
 
 static HOST_CTX: OnceLock<Arc<HostContext>> = OnceLock::new();
 
+#[cfg(feature = "runtime")]
 pub fn init_host_context(asset_store: Arc<AssetStore>) {
     let ctx = Arc::new(HostContext {
         services: Mutex::new(HashMap::new()),
         asset_store,
+        services_generation: AtomicU64::new(1),
+        event_sinks: Mutex::new(Vec::new()),
+    });
+    let _ = HOST_CTX.set(ctx);
+}
+
+#[cfg(not(feature = "runtime"))]
+pub fn init_host_context() {
+    let ctx = Arc::new(HostContext {
+        services: Mutex::new(HashMap::new()),
         services_generation: AtomicU64::new(1),
         event_sinks: Mutex::new(Vec::new()),
     });
@@ -91,7 +104,10 @@ pub fn subscribe_event_sink(sink: EventSinkV1Dyn<'static>) -> Result<(), String>
 pub fn emit_plugin_event(topic: RString, payload: Blob) -> Result<(), String> {
     let c = ctx();
     let sinks = {
-        let g = c.event_sinks.lock().map_err(|_| "event_sinks mutex poisoned".to_string())?;
+        let g = c
+            .event_sinks
+            .lock()
+            .map_err(|_| "event_sinks mutex poisoned".to_string())?;
         g.clone()
     };
 

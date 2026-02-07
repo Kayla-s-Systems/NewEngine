@@ -57,7 +57,7 @@ pub(super) unsafe fn create_framebuffers(
     Ok(fbs)
 }
 
-pub(super) unsafe fn create_shader_module(device: &Device, bytes: &[u8]) -> VkResult<vk::ShaderModule> {
+pub(crate) unsafe fn create_shader_module(device: &Device, bytes: &[u8]) -> VkResult<vk::ShaderModule> {
     let words = ash::util::read_spv(&mut std::io::Cursor::new(bytes))
         .map_err(|e| VkRenderError::AshWindow(e.to_string()))?;
     let ci = vk::ShaderModuleCreateInfo::default().code(&words);

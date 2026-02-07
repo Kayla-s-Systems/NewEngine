@@ -2,6 +2,7 @@
 
 use crate::plugins::describe::is_asset_importer;
 use crate::plugins::host_context::{ctx, ServiceEntry};
+#[cfg(feature = "runtime")]
 use crate::plugins::importer::try_auto_register_importer;
 use abi_stable::std_types::{RResult, RString};
 use newengine_plugin_api::{
@@ -78,8 +79,11 @@ pub(crate) fn host_register_service_impl(
         crate::plugins::host_context::bump_services_generation();
     }
 
-    if auto_register_importer {
-        try_auto_register_importer(&service_id, &describe_json);
+    #[cfg(feature = "runtime")]
+    {
+        if auto_register_importer {
+            try_auto_register_importer(&service_id, &describe_json);
+        }
     }
 
     RResult::ROk(())

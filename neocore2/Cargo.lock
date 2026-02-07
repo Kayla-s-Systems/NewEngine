@@ -1396,10 +1396,14 @@ dependencies = [
 name = "newengine-assets"
 version = "0.1.0"
 dependencies = [
+    "abi_stable",
  "blake3",
+    "libloading 0.8.9",
  "log",
+    "newengine-plugin-api",
  "parking_lot",
  "quick-xml 0.36.2",
+    "serde",
  "serde_json",
  "thiserror 1.0.69",
 ]
@@ -1445,6 +1449,7 @@ version = "0.1.0"
 dependencies = [
  "ash",
  "ash-window",
+    "bytemuck",
  "log",
     "newengine-camera",
  "newengine-core",

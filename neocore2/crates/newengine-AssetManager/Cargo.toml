@@ -5,6 +5,9 @@ edition = "2021"
 description = "NewEngine asset system (CPU-side): sources, importers, store, handles"
 license = "MIT OR Apache-2.0"
 
+[lib]
+crate-type = ["cdylib", "rlib"]
+
 [dependencies]
 blake3 = "1.5"
 parking_lot = "0.12"
@@ -14,3 +17,13 @@ log = "0.4.29"
 serde_json = "1.0"
 quick-xml = "0.36"
 thiserror = "1.0"
+
+# ABI / plugin
+abi_stable = "0.11"
+newengine-plugin-api = { path = "../newengine-plugin-api" }
+
+# Importer DLL hosting
+libloading = "0.8"
+
+# Describe parsing (stable + cheap)
+serde = { version = "1.0", features = ["derive"] }

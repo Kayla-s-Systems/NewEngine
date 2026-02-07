@@ -3,6 +3,7 @@
 mod describe;
 pub(crate) mod host_api;
 pub mod host_context;
+#[cfg(feature = "runtime")]
 mod importer;
 mod manager;
 mod paths;
