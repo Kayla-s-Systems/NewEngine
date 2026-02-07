@@ -11,6 +11,14 @@ use crate::plugins::host_api::{
 use crate::plugins::host_context::{unregister_by_owner, with_current_plugin_id};
 use crate::plugins::paths::{default_plugins_dir, is_dynamic_lib, resolve_plugins_dir};
 
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+enum PluginState {
+    Registered,
+    Running,
+    Stopped,
+    Disabled,
+}
+
 #[derive(Debug)]
 pub struct PluginLoadError {
     pub path: PathBuf,
@@ -29,7 +37,7 @@ struct LoadedPlugin {
     _lib: Library,
     module: PluginModuleDyn<'static>,
     info: PluginInfo,
-    enabled: bool,
+    state: PluginState,
     disabled_reason: Option<String>,
 }
 
@@ -183,13 +191,17 @@ impl PluginManager {
     }
 
     #[inline]
-    fn rresult_to_string(r: abi_stable::std_types::RResult<(), abi_stable::std_types::RString>) -> Result<(), String> {
+    fn rresult_to_string(
+        r: abi_stable::std_types::RResult<(), abi_stable::std_types::RString>,
+    ) -> Result<(), String> {
         r.into_result().map_err(|e| e.to_string())
     }
 
-
     pub fn start_all(&mut self) -> Result<(), String> {
         for i in 0..self.loaded.len() {
+            if self.loaded[i].state != PluginState::Registered {
+                continue;
+            }
             self.call_plugin(i, "start", |m| Self::rresult_to_string(m.start()));
         }
         Ok(())
@@ -197,13 +209,21 @@ impl PluginManager {
 
     pub fn fixed_update_all(&mut self, dt: f32) -> Result<(), String> {
         for i in 0..self.loaded.len() {
-            self.call_plugin(i, "fixed_update", |m| Self::rresult_to_string(m.fixed_update(dt)));
+            if self.loaded[i].state != PluginState::Running {
+                continue;
+            }
+            self.call_plugin(i, "fixed_update", |m| {
+                Self::rresult_to_string(m.fixed_update(dt))
+            });
         }
         Ok(())
     }
 
     pub fn update_all(&mut self, dt: f32) -> Result<(), String> {
         for i in 0..self.loaded.len() {
+            if self.loaded[i].state != PluginState::Running {
+                continue;
+            }
             self.call_plugin(i, "update", |m| Self::rresult_to_string(m.update(dt)));
         }
         Ok(())
@@ -211,16 +231,19 @@ impl PluginManager {
 
     pub fn render_all(&mut self, dt: f32) -> Result<(), String> {
         for i in 0..self.loaded.len() {
+            if self.loaded[i].state != PluginState::Running {
+                continue;
+            }
             self.call_plugin(i, "render", |m| Self::rresult_to_string(m.render(dt)));
         }
         Ok(())
     }
 
-
     pub fn shutdown(&mut self) {
         for i in (0..self.loaded.len()).rev() {
             let id = self.loaded[i].info.id.to_string();
             self.safe_shutdown_one(i);
+            self.loaded[i].state = PluginState::Stopped;
             unregister_by_owner(&id);
         }
         self.loaded.clear();
@@ -233,7 +256,11 @@ impl PluginManager {
         op: &str,
         f: impl FnOnce(&mut PluginModuleDyn<'static>) -> Result<(), String>,
     ) {
-        if idx >= self.loaded.len() || !self.loaded[idx].enabled {
+        if idx >= self.loaded.len() {
+            return;
+        }
+
+        if self.loaded[idx].state == PluginState::Disabled {
             return;
         }
 
@@ -250,18 +277,28 @@ impl PluginManager {
                 self.disable_plugin(idx, &id, format!("op '{op}' failed: {e}"));
             }
             Err(_) => {
-                log::error!("plugins: panic during op '{}' for id='{}' (plugin disabled)", op, id);
+                log::error!(
+                    "plugins: panic during op '{}' for id='{}' (plugin disabled)",
+                    op,
+                    id
+                );
                 self.disable_plugin(idx, &id, format!("panic during op '{op}'"));
+            }
+        }
+
+        if idx < self.loaded.len() {
+            if op == "start" && self.loaded[idx].state == PluginState::Registered {
+                self.loaded[idx].state = PluginState::Running;
             }
         }
     }
 
     fn disable_plugin(&mut self, idx: usize, id: &str, reason: String) {
-        if idx >= self.loaded.len() || !self.loaded[idx].enabled {
+        if idx >= self.loaded.len() || self.loaded[idx].state == PluginState::Disabled {
             return;
         }
 
-        self.loaded[idx].enabled = false;
+        self.loaded[idx].state = PluginState::Disabled;
         self.loaded[idx].disabled_reason = Some(reason);
 
         self.safe_shutdown_one(idx);
@@ -300,6 +337,30 @@ impl PluginManager {
 
         let info = module.info();
         let id_str = info.id.to_string();
+
+        if id_str.trim().is_empty() {
+            let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| module.shutdown()));
+            return Err(PluginLoadError {
+                path: path.to_path_buf(),
+                message: "plugin id is empty".to_string(),
+            });
+        }
+
+        if info.name.to_string().trim().is_empty() {
+            let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| module.shutdown()));
+            return Err(PluginLoadError {
+                path: path.to_path_buf(),
+                message: "plugin name is empty".to_string(),
+            });
+        }
+
+        if info.version.to_string().trim().is_empty() {
+            let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| module.shutdown()));
+            return Err(PluginLoadError {
+                path: path.to_path_buf(),
+                message: "plugin version is empty".to_string(),
+            });
+        }
 
         if self.loaded_ids.contains(&id_str) {
             log::warn!(
@@ -351,7 +412,7 @@ impl PluginManager {
             _lib: lib,
             module,
             info,
-            enabled: true,
+            state: PluginState::Registered,
             disabled_reason: None,
         });
 
@@ -422,7 +483,9 @@ impl PluginManager {
 
         for svc in state.staged.drain(..) {
             let reg = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-                with_current_plugin_id(&id_pre, || host_register_service_impl(svc, true).into_result())
+                with_current_plugin_id(&id_pre, || {
+                    host_register_service_impl(svc, true).into_result()
+                })
             }));
 
             match reg {
@@ -473,7 +536,7 @@ impl PluginManager {
             _lib: lib,
             module,
             info: info.clone(),
-            enabled: true,
+            state: PluginState::Registered,
             disabled_reason: None,
         });
 

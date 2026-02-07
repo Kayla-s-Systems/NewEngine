@@ -376,7 +376,7 @@ pub struct BindGroupId(NonZeroU32);
 #[allow(dead_code)]
 impl BufferId {
     #[inline]
-    pub(crate) fn new(v: u32) -> Self {
+    pub fn new(v: u32) -> Self {
         Self(NonZeroU32::new(v).expect("BufferId must be non-zero"))
     }
 }
@@ -400,7 +400,7 @@ impl SamplerId {
 #[allow(dead_code)]
 impl ShaderId {
     #[inline]
-    pub(crate) fn new(v: u32) -> Self {
+    pub fn new(v: u32) -> Self {
         Self(NonZeroU32::new(v).expect("ShaderId must be non-zero"))
     }
 }
@@ -416,7 +416,7 @@ impl PipelineId {
 #[allow(dead_code)]
 impl BindGroupLayoutId {
     #[inline]
-    pub(crate) fn new(v: u32) -> Self {
+    pub fn new(v: u32) -> Self {
         Self(NonZeroU32::new(v).expect("BindGroupLayoutId must be non-zero"))
     }
 }
@@ -424,7 +424,7 @@ impl BindGroupLayoutId {
 #[allow(dead_code)]
 impl BindGroupId {
     #[inline]
-    pub(crate) fn new(v: u32) -> Self {
+    pub fn new(v: u32) -> Self {
         Self(NonZeroU32::new(v).expect("BindGroupId must be non-zero"))
     }
 }

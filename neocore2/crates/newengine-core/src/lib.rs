@@ -1,4 +1,5 @@
 pub mod bus;
+pub mod core_invariants;
 pub mod engine;
 pub mod error;
 pub mod events;
@@ -19,7 +20,6 @@ pub mod host_services;
 pub use host_services::{call_service_v1, describe_service, list_service_ids};
 
 pub use assets::{AssetManager, AssetManagerConfig};
-
 
 pub use bus::Bus;
 pub use engine::{Engine, EngineConfig};
