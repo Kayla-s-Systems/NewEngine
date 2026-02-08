@@ -1,20 +1,17 @@
-<ui>
+<ui visuals="dark" density="compact" font_size="14">
     <topbar>
         <label text="$app.name"/>
         <spacer/>
-        <button id="quit" text="Quit"/>
-    </topbar>
 
-    <window title="Stats" open="true">
-        <column>
-            <label text="UI loaded from asset file"/>
-            <spacer/>
-            <row>
-                <label text="Command:"/>
-                <textbox id="cmd" bind="cmd" hint="Type here..." multiline="false"/>
-            </row>
-            <spacer/>
-            <textbox id="log" bind="log" hint="Output..." multiline="true"/>
-        </column>
-    </window>
+        <button id="frame_all" text="Frame All" on_click="frame_all"/>
+        <button id="toggle_grid" text="Grid" on_click="toggle_grid"/>
+        <button id="toggle_model" text="Model" on_click="toggle_model"/>
+        <spacer/>
+
+        <textbox id="model_path" bind="model_path" hint="models/fox.obj" on_submit="load_model"/>
+        <button id="load_model" text="Load" on_click="load_model"/>
+
+        <spacer/>
+        <button id="quit" text="Quit" on_click="quit"/>
+    </topbar>
 </ui>

@@ -1,0 +1,13 @@
+[package]
+name = "newengine-bounds"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+newengine-plugin-api = { path = "../newengine-plugin-api" }
+newengine-ecs = { path = "../newengine-ecs" }
+ahash = "0.8"
+roxmltree = "0.19"
+smallvec = "1.13"
+bytemuck = { version = "1.16", features = ["derive"] }
+glam = "0.31.0"
