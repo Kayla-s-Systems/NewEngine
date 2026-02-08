@@ -9,6 +9,11 @@ pub struct AssetId(pub(crate) u128);
 
 impl AssetId {
     #[inline]
+    pub const fn from_u128(v: u128) -> Self {
+        Self(v)
+    }
+
+    #[inline]
     pub fn to_u128(self) -> u128 {
         self.0
     }
@@ -26,6 +31,7 @@ impl AssetId {
         Self(u128::from_le_bytes(lo))
     }
 }
+
 
 #[inline]
 fn hash_logical_path(h: &mut Hasher, p: &Path) {

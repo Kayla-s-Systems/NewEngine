@@ -3,8 +3,8 @@
 use crossbeam_channel::unbounded;
 
 use newengine_core::{
-    AssetManagerConfig, Bus, ConfigPaths, Engine, EngineConfig, EngineError, EngineResult, Services,
-    ShutdownToken, StartupConfig, StartupLoader,
+    Bus, ConfigPaths, Engine, EngineConfig, EngineError, EngineResult, Services, ShutdownToken,
+    StartupConfig, StartupLoader,
 };
 
 use newengine_modules_logging::{ConsoleLoggerConfig, ConsoleLoggerModule};
@@ -13,15 +13,19 @@ use newengine_modules_render_vulkan_ash::VulkanAshRenderModule;
 use newengine_platform_winit::app::config::WinitAppIcon;
 use newengine_platform_winit::{run_winit_app_with_config, WinitAppConfig, WinitWindowPlacement};
 
+use newengine_ui::asset_access::wait_ready;
 use newengine_ui::markup::UiMarkupDoc;
 use newengine_ui::UiBuildFn;
+use newengine_ui::{AssetAccess, AssetServiceClient};
 
 use std::sync::{Arc, Mutex};
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
 mod render_controller;
 mod ui;
 mod viewport_bridge;
+mod shared;
+mod scene_components;
 
 const FIXED_DT_MS: u32 = 16;
 const UI_MARKUP_PATH: &str = "ui/editor.xml";
@@ -91,17 +95,12 @@ fn build_engine_from_startup(startup: &StartupConfig) -> EngineResult<Engine<()>
     let services: Box<dyn Services> = Box::new(AppServices::new());
     let shutdown = ShutdownToken::new();
 
-    let assets = AssetManagerConfig::new(startup.assets_root.clone())
-        .with_pump_steps(startup.asset_pump_steps)
-        .with_filesystem_source(startup.asset_filesystem_source);
-
-    let config =
-        EngineConfig::new(FIXED_DT_MS, assets).with_plugins_dir(Some(startup.modules_dir.clone()));
+    let config = EngineConfig::new(FIXED_DT_MS).with_plugins_dir(Some(startup.modules_dir.clone()));
 
     let mut engine: Engine<()> = Engine::new_with_config(config, services, bus, shutdown)?;
 
     // The logger module installs the global logger in `init()`. We still bootstrap logging
-    // before Engine::start() so early plugin/importer logs are visible.
+    // before Engine::start() so early plugin logs are visible.
     engine.register_module(Box::new(ConsoleLoggerModule::new(configure_logger(startup))))?;
 
     Ok(engine)
@@ -138,67 +137,39 @@ fn bootstrap_logging(startup: &StartupConfig) {
     let _ = builder.try_init();
 }
 
-fn load_asset_blob_with_timeout(
-    engine: &Engine<()>,
-    logical_path: &str,
-    timeout: Duration,
-) -> EngineResult<std::sync::Arc<newengine_assets::AssetBlob>> {
-    use newengine_assets::AssetState;
-
-    let am = engine
-        .resources
-        .get::<newengine_core::assets::AssetManager>()
-        .ok_or_else(|| EngineError::other("AssetManager missing in engine.resources"))?;
-
-    let store = am.store();
-    let id = store
-        .load_path(logical_path)
-        .map_err(|e| EngineError::other(format!("asset.load failed path='{logical_path}' err='{e}'")))?;
-
-    let t0 = Instant::now();
-
-    loop {
-        am.pump();
-
-        match store.state(id) {
-            AssetState::Ready => {
-                let blob = store
-                    .get_blob(id)
-                    .ok_or_else(|| EngineError::other("asset: Ready but blob is missing"))?;
-                return Ok(blob);
-            }
-            AssetState::Failed(e) => {
-                return Err(EngineError::other(format!(
-                    "asset: failed path='{logical_path}' err='{e}'"
-                )));
-            }
-            _ => {
-                if t0.elapsed() >= timeout {
-                    return Err(EngineError::other(format!(
-                        "asset: timeout path='{logical_path}' timeout_ms={}"
-                        , timeout.as_millis()
-                    )));
-                }
-                std::thread::sleep(Duration::from_millis(1));
-            }
-        }
-    }
-}
-
-fn try_load_window_icon(engine: &Engine<()>, startup: &StartupConfig) -> Option<WinitAppIcon> {
+fn try_load_window_icon(startup: &StartupConfig) -> Option<WinitAppIcon> {
     let Some(path) = startup.window_icon_path.as_deref() else {
         return None;
     };
 
-    let blob = match load_asset_blob_with_timeout(engine, path, Duration::from_millis(500)) {
-        Ok(b) => b,
+    // AssetManager is a plugin now; load via service client.
+    let assets = AssetServiceClient::new(newengine_core::plugins::default_host_api());
+
+    let id_hex32 = match assets.load(path) {
+        Ok(v) => v,
         Err(e) => {
-            log::warn!("window icon: load failed path='{path}' err='{e}'");
+            log::warn!("window icon: asset.load failed path='{path}' err='{e}'");
             return None;
         }
     };
 
-    match WinitAppIcon::from_png_bytes(&blob.payload) {
+    match wait_ready(&assets, &id_hex32, Duration::from_millis(500)) {
+        Ok(()) => {}
+        Err(e) => {
+            log::warn!("window icon: wait_ready failed path='{path}' err='{e:?}'");
+            return None;
+        }
+    }
+
+    let (_meta_json, payload) = match assets.blob_wire_v1(&id_hex32) {
+        Ok(v) => v,
+        Err(e) => {
+            log::warn!("window icon: blob_wire_v1 failed path='{path}' err='{e}'");
+            return None;
+        }
+    };
+
+    match WinitAppIcon::from_png_bytes(&payload) {
         Ok(icon) => Some(icon),
         Err(e) => {
             log::warn!("window icon: decode failed path='{path}' err='{e}'");
@@ -211,7 +182,7 @@ fn main() -> EngineResult<()> {
     let paths = ConfigPaths::from_startup_str("config.json");
     let (startup, report) = StartupLoader::load_json(&paths)?;
 
-    // Bootstrap logging as early as possible, before any plugin/importer activity.
+    // Bootstrap logging as early as possible, before any plugin activity.
     bootstrap_logging(&startup);
 
     println!(
@@ -234,48 +205,35 @@ fn main() -> EngineResult<()> {
     // 1) Register render (backend + controller) so the module set is complete before window creation.
     register_render_from_startup(&mut engine, &startup, viewport.clone())?;
 
-    // 2) Load plugins/importers BEFORE creating winit (required: plugins/providers must exist).
+    // 2) Load plugins BEFORE creating winit (required: providers must exist).
     engine.load_plugins_once()?;
 
-    // 3) Resolve window icon via AssetManager + existing importers (no new image reading logic).
-    let icon = try_load_window_icon(&engine, &startup);
+    // 3) Resolve window icon via AssetManager service.
+    let icon = try_load_window_icon(&startup);
 
     let mut winit_cfg = winit_config_from_startup(&startup);
     winit_cfg.icon = icon;
 
-    // UI builder exists immediately; document is loaded after importers are ready.
+    // UI builder exists immediately; document is loaded after plugins are ready.
     let shared_doc: Arc<Mutex<Option<UiMarkupDoc>>> = Arc::new(Mutex::new(None));
     let ui_build: Option<Box<dyn UiBuildFn>> = match startup.ui_backend {
         newengine_core::startup::UiBackend::Disabled => None,
         _ => Some(Box::new(ui::EditorUiBuild::new(shared_doc.clone(), viewport.clone()))),
     };
 
-    let startup_for_after = Arc::clone(&startup);
-
-    // Importer for .xml is guaranteed to be registered now -> load markup via AssetManager.
+    // Load markup via AssetManager service (no AssetStore in-process).
     if !matches!(startup.ui_backend, newengine_core::startup::UiBackend::Disabled) {
-        let am = engine
-            .resources
-            .get::<newengine_core::assets::AssetManager>()
-            .ok_or_else(|| EngineError::other("AssetManager missing in engine.resources"))?;
+        let assets = AssetServiceClient::new(newengine_core::plugins::default_host_api());
 
-        let store = am.store();
-        let mut pump = || {
-            am.pump();
-        };
-
-        let doc = UiMarkupDoc::load_from_store(
-            store,
-            &mut pump,
-            UI_MARKUP_PATH,
-            Duration::from_millis(250),
-        )
+        let doc = UiMarkupDoc::load(&assets, UI_MARKUP_PATH, Duration::from_millis(250))
             .map_err(|e| EngineError::other(format!("ui: load failed: {e}")))?;
 
         if let Ok(mut g) = shared_doc.lock() {
             *g = Some(doc);
         }
     }
+
+    let startup_for_after = Arc::clone(&startup);
 
     run_winit_app_with_config(engine, winit_cfg, ui_build, move |_engine| {
         // Window-dependent work is handled by modules via WinitWindowHandles.

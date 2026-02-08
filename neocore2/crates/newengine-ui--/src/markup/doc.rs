@@ -9,6 +9,9 @@ use crate::markup::theme::UiThemeDesc;
 use crate::markup::ui_node::UiNode;
 
 use crate::asset_access::{wait_ready, AssetAccess};
+// см. п.1
+use newengine_assets::TextReader;
+// если TextReader остаётся в отдельном types crate
 
 #[derive(Debug, Clone)]
 pub struct UiMarkupDoc {
@@ -26,18 +29,17 @@ impl UiMarkupDoc {
             .load(logical_path)
             .map_err(UiMarkupError::Enqueue)?;
 
-        wait_ready(assets, &id_hex32, timeout).map_err(|_| UiMarkupError::Timeout {
-            path: logical_path.to_string(),
-        })?;
+        wait_ready(assets, &id_hex32, timeout)
+            .map_err(|_| UiMarkupError::Timeout { path: logical_path.to_string() })?;
 
-        let (_meta_json, payload) = assets
+        let (meta_json, payload) = assets
             .blob_wire_v1(&id_hex32)
             .map_err(|e| UiMarkupError::TextRead(e))?;
 
-        let xml_text = std::str::from_utf8(&payload)
-            .map_err(|_| UiMarkupError::TextRead("asset payload is not valid UTF-8".to_string()))?;
+        let doc = TextReader::from_blob_parts(&meta_json, &payload)
+            .map_err(|e| UiMarkupError::TextRead(e.to_string()))?;
 
-        Self::parse(xml_text)
+        Self::parse(&doc.text)
     }
 
     pub fn parse(xml_text: &str) -> Result<Self, UiMarkupError> {

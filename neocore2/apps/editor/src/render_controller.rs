@@ -1,18 +1,19 @@
 #![forbid(unsafe_op_in_unsafe_fn)]
 
 use newengine_core::render::{
-    require_render_api, BeginFrameDesc, BindGroupDesc, BindGroupLayoutDesc, BindingKind,
-    BufferBinding, BufferDesc, BufferSlice, BufferUsage, DrawIndexedArgs, Extent2D, IndexFormat,
-    MemoryHint, PipelineDesc, PrimitiveTopology, RectI32, ShaderDesc, ShaderStage, TextureFormat,
-    VertexAttribute, VertexFormat, VertexLayout, Viewport, RenderTargetDesc, BeginRenderTargetDesc,
+    require_render_api, BeginFrameDesc, BeginRenderTargetDesc, BindGroupDesc, BindGroupLayoutDesc,
+    BindingKind, BufferBinding, BufferDesc, BufferSlice, BufferUsage, DrawIndexedArgs, Extent2D,
+    IndexFormat, MemoryHint, PipelineDesc, PrimitiveTopology, RectI32, RenderTargetDesc, ShaderDesc,
+    ShaderStage, TextureFormat, VertexAttribute, VertexFormat, VertexLayout, Viewport,
 };
 use newengine_core::{EngineError, EngineResult, Module, ModuleCtx};
 use newengine_platform_winit::WinitWindowInitSize;
 use newengine_ui::draw::UiDrawList;
+use newengine_ui::{AssetAccess, AssetServiceClient};
 
 use crate::viewport_bridge::ViewportBridge;
 
-use newengine_assets::{AssetState, Model3dFormat, Model3dReader};
+use newengine_core::plugins::default_host_api;
 
 use shaderc::{CompileOptions, Compiler, OptimizationLevel, ShaderKind};
 
@@ -107,6 +108,9 @@ struct ModelGpu {
 }
 
 pub struct EditorRenderController {
+    model_center: [f32; 3],
+    model_radius: f32,
+    model_framed_once: bool,
     clear_color: [f32; 4],
     last_w: u32,
     last_h: u32,
@@ -115,6 +119,8 @@ pub struct EditorRenderController {
     model_loaded_once: bool,
 
     orbit: OrbitCamera,
+
+    assets: AssetServiceClient,
 
     viewport_bridge: std::sync::Arc<ViewportBridge>,
     viewport_rt: Option<newengine_core::render::RenderTargetId>,
@@ -125,6 +131,9 @@ impl EditorRenderController {
     #[inline]
     pub fn new(clear_color: [f32; 4], viewport_bridge: std::sync::Arc<ViewportBridge>) -> Self {
         Self {
+            model_center: [0.0, 0.0, 0.0],
+            model_radius: 1.0,
+            model_framed_once: false,
             clear_color,
             last_w: 0,
             last_h: 0,
@@ -133,6 +142,8 @@ impl EditorRenderController {
             model_loaded_once: false,
 
             orbit: OrbitCamera::default_editor(),
+
+            assets: AssetServiceClient::new(default_host_api()),
 
             viewport_bridge,
             viewport_rt: None,
@@ -191,20 +202,17 @@ impl EditorRenderController {
         Ok(())
     }
 
-    fn load_model_blob(
-        ctx: &ModuleCtx<'_, impl Send + 'static>,
+    fn load_asset_payload_with_timeout(
+        &self,
         logical_path: &str,
         timeout_ms: u64,
-    ) -> EngineResult<Option<std::sync::Arc<newengine_assets::AssetBlob>>> {
-        let Some(am) = ctx.resources().get::<newengine_core::assets::AssetManager>() else {
-            return Ok(None);
-        };
+    ) -> EngineResult<Option<Vec<u8>>> {
+        use newengine_ui::AssetState;
 
-        let store = am.store();
-        let id = match store.load_path(logical_path) {
-            Ok(id) => id,
+        let id_hex32 = match self.assets.load(logical_path) {
+            Ok(v) => v,
             Err(e) => {
-                log::warn!("model: asset.load failed path='{logical_path}' err='{e}'");
+                log::warn!("asset: load failed path='{logical_path}' err='{e}'");
                 return Ok(None);
             }
         };
@@ -212,23 +220,37 @@ impl EditorRenderController {
         let t0 = std::time::Instant::now();
         let timeout = std::time::Duration::from_millis(timeout_ms);
         loop {
-            am.pump();
-            match store.state(id) {
-                AssetState::Ready => return Ok(store.get_blob(id)),
-                AssetState::Failed(e) => {
+            self.assets.pump();
+
+            match self.assets.state(&id_hex32) {
+                Ok(AssetState::Ready) => break,
+                Ok(AssetState::Failed) => {
                     return Err(EngineError::other(format!(
-                        "model: import failed path='{logical_path}' err='{e}'"
+                        "asset: import failed path='{logical_path}'"
                     )));
                 }
-                _ => {
-                    if t0.elapsed() >= timeout {
-                        log::warn!("model: load timeout path='{logical_path}'");
-                        return Ok(None);
-                    }
-                    std::thread::sleep(std::time::Duration::from_millis(1));
+                Ok(AssetState::Loading) | Ok(AssetState::Unloaded) => {}
+                Err(e) => {
+                    return Err(EngineError::other(format!(
+                        "asset: state query failed path='{logical_path}' err='{e}'"
+                    )));
                 }
             }
+
+            if t0.elapsed() >= timeout {
+                log::warn!("asset: load timeout path='{logical_path}'");
+                return Ok(None);
+            }
+
+            std::thread::sleep(std::time::Duration::from_millis(1));
         }
+
+        let (_meta_json, payload) = self
+            .assets
+            .blob_wire_v1(&id_hex32)
+            .map_err(|e| EngineError::other(format!("asset: blob_wire_v1 failed: {e}")))?;
+
+        Ok(Some(payload))
     }
 
     fn decode_ne3d_mesh(bytes: &[u8]) -> EngineResult<(Vec<[f32; 3]>, Vec<[f32; 3]>, Vec<u32>)> {
@@ -521,7 +543,7 @@ void main() {
 
     fn build_model(
         &mut self,
-        ctx: &ModuleCtx<'_, impl Send + 'static>,
+        _ctx: &ModuleCtx<'_, impl Send + 'static>,
         r: &mut dyn newengine_core::render::RenderApi,
         target: Extent2D,
     ) -> EngineResult<()> {
@@ -531,18 +553,16 @@ void main() {
 
         self.model_loaded_once = true;
 
+        // The importer pipeline is responsible for producing engine-native NE3D payload.
+        // The editor render controller consumes only that wire format.
         const MODEL_PATH: &str = "models/fox.obj";
 
-        let Some(blob) = Self::load_model_blob(ctx, MODEL_PATH, 750)? else {
-            log::warn!("model: missing '{MODEL_PATH}'. Add an .obj under assets/models/demo.obj to see 3D.");
+        let Some(payload) = self.load_asset_payload_with_timeout(MODEL_PATH, 750)? else {
+            log::warn!("model: missing '{MODEL_PATH}'. Place a model under assets/{MODEL_PATH}.");
             return Ok(());
         };
 
-        let model = Model3dReader::from_blob_parts(blob.meta_json.as_ref(), &blob.payload)
-            .map_err(|e| EngineError::other(format!("model: decode failed: {e}")))?;
-
-
-        let (pos, nrm, idx) = Self::decode_ne3d_mesh(&model.payload)?;
+        let (pos, nrm, idx) = Self::decode_ne3d_mesh(&payload)?;
         if pos.is_empty() || idx.is_empty() {
             return Err(EngineError::other("model: empty geometry"));
         }
@@ -778,15 +798,41 @@ impl<E: Send + 'static> Module<E> for EditorRenderController {
                     let aspect = vp_w as f32 / (vp_h.max(1) as f32);
                     // Dynamic near/far to avoid near-plane clipping while dollying.
                     // Model is normalized on load to roughly unit radius.
-                    let radius = 1.0f32;
-                    self.orbit.dist = self.orbit.dist.clamp(radius * 1.15, 250.0);
-                    let near = (self.orbit.dist - radius * 2.2).max(0.001);
-                    let far = (self.orbit.dist + radius * 6.0).max(near + 0.1);
+                    let aspect = vp_w as f32 / (vp_h.max(1) as f32);
+                    let fov_y = 60.0f32.to_radians();
 
-                    let proj = Self::mat4_perspective(60.0f32.to_radians(), aspect, near, far);
+                    let radius = self.model_radius.max(0.000_001);
+                    let target = self.model_center;
+
+                    // One-time frame-all on first visible render (editor UX), but logic is universal.
+                    if !self.model_framed_once {
+                        // Fit distance so sphere fully fits in frustum.
+                        let dist = {
+                            let tan_y = (0.5 * fov_y).tan().max(1e-6);
+                            let fov_x = 2.0 * (tan_y * aspect.max(1e-6)).atan();
+                            let tan_x = (0.5 * fov_x).tan().max(1e-6);
+                            let d_y = (radius * 1.15) / tan_y; // margin
+                            let d_x = (radius * 1.15) / tan_x;
+                            d_y.max(d_x).max(0.05)
+                        };
+
+                        self.orbit.dist = dist;
+                        self.model_framed_once = true;
+                    }
+
+                    // Apply user input AFTER initial framing.
+                    self.orbit.dist = self.orbit.dist.clamp(radius * 1.05, 250.0);
+
+                    // Auto near/far from sphere.
+                    let d = self.orbit.dist.max(0.01);
+                    let near = (d * 0.001).max((d - radius * 1.2).max(0.0005));
+                    let far = (d + radius * 4.0).max(near + 0.1);
+
+                    let proj = Self::mat4_perspective(fov_y, aspect, near, far);
 
                     let eye = self.orbit.eye();
-                    let view = Self::mat4_look_at(eye, [0.0, 0.0, 0.0], [0.0, 1.0, 0.0]);
+                    let view = Self::mat4_look_at(eye, target, [0.0, 1.0, 0.0]);
+
                     let mvp = Self::mat4_mul(proj, view);
 
                     let mut ubytes: Vec<u8> = Vec::with_capacity(64);

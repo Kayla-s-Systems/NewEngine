@@ -1,37 +1,11 @@
 #![forbid(unsafe_op_in_unsafe_fn)]
 
-use crate::plugins::describe::is_asset_importer;
 use crate::plugins::host_context::{ctx, ServiceEntry};
-#[cfg(feature = "runtime")]
-use crate::plugins::importer::try_auto_register_importer;
 use abi_stable::std_types::{RResult, RString};
 use newengine_plugin_api::{
     Blob, CapabilityId, EventSinkV1Dyn, HostApiV1, MethodName, ServiceV1Dyn,
 };
-use std::cell::Cell;
 use std::sync::Arc;
-
-pub(crate) struct ImporterLoadState {
-    pub saw_importer: bool,
-    pub staged: Vec<ServiceV1Dyn<'static>>,
-}
-
-thread_local! {
-    static IMPORTER_LOAD_STATE: Cell<*mut ImporterLoadState> =
-        const { Cell::new(std::ptr::null_mut()) };
-}
-
-pub(crate) fn with_importer_load_state<R>(
-    state: &mut ImporterLoadState,
-    f: impl FnOnce() -> R,
-) -> R {
-    IMPORTER_LOAD_STATE.with(|slot| {
-        let prev = slot.replace(state as *mut _);
-        let out = f();
-        slot.set(prev);
-        out
-    })
-}
 
 extern "C" fn host_log_info(s: RString) {
     log::info!("{}", s);
@@ -45,10 +19,7 @@ extern "C" fn host_log_error(s: RString) {
     log::error!("{}", s);
 }
 
-pub(crate) fn host_register_service_impl(
-    svc: ServiceV1Dyn<'static>,
-    auto_register_importer: bool,
-) -> RResult<(), RString> {
+pub(crate) fn host_register_service_impl(svc: ServiceV1Dyn<'static>) -> RResult<(), RString> {
     let service_id = svc.id().to_string();
     let describe_json = svc.describe().to_string();
     let owner = crate::plugins::host_context::current_plugin_id();
@@ -79,39 +50,11 @@ pub(crate) fn host_register_service_impl(
         crate::plugins::host_context::bump_services_generation();
     }
 
-    #[cfg(feature = "runtime")]
-    {
-        if auto_register_importer {
-            try_auto_register_importer(&service_id, &describe_json);
-        }
-    }
-
     RResult::ROk(())
 }
 
 extern "C" fn host_register_service_v1_plain(svc: ServiceV1Dyn<'static>) -> RResult<(), RString> {
-    host_register_service_impl(svc, false)
-}
-
-extern "C" fn host_register_service_v1_importers(
-    svc: ServiceV1Dyn<'static>,
-) -> RResult<(), RString> {
-    IMPORTER_LOAD_STATE.with(|slot| {
-        let p = slot.get();
-        if p.is_null() {
-            return RResult::RErr(RString::from("importer loader: host state is not set"));
-        }
-
-        let st = unsafe { &mut *p };
-
-        let describe_json = svc.describe().to_string();
-        if is_asset_importer(&describe_json) {
-            st.saw_importer = true;
-        }
-
-        st.staged.push(svc);
-        RResult::ROk(())
-    })
+    host_register_service_impl(svc)
 }
 
 pub(crate) extern "C" fn call_service_v1(
@@ -158,20 +101,6 @@ pub fn default_host_api() -> HostApiV1 {
         log_error: host_log_error,
 
         register_service_v1: host_register_service_v1_plain,
-        call_service_v1: call_service_v1,
-
-        emit_event_v1: host_emit_event_v1,
-        subscribe_events_v1: host_subscribe_events_v1,
-    }
-}
-
-pub fn importers_host_api() -> HostApiV1 {
-    HostApiV1 {
-        log_info: host_log_info,
-        log_warn: host_log_warn,
-        log_error: host_log_error,
-
-        register_service_v1: host_register_service_v1_importers,
         call_service_v1: call_service_v1,
 
         emit_event_v1: host_emit_event_v1,

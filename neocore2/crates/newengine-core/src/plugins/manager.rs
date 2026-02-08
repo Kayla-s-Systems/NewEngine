@@ -1,13 +1,10 @@
 #![forbid(unsafe_op_in_unsafe_fn)]
 
 use libloading::Library;
-use newengine_plugin_api::{HostApiV1, PluginInfo, PluginModuleDyn, PluginRootV1Ref, ServiceV1Dyn};
+use newengine_plugin_api::{HostApiV1, PluginInfo, PluginModuleDyn, PluginRootV1Ref};
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 
-use crate::plugins::host_api::{
-    host_register_service_impl, with_importer_load_state, ImporterLoadState,
-};
 use crate::plugins::host_context::{unregister_by_owner, with_current_plugin_id};
 use crate::plugins::paths::{default_plugins_dir, is_dynamic_lib, resolve_plugins_dir};
 
@@ -63,81 +60,6 @@ impl PluginManager {
     pub fn load_default(&mut self, host: HostApiV1) -> Result<(), PluginLoadError> {
         let dir = default_plugins_dir()?;
         self.load_from_dir(&dir, host)
-    }
-
-    pub fn load_importers_from_dir(
-        &mut self,
-        dir: &Path,
-        host: HostApiV1,
-    ) -> Result<(), PluginLoadError> {
-        let dir = resolve_plugins_dir(dir)?;
-        log::info!(target: "assets", "importers: scanning directory '{}'", dir.display());
-
-        if let Err(e) = std::fs::create_dir_all(&dir) {
-            return Err(PluginLoadError {
-                path: dir.clone(),
-                message: format!("create_dir_all failed: {e}"),
-            });
-        }
-
-        let mut candidates = Vec::new();
-        let rd = std::fs::read_dir(&dir).map_err(|e| PluginLoadError {
-            path: dir.clone(),
-            message: format!("read_dir failed: {e}"),
-        })?;
-
-        for ent in rd {
-            let ent = ent.map_err(|e| PluginLoadError {
-                path: dir.clone(),
-                message: format!("read_dir entry failed: {e}"),
-            })?;
-
-            let p = ent.path();
-            if !is_dynamic_lib(&p) {
-                continue;
-            }
-            candidates.push(p);
-        }
-
-        candidates.sort();
-
-        log::info!(
-            target: "assets",
-            "importers: found {} candidate(s) in '{}'",
-            candidates.len(),
-            dir.display()
-        );
-
-        for path in candidates {
-            match self.load_one_importer(&path, host.clone()) {
-                Ok(ImporterLoadOutcome::Loaded(info)) => {
-                    log::info!(
-                        target: "assets",
-                        "importers: loaded id='{}' ver='{}' from '{}'",
-                        info.id,
-                        info.version,
-                        path.display()
-                    );
-                }
-                Ok(ImporterLoadOutcome::SkippedNotImporter) => {
-                    log::debug!(
-                        target: "assets",
-                        "importers: skipped (not an importer) '{}'",
-                        path.display()
-                    );
-                }
-                Err(e) => {
-                    log::warn!(
-                        target: "assets",
-                        "importers: failed to load '{}': {}",
-                        path.display(),
-                        e
-                    );
-                }
-            }
-        }
-
-        Ok(())
     }
 
     pub fn load_from_dir(&mut self, dir: &Path, host: HostApiV1) -> Result<(), PluginLoadError> {
@@ -212,9 +134,7 @@ impl PluginManager {
             if self.loaded[i].state != PluginState::Running {
                 continue;
             }
-            self.call_plugin(i, "fixed_update", |m| {
-                Self::rresult_to_string(m.fixed_update(dt))
-            });
+            self.call_plugin(i, "fixed_update", |m| Self::rresult_to_string(m.fixed_update(dt)));
         }
         Ok(())
     }
@@ -418,133 +338,4 @@ impl PluginManager {
 
         Ok(())
     }
-
-    fn load_one_importer(
-        &mut self,
-        path: &Path,
-        host: HostApiV1,
-    ) -> Result<ImporterLoadOutcome, PluginLoadError> {
-        log::info!(target: "assets", "importers: loading '{}'", path.display());
-
-        let lib = unsafe { Library::new(path) }.map_err(|e| PluginLoadError {
-            path: path.to_path_buf(),
-            message: format!("Library::new failed: {e}"),
-        })?;
-
-        let sym: libloading::Symbol<unsafe extern "C" fn() -> PluginRootV1Ref> =
-            unsafe { lib.get(b"export_plugin_root\0") }.map_err(|e| PluginLoadError {
-                path: path.to_path_buf(),
-                message: format!("symbol export_plugin_root not found: {e}"),
-            })?;
-
-        let root = unsafe { sym() };
-        let mut module = root.create()();
-
-        let info_pre = module.info();
-        let id_pre = info_pre.id.to_string();
-
-        let mut state = ImporterLoadState {
-            saw_importer: false,
-            staged: Vec::<ServiceV1Dyn<'static>>::new(),
-        };
-
-        let init_result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-            with_current_plugin_id(&id_pre, || {
-                with_importer_load_state(&mut state, || module.init(host).into_result())
-            })
-        }));
-
-        let init_outcome: Result<(), String> = match init_result {
-            Ok(Ok(())) => Ok(()),
-            Ok(Err(e)) => Err(e.to_string()),
-            Err(_) => Err("init panicked".to_string()),
-        };
-
-        if let Err(e) = init_outcome {
-            unregister_by_owner(&id_pre);
-            let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-                with_current_plugin_id(&id_pre, || module.shutdown());
-            }));
-            return Err(PluginLoadError {
-                path: path.to_path_buf(),
-                message: format!("init failed: {e}"),
-            });
-        }
-
-        if !state.saw_importer {
-            unregister_by_owner(&id_pre);
-            let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-                with_current_plugin_id(&id_pre, || module.shutdown());
-            }));
-            drop(module);
-            drop(lib);
-            return Ok(ImporterLoadOutcome::SkippedNotImporter);
-        }
-
-        for svc in state.staged.drain(..) {
-            let reg = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-                with_current_plugin_id(&id_pre, || {
-                    host_register_service_impl(svc, true).into_result()
-                })
-            }));
-
-            match reg {
-                Ok(Ok(())) => {}
-                Ok(Err(e)) => {
-                    unregister_by_owner(&id_pre);
-                    let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-                        with_current_plugin_id(&id_pre, || module.shutdown());
-                    }));
-                    return Err(PluginLoadError {
-                        path: path.to_path_buf(),
-                        message: format!("register_service_v1 failed: {e}"),
-                    });
-                }
-                Err(_) => {
-                    unregister_by_owner(&id_pre);
-                    let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-                        with_current_plugin_id(&id_pre, || module.shutdown());
-                    }));
-                    return Err(PluginLoadError {
-                        path: path.to_path_buf(),
-                        message: "register_service_v1 panicked".to_string(),
-                    });
-                }
-            }
-        }
-
-        let info = module.info();
-        let id_str = info.id.to_string();
-
-        if self.loaded_ids.contains(&id_str) {
-            log::warn!(
-                target: "assets",
-                "importers: duplicate id='{}' from '{}' ignored (already loaded)",
-                id_str,
-                path.display()
-            );
-            unregister_by_owner(&id_str);
-            let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-                with_current_plugin_id(&id_str, || module.shutdown());
-            }));
-            return Ok(ImporterLoadOutcome::SkippedNotImporter);
-        }
-
-        self.loaded_ids.insert(id_str);
-
-        self.loaded.push(LoadedPlugin {
-            _lib: lib,
-            module,
-            info: info.clone(),
-            state: PluginState::Registered,
-            disabled_reason: None,
-        });
-
-        Ok(ImporterLoadOutcome::Loaded(info))
-    }
-}
-
-enum ImporterLoadOutcome {
-    Loaded(PluginInfo),
-    SkippedNotImporter,
 }

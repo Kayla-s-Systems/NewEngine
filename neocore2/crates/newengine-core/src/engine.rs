@@ -1,15 +1,12 @@
+#![forbid(unsafe_op_in_unsafe_fn)]
+
 use crate::error::{EngineError, EngineResult, ModuleStage};
 use crate::events::EventHub;
 use crate::frame::Frame;
 use crate::module::{ApiVersion, Bus, Module, ModuleCtx, Resources, Services};
-#[cfg(feature = "runtime")]
-use crate::plugins::importers_host_api;
 use crate::plugins::{default_host_api, init_host_context, PluginManager};
 use crate::sched::Scheduler;
 use crate::sync::ShutdownToken;
-use crate::system_info::SystemInfo;
-#[cfg(feature = "runtime")]
-use crate::AssetManagerConfig;
 
 use std::any::Any;
 use std::collections::{HashMap, HashSet, VecDeque};
@@ -20,23 +17,10 @@ use std::time::{Duration, Instant};
 #[derive(Debug, Clone)]
 pub struct EngineConfig {
     pub fixed_dt_ms: u32,
-    #[cfg(feature = "runtime")]
-    pub assets: AssetManagerConfig,
     pub plugins_dir: Option<PathBuf>,
 }
 
 impl EngineConfig {
-    #[cfg(feature = "runtime")]
-    #[inline]
-    pub fn new(fixed_dt_ms: u32, assets: AssetManagerConfig) -> Self {
-        Self {
-            fixed_dt_ms,
-            assets,
-            plugins_dir: None,
-        }
-    }
-
-    #[cfg(not(feature = "runtime"))]
     #[inline]
     pub fn new(fixed_dt_ms: u32) -> Self {
         Self {
@@ -114,10 +98,10 @@ impl<E: Send + 'static> Engine<E> {
         Ok(())
     }
 
-    /// Loads plugins/importers once (idempotent).
+    /// Loads plugins once (idempotent).
     ///
-    /// This does NOT initialize or start modules. It only populates the plugin registry and,
-    /// when built with `feature="runtime"`, registers asset importers from the importers directory.
+    /// The engine core never hardcodes plugin categories (assets, input, render, etc.).
+    /// Any capability registration and secondary loading (e.g. importers) is owned by plugins.
     #[inline]
     pub fn load_plugins_once(&mut self) -> EngineResult<()> {
         self.try_load_plugins_once()
@@ -146,17 +130,7 @@ impl<E: Send + 'static> Engine<E> {
         bus: Bus<E>,
         shutdown: ShutdownToken,
     ) -> EngineResult<Self> {
-        #[cfg(feature = "runtime")]
-        let config = {
-            let assets_root = std::env::current_dir()
-                .unwrap_or_else(|_| PathBuf::from("."))
-                .join("assets");
-            EngineConfig::new(fixed_dt_ms, AssetManagerConfig::new(assets_root))
-        };
-
-        #[cfg(not(feature = "runtime"))]
         let config = EngineConfig::new(fixed_dt_ms);
-
         Self::new_with_config(config, services, bus, shutdown)
     }
 
@@ -168,29 +142,9 @@ impl<E: Send + 'static> Engine<E> {
     ) -> EngineResult<Self> {
         let fixed_dt = (config.fixed_dt_ms as f32 / 1000.0).max(0.001);
 
-        let mut resources = Resources::default();
+        let resources = Resources::default();
 
-        #[cfg(feature = "runtime")]
-        {
-            let asset_manager = crate::assets::AssetManager::new_with_config(config.assets);
-            resources.insert(asset_manager);
-
-            // Host context must exist before any plugin can register services/importers.
-            let asset_store = resources
-                .get::<crate::assets::AssetManager>()
-                .expect("AssetManager missing")
-                .store()
-                .clone();
-
-            init_host_context(asset_store.clone());
-            crate::assets_service::register_asset_manager_service(asset_store.clone());
-            crate::console::init_console_service();
-        }
-
-        #[cfg(not(feature = "runtime"))]
-        {
-            init_host_context();
-        }
+        init_host_context();
 
         Ok(Self {
             fixed_dt,
@@ -233,9 +187,7 @@ impl<E: Send + 'static> Engine<E> {
 
         let id = module.id();
         if self.module_ids.contains(id) {
-            return Err(EngineError::Other(format!(
-                "module already registered: {id}"
-            )));
+            return Err(EngineError::Other(format!("module already registered: {id}")));
         }
 
         self.modules.push(module);
@@ -264,6 +216,7 @@ impl<E: Send + 'static> Engine<E> {
         }
     }
 
+    #[allow(dead_code)]
     #[inline]
     fn phase_err(phase: &'static str, elapsed: Elapsed, e: impl fmt::Display) -> EngineError {
         EngineError::Other(format!("plugins: failed (phase={phase} {elapsed}): {e}"))
@@ -275,31 +228,10 @@ impl<E: Send + 'static> Engine<E> {
             return Ok(());
         }
 
-        let phase = "load_default";
+        let phase = "load";
         Self::log_phase_begin("plugins", phase, None);
         let t0 = Instant::now();
 
-        // 1) Importers: only from `<exe_dir>/importers` (runtime facade only).
-        #[cfg(feature = "runtime")]
-        {
-            if let Some(am) = self.resources.get::<crate::assets::AssetManager>() {
-                let host = importers_host_api();
-                if let Err(e) = self
-                    .plugins
-                    .load_importers_from_dir(am.importers_dir(), host)
-                {
-                    log::warn!(
-                        target: "assets",
-                        "importers: non-fatal load error (phase={} {}): {}",
-                        phase,
-                        Self::elapsed_since(t0),
-                        e
-                    );
-                }
-            }
-        }
-
-        // 2) Regular plugins: scan the configured plugins directory (no importer auto-registration).
         let host = default_host_api();
 
         let load_result = if let Some(dir) = self.plugins_dir.as_deref() {
@@ -322,88 +254,7 @@ impl<E: Send + 'static> Engine<E> {
         let loaded = self.plugins.iter().count();
         Self::log_phase_ok("plugins", phase, Some(loaded), Self::elapsed_since(t0));
 
-        // Diagnostics (runtime facade only).
-        #[cfg(feature = "runtime")]
-        self.log_importer_registry("after plugins load");
-
         Ok(())
-    }
-
-    #[cfg(feature = "runtime")]
-    fn log_importer_registry(&self, tag: &'static str) {
-        let Some(am) = self.resources.get::<crate::assets::AssetManager>() else {
-            log::debug!(
-                target: "assets",
-                "importer.registry skipped (AssetManager missing) tag={}",
-                tag
-            );
-            return;
-        };
-
-        let bindings = am.store().importer_bindings();
-
-        if bindings.is_empty() {
-            log::info!(target: "assets", "importer.registry empty (no bindings) tag={}", tag);
-            log::info!(target: "assets", "importer.formats readable=<none> tag={}", tag);
-            return;
-        }
-
-        log::info!(
-            target: "assets",
-            "importer.registry bindings={} (tag={})",
-            bindings.len(),
-            tag
-        );
-
-        use std::collections::{BTreeMap, BTreeSet};
-
-        let mut exts: BTreeSet<String> = BTreeSet::new();
-        let mut by_ext: BTreeMap<String, Vec<&_>> = BTreeMap::new();
-
-        for b in bindings.iter() {
-            let ext = format!(".{}", b.ext.trim_start_matches('.').to_ascii_lowercase());
-            exts.insert(ext.clone());
-            by_ext.entry(ext).or_default().push(b);
-        }
-
-        let formats_line = exts.iter().cloned().collect::<Vec<_>>().join(", ");
-        log::info!(
-            target: "assets",
-            "importer.formats readable=[{}] (tag={})",
-            formats_line,
-            tag
-        );
-
-        for (ext, list) in by_ext.iter() {
-            let mut uniq: BTreeSet<String> = BTreeSet::new();
-            for b in list.iter() {
-                uniq.insert(format!(
-                    "id='{}' type='{}' prio={}",
-                    b.stable_id, b.output_type_id, b.priority.0
-                ));
-            }
-            let providers = uniq.into_iter().collect::<Vec<_>>().join("; ");
-            log::info!(
-                target: "assets",
-                "importer.format {} -> {} (tag={})",
-                ext,
-                providers,
-                tag
-            );
-        }
-
-        if log::log_enabled!(log::Level::Debug) {
-            for b in bindings {
-                log::debug!(
-                    target: "assets",
-                    "importer.binding ext='.{}' id='{}' type='{}' priority={}",
-                    b.ext,
-                    b.stable_id,
-                    b.output_type_id,
-                    b.priority.0
-                );
-            }
-        }
     }
 
     fn log_plugins_diagnostics(&self, tag: &'static str) {
@@ -517,7 +368,10 @@ impl<E: Send + 'static> Engine<E> {
         }
 
         #[inline]
-        fn shutdown_modules<E: Send + 'static>(engine: &mut Engine<E>, modules: &mut [Box<dyn Module<E>>]) {
+        fn shutdown_modules<E: Send + 'static>(
+            engine: &mut Engine<E>,
+            modules: &mut [Box<dyn Module<E>>],
+        ) {
             for m in modules.iter_mut().rev() {
                 let mut ctx = ModuleCtx::new(
                     engine.services.as_ref(),
@@ -653,16 +507,6 @@ impl<E: Send + 'static> Engine<E> {
         self.scheduler.end_frame(Duration::from_secs_f32(dt));
         self.frame_index = self.frame_index.wrapping_add(1);
 
-        #[cfg(feature = "runtime")]
-        {
-            if let Some(am) = self.resources.get::<crate::assets::AssetManager>() {
-                am.pump();
-            }
-            if crate::console::take_exit_requested() {
-                self.exit_requested = true;
-            }
-        }
-
         Ok(frame)
     }
 
@@ -683,7 +527,6 @@ impl<E: Send + 'static> Engine<E> {
         self.propagate_shutdown_request();
         Ok(frame)
     }
-
 
     #[deprecated(
         note = "Use Engine::emit(...) + EventHub subscriptions instead of synchronous fan-out"
@@ -718,6 +561,7 @@ impl<E: Send + 'static> Engine<E> {
             #[allow(deprecated)]
             m.on_external_event(&mut ctx, event)
                 .map_err(|e| EngineError::with_module_stage(module_id, ModuleStage::ExternalEvent, e))?;
+
 
             if *exit_requested {
                 shutdown.request();
@@ -786,7 +630,8 @@ impl<E: Send + 'static> Engine<E> {
             let mut ctx = ModuleCtx::new(services, resources, bus, events, scheduler, exit_requested);
             ctx.set_frame(frame);
 
-            call(m.as_mut(), &mut ctx).map_err(|e| EngineError::with_module_stage(module_id, stage, e))?;
+            call(m.as_mut(), &mut ctx)
+                .map_err(|e| EngineError::with_module_stage(module_id, stage, e))?;
 
             if *exit_requested {
                 shutdown.request();
