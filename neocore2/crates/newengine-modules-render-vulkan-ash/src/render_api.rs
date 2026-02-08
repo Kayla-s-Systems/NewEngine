@@ -6,13 +6,11 @@ use ash::vk;
 
 use newengine_core::render::*;
 use newengine_core::{EngineError, EngineResult};
-use newengine_ui::draw::UiDrawList;
+use newengine_ui::draw::{UiDrawList, UiTexId};
 use newengine_ui::texture::reserved as ui_reserved;
 
-use newengine_ui::draw::UiTexId;
 use std::collections::HashMap;
 use std::ffi::CString;
-
 
 #[derive(Clone, Copy)]
 struct VkBuffer {

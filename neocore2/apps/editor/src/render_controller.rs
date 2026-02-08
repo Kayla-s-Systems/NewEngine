@@ -1,11 +1,10 @@
 #![forbid(unsafe_op_in_unsafe_fn)]
 
-use newengine_core::call_service_v1;
 use newengine_core::render::{
-    require_render_api, BeginFrameDesc, BeginRenderTargetDesc, BindGroupDesc, BindGroupLayoutDesc,
-    BindingKind, BufferBinding, BufferDesc, BufferSlice, BufferUsage, DrawIndexedArgs, Extent2D,
-    IndexFormat, MemoryHint, PipelineDesc, PrimitiveTopology, RectI32, RenderTargetDesc, ShaderDesc,
-    ShaderStage, TextureFormat, VertexAttribute, VertexFormat, VertexLayout, Viewport,
+    require_render_api, BeginFrameDesc, BindGroupDesc, BindGroupLayoutDesc, BindingKind,
+    BufferBinding, BufferDesc, BufferSlice, BufferUsage, DrawIndexedArgs, Extent2D, IndexFormat,
+    MemoryHint, PipelineDesc, PrimitiveTopology, RectI32, ShaderDesc, ShaderStage, TextureFormat,
+    VertexAttribute, VertexFormat, VertexLayout, Viewport, RenderTargetDesc, BeginRenderTargetDesc,
 };
 use newengine_core::{EngineError, EngineResult, Module, ModuleCtx};
 use newengine_platform_winit::WinitWindowInitSize;
@@ -17,10 +16,7 @@ use newengine_assets::{AssetState, Model3dFormat, Model3dReader};
 
 use shaderc::{CompileOptions, Compiler, OptimizationLevel, ShaderKind};
 
-use serde::Deserialize;
-
-const INPUT_SERVICE_ID: &str = "kalitech.input.v1";
-const INPUT_METHOD_STATE_JSON: &str = "state_json";
+// Orbit controls are driven by UI via `ViewportBridge` to avoid leaking global input state.
 
 #[derive(Debug, Clone, Copy, Default)]
 struct OrbitCamera {
@@ -41,30 +37,33 @@ impl OrbitCamera {
     }
 
     #[inline]
-    fn apply_input(&mut self, dx: f32, dy: f32, wheel_y: f32, lmb_down: bool) {
-        // Mouse deltas are in pixels.
-        const ROT_SENS: f32 = 0.005;
-        const ZOOM_SENS: f32 = 0.001;
+    fn apply_input(&mut self, dx_px: f32, dy_px: f32, wheel_y: f32, lmb_dragging: bool) {
+        // Deltas are in *physical pixels*.
+        const ROT_SENS: f32 = 0.0045;
+        // Exponential zoom avoids "self-rotation" feeling and is stable across wheel deltas.
+        const ZOOM_EXP_SENS: f32 = 0.0018;
 
-        if lmb_down {
-            if dx.is_finite() {
-                self.yaw += dx * ROT_SENS;
+        if lmb_dragging {
+            if dx_px.is_finite() {
+                self.yaw += dx_px * ROT_SENS;
             }
-            if dy.is_finite() {
-                self.pitch += dy * ROT_SENS;
+            if dy_px.is_finite() {
+                self.pitch += dy_px * ROT_SENS;
             }
         }
 
-        if wheel_y.is_finite() && wheel_y != 0.0 {
-            // dy > 0 typically means wheel up -> zoom in.
-            let k = 1.0 - (wheel_y * ZOOM_SENS);
-            // Prevent inversion / exploding.
-            let k = k.clamp(0.05, 20.0);
-            self.dist *= k;
+        if wheel_y.is_finite() && wheel_y.abs() > 1e-6 {
+            // Convention: wheel_y > 0 => zoom in.
+            // exp(-x) => positive wheel shrinks distance.
+            let factor = (-wheel_y * ZOOM_EXP_SENS).exp();
+            if factor.is_finite() {
+                self.dist *= factor;
+            }
         }
 
         self.pitch = self.pitch.clamp(-1.54, 1.54);
-        self.dist = self.dist.clamp(0.15, 250.0);
+        // Dist clamp keeps the camera stable; near/far are adjusted separately each frame.
+        self.dist = self.dist.clamp(0.05, 250.0);
     }
 
     #[inline]
@@ -81,23 +80,7 @@ impl OrbitCamera {
     }
 }
 
-#[derive(Debug, Deserialize)]
-struct InputSnapshotJson {
-    mouse: InputMouseJson,
-}
-
-#[derive(Debug, Deserialize)]
-struct InputMouseJson {
-    delta: InputVec2Json,
-    wheel: InputVec2Json,
-    down: Vec<u32>,
-}
-
-#[derive(Debug, Deserialize)]
-struct InputVec2Json {
-    x: f32,
-    y: f32,
-}
+// Input JSON structs removed: orbit input comes from UI.
 
 #[derive(Clone, Copy)]
 struct DemoGpu {
@@ -158,9 +141,12 @@ impl EditorRenderController {
     }
 
     #[inline]
-    fn read_input_snapshot() -> Option<InputSnapshotJson> {
-        let bytes = call_service_v1(INPUT_SERVICE_ID, INPUT_METHOD_STATE_JSON, b"{}").ok()?;
-        serde_json::from_slice::<InputSnapshotJson>(&bytes).ok()
+    fn rt_to_ui_tex_user(rt: newengine_core::render::RenderTargetId) -> u64 {
+        // Matches `newengine-modules-render-vulkan-ash` convention
+        // (renderer/render_target.rs): ui_tex_id = 0x8000_0000 | render_target_id.
+        const UI_EXTERNAL_BASE: u32 = 0x8000_0000;
+        let id = rt.0.get();
+        (UI_EXTERNAL_BASE | (id & 0x7FFF_FFFF)) as u64
     }
 
     fn ensure_viewport_rt(
@@ -173,7 +159,7 @@ impl EditorRenderController {
                 r.destroy_render_target(rt);
             }
             self.viewport_rt_extent = Extent2D::new(0, 0);
-            self.viewport_bridge.publish_ui_tex(None);
+            self.viewport_bridge.publish_tex_user(0);
             return Ok(());
         }
 
@@ -198,8 +184,8 @@ impl EditorRenderController {
             self.viewport_rt = Some(rt);
             self.viewport_rt_extent = extent;
 
-            let ui_tex = r.render_target_ui_tex_id(rt)?;
-            self.viewport_bridge.publish_ui_tex(Some(ui_tex));
+            let tex_user = Self::rt_to_ui_tex_user(rt);
+            self.viewport_bridge.publish_tex_user(tex_user);
         }
 
         Ok(())
@@ -577,12 +563,16 @@ void main() {
             (bb_min[1] + bb_max[1]) * 0.5,
             (bb_min[2] + bb_max[2]) * 0.5,
         ];
-        let ext = [
-            (bb_max[0] - bb_min[0]).abs(),
-            (bb_max[1] - bb_min[1]).abs(),
-            (bb_max[2] - bb_min[2]).abs(),
-        ];
-        let radius = (0.5 * ext[0].max(ext[1]).max(ext[2])).max(0.001);
+        // Robust radius: true bounding-sphere radius around AABB center.
+        // This avoids cases where a long diagonal extends beyond "half max extent".
+        let mut radius = 0.0f32;
+        for p in &pos {
+            let dx = p[0] - center[0];
+            let dy = p[1] - center[1];
+            let dz = p[2] - center[2];
+            radius = radius.max((dx * dx + dy * dy + dz * dz).sqrt());
+        }
+        let radius = radius.max(0.001);
         let inv_radius = 1.0 / radius;
 
         let stride = 6 * std::mem::size_of::<f32>();
@@ -774,15 +764,8 @@ impl<E: Send + 'static> Module<E> for EditorRenderController {
         if vp_w > 0 && vp_h > 0 {
             self.ensure_viewport_rt(&mut **r, Extent2D::new(vp_w, vp_h))?;
 
-            if let Some(snap) = Self::read_input_snapshot() {
-                let lmb_down = snap.mouse.down.iter().any(|&b| b == 1);
-                self.orbit.apply_input(
-                    snap.mouse.delta.x,
-                    snap.mouse.delta.y,
-                    snap.mouse.wheel.y,
-                    lmb_down,
-                );
-            }
+            let (dx_px, dy_px, wheel_y, _hovered, dragging) = self.viewport_bridge.read_orbit_input();
+            self.orbit.apply_input(dx_px, dy_px, wheel_y, dragging);
 
             if let Some(rt) = self.viewport_rt {
                 r.begin_render_target(BeginRenderTargetDesc::new(rt))?;
@@ -793,7 +776,14 @@ impl<E: Send + 'static> Module<E> for EditorRenderController {
 
                 if let Some(model) = self.model {
                     let aspect = vp_w as f32 / (vp_h.max(1) as f32);
-                    let proj = Self::mat4_perspective(60.0f32.to_radians(), aspect, 0.01, 1000.0);
+                    // Dynamic near/far to avoid near-plane clipping while dollying.
+                    // Model is normalized on load to roughly unit radius.
+                    let radius = 1.0f32;
+                    self.orbit.dist = self.orbit.dist.clamp(radius * 1.15, 250.0);
+                    let near = (self.orbit.dist - radius * 2.2).max(0.001);
+                    let far = (self.orbit.dist + radius * 6.0).max(near + 0.1);
+
+                    let proj = Self::mat4_perspective(60.0f32.to_radians(), aspect, near, far);
 
                     let eye = self.orbit.eye();
                     let view = Self::mat4_look_at(eye, [0.0, 0.0, 0.0], [0.0, 1.0, 0.0]);

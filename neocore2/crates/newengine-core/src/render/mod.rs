@@ -77,18 +77,23 @@ impl BeginRenderTargetDesc {
     }
 
     #[inline]
-    pub const fn with_clear_color(mut self, color: Color4) -> Self {
+    pub fn with_clear_color(mut self, color: Color4) -> Self {
         self.clear_color = Some(color);
         self
     }
 
     #[inline]
-    pub const fn with_clear_depth(mut self, depth: f32) -> Self {
+    pub fn with_clear_depth(mut self, depth: f32) -> Self {
         self.clear_depth = Some(depth);
         self
     }
-}
 
+    #[inline]
+    pub fn with_clear_stencil(mut self, stencil: u32) -> Self {
+        self.clear_stencil = Some(stencil);
+        self
+    }
+}
 
 #[derive(Debug, Clone, Copy)]
 pub struct Extent2D {
@@ -179,7 +184,7 @@ impl TextureDesc {
             extent,
             format,
             usage,
-            mip_levels: NonZeroU32::new(1).unwrap(),
+            mip_levels: NonZeroU32::new(1).expect("mip_levels must be non-zero"),
         }
     }
 
@@ -432,91 +437,45 @@ impl RectI32 {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub struct BufferId(NonZeroU32);
+macro_rules! define_id {
+    ($name:ident, $vis_new:vis) => {
+        #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+        pub struct $name(NonZeroU32);
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub struct TextureId(NonZeroU32);
+        impl $name {
+            #[inline]
+            $vis_new fn new(v: u32) -> Self {
+                Self(NonZeroU32::new(v).expect(concat!(stringify!($name), " must be non-zero")))
+            }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub struct SamplerId(NonZeroU32);
+            #[inline]
+            pub fn get(self) -> u32 {
+                self.0.get()
+            }
+        }
+    };
+}
+
+define_id!(BufferId, pub);
+define_id!(TextureId, pub(crate));
+define_id!(SamplerId, pub(crate));
+define_id!(ShaderId, pub);
+define_id!(PipelineId, pub);
+define_id!(BindGroupLayoutId, pub);
+define_id!(BindGroupId, pub);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct RenderTargetId(pub NonZeroU32);
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub struct ShaderId(NonZeroU32);
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub struct PipelineId(NonZeroU32);
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub struct BindGroupLayoutId(NonZeroU32);
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub struct BindGroupId(NonZeroU32);
-
-#[allow(dead_code)]
-impl BufferId {
-    #[inline]
-    pub fn new(v: u32) -> Self {
-        Self(NonZeroU32::new(v).expect("BufferId must be non-zero"))
-    }
-}
-
-#[allow(dead_code)]
-impl TextureId {
-    #[inline]
-    pub(crate) fn new(v: u32) -> Self {
-        Self(NonZeroU32::new(v).expect("TextureId must be non-zero"))
-    }
-}
-
-#[allow(dead_code)]
-impl SamplerId {
-    #[inline]
-    pub(crate) fn new(v: u32) -> Self {
-        Self(NonZeroU32::new(v).expect("SamplerId must be non-zero"))
-    }
-}
-
-#[allow(dead_code)]
 impl RenderTargetId {
     #[inline]
     pub fn new(v: u32) -> Self {
         Self(NonZeroU32::new(v).expect("RenderTargetId must be non-zero"))
     }
-}
 
-#[allow(dead_code)]
-impl ShaderId {
     #[inline]
-    pub fn new(v: u32) -> Self {
-        Self(NonZeroU32::new(v).expect("ShaderId must be non-zero"))
-    }
-}
-
-#[allow(dead_code)]
-impl PipelineId {
-    #[inline]
-    pub fn new(v: u32) -> Self {
-        Self(NonZeroU32::new(v).expect("PipelineId must be non-zero"))
-    }
-}
-
-#[allow(dead_code)]
-impl BindGroupLayoutId {
-    #[inline]
-    pub fn new(v: u32) -> Self {
-        Self(NonZeroU32::new(v).expect("BindGroupLayoutId must be non-zero"))
-    }
-}
-
-#[allow(dead_code)]
-impl BindGroupId {
-    #[inline]
-    pub fn new(v: u32) -> Self {
-        Self(NonZeroU32::new(v).expect("BindGroupId must be non-zero"))
+    pub fn get(self) -> u32 {
+        self.0.get()
     }
 }
 
@@ -685,7 +644,7 @@ pub trait RenderApi: Send {
 
     /// Returns a UI-facing texture handle for a render target.
     ///
-    /// This is the *only* supported way for apps/editor UI to embed the GPU image into UI widgets.
+    /// This is the only supported way for apps/editor UI to embed the GPU image into UI widgets.
     /// The returned id is stable for the lifetime of the render target.
     fn render_target_ui_tex_id(&self, id: RenderTargetId) -> EngineResult<UiTexId>;
 
@@ -708,8 +667,7 @@ pub trait RenderApi: Send {
     fn create_pipeline(&mut self, desc: PipelineDesc) -> EngineResult<PipelineId>;
     fn destroy_pipeline(&mut self, id: PipelineId);
 
-    fn create_bind_group_layout(&mut self, desc: BindGroupLayoutDesc)
-                                -> EngineResult<BindGroupLayoutId>;
+    fn create_bind_group_layout(&mut self, desc: BindGroupLayoutDesc) -> EngineResult<BindGroupLayoutId>;
     fn destroy_bind_group_layout(&mut self, id: BindGroupLayoutId);
 
     fn create_bind_group(&mut self, desc: BindGroupDesc) -> EngineResult<BindGroupId>;
@@ -729,16 +687,16 @@ pub trait RenderApi: Send {
 }
 
 #[derive(Clone)]
-pub struct RenderApiRef(Arc<Mutex<Box<dyn RenderApi + Send + 'static>>>);
+pub struct RenderApiRef(Arc<Mutex<Box<dyn RenderApi + 'static>>>);
 
 impl RenderApiRef {
     #[inline]
-    pub fn new(api: impl RenderApi + Send + 'static) -> Self {
+    pub fn new(api: impl RenderApi + 'static) -> Self {
         Self(Arc::new(Mutex::new(Box::new(api))))
     }
 
     #[inline]
-    pub fn lock(&self) -> MutexGuard<'_, Box<dyn RenderApi + Send + 'static>> {
+    pub fn lock(&self) -> MutexGuard<'_, Box<dyn RenderApi + 'static>> {
         self.0.lock()
     }
 }

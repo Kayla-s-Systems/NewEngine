@@ -21,6 +21,9 @@ pub struct EditorUiBuild {
 
     viewport_bridge: Arc<ViewportBridge>,
 
+    // Orbit interaction (UI-driven, not via global input plugin).
+    last_drag_pos: Option<egui::Pos2>,
+
     console_open: bool,
     console_input: String,
 }
@@ -38,6 +41,7 @@ impl EditorUiBuild {
             scene,
             viewport,
             viewport_bridge,
+            last_drag_pos: None,
             console_open: false,
             console_input: String::new(),
         }
@@ -64,7 +68,9 @@ impl EditorUiBuild {
     fn ui_viewport(&mut self, ctx: &egui::Context) {
         egui::CentralPanel::default().show(ctx, |ui| {
             let avail = ui.available_size();
-            let (rect, _) = ui.allocate_exact_size(avail, egui::Sense::hover());
+            // The viewport must be able to capture drag + wheel *only when hovered*.
+            // We do NOT want global mouse delta from the input plugin to rotate the model.
+            let (rect, resp) = ui.allocate_exact_size(avail, egui::Sense::click_and_drag());
 
             // Frame for viewport.
             ui.painter().rect_filled(rect, 0.0, egui::Color32::from_rgb(12, 12, 14));
@@ -81,13 +87,47 @@ impl EditorUiBuild {
             // Publish desired size each frame (UI -> render).
             self.viewport_bridge.publish_extent(px_w, px_h);
 
-            // Read current UI texture id (published by renderer).
-            let ui_tex = self.viewport_bridge.read_ui_tex();
+            // --- Orbit input (UI -> render) ---
+            // Rotate ONLY while the viewport is capturing a primary-button drag.
+            // Zoom ONLY while hovered.
+            let hovered = resp.hovered();
+            let dragging = resp.dragged_by(egui::PointerButton::Primary);
+
+            // Compute per-frame drag delta in points.
+            let mut dx_px = 0.0f32;
+            let mut dy_px = 0.0f32;
+            if dragging {
+                if let Some(pos) = resp.interact_pointer_pos() {
+                    if let Some(prev) = self.last_drag_pos {
+                        let d = pos - prev;
+                        dx_px = d.x * ppp;
+                        dy_px = d.y * ppp;
+                    }
+                    self.last_drag_pos = Some(pos);
+                }
+            } else {
+                self.last_drag_pos = None;
+            }
+
+            // Wheel delta: take from egui input, but only apply it when hovered.
+            let wheel_y_points = if hovered {
+                ctx.input(|i| i.raw_scroll_delta.y)
+            } else {
+                0.0
+            };
+            // Convert to a normalized-ish scalar; the orbit controller applies its own smoothing.
+            let wheel_y = wheel_y_points;
+
+            self.viewport_bridge
+                .publish_orbit_input(dx_px, dy_px, wheel_y, hovered, dragging);
+
+            // Read current external texture id (published by renderer).
+            let tex_user = self.viewport_bridge.read_tex_user();
 
             // Draw the rendered texture if available.
             ui.allocate_ui_at_rect(rect, |ui| {
-                if let Some(tex) = ui_tex {
-                    let tid = egui::TextureId::User(tex.0 as u64);
+                if tex_user != 0 {
+                    let tid = egui::TextureId::User(tex_user);
                     let st = egui::load::SizedTexture::new(tid, rect.size());
                     ui.add(egui::Image::new(st).fit_to_exact_size(rect.size()));
                 } else {
