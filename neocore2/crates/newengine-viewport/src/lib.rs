@@ -6,7 +6,10 @@ use newengine_ecs::EntityId;
 /// Editor-owned viewport state.
 #[derive(Clone, Debug)]
 pub struct ViewportState {
-    pub camera: EntityId,
+    /// Camera entity used to render this viewport.
+    ///
+    /// `None` is allowed: the renderer should treat it as "no view" and skip rendering.
+    pub camera: Option<EntityId>,
     pub extent: Extent2D,
 
     pub render_target: Option<RenderTargetId>,
@@ -15,13 +18,18 @@ pub struct ViewportState {
 
 impl ViewportState {
     #[inline]
-    pub fn new(camera: EntityId) -> Self {
+    pub fn new(camera: Option<EntityId>) -> Self {
         Self {
             camera,
             extent: Extent2D::new(1, 1),
             render_target: None,
             color_texture: None,
         }
+    }
+
+    #[inline]
+    pub fn set_camera(&mut self, camera: Option<EntityId>) {
+        self.camera = camera;
     }
 
     #[inline]

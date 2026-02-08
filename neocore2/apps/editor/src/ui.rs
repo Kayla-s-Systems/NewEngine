@@ -33,7 +33,7 @@ impl EditorUiBuild {
     #[inline]
     pub fn new(shared_doc: Arc<Mutex<Option<UiMarkupDoc>>>, viewport_bridge: Arc<ViewportBridge>) -> Self {
         let scene = Scene::demo();
-        let viewport = ViewportState::new(scene.active_camera());
+        let viewport = ViewportState::new(Some(scene.active_camera().expect("scene has no active camera")));
 
         Self {
             shared_doc,

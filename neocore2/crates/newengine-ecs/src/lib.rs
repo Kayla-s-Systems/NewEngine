@@ -45,14 +45,41 @@ impl<T: 'static> ErasedStorage for Storage<T> {
     }
 }
 
+/// Immutable query iterator over a single component type.
+pub struct Query<'a, T: 'static> {
+    iter: Option<slotmap::secondary::Iter<'a, EntityId, T>>,
+}
+
+impl<'a, T: 'static> Iterator for Query<'a, T> {
+    type Item = (EntityId, &'a T);
+
+    #[inline]
+    fn next(&mut self) -> Option<Self::Item> {
+        self.iter.as_mut()?.next()
+    }
+}
+
+/// Mutable query iterator over a single component type.
+pub struct QueryMut<'a, T: 'static> {
+    iter: Option<slotmap::secondary::IterMut<'a, EntityId, T>>,
+}
+
+impl<'a, T: 'static> Iterator for QueryMut<'a, T> {
+    type Item = (EntityId, &'a mut T);
+
+    #[inline]
+    fn next(&mut self) -> Option<Self::Item> {
+        self.iter.as_mut()?.next()
+    }
+}
+
 /// A small, deterministic ECS world.
 ///
-/// - Entities are generational keys.
-/// - Components are stored in typed `SecondaryMap`s.
-/// - Component access is type-safe.
-///
-/// This is intentionally minimal and editor-friendly; the higher-level systems
-/// (transform propagation, rendering extraction, etc.) live in separate crates.
+/// Design goals:
+/// - deterministic entity identity via generational keys
+/// - type-safe component storage
+/// - no hidden allocations on iteration
+/// - editor-friendly (command/deferred patterns live above ECS)
 pub struct World {
     entities: SlotMap<EntityId, ()>,
     storages: HashMap<TypeId, Box<dyn ErasedStorage>>,
@@ -84,11 +111,11 @@ impl World {
         self.entities.contains_key(id)
     }
 
-
     #[inline]
     pub fn entity_count(&self) -> usize {
         self.entities.len()
     }
+
     /// Despawns an entity and removes all its components.
     #[inline]
     pub fn despawn(&mut self, id: EntityId) -> bool {
@@ -106,6 +133,7 @@ impl World {
         self.entities.keys()
     }
 
+    /// Ensures storage for component T exists and returns mutable access to it.
     #[inline]
     fn storage_mut<T: 'static>(&mut self) -> &mut Storage<T> {
         let tid = TypeId::of::<T>();
@@ -119,12 +147,40 @@ impl World {
             .expect("storage type mismatch")
     }
 
+    /// Returns immutable storage for T if it exists.
     #[inline]
     fn storage<T: 'static>(&self) -> Option<&Storage<T>> {
         let tid = TypeId::of::<T>();
         self.storages
             .get(&tid)
             .and_then(|b| b.as_any().downcast_ref::<Storage<T>>())
+    }
+
+    /// Returns mutable storage for T if it exists (does not create it).
+    #[inline]
+    fn storage_mut_if_exists<T: 'static>(&mut self) -> Option<&mut Storage<T>> {
+        let tid = TypeId::of::<T>();
+        self.storages
+            .get_mut(&tid)
+            .and_then(|b| b.as_any_mut().downcast_mut::<Storage<T>>())
+    }
+
+    /// Ensures component storage exists (no-op if already created).
+    #[inline]
+    pub fn ensure_storage<T: 'static>(&mut self) {
+        let _ = self.storage_mut::<T>();
+    }
+
+    /// Raw immutable access to the underlying component map.
+    #[inline]
+    pub fn components<T: 'static>(&self) -> Option<&SecondaryMap<EntityId, T>> {
+        Some(&self.storage::<T>()?.map)
+    }
+
+    /// Raw mutable access to the underlying component map (does not create it).
+    #[inline]
+    pub fn components_mut<T: 'static>(&mut self) -> Option<&mut SecondaryMap<EntityId, T>> {
+        Some(&mut self.storage_mut_if_exists::<T>()?.map)
     }
 
     /// Inserts (or replaces) a component on an entity.
@@ -137,9 +193,10 @@ impl World {
         true
     }
 
+    /// Removes a component from an entity (does not create storage).
     #[inline]
     pub fn remove<T: 'static>(&mut self, id: EntityId) -> Option<T> {
-        self.storage_mut::<T>().map.remove(id)
+        self.storage_mut_if_exists::<T>()?.map.remove(id)
     }
 
     #[inline]
@@ -147,18 +204,33 @@ impl World {
         self.storage::<T>()?.map.get(id)
     }
 
+    /// Gets a mutable component reference (creates storage if missing).
+    ///
+    /// Note: if you want "no create" semantics, use `components_mut()` and look up in the map.
     #[inline]
     pub fn get_mut<T: 'static>(&mut self, id: EntityId) -> Option<&mut T> {
         self.storage_mut::<T>().map.get_mut(id)
     }
 
-    /// Iterates entities that have a component `T`.
     #[inline]
-    pub fn iter_with<T: 'static>(&self) -> impl Iterator<Item=(EntityId, &T)> + '_ {
-        self.storage::<T>()
-            .map(|s| s.map.iter().map(|(id, c)| (id, c)).collect::<Vec<_>>())
-            .unwrap_or_default()
-            .into_iter()
+    pub fn has<T: 'static>(&self, id: EntityId) -> bool {
+        self.get::<T>(id).is_some()
+    }
+
+    /// Zero-allocation query over entities that have component T.
+    #[inline]
+    pub fn query<T: 'static>(&self) -> Query<'_, T> {
+        Query {
+            iter: self.storage::<T>().map(|s| s.map.iter()),
+        }
+    }
+
+    /// Zero-allocation mutable query over entities that have component T.
+    #[inline]
+    pub fn query_mut<T: 'static>(&mut self) -> QueryMut<'_, T> {
+        QueryMut {
+            iter: self.storage_mut_if_exists::<T>().map(|s| s.map.iter_mut()),
+        }
     }
 }
 

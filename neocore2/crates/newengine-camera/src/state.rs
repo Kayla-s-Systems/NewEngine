@@ -2,17 +2,19 @@
 
 use glam::{Mat4, Vec2};
 
-use crate::{CameraInput, CameraMatrices, CameraRig, FreeFlyController, Frustum, Projection};
+use crate::{CameraController, CameraInput, CameraMatrices, CameraRig, Frustum, Projection};
 
-/// Full camera state used by the engine/editor.
+/// Full camera state used by engine runtime AND editor.
 ///
-/// Owns spatial rig + projection + controller.
+/// Owns spatial rig + projection + optional controller.
 /// Produces matrices, frustum and GPU-uniform each frame.
 #[derive(Clone, Debug)]
 pub struct CameraState {
     pub rig: CameraRig,
     pub projection: Projection,
-    pub controller: FreeFlyController,
+
+    /// Optional controller. Runtime gameplay may choose `None` and drive `rig` directly.
+    pub controller: CameraController,
 
     pub jitter: Vec2,
     pub viewport_wh: Vec2,
@@ -28,7 +30,7 @@ impl Default for CameraState {
                 0.1,
                 200.0,
             )),
-            controller: FreeFlyController::default(),
+            controller: CameraController::default(),
             jitter: Vec2::ZERO,
             viewport_wh: Vec2::new(1920.0, 1080.0),
         }
@@ -48,16 +50,13 @@ impl CameraState {
     #[inline]
     pub fn update(&mut self, input: Option<CameraInput>, dt: f32) -> (CameraMatrices, Frustum) {
         if let Some(i) = input {
-            if i.zoom_delta.is_finite() && i.zoom_delta.abs() > 1e-6 {
-                self.apply_zoom(i.zoom_delta);
-            }
             self.controller.apply(&mut self.rig, i, dt);
         }
 
         let view = self.rig.view_matrix();
         let proj = self.projection.matrix();
 
-        // IMPORTANT: jitter is applied to projection (TAA-ready). For now we offset NDC.
+        // jitter is applied to projection (TAA-ready).
         let proj = apply_jitter(proj, self.jitter, self.viewport_wh);
 
         let mats = CameraMatrices::new(view, proj, self.rig.position, self.viewport_wh, self.jitter);
@@ -68,28 +67,6 @@ impl CameraState {
     #[inline]
     pub fn near_far(&self) -> (f32, f32) {
         self.projection.near_far()
-    }
-
-    /// Applies zoom to the current projection.
-    ///
-    /// Convention: positive `delta` zooms in.
-    #[inline]
-    pub fn apply_zoom(&mut self, delta: f32) {
-        let step = (delta * 0.1).clamp(-2.0, 2.0);
-        let factor = (1.0 - step).clamp(0.05, 20.0);
-
-        match &mut self.projection {
-            Projection::Perspective(p) => {
-                let min_fovy = 20.0_f32.to_radians();
-                let max_fovy = 100.0_f32.to_radians();
-                let fovy = (p.fovy * factor).clamp(min_fovy, max_fovy);
-                p.fovy = fovy;
-            }
-            Projection::Orthographic(o) => {
-                let hh = (o.half_height * factor).clamp(0.05, 10_000.0);
-                o.half_height = hh;
-            }
-        }
     }
 }
 

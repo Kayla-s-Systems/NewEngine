@@ -6,3 +6,4 @@ edition = "2021"
 [dependencies]
 glam = "0.29"
 newengine-ecs = { path = "../newengine-ecs" }
+hashbrown = "0.14.5"
