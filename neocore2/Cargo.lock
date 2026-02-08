@@ -644,6 +644,7 @@ dependencies = [
  "crossbeam-channel",
  "env_logger",
  "log",
+    "newengine-camera",
  "newengine-core",
  "newengine-ecs",
  "newengine-modules-logging",

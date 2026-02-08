@@ -167,3 +167,23 @@ pub fn union_world_bounds(world: &World, entities: impl Iterator<Item=EntityId>)
     }
     out
 }
+
+/// Returns union world bounds for **all** entities that have `WorldBounds`.
+///
+/// This is the canonical way to compute scene/world bounds for camera framing,
+/// streaming decisions, and editor UX.
+#[inline]
+pub fn scene_world_bounds(world: &World) -> Option<Aabb> {
+    let mut out: Option<Aabb> = None;
+    for (_id, wb) in world.query::<WorldBounds>() {
+        let b = wb.0;
+        if !b.is_valid() {
+            continue;
+        }
+        out = Some(match out {
+            None => b,
+            Some(acc) => acc.union(b),
+        });
+    }
+    out
+}

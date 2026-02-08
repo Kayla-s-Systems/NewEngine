@@ -21,3 +21,4 @@ newengine-modules-render-vulkan-ash = { path = "../../crates/newengine-modules-r
 newengine-scene = { path = "../../crates/newengine-scene" }
 newengine-ecs = { path = "../../crates/newengine-ecs" }
 newengine-viewport = { path = "../../crates/newengine-viewport" }
+newengine-camera = { path = "../../crates/newengine-camera" }

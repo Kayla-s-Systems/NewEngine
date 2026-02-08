@@ -15,8 +15,8 @@ use crate::viewport_bridge::ViewportBridge;
 
 use newengine_core::plugins::default_host_api;
 
+use newengine_camera::frame;
 use shaderc::{CompileOptions, Compiler, OptimizationLevel, ShaderKind};
-
 // Orbit controls are driven by UI via `ViewportBridge` to avoid leaking global input state.
 
 #[derive(Debug, Clone, Copy, Default)]
@@ -24,6 +24,7 @@ struct OrbitCamera {
     yaw: f32,
     pitch: f32,
     dist: f32,
+    target: [f32; 3],
 }
 
 impl OrbitCamera {
@@ -34,6 +35,7 @@ impl OrbitCamera {
             yaw: 0.7853982,  // 45 deg
             pitch: 0.55,
             dist: 4.1,
+            target: [0.0, 0.0, 0.0],
         }
     }
 
@@ -74,9 +76,9 @@ impl OrbitCamera {
 
         // Right-handed. yaw around +Y.
         [
-            self.dist * sy * cp,
-            self.dist * sp,
-            self.dist * cy * cp,
+            self.target[0] + self.dist * sy * cp,
+            self.target[1] + self.dist * sp,
+            self.target[2] + self.dist * cy * cp,
         ]
     }
 }
@@ -107,6 +109,23 @@ struct ModelGpu {
     index_count: u32,
 }
 
+#[derive(Clone, Copy)]
+struct GridGpu {
+    vb: newengine_core::render::BufferId,
+    ubo: newengine_core::render::BufferId,
+
+    bgl: newengine_core::render::BindGroupLayoutId,
+    bg: newengine_core::render::BindGroupId,
+
+    vs: newengine_core::render::ShaderId,
+    fs: newengine_core::render::ShaderId,
+    pipeline: newengine_core::render::PipelineId,
+
+    vertex_count: u32,
+    // Quantized scale used to decide when to rebuild VB.
+    scale_q: u32,
+}
+
 pub struct EditorRenderController {
     model_center: [f32; 3],
     model_radius: f32,
@@ -116,6 +135,7 @@ pub struct EditorRenderController {
     last_h: u32,
     demo: Option<DemoGpu>,
     model: Option<ModelGpu>,
+    grid: Option<GridGpu>,
     model_loaded_once: bool,
 
     orbit: OrbitCamera,
@@ -139,6 +159,7 @@ impl EditorRenderController {
             last_h: 0,
             demo: None,
             model: None,
+            grid: None,
             model_loaded_once: false,
 
             orbit: OrbitCamera::default_editor(),
@@ -149,6 +170,224 @@ impl EditorRenderController {
             viewport_rt: None,
             viewport_rt_extent: Extent2D::new(0, 0),
         }
+    }
+
+    #[inline]
+    fn quantize_grid_scale(s: f32) -> u32 {
+        // Stable quantization: powers of 10 in millimeters..kilometers range.
+        if !s.is_finite() || s <= 0.0 {
+            return 0;
+        }
+        let exp = s.abs().log10().floor() as i32;
+        (exp + 32).clamp(0, 64) as u32
+    }
+
+    #[inline]
+    fn choose_grid_step(radius: f32) -> (f32, f32, f32) {
+        // Returns (minor_step, major_step, half_extent).
+        // The grid is built on XZ plane (Y=0) and adapts to the framed content.
+        let r = radius.abs().max(1e-3);
+        // Show ~20 major cells across the view.
+        let desired_major = (r * 2.0) / 20.0;
+        let exp = desired_major.log10().floor();
+        let base = 10.0f32.powf(exp);
+
+        // Snap major to {1,2,5} * 10^exp.
+        let m = desired_major / base;
+        let major = if m < 1.5 {
+            1.0 * base
+        } else if m < 3.5 {
+            2.0 * base
+        } else if m < 7.5 {
+            5.0 * base
+        } else {
+            10.0 * base
+        };
+
+        let minor = major * 0.1;
+        // Keep grid extent slightly larger than content.
+        let half_extent = (r * 1.6).max(major * 10.0);
+        (minor, major, half_extent)
+    }
+
+    fn build_grid(
+        &mut self,
+        r: &mut dyn newengine_core::render::RenderApi,
+        radius_hint: f32,
+    ) -> EngineResult<()> {
+        let (minor, major, half_extent) = Self::choose_grid_step(radius_hint);
+        let scale_q = Self::quantize_grid_scale(major);
+
+        if let Some(g) = self.grid {
+            if g.scale_q == scale_q {
+                return Ok(());
+            }
+            // Rebuild on scale changes.
+            r.destroy_buffer(g.vb);
+            r.destroy_buffer(g.ubo);
+            r.destroy_bind_group(g.bg);
+            r.destroy_bind_group_layout(g.bgl);
+            r.destroy_shader(g.vs);
+            r.destroy_shader(g.fs);
+            r.destroy_pipeline(g.pipeline);
+            self.grid = None;
+        }
+
+        // Vertex: pos.xyz + color.rgb
+        let mut v: Vec<f32> = Vec::new();
+
+        // Grid lines: XZ plane.
+        // Minor lines are faint, major lines stronger, axes strongest.
+        let axis_strength = 0.85f32;
+        let major_strength = 0.28f32;
+        let minor_strength = 0.12f32;
+
+        let add_line = |out: &mut Vec<f32>, a: [f32; 3], b: [f32; 3], s: f32| {
+            out.extend_from_slice(&[a[0], a[1], a[2], s, s, s]);
+            out.extend_from_slice(&[b[0], b[1], b[2], s, s, s]);
+        };
+
+        // Minor lines.
+        let n_minor = (half_extent / minor).ceil() as i32;
+        for i in -n_minor..=n_minor {
+            let x = i as f32 * minor;
+            let z = i as f32 * minor;
+
+            // Skip where major will be drawn.
+            let on_major_x = (x / major).round();
+            if (x - on_major_x * major).abs() < 1e-5 {
+                // handled by major pass
+            } else {
+                add_line(&mut v, [x, 0.0, -half_extent], [x, 0.0, half_extent], minor_strength);
+            }
+
+            let on_major_z = (z / major).round();
+            if (z - on_major_z * major).abs() < 1e-5 {} else {
+                add_line(&mut v, [-half_extent, 0.0, z], [half_extent, 0.0, z], minor_strength);
+            }
+        }
+
+        // Major lines.
+        let n_major = (half_extent / major).ceil() as i32;
+        for i in -n_major..=n_major {
+            let x = i as f32 * major;
+            let z = i as f32 * major;
+            add_line(&mut v, [x, 0.0, -half_extent], [x, 0.0, half_extent], major_strength);
+            add_line(&mut v, [-half_extent, 0.0, z], [half_extent, 0.0, z], major_strength);
+        }
+
+        // Axes: X and Z.
+        add_line(
+            &mut v,
+            [-half_extent, 0.0, 0.0],
+            [half_extent, 0.0, 0.0],
+            axis_strength,
+        );
+        add_line(
+            &mut v,
+            [0.0, 0.0, -half_extent],
+            [0.0, 0.0, half_extent],
+            axis_strength,
+        );
+
+        let vertex_count = (v.len() / 6) as u32;
+        let mut vbytes: Vec<u8> = Vec::with_capacity(v.len() * 4);
+        for f in v {
+            vbytes.extend_from_slice(&f.to_ne_bytes());
+        }
+
+        let vb = r.create_buffer(
+            BufferDesc::new(vbytes.len() as u64, BufferUsage::Vertex, MemoryHint::CpuToGpu)
+                .with_label("editor_grid_vb"),
+        )?;
+        r.write_buffer(vb, 0, &vbytes)?;
+
+        let ubo = r.create_buffer(
+            BufferDesc::new(64, BufferUsage::Uniform, MemoryHint::CpuToGpu)
+                .with_label("editor_grid_ubo"),
+        )?;
+
+        let bgl = r.create_bind_group_layout(
+            BindGroupLayoutDesc::new(vec![BindingKind::UniformBuffer]).with_label("editor_grid_bgl"),
+        )?;
+        let bg = r.create_bind_group(
+            BindGroupDesc::new(bgl)
+                .with_label("editor_grid_bg")
+                .with_uniform0(BufferBinding::new(ubo, 0, 64)),
+        )?;
+
+        let compiler = Compiler::new().ok_or_else(|| EngineError::other("shaderc: Compiler"))?;
+
+        const VS_SRC: &str = r#"#version 450
+layout(location = 0) in vec3 a_pos;
+layout(location = 1) in vec3 a_col;
+
+layout(set = 0, binding = 0) uniform Ubo {
+    mat4 u_mvp;
+} u;
+
+layout(location = 0) out vec3 v_col;
+
+void main() {
+    v_col = a_col;
+    gl_Position = u.u_mvp * vec4(a_pos, 1.0);
+}
+"#;
+
+        const FS_SRC: &str = r#"#version 450
+layout(location = 0) in vec3 v_col;
+layout(location = 0) out vec4 o_col;
+
+void main() {
+    // Subtle grid (pre-multiplied style isn't available here), keep alpha = 1.
+    o_col = vec4(v_col, 1.0);
+}
+"#;
+
+        let vs_spv = Self::compile_glsl(&compiler, ShaderKind::Vertex, "editor_grid.vert", VS_SRC)?;
+        let fs_spv = Self::compile_glsl(&compiler, ShaderKind::Fragment, "editor_grid.frag", FS_SRC)?;
+
+        let vs = r.create_shader(
+            ShaderDesc::new(ShaderStage::Vertex, "main", vs_spv).with_label("editor_grid_vs"),
+        )?;
+        let fs = r.create_shader(
+            ShaderDesc::new(ShaderStage::Fragment, "main", fs_spv).with_label("editor_grid_fs"),
+        )?;
+
+        let stride = (6 * std::mem::size_of::<f32>()) as u32;
+        let layout = VertexLayout::new(
+            stride,
+            vec![
+                VertexAttribute::new(0, 0, VertexFormat::Float32x3),
+                VertexAttribute::new(
+                    1,
+                    (3 * std::mem::size_of::<f32>()) as u32,
+                    VertexFormat::Float32x3,
+                ),
+            ],
+        );
+
+        let pipeline = r.create_pipeline(
+            PipelineDesc::new(vs, fs, TextureFormat::Bgra8Unorm)
+                .with_label("editor_grid_pipeline")
+                .with_topology(PrimitiveTopology::LineList)
+                .with_vertex_layouts(vec![layout])
+                .with_bind_group_layouts(vec![bgl]),
+        )?;
+
+        self.grid = Some(GridGpu {
+            vb,
+            ubo,
+            bgl,
+            bg,
+            vs,
+            fs,
+            pipeline,
+            vertex_count,
+            scale_q,
+        });
+
+        Ok(())
     }
 
     #[inline]
@@ -593,19 +832,20 @@ void main() {
             radius = radius.max((dx * dx + dy * dy + dz * dz).sqrt());
         }
         let radius = radius.max(0.001);
-        let inv_radius = 1.0 / radius;
+
+        self.model_center = center;
+        self.model_radius = radius;
+        // Keep orbit target synced even before first frame-all.
+        self.orbit.target = center;
 
         let stride = 6 * std::mem::size_of::<f32>();
         let mut vbytes: Vec<u8> = Vec::with_capacity(pos.len() * stride);
 
         for (p, n) in pos.iter().zip(nrm.iter()) {
-            let px = (p[0] - center[0]) * inv_radius;
-            let py = (p[1] - center[1]) * inv_radius;
-            let pz = (p[2] - center[2]) * inv_radius;
-
-            vbytes.extend_from_slice(&px.to_ne_bytes());
-            vbytes.extend_from_slice(&py.to_ne_bytes());
-            vbytes.extend_from_slice(&pz.to_ne_bytes());
+            // Keep authoring scale. Camera + near/far use bounds.
+            vbytes.extend_from_slice(&p[0].to_ne_bytes());
+            vbytes.extend_from_slice(&p[1].to_ne_bytes());
+            vbytes.extend_from_slice(&p[2].to_ne_bytes());
             vbytes.extend_from_slice(&n[0].to_ne_bytes());
             vbytes.extend_from_slice(&n[1].to_ne_bytes());
             vbytes.extend_from_slice(&n[2].to_ne_bytes());
@@ -703,22 +943,8 @@ void main() {
                 .with_bind_group_layouts(vec![bgl]),
         )?;
 
-        let aspect = if target.height == 0 {
-            1.0
-        } else {
-            target.width as f32 / target.height as f32
-        };
-
-        let proj = Self::mat4_perspective(60.0f32.to_radians(), aspect, 0.01, 1000.0);
-        let eye = self.orbit.eye();
-        let view = Self::mat4_look_at(eye, [0.0, 0.0, 0.0], [0.0, 1.0, 0.0]);
-        let mvp = Self::mat4_mul(proj, view);
-
-        let mut ubytes: Vec<u8> = Vec::with_capacity(64);
-        for f in mvp {
-            ubytes.extend_from_slice(&f.to_ne_bytes());
-        }
-        r.write_buffer(ubo, 0, &ubytes)?;
+        // Camera matrices are written per-frame; keep ubo zeroed for now.
+        r.write_buffer(ubo, 0, &[0u8; 64])?;
 
         self.model = Some(ModelGpu {
             vb,
@@ -738,6 +964,11 @@ void main() {
             idx.len(),
             radius
         );
+
+        self.model_center = center;
+        self.model_radius = radius;
+        // Reset framing on new content.
+        self.model_framed_once = false;
 
         Ok(())
     }
@@ -794,47 +1025,48 @@ impl<E: Send + 'static> Module<E> for EditorRenderController {
                 r.set_viewport(Viewport::full(extent))?;
                 r.set_scissor(RectI32::new(0, 0, vp_w as i32, vp_h as i32))?;
 
-                if let Some(model) = self.model {
-                    let aspect = vp_w as f32 / (vp_h.max(1) as f32);
-                    // Dynamic near/far to avoid near-plane clipping while dollying.
-                    // Model is normalized on load to roughly unit radius.
-                    let aspect = vp_w as f32 / (vp_h.max(1) as f32);
-                    let fov_y = 60.0f32.to_radians();
+                // Build the camera frame (universal math: works the same in editor and game).
+                let aspect = vp_w as f32 / (vp_h.max(1) as f32);
+                let fov_y = 60.0f32.to_radians();
 
-                    let radius = self.model_radius.max(0.000_001);
-                    let target = self.model_center;
+                let has_model = self.model.is_some();
+                let target = if has_model { self.model_center } else { [0.0, 0.0, 0.0] };
+                let radius = if has_model { self.model_radius.max(1e-6) } else { 1.0 };
 
-                    // One-time frame-all on first visible render (editor UX), but logic is universal.
-                    if !self.model_framed_once {
-                        // Fit distance so sphere fully fits in frustum.
-                        let dist = {
-                            let tan_y = (0.5 * fov_y).tan().max(1e-6);
-                            let fov_x = 2.0 * (tan_y * aspect.max(1e-6)).atan();
-                            let tan_x = (0.5 * fov_x).tan().max(1e-6);
-                            let d_y = (radius * 1.15) / tan_y; // margin
-                            let d_x = (radius * 1.15) / tan_x;
-                            d_y.max(d_x).max(0.05)
-                        };
+                // Keep orbit target synced.
+                self.orbit.target = target;
 
-                        self.orbit.dist = dist;
-                        self.model_framed_once = true;
+                // One-time frame-all when content appears.
+                if has_model && !self.model_framed_once {
+                    let dist = frame::fit_distance_for_sphere_perspective(fov_y, aspect, radius, 1.15);
+                    self.orbit.dist = dist;
+                    self.model_framed_once = true;
+                }
+
+                // Clamp: minimum depends on radius; maximum is a safety cap.
+                self.orbit.dist = self.orbit.dist.clamp(radius * 1.05, 250_000.0);
+
+                let (near, far) = frame::auto_near_far(self.orbit.dist, radius);
+                let proj = Self::mat4_perspective(fov_y, aspect, near, far);
+                let eye = self.orbit.eye();
+                let view = Self::mat4_look_at(eye, target, [0.0, 1.0, 0.0]);
+                let mvp = Self::mat4_mul(proj, view);
+
+                // Grid: build + draw first so the model draws on top (no depth yet).
+                self.build_grid(&mut **r, radius)?;
+                if let Some(grid) = self.grid {
+                    let mut ubytes: Vec<u8> = Vec::with_capacity(64);
+                    for f in mvp {
+                        ubytes.extend_from_slice(&f.to_ne_bytes());
                     }
+                    r.write_buffer(grid.ubo, 0, &ubytes)?;
+                    r.set_pipeline(grid.pipeline)?;
+                    r.set_bind_group(0, grid.bg)?;
+                    r.set_vertex_buffer(0, BufferSlice::new(grid.vb, 0))?;
+                    r.draw(newengine_core::render::DrawArgs::new(grid.vertex_count))?;
+                }
 
-                    // Apply user input AFTER initial framing.
-                    self.orbit.dist = self.orbit.dist.clamp(radius * 1.05, 250.0);
-
-                    // Auto near/far from sphere.
-                    let d = self.orbit.dist.max(0.01);
-                    let near = (d * 0.001).max((d - radius * 1.2).max(0.0005));
-                    let far = (d + radius * 4.0).max(near + 0.1);
-
-                    let proj = Self::mat4_perspective(fov_y, aspect, near, far);
-
-                    let eye = self.orbit.eye();
-                    let view = Self::mat4_look_at(eye, target, [0.0, 1.0, 0.0]);
-
-                    let mvp = Self::mat4_mul(proj, view);
-
+                if let Some(model) = self.model {
                     let mut ubytes: Vec<u8> = Vec::with_capacity(64);
                     for f in mvp {
                         ubytes.extend_from_slice(&f.to_ne_bytes());
