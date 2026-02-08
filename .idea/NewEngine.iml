@@ -30,6 +30,7 @@
       <sourceFolder url="file://$MODULE_DIR$/neocore2/crates/newengine-scene/src" isTestSource="false" />
       <sourceFolder url="file://$MODULE_DIR$/neocore2/crates/newengine-transform/src" isTestSource="false" />
       <sourceFolder url="file://$MODULE_DIR$/neocore2/crates/newengine-viewport/src" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/neocore2/crates/newengine-bounds/src" isTestSource="false" />
       <excludeFolder url="file://$MODULE_DIR$/neocore2/target" />
     </content>
     <orderEntry type="inheritedJdk" />
