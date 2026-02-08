@@ -163,5 +163,5 @@ fn default_importers_dir() -> PathBuf {
         .parent()
         .map(|p| p.to_path_buf())
         .unwrap_or_else(|| PathBuf::from("."));
-    base.join("importers")
+    base.join("../../importers") //DIRECTORY FOR IMPORTERS IS SET HERE (IN FUTURE WILL BE CONFGIGURABLE)
 }

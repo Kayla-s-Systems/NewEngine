@@ -32,8 +32,8 @@ pub use sched::Scheduler;
 pub use sync::ShutdownToken;
 
 pub use render::{
-    BeginFrameDesc, Color4, RenderApi, RenderApiRef, RENDER_API_ID, RENDER_API_PROVIDE,
-    RENDER_API_VERSION,
+    BeginFrameDesc, BeginRenderTargetDesc, Color4, RenderApi, RenderApiRef, RenderTargetDesc,
+    RenderTargetId, RENDER_API_ID, RENDER_API_PROVIDE, RENDER_API_VERSION,
 };
 
 pub use startup::{

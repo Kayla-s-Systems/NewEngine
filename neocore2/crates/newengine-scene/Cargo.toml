@@ -1,0 +1,9 @@
+[package]
+name = "newengine-scene"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+newengine-ecs = { path = "../newengine-ecs" }
+newengine-transform = { path = "../newengine-transform" }
+glam = "0.29"

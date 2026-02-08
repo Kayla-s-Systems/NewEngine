@@ -6,9 +6,14 @@ use crate::rig::CameraRig;
 
 #[derive(Clone, Copy, Debug, Default)]
 pub struct CameraInput {
+    /// Whether look input should be applied (e.g. RMB held).
+    pub look_active: bool,
     pub look_delta: Vec2,
     pub move_axis: Vec3, // x=right, y=up, z=forward
     pub speed_mul: f32,
+
+    /// Mouse wheel delta (positive -> zoom in).
+    pub zoom_delta: f32,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -43,14 +48,16 @@ impl FreeFlyController {
             1.0
         };
 
-        let dx = input.look_delta.x;
-        let dy = input.look_delta.y;
+        if input.look_active {
+            let dx = input.look_delta.x;
+            let dy = input.look_delta.y;
 
-        if dx.is_finite() {
-            self.yaw += dx * self.look_sens;
-        }
-        if dy.is_finite() {
-            self.pitch += dy * self.look_sens;
+            if dx.is_finite() {
+                self.yaw += dx * self.look_sens;
+            }
+            if dy.is_finite() {
+                self.pitch += dy * self.look_sens;
+            }
         }
 
         self.pitch = self.pitch.clamp(-self.pitch_limit, self.pitch_limit);

@@ -24,6 +24,71 @@ impl BeginFrameDesc {
     }
 }
 
+#[derive(Debug, Clone)]
+pub struct RenderTargetDesc {
+    pub extent: Extent2D,
+    pub color: TextureFormat,
+    pub depth: Option<TextureFormat>,
+    pub label: Option<&'static str>,
+}
+
+impl RenderTargetDesc {
+    #[inline]
+    pub fn new(extent: Extent2D, color: TextureFormat) -> Self {
+        Self {
+            extent,
+            color,
+            depth: None,
+            label: None,
+        }
+    }
+
+    #[inline]
+    pub fn with_depth(mut self, depth: TextureFormat) -> Self {
+        self.depth = Some(depth);
+        self
+    }
+
+    #[inline]
+    pub fn with_label(mut self, label: &'static str) -> Self {
+        self.label = Some(label);
+        self
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct BeginRenderTargetDesc {
+    pub target: RenderTargetId,
+    pub clear_color: Option<Color4>,
+    pub clear_depth: Option<f32>,
+    pub clear_stencil: Option<u32>,
+}
+
+impl BeginRenderTargetDesc {
+    #[inline]
+    pub const fn new(target: RenderTargetId) -> Self {
+        Self {
+            target,
+            clear_color: None,
+            clear_depth: None,
+            clear_stencil: None,
+        }
+    }
+
+    #[inline]
+    pub const fn with_clear_color(mut self, color: Color4) -> Self {
+        self.clear_color = Some(color);
+        self
+    }
+
+    #[inline]
+    pub const fn with_clear_depth(mut self, depth: f32) -> Self {
+        self.clear_depth = Some(depth);
+        self
+    }
+}
+
+
 #[derive(Debug, Clone, Copy)]
 pub struct Extent2D {
     pub width: u32,
@@ -376,6 +441,9 @@ pub struct TextureId(NonZeroU32);
 pub struct SamplerId(NonZeroU32);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct RenderTargetId(NonZeroU32);
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct ShaderId(NonZeroU32);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -408,6 +476,14 @@ impl SamplerId {
     #[inline]
     pub(crate) fn new(v: u32) -> Self {
         Self(NonZeroU32::new(v).expect("SamplerId must be non-zero"))
+    }
+}
+
+#[allow(dead_code)]
+impl RenderTargetId {
+    #[inline]
+    pub(crate) fn new(v: u32) -> Self {
+        Self(NonZeroU32::new(v).expect("RenderTargetId must be non-zero"))
     }
 }
 
@@ -602,6 +678,12 @@ pub trait RenderApi: Send {
     fn set_ui_draw_list(&mut self, ui: UiDrawList);
     fn end_frame(&mut self) -> EngineResult<()>;
     fn resize(&mut self, width: u32, height: u32) -> EngineResult<()>;
+
+    fn create_render_target(&mut self, desc: RenderTargetDesc) -> EngineResult<RenderTargetId>;
+    fn destroy_render_target(&mut self, id: RenderTargetId);
+
+    fn begin_render_target(&mut self, desc: BeginRenderTargetDesc) -> EngineResult<()>;
+    fn end_render_target(&mut self) -> EngineResult<()>;
 
     fn create_buffer(&mut self, desc: BufferDesc) -> EngineResult<BufferId>;
     fn destroy_buffer(&mut self, id: BufferId);

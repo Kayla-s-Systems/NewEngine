@@ -10,7 +10,8 @@ members = [
   "crates/newengine-import-image",
   "crates/newengine-import-text",
   "crates/newengine-import-audio",
-    "crates/newengine-import-3d",
+  "crates/newengine-import-3d",
+  "crates/newengine-ecs",
   "crates/newengine-ui",
   "apps/editor",
 ]

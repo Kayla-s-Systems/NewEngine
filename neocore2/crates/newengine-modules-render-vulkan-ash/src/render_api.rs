@@ -373,6 +373,22 @@ impl RenderApi for VulkanRenderApi {
         self.renderer.resize(width, height).map_err(|e| EngineError::other(e.to_string()))
     }
 
+
+    fn create_render_target(&mut self, _desc: RenderTargetDesc) -> EngineResult<RenderTargetId> {
+        Err(EngineError::other("RenderTarget API is not implemented yet for Vulkan backend"))
+    }
+
+    #[inline]
+    fn destroy_render_target(&mut self, _id: RenderTargetId) {}
+
+    fn begin_render_target(&mut self, _desc: BeginRenderTargetDesc) -> EngineResult<()> {
+        Err(EngineError::other("RenderTarget API is not implemented yet for Vulkan backend"))
+    }
+
+    fn end_render_target(&mut self) -> EngineResult<()> {
+        Err(EngineError::other("RenderTarget API is not implemented yet for Vulkan backend"))
+    }
+
     fn create_buffer(&mut self, desc: BufferDesc) -> EngineResult<BufferId> {
         let id = BufferId::new(self.alloc_u32());
         unsafe {

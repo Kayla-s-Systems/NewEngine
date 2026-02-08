@@ -18,7 +18,7 @@
   },
 
   "engine": {
-    "modules_dir": ".",
+    "modules_dir": "../../engineModules",
     "assets_root": "assets",
     "asset_pump_steps": 16,
     "asset_filesystem_source": true
@@ -27,7 +27,7 @@
   "render": {
     "backend": "vulkan_ash",
     "clear_color": [
-      1.00,
+      0.00,
       0.0,
       0.0,
       0.0
