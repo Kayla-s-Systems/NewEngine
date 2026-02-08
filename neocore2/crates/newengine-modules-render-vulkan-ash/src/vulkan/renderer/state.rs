@@ -4,7 +4,7 @@ use std::collections::HashMap;
 use std::time::Instant;
 
 use super::types::{FrameSync, FRAMES_IN_FLIGHT};
-use crate::vulkan::resources::{DeferredFree, UploadCtx};
+use crate::vulkan::resources::{DeferredFree, ImageAlloc, UploadCtx};
 use crate::vulkan::ui::GpuUiTexture;
 
 pub(crate) const UPLOAD_CONTEXTS: usize = 3;
@@ -85,6 +85,10 @@ pub struct UiOverlayResources {
 
     pub(crate) textures: HashMap<u32, GpuUiTexture>,
 
+    /// External GPU textures registered by higher-level systems (e.g. viewport render targets).
+    /// Key: UiTexId. Value: descriptor set sampled with `ui.sampler`.
+    pub(crate) external: HashMap<u32, vk::DescriptorSet>,
+
     pub(crate) vb: vk::Buffer,
     pub(crate) vb_mem: vk::DeviceMemory,
     pub(crate) vb_size: vk::DeviceSize,
@@ -96,6 +100,15 @@ pub struct UiOverlayResources {
     pub(crate) staging_buf: vk::Buffer,
     pub(crate) staging_mem: vk::DeviceMemory,
     pub(crate) staging_size: vk::DeviceSize,
+}
+
+#[derive(Clone, Copy, Default)]
+pub struct RenderTargetVk {
+    pub(crate) extent: vk::Extent2D,
+    pub(crate) format: vk::Format,
+    pub(crate) color: ImageAlloc,
+    pub(crate) framebuffer: vk::Framebuffer,
+    pub(crate) layout: vk::ImageLayout,
 }
 
 pub struct DebugState {
@@ -124,4 +137,17 @@ pub struct VulkanRenderer {
     pub(crate) text: TextOverlayResources,
     pub(crate) ui: UiOverlayResources,
     pub(crate) debug: DebugState,
+
+    pub(crate) render_targets: HashMap<u32, RenderTargetVk>,
+
+    /// Active render pass scope for the current command buffer.
+    pub(crate) active_pass: ActivePass,
+    pub(crate) frame_clear_color: [f32; 4],
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ActivePass {
+    None,
+    Swapchain,
+    RenderTarget(u32),
 }

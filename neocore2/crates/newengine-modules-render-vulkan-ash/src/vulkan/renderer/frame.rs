@@ -3,12 +3,11 @@ use crate::vulkan::util::transition_image;
 
 use ash::vk;
 
-use super::state::VulkanRenderer;
+use super::state::{ActivePass, VulkanRenderer};
 use super::types::FRAMES_IN_FLIGHT;
 
 impl VulkanRenderer {
     pub fn begin_frame(&mut self, clear_rgba: [f32; 4]) -> VkResult<()> {
-        // Release any upload staging resources whose fences are signaled.
         unsafe {
             self.frames.deferred_free.pump(&self.core.device)?;
         }
@@ -17,13 +16,11 @@ impl VulkanRenderer {
             return Err(VkRenderError::InvalidState("begin_frame called while already in frame"));
         }
 
-        // If window is minimized or has no drawable area: keep state clean and do nothing.
         if self.debug.target_width == 0 || self.debug.target_height == 0 {
             self.debug.swapchain_dirty = true;
             return Ok(());
         }
 
-        // Apply deferred swapchain recreation exactly once at a safe point.
         if self.debug.swapchain_dirty {
             self.debug.swapchain_dirty = false;
             unsafe { self.recreate_swapchain()? };
@@ -89,44 +86,11 @@ impl VulkanRenderer {
                 vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL,
             );
 
-            let clear = vk::ClearValue {
-                color: vk::ClearColorValue { float32: clear_rgba },
-            };
-
-            let rp_begin = vk::RenderPassBeginInfo::default()
-                .render_pass(self.pipelines.render_pass)
-                .framebuffer(self.swapchain.framebuffers[idx])
-                .render_area(vk::Rect2D {
-                    offset: vk::Offset2D { x: 0, y: 0 },
-                    extent: self.swapchain.extent,
-                })
-                .clear_values(std::slice::from_ref(&clear));
-
-            self.core
-                .device
-                .cmd_begin_render_pass(cmd, &rp_begin, vk::SubpassContents::INLINE);
-
-            let viewport = vk::Viewport {
-                x: 0.0,
-                y: 0.0,
-                width: self.swapchain.extent.width as f32,
-                height: self.swapchain.extent.height as f32, // <- positive
-                min_depth: 0.0,
-                max_depth: 1.0,
-            };
-
-            let scissor = vk::Rect2D {
-                offset: vk::Offset2D { x: 0, y: 0 },
-                extent: self.swapchain.extent,
-            };
-
-            self.core
-                .device
-                .cmd_set_viewport(cmd, 0, std::slice::from_ref(&viewport));
-            self.core
-                .device
-                .cmd_set_scissor(cmd, 0, std::slice::from_ref(&scissor));
+            self.swapchain.image_layouts[idx] = vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL;
         }
+
+        self.frame_clear_color = clear_rgba;
+        self.active_pass = ActivePass::None;
 
         self.debug.in_frame = true;
         self.debug.current_image_index = image_index;
@@ -146,6 +110,8 @@ impl VulkanRenderer {
         let image_index = self.debug.current_image_index;
 
         unsafe {
+            self.ensure_swapchain_pass(cmd)?;
+
             if self.pipelines.text_pipeline != vk::Pipeline::null()
                 && self.pipelines.text_pipeline_layout != vk::PipelineLayout::null()
                 && !self.debug.debug_text.is_empty()
@@ -167,7 +133,7 @@ impl VulkanRenderer {
                 }
             }
 
-            self.core.device.cmd_end_render_pass(cmd);
+            self.end_active_pass(cmd)?;
 
             transition_image(
                 &self.core.device,
@@ -219,5 +185,166 @@ impl VulkanRenderer {
         self.frames.frame_index = (self.frames.frame_index + 1) % FRAMES_IN_FLIGHT;
         self.debug.in_frame = false;
         Ok(())
+    }
+
+    pub(crate) unsafe fn ensure_swapchain_pass(&mut self, cmd: vk::CommandBuffer) -> VkResult<()> {
+        match self.active_pass {
+            ActivePass::Swapchain => Ok(()),
+            ActivePass::RenderTarget(_) => {
+                self.end_active_pass(cmd)?;
+                self.begin_swapchain_pass(cmd)
+            }
+            ActivePass::None => self.begin_swapchain_pass(cmd),
+        }
+    }
+
+    pub(crate) unsafe fn begin_swapchain_pass(&mut self, cmd: vk::CommandBuffer) -> VkResult<()> {
+        if self.active_pass == ActivePass::Swapchain {
+            return Ok(());
+        }
+
+        let idx = self.debug.current_swapchain_idx;
+
+        let clear = vk::ClearValue {
+            color: vk::ClearColorValue {
+                float32: self.frame_clear_color,
+            },
+        };
+
+        let rp_begin = vk::RenderPassBeginInfo::default()
+            .render_pass(self.pipelines.render_pass)
+            .framebuffer(self.swapchain.framebuffers[idx])
+            .render_area(vk::Rect2D {
+                offset: vk::Offset2D { x: 0, y: 0 },
+                extent: self.swapchain.extent,
+            })
+            .clear_values(std::slice::from_ref(&clear));
+
+        self.core
+            .device
+            .cmd_begin_render_pass(cmd, &rp_begin, vk::SubpassContents::INLINE);
+
+        let viewport = vk::Viewport {
+            x: 0.0,
+            y: 0.0,
+            width: self.swapchain.extent.width as f32,
+            height: self.swapchain.extent.height as f32,
+            min_depth: 0.0,
+            max_depth: 1.0,
+        };
+
+        let scissor = vk::Rect2D {
+            offset: vk::Offset2D { x: 0, y: 0 },
+            extent: self.swapchain.extent,
+        };
+
+        self.core
+            .device
+            .cmd_set_viewport(cmd, 0, std::slice::from_ref(&viewport));
+        self.core
+            .device
+            .cmd_set_scissor(cmd, 0, std::slice::from_ref(&scissor));
+
+        self.active_pass = ActivePass::Swapchain;
+        Ok(())
+    }
+
+    pub(crate) unsafe fn begin_render_target_pass(
+        &mut self,
+        cmd: vk::CommandBuffer,
+        target_id: u32,
+        clear_color: Option<[f32; 4]>,
+    ) -> VkResult<()> {
+        if let ActivePass::RenderTarget(id) = self.active_pass {
+            if id == target_id {
+                return Ok(());
+            }
+        }
+
+        self.end_active_pass(cmd)?;
+
+        let Some(rt) = self.render_targets.get_mut(&target_id) else { return Ok(()); };
+        if rt.color.image == vk::Image::null() || rt.framebuffer == vk::Framebuffer::null() {
+            return Ok(());
+        }
+
+        transition_image(
+            &self.core.device,
+            cmd,
+            rt.color.image,
+            rt.layout,
+            vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL,
+        );
+        rt.layout = vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL;
+
+        let clear_rgba = clear_color.unwrap_or(self.frame_clear_color);
+        let clear = vk::ClearValue {
+            color: vk::ClearColorValue { float32: clear_rgba },
+        };
+
+        let rp_begin = vk::RenderPassBeginInfo::default()
+            .render_pass(self.pipelines.render_pass)
+            .framebuffer(rt.framebuffer)
+            .render_area(vk::Rect2D {
+                offset: vk::Offset2D { x: 0, y: 0 },
+                extent: rt.extent,
+            })
+            .clear_values(std::slice::from_ref(&clear));
+
+        self.core
+            .device
+            .cmd_begin_render_pass(cmd, &rp_begin, vk::SubpassContents::INLINE);
+
+        let viewport = vk::Viewport {
+            x: 0.0,
+            y: 0.0,
+            width: rt.extent.width as f32,
+            height: rt.extent.height as f32,
+            min_depth: 0.0,
+            max_depth: 1.0,
+        };
+
+        let scissor = vk::Rect2D {
+            offset: vk::Offset2D { x: 0, y: 0 },
+            extent: rt.extent,
+        };
+
+        self.core
+            .device
+            .cmd_set_viewport(cmd, 0, std::slice::from_ref(&viewport));
+        self.core
+            .device
+            .cmd_set_scissor(cmd, 0, std::slice::from_ref(&scissor));
+
+        self.active_pass = ActivePass::RenderTarget(target_id);
+        Ok(())
+    }
+
+    pub(crate) unsafe fn end_active_pass(&mut self, cmd: vk::CommandBuffer) -> VkResult<()> {
+        match self.active_pass {
+            ActivePass::None => Ok(()),
+            ActivePass::Swapchain => {
+                self.core.device.cmd_end_render_pass(cmd);
+                self.active_pass = ActivePass::None;
+                Ok(())
+            }
+            ActivePass::RenderTarget(id) => {
+                self.core.device.cmd_end_render_pass(cmd);
+
+                if let Some(rt) = self.render_targets.get_mut(&id) {
+                    transition_image(
+                        &self.core.device,
+                        cmd,
+                        rt.color.image,
+                        vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL,
+                        vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL,
+                    );
+                    rt.layout = vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL;
+                }
+
+                self.active_pass = ActivePass::None;
+                Ok(())
+            }
+        }
     }
 }

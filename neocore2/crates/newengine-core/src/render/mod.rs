@@ -441,7 +441,7 @@ pub struct TextureId(NonZeroU32);
 pub struct SamplerId(NonZeroU32);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub struct RenderTargetId(NonZeroU32);
+pub struct RenderTargetId(pub NonZeroU32);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct ShaderId(NonZeroU32);
@@ -482,7 +482,7 @@ impl SamplerId {
 #[allow(dead_code)]
 impl RenderTargetId {
     #[inline]
-    pub(crate) fn new(v: u32) -> Self {
+    pub fn new(v: u32) -> Self {
         Self(NonZeroU32::new(v).expect("RenderTargetId must be non-zero"))
     }
 }

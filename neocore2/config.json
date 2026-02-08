@@ -14,7 +14,7 @@
   },
 
   "ui": {
-    "backend": "egui"
+    "backend": "equi"
   },
 
   "engine": {

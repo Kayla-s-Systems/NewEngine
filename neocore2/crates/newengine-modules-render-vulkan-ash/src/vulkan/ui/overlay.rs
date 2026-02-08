@@ -88,6 +88,16 @@ impl VulkanRenderer {
     }
 
     unsafe fn destroy_ui_resources(&mut self) {
+        if self.ui.desc_pool != vk::DescriptorPool::null() {
+            for (_id, ds) in self.ui.external.drain() {
+                if ds != vk::DescriptorSet::null() {
+                    let _ = self.core.device.free_descriptor_sets(self.ui.desc_pool, &[ds]);
+                }
+            }
+        } else {
+            self.ui.external.clear();
+        }
+
         for (_id, tex) in self.ui.textures.drain() {
             if tex.desc_set != vk::DescriptorSet::null()
                 && self.ui.desc_pool != vk::DescriptorPool::null()
@@ -579,20 +589,94 @@ impl VulkanRenderer {
         Ok(())
     }
 
+    /// Registers a GPU-owned image view as an external UI texture.
+    ///
+    /// The texture will be sampled using the UI global sampler (`ui.sampler`).
+    /// Call this after the image has been created and its view is valid.
+    pub(crate) unsafe fn ui_register_external_texture(
+        &mut self,
+        id: u32,
+        view: vk::ImageView,
+    ) -> VkResult<()> {
+        if view == vk::ImageView::null() {
+            return Ok(());
+        }
+        if self.ui.desc_set_layout == vk::DescriptorSetLayout::null()
+            || self.ui.desc_pool == vk::DescriptorPool::null()
+            || self.ui.sampler == vk::Sampler::null()
+        {
+            return Ok(());
+        }
+
+        if let Some(existing) = self.ui.external.get(&id) {
+            if *existing != vk::DescriptorSet::null() {
+                return Ok(());
+            }
+        }
+
+        let layouts = [self.ui.desc_set_layout];
+        let desc_set = self.core.device.allocate_descriptor_sets(
+            &vk::DescriptorSetAllocateInfo::default()
+                .descriptor_pool(self.ui.desc_pool)
+                .set_layouts(&layouts),
+        )?[0];
+
+        let img = vk::DescriptorImageInfo::default()
+            .sampler(self.ui.sampler)
+            .image_view(view)
+            .image_layout(vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL);
+
+        let write = vk::WriteDescriptorSet::default()
+            .dst_set(desc_set)
+            .dst_binding(0)
+            .descriptor_type(vk::DescriptorType::COMBINED_IMAGE_SAMPLER)
+            .image_info(std::slice::from_ref(&img));
+
+        self.core.device.update_descriptor_sets(std::slice::from_ref(&write), &[]);
+        self.ui.external.insert(id, desc_set);
+        Ok(())
+    }
+
+    pub(crate) unsafe fn ui_unregister_external_texture(&mut self, id: u32) {
+        let Some(ds) = self.ui.external.remove(&id) else { return; };
+        if ds == vk::DescriptorSet::null() {
+            return;
+        }
+        if self.ui.desc_pool != vk::DescriptorPool::null() {
+            let _ = self.core.device.free_descriptor_sets(self.ui.desc_pool, &[ds]);
+        }
+    }
+
+
     unsafe fn ui_draw_cmd(&mut self, cmd: vk::CommandBuffer, c: &UiDrawCmd) -> VkResult<()> {
-        let Some(tex) = self.ui.textures.get(&c.texture.0) else {
+        // Resolve texture descriptor set:
+        // - Prefer engine-managed UI textures.
+        // - Fallback to externally-registered GPU textures (e.g. viewport render targets).
+        let desc_set = if let Some(tex) = self.ui.textures.get(&c.texture.0) {
+            tex.desc_set
+        } else if let Some(ds) = self.ui.external.get(&c.texture.0) {
+            *ds
+        } else {
             return Ok(());
         };
 
+        if desc_set == vk::DescriptorSet::null() {
+            return Ok(());
+        }
+
+        // Clip/scissor in pixel space (already transformed upstream).
         let mut x0 = c.clip_rect.min_x.floor() as i32;
         let mut y0 = c.clip_rect.min_y.floor() as i32;
         let mut x1 = c.clip_rect.max_x.ceil() as i32;
         let mut y1 = c.clip_rect.max_y.ceil() as i32;
 
-        x0 = x0.clamp(0, self.swapchain.extent.width as i32);
-        y0 = y0.clamp(0, self.swapchain.extent.height as i32);
-        x1 = x1.clamp(0, self.swapchain.extent.width as i32);
-        y1 = y1.clamp(0, self.swapchain.extent.height as i32);
+        let max_w = self.swapchain.extent.width as i32;
+        let max_h = self.swapchain.extent.height as i32;
+
+        x0 = x0.clamp(0, max_w);
+        y0 = y0.clamp(0, max_h);
+        x1 = x1.clamp(0, max_w);
+        y1 = y1.clamp(0, max_h);
 
         if x1 <= x0 || y1 <= y0 {
             return Ok(());
@@ -615,12 +699,15 @@ impl VulkanRenderer {
             vk::PipelineBindPoint::GRAPHICS,
             self.pipelines.ui_pipeline_layout,
             0,
-            std::slice::from_ref(&tex.desc_set),
+            std::slice::from_ref(&desc_set),
             &[],
         );
 
         let first_index = c.index_range.start;
-        let index_count = c.index_range.end.saturating_sub(c.index_range.start);
+        let index_count = c
+            .index_range
+            .end
+            .saturating_sub(c.index_range.start);
 
         if index_count == 0 {
             return Ok(());
@@ -629,6 +716,7 @@ impl VulkanRenderer {
         self.core
             .device
             .cmd_draw_indexed(cmd, index_count, 1, first_index, 0, 0);
+
         Ok(())
     }
 }

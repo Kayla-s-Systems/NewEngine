@@ -211,6 +211,7 @@ impl VulkanRenderer {
             desc_pool: vk::DescriptorPool::null(),
             sampler: vk::Sampler::null(),
             textures: std::collections::HashMap::new(),
+            external: std::collections::HashMap::new(),
 
             vb: vk::Buffer::null(),
             vb_mem: vk::DeviceMemory::null(),
@@ -258,6 +259,9 @@ impl VulkanRenderer {
             text,
             ui,
             debug,
+            render_targets: std::collections::HashMap::new(),
+            active_pass: super::state::ActivePass::None,
+            frame_clear_color: [0.0, 0.0, 0.0, 1.0],
         };
 
         me.init_text_overlay()?;

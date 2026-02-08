@@ -10,6 +10,15 @@ impl Drop for VulkanRenderer {
             self.destroy_ui_overlay();
             self.destroy_text_overlay();
 
+            for (_id, mut rt) in self.render_targets.drain() {
+                if rt.framebuffer != vk::Framebuffer::null() {
+                    self.core.device.destroy_framebuffer(rt.framebuffer, None);
+                    rt.framebuffer = vk::Framebuffer::null();
+                }
+                rt.color.destroy(&self.core.device);
+            }
+
+
             // Flush deferred frees; device is idle already.
             let _ = self.frames.deferred_free.pump(&self.core.device);
 

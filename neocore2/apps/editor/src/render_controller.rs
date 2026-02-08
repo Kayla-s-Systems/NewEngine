@@ -400,7 +400,7 @@ void main() {
 
         self.model_loaded_once = true;
 
-        const MODEL_PATH: &str = "models/demo.obj";
+        const MODEL_PATH: &str = "models/fox.obj";
 
         let Some(blob) = Self::load_model_blob(ctx, MODEL_PATH, 750)? else {
             log::warn!("model: missing '{MODEL_PATH}'. Add an .obj under assets/models/demo.obj to see 3D.");

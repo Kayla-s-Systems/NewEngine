@@ -75,6 +75,8 @@ pub struct VulkanRenderApi {
     renderer: VulkanRenderer,
     target: Extent2D,
 
+    active_render_target: Option<u32>,
+
     next_id: u32,
 
     buffers: HashMap<BufferId, VkBuffer>,
@@ -97,6 +99,7 @@ impl VulkanRenderApi {
         Self {
             renderer,
             target: Extent2D::new(width, height),
+            active_render_target: None,
             next_id: 1,
             buffers: HashMap::new(),
             shaders: HashMap::new(),
@@ -256,7 +259,23 @@ impl VulkanRenderApi {
     }
 
     unsafe fn flush_recorded(&mut self) -> EngineResult<()> {
-        let Some(cmd) = self.current_cmd() else { return Ok(()); };
+        let Some(cmd) = self.current_cmd() else {
+            self.recorded.clear();
+            return Ok(());
+        };
+
+        // Ensure we are inside the correct render pass before issuing any graphics commands.
+        // This is a hard requirement in Vulkan: draw calls outside a render pass are invalid.
+        if let Some(rt) = self.active_render_target {
+            self.renderer
+                .begin_render_target_pass(cmd, rt, None)
+                .map_err(|e| EngineError::other(e.to_string()))?;
+        } else {
+            self.renderer
+                .ensure_swapchain_pass(cmd)
+                .map_err(|e| EngineError::other(e.to_string()))?;
+        }
+
         let device = &self.renderer.core.device;
 
         for c in self.recorded.drain(..) {
@@ -354,6 +373,7 @@ impl RenderApi for VulkanRenderApi {
         self.current_vertex = [None, None, None, None];
         self.current_index = None;
         self.current_bind_groups = [None, None, None, None];
+        self.active_render_target = None;
 
         self.renderer.begin_frame(desc.clear_color).map_err(|e| EngineError::other(e.to_string()))
     }
@@ -364,7 +384,9 @@ impl RenderApi for VulkanRenderApi {
     }
 
     fn end_frame(&mut self) -> EngineResult<()> {
-        unsafe { self.flush_recorded()?; }
+        unsafe {
+            self.flush_recorded()?;
+        }
         self.renderer.end_frame().map_err(|e| EngineError::other(e.to_string()))
     }
 
@@ -374,19 +396,97 @@ impl RenderApi for VulkanRenderApi {
     }
 
 
-    fn create_render_target(&mut self, _desc: RenderTargetDesc) -> EngineResult<RenderTargetId> {
-        Err(EngineError::other("RenderTarget API is not implemented yet for Vulkan backend"))
+    fn create_render_target(&mut self, desc: RenderTargetDesc) -> EngineResult<RenderTargetId> {
+        if desc.extent.width == 0 || desc.extent.height == 0 {
+            return Err(EngineError::other("create_render_target: zero extent"));
+        }
+
+        if desc.depth.is_some() {
+            // Current Vulkan backend uses a single-color render pass.
+            // Depth-stencil support will be added via a dedicated render pass and attachment set.
+            return Err(EngineError::other(
+                "create_render_target: depth is not supported by Vulkan backend yet",
+            ));
+        }
+
+        let id_u32 = self.alloc_u32();
+        let id = RenderTargetId::new(id_u32);
+
+        let extent = vk::Extent2D {
+            width: desc.extent.width,
+            height: desc.extent.height,
+        };
+
+        self.renderer
+            .create_render_target(id_u32, extent)
+            .map_err(|e| EngineError::other(e.to_string()))?;
+
+        Ok(id)
     }
 
-    #[inline]
-    fn destroy_render_target(&mut self, _id: RenderTargetId) {}
+    fn destroy_render_target(&mut self, id: RenderTargetId) {
+        // If user destroys the active target, force scope reset.
+        if self.active_render_target == Some(id.0.get()) {
+            self.active_render_target = None;
+            self.current_pipeline = None;
+            self.current_vertex = [None, None, None, None];
+            self.current_index = None;
+            self.current_bind_groups = [None, None, None, None];
+            self.recorded.clear();
+        }
 
-    fn begin_render_target(&mut self, _desc: BeginRenderTargetDesc) -> EngineResult<()> {
-        Err(EngineError::other("RenderTarget API is not implemented yet for Vulkan backend"))
+        unsafe {
+            self.renderer.destroy_render_target(id.0.get());
+        }
+    }
+
+    fn begin_render_target(&mut self, desc: BeginRenderTargetDesc) -> EngineResult<()> {
+        unsafe {
+            // Flush any pending commands recorded for the previous target.
+            self.flush_recorded()?;
+
+            let Some(cmd) = self.current_cmd() else {
+                return Ok(());
+            };
+
+            self.renderer
+                .begin_render_target_pass(cmd, desc.target.0.get(), desc.clear_color)
+                .map_err(|e| EngineError::other(e.to_string()))?;
+        }
+
+        self.active_render_target = Some(desc.target.0.get());
+
+        // Pipeline state must be rebound after switching render pass scope.
+        self.current_pipeline = None;
+        self.current_vertex = [None, None, None, None];
+        self.current_index = None;
+        self.current_bind_groups = [None, None, None, None];
+        Ok(())
     }
 
     fn end_render_target(&mut self) -> EngineResult<()> {
-        Err(EngineError::other("RenderTarget API is not implemented yet for Vulkan backend"))
+        unsafe {
+            self.flush_recorded()?;
+
+            let Some(cmd) = self.current_cmd() else {
+                self.active_render_target = None;
+                return Ok(());
+            };
+
+            // Close the currently active pass (render target) and transition for sampling.
+            self.renderer
+                .end_active_pass(cmd)
+                .map_err(|e| EngineError::other(e.to_string()))?;
+        }
+
+        self.active_render_target = None;
+
+        // Force rebind; next flush will open swapchain pass on demand.
+        self.current_pipeline = None;
+        self.current_vertex = [None, None, None, None];
+        self.current_index = None;
+        self.current_bind_groups = [None, None, None, None];
+        Ok(())
     }
 
     fn create_buffer(&mut self, desc: BufferDesc) -> EngineResult<BufferId> {
