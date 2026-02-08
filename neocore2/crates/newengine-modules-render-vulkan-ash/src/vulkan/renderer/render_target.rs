@@ -3,6 +3,8 @@ use crate::vulkan::util::immediate_submit;
 
 use ash::vk;
 
+use newengine_ui::texture::reserved as ui_reserved;
+
 use super::state::{RenderTargetVk, VulkanRenderer};
 
 #[inline]
@@ -24,15 +26,9 @@ unsafe fn find_memory_type(
     Err(VkRenderError::AshWindow("No compatible memory type found".into()))
 }
 
-/// High-bit namespace fence for external UI textures.
-///
-/// Convention: `ui_tex_id = UI_EXTERNAL_BASE | render_target_id_u32`.
-/// This avoids collisions with engine-managed UI texture ids.
-pub(crate) const UI_EXTERNAL_BASE: u32 = 0x8000_0000;
-
 #[inline]
-pub(crate) const fn ui_external_id(render_target_id: u32) -> u32 {
-    UI_EXTERNAL_BASE | (render_target_id & 0x7FFF_FFFF)
+fn ui_external_id(render_target_id: u32) -> u32 {
+    ui_reserved::external_from_u32(render_target_id).0
 }
 
 impl VulkanRenderer {

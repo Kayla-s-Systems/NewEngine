@@ -1,13 +1,14 @@
 use crate::error::{EngineError, EngineResult};
 use crate::module::{ApiProvide, ApiVersion};
 
-use newengine_ui::draw::UiDrawList;
+use newengine_ui::draw::{UiDrawList, UiTexId};
 use parking_lot::{Mutex, MutexGuard};
 use std::num::NonZeroU32;
 use std::sync::Arc;
 
 pub const RENDER_API_ID: &str = "render.api";
-pub const RENDER_API_VERSION: ApiVersion = ApiVersion::new(0, 2, 0);
+// 0.3.0: render targets can expose a UI texture handle for viewport embedding.
+pub const RENDER_API_VERSION: ApiVersion = ApiVersion::new(0, 3, 0);
 pub const RENDER_API_PROVIDE: ApiProvide = ApiProvide::new(RENDER_API_ID, RENDER_API_VERSION);
 
 pub type Color4 = [f32; 4];
@@ -681,6 +682,12 @@ pub trait RenderApi: Send {
 
     fn create_render_target(&mut self, desc: RenderTargetDesc) -> EngineResult<RenderTargetId>;
     fn destroy_render_target(&mut self, id: RenderTargetId);
+
+    /// Returns a UI-facing texture handle for a render target.
+    ///
+    /// This is the *only* supported way for apps/editor UI to embed the GPU image into UI widgets.
+    /// The returned id is stable for the lifetime of the render target.
+    fn render_target_ui_tex_id(&self, id: RenderTargetId) -> EngineResult<UiTexId>;
 
     fn begin_render_target(&mut self, desc: BeginRenderTargetDesc) -> EngineResult<()>;
     fn end_render_target(&mut self) -> EngineResult<()>;

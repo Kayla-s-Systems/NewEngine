@@ -6,6 +6,8 @@ use std::sync::{Arc, Mutex};
 use newengine_scene::Scene;
 use newengine_viewport::ViewportState;
 
+use crate::viewport_bridge::ViewportBridge;
+
 /// Minimal editor UI: foundation-first.
 ///
 /// - Viewport is the only primary panel.
@@ -17,13 +19,16 @@ pub struct EditorUiBuild {
     scene: Scene,
     viewport: ViewportState,
 
+    viewport_bridge: Arc<ViewportBridge>,
+
     console_open: bool,
     console_input: String,
 }
 
+
 impl EditorUiBuild {
     #[inline]
-    pub fn new(shared_doc: Arc<Mutex<Option<UiMarkupDoc>>>) -> Self {
+    pub fn new(shared_doc: Arc<Mutex<Option<UiMarkupDoc>>>, viewport_bridge: Arc<ViewportBridge>) -> Self {
         let scene = Scene::demo();
         let viewport = ViewportState::new(scene.active_camera());
 
@@ -32,6 +37,7 @@ impl EditorUiBuild {
             state: UiState::default(),
             scene,
             viewport,
+            viewport_bridge,
             console_open: false,
             console_input: String::new(),
         }
@@ -58,21 +64,41 @@ impl EditorUiBuild {
     fn ui_viewport(&mut self, ctx: &egui::Context) {
         egui::CentralPanel::default().show(ctx, |ui| {
             let avail = ui.available_size();
-            let w = avail.x.max(1.0) as u32;
-            let h = avail.y.max(1.0) as u32;
-            self.viewport.set_pixel_extent(w, h);
+            let (rect, _) = ui.allocate_exact_size(avail, egui::Sense::hover());
 
-            egui::Frame::none()
-                .fill(egui::Color32::from_rgb(12, 12, 14))
-                .stroke(egui::Stroke::new(1.0, egui::Color32::from_gray(45)))
-                .show(ui, |ui| {
-                    ui.set_min_size(avail);
+            // Frame for viewport.
+            ui.painter().rect_filled(rect, 0.0, egui::Color32::from_rgb(12, 12, 14));
+            ui.painter().rect_stroke(rect, 0.0, egui::Stroke::new(1.0, egui::Color32::from_gray(45)));
+
+            // Convert to physical pixels.
+            let ppp = ctx.pixels_per_point().max(0.0001);
+            let px_w = (rect.width() * ppp).round().max(1.0) as u32;
+            let px_h = (rect.height() * ppp).round().max(1.0) as u32;
+
+            // ViewportState might want this too.
+            self.viewport.set_pixel_extent(px_w, px_h);
+
+            // Publish desired size each frame (UI -> render).
+            self.viewport_bridge.publish_extent(px_w, px_h);
+
+            // Read current UI texture id (published by renderer).
+            let ui_tex = self.viewport_bridge.read_ui_tex();
+
+            // Draw the rendered texture if available.
+            ui.allocate_ui_at_rect(rect, |ui| {
+                if let Some(tex) = ui_tex {
+                    let tid = egui::TextureId::User(tex.0 as u64);
+                    let st = egui::load::SizedTexture::new(tid, rect.size());
+                    ui.add(egui::Image::new(st).fit_to_exact_size(rect.size()));
+                } else {
                     ui.centered_and_justified(|ui| {
-                        ui.label("Viewport render target is not wired yet.");
+                        ui.label("Viewport: waiting for render target...");
                     });
-                });
+                }
+            });
         });
     }
+
 
     fn ui_console(&mut self, ctx: &egui::Context) {
         if !self.console_open {

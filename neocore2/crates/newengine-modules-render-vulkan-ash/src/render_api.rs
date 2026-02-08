@@ -7,9 +7,12 @@ use ash::vk;
 use newengine_core::render::*;
 use newengine_core::{EngineError, EngineResult};
 use newengine_ui::draw::UiDrawList;
+use newengine_ui::texture::reserved as ui_reserved;
 
+use newengine_ui::draw::UiTexId;
 use std::collections::HashMap;
 use std::ffi::CString;
+
 
 #[derive(Clone, Copy)]
 struct VkBuffer {
@@ -438,6 +441,15 @@ impl RenderApi for VulkanRenderApi {
         unsafe {
             self.renderer.destroy_render_target(id.0.get());
         }
+    }
+
+    fn render_target_ui_tex_id(&self, id: RenderTargetId) -> EngineResult<UiTexId> {
+        let key = id.0.get();
+        if !self.renderer.render_targets.contains_key(&key) {
+            return Err(EngineError::other("render_target_ui_tex_id: unknown render target"));
+        }
+
+        Ok(ui_reserved::external_from_u32(key))
     }
 
     fn begin_render_target(&mut self, desc: BeginRenderTargetDesc) -> EngineResult<()> {

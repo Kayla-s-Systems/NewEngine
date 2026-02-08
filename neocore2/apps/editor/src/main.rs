@@ -21,6 +21,7 @@ use std::time::{Duration, Instant};
 
 mod render_controller;
 mod ui;
+mod viewport_bridge;
 
 const FIXED_DT_MS: u32 = 16;
 const UI_MARKUP_PATH: &str = "ui/editor.xml";
@@ -60,15 +61,20 @@ fn winit_config_from_startup(startup: &StartupConfig) -> WinitAppConfig {
 }
 
 #[inline]
-fn register_render_from_startup(engine: &mut Engine<()>, startup: &StartupConfig) -> EngineResult<()> {
+fn register_render_from_startup(
+    engine: &mut Engine<()>,
+    startup: &StartupConfig,
+    viewport: std::sync::Arc<viewport_bridge::ViewportBridge>,
+) -> EngineResult<()> {
     let backend = startup.render_backend.trim();
 
     if backend.eq_ignore_ascii_case("vulkan_ash") || backend.eq_ignore_ascii_case("vulkan") {
         engine.register_module(Box::new(VulkanAshRenderModule::new()))?;
 
-        engine.register_module(Box::new(
-            render_controller::EditorRenderController::new(startup.render_clear_color),
-        ))?;
+        engine.register_module(Box::new(render_controller::EditorRenderController::new(
+            startup.render_clear_color,
+            viewport,
+        )))?;
 
         return Ok(());
     }
@@ -221,10 +227,12 @@ fn main() -> EngineResult<()> {
 
     let startup = Arc::new(startup);
 
+    let viewport = std::sync::Arc::new(viewport_bridge::ViewportBridge::new());
+
     let mut engine = build_engine_from_startup(&startup)?;
 
     // 1) Register render (backend + controller) so the module set is complete before window creation.
-    register_render_from_startup(&mut engine, &startup)?;
+    register_render_from_startup(&mut engine, &startup, viewport.clone())?;
 
     // 2) Load plugins/importers BEFORE creating winit (required: plugins/providers must exist).
     engine.load_plugins_once()?;
@@ -239,7 +247,7 @@ fn main() -> EngineResult<()> {
     let shared_doc: Arc<Mutex<Option<UiMarkupDoc>>> = Arc::new(Mutex::new(None));
     let ui_build: Option<Box<dyn UiBuildFn>> = match startup.ui_backend {
         newengine_core::startup::UiBackend::Disabled => None,
-        _ => Some(Box::new(ui::EditorUiBuild::new(shared_doc.clone()))),
+        _ => Some(Box::new(ui::EditorUiBuild::new(shared_doc.clone(), viewport.clone()))),
     };
 
     let startup_for_after = Arc::clone(&startup);
