@@ -9,7 +9,7 @@ edition = "2021"
 default = ["runtime"]
 
 # Runtime facade: asset manager wiring, importer auto-registration, console service.
-runtime = ["dep:newengine-assets", "dep:newengine-ui"]
+runtime = ["dep:newengine-ui"]
 
 [dependencies]
 crossbeam-channel = "0.5"
@@ -19,7 +19,6 @@ abi_stable = "0.11"
 newengine-plugin-api = { path = "../newengine-plugin-api" }
 
 # Optional runtime dependencies. Kernel/orchestrator builds should disable default features.
-newengine-assets = { path = "../newengine-AssetManager", optional = true }
 newengine-ui = { path = "../newengine-ui", optional = true }
 
 serde = { version = "1.0.228", features = ["derive"] }
