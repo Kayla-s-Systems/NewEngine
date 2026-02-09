@@ -1,5 +1,6 @@
 #![forbid(unsafe_op_in_unsafe_fn)]
 
+use newengine_bounds::{union_world_bounds, Aabb, WorldBounds};
 use newengine_ecs::{EntityId, World};
 use newengine_transform::{set_parent, Transform};
 
@@ -186,4 +187,19 @@ pub fn spawn_named(world: &mut World, name: impl Into<String>) -> EntityId {
 #[inline]
 pub fn name_or<'a>(world: &'a World, id: EntityId, fallback: &'a str) -> &'a str {
     world.get::<Name>(id).map(|n| n.as_str()).unwrap_or(fallback)
+}
+
+/// Computes union world bounds for all entities that have `WorldBounds`.
+///
+/// This is renderer-agnostic and editor-agnostic.
+#[inline]
+pub fn scene_world_bounds(world: &World) -> Option<Aabb> {
+    let entities = world.query::<WorldBounds>().map(|(id, _)| id);
+    union_world_bounds(world, entities)
+}
+
+/// Computes union world bounds for the provided entities.
+#[inline]
+pub fn selection_world_bounds(world: &World, entities: impl Iterator<Item=EntityId>) -> Option<Aabb> {
+    union_world_bounds(world, entities)
 }

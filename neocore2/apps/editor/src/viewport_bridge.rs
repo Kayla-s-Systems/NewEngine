@@ -28,7 +28,12 @@ pub struct ViewportBridge {
     /// bit0: hovered
     /// bit1: lmb_down
     orbit_flags: AtomicU64,
+
+    /// Packed movement keys for editor-style camera.
+    /// bit0: W, bit1: A, bit2: S, bit3: D, bit4: Q, bit5: E, bit6: Shift
+    move_keys: AtomicU64,
 }
+
 
 impl ViewportBridge {
     #[inline]
@@ -40,6 +45,7 @@ impl ViewportBridge {
             orbit_delta_xy: AtomicU64::new(0),
             orbit_wheel_y: AtomicU64::new(0),
             orbit_flags: AtomicU64::new(0),
+            move_keys: AtomicU64::new(0),
         }
     }
 
@@ -127,6 +133,19 @@ impl ViewportBridge {
             flags |= 2;
         }
         self.orbit_flags.store(flags, Ordering::Relaxed);
+    }
+
+
+    /// Publish per-frame movement key mask from UI.
+    #[inline]
+    pub fn publish_move_keys(&self, mask: u64) {
+        self.move_keys.store(mask, Ordering::Relaxed);
+    }
+
+    /// Read per-frame movement key mask.
+    #[inline]
+    pub fn read_move_keys(&self) -> u64 {
+        self.move_keys.load(Ordering::Relaxed)
     }
 
     /// Read orbit input published by UI for this frame.

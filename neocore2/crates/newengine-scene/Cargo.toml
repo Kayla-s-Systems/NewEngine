@@ -6,4 +6,5 @@ edition = "2021"
 [dependencies]
 newengine-ecs = { path = "../newengine-ecs" }
 newengine-transform = { path = "../newengine-transform" }
+newengine-bounds = { path = "../newengine-bounds" }
 glam = "0.29"

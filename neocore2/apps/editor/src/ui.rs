@@ -121,6 +121,23 @@ impl EditorUiBuild {
             self.viewport_bridge
                 .publish_orbit_input(dx_px, dy_px, wheel_y, hovered, dragging);
 
+            // --- Movement keys (UI -> render) ---
+            // Only publish when viewport is hovered and UI is not capturing keyboard for text input.
+            let wants_kb = ctx.wants_keyboard_input();
+            let mut move_mask: u64 = 0;
+            if hovered && !wants_kb {
+                ctx.input(|i| {
+                    if i.key_down(egui::Key::W) { move_mask |= 1 << 0; }
+                    if i.key_down(egui::Key::A) { move_mask |= 1 << 1; }
+                    if i.key_down(egui::Key::S) { move_mask |= 1 << 2; }
+                    if i.key_down(egui::Key::D) { move_mask |= 1 << 3; }
+                    if i.key_down(egui::Key::Q) { move_mask |= 1 << 4; }
+                    if i.key_down(egui::Key::E) { move_mask |= 1 << 5; }
+                    if i.modifiers.shift { move_mask |= 1 << 6; }
+                });
+            }
+            self.viewport_bridge.publish_move_keys(move_mask);
+
             // Read current external texture id (published by renderer).
             let tex_user = self.viewport_bridge.read_tex_user();
 
