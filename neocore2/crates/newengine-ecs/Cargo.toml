@@ -4,5 +4,5 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-hashbrown = "0.14"
+hashbrown = "0.16.1"
 slotmap = "1.0"

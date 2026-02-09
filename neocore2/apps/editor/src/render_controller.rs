@@ -441,17 +441,20 @@ impl EditorRenderController {
     }
 
     #[inline]
-    fn grid_params_from_radius(radius: f32) -> (f32, f32, f32) {
+    fn grid_params(radius: f32, camera_distance: f32) -> (f32, f32, f32) {
         // Returns (half_extent, step, major_step).
-        // Goal: stable, editor-friendly grid that scales with scene size.
+        // Blender-like behavior:
+        // - Grid size follows scene radius, but also stays useful when you zoom far away.
+        // - Density stays roughly constant on screen by targeting a fixed number of lines.
         let r = radius.max(0.000_001);
-        let half = (r * 8.0).max(10.0);
+        let d = camera_distance.abs().max(0.000_001);
+        let half = (r * 8.0).max(d * 2.0).max(10.0);
 
         // "Nice" step: 1-2-5 * 10^n.
         let exp = half.log10().floor();
         let base = 10.0f32.powf(exp);
         let mut step = base;
-        let target_lines = 80.0f32; // ~ +/-40 lines.
+        let target_lines = 120.0f32; // ~ +/-60 lines.
         let raw = (half * 2.0) / target_lines;
         let raw_n = raw / base;
         step = if raw_n <= 1.0 {
@@ -474,13 +477,14 @@ impl EditorRenderController {
         &mut self,
         r: &mut dyn newengine_core::render::RenderApi,
         radius: f32,
+        camera_distance: f32,
     ) -> EngineResult<()> {
         let Some(model) = self.model else {
             // Grid is a 3D world overlay; without a camera UBO/bind group it has nothing to bind.
             return Ok(());
         };
 
-        let (half_extent, step, major_step) = Self::grid_params_from_radius(radius);
+        let (half_extent, step, major_step) = Self::grid_params(radius, camera_distance);
 
         let params = (half_extent, step, major_step);
 
@@ -499,10 +503,13 @@ impl EditorRenderController {
         }
 
         let n = (half_extent / step).round().max(1.0) as i32;
+        let major_every = (major_step / step).round().max(1.0) as i32;
         let mut verts: Vec<f32> = Vec::new();
-        // Vertex format: pos.xyz, color.rgb.
-        let mut push_v = |p: Vec3, c: Vec3| {
-            verts.extend_from_slice(&[p.x, p.y, p.z, c.x, c.y, c.z]);
+        // Vertex format: pos.xyz, color.rgba (single base color, varying alpha).
+        let base_rgb = Vec3::new(0.42, 0.42, 0.44);
+        let mut push_v = |p: Vec3, a: f32| {
+            let a = a.clamp(0.0, 1.0);
+            verts.extend_from_slice(&[p.x, p.y, p.z, base_rgb.x, base_rgb.y, base_rgb.z, a]);
         };
 
         let y = 0.0f32;
@@ -511,32 +518,23 @@ impl EditorRenderController {
             let k = i as f32 * step;
 
             let is_axis = i == 0;
-            let is_major = !is_axis && ((k / major_step).round() - (k / major_step)).abs() < 0.001;
+            let is_major = !is_axis && (i % major_every == 0);
 
-            let c = if is_axis {
-                Vec3::new(0.85, 0.85, 0.85)
+            // Blender-style single hue: major/axis are only denser via alpha.
+            let a = if is_axis {
+                0.55
             } else if is_major {
-                Vec3::new(0.28, 0.28, 0.30)
+                0.35
             } else {
-                Vec3::new(0.18, 0.18, 0.20)
+                0.18
             };
 
             // Lines parallel to X (vary Z).
-            push_v(Vec3::new(-half_extent, y, k), c);
-            push_v(Vec3::new(half_extent, y, k), c);
+            push_v(Vec3::new(-half_extent, y, k), a);
+            push_v(Vec3::new(half_extent, y, k), a);
             // Lines parallel to Z (vary X).
-            push_v(Vec3::new(k, y, -half_extent), c);
-            push_v(Vec3::new(k, y, half_extent), c);
-        }
-
-        // Axis accents.
-        {
-            let cx = Vec3::new(0.85, 0.22, 0.22);
-            let cz = Vec3::new(0.22, 0.45, 0.85);
-            push_v(Vec3::new(-half_extent, y, 0.0), cx);
-            push_v(Vec3::new(half_extent, y, 0.0), cx);
-            push_v(Vec3::new(0.0, y, -half_extent), cz);
-            push_v(Vec3::new(0.0, y, half_extent), cz);
+            push_v(Vec3::new(k, y, -half_extent), a);
+            push_v(Vec3::new(k, y, half_extent), a);
         }
 
         let vbytes = bytemuck::cast_slice::<f32, u8>(&verts);
@@ -550,13 +548,13 @@ impl EditorRenderController {
 
         const VS_SRC: &str = r#"#version 450
 layout(location = 0) in vec3 a_pos;
-layout(location = 1) in vec3 a_col;
+layout(location = 1) in vec4 a_col;
 
 layout(set = 0, binding = 0) uniform Ubo {
     mat4 u_mvp;
 } u;
 
-layout(location = 0) out vec3 v_col;
+layout(location = 0) out vec4 v_col;
 
 void main() {
     v_col = a_col;
@@ -565,11 +563,11 @@ void main() {
 "#;
 
         const FS_SRC: &str = r#"#version 450
-layout(location = 0) in vec3 v_col;
+	layout(location = 0) in vec4 v_col;
 layout(location = 0) out vec4 o_col;
 
 void main() {
-    o_col = vec4(v_col, 1.0);
+    o_col = v_col;
 }
 "#;
 
@@ -586,13 +584,13 @@ void main() {
         let bgl = model.bgl;
 
         let layout = VertexLayout::new(
-            (6 * std::mem::size_of::<f32>()) as u32,
+            (7 * std::mem::size_of::<f32>()) as u32,
             vec![
                 VertexAttribute::new(0, 0, VertexFormat::Float32x3),
                 VertexAttribute::new(
                     1,
                     (3 * std::mem::size_of::<f32>()) as u32,
-                    VertexFormat::Float32x3,
+                    VertexFormat::Float32x4,
                 ),
             ],
         );
@@ -610,7 +608,7 @@ void main() {
             vs,
             fs,
             pipeline,
-            vertex_count: (verts.len() / 6) as u32,
+            vertex_count: (verts.len() / 7) as u32,
         });
 
         self.grid_params = Some(params);
@@ -749,7 +747,7 @@ void main() {
 
         // The importer pipeline is responsible for producing engine-native NE3D payload.
         // The editor render controller consumes only that wire format.
-        const MODEL_PATH: &str = "models/zorro/zorro.obj";
+        const MODEL_PATH: &str = "models/fox.obj";
 
         let Some(payload) = self.load_asset_payload_with_timeout(MODEL_PATH, 750)? else {
             log::warn!("model: missing '{MODEL_PATH}'. Place a model under assets/{MODEL_PATH}.");
@@ -1002,6 +1000,7 @@ impl<E: Send + 'static> Module<E> for EditorRenderController {
                 r.set_viewport(Viewport::full(extent))?;
                 r.set_scissor(RectI32::new(0, 0, vp_w as i32, vp_h as i32))?;
 
+
                 if let Some(model) = self.model {
                     let aspect = vp_w as f32 / (vp_h.max(1) as f32);
 
@@ -1036,7 +1035,7 @@ impl<E: Send + 'static> Module<E> for EditorRenderController {
                     r.write_buffer(model.ubo, 0, &ubytes)?;
 
                     // Grid uses the same camera UBO bind group as the model.
-                    self.build_grid(&mut **r, radius)?;
+                    self.build_grid(&mut **r, radius, self.orbit.distance)?;
                     if let Some(g) = self.grid {
                         r.set_pipeline(g.pipeline)?;
                         r.set_bind_group(0, model.bg)?;
@@ -1056,6 +1055,9 @@ impl<E: Send + 'static> Module<E> for EditorRenderController {
                 }
 
                 r.end_render_target()?;
+                let win_extent = Extent2D::new(w, h);
+                r.set_viewport(Viewport::full(win_extent))?;
+                r.set_scissor(RectI32::new(0, 0, w as i32, h as i32))?;
             }
         }
 

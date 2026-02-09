@@ -1,8 +1,12 @@
 #![forbid(unsafe_op_in_unsafe_fn)]
 
-use newengine_bounds::{union_world_bounds, Aabb, WorldBounds};
+use hashbrown::HashMap;
+
+use newengine_bounds::{
+    propagate_world_bounds, union_world_bounds, Aabb, BoundingSphere, WorldBounds,
+};
 use newengine_ecs::{EntityId, World};
-use newengine_transform::{set_parent, Transform};
+use newengine_transform::{propagate_transforms, set_parent, GlobalTransform, Transform};
 
 /// Human-readable name of an entity.
 #[derive(Clone, Debug)]
@@ -22,6 +26,52 @@ pub struct SceneRoot;
 /// Marks the active camera entity.
 #[derive(Clone, Copy, Debug, Default)]
 pub struct ActiveCamera;
+
+/// Opaque gameplay/controller binding.
+///
+/// The engine core does not know what a controller "is"; concrete controllers live in gameplay
+/// code (or plugins). This component only stores an identifier and optional state payload.
+#[derive(Clone, Debug)]
+pub struct Controller {
+    /// Stable controller id (e.g. hash of a string or a plugin-provided id).
+    pub kind: u64,
+    /// Human-readable name for debugging/UI.
+    pub kind_name: String,
+    /// Opaque controller state owned by the controller implementation.
+    pub state: Vec<u8>,
+}
+
+impl Controller {
+    #[inline]
+    pub fn new(kind: u64, kind_name: impl Into<String>, state: Vec<u8>) -> Self {
+        Self {
+            kind,
+            kind_name: kind_name.into(),
+            state,
+        }
+    }
+}
+
+/// Generic, editor-friendly property bag.
+///
+/// For gameplay performance prefer typed components (e.g. `Health`, `Armor`) instead of using a
+/// string-keyed map. This type exists for scripting, UI inspection and prototyping.
+#[derive(Clone, Debug, Default)]
+pub struct PropertyBag {
+    pub props: HashMap<String, PropertyValue>,
+}
+
+#[derive(Clone, Debug)]
+pub enum PropertyValue {
+    Bool(bool),
+    I64(i64),
+    U64(u64),
+    F32(f32),
+    F64(f64),
+    String(String),
+    Bytes(Vec<u8>),
+    Vec3([f32; 3]),
+}
 
 /// Coordinate system definition for the scene.
 ///
@@ -196,6 +246,29 @@ pub fn name_or<'a>(world: &'a World, id: EntityId, fallback: &'a str) -> &'a str
 pub fn scene_world_bounds(world: &World) -> Option<Aabb> {
     let entities = world.query::<WorldBounds>().map(|(id, _)| id);
     union_world_bounds(world, entities)
+}
+
+/// Cached scene bounds (union of all `WorldBounds`).
+#[derive(Clone, Copy, Debug, Default)]
+pub struct SceneBounds {
+    pub aabb: Option<Aabb>,
+    pub sphere: Option<BoundingSphere>,
+}
+
+/// Updates derived scene state:
+/// - propagates `Transform` -> `GlobalTransform`/`WorldPose`
+/// - propagates `LocalBounds` -> `WorldBounds`
+/// - caches the union bounds as a `SceneBounds` resource
+#[inline]
+pub fn update_scene_world(world: &mut World) {
+    propagate_transforms(world);
+    propagate_world_bounds(world, |w: &World, id: EntityId| {
+        w.get::<GlobalTransform>(id).map(|g| g.0)
+    });
+
+    let aabb = scene_world_bounds(world);
+    let sphere = aabb.map(|a| a.to_sphere());
+    world.insert_resource(SceneBounds { aabb, sphere });
 }
 
 /// Computes union world bounds for the provided entities.

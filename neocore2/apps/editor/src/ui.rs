@@ -115,8 +115,10 @@ impl EditorUiBuild {
             } else {
                 0.0
             };
-            // Convert to a normalized-ish scalar; the orbit controller applies its own smoothing.
-            let wheel_y = wheel_y_points;
+            // Normalize wheel delta.
+            // On Windows mouse wheels typically report 120 units per notch; touchpads may report smaller deltas.
+            // Keeping this normalization here prevents the camera from "teleporting" on high-res wheels.
+            let wheel_y = (wheel_y_points / 120.0).clamp(-12.0, 12.0);
 
             self.viewport_bridge
                 .publish_orbit_input(dx_px, dy_px, wheel_y, hovered, dragging);

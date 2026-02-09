@@ -83,6 +83,7 @@ impl<'a, T: 'static> Iterator for QueryMut<'a, T> {
 pub struct World {
     entities: SlotMap<EntityId, ()>,
     storages: HashMap<TypeId, Box<dyn ErasedStorage>>,
+    resources: HashMap<TypeId, Box<dyn Any>>,
 }
 
 impl Default for World {
@@ -98,6 +99,7 @@ impl World {
         Self {
             entities: SlotMap::with_key(),
             storages: HashMap::new(),
+            resources: HashMap::new(),
         }
     }
 
@@ -131,6 +133,41 @@ impl World {
     #[inline]
     pub fn iter_entities(&self) -> impl Iterator<Item=EntityId> + '_ {
         self.entities.keys()
+    }
+
+    // -----------------------------
+    // Resources (singletons)
+    // -----------------------------
+
+    /// Inserts (or replaces) a resource.
+    #[inline]
+    pub fn insert_resource<T: 'static>(&mut self, r: T) {
+        self.resources.insert(TypeId::of::<T>(), Box::new(r));
+    }
+
+    /// Returns an immutable resource reference.
+    #[inline]
+    pub fn resource<T: 'static>(&self) -> Option<&T> {
+        self.resources
+            .get(&TypeId::of::<T>())
+            .and_then(|b| b.downcast_ref::<T>())
+    }
+
+    /// Returns a mutable resource reference.
+    #[inline]
+    pub fn resource_mut<T: 'static>(&mut self) -> Option<&mut T> {
+        self.resources
+            .get_mut(&TypeId::of::<T>())
+            .and_then(|b| b.downcast_mut::<T>())
+    }
+
+    /// Removes a resource.
+    #[inline]
+    pub fn remove_resource<T: 'static>(&mut self) -> Option<T> {
+        self.resources
+            .remove(&TypeId::of::<T>())
+            .and_then(|b| b.downcast::<T>().ok())
+            .map(|b| *b)
     }
 
     /// Ensures storage for component T exists and returns mutable access to it.
@@ -230,6 +267,84 @@ impl World {
     pub fn query_mut<T: 'static>(&mut self) -> QueryMut<'_, T> {
         QueryMut {
             iter: self.storage_mut_if_exists::<T>().map(|s| s.map.iter_mut()),
+        }
+    }
+
+    /// Zero-allocation join query over entities that have both `A` and `B`.
+    ///
+    /// Internals: iterates the smaller component map and checks the other one.
+    #[inline]
+    pub fn query2<A: 'static, B: 'static>(&self) -> Query2<'_, A, B> {
+        let a = self.storage::<A>().map(|s| &s.map);
+        let b = self.storage::<B>().map(|s| &s.map);
+
+        match (a, b) {
+            (Some(am), Some(bm)) => {
+                if am.len() <= bm.len() {
+                    Query2::A(Query2A {
+                        iter: am.iter(),
+                        b: bm,
+                    })
+                } else {
+                    Query2::B(Query2B {
+                        iter: bm.iter(),
+                        a: am,
+                    })
+                }
+            }
+            _ => Query2::Empty,
+        }
+    }
+
+    /// Returns entity ids that have both `A` and `B`.
+    ///
+    /// This is useful for safely performing mutable updates on multiple component types.
+    #[inline]
+    pub fn query2_ids<A: 'static, B: 'static>(&self) -> impl Iterator<Item=EntityId> + '_ {
+        self.query2::<A, B>().map(|(id, _, _)| id)
+    }
+}
+
+/// Join query iterator over two component types.
+pub enum Query2<'a, A: 'static, B: 'static> {
+    Empty,
+    A(Query2A<'a, A, B>),
+    B(Query2B<'a, A, B>),
+}
+
+pub struct Query2A<'a, A: 'static, B: 'static> {
+    iter: slotmap::secondary::Iter<'a, EntityId, A>,
+    b: &'a SecondaryMap<EntityId, B>,
+}
+
+pub struct Query2B<'a, A: 'static, B: 'static> {
+    iter: slotmap::secondary::Iter<'a, EntityId, B>,
+    a: &'a SecondaryMap<EntityId, A>,
+}
+
+impl<'a, A: 'static, B: 'static> Iterator for Query2<'a, A, B> {
+    type Item = (EntityId, &'a A, &'a B);
+
+    #[inline]
+    fn next(&mut self) -> Option<Self::Item> {
+        match self {
+            Query2::Empty => None,
+            Query2::A(q) => {
+                while let Some((id, a)) = q.iter.next() {
+                    if let Some(b) = q.b.get(id) {
+                        return Some((id, a, b));
+                    }
+                }
+                None
+            }
+            Query2::B(q) => {
+                while let Some((id, b)) = q.iter.next() {
+                    if let Some(a) = q.a.get(id) {
+                        return Some((id, a, b));
+                    }
+                }
+                None
+            }
         }
     }
 }
