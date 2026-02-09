@@ -1,0 +1,6 @@
+{
+  "git": {
+    "sha1": "dd8c14371c08f3123c49f93b4f37f85896ac6c50"
+  },
+  "path_in_vcs": "crates/joltc-sys"
+}
