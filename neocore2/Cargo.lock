@@ -653,6 +653,8 @@ dependencies = [
  "newengine-modules-render-vulkan-ash",
  "newengine-platform-winit",
  "newengine-scene",
+    "newengine-sim",
+    "newengine-transform",
  "newengine-ui",
  "newengine-viewport",
  "parking_lot",
@@ -1375,6 +1377,18 @@ dependencies = [
  "newengine-bounds",
  "newengine-ecs",
  "newengine-transform",
+]
+
+[[package]]
+name = "newengine-sim"
+version = "0.1.0"
+dependencies = [
+    "glam",
+    "hashbrown",
+    "newengine-camera",
+    "newengine-ecs",
+    "newengine-scene",
+    "newengine-transform",
 ]
 
 [[package]]

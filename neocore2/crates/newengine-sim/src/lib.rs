@@ -118,6 +118,26 @@ pub struct CameraRigComp(pub CameraRig);
 #[derive(Clone, Copy, Debug, Default)]
 pub struct CameraInputComp(pub CameraInput);
 
+// Compile-time guarantees: ECS world can be shared across threads (editor/render/game).
+#[inline]
+fn _assert_send_sync<T: Send + Sync>() {}
+
+#[allow(dead_code)]
+#[inline]
+fn _assert_all_send_sync() {
+    _assert_send_sync::<Velocity>();
+    _assert_send_sync::<AngularVelocity>();
+    _assert_send_sync::<MotorInput>();
+    _assert_send_sync::<CharacterMotor>();
+    _assert_send_sync::<OrbitCameraMotor>();
+    _assert_send_sync::<CameraRigComp>();
+    _assert_send_sync::<CameraInputComp>();
+
+    _assert_send_sync::<CameraRig>();
+    _assert_send_sync::<CameraInput>();
+    _assert_send_sync::<OrbitController>();
+}
+
 // -----------------------------------------------------------------------------
 // Schedule
 // -----------------------------------------------------------------------------
@@ -171,7 +191,10 @@ impl SimSchedule {
 
     #[inline]
     pub fn add_system(&mut self, stage: SimStage, order: i32, name: &'static str, f: SystemFn) {
-        self.stages.entry(stage).or_default().push(SystemEntry { order, name, f });
+        self.stages
+            .entry(stage)
+            .or_default()
+            .push(SystemEntry { order, name, f });
         self.is_sorted = false;
     }
 
@@ -218,7 +241,12 @@ pub fn default_schedule() -> SimSchedule {
     // Controllers.
     s.add_system(SimStage::Controllers, 10, "character_motor", sys_character_motor);
     s.add_system(SimStage::Controllers, 20, "orbit_camera", sys_orbit_camera);
-    s.add_system(SimStage::Controllers, 30, "camera_rig_to_transform", sys_camera_rig_to_transform);
+    s.add_system(
+        SimStage::Controllers,
+        30,
+        "camera_rig_to_transform",
+        sys_camera_rig_to_transform,
+    );
 
     // Physics.
     s.add_system(SimStage::Physics, 10, "integrate_velocities", sys_integrate_velocities);
@@ -239,8 +267,9 @@ pub fn sys_character_motor(world: &mut World, frame: SimFrame) {
         return;
     }
 
-    let ids: Vec<EntityId> = world.query2_ids::<CharacterMotor, MotorInput>().collect();
+    let ids: Vec<EntityId> = world.query2_ids::<CharacterMotor, MotorInput>().into_iter().collect();
     for id in ids {
+        // remove/insert avoids multi-borrow issues across storages and stays deterministic.
         let Some(mut motor) = world.remove::<CharacterMotor>(id) else { continue; };
         let Some(input) = world.get::<MotorInput>(id).copied() else {
             let _ = world.insert(id, motor);
@@ -273,7 +302,10 @@ pub fn sys_character_motor(world: &mut World, frame: SimFrame) {
         let len = local.length();
         let vel = if len > 1e-6 {
             let dir = local / len;
-            let rot = world.get::<Transform>(id).map(|t| t.rotation).unwrap_or(Quat::IDENTITY);
+            let rot = world
+                .get::<Transform>(id)
+                .map(|t| t.rotation)
+                .unwrap_or(Quat::IDENTITY);
             (rot * dir) * (motor.move_speed * speed_mul)
         } else {
             Vec3::ZERO
@@ -293,7 +325,7 @@ pub fn sys_orbit_camera(world: &mut World, frame: SimFrame) {
 
     let ids: Vec<EntityId> = world
         .query2_ids::<OrbitCameraMotor, CameraRigComp>()
-        .collect();
+        .into_iter().collect();
     for id in ids {
         let Some(mut motor) = world.remove::<OrbitCameraMotor>(id) else { continue; };
         let Some(mut rig) = world.remove::<CameraRigComp>(id) else {
@@ -312,7 +344,7 @@ pub fn sys_orbit_camera(world: &mut World, frame: SimFrame) {
 
 /// Copies `CameraRigComp` to `Transform`.
 pub fn sys_camera_rig_to_transform(world: &mut World, _frame: SimFrame) {
-    let ids: Vec<EntityId> = world.query2_ids::<CameraRigComp, Transform>().collect();
+    let ids: Vec<EntityId> = world.query2_ids::<CameraRigComp, Transform>().into_iter().collect();
     for id in ids {
         let Some(rig) = world.get::<CameraRigComp>(id).copied() else { continue; };
         if let Some(t) = world.get_mut::<Transform>(id) {
@@ -330,7 +362,7 @@ pub fn sys_integrate_velocities(world: &mut World, frame: SimFrame) {
     }
 
     // Translation.
-    let ids: Vec<EntityId> = world.query2_ids::<Transform, Velocity>().collect();
+    let ids: Vec<EntityId> = world.query2_ids::<Transform, Velocity>().into_iter().collect();
     for id in ids {
         let Some(v) = world.get::<Velocity>(id).copied() else { continue; };
         if let Some(t) = world.get_mut::<Transform>(id) {
@@ -339,12 +371,13 @@ pub fn sys_integrate_velocities(world: &mut World, frame: SimFrame) {
     }
 
     // Rotation.
-    let ids: Vec<EntityId> = world.query2_ids::<Transform, AngularVelocity>().collect();
+    let ids: Vec<EntityId> = world.query2_ids::<Transform, AngularVelocity>().into_iter().collect();
     for id in ids {
         let Some(w) = world.get::<AngularVelocity>(id).copied() else { continue; };
         if let Some(t) = world.get_mut::<Transform>(id) {
             let d = w.0 * dt;
             if d.is_finite() && d.length_squared() > 1e-12 {
+                // yaw(y), pitch(x), roll(z) -> EulerRot::YXZ
                 let dq = Quat::from_euler(EulerRot::YXZ, d.y, d.x, d.z);
                 t.rotation = (t.rotation * dq).normalize();
             }

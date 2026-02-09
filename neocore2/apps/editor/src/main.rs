@@ -69,6 +69,7 @@ fn register_render_from_startup(
     engine: &mut Engine<()>,
     startup: &StartupConfig,
     viewport: std::sync::Arc<viewport_bridge::ViewportBridge>,
+    shared: shared::EditorShared,
 ) -> EngineResult<()> {
     let backend = startup.render_backend.trim();
 
@@ -78,6 +79,7 @@ fn register_render_from_startup(
         engine.register_module(Box::new(render_controller::EditorRenderController::new(
             startup.render_clear_color,
             viewport,
+            shared,
         )))?;
 
         return Ok(());
@@ -200,10 +202,13 @@ fn main() -> EngineResult<()> {
 
     let viewport = std::sync::Arc::new(viewport_bridge::ViewportBridge::new());
 
+    // Shared editor state (Scene + flags/requests) accessible by both UI and renderer.
+    let shared = shared::EditorShared::new(newengine_scene::Scene::demo());
+
     let mut engine = build_engine_from_startup(&startup)?;
 
     // 1) Register render (backend + controller) so the module set is complete before window creation.
-    register_render_from_startup(&mut engine, &startup, viewport.clone())?;
+    register_render_from_startup(&mut engine, &startup, viewport.clone(), shared.clone())?;
 
     // 2) Load plugins BEFORE creating winit (required: providers must exist).
     engine.load_plugins_once()?;
@@ -218,7 +223,10 @@ fn main() -> EngineResult<()> {
     let shared_doc: Arc<Mutex<Option<UiMarkupDoc>>> = Arc::new(Mutex::new(None));
     let ui_build: Option<Box<dyn UiBuildFn>> = match startup.ui_backend {
         newengine_core::startup::UiBackend::Disabled => None,
-        _ => Some(Box::new(ui::EditorUiBuild::new(shared_doc.clone(), viewport.clone()))),
+        _ => Some(Box::new(ui::EditorUiBuild::new(
+            shared_doc.clone(),
+            viewport.clone(),
+        ))),
     };
 
     // Load markup via AssetManager service (no AssetStore in-process).

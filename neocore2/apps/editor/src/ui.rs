@@ -1,10 +1,11 @@
+#![forbid(unsafe_op_in_unsafe_fn)]
+
 use newengine_platform_winit::{egui, UiBuildFn};
+use newengine_scene::Scene;
 use newengine_ui::markup::{UiMarkupDoc, UiState};
+use newengine_viewport::ViewportState;
 use std::any::Any;
 use std::sync::{Arc, Mutex};
-
-use newengine_scene::Scene;
-use newengine_viewport::ViewportState;
 
 use crate::viewport_bridge::ViewportBridge;
 
@@ -28,12 +29,13 @@ pub struct EditorUiBuild {
     console_input: String,
 }
 
-
 impl EditorUiBuild {
     #[inline]
     pub fn new(shared_doc: Arc<Mutex<Option<UiMarkupDoc>>>, viewport_bridge: Arc<ViewportBridge>) -> Self {
         let scene = Scene::demo();
-        let viewport = ViewportState::new(Some(scene.active_camera().expect("scene has no active camera")));
+        let viewport = ViewportState::new(Some(
+            scene.active_camera().expect("scene has no active camera"),
+        ));
 
         Self {
             shared_doc,
@@ -68,32 +70,26 @@ impl EditorUiBuild {
     fn ui_viewport(&mut self, ctx: &egui::Context) {
         egui::CentralPanel::default().show(ctx, |ui| {
             let avail = ui.available_size();
-            // The viewport must be able to capture drag + wheel *only when hovered*.
-            // We do NOT want global mouse delta from the input plugin to rotate the model.
             let (rect, resp) = ui.allocate_exact_size(avail, egui::Sense::click_and_drag());
 
-            // Frame for viewport.
-            ui.painter().rect_filled(rect, 0.0, egui::Color32::from_rgb(12, 12, 14));
-            ui.painter().rect_stroke(rect, 0.0, egui::Stroke::new(1.0, egui::Color32::from_gray(45)));
+            ui.painter()
+                .rect_filled(rect, 0.0, egui::Color32::from_rgb(12, 12, 14));
+            ui.painter().rect_stroke(
+                rect,
+                0.0,
+                egui::Stroke::new(1.0, egui::Color32::from_gray(45)),
+            );
 
-            // Convert to physical pixels.
             let ppp = ctx.pixels_per_point().max(0.0001);
             let px_w = (rect.width() * ppp).round().max(1.0) as u32;
             let px_h = (rect.height() * ppp).round().max(1.0) as u32;
 
-            // ViewportState might want this too.
             self.viewport.set_pixel_extent(px_w, px_h);
-
-            // Publish desired size each frame (UI -> render).
             self.viewport_bridge.publish_extent(px_w, px_h);
 
-            // --- Orbit input (UI -> render) ---
-            // Rotate ONLY while the viewport is capturing a primary-button drag.
-            // Zoom ONLY while hovered.
             let hovered = resp.hovered();
             let dragging = resp.dragged_by(egui::PointerButton::Primary);
 
-            // Compute per-frame drag delta in points.
             let mut dx_px = 0.0f32;
             let mut dy_px = 0.0f32;
             if dragging {
@@ -109,55 +105,67 @@ impl EditorUiBuild {
                 self.last_drag_pos = None;
             }
 
-            // Wheel delta: take from egui input, but only apply it when hovered.
             let wheel_y_points = if hovered {
                 ctx.input(|i| i.raw_scroll_delta.y)
             } else {
                 0.0
             };
-            // Normalize wheel delta.
-            // On Windows mouse wheels typically report 120 units per notch; touchpads may report smaller deltas.
-            // Keeping this normalization here prevents the camera from "teleporting" on high-res wheels.
             let wheel_y = (wheel_y_points / 120.0).clamp(-12.0, 12.0);
 
             self.viewport_bridge
                 .publish_orbit_input(dx_px, dy_px, wheel_y, hovered, dragging);
 
-            // --- Movement keys (UI -> render) ---
-            // Only publish when viewport is hovered and UI is not capturing keyboard for text input.
             let wants_kb = ctx.wants_keyboard_input();
             let mut move_mask: u64 = 0;
             if hovered && !wants_kb {
                 ctx.input(|i| {
-                    if i.key_down(egui::Key::W) { move_mask |= 1 << 0; }
-                    if i.key_down(egui::Key::A) { move_mask |= 1 << 1; }
-                    if i.key_down(egui::Key::S) { move_mask |= 1 << 2; }
-                    if i.key_down(egui::Key::D) { move_mask |= 1 << 3; }
-                    if i.key_down(egui::Key::Q) { move_mask |= 1 << 4; }
-                    if i.key_down(egui::Key::E) { move_mask |= 1 << 5; }
-                    if i.modifiers.shift { move_mask |= 1 << 6; }
+                    if i.key_down(egui::Key::W) {
+                        move_mask |= 1 << 0;
+                    }
+                    if i.key_down(egui::Key::A) {
+                        move_mask |= 1 << 1;
+                    }
+                    if i.key_down(egui::Key::S) {
+                        move_mask |= 1 << 2;
+                    }
+                    if i.key_down(egui::Key::D) {
+                        move_mask |= 1 << 3;
+                    }
+                    if i.key_down(egui::Key::Q) {
+                        move_mask |= 1 << 4;
+                    }
+                    if i.key_down(egui::Key::E) {
+                        move_mask |= 1 << 5;
+                    }
+                    if i.modifiers.shift {
+                        move_mask |= 1 << 6;
+                    }
                 });
             }
             self.viewport_bridge.publish_move_keys(move_mask);
 
-            // Read current external texture id (published by renderer).
             let tex_user = self.viewport_bridge.read_tex_user();
 
-            // Draw the rendered texture if available.
-            ui.allocate_ui_at_rect(rect, |ui| {
-                if tex_user != 0 {
-                    let tid = egui::TextureId::User(tex_user);
-                    let st = egui::load::SizedTexture::new(tid, rect.size());
-                    ui.add(egui::Image::new(st).fit_to_exact_size(rect.size()));
-                } else {
+            if tex_user != 0 {
+                let tid = egui::TextureId::User(tex_user);
+
+                // Draw as a full-rect mesh to avoid any aspect/fit heuristics.
+                let painter = ui.painter_at(rect);
+
+                let mut mesh = egui::Mesh::with_texture(tid);
+                let uv = egui::Rect::from_min_max(egui::pos2(0.0, 0.0), egui::pos2(1.0, 1.0));
+                mesh.add_rect_with_uv(rect, uv, egui::Color32::WHITE);
+
+                painter.add(egui::Shape::mesh(mesh));
+            } else {
+                ui.allocate_ui_at_rect(rect, |ui| {
                     ui.centered_and_justified(|ui| {
                         ui.label("Viewport: waiting for render target...");
                     });
-                }
-            });
+                });
+            }
         });
     }
-
 
     fn ui_console(&mut self, ctx: &egui::Context) {
         if !self.console_open {
@@ -191,11 +199,8 @@ impl UiBuildFn for EditorUiBuild {
             return;
         };
 
-        // Keep markup state synced (even if we don't render markup in foundation mode yet).
         let _maybe_doc = { self.shared_doc.lock().ok().and_then(|g| g.as_ref().cloned()) };
-        //self.state.begin_frame();
 
-        // Hotkey: F1 toggles console.
         if ctx.input(|i| i.key_pressed(egui::Key::F1)) {
             self.console_open = !self.console_open;
         }
@@ -203,7 +208,5 @@ impl UiBuildFn for EditorUiBuild {
         self.ui_topbar(ctx);
         self.ui_viewport(ctx);
         self.ui_console(ctx);
-
-        //self.state.end_frame();
     }
 }
