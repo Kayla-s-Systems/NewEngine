@@ -1,0 +1,13 @@
+[package]
+name = "newengine-sim"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+glam = "0.31.0"
+hashbrown = "0.14"
+
+newengine-ecs = { path = "../newengine-ecs" }
+newengine-transform = { path = "../newengine-transform" }
+newengine-scene = { path = "../newengine-scene" }
+newengine-camera = { path = "../newengine-camera" }
