@@ -1,24 +1,17 @@
 #![forbid(unsafe_op_in_unsafe_fn)]
 
-//! Game-ready simulation layer on top of `newengine-ecs`.
-//!
-//! This crate intentionally stays renderer/editor agnostic.
-
 use core::cmp::Ordering;
 
 use glam::{EulerRot, Quat, Vec2, Vec3};
 use hashbrown::HashMap;
-
-use newengine_camera::{CameraInput, CameraRig, OrbitController};
 use newengine_ecs::{EntityId, World};
 use newengine_scene::update_scene_world;
 use newengine_transform::Transform;
+use slotmap::Key;
 
-// -----------------------------------------------------------------------------
-// Time
-// -----------------------------------------------------------------------------
+mod physics;
+pub use physics::*;
 
-/// Simulation frame data.
 #[derive(Clone, Copy, Debug)]
 pub struct SimFrame {
     pub dt: f32,
@@ -32,43 +25,21 @@ impl SimFrame {
     }
 }
 
-// -----------------------------------------------------------------------------
-// Components
-// -----------------------------------------------------------------------------
-
-/// Linear velocity in world space (units/sec).
 #[derive(Clone, Copy, Debug, Default)]
 pub struct Velocity(pub Vec3);
 
-/// Angular velocity in local space (rad/sec).
-///
-/// Conventions:
-/// - x: pitch rate
-/// - y: yaw rate
-/// - z: roll rate
 #[derive(Clone, Copy, Debug, Default)]
 pub struct AngularVelocity(pub Vec3);
 
-/// Input state for entity-local controllers (typically written by input/plugins).
 #[derive(Clone, Copy, Debug, Default)]
 pub struct MotorInput {
-    /// Generic movement axes.
-    /// Convention: x=right, y=up, z=forward.
     pub move_axis: Vec3,
-    /// Look delta (mouse, stick).
     pub look_delta: Vec2,
-    /// Whether look should affect yaw/pitch.
     pub look_active: bool,
-    /// Additional speed multiplier (shift/sprint).
     pub speed_mul: f32,
-    /// Mouse wheel / zoom delta.
     pub zoom_delta: f32,
 }
 
-/// FPS / Free-fly style motor.
-///
-/// This is meant to be a small, deterministic building block.
-/// Character collision/physics should live in a separate plugin/system.
 #[derive(Clone, Copy, Debug)]
 pub struct CharacterMotor {
     pub yaw: f32,
@@ -93,65 +64,11 @@ impl Default for CharacterMotor {
     }
 }
 
-/// ECS-bridge for `newengine-camera` orbit controller.
-///
-/// The camera crate is pure math; this component wires it to ECS entities.
-#[derive(Clone, Copy, Debug)]
-pub struct OrbitCameraMotor {
-    pub controller: OrbitController,
-}
-
-impl Default for OrbitCameraMotor {
-    #[inline]
-    fn default() -> Self {
-        Self {
-            controller: OrbitController::default(),
-        }
-    }
-}
-
-/// Camera rig stored as a component.
-#[derive(Clone, Copy, Debug, Default)]
-pub struct CameraRigComp(pub CameraRig);
-
-/// Camera input stored as a component (written by input/editor).
-#[derive(Clone, Copy, Debug, Default)]
-pub struct CameraInputComp(pub CameraInput);
-
-// Compile-time guarantees: ECS world can be shared across threads (editor/render/game).
-#[inline]
-fn _assert_send_sync<T: Send + Sync>() {}
-
-#[allow(dead_code)]
-#[inline]
-fn _assert_all_send_sync() {
-    _assert_send_sync::<Velocity>();
-    _assert_send_sync::<AngularVelocity>();
-    _assert_send_sync::<MotorInput>();
-    _assert_send_sync::<CharacterMotor>();
-    _assert_send_sync::<OrbitCameraMotor>();
-    _assert_send_sync::<CameraRigComp>();
-    _assert_send_sync::<CameraInputComp>();
-
-    _assert_send_sync::<CameraRig>();
-    _assert_send_sync::<CameraInput>();
-    _assert_send_sync::<OrbitController>();
-}
-
-// -----------------------------------------------------------------------------
-// Schedule
-// -----------------------------------------------------------------------------
-
-/// Deterministic simulation stages.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum SimStage {
-    /// Inputs are produced externally (winit/plugin) and written into components/resources.
     Input,
-    /// Controllers translate inputs to desired motion / camera.
     Controllers,
-    /// Kinematic integration / physics.
     Physics,
-    /// Derived world state (transforms, bounds, scene caches).
     Derived,
 }
 
@@ -164,10 +81,6 @@ struct SystemEntry {
     f: SystemFn,
 }
 
-/// A minimal deterministic scheduler.
-///
-/// - stable ordering by (order, name)
-/// - no dynamic dispatch in the hot loop (plain fn pointers)
 pub struct SimSchedule {
     stages: HashMap<SimStage, Vec<SystemEntry>>,
     is_sorted: bool,
@@ -203,7 +116,6 @@ impl SimSchedule {
         if self.is_sorted {
             return;
         }
-
         for v in self.stages.values_mut() {
             v.sort_unstable_by(|a, b| match a.order.cmp(&b.order) {
                 Ordering::Equal => a.name.cmp(b.name),
@@ -231,45 +143,49 @@ impl SimSchedule {
     }
 }
 
-/// A production-lean default schedule.
-///
-/// You can extend it with gameplay systems without forking the engine.
 #[inline]
 pub fn default_schedule() -> SimSchedule {
     let mut s = SimSchedule::new();
 
-    // Controllers.
     s.add_system(SimStage::Controllers, 10, "character_motor", sys_character_motor);
-    s.add_system(SimStage::Controllers, 20, "orbit_camera", sys_orbit_camera);
+
+    // Physics pipeline:
+    // 1) Bake bodies from ECS authoring components.
+    s.add_system(SimStage::Physics, 0, "physics_bake_bodies", physics_bake_bodies);
+    // 2) Step Jolt.
+    s.add_system(SimStage::Physics, 10, "physics_step_jolt", physics_step_jolt);
+    // 3) Sync transforms (Dynamic: Jolt->ECS, Kinematic/Static: ECS->Jolt).
     s.add_system(
-        SimStage::Controllers,
+        SimStage::Physics,
+        20,
+        "physics_sync_transforms",
+        physics_sync_transforms,
+    );
+    // 4) Cleanup orphans (despawn/remove components).
+    s.add_system(
+        SimStage::Physics,
         30,
-        "camera_rig_to_transform",
-        sys_camera_rig_to_transform,
+        "physics_cleanup_bodies",
+        physics_cleanup_bodies,
     );
 
-    // Physics.
-    s.add_system(SimStage::Physics, 10, "integrate_velocities", sys_integrate_velocities);
+    // Legacy integration only for non-physics entities.
+    s.add_system(SimStage::Physics, 40, "integrate_velocities", sys_integrate_velocities);
 
-    // Derived.
     s.add_system(SimStage::Derived, 10, "scene_derived", sys_scene_derived);
     s
 }
 
-// -----------------------------------------------------------------------------
-// Systems
-// -----------------------------------------------------------------------------
-
-/// Applies `MotorInput` to `CharacterMotor` and updates `Transform`/`Velocity`.
 pub fn sys_character_motor(world: &mut World, frame: SimFrame) {
     let dt = frame.dt;
     if !dt.is_finite() || dt <= 0.0 {
         return;
     }
 
-    let ids: Vec<EntityId> = world.query2_ids::<CharacterMotor, MotorInput>().into_iter().collect();
+    let mut ids = world.query2_ids::<CharacterMotor, MotorInput>();
+    ids.sort_unstable_by_key(|&id| id.data().as_ffi());
+
     for id in ids {
-        // remove/insert avoids multi-borrow issues across storages and stays deterministic.
         let Some(mut motor) = world.remove::<CharacterMotor>(id) else { continue; };
         let Some(input) = world.get::<MotorInput>(id).copied() else {
             let _ = world.insert(id, motor);
@@ -292,12 +208,10 @@ pub fn sys_character_motor(world: &mut World, frame: SimFrame) {
         }
         motor.pitch = motor.pitch.clamp(-motor.pitch_limit, motor.pitch_limit);
 
-        // Update orientation.
         if let Some(t) = world.get_mut::<Transform>(id) {
             t.rotation = Quat::from_euler(EulerRot::YXZ, motor.yaw, motor.pitch, 0.0);
         }
 
-        // Convert input axes to world velocity. Convention: forward is -Z.
         let local = Vec3::new(input.move_axis.x, input.move_axis.y, -input.move_axis.z);
         let len = local.length();
         let vel = if len > 1e-6 {
@@ -316,68 +230,30 @@ pub fn sys_character_motor(world: &mut World, frame: SimFrame) {
     }
 }
 
-/// Applies orbit controller input to `CameraRigComp`.
-pub fn sys_orbit_camera(world: &mut World, frame: SimFrame) {
-    let dt = frame.dt;
-    if !dt.is_finite() || dt <= 0.0 {
-        return;
-    }
-
-    let ids: Vec<EntityId> = world
-        .query2_ids::<OrbitCameraMotor, CameraRigComp>()
-        .into_iter().collect();
-    for id in ids {
-        let Some(mut motor) = world.remove::<OrbitCameraMotor>(id) else { continue; };
-        let Some(mut rig) = world.remove::<CameraRigComp>(id) else {
-            let _ = world.insert(id, motor);
-            continue;
-        };
-
-        // Gather input. If missing, apply with defaults (no movement).
-        let input = world.get::<CameraInputComp>(id).map(|c| c.0).unwrap_or_default();
-        motor.controller.apply(&mut rig.0, input, dt);
-
-        let _ = world.insert(id, rig);
-        let _ = world.insert(id, motor);
-    }
-}
-
-/// Copies `CameraRigComp` to `Transform`.
-pub fn sys_camera_rig_to_transform(world: &mut World, _frame: SimFrame) {
-    let ids: Vec<EntityId> = world.query2_ids::<CameraRigComp, Transform>().into_iter().collect();
-    for id in ids {
-        let Some(rig) = world.get::<CameraRigComp>(id).copied() else { continue; };
-        if let Some(t) = world.get_mut::<Transform>(id) {
-            t.position = rig.0.position;
-            t.rotation = rig.0.rotation;
-        }
-    }
-}
-
-/// Integrates velocities into transforms.
 pub fn sys_integrate_velocities(world: &mut World, frame: SimFrame) {
     let dt = frame.dt;
     if !dt.is_finite() || dt <= 0.0 {
         return;
     }
 
-    // Translation.
-    let ids: Vec<EntityId> = world.query2_ids::<Transform, Velocity>().into_iter().collect();
+    let mut ids: Vec<EntityId> = world.query::<Transform>().map(|(id, _)| id).collect();
+    ids.sort_unstable_by_key(|&id| id.data().as_ffi());
+
     for id in ids {
-        let Some(v) = world.get::<Velocity>(id).copied() else { continue; };
-        if let Some(t) = world.get_mut::<Transform>(id) {
+        // Physics-driven entities must not be integrated here.
+        if world.has::<PhysicsBody>(id) {
+            continue;
+        }
+
+        if let (Some(v), Some(t)) = (world.get::<Velocity>(id).copied(), world.get_mut::<Transform>(id)) {
             t.position += v.0 * dt;
         }
-    }
 
-    // Rotation.
-    let ids: Vec<EntityId> = world.query2_ids::<Transform, AngularVelocity>().into_iter().collect();
-    for id in ids {
-        let Some(w) = world.get::<AngularVelocity>(id).copied() else { continue; };
-        if let Some(t) = world.get_mut::<Transform>(id) {
+        if let (Some(w), Some(t)) =
+            (world.get::<AngularVelocity>(id).copied(), world.get_mut::<Transform>(id))
+        {
             let d = w.0 * dt;
             if d.is_finite() && d.length_squared() > 1e-12 {
-                // yaw(y), pitch(x), roll(z) -> EulerRot::YXZ
                 let dq = Quat::from_euler(EulerRot::YXZ, d.y, d.x, d.z);
                 t.rotation = (t.rotation * dq).normalize();
             }
@@ -385,7 +261,6 @@ pub fn sys_integrate_velocities(world: &mut World, frame: SimFrame) {
     }
 }
 
-/// Updates derived scene data (world pose, bounds, cached scene bounds).
 pub fn sys_scene_derived(world: &mut World, _frame: SimFrame) {
     update_scene_world(world);
 }

@@ -6,6 +6,11 @@ edition = "2021"
 [dependencies]
 glam = "0.31.0"
 hashbrown = "0.16.1"
+log = "0.4"
+slotmap = "1"
+
+newengine-physics-jolt = { path = "../newengine-physics-jolt" }
+joltc-sys = "0.3.1"
 
 newengine-ecs = { path = "../newengine-ecs" }
 newengine-transform = { path = "../newengine-transform" }
