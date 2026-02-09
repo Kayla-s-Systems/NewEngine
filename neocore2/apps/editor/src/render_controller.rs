@@ -494,7 +494,9 @@ impl EditorRenderController {
         name: &'static str,
         src: &'static str,
     ) -> EngineResult<Vec<u32>> {
-        let mut opts = CompileOptions::new().ok_or_else(|| EngineError::other("shaderc: CompileOptions"))?;
+        let mut opts = CompileOptions::new()
+            .map_err(|e| EngineError::other(format!("shaderc options: {}", e)))?;
+
         opts.set_optimization_level(OptimizationLevel::Performance);
 
         let art = compiler
@@ -608,7 +610,7 @@ impl EditorRenderController {
         )?;
         r.write_buffer(vb, 0, vbytes)?;
 
-        let compiler = Compiler::new().ok_or_else(|| EngineError::other("shaderc: Compiler"))?;
+        let compiler = Compiler::new().map_err(|e| EngineError::other(format!("shaderc CompileOptions: {}", e)))?;
 
         const VS_SRC: &str = r#"#version 450
 layout(location = 0) in vec3 a_pos;
@@ -685,7 +687,8 @@ void main() {
             return Ok(());
         }
 
-        let compiler = Compiler::new().ok_or_else(|| EngineError::other("shaderc: Compiler"))?;
+        let compiler = Compiler::new().map_err(|e| EngineError::other(format!("shaderc CompileOptions: {}", e)))?;
+
 
         const VS_SRC: &str = r#"#version 450
 layout(location = 0) in vec2 a_pos;
@@ -856,7 +859,7 @@ void main() {
                 .with_uniform0(BufferBinding::new(ubo, 0, 64)),
         )?;
 
-        let compiler = Compiler::new().ok_or_else(|| EngineError::other("shaderc: Compiler"))?;
+        let compiler = Compiler::new().map_err(|e| EngineError::other(format!("shaderc CompileOptions: {}", e)))?;
 
         const VS_SRC: &str = r#"#version 450
 layout(location = 0) in vec3 a_pos;
