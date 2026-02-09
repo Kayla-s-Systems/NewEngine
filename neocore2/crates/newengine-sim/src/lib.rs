@@ -4,6 +4,8 @@ use core::cmp::Ordering;
 
 use glam::{EulerRot, Quat, Vec2, Vec3};
 use hashbrown::HashMap;
+
+use newengine_camera::{CameraInput, CameraRig, OrbitController};
 use newengine_ecs::{EntityId, World};
 use newengine_scene::update_scene_world;
 use newengine_transform::Transform;
@@ -11,6 +13,13 @@ use slotmap::Key;
 
 mod physics;
 pub use physics::*;
+
+// Re-export camera primitives so editor/game can import from newengine_sim if desired.
+pub use newengine_camera::{orbit_frame_sphere, orbit_set_angles};
+
+// -----------------------------------------------------------------------------
+// Time
+// -----------------------------------------------------------------------------
 
 #[derive(Clone, Copy, Debug)]
 pub struct SimFrame {
@@ -25,11 +34,19 @@ impl SimFrame {
     }
 }
 
+// -----------------------------------------------------------------------------
+// Common components
+// -----------------------------------------------------------------------------
+
 #[derive(Clone, Copy, Debug, Default)]
 pub struct Velocity(pub Vec3);
 
 #[derive(Clone, Copy, Debug, Default)]
 pub struct AngularVelocity(pub Vec3);
+
+// -----------------------------------------------------------------------------
+// Generic motor input (legacy)
+// -----------------------------------------------------------------------------
 
 #[derive(Clone, Copy, Debug, Default)]
 pub struct MotorInput {
@@ -63,6 +80,57 @@ impl Default for CharacterMotor {
         }
     }
 }
+
+// -----------------------------------------------------------------------------
+// Camera components expected by editor/game
+// -----------------------------------------------------------------------------
+
+/// ECS component: camera input for the current frame (fed by UI or runtime input).
+///
+/// Editor expects `.0` access and tuple constructor `CameraInputComp(input)`.
+#[derive(Clone, Copy, Debug)]
+pub struct CameraInputComp(pub CameraInput);
+
+impl Default for CameraInputComp {
+    #[inline]
+    fn default() -> Self {
+        Self(CameraInput::default())
+    }
+}
+
+/// ECS component: camera rig (spatial transform).
+///
+/// Editor expects `.0` access and `rig.view_matrix()`.
+#[derive(Clone, Copy, Debug)]
+pub struct CameraRigComp(pub CameraRig);
+
+impl Default for CameraRigComp {
+    #[inline]
+    fn default() -> Self {
+        Self(CameraRig::default())
+    }
+}
+
+/// ECS component: orbit motor (controller state).
+///
+/// IMPORTANT: uses `newengine_camera::OrbitController` (single source of truth).
+#[derive(Clone, Copy, Debug)]
+pub struct OrbitCameraMotor {
+    pub controller: OrbitController,
+}
+
+impl Default for OrbitCameraMotor {
+    #[inline]
+    fn default() -> Self {
+        Self {
+            controller: OrbitController::default(),
+        }
+    }
+}
+
+// -----------------------------------------------------------------------------
+// Schedule
+// -----------------------------------------------------------------------------
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum SimStage {
@@ -147,21 +215,21 @@ impl SimSchedule {
 pub fn default_schedule() -> SimSchedule {
     let mut s = SimSchedule::new();
 
+    // Camera (editor/game unified).
+    s.add_system(SimStage::Controllers, 0, "orbit_camera_motor", sys_orbit_camera_motor);
+
+    // Legacy motor.
     s.add_system(SimStage::Controllers, 10, "character_motor", sys_character_motor);
 
     // Physics pipeline:
-    // 1) Bake bodies from ECS authoring components.
     s.add_system(SimStage::Physics, 0, "physics_bake_bodies", physics_bake_bodies);
-    // 2) Step Jolt.
     s.add_system(SimStage::Physics, 10, "physics_step_jolt", physics_step_jolt);
-    // 3) Sync transforms (Dynamic: Jolt->ECS, Kinematic/Static: ECS->Jolt).
     s.add_system(
         SimStage::Physics,
         20,
         "physics_sync_transforms",
         physics_sync_transforms,
     );
-    // 4) Cleanup orphans (despawn/remove components).
     s.add_system(
         SimStage::Physics,
         30,
@@ -176,6 +244,45 @@ pub fn default_schedule() -> SimSchedule {
     s
 }
 
+// -----------------------------------------------------------------------------
+// Systems
+// -----------------------------------------------------------------------------
+
+pub fn sys_orbit_camera_motor(world: &mut World, frame: SimFrame) {
+    let dt = frame.dt;
+    if !dt.is_finite() || dt <= 0.0 {
+        return;
+    }
+
+    // Deterministic order.
+    let mut ids = world.query2_ids::<OrbitCameraMotor, CameraInputComp>();
+    ids.retain(|&id| world.get::<CameraRigComp>(id).is_some());
+    ids.sort_unstable_by_key(|id: &EntityId| id.data().as_ffi());
+
+    for id in ids {
+        let Some(mut motor) = world.remove::<OrbitCameraMotor>(id) else { continue; };
+        let Some(input) = world.get::<CameraInputComp>(id).copied() else {
+            let _ = world.insert(id, motor);
+            continue;
+        };
+        let Some(mut rig) = world.remove::<CameraRigComp>(id) else {
+            let _ = world.insert(id, motor);
+            continue;
+        };
+
+        motor.controller.apply(&mut rig.0, input.0, dt);
+
+        // Optional: keep Transform in sync for downstream systems that rely on it.
+        if let Some(t) = world.get_mut::<Transform>(id) {
+            t.position = rig.0.position;
+            t.rotation = rig.0.rotation;
+        }
+
+        let _ = world.insert(id, rig);
+        let _ = world.insert(id, motor);
+    }
+}
+
 pub fn sys_character_motor(world: &mut World, frame: SimFrame) {
     let dt = frame.dt;
     if !dt.is_finite() || dt <= 0.0 {
@@ -183,7 +290,7 @@ pub fn sys_character_motor(world: &mut World, frame: SimFrame) {
     }
 
     let mut ids = world.query2_ids::<CharacterMotor, MotorInput>();
-    ids.sort_unstable_by_key(|&id| id.data().as_ffi());
+    ids.sort_unstable_by_key(|id: &EntityId| id.data().as_ffi());
 
     for id in ids {
         let Some(mut motor) = world.remove::<CharacterMotor>(id) else { continue; };
@@ -237,7 +344,7 @@ pub fn sys_integrate_velocities(world: &mut World, frame: SimFrame) {
     }
 
     let mut ids: Vec<EntityId> = world.query::<Transform>().map(|(id, _)| id).collect();
-    ids.sort_unstable_by_key(|&id| id.data().as_ffi());
+    ids.sort_unstable_by_key(|id: &EntityId| id.data().as_ffi());
 
     for id in ids {
         // Physics-driven entities must not be integrated here.
@@ -253,7 +360,7 @@ pub fn sys_integrate_velocities(world: &mut World, frame: SimFrame) {
             (world.get::<AngularVelocity>(id).copied(), world.get_mut::<Transform>(id))
         {
             let d = w.0 * dt;
-            if d.is_finite() && d.length_squared() > 1e-12 {
+            if d.is_finite() && d.length_squared() > 1.0e-12 {
                 let dq = Quat::from_euler(EulerRot::YXZ, d.y, d.x, d.z);
                 t.rotation = (t.rotation * dq).normalize();
             }
