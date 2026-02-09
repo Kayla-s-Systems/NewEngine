@@ -1,0 +1,21 @@
+[package]
+name = "newengine-physics-jolt"
+version = "0.1.0"
+edition = "2021"
+license = "MIT OR Apache-2.0"
+description = "NewEngine physics backend: Jolt via rolt/joltc-sys"
+
+[features]
+default = []
+double-precision = ["rolt/double-precision", "joltc-sys/double-precision"]
+object-layer-u32 = ["rolt/object-layer-u32", "joltc-sys/object-layer-u32"]
+
+[dependencies]
+glam = "0.27"
+thiserror = "2"
+
+# Safe wrapper
+rolt = "0.3"
+
+# Low-level bindings for allocator/job-system and glue
+joltc-sys = "0.3"
