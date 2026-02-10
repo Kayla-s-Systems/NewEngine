@@ -32,6 +32,35 @@ impl PhysicsCtx {
     }
 }
 
+/// Physics initialization bundle.
+///
+/// This is a host-facing description of the physics world configuration.
+/// Keep it deterministic and explicit.
+#[derive(Clone, Copy, Debug)]
+pub struct PhysicsInitDesc {
+    pub jolt: JoltInitDesc,
+    pub settings: PhysicsSettings,
+}
+
+impl Default for PhysicsInitDesc {
+    #[inline]
+    fn default() -> Self {
+        Self {
+            jolt: JoltInitDesc::default(),
+            settings: PhysicsSettings::default(),
+        }
+    }
+}
+
+/// Read-only debug snapshot for editor/game diagnostics.
+#[derive(Clone, Copy, Debug, Default)]
+pub struct PhysicsDebugStats {
+    pub tick: u64,
+    pub alpha: f32,
+    pub steps_last: u32,
+    pub bodies_total: u32,
+}
+
 /// Simulation stepping settings.
 ///
 /// This implements a UE-like fixed timestep with sub-stepping and render interpolation.
@@ -64,6 +93,9 @@ pub struct PhysicsStepState {
     pub alpha: f32,
     /// Monotonic physics tick (increments per fixed step).
     pub tick: u64,
+
+    /// Number of substeps executed in the last call to `physics_step_jolt`.
+    pub steps_last: u32,
 }
 
 /// Sets interpolation alpha for the current frame.
@@ -75,12 +107,58 @@ pub struct PhysicsStepState {
 /// - `alpha = 1` means "use current physics pose".
 #[inline]
 pub fn physics_set_interpolation_alpha(world: &mut World, alpha: f32) {
-    if !ensure_physics_ctx(world) {
+    if world.resource::<PhysicsCtx>().is_none() {
         return;
     }
     if let Some(s) = world.resource_mut::<PhysicsStepState>() {
         s.alpha = alpha.clamp(0.0, 1.0);
     }
+}
+
+/// Initializes physics if needed.
+///
+/// This function is idempotent and safe to call from both editor and game.
+///
+/// Returns `true` if physics is available after the call.
+pub fn physics_bootstrap(world: &mut World, desc: PhysicsInitDesc) -> bool {
+    if world.resource::<PhysicsCtx>().is_some() {
+        if world.resource::<PhysicsSettings>().is_none() {
+            world.insert_resource(desc.settings);
+        }
+        if world.resource::<PhysicsStepState>().is_none() {
+            world.insert_resource(PhysicsStepState::default());
+        }
+        return true;
+    }
+
+    world.insert_resource(desc.settings);
+    world.insert_resource(PhysicsStepState::default());
+
+    match PhysicsCtx::new(desc.jolt) {
+        Ok(ctx) => {
+            world.insert_resource(ctx);
+            true
+        }
+        Err(_) => false,
+    }
+}
+
+/// Convenience bootstrap using default init desc.
+pub fn physics_bootstrap_default(world: &mut World, _frame: super::SimFrame) {
+    let _ = physics_bootstrap(world, PhysicsInitDesc::default());
+}
+
+#[inline]
+pub fn physics_debug_stats(world: &World) -> Option<PhysicsDebugStats> {
+    let _ = world.resource::<PhysicsCtx>()?;
+    let s = world.resource::<PhysicsStepState>()?;
+    let bodies_total = world.query::<PhysicsBody>().count() as u32;
+    Some(PhysicsDebugStats {
+        tick: s.tick,
+        alpha: s.alpha,
+        steps_last: s.steps_last,
+        bodies_total,
+    })
 }
 
 /// Rigidbody kind.
@@ -158,31 +236,7 @@ fn stable_entity_key(id: EntityId) -> u64 {
 // -----------------------------------------------------------------------------
 
 #[inline]
-fn ensure_physics_ctx(world: &mut World) -> bool {
-    if world.resource::<PhysicsCtx>().is_some() {
-        if world.resource::<PhysicsSettings>().is_none() {
-            world.insert_resource(PhysicsSettings::default());
-        }
-        if world.resource::<PhysicsStepState>().is_none() {
-            world.insert_resource(PhysicsStepState::default());
-        }
-        return true;
-    }
-
-    if world.resource::<PhysicsSettings>().is_none() {
-        world.insert_resource(PhysicsSettings::default());
-    }
-    if world.resource::<PhysicsStepState>().is_none() {
-        world.insert_resource(PhysicsStepState::default());
-    }
-
-    if let Ok(ctx) = PhysicsCtx::new(JoltInitDesc::default()) {
-        world.insert_resource(ctx);
-        true
-    } else {
-        false
-    }
-}
+// NOTE: physics bootstrapping is explicit via `physics_bootstrap*`.
 
 // -----------------------------------------------------------------------------
 // Baking (ECS -> Jolt)
@@ -192,7 +246,7 @@ fn ensure_physics_ctx(world: &mut World) -> bool {
 ///
 /// Determinism: iterate entities in stable-key order.
 pub fn physics_bake_bodies(world: &mut World, _frame: super::SimFrame) {
-    if !ensure_physics_ctx(world) {
+    if world.resource::<PhysicsCtx>().is_none() {
         return;
     }
 
@@ -250,7 +304,7 @@ pub fn physics_bake_bodies(world: &mut World, _frame: super::SimFrame) {
 ///
 /// This keeps the physics world bounded and prevents leaked bodies across hot-reloads.
 pub fn physics_cleanup_bodies(world: &mut World, _frame: super::SimFrame) {
-    if !ensure_physics_ctx(world) {
+    if world.resource::<PhysicsCtx>().is_none() {
         return;
     }
 
@@ -309,7 +363,7 @@ pub fn physics_step_jolt(world: &mut World, frame: super::SimFrame) {
     if !frame.dt.is_finite() || frame.dt <= 0.0 {
         return;
     }
-    if !ensure_physics_ctx(world) {
+    if world.resource::<PhysicsCtx>().is_none() {
         return;
     }
 
@@ -359,12 +413,14 @@ pub fn physics_step_jolt(world: &mut World, frame: super::SimFrame) {
             if let Some(s) = world.resource_mut::<PhysicsStepState>() {
                 s.accum = accum;
                 s.alpha = alpha;
+                s.steps_last = 0;
             }
         }
         return;
     }
 
     // Step physics under a dedicated scope so the lock + ctx borrow ends BEFORE we borrow world mutably again.
+    let mut executed: u32 = 0;
     {
         let mut pw_guard = {
             let ctx = world.resource::<PhysicsCtx>().expect("physics ctx must exist");
@@ -379,6 +435,8 @@ pub fn physics_step_jolt(world: &mut World, frame: super::SimFrame) {
             if pw.step(settings.fixed_dt).is_err() {
                 break;
             }
+
+            executed += 1;
 
             tick = tick.wrapping_add(1);
             if !use_external_tick {
@@ -403,6 +461,7 @@ pub fn physics_step_jolt(world: &mut World, frame: super::SimFrame) {
     state.accum = accum;
     state.alpha = alpha;
     state.tick = tick;
+    state.steps_last = executed;
 }
 
 // -----------------------------------------------------------------------------
@@ -413,7 +472,7 @@ pub fn physics_step_jolt(world: &mut World, frame: super::SimFrame) {
 ///
 /// Kinematic/static bodies are driven by ECS transforms and pushed into Jolt during stepping.
 pub fn physics_sync_transforms(world: &mut World, _frame: super::SimFrame) {
-    if !ensure_physics_ctx(world) {
+    if world.resource::<PhysicsCtx>().is_none() {
         return;
     }
 

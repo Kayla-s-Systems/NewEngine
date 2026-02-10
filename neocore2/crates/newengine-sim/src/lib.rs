@@ -218,10 +218,14 @@ pub fn default_schedule() -> SimSchedule {
     // Camera (editor/game unified).
     s.add_system(SimStage::Controllers, 0, "orbit_camera_motor", sys_orbit_camera_motor);
 
-    // Legacy motor.
-    s.add_system(SimStage::Controllers, 10, "character_motor", sys_character_motor);
-
     // Physics pipeline:
+    // Bootstrap is intentionally first to keep physics explicit and predictable.
+    s.add_system(
+        SimStage::Physics,
+        -100,
+        "physics_bootstrap_default",
+        physics_bootstrap_default,
+    );
     s.add_system(SimStage::Physics, 0, "physics_bake_bodies", physics_bake_bodies);
     s.add_system(SimStage::Physics, 10, "physics_step_jolt", physics_step_jolt);
     s.add_system(
@@ -236,9 +240,6 @@ pub fn default_schedule() -> SimSchedule {
         "physics_cleanup_bodies",
         physics_cleanup_bodies,
     );
-
-    // Legacy integration only for non-physics entities.
-    s.add_system(SimStage::Physics, 40, "integrate_velocities", sys_integrate_velocities);
 
     s.add_system(SimStage::Derived, 10, "scene_derived", sys_scene_derived);
     s
