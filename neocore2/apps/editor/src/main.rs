@@ -226,6 +226,7 @@ fn main() -> EngineResult<()> {
         _ => Some(Box::new(ui::EditorUiBuild::new(
             shared_doc.clone(),
             viewport.clone(),
+            shared.clone(),
         ))),
     };
 

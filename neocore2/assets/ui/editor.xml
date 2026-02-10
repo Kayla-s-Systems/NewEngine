@@ -1,17 +1,35 @@
-<ui visuals="dark" density="compact" font_size="14">
+<ui theme="dark" scale="1.0" density="compact" font_size="14">
     <topbar>
-        <label text="$app.name"/>
-        <spacer/>
-
-        <button id="frame_all" text="Frame All" on_click="frame_all"/>
-        <button id="toggle_grid" text="Grid" on_click="toggle_grid"/>
-        <button id="toggle_model" text="Model" on_click="toggle_model"/>
-        <spacer/>
-
-        <textbox id="model_path" bind="model_path" hint="models/fox.obj" on_submit="load_model"/>
-        <button id="load_model" text="Load" on_click="load_model"/>
-
-        <spacer/>
-        <button id="quit" text="Quit" on_click="quit"/>
+        <row>
+            <label text="NewEngine Editor"/>
+            <spacer/>
+            <label text="entities: ${ecs.entity_count}"/>
+            <spacer/>
+            <flags id="view_flags"/>
+        </row>
     </topbar>
+
+    <sidepanel side="left" width="320">
+        <column>
+            <label text="Hierarchy"/>
+            <spacer/>
+            <ecs_hierarchy/>
+        </column>
+    </sidepanel>
+
+    <sidepanel side="right" width="360">
+        <column>
+            <label text="Inspector"/>
+            <spacer/>
+            <ecs_inspector/>
+            <spacer/>
+            <label text="Model"/>
+            <textbox id="model_path" bind="model_path" hint="assets/models/demo.obj"/>
+            <button id="btn_load_model" text="Load model"/>
+        </column>
+    </sidepanel>
+
+    <central>
+        <viewport/>
+    </central>
 </ui>

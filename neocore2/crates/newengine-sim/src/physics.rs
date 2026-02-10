@@ -66,6 +66,23 @@ pub struct PhysicsStepState {
     pub tick: u64,
 }
 
+/// Sets interpolation alpha for the current frame.
+///
+/// Hosts that implement their own fixed-timestep loop should set this once per render/update
+/// frame to keep physics-driven transforms smoothly interpolated.
+///
+/// - `alpha = 0` means "use previous physics pose".
+/// - `alpha = 1` means "use current physics pose".
+#[inline]
+pub fn physics_set_interpolation_alpha(world: &mut World, alpha: f32) {
+    if !ensure_physics_ctx(world) {
+        return;
+    }
+    if let Some(s) = world.resource_mut::<PhysicsStepState>() {
+        s.alpha = alpha.clamp(0.0, 1.0);
+    }
+}
+
 /// Rigidbody kind.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum RigidBodyKind {
@@ -302,19 +319,50 @@ pub fn physics_step_jolt(world: &mut World, frame: super::SimFrame) {
 
     let dt = frame.dt.min(settings.max_frame_dt);
 
-    // Update accumulator first (short mutable borrow).
-    let (mut accum, mut tick) = {
-        let state = world
-            .resource_mut::<PhysicsStepState>()
-            .expect("physics step state must exist");
-        state.accum = (state.accum + dt).max(0.0);
-        (state.accum, state.tick)
-    };
-
-    // Snapshot kinematic/static targets once per frame (no locks held).
+    // Snapshot kinematic targets once per frame (no locks held).
     let kin_targets = gather_kinematic_targets(world);
 
-    let mut steps: u32 = 0;
+    // Decide stepping mode:
+    // - External fixed-tick mode (authoritative host fixed loop): advance by delta ticks.
+    // - Accumulator mode (standalone/editor): sub-step based on dt.
+    let (mut accum, mut tick) = {
+        let s = world
+            .resource::<PhysicsStepState>()
+            .expect("physics step state must exist");
+        (s.accum, s.tick)
+    };
+
+    let mut steps_to_run: u32 = 0;
+
+    // External mode: the caller provides monotonic `fixed_tick` in fixed steps.
+    // We only engage it when `dt` is approximately the fixed dt; this prevents accidental
+    // per-render stepping (the editor used to increment `fixed_tick` every frame).
+    let use_external_tick = frame.fixed_tick != 0
+        && settings.fixed_dt > 0.0
+        && (dt - settings.fixed_dt).abs() <= settings.fixed_dt * 0.02;
+
+    if use_external_tick {
+        // Only handle forward progress; wrapping is treated as reset.
+        let delta = frame.fixed_tick.saturating_sub(tick);
+        steps_to_run = delta.min(settings.max_substeps as u64) as u32;
+        accum = 0.0;
+    } else {
+        accum = (accum + dt).max(0.0);
+        steps_to_run = (accum / settings.fixed_dt).floor() as u32;
+        steps_to_run = steps_to_run.min(settings.max_substeps);
+    }
+
+    if steps_to_run == 0 {
+        // Keep alpha stable even if nothing stepped.
+        if !use_external_tick && settings.fixed_dt > 0.0 {
+            let alpha = (accum / settings.fixed_dt).clamp(0.0, 1.0);
+            if let Some(s) = world.resource_mut::<PhysicsStepState>() {
+                s.accum = accum;
+                s.alpha = alpha;
+            }
+        }
+        return;
+    }
 
     // Step physics under a dedicated scope so the lock + ctx borrow ends BEFORE we borrow world mutably again.
     {
@@ -325,21 +373,24 @@ pub fn physics_step_jolt(world: &mut World, frame: super::SimFrame) {
         let Some(mut pw_guard) = pw_guard else { return; };
         let pw = &mut *pw_guard;
 
-        while accum + 1.0e-6 >= settings.fixed_dt && steps < settings.max_substeps {
+        for _ in 0..steps_to_run {
             apply_kinematic_targets_locked(pw, &kin_targets);
 
             if pw.step(settings.fixed_dt).is_err() {
                 break;
             }
 
-            accum -= settings.fixed_dt;
             tick = tick.wrapping_add(1);
-            steps += 1;
+            if !use_external_tick {
+                accum -= settings.fixed_dt;
+            }
         }
         // pw_guard dropped here
     }
 
-    let alpha = if settings.fixed_dt > 0.0 {
+    let alpha = if use_external_tick {
+        0.0
+    } else if settings.fixed_dt > 0.0 {
         (accum / settings.fixed_dt).clamp(0.0, 1.0)
     } else {
         0.0
@@ -353,7 +404,6 @@ pub fn physics_step_jolt(world: &mut World, frame: super::SimFrame) {
     state.alpha = alpha;
     state.tick = tick;
 }
-
 
 // -----------------------------------------------------------------------------
 // Sync back (Jolt -> ECS)
@@ -409,12 +459,7 @@ pub fn physics_sync_transforms(world: &mut World, _frame: super::SimFrame) {
             };
 
             unsafe {
-                sys::JPC_BodyInterface_GetPositionAndRotation(
-                    body_iface,
-                    body_id,
-                    &mut pos,
-                    &mut rot,
-                );
+                sys::JPC_BodyInterface_GetPositionAndRotation(body_iface, body_id, &mut pos, &mut rot);
             }
 
             dyn_out.push((
@@ -459,7 +504,9 @@ fn gather_kinematic_targets(world: &World) -> Vec<(u64, sys::JPC_BodyID, Transfo
     let mut out: Vec<(u64, sys::JPC_BodyID, Transform)> = Vec::new();
     for (id, pb) in world.query::<PhysicsBody>() {
         let Some(rb) = world.get::<RigidBody>(id).copied() else { continue; };
-        if rb.kind == RigidBodyKind::Dynamic {
+        // Only true kinematic bodies are driven by ECS every step.
+        // Static bodies should be baked once (re-bake by removing `PhysicsBody`).
+        if rb.kind != RigidBodyKind::Kinematic {
             continue;
         }
         let Some(t) = world.get::<Transform>(id).copied() else { continue; };
@@ -470,10 +517,7 @@ fn gather_kinematic_targets(world: &World) -> Vec<(u64, sys::JPC_BodyID, Transfo
 }
 
 #[inline]
-fn apply_kinematic_targets_locked(
-    pw: &mut PhysicsWorld,
-    targets: &[(u64, sys::JPC_BodyID, Transform)],
-) {
+fn apply_kinematic_targets_locked(pw: &mut PhysicsWorld, targets: &[(u64, sys::JPC_BodyID, Transform)]) {
     if targets.is_empty() {
         return;
     }
