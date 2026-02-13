@@ -11,6 +11,7 @@ use crate::sync::ShutdownToken;
 use std::any::Any;
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::fmt;
+use std::panic::{self, AssertUnwindSafe};
 use std::path::PathBuf;
 use std::time::{Duration, Instant};
 
@@ -18,6 +19,12 @@ use std::time::{Duration, Instant};
 pub struct EngineConfig {
     pub fixed_dt_ms: u32,
     pub plugins_dir: Option<PathBuf>,
+
+    /// Controls how the engine reacts to panics inside module callbacks.
+    ///
+    /// - When `true` (default), the engine converts panics to `EngineError` and requests shutdown.
+    /// - When `false`, panics unwind normally (useful for debugging).
+    pub catch_panics: bool,
 }
 
 impl EngineConfig {
@@ -26,6 +33,7 @@ impl EngineConfig {
         Self {
             fixed_dt_ms,
             plugins_dir: None,
+            catch_panics: true,
         }
     }
 
@@ -34,10 +42,17 @@ impl EngineConfig {
         self.plugins_dir = dir;
         self
     }
+
+    #[inline]
+    pub fn with_catch_panics(mut self, enabled: bool) -> Self {
+        self.catch_panics = enabled;
+        self
+    }
 }
 
 pub struct Engine<E: Send + 'static> {
     fixed_dt: f32,
+    catch_panics: bool,
     services: Box<dyn Services>,
     modules: Vec<Box<dyn Module<E>>>,
     module_ids: HashSet<&'static str>,
@@ -91,6 +106,17 @@ impl fmt::Display for Elapsed {
 }
 
 impl<E: Send + 'static> Engine<E> {
+    #[inline]
+    fn panic_message(payload: Box<dyn Any + Send>) -> String {
+        if let Some(s) = payload.downcast_ref::<&'static str>() {
+            (*s).to_string()
+        } else if let Some(s) = payload.downcast_ref::<String>() {
+            s.clone()
+        } else {
+            "<non-string panic payload>".to_string()
+        }
+    }
+
     #[inline]
     pub fn request_exit(&mut self) -> EngineResult<()> {
         self.exit_requested = true;
@@ -148,6 +174,7 @@ impl<E: Send + 'static> Engine<E> {
 
         Ok(Self {
             fixed_dt,
+            catch_panics: config.catch_panics,
             services,
             modules: Vec::new(),
             module_ids: HashSet::new(),
@@ -421,6 +448,42 @@ impl<E: Send + 'static> Engine<E> {
             }
         }
 
+        // Start stage (after successful init of all modules).
+        let mut started = 0usize;
+        for i in 0..sorted.len() {
+            self.sync_shutdown_state();
+
+            let start_result = {
+                let m = &mut sorted[i];
+                let mut ctx = ModuleCtx::new(
+                    self.services.as_ref(),
+                    &mut self.resources,
+                    &self.bus,
+                    &self.events,
+                    &mut self.scheduler,
+                    &mut self.exit_requested,
+                );
+                m.start(&mut ctx)
+            };
+
+            if let Err(err) = start_result {
+                shutdown_modules(self, &mut sorted[..initialized]);
+                return Err(EngineError::with_module_stage(
+                    sorted[i].id(),
+                    ModuleStage::Start,
+                    err,
+                ));
+            }
+
+            started += 1;
+
+            self.sync_shutdown_state();
+            if self.is_exit_requested() {
+                shutdown_modules(self, &mut sorted[..initialized]);
+                return Err(EngineError::ExitRequested);
+            }
+        }
+
         self.modules = sorted;
 
         self.try_load_plugins_once()?;
@@ -558,9 +621,27 @@ impl<E: Send + 'static> Engine<E> {
             let module_id = m.id();
             let mut ctx = ModuleCtx::new(services, resources, bus, events, scheduler, exit_requested);
 
-            #[allow(deprecated)]
-            m.on_external_event(&mut ctx, event)
-                .map_err(|e| EngineError::with_module_stage(module_id, ModuleStage::ExternalEvent, e))?;
+            let result = if self.catch_panics {
+                #[allow(deprecated)]
+                match panic::catch_unwind(AssertUnwindSafe(|| m.on_external_event(&mut ctx, event))) {
+                    Ok(r) => r,
+                    Err(payload) => {
+                        *exit_requested = true;
+                        Err(EngineError::Other(format!(
+                            "panic in module callback (module='{module_id}' stage={:?} msg='{}')",
+                            ModuleStage::ExternalEvent,
+                            Self::panic_message(payload)
+                        )))
+                    }
+                }
+            } else {
+                #[allow(deprecated)]
+                m.on_external_event(&mut ctx, event)
+            };
+
+            result.map_err(|e| {
+                EngineError::with_module_stage(module_id, ModuleStage::ExternalEvent, e)
+            })?;
 
 
             if *exit_requested {
@@ -630,8 +711,22 @@ impl<E: Send + 'static> Engine<E> {
             let mut ctx = ModuleCtx::new(services, resources, bus, events, scheduler, exit_requested);
             ctx.set_frame(frame);
 
-            call(m.as_mut(), &mut ctx)
-                .map_err(|e| EngineError::with_module_stage(module_id, stage, e))?;
+            let result = if self.catch_panics {
+                match panic::catch_unwind(AssertUnwindSafe(|| call(m.as_mut(), &mut ctx))) {
+                    Ok(r) => r,
+                    Err(payload) => {
+                        *exit_requested = true;
+                        Err(EngineError::Other(format!(
+                            "panic in module callback (module='{module_id}' stage={stage:?} msg='{}')",
+                            Self::panic_message(payload)
+                        )))
+                    }
+                }
+            } else {
+                call(m.as_mut(), &mut ctx)
+            };
+
+            result.map_err(|e| EngineError::with_module_stage(module_id, stage, e))?;
 
             if *exit_requested {
                 shutdown.request();

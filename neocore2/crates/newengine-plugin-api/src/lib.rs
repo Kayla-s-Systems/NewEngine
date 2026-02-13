@@ -12,6 +12,74 @@ pub type CapabilityId = RString;
 pub type MethodName = RString;
 
 /* =============================================================================================
+   Capability model (ABI-stable, extensible)
+   ============================================================================================= */
+
+/// Broad plugin category.
+///
+/// Values are ABI-stable; new kinds must be appended (do not reorder).
+#[repr(u8)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, StableAbi)]
+pub enum PluginKind {
+    Runtime = 1,
+    Importer = 2,
+    Editor = 3,
+    Tool = 4,
+
+    /// Fallback for future extensions.
+    Other = 255,
+}
+
+/// Capability direction.
+#[repr(u8)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, StableAbi)]
+pub enum CapabilityRole {
+    Provides = 1,
+    Requires = 2,
+}
+
+/// Capability kind.
+///
+/// Keep this intentionally coarse: plugins own the semantics via `describe_json`.
+#[repr(u8)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, StableAbi)]
+pub enum CapabilityKind {
+    ServiceV1 = 1,
+    EventsV1 = 2,
+
+    /// Asset importer surface (still uses ServiceV1 call ABI).
+    AssetImporterV1 = 3,
+
+    Other = 255,
+}
+
+/// Small, ABI-stable capability descriptor.
+///
+/// `describe_json` is intentionally opaque to the core.
+#[repr(C)]
+#[derive(Debug, Clone, StableAbi)]
+pub struct CapabilityDesc {
+    pub id: CapabilityId,
+    pub role: CapabilityRole,
+    pub kind: CapabilityKind,
+    pub version: u32,
+
+    /// Provider-owned JSON (or empty string) describing the capability.
+    pub describe_json: RString,
+}
+
+/// V2 plugin descriptor.
+#[repr(C)]
+#[derive(Debug, Clone, StableAbi)]
+pub struct PluginDescriptor {
+    pub id: RString,
+    pub name: RString,
+    pub version: RString,
+    pub kind: PluginKind,
+    pub capabilities: RVec<CapabilityDesc>,
+}
+
+/* =============================================================================================
    Generic service: semantics fully owned by provider plugin
    ============================================================================================= */
 
@@ -53,7 +121,7 @@ pub struct HostApiV1 {
 }
 
 /* =============================================================================================
-   Plugin module ABI
+   Plugin module ABI (V1)
    ============================================================================================= */
 
 #[repr(C)]
@@ -81,6 +149,27 @@ pub trait PluginModule: Send + Sync {
 pub type PluginModuleDyn<'a> = PluginModule_TO<'a, abi_stable::std_types::RBox<()>>;
 
 /* =============================================================================================
+   Plugin module ABI (V2)
+   ============================================================================================= */
+
+#[sabi_trait]
+pub trait PluginModuleV2: Send + Sync {
+    /// Stronger, extensible descriptor with kind + capabilities.
+    fn descriptor(&self) -> PluginDescriptor;
+
+    fn init(&mut self, host: HostApiV1) -> RResult<(), RString>;
+    fn start(&mut self) -> RResult<(), RString>;
+
+    fn fixed_update(&mut self, dt: f32) -> RResult<(), RString>;
+    fn update(&mut self, dt: f32) -> RResult<(), RString>;
+    fn render(&mut self, dt: f32) -> RResult<(), RString>;
+
+    fn shutdown(&mut self);
+}
+
+pub type PluginModuleV2Dyn<'a> = PluginModuleV2_TO<'a, abi_stable::std_types::RBox<()>>;
+
+/* =============================================================================================
    Root module ABI
    ============================================================================================= */
 
@@ -92,6 +181,11 @@ pub struct PluginRootV1 {
     /// when you add new optional fields later.
     #[sabi(last_prefix_field)]
     pub create: extern "C" fn() -> PluginModuleDyn<'static>,
+
+    /// Optional V2 entrypoint.
+    ///
+    /// Old plugins won't have this field; hosts must treat it as optional.
+    pub create_v2: extern "C" fn() -> PluginModuleV2Dyn<'static>,
 }
 
 impl RootModule for PluginRootV1Ref {
