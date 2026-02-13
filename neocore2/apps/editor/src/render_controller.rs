@@ -3,27 +3,20 @@
 use newengine_core::render::{
     require_render_api, BeginFrameDesc, BeginRenderTargetDesc, BindGroupDesc, BindGroupLayoutDesc,
     BindingKind, BufferBinding, BufferDesc, BufferSlice, BufferUsage, DrawIndexedArgs, Extent2D,
-    IndexFormat, MemoryHint, PipelineDesc, PrimitiveTopology, RectI32, RenderTargetDesc,
-    ShaderDesc, ShaderStage, TextureFormat, VertexAttribute, VertexFormat, VertexLayout, Viewport,
+    IndexFormat, MemoryHint, PipelineDesc, PrimitiveTopology, RectI32, RenderTargetDesc, ShaderDesc,
+    ShaderStage, TextureFormat, VertexAttribute, VertexFormat, VertexLayout, Viewport,
 };
 use newengine_core::{EngineError, EngineResult, Module, ModuleCtx};
 use newengine_platform_winit::WinitWindowInitSize;
 use newengine_ui::draw::UiDrawList;
 use newengine_ui::{AssetAccess, AssetServiceClient};
 
-use glam::{Mat4, Vec2, Vec3};
+use glam::{Mat4, Vec3};
 use newengine_camera::{
-    auto_near_far_from_sphere, orbit_frame_sphere, orbit_set_angles, CameraInput, Perspective,
-    Projection,
+    auto_near_far_from_sphere, orbit_frame_sphere, orbit_set_angles, CameraInput, CameraRig,
+    OrbitController, Perspective, Projection,
 };
 
-use newengine_scene::{ActiveCamera, SceneBounds};
-
-use newengine_sim::{
-    default_schedule, CameraInputComp, CameraRigComp, OrbitCameraMotor, SimFrame, SimSchedule,
-};
-
-use crate::shared::EditorShared;
 use crate::viewport_bridge::ViewportBridge;
 
 use newengine_core::plugins::default_host_api;
@@ -78,14 +71,11 @@ pub struct EditorRenderController {
     model: Option<ModelGpu>,
     model_loaded_once: bool,
 
+    orbit: OrbitController,
+    rig: CameraRig,
     projection: Projection,
 
-    schedule: SimSchedule,
-    fixed_tick: u64,
-
     assets: AssetServiceClient,
-
-    shared: EditorShared,
 
     viewport_bridge: std::sync::Arc<ViewportBridge>,
     viewport_rt: Option<newengine_core::render::RenderTargetId>,
@@ -94,13 +84,23 @@ pub struct EditorRenderController {
 
 impl EditorRenderController {
     #[inline]
-    pub fn new(
-        clear_color: [f32; 4],
-        viewport_bridge: std::sync::Arc<ViewportBridge>,
-        shared: EditorShared,
-    ) -> Self {
-        let projection =
-            Projection::Perspective(Perspective::new(60.0f32.to_radians(), 1.0, 0.01, 1000.0));
+    pub fn new(clear_color: [f32; 4], viewport_bridge: std::sync::Arc<ViewportBridge>) -> Self {
+        // Engine baseline coordinate system:
+        // - right-handed
+        // - +Y up
+        // - -Z forward
+        // CameraRig::forward() points along -Z.
+        let mut orbit = OrbitController::default();
+        orbit_set_angles(&mut orbit, 0.7853982, 0.55);
+        orbit.distance = 4.1;
+
+        let rig = CameraRig::default();
+        let projection = Projection::Perspective(Perspective::new(
+            60.0f32.to_radians(),
+            1.0,
+            0.01,
+            1000.0,
+        ));
 
         Self {
             model_center: [0.0, 0.0, 0.0],
@@ -115,96 +115,16 @@ impl EditorRenderController {
             model: None,
             model_loaded_once: false,
 
+            orbit,
+            rig,
             projection,
 
-            schedule: default_schedule(),
-            fixed_tick: 0,
-
             assets: AssetServiceClient::new(default_host_api()),
-
-            shared,
 
             viewport_bridge,
             viewport_rt: None,
             viewport_rt_extent: Extent2D::new(0, 0),
         }
-    }
-
-    fn ensure_editor_camera(world: &mut newengine_ecs::World, cam: newengine_ecs::EntityId) {
-        use newengine_transform::Transform;
-
-        if world.get::<Transform>(cam).is_none() {
-            let _ = world.insert(cam, Transform::default());
-        }
-
-        if world.get::<CameraRigComp>(cam).is_none() {
-            let _ = world.insert(cam, CameraRigComp::default());
-        }
-
-        if world.get::<OrbitCameraMotor>(cam).is_none() {
-            let mut motor = OrbitCameraMotor::default();
-            orbit_set_angles(&mut motor.controller, 0.7853982, 0.55);
-            motor.controller.distance = 4.1;
-            let _ = world.insert(cam, motor);
-        }
-
-        if world.get::<CameraInputComp>(cam).is_none() {
-            let _ = world.insert(cam, CameraInputComp::default());
-        }
-    }
-
-    fn write_camera_input(
-        world: &mut newengine_ecs::World,
-        cam: newengine_ecs::EntityId,
-        input: CameraInput,
-    ) {
-        if let Some(ci) = world.get_mut::<CameraInputComp>(cam) {
-            ci.0 = input;
-        } else {
-            let _ = world.insert(cam, CameraInputComp(input));
-        }
-    }
-
-    #[inline]
-    fn move_axis_from_mask(move_mask: u64) -> (Vec3, f32) {
-        let mut x = 0.0f32;
-        let mut y = 0.0f32;
-        let mut z = 0.0f32;
-
-        // Convention: x=right, y=up, z=forward.
-        if (move_mask & (1 << 0)) != 0 {
-            z += 1.0;
-        } // W
-        if (move_mask & (1 << 2)) != 0 {
-            z -= 1.0;
-        } // S
-        if (move_mask & (1 << 3)) != 0 {
-            x += 1.0;
-        } // D
-        if (move_mask & (1 << 1)) != 0 {
-            x -= 1.0;
-        } // A
-        if (move_mask & (1 << 5)) != 0 {
-            y += 1.0;
-        } // E
-        if (move_mask & (1 << 4)) != 0 {
-            y -= 1.0;
-        } // Q
-
-        let v = Vec3::new(x, y, z);
-        let len_sq = v.length_squared();
-        let v = if len_sq > 1e-6 {
-            v / len_sq.sqrt()
-        } else {
-            Vec3::ZERO
-        };
-
-        let sprint = if (move_mask & (1 << 6)) != 0 {
-            4.0
-        } else {
-            1.0
-        };
-        (v, sprint)
     }
 
     #[inline]
@@ -232,10 +152,8 @@ impl EditorRenderController {
 
         let need_recreate = match self.viewport_rt {
             None => true,
-            Some(_) => {
-                self.viewport_rt_extent.width != extent.width
-                    || self.viewport_rt_extent.height != extent.height
-            }
+            Some(_) => self.viewport_rt_extent.width != extent.width
+                || self.viewport_rt_extent.height != extent.height,
         };
 
         if need_recreate {
@@ -315,9 +233,7 @@ impl EditorRenderController {
         fn need<'a>(bytes: &'a [u8], at: usize, len: usize, what: &str) -> EngineResult<&'a [u8]> {
             let end = at.saturating_add(len);
             if end > bytes.len() {
-                return Err(EngineError::other(format!(
-                    "ne3d: truncated while reading {what}"
-                )));
+                return Err(EngineError::other(format!("ne3d: truncated while reading {what}")));
             }
             Ok(&bytes[at..end])
         }
@@ -335,9 +251,7 @@ impl EditorRenderController {
         let ver = read_u32(need(bytes, at, 4, "version")?);
         at += 4;
         if ver != 1 {
-            return Err(EngineError::other(format!(
-                "ne3d: unsupported version {ver}"
-            )));
+            return Err(EngineError::other(format!("ne3d: unsupported version {ver}")));
         }
 
         let vtx_count = read_u32(need(bytes, at, 4, "vertex_count")?) as usize;
@@ -423,24 +337,13 @@ impl EditorRenderController {
         // Column-major memory layout:
         // [ m00 m10 m20 m30 | m01 m11 m21 m31 | m02 m12 m22 m32 | m03 m13 m23 m33 ]
         [
-            f / aspect,
-            0.0,
-            0.0,
-            0.0, //
-            0.0,
-            -f,
-            0.0,
-            0.0, //
-            0.0,
-            0.0,
-            z_far * nf,
-            -1.0, //
-            0.0,
-            0.0,
-            z_far * z_near * nf,
-            0.0, //
+            f / aspect, 0.0, 0.0, 0.0, //
+            0.0, -f, 0.0, 0.0,        //
+            0.0, 0.0, z_far * nf, -1.0, //
+            0.0, 0.0, z_far * z_near * nf, 0.0, //
         ]
     }
+
 
     #[inline]
     fn vec3_sub(a: [f32; 3], b: [f32; 3]) -> [f32; 3] {
@@ -474,9 +377,13 @@ impl EditorRenderController {
     #[inline]
     fn mat4_scale_uniform(s: f32) -> [f32; 16] {
         [
-            s, 0.0, 0.0, 0.0, 0.0, s, 0.0, 0.0, 0.0, 0.0, s, 0.0, 0.0, 0.0, 0.0, 1.0,
+            s, 0.0, 0.0, 0.0,
+            0.0, s, 0.0, 0.0,
+            0.0, 0.0, s, 0.0,
+            0.0, 0.0, 0.0, 1.0,
         ]
     }
+
 
     #[inline]
     fn mat4_look_at(eye: [f32; 3], center: [f32; 3], up: [f32; 3]) -> [f32; 16] {
@@ -523,9 +430,7 @@ impl EditorRenderController {
         name: &'static str,
         src: &'static str,
     ) -> EngineResult<Vec<u32>> {
-        let mut opts = CompileOptions::new()
-            .map_err(|e| EngineError::other(format!("shaderc options: {}", e)))?;
-
+        let mut opts = CompileOptions::new().ok_or_else(|| EngineError::other("shaderc: CompileOptions"))?;
         opts.set_optimization_level(OptimizationLevel::Performance);
 
         let art = compiler
@@ -584,8 +489,7 @@ impl EditorRenderController {
         let params = (half_extent, step, major_step);
 
         // Rebuild only if parameters changed materially.
-        let need_rebuild =
-            self.grid.is_none() || self.grid_params.map(|p| p != params).unwrap_or(true);
+        let need_rebuild = self.grid.is_none() || self.grid_params.map(|p| p != params).unwrap_or(true);
 
         if !need_rebuild {
             return Ok(());
@@ -635,17 +539,12 @@ impl EditorRenderController {
 
         let vbytes = bytemuck::cast_slice::<f32, u8>(&verts);
         let vb = r.create_buffer(
-            BufferDesc::new(
-                vbytes.len() as u64,
-                BufferUsage::Vertex,
-                MemoryHint::CpuToGpu,
-            )
+            BufferDesc::new(vbytes.len() as u64, BufferUsage::Vertex, MemoryHint::CpuToGpu)
                 .with_label("editor_grid_vb"),
         )?;
         r.write_buffer(vb, 0, vbytes)?;
 
-        let compiler = Compiler::new()
-            .map_err(|e| EngineError::other(format!("shaderc CompileOptions: {}", e)))?;
+        let compiler = Compiler::new().ok_or_else(|| EngineError::other("shaderc: Compiler"))?;
 
         const VS_SRC: &str = r#"#version 450
 layout(location = 0) in vec3 a_pos;
@@ -673,8 +572,7 @@ void main() {
 "#;
 
         let vs_spv = Self::compile_glsl(&compiler, ShaderKind::Vertex, "editor_grid.vert", VS_SRC)?;
-        let fs_spv =
-            Self::compile_glsl(&compiler, ShaderKind::Fragment, "editor_grid.frag", FS_SRC)?;
+        let fs_spv = Self::compile_glsl(&compiler, ShaderKind::Fragment, "editor_grid.frag", FS_SRC)?;
 
         let vs = r.create_shader(
             ShaderDesc::new(ShaderStage::Vertex, "main", vs_spv).with_label("editor_grid_vs"),
@@ -718,13 +616,52 @@ void main() {
         Ok(())
     }
 
+    #[inline]
+    fn apply_wasd_target_translate(orbit: &mut OrbitController, move_mask: u64, dt: f32, base_speed: f32) {
+        if dt <= 0.0 || !dt.is_finite() {
+            return;
+        }
+
+        let mut forward = 0.0f32;
+        let mut right = 0.0f32;
+        let mut up = 0.0f32;
+
+        if (move_mask & (1 << 0)) != 0 { forward += 1.0; } // W
+        if (move_mask & (1 << 2)) != 0 { forward -= 1.0; } // S
+        if (move_mask & (1 << 3)) != 0 { right += 1.0; }   // D
+        if (move_mask & (1 << 1)) != 0 { right -= 1.0; }   // A
+        if (move_mask & (1 << 5)) != 0 { up += 1.0; }      // E
+        if (move_mask & (1 << 4)) != 0 { up -= 1.0; }      // Q
+
+        if forward == 0.0 && right == 0.0 && up == 0.0 {
+            return;
+        }
+
+        let len_sq = forward * forward + right * right + up * up;
+        let inv_len = if len_sq > 1e-6 { len_sq.sqrt().recip() } else { 1.0 };
+        forward *= inv_len;
+        right *= inv_len;
+        up *= inv_len;
+
+        let sprint = if (move_mask & (1 << 6)) != 0 { 4.0 } else { 1.0 };
+        let speed = (base_speed * sprint).max(0.0);
+
+        // Move in the horizontal plane aligned to yaw.
+        let (sy, cy) = orbit.yaw.sin_cos();
+        let fwd = Vec3::new(-sy, 0.0, -cy);
+        let rgt = Vec3::new(cy, 0.0, -sy);
+        let upv = Vec3::Y;
+
+        let s = speed * dt;
+        orbit.target += (fwd * forward + rgt * right + upv * up) * s;
+    }
+
     fn build_demo(&mut self, r: &mut dyn newengine_core::render::RenderApi) -> EngineResult<()> {
         if self.demo.is_some() {
             return Ok(());
         }
 
-        let compiler = Compiler::new()
-            .map_err(|e| EngineError::other(format!("shaderc CompileOptions: {}", e)))?;
+        let compiler = Compiler::new().ok_or_else(|| EngineError::other("shaderc: Compiler"))?;
 
         const VS_SRC: &str = r#"#version 450
 layout(location = 0) in vec2 a_pos;
@@ -745,8 +682,7 @@ void main() {
 "#;
 
         let vs_spv = Self::compile_glsl(&compiler, ShaderKind::Vertex, "editor_demo.vert", VS_SRC)?;
-        let fs_spv =
-            Self::compile_glsl(&compiler, ShaderKind::Fragment, "editor_demo.frag", FS_SRC)?;
+        let fs_spv = Self::compile_glsl(&compiler, ShaderKind::Fragment, "editor_demo.frag", FS_SRC)?;
 
         let vs = r.create_shader(
             ShaderDesc::new(ShaderStage::Vertex, "main", vs_spv).with_label("editor_demo_vs"),
@@ -769,11 +705,7 @@ void main() {
         }
 
         let vb = r.create_buffer(
-            BufferDesc::new(
-                bytes.len() as u64,
-                BufferUsage::Vertex,
-                MemoryHint::CpuToGpu,
-            )
+            BufferDesc::new(bytes.len() as u64, BufferUsage::Vertex, MemoryHint::CpuToGpu)
                 .with_label("editor_demo_vb"),
         )?;
         r.write_buffer(vb, 0, &bytes)?;
@@ -797,12 +729,7 @@ void main() {
                 .with_vertex_layouts(vec![layout]),
         )?;
 
-        self.demo = Some(DemoGpu {
-            vb,
-            vs,
-            fs,
-            pipeline,
-        });
+        self.demo = Some(DemoGpu { vb, vs, fs, pipeline });
         Ok(())
     }
 
@@ -881,33 +808,23 @@ void main() {
         }
 
         let vb = r.create_buffer(
-            BufferDesc::new(
-                vbytes.len() as u64,
-                BufferUsage::Vertex,
-                MemoryHint::CpuToGpu,
-            )
+            BufferDesc::new(vbytes.len() as u64, BufferUsage::Vertex, MemoryHint::CpuToGpu)
                 .with_label("editor_model_vb"),
         )?;
         r.write_buffer(vb, 0, &vbytes)?;
 
         let ib = r.create_buffer(
-            BufferDesc::new(
-                ibytes.len() as u64,
-                BufferUsage::Index,
-                MemoryHint::CpuToGpu,
-            )
+            BufferDesc::new(ibytes.len() as u64, BufferUsage::Index, MemoryHint::CpuToGpu)
                 .with_label("editor_model_ib"),
         )?;
         r.write_buffer(ib, 0, &ibytes)?;
 
         let ubo = r.create_buffer(
-            BufferDesc::new(64, BufferUsage::Uniform, MemoryHint::CpuToGpu)
-                .with_label("editor_model_ubo"),
+            BufferDesc::new(64, BufferUsage::Uniform, MemoryHint::CpuToGpu).with_label("editor_model_ubo"),
         )?;
 
         let bgl = r.create_bind_group_layout(
-            BindGroupLayoutDesc::new(vec![BindingKind::UniformBuffer])
-                .with_label("editor_model_bgl"),
+            BindGroupLayoutDesc::new(vec![BindingKind::UniformBuffer]).with_label("editor_model_bgl"),
         )?;
         let bg = r.create_bind_group(
             BindGroupDesc::new(bgl)
@@ -915,8 +832,7 @@ void main() {
                 .with_uniform0(BufferBinding::new(ubo, 0, 64)),
         )?;
 
-        let compiler = Compiler::new()
-            .map_err(|e| EngineError::other(format!("shaderc CompileOptions: {}", e)))?;
+        let compiler = Compiler::new().ok_or_else(|| EngineError::other("shaderc: Compiler"))?;
 
         const VS_SRC: &str = r#"#version 450
 layout(location = 0) in vec3 a_pos;
@@ -946,10 +862,8 @@ void main() {
 }
 "#;
 
-        let vs_spv =
-            Self::compile_glsl(&compiler, ShaderKind::Vertex, "editor_model.vert", VS_SRC)?;
-        let fs_spv =
-            Self::compile_glsl(&compiler, ShaderKind::Fragment, "editor_model.frag", FS_SRC)?;
+        let vs_spv = Self::compile_glsl(&compiler, ShaderKind::Vertex, "editor_model.vert", VS_SRC)?;
+        let fs_spv = Self::compile_glsl(&compiler, ShaderKind::Fragment, "editor_model.frag", FS_SRC)?;
 
         let vs = r.create_shader(
             ShaderDesc::new(ShaderStage::Vertex, "main", vs_spv).with_label("editor_model_vs"),
@@ -1054,95 +968,30 @@ impl<E: Send + 'static> Module<E> for EditorRenderController {
 
             let (dx_px, dy_px, wheel_y, _hovered, dragging) =
                 self.viewport_bridge.read_orbit_input();
+
             let move_mask = self.viewport_bridge.read_move_keys();
             let dt = ctx.frame().map(|f| f.dt).unwrap_or(0.016);
-            let aspect = vp_w as f32 / (vp_h.max(1) as f32);
 
-            // --- ECS-driven camera simulation (editor/game unified) ---
-            let (rig, orbit_distance) = {
-                let mut scene = self.shared.scene.write();
+            // Translate orbit target in world space (editor/game friendly).
+            let base_speed = (self.model_radius.max(0.01) * 2.0).clamp(0.5, 200.0);
+            Self::apply_wasd_target_translate(&mut self.orbit, move_mask, dt, base_speed);
 
-                let cam = match scene.active_camera() {
-                    Some(v) => v,
-                    None => {
-                        // Be resilient: if the marker was removed, recreate an active camera.
-                        // This keeps the renderer non-fatal.
-                        let world = scene.world_mut();
-                        let cam = world.spawn();
-                        let _ = world.insert(cam, newengine_transform::Transform::default());
-                        let _ = world.insert(cam, ActiveCamera);
-                        cam
-                    }
-                };
-
-                let world = scene.world_mut();
-                Self::ensure_editor_camera(world, cam);
-
-                // Tune orbit controller to match the previous feel.
-                if let Some(motor) = world.get_mut::<OrbitCameraMotor>(cam) {
-                    motor.controller.look_sens = 0.0045;
-                    motor.controller.dolly_speed = 6.0;
-                    motor.controller.pan_speed = 1.0;
-                }
-
-                // Auto-frame model bounds on first load (universal: editor + game).
-                if let Some(_model) = self.model {
-                    let radius = self.model_radius.max(0.000_001);
-                    if let Some(motor) = world.get_mut::<OrbitCameraMotor>(cam) {
-                        motor.controller.min_distance = (radius * 0.05).max(0.05);
-
-                        if !self.model_framed_once {
-                            let center = Vec3::new(
-                                self.model_center[0],
-                                self.model_center[1],
-                                self.model_center[2],
-                            );
-                            let fovy = 60.0f32.to_radians();
-                            orbit_frame_sphere(
-                                &mut motor.controller,
-                                center,
-                                radius,
-                                fovy,
-                                aspect,
-                                1.15,
-                            );
-                            self.model_framed_once = true;
-                        }
-                    }
-                }
-
-                let (move_axis, speed_mul) = Self::move_axis_from_mask(move_mask);
-                let input = CameraInput {
-                    look_active: dragging,
-                    // Editor convention: drag up pitches camera down.
-                    look_delta: Vec2::new(dx_px, -dy_px),
-                    move_axis,
-                    speed_mul,
-                    zoom_delta: wheel_y,
-                };
-                Self::write_camera_input(world, cam, input);
-
-                // Standalone editor stepping: physics uses its own accumulator.
-                // `fixed_tick` in `SimFrame` is reserved for the main engine fixed loop.
-                self.schedule
-                    .run_default_pipeline(world, SimFrame::new(dt, 0));
-
-                // Mirror physics tick for diagnostics/UI.
-                if let Some(s) = world.resource::<newengine_sim::PhysicsStepState>() {
-                    self.fixed_tick = s.tick;
-                }
-
-                let rig = world
-                    .get::<CameraRigComp>(cam)
-                    .copied()
-                    .unwrap_or_default()
-                    .0;
-                let dist = world
-                    .get::<OrbitCameraMotor>(cam)
-                    .map(|m| m.controller.distance)
-                    .unwrap_or(4.0);
-                (rig, dist)
+            // Apply orbit rotation + dolly.
+            let input = CameraInput {
+                look_active: dragging,
+                // Editor convention: drag up pitches camera down.
+                look_delta: glam::Vec2::new(dx_px, -dy_px),
+                move_axis: Vec3::ZERO,
+                speed_mul: 1.0,
+                zoom_delta: wheel_y,
             };
+
+            // Match the feel of the previous orbit controller.
+            self.orbit.look_sens = 0.0045;
+            self.orbit.dolly_speed = 6.0;
+            self.orbit.pan_speed = 1.0;
+
+            self.orbit.apply(&mut self.rig, input, dt);
 
             if let Some(rt) = self.viewport_rt {
                 r.begin_render_target(BeginRenderTargetDesc::new(rt))?;
@@ -1151,18 +1000,29 @@ impl<E: Send + 'static> Module<E> for EditorRenderController {
                 r.set_viewport(Viewport::full(extent))?;
                 r.set_scissor(RectI32::new(0, 0, vp_w as i32, vp_h as i32))?;
 
+
                 if let Some(model) = self.model {
                     let aspect = vp_w as f32 / (vp_h.max(1) as f32);
 
                     let radius = self.model_radius.max(0.000_001);
-                    let (near, far) = auto_near_far_from_sphere(orbit_distance, radius);
+                    let center = Vec3::new(self.model_center[0], self.model_center[1], self.model_center[2]);
+
+                    // Universal "frame all" — can be invoked by editor OR by game.
+                    if !self.model_framed_once {
+                        let fovy = 60.0f32.to_radians();
+                        orbit_frame_sphere(&mut self.orbit, center, radius, fovy, aspect, 1.15);
+                        self.model_framed_once = true;
+                    }
+
+                    self.orbit.min_distance = (radius * 0.05).max(0.05);
+
+                    let (near, far) = auto_near_far_from_sphere(self.orbit.distance, radius);
 
                     // Projection is Vulkan-ready (RH, Y-flip baked, Z 0..1).
                     let fovy = 60.0f32.to_radians();
-                    self.projection =
-                        Projection::Perspective(Perspective::new(fovy, aspect, near, far));
+                    self.projection = Projection::Perspective(Perspective::new(fovy, aspect, near, far));
                     let proj = self.projection.matrix();
-                    let view = rig.view_matrix();
+                    let view = self.rig.view_matrix();
                     let mvp = proj * view;
 
                     // Upload MVP for both grid and model.
@@ -1175,7 +1035,7 @@ impl<E: Send + 'static> Module<E> for EditorRenderController {
                     r.write_buffer(model.ubo, 0, &ubytes)?;
 
                     // Grid uses the same camera UBO bind group as the model.
-                    self.build_grid(&mut **r, radius, orbit_distance)?;
+                    self.build_grid(&mut **r, radius, self.orbit.distance)?;
                     if let Some(g) = self.grid {
                         r.set_pipeline(g.pipeline)?;
                         r.set_bind_group(0, model.bg)?;

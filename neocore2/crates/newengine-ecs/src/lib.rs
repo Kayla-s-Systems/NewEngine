@@ -1,7 +1,6 @@
 #![forbid(unsafe_op_in_unsafe_fn)]
 
 use core::any::{Any, TypeId};
-
 use hashbrown::HashMap;
 use slotmap::{new_key_type, SecondaryMap, SlotMap};
 
@@ -10,17 +9,17 @@ new_key_type! {
     pub struct EntityId;
 }
 
-trait ErasedStorage: Send + Sync {
+trait ErasedStorage {
     fn as_any(&self) -> &dyn Any;
     fn as_any_mut(&mut self) -> &mut dyn Any;
     fn remove_entity(&mut self, id: EntityId);
 }
 
-struct Storage<T: Send + Sync + 'static> {
+struct Storage<T: 'static> {
     map: SecondaryMap<EntityId, T>,
 }
 
-impl<T: Send + Sync + 'static> Storage<T> {
+impl<T: 'static> Storage<T> {
     #[inline]
     fn new() -> Self {
         Self {
@@ -29,7 +28,7 @@ impl<T: Send + Sync + 'static> Storage<T> {
     }
 }
 
-impl<T: Send + Sync + 'static> ErasedStorage for Storage<T> {
+impl<T: 'static> ErasedStorage for Storage<T> {
     #[inline]
     fn as_any(&self) -> &dyn Any {
         self
@@ -47,11 +46,11 @@ impl<T: Send + Sync + 'static> ErasedStorage for Storage<T> {
 }
 
 /// Immutable query iterator over a single component type.
-pub struct Query<'a, T: Send + Sync + 'static> {
+pub struct Query<'a, T: 'static> {
     iter: Option<slotmap::secondary::Iter<'a, EntityId, T>>,
 }
 
-impl<'a, T: Send + Sync + 'static> Iterator for Query<'a, T> {
+impl<'a, T: 'static> Iterator for Query<'a, T> {
     type Item = (EntityId, &'a T);
 
     #[inline]
@@ -61,11 +60,11 @@ impl<'a, T: Send + Sync + 'static> Iterator for Query<'a, T> {
 }
 
 /// Mutable query iterator over a single component type.
-pub struct QueryMut<'a, T: Send + Sync + 'static> {
+pub struct QueryMut<'a, T: 'static> {
     iter: Option<slotmap::secondary::IterMut<'a, EntityId, T>>,
 }
 
-impl<'a, T: Send + Sync + 'static> Iterator for QueryMut<'a, T> {
+impl<'a, T: 'static> Iterator for QueryMut<'a, T> {
     type Item = (EntityId, &'a mut T);
 
     #[inline]
@@ -74,34 +73,17 @@ impl<'a, T: Send + Sync + 'static> Iterator for QueryMut<'a, T> {
     }
 }
 
-/// Immutable query iterator for two component types.
-pub struct Query2<'a, A: Send + Sync + 'static, B: Send + Sync + 'static> {
-    iter_a: slotmap::secondary::Iter<'a, EntityId, A>,
-    map_b: &'a SecondaryMap<EntityId, B>,
-}
-
-impl<'a, A: Send + Sync + 'static, B: Send + Sync + 'static> Iterator for Query2<'a, A, B> {
-    type Item = (EntityId, &'a A, &'a B);
-
-    #[inline]
-    fn next(&mut self) -> Option<Self::Item> {
-        loop {
-            let (id, a) = self.iter_a.next()?;
-            if let Some(b) = self.map_b.get(id) {
-                return Some((id, a, b));
-            }
-        }
-    }
-}
-
 /// A small, deterministic ECS world.
 ///
-/// Threading: `World` is `Send + Sync` (intended to be shared behind locks).
-/// Therefore component and resource types must be `Send + Sync + 'static`.
+/// Design goals:
+/// - deterministic entity identity via generational keys
+/// - type-safe component storage
+/// - no hidden allocations on iteration
+/// - editor-friendly (command/deferred patterns live above ECS)
 pub struct World {
     entities: SlotMap<EntityId, ()>,
     storages: HashMap<TypeId, Box<dyn ErasedStorage>>,
-    resources: HashMap<TypeId, Box<dyn Any + Send + Sync>>,
+    resources: HashMap<TypeId, Box<dyn Any>>,
 }
 
 impl Default for World {
@@ -153,8 +135,44 @@ impl World {
         self.entities.keys()
     }
 
+    // -----------------------------
+    // Resources (singletons)
+    // -----------------------------
+
+    /// Inserts (or replaces) a resource.
     #[inline]
-    fn storage_mut<T: Send + Sync + 'static>(&mut self) -> &mut Storage<T> {
+    pub fn insert_resource<T: 'static>(&mut self, r: T) {
+        self.resources.insert(TypeId::of::<T>(), Box::new(r));
+    }
+
+    /// Returns an immutable resource reference.
+    #[inline]
+    pub fn resource<T: 'static>(&self) -> Option<&T> {
+        self.resources
+            .get(&TypeId::of::<T>())
+            .and_then(|b| b.downcast_ref::<T>())
+    }
+
+    /// Returns a mutable resource reference.
+    #[inline]
+    pub fn resource_mut<T: 'static>(&mut self) -> Option<&mut T> {
+        self.resources
+            .get_mut(&TypeId::of::<T>())
+            .and_then(|b| b.downcast_mut::<T>())
+    }
+
+    /// Removes a resource.
+    #[inline]
+    pub fn remove_resource<T: 'static>(&mut self) -> Option<T> {
+        self.resources
+            .remove(&TypeId::of::<T>())
+            .and_then(|b| b.downcast::<T>().ok())
+            .map(|b| *b)
+    }
+
+    /// Ensures storage for component T exists and returns mutable access to it.
+    #[inline]
+    fn storage_mut<T: 'static>(&mut self) -> &mut Storage<T> {
         let tid = TypeId::of::<T>();
         if !self.storages.contains_key(&tid) {
             self.storages.insert(tid, Box::new(Storage::<T>::new()));
@@ -166,42 +184,45 @@ impl World {
             .expect("storage type mismatch")
     }
 
+    /// Returns immutable storage for T if it exists.
     #[inline]
-    fn storage<T: Send + Sync + 'static>(&self) -> Option<&Storage<T>> {
+    fn storage<T: 'static>(&self) -> Option<&Storage<T>> {
         let tid = TypeId::of::<T>();
         self.storages
             .get(&tid)
             .and_then(|b| b.as_any().downcast_ref::<Storage<T>>())
     }
 
+    /// Returns mutable storage for T if it exists (does not create it).
     #[inline]
-    fn storage_mut_if_exists<T: Send + Sync + 'static>(&mut self) -> Option<&mut Storage<T>> {
+    fn storage_mut_if_exists<T: 'static>(&mut self) -> Option<&mut Storage<T>> {
         let tid = TypeId::of::<T>();
         self.storages
             .get_mut(&tid)
             .and_then(|b| b.as_any_mut().downcast_mut::<Storage<T>>())
     }
 
+    /// Ensures component storage exists (no-op if already created).
     #[inline]
-    pub fn ensure_storage<T: Send + Sync + 'static>(&mut self) {
+    pub fn ensure_storage<T: 'static>(&mut self) {
         let _ = self.storage_mut::<T>();
     }
 
-    /// Raw immutable access to a component map.
+    /// Raw immutable access to the underlying component map.
     #[inline]
-    pub fn components<T: Send + Sync + 'static>(&self) -> Option<&SecondaryMap<EntityId, T>> {
+    pub fn components<T: 'static>(&self) -> Option<&SecondaryMap<EntityId, T>> {
         Some(&self.storage::<T>()?.map)
     }
 
-    /// Raw mutable access to a component map (does not create storage).
+    /// Raw mutable access to the underlying component map (does not create it).
     #[inline]
-    pub fn components_mut<T: Send + Sync + 'static>(&mut self) -> Option<&mut SecondaryMap<EntityId, T>> {
+    pub fn components_mut<T: 'static>(&mut self) -> Option<&mut SecondaryMap<EntityId, T>> {
         Some(&mut self.storage_mut_if_exists::<T>()?.map)
     }
 
     /// Inserts (or replaces) a component on an entity.
     #[inline]
-    pub fn insert<T: Send + Sync + 'static>(&mut self, id: EntityId, c: T) -> bool {
+    pub fn insert<T: 'static>(&mut self, id: EntityId, c: T) -> bool {
         if !self.exists(id) {
             return false;
         }
@@ -211,85 +232,150 @@ impl World {
 
     /// Removes a component from an entity (does not create storage).
     #[inline]
-    pub fn remove<T: Send + Sync + 'static>(&mut self, id: EntityId) -> Option<T> {
+    pub fn remove<T: 'static>(&mut self, id: EntityId) -> Option<T> {
         self.storage_mut_if_exists::<T>()?.map.remove(id)
     }
 
     #[inline]
-    pub fn get<T: Send + Sync + 'static>(&self, id: EntityId) -> Option<&T> {
+    pub fn get<T: 'static>(&self, id: EntityId) -> Option<&T> {
         self.storage::<T>()?.map.get(id)
     }
 
+    /// Gets a mutable component reference (creates storage if missing).
+    ///
+    /// Note: if you want "no create" semantics, use `components_mut()` and look up in the map.
     #[inline]
-    pub fn get_mut<T: Send + Sync + 'static>(&mut self, id: EntityId) -> Option<&mut T> {
+    pub fn get_mut<T: 'static>(&mut self, id: EntityId) -> Option<&mut T> {
         self.storage_mut::<T>().map.get_mut(id)
     }
 
     #[inline]
-    pub fn has<T: Send + Sync + 'static>(&self, id: EntityId) -> bool {
+    pub fn has<T: 'static>(&self, id: EntityId) -> bool {
         self.get::<T>(id).is_some()
     }
 
-    /// Zero-allocation query over entities that have component `T`.
+    /// Zero-allocation query over entities that have component T.
     #[inline]
-    pub fn query<T: Send + Sync + 'static>(&self) -> Query<'_, T> {
+    pub fn query<T: 'static>(&self) -> Query<'_, T> {
         Query {
             iter: self.storage::<T>().map(|s| s.map.iter()),
         }
     }
 
-    /// Zero-allocation mutable query over entities that have component `T`.
+    /// Zero-allocation mutable query over entities that have component T.
     #[inline]
-    pub fn query_mut<T: Send + Sync + 'static>(&mut self) -> QueryMut<'_, T> {
+    pub fn query_mut<T: 'static>(&mut self) -> QueryMut<'_, T> {
         QueryMut {
             iter: self.storage_mut_if_exists::<T>().map(|s| s.map.iter_mut()),
         }
     }
 
-    /// Zero-allocation query over entities that have both `A` and `B`.
+    /// Zero-allocation join query over entities that have both `A` and `B`.
+    ///
+    /// Internals: iterates the smaller component map and checks the other one.
     #[inline]
-    pub fn query2<A: Send + Sync + 'static, B: Send + Sync + 'static>(&self) -> Option<Query2<'_, A, B>> {
-        let a = self.storage::<A>()?;
-        let b = self.storage::<B>()?;
-        Some(Query2 {
-            iter_a: a.map.iter(),
-            map_b: &b.map,
-        })
+    pub fn query2<A: 'static, B: 'static>(&self) -> Query2<'_, A, B> {
+        let a = self.storage::<A>().map(|s| &s.map);
+        let b = self.storage::<B>().map(|s| &s.map);
+
+        match (a, b) {
+            (Some(am), Some(bm)) => {
+                if am.len() <= bm.len() {
+                    Query2::A(Query2A {
+                        iter: am.iter(),
+                        b: bm,
+                    })
+                } else {
+                    Query2::B(Query2B {
+                        iter: bm.iter(),
+                        a: am,
+                    })
+                }
+            }
+            _ => Query2::Empty,
+        }
     }
 
     /// Returns entity ids that have both `A` and `B`.
     ///
-    /// This is designed for safe multi-pass: collect ids, then mutate per-entity.
+    /// This is useful for safely performing mutable updates on multiple component types.
     #[inline]
-    pub fn query2_ids<A: Send + Sync + 'static, B: Send + Sync + 'static>(&self) -> Vec<EntityId> {
-        let Some(a) = self.storage::<A>() else { return Vec::new(); };
-        let Some(b) = self.storage::<B>() else { return Vec::new(); };
-        a.map.keys().filter(|&id| b.map.contains_key(id)).collect()
+    pub fn query2_ids<A: 'static, B: 'static>(&self) -> impl Iterator<Item=EntityId> + '_ {
+        self.query2::<A, B>().map(|(id, _, _)| id)
+    }
+}
+
+/// Join query iterator over two component types.
+pub enum Query2<'a, A: 'static, B: 'static> {
+    Empty,
+    A(Query2A<'a, A, B>),
+    B(Query2B<'a, A, B>),
+}
+
+pub struct Query2A<'a, A: 'static, B: 'static> {
+    iter: slotmap::secondary::Iter<'a, EntityId, A>,
+    b: &'a SecondaryMap<EntityId, B>,
+}
+
+pub struct Query2B<'a, A: 'static, B: 'static> {
+    iter: slotmap::secondary::Iter<'a, EntityId, B>,
+    a: &'a SecondaryMap<EntityId, A>,
+}
+
+impl<'a, A: 'static, B: 'static> Iterator for Query2<'a, A, B> {
+    type Item = (EntityId, &'a A, &'a B);
+
+    #[inline]
+    fn next(&mut self) -> Option<Self::Item> {
+        match self {
+            Query2::Empty => None,
+            Query2::A(q) => {
+                while let Some((id, a)) = q.iter.next() {
+                    if let Some(b) = q.b.get(id) {
+                        return Some((id, a, b));
+                    }
+                }
+                None
+            }
+            Query2::B(q) => {
+                while let Some((id, b)) = q.iter.next() {
+                    if let Some(a) = q.a.get(id) {
+                        return Some((id, a, b));
+                    }
+                }
+                None
+            }
+        }
+    }
+}
+
+/// High-level editor operations are expressed as commands to enable undo/redo later.
+pub enum Command {
+    Spawn,
+    Despawn { entity: EntityId },
+    InsertName { entity: EntityId, name: String },
+}
+
+/// Command application for MVP; undo/redo will be built on top later.
+pub struct Commands {
+    queue: Vec<Command>,
+}
+
+impl Default for Commands {
+    #[inline]
+    fn default() -> Self {
+        Self { queue: Vec::new() }
+    }
+}
+
+impl Commands {
+    #[inline]
+    pub fn push(&mut self, c: Command) {
+        self.queue.push(c);
     }
 
-    /// Resources (singletons)
     #[inline]
-    pub fn insert_resource<R: Send + Sync + 'static>(&mut self, r: R) {
-        self.resources.insert(TypeId::of::<R>(), Box::new(r));
-    }
-
-    #[inline]
-    pub fn resource<R: Send + Sync + 'static>(&self) -> Option<&R> {
-        self.resources
-            .get(&TypeId::of::<R>())
-            .and_then(|b| b.downcast_ref::<R>())
-    }
-
-    #[inline]
-    pub fn resource_mut<R: Send + Sync + 'static>(&mut self) -> Option<&mut R> {
-        self.resources
-            .get_mut(&TypeId::of::<R>())
-            .and_then(|b| b.downcast_mut::<R>())
-    }
-
-    #[inline]
-    pub fn remove_resource<R: Send + Sync + 'static>(&mut self) -> Option<R> {
-        let b = self.resources.remove(&TypeId::of::<R>())?;
-        b.downcast::<R>().ok().map(|b| *b)
+    pub fn drain(&mut self) -> std::vec::IntoIter<Command> {
+        std::mem::take(&mut self.queue).into_iter()
     }
 }

@@ -6,7 +6,7 @@ use smallvec::SmallVec;
 use crate::markup::actions::parse_actions_for;
 use crate::markup::state::UiEventKind;
 use crate::markup::theme::{UiDensity, UiThemeDesc, UiVisuals};
-use crate::markup::ui_node::{UiNode, UiSide};
+use crate::markup::ui_node::UiNode;
 
 pub(crate) fn parse_ui_root(doc: &Document) -> Result<UiNode, String> {
     let root = doc.root_element();
@@ -73,33 +73,12 @@ fn parse_node(n: Node) -> Result<UiNode, String> {
                 children: parse_children(n)?,
             })
         }
-        "central" => Ok(UiNode::Central {
-            children: parse_children(n)?,
-        }),
-        "sidepanel" => {
-            let side = attr_any(n, &["side", "align"]).unwrap_or("left");
-            let side = match side.trim().to_ascii_lowercase().as_str() {
-                "right" => UiSide::Right,
-                _ => UiSide::Left,
-            };
-
-            Ok(UiNode::SidePanel {
-                side,
-                width: attr_f32(n, "width").map(|v| v.max(64.0)),
-                children: parse_children(n)?,
-            })
-        }
-        "bottompanel" | "bottombar" => Ok(UiNode::BottomPanel {
-            height: attr_f32(n, "height").map(|v| v.max(32.0)),
-            children: parse_children(n)?,
-        }),
         "row" | "div" => {
             if tag == "div" {
                 let class = attr(n, "class").unwrap_or_default();
                 if !class.split_whitespace().any(|c| c == "row") {
                     return Ok(UiNode::Unknown {
                         tag: tag.to_string(),
-                        attrs: collect_attrs(n),
                         children: parse_children(n)?,
                     });
                 }
@@ -149,22 +128,9 @@ fn parse_node(n: Node) -> Result<UiNode, String> {
         "spacer" => Ok(UiNode::Spacer),
         _ => Ok(UiNode::Unknown {
             tag: tag.to_string(),
-            attrs: collect_attrs(n),
             children: parse_children(n)?,
         }),
     }
-}
-
-fn collect_attrs(n: Node) -> Vec<(String, String)> {
-    let mut out = Vec::new();
-    for a in n.attributes() {
-        let k = a.name().trim();
-        if k.is_empty() {
-            continue;
-        }
-        out.push((k.to_string(), a.value().to_string()));
-    }
-    out
 }
 
 fn attr(n: Node, key: &str) -> Option<String> {

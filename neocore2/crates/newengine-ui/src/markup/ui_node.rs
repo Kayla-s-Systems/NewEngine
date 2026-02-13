@@ -2,12 +2,6 @@
 
 use smallvec::SmallVec;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum UiSide {
-    Left,
-    Right,
-}
-
 #[derive(Debug, Clone)]
 pub(crate) enum UiNode {
     Ui {
@@ -19,21 +13,6 @@ pub(crate) enum UiNode {
     Window {
         title: String,
         open: bool,
-        children: Vec<UiNode>,
-    },
-
-    Central {
-        children: Vec<UiNode>,
-    },
-
-    SidePanel {
-        side: UiSide,
-        width: Option<f32>,
-        children: Vec<UiNode>,
-    },
-
-    BottomPanel {
-        height: Option<f32>,
         children: Vec<UiNode>,
     },
     Row {
@@ -65,7 +44,6 @@ pub(crate) enum UiNode {
 
     Unknown {
         tag: String,
-        attrs: Vec<(String, String)>,
         children: Vec<UiNode>,
     },
 }

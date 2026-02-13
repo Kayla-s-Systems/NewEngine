@@ -5,46 +5,29 @@ use crate::markup::substitute::substitute_vars;
 #[cfg(feature = "egui")]
 use crate::markup::theme::{UiDensity, UiThemeDesc, UiVisuals};
 #[cfg(feature = "egui")]
-use crate::markup::ui_node::{UiNode, UiSide};
+use crate::markup::ui_node::UiNode;
 #[cfg(feature = "egui")]
-use crate::markup::{EguiWidgetProvider, UiEvent, UiEventKind, UiMarkupDoc, UiState};
+use crate::markup::{UiEvent, UiEventKind, UiMarkupDoc, UiState};
 
 #[cfg(feature = "egui")]
 pub(crate) fn render_doc(doc: &UiMarkupDoc, ctx: &egui::Context, state: &mut UiState) {
     apply_theme(ctx, &doc.theme);
-    let mut null = crate::markup::NullEguiWidgetProvider;
-    render_root(&doc.root, ctx, state, &mut null);
+    render_root(&doc.root, ctx, state);
 }
 
 #[cfg(feature = "egui")]
-pub fn render_doc_with_widgets(
-    doc: &UiMarkupDoc,
-    ctx: &egui::Context,
-    state: &mut UiState,
-    widgets: &mut dyn EguiWidgetProvider,
-) {
-    apply_theme(ctx, &doc.theme);
-    render_root(&doc.root, ctx, state, widgets);
-}
-
-#[cfg(feature = "egui")]
-fn render_root(
-    root: &UiNode,
-    ctx: &egui::Context,
-    state: &mut UiState,
-    widgets: &mut dyn EguiWidgetProvider,
-) {
+fn render_root(root: &UiNode, ctx: &egui::Context, state: &mut UiState) {
     match root {
         UiNode::Ui { children } => {
             for c in children {
-                render_root(c, ctx, state, widgets);
+                render_root(c, ctx, state);
             }
         }
         UiNode::TopBar { children } => {
             egui::TopBottomPanel::top("ui_topbar").show(ctx, |ui| {
                 ui.horizontal(|ui| {
                     for c in children {
-                        render_in_ui(c, ui, state, widgets);
+                        render_in_ui(c, ui, state);
                     }
                 });
             });
@@ -57,50 +40,7 @@ fn render_root(
             let mut is_open = *open;
             egui::Window::new(title).open(&mut is_open).show(ctx, |ui| {
                 for c in children {
-                    render_in_ui(c, ui, state, widgets);
-                }
-            });
-        }
-        UiNode::Central { children } => {
-            egui::CentralPanel::default().show(ctx, |ui| {
-                for c in children {
-                    render_in_ui(c, ui, state, widgets);
-                }
-            });
-        }
-        UiNode::SidePanel {
-            side,
-            width,
-            children,
-        } => {
-            let panel_id = match side {
-                UiSide::Left => "ui_side_left",
-                UiSide::Right => "ui_side_right",
-            };
-
-            let mut p = match side {
-                UiSide::Left => egui::SidePanel::left(panel_id),
-                UiSide::Right => egui::SidePanel::right(panel_id),
-            };
-
-            if let Some(w) = *width {
-                p = p.default_width(w);
-            }
-
-            p.show(ctx, |ui| {
-                for c in children {
-                    render_in_ui(c, ui, state, widgets);
-                }
-            });
-        }
-        UiNode::BottomPanel { height, children } => {
-            let mut p = egui::TopBottomPanel::bottom("ui_bottom_panel");
-            if let Some(h) = *height {
-                p = p.default_height(h);
-            }
-            p.show(ctx, |ui| {
-                for c in children {
-                    render_in_ui(c, ui, state, widgets);
+                    render_in_ui(c, ui, state);
                 }
             });
         }
@@ -109,24 +49,19 @@ fn render_root(
 }
 
 #[cfg(feature = "egui")]
-fn render_in_ui(
-    node: &UiNode,
-    ui: &mut egui::Ui,
-    state: &mut UiState,
-    widgets: &mut dyn EguiWidgetProvider,
-) {
+fn render_in_ui(node: &UiNode, ui: &mut egui::Ui, state: &mut UiState) {
     match node {
         UiNode::Row { children } => {
             ui.horizontal(|ui| {
                 for c in children {
-                    render_in_ui(c, ui, state, widgets);
+                    render_in_ui(c, ui, state);
                 }
             });
         }
         UiNode::Column { children } => {
             ui.vertical(|ui| {
                 for c in children {
-                    render_in_ui(c, ui, state, widgets);
+                    render_in_ui(c, ui, state);
                 }
             });
         }
@@ -216,49 +151,20 @@ fn render_in_ui(
         UiNode::TopBar { children } => {
             ui.horizontal(|ui| {
                 for c in children {
-                    render_in_ui(c, ui, state, widgets);
+                    render_in_ui(c, ui, state);
                 }
             });
         }
         UiNode::Window { .. } => {}
-        UiNode::Central { children } => {
-            ui.vertical(|ui| {
-                for c in children {
-                    render_in_ui(c, ui, state, widgets);
-                }
-            });
-        }
-        UiNode::SidePanel { children, .. } => {
-            ui.vertical(|ui| {
-                for c in children {
-                    render_in_ui(c, ui, state, widgets);
-                }
-            });
-        }
-        UiNode::BottomPanel { children, .. } => {
-            ui.vertical(|ui| {
-                for c in children {
-                    render_in_ui(c, ui, state, widgets);
-                }
-            });
-        }
         UiNode::Ui { children } => {
             for c in children {
-                render_in_ui(c, ui, state, widgets);
+                render_in_ui(c, ui, state);
             }
         }
-        UiNode::Unknown {
-            tag,
-            attrs,
-            children,
-        } => {
-            if widgets.render(tag, attrs, ui, state) {
-                return;
-            }
-
+        UiNode::Unknown { tag, children } => {
             *state.unknown_tags.entry(tag.clone()).or_insert(0) += 1;
             for c in children {
-                render_in_ui(c, ui, state, widgets);
+                render_in_ui(c, ui, state);
             }
         }
     }
