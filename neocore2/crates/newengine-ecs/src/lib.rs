@@ -307,6 +307,135 @@ impl World {
     pub fn query2_ids<A: Send + Sync + 'static, B: Send + Sync + 'static>(&self) -> impl Iterator<Item=EntityId> + '_ {
         self.query2::<A, B>().map(|(id, _, _)| id)
     }
+
+    /// Executes a closure with mutable access to up to two components on the same entity,
+    /// without the remove/insert copy pattern.
+    ///
+    /// This stays 100% safe Rust by temporarily taking the two storages out of the `HashMap`,
+    /// so the borrow checker can prove disjointness.
+    #[inline]
+    pub fn with2_mut<A: Send + Sync + 'static, B: Send + Sync + 'static, R>(
+        &mut self,
+        id: EntityId,
+        f: impl FnOnce(Option<&mut A>, Option<&mut B>) -> R,
+    ) -> R {
+        let ta = TypeId::of::<A>();
+        let tb = TypeId::of::<B>();
+
+        if ta == tb {
+            // Same component type requested twice: expose it once.
+            let a = self.get_mut::<A>(id).map(|x| x as &mut A);
+            return f(a, None);
+        }
+
+        // Take storages out to avoid aliasing.
+        let mut sa = self.storages.remove(&ta);
+        let mut sb = self.storages.remove(&tb);
+
+        // If a storage doesn't exist, we keep it None.
+        let mut a_ref: Option<&mut A> = None;
+        let mut b_ref: Option<&mut B> = None;
+
+        if let Some(ref mut box_a) = sa {
+            a_ref = box_a
+                .as_any_mut()
+                .downcast_mut::<Storage<A>>()
+                .and_then(|s| s.map.get_mut(id));
+        }
+        if let Some(ref mut box_b) = sb {
+            b_ref = box_b
+                .as_any_mut()
+                .downcast_mut::<Storage<B>>()
+                .and_then(|s| s.map.get_mut(id));
+        }
+
+        let out = f(a_ref, b_ref);
+
+        // Put storages back.
+        if let Some(box_a) = sa {
+            self.storages.insert(ta, box_a);
+        }
+        if let Some(box_b) = sb {
+            self.storages.insert(tb, box_b);
+        }
+
+        out
+    }
+
+    /// Executes a closure with mutable access to up to three components on the same entity.
+    ///
+    /// Same approach as `with2_mut`, but for 3 storages.
+    #[inline]
+    pub fn with3_mut<
+        A: Send + Sync + 'static,
+        B: Send + Sync + 'static,
+        C: Send + Sync + 'static,
+        R,
+    >(
+        &mut self,
+        id: EntityId,
+        f: impl FnOnce(Option<&mut A>, Option<&mut B>, Option<&mut C>) -> R,
+    ) -> R {
+        let ta = TypeId::of::<A>();
+        let tb = TypeId::of::<B>();
+        let tc = TypeId::of::<C>();
+
+        // Handle accidental duplicates WITHOUT multiple `get_mut` borrows.
+        if ta == tb && tb == tc {
+            // All same type: we can only hand out one mutable ref safely.
+            let a = self.get_mut::<A>(id).map(|x| x as &mut A);
+            return f(a, None, None);
+        }
+        if ta == tb {
+            // A==B, but C different -> give A and C. B must be None.
+            return self.with2_mut::<A, C, R>(id, |a, c| f(a, None, c));
+        }
+        if ta == tc {
+            // A==C, but B different -> give A and B. C must be None.
+            return self.with2_mut::<A, B, R>(id, |a, b| f(a, b, None));
+        }
+        if tb == tc {
+            // B==C, but A different -> give A and B. C must be None.
+            return self.with2_mut::<A, B, R>(id, |a, b| f(a, b, None));
+        }
+
+        // Normal case: all three types distinct.
+        let mut sa = self.storages.remove(&ta);
+        let mut sb = self.storages.remove(&tb);
+        let mut sc = self.storages.remove(&tc);
+
+        let mut a_ref: Option<&mut A> = None;
+        let mut b_ref: Option<&mut B> = None;
+        let mut c_ref: Option<&mut C> = None;
+
+        if let Some(ref mut box_a) = sa {
+            a_ref = box_a
+                .as_any_mut()
+                .downcast_mut::<Storage<A>>()
+                .and_then(|s| s.map.get_mut(id));
+        }
+        if let Some(ref mut box_b) = sb {
+            b_ref = box_b
+                .as_any_mut()
+                .downcast_mut::<Storage<B>>()
+                .and_then(|s| s.map.get_mut(id));
+        }
+        if let Some(ref mut box_c) = sc {
+            c_ref = box_c
+                .as_any_mut()
+                .downcast_mut::<Storage<C>>()
+                .and_then(|s| s.map.get_mut(id));
+        }
+
+        let out = f(a_ref, b_ref, c_ref);
+
+        if let Some(box_a) = sa { self.storages.insert(ta, box_a); }
+        if let Some(box_b) = sb { self.storages.insert(tb, box_b); }
+        if let Some(box_c) = sc { self.storages.insert(tc, box_c); }
+
+        out
+    }
+
 }
 
 /// Join query iterator over two component types.

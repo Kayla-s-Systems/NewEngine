@@ -241,46 +241,50 @@ pub fn sys_character_motor(world: &mut World, frame: SimFrame) {
 
     let ids: Vec<EntityId> = world.query2_ids::<CharacterMotor, MotorInput>().collect();
     for id in ids {
-        let Some(mut motor) = world.remove::<CharacterMotor>(id) else { continue; };
-        let Some(input) = world.get::<MotorInput>(id).copied() else {
-            let _ = world.insert(id, motor);
-            continue;
-        };
+        // Update motor + transform in-place (no remove/insert copy churn).
+        // Velocity is written as a separate component (insert/replace).
+        let mut out_vel = None;
 
-        let speed_mul = if input.speed_mul.is_finite() && input.speed_mul > 0.0 {
-            input.speed_mul
-        } else {
-            1.0
-        };
+        world.with3_mut::<CharacterMotor, MotorInput, Transform, _>(id, |motor_opt, input_opt, tr_opt| {
+            let (Some(motor), Some(input), Some(t)) = (motor_opt, input_opt.copied(), tr_opt) else {
+                return;
+            };
 
-        if input.look_active {
-            if input.look_delta.x.is_finite() {
-                motor.yaw += input.look_delta.x * motor.look_sens;
+            let speed_mul = if input.speed_mul.is_finite() && input.speed_mul > 0.0 {
+                input.speed_mul
+            } else {
+                1.0
+            };
+
+            if input.look_active {
+                if input.look_delta.x.is_finite() {
+                    motor.yaw += input.look_delta.x * motor.look_sens;
+                }
+                if input.look_delta.y.is_finite() {
+                    motor.pitch += input.look_delta.y * motor.look_sens;
+                }
             }
-            if input.look_delta.y.is_finite() {
-                motor.pitch += input.look_delta.y * motor.look_sens;
-            }
-        }
-        motor.pitch = motor.pitch.clamp(-motor.pitch_limit, motor.pitch_limit);
+            motor.pitch = motor.pitch.clamp(-motor.pitch_limit, motor.pitch_limit);
 
-        // Update orientation.
-        if let Some(t) = world.get_mut::<Transform>(id) {
+            // Update orientation.
             t.rotation = Quat::from_euler(EulerRot::YXZ, motor.yaw, motor.pitch, 0.0);
+
+            // Convert input axes to world velocity. Convention: forward is -Z.
+            let local = Vec3::new(input.move_axis.x, input.move_axis.y, -input.move_axis.z);
+            let len = local.length();
+            let vel = if len > 1e-6 {
+                let dir = local / len;
+                (t.rotation * dir) * (motor.move_speed * speed_mul)
+            } else {
+                Vec3::ZERO
+            };
+
+            out_vel = Some(Velocity(vel));
+        });
+
+        if let Some(v) = out_vel {
+            let _ = world.insert(id, v);
         }
-
-        // Convert input axes to world velocity. Convention: forward is -Z.
-        let local = Vec3::new(input.move_axis.x, input.move_axis.y, -input.move_axis.z);
-        let len = local.length();
-        let vel = if len > 1e-6 {
-            let dir = local / len;
-            let rot = world.get::<Transform>(id).map(|t| t.rotation).unwrap_or(Quat::IDENTITY);
-            (rot * dir) * (motor.move_speed * speed_mul)
-        } else {
-            Vec3::ZERO
-        };
-
-        let _ = world.insert(id, Velocity(vel));
-        let _ = world.insert(id, motor);
     }
 }
 
@@ -294,23 +298,19 @@ pub fn sys_orbit_camera(world: &mut World, frame: SimFrame) {
     let ids: Vec<EntityId> = world
         .query2_ids::<OrbitCameraMotor, CameraRigComp>()
         .collect();
+
     for id in ids {
-        let Some(mut motor) = world.remove::<OrbitCameraMotor>(id) else { continue; };
-        let Some(mut rig) = world.remove::<CameraRigComp>(id) else {
-            let _ = world.insert(id, motor);
-            continue;
-        };
-
-        // Gather input. If missing, apply with defaults (no movement).
         let input = world.get::<CameraInputComp>(id).map(|c| c.0).unwrap_or_default();
-        motor.controller.apply(&mut rig.0, input, dt);
 
-        let _ = world.insert(id, rig);
-        let _ = world.insert(id, motor);
+        // In-place update (no remove/insert).
+        world.with2_mut::<OrbitCameraMotor, CameraRigComp, _>(id, |motor_opt, rig_opt| {
+            let (Some(motor), Some(rig)) = (motor_opt, rig_opt) else { return; };
+            motor.controller.apply(&mut rig.0, input, dt);
+        });
     }
 }
 
-/// Copies `CameraRigComp` to `Transform`.
+/// Copies `CameraRigComp`/// Copies `CameraRigComp` to `Transform`.
 pub fn sys_camera_rig_to_transform(world: &mut World, _frame: SimFrame) {
     let ids: Vec<EntityId> = world.query2_ids::<CameraRigComp, Transform>().collect();
     for id in ids {
