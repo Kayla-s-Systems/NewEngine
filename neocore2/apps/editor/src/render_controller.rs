@@ -17,6 +17,7 @@ use newengine_camera::{
     OrbitController, Perspective, Projection,
 };
 
+use crate::plugin_manager_bridge::PluginManagerBridge;
 use crate::viewport_bridge::ViewportBridge;
 
 use newengine_core::plugins::default_host_api;
@@ -78,13 +79,18 @@ pub struct EditorRenderController {
     assets: AssetServiceClient,
 
     viewport_bridge: std::sync::Arc<ViewportBridge>,
+    plugins_bridge: std::sync::Arc<PluginManagerBridge>,
     viewport_rt: Option<newengine_core::render::RenderTargetId>,
     viewport_rt_extent: Extent2D,
 }
 
 impl EditorRenderController {
     #[inline]
-    pub fn new(clear_color: [f32; 4], viewport_bridge: std::sync::Arc<ViewportBridge>) -> Self {
+    pub fn new(
+        clear_color: [f32; 4],
+        viewport_bridge: std::sync::Arc<ViewportBridge>,
+        plugins_bridge: std::sync::Arc<PluginManagerBridge>,
+    ) -> Self {
         // Engine baseline coordinate system:
         // - right-handed
         // - +Y up
@@ -122,6 +128,7 @@ impl EditorRenderController {
             assets: AssetServiceClient::new(default_host_api()),
 
             viewport_bridge,
+            plugins_bridge,
             viewport_rt: None,
             viewport_rt_extent: Extent2D::new(0, 0),
         }
@@ -932,6 +939,10 @@ impl<E: Send + 'static> Module<E> for EditorRenderController {
 
     fn render(&mut self, ctx: &mut ModuleCtx<'_, E>) -> EngineResult<()> {
         let ui: Option<UiDrawList> = ctx.resources_mut().remove::<UiDrawList>();
+
+        if let Some(snap) = ctx.resources().get::<newengine_core::plugins::PluginsSnapshot>() {
+            self.plugins_bridge.publish(snap.clone());
+        }
 
         let (w, h) = ctx
             .resources()

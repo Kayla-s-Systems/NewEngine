@@ -1,7 +1,10 @@
 #![forbid(unsafe_op_in_unsafe_fn)]
 
 use libloading::Library;
-use newengine_plugin_api::{HostApiV1, PluginInfo, PluginModuleDyn, PluginRootV1Ref};
+use newengine_plugin_api::{
+    CapabilityDesc, HostApiV1, PluginDescriptor, PluginInfo, PluginKind, PluginModuleDyn,
+    PluginModuleV2Dyn, PluginRootV1Ref,
+};
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 
@@ -30,10 +33,29 @@ impl std::fmt::Display for PluginLoadError {
 
 impl std::error::Error for PluginLoadError {}
 
+#[derive(Clone, Debug)]
+pub struct PluginSnapshotEntry {
+    pub path: PathBuf,
+    pub id: String,
+    pub name: String,
+    pub version: String,
+    pub kind: Option<PluginKind>,
+    pub capabilities: Vec<CapabilityDesc>,
+    pub state: String,
+    pub disabled_reason: Option<String>,
+}
+
+enum PluginModuleAny {
+    V1(PluginModuleDyn<'static>),
+    V2(PluginModuleV2Dyn<'static>),
+}
+
 struct LoadedPlugin {
+    path: PathBuf,
     _lib: Library,
-    module: PluginModuleDyn<'static>,
+    module: PluginModuleAny,
     info: PluginInfo,
+    descriptor: Option<PluginDescriptor>,
     state: PluginState,
     disabled_reason: Option<String>,
 }
@@ -54,7 +76,40 @@ impl PluginManager {
 
     #[inline]
     pub fn iter(&self) -> impl Iterator<Item = &PluginModuleDyn<'static>> {
-        self.loaded.iter().map(|p| &p.module)
+        self.loaded.iter().filter_map(|p| match &p.module {
+            PluginModuleAny::V1(m) => Some(m),
+            PluginModuleAny::V2(_) => None,
+        })
+    }
+
+    #[inline]
+    pub fn snapshot(&self) -> Vec<PluginSnapshotEntry> {
+        let mut out = Vec::with_capacity(self.loaded.len());
+        for p in self.loaded.iter() {
+            let (kind, caps) = match &p.descriptor {
+                Some(d) => (Some(d.kind), d.capabilities.iter().cloned().collect()),
+                None => (None, Vec::new()),
+            };
+
+            out.push(PluginSnapshotEntry {
+                path: p.path.clone(),
+                id: p.info.id.to_string(),
+                name: p.info.name.to_string(),
+                version: p.info.version.to_string(),
+                kind,
+                capabilities: caps,
+                state: match p.state {
+                    PluginState::Registered => "registered".to_string(),
+                    PluginState::Running => "running".to_string(),
+                    PluginState::Stopped => "stopped".to_string(),
+                    PluginState::Disabled => "disabled".to_string(),
+                },
+                disabled_reason: p.disabled_reason.clone(),
+            });
+        }
+
+        out.sort_by(|a, b| a.id.cmp(&b.id));
+        out
     }
 
     pub fn load_default(&mut self, host: HostApiV1) -> Result<(), PluginLoadError> {
@@ -124,7 +179,10 @@ impl PluginManager {
             if self.loaded[i].state != PluginState::Registered {
                 continue;
             }
-            self.call_plugin(i, "start", |m| Self::rresult_to_string(m.start()));
+            self.call_plugin(i, "start", |m| match m {
+                PluginModuleAny::V1(m) => Self::rresult_to_string(m.start()),
+                PluginModuleAny::V2(m) => Self::rresult_to_string(m.start()),
+            });
         }
         Ok(())
     }
@@ -134,7 +192,10 @@ impl PluginManager {
             if self.loaded[i].state != PluginState::Running {
                 continue;
             }
-            self.call_plugin(i, "fixed_update", |m| Self::rresult_to_string(m.fixed_update(dt)));
+            self.call_plugin(i, "fixed_update", |m| match m {
+                PluginModuleAny::V1(m) => Self::rresult_to_string(m.fixed_update(dt)),
+                PluginModuleAny::V2(m) => Self::rresult_to_string(m.fixed_update(dt)),
+            });
         }
         Ok(())
     }
@@ -144,7 +205,10 @@ impl PluginManager {
             if self.loaded[i].state != PluginState::Running {
                 continue;
             }
-            self.call_plugin(i, "update", |m| Self::rresult_to_string(m.update(dt)));
+            self.call_plugin(i, "update", |m| match m {
+                PluginModuleAny::V1(m) => Self::rresult_to_string(m.update(dt)),
+                PluginModuleAny::V2(m) => Self::rresult_to_string(m.update(dt)),
+            });
         }
         Ok(())
     }
@@ -154,7 +218,10 @@ impl PluginManager {
             if self.loaded[i].state != PluginState::Running {
                 continue;
             }
-            self.call_plugin(i, "render", |m| Self::rresult_to_string(m.render(dt)));
+            self.call_plugin(i, "render", |m| match m {
+                PluginModuleAny::V1(m) => Self::rresult_to_string(m.render(dt)),
+                PluginModuleAny::V2(m) => Self::rresult_to_string(m.render(dt)),
+            });
         }
         Ok(())
     }
@@ -174,7 +241,7 @@ impl PluginManager {
         &mut self,
         idx: usize,
         op: &str,
-        f: impl FnOnce(&mut PluginModuleDyn<'static>) -> Result<(), String>,
+        f: impl FnOnce(&mut PluginModuleAny) -> Result<(), String>,
     ) {
         if idx >= self.loaded.len() {
             return;
@@ -232,8 +299,9 @@ impl PluginManager {
 
         let id = self.loaded[idx].info.id.to_string();
         let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-            with_current_plugin_id(&id, || {
-                self.loaded[idx].module.shutdown();
+            with_current_plugin_id(&id, || match &mut self.loaded[idx].module {
+                PluginModuleAny::V1(m) => m.shutdown(),
+                PluginModuleAny::V2(m) => m.shutdown(),
             })
         }));
     }
@@ -253,13 +321,30 @@ impl PluginManager {
             })?;
 
         let root = unsafe { sym() };
-        let mut module = root.create()();
 
-        let info = module.info();
+        // Prefer V2 when available: it provides kind + capabilities for tooling.
+        // Older plugins will not have this field; treat it as optional.
+        let (mut module_any, info, descriptor) = if let Some(create_v2) = root.create_v2() {
+            let mut m2 = create_v2();
+            let d = m2.descriptor();
+            let info = PluginInfo {
+                id: d.id.clone(),
+                name: d.name.clone(),
+                version: d.version.clone(),
+            };
+            (PluginModuleAny::V2(m2), info, Some(d))
+        } else {
+            let mut m1 = root.create()();
+            let info = m1.info();
+            (PluginModuleAny::V1(m1), info, None)
+        };
         let id_str = info.id.to_string();
 
         if id_str.trim().is_empty() {
-            let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| module.shutdown()));
+            let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| match &mut module_any {
+                PluginModuleAny::V1(m) => m.shutdown(),
+                PluginModuleAny::V2(m) => m.shutdown(),
+            }));
             return Err(PluginLoadError {
                 path: path.to_path_buf(),
                 message: "plugin id is empty".to_string(),
@@ -267,7 +352,10 @@ impl PluginManager {
         }
 
         if info.name.to_string().trim().is_empty() {
-            let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| module.shutdown()));
+            let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| match &mut module_any {
+                PluginModuleAny::V1(m) => m.shutdown(),
+                PluginModuleAny::V2(m) => m.shutdown(),
+            }));
             return Err(PluginLoadError {
                 path: path.to_path_buf(),
                 message: "plugin name is empty".to_string(),
@@ -275,7 +363,10 @@ impl PluginManager {
         }
 
         if info.version.to_string().trim().is_empty() {
-            let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| module.shutdown()));
+            let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| match &mut module_any {
+                PluginModuleAny::V1(m) => m.shutdown(),
+                PluginModuleAny::V2(m) => m.shutdown(),
+            }));
             return Err(PluginLoadError {
                 path: path.to_path_buf(),
                 message: "plugin version is empty".to_string(),
@@ -288,12 +379,18 @@ impl PluginManager {
                 id_str,
                 path.display()
             );
-            let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| module.shutdown()));
+            let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| match &mut module_any {
+                PluginModuleAny::V1(m) => m.shutdown(),
+                PluginModuleAny::V2(m) => m.shutdown(),
+            }));
             return Ok(());
         }
 
         let init_res = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-            with_current_plugin_id(&id_str, || module.init(host).into_result())
+            with_current_plugin_id(&id_str, || match &mut module_any {
+                PluginModuleAny::V1(m) => m.init(host).into_result(),
+                PluginModuleAny::V2(m) => m.init(host).into_result(),
+            })
         }));
 
         match init_res {
@@ -301,7 +398,10 @@ impl PluginManager {
             Ok(Err(e)) => {
                 unregister_by_owner(&id_str);
                 let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-                    with_current_plugin_id(&id_str, || module.shutdown());
+                    with_current_plugin_id(&id_str, || match &mut module_any {
+                        PluginModuleAny::V1(m) => m.shutdown(),
+                        PluginModuleAny::V2(m) => m.shutdown(),
+                    });
                 }));
                 return Err(PluginLoadError {
                     path: path.to_path_buf(),
@@ -311,7 +411,10 @@ impl PluginManager {
             Err(_) => {
                 unregister_by_owner(&id_str);
                 let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-                    with_current_plugin_id(&id_str, || module.shutdown());
+                    with_current_plugin_id(&id_str, || match &mut module_any {
+                        PluginModuleAny::V1(m) => m.shutdown(),
+                        PluginModuleAny::V2(m) => m.shutdown(),
+                    });
                 }));
                 return Err(PluginLoadError {
                     path: path.to_path_buf(),
@@ -329,9 +432,11 @@ impl PluginManager {
 
         self.loaded_ids.insert(id_str);
         self.loaded.push(LoadedPlugin {
+            path: path.to_path_buf(),
             _lib: lib,
-            module,
+            module: module_any,
             info,
+            descriptor,
             state: PluginState::Registered,
             disabled_reason: None,
         });

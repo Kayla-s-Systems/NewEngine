@@ -6,6 +6,7 @@ use std::sync::{Arc, Mutex};
 use newengine_scene::Scene;
 use newengine_viewport::ViewportState;
 
+use crate::plugin_manager_bridge::PluginManagerBridge;
 use crate::viewport_bridge::ViewportBridge;
 
 /// Minimal editor UI: foundation-first.
@@ -20,18 +21,26 @@ pub struct EditorUiBuild {
     viewport: ViewportState,
 
     viewport_bridge: Arc<ViewportBridge>,
+    plugins_bridge: Arc<PluginManagerBridge>,
 
     // Orbit interaction (UI-driven, not via global input plugin).
     last_drag_pos: Option<egui::Pos2>,
 
     console_open: bool,
     console_input: String,
+
+    plugins_open: bool,
+    selected_plugin: Option<String>,
 }
 
 
 impl EditorUiBuild {
     #[inline]
-    pub fn new(shared_doc: Arc<Mutex<Option<UiMarkupDoc>>>, viewport_bridge: Arc<ViewportBridge>) -> Self {
+    pub fn new(
+        shared_doc: Arc<Mutex<Option<UiMarkupDoc>>>,
+        viewport_bridge: Arc<ViewportBridge>,
+        plugins_bridge: Arc<PluginManagerBridge>,
+    ) -> Self {
         let scene = Scene::demo();
         let viewport = ViewportState::new(Some(scene.active_camera().expect("scene has no active camera")));
 
@@ -41,9 +50,12 @@ impl EditorUiBuild {
             scene,
             viewport,
             viewport_bridge,
+            plugins_bridge,
             last_drag_pos: None,
             console_open: false,
             console_input: String::new(),
+            plugins_open: false,
+            selected_plugin: None,
         }
     }
 
@@ -57,6 +69,9 @@ impl EditorUiBuild {
                 ui.label(format!("entities: {entities}"));
 
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                    if ui.button("Plugins").clicked() {
+                        self.plugins_open = !self.plugins_open;
+                    }
                     if ui.button("Console").clicked() {
                         self.console_open = !self.console_open;
                     }
@@ -183,6 +198,112 @@ impl EditorUiBuild {
                 }
             });
     }
+
+    fn ui_plugins(&mut self, ctx: &egui::Context) {
+        if !self.plugins_open {
+            return;
+        }
+
+        let snap = self.plugins_bridge.read();
+
+        egui::Window::new("Plugin Manager")
+            .open(&mut self.plugins_open)
+            .resizable(true)
+            .vscroll(false)
+            .show(ctx, |ui| {
+                ui.label(format!("loaded: {}", snap.plugins.len()));
+                ui.add_space(8.0);
+
+                ui.columns(2, |cols| {
+                    // Left: list
+                    cols[0].heading("Plugins");
+                    cols[0].add_space(6.0);
+
+                    egui::ScrollArea::vertical()
+                        .id_source("plugin_list")
+                        .max_height(460.0)
+                        .show(&mut cols[0], |ui| {
+                            for p in snap.plugins.iter() {
+                                let label = format!("{}  ({})", p.name, p.id);
+                                let selected = self
+                                    .selected_plugin
+                                    .as_deref()
+                                    .map(|s| s == p.id)
+                                    .unwrap_or(false);
+
+                                let resp = ui.selectable_label(selected, label);
+                                if resp.clicked() {
+                                    self.selected_plugin = Some(p.id.clone());
+                                }
+
+                                ui.label(format!("{}  ·  {}", p.version, p.state));
+                                if let Some(reason) = p.disabled_reason.as_deref() {
+                                    ui.label(format!("disabled: {reason}"));
+                                }
+                                ui.add_space(6.0);
+                                ui.separator();
+                            }
+                        });
+
+                    // Right: details
+                    cols[1].heading("Details");
+                    cols[1].add_space(6.0);
+
+                    let selected = self
+                        .selected_plugin
+                        .as_deref()
+                        .and_then(|id| snap.plugins.iter().find(|p| p.id == id));
+
+                    if let Some(p) = selected {
+                        cols[1].label(format!("id: {}", p.id));
+                        cols[1].label(format!("name: {}", p.name));
+                        cols[1].label(format!("version: {}", p.version));
+                        cols[1].label(format!("state: {}", p.state));
+                        cols[1].label(format!("path: {}", p.path.display()));
+
+                        if let Some(k) = p.kind {
+                            cols[1].label(format!("kind: {k:?}"));
+                        } else {
+                            cols[1].label("kind: <v1 plugin>");
+                        }
+
+                        if let Some(reason) = p.disabled_reason.as_deref() {
+                            cols[1].add_space(6.0);
+                            cols[1].label(format!("disabled_reason: {reason}"));
+                        }
+
+                        cols[1].add_space(10.0);
+                        cols[1].heading("Capabilities");
+                        cols[1].add_space(6.0);
+
+                        egui::ScrollArea::vertical()
+                            .id_source("plugin_caps")
+                            .max_height(360.0)
+                            .show(&mut cols[1], |ui| {
+                                if p.capabilities.is_empty() {
+                                    ui.label("<none>");
+                                    return;
+                                }
+
+                                for c in p.capabilities.iter() {
+                                    ui.group(|ui| {
+                                        ui.label(format!("id: {}", c.id));
+                                        ui.label(format!("role: {:?}", c.role));
+                                        ui.label(format!("kind: {:?}", c.kind));
+                                        ui.label(format!("version: {}", c.version));
+                                        if !c.describe_json.is_empty() {
+                                            ui.label(format!("describe_json: {}", c.describe_json));
+                                        }
+                                    });
+                                    ui.add_space(6.0);
+                                }
+                            });
+                    } else {
+                        cols[1].label("Select a plugin on the left.");
+                    }
+                });
+            });
+    }
 }
 
 impl UiBuildFn for EditorUiBuild {
@@ -200,9 +321,15 @@ impl UiBuildFn for EditorUiBuild {
             self.console_open = !self.console_open;
         }
 
+        // Hotkey: F2 toggles plugin manager.
+        if ctx.input(|i| i.key_pressed(egui::Key::F2)) {
+            self.plugins_open = !self.plugins_open;
+        }
+
         self.ui_topbar(ctx);
         self.ui_viewport(ctx);
         self.ui_console(ctx);
+        self.ui_plugins(ctx);
 
         //self.state.end_frame();
     }

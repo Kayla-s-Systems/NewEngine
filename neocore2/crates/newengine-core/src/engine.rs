@@ -4,6 +4,7 @@ use crate::error::{EngineError, EngineResult, ModuleStage};
 use crate::events::EventHub;
 use crate::frame::Frame;
 use crate::module::{ApiVersion, Bus, Module, ModuleCtx, Resources, Services};
+use crate::plugins::PluginsSnapshot;
 use crate::plugins::{default_host_api, init_host_context, PluginManager};
 use crate::sched::Scheduler;
 use crate::sync::ShutdownToken;
@@ -278,40 +279,36 @@ impl<E: Send + 'static> Engine<E> {
 
         self.plugins_loaded = true;
 
-        let loaded = self.plugins.iter().count();
+        let loaded = self.plugins.snapshot().len();
         Self::log_phase_ok("plugins", phase, Some(loaded), Self::elapsed_since(t0));
 
         Ok(())
     }
 
     fn log_plugins_diagnostics(&self, tag: &'static str) {
-        let mut list: Vec<(String, String)> = Vec::new();
-        for p in self.plugins.iter() {
-            let info = p.info();
-            list.push((info.id.to_string(), info.version.to_string()));
-        }
-        list.sort_by(|a, b| a.0.cmp(&b.0));
-
+        let list = self.plugins.snapshot();
         log::info!("plugins: diagnostics tag='{}' loaded={}", tag, list.len());
 
-        for (i, (id, ver)) in list.iter().enumerate() {
+        for (i, p) in list.iter().enumerate() {
             log::info!(
-                "plugins: diag [{:02}/{:02}] id='{}' ver='{}'",
+                "plugins: diag [{:02}/{:02}] id='{}' ver='{}' state='{}'",
                 i.saturating_add(1),
                 list.len().max(1),
-                id,
-                ver
+                p.id,
+                p.version,
+                p.state
             );
         }
 
         if log::log_enabled!(log::Level::Debug) {
-            for p in self.plugins.iter() {
-                let info = p.info();
+            for p in list.iter() {
                 log::debug!(
-                    "plugins: diag.debug id='{}' ver='{}' info={:?}",
-                    info.id,
-                    info.version,
-                    info
+                    "plugins: diag.debug id='{}' ver='{}' kind={:?} caps={} path='{}'",
+                    p.id,
+                    p.version,
+                    p.kind,
+                    p.capabilities.len(),
+                    p.path.display()
                 );
             }
         }
@@ -517,6 +514,12 @@ impl<E: Send + 'static> Engine<E> {
         self.acc = (self.acc + dt).min(1.0);
 
         self.scheduler.begin_frame(Duration::from_secs_f32(dt));
+
+        // Expose engine/plugin telemetry to modules and UI.
+        // This is a snapshot (no interior mutability), so UI can read without synchronization.
+        self.resources.insert(PluginsSnapshot {
+            plugins: self.plugins.snapshot(),
+        });
 
         let mut steps_to_run = (self.acc / self.fixed_dt).floor() as u32;
         steps_to_run = steps_to_run.min(8);

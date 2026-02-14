@@ -24,6 +24,7 @@ use std::time::Duration;
 mod render_controller;
 mod ui;
 mod viewport_bridge;
+mod plugin_manager_bridge;
 mod shared;
 mod scene_components;
 
@@ -69,6 +70,7 @@ fn register_render_from_startup(
     engine: &mut Engine<()>,
     startup: &StartupConfig,
     viewport: std::sync::Arc<viewport_bridge::ViewportBridge>,
+    plugins: std::sync::Arc<plugin_manager_bridge::PluginManagerBridge>,
 ) -> EngineResult<()> {
     let backend = startup.render_backend.trim();
 
@@ -78,6 +80,7 @@ fn register_render_from_startup(
         engine.register_module(Box::new(render_controller::EditorRenderController::new(
             startup.render_clear_color,
             viewport,
+            plugins,
         )))?;
 
         return Ok(());
@@ -199,11 +202,12 @@ fn main() -> EngineResult<()> {
     let startup = Arc::new(startup);
 
     let viewport = std::sync::Arc::new(viewport_bridge::ViewportBridge::new());
+    let plugins = std::sync::Arc::new(plugin_manager_bridge::PluginManagerBridge::new());
 
     let mut engine = build_engine_from_startup(&startup)?;
 
     // 1) Register render (backend + controller) so the module set is complete before window creation.
-    register_render_from_startup(&mut engine, &startup, viewport.clone())?;
+    register_render_from_startup(&mut engine, &startup, viewport.clone(), plugins.clone())?;
 
     // 2) Load plugins BEFORE creating winit (required: providers must exist).
     engine.load_plugins_once()?;
@@ -218,7 +222,11 @@ fn main() -> EngineResult<()> {
     let shared_doc: Arc<Mutex<Option<UiMarkupDoc>>> = Arc::new(Mutex::new(None));
     let ui_build: Option<Box<dyn UiBuildFn>> = match startup.ui_backend {
         newengine_core::startup::UiBackend::Disabled => None,
-        _ => Some(Box::new(ui::EditorUiBuild::new(shared_doc.clone(), viewport.clone()))),
+        _ => Some(Box::new(ui::EditorUiBuild::new(
+            shared_doc.clone(),
+            viewport.clone(),
+            plugins.clone(),
+        ))),
     };
 
     // Load markup via AssetManager service (no AssetStore in-process).
