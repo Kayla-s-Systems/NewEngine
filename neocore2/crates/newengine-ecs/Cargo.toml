@@ -6,3 +6,4 @@ edition = "2021"
 [dependencies]
 hashbrown = "0.16.1"
 slotmap = "1.0"
+fxhash = "0.2"

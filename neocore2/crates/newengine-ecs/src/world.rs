@@ -1,7 +1,9 @@
 #![forbid(unsafe_op_in_unsafe_fn)]
 
 use core::any::{Any, TypeId};
+use core::hash::BuildHasherDefault;
 
+use fxhash::FxHasher;
 use hashbrown::HashMap;
 use slotmap::SlotMap;
 
@@ -10,6 +12,8 @@ use crate::{
     storage::{ErasedStorage, Storage},
     Component, EntityId,
 };
+
+type FxHashMap<K, V> = HashMap<K, V, BuildHasherDefault<FxHasher>>;
 
 /// A small, deterministic ECS world.
 ///
@@ -21,9 +25,8 @@ use crate::{
 /// - conservative change tracking (per-component added/changed ticks)
 pub struct World {
     entities: SlotMap<EntityId, ()>,
-    storages: HashMap<TypeId, Box<dyn ErasedStorage>>,
-    resources: HashMap<TypeId, Box<dyn Any + Send + Sync>>,
-
+    storages: FxHashMap<TypeId, Box<dyn ErasedStorage>>,
+    resources: FxHashMap<TypeId, Box<dyn Any + Send + Sync>>,
     tick: u64,
 }
 
@@ -39,8 +42,8 @@ impl World {
     pub fn new() -> Self {
         Self {
             entities: SlotMap::with_key(),
-            storages: HashMap::new(),
-            resources: HashMap::new(),
+            storages: FxHashMap::default(),
+            resources: FxHashMap::default(),
             tick: 1,
         }
     }
@@ -143,6 +146,7 @@ impl World {
     #[inline]
     fn storage_mut<T: Component>(&mut self) -> &mut Storage<T> {
         let tid = TypeId::of::<T>();
+
         if !self.storages.contains_key(&tid) {
             self.storages.insert(tid, Box::new(Storage::<T>::new()));
         }
@@ -185,7 +189,9 @@ impl World {
 
     /// Raw mutable access to the underlying component map (does not create it).
     #[inline]
-    pub fn components_mut<T: Component>(&mut self) -> Option<&mut slotmap::SecondaryMap<EntityId, T>> {
+    pub fn components_mut<T: Component>(
+        &mut self,
+    ) -> Option<&mut slotmap::SecondaryMap<EntityId, T>> {
         Some(&mut self.storage_mut_if_exists::<T>()?.map)
     }
 
@@ -199,6 +205,7 @@ impl World {
         let tick = self.tick;
         let s = self.storage_mut::<T>();
         let existed = s.map.contains_key(id);
+
         s.map.insert(id, c);
 
         if existed {
@@ -234,11 +241,14 @@ impl World {
         if !self.exists(id) {
             return None;
         }
+
         let tick = self.tick;
         let s = self.storage_mut::<T>();
+
         if s.map.contains_key(id) {
             s.changed_tick.insert(id, tick);
         }
+
         s.map.get_mut(id)
     }
 
@@ -252,7 +262,8 @@ impl World {
     pub fn is_added_since<T: Component>(&self, id: EntityId, since_tick: u64) -> bool {
         self.storage::<T>()
             .and_then(|s| s.added_tick.get(id).copied())
-            .map(|t| t > since_tick).unwrap_or(false)
+            .map(|t| t > since_tick)
+            .unwrap_or(false)
     }
 
     /// Returns true if the component `T` was changed after `since_tick` (strictly greater).
@@ -260,21 +271,28 @@ impl World {
     pub fn is_changed_since<T: Component>(&self, id: EntityId, since_tick: u64) -> bool {
         self.storage::<T>()
             .and_then(|s| s.changed_tick.get(id).copied())
-            .map(|t| t > since_tick).unwrap_or(false)
+            .map(|t| t > since_tick)
+            .unwrap_or(false)
     }
 
     /// Iterates entities that have component `T` and were changed after `since_tick`.
     ///
     /// Note: this iterates the component map and checks the tick map; no allocations.
     #[inline]
-    pub fn query_changed<T: Component>(&self, since_tick: u64) -> impl Iterator<Item=(EntityId, &T)> + '_ {
+    pub fn query_changed<T: Component>(
+        &self,
+        since_tick: u64,
+    ) -> impl Iterator<Item=(EntityId, &T)> + '_ {
         self.query::<T>()
             .filter(move |(id, _)| self.is_changed_since::<T>(*id, since_tick))
     }
 
     /// Iterates entities that have component `T` and were added after `since_tick`.
     #[inline]
-    pub fn query_added<T: Component>(&self, since_tick: u64) -> impl Iterator<Item=(EntityId, &T)> + '_ {
+    pub fn query_added<T: Component>(
+        &self,
+        since_tick: u64,
+    ) -> impl Iterator<Item=(EntityId, &T)> + '_ {
         self.query::<T>()
             .filter(move |(id, _)| self.is_added_since::<T>(*id, since_tick))
     }
