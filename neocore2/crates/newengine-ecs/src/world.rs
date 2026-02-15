@@ -204,9 +204,9 @@ impl World {
 
         let tick = self.tick;
         let s = self.storage_mut::<T>();
-        let existed = s.map.contains_key(id);
 
-        s.map.insert(id, c);
+        // SecondaryMap::insert returns the previous value if it existed.
+        let existed = s.map.insert(id, c).is_some();
 
         if existed {
             s.changed_tick.insert(id, tick);
@@ -243,7 +243,9 @@ impl World {
             return None;
         }
 
-        self.storage_mut::<T>().map.get_mut(id)
+        // No implicit storage creation on read paths.
+        let s = self.storage_mut_if_exists::<T>()?;
+        s.map.get_mut(id)
     }
 
     /// Gets a mutable component reference and marks it as changed.
@@ -256,8 +258,16 @@ impl World {
             return None;
         }
 
-        self.mark_changed::<T>(id);
-        self.storage_mut::<T>().map.get_mut(id)
+        let tick = self.tick;
+        let s = self.storage_mut_if_exists::<T>()?;
+
+        // Mark-changed only if the component actually exists.
+        if let Some(v) = s.map.get_mut(id) {
+            s.changed_tick.insert(id, tick);
+            return Some(v);
+        }
+
+        None
     }
 
     /// Marks a component as changed for the current world tick.

@@ -1,6 +1,6 @@
 #![forbid(unsafe_op_in_unsafe_fn)]
 
-use newengine_ecs::{EntityId, World};
+use newengine_ecs::{Component, EntityId, World};
 
 use crate::components::{ActiveCamera, SceneRoot};
 use crate::settings::SceneSettings;
@@ -72,6 +72,50 @@ impl Scene {
         true
     }
 
+
+    #[inline]
+    fn reconcile_unique_marker<C: Component>(&mut self) -> (Option<EntityId>, bool) {
+        // Pass 1: find the deterministic keeper (min stable_u64) and count.
+        let mut keep: Option<EntityId> = None;
+        let mut keep_key: u64 = 0;
+        let mut count: usize = 0;
+
+        for (id, _) in self.world.query::<C>() {
+            count += 1;
+            let k = id.stable_u64();
+            match keep {
+                None => {
+                    keep = Some(id);
+                    keep_key = k;
+                }
+                Some(_) => {
+                    if k < keep_key {
+                        keep = Some(id);
+                        keep_key = k;
+                    }
+                }
+            }
+        }
+
+        if count <= 1 {
+            return (keep, false);
+        }
+
+        // Pass 2: remove all non-keepers.
+        let keep_id = keep.expect("count>0 implies keep");
+        let mut to_remove: Vec<EntityId> = Vec::with_capacity(count.saturating_sub(1));
+        for (id, _) in self.world.query::<C>() {
+            if id != keep_id {
+                to_remove.push(id);
+            }
+        }
+        for id in to_remove {
+            let _ = self.world.remove::<C>(id);
+        }
+
+        (Some(keep_id), true)
+    }
+
     /// Ensures:
     /// - at most one `SceneRoot` marker
     /// - at most one `ActiveCamera` marker
@@ -83,46 +127,12 @@ impl Scene {
         let mut changed = false;
 
         // ---- ROOT ----
-        let mut roots: Vec<EntityId> = self
-            .world
-            .query::<SceneRoot>()
-            .map(|(id, _)| id)
-            .collect();
-
-        let root: Option<EntityId> = match roots.len() {
-            0 => None,
-            1 => Some(roots[0]),
-            _ => {
-                roots.sort_unstable_by_key(|e| e.stable_u64());
-                let keep = roots[0];
-                for e in roots.iter().skip(1) {
-                    self.world.remove::<SceneRoot>(*e);
-                }
-                changed = true;
-                Some(keep)
-            }
-        };
+        let (root, root_changed) = self.reconcile_unique_marker::<SceneRoot>();
+        changed |= root_changed;
 
         // ---- CAMERA ----
-        let mut cams: Vec<EntityId> = self
-            .world
-            .query::<ActiveCamera>()
-            .map(|(id, _)| id)
-            .collect();
-
-        let cam: Option<EntityId> = match cams.len() {
-            0 => None,
-            1 => Some(cams[0]),
-            _ => {
-                cams.sort_unstable_by_key(|e| e.stable_u64());
-                let keep = cams[0];
-                for e in cams.iter().skip(1) {
-                    self.world.remove::<ActiveCamera>(*e);
-                }
-                changed = true;
-                Some(keep)
-            }
-        };
+        let (cam, cam_changed) = self.reconcile_unique_marker::<ActiveCamera>();
+        changed |= cam_changed;
 
         match self.world.resource_mut::<SceneState>() {
             Some(st) => {
