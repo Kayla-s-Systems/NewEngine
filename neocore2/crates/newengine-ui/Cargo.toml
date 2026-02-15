@@ -12,7 +12,7 @@ provider-null = []
 [dependencies]
 newengine-plugin-api = { path = "../newengine-plugin-api" }
 ahash = "0.8"
-roxmltree = "0.19"
+roxmltree = "0.21.1"
 smallvec = "1.13"
 bytemuck = { version = "1.16", features = ["derive"] }
 

@@ -8,6 +8,8 @@ use crate::markup::theme::{UiDensity, UiThemeDesc, UiVisuals};
 use crate::markup::ui_node::UiNode;
 #[cfg(feature = "egui")]
 use crate::markup::{UiEvent, UiEventKind, UiMarkupDoc, UiState};
+#[cfg(feature = "egui")]
+use serde_json::Value;
 
 #[cfg(feature = "egui")]
 pub(crate) fn render_doc(doc: &UiMarkupDoc, ctx: &egui::Context, state: &mut UiState) {
@@ -146,6 +148,138 @@ fn render_in_ui(node: &UiNode, ui: &mut egui::Ui, state: &mut UiState) {
                     actions: on_submit.clone(),
                 });
             }
+        }
+        UiNode::Checkbox {
+            id,
+            text,
+            bind,
+            on_change,
+        } => {
+            let text = substitute_vars(text, &state.vars);
+
+            let cur = state
+                .vars
+                .get(bind)
+                .map(|s| {
+                    let v = s.trim().to_ascii_lowercase();
+                    v == "1" || v == "true" || v == "yes" || v == "on"
+                })
+                .unwrap_or(false);
+
+            let mut v = cur;
+            let changed = ui.checkbox(&mut v, text.as_ref()).changed();
+            if changed {
+                let v_str = if v { "true" } else { "false" };
+                state.vars.insert(bind.clone(), v_str.to_string());
+
+                if !on_change.is_empty() {
+                    state.push_event(UiEvent {
+                        kind: UiEventKind::Change,
+                        target_id: id.clone(),
+                        value: Some(v_str.to_string()),
+                        actions: on_change.clone(),
+                    });
+                }
+            }
+        }
+        UiNode::Select {
+            id,
+            bind,
+            options,
+            on_change,
+        } => {
+            let cur = state.vars.get(bind).cloned().unwrap_or_default();
+            let mut selected = cur;
+
+            let selected_label = options
+                .iter()
+                .find(|(v, _)| *v == selected)
+                .map(|(_, l)| l.as_str())
+                .unwrap_or("<select>");
+
+            let mut changed = false;
+            egui::ComboBox::from_id_source(id)
+                .selected_text(selected_label)
+                .show_ui(ui, |ui| {
+                    for (v, l) in options.iter() {
+                        if ui.selectable_value(&mut selected, v.clone(), l).clicked() {
+                            changed = true;
+                        }
+                    }
+                });
+
+            if changed {
+                state.vars.insert(bind.clone(), selected.clone());
+
+                if !on_change.is_empty() {
+                    state.push_event(UiEvent {
+                        kind: UiEventKind::Change,
+                        target_id: id.clone(),
+                        value: Some(selected),
+                        actions: on_change.clone(),
+                    });
+                }
+            }
+        }
+        UiNode::Separator => {
+            ui.separator();
+        }
+        UiNode::Scroll { id, children } => {
+            let mut sa = egui::ScrollArea::vertical().auto_shrink([false; 2]);
+            if let Some(id) = id.as_deref() {
+                sa = sa.id_source(id);
+            }
+            sa.show(ui, |ui| {
+                for c in children {
+                    render_in_ui(c, ui, state);
+                }
+            });
+        }
+        UiNode::Repeat {
+            items,
+            as_name,
+            children,
+        } => {
+            // items must be a JSON array of objects.
+            let Some(src) = state.vars.get(items).cloned() else {
+                return;
+            };
+
+            let parsed: Value = match serde_json::from_str(&src) {
+                Ok(v) => v,
+                Err(_) => return,
+            };
+            let Some(arr) = parsed.as_array() else {
+                return;
+            };
+
+            // Backup vars once, then overlay per item.
+            let base_vars = state.vars.clone();
+
+            for it in arr.iter() {
+                state.vars = base_vars.clone();
+
+                // Inject object fields as "$as_name.key".
+                if let Some(obj) = it.as_object() {
+                    for (k, v) in obj.iter() {
+                        let key = format!("{as}.{k}", as = as_name);
+                        let val = match v {
+                            Value::String(s) => s.clone(),
+                            Value::Number(n) => n.to_string(),
+                            Value::Bool(b) => b.to_string(),
+                            _ => v.to_string(),
+                        };
+                        state.vars.insert(key, val);
+                    }
+                }
+
+                for c in children {
+                    render_in_ui(c, ui, state);
+                }
+            }
+
+            // Restore.
+            state.vars = base_vars;
         }
         UiNode::Spacer => ui.add_space(8.0),
         UiNode::TopBar { children } => {

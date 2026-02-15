@@ -841,13 +841,14 @@ void main() {
 
         // Move in the horizontal plane aligned to yaw.
         let (sy, cy) = orbit.yaw.sin_cos();
-        let fwd = Vec3::new(-sy, 0.0, -cy);
-        let rgt = Vec3::new(cy, 0.0, -sy);
-        let upv = Vec3::Y;
+        let fwd: Vec3 = Vec3::new(-sy, 0.0, -cy);
+        let rgt: Vec3 = Vec3::new(cy, 0.0, -sy);
+        let upv: Vec3 = Vec3::Y;
 
         let s = speed * dt;
         orbit.target += (fwd * forward + rgt * right + upv * up) * s;
     }
+
 
     fn build_demo(&mut self, r: &mut dyn newengine_core::render::RenderApi) -> EngineResult<()> {
         if self.demo.is_some() {

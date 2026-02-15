@@ -125,6 +125,64 @@ fn parse_node(n: Node) -> Result<UiNode, String> {
                 on_submit,
             })
         }
+        "checkbox" => {
+            let id = attr(n, "id").ok_or_else(|| "checkbox requires id".to_string())?;
+            let bind = attr(n, "bind").unwrap_or_else(|| id.clone());
+            let text = attr(n, "text").unwrap_or_default();
+
+            let mut on_change = SmallVec::<[String; 2]>::new();
+            parse_actions_for(&n, UiEventKind::Change, &mut on_change);
+
+            Ok(UiNode::Checkbox {
+                id,
+                text,
+                bind,
+                on_change,
+            })
+        }
+        "select" => {
+            let id = attr(n, "id").ok_or_else(|| "select requires id".to_string())?;
+            let bind = attr(n, "bind").unwrap_or_else(|| id.clone());
+
+            let options_raw = attr(n, "options").unwrap_or_default();
+            let mut options = Vec::new();
+            for part in options_raw.split(|c| c == ',' || c == ';') {
+                let p = part.trim();
+                if p.is_empty() {
+                    continue;
+                }
+                // value|label or just value
+                if let Some((v, l)) = p.split_once('|') {
+                    options.push((v.trim().to_string(), l.trim().to_string()));
+                } else {
+                    options.push((p.to_string(), p.to_string()));
+                }
+            }
+
+            let mut on_change = SmallVec::<[String; 2]>::new();
+            parse_actions_for(&n, UiEventKind::Change, &mut on_change);
+
+            Ok(UiNode::Select {
+                id,
+                bind,
+                options,
+                on_change,
+            })
+        }
+        "separator" | "sep" => Ok(UiNode::Separator),
+        "scroll" => Ok(UiNode::Scroll {
+            id: attr_opt(n, "id"),
+            children: parse_children(n)?,
+        }),
+        "repeat" => {
+            let items = attr(n, "items").ok_or_else(|| "repeat requires items".to_string())?;
+            let as_name = attr(n, "as").unwrap_or_else(|| "it".to_string());
+            Ok(UiNode::Repeat {
+                items,
+                as_name,
+                children: parse_children(n)?,
+            })
+        }
         "spacer" => Ok(UiNode::Spacer),
         _ => Ok(UiNode::Unknown {
             tag: tag.to_string(),

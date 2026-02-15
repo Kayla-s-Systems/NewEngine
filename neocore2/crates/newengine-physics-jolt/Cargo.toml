@@ -11,7 +11,7 @@ double-precision = ["rolt/double-precision", "joltc-sys/double-precision"]
 object-layer-u32 = ["rolt/object-layer-u32", "joltc-sys/object-layer-u32"]
 
 [dependencies]
-glam = "0.27"
+glam = "0.32.0"
 thiserror = "2"
 
 # Safe wrapper
