@@ -7,13 +7,13 @@ use newengine_ecs::EntityId;
 /// This prevents the "first found" ambiguity and makes roles explicit.
 #[derive(Clone, Copy, Debug)]
 pub struct SceneState {
-    pub root: EntityId,
-    pub active_camera: EntityId,
+    pub root: Option<EntityId>,
+    pub active_camera: Option<EntityId>,
 }
 
 impl SceneState {
     #[inline]
-    pub fn new(root: EntityId, active_camera: EntityId) -> Self {
+    pub fn new(root: Option<EntityId>, active_camera: Option<EntityId>) -> Self {
         Self { root, active_camera }
     }
 }

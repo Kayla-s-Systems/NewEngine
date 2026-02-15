@@ -18,7 +18,7 @@ pub fn set_parent(world: &mut World, child: EntityId, parent: Option<EntityId>) 
     let old_parent = world.get::<Parent>(child).map(|p| p.0);
 
     if let Some(op) = old_parent {
-        if let Some(ch) = world.get_mut::<Children>(op) {
+        if let Some(ch) = world.get_mut_tracked::<Children>(op) {
             ch.0.retain(|&e| e != child);
         }
     }
@@ -36,7 +36,7 @@ pub fn set_parent(world: &mut World, child: EntityId, parent: Option<EntityId>) 
             if world.get::<Children>(p).is_none() {
                 let _ = world.insert(p, Children::default());
             }
-            if let Some(ch) = world.get_mut::<Children>(p) {
+            if let Some(ch) = world.get_mut_tracked::<Children>(p) {
                 if !ch.0.iter().any(|&e| e == child) {
                     ch.0.push(child);
                 }

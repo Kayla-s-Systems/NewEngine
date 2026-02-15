@@ -130,11 +130,11 @@ pub fn propagate_transforms(world: &mut World) {
     for (i, &id) in ids.iter().enumerate() {
         let m = out[i];
 
-        if let Some(gt) = world.get_mut::<GlobalTransform>(id) {
+        if let Some(gt) = world.get_mut_tracked::<GlobalTransform>(id) {
             gt.0 = m;
         }
 
-        if let Some(wp) = world.get_mut::<WorldPose>(id) {
+        if let Some(wp) = world.get_mut_tracked::<WorldPose>(id) {
             let (scale, rot, trans) = m.to_scale_rotation_translation();
             let (yaw, pitch, roll) = rot.to_euler(EulerRot::YXZ);
 

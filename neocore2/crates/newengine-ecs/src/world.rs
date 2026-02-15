@@ -233,23 +233,50 @@ impl World {
         self.storage::<T>()?.map.get(id)
     }
 
-    /// Gets a mutable component reference.
+    /// Gets a mutable component reference without side effects.
     ///
-    /// Conservative change tracking: acquiring a mutable ref marks the component as changed.
+    /// This does **not** mark the component as changed. If you need change tracking,
+    /// either call [`World::mark_changed`] after mutation or use [`World::get_mut_tracked`].
     #[inline]
     pub fn get_mut<T: Component>(&mut self, id: EntityId) -> Option<&mut T> {
         if !self.exists(id) {
             return None;
         }
 
-        let tick = self.tick;
-        let s = self.storage_mut::<T>();
+        self.storage_mut::<T>().map.get_mut(id)
+    }
 
-        if s.map.contains_key(id) {
-            s.changed_tick.insert(id, tick);
+    /// Gets a mutable component reference and marks it as changed.
+    ///
+    /// Use this when you *know* you are going to mutate the component and want
+    /// change tracking to reflect that.
+    #[inline]
+    pub fn get_mut_tracked<T: Component>(&mut self, id: EntityId) -> Option<&mut T> {
+        if !self.exists(id) {
+            return None;
         }
 
-        s.map.get_mut(id)
+        self.mark_changed::<T>(id);
+        self.storage_mut::<T>().map.get_mut(id)
+    }
+
+    /// Marks a component as changed for the current world tick.
+    ///
+    /// This is useful when you mutated a component via interior mutability or
+    /// via an untracked mutable reference.
+    #[inline]
+    pub fn mark_changed<T: Component>(&mut self, id: EntityId) {
+        if !self.exists(id) {
+            return;
+        }
+
+        let tick = self.tick;
+        let s = self.storage_mut_if_exists::<T>();
+        if let Some(s) = s {
+            if s.map.contains_key(id) {
+                s.changed_tick.insert(id, tick);
+            }
+        }
     }
 
     #[inline]

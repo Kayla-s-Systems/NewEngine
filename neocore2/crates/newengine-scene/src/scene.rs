@@ -2,11 +2,8 @@
 
 use newengine_ecs::{EntityId, World};
 
-use newengine_transform::set_parent;
-
 use crate::components::{ActiveCamera, SceneRoot};
 use crate::settings::SceneSettings;
-use crate::spawn::spawn_named;
 use crate::SceneState;
 
 /// Runtime scene: owned ECS `World` + settings.
@@ -46,12 +43,12 @@ impl Scene {
 
     #[inline]
     pub fn root(&self) -> Option<EntityId> {
-        self.world.resource::<SceneState>().map(|s| s.root)
+        self.world.resource::<SceneState>().and_then(|s| s.root)
     }
 
     #[inline]
     pub fn active_camera(&self) -> Option<EntityId> {
-        self.world.resource::<SceneState>().map(|s| s.active_camera)
+        self.world.resource::<SceneState>().and_then(|s| s.active_camera)
     }
 
     #[inline]
@@ -60,38 +57,41 @@ impl Scene {
             return false;
         }
 
-        if let Some(st) = self.world.resource::<SceneState>().copied() {
-            self.world.remove::<ActiveCamera>(st.active_camera);
+        if let Some(st) = self.world.resource::<SceneState>() {
+            if let Some(prev) = st.active_camera {
+                self.world.remove::<ActiveCamera>(prev);
+            }
         }
 
         self.world.insert(id, ActiveCamera);
 
         if let Some(st) = self.world.resource_mut::<SceneState>() {
-            st.active_camera = id;
+            st.active_camera = Some(id);
         }
 
         true
     }
 
     /// Ensures:
-    /// - exactly one SceneRoot
-    /// - exactly one ActiveCamera
-    /// - SceneState matches markers
+    /// - at most one `SceneRoot` marker
+    /// - at most one `ActiveCamera` marker
+    /// - `SceneState` matches markers
+    ///
+    /// Foundation-first rule: this method never spawns entities.
+    /// Scene bootstrap (root/camera defaults) must live in higher layers (editor/game).
     pub fn validate_invariants(&mut self) -> bool {
         let mut changed = false;
 
         // ---- ROOT ----
-        let mut roots: Vec<EntityId> =
-            self.world.query::<SceneRoot>().map(|(id, _)| id).collect();
+        let mut roots: Vec<EntityId> = self
+            .world
+            .query::<SceneRoot>()
+            .map(|(id, _)| id)
+            .collect();
 
-        let root = match roots.len() {
-            1 => roots[0],
-            0 => {
-                let e = spawn_named(&mut self.world, "Root");
-                self.world.insert(e, SceneRoot);
-                changed = true;
-                e
-            }
+        let root: Option<EntityId> = match roots.len() {
+            0 => None,
+            1 => Some(roots[0]),
             _ => {
                 roots.sort_unstable_by_key(|e| e.stable_u64());
                 let keep = roots[0];
@@ -99,23 +99,20 @@ impl Scene {
                     self.world.remove::<SceneRoot>(*e);
                 }
                 changed = true;
-                keep
+                Some(keep)
             }
         };
 
         // ---- CAMERA ----
-        let mut cams: Vec<EntityId> =
-            self.world.query::<ActiveCamera>().map(|(id, _)| id).collect();
+        let mut cams: Vec<EntityId> = self
+            .world
+            .query::<ActiveCamera>()
+            .map(|(id, _)| id)
+            .collect();
 
-        let cam = match cams.len() {
-            1 => cams[0],
-            0 => {
-                let e = spawn_named(&mut self.world, "Camera");
-                self.world.insert(e, ActiveCamera);
-                set_parent(&mut self.world, e, Some(root));
-                changed = true;
-                e
-            }
+        let cam: Option<EntityId> = match cams.len() {
+            0 => None,
+            1 => Some(cams[0]),
             _ => {
                 cams.sort_unstable_by_key(|e| e.stable_u64());
                 let keep = cams[0];
@@ -123,7 +120,7 @@ impl Scene {
                     self.world.remove::<ActiveCamera>(*e);
                 }
                 changed = true;
-                keep
+                Some(keep)
             }
         };
 

@@ -2,7 +2,7 @@
 
 use crate::{EntityId, World};
 
-/// Placeholder for an entity that will be spawned when the command buffer is applied.
+/// Opaque handle for an entity that will be spawned when the command buffer is applied.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct EntityToken(u32);
 
@@ -62,7 +62,7 @@ impl Commands {
         }
     }
 
-    /// Records a spawn and returns a placeholder token.
+    /// Records a spawn and returns an opaque token.
     #[inline]
     pub fn spawn(&mut self) -> EntityToken {
         let t = EntityToken(self.next_token);
@@ -166,21 +166,27 @@ impl Commands {
         }
 
         // Phase 1: resolve spawns.
-        let mut spawned: Vec<(EntityToken, EntityId)> = Vec::new();
+        //
+        // Tokens are monotonic indices starting at 1, so we can resolve in O(1)
+        // via a dense vector where index = token.index() - 1.
+        let mut token_to_entity: Vec<EntityId> = Vec::new();
+        token_to_entity.reserve(self.next_token.saturating_sub(1) as usize);
+
         for op in self.ops.iter() {
             if let Op::Spawn { token } = *op {
                 let id = world.spawn();
-                spawned.push((token, id));
+                let idx = (token.index().saturating_sub(1)) as usize;
+                if token_to_entity.len() <= idx {
+                    token_to_entity.resize(idx + 1, id);
+                } else {
+                    token_to_entity[idx] = id;
+                }
             }
         }
 
-        // Helper for token resolution (linear scan is fine for editor/early runtime;
-        // can be replaced by a small hashmap if needed later).
-        let mut resolve = |t: EntityToken| -> Option<EntityId> {
-            spawned
-                .iter()
-                .find(|(tok, _)| *tok == t)
-                .map(|(_, id)| *id)
+        let resolve = |t: EntityToken, map: &Vec<EntityId>| -> Option<EntityId> {
+            let idx = (t.index().saturating_sub(1)) as usize;
+            map.get(idx).copied()
         };
 
         // Phase 2: apply in original order.
@@ -191,7 +197,7 @@ impl Commands {
                 Op::Despawn { target } => {
                     let id = match target {
                         EntityTarget::Existing(e) => Some(e),
-                        EntityTarget::Token(t) => resolve(t),
+                        EntityTarget::Token(t) => resolve(t, &token_to_entity),
                     };
                     if let Some(id) = id {
                         let _ = world.despawn(id);
@@ -200,7 +206,7 @@ impl Commands {
                 Op::Insert { target, f } => {
                     let id = match target {
                         EntityTarget::Existing(e) => Some(e),
-                        EntityTarget::Token(t) => resolve(t),
+                        EntityTarget::Token(t) => resolve(t, &token_to_entity),
                     };
                     if let Some(id) = id {
                         f(world, id);
@@ -209,7 +215,7 @@ impl Commands {
                 Op::Remove { target, f } => {
                     let id = match target {
                         EntityTarget::Existing(e) => Some(e),
-                        EntityTarget::Token(t) => resolve(t),
+                        EntityTarget::Token(t) => resolve(t, &token_to_entity),
                     };
                     if let Some(id) = id {
                         f(world, id);
@@ -218,6 +224,12 @@ impl Commands {
             }
         }
 
-        spawned
+        // Preserve the public return contract: token->entity pairs.
+        let mut out: Vec<(EntityToken, EntityId)> = Vec::with_capacity(token_to_entity.len());
+        for (i, id) in token_to_entity.into_iter().enumerate() {
+            out.push((EntityToken((i as u32) + 1), id));
+        }
+
+        out
     }
 }

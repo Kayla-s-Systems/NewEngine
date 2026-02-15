@@ -144,7 +144,7 @@ pub fn propagate_world_bounds(
     // Write-back.
     for (id, local, g) in items {
         let wb = transform_aabb(g, local);
-        if let Some(w) = world.get_mut::<WorldBounds>(id) {
+        if let Some(w) = world.get_mut_tracked::<WorldBounds>(id) {
             w.0 = wb;
         }
         let _ = world.remove::<BoundsDirty>(id);

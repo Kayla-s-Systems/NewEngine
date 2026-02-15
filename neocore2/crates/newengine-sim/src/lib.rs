@@ -264,7 +264,7 @@ pub fn sys_character_motor(world: &mut World, frame: SimFrame) {
         motor.pitch = motor.pitch.clamp(-motor.pitch_limit, motor.pitch_limit);
 
         // Update orientation.
-        if let Some(t) = world.get_mut::<Transform>(id) {
+        if let Some(t) = world.get_mut_tracked::<Transform>(id) {
             t.rotation = Quat::from_euler(EulerRot::YXZ, motor.yaw, motor.pitch, 0.0);
         }
 
@@ -315,7 +315,7 @@ pub fn sys_camera_rig_to_transform(world: &mut World, _frame: SimFrame) {
     let ids: Vec<EntityId> = world.query2_ids::<CameraRigComp, Transform>().collect();
     for id in ids {
         let Some(rig) = world.get::<CameraRigComp>(id).copied() else { continue; };
-        if let Some(t) = world.get_mut::<Transform>(id) {
+        if let Some(t) = world.get_mut_tracked::<Transform>(id) {
             t.position = rig.0.position;
             t.rotation = rig.0.rotation;
         }
@@ -333,7 +333,7 @@ pub fn sys_integrate_velocities(world: &mut World, frame: SimFrame) {
     let ids: Vec<EntityId> = world.query2_ids::<Transform, Velocity>().collect();
     for id in ids {
         let Some(v) = world.get::<Velocity>(id).copied() else { continue; };
-        if let Some(t) = world.get_mut::<Transform>(id) {
+        if let Some(t) = world.get_mut_tracked::<Transform>(id) {
             t.position += v.0 * dt;
         }
     }
@@ -342,7 +342,7 @@ pub fn sys_integrate_velocities(world: &mut World, frame: SimFrame) {
     let ids: Vec<EntityId> = world.query2_ids::<Transform, AngularVelocity>().collect();
     for id in ids {
         let Some(w) = world.get::<AngularVelocity>(id).copied() else { continue; };
-        if let Some(t) = world.get_mut::<Transform>(id) {
+        if let Some(t) = world.get_mut_tracked::<Transform>(id) {
             let d = w.0 * dt;
             if d.is_finite() && d.length_squared() > 1e-12 {
                 let dq = Quat::from_euler(EulerRot::YXZ, d.y, d.x, d.z);

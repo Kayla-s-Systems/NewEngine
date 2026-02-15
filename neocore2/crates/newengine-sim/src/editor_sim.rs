@@ -97,7 +97,7 @@ impl EditorSimModule {
 
         // Write into the active camera entity.
         for (id, _cam) in world.query::<newengine_scene::ActiveCamera>() {
-            if let Some(ci) = world.get_mut::<CameraInputComp>(id) {
+            if let Some(ci) = world.get_mut_tracked::<CameraInputComp>(id) {
                 ci.0 = input;
             } else {
                 let _ = world.insert(id, CameraInputComp(input));
@@ -144,7 +144,7 @@ impl EditorSimModule {
                     };
                     let _ = world.insert(id, p);
 
-                    if let Some(t) = world.get_mut::<Transform>(id) {
+                    if let Some(t) = world.get_mut_tracked::<Transform>(id) {
                         match kind {
                             PrimitiveKind::Cube => {
                                 t.position = glam::Vec3::new(0.0, 0.5, 0.0);
