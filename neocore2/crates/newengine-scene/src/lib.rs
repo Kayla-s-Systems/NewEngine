@@ -1,6 +1,6 @@
 #![forbid(unsafe_op_in_unsafe_fn)]
 mod bounds;
-mod components;
+pub mod components;
 mod scene;
 mod state;
 mod settings;

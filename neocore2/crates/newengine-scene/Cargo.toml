@@ -7,5 +7,4 @@ edition = "2021"
 newengine-ecs = { path = "../newengine-ecs" }
 newengine-transform = { path = "../newengine-transform" }
 newengine-bounds = { path = "../newengine-bounds" }
-glam = "0.32.0"
 hashbrown = "0.16.1"

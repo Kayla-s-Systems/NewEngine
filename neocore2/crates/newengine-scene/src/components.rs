@@ -1,6 +1,6 @@
 #![forbid(unsafe_op_in_unsafe_fn)]
 
-use hashbrown::HashMap;
+use std::collections::BTreeMap;
 
 /// Human-readable name of an entity.
 #[derive(Clone, Debug)]
@@ -52,7 +52,7 @@ impl Controller {
 /// string-keyed map. This type exists for scripting, UI inspection and prototyping.
 #[derive(Clone, Debug, Default)]
 pub struct PropertyBag {
-    pub props: HashMap<String, PropertyValue>,
+    pub props: BTreeMap<String, PropertyValue>,
 }
 
 #[derive(Clone, Debug)]
