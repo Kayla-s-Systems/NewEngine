@@ -17,7 +17,7 @@ use newengine_camera::{
     OrbitController, Perspective, Projection,
 };
 
-use crate::plugin_manager_bridge::PluginManagerBridge;
+use crate::plugin_manager::PluginManagerBridge;
 use crate::viewport_bridge::ViewportBridge;
 
 use newengine_core::plugins::default_host_api;

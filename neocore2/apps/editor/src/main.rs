@@ -24,7 +24,7 @@ use std::time::Duration;
 mod render_controller;
 mod ui;
 mod viewport_bridge;
-mod plugin_manager_bridge;
+mod plugin_manager;
 mod shared;
 mod scene_components;
 
@@ -70,7 +70,7 @@ fn register_render_from_startup(
     engine: &mut Engine<()>,
     startup: &StartupConfig,
     viewport: std::sync::Arc<viewport_bridge::ViewportBridge>,
-    plugins: std::sync::Arc<plugin_manager_bridge::PluginManagerBridge>,
+    plugins: std::sync::Arc<plugin_manager::PluginManagerBridge>,
 ) -> EngineResult<()> {
     let backend = startup.render_backend.trim();
 
@@ -202,7 +202,7 @@ fn main() -> EngineResult<()> {
     let startup = Arc::new(startup);
 
     let viewport = std::sync::Arc::new(viewport_bridge::ViewportBridge::new());
-    let plugins = std::sync::Arc::new(plugin_manager_bridge::PluginManagerBridge::new());
+    let plugins = std::sync::Arc::new(plugin_manager::PluginManagerBridge::new());
 
     let mut engine = build_engine_from_startup(&startup)?;
 
