@@ -141,7 +141,7 @@ impl EditorUiBuild {
                 0.0
             };
 
-            let wheel_y = (wheel_y_points / 24.0).clamp(-12.0, 12.0);
+            let wheel_y = (wheel_y_points / 240.0).clamp(-2.0, 2.0);
 
             self.viewport_bridge
                 .publish_orbit_input(dx_px, dy_px, wheel_y, active, dragging);
