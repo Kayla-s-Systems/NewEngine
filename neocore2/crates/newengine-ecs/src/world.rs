@@ -6,9 +6,9 @@ use hashbrown::HashMap;
 use slotmap::SlotMap;
 
 use crate::{
-    query::{Query, Query2, Query2A, Query2B, QueryMut}, storage::{ErasedStorage, Storage},
-    Component,
-    EntityId,
+    query::{Query, Query2, Query2A, Query2B, QueryMut},
+    storage::{ErasedStorage, Storage},
+    Component, EntityId,
 };
 
 /// A small, deterministic ECS world.
@@ -18,10 +18,13 @@ use crate::{
 /// - type-safe component storage
 /// - iteration without hidden allocations (iterators are thin wrappers)
 /// - thread-safe storages/resources (Send + Sync), so scene bridges can safely share it
+/// - conservative change tracking (per-component added/changed ticks)
 pub struct World {
     entities: SlotMap<EntityId, ()>,
     storages: HashMap<TypeId, Box<dyn ErasedStorage>>,
     resources: HashMap<TypeId, Box<dyn Any + Send + Sync>>,
+
+    tick: u64,
 }
 
 impl Default for World {
@@ -38,7 +41,31 @@ impl World {
             entities: SlotMap::with_key(),
             storages: HashMap::new(),
             resources: HashMap::new(),
+            tick: 1,
         }
+    }
+
+    /// Current world tick used for change tracking.
+    ///
+    /// The engine/runtime should drive this deterministically (e.g. frame index or fixed tick).
+    #[inline]
+    pub fn tick(&self) -> u64 {
+        self.tick
+    }
+
+    /// Sets the current world tick.
+    ///
+    /// Use monotonically increasing values.
+    #[inline]
+    pub fn set_tick(&mut self, tick: u64) {
+        self.tick = tick.max(1);
+    }
+
+    /// Advances the tick by 1.
+    #[inline]
+    pub fn advance_tick(&mut self) -> u64 {
+        self.tick = self.tick.wrapping_add(1).max(1);
+        self.tick
     }
 
     #[inline]
@@ -80,8 +107,7 @@ impl World {
     /// Inserts (or replaces) a resource.
     #[inline]
     pub fn insert_resource<T: 'static + Send + Sync>(&mut self, r: T) {
-        self.resources
-            .insert(TypeId::of::<T>(), Box::new(r));
+        self.resources.insert(TypeId::of::<T>(), Box::new(r));
     }
 
     /// Returns an immutable resource reference.
@@ -169,14 +195,30 @@ impl World {
         if !self.exists(id) {
             return false;
         }
-        self.storage_mut::<T>().map.insert(id, c);
+
+        let tick = self.tick;
+        let s = self.storage_mut::<T>();
+        let existed = s.map.contains_key(id);
+        s.map.insert(id, c);
+
+        if existed {
+            s.changed_tick.insert(id, tick);
+        } else {
+            s.added_tick.insert(id, tick);
+            s.changed_tick.insert(id, tick);
+        }
+
         true
     }
 
     /// Removes a component from an entity (does not create storage).
     #[inline]
     pub fn remove<T: Component>(&mut self, id: EntityId) -> Option<T> {
-        self.storage_mut_if_exists::<T>()?.map.remove(id)
+        let s = self.storage_mut_if_exists::<T>()?;
+        let v = s.map.remove(id);
+        let _ = s.added_tick.remove(id);
+        let _ = s.changed_tick.remove(id);
+        v
     }
 
     #[inline]
@@ -184,15 +226,57 @@ impl World {
         self.storage::<T>()?.map.get(id)
     }
 
-    /// Gets a mutable component reference (creates storage if missing).
+    /// Gets a mutable component reference.
+    ///
+    /// Conservative change tracking: acquiring a mutable ref marks the component as changed.
     #[inline]
     pub fn get_mut<T: Component>(&mut self, id: EntityId) -> Option<&mut T> {
-        self.storage_mut::<T>().map.get_mut(id)
+        if !self.exists(id) {
+            return None;
+        }
+        let tick = self.tick;
+        let s = self.storage_mut::<T>();
+        if s.map.contains_key(id) {
+            s.changed_tick.insert(id, tick);
+        }
+        s.map.get_mut(id)
     }
 
     #[inline]
     pub fn has<T: Component>(&self, id: EntityId) -> bool {
         self.get::<T>(id).is_some()
+    }
+
+    /// Returns true if the component `T` was added after `since_tick` (strictly greater).
+    #[inline]
+    pub fn is_added_since<T: Component>(&self, id: EntityId, since_tick: u64) -> bool {
+        self.storage::<T>()
+            .and_then(|s| s.added_tick.get(id).copied())
+            .map(|t| t > since_tick).unwrap_or(false)
+    }
+
+    /// Returns true if the component `T` was changed after `since_tick` (strictly greater).
+    #[inline]
+    pub fn is_changed_since<T: Component>(&self, id: EntityId, since_tick: u64) -> bool {
+        self.storage::<T>()
+            .and_then(|s| s.changed_tick.get(id).copied())
+            .map(|t| t > since_tick).unwrap_or(false)
+    }
+
+    /// Iterates entities that have component `T` and were changed after `since_tick`.
+    ///
+    /// Note: this iterates the component map and checks the tick map; no allocations.
+    #[inline]
+    pub fn query_changed<T: Component>(&self, since_tick: u64) -> impl Iterator<Item=(EntityId, &T)> + '_ {
+        self.query::<T>()
+            .filter(move |(id, _)| self.is_changed_since::<T>(*id, since_tick))
+    }
+
+    /// Iterates entities that have component `T` and were added after `since_tick`.
+    #[inline]
+    pub fn query_added<T: Component>(&self, since_tick: u64) -> impl Iterator<Item=(EntityId, &T)> + '_ {
+        self.query::<T>()
+            .filter(move |(id, _)| self.is_added_since::<T>(*id, since_tick))
     }
 
     /// Zero-allocation query over entities that have component `T`.

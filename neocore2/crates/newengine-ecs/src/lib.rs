@@ -6,6 +6,8 @@ mod storage;
 mod query;
 mod world;
 mod commands;
+mod events;
+mod schedule;
 
 pub use entity::EntityId;
 
@@ -16,4 +18,8 @@ pub use query::{Query, Query2, Query2A, Query2B, QueryMut};
 
 pub use world::World;
 
-pub use commands::{Command, Commands};
+pub use commands::{Commands, EntityToken};
+
+pub use events::Events;
+
+pub use schedule::{FrameCtx, Schedule, Stage, System};

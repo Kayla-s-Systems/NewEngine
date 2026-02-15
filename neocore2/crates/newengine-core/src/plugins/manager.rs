@@ -325,7 +325,7 @@ impl PluginManager {
         // Prefer V2 when available: it provides kind + capabilities for tooling.
         // Older plugins will not have this field; treat it as optional.
         let (mut module_any, info, descriptor) = if let Some(create_v2) = root.create_v2() {
-            let mut m2 = create_v2();
+            let m2 = create_v2();
             let d = m2.descriptor();
             let info = PluginInfo {
                 id: d.id.clone(),
@@ -334,7 +334,7 @@ impl PluginManager {
             };
             (PluginModuleAny::V2(m2), info, Some(d))
         } else {
-            let mut m1 = root.create()();
+            let m1 = root.create()();
             let info = m1.info();
             (PluginModuleAny::V1(m1), info, None)
         };

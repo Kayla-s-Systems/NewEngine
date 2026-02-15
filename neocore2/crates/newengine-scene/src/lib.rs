@@ -2,6 +2,7 @@
 mod bounds;
 mod components;
 mod scene;
+mod state;
 mod settings;
 mod spawn;
 
@@ -14,3 +15,4 @@ pub use components::{
 pub use scene::Scene;
 pub use settings::{ForwardAxis, SceneSettings, UnitScaleMeters, UpAxis};
 pub use spawn::{name_or, spawn_named};
+pub use state::SceneState;

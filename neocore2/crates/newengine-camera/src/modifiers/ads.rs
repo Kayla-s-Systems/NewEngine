@@ -54,7 +54,7 @@ impl CameraModifier for AdsFov {
         };
 
         let mut out = ModifierOutput::default();
-        out.proj.fovy_add = (desired - current);
+        out.proj.fovy_add = desired - current;
         out
     }
 }
