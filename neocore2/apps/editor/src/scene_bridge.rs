@@ -6,7 +6,7 @@ use std::sync::Arc;
 use glam::Vec3;
 
 use newengine_ecs::EntityId;
-use newengine_primitives::{Primitive, PrimitiveKind};
+use newengine_primitives::{builtins, Primitive, PrimitiveId, PrimitiveRegistry};
 use newengine_scene::{spawn_named, Scene};
 use newengine_transform::Transform;
 
@@ -20,7 +20,7 @@ pub enum SceneCommand {
     /// Replace the current scene with a fresh one (root + camera).
     NewScene,
     SpawnPrimitive {
-        kind: PrimitiveKind,
+        id: PrimitiveId,
         name: String,
         position: [f32; 3],
         scale: [f32; 3],
@@ -42,6 +42,7 @@ pub struct SceneBridge {
     scene: Arc<RwLock<Scene>>,
     queue: Arc<Mutex<SceneQueue>>,
     selection: Arc<Mutex<Option<EntityId>>>,
+    primitives: Arc<RwLock<PrimitiveRegistry>>,
 }
 
 impl SceneBridge {
@@ -53,7 +54,27 @@ impl SceneBridge {
             scene: Arc::new(RwLock::new(initial)),
             queue: Arc::new(Mutex::new(SceneQueue::default())),
             selection: Arc::new(Mutex::new(None)),
+            primitives: Arc::new(RwLock::new(PrimitiveRegistry::with_builtins())),
         }
+    }
+
+    #[inline]
+    pub fn primitives(&self) -> Arc<RwLock<PrimitiveRegistry>> {
+        Arc::clone(&self.primitives)
+    }
+
+    /// Snapshot primitives for UI.
+    ///
+    /// Returns sorted (name, id) pairs.
+    #[inline]
+    pub fn primitives_snapshot(&self) -> Vec<(String, PrimitiveId)> {
+        let reg = self.primitives.read();
+        let mut out: Vec<(String, PrimitiveId)> = reg
+            .ids()
+            .filter_map(|id| reg.name(id).map(|n| (n.to_string(), id)))
+            .collect();
+        out.sort_by(|a, b| a.0.cmp(&b.0));
+        out
     }
 
     #[inline]
@@ -77,25 +98,26 @@ impl SceneBridge {
     }
 
     #[inline]
-    pub fn cmd_spawn_cube(&self, position: Vec3) {
-        self.queue.lock().cmds.push(SceneCommand::SpawnPrimitive {
-            kind: PrimitiveKind::Cube,
-            name: "Cube".to_string(),
-            position: [position.x, position.y, position.z],
-            scale: [1.0, 1.0, 1.0],
-            color: [0.85, 0.85, 0.9, 1.0],
-        });
-    }
+    pub fn cmd_spawn_primitive(&self, id: PrimitiveId, name: String, position: Vec3) {
+        // Default scale presets for common built-ins.
+        let scale = if id == builtins::ID_PLANE {
+            [10.0, 1.0, 10.0]
+        } else {
+            [1.0, 1.0, 1.0]
+        };
 
+        let color = if id == builtins::ID_PLANE {
+            [0.35, 0.35, 0.38, 1.0]
+        } else {
+            [0.85, 0.85, 0.9, 1.0]
+        };
 
-    #[inline]
-    pub fn cmd_spawn_plane(&self, position: Vec3) {
         self.queue.lock().cmds.push(SceneCommand::SpawnPrimitive {
-            kind: PrimitiveKind::Plane,
-            name: "Plane".to_string(),
+            id,
+            name,
             position: [position.x, position.y, position.z],
-            scale: [10.0, 1.0, 10.0],
-            color: [0.35, 0.35, 0.38, 1.0],
+            scale,
+            color,
         });
     }
 
@@ -126,7 +148,7 @@ impl SceneBridge {
                     }
 
                     SceneCommand::SpawnPrimitive {
-                        kind,
+                        id,
                         name,
                         position,
                         scale,
@@ -147,7 +169,7 @@ impl SceneBridge {
                         let _ = world.insert(
                             e,
                             Primitive {
-                                kind,
+                                id,
                                 color,
                             },
                         );

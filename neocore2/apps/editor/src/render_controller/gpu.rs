@@ -7,7 +7,7 @@ use newengine_core::render::{
     VertexLayout,
 };
 use newengine_core::{EngineError, EngineResult as CoreResult};
-use newengine_primitives::{build_mesh, PrimitiveKind, PrimitiveVertex};
+use newengine_primitives::{PrimitiveId, PrimitiveRegistry, PrimitiveVertex};
 
 use shaderc::{CompileOptions, Compiler, OptimizationLevel, ShaderKind};
 
@@ -58,7 +58,7 @@ pub(super) fn ensure_lit_pipeline(
             .with_uniform0(BufferBinding::new(ubo, 0, 64)),
     )?;
 
-    let compiler = Compiler::new().ok_or_else(|| EngineError::other("shaderc: Compiler"))?;
+    let compiler = shaderc::Compiler::new().map_err(|e| EngineError::other(format!("shaderc: Compiler: {e}")))?;
 
     const VS_SRC: &str = r#"#version 450
 layout(location = 0) in vec3 a_pos;
@@ -125,21 +125,18 @@ void main() {
 }
 
 pub(super) fn ensure_primitive_gpu(
-    kind: PrimitiveKind,
-    prim_cube: &mut Option<PrimitiveGpu>,
-    prim_plane: &mut Option<PrimitiveGpu>,
+    reg: &PrimitiveRegistry,
+    id: PrimitiveId,
+    cache: &mut hashbrown::HashMap<PrimitiveId, PrimitiveGpu>,
     r: &mut dyn newengine_core::render::RenderApi,
 ) -> CoreResult<PrimitiveGpu> {
-    let slot = match kind {
-        PrimitiveKind::Cube => prim_cube,
-        PrimitiveKind::Plane => prim_plane,
-    };
-
-    if let Some(g) = *slot {
+    if let Some(g) = cache.get(&id).copied() {
         return Ok(g);
     }
 
-    let mesh = build_mesh(kind);
+    let mesh = reg
+        .build_mesh(id)
+        .map_err(|e| EngineError::other(format!("{e}")))?;
 
     let mut vbytes: Vec<u8> = Vec::with_capacity(mesh.vertices.len() * std::mem::size_of::<PrimitiveVertex>());
     for v in &mesh.vertices {
@@ -174,7 +171,7 @@ pub(super) fn ensure_primitive_gpu(
         index_count: mesh.indices.len() as u32,
     };
 
-    *slot = Some(gpu);
+    cache.insert(id, gpu);
     Ok(gpu)
 }
 
@@ -188,7 +185,7 @@ pub(super) fn ensure_grid(
         return Ok(g);
     }
 
-    let compiler = Compiler::new().ok_or_else(|| EngineError::other("shaderc: Compiler"))?;
+    let compiler = shaderc::Compiler::new().map_err(|e| EngineError::other(format!("shaderc: Compiler: {e}")))?;
 
     // Editor grid in XZ plane, authored in unit space (spacing = 1.0).
     // The caller scales/translates it to follow the camera (infinite feel).
@@ -299,7 +296,8 @@ fn compile_glsl(
     name: &str,
     src: &str,
 ) -> CoreResult<Vec<u32>> {
-    let mut opts = CompileOptions::new().ok_or_else(|| EngineError::other("shaderc: CompileOptions"))?;
+    let mut opts = CompileOptions::new()
+        .map_err(|e| EngineError::other(format!("shaderc: CompileOptions: {e}")))?;
     opts.set_optimization_level(OptimizationLevel::Performance);
 
     let bin = compiler

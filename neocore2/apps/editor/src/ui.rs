@@ -34,7 +34,8 @@ pub struct EditorUiBuild {
     console_open: bool,
     console_input: String,
 
-    // Plugin manager UI (fully encapsulated).
+    // Primitives UI.
+    selected_primitive: Option<newengine_primitives::PrimitiveId>,
 }
 
 
@@ -95,6 +96,8 @@ impl EditorUiBuild {
             last_drag_pos: None,
             console_open: false,
             console_input: String::new(),
+
+            selected_primitive: None,
         }
     }
 
@@ -112,11 +115,49 @@ impl EditorUiBuild {
                 if ui.button("New Scene").clicked() {
                     self.scene_bridge.cmd_new_scene();
                 }
-                if ui.button("Add Cube").clicked() {
-                    self.scene_bridge.cmd_spawn_cube(glam::Vec3::new(0.0, 0.5, 0.0));
-                }
-                if ui.button("Add Plane").clicked() {
-                    self.scene_bridge.cmd_spawn_plane(glam::Vec3::new(0.0, 0.0, 0.0));
+
+                // Dynamic primitives dropdown (registry-driven).
+                {
+                    let prims = self.scene_bridge.primitives_snapshot();
+
+                    if self.selected_primitive.is_none() {
+                        self.selected_primitive = prims.first().map(|p| p.1);
+                    }
+
+                    // If selected primitive was removed/unregistered, fall back to first.
+                    if let Some(sel) = self.selected_primitive {
+                        if !prims.iter().any(|p| p.1 == sel) {
+                            self.selected_primitive = prims.first().map(|p| p.1);
+                        }
+                    }
+
+                    let current_label = self
+                        .selected_primitive
+                        .and_then(|id| prims.iter().find(|x| x.1 == id).map(|x| x.0.as_str()))
+                        .unwrap_or("<none>");
+
+                    egui::ComboBox::from_id_source("add_primitive_combo")
+                        .width(160.0)
+                        .selected_text(current_label)
+                        .show_ui(ui, |ui| {
+                            for (name, id) in &prims {
+                                ui.selectable_value(&mut self.selected_primitive, Some(*id), name);
+                            }
+                        });
+
+                    if ui.button("Add").clicked() {
+                        if let Some(id) = self.selected_primitive {
+                            let name = prims
+                                .iter()
+                                .find(|x| x.1 == id)
+                                .map(|x| x.0.clone())
+                                .unwrap_or_else(|| "Primitive".to_string());
+
+                            // Spawn slightly above floor to avoid z-fighting and keep it visible.
+                            self.scene_bridge
+                                .cmd_spawn_primitive(id, name, glam::Vec3::new(0.0, 0.5, 0.0));
+                        }
+                    }
                 }
 
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {

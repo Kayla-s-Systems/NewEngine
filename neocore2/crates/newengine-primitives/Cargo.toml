@@ -6,3 +6,4 @@ edition = "2021"
 [dependencies]
 bytemuck = { version = "1.16", features = ["derive"] }
 glam = "0.32.0"
+hashbrown = "0.16.1"

@@ -5,7 +5,9 @@ use crate::events::EventHub;
 use crate::frame::Frame;
 use crate::module::{ApiVersion, Bus, Module, ModuleCtx, Resources, Services};
 use crate::plugins::PluginsSnapshot;
-use crate::plugins::{default_host_api, init_host_context, PluginManager};
+use crate::plugins::{
+    default_host_api, init_host_context, PluginControlCommand, PluginControlQueue, PluginManager,
+};
 use crate::sched::Scheduler;
 use crate::sync::ShutdownToken;
 
@@ -169,7 +171,9 @@ impl<E: Send + 'static> Engine<E> {
     ) -> EngineResult<Self> {
         let fixed_dt = (config.fixed_dt_ms as f32 / 1000.0).max(0.001);
 
-        let resources = Resources::default();
+        let mut resources = Resources::default();
+        // Tooling control-plane for plugins (editor UI, automation).
+        resources.insert(PluginControlQueue::default());
 
         init_host_context();
 
@@ -515,6 +519,8 @@ impl<E: Send + 'static> Engine<E> {
 
         self.scheduler.begin_frame(Duration::from_secs_f32(dt));
 
+        self.process_plugin_control();
+
         // Expose engine/plugin telemetry to modules and UI.
         // This is a snapshot (no interior mutability), so UI can read without synchronization.
         self.resources.insert(PluginsSnapshot {
@@ -574,6 +580,94 @@ impl<E: Send + 'static> Engine<E> {
         self.frame_index = self.frame_index.wrapping_add(1);
 
         Ok(frame)
+    }
+
+    fn process_plugin_control(&mut self) {
+        let Some(queue) = self.resources.get_mut::<PluginControlQueue>() else {
+            return;
+        };
+
+        let mut did_any = false;
+        let mut last_action: Option<String> = None;
+        let mut last_error: Option<String> = None;
+
+        for cmd in queue.drain() {
+            did_any = true;
+            let host = default_host_api();
+
+            match cmd {
+                PluginControlCommand::Rescan => {
+                    let dir = self.plugins_dir.clone();
+                    let res = if let Some(d) = dir.as_deref() {
+                        self.plugins.load_from_dir(d, host)
+                    } else {
+                        self.plugins.load_default(host)
+                    };
+
+                    match res {
+                        Ok(()) => {
+                            last_action = Some("plugins: rescan".to_string());
+                        }
+                        Err(e) => {
+                            last_error = Some(format!("plugins: rescan failed: {e}"));
+                        }
+                    }
+                }
+                PluginControlCommand::LoadPath(path) => {
+                    match self.plugins.load_path(&path, host) {
+                        Ok(()) => {
+                            last_action = Some(format!("plugins: load '{}'", path.display()));
+                        }
+                        Err(e) => {
+                            last_error = Some(format!("plugins: load failed: {e}"));
+                        }
+                    }
+                }
+                PluginControlCommand::ReloadId(id) | PluginControlCommand::EnableId(id) => {
+                    match self.plugins.reload_by_id(&id, host) {
+                        Ok(true) => {
+                            self.plugins.start_by_id(&id);
+                            last_action = Some(format!("plugins: reloaded id='{}'", id));
+                        }
+                        Ok(false) => {
+                            last_error = Some(format!("plugins: unknown id='{}'", id));
+                        }
+                        Err(e) => {
+                            last_error = Some(format!("plugins: reload failed: {e}"));
+                        }
+                    }
+                }
+                PluginControlCommand::StartId(id) => {
+                    if self.plugins.start_by_id(&id) {
+                        last_action = Some(format!("plugins: start id='{}'", id));
+                    } else {
+                        last_error = Some(format!("plugins: unknown id='{}'", id));
+                    }
+                }
+                PluginControlCommand::StopId(id) => {
+                    if self.plugins.stop_by_id(&id) {
+                        last_action = Some(format!("plugins: stop id='{}'", id));
+                    } else {
+                        last_error = Some(format!("plugins: unknown id='{}'", id));
+                    }
+                }
+                PluginControlCommand::DisableId(id) => {
+                    if self
+                        .plugins
+                        .disable_by_id(&id, "manually disabled via control plane")
+                    {
+                        last_action = Some(format!("plugins: disable id='{}'", id));
+                    } else {
+                        last_error = Some(format!("plugins: unknown id='{}'", id));
+                    }
+                }
+            }
+        }
+
+        if did_any {
+            queue.result.last_action = last_action;
+            queue.result.last_error = last_error;
+        }
     }
 
     /// Single engine tick (compat facade).

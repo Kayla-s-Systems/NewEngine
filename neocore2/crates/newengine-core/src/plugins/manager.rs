@@ -168,6 +168,11 @@ impl PluginManager {
     }
 
     #[inline]
+    pub fn load_path(&mut self, path: &Path, host: HostApiV1) -> Result<(), PluginLoadError> {
+        self.load_one(path, host)
+    }
+
+    #[inline]
     fn rresult_to_string(
         r: abi_stable::std_types::RResult<(), abi_stable::std_types::RString>,
     ) -> Result<(), String> {
@@ -235,6 +240,89 @@ impl PluginManager {
         }
         self.loaded.clear();
         self.loaded_ids.clear();
+    }
+
+    #[inline]
+    pub fn has_plugin(&self, id: &str) -> bool {
+        self.loaded_ids.contains(id)
+    }
+
+    #[inline]
+    pub fn find_index(&self, id: &str) -> Option<usize> {
+        self.loaded
+            .iter()
+            .position(|p| p.info.id.to_string().as_str() == id)
+    }
+
+    pub fn stop_by_id(&mut self, id: &str) -> bool {
+        let Some(idx) = self.find_index(id) else {
+            return false;
+        };
+
+        if self.loaded[idx].state == PluginState::Stopped {
+            return true;
+        }
+
+        self.safe_shutdown_one(idx);
+        self.loaded[idx].state = PluginState::Stopped;
+        unregister_by_owner(id);
+        true
+    }
+
+    pub fn disable_by_id(&mut self, id: &str, reason: impl Into<String>) -> bool {
+        let Some(idx) = self.find_index(id) else {
+            return false;
+        };
+        self.disable_plugin(idx, id, reason.into());
+        true
+    }
+
+    pub fn unload_by_id(&mut self, id: &str) -> bool {
+        let Some(idx) = self.find_index(id) else {
+            return false;
+        };
+        self.unload_at(idx);
+        true
+    }
+
+    pub fn reload_by_id(&mut self, id: &str, host: HostApiV1) -> Result<bool, PluginLoadError> {
+        let Some(idx) = self.find_index(id) else {
+            return Ok(false);
+        };
+
+        let path = self.loaded[idx].path.clone();
+        self.unload_at(idx);
+        self.load_one(&path, host)?;
+        Ok(true)
+    }
+
+    pub fn start_by_id(&mut self, id: &str) -> bool {
+        let Some(idx) = self.find_index(id) else {
+            return false;
+        };
+
+        match self.loaded[idx].state {
+            PluginState::Registered | PluginState::Stopped => {
+                self.call_plugin(idx, "start", |m| match m {
+                    PluginModuleAny::V1(m) => Self::rresult_to_string(m.start()),
+                    PluginModuleAny::V2(m) => Self::rresult_to_string(m.start()),
+                });
+                true
+            }
+            _ => true,
+        }
+    }
+
+    fn unload_at(&mut self, idx: usize) {
+        if idx >= self.loaded.len() {
+            return;
+        }
+
+        let id = self.loaded[idx].info.id.to_string();
+        self.safe_shutdown_one(idx);
+        unregister_by_owner(&id);
+        self.loaded_ids.remove(&id);
+        self.loaded.remove(idx);
     }
 
     fn call_plugin(

@@ -1,7 +1,9 @@
 #![forbid(unsafe_op_in_unsafe_fn)]
 
-use std::sync::RwLock;
+use std::collections::VecDeque;
+use std::sync::{Mutex, RwLock};
 
+use newengine_core::plugins::PluginControlCommand;
 use newengine_core::plugins::PluginsSnapshot;
 
 /// UI <-> engine bridge for plugin diagnostics.
@@ -12,6 +14,7 @@ use newengine_core::plugins::PluginsSnapshot;
 #[derive(Debug, Default)]
 pub struct PluginManagerBridge {
     snapshot: RwLock<PluginsSnapshot>,
+    commands: Mutex<VecDeque<PluginControlCommand>>,
 }
 
 impl PluginManagerBridge {
@@ -19,6 +22,7 @@ impl PluginManagerBridge {
     pub fn new() -> Self {
         Self {
             snapshot: RwLock::new(PluginsSnapshot::default()),
+            commands: Mutex::new(VecDeque::new()),
         }
     }
 
@@ -32,5 +36,20 @@ impl PluginManagerBridge {
     #[inline]
     pub fn read(&self) -> PluginsSnapshot {
         self.snapshot.read().map(|g| g.clone()).unwrap_or_default()
+    }
+
+    #[inline]
+    pub fn push_cmd(&self, cmd: PluginControlCommand) {
+        if let Ok(mut q) = self.commands.lock() {
+            q.push_back(cmd);
+        }
+    }
+
+    #[inline]
+    pub fn drain_cmds(&self) -> Vec<PluginControlCommand> {
+        let Ok(mut q) = self.commands.lock() else {
+            return Vec::new();
+        };
+        q.drain(..).collect()
     }
 }

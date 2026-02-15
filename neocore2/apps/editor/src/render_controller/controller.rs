@@ -10,6 +10,8 @@ use crate::viewport_bridge::ViewportBridge;
 
 use super::gpu::{GridGpu, LitPipeline, PrimitiveGpu};
 
+type PrimGpuCache = hashbrown::HashMap<newengine_primitives::PrimitiveId, PrimitiveGpu>;
+
 pub struct EditorRenderController {
     pub(super) clear_color: [f32; 4],
     pub(super) last_w: u32,
@@ -32,10 +34,14 @@ pub struct EditorRenderController {
 
     pub(super) grid: Option<GridGpu>,
     pub(super) lit: Option<LitPipeline>,
-    pub(super) prim_cube: Option<PrimitiveGpu>,
-    pub(super) prim_plane: Option<PrimitiveGpu>,
+    pub(super) prim_cache: PrimGpuCache,
 
+    // Camera framing:
+    // - frame_once on startup/aspect change
+    // - expand frame only when scene grows (never shrink on spawn)
     pub(super) framed_once: bool,
+    pub(super) framed_radius: f32,
+
     pub(super) last_bounds_center: Vec3,
     pub(super) last_bounds_radius: f32,
 }
@@ -48,14 +54,13 @@ impl EditorRenderController {
         plugins_bridge: std::sync::Arc<PluginManagerBridge>,
         scene_bridge: std::sync::Arc<SceneBridge>,
     ) -> Self {
-        // Engine baseline coordinate system:
-        // - right-handed
-        // - +Y up
-        // - -Z forward
-        // CameraRig::forward() points along -Z.
         let mut orbit = OrbitController::default();
-        orbit_set_angles(&mut orbit, 0.7853982, 0.55);
-        orbit.distance = 4.1;
+
+        // Blender-like editor orbit:
+        // - pivot around target
+        // - camera above ground looking down (pitch negative)
+        orbit_set_angles(&mut orbit, 0.7853982, -0.55);
+        orbit.distance = 6.0;
 
         let rig = CameraRig::default();
         let projection = Projection::Perspective(Perspective::new(
@@ -87,10 +92,11 @@ impl EditorRenderController {
 
             grid: None,
             lit: None,
-            prim_cube: None,
-            prim_plane: None,
+            prim_cache: PrimGpuCache::default(),
 
             framed_once: false,
+            framed_radius: 0.0,
+
             last_bounds_center: Vec3::ZERO,
             last_bounds_radius: 1.0,
         }

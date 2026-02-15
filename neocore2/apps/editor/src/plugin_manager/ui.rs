@@ -23,6 +23,8 @@ pub struct PluginManagerUi {
     search: String,
     show_disabled: bool,
     sort: PluginSort,
+
+    load_path: String,
 }
 
 impl PluginManagerUi {
@@ -35,6 +37,8 @@ impl PluginManagerUi {
             search: String::new(),
             show_disabled: true,
             sort: PluginSort::Name,
+
+            load_path: String::new(),
         }
     }
 
@@ -160,6 +164,50 @@ impl PluginManagerUi {
                         );
                     });
 
+                    ui.add_space(8.0);
+
+                    // High-level actions.
+                    egui::Frame::group(ui.style())
+                        .inner_margin(egui::Margin::same(10))
+                        .show(ui, |ui| {
+                            ui.horizontal(|ui| {
+                                if ui.button("Rescan folder").clicked() {
+                                    self.bridge.push_cmd(newengine_core::plugins::PluginControlCommand::Rescan);
+                                }
+
+                                ui.separator();
+
+                                ui.add(
+                                    egui::TextEdit::singleline(&mut self.load_path)
+                                        .hint_text("Load plugin by path (dll/so/dylib)…")
+                                        .desired_width(360.0),
+                                );
+
+                                let can_load = !self.load_path.trim().is_empty();
+                                if ui.add_enabled(can_load, egui::Button::new("Load"))
+                                    .clicked()
+                                {
+                                    let p = std::path::PathBuf::from(self.load_path.trim());
+                                    self.bridge.push_cmd(
+                                        newengine_core::plugins::PluginControlCommand::LoadPath(p),
+                                    );
+                                }
+
+                                ui.with_layout(
+                                    egui::Layout::right_to_left(egui::Align::Center),
+                                    |ui| {
+                                        ui.label(
+                                            egui::RichText::new(
+                                                "Actions are applied on the next frame (deterministic).",
+                                            )
+                                                .small()
+                                                .weak(),
+                                        );
+                                    },
+                                );
+                            });
+                        });
+
                     ui.add_space(6.0);
                     ui.separator();
                 });
@@ -185,8 +233,9 @@ impl PluginManagerUi {
                                             .map(|s| s == p.id)
                                             .unwrap_or(false);
 
+                                        let label = format!("{}  ·  {}", p.name, p.state);
                                         if ui
-                                            .selectable_label(selected_flag, &p.name)
+                                            .selectable_label(selected_flag, label)
                                             .clicked()
                                         {
                                             self.selected_plugin = Some(p.id.clone());
@@ -222,8 +271,89 @@ impl PluginManagerUi {
 
                             ui.horizontal(|ui| {
                                 ui.label("State:");
-                                ui.label(&p.state);
+                                ui.label(egui::RichText::new(&p.state).strong());
                             });
+
+                            if let Some(reason) = p.disabled_reason.as_deref() {
+                                ui.horizontal(|ui| {
+                                    ui.label("Disabled reason:");
+                                    ui.label(egui::RichText::new(reason).strong());
+                                });
+                            }
+
+                            ui.add_space(8.0);
+
+                            // Contextual actions for the selected plugin.
+                            egui::Frame::group(ui.style())
+                                .inner_margin(egui::Margin::same(10))
+                                .show(ui, |ui| {
+                                    ui.label(egui::RichText::new("Actions").strong());
+                                    ui.add_space(6.0);
+
+                                    ui.horizontal_wrapped(|ui| {
+                                        let id = p.id.clone();
+
+                                        let is_running = p.state == "running";
+                                        let is_stopped = p.state == "stopped";
+                                        let is_registered = p.state == "registered";
+                                        let is_disabled = p.state == "disabled";
+
+                                        if ui
+                                            .add_enabled(
+                                                is_registered || is_stopped,
+                                                egui::Button::new("Start"),
+                                            )
+                                            .clicked()
+                                        {
+                                            self.bridge.push_cmd(
+                                                newengine_core::plugins::PluginControlCommand::StartId(
+                                                    id.clone(),
+                                                ),
+                                            );
+                                        }
+
+                                        if ui
+                                            .add_enabled(is_running || is_registered, egui::Button::new("Stop"))
+                                            .clicked()
+                                        {
+                                            self.bridge.push_cmd(
+                                                newengine_core::plugins::PluginControlCommand::StopId(
+                                                    id.clone(),
+                                                ),
+                                            );
+                                        }
+
+                                        if ui
+                                            .add_enabled(!is_disabled, egui::Button::new("Disable"))
+                                            .clicked()
+                                        {
+                                            self.bridge.push_cmd(
+                                                newengine_core::plugins::PluginControlCommand::DisableId(
+                                                    id.clone(),
+                                                ),
+                                            );
+                                        }
+
+                                        if ui
+                                            .add_enabled(is_disabled, egui::Button::new("Enable"))
+                                            .clicked()
+                                        {
+                                            self.bridge.push_cmd(
+                                                newengine_core::plugins::PluginControlCommand::EnableId(
+                                                    id.clone(),
+                                                ),
+                                            );
+                                        }
+
+                                        if ui.button("Reload").clicked() {
+                                            self.bridge.push_cmd(
+                                                newengine_core::plugins::PluginControlCommand::ReloadId(
+                                                    id,
+                                                ),
+                                            );
+                                        }
+                                    });
+                                });
 
                             ui.horizontal(|ui| {
                                 ui.label("Path:");
