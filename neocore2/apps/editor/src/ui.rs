@@ -191,7 +191,7 @@ impl EditorUiBuild {
                         let dot_ext = if ext.is_empty() { String::new() } else { format!(".{ext}") };
 
                         if !dot_ext.is_empty() && (exts.is_empty() || exts.iter().any(|e| e == &dot_ext)) {
-                            self.scene_bridge.cmd_load_model(p);
+                            log::warn!("model drop is currently disabled (no asset->scene contract yet): '{}'", p);
                         } else {
                             log::warn!("dropped file has unsupported extension: '{}'", p);
                         }

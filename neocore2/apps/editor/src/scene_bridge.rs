@@ -19,13 +19,6 @@ use crate::scene_bootstrap::bootstrap_editor_scene;
 pub enum SceneCommand {
     /// Replace the current scene with a fresh one (root + camera).
     NewScene,
-    /// Load a model asset via AssetManager service and spawn a placeholder entity.
-    /// The actual model rendering is handled by renderer/plugins; the editor keeps this command
-    /// deterministic and explicit.
-    LoadModel {
-        path: String,
-    },
-
     SpawnPrimitive {
         kind: PrimitiveKind,
         name: String,
@@ -96,11 +89,6 @@ impl SceneBridge {
 
 
     #[inline]
-    pub fn cmd_load_model(&self, path: String) {
-        self.queue.lock().cmds.push(SceneCommand::LoadModel { path });
-    }
-
-    #[inline]
     pub fn cmd_spawn_plane(&self, position: Vec3) {
         self.queue.lock().cmds.push(SceneCommand::SpawnPrimitive {
             kind: PrimitiveKind::Plane,
@@ -164,14 +152,13 @@ impl SceneBridge {
                             },
                         );
 
-                        if let Some(t) = world.get_mut::<Transform>(e) {
+                        if let Some(t) = world.get_mut_tracked::<Transform>(e) {
                             t.position = Vec3::new(position[0], position[1], position[2]);
                             t.scale = Vec3::new(scale[0], scale[1], scale[2]);
                         }
 
                         pending_selection = Some(Some(e));
                     }
-                    _ => {}
                 }
             }
         } // scene write lock dropped here
