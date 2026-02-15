@@ -1,7 +1,8 @@
 #![forbid(unsafe_op_in_unsafe_fn)]
 
-use newengine_core::plugins::PluginsSnapshot;
 use std::sync::RwLock;
+
+use newengine_core::plugins::PluginsSnapshot;
 
 /// UI <-> engine bridge for plugin diagnostics.
 ///

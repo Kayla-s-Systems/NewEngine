@@ -229,6 +229,7 @@ fn main() -> EngineResult<()> {
         ))),
     };
 
+
     // Load markup via AssetManager service (no AssetStore in-process).
     if !matches!(startup.ui_backend, newengine_core::startup::UiBackend::Disabled) {
         let assets = AssetServiceClient::new(newengine_core::plugins::default_host_api());
