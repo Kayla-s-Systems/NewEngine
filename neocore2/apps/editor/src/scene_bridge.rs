@@ -10,6 +10,8 @@ use newengine_primitives::{Primitive, PrimitiveKind};
 use newengine_scene::{spawn_named, Scene};
 use newengine_transform::Transform;
 
+use crate::scene_bootstrap::bootstrap_editor_scene;
+
 /// Scene commands produced by UI/editor tools and consumed by the render/controller side.
 ///
 /// We keep this queue deterministic and explicit: no hidden async, no world access from UI.
@@ -51,7 +53,9 @@ pub struct SceneBridge {
 
 impl SceneBridge {
     #[inline]
-    pub fn new(initial: Scene) -> Self {
+    pub fn new(mut initial: Scene) -> Self {
+        bootstrap_editor_scene(&mut initial);
+
         Self {
             scene: Arc::new(RwLock::new(initial)),
             queue: Arc::new(Mutex::new(SceneQueue::default())),
@@ -129,6 +133,7 @@ impl SceneBridge {
                 match cmd {
                     SceneCommand::NewScene => {
                         *scene = Scene::new();
+                        bootstrap_editor_scene(&mut *scene);
                         pending_selection = Some(scene.active_camera());
                     }
 

@@ -26,6 +26,7 @@ mod ui;
 mod viewport_bridge;
 mod plugin_manager;
 mod scene_bridge;
+mod scene_bootstrap;
 mod shared;
 
 const FIXED_DT_MS: u32 = 16;

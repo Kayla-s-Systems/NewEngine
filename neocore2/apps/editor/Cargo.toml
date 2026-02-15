@@ -26,3 +26,4 @@ newengine-ecs = { path = "../../crates/newengine-ecs" }
 newengine-viewport = { path = "../../crates/newengine-viewport" }
 newengine-camera = { path = "../../crates/newengine-camera" }
 newengine-primitives = { path = "../../crates/newengine-primitives" }
+hashbrown = "0.16.1"
