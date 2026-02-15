@@ -3,7 +3,8 @@ use crate::texture::reserved;
 
 /// Convert egui output into engine draw list.
 pub fn egui_output_to_draw_list(ctx: &egui::Context, output: egui::FullOutput, out: &mut UiDrawList) {
-    let pixels_per_point = ctx.pixels_per_point();
+    // Prefer the per-viewport scale from the frame output.
+    let pixels_per_point = output.pixels_per_point;
     out.pixels_per_point = pixels_per_point;
 
     let screen_rect = ctx.screen_rect();
@@ -13,7 +14,7 @@ pub fn egui_output_to_draw_list(ctx: &egui::Context, output: egui::FullOutput, o
 
     apply_texture_delta(&output.textures_delta, &mut out.texture_delta);
 
-    let clipped_primitives = ctx.tessellate(output.shapes, output.pixels_per_point);
+    let clipped_primitives = ctx.tessellate(output.shapes, pixels_per_point);
     for egui::ClippedPrimitive { clip_rect, primitive } in clipped_primitives {
         let clip = clip_rect_to_px(clip_rect, pixels_per_point);
 
@@ -114,32 +115,17 @@ fn apply_texture_delta(delta: &egui::TexturesDelta, out: &mut UiTextureDelta) {
     }
 }
 
-#[inline]
-fn f32_alpha_to_u8(a: f32) -> u8 {
-    (a.clamp(0.0, 1.0) * 255.0).round() as u8
-}
-
 fn image_delta_to_rgba8(img: &egui::ImageData) -> (u32, u32, Vec<u8>) {
+    // As of egui 0.33, ImageData currently only has a Color variant.
+    // (Font atlas data is also delivered as a ColorImage.)
     match img {
         egui::ImageData::Color(cimg) => {
-            let w = cimg.size[0] as u32;
-            let h = cimg.size[1] as u32;
+            let [w_usize, h_usize] = cimg.size;
+            let w = w_usize as u32;
+            let h = h_usize as u32;
             let mut rgba8 = Vec::with_capacity((w * h * 4) as usize);
             for p in &cimg.pixels {
                 rgba8.extend_from_slice(&p.to_array());
-            }
-            (w, h, rgba8)
-        }
-        egui::ImageData::Font(fimg) => {
-            let w = fimg.size[0] as u32;
-            let h = fimg.size[1] as u32;
-            let mut rgba8 = Vec::with_capacity((w * h * 4) as usize);
-            for &a in &fimg.pixels {
-                let a8 = f32_alpha_to_u8(a);
-                rgba8.push(255);
-                rgba8.push(255);
-                rgba8.push(255);
-                rgba8.push(a8);
             }
             (w, h, rgba8)
         }

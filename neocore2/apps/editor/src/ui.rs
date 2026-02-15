@@ -102,10 +102,12 @@ impl EditorUiBuild {
 
             ui.painter()
                 .rect_filled(rect, 0.0, egui::Color32::from_rgb(12, 12, 14));
+
             ui.painter().rect_stroke(
                 rect,
                 0.0,
                 egui::Stroke::new(1.0, egui::Color32::from_gray(45)),
+                egui::StrokeKind::Inside,
             );
 
             let ppp = ctx.pixels_per_point().max(0.0001);
@@ -115,8 +117,8 @@ impl EditorUiBuild {
             self.viewport.set_pixel_extent(px_w, px_h);
             self.viewport_bridge.publish_extent(px_w, px_h);
 
-            let hovered = resp.hovered();
             let dragging = resp.dragged_by(egui::PointerButton::Primary);
+            let active = resp.hovered() || dragging;
 
             let mut dx_px = 0.0f32;
             let mut dy_px = 0.0f32;
@@ -133,19 +135,21 @@ impl EditorUiBuild {
                 self.last_drag_pos = None;
             }
 
-            let wheel_y_points = if hovered {
+            let wheel_y_points = if active {
                 ctx.input(|i| i.raw_scroll_delta.y)
             } else {
                 0.0
             };
-            let wheel_y = (wheel_y_points / 120.0).clamp(-12.0, 12.0);
+
+            let wheel_y = (wheel_y_points / 24.0).clamp(-12.0, 12.0);
 
             self.viewport_bridge
-                .publish_orbit_input(dx_px, dy_px, wheel_y, hovered, dragging);
+                .publish_orbit_input(dx_px, dy_px, wheel_y, active, dragging);
 
             let wants_kb = ctx.wants_keyboard_input();
             let mut move_mask: u64 = 0;
-            if hovered && !wants_kb {
+
+            if active && !wants_kb {
                 ctx.input(|i| {
                     if i.key_down(egui::Key::W) {
                         move_mask |= 1 << 0;
@@ -170,6 +174,7 @@ impl EditorUiBuild {
                     }
                 });
             }
+
             self.viewport_bridge.publish_move_keys(move_mask);
 
             let tex_user = self.viewport_bridge.read_tex_user();
@@ -187,6 +192,7 @@ impl EditorUiBuild {
             });
         });
     }
+
 
     fn ui_console(&mut self, ctx: &egui::Context) {
         if !self.console_open {

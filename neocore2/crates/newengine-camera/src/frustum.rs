@@ -12,9 +12,37 @@ pub struct Frustum {
 
 impl Frustum {
     /// Extract planes from a column-major clip matrix (proj * view).
+    ///
+    /// Engine baseline is Vulkan/DirectX depth range (Z in 0..1).
     #[inline]
     pub fn from_view_proj(m: Mat4) -> Self {
         // glam Mat4 stores columns; convert to rows by indexing.
+        let r0 = Vec4::new(m.x_axis.x, m.y_axis.x, m.z_axis.x, m.w_axis.x);
+        let r1 = Vec4::new(m.x_axis.y, m.y_axis.y, m.z_axis.y, m.w_axis.y);
+        let r2 = Vec4::new(m.x_axis.z, m.y_axis.z, m.z_axis.z, m.w_axis.z);
+        let r3 = Vec4::new(m.x_axis.w, m.y_axis.w, m.z_axis.w, m.w_axis.w);
+
+        let mut p = [
+            r3 + r0, // left
+            r3 - r0, // right
+            r3 + r1, // bottom
+            r3 - r1, // top
+            r2,      // near (z >= 0)
+            r3 - r2, // far  (z <= w)
+        ];
+
+        for pl in &mut p {
+            let n = Vec3::new(pl.x, pl.y, pl.z);
+            let inv_len = 1.0 / n.length().max(1e-6);
+            *pl *= inv_len;
+        }
+
+        Self { planes: p }
+    }
+
+    /// Extract planes for OpenGL-style depth range (Z in -1..1).
+    #[inline]
+    pub fn from_view_proj_gl(m: Mat4) -> Self {
         let r0 = Vec4::new(m.x_axis.x, m.y_axis.x, m.z_axis.x, m.w_axis.x);
         let r1 = Vec4::new(m.x_axis.y, m.y_axis.y, m.z_axis.y, m.w_axis.y);
         let r2 = Vec4::new(m.x_axis.z, m.y_axis.z, m.z_axis.z, m.w_axis.z);

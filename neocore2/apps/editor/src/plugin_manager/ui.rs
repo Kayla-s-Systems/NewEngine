@@ -14,9 +14,6 @@ enum PluginSort {
 }
 
 /// Plugin Manager UI state + renderer.
-///
-/// Owns all UI state and renders the window. The editor shell just calls
-/// `topbar_button()` and `show()`.
 pub struct PluginManagerUi {
     bridge: Arc<PluginManagerBridge>,
 
@@ -73,6 +70,7 @@ impl PluginManagerUi {
                 if !self.show_disabled && p.state == "disabled" {
                     return false;
                 }
+
                 if q.is_empty() {
                     return true;
                 }
@@ -93,7 +91,9 @@ impl PluginManagerUi {
             .collect();
 
         match self.sort {
-            PluginSort::Name => plugins.sort_by(|a, b| a.name.cmp(&b.name).then(a.id.cmp(&b.id))),
+            PluginSort::Name => {
+                plugins.sort_by(|a, b| a.name.cmp(&b.name).then(a.id.cmp(&b.id)))
+            }
             PluginSort::Id => plugins.sort_by(|a, b| a.id.cmp(&b.id)),
             PluginSort::State => {
                 plugins.sort_by(|a, b| a.state.cmp(&b.state).then(a.id.cmp(&b.id)))
@@ -147,14 +147,17 @@ impl PluginManagerUi {
 
                         ui.checkbox(&mut self.show_disabled, "Show disabled");
 
-                        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                            ui.label(
-                                egui::RichText::new(format!(
-                                    "{running} running · {registered} registered · {stopped} stopped · {disabled} disabled · {total} total"
-                                ))
-                                    .small(),
-                            );
-                        });
+                        ui.with_layout(
+                            egui::Layout::right_to_left(egui::Align::Center),
+                            |ui| {
+                                ui.label(
+                                    egui::RichText::new(format!(
+                                        "{running} running · {registered} registered · {stopped} stopped · {disabled} disabled · {total} total"
+                                    ))
+                                        .small(),
+                                );
+                            },
+                        );
                     });
 
                     ui.add_space(6.0);
@@ -167,253 +170,89 @@ impl PluginManagerUi {
                     cols[0].set_min_width(340.0);
 
                     egui::Frame::group(cols[0].style())
-                        .inner_margin(egui::Margin::same(10.0))
+                        .inner_margin(egui::Margin::same(10))
                         .show(&mut cols[0], |ui| {
-                            ui.horizontal(|ui| {
-                                ui.label(egui::RichText::new("Plugins").strong());
-                                ui.with_layout(
-                                    egui::Layout::right_to_left(egui::Align::Center),
-                                    |ui| {
-                                        ui.label(
-                                            egui::RichText::new(format!("{}", plugins.len()))
-                                                .small(),
-                                        );
-                                    },
-                                );
-                            });
-
-                            ui.add_space(6.0);
+                            ui.label(egui::RichText::new("Plugins").strong());
 
                             egui::ScrollArea::vertical()
                                 .id_source("plugin_list")
                                 .auto_shrink([false; 2])
                                 .show(ui, |ui| {
                                     for p in plugins.iter() {
-                                        let is_selected = self
+                                        let selected_flag = self
                                             .selected_plugin
                                             .as_deref()
                                             .map(|s| s == p.id)
                                             .unwrap_or(false);
 
-                                        let state_rt = match p.state.as_str() {
-                                            "running" => egui::RichText::new("RUNNING").strong(),
-                                            "registered" => egui::RichText::new("READY").strong(),
-                                            "stopped" => egui::RichText::new("STOPPED").strong(),
-                                            "disabled" => egui::RichText::new("DISABLED").strong(),
-                                            _ => egui::RichText::new(p.state.to_ascii_uppercase())
-                                                .strong(),
-                                        };
-
-                                        let kind_txt = p
-                                            .kind
-                                            .map(|k| format!("{k:?}"))
-                                            .unwrap_or_else(|| "V1".to_string());
-
-                                        let resp = ui
-                                            .add(egui::SelectableLabel::new(is_selected, ""))
-                                            .on_hover_text("Click to inspect");
-
-                                        let rect = resp.rect;
-                                        ui.allocate_ui_at_rect(rect.shrink(6.0), |ui| {
-                                            ui.horizontal(|ui| {
-                                                ui.vertical(|ui| {
-                                                    ui.label(egui::RichText::new(&p.name).strong());
-                                                    ui.label(
-                                                        egui::RichText::new(&p.id)
-                                                            .small()
-                                                            .monospace(),
-                                                    );
-                                                    ui.label(
-                                                        egui::RichText::new(format!(
-                                                            "{} · {}",
-                                                            p.version, kind_txt
-                                                        ))
-                                                            .small(),
-                                                    );
-                                                });
-
-                                                ui.with_layout(
-                                                    egui::Layout::right_to_left(egui::Align::Min),
-                                                    |ui| {
-                                                        ui.label(state_rt);
-                                                    },
-                                                );
-                                            });
-
-                                            if let Some(reason) = p.disabled_reason.as_deref() {
-                                                ui.add_space(4.0);
-                                                ui.label(
-                                                    egui::RichText::new(format!(
-                                                        "disabled: {reason}"
-                                                    ))
-                                                        .small(),
-                                                );
-                                            }
-                                        });
-
-                                        if resp.clicked() {
+                                        if ui
+                                            .selectable_label(selected_flag, &p.name)
+                                            .clicked()
+                                        {
                                             self.selected_plugin = Some(p.id.clone());
                                         }
-
-                                        ui.add_space(6.0);
-                                        ui.separator();
-                                    }
-
-                                    if plugins.is_empty() {
-                                        ui.label("No plugins match the filter.");
                                     }
                                 });
                         });
 
                     egui::Frame::group(cols[1].style())
-                        .inner_margin(egui::Margin::same(12.0))
+                        .inner_margin(egui::Margin::same(12))
                         .show(&mut cols[1], |ui| {
-                            ui.horizontal(|ui| {
-                                ui.label(egui::RichText::new("Inspector").strong());
-                                ui.with_layout(
-                                    egui::Layout::right_to_left(egui::Align::Center),
-                                    |ui| {
-                                        if ui.button("Copy id").clicked() {
-                                            if let Some(p) = selected {
-                                                ui.output_mut(|o| o.copied_text = p.id.clone());
-                                            }
-                                        }
-                                    },
-                                );
-                            });
-
-                            ui.add_space(8.0);
-
                             let Some(p) = selected else {
-                                ui.label("Select a plugin on the left.");
+                                ui.label("Select a plugin.");
                                 return;
                             };
 
-                            ui.label(egui::RichText::new(&p.name).size(18.0).strong());
-                            ui.add_space(2.0);
-                            ui.label(egui::RichText::new(&p.id).monospace());
-                            ui.add_space(6.0);
-
                             ui.horizontal(|ui| {
-                                ui.label(egui::RichText::new("Version:").strong());
-                                ui.label(&p.version);
-                                ui.separator();
-                                ui.label(egui::RichText::new("State:").strong());
-                                ui.label(&p.state);
-                                ui.separator();
-                                ui.label(egui::RichText::new("Kind:").strong());
-                                ui.label(
-                                    p.kind
-                                        .map(|k| format!("{k:?}"))
-                                        .unwrap_or_else(|| "<v1>".to_string()),
-                                );
+                                ui.label(egui::RichText::new(&p.name).strong());
+
+                                if ui.button("Copy id").clicked() {
+                                    ctx.copy_text(p.id.clone());
+                                }
                             });
 
-                            ui.add_space(6.0);
+                            ui.label(egui::RichText::new(&p.id).monospace());
+
+                            ui.separator();
 
                             ui.horizontal(|ui| {
-                                ui.label(egui::RichText::new("Path:").strong());
+                                ui.label("Version:");
+                                ui.label(&p.version);
+                            });
+
+                            ui.horizontal(|ui| {
+                                ui.label("State:");
+                                ui.label(&p.state);
+                            });
+
+                            ui.horizontal(|ui| {
+                                ui.label("Path:");
                                 ui.label(
                                     egui::RichText::new(p.path.display().to_string())
                                         .monospace(),
                                 );
-                                ui.with_layout(
-                                    egui::Layout::right_to_left(egui::Align::Center),
-                                    |ui| {
-                                        if ui.button("Copy path").clicked() {
-                                            ui.output_mut(|o| {
-                                                o.copied_text = p.path.display().to_string()
-                                            });
-                                        }
-                                    },
-                                );
+
+                                if ui.button("Copy path").clicked() {
+                                    ctx.copy_text(p.path.display().to_string());
+                                }
                             });
 
-                            if let Some(reason) = p.disabled_reason.as_deref() {
-                                ui.add_space(8.0);
-                                egui::Frame::none()
-                                    .fill(ui.visuals().faint_bg_color)
-                                    .inner_margin(egui::Margin::same(10.0))
-                                    .show(ui, |ui| {
-                                        ui.label(egui::RichText::new("Disabled reason").strong());
-                                        ui.add_space(4.0);
-                                        ui.label(reason);
-                                    });
-                            }
+                            if !p.capabilities.is_empty() {
+                                ui.separator();
+                                ui.label(egui::RichText::new("Capabilities").strong());
 
-                            ui.add_space(10.0);
-                            ui.separator();
-                            ui.add_space(10.0);
-
-                            ui.label(egui::RichText::new("Capabilities").strong());
-                            ui.add_space(6.0);
-
-                            if p.capabilities.is_empty() {
-                                ui.label("<none>");
-                                return;
-                            }
-
-                            egui::ScrollArea::vertical()
-                                .id_source("plugin_caps")
-                                .auto_shrink([false; 2])
-                                .show(ui, |ui| {
-                                    for (idx, c) in p.capabilities.iter().enumerate() {
-                                        let title = format!(
-                                            "{} · {:?} · {:?} · v{}",
-                                            c.id, c.role, c.kind, c.version
+                                for c in &p.capabilities {
+                                    ui.horizontal(|ui| {
+                                        ui.label(
+                                            egui::RichText::new(c.id.to_string()).monospace(),
                                         );
 
-                                        egui::CollapsingHeader::new(title)
-                                            .id_source(("cap", idx))
-                                            .default_open(idx == 0)
-                                            .show(ui, |ui| {
-                                                ui.horizontal(|ui| {
-                                                    ui.label(
-                                                        egui::RichText::new("id:").strong(),
-                                                    );
-                                                    ui.label(
-                                                        egui::RichText::new(c.id.to_string())
-                                                            .monospace(),
-                                                    );
-                                                    ui.with_layout(
-                                                        egui::Layout::right_to_left(
-                                                            egui::Align::Center,
-                                                        ),
-                                                        |ui| {
-                                                            if ui.button("Copy").clicked() {
-                                                                ui.output_mut(|o| {
-                                                                    o.copied_text = c.id.to_string()
-                                                                });
-                                                            }
-                                                        },
-                                                    );
-                                                });
-
-                                                ui.label(format!("role: {:?}", c.role));
-                                                ui.label(format!("kind: {:?}", c.kind));
-                                                ui.label(format!("version: {}", c.version));
-
-                                                if !c.describe_json.is_empty() {
-                                                    ui.add_space(6.0);
-                                                    ui.label(
-                                                        egui::RichText::new("describe_json")
-                                                            .strong(),
-                                                    );
-
-                                                    let mut json = c.describe_json.to_string();
-                                                    ui.add(
-                                                        egui::TextEdit::multiline(&mut json)
-                                                            .font(egui::TextStyle::Monospace)
-                                                            .desired_width(f32::INFINITY)
-                                                            .desired_rows(6)
-                                                            .lock_focus(true),
-                                                    );
-                                                }
-                                            });
-
-                                        ui.add_space(6.0);
-                                    }
-                                });
+                                        if ui.button("Copy").clicked() {
+                                            ctx.copy_text(c.id.to_string());
+                                        }
+                                    });
+                                }
+                            }
                         });
                 });
             });
