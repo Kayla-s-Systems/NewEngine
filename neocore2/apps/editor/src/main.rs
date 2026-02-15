@@ -25,8 +25,8 @@ mod render_controller;
 mod ui;
 mod viewport_bridge;
 mod plugin_manager;
+mod scene_bridge;
 mod shared;
-mod scene_components;
 
 const FIXED_DT_MS: u32 = 16;
 const UI_MARKUP_PATH: &str = "ui/editor.xml";
@@ -69,8 +69,9 @@ fn winit_config_from_startup(startup: &StartupConfig) -> WinitAppConfig {
 fn register_render_from_startup(
     engine: &mut Engine<()>,
     startup: &StartupConfig,
-    viewport: std::sync::Arc<viewport_bridge::ViewportBridge>,
-    plugins: std::sync::Arc<plugin_manager::PluginManagerBridge>,
+    viewport: Arc<viewport_bridge::ViewportBridge>,
+    plugins: Arc<plugin_manager::PluginManagerBridge>,
+    scene: Arc<scene_bridge::SceneBridge>,
 ) -> EngineResult<()> {
     let backend = startup.render_backend.trim();
 
@@ -81,6 +82,7 @@ fn register_render_from_startup(
             startup.render_clear_color,
             viewport,
             plugins,
+            scene,
         )))?;
 
         return Ok(());
@@ -201,13 +203,20 @@ fn main() -> EngineResult<()> {
 
     let startup = Arc::new(startup);
 
-    let viewport = std::sync::Arc::new(viewport_bridge::ViewportBridge::new());
-    let plugins = std::sync::Arc::new(plugin_manager::PluginManagerBridge::new());
+    let viewport = Arc::new(viewport_bridge::ViewportBridge::new());
+    let plugins = Arc::new(plugin_manager::PluginManagerBridge::new());
+    let scene = Arc::new(scene_bridge::SceneBridge::new(newengine_scene::Scene::new()));
 
     let mut engine = build_engine_from_startup(&startup)?;
 
     // 1) Register render (backend + controller) so the module set is complete before window creation.
-    register_render_from_startup(&mut engine, &startup, viewport.clone(), plugins.clone())?;
+    register_render_from_startup(
+        &mut engine,
+        &startup,
+        viewport.clone(),
+        plugins.clone(),
+        scene.clone(),
+    )?;
 
     // 2) Load plugins BEFORE creating winit (required: providers must exist).
     engine.load_plugins_once()?;
@@ -226,6 +235,7 @@ fn main() -> EngineResult<()> {
             shared_doc.clone(),
             viewport.clone(),
             plugins.clone(),
+            scene.clone(),
         ))),
     };
 

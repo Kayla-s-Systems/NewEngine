@@ -7,10 +7,10 @@ use newengine_ui::UiBuildFn;
 use std::any::Any;
 use std::sync::{Arc, Mutex};
 
-use newengine_scene::Scene;
 use newengine_viewport::ViewportState;
 
 use crate::plugin_manager::PluginManagerUi;
+use crate::scene_bridge::SceneBridge;
 use crate::viewport_bridge::ViewportBridge;
 
 /// Minimal editor UI: foundation-first.
@@ -21,10 +21,10 @@ pub struct EditorUiBuild {
     shared_doc: Arc<Mutex<Option<UiMarkupDoc>>>,
     state: UiState,
 
-    scene: Scene,
     viewport: ViewportState,
 
     viewport_bridge: Arc<ViewportBridge>,
+    scene_bridge: Arc<SceneBridge>,
     plugin_manager: PluginManagerUi,
 
     // Orbit interaction (UI-driven, not via global input plugin).
@@ -42,18 +42,21 @@ impl EditorUiBuild {
         shared_doc: Arc<Mutex<Option<UiMarkupDoc>>>,
         viewport_bridge: Arc<ViewportBridge>,
         plugins_bridge: Arc<crate::plugin_manager::PluginManagerBridge>,
+        scene_bridge: Arc<SceneBridge>,
     ) -> Self {
-        let scene = Scene::demo();
-        let viewport = ViewportState::new(Some(
-            scene.active_camera().expect("scene has no active camera"),
-        ));
+        let cam = scene_bridge
+            .scene()
+            .read()
+            .active_camera()
+            .expect("scene has no active camera");
+        let viewport = ViewportState::new(Some(cam));
 
         Self {
             shared_doc,
             state: UiState::default(),
-            scene,
             viewport,
             viewport_bridge,
+            scene_bridge,
             plugin_manager: PluginManagerUi::new(plugins_bridge),
             last_drag_pos: None,
             console_open: false,
@@ -67,8 +70,20 @@ impl EditorUiBuild {
                 ui.label("NewEngine Editor (Foundation)");
                 ui.separator();
 
-                let entities = self.scene.world().iter_entities().count();
+                let entities = self.scene_bridge.scene().read().world().entity_count();
                 ui.label(format!("entities: {entities}"));
+
+                ui.separator();
+
+                if ui.button("New Scene").clicked() {
+                    self.scene_bridge.cmd_new_scene();
+                }
+                if ui.button("Add Cube").clicked() {
+                    self.scene_bridge.cmd_spawn_cube(glam::Vec3::new(0.0, 0.5, 0.0));
+                }
+                if ui.button("Add Plane").clicked() {
+                    self.scene_bridge.cmd_spawn_plane(glam::Vec3::new(0.0, 0.0, 0.0));
+                }
 
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                     self.plugin_manager.topbar_button(ui);
@@ -216,6 +231,9 @@ impl EditorUiBuild {
         }
         if ctx.input(|i| i.key_pressed(egui::Key::F2)) {
             self.plugin_manager.toggle();
+        }
+        if ctx.input(|i| i.modifiers.ctrl && i.key_pressed(egui::Key::N)) {
+            self.scene_bridge.cmd_new_scene();
         }
 
         self.ui_topbar(ctx);

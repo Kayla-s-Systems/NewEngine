@@ -18,9 +18,14 @@ use newengine_camera::{
 };
 
 use crate::plugin_manager::PluginManagerBridge;
+use crate::scene_bridge::SceneBridge;
 use crate::viewport_bridge::ViewportBridge;
 
 use newengine_core::plugins::default_host_api;
+
+use newengine_primitives::{build_mesh, Primitive, PrimitiveKind, PrimitiveVertex};
+use newengine_scene::update_scene_world;
+use newengine_transform::GlobalTransform;
 
 use shaderc::{CompileOptions, Compiler, OptimizationLevel, ShaderKind};
 
@@ -59,6 +64,23 @@ struct ModelGpu {
     index_count: u32,
 }
 
+#[derive(Clone, Copy)]
+struct LitPipeline {
+    ubo: newengine_core::render::BufferId,
+    bgl: newengine_core::render::BindGroupLayoutId,
+    bg: newengine_core::render::BindGroupId,
+    vs: newengine_core::render::ShaderId,
+    fs: newengine_core::render::ShaderId,
+    pipeline: newengine_core::render::PipelineId,
+}
+
+#[derive(Clone, Copy)]
+struct PrimitiveGpu {
+    vb: newengine_core::render::BufferId,
+    ib: newengine_core::render::BufferId,
+    index_count: u32,
+}
+
 pub struct EditorRenderController {
     model_center: [f32; 3],
     model_radius: f32,
@@ -80,8 +102,13 @@ pub struct EditorRenderController {
 
     viewport_bridge: std::sync::Arc<ViewportBridge>,
     plugins_bridge: std::sync::Arc<PluginManagerBridge>,
+    scene_bridge: std::sync::Arc<SceneBridge>,
     viewport_rt: Option<newengine_core::render::RenderTargetId>,
     viewport_rt_extent: Extent2D,
+
+    lit: Option<LitPipeline>,
+    prim_cube: Option<PrimitiveGpu>,
+    prim_plane: Option<PrimitiveGpu>,
 }
 
 impl EditorRenderController {
@@ -90,6 +117,7 @@ impl EditorRenderController {
         clear_color: [f32; 4],
         viewport_bridge: std::sync::Arc<ViewportBridge>,
         plugins_bridge: std::sync::Arc<PluginManagerBridge>,
+        scene_bridge: std::sync::Arc<SceneBridge>,
     ) -> Self {
         // Engine baseline coordinate system:
         // - right-handed
@@ -129,9 +157,167 @@ impl EditorRenderController {
 
             viewport_bridge,
             plugins_bridge,
+            scene_bridge,
             viewport_rt: None,
             viewport_rt_extent: Extent2D::new(0, 0),
+
+            lit: None,
+            prim_cube: None,
+            prim_plane: None,
         }
+    }
+
+    fn ensure_lit_pipeline(
+        &mut self,
+        r: &mut dyn newengine_core::render::RenderApi,
+    ) -> EngineResult<LitPipeline> {
+        if let Some(p) = self.lit {
+            return Ok(p);
+        }
+
+        let ubo = r.create_buffer(
+            BufferDesc::new(64, BufferUsage::Uniform, MemoryHint::CpuToGpu).with_label("editor_lit_ubo"),
+        )?;
+
+        let bgl = r.create_bind_group_layout(
+            BindGroupLayoutDesc::new(vec![BindingKind::UniformBuffer]).with_label("editor_lit_bgl"),
+        )?;
+        let bg = r.create_bind_group(
+            BindGroupDesc::new(bgl)
+                .with_label("editor_lit_bg")
+                .with_uniform0(BufferBinding::new(ubo, 0, 64)),
+        )?;
+
+        let compiler = Compiler::new().ok_or_else(|| EngineError::other("shaderc: Compiler"))?;
+
+        const VS_SRC: &str = r#"#version 450
+layout(location = 0) in vec3 a_pos;
+layout(location = 1) in vec3 a_nrm;
+
+layout(set = 0, binding = 0) uniform Ubo {
+    mat4 u_mvp;
+} u;
+
+layout(location = 0) out vec3 v_nrm;
+
+void main() {
+    v_nrm = a_nrm;
+    gl_Position = u.u_mvp * vec4(a_pos, 1.0);
+}
+"#;
+
+        const FS_SRC: &str = r#"#version 450
+layout(location = 0) in vec3 v_nrm;
+layout(location = 0) out vec4 o_col;
+
+void main() {
+    vec3 n = normalize(v_nrm);
+    vec3 l = normalize(vec3(0.35, 0.75, 0.55));
+    float ndl = clamp(dot(n, l) * 0.5 + 0.5, 0.0, 1.0);
+    o_col = vec4(vec3(ndl), 1.0);
+}
+"#;
+
+        let vs_spv = Self::compile_glsl(&compiler, ShaderKind::Vertex, "editor_lit.vert", VS_SRC)?;
+        let fs_spv = Self::compile_glsl(&compiler, ShaderKind::Fragment, "editor_lit.frag", FS_SRC)?;
+
+        let vs = r.create_shader(
+            ShaderDesc::new(ShaderStage::Vertex, "main", vs_spv).with_label("editor_lit_vs"),
+        )?;
+        let fs = r.create_shader(
+            ShaderDesc::new(ShaderStage::Fragment, "main", fs_spv).with_label("editor_lit_fs"),
+        )?;
+
+        let layout = VertexLayout::new(
+            std::mem::size_of::<PrimitiveVertex>() as u32,
+            vec![
+                VertexAttribute::new(0, 0, VertexFormat::Float32x3),
+                VertexAttribute::new(
+                    1,
+                    (3 * std::mem::size_of::<f32>()) as u32,
+                    VertexFormat::Float32x3,
+                ),
+            ],
+        );
+
+        let pipeline = r.create_pipeline(
+            PipelineDesc::new(vs, fs, TextureFormat::Bgra8Unorm)
+                .with_label("editor_lit_pipeline")
+                .with_topology(PrimitiveTopology::TriangleList)
+                .with_vertex_layouts(vec![layout])
+                .with_bind_group_layouts(vec![bgl]),
+        )?;
+
+        // Initialize with identity.
+        let mvp = Mat4::IDENTITY.to_cols_array();
+        let mut ubytes: Vec<u8> = Vec::with_capacity(64);
+        for f in mvp {
+            ubytes.extend_from_slice(&f.to_ne_bytes());
+        }
+        r.write_buffer(ubo, 0, &ubytes)?;
+
+        let p = LitPipeline {
+            ubo,
+            bgl,
+            bg,
+            vs,
+            fs,
+            pipeline,
+        };
+        self.lit = Some(p);
+        Ok(p)
+    }
+
+    fn ensure_primitive_gpu(
+        &mut self,
+        r: &mut dyn newengine_core::render::RenderApi,
+        kind: PrimitiveKind,
+    ) -> EngineResult<PrimitiveGpu> {
+        match kind {
+            PrimitiveKind::Cube => {
+                if let Some(g) = self.prim_cube {
+                    return Ok(g);
+                }
+                let g = Self::build_primitive_gpu(r, kind)?;
+                self.prim_cube = Some(g);
+                Ok(g)
+            }
+            PrimitiveKind::Plane => {
+                if let Some(g) = self.prim_plane {
+                    return Ok(g);
+                }
+                let g = Self::build_primitive_gpu(r, kind)?;
+                self.prim_plane = Some(g);
+                Ok(g)
+            }
+        }
+    }
+
+    fn build_primitive_gpu(
+        r: &mut dyn newengine_core::render::RenderApi,
+        kind: PrimitiveKind,
+    ) -> EngineResult<PrimitiveGpu> {
+        let mesh = build_mesh(kind);
+        let vbytes = bytemuck::cast_slice(mesh.vertices.as_slice());
+        let ibytes = bytemuck::cast_slice(mesh.indices.as_slice());
+
+        let vb = r.create_buffer(
+            BufferDesc::new(vbytes.len() as u64, BufferUsage::Vertex, MemoryHint::CpuToGpu)
+                .with_label("editor_prim_vb"),
+        )?;
+        r.write_buffer(vb, 0, vbytes)?;
+
+        let ib = r.create_buffer(
+            BufferDesc::new(ibytes.len() as u64, BufferUsage::Index, MemoryHint::CpuToGpu)
+                .with_label("editor_prim_ib"),
+        )?;
+        r.write_buffer(ib, 0, ibytes)?;
+
+        Ok(PrimitiveGpu {
+            vb,
+            ib,
+            index_count: mesh.indices.len() as u32,
+        })
     }
 
     #[inline]
@@ -932,6 +1118,185 @@ void main() {
     }
 }
 
+/*
+
+`(dyn Any + 'static)` cannot be sent between threads safely [E0277]
+Help: the trait `Send` is not implemented for `(dyn Any + 'static)`
+Note: required for `Unique<(dyn Any + 'static)>` to implement `Send`
+Note: required because it appears within the type `Box<(dyn Any + 'static)>`
+Note: required because it appears within the type `(std::any::TypeId, Box<(dyn Any + 'static)>)`
+Note: required for `hashbrown::raw::RawTable<(std::any::TypeId, Box<(dyn Any + 'static)>)>` to implement `Send`
+Note: required because it appears within the type `hashbrown::map::HashMap<std::any::TypeId, Box<(dyn Any + 'static)>>`
+Note: required because it appears within the type `World`
+Note: required because it appears within the type `Scene`
+Note: required for `parking_lot::lock_api::RwLock<parking_lot::RawRwLock, Scene>` to implement `Sync`
+Note: 1 redundant requirement hidden
+Note: required for `Arc<parking_lot::lock_api::RwLock<parking_lot::RawRwLock, Scene>>` to implement `Sync`
+Note: required because it appears within the type `SceneBridge`
+Note: required for `Arc<SceneBridge>` to implement `Send`
+Note: required because it appears within the type `EditorRenderController`
+Note: required by a bound in `newengine_core::Module`
+`(dyn Any + 'static)` cannot be shared between threads safely [E0277]
+Help: the trait `Sync` is not implemented for `(dyn Any + 'static)`
+Note: required for `Unique<(dyn Any + 'static)>` to implement `Sync`
+Note: required because it appears within the type `Box<(dyn Any + 'static)>`
+Note: required because it appears within the type `(std::any::TypeId, Box<(dyn Any + 'static)>)`
+Note: required for `hashbrown::raw::RawTable<(std::any::TypeId, Box<(dyn Any + 'static)>)>` to implement `Sync`
+Note: required because it appears within the type `hashbrown::map::HashMap<std::any::TypeId, Box<(dyn Any + 'static)>>`
+Note: required because it appears within the type `World`
+Note: required because it appears within the type `Scene`
+Note: required for `parking_lot::lock_api::RwLock<parking_lot::RawRwLock, Scene>` to implement `Sync`
+Note: 1 redundant requirement hidden
+Note: required for `Arc<parking_lot::lock_api::RwLock<parking_lot::RawRwLock, Scene>>` to implement `Sync`
+Note: required because it appears within the type `SceneBridge`
+Note: required for `Arc<SceneBridge>` to implement `Send`
+Note: required because it appears within the type `EditorRenderController`
+Note: required by a bound in `newengine_core::Module`
+`(dyn newengine_ecs::ErasedStorage + 'static)` cannot be sent between threads safely [E0277]
+Help: the trait `Send` is not implemented for `(dyn newengine_ecs::ErasedStorage + 'static)`
+Note: required for `Unique<(dyn newengine_ecs::ErasedStorage + 'static)>` to implement `Send`
+Note: required because it appears within the type `Box<(dyn newengine_ecs::ErasedStorage + 'static)>`
+Note: required because it appears within the type `(std::any::TypeId, Box<(dyn newengine_ecs::ErasedStorage + 'static)>)`
+Note: required for `RawTable<(TypeId, Box<dyn ErasedStorage>)>` to implement `Send`
+Note: required because it appears within the type `hashbrown::map::HashMap<std::any::TypeId, Box<(dyn newengine_ecs::ErasedStorage + 'static)>>`
+Note: required because it appears within the type `World`
+Note: required because it appears within the type `Scene`
+Note: required for `parking_lot::lock_api::RwLock<parking_lot::RawRwLock, Scene>` to implement `Sync`
+Note: 1 redundant requirement hidden
+Note: required for `Arc<parking_lot::lock_api::RwLock<parking_lot::RawRwLock, Scene>>` to implement `Sync`
+Note: required because it appears within the type `SceneBridge`
+Note: required for `Arc<SceneBridge>` to implement `Send`
+Note: required because it appears within the type `EditorRenderController`
+Note: required by a bound in `newengine_core::Module`
+Note: the full name for the type has been written to 'C:\Users\Aiden\Documents\Kayla's Systems\NewEngine\neocore2\target\debug\deps\editor-536512d67516128f.long-type-9462895103954916477.txt'
+Note: consider using `--verbose` to print the full type name to the console
+`(dyn newengine_ecs::ErasedStorage + 'static)` cannot be sent between threads safely [E0277]
+Help: the trait `Send` is not implemented for `(dyn newengine_ecs::ErasedStorage + 'static)`
+Note: required for `Unique<(dyn newengine_ecs::ErasedStorage + 'static)>` to implement `Send`
+Note: required because it appears within the type `Box<(dyn newengine_ecs::ErasedStorage + 'static)>`
+Note: required because it appears within the type `(std::any::TypeId, Box<(dyn newengine_ecs::ErasedStorage + 'static)>)`
+Note: required for `RawTable<(TypeId, Box<dyn ErasedStorage>)>` to implement `Send`
+Note: required because it appears within the type `hashbrown::map::HashMap<std::any::TypeId, Box<(dyn newengine_ecs::ErasedStorage + 'static)>>`
+Note: required because it appears within the type `World`
+Note: required because it appears within the type `Scene`
+Note: required for `parking_lot::lock_api::RwLock<parking_lot::RawRwLock, Scene>` to implement `Sync`
+Note: 1 redundant requirement hidden
+Note: required for `Arc<parking_lot::lock_api::RwLock<parking_lot::RawRwLock, Scene>>` to implement `Sync`
+Note: required because it appears within the type `SceneBridge`
+Note: required for `Arc<SceneBridge>` to implement `Send`
+Note: required because it appears within the type `EditorRenderController`
+Note: required by a bound in `newengine_core::Module`
+Note: the full name for the type has been written to 'C:\Users\Aiden\Documents\Kayla's Systems\NewEngine\neocore2\target\debug\deps\editor-4e93ec76c3140e63.long-type-13092832226684424653.txt'
+Note: consider using `--verbose` to print the full type name to the console
+`(dyn newengine_ecs::ErasedStorage + 'static)` cannot be shared between threads safely [E0277]
+Help: the trait `Sync` is not implemented for `(dyn newengine_ecs::ErasedStorage + 'static)`
+Note: required for `Unique<(dyn newengine_ecs::ErasedStorage + 'static)>` to implement `Sync`
+Note: required because it appears within the type `Box<(dyn newengine_ecs::ErasedStorage + 'static)>`
+Note: required because it appears within the type `(std::any::TypeId, Box<(dyn newengine_ecs::ErasedStorage + 'static)>)`
+Note: required for `RawTable<(TypeId, Box<dyn ErasedStorage>)>` to implement `Sync`
+Note: required because it appears within the type `hashbrown::map::HashMap<std::any::TypeId, Box<(dyn newengine_ecs::ErasedStorage + 'static)>>`
+Note: required because it appears within the type `World`
+Note: required because it appears within the type `Scene`
+Note: required for `parking_lot::lock_api::RwLock<parking_lot::RawRwLock, Scene>` to implement `Sync`
+Note: 1 redundant requirement hidden
+Note: required for `Arc<parking_lot::lock_api::RwLock<parking_lot::RawRwLock, Scene>>` to implement `Sync`
+Note: required because it appears within the type `SceneBridge`
+Note: required for `Arc<SceneBridge>` to implement `Send`
+Note: required because it appears within the type `EditorRenderController`
+Note: required by a bound in `newengine_core::Module`
+Note: the full name for the type has been written to 'C:\Users\Aiden\Documents\Kayla's Systems\NewEngine\neocore2\target\debug\deps\editor-536512d67516128f.long-type-9462895103954916477.txt'
+Note: consider using `--verbose` to print the full type name to the console
+`(dyn newengine_ecs::ErasedStorage + 'static)` cannot be shared between threads safely [E0277]
+Help: the trait `Sync` is not implemented for `(dyn newengine_ecs::ErasedStorage + 'static)`
+Note: required for `Unique<(dyn newengine_ecs::ErasedStorage + 'static)>` to implement `Sync`
+Note: required because it appears within the type `Box<(dyn newengine_ecs::ErasedStorage + 'static)>`
+Note: required because it appears within the type `(std::any::TypeId, Box<(dyn newengine_ecs::ErasedStorage + 'static)>)`
+Note: required for `RawTable<(TypeId, Box<dyn ErasedStorage>)>` to implement `Sync`
+Note: required because it appears within the type `hashbrown::map::HashMap<std::any::TypeId, Box<(dyn newengine_ecs::ErasedStorage + 'static)>>`
+Note: required because it appears within the type `World`
+Note: required because it appears within the type `Scene`
+Note: required for `parking_lot::lock_api::RwLock<parking_lot::RawRwLock, Scene>` to implement `Sync`
+Note: 1 redundant requirement hidden
+Note: required for `Arc<parking_lot::lock_api::RwLock<parking_lot::RawRwLock, Scene>>` to implement `Sync`
+Note: required because it appears within the type `SceneBridge`
+Note: required for `Arc<SceneBridge>` to implement `Send`
+Note: required because it appears within the type `EditorRenderController`
+Note: required by a bound in `newengine_core::Module`
+Note: the full name for the type has been written to 'C:\Users\Aiden\Documents\Kayla's Systems\NewEngine\neocore2\target\debug\deps\editor-4e93ec76c3140e63.long-type-13092832226684424653.txt'
+Note: consider using `--verbose` to print the full type name to the console
+`(dyn newengine_ecs::ErasedStorage + 'static)` cannot be sent between threads safely [E0277]
+Help: the trait `Send` is not implemented for `(dyn newengine_ecs::ErasedStorage + 'static)`
+Note: required for `Unique<(dyn newengine_ecs::ErasedStorage + 'static)>` to implement `Send`
+Note: required because it appears within the type `Box<(dyn newengine_ecs::ErasedStorage + 'static)>`
+Note: required because it appears within the type `(std::any::TypeId, Box<(dyn newengine_ecs::ErasedStorage + 'static)>)`
+Note: required for `RawTable<(TypeId, Box<dyn ErasedStorage>)>` to implement `Send`
+Note: required because it appears within the type `hashbrown::map::HashMap<std::any::TypeId, Box<(dyn newengine_ecs::ErasedStorage + 'static)>>`
+Note: required because it appears within the type `World`
+Note: required because it appears within the type `Scene`
+Note: required for `parking_lot::lock_api::RwLock<parking_lot::RawRwLock, Scene>` to implement `Sync`
+Note: 1 redundant requirement hidden
+Note: required for `Arc<parking_lot::lock_api::RwLock<parking_lot::RawRwLock, Scene>>` to implement `Sync`
+Note: required because it appears within the type `SceneBridge`
+Note: required for `Arc<SceneBridge>` to implement `Send`
+Note: required because it appears within the type `EditorRenderController`
+Note: required by a bound in `newengine_core::Module`
+Note: the full name for the type has been written to 'C:\Users\Aiden\Documents\Kayla's Systems\NewEngine\neocore2\target\debug\deps\editor-4e93ec76c3140e63.long-type-2589745563924243073.txt'
+Note: consider using `--verbose` to print the full type name to the console
+`(dyn newengine_ecs::ErasedStorage + 'static)` cannot be sent between threads safely [E0277]
+Help: the trait `Send` is not implemented for `(dyn newengine_ecs::ErasedStorage + 'static)`
+Note: required for `Unique<(dyn newengine_ecs::ErasedStorage + 'static)>` to implement `Send`
+Note: required because it appears within the type `Box<(dyn newengine_ecs::ErasedStorage + 'static)>`
+Note: required because it appears within the type `(std::any::TypeId, Box<(dyn newengine_ecs::ErasedStorage + 'static)>)`
+Note: required for `RawTable<(TypeId, Box<dyn ErasedStorage>)>` to implement `Send`
+Note: required because it appears within the type `hashbrown::map::HashMap<std::any::TypeId, Box<(dyn newengine_ecs::ErasedStorage + 'static)>>`
+Note: required because it appears within the type `World`
+Note: required because it appears within the type `Scene`
+Note: required for `parking_lot::lock_api::RwLock<parking_lot::RawRwLock, Scene>` to implement `Sync`
+Note: 1 redundant requirement hidden
+Note: required for `Arc<parking_lot::lock_api::RwLock<parking_lot::RawRwLock, Scene>>` to implement `Sync`
+Note: required because it appears within the type `SceneBridge`
+Note: required for `Arc<SceneBridge>` to implement `Send`
+Note: required because it appears within the type `EditorRenderController`
+Note: required by a bound in `newengine_core::Module`
+Note: the full name for the type has been written to 'C:\Users\Aiden\Documents\Kayla's Systems\NewEngine\neocore2\target\debug\deps\editor-536512d67516128f.long-type-16232427013712189229.txt'
+Note: consider using `--verbose` to print the full type name to the console
+`(dyn newengine_ecs::ErasedStorage + 'static)` cannot be shared between threads safely [E0277]
+Help: the trait `Sync` is not implemented for `(dyn newengine_ecs::ErasedStorage + 'static)`
+Note: required for `Unique<(dyn newengine_ecs::ErasedStorage + 'static)>` to implement `Sync`
+Note: required because it appears within the type `Box<(dyn newengine_ecs::ErasedStorage + 'static)>`
+Note: required because it appears within the type `(std::any::TypeId, Box<(dyn newengine_ecs::ErasedStorage + 'static)>)`
+Note: required for `RawTable<(TypeId, Box<dyn ErasedStorage>)>` to implement `Sync`
+Note: required because it appears within the type `hashbrown::map::HashMap<std::any::TypeId, Box<(dyn newengine_ecs::ErasedStorage + 'static)>>`
+Note: required because it appears within the type `World`
+Note: required because it appears within the type `Scene`
+Note: required for `parking_lot::lock_api::RwLock<parking_lot::RawRwLock, Scene>` to implement `Sync`
+Note: 1 redundant requirement hidden
+Note: required for `Arc<parking_lot::lock_api::RwLock<parking_lot::RawRwLock, Scene>>` to implement `Sync`
+Note: required because it appears within the type `SceneBridge`
+Note: required for `Arc<SceneBridge>` to implement `Send`
+Note: required because it appears within the type `EditorRenderController`
+Note: required by a bound in `newengine_core::Module`
+Note: the full name for the type has been written to 'C:\Users\Aiden\Documents\Kayla's Systems\NewEngine\neocore2\target\debug\deps\editor-4e93ec76c3140e63.long-type-2589745563924243073.txt'
+Note: consider using `--verbose` to print the full type name to the console
+`(dyn newengine_ecs::ErasedStorage + 'static)` cannot be shared between threads safely [E0277]
+Help: the trait `Sync` is not implemented for `(dyn newengine_ecs::ErasedStorage + 'static)`
+Note: required for `Unique<(dyn newengine_ecs::ErasedStorage + 'static)>` to implement `Sync`
+Note: required because it appears within the type `Box<(dyn newengine_ecs::ErasedStorage + 'static)>`
+Note: required because it appears within the type `(std::any::TypeId, Box<(dyn newengine_ecs::ErasedStorage + 'static)>)`
+Note: required for `RawTable<(TypeId, Box<dyn ErasedStorage>)>` to implement `Sync`
+Note: required because it appears within the type `hashbrown::map::HashMap<std::any::TypeId, Box<(dyn newengine_ecs::ErasedStorage + 'static)>>`
+Note: required because it appears within the type `World`
+Note: required because it appears within the type `Scene`
+Note: required for `parking_lot::lock_api::RwLock<parking_lot::RawRwLock, Scene>` to implement `Sync`
+Note: 1 redundant requirement hidden
+Note: required for `Arc<parking_lot::lock_api::RwLock<parking_lot::RawRwLock, Scene>>` to implement `Sync`
+Note: required because it appears within the type `SceneBridge`
+Note: required for `Arc<SceneBridge>` to implement `Send`
+Note: required because it appears within the type `EditorRenderController`
+Note: required by a bound in `newengine_core::Module`
+Note: the full name for the type has been written to 'C:\Users\Aiden\Documents\Kayla's Systems\NewEngine\neocore2\target\debug\deps\editor-536512d67516128f.long-type-16232427013712189229.txt'
+Note: consider using `--verbose` to print the full type name to the console
+*/
 impl<E: Send + 'static> Module<E> for EditorRenderController {
     fn id(&self) -> &'static str {
         "app.render_controller"
@@ -977,9 +1342,7 @@ impl<E: Send + 'static> Module<E> for EditorRenderController {
         if vp_w > 0 && vp_h > 0 {
             self.ensure_viewport_rt(&mut **r, Extent2D::new(vp_w, vp_h))?;
 
-            let (dx_px, dy_px, wheel_y, _hovered, dragging) =
-                self.viewport_bridge.read_orbit_input();
-
+            let (dx_px, dy_px, wheel_y, _hovered, dragging) = self.viewport_bridge.read_orbit_input();
             let move_mask = self.viewport_bridge.read_move_keys();
             let dt = ctx.frame().map(|f| f.dt).unwrap_or(0.016);
 
@@ -1011,12 +1374,15 @@ impl<E: Send + 'static> Module<E> for EditorRenderController {
                 r.set_viewport(Viewport::full(extent))?;
                 r.set_scissor(RectI32::new(0, 0, vp_w as i32, vp_h as i32))?;
 
-
                 if let Some(model) = self.model {
                     let aspect = vp_w as f32 / (vp_h.max(1) as f32);
 
                     let radius = self.model_radius.max(0.000_001);
-                    let center = Vec3::new(self.model_center[0], self.model_center[1], self.model_center[2]);
+                    let center = Vec3::new(
+                        self.model_center[0],
+                        self.model_center[1],
+                        self.model_center[2],
+                    );
 
                     // Universal "frame all" — can be invoked by editor OR by game.
                     if !self.model_framed_once {
@@ -1034,16 +1400,18 @@ impl<E: Send + 'static> Module<E> for EditorRenderController {
                     self.projection = Projection::Perspective(Perspective::new(fovy, aspect, near, far));
                     let proj = self.projection.matrix();
                     let view = self.rig.view_matrix();
-                    let mvp = proj * view;
+                    let viewproj = proj * view;
 
-                    // Upload MVP for both grid and model.
-                    let cols = mvp.to_cols_array();
-                    let mut ubytes: [u8; 64] = [0u8; 64];
-                    for (i, f) in cols.iter().enumerate() {
-                        let off = i * 4;
-                        ubytes[off..off + 4].copy_from_slice(&f.to_ne_bytes());
+                    // Upload MVP for both grid and model (camera UBO).
+                    {
+                        let cols = viewproj.to_cols_array();
+                        let mut ubytes: [u8; 64] = [0u8; 64];
+                        for (i, f) in cols.iter().enumerate() {
+                            let off = i * 4;
+                            ubytes[off..off + 4].copy_from_slice(&f.to_ne_bytes());
+                        }
+                        r.write_buffer(model.ubo, 0, &ubytes)?;
                     }
-                    r.write_buffer(model.ubo, 0, &ubytes)?;
 
                     // Grid uses the same camera UBO bind group as the model.
                     self.build_grid(&mut **r, radius, self.orbit.distance)?;
@@ -1054,6 +1422,44 @@ impl<E: Send + 'static> Module<E> for EditorRenderController {
                         r.draw(newengine_core::render::DrawArgs::new(g.vertex_count))?;
                     }
 
+                    // Apply UI/editor scene commands once per frame (deterministic) and render primitives.
+                    self.scene_bridge.apply_commands();
+
+                    {
+                        let lit = self.ensure_lit_pipeline(&mut **r)?;
+
+                        // IMPORTANT: bind the Arc to extend its lifetime (fixes E0716).
+                        let scene_lock = self.scene_bridge.scene();
+                        let mut scene = scene_lock.write();
+
+                        // Update scene world using &mut World, then release mutable borrow before querying immutably.
+                        {
+                            let world_mut = scene.world_mut();
+                            update_scene_world(world_mut);
+                        }
+
+                        let world = scene.world();
+                        for (_id, prim, gt) in world.query2::<Primitive, GlobalTransform>() {
+                            let gpu = self.ensure_primitive_gpu(&mut **r, prim.kind)?;
+
+                            let mvp = viewproj * gt.0;
+                            let cols = mvp.to_cols_array();
+                            let mut ubytes: [u8; 64] = [0u8; 64];
+                            for (i, f) in cols.iter().enumerate() {
+                                let off = i * 4;
+                                ubytes[off..off + 4].copy_from_slice(&f.to_ne_bytes());
+                            }
+                            r.write_buffer(lit.ubo, 0, &ubytes)?;
+
+                            r.set_pipeline(lit.pipeline)?;
+                            r.set_bind_group(0, lit.bg)?;
+                            r.set_vertex_buffer(0, BufferSlice::new(gpu.vb, 0))?;
+                            r.set_index_buffer(BufferSlice::new(gpu.ib, 0), IndexFormat::U32)?;
+                            r.draw_indexed(DrawIndexedArgs::new(gpu.index_count))?;
+                        }
+                    }
+
+                    // Draw the model last (so it sits on top of grid visually, if desired).
                     r.set_pipeline(model.pipeline)?;
                     r.set_bind_group(0, model.bg)?;
                     r.set_vertex_buffer(0, BufferSlice::new(model.vb, 0))?;
@@ -1066,6 +1472,7 @@ impl<E: Send + 'static> Module<E> for EditorRenderController {
                 }
 
                 r.end_render_target()?;
+
                 let win_extent = Extent2D::new(w, h);
                 r.set_viewport(Viewport::full(win_extent))?;
                 r.set_scissor(RectI32::new(0, 0, w as i32, h as i32))?;
