@@ -1,6 +1,6 @@
 #![forbid(unsafe_op_in_unsafe_fn)]
 
-use glam::{Mat4, Vec3};
+use glam::{Mat4, Quat, Vec3};
 use newengine_camera::{auto_near_far_from_sphere, orbit_frame_sphere, CameraInput, Perspective, Projection};
 use newengine_core::render::{
     require_render_api, BeginFrameDesc, BeginRenderTargetDesc, BufferSlice, Extent2D, IndexFormat,
@@ -37,13 +37,7 @@ impl EditorRenderController {
         if (mask & (1 << 3)) != 0 {
             dir.x += 1.0;
         }
-        if (mask & (1 << 4)) != 0 {
-            dir.y -= 1.0;
-        }
-        if (mask & (1 << 5)) != 0 {
-            dir.y += 1.0;
-        }
-
+        // Vertical orbit target translation is disabled in editor mode.
         if dir.length_squared() <= 1e-6 {
             return;
         }
@@ -140,6 +134,8 @@ impl<E: Send + 'static> Module<E> for EditorRenderController {
             // Translate orbit target in world space.
             let base_speed = (bounds_radius.max(0.01) * 2.0).clamp(0.5, 200.0);
             Self::apply_wasd_target_translate(&mut self.orbit, move_mask, dt, base_speed);
+            // Keep orbit target on the editor ground plane.
+            self.orbit.target.y = 0.0;
 
             // Apply orbit rotation + dolly.
             let input = CameraInput {
@@ -219,9 +215,30 @@ impl<E: Send + 'static> Module<E> for EditorRenderController {
 
             // Grid: reuse the same UBO bind group (layout compatible).
             if bounds_radius.is_finite() {
-                let g = ensure_grid(&mut self.grid, &mut **r, lit.bgl, bounds_radius, self.orbit.distance)?;
-                // Camera MVP for grid.
-                Self::write_mat4_ubo(&mut **r, lit.ubo, viewproj)?;
+                let g = ensure_grid(&mut self.grid, &mut **r, lit.bgl)?;
+                // Infinite-feel grid:
+                // - unit grid VB is scaled to a dynamic spacing derived from camera distance
+                // - translated to follow the camera target (snapped to spacing) to prevent swimming.
+                let spacing = {
+                    let d = self.orbit.distance.max(0.01);
+                    let base = (d * 0.08).max(0.05);
+                    let pow10 = 10.0f32.powf(base.log10().floor());
+                    pow10.clamp(0.05, 1000.0)
+                };
+
+                // Snap grid origin to spacing to keep lines stable while panning.
+                let cx = (self.orbit.target.x / spacing).round() * spacing;
+                let cz = (self.orbit.target.z / spacing).round() * spacing;
+
+                let grid_model = Mat4::from_scale_rotation_translation(
+                    Vec3::new(spacing, 1.0, spacing),
+                    Quat::IDENTITY,
+                    Vec3::new(cx, 0.0, cz),
+                );
+
+                // MVP for grid (model is applied before viewproj).
+                Self::write_mat4_ubo(&mut **r, lit.ubo, viewproj * grid_model)?;
+
 
                 r.set_pipeline(g.pipeline)?;
                 r.set_bind_group(0, lit.bg)?;

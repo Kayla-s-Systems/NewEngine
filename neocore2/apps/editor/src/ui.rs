@@ -25,6 +25,7 @@ pub struct EditorUiBuild {
 
     viewport_bridge: Arc<ViewportBridge>,
     scene_bridge: Arc<SceneBridge>,
+    plugins_bridge: Arc<crate::plugin_manager::PluginManagerBridge>,
     plugin_manager: PluginManagerUi,
 
     // Orbit interaction (UI-driven, not via global input plugin).
@@ -34,6 +35,38 @@ pub struct EditorUiBuild {
     console_input: String,
 
     // Plugin manager UI (fully encapsulated).
+}
+
+
+fn infer_model_exts(snap: &newengine_core::plugins::PluginsSnapshot) -> Vec<String> {
+    use std::collections::BTreeSet;
+
+    // Best-effort extraction based on declared plugin capabilities.
+    // Importer plugins are expected to expose capability ids that contain format tokens.
+    let mut out: BTreeSet<String> = BTreeSet::new();
+    let tokens: [(&str, &[&str]); 8] = [
+        ("obj", &["obj"]),
+        ("gltf", &["gltf"]),
+        ("glb", &["glb"]),
+        ("fbx", &["fbx"]),
+        ("dae", &["dae", "collada"]),
+        ("stl", &["stl"]),
+        ("ply", &["ply"]),
+        ("blend", &["blend"]),
+    ];
+
+    for p in &snap.plugins {
+        for c in &p.capabilities {
+            let id = c.id.to_ascii_lowercase();
+            for (ext, keys) in tokens {
+                if keys.iter().any(|k| id.contains(k)) {
+                    out.insert(format!(".{ext}"));
+                }
+            }
+        }
+    }
+
+    out.into_iter().collect()
 }
 
 impl EditorUiBuild {
@@ -57,6 +90,7 @@ impl EditorUiBuild {
             viewport,
             viewport_bridge,
             scene_bridge,
+            plugins_bridge: Arc::clone(&plugins_bridge),
             plugin_manager: PluginManagerUi::new(plugins_bridge),
             last_drag_pos: None,
             console_open: false,
@@ -142,6 +176,29 @@ impl EditorUiBuild {
             };
 
             let wheel_y = (wheel_y_points / 240.0).clamp(-2.0, 2.0);
+            // Drag & drop models onto the viewport.
+            // The engine-side asset pipeline decides which formats are supported; we display a best-effort
+            // list from registered plugin capabilities.
+            let snap = self.plugins_bridge.read();
+            let exts = infer_model_exts(&snap);
+
+            if active {
+                let dropped: Vec<_> = ctx.input(|i| i.raw.dropped_files.clone());
+                for f in dropped {
+                    if let Some(path) = f.path {
+                        let p = path.display().to_string();
+                        let ext = path.extension().and_then(|s| s.to_str()).unwrap_or("").to_ascii_lowercase();
+                        let dot_ext = if ext.is_empty() { String::new() } else { format!(".{ext}") };
+
+                        if !dot_ext.is_empty() && (exts.is_empty() || exts.iter().any(|e| e == &dot_ext)) {
+                            self.scene_bridge.cmd_load_model(p);
+                        } else {
+                            log::warn!("dropped file has unsupported extension: '{}'", p);
+                        }
+                    }
+                }
+            }
+
 
             self.viewport_bridge
                 .publish_orbit_input(dx_px, dy_px, wheel_y, active, dragging);
@@ -188,6 +245,23 @@ impl EditorUiBuild {
                     ui.centered_and_justified(|ui| {
                         ui.label("Viewport: waiting for render target...");
                     });
+                }
+
+                // Viewport overlay: supported model extensions.
+                if active {
+                    let snap = self.plugins_bridge.read();
+                    let exts = infer_model_exts(&snap);
+                    if !exts.is_empty() {
+                        let msg = format!("Drop model: {}", exts.join(", "));
+                        let pos = rect.left_bottom() + egui::vec2(8.0, -8.0);
+                        ui.painter().text(
+                            pos,
+                            egui::Align2::LEFT_BOTTOM,
+                            msg,
+                            egui::FontId::monospace(12.0),
+                            egui::Color32::from_gray(140),
+                        );
+                    }
                 }
             });
         });

@@ -17,8 +17,13 @@ use newengine_transform::Transform;
 pub enum SceneCommand {
     /// Replace the current scene with a fresh one (root + camera).
     NewScene,
+    /// Load a model asset via AssetManager service and spawn a placeholder entity.
+    /// The actual model rendering is handled by renderer/plugins; the editor keeps this command
+    /// deterministic and explicit.
+    LoadModel {
+        path: String,
+    },
 
-    /// Spawn a primitive entity under scene root.
     SpawnPrimitive {
         kind: PrimitiveKind,
         name: String,
@@ -83,6 +88,12 @@ impl SceneBridge {
             scale: [1.0, 1.0, 1.0],
             color: [0.85, 0.85, 0.9, 1.0],
         });
+    }
+
+
+    #[inline]
+    pub fn cmd_load_model(&self, path: String) {
+        self.queue.lock().cmds.push(SceneCommand::LoadModel { path });
     }
 
     #[inline]
@@ -155,6 +166,7 @@ impl SceneBridge {
 
                         pending_selection = Some(Some(e));
                     }
+                    _ => {}
                 }
             }
         } // scene write lock dropped here
