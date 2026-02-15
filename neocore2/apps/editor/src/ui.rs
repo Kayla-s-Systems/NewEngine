@@ -7,7 +7,7 @@ use newengine_ui::UiBuildFn;
 use std::any::Any;
 use std::sync::{Arc, Mutex};
 
-use newengine_viewport::ViewportState;
+use newengine_viewport::Viewport;
 
 use crate::plugin_manager::PluginManagerUi;
 use crate::scene_bridge::SceneBridge;
@@ -21,7 +21,7 @@ pub struct EditorUiBuild {
     shared_doc: Arc<Mutex<Option<UiMarkupDoc>>>,
     state: UiState,
 
-    viewport: ViewportState,
+    viewport: Viewport,
 
     viewport_bridge: Arc<ViewportBridge>,
     scene_bridge: Arc<SceneBridge>,
@@ -83,7 +83,7 @@ impl EditorUiBuild {
             .read()
             .active_camera()
             .expect("scene has no active camera");
-        let viewport = ViewportState::new(Some(cam));
+        let viewport = Viewport::new(Some(cam));
 
         Self {
             shared_doc,
@@ -189,7 +189,7 @@ impl EditorUiBuild {
             let px_w = (rect.width() * ppp).round().max(1.0) as u32;
             let px_h = (rect.height() * ppp).round().max(1.0) as u32;
 
-            self.viewport.set_pixel_extent(px_w, px_h);
+            self.viewport.set_extent(px_w, px_h);
             self.viewport_bridge.publish_extent(px_w, px_h);
 
             let dragging = resp.dragged_by(egui::PointerButton::Primary);

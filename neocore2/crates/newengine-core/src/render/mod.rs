@@ -95,7 +95,7 @@ impl BeginRenderTargetDesc {
     }
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
 pub struct Extent2D {
     pub width: u32,
     pub height: u32,
