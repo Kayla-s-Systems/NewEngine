@@ -10,6 +10,12 @@ pub mod types;
 // ADD:
 pub mod frame;
 pub mod util;
+pub mod editor;
+pub mod game;
+
+// Universal gameplay/editor camera stack with deterministic modifiers.
+pub mod modifiers;
+pub mod stack;
 
 pub use controller::*;
 pub use frustum::*;
@@ -18,6 +24,11 @@ pub use rig::*;
 pub use state::*;
 pub use types::*;
 
+pub use editor::*;
 // ADD:
 pub use frame::*;
+pub use game::*;
 pub use util::*;
+
+pub use modifiers::*;
+pub use stack::*;

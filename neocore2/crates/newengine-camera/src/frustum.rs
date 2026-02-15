@@ -13,7 +13,8 @@ pub struct Frustum {
 impl Frustum {
     /// Extract planes from a column-major clip matrix (proj * view).
     ///
-    /// Engine baseline is Vulkan/DirectX depth range (Z in 0..1).
+    /// Engine baseline uses **Vulkan/DirectX clip space** with **Z in 0..1**.
+    /// This extraction matches that convention.
     #[inline]
     pub fn from_view_proj(m: Mat4) -> Self {
         // glam Mat4 stores columns; convert to rows by indexing.
@@ -27,8 +28,8 @@ impl Frustum {
             r3 - r0, // right
             r3 + r1, // bottom
             r3 - r1, // top
-            r2,      // near (z >= 0)
-            r3 - r2, // far  (z <= w)
+            r2,      // near  (Z: 0..1)
+            r3 - r2, // far
         ];
 
         for pl in &mut p {
@@ -40,7 +41,9 @@ impl Frustum {
         Self { planes: p }
     }
 
-    /// Extract planes for OpenGL-style depth range (Z in -1..1).
+    /// Extract planes for **OpenGL clip space** with **Z in -1..1**.
+    ///
+    /// Keep this for tooling/tests or if you run a GL backend.
     #[inline]
     pub fn from_view_proj_gl(m: Mat4) -> Self {
         let r0 = Vec4::new(m.x_axis.x, m.y_axis.x, m.z_axis.x, m.w_axis.x);
@@ -53,7 +56,7 @@ impl Frustum {
             r3 - r0, // right
             r3 + r1, // bottom
             r3 - r1, // top
-            r3 + r2, // near
+            r3 + r2, // near (Z: -1..1)
             r3 - r2, // far
         ];
 

@@ -78,6 +78,7 @@ fn apply_jitter(proj: Mat4, jitter: Vec2, viewport_wh: Vec2) -> Mat4 {
     let dx = (2.0 * jitter.x) / w;
     let dy = (2.0 * jitter.y) / h;
 
-    // Jitter must be applied in clip space (post-projection), so we pre-multiply.
+    // Jitter is defined in clip space. Therefore we must pre-multiply:
+    // clip' = T * (P * V * world)
     Mat4::from_translation(glam::Vec3::new(dx, dy, 0.0)) * proj
 }

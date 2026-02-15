@@ -61,3 +61,15 @@ pub fn orbit_set_angles(orbit: &mut OrbitController, yaw: f32, pitch: f32) {
     orbit.yaw = yaw;
     orbit.pitch = pitch.clamp(-orbit.pitch_limit, orbit.pitch_limit);
 }
+
+/// Exponential smoothing factor for a given speed and delta time.
+///
+/// Returns `k` in [0..1] such that: `x = x + (target - x) * k`.
+#[inline]
+pub fn exp_smooth(speed: f32, dt: f32) -> f32 {
+    if !speed.is_finite() || speed <= 0.0 {
+        return 1.0;
+    }
+    let dt = dt.max(0.0);
+    (1.0 - (-speed * dt).exp()).clamp(0.0, 1.0)
+}
