@@ -38,7 +38,8 @@ pub struct ViewportBridge {
 
     /// Orbit interaction flags.
     /// bit0: hovered
-    /// bit1: lmb_down
+    /// bit1: look_drag (orbit rotate)
+    /// bit2: pan_drag (orbit pan)
     orbit_flags: AtomicU64,
 
     /// Packed movement keys for editor-style camera.
@@ -137,7 +138,8 @@ impl ViewportBridge {
     /// - `dx_px`, `dy_px` are cursor deltas in **physical pixels**.
     /// - `wheel_y` is wheel delta Y (positive -> zoom in).
     /// - `hovered` is true when the viewport rect is hovered.
-    /// - `lmb_down` is true while the primary button is held and the viewport is capturing drag.
+    /// - `look_drag` is true while orbit rotation is captured.
+    /// - `pan_drag` is true while orbit panning is captured.
     #[inline]
     pub fn publish_orbit_input(
         &self,
@@ -145,7 +147,8 @@ impl ViewportBridge {
         dy_px: f32,
         wheel_y: f32,
         hovered: bool,
-        lmb_down: bool,
+        look_drag: bool,
+        pan_drag: bool,
     ) {
         self.orbit_delta_xy
             .store(Self::pack_f32x2(dx_px, dy_px), Ordering::Relaxed);
@@ -155,8 +158,11 @@ impl ViewportBridge {
         if hovered {
             flags |= 1;
         }
-        if lmb_down {
+        if look_drag {
             flags |= 2;
+        }
+        if pan_drag {
+            flags |= 4;
         }
         self.orbit_flags.store(flags, Ordering::Relaxed);
     }
@@ -176,13 +182,14 @@ impl ViewportBridge {
 
     /// Read orbit input published by UI for this frame.
     #[inline]
-    pub fn read_orbit_input(&self) -> (f32, f32, f32, bool, bool) {
+    pub fn read_orbit_input(&self) -> (f32, f32, f32, bool, bool, bool) {
         let (dx, dy) = Self::unpack_f32x2(self.orbit_delta_xy.load(Ordering::Relaxed));
         let wheel = Self::unpack_f32(self.orbit_wheel_y.load(Ordering::Relaxed));
         let flags = self.orbit_flags.load(Ordering::Relaxed);
         let hovered = (flags & 1) != 0;
-        let lmb_down = (flags & 2) != 0;
-        (dx, dy, wheel, hovered, lmb_down)
+        let look_drag = (flags & 2) != 0;
+        let pan_drag = (flags & 4) != 0;
+        (dx, dy, wheel, hovered, look_drag, pan_drag)
     }
 
     /// Publish a pick request from UI.

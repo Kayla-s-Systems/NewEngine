@@ -58,7 +58,7 @@ impl EditorSimModule {
     fn apply_viewport_camera_input(&self, world: &mut newengine_ecs::World) {
         // Read per-frame orbit input from UI and write it into the active camera component.
         // This keeps render fully read-only and deterministic w.r.t. the world state.
-        let (dx_px, dy_px, wheel_y, _hovered, dragging) = self.viewport_bridge.read_orbit_input();
+        let (dx_px, dy_px, wheel_y, _hovered, look_drag, _pan_drag) = self.viewport_bridge.read_orbit_input();
         let move_mask = self.viewport_bridge.read_move_keys();
 
         let mut move_axis = glam::Vec3::ZERO;
@@ -88,7 +88,7 @@ impl EditorSimModule {
         let speed_mul = if (move_mask & (1 << 6)) != 0 { 3.0 } else { 1.0 };
 
         let input = newengine_camera::CameraInput {
-            look_active: dragging,
+            look_active: look_drag,
             look_delta: glam::Vec2::new(dx_px, -dy_px),
             move_axis,
             speed_mul,

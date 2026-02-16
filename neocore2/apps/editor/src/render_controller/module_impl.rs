@@ -249,7 +249,7 @@ impl<E: Send + 'static> Module<E> for EditorRenderController {
             let extent = Extent2D::new(vp_w, vp_h);
             let rt = self.ensure_viewport_rt(&mut **r, extent)?;
 
-            let (dx_px, dy_px, wheel_y, _hovered, dragging) = self.viewport_bridge.read_orbit_input();
+            let (dx_px, dy_px, wheel_y, _hovered, look_drag, pan_drag) = self.viewport_bridge.read_orbit_input();
             let move_mask = self.viewport_bridge.read_move_keys();
             let dt = ctx.frame().map(|f| f.dt).unwrap_or(0.016);
 
@@ -278,17 +278,23 @@ impl<E: Send + 'static> Module<E> for EditorRenderController {
             let base_speed = (bounds_radius.max(0.01) * 2.0).clamp(0.5, 200.0);
             Self::apply_move_axes(&mut self.orbit, move_mask, dt, base_speed);
 
+            let mut move_axis = Vec3::ZERO;
+            if pan_drag {
+                // Pan in camera plane: pixels -> normalized units.
+                // Scale is tuned inside OrbitController via pan_speed * distance.
+                move_axis.x = -dx_px;
+                move_axis.y = dy_px;
+            }
+
             let input = CameraInput {
-                look_active: dragging,
+                look_active: look_drag,
                 look_delta: glam::Vec2::new(dx_px, -dy_px),
-                move_axis: Vec3::ZERO,
+                move_axis,
                 speed_mul: 1.0,
                 zoom_delta: wheel_y,
             };
 
-            let aspect = vp_w as f32 / (vp_h as f32);
-
-            // NOTE: fix typo; keep stable aspect even if vp_h==0 (we are in vp_h>0 branch)
+            // Viewport aspect (vp_h > 0 in this branch).
             let aspect = vp_w as f32 / (vp_h as f32);
 
             self.orbit.look_sens = 0.0045;
@@ -307,7 +313,7 @@ impl<E: Send + 'static> Module<E> for EditorRenderController {
                 || vp_w != self.last_vp_w
                 || vp_h != self.last_vp_h;
 
-            let user_busy = dragging || move_mask != 0;
+            let user_busy = look_drag || pan_drag || move_mask != 0;
             let need_expand = if self.framed_radius <= 0.0 {
                 true
             } else {

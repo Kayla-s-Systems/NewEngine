@@ -163,6 +163,17 @@ impl SceneBridge {
     ///
     /// Call from the render/controller thread once per frame.
     pub fn apply_commands(&self) {
+        // IMPORTANT (AAA determinism / correctness): advance the world's change-tracking tick
+        // exactly once per render frame.
+        //
+        // Without this, `query_changed::<T>(since)` never observes updates because all writes
+        // happen at the same tick, and derived systems (e.g. Transform -> GlobalTransform)
+        // will not run. That manifests as "gizmo/outline moves but geometry doesn't".
+        {
+            let mut scene = self.scene.write();
+            scene.world_mut().advance_tick();
+        }
+
         let cmds = {
             let mut q = self.queue.lock();
             if q.cmds.is_empty() {
