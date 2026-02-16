@@ -254,6 +254,7 @@ impl VulkanRenderer {
         cmd: vk::CommandBuffer,
         target_id: u32,
         clear_color: Option<[f32; 4]>,
+        clear_depth: Option<f32>,
     ) -> VkResult<()> {
         if let ActivePass::RenderTarget(id) = self.active_pass {
             if id == target_id {
@@ -277,19 +278,47 @@ impl VulkanRenderer {
         );
         rt.layout = vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL;
 
+        if rt.has_depth {
+            crate::vulkan::util::transition_image_layout_aspect(
+                &self.core.device,
+                cmd,
+                rt.depth.image,
+                rt.depth_layout,
+                vk::ImageLayout::DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
+                vk::ImageAspectFlags::DEPTH,
+            );
+            rt.depth_layout = vk::ImageLayout::DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+        }
+
         let clear_rgba = clear_color.unwrap_or(self.frame_clear_color);
-        let clear = vk::ClearValue {
+        let clear_color_v = vk::ClearValue {
             color: vk::ClearColorValue { float32: clear_rgba },
         };
 
+        let clear_depth_v = vk::ClearValue {
+            depth_stencil: vk::ClearDepthStencilValue {
+                depth: clear_depth.unwrap_or(1.0),
+                stencil: 0,
+            },
+        };
+
+        let clears: [vk::ClearValue; 2] = [clear_color_v, clear_depth_v];
         let rp_begin = vk::RenderPassBeginInfo::default()
-            .render_pass(self.pipelines.render_pass)
+            .render_pass(if rt.has_depth {
+                self.pipelines.render_pass_depth
+            } else {
+                self.pipelines.render_pass
+            })
             .framebuffer(rt.framebuffer)
             .render_area(vk::Rect2D {
                 offset: vk::Offset2D { x: 0, y: 0 },
                 extent: rt.extent,
             })
-            .clear_values(std::slice::from_ref(&clear));
+            .clear_values(if rt.has_depth {
+                &clears
+            } else {
+                std::slice::from_ref(&clear_color_v)
+            });
 
         self.core
             .device

@@ -10,6 +10,7 @@ log = "0.4"
 shaderc = "0.10.1"
 parking_lot = "0.12"
 glam = "0.32.0"
+bytemuck = { version = "1", features = ["derive"] }
 
 newengine-core = { path = "../../crates/newengine-core" }
 newengine-ui = { path = "../../crates/newengine-ui" }
@@ -23,4 +24,5 @@ newengine-ecs = { path = "../../crates/newengine-ecs" }
 newengine-viewport = { path = "../../crates/newengine-viewport" }
 newengine-camera = { path = "../../crates/newengine-camera" }
 newengine-primitives = { path = "../../crates/newengine-primitives" }
+newengine-bounds = { path = "../../crates/newengine-bounds" }
 hashbrown = "0.16.1"

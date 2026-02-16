@@ -9,12 +9,13 @@ use newengine_core::{EngineResult, Module, ModuleCtx};
 use newengine_platform_winit::WinitWindowInitSize;
 use newengine_ui::draw::UiDrawList;
 
+use newengine_bounds::Aabb;
 use newengine_primitives::Primitive;
 use newengine_scene::{update_scene_world, SceneBounds};
 use newengine_transform::GlobalTransform;
 
 use super::controller::EditorRenderController;
-use super::gpu::{ensure_grid, ensure_lit_pipeline, ensure_primitive_gpu};
+use super::gpu::{ensure_grid, ensure_lit_pipeline, ensure_overlay_pipeline, ensure_overlay_vb_capacity, ensure_primitive_gpu, OverlayVertex};
 
 impl EditorRenderController {
     // Editor "floor" constraint: camera must stay above this Y.
@@ -328,6 +329,140 @@ impl<E: Send + 'static> Module<E> for EditorRenderController {
                     r.set_vertex_buffer(0, BufferSlice::new(gpu.vb, 0))?;
                     r.set_index_buffer(BufferSlice::new(gpu.ib, 0), IndexFormat::U32)?;
                     r.draw_indexed(newengine_core::render::DrawIndexedArgs::new(gpu.index_count))?;
+                }
+
+                // Editor selection overlay (bbox + gizmo axes).
+                if let Some(sel) = self.scene_bridge.selection() {
+                    if let (Some(prim), Some(gt)) = (world.get::<Primitive>(sel), world.get::<GlobalTransform>(sel)) {
+                        let local_aabb: Aabb = if let Some(a) = self.prim_aabb_cache.get(&prim.id).copied() {
+                            a
+                        } else {
+                            let mesh = reg
+                                .build_mesh(prim.id)
+                                .map_err(|e| newengine_core::EngineError::other(format!("{e}")))?;
+                            let mut mn = Vec3::splat(f32::INFINITY);
+                            let mut mx = Vec3::splat(f32::NEG_INFINITY);
+                            for v in &mesh.vertices {
+                                let p = Vec3::from_array(v.pos);
+                                mn = mn.min(p);
+                                mx = mx.max(p);
+                            }
+                            let a = Aabb::new(mn, mx);
+                            self.prim_aabb_cache.insert(prim.id, a);
+                            a
+                        };
+
+                        let m = gt.0;
+                        let corners = {
+                            let mn = local_aabb.min;
+                            let mx = local_aabb.max;
+                            [
+                                Vec3::new(mn.x, mn.y, mn.z),
+                                Vec3::new(mx.x, mn.y, mn.z),
+                                Vec3::new(mx.x, mx.y, mn.z),
+                                Vec3::new(mn.x, mx.y, mn.z),
+                                Vec3::new(mn.x, mn.y, mx.z),
+                                Vec3::new(mx.x, mn.y, mx.z),
+                                Vec3::new(mx.x, mx.y, mx.z),
+                                Vec3::new(mn.x, mx.y, mx.z),
+                            ]
+                        };
+
+                        let mut wc: [Vec3; 8] = [Vec3::ZERO; 8];
+                        for (i, c) in corners.iter().enumerate() {
+                            let v4 = m * c.extend(1.0);
+                            wc[i] = (v4.truncate() / v4.w).into();
+                        }
+
+                        let mut wmin = Vec3::splat(f32::INFINITY);
+                        let mut wmax = Vec3::splat(f32::NEG_INFINITY);
+                        for p in &wc {
+                            wmin = wmin.min(*p);
+                            wmax = wmax.max(*p);
+                        }
+                        let waabb = Aabb::new(wmin, wmax);
+                        let center = waabb.center();
+                        let he = waabb.half_extents();
+                        let axis_len = he.max_element().max(0.25) * 1.25;
+
+                        let bbox_col: [f32; 4] = [1.0, 0.72, 0.18, 1.0];
+                        let xcol: [f32; 4] = [0.90, 0.22, 0.18, 1.0];
+                        let ycol: [f32; 4] = [0.20, 0.85, 0.26, 1.0];
+                        let zcol: [f32; 4] = [0.22, 0.46, 0.95, 1.0];
+
+                        let mut verts: Vec<OverlayVertex> = Vec::with_capacity(24 + 6);
+
+                        // 12 bbox edges (pairs of indices into wc)
+                        const EDGES: &[(usize, usize)] = &[
+                            (0, 1),
+                            (1, 2),
+                            (2, 3),
+                            (3, 0),
+                            (4, 5),
+                            (5, 6),
+                            (6, 7),
+                            (7, 4),
+                            (0, 4),
+                            (1, 5),
+                            (2, 6),
+                            (3, 7),
+                        ];
+
+                        for &(a, b) in EDGES {
+                            let pa = wc[a];
+                            let pb = wc[b];
+                            verts.push(OverlayVertex {
+                                pos: pa.to_array(),
+                                col: bbox_col,
+                            });
+                            verts.push(OverlayVertex {
+                                pos: pb.to_array(),
+                                col: bbox_col,
+                            });
+                        }
+
+                        // Gizmo axes (world-space, centered on bounds center).
+                        verts.push(OverlayVertex {
+                            pos: center.to_array(),
+                            col: xcol,
+                        });
+                        verts.push(OverlayVertex {
+                            pos: (center + Vec3::X * axis_len).to_array(),
+                            col: xcol,
+                        });
+
+                        verts.push(OverlayVertex {
+                            pos: center.to_array(),
+                            col: ycol,
+                        });
+                        verts.push(OverlayVertex {
+                            pos: (center + Vec3::Y * axis_len).to_array(),
+                            col: ycol,
+                        });
+
+                        verts.push(OverlayVertex {
+                            pos: center.to_array(),
+                            col: zcol,
+                        });
+                        verts.push(OverlayVertex {
+                            pos: (center + Vec3::Z * axis_len).to_array(),
+                            col: zcol,
+                        });
+
+                        let overlay = ensure_overlay_pipeline(&mut self.overlay, &mut **r, lit.bgl, lit.bg)?;
+                        let bytes = bytemuck::cast_slice::<OverlayVertex, u8>(&verts);
+                        ensure_overlay_vb_capacity(&mut self.overlay.as_mut().expect("overlay must exist"), &mut **r, bytes.len() as u64)?;
+
+                        // Re-fetch after potential grow.
+                        let overlay = self.overlay.expect("overlay must exist");
+                        r.write_buffer(overlay.vb, 0, bytes)?;
+
+                        Self::write_mat4_ubo(&mut **r, lit.ubo, viewproj)?;
+                        r.set_pipeline(overlay.pipeline)?;
+                        r.set_bind_group(0, lit.bg)?;
+                        r.set_vertex_buffer(0, BufferSlice::new(overlay.vb, 0))?;
+                        r.draw(newengine_core::render::DrawArgs::new(verts.len() as u32))?;
+                    }
                 }
             }
 
