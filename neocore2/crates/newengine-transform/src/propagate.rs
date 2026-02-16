@@ -6,6 +6,24 @@ use slotmap::Key;
 
 use crate::{GlobalTransform, Parent, Transform, TransformDirty, WorldPose};
 
+/// Reusable buffers for transform propagation.
+///
+/// Stored as a `World` resource to avoid per-frame heap churn in editor/runtime.
+///
+/// Notes:
+/// - This is intentionally *not* `pub(crate)` because the engine may want to pre-warm capacities
+///   or inspect stats in tooling.
+/// - Contents are scratch-only; never rely on values persisting across calls.
+#[derive(Default)]
+pub struct TransformPropagationScratch {
+    ids: Vec<EntityId>,
+    locals: Vec<Mat4>,
+    parents: Vec<Option<EntityId>>,
+    vis: Vec<u8>,
+    out: Vec<Mat4>,
+    stack: Vec<(usize, u8)>,
+}
+
 
 /// Ensures derived outputs (`GlobalTransform`, `WorldPose`) exist for all entities with `Transform`.
 ///
@@ -34,12 +52,22 @@ pub fn ensure_transform_outputs(world: &mut World) {
 pub fn propagate_transforms(world: &mut World) {
     ensure_transform_outputs(world);
 
-    // 1) Collect all entities that have Transform, deterministically ordered.
-    let mut ids: Vec<EntityId> = world.query::<Transform>().map(|(id, _)| id).collect();
-    ids.sort_unstable_by_key(|e| e.data().as_ffi());
-    ids.dedup();
+    // Allocate once, reuse forever.
+    if world.resource::<TransformPropagationScratch>().is_none() {
+        world.insert_resource(TransformPropagationScratch::default());
+    }
 
-    if ids.is_empty() {
+    let scratch = world
+        .resource_mut::<TransformPropagationScratch>()
+        .expect("TransformPropagationScratch must exist");
+
+    // 1) Collect all entities that have Transform, deterministically ordered.
+    scratch.ids.clear();
+    scratch.ids.extend(world.query::<Transform>().map(|(id, _)| id));
+    scratch.ids.sort_unstable_by_key(|e| e.data().as_ffi());
+    scratch.ids.dedup();
+
+    if scratch.ids.is_empty() {
         return;
     }
 
@@ -48,65 +76,76 @@ pub fn propagate_transforms(world: &mut World) {
     // But we can make it deterministic and allocate once per call: Vec + binary_search.
     //
     // We binary_search on sorted ids, so parent->idx is O(log n).
-    let locals: Vec<Mat4> = ids
-        .iter()
-        .map(|&id| world.get::<Transform>(id).copied().unwrap_or_default().to_mat4())
-        .collect();
+    scratch.locals.clear();
+    scratch.locals.reserve(scratch.ids.len());
+    for &id in scratch.ids.iter() {
+        let local = world
+            .get::<Transform>(id)
+            .copied()
+            .unwrap_or_default()
+            .to_mat4();
+        scratch.locals.push(local);
+    }
 
-    let parents: Vec<Option<EntityId>> = ids
-        .iter()
-        .map(|&id| world.get::<Parent>(id).map(|p| p.0))
-        .collect();
+    scratch.parents.clear();
+    scratch.parents.reserve(scratch.ids.len());
+    for &id in scratch.ids.iter() {
+        scratch.parents.push(world.get::<Parent>(id).map(|p| p.0));
+    }
 
     // 3) Iterative DFS with 3-state visitation.
     // 0 = Unvisited, 1 = Visiting (in stack), 2 = Done
-    let mut vis: Vec<u8> = vec![0; ids.len()];
-    let mut out: Vec<Mat4> = vec![Mat4::IDENTITY; ids.len()];
+    scratch.vis.clear();
+    scratch.vis.resize(scratch.ids.len(), 0);
+
+    scratch.out.clear();
+    scratch.out.resize(scratch.ids.len(), Mat4::IDENTITY);
 
     // Stack frames: (node_idx, phase)
     // phase 0 = enter, phase 1 = exit (after children/parent handled)
-    let mut stack: Vec<(usize, u8)> = Vec::with_capacity(ids.len() * 2);
+    scratch.stack.clear();
+    scratch.stack.reserve(scratch.ids.len() * 2);
 
-    for start in 0..ids.len() {
-        if vis[start] != 0 {
+    for start in 0..scratch.ids.len() {
+        if scratch.vis[start] != 0 {
             continue;
         }
 
-        stack.push((start, 0));
+        scratch.stack.push((start, 0));
 
-        while let Some((i, phase)) = stack.pop() {
+        while let Some((i, phase)) = scratch.stack.pop() {
             match phase {
                 0 => {
-                    match vis[i] {
+                    match scratch.vis[i] {
                         2 => continue, // already done
                         1 => {
                             // Cycle edge reached: degrade to local as root.
-                            out[i] = locals[i];
-                            vis[i] = 2;
+                            scratch.out[i] = scratch.locals[i];
+                            scratch.vis[i] = 2;
                             continue;
                         }
                         _ => {}
                     }
 
-                    vis[i] = 1; // visiting
-                    stack.push((i, 1)); // exit later
+                    scratch.vis[i] = 1; // visiting
+                    scratch.stack.push((i, 1)); // exit later
 
                     // Push parent first (so it computes before node).
-                    if let Some(pid) = parents[i] {
-                        if let Ok(pidx) = ids.binary_search(&pid) {
-                            if vis[pidx] != 2 {
-                                stack.push((pidx, 0));
+                    if let Some(pid) = scratch.parents[i] {
+                        if let Ok(pidx) = scratch.ids.binary_search(&pid) {
+                            if scratch.vis[pidx] != 2 {
+                                scratch.stack.push((pidx, 0));
                             }
                         }
                     }
                 }
                 _ => {
                     // exit: compute node from parent (if valid & computed) * local.
-                    let local = locals[i];
-                    let composed = if let Some(pid) = parents[i] {
-                        if let Ok(pidx) = ids.binary_search(&pid) {
-                            if vis[pidx] == 2 {
-                                out[pidx] * local
+                    let local = scratch.locals[i];
+                    let composed = if let Some(pid) = scratch.parents[i] {
+                        if let Ok(pidx) = scratch.ids.binary_search(&pid) {
+                            if scratch.vis[pidx] == 2 {
+                                scratch.out[pidx] * local
                             } else {
                                 // Parent in cycle or unresolved -> treat as root.
                                 local
@@ -119,16 +158,16 @@ pub fn propagate_transforms(world: &mut World) {
                         local
                     };
 
-                    out[i] = composed;
-                    vis[i] = 2;
+                    scratch.out[i] = composed;
+                    scratch.vis[i] = 2;
                 }
             }
         }
     }
 
     // 4) Write-back.
-    for (i, &id) in ids.iter().enumerate() {
-        let m = out[i];
+    for (i, &id) in scratch.ids.iter().enumerate() {
+        let m = scratch.out[i];
 
         if let Some(gt) = world.get_mut_tracked::<GlobalTransform>(id) {
             gt.0 = m;
