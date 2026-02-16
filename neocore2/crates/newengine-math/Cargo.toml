@@ -1,0 +1,17 @@
+[package]
+name = "newengine-math"
+version = "0.1.0"
+edition = "2021"
+license = "MIT OR Apache-2.0"
+
+[features]
+default = ["kernel"]
+kernel = ["dep:blake3", "dep:thiserror"]
+serde = ["dep:serde", "glam/serde"]
+
+[dependencies]
+bitflags = "2.6"
+glam = { version = "0.32.0", default-features = false, features = ["libm"] }
+serde = { version = "1.0", features = ["derive"], optional = true }
+blake3 = { version = "1.5.1", optional = true }
+thiserror = { version = "1.0", optional = true }
