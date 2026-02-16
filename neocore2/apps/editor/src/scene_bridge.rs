@@ -47,6 +47,53 @@ struct SceneQueue {
     cmds: Vec<SceneCommand>,
 }
 
+#[derive(Debug, Clone, Copy)]
+pub struct GridSettings {
+    pub auto_spacing: bool,
+    pub spacing: f32,
+    pub follow_camera: bool,
+    pub half_lines: u32,
+    pub major_every: u32,
+    pub minor_color: [f32; 4],
+    pub major_color: [f32; 4],
+    pub background_color: [f32; 4],
+}
+
+impl Default for GridSettings {
+    #[inline]
+    fn default() -> Self {
+        // Neutral, Blender-like defaults: readable grid, not “space”.
+        Self {
+            auto_spacing: true,
+            spacing: 1.0,
+            follow_camera: false,
+            half_lines: 80,
+            major_every: 10,
+            minor_color: [0.32, 0.32, 0.34, 1.0],
+            major_color: [0.45, 0.45, 0.48, 1.0],
+            background_color: [0.10, 0.10, 0.11, 1.0],
+        }
+    }
+}
+
+impl GridSettings {
+    /// Compute the effective grid spacing for the current camera distance.
+    ///
+    /// This keeps renderer logic data-driven and avoids hardcoded grid math spread across modules.
+    #[inline]
+    pub fn effective_spacing(&self, camera_distance: f32) -> f32 {
+        if self.auto_spacing {
+            let d = camera_distance.max(0.01);
+            // Heuristic: quantize to powers of 10 to keep the grid stable while zooming.
+            let base = (d * 0.08).max(0.05);
+            let pow10 = 10.0f32.powf(base.log10().floor());
+            pow10.clamp(0.05, 1000.0)
+        } else {
+            self.spacing.max(0.0001)
+        }
+    }
+}
+
 /// Thread-safe bridge between UI and the scene world.
 ///
 /// - UI pushes commands (no world mutation).
@@ -57,6 +104,7 @@ pub struct SceneBridge {
     queue: Arc<Mutex<SceneQueue>>,
     selection: Arc<Mutex<Option<EntityId>>>,
     primitives: Arc<RwLock<PrimitiveRegistry>>,
+    grid_settings: Arc<Mutex<GridSettings>>,
 }
 
 impl SceneBridge {
@@ -69,6 +117,7 @@ impl SceneBridge {
             queue: Arc::new(Mutex::new(SceneQueue::default())),
             selection: Arc::new(Mutex::new(None)),
             primitives: Arc::new(RwLock::new(PrimitiveRegistry::with_builtins())),
+            grid_settings: Arc::new(Mutex::new(GridSettings::default())),
         }
     }
 
@@ -94,6 +143,18 @@ impl SceneBridge {
     #[inline]
     pub fn scene(&self) -> Arc<RwLock<Scene>> {
         Arc::clone(&self.scene)
+    }
+
+    /// Get current grid settings snapshot.
+    #[inline]
+    pub fn grid_settings(&self) -> GridSettings {
+        *self.grid_settings.lock()
+    }
+
+    /// Replace grid settings (editor-side).
+    #[inline]
+    pub fn set_grid_settings(&self, settings: GridSettings) {
+        *self.grid_settings.lock() = settings;
     }
 
     #[inline]
@@ -163,17 +224,6 @@ impl SceneBridge {
     ///
     /// Call from the render/controller thread once per frame.
     pub fn apply_commands(&self) {
-        // IMPORTANT (AAA determinism / correctness): advance the world's change-tracking tick
-        // exactly once per render frame.
-        //
-        // Without this, `query_changed::<T>(since)` never observes updates because all writes
-        // happen at the same tick, and derived systems (e.g. Transform -> GlobalTransform)
-        // will not run. That manifests as "gizmo/outline moves but geometry doesn't".
-        {
-            let mut scene = self.scene.write();
-            scene.world_mut().advance_tick();
-        }
-
         let cmds = {
             let mut q = self.queue.lock();
             if q.cmds.is_empty() {
@@ -187,6 +237,13 @@ impl SceneBridge {
 
         {
             let mut scene = self.scene.write();
+
+            // IMPORTANT:
+            // The ECS relies on a monotonically increasing tick for change tracking.
+            // `get_mut_tracked()` tags writes with the current tick. If tick does not advance,
+            // downstream systems that use `query_changed(since_tick)` (e.g. transform propagation)
+            // can miss updates, causing the gizmo/overlay to move while geometry stays put.
+            scene.world_mut().advance_tick();
 
             for cmd in cmds {
                 match cmd {

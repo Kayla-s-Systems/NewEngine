@@ -18,7 +18,7 @@ use image::GenericImageView;
 /// 1) `loader.request(assets, "pm.refresh", "ui/icons/refresh.png")`
 /// 2) `loader.pump(ctx, assets, state)`
 /// 3) Markup refers to `$tex.pm.refresh` (a u64).
-#[derive(Default)]
+#[derive(Debug, Default)]
 pub struct UiImageLoader {
     slots: AHashMap<String, Slot>,
 }
@@ -29,7 +29,7 @@ type TexHandle = egui::TextureHandle;
 #[cfg(not(all(feature = "egui", feature = "images")))]
 type TexHandle = ();
 
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 enum Slot {
     Empty { path: String },
     Loading { path: String, id_hex32: String },
@@ -172,5 +172,5 @@ fn decode_to_color_image(bytes: &[u8]) -> Result<(egui::ColorImage, u32, u32), S
         pixels.push(egui::Color32::from_rgba_unmultiplied(r, g, b, a));
     }
 
-    Ok((egui::ColorImage { size: [w as usize, h as usize], source_size: Default::default(), pixels }, w, h))
+    Ok((egui::ColorImage { size: [w as usize, h as usize], pixels }, w, h))
 }

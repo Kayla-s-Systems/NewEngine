@@ -12,7 +12,7 @@ parking_lot = "0.12"
 glam = "0.32.0"
 
 newengine-core = { path = "../../crates/newengine-core" }
-newengine-ui = { path = "../../crates/newengine-ui", features = ["egui", "images"] }
+newengine-ui = { path = "../../crates/newengine-ui" }
 newengine-platform-winit = { path = "../../crates/newengine-platform-winit" }
 newengine-modules-logging = { path = "../../crates/newengine-modules-logging" }
 newengine-modules-render-vulkan-ash = { path = "../../crates/newengine-modules-render-vulkan-ash" }
@@ -23,4 +23,5 @@ newengine-ecs = { path = "../../crates/newengine-ecs" }
 newengine-viewport = { path = "../../crates/newengine-viewport" }
 newengine-camera = { path = "../../crates/newengine-camera" }
 newengine-primitives = { path = "../../crates/newengine-primitives" }
+newengine-gizmo = { path = "../../crates/newengine-gizmo" }
 hashbrown = "0.16.1"

@@ -664,6 +664,7 @@ dependencies = [
     "newengine-camera",
     "newengine-core",
     "newengine-ecs",
+    "newengine-gizmo",
     "newengine-modules-logging",
     "newengine-modules-render-vulkan-ash",
     "newengine-platform-winit",
@@ -1398,6 +1399,13 @@ dependencies = [
     "fxhash",
     "hashbrown",
     "slotmap",
+]
+
+[[package]]
+name = "newengine-gizmo"
+version = "0.1.0"
+dependencies = [
+    "glam",
 ]
 
 [[package]]

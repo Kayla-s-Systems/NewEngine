@@ -2,36 +2,23 @@
 
 use newengine_platform_winit::egui;
 use newengine_ui::markup::{UiMarkupDoc, UiState};
-use newengine_ui::{AssetAccess, AssetServiceClient, UiBuildFn, UiImageLoader};
+use newengine_ui::UiBuildFn;
 
 use std::any::Any;
 use std::sync::{Arc, Mutex};
 
 use newengine_ecs::EntityId;
+use newengine_gizmo::{GizmoAxis, GizmoMode};
 use newengine_primitives::Primitive;
 use newengine_scene::components::Name;
 use newengine_transform::Transform;
 use newengine_viewport::Viewport;
 
 use crate::plugin_manager::PluginManagerUi;
-use crate::scene_bridge::SceneBridge;
+use crate::scene_bridge::{GridSettings, SceneBridge};
 use crate::viewport_bridge::ViewportBridge;
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-enum GizmoMode {
-    Translate,
-    Rotate,
-    Scale,
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-enum GizmoAxis {
-    X,
-    Y,
-    Z,
-}
-
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, PartialEq)]
 struct GizmoDrag {
     mode: GizmoMode,
     axis: GizmoAxis,
@@ -49,9 +36,6 @@ struct GizmoDrag {
 pub struct EditorUiBuild {
     shared_doc: Arc<Mutex<Option<UiMarkupDoc>>>,
     state: UiState,
-
-    assets: AssetServiceClient,
-    icons: UiImageLoader,
 
     viewport: Viewport,
 
@@ -130,8 +114,6 @@ impl EditorUiBuild {
         Self {
             shared_doc,
             state: UiState::default(),
-            assets: AssetServiceClient::new(newengine_core::plugins::default_host_api()),
-            icons: UiImageLoader::new(),
             viewport,
             viewport_bridge,
             scene_bridge,
@@ -155,52 +137,8 @@ impl EditorUiBuild {
     }
 
     #[inline]
-    fn tex_u64(&self, key: &str) -> Option<u64> {
-        self.state
-            .vars
-            .get(key)
-            .and_then(|v| v.parse::<u64>().ok())
-            .filter(|&u| u != 0)
-    }
-
-    fn gizmo_mode_button(
-        &mut self,
-        ui: &mut egui::Ui,
-        mode: GizmoMode,
-        label: &str,
-        tooltip: &str,
-        tex_key: &str,
-    ) {
-        let selected = self.gizmo_mode == mode;
-
-        let clicked = if let Some(tex) = self.tex_u64(tex_key) {
-            let size = egui::vec2(18.0, 18.0);
-            let tid = egui::TextureId::User(tex);
-            let img = egui::Image::new((tid, size));
-            let mut b = egui::ImageButton::new(img).frame(true);
-            if selected {
-                b = b.selected(true);
-            }
-            ui.add(b).on_hover_text(tooltip).clicked()
-        } else {
-            ui.selectable_label(selected, label)
-                .on_hover_text(tooltip)
-                .clicked()
-        };
-
-        if clicked {
-            self.gizmo_mode = mode;
-            self.gizmo_drag = None;
-        }
-    }
-
-    #[inline]
     fn axis_vec(axis: GizmoAxis) -> glam::Vec3 {
-        match axis {
-            GizmoAxis::X => glam::Vec3::X,
-            GizmoAxis::Y => glam::Vec3::Y,
-            GizmoAxis::Z => glam::Vec3::Z,
-        }
+        axis.vec3()
     }
 
     #[inline]
@@ -360,6 +298,63 @@ impl EditorUiBuild {
         }
     }
 
+
+    fn ui_toolbar(&mut self, ctx: &egui::Context) {
+        egui::SidePanel::left("toolbar")
+            .resizable(false)
+            .exact_width(56.0)
+            .show(ctx, |ui| {
+                ui.add_space(6.0);
+
+                ui.vertical_centered(|ui| {
+                    ui.label("Tools");
+                });
+                ui.separator();
+                ui.add_space(4.0);
+
+                let button = |ui: &mut egui::Ui, label: &str, active: bool| -> egui::Response {
+                    let mut b = egui::Button::new(label).min_size(egui::vec2(44.0, 36.0));
+                    if active {
+                        b = b.fill(ui.visuals().selection.bg_fill);
+                    }
+                    ui.add(b)
+                };
+
+                // (Select mode will be added when we have object picking under mouse)
+                ui.vertical(|ui| {
+                    if button(ui, "W", self.gizmo_mode == GizmoMode::Translate)
+                        .on_hover_text("Move (W)")
+                        .clicked()
+                    {
+                        self.gizmo_mode = GizmoMode::Translate;
+                        self.gizmo_drag = None;
+                    }
+
+                    if button(ui, "E", self.gizmo_mode == GizmoMode::Rotate)
+                        .on_hover_text("Rotate (E)")
+                        .clicked()
+                    {
+                        self.gizmo_mode = GizmoMode::Rotate;
+                        self.gizmo_drag = None;
+                    }
+
+                    if button(ui, "R", self.gizmo_mode == GizmoMode::Scale)
+                        .on_hover_text("Scale (R)")
+                        .clicked()
+                    {
+                        self.gizmo_mode = GizmoMode::Scale;
+                        self.gizmo_drag = None;
+                    }
+                });
+
+                ui.with_layout(egui::Layout::bottom_up(egui::Align::Center), |ui| {
+                    ui.separator();
+                    ui.add_space(4.0);
+                    ui.label("NewEngine");
+                });
+            });
+    }
+
     fn ui_hierarchy(&mut self, ctx: &egui::Context) {
         egui::SidePanel::left("hierarchy")
             .resizable(true)
@@ -434,6 +429,59 @@ impl EditorUiBuild {
             .show(ctx, |ui| {
                 ui.heading("Inspector");
                 ui.add_space(6.0);
+
+                // Viewport / Grid (editor-only).
+                {
+                    ui.group(|ui| {
+                        ui.label(egui::RichText::new("Viewport").strong());
+                        ui.add_space(4.0);
+
+                        let mut gs: GridSettings = self.scene_bridge.grid_settings();
+                        let mut changed = false;
+
+                        changed |= ui.checkbox(&mut gs.auto_spacing, "Auto grid spacing").changed();
+
+                        ui.add_enabled_ui(!gs.auto_spacing, |ui| {
+                            ui.horizontal(|ui| {
+                                ui.label("Spacing");
+                                changed |= ui.add(egui::DragValue::new(&mut gs.spacing).speed(0.05).clamp_range(0.001..=10_000.0)).changed();
+                            });
+                        });
+
+                        ui.horizontal(|ui| {
+                            ui.label("Extent");
+                            changed |= ui.add(egui::DragValue::new(&mut gs.half_lines).speed(1).clamp_range(8..=4096)).changed();
+                            ui.label("half-lines");
+                        });
+
+                        ui.horizontal(|ui| {
+                            ui.label("Major every");
+                            changed |= ui.add(egui::DragValue::new(&mut gs.major_every).speed(1).clamp_range(1..=256)).changed();
+                        });
+
+                        ui.horizontal(|ui| {
+                            ui.label("Minor");
+                            changed |= ui.color_edit_button_rgba_unmultiplied(&mut gs.minor_color).changed();
+                        });
+
+                        ui.horizontal(|ui| {
+                            ui.label("Major");
+                            changed |= ui.color_edit_button_rgba_unmultiplied(&mut gs.major_color).changed();
+                        });
+
+                        ui.horizontal(|ui| {
+                            ui.label("Background");
+                            changed |= ui.color_edit_button_rgba_unmultiplied(&mut gs.background_color).changed();
+                        });
+
+                        if changed {
+                            self.scene_bridge.set_grid_settings(gs);
+                        }
+                    });
+                    ui.add_space(8.0);
+                }
+
+
 
                 let selected = self.scene_bridge.selection();
                 let Some(e) = selected else {
@@ -535,32 +583,6 @@ impl EditorUiBuild {
                 if ui.button("New Scene").clicked() {
                     self.scene_bridge.cmd_new_scene();
                 }
-
-                ui.separator();
-
-                // Blender-like transform tools: W/E/R
-                ui.label("Tool");
-                self.gizmo_mode_button(
-                    ui,
-                    GizmoMode::Translate,
-                    "Move",
-                    "Translate (W / 1)",
-                    "tex.gizmo.translate",
-                );
-                self.gizmo_mode_button(
-                    ui,
-                    GizmoMode::Rotate,
-                    "Rot",
-                    "Rotate (E / 2)",
-                    "tex.gizmo.rotate",
-                );
-                self.gizmo_mode_button(
-                    ui,
-                    GizmoMode::Scale,
-                    "Scale",
-                    "Scale (R / 3)",
-                    "tex.gizmo.scale",
-                );
 
                 // Dynamic primitives dropdown (registry-driven).
                 {
@@ -685,61 +707,34 @@ impl EditorUiBuild {
             }
 
             // Determine whether gizmo wants to capture input this frame (prevents orbit/selection conflicts).
-            //
-            // Important: if the gizmo does not capture, viewport navigation may run concurrently
-            // (e.g. RMB orbit), which visually looks like "the grid rotates together with the object".
             let mut gizmo_capture_now = self.gizmo_drag.is_some();
-
-            if let (Some(frame), Some(e)) = (self.viewport_bridge.read_camera_frame(), self.scene_bridge.selection()) {
-                if let Some((pos, rot, _scale, _)) = self.read_selected_pose(e) {
-                    if let Some((center, _ndc_z)) = Self::world_to_screen(&frame, rect, pos) {
-                        let desired_len = 72.0;
-                        let axis_end = |axis: GizmoAxis| -> egui::Pos2 {
-                            let dir_world = (rot * Self::axis_vec(axis)).normalize_or_zero();
-                            let unit = pos + dir_world;
-                            let Some((unit_s, _)) = Self::world_to_screen(&frame, rect, unit) else {
-                                return center;
+            if !gizmo_capture_now {
+                if let (Some(frame), Some(e)) = (self.viewport_bridge.read_camera_frame(), self.scene_bridge.selection()) {
+                    if let Some((pos, rot, _scale, _)) = self.read_selected_pose(e) {
+                        if let Some((center, _ndc_z)) = Self::world_to_screen(&frame, rect, pos) {
+                            let desired_len = 72.0;
+                            let axis_end = |axis: GizmoAxis| -> egui::Pos2 {
+                                let dir_world = (rot * Self::axis_vec(axis)).normalize_or_zero();
+                                let unit = pos + dir_world;
+                                let Some((unit_s, _)) = Self::world_to_screen(&frame, rect, unit) else {
+                                    return center;
+                                };
+                                let d = (unit_s - center).length().max(1.0);
+                                let len_world = desired_len / d;
+                                let end_world = pos + dir_world * len_world;
+                                Self::world_to_screen(&frame, rect, end_world)
+                                    .map(|x| x.0)
+                                    .unwrap_or(center)
                             };
-                            let d = (unit_s - center).length().max(1.0);
-                            let len_world = desired_len / d;
-                            let end_world = pos + dir_world * len_world;
-                            Self::world_to_screen(&frame, rect, end_world)
-                                .map(|x| x.0)
-                                .unwrap_or(center)
-                        };
-
-                        let x_end = axis_end(GizmoAxis::X);
-                        let y_end = axis_end(GizmoAxis::Y);
-                        let z_end = axis_end(GizmoAxis::Z);
-
-                        if let Some(m) = ctx.input(|i| i.pointer.interact_pos()) {
-                            if rect.contains(m) {
-                                // Rotate uses a ring hit-test; translate/scale use axis hit-test.
-                                let hovered_axis = self.gizmo_pick_axis(center, x_end, y_end, z_end, m);
-                                let in_ring = {
-                                    let r = desired_len * 0.75;
-                                    let th = 10.0;
-                                    let d = (m - center).length();
-                                    d >= (r - th) && d <= (r + th)
-                                };
-
-                                let hovered_any = match self.gizmo_mode {
-                                    GizmoMode::Rotate => in_ring || hovered_axis.is_some(),
-                                    _ => hovered_axis.is_some(),
-                                };
-
-                                if hovered_any {
-                                    ctx.output_mut(|o| {
-                                        o.cursor_icon = match self.gizmo_mode {
-                                            GizmoMode::Translate => egui::CursorIcon::Move,
-                                            GizmoMode::Scale => egui::CursorIcon::ResizeColumn,
-                                            GizmoMode::Rotate => egui::CursorIcon::Grab,
-                                        };
-                                    });
-                                }
-
-                                if hovered_any && ctx.input(|i| i.pointer.primary_down()) {
-                                    gizmo_capture_now = true;
+                            let x_end = axis_end(GizmoAxis::X);
+                            let y_end = axis_end(GizmoAxis::Y);
+                            let z_end = axis_end(GizmoAxis::Z);
+                            if let Some(m) = ctx.input(|i| i.pointer.interact_pos()) {
+                                if rect.contains(m) {
+                                    let hovered_axis = self.gizmo_pick_axis(center, x_end, y_end, z_end, m);
+                                    if hovered_axis.is_some() && ctx.input(|i| i.pointer.primary_down()) {
+                                        gizmo_capture_now = true;
+                                    }
                                 }
                             }
                         }
@@ -748,7 +743,6 @@ impl EditorUiBuild {
             }
 
             // Click-to-select (picking handled on render thread).
-
             // Suppress selection when the gizmo captures the interaction.
             if resp.clicked_by(egui::PointerButton::Primary) && !nav_drag && !gizmo_capture_now {
                 if let Some(pos) = resp.interact_pointer_pos() {
@@ -808,8 +802,13 @@ impl EditorUiBuild {
 
             let look_drag = nav_rotate && !gizmo_capture_now;
             let pan_drag = nav_pan && !gizmo_capture_now;
+            // UI busy flag is critical for renderer-side camera framing logic.
+            // When the user manipulates an object with the gizmo, we must treat the camera
+            // as "user busy" to prevent auto-framing from moving the orbit pivot, which
+            // makes the world grid appear to move while transforming.
+            let ui_busy = self.gizmo_drag.is_some();
             self.viewport_bridge
-                .publish_orbit_input(dx_px, dy_px, wheel_y, active, look_drag, pan_drag);
+                .publish_orbit_input(dx_px, dy_px, wheel_y, active, look_drag, pan_drag, ui_busy);
 
             let wants_kb = ctx.wants_keyboard_input();
             let mut move_mask: u64 = 0;
@@ -916,16 +915,7 @@ impl EditorUiBuild {
                             // Drag start.
                             let just_pressed = resp.drag_started_by(egui::PointerButton::Primary);
                             if self.gizmo_drag.is_none() && just_pressed {
-                                // In rotate mode we allow starting a drag from the ring area too (axis defaults to Y if not hovered).
-                                let axis = hovered_axis.or_else(|| {
-                                    if self.gizmo_mode == GizmoMode::Rotate {
-                                        Some(GizmoAxis::Y)
-                                    } else {
-                                        None
-                                    }
-                                });
-                                if let Some(axis) = axis {
-
+                                if let Some(axis) = hovered_axis {
                                     if let Some(m) = resp.interact_pointer_pos() {
                                         self.gizmo_drag = Some(GizmoDrag {
                                             mode: self.gizmo_mode,
@@ -1031,76 +1021,84 @@ impl EditorUiBuild {
                                 }
                             }
 
-                            // Draw gizmo with mode-specific shapes:
-                            // - Translate: arrows
-                            // - Scale: sticks with boxes
-                            // - Rotate: screen-space rings (approx) to avoid camera orbit conflicts
+                            // Draw gizmo with mode-specific handles.
                             let active_axis = self.gizmo_drag.map(|d| d.axis);
-
                             let painter = ui.painter();
-                            let draw_arrow = |a: GizmoAxis, end: egui::Pos2| {
-                                let mut stroke = egui::Stroke::new(2.0, Self::axis_color(a));
-                                if Some(a) == hovered_axis { stroke.width = 3.0; }
-                                if Some(a) == active_axis { stroke.width = 4.0; }
-                                painter.line_segment([center, end], stroke);
 
-                                // Arrow head (screen-space).
-                                let dir = (end - center).normalized();
-                                let n = egui::vec2(-dir.y, dir.x);
-                                let head_len = 10.0;
-                                let head_w = 5.0;
-                                let tip = end;
-                                let base = end - dir * head_len;
-                                let p0 = base + n * head_w;
-                                let p1 = base - n * head_w;
-                                painter.add(egui::Shape::convex_polygon(
-                                    vec![tip, p0, p1],
-                                    stroke.color,
-                                    egui::Stroke::NONE,
-                                ));
+                            // Helpers (2D overlay; true AAA 3D gizmo comes via overlay pipeline).
+                            let draw_arrow = |p: &egui::Painter, a: egui::Pos2, b: egui::Pos2, stroke: egui::Stroke| {
+                                p.line_segment([a, b], stroke);
+
+                                let dir = (b - a);
+                                let len = dir.length().max(1.0);
+                                let n = dir / len;
+                                let perp = egui::vec2(-n.y, n.x);
+
+                                let tip = b;
+                                let back = b - n * 10.0;
+                                let l = back + perp * 5.0;
+                                let r = back - perp * 5.0;
+
+                                p.add(egui::Shape::convex_polygon(vec![tip, l, r], stroke.color, egui::Stroke::NONE));
                             };
 
-                            let draw_box = |a: GizmoAxis, end: egui::Pos2| {
-                                let mut stroke = egui::Stroke::new(2.0, Self::axis_color(a));
-                                if Some(a) == hovered_axis { stroke.width = 3.0; }
-                                if Some(a) == active_axis { stroke.width = 4.0; }
-                                painter.line_segment([center, end], stroke);
-                                let s = 7.0;
-                                let rect = egui::Rect::from_center_size(end, egui::vec2(s * 2.0, s * 2.0));
-                                painter.rect_filled(rect, 2.0, stroke.color);
+                            let draw_cube = |p: &egui::Painter, b: egui::Pos2, col: egui::Color32, w: f32| {
+                                let s = 8.0 + (w - 2.0).clamp(0.0, 2.0);
+                                let rect = egui::Rect::from_center_size(b, egui::vec2(s, s));
+                                p.rect_filled(rect, 1.0, col);
                             };
 
-                            let draw_ring = |a: GizmoAxis, radius: f32| {
-                                let mut stroke = egui::Stroke::new(2.0, Self::axis_color(a));
-                                if Some(a) == hovered_axis { stroke.width = 3.0; }
-                                if Some(a) == active_axis { stroke.width = 4.0; }
-                                painter.circle_stroke(center, radius, stroke);
+                            let draw_ring = |p: &egui::Painter, c: egui::Pos2, radius: f32, stroke: egui::Stroke| {
+                                p.circle_stroke(c, radius, stroke);
                             };
 
                             match self.gizmo_mode {
-                                GizmoMode::Translate => {
-                                    for (axis, end) in [(GizmoAxis::X, x_end), (GizmoAxis::Y, y_end), (GizmoAxis::Z, z_end)] {
-                                        draw_arrow(axis, end);
-                                    }
-                                }
-                                GizmoMode::Scale => {
-                                    for (axis, end) in [(GizmoAxis::X, x_end), (GizmoAxis::Y, y_end), (GizmoAxis::Z, z_end)] {
-                                        draw_box(axis, end);
-                                    }
-                                }
                                 GizmoMode::Rotate => {
-                                    // Approximate Blender-like 3-axis rotation arcs.
-                                    // We cannot reliably project true 3D rings in 2D overlay without a full gizmo mesh,
-                                    // so we draw 3 concentric rings and still rotate around the selected axis.
-                                    let base_r = 54.0;
-                                    draw_ring(GizmoAxis::X, base_r * 0.92);
-                                    draw_ring(GizmoAxis::Y, base_r);
-                                    draw_ring(GizmoAxis::Z, base_r * 1.08);
+                                    let r0 = desired_len * 0.78;
+                                    let r1 = desired_len * 0.70;
+                                    let r2 = desired_len * 0.62;
+                                    for (axis, radius) in [
+                                        (GizmoAxis::X, r0),
+                                        (GizmoAxis::Y, r1),
+                                        (GizmoAxis::Z, r2),
+                                    ] {
+                                        let mut stroke = egui::Stroke::new(2.0, Self::axis_color(axis));
+                                        if Some(axis) == hovered_axis {
+                                            stroke.width = 3.0;
+                                        }
+                                        if Some(axis) == active_axis {
+                                            stroke.width = 4.0;
+                                        }
+                                        draw_ring(painter, center, radius, stroke);
+                                    }
+                                }
+                                GizmoMode::Translate | GizmoMode::Scale => {
+                                    for (axis, end) in [
+                                        (GizmoAxis::X, x_end),
+                                        (GizmoAxis::Y, y_end),
+                                        (GizmoAxis::Z, z_end),
+                                    ] {
+                                        let mut stroke = egui::Stroke::new(2.0, Self::axis_color(axis));
+                                        if Some(axis) == hovered_axis {
+                                            stroke.width = 3.0;
+                                        }
+                                        if Some(axis) == active_axis {
+                                            stroke.width = 4.0;
+                                        }
+
+                                        match self.gizmo_mode {
+                                            GizmoMode::Translate => draw_arrow(painter, center, end, stroke),
+                                            GizmoMode::Scale => {
+                                                painter.line_segment([center, end], stroke);
+                                                draw_cube(painter, end, stroke.color, stroke.width);
+                                            }
+                                            GizmoMode::Rotate => {}
+                                        }
+                                    }
                                 }
                             }
 
                             // Mode hint.
-
                             let mode_txt = match self.gizmo_mode {
                                 GizmoMode::Translate => "Gizmo: Translate (1)",
                                 GizmoMode::Rotate => "Gizmo: Rotate (2)",
@@ -1153,13 +1151,6 @@ impl EditorUiBuild {
             return;
         };
 
-        // UI icon atlas (best-effort). These paths are logical and resolved by AssetManager.
-        // If icons are missing, the UI falls back to text buttons.
-        self.icons.request(&self.assets, "gizmo.translate", "ui/icons/gizmo_translate.png");
-        self.icons.request(&self.assets, "gizmo.rotate", "ui/icons/gizmo_rotate.png");
-        self.icons.request(&self.assets, "gizmo.scale", "ui/icons/gizmo_scale.png");
-        self.icons.pump(ctx, &self.assets, &mut self.state);
-
         let _maybe_doc = {
             self.shared_doc
                 .lock()
@@ -1178,6 +1169,7 @@ impl EditorUiBuild {
         }
 
         self.ui_topbar(ctx);
+        self.ui_toolbar(ctx);
         self.ui_hierarchy(ctx);
         self.ui_inspector(ctx);
         self.ui_viewport(ctx);

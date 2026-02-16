@@ -40,6 +40,7 @@ pub struct ViewportBridge {
     /// bit0: hovered
     /// bit1: look_drag (orbit rotate)
     /// bit2: pan_drag (orbit pan)
+    /// bit3: ui_busy (UI captured input; e.g. gizmo drag/hover)
     orbit_flags: AtomicU64,
 
     /// Packed movement keys for editor-style camera.
@@ -149,6 +150,7 @@ impl ViewportBridge {
         hovered: bool,
         look_drag: bool,
         pan_drag: bool,
+        ui_busy: bool,
     ) {
         self.orbit_delta_xy
             .store(Self::pack_f32x2(dx_px, dy_px), Ordering::Relaxed);
@@ -163,6 +165,9 @@ impl ViewportBridge {
         }
         if pan_drag {
             flags |= 4;
+        }
+        if ui_busy {
+            flags |= 8;
         }
         self.orbit_flags.store(flags, Ordering::Relaxed);
     }
@@ -182,14 +187,15 @@ impl ViewportBridge {
 
     /// Read orbit input published by UI for this frame.
     #[inline]
-    pub fn read_orbit_input(&self) -> (f32, f32, f32, bool, bool, bool) {
+    pub fn read_orbit_input(&self) -> (f32, f32, f32, bool, bool, bool, bool) {
         let (dx, dy) = Self::unpack_f32x2(self.orbit_delta_xy.load(Ordering::Relaxed));
         let wheel = Self::unpack_f32(self.orbit_wheel_y.load(Ordering::Relaxed));
         let flags = self.orbit_flags.load(Ordering::Relaxed);
         let hovered = (flags & 1) != 0;
         let look_drag = (flags & 2) != 0;
         let pan_drag = (flags & 4) != 0;
-        (dx, dy, wheel, hovered, look_drag, pan_drag)
+        let ui_busy = (flags & 8) != 0;
+        (dx, dy, wheel, hovered, look_drag, pan_drag, ui_busy)
     }
 
     /// Publish a pick request from UI.

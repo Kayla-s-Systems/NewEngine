@@ -14,7 +14,7 @@ use newengine_scene::{update_scene_world, SceneBounds};
 use newengine_transform::GlobalTransform;
 
 use super::controller::EditorRenderController;
-use super::gpu::{ensure_grid, ensure_lit_pipeline, ensure_primitive_gpu};
+use super::gpu::{ensure_grid, ensure_lit_pipeline, ensure_primitive_gpu, GridMeshParams};
 
 impl EditorRenderController {
     // Editor "floor" constraint: camera must stay above this Y.
@@ -249,7 +249,8 @@ impl<E: Send + 'static> Module<E> for EditorRenderController {
             let extent = Extent2D::new(vp_w, vp_h);
             let rt = self.ensure_viewport_rt(&mut **r, extent)?;
 
-            let (dx_px, dy_px, wheel_y, _hovered, look_drag, pan_drag) = self.viewport_bridge.read_orbit_input();
+            let (dx_px, dy_px, wheel_y, _hovered, look_drag, pan_drag, ui_busy) =
+                self.viewport_bridge.read_orbit_input();
             let move_mask = self.viewport_bridge.read_move_keys();
             let dt = ctx.frame().map(|f| f.dt).unwrap_or(0.016);
 
@@ -313,7 +314,10 @@ impl<E: Send + 'static> Module<E> for EditorRenderController {
                 || vp_w != self.last_vp_w
                 || vp_h != self.last_vp_h;
 
-            let user_busy = look_drag || pan_drag || move_mask != 0;
+            // "Busy" means the user is actively controlling the camera OR manipulating scene objects.
+            // We must not auto-frame while the gizmo is being dragged, otherwise orbit.target will
+            // chase the changing scene bounds and the world grid will look like it's moving.
+            let user_busy = look_drag || pan_drag || move_mask != 0 || ui_busy;
             let need_expand = if self.framed_radius <= 0.0 {
                 true
             } else {
@@ -363,10 +367,12 @@ impl<E: Send + 'static> Module<E> for EditorRenderController {
                 self.scene_bridge.set_selection(picked);
             }
 
+            let grid_settings = self.scene_bridge.grid_settings();
+
             r.begin_render_target(
                 BeginRenderTargetDesc::new(rt)
                     .with_clear_depth(1.0)
-                    .with_clear_color([0.02, 0.02, 0.022, 1.0]),
+                    .with_clear_color(grid_settings.background_color),
             )?;
             r.set_viewport(Viewport::full(extent))?;
             r.set_scissor(RectI32::new(0, 0, vp_w as i32, vp_h as i32))?;
@@ -375,16 +381,31 @@ impl<E: Send + 'static> Module<E> for EditorRenderController {
 
             // Grid stays on y=0 always (world floor), independent from orbit.target.y
             if bounds_radius.is_finite() {
-                let g = ensure_grid(&mut self.grid, &mut **r, lit.bgl)?;
-                let spacing = {
-                    let d = self.orbit.distance.max(0.01);
-                    let base = (d * 0.08).max(0.05);
-                    let pow10 = 10.0f32.powf(base.log10().floor());
-                    pow10.clamp(0.05, 1000.0)
-                };
+                let g = ensure_grid(
+                    &mut self.grid,
+                    &mut **r,
+                    lit.bgl,
+                    GridMeshParams {
+                        half_lines: grid_settings.half_lines as i32,
+                        major_every: grid_settings.major_every as i32,
+                        minor_color: grid_settings.minor_color,
+                        major_color: grid_settings.major_color,
+                    },
+                )?;
+                let spacing = grid_settings.effective_spacing(self.orbit.distance);
 
-                let cx = (self.orbit.target.x / spacing).round() * spacing;
-                let cz = (self.orbit.target.z / spacing).round() * spacing;
+                // IMPORTANT (Editor UX): the grid is a world-space reference plane.
+                // It must NOT follow selection/orbit target, otherwise transforming objects
+                // makes the grid appear to "move with the object".
+                // If you ever want an "infinite grid" variant, expose it as an explicit toggle.
+                let (cx, cz) = if grid_settings.follow_camera {
+                    (
+                        (self.orbit.target.x / spacing).round() * spacing,
+                        (self.orbit.target.z / spacing).round() * spacing,
+                    )
+                } else {
+                    (0.0, 0.0)
+                };
 
                 let grid_model = Mat4::from_scale_rotation_translation(
                     Vec3::new(spacing, 1.0, spacing),

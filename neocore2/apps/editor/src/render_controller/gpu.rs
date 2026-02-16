@@ -11,6 +11,14 @@ use newengine_primitives::{PrimitiveId, PrimitiveRegistry, PrimitiveVertex};
 
 use shaderc::{CompileOptions, Compiler, OptimizationLevel, ShaderKind};
 
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(super) struct GridMeshParams {
+    pub half_lines: i32,
+    pub major_every: i32,
+    pub minor_color: [f32; 4],
+    pub major_color: [f32; 4],
+}
+
 #[derive(Clone, Copy)]
 pub(super) struct GridGpu {
     pub vb: newengine_core::render::BufferId,
@@ -18,6 +26,7 @@ pub(super) struct GridGpu {
     pub fs: newengine_core::render::ShaderId,
     pub pipeline: newengine_core::render::PipelineId,
     pub vertex_count: u32,
+    pub params: GridMeshParams,
 }
 
 #[derive(Clone, Copy)]
@@ -181,9 +190,12 @@ pub(super) fn ensure_grid(
     cached: &mut Option<GridGpu>,
     r: &mut dyn newengine_core::render::RenderApi,
     bgl: newengine_core::render::BindGroupLayoutId,
+    params: GridMeshParams,
 ) -> CoreResult<GridGpu> {
     if let Some(g) = *cached {
-        return Ok(g);
+        if g.params == params {
+            return Ok(g);
+        }
     }
 
     let compiler = shaderc::Compiler::new().map_err(|e| EngineError::other(format!("shaderc: Compiler: {e}")))?;
@@ -193,22 +205,26 @@ pub(super) fn ensure_grid(
     // The caller provides MVP via the same UBO bind-group as the lit pipeline.
     const VS_SRC: &str = r#"#version 450
 layout(location = 0) in vec3 a_pos;
+layout(location = 1) in vec4 a_col;
 
 layout(set = 0, binding = 0) uniform Ubo {
     mat4 u_mvp;
 } u;
 
+layout(location = 0) out vec4 v_col;
+
 void main() {
+    v_col = a_col;
     gl_Position = u.u_mvp * vec4(a_pos, 1.0);
 }
 "#;
 
     const FS_SRC: &str = r#"#version 450
+layout(location = 0) in vec4 v_col;
 layout(location = 0) out vec4 o_col;
 
 void main() {
-    // Subtle neutral grid tone.
-    o_col = vec4(0.14, 0.14, 0.15, 1.0);
+    o_col = v_col;
 }
 "#;
 
@@ -218,10 +234,16 @@ void main() {
     let vs = r.create_shader(ShaderDesc::new(ShaderStage::Vertex, "main", vs_spv).with_label("editor_grid_vs"))?;
     let fs = r.create_shader(ShaderDesc::new(ShaderStage::Fragment, "main", fs_spv).with_label("editor_grid_fs"))?;
 
-    let vb = build_unit_grid_vb(r)?;
+    let vb = build_unit_grid_vb(r, params)?;
 
-    let stride = (3 * std::mem::size_of::<f32>()) as u32;
-    let layout = VertexLayout::new(stride, vec![VertexAttribute::new(0, 0, VertexFormat::Float32x3)]);
+    let stride = (7 * std::mem::size_of::<f32>()) as u32;
+    let layout = VertexLayout::new(
+        stride,
+        vec![
+            VertexAttribute::new(0, 0, VertexFormat::Float32x3),
+            VertexAttribute::new(1, (3 * std::mem::size_of::<f32>()) as u32, VertexFormat::Float32x4),
+        ],
+    );
 
     let pipeline = r.create_pipeline(
         PipelineDesc::new(vs, fs, TextureFormat::Bgra8Unorm)
@@ -232,7 +254,7 @@ void main() {
             .with_depth(TextureFormat::Depth32Float),
     )?;
 
-    let vertex_count = unit_grid_vertex_count();
+    let vertex_count = unit_grid_vertex_count(params.half_lines.max(1));
 
     let g = GridGpu {
         vb,
@@ -240,52 +262,65 @@ void main() {
         fs,
         pipeline,
         vertex_count,
+        params,
     };
 
     *cached = Some(g);
     Ok(g)
 }
 
-fn unit_grid_vertex_count() -> u32 {
-    const HALF_LINES: i32 = 256;
-    // 2 axes (X,Z), each line is 2 vertices, both + and - => (2*HALF_LINES+1) lines per axis.
-    let per_axis = (2 * HALF_LINES + 1) as u32;
+fn unit_grid_vertex_count(half_lines: i32) -> u32 {
+    let per_axis = (2 * half_lines + 1) as u32;
     2 * per_axis * 2
 }
 
+
 fn build_unit_grid_vb(
     r: &mut dyn newengine_core::render::RenderApi,
+    params: GridMeshParams,
 ) -> CoreResult<newengine_core::render::BufferId> {
-    const HALF_LINES: i32 = 256;
-    let half = HALF_LINES as f32;
+    let half_lines = params.half_lines.max(1);
+    let major_every = params.major_every.max(1);
 
-    let mut v: Vec<[f32; 3]> = Vec::with_capacity(unit_grid_vertex_count() as usize);
+    let half = half_lines as f32;
+    let vertex_count = unit_grid_vertex_count(half_lines) as usize;
 
-    // Lines parallel to X (vary Z)
-    for i in -HALF_LINES..=HALF_LINES {
-        let z = i as f32;
-        v.push([-half, 0.0, z]);
-        v.push([half, 0.0, z]);
-    }
+    let mut bytes: Vec<u8> = Vec::with_capacity(vertex_count * (7 * 4));
 
-    // Lines parallel to Z (vary X)
-    for i in -HALF_LINES..=HALF_LINES {
-        let x = i as f32;
-        v.push([x, 0.0, -half]);
-        v.push([x, 0.0, half]);
-    }
-
-    let mut bytes: Vec<u8> = Vec::with_capacity(v.len() * 12);
-    for p in &v {
+    let mut push = |p: [f32; 3], c: [f32; 4]| {
         bytes.extend_from_slice(&p[0].to_ne_bytes());
         bytes.extend_from_slice(&p[1].to_ne_bytes());
         bytes.extend_from_slice(&p[2].to_ne_bytes());
+        bytes.extend_from_slice(&c[0].to_ne_bytes());
+        bytes.extend_from_slice(&c[1].to_ne_bytes());
+        bytes.extend_from_slice(&c[2].to_ne_bytes());
+        bytes.extend_from_slice(&c[3].to_ne_bytes());
+    };
+
+    // Lines parallel to X (vary Z)
+    for i in -half_lines..=half_lines {
+        let z = i as f32;
+        let is_major = (i.rem_euclid(major_every)) == 0;
+        let col = if is_major { params.major_color } else { params.minor_color };
+        push([-half, 0.0, z], col);
+        push([half, 0.0, z], col);
+    }
+
+    // Lines parallel to Z (vary X)
+    for i in -half_lines..=half_lines {
+        let x = i as f32;
+        let is_major = (i.rem_euclid(major_every)) == 0;
+        let col = if is_major { params.major_color } else { params.minor_color };
+        push([x, 0.0, -half], col);
+        push([x, 0.0, half], col);
     }
 
     let vb = r.create_buffer(
         BufferDesc::new(bytes.len() as u64, BufferUsage::Vertex, MemoryHint::CpuToGpu)
             .with_label("editor_grid_vb"),
     )?;
+
+    // Upload vertex data (pos + color). Without this the grid buffer stays zeroed and nothing renders.
     r.write_buffer(vb, 0, &bytes)?;
 
     Ok(vb)
