@@ -7,8 +7,6 @@
 use core::cmp::Ordering;
 
 use glam::{EulerRot, Quat, Vec2, Vec3};
-use hashbrown::HashMap;
-
 use newengine_camera::{CameraInput, CameraRig, OrbitController};
 use newengine_ecs::{EntityId, World};
 use newengine_scene::update_scene_world;
@@ -124,7 +122,9 @@ pub struct CameraInputComp(pub CameraInput);
 
 /// Deterministic simulation stages.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-pub enum SimStage {
+pub
+#[repr(u8)]
+enum SimStage {
     /// Inputs are produced externally (winit/plugin) and written into components/resources.
     Input,
     /// Controllers translate inputs to desired motion / camera.
@@ -135,11 +135,24 @@ pub enum SimStage {
     Derived,
 }
 
+
+impl SimStage {
+    pub const COUNT: usize = 4;
+
+    #[inline]
+    pub const fn as_usize(self) -> usize {
+        self as usize
+    }
+}
+
+}
+
 pub type SystemFn = fn(&mut World, SimFrame);
 
 #[derive(Clone, Copy)]
 struct SystemEntry {
     order: i32,
+    seq: u32,
     name: &'static str,
     f: SystemFn,
 }
@@ -149,8 +162,9 @@ struct SystemEntry {
 /// - stable ordering by (order, name)
 /// - no dynamic dispatch in the hot loop (plain fn pointers)
 pub struct SimSchedule {
-    stages: HashMap<SimStage, Vec<SystemEntry>>,
-    is_sorted: bool,
+    stages: [Vec<SystemEntry>; SimStage::COUNT],
+    is_sorted: [bool; SimStage::COUNT],
+    next_seq: u32,
 }
 
 impl Default for SimSchedule {
@@ -164,37 +178,38 @@ impl SimSchedule {
     #[inline]
     pub fn new() -> Self {
         Self {
-            stages: HashMap::new(),
-            is_sorted: false,
+            stages: core::array::from_fn(|_| Vec::new()),
+            is_sorted: [false; SimStage::COUNT],
+            next_seq: 1,
         }
     }
 
     #[inline]
     pub fn add_system(&mut self, stage: SimStage, order: i32, name: &'static str, f: SystemFn) {
-        self.stages.entry(stage).or_default().push(SystemEntry { order, name, f });
-        self.is_sorted = false;
+        let seq = self.next_seq;
+        self.next_seq = self.next_seq.wrapping_add(1).max(1);
+        self.stages[stage.as_usize()].push(SystemEntry { order, seq, name, f });
+        self.is_sorted[stage.as_usize()] = false;
     }
 
     #[inline]
     pub fn sort_if_needed(&mut self) {
-        if self.is_sorted {
-            return;
-        }
-
-        for v in self.stages.values_mut() {
+        for (i, v) in self.stages.iter_mut().enumerate() {
+            if self.is_sorted[i] {
+                continue;
+            }
             v.sort_unstable_by(|a, b| match a.order.cmp(&b.order) {
-                Ordering::Equal => a.name.cmp(b.name),
+                Ordering::Equal => a.seq.cmp(&b.seq),
                 o => o,
             });
+            self.is_sorted[i] = true;
         }
-        self.is_sorted = true;
     }
 
     #[inline]
     pub fn run_stage(&mut self, world: &mut World, stage: SimStage, frame: SimFrame) {
         self.sort_if_needed();
-        let Some(v) = self.stages.get(&stage) else { return; };
-        for s in v {
+        for s in self.stages[stage.as_usize()].iter() {
             (s.f)(world, frame);
         }
     }
