@@ -1,6 +1,18 @@
 #![forbid(unsafe_op_in_unsafe_fn)]
 
+use glam::Mat4;
+use parking_lot::Mutex;
 use std::sync::atomic::{AtomicU64, Ordering};
+
+#[derive(Clone, Copy, Debug)]
+pub struct ViewportCameraFrame {
+    pub view: Mat4,
+    pub proj: Mat4,
+    pub viewproj: Mat4,
+    pub inv_viewproj: Mat4,
+    pub vp_w: u32,
+    pub vp_h: u32,
+}
 
 /// Bidirectional UI <-> renderer bridge for the viewport.
 ///
@@ -32,6 +44,15 @@ pub struct ViewportBridge {
     /// Packed movement keys for editor-style camera.
     /// bit0: W, bit1: A, bit2: S, bit3: D, bit4: Q, bit5: E, bit6: Shift
     move_keys: AtomicU64,
+
+    /// Selection pick request.
+    ///
+    /// `pick_seq` is incremented by UI when a new pick is requested.
+    /// `pick_xy` stores the cursor position in **physical pixels** relative to the viewport rect.
+    pick_seq: AtomicU64,
+    pick_xy: AtomicU64,
+
+    camera_frame: Mutex<Option<ViewportCameraFrame>>,
 }
 
 
@@ -46,6 +67,11 @@ impl ViewportBridge {
             orbit_wheel_y: AtomicU64::new(0),
             orbit_flags: AtomicU64::new(0),
             move_keys: AtomicU64::new(0),
+
+            pick_seq: AtomicU64::new(0),
+            pick_xy: AtomicU64::new(0),
+
+            camera_frame: Mutex::new(None),
         }
     }
 
@@ -157,5 +183,46 @@ impl ViewportBridge {
         let hovered = (flags & 1) != 0;
         let lmb_down = (flags & 2) != 0;
         (dx, dy, wheel, hovered, lmb_down)
+    }
+
+    /// Publish a pick request from UI.
+    ///
+    /// `x_px`, `y_px` must be in **physical pixels** relative to the viewport rect.
+    #[inline]
+    pub fn publish_pick_request(&self, x_px: f32, y_px: f32) {
+        self.pick_xy
+            .store(Self::pack_f32x2(x_px, y_px), Ordering::Relaxed);
+        self.pick_seq.fetch_add(1, Ordering::Relaxed);
+    }
+
+    /// Read the latest pick request.
+    ///
+    /// Returns (seq, x_px, y_px). The caller should track the last processed `seq`.
+    #[inline]
+    pub fn read_pick_request(&self) -> (u64, f32, f32) {
+        let seq = self.pick_seq.load(Ordering::Relaxed);
+        let (x, y) = Self::unpack_f32x2(self.pick_xy.load(Ordering::Relaxed));
+        (seq, x, y)
+    }
+
+    /// Publish camera matrices and current viewport size (renderer -> UI).
+    #[inline]
+    pub fn publish_camera_frame(&self, view: Mat4, proj: Mat4, vp_w: u32, vp_h: u32) {
+        let viewproj = proj * view;
+        let inv_viewproj = viewproj.inverse();
+        *self.camera_frame.lock() = Some(ViewportCameraFrame {
+            view,
+            proj,
+            viewproj,
+            inv_viewproj,
+            vp_w,
+            vp_h,
+        });
+    }
+
+    /// Read last published camera frame (UI).
+    #[inline]
+    pub fn read_camera_frame(&self) -> Option<ViewportCameraFrame> {
+        *self.camera_frame.lock()
     }
 }

@@ -36,6 +36,58 @@ pub(super) unsafe fn create_render_pass(device: &Device, format: vk::Format) -> 
     Ok(device.create_render_pass(&rp, None)?)
 }
 
+pub(super) unsafe fn create_render_pass_with_depth(
+    device: &Device,
+    color_format: vk::Format,
+    depth_format: vk::Format,
+) -> VkResult<vk::RenderPass> {
+    let color = vk::AttachmentDescription::default()
+        .format(color_format)
+        .samples(vk::SampleCountFlags::TYPE_1)
+        .load_op(vk::AttachmentLoadOp::CLEAR)
+        .store_op(vk::AttachmentStoreOp::STORE)
+        .initial_layout(vk::ImageLayout::UNDEFINED)
+        .final_layout(vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL);
+
+    let depth = vk::AttachmentDescription::default()
+        .format(depth_format)
+        .samples(vk::SampleCountFlags::TYPE_1)
+        .load_op(vk::AttachmentLoadOp::CLEAR)
+        .store_op(vk::AttachmentStoreOp::DONT_CARE)
+        .stencil_load_op(vk::AttachmentLoadOp::DONT_CARE)
+        .stencil_store_op(vk::AttachmentStoreOp::DONT_CARE)
+        .initial_layout(vk::ImageLayout::UNDEFINED)
+        .final_layout(vk::ImageLayout::DEPTH_STENCIL_ATTACHMENT_OPTIMAL);
+
+    let color_ref = vk::AttachmentReference::default()
+        .attachment(0)
+        .layout(vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL);
+
+    let depth_ref = vk::AttachmentReference::default()
+        .attachment(1)
+        .layout(vk::ImageLayout::DEPTH_STENCIL_ATTACHMENT_OPTIMAL);
+
+    let subpass = vk::SubpassDescription::default()
+        .pipeline_bind_point(vk::PipelineBindPoint::GRAPHICS)
+        .color_attachments(std::slice::from_ref(&color_ref))
+        .depth_stencil_attachment(&depth_ref);
+
+    let dep = vk::SubpassDependency::default()
+        .src_subpass(vk::SUBPASS_EXTERNAL)
+        .dst_subpass(0)
+        .src_stage_mask(vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT | vk::PipelineStageFlags::EARLY_FRAGMENT_TESTS)
+        .dst_stage_mask(vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT | vk::PipelineStageFlags::EARLY_FRAGMENT_TESTS)
+        .dst_access_mask(vk::AccessFlags::COLOR_ATTACHMENT_WRITE | vk::AccessFlags::DEPTH_STENCIL_ATTACHMENT_WRITE);
+
+    let attachments = [color, depth];
+    let rp = vk::RenderPassCreateInfo::default()
+        .attachments(&attachments)
+        .subpasses(std::slice::from_ref(&subpass))
+        .dependencies(std::slice::from_ref(&dep));
+
+    Ok(device.create_render_pass(&rp, None)?)
+}
+
 pub(super) unsafe fn create_framebuffers(
     device: &Device,
     render_pass: vk::RenderPass,

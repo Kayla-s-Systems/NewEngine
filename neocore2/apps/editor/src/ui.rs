@@ -7,11 +7,40 @@ use newengine_ui::UiBuildFn;
 use std::any::Any;
 use std::sync::{Arc, Mutex};
 
+use newengine_ecs::EntityId;
+use newengine_primitives::Primitive;
+use newengine_scene::components::Name;
+use newengine_transform::Transform;
 use newengine_viewport::Viewport;
 
 use crate::plugin_manager::PluginManagerUi;
 use crate::scene_bridge::SceneBridge;
 use crate::viewport_bridge::ViewportBridge;
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum GizmoMode {
+    Translate,
+    Rotate,
+    Scale,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum GizmoAxis {
+    X,
+    Y,
+    Z,
+}
+
+#[derive(Clone, Copy, Debug)]
+struct GizmoDrag {
+    mode: GizmoMode,
+    axis: GizmoAxis,
+    start_mouse: egui::Pos2,
+    start_pos: glam::Vec3,
+    start_rot: glam::Quat,
+    start_scale: glam::Vec3,
+    ndc_z: f32,
+}
 
 /// Minimal editor UI: foundation-first.
 ///
@@ -36,6 +65,16 @@ pub struct EditorUiBuild {
 
     // Primitives UI.
     selected_primitive: Option<newengine_primitives::PrimitiveId>,
+
+    // Selection + inspector cache.
+    selected_entity_cached: Option<EntityId>,
+    insp_pos: [f32; 3],
+    insp_rot_deg: [f32; 3],
+    insp_scale: [f32; 3],
+    insp_color: [f32; 4],
+
+    gizmo_mode: GizmoMode,
+    gizmo_drag: Option<GizmoDrag>,
 }
 
 
@@ -98,7 +137,343 @@ impl EditorUiBuild {
             console_input: String::new(),
 
             selected_primitive: None,
+
+            selected_entity_cached: None,
+            insp_pos: [0.0; 3],
+            insp_rot_deg: [0.0; 3],
+            insp_scale: [1.0, 1.0, 1.0],
+            insp_color: [0.85, 0.85, 0.9, 1.0],
+
+            gizmo_mode: GizmoMode::Translate,
+            gizmo_drag: None,
         }
+    }
+
+    #[inline]
+    fn axis_vec(axis: GizmoAxis) -> glam::Vec3 {
+        match axis {
+            GizmoAxis::X => glam::Vec3::X,
+            GizmoAxis::Y => glam::Vec3::Y,
+            GizmoAxis::Z => glam::Vec3::Z,
+        }
+    }
+
+    #[inline]
+    fn axis_color(axis: GizmoAxis) -> egui::Color32 {
+        match axis {
+            GizmoAxis::X => egui::Color32::from_rgb(220, 70, 70),
+            GizmoAxis::Y => egui::Color32::from_rgb(80, 210, 110),
+            GizmoAxis::Z => egui::Color32::from_rgb(80, 140, 255),
+        }
+    }
+
+    #[inline]
+    fn world_to_screen(
+        frame: &crate::viewport_bridge::ViewportCameraFrame,
+        rect: egui::Rect,
+        world: glam::Vec3,
+    ) -> Option<(egui::Pos2, f32)> {
+        let v = frame.viewproj * glam::Vec4::new(world.x, world.y, world.z, 1.0);
+        if !v.w.is_finite() || v.w.abs() < 1e-6 {
+            return None;
+        }
+        let ndc = v / v.w;
+        if !ndc.x.is_finite() || !ndc.y.is_finite() || !ndc.z.is_finite() {
+            return None;
+        }
+        // Map NDC [-1..1] to viewport pixels, then to egui points.
+        let sx_px = (ndc.x * 0.5 + 0.5) * frame.vp_w as f32;
+        let sy_px = (ndc.y * 0.5 + 0.5) * frame.vp_h as f32;
+
+        let ppp = (rect.width() / frame.vp_w as f32).max(1e-6);
+        let x_pt = rect.min.x + sx_px * ppp;
+        let y_pt = rect.min.y + sy_px * ppp;
+        Some((egui::pos2(x_pt, y_pt), ndc.z))
+    }
+
+    #[inline]
+    fn screen_to_world_at_ndc_z(
+        frame: &crate::viewport_bridge::ViewportCameraFrame,
+        rect: egui::Rect,
+        screen: egui::Pos2,
+        ndc_z: f32,
+    ) -> glam::Vec3 {
+        let ppp = (rect.width() / frame.vp_w as f32).max(1e-6);
+        let px = ((screen.x - rect.min.x) / ppp).clamp(0.0, frame.vp_w as f32);
+        let py = ((screen.y - rect.min.y) / ppp).clamp(0.0, frame.vp_h as f32);
+
+        let x = (px / frame.vp_w as f32) * 2.0 - 1.0;
+        let y = (py / frame.vp_h as f32) * 2.0 - 1.0;
+
+        let h = frame.inv_viewproj * glam::Vec4::new(x, y, ndc_z, 1.0);
+        if h.w.abs() < 1e-6 {
+            return glam::Vec3::ZERO;
+        }
+        (h / h.w).truncate()
+    }
+
+    fn read_selected_pose(&self, e: EntityId) -> Option<(glam::Vec3, glam::Quat, glam::Vec3, Option<[f32; 4]>)> {
+        let scene = self.scene_bridge.scene();
+        let s = scene.read();
+        let w = s.world();
+        let t = w.get::<Transform>(e)?;
+        let color = w.get::<Primitive>(e).map(|p| p.color);
+        Some((t.position, t.rotation, t.scale, color))
+    }
+
+    fn draw_selection_outline(
+        &self,
+        painter: &egui::Painter,
+        frame: &crate::viewport_bridge::ViewportCameraFrame,
+        rect: egui::Rect,
+        pos: glam::Vec3,
+        rot: glam::Quat,
+        scale: glam::Vec3,
+    ) {
+        // Approximate a box in local space and project its edges.
+        let hx = 0.5 * scale.x.abs().max(0.001);
+        let hy = 0.5 * scale.y.abs().max(0.001);
+        let hz = 0.5 * scale.z.abs().max(0.001);
+        let corners_local = [
+            glam::Vec3::new(-hx, -hy, -hz),
+            glam::Vec3::new(hx, -hy, -hz),
+            glam::Vec3::new(hx, -hy, hz),
+            glam::Vec3::new(-hx, -hy, hz),
+            glam::Vec3::new(-hx, hy, -hz),
+            glam::Vec3::new(hx, hy, -hz),
+            glam::Vec3::new(hx, hy, hz),
+            glam::Vec3::new(-hx, hy, hz),
+        ];
+
+        let mut pts: [Option<egui::Pos2>; 8] = [None; 8];
+        for (i, c) in corners_local.iter().enumerate() {
+            let wpos = pos + (rot * *c);
+            pts[i] = Self::world_to_screen(frame, rect, wpos).map(|x| x.0);
+        }
+
+        let edges: &[(usize, usize)] = &[
+            (0, 1),
+            (1, 2),
+            (2, 3),
+            (3, 0),
+            (4, 5),
+            (5, 6),
+            (6, 7),
+            (7, 4),
+            (0, 4),
+            (1, 5),
+            (2, 6),
+            (3, 7),
+        ];
+
+        let stroke_outer = egui::Stroke::new(3.0, egui::Color32::from_rgba_unmultiplied(0, 0, 0, 120));
+        let stroke_inner = egui::Stroke::new(1.5, egui::Color32::from_rgb(235, 210, 90));
+
+        for (a, b) in edges {
+            let (Some(pa), Some(pb)) = (pts[*a], pts[*b]) else { continue; };
+            painter.line_segment([pa, pb], stroke_outer);
+            painter.line_segment([pa, pb], stroke_inner);
+        }
+    }
+
+    fn gizmo_pick_axis(
+        &self,
+        center: egui::Pos2,
+        x_end: egui::Pos2,
+        y_end: egui::Pos2,
+        z_end: egui::Pos2,
+        mouse: egui::Pos2,
+    ) -> Option<GizmoAxis> {
+        fn dist_to_seg(p: egui::Pos2, a: egui::Pos2, b: egui::Pos2) -> f32 {
+            let ab = b - a;
+            let ap = p - a;
+            let ab2 = ab.x * ab.x + ab.y * ab.y;
+            if ab2 <= 1e-6 {
+                return ap.length();
+            }
+            let t = ((ap.x * ab.x + ap.y * ab.y) / ab2).clamp(0.0, 1.0);
+            let q = a + ab * t;
+            (p - q).length()
+        }
+
+        let dx = dist_to_seg(mouse, center, x_end);
+        let dy = dist_to_seg(mouse, center, y_end);
+        let dz = dist_to_seg(mouse, center, z_end);
+
+        let (axis, d) = if dx <= dy && dx <= dz {
+            (GizmoAxis::X, dx)
+        } else if dy <= dz {
+            (GizmoAxis::Y, dy)
+        } else {
+            (GizmoAxis::Z, dz)
+        };
+
+        if d <= 10.0 {
+            Some(axis)
+        } else {
+            None
+        }
+    }
+
+    fn ui_hierarchy(&mut self, ctx: &egui::Context) {
+        egui::SidePanel::left("hierarchy")
+            .resizable(true)
+            .default_width(240.0)
+            .min_width(200.0)
+            .show(ctx, |ui| {
+                ui.heading("Hierarchy");
+                ui.add_space(6.0);
+
+                let selected = self.scene_bridge.selection();
+
+                let scene = self.scene_bridge.scene();
+                let world = scene.read();
+                let w = world.world();
+
+                // Deterministic list: sort by name then by id.
+                let mut items: Vec<(String, EntityId, bool)> = Vec::new();
+                for (e, name) in w.query::<Name>() {
+                    let has_prim = w.get::<Primitive>(e).is_some();
+                    items.push((name.as_str().to_string(), e, has_prim));
+                }
+                items.sort_by(|a, b| {
+                    a.0.cmp(&b.0)
+                        .then_with(|| a.1.stable_u64().cmp(&b.1.stable_u64()))
+                });
+
+                egui::ScrollArea::vertical().auto_shrink([false; 2]).show(ui, |ui| {
+                    for (name, e, has_prim) in items {
+                        let mut label = name;
+                        if has_prim {
+                            label.push_str("  [Prim]");
+                        }
+
+                        let is_sel = selected == Some(e);
+                        if ui.selectable_label(is_sel, label).clicked() {
+                            self.scene_bridge.set_selection(Some(e));
+                        }
+                    }
+                });
+
+                ui.separator();
+                if ui.button("Deselect").clicked() {
+                    self.scene_bridge.set_selection(None);
+                }
+            });
+    }
+
+    fn refresh_inspector_cache(&mut self, entity: EntityId) {
+        let scene = self.scene_bridge.scene();
+        let s = scene.read();
+        let w = s.world();
+
+        if let Some(t) = w.get::<Transform>(entity) {
+            self.insp_pos = [t.position.x, t.position.y, t.position.z];
+            let (y, p, r) = t.yaw_pitch_roll();
+            self.insp_rot_deg = [y.to_degrees(), p.to_degrees(), r.to_degrees()];
+            self.insp_scale = [t.scale.x, t.scale.y, t.scale.z];
+        }
+
+        if let Some(p) = w.get::<Primitive>(entity) {
+            self.insp_color = p.color;
+        }
+
+        self.selected_entity_cached = Some(entity);
+    }
+
+    fn ui_inspector(&mut self, ctx: &egui::Context) {
+        egui::SidePanel::right("inspector")
+            .resizable(true)
+            .default_width(300.0)
+            .min_width(260.0)
+            .show(ctx, |ui| {
+                ui.heading("Inspector");
+                ui.add_space(6.0);
+
+                let selected = self.scene_bridge.selection();
+                let Some(e) = selected else {
+                    ui.label("No selection.");
+                    return;
+                };
+
+                if self.selected_entity_cached != Some(e) {
+                    self.refresh_inspector_cache(e);
+                }
+
+                // Name
+                {
+                    let scene = self.scene_bridge.scene();
+                    let s = scene.read();
+                    let w = s.world();
+                    let name = w.get::<Name>(e).map(|n| n.as_str()).unwrap_or("<unnamed>");
+                    ui.label(format!("Entity: {}", name));
+                }
+
+                ui.separator();
+
+                // Transform
+                ui.collapsing("Transform", |ui| {
+                    let mut changed = false;
+
+                    ui.horizontal(|ui| {
+                        ui.label("Position");
+                        changed |= ui.add(egui::DragValue::new(&mut self.insp_pos[0]).speed(0.05)).changed();
+                        changed |= ui.add(egui::DragValue::new(&mut self.insp_pos[1]).speed(0.05)).changed();
+                        changed |= ui.add(egui::DragValue::new(&mut self.insp_pos[2]).speed(0.05)).changed();
+                    });
+
+                    ui.horizontal(|ui| {
+                        ui.label("Rotation (deg)");
+                        changed |= ui.add(egui::DragValue::new(&mut self.insp_rot_deg[0]).speed(0.25)).changed();
+                        changed |= ui.add(egui::DragValue::new(&mut self.insp_rot_deg[1]).speed(0.25)).changed();
+                        changed |= ui.add(egui::DragValue::new(&mut self.insp_rot_deg[2]).speed(0.25)).changed();
+                    });
+
+                    ui.horizontal(|ui| {
+                        ui.label("Scale");
+                        changed |= ui.add(egui::DragValue::new(&mut self.insp_scale[0]).speed(0.05)).changed();
+                        changed |= ui.add(egui::DragValue::new(&mut self.insp_scale[1]).speed(0.05)).changed();
+                        changed |= ui.add(egui::DragValue::new(&mut self.insp_scale[2]).speed(0.05)).changed();
+                    });
+
+                    if changed {
+                        let pos = glam::Vec3::new(self.insp_pos[0], self.insp_pos[1], self.insp_pos[2]);
+                        let ypr = (
+                            self.insp_rot_deg[0].to_radians(),
+                            self.insp_rot_deg[1].to_radians(),
+                            self.insp_rot_deg[2].to_radians(),
+                        );
+                        let scale = glam::Vec3::new(self.insp_scale[0], self.insp_scale[1], self.insp_scale[2]);
+                        self.scene_bridge.cmd_set_transform(e, pos, ypr, scale);
+                    }
+                });
+
+                // Primitive
+                ui.collapsing("Primitive", |ui| {
+                    let scene = self.scene_bridge.scene();
+                    let s = scene.read();
+                    let w = s.world();
+                    let prim = w.get::<Primitive>(e);
+
+                    if let Some(p) = prim {
+                        let reg = self.scene_bridge.primitives();
+                        let reg = reg.read();
+                        let prim_name = reg.name(p.id).unwrap_or("<unknown>");
+                        ui.label(format!("Kind: {}", prim_name));
+
+                        let mut rgba = self.insp_color;
+                        let changed = ui
+                            .color_edit_button_rgba_unmultiplied(&mut rgba)
+                            .changed();
+                        if changed {
+                            self.insp_color = rgba;
+                            self.scene_bridge.cmd_set_primitive_color(e, rgba);
+                        }
+                    } else {
+                        ui.label("(no Primitive component)");
+                    }
+                });
+            });
     }
 
     fn ui_topbar(&mut self, ctx: &egui::Context) {
@@ -195,6 +570,73 @@ impl EditorUiBuild {
             let dragging = resp.dragged_by(egui::PointerButton::Primary);
             let active = resp.hovered() || dragging;
 
+            // Note: we intentionally avoid binding W/E/R because the editor camera uses WASD+QE.
+            // Instead we use: 1 (translate), 2 (rotate), 3 (scale).
+            if active && !ctx.wants_keyboard_input() {
+                ctx.input(|i| {
+                    if i.key_pressed(egui::Key::Num1) {
+                        self.gizmo_mode = GizmoMode::Translate;
+                        self.gizmo_drag = None;
+                    }
+                    if i.key_pressed(egui::Key::Num2) {
+                        self.gizmo_mode = GizmoMode::Rotate;
+                        self.gizmo_drag = None;
+                    }
+                    if i.key_pressed(egui::Key::Num3) {
+                        self.gizmo_mode = GizmoMode::Scale;
+                        self.gizmo_drag = None;
+                    }
+                });
+            }
+
+            // Determine whether gizmo wants to capture input this frame (prevents orbit/selection conflicts).
+            let mut gizmo_capture_now = self.gizmo_drag.is_some();
+            if !gizmo_capture_now {
+                if let (Some(frame), Some(e)) = (self.viewport_bridge.read_camera_frame(), self.scene_bridge.selection()) {
+                    if let Some((pos, rot, _scale, _)) = self.read_selected_pose(e) {
+                        if let Some((center, _ndc_z)) = Self::world_to_screen(&frame, rect, pos) {
+                            let desired_len = 72.0;
+                            let axis_end = |axis: GizmoAxis| -> egui::Pos2 {
+                                let dir_world = (rot * Self::axis_vec(axis)).normalize_or_zero();
+                                let unit = pos + dir_world;
+                                let Some((unit_s, _)) = Self::world_to_screen(&frame, rect, unit) else {
+                                    return center;
+                                };
+                                let d = (unit_s - center).length().max(1.0);
+                                let len_world = desired_len / d;
+                                let end_world = pos + dir_world * len_world;
+                                Self::world_to_screen(&frame, rect, end_world)
+                                    .map(|x| x.0)
+                                    .unwrap_or(center)
+                            };
+                            let x_end = axis_end(GizmoAxis::X);
+                            let y_end = axis_end(GizmoAxis::Y);
+                            let z_end = axis_end(GizmoAxis::Z);
+                            if let Some(m) = ctx.input(|i| i.pointer.interact_pos()) {
+                                if rect.contains(m) {
+                                    let hovered_axis = self.gizmo_pick_axis(center, x_end, y_end, z_end, m);
+                                    if hovered_axis.is_some() && ctx.input(|i| i.pointer.primary_down()) {
+                                        gizmo_capture_now = true;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Click-to-select (picking handled on render thread).
+            // Suppress selection when the gizmo captures the interaction.
+            if resp.clicked_by(egui::PointerButton::Primary) && !dragging && !gizmo_capture_now {
+                if let Some(pos) = resp.interact_pointer_pos() {
+                    let local = pos - rect.min;
+                    let ppp = ctx.pixels_per_point().max(0.0001);
+                    let x_px = (local.x * ppp).clamp(0.0, rect.width() * ppp);
+                    let y_px = (local.y * ppp).clamp(0.0, rect.height() * ppp);
+                    self.viewport_bridge.publish_pick_request(x_px, y_px);
+                }
+            }
+
             let mut dx_px = 0.0f32;
             let mut dy_px = 0.0f32;
             if dragging {
@@ -242,7 +684,7 @@ impl EditorUiBuild {
 
 
             self.viewport_bridge
-                .publish_orbit_input(dx_px, dy_px, wheel_y, active, dragging);
+                .publish_orbit_input(dx_px, dy_px, wheel_y, active, dragging && !gizmo_capture_now);
 
             let wants_kb = ctx.wants_keyboard_input();
             let mut move_mask: u64 = 0;
@@ -304,6 +746,191 @@ impl EditorUiBuild {
                         );
                     }
                 }
+
+                // Viewport overlay: selection highlight + gizmo (renderer publishes camera matrices).
+                let frame = self.viewport_bridge.read_camera_frame();
+                let selected = self.scene_bridge.selection();
+                if let (Some(frame), Some(e)) = (frame, selected) {
+                    if let Some((pos, rot, scale, _color)) = self.read_selected_pose(e) {
+                        // Outline.
+                        self.draw_selection_outline(ui.painter(), &frame, rect, pos, rot, scale);
+
+                        // Gizmo.
+                        if let Some((center, ndc_z)) = Self::world_to_screen(&frame, rect, pos) {
+                            let desired_len = 72.0;
+
+                            let axis_end = |axis: GizmoAxis| -> egui::Pos2 {
+                                let dir_world = (rot * Self::axis_vec(axis)).normalize_or_zero();
+                                let unit = pos + dir_world;
+                                let Some((unit_s, _)) = Self::world_to_screen(&frame, rect, unit) else {
+                                    return center;
+                                };
+                                let d = (unit_s - center).length().max(1.0);
+                                let len_world = desired_len / d;
+                                let end_world = pos + dir_world * len_world;
+                                Self::world_to_screen(&frame, rect, end_world)
+                                    .map(|x| x.0)
+                                    .unwrap_or(center)
+                            };
+
+                            let x_end = axis_end(GizmoAxis::X);
+                            let y_end = axis_end(GizmoAxis::Y);
+                            let z_end = axis_end(GizmoAxis::Z);
+
+                            let mouse = ctx.input(|i| i.pointer.hover_pos());
+
+                            // Determine hovered axis.
+                            let mut hovered_axis: Option<GizmoAxis> = None;
+                            if let Some(m) = mouse {
+                                if rect.contains(m) {
+                                    hovered_axis = self.gizmo_pick_axis(center, x_end, y_end, z_end, m);
+                                }
+                            }
+
+                            // Drag start.
+                            let just_pressed = resp.drag_started_by(egui::PointerButton::Primary);
+                            if self.gizmo_drag.is_none() && just_pressed {
+                                if let Some(axis) = hovered_axis {
+                                    if let Some(m) = resp.interact_pointer_pos() {
+                                        self.gizmo_drag = Some(GizmoDrag {
+                                            mode: self.gizmo_mode,
+                                            axis,
+                                            start_mouse: m,
+                                            start_pos: pos,
+                                            start_rot: rot,
+                                            start_scale: scale,
+                                            ndc_z,
+                                        });
+                                    }
+                                }
+                            }
+
+                            // Drag update.
+                            if let Some(drag) = self.gizmo_drag {
+                                let lmb_down = ctx.input(|i| i.pointer.primary_down());
+                                if !lmb_down {
+                                    self.gizmo_drag = None;
+                                } else if let Some(m) = ctx.input(|i| i.pointer.interact_pos()) {
+                                    // Axis vectors in world space.
+                                    let axis_world = match drag.axis {
+                                        GizmoAxis::X => drag.start_rot * glam::Vec3::X,
+                                        GizmoAxis::Y => drag.start_rot * glam::Vec3::Y,
+                                        GizmoAxis::Z => drag.start_rot * glam::Vec3::Z,
+                                    };
+                                    let axis_world = axis_world.normalize_or_zero();
+
+                                    match drag.mode {
+                                        GizmoMode::Translate => {
+                                            let ws0 = Self::screen_to_world_at_ndc_z(&frame, rect, drag.start_mouse, drag.ndc_z);
+                                            let ws1 = Self::screen_to_world_at_ndc_z(&frame, rect, m, drag.ndc_z);
+                                            let delta = (ws1 - ws0).dot(axis_world);
+                                            let new_pos = drag.start_pos + axis_world * delta;
+
+                                            self.insp_pos = [new_pos.x, new_pos.y, new_pos.z];
+                                            let (y, p, r) = (drag.start_rot).to_euler(glam::EulerRot::YXZ);
+                                            self.insp_rot_deg = [y.to_degrees(), p.to_degrees(), r.to_degrees()];
+                                            self.insp_scale = [drag.start_scale.x, drag.start_scale.y, drag.start_scale.z];
+
+                                            self.scene_bridge.cmd_set_transform(
+                                                e,
+                                                new_pos,
+                                                (y, p, r),
+                                                drag.start_scale,
+                                            );
+                                        }
+                                        GizmoMode::Scale => {
+                                            let ws0 = Self::screen_to_world_at_ndc_z(&frame, rect, drag.start_mouse, drag.ndc_z);
+                                            let ws1 = Self::screen_to_world_at_ndc_z(&frame, rect, m, drag.ndc_z);
+                                            let delta = (ws1 - ws0).dot(axis_world);
+
+                                            let mut new_scale = drag.start_scale;
+                                            match drag.axis {
+                                                GizmoAxis::X => new_scale.x = (new_scale.x + delta).max(0.001),
+                                                GizmoAxis::Y => new_scale.y = (new_scale.y + delta).max(0.001),
+                                                GizmoAxis::Z => new_scale.z = (new_scale.z + delta).max(0.001),
+                                            }
+
+                                            self.insp_pos = [drag.start_pos.x, drag.start_pos.y, drag.start_pos.z];
+                                            let (y, p, r) = (drag.start_rot).to_euler(glam::EulerRot::YXZ);
+                                            self.insp_rot_deg = [y.to_degrees(), p.to_degrees(), r.to_degrees()];
+                                            self.insp_scale = [new_scale.x, new_scale.y, new_scale.z];
+
+                                            self.scene_bridge.cmd_set_transform(
+                                                e,
+                                                drag.start_pos,
+                                                (y, p, r),
+                                                new_scale,
+                                            );
+                                        }
+                                        GizmoMode::Rotate => {
+                                            // Screen-space rotation around the gizmo center.
+                                            let v0 = drag.start_mouse - center;
+                                            let v1 = m - center;
+                                            let a0 = v0.y.atan2(v0.x);
+                                            let a1 = v1.y.atan2(v1.x);
+                                            let mut da = a1 - a0;
+                                            // Wrap to [-pi..pi].
+                                            while da > core::f32::consts::PI {
+                                                da -= 2.0 * core::f32::consts::PI;
+                                            }
+                                            while da < -core::f32::consts::PI {
+                                                da += 2.0 * core::f32::consts::PI;
+                                            }
+
+                                            let q = glam::Quat::from_axis_angle(axis_world, da);
+                                            let new_rot = q * drag.start_rot;
+                                            let (y, p, r) = new_rot.to_euler(glam::EulerRot::YXZ);
+
+                                            self.insp_pos = [drag.start_pos.x, drag.start_pos.y, drag.start_pos.z];
+                                            self.insp_rot_deg = [y.to_degrees(), p.to_degrees(), r.to_degrees()];
+                                            self.insp_scale = [drag.start_scale.x, drag.start_scale.y, drag.start_scale.z];
+
+                                            self.scene_bridge.cmd_set_transform(
+                                                e,
+                                                drag.start_pos,
+                                                (y, p, r),
+                                                drag.start_scale,
+                                            );
+                                        }
+                                    }
+                                }
+                            }
+
+                            // Draw gizmo axes with hover/active emphasis.
+                            let active_axis = self.gizmo_drag.map(|d| d.axis);
+                            for (axis, end) in [
+                                (GizmoAxis::X, x_end),
+                                (GizmoAxis::Y, y_end),
+                                (GizmoAxis::Z, z_end),
+                            ] {
+                                let mut stroke = egui::Stroke::new(2.0, Self::axis_color(axis));
+                                if Some(axis) == hovered_axis {
+                                    stroke.width = 3.0;
+                                }
+                                if Some(axis) == active_axis {
+                                    stroke.width = 4.0;
+                                }
+                                ui.painter().line_segment([center, end], stroke);
+                                ui.painter().circle_filled(end, 4.0, stroke.color);
+                            }
+
+                            // Mode hint.
+                            let mode_txt = match self.gizmo_mode {
+                                GizmoMode::Translate => "Gizmo: Translate (1)",
+                                GizmoMode::Rotate => "Gizmo: Rotate (2)",
+                                GizmoMode::Scale => "Gizmo: Scale (3)",
+                            };
+                            let pos = rect.right_top() + egui::vec2(-8.0, 8.0);
+                            ui.painter().text(
+                                pos,
+                                egui::Align2::RIGHT_TOP,
+                                mode_txt,
+                                egui::FontId::monospace(12.0),
+                                egui::Color32::from_gray(160),
+                            );
+                        }
+                    }
+                }
             });
         });
     }
@@ -358,6 +985,8 @@ impl EditorUiBuild {
         }
 
         self.ui_topbar(ctx);
+        self.ui_hierarchy(ctx);
+        self.ui_inspector(ctx);
         self.ui_viewport(ctx);
         self.ui_console(ctx);
         self.plugin_manager.show(ctx);

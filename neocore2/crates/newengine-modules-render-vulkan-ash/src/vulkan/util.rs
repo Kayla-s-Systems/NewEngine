@@ -52,6 +52,17 @@ pub unsafe fn transition_image_layout(
     old_layout: vk::ImageLayout,
     new_layout: vk::ImageLayout,
 ) {
+    transition_image_layout_aspect(device, cmd, image, old_layout, new_layout, vk::ImageAspectFlags::COLOR);
+}
+
+pub unsafe fn transition_image_layout_aspect(
+    device: &ash::Device,
+    cmd: vk::CommandBuffer,
+    image: vk::Image,
+    old_layout: vk::ImageLayout,
+    new_layout: vk::ImageLayout,
+    aspect: vk::ImageAspectFlags,
+) {
     if old_layout == new_layout {
         return;
     }
@@ -69,7 +80,7 @@ pub unsafe fn transition_image_layout(
         .image(image)
         .subresource_range(
             vk::ImageSubresourceRange::default()
-                .aspect_mask(vk::ImageAspectFlags::COLOR)
+                .aspect_mask(aspect)
                 .base_mip_level(0)
                 .level_count(1)
                 .base_array_layer(0)

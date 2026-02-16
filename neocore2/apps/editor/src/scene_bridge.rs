@@ -3,7 +3,7 @@
 use parking_lot::{Mutex, RwLock};
 use std::sync::Arc;
 
-use glam::Vec3;
+use glam::{EulerRot, Quat, Vec3};
 
 use newengine_ecs::EntityId;
 use newengine_primitives::{builtins, Primitive, PrimitiveId, PrimitiveRegistry};
@@ -24,6 +24,20 @@ pub enum SceneCommand {
         name: String,
         position: [f32; 3],
         scale: [f32; 3],
+        color: [f32; 4],
+    },
+
+    /// Set local transform of an entity.
+    SetTransform {
+        entity: EntityId,
+        position: [f32; 3],
+        rotation_ypr: [f32; 3],
+        scale: [f32; 3],
+    },
+
+    /// Set primitive color (if entity has `Primitive`).
+    SetPrimitiveColor {
+        entity: EntityId,
         color: [f32; 4],
     },
 }
@@ -121,6 +135,30 @@ impl SceneBridge {
         });
     }
 
+    #[inline]
+    pub fn cmd_set_transform(
+        &self,
+        entity: EntityId,
+        position: Vec3,
+        rotation_ypr: (f32, f32, f32),
+        scale: Vec3,
+    ) {
+        self.queue.lock().cmds.push(SceneCommand::SetTransform {
+            entity,
+            position: [position.x, position.y, position.z],
+            rotation_ypr: [rotation_ypr.0, rotation_ypr.1, rotation_ypr.2],
+            scale: [scale.x, scale.y, scale.z],
+        });
+    }
+
+    #[inline]
+    pub fn cmd_set_primitive_color(&self, entity: EntityId, color: [f32; 4]) {
+        self.queue
+            .lock()
+            .cmds
+            .push(SceneCommand::SetPrimitiveColor { entity, color });
+    }
+
     /// Applies queued commands to the scene world.
     ///
     /// Call from the render/controller thread once per frame.
@@ -180,6 +218,32 @@ impl SceneBridge {
                         }
 
                         pending_selection = Some(Some(e));
+                    }
+
+                    SceneCommand::SetTransform {
+                        entity,
+                        position,
+                        rotation_ypr,
+                        scale,
+                    } => {
+                        let world = scene.world_mut();
+                        if let Some(t) = world.get_mut_tracked::<Transform>(entity) {
+                            t.position = Vec3::new(position[0], position[1], position[2]);
+                            t.rotation = Quat::from_euler(
+                                EulerRot::YXZ,
+                                rotation_ypr[0],
+                                rotation_ypr[1],
+                                rotation_ypr[2],
+                            );
+                            t.scale = Vec3::new(scale[0], scale[1], scale[2]);
+                        }
+                    }
+
+                    SceneCommand::SetPrimitiveColor { entity, color } => {
+                        let world = scene.world_mut();
+                        if let Some(p) = world.get_mut_tracked::<Primitive>(entity) {
+                            p.color = color;
+                        }
                     }
                 }
             }

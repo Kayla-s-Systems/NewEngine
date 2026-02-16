@@ -32,7 +32,7 @@ fn ui_external_id(render_target_id: u32) -> u32 {
 }
 
 impl VulkanRenderer {
-    pub fn create_render_target(&mut self, id: u32, extent: vk::Extent2D) -> VkResult<()> {
+    pub fn create_render_target(&mut self, id: u32, extent: vk::Extent2D, with_depth: bool) -> VkResult<()> {
         unsafe {
             self.destroy_render_target(id);
         }
@@ -42,6 +42,7 @@ impl VulkanRenderer {
         }
 
         let format = self.swapchain.format;
+        let depth_format = vk::Format::D32_SFLOAT;
 
         unsafe {
             let image_info = vk::ImageCreateInfo::default()
@@ -95,13 +96,72 @@ impl VulkanRenderer {
 
             let view = self.core.device.create_image_view(&view_info, None)?;
 
-            let fb_info = vk::FramebufferCreateInfo::default()
-                .render_pass(self.pipelines.render_pass)
-                .attachments(std::slice::from_ref(&view))
-                .width(extent.width)
-                .height(extent.height)
-                .layers(1);
-            let framebuffer = self.core.device.create_framebuffer(&fb_info, None)?;
+            let (framebuffer, depth_alloc) = if with_depth {
+                let depth_info = vk::ImageCreateInfo::default()
+                    .image_type(vk::ImageType::TYPE_2D)
+                    .format(depth_format)
+                    .extent(vk::Extent3D {
+                        width: extent.width,
+                        height: extent.height,
+                        depth: 1,
+                    })
+                    .mip_levels(1)
+                    .array_layers(1)
+                    .samples(vk::SampleCountFlags::TYPE_1)
+                    .tiling(vk::ImageTiling::OPTIMAL)
+                    .usage(vk::ImageUsageFlags::DEPTH_STENCIL_ATTACHMENT)
+                    .sharing_mode(vk::SharingMode::EXCLUSIVE)
+                    .initial_layout(vk::ImageLayout::UNDEFINED);
+
+                let depth_image = self.core.device.create_image(&depth_info, None)?;
+                let depth_req = self.core.device.get_image_memory_requirements(depth_image);
+                let depth_mem_type = find_memory_type(
+                    &self.core.instance,
+                    self.core.physical_device,
+                    depth_req.memory_type_bits,
+                    vk::MemoryPropertyFlags::DEVICE_LOCAL,
+                )?;
+
+                let depth_alloc_info = vk::MemoryAllocateInfo::default()
+                    .allocation_size(depth_req.size)
+                    .memory_type_index(depth_mem_type);
+                let depth_mem = self.core.device.allocate_memory(&depth_alloc_info, None)?;
+                self.core.device.bind_image_memory(depth_image, depth_mem, 0)?;
+
+                let depth_view_info = vk::ImageViewCreateInfo::default()
+                    .image(depth_image)
+                    .view_type(vk::ImageViewType::TYPE_2D)
+                    .format(depth_format)
+                    .subresource_range(
+                        vk::ImageSubresourceRange::default()
+                            .aspect_mask(vk::ImageAspectFlags::DEPTH)
+                            .base_mip_level(0)
+                            .level_count(1)
+                            .base_array_layer(0)
+                            .layer_count(1),
+                    );
+                let depth_view = self.core.device.create_image_view(&depth_view_info, None)?;
+
+                let attachments = [view, depth_view];
+                let fb_info = vk::FramebufferCreateInfo::default()
+                    .render_pass(self.pipelines.render_pass_depth)
+                    .attachments(&attachments)
+                    .width(extent.width)
+                    .height(extent.height)
+                    .layers(1);
+                let framebuffer = self.core.device.create_framebuffer(&fb_info, None)?;
+
+                (framebuffer, Some((depth_image, depth_mem, depth_view)))
+            } else {
+                let fb_info = vk::FramebufferCreateInfo::default()
+                    .render_pass(self.pipelines.render_pass)
+                    .attachments(std::slice::from_ref(&view))
+                    .width(extent.width)
+                    .height(extent.height)
+                    .layers(1);
+                let framebuffer = self.core.device.create_framebuffer(&fb_info, None)?;
+                (framebuffer, None)
+            };
 
             // Initialize layout to SHADER_READ_ONLY so UI sampling is always valid.
             immediate_submit(
@@ -129,6 +189,16 @@ impl VulkanRenderer {
             rt.framebuffer = framebuffer;
             rt.layout = vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL;
 
+            rt.has_depth = with_depth;
+            rt.depth_format = depth_format;
+            rt.depth_layout = vk::ImageLayout::UNDEFINED;
+            if let Some((di, dm, dv)) = depth_alloc {
+                rt.depth.image = di;
+                rt.depth.memory = dm;
+                rt.depth.view = dv;
+                rt.depth.sampler = vk::Sampler::null();
+            }
+
             self.render_targets.insert(id, rt);
 
             // Expose as external UI texture (stable convention).
@@ -152,6 +222,9 @@ impl VulkanRenderer {
             rt.framebuffer = vk::Framebuffer::null();
         }
 
+        if rt.has_depth {
+            rt.depth.destroy(&self.core.device);
+        }
         rt.color.destroy(&self.core.device);
     }
 
@@ -164,6 +237,6 @@ impl VulkanRenderer {
             return Ok(());
         }
 
-        self.create_render_target(id, extent)
+        self.create_render_target(id, extent, existing.has_depth)
     }
 }

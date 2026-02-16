@@ -36,6 +36,7 @@ pub struct SwapchainContext {
 
 pub struct PipelinePack {
     pub(crate) render_pass: vk::RenderPass,
+    pub(crate) render_pass_depth: vk::RenderPass,
 
     pub(crate) tri_pipeline_layout: vk::PipelineLayout,
     pub(crate) tri_pipeline: vk::Pipeline,
@@ -107,8 +108,12 @@ pub struct RenderTargetVk {
     pub(crate) extent: vk::Extent2D,
     pub(crate) format: vk::Format,
     pub(crate) color: ImageAlloc,
+    pub(crate) has_depth: bool,
+    pub(crate) depth_format: vk::Format,
+    pub(crate) depth: ImageAlloc,
     pub(crate) framebuffer: vk::Framebuffer,
     pub(crate) layout: vk::ImageLayout,
+    pub(crate) depth_layout: vk::ImageLayout,
 }
 
 pub struct DebugState {

@@ -26,7 +26,10 @@ impl EditorRenderController {
         }
 
         let rt = r.create_render_target(
-            RenderTargetDesc::new(extent, TextureFormat::Bgra8Unorm).with_label("editor_viewport_rt"),
+            RenderTargetDesc::new(extent, TextureFormat::Bgra8Unorm)
+                // Depth is critical for an editor viewport: correct occlusion, stable gizmo/grid.
+                .with_depth(TextureFormat::Depth32Float)
+                .with_label("editor_viewport_rt"),
         )?;
 
         self.viewport_rt = Some(rt);

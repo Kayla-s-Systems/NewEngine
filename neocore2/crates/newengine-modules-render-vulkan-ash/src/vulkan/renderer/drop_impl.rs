@@ -84,6 +84,13 @@ impl Drop for VulkanRenderer {
                 self.pipelines.render_pass = vk::RenderPass::null();
             }
 
+            if self.pipelines.render_pass_depth != vk::RenderPass::null() {
+                self.core
+                    .device
+                    .destroy_render_pass(self.pipelines.render_pass_depth, None);
+                self.pipelines.render_pass_depth = vk::RenderPass::null();
+            }
+
             for &iv in &self.swapchain.image_views {
                 if iv != vk::ImageView::null() {
                     self.core.device.destroy_image_view(iv, None);

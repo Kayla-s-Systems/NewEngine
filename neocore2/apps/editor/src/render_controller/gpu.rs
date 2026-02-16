@@ -30,132 +30,6 @@ pub(super) struct LitPipeline {
     pub pipeline: newengine_core::render::PipelineId,
 }
 
-#[repr(C)]
-#[derive(Clone, Copy, Debug)]
-pub(super) struct OverlayVertex {
-    pub pos: [f32; 3],
-    pub col: [f32; 4],
-}
-
-unsafe impl bytemuck::Zeroable for OverlayVertex {}
-unsafe impl bytemuck::Pod for OverlayVertex {}
-
-#[derive(Clone, Copy)]
-pub(super) struct OverlayPipeline {
-    pub vb: newengine_core::render::BufferId,
-    pub vb_capacity: u64,
-
-    pub vs: newengine_core::render::ShaderId,
-    pub fs: newengine_core::render::ShaderId,
-    pub pipeline: newengine_core::render::PipelineId,
-}
-
-pub(super) fn ensure_overlay_pipeline(
-    cached: &mut Option<OverlayPipeline>,
-    r: &mut dyn newengine_core::render::RenderApi,
-    bgl: newengine_core::render::BindGroupLayoutId,
-    _bg: newengine_core::render::BindGroupId,
-) -> CoreResult<OverlayPipeline> {
-    if let Some(p) = *cached {
-        return Ok(p);
-    }
-
-    let vb_capacity = 64 * 1024; // стартовый буфер под линии
-    let vb = r.create_buffer(
-        BufferDesc::new(vb_capacity, BufferUsage::Vertex, MemoryHint::CpuToGpu)
-            .with_label("editor_overlay_vb"),
-    )?;
-
-    let compiler = shaderc::Compiler::new()
-        .map_err(|e| EngineError::other(format!("shaderc: Compiler: {e}")))?;
-
-    const VS_SRC: &str = r#"#version 450
-layout(location = 0) in vec3 a_pos;
-layout(location = 1) in vec4 a_col;
-
-layout(set = 0, binding = 0) uniform Ubo {
-    mat4 u_mvp;
-} u;
-
-layout(location = 0) out vec4 v_col;
-
-void main() {
-    v_col = a_col;
-    gl_Position = u.u_mvp * vec4(a_pos, 1.0);
-}
-"#;
-
-    const FS_SRC: &str = r#"#version 450
-layout(location = 0) in vec4 v_col;
-layout(location = 0) out vec4 o_col;
-
-void main() {
-    o_col = v_col;
-}
-"#;
-
-    let vs_spv = compile_glsl(&compiler, ShaderKind::Vertex, "editor_overlay.vert", VS_SRC)?;
-    let fs_spv = compile_glsl(&compiler, ShaderKind::Fragment, "editor_overlay.frag", FS_SRC)?;
-
-    let vs = r.create_shader(
-        ShaderDesc::new(ShaderStage::Vertex, "main", vs_spv).with_label("editor_overlay_vs"),
-    )?;
-    let fs = r.create_shader(
-        ShaderDesc::new(ShaderStage::Fragment, "main", fs_spv).with_label("editor_overlay_fs"),
-    )?;
-
-    let stride = std::mem::size_of::<OverlayVertex>() as u32;
-    let layout = VertexLayout::new(
-        stride,
-        vec![
-            VertexAttribute::new(0, 0, VertexFormat::Float32x3),
-            VertexAttribute::new(1, 12, VertexFormat::Float32x4),
-        ],
-    );
-
-    let pipeline = r.create_pipeline(
-        PipelineDesc::new(vs, fs, TextureFormat::Bgra8Unorm)
-            .with_label("editor_overlay_pipeline")
-            .with_topology(PrimitiveTopology::LineList)
-            .with_vertex_layouts(vec![layout])
-            .with_bind_group_layouts(vec![bgl]),
-    )?;
-
-    let p = OverlayPipeline {
-        vb,
-        vb_capacity,
-        vs,
-        fs,
-        pipeline,
-    };
-
-    *cached = Some(p);
-    Ok(p)
-}
-
-pub(super) fn ensure_overlay_vb_capacity(
-    overlay: &mut OverlayPipeline,
-    r: &mut dyn newengine_core::render::RenderApi,
-    need_bytes: u64,
-) -> CoreResult<()> {
-    if need_bytes <= overlay.vb_capacity {
-        return Ok(());
-    }
-
-    let new_cap = overlay.vb_capacity.max(64 * 1024).saturating_mul(2).max(need_bytes);
-    let new_vb = r.create_buffer(
-        BufferDesc::new(new_cap, BufferUsage::Vertex, MemoryHint::CpuToGpu)
-            .with_label("editor_overlay_vb_grow"),
-    )?;
-
-    r.destroy_buffer(overlay.vb);
-    overlay.vb = new_vb;
-    overlay.vb_capacity = new_cap;
-
-    Ok(())
-}
-
-
 #[derive(Clone, Copy)]
 pub(super) struct PrimitiveGpu {
     pub vb: newengine_core::render::BufferId,
@@ -234,7 +108,8 @@ void main() {
             .with_label("editor_lit_pipeline")
             .with_topology(PrimitiveTopology::TriangleList)
             .with_vertex_layouts(vec![layout])
-            .with_bind_group_layouts(vec![bgl]),
+            .with_bind_group_layouts(vec![bgl])
+            .with_depth(TextureFormat::Depth32Float),
     )?;
 
     let p = LitPipeline {
@@ -353,7 +228,8 @@ void main() {
             .with_label("editor_grid_pipeline")
             .with_topology(PrimitiveTopology::LineList)
             .with_vertex_layouts(vec![layout])
-            .with_bind_group_layouts(vec![bgl]),
+            .with_bind_group_layouts(vec![bgl])
+            .with_depth(TextureFormat::Depth32Float),
     )?;
 
     let vertex_count = unit_grid_vertex_count();

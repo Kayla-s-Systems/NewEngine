@@ -656,13 +656,11 @@ dependencies = [
 name = "editor"
 version = "0.1.0"
 dependencies = [
- "bytemuck",
  "crossbeam-channel",
  "env_logger",
  "glam",
  "hashbrown",
  "log",
- "newengine-bounds",
  "newengine-camera",
  "newengine-core",
  "newengine-ecs",

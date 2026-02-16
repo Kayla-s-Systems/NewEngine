@@ -8,10 +8,9 @@ use crate::plugin_manager::PluginManagerBridge;
 use crate::scene_bridge::SceneBridge;
 use crate::viewport_bridge::ViewportBridge;
 
-use super::gpu::{GridGpu, LitPipeline, OverlayPipeline, PrimitiveGpu};
+use super::gpu::{GridGpu, LitPipeline, PrimitiveGpu};
 
 type PrimGpuCache = hashbrown::HashMap<newengine_primitives::PrimitiveId, PrimitiveGpu>;
-type PrimAabbCache = hashbrown::HashMap<newengine_primitives::PrimitiveId, newengine_bounds::Aabb>;
 
 pub struct EditorRenderController {
     pub(super) clear_color: [f32; 4],
@@ -36,9 +35,6 @@ pub struct EditorRenderController {
     pub(super) grid: Option<GridGpu>,
     pub(super) lit: Option<LitPipeline>,
     pub(super) prim_cache: PrimGpuCache,
-    pub(super) prim_aabb_cache: PrimAabbCache,
-
-    pub(super) overlay: Option<OverlayPipeline>,
 
     // Camera framing:
     // - frame_once on startup/aspect change
@@ -48,6 +44,8 @@ pub struct EditorRenderController {
 
     pub(super) last_bounds_center: Vec3,
     pub(super) last_bounds_radius: f32,
+
+    pub(super) last_pick_seq: u64,
 }
 
 impl EditorRenderController {
@@ -97,15 +95,14 @@ impl EditorRenderController {
             grid: None,
             lit: None,
             prim_cache: PrimGpuCache::default(),
-            prim_aabb_cache: PrimAabbCache::default(),
-
-            overlay: None,
 
             framed_once: false,
             framed_radius: 0.0,
 
             last_bounds_center: Vec3::ZERO,
             last_bounds_radius: 1.0,
+
+            last_pick_seq: 0,
         }
     }
 

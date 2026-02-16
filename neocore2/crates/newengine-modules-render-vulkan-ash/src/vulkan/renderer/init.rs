@@ -93,6 +93,11 @@ impl VulkanRenderer {
         let image_layouts = vec![vk::ImageLayout::UNDEFINED; images.len()];
 
         let render_pass = create_render_pass(&device, format)?;
+        let render_pass_depth = crate::vulkan::pipeline::create_render_pass_with_depth(
+            &device,
+            format,
+            vk::Format::D32_SFLOAT,
+        )?;
         let (tri_pipeline_layout, tri_pipeline) = create_pipeline(&device, render_pass)?;
         let framebuffers = create_framebuffers(&device, render_pass, &image_views, extent)?;
 
@@ -183,6 +188,7 @@ impl VulkanRenderer {
 
         let pipelines = PipelinePack {
             render_pass,
+            render_pass_depth,
             tri_pipeline_layout,
             tri_pipeline,
             text_pipeline_layout: vk::PipelineLayout::null(),

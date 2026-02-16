@@ -16,6 +16,8 @@
 2) **Структурные изменения — через `Commands`.**
    - В системах избегаем прямых `spawn/despawn/insert/remove` на `World`, чтобы не ловить borrow hazards.
    - `Commands` применяются детерминированно (двухфазный коммит: сначала spawn, затем остальное в исходном порядке).
+   - `Commands::apply()` возвращает пары `(EntityToken, EntityId)` **только** для реально созданных через `spawn()`
+     токенов.
 
 3) **Change tracking (`added_tick` / `changed_tick`) привязан к `World::tick`.**
    - Tick должен быть монотонным и управляться runtime’ом (frame index или fixed tick).

@@ -269,7 +269,12 @@ impl VulkanRenderApi {
         // This is a hard requirement in Vulkan: draw calls outside a render pass are invalid.
         if let Some(rt) = self.active_render_target {
             self.renderer
-                .begin_render_target_pass(cmd, rt, None)
+                .begin_render_target_pass(
+                    cmd,
+                    rt,
+                    Some([0.1, 0.1, 0.12, 1.0]), // clear color
+                    Some(1.0),                   // clear depth
+                )
                 .map_err(|e| EngineError::other(e.to_string()))?;
         } else {
             self.renderer
@@ -402,13 +407,7 @@ impl RenderApi for VulkanRenderApi {
             return Err(EngineError::other("create_render_target: zero extent"));
         }
 
-        if desc.depth.is_some() {
-            // Current Vulkan backend uses a single-color render pass.
-            // Depth-stencil support will be added via a dedicated render pass and attachment set.
-            return Err(EngineError::other(
-                "create_render_target: depth is not supported by Vulkan backend yet",
-            ));
-        }
+        let with_depth = desc.depth.is_some();
 
         let id_u32 = self.alloc_u32();
         let id = RenderTargetId::new(id_u32);
@@ -419,7 +418,7 @@ impl RenderApi for VulkanRenderApi {
         };
 
         self.renderer
-            .create_render_target(id_u32, extent)
+            .create_render_target(id_u32, extent, with_depth)
             .map_err(|e| EngineError::other(e.to_string()))?;
 
         Ok(id)
@@ -460,7 +459,12 @@ impl RenderApi for VulkanRenderApi {
             };
 
             self.renderer
-                .begin_render_target_pass(cmd, desc.target.0.get(), desc.clear_color)
+                .begin_render_target_pass(
+                    cmd,
+                    desc.target.0.get(),
+                    desc.clear_color,
+                    desc.clear_depth,
+                )
                 .map_err(|e| EngineError::other(e.to_string()))?;
         }
 
@@ -733,6 +737,13 @@ impl RenderApi for VulkanRenderApi {
 
             let ms = vk::PipelineMultisampleStateCreateInfo::default().rasterization_samples(vk::SampleCountFlags::TYPE_1);
 
+            let depth_state = vk::PipelineDepthStencilStateCreateInfo::default()
+                .depth_test_enable(true)
+                .depth_write_enable(true)
+                .depth_compare_op(vk::CompareOp::LESS_OR_EQUAL)
+                .depth_bounds_test_enable(false)
+                .stencil_test_enable(false);
+
             let ca = vk::PipelineColorBlendAttachmentState::default()
                 .blend_enable(false)
                 .color_write_mask(
@@ -747,7 +758,9 @@ impl RenderApi for VulkanRenderApi {
             let dyn_states = [vk::DynamicState::VIEWPORT, vk::DynamicState::SCISSOR];
             let ds = vk::PipelineDynamicStateCreateInfo::default().dynamic_states(&dyn_states);
 
-            let gp = vk::GraphicsPipelineCreateInfo::default()
+            let use_depth = desc.depth_format.is_some();
+
+            let mut gp = vk::GraphicsPipelineCreateInfo::default()
                 .stages(&stages)
                 .vertex_input_state(&vi)
                 .input_assembly_state(&ia)
@@ -757,8 +770,16 @@ impl RenderApi for VulkanRenderApi {
                 .color_blend_state(&cb)
                 .dynamic_state(&ds)
                 .layout(layout)
-                .render_pass(self.renderer.pipelines.render_pass)
+                .render_pass(if use_depth {
+                    self.renderer.pipelines.render_pass_depth
+                } else {
+                    self.renderer.pipelines.render_pass
+                })
                 .subpass(0);
+
+            if use_depth {
+                gp = gp.depth_stencil_state(&depth_state);
+            }
 
             let pipelines = device.create_graphics_pipelines(vk::PipelineCache::null(), &[gp], None);
             let pipeline = match pipelines {
