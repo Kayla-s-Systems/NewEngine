@@ -1,25 +1,88 @@
-use newengine_ecs::{QueryMut, World};
+#![forbid(unsafe_op_in_unsafe_fn)]
 
-use crate::{sphere_to_aabb, Bounds};
+use newengine_ecs::{EntityId, World};
+use slotmap::Key;
+
+use crate::{sphere_to_aabb, Bounds, BoundsKind};
+
+/// Reusable scratch buffers to avoid per-frame allocations.
+#[derive(Default)]
+struct BoundsUpdateFromTransformScratch {
+    ids: Vec<EntityId>,
+}
+
+#[inline]
+fn ensure_scratch(world: &mut World) {
+    if world.resource::<BoundsUpdateFromTransformScratch>().is_none() {
+        world.insert_resource(BoundsUpdateFromTransformScratch::default());
+    }
+}
 
 /// Updates world-space bounds from `newengine_transform::Transform`.
 ///
 /// Enabled by the `transform` crate feature.
+///
+/// AAA contract:
+/// - deterministic iteration (stable entity id order)
+/// - no per-frame heap churn (scratch is a resource)
+/// - mutations are tracked (only mark changed when derived data differs)
+#[inline]
 pub fn update_bounds_from_transform_system(world: &mut World) {
-    let mut q = QueryMut::<(&newengine_transform::Transform, &mut Bounds)>::new(world);
-    for (t, b) in q.iter_mut() {
+    ensure_scratch(world);
+
+    // Move scratch out to avoid borrow conflicts with world queries/gets.
+    let mut scratch = {
+        let s = world
+            .resource_mut::<BoundsUpdateFromTransformScratch>()
+            .expect("BoundsUpdateFromTransformScratch must exist");
+        core::mem::take(s)
+    };
+
+    scratch.ids.clear();
+    scratch
+        .ids
+        .extend(world.query2_ids::<newengine_transform::Transform, Bounds>());
+    scratch.ids.sort_unstable_by_key(|id| id.data().as_ffi());
+    scratch.ids.dedup();
+
+    for id in scratch.ids.iter().copied() {
+        let t = match world.get::<newengine_transform::Transform>(id) {
+            Some(v) => *v,
+            None => continue,
+        };
+
+        let src = match world.get::<Bounds>(id) {
+            Some(v) => *v,
+            None => continue,
+        };
+
         let m = t.matrix();
-        b.world_aabb = b.local_aabb.transformed(m);
-        b.world_sphere.center = m.transform_point3(b.local_sphere.center);
+
+        let mut world_sphere = src.local_sphere;
+        world_sphere.center = m.transform_point3(src.local_sphere.center);
 
         let sx = m.x_axis.truncate().length();
         let sy = m.y_axis.truncate().length();
         let sz = m.z_axis.truncate().length();
         let s = sx.max(sy).max(sz);
-        b.world_sphere.radius = b.local_sphere.radius * s;
+        world_sphere.radius = src.local_sphere.radius * s;
 
-        if b.kind == crate::BoundsKind::Sphere {
-            b.world_aabb = sphere_to_aabb(b.world_sphere);
+        let mut world_aabb = src.local_aabb.transformed(m);
+        if src.kind == BoundsKind::Sphere {
+            world_aabb = sphere_to_aabb(world_sphere);
+        }
+
+        if let Some(dst) = world.get_mut::<Bounds>(id) {
+            let changed = dst.world_aabb != world_aabb || dst.world_sphere != world_sphere;
+            if changed {
+                dst.world_aabb = world_aabb;
+                dst.world_sphere = world_sphere;
+                world.mark_changed::<Bounds>(id);
+            }
         }
     }
+
+    *world
+        .resource_mut::<BoundsUpdateFromTransformScratch>()
+        .expect("BoundsUpdateFromTransformScratch must exist") = scratch;
 }

@@ -9,6 +9,7 @@ newengine-ecs = { path = "../newengine-ecs" }
 glam = "0.32.0"
 
 newengine-transform = { path = "../newengine-transform", optional = true }
+slotmap = "1.1.1"
 
 [features]
 default = []
