@@ -1,0 +1,10 @@
+[package]
+name = "newengine-gizmo"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+glam = "0.32"
+
+[features]
+default = []
