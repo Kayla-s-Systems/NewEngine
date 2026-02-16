@@ -1,6 +1,6 @@
 #![forbid(unsafe_op_in_unsafe_fn)]
 
-use glam::Vec3;
+use newengine_math::Vec3;
 
 use crate::controller::OrbitController;
 

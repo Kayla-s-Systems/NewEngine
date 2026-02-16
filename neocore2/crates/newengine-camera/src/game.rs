@@ -1,6 +1,6 @@
 #![forbid(unsafe_op_in_unsafe_fn)]
 
-use glam::{Quat, Vec2, Vec3};
+use newengine_math::{Quat, Vec2, Vec3};
 
 use crate::modifiers::{AdsFov, HeadBob, NoiseShake, Recoil, SpringArm, Sway, TaaJitter, WeaponSway};
 use crate::{CameraRig, CameraStack, Perspective, Projection};

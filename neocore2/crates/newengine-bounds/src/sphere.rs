@@ -1,4 +1,4 @@
-use glam::Vec3;
+use newengine_math::Vec3;
 
 /// Bounding sphere in 3D space.
 #[derive(Clone, Copy, Debug, PartialEq)]

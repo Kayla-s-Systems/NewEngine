@@ -1,7 +1,7 @@
 #![forbid(unsafe_op_in_unsafe_fn)]
 
-use glam::{EulerRot, Mat4};
 use newengine_ecs::{EntityId, World};
+use newengine_math::{EulerRot, Mat4};
 use slotmap::Key;
 
 use crate::{GlobalTransform, Parent, Transform, TransformDirty, WorldPose};

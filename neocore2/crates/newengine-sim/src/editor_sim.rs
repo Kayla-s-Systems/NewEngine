@@ -61,7 +61,7 @@ impl EditorSimModule {
         let (dx_px, dy_px, wheel_y, _hovered, look_drag, _pan_drag) = self.viewport_bridge.read_orbit_input();
         let move_mask = self.viewport_bridge.read_move_keys();
 
-        let mut move_axis = glam::Vec3::ZERO;
+        let mut move_axis = newengine_math::Vec3::ZERO;
 
         // Orbit pan (XY): D-A, E-Q.
         if (move_mask & (1 << 3)) != 0 {
@@ -89,7 +89,7 @@ impl EditorSimModule {
 
         let input = newengine_camera::CameraInput {
             look_active: look_drag,
-            look_delta: glam::Vec2::new(dx_px, -dy_px),
+            look_delta: newengine_math::Vec2::new(dx_px, -dy_px),
             move_axis,
             speed_mul,
             zoom_delta: wheel_y,
@@ -147,10 +147,10 @@ impl EditorSimModule {
                     if let Some(t) = world.get_mut_tracked::<Transform>(id) {
                         match kind {
                             PrimitiveKind::Cube => {
-                                t.position = glam::Vec3::new(0.0, 0.5, 0.0);
+                                t.position = newengine_math::Vec3::new(0.0, 0.5, 0.0);
                             }
                             PrimitiveKind::Plane => {
-                                t.scale = glam::Vec3::splat(10.0);
+                                t.scale = newengine_math::Vec3::splat(10.0);
                             }
                         }
                     }

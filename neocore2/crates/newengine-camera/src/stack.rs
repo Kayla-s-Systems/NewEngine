@@ -1,6 +1,6 @@
 #![forbid(unsafe_op_in_unsafe_fn)]
 
-use glam::{Mat4, Quat, Vec2, Vec3};
+use newengine_math::{Mat4, Quat, Vec2, Vec3};
 
 use crate::{CameraMatrices, CameraRig, Frustum, Projection};
 

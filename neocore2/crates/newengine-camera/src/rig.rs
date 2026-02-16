@@ -1,6 +1,6 @@
 #![forbid(unsafe_op_in_unsafe_fn)]
 
-use glam::{Mat4, Quat, Vec3};
+use newengine_math::{Mat4, Quat, Vec3};
 
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
@@ -115,6 +115,6 @@ fn look_at_rotation(position: Vec3, target: Vec3, up: Vec3) -> Quat {
     let y_axis = z_axis.cross(x_axis).normalize();
 
     // Column-major 3x3 basis in world space.
-    let m = glam::Mat3::from_cols(x_axis, y_axis, z_axis);
+    let m = newengine_math::Mat3::from_cols(x_axis, y_axis, z_axis);
     Quat::from_mat3(&m)
 }

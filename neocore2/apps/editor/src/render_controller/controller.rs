@@ -1,8 +1,8 @@
 #![forbid(unsafe_op_in_unsafe_fn)]
 
-use glam::Vec3;
 use newengine_camera::{orbit_set_angles, CameraRig, OrbitController, Perspective, Projection};
 use newengine_core::render::Extent2D;
+use newengine_math::Vec3;
 
 use crate::plugin_manager::PluginManagerBridge;
 use crate::scene_bridge::SceneBridge;

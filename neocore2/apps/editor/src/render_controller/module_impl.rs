@@ -1,11 +1,11 @@
 #![forbid(unsafe_op_in_unsafe_fn)]
 
-use glam::{Mat4, Quat, Vec3};
 use newengine_camera::{auto_near_far_from_sphere, orbit_frame_sphere, CameraInput, Perspective, Projection};
 use newengine_core::render::{
     require_render_api, BeginFrameDesc, BeginRenderTargetDesc, BufferSlice, Extent2D, IndexFormat, RectI32, Viewport,
 };
 use newengine_core::{EngineResult, Module, ModuleCtx};
+use newengine_math::{Mat4, Quat, Vec3};
 use newengine_platform_winit::WinitWindowInitSize;
 use newengine_ui::draw::UiDrawList;
 
@@ -158,8 +158,8 @@ impl EditorRenderController {
         let x = ((x_px + 0.5) / vp_w as f32) * 2.0 - 1.0;
         let y = 1.0 - ((y_px + 0.5) / vp_h as f32) * 2.0;
 
-        let near = inv * glam::Vec4::new(x, y, 0.0, 1.0);
-        let far = inv * glam::Vec4::new(x, y, 1.0, 1.0);
+        let near = inv * newengine_math::Vec4::new(x, y, 0.0, 1.0);
+        let far = inv * newengine_math::Vec4::new(x, y, 1.0, 1.0);
 
         let near3 = near.truncate() / near.w.max(1e-6);
         let far3 = far.truncate() / far.w.max(1e-6);
@@ -289,7 +289,7 @@ impl<E: Send + 'static> Module<E> for EditorRenderController {
 
             let input = CameraInput {
                 look_active: look_drag,
-                look_delta: glam::Vec2::new(dx_px, -dy_px),
+                look_delta: newengine_math::Vec2::new(dx_px, -dy_px),
                 move_axis,
                 speed_mul: 1.0,
                 zoom_delta: wheel_y,

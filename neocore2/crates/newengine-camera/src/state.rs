@@ -1,6 +1,6 @@
 #![forbid(unsafe_op_in_unsafe_fn)]
 
-use glam::{Mat4, Vec2};
+use newengine_math::{Mat4, Vec2};
 
 use crate::{CameraController, CameraInput, CameraMatrices, CameraRig, Frustum, Projection};
 
@@ -80,5 +80,5 @@ fn apply_jitter(proj: Mat4, jitter: Vec2, viewport_wh: Vec2) -> Mat4 {
 
     // Jitter is defined in clip space. Therefore we must pre-multiply:
     // clip' = T * (P * V * world)
-    Mat4::from_translation(glam::Vec3::new(dx, dy, 0.0)) * proj
+    Mat4::from_translation(newengine_math::Vec3::new(dx, dy, 0.0)) * proj
 }

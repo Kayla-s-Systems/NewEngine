@@ -120,9 +120,6 @@ pub struct CameraInputComp(pub CameraInput);
 // Schedule
 // -----------------------------------------------------------------------------
 
-/// Deterministic simulation stages.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-pub
 #[repr(u8)]
 enum SimStage {
     /// Inputs are produced externally (winit/plugin) and written into components/resources.
@@ -143,8 +140,6 @@ impl SimStage {
     pub const fn as_usize(self) -> usize {
         self as usize
     }
-}
-
 }
 
 pub type SystemFn = fn(&mut World, SimFrame);
@@ -188,8 +183,11 @@ impl SimSchedule {
     pub fn add_system(&mut self, stage: SimStage, order: i32, name: &'static str, f: SystemFn) {
         let seq = self.next_seq;
         self.next_seq = self.next_seq.wrapping_add(1).max(1);
-        self.stages[stage.as_usize()].push(SystemEntry { order, seq, name, f });
-        self.is_sorted[stage.as_usize()] = false;
+
+        let idx = stage.as_usize();
+
+        self.stages[idx].push(SystemEntry { order, seq, name, f });
+        self.is_sorted[idx] = false;
     }
 
     #[inline]

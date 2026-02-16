@@ -82,14 +82,14 @@ impl TransformAsset {
     #[inline]
     pub fn into_transform(self) -> Transform {
         Transform {
-            position: glam::Vec3::new(self.position[0], self.position[1], self.position[2]),
-            rotation: glam::Quat::from_xyzw(
+            position: newengine_math::Vec3::new(self.position[0], self.position[1], self.position[2]),
+            rotation: newengine_math::Quat::from_xyzw(
                 self.rotation[0],
                 self.rotation[1],
                 self.rotation[2],
                 self.rotation[3],
             ),
-            scale: glam::Vec3::new(self.scale[0], self.scale[1], self.scale[2]),
+            scale: newengine_math::Vec3::new(self.scale[0], self.scale[1], self.scale[2]),
         }
     }
 }

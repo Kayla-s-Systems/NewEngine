@@ -1,6 +1,6 @@
 #![forbid(unsafe_op_in_unsafe_fn)]
 
-use glam::Vec2;
+use newengine_math::Vec2;
 
 use crate::stack::{CameraModifier, CameraStackInput, ModifierOutput};
 use crate::{CameraRig, Projection};

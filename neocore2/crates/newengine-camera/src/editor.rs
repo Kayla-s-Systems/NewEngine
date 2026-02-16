@@ -1,6 +1,6 @@
 #![forbid(unsafe_op_in_unsafe_fn)]
 
-use glam::{Vec2, Vec3};
+use newengine_math::{Vec2, Vec3};
 
 use crate::{
     auto_near_far, default_perspective, frame_orbit_to_sphere, CameraController, CameraInput,

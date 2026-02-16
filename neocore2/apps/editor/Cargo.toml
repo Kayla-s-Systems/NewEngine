@@ -9,7 +9,7 @@ env_logger = "0.11"
 log = "0.4"
 shaderc = "0.10.1"
 parking_lot = "0.12"
-glam = "0.32.0"
+newengine-math = { path = "../../crates/newengine-math" }
 
 newengine-core = { path = "../../crates/newengine-core" }
 newengine-ui = { path = "../../crates/newengine-ui" }

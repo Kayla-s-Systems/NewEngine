@@ -1,7 +1,7 @@
 #![forbid(unsafe_op_in_unsafe_fn)]
 
-use glam::{EulerRot, Mat4, Quat, Vec3};
 use newengine_ecs::EntityId;
+use newengine_math::{EulerRot, Mat4, Quat, Vec3};
 
 /// Local transform relative to parent.
 #[derive(Clone, Copy, Debug)]

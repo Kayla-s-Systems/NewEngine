@@ -6,9 +6,9 @@ edition = "2021"
 
 [features]
 default = []
-serde = ["dep:serde", "glam/serde"]
+serde = ["dep:serde", "newengine-math/serde"]
 
 [dependencies]
-glam = { version = "0.32.0", default-features = false, features = ["libm"] }
+newengine-math = { path = "../newengine-math" }
 bytemuck = { version = "1.16", features = ["derive"] }
 serde = { version = "1.0", optional = true, features = ["derive"] }

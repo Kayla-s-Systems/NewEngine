@@ -1,19 +1,7 @@
 [workspace]
 resolver = "2"
+
 members = [
-  "crates/newengine-core",
-  "crates/newengine-platform-winit",
-  "crates/newengine-modules-logging",
-  "apps/editor",
+    "apps/editor",
+    "crates/*",
 ]
-
-[profile.release]
-debug = 0
-strip = "symbols"
-panic = "abort"
-lto = true
-codegen-units = 1
-
-[workspace.package]
-edition = "2021"
-license = "Proprietary"

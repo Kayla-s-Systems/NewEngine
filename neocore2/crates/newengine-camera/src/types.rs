@@ -1,7 +1,7 @@
 #![forbid(unsafe_op_in_unsafe_fn)]
 
 use bytemuck::{Pod, Zeroable};
-use glam::{Mat4, Vec2, Vec3, Vec4};
+use newengine_math::{Mat4, Vec2, Vec3, Vec4};
 
 /// CPU-side camera matrices (ergonomic).
 #[derive(Clone, Copy, Debug)]

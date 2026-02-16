@@ -3,7 +3,7 @@
 use parking_lot::{Mutex, RwLock};
 use std::sync::Arc;
 
-use glam::{EulerRot, Quat, Vec3};
+use newengine_math::{EulerRot, Quat, Vec3};
 
 use newengine_ecs::EntityId;
 use newengine_primitives::{builtins, Primitive, PrimitiveId, PrimitiveRegistry};

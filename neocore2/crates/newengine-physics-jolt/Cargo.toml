@@ -12,7 +12,7 @@ double-precision = ["rolt/double-precision", "joltc-sys/double-precision"]
 object-layer-u32 = ["rolt/object-layer-u32", "joltc-sys/object-layer-u32"]
 
 [dependencies]
-glam = "0.32.0"
+newengine-math = { path = "../newengine-math" }
 thiserror = "2"
 
 # Safe wrapper

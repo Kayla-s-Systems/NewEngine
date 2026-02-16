@@ -137,7 +137,7 @@ fn update_bounds_from_global_transform(world: &mut World) {
         let mut world_aabb = src.local_aabb.transformed(m);
         if src.kind == BoundsKind::Sphere {
             // Equivalent to newengine_bounds::sphere_to_aabb, but kept local to avoid using crate-private API.
-            let r = glam::Vec3::splat(world_sphere.radius);
+            let r = newengine_math::Vec3::splat(world_sphere.radius);
             world_aabb = Aabb::new(world_sphere.center - r, world_sphere.center + r);
         }
 

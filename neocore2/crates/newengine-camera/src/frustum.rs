@@ -1,6 +1,6 @@
 #![forbid(unsafe_op_in_unsafe_fn)]
 
-use glam::{Mat4, Vec3, Vec4};
+use newengine_math::{Mat4, Vec3, Vec4};
 
 /// View frustum extracted from a view-projection matrix.
 ///

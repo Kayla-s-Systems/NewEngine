@@ -1,4 +1,4 @@
-use glam::Vec3;
+use newengine_math::Vec3;
 
 /// Axis-aligned bounding box in 3D space.
 ///

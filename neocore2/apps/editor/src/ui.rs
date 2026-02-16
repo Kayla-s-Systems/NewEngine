@@ -23,9 +23,9 @@ struct GizmoDrag {
     mode: GizmoMode,
     axis: GizmoAxis,
     start_mouse: egui::Pos2,
-    start_pos: glam::Vec3,
-    start_rot: glam::Quat,
-    start_scale: glam::Vec3,
+    start_pos: newengine_math::Vec3,
+    start_rot: newengine_math::Quat,
+    start_scale: newengine_math::Vec3,
     ndc_z: f32,
 }
 
@@ -137,7 +137,7 @@ impl EditorUiBuild {
     }
 
     #[inline]
-    fn axis_vec(axis: GizmoAxis) -> glam::Vec3 {
+    fn axis_vec(axis: GizmoAxis) -> newengine_math::Vec3 {
         axis.vec3()
     }
 
@@ -154,9 +154,9 @@ impl EditorUiBuild {
     fn world_to_screen(
         frame: &crate::viewport_bridge::ViewportCameraFrame,
         rect: egui::Rect,
-        world: glam::Vec3,
+        world: newengine_math::Vec3,
     ) -> Option<(egui::Pos2, f32)> {
-        let v = frame.viewproj * glam::Vec4::new(world.x, world.y, world.z, 1.0);
+        let v = frame.viewproj * newengine_math::Vec4::new(world.x, world.y, world.z, 1.0);
         if !v.w.is_finite() || v.w.abs() < 1e-6 {
             return None;
         }
@@ -180,7 +180,7 @@ impl EditorUiBuild {
         rect: egui::Rect,
         screen: egui::Pos2,
         ndc_z: f32,
-    ) -> glam::Vec3 {
+    ) -> newengine_math::Vec3 {
         let ppp = (rect.width() / frame.vp_w as f32).max(1e-6);
         let px = ((screen.x - rect.min.x) / ppp).clamp(0.0, frame.vp_w as f32);
         let py = ((screen.y - rect.min.y) / ppp).clamp(0.0, frame.vp_h as f32);
@@ -188,14 +188,14 @@ impl EditorUiBuild {
         let x = (px / frame.vp_w as f32) * 2.0 - 1.0;
         let y = (py / frame.vp_h as f32) * 2.0 - 1.0;
 
-        let h = frame.inv_viewproj * glam::Vec4::new(x, y, ndc_z, 1.0);
+        let h = frame.inv_viewproj * newengine_math::Vec4::new(x, y, ndc_z, 1.0);
         if h.w.abs() < 1e-6 {
-            return glam::Vec3::ZERO;
+            return newengine_math::Vec3::ZERO;
         }
         (h / h.w).truncate()
     }
 
-    fn read_selected_pose(&self, e: EntityId) -> Option<(glam::Vec3, glam::Quat, glam::Vec3, Option<[f32; 4]>)> {
+    fn read_selected_pose(&self, e: EntityId) -> Option<(newengine_math::Vec3, newengine_math::Quat, newengine_math::Vec3, Option<[f32; 4]>)> {
         let scene = self.scene_bridge.scene();
         let s = scene.read();
         let w = s.world();
@@ -209,23 +209,23 @@ impl EditorUiBuild {
         painter: &egui::Painter,
         frame: &crate::viewport_bridge::ViewportCameraFrame,
         rect: egui::Rect,
-        pos: glam::Vec3,
-        rot: glam::Quat,
-        scale: glam::Vec3,
+        pos: newengine_math::Vec3,
+        rot: newengine_math::Quat,
+        scale: newengine_math::Vec3,
     ) {
         // Approximate a box in local space and project its edges.
         let hx = 0.5 * scale.x.abs().max(0.001);
         let hy = 0.5 * scale.y.abs().max(0.001);
         let hz = 0.5 * scale.z.abs().max(0.001);
         let corners_local = [
-            glam::Vec3::new(-hx, -hy, -hz),
-            glam::Vec3::new(hx, -hy, -hz),
-            glam::Vec3::new(hx, -hy, hz),
-            glam::Vec3::new(-hx, -hy, hz),
-            glam::Vec3::new(-hx, hy, -hz),
-            glam::Vec3::new(hx, hy, -hz),
-            glam::Vec3::new(hx, hy, hz),
-            glam::Vec3::new(-hx, hy, hz),
+            newengine_math::Vec3::new(-hx, -hy, -hz),
+            newengine_math::Vec3::new(hx, -hy, -hz),
+            newengine_math::Vec3::new(hx, -hy, hz),
+            newengine_math::Vec3::new(-hx, -hy, hz),
+            newengine_math::Vec3::new(-hx, hy, -hz),
+            newengine_math::Vec3::new(hx, hy, -hz),
+            newengine_math::Vec3::new(hx, hy, hz),
+            newengine_math::Vec3::new(-hx, hy, hz),
         ];
 
         let mut pts: [Option<egui::Pos2>; 8] = [None; 8];
@@ -530,13 +530,13 @@ impl EditorUiBuild {
                     });
 
                     if changed {
-                        let pos = glam::Vec3::new(self.insp_pos[0], self.insp_pos[1], self.insp_pos[2]);
+                        let pos = newengine_math::Vec3::new(self.insp_pos[0], self.insp_pos[1], self.insp_pos[2]);
                         let ypr = (
                             self.insp_rot_deg[0].to_radians(),
                             self.insp_rot_deg[1].to_radians(),
                             self.insp_rot_deg[2].to_radians(),
                         );
-                        let scale = glam::Vec3::new(self.insp_scale[0], self.insp_scale[1], self.insp_scale[2]);
+                        let scale = newengine_math::Vec3::new(self.insp_scale[0], self.insp_scale[1], self.insp_scale[2]);
                         self.scene_bridge.cmd_set_transform(e, pos, ypr, scale);
                     }
                 });
@@ -623,7 +623,7 @@ impl EditorUiBuild {
 
                             // Spawn slightly above floor to avoid z-fighting and keep it visible.
                             self.scene_bridge
-                                .cmd_spawn_primitive(id, name, glam::Vec3::new(0.0, 0.5, 0.0));
+                                .cmd_spawn_primitive(id, name, newengine_math::Vec3::new(0.0, 0.5, 0.0));
                         }
                     }
                 }
@@ -938,9 +938,9 @@ impl EditorUiBuild {
                                 } else if let Some(m) = ctx.input(|i| i.pointer.interact_pos()) {
                                     // Axis vectors in world space.
                                     let axis_world = match drag.axis {
-                                        GizmoAxis::X => drag.start_rot * glam::Vec3::X,
-                                        GizmoAxis::Y => drag.start_rot * glam::Vec3::Y,
-                                        GizmoAxis::Z => drag.start_rot * glam::Vec3::Z,
+                                        GizmoAxis::X => drag.start_rot * newengine_math::Vec3::X,
+                                        GizmoAxis::Y => drag.start_rot * newengine_math::Vec3::Y,
+                                        GizmoAxis::Z => drag.start_rot * newengine_math::Vec3::Z,
                                     };
                                     let axis_world = axis_world.normalize_or_zero();
 
@@ -952,7 +952,7 @@ impl EditorUiBuild {
                                             let new_pos = drag.start_pos + axis_world * delta;
 
                                             self.insp_pos = [new_pos.x, new_pos.y, new_pos.z];
-                                            let (y, p, r) = (drag.start_rot).to_euler(glam::EulerRot::YXZ);
+                                            let (y, p, r) = (drag.start_rot).to_euler(newengine_math::EulerRot::YXZ);
                                             self.insp_rot_deg = [y.to_degrees(), p.to_degrees(), r.to_degrees()];
                                             self.insp_scale = [drag.start_scale.x, drag.start_scale.y, drag.start_scale.z];
 
@@ -976,7 +976,7 @@ impl EditorUiBuild {
                                             }
 
                                             self.insp_pos = [drag.start_pos.x, drag.start_pos.y, drag.start_pos.z];
-                                            let (y, p, r) = (drag.start_rot).to_euler(glam::EulerRot::YXZ);
+                                            let (y, p, r) = (drag.start_rot).to_euler(newengine_math::EulerRot::YXZ);
                                             self.insp_rot_deg = [y.to_degrees(), p.to_degrees(), r.to_degrees()];
                                             self.insp_scale = [new_scale.x, new_scale.y, new_scale.z];
 
@@ -1002,9 +1002,9 @@ impl EditorUiBuild {
                                                 da += 2.0 * core::f32::consts::PI;
                                             }
 
-                                            let q = glam::Quat::from_axis_angle(axis_world, da);
+                                            let q = newengine_math::Quat::from_axis_angle(axis_world, da);
                                             let new_rot = q * drag.start_rot;
-                                            let (y, p, r) = new_rot.to_euler(glam::EulerRot::YXZ);
+                                            let (y, p, r) = new_rot.to_euler(newengine_math::EulerRot::YXZ);
 
                                             self.insp_pos = [drag.start_pos.x, drag.start_pos.y, drag.start_pos.z];
                                             self.insp_rot_deg = [y.to_degrees(), p.to_degrees(), r.to_degrees()];

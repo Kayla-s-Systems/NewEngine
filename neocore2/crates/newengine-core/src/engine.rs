@@ -10,6 +10,7 @@ use crate::plugins::{
 };
 use crate::sched::Scheduler;
 use crate::sync::ShutdownToken;
+use newengine_math::{register_engine_builtins, MathRegistry};
 
 use std::any::Any;
 use std::collections::{HashMap, HashSet, VecDeque};
@@ -176,6 +177,11 @@ impl<E: Send + 'static> Engine<E> {
         resources.insert(PluginControlQueue::default());
 
         init_host_context();
+
+        // Engine-wide math layer init.
+        // All modules/plugins must consume math via `newengine-math` (no direct third-party math deps).
+        register_engine_builtins(MathRegistry::global())
+            .map_err(|e| EngineError::Other(format!("math init failed: {e}")))?;
 
         Ok(Self {
             fixed_dt,

@@ -1,6 +1,6 @@
 #![forbid(unsafe_op_in_unsafe_fn)]
 
-use glam::Mat4;
+use newengine_math::Mat4;
 use parking_lot::Mutex;
 use std::sync::atomic::{AtomicU64, Ordering};
 

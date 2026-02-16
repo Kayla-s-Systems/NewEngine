@@ -6,7 +6,7 @@
 //! It defines the common, reusable types required to build editor gizmos
 //! (move/rotate/scale) while keeping the editor layer thin.
 
-use glam::Vec3;
+use newengine_math::Vec3;
 
 /// Transform tool mode.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]

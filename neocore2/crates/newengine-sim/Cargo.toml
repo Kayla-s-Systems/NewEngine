@@ -5,10 +5,10 @@ readme = "README.md"
 edition = "2021"
 
 [dependencies]
-glam = "0.32.0"
-hashbrown = "0.16.1"
+newengine-math = { path = "../newengine-math" }
 
 newengine-ecs = { path = "../newengine-ecs" }
 newengine-transform = { path = "../newengine-transform" }
 newengine-scene = { path = "../newengine-scene" }
 newengine-camera = { path = "../newengine-camera" }
+glam = "0.32.0"

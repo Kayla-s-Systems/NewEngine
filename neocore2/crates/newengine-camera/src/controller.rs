@@ -1,6 +1,6 @@
 #![forbid(unsafe_op_in_unsafe_fn)]
 
-use glam::{Quat, Vec2, Vec3};
+use newengine_math::{Quat, Vec2, Vec3};
 
 use crate::rig::CameraRig;
 

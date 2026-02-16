@@ -1,6 +1,6 @@
 #![forbid(unsafe_op_in_unsafe_fn)]
 
-use glam::{Quat, Vec3};
+use newengine_math::{Quat, Vec3};
 
 use crate::stack::{CameraModifier, CameraStackInput, ModifierOutput};
 use crate::{CameraRig, Projection};

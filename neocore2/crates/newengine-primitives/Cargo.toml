@@ -6,5 +6,5 @@ edition = "2021"
 
 [dependencies]
 bytemuck = { version = "1.16", features = ["derive"] }
-glam = "0.32.0"
+newengine-math = { path = "../newengine-math" }
 hashbrown = "0.16.1"

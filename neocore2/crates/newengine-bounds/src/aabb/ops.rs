@@ -1,5 +1,5 @@
 use super::Aabb;
-use glam::Vec3;
+use newengine_math::Vec3;
 
 impl Aabb {
     #[inline]

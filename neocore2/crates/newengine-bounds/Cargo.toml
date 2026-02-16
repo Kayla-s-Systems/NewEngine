@@ -6,7 +6,7 @@ edition = "2021"
 
 [dependencies]
 newengine-ecs = { path = "../newengine-ecs" }
-glam = "0.32.0"
+newengine-math = { path = "../newengine-math" }
 
 newengine-transform = { path = "../newengine-transform", optional = true }
 slotmap = "1.1.1"

@@ -1,5 +1,5 @@
 use super::Aabb;
-use glam::{Mat4, Vec3};
+use newengine_math::{Mat4, Vec3};
 
 /// Transform AABB by matrix.
 ///
