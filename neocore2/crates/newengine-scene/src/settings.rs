@@ -6,13 +6,16 @@
 /// - right-handed
 /// - +Y up
 /// - -Z forward
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+use serde::{Deserialize, Serialize};
+
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum UpAxis {
     Y,
     Z,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum ForwardAxis {
     NegZ,
     PosZ,
@@ -21,7 +24,7 @@ pub enum ForwardAxis {
 }
 
 /// Scene unit scale: how many meters are in one world unit.
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, Serialize, Deserialize)]
 pub struct UnitScaleMeters(pub f32);
 
 impl Default for UnitScaleMeters {
@@ -32,7 +35,7 @@ impl Default for UnitScaleMeters {
 }
 
 /// Global scene settings (renderer-agnostic, editor-agnostic).
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, Serialize, Deserialize)]
 pub struct SceneSettings {
     pub up: UpAxis,
     pub forward: ForwardAxis,

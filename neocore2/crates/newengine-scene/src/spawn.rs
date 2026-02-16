@@ -4,11 +4,13 @@ use newengine_ecs::{EntityId, World};
 use newengine_transform::Transform;
 
 use crate::components::Name;
+use crate::guid::ensure_entity_guid;
 
 /// Spawns an entity with `Name` and `Transform`.
 #[inline]
 pub fn spawn_named(world: &mut World, name: impl Into<String>) -> EntityId {
     let e = world.spawn();
+    let _ = ensure_entity_guid(world, e);
     let _ = world.insert(e, Name(name.into()));
     let _ = world.insert(e, Transform::default());
     e

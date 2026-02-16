@@ -11,8 +11,8 @@ use crate::SceneState;
 /// Entity roles are expressed via components (`SceneRoot`, `ActiveCamera`)
 /// and cached in `SceneState` for strict invariants.
 pub struct Scene {
-    world: World,
-    settings: SceneSettings,
+    pub(crate) world: World,
+    pub(crate) settings: SceneSettings,
 }
 
 impl Default for Scene {

@@ -2,6 +2,29 @@
 
 use std::collections::BTreeMap;
 
+/// Persistent entity identity for serialization, prefabs and cross-world references.
+///
+/// Runtime `EntityId` is not stable across loads; use `EntityGuid` for saved scenes.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub struct EntityGuid(pub u128);
+
+impl EntityGuid {
+    #[inline]
+    pub const fn as_u128(self) -> u128 {
+        self.0
+    }
+
+    #[inline]
+    pub const fn hi(self) -> u64 {
+        (self.0 >> 64) as u64
+    }
+
+    #[inline]
+    pub const fn lo(self) -> u64 {
+        self.0 as u64
+    }
+}
+
 /// Human-readable name of an entity.
 #[derive(Clone, Debug)]
 pub struct Name(pub String);
