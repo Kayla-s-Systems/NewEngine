@@ -1,8 +1,15 @@
 [package]
 name = "newengine-bounds"
 version = "0.1.0"
+readme = "README.md"
 edition = "2021"
 
 [dependencies]
 newengine-ecs = { path = "../newengine-ecs" }
 glam = "0.32.0"
+
+newengine-transform = { path = "../newengine-transform", optional = true }
+
+[features]
+default = []
+transform = ["dep:newengine-transform"]
