@@ -1,29 +1,49 @@
 {
   "logging": {
-    "level": "debug"
+    "level": "debug",
+    "filter": "info,newengine_render=debug",
+    "style": "auto",
+    "target": "stderr",
+    "file": "logs/editor.log",
+    "tee": true,
+    "include": {
+      "module_path": true,
+      "target": true,
+      "file": true,
+      "line": false
+    },
+    "timestamp": "millis",
+    "indent": 2,
+    "rolling": {
+      "max_bytes": 33554432,
+      "max_files": 5,
+      "keep_days": 7
+    }
   },
-
   "window": {
     "title": "NewEngine Editor",
     "icon": "ui/engine.ico",
-    "size": [1600, 900],
+    "size": [
+      1600,
+      900
+    ],
     "placement": {
       "type": "centered",
-      "offset": [0, -24]
+      "offset": [
+        0,
+        -24
+      ]
     }
   },
-
   "ui": {
     "backend": "egui"
   },
-
   "engine": {
     "modules_dir": "../../engineModules",
     "assets_root": "assets",
     "asset_pump_steps": 16,
     "asset_filesystem_source": true
   },
-
   "render": {
     "backend": "vulkan_ash",
     "clear_color": [

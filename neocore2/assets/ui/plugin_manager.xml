@@ -1,0 +1,81 @@
+<ui visuals="auto" density="default" scale="1.0" font_size="14">
+    <window title="Plugin Manager" open="true">
+        <column>
+            <row>
+                <textbox id="pm.search" bind="pm.search" hint="Search: id / name / version / kind…"/>
+                <separator/>
+                <select id="pm.sort" bind="pm.sort" options="name|Sort: Name,id|Sort: Id,state|Sort: State"/>
+                <checkbox id="pm.show_disabled" bind="pm.show_disabled" text="Show disabled"/>
+                <spacer/>
+                <label id="pm.stats" text="$pm.stats"/>
+                <button id="pm.close" text="" icon="ui/icons/close.svg" icon_px="16" class="ghost" tooltip="Close"
+                        on_click="pm.close"/>
+            </row>
+
+            <separator/>
+
+            <row>
+                <button id="pm_rescan" text="Rescan" icon="ui/icons/refresh.svg" icon_px="16"
+                        tooltip="Rescan plugin folder" on_click="pm.rescan"/>
+                <separator/>
+                <textbox id="pm.load_path" bind="pm.load_path" hint="Load plugin by path (dll/so/dylib)…"/>
+                <button id="pm_load" text="Load" icon="ui/icons/load.svg" icon_px="16" enabled="pm.can_load"
+                        on_click="pm.load"/>
+                <spacer/>
+                <label text="Actions are applied on the next frame (deterministic)."/>
+            </row>
+
+            <separator/>
+
+            <row>
+                <column>
+                    <label text="Plugins"/>
+                    <scroll id="pm_list">
+                        <repeat items="pm.plugins_json" as="p">
+                            <button id="pm_select" text="$p.name  ·  $p.state" class="$p.row_class"
+                                    on_click="pm.select:$p.id"/>
+                        </repeat>
+                    </scroll>
+                </column>
+
+                <separator/>
+
+                <column>
+                    <row>
+                        <label text="$pm.sel.name"/>
+                        <spacer/>
+                        <button id="pm_copy_id" text="" icon="ui/icons/copy.svg" icon_px="16" class="ghost"
+                                tooltip="Copy id" on_click="pm.copy_id"/>
+                        <button id="pm_copy_path" text="" icon="ui/icons/copy_path.svg" icon_px="16" class="ghost"
+                                tooltip="Copy path" on_click="pm.copy_path"/>
+                    </row>
+
+                    <separator/>
+
+                    <label text="Id: $pm.sel.id"/>
+                    <label text="Version: $pm.sel.version"/>
+                    <label text="Kind: $pm.sel.kind"/>
+                    <label text="State: $pm.sel.state"/>
+                    <label text="Path: $pm.sel.path"/>
+                    <label text="$pm.sel.disabled_reason"/>
+
+                    <separator/>
+
+                    <row>
+                        <button id="pm_start" text="Start" icon="ui/icons/play.svg" icon_px="16"
+                                on_click="pm.cmd:start"/>
+                        <button id="pm_stop" text="Stop" icon="ui/icons/stop.svg" icon_px="16" on_click="pm.cmd:stop"/>
+                        <separator/>
+                        <button id="pm_enable" text="Enable" icon="ui/icons/enable.svg" icon_px="16"
+                                on_click="pm.cmd:enable"/>
+                        <button id="pm_disable" text="Disable" icon="ui/icons/disable.svg" icon_px="16"
+                                on_click="pm.cmd:disable"/>
+                        <separator/>
+                        <button id="pm_reload" text="Reload" icon="ui/icons/reload.svg" icon_px="16"
+                                on_click="pm.cmd:reload"/>
+                    </row>
+                </column>
+            </row>
+        </column>
+    </window>
+</ui>

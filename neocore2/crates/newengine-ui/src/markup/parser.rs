@@ -6,7 +6,7 @@ use smallvec::SmallVec;
 use crate::markup::actions::parse_actions_for;
 use crate::markup::state::UiEventKind;
 use crate::markup::theme::{UiDensity, UiThemeDesc, UiVisuals};
-use crate::markup::ui_node::UiNode;
+use crate::markup::ui_node::{UiIconSide, UiNode};
 
 pub(crate) fn parse_ui_root(doc: &Document) -> Result<UiNode, String> {
     let root = doc.root_element();
@@ -90,18 +90,67 @@ fn parse_node(n: Node) -> Result<UiNode, String> {
         "col" | "column" => Ok(UiNode::Column {
             children: parse_children(n)?,
         }),
-        "label" => Ok(UiNode::Label {
-            id: attr_opt(n, "id"),
-            text: attr(n, "text").unwrap_or_default(),
-        }),
+        "label" => {
+            let icon = attr_opt(n, "icon");
+            let icon_side = attr_str(n, "icon_side")
+                .or_else(|| attr_str(n, "iconSide"))
+                .map(UiIconSide::from_str)
+                .unwrap_or(UiIconSide::Left);
+            let icon_size = attr_f32(n, "icon_size")
+                .or_else(|| attr_f32(n, "iconSize"))
+                .filter(|v| *v > 0.0);
+
+            Ok(UiNode::Label {
+                id: attr_opt(n, "id"),
+                text: attr(n, "text").unwrap_or_default(),
+                icon,
+                icon_side,
+                icon_size,
+            })
+        }
         "button" => {
             let id = attr(n, "id").ok_or_else(|| "button requires id".to_string())?;
             let text = attr(n, "text").unwrap_or_else(|| "Button".to_string());
 
+            let icon = attr_opt(n, "icon");
+            let icon_side = attr_str(n, "icon_side")
+                .or_else(|| attr_str(n, "iconSide"))
+                .map(UiIconSide::from_str)
+                .unwrap_or(UiIconSide::Left);
+            let icon_size = attr_f32(n, "icon_size")
+                .or_else(|| attr_f32(n, "iconSize"))
+                .filter(|v| *v > 0.0);
+
             let mut on_click = SmallVec::<[String; 2]>::new();
             parse_actions_for(&n, UiEventKind::Click, &mut on_click);
 
-            Ok(UiNode::Button { id, text, on_click })
+            Ok(UiNode::Button {
+                id,
+                text,
+                icon,
+                icon_side,
+                icon_size,
+                on_click,
+            })
+        }
+        "image" | "img" => {
+            let tex = attr(n, "tex")
+                .or_else(|| attr(n, "src"))
+                .ok_or_else(|| "image requires tex/src".to_string())?;
+
+            let w = attr_f32(n, "w").or_else(|| attr_f32(n, "width"));
+            let h = attr_f32(n, "h").or_else(|| attr_f32(n, "height"));
+            let size = match (w, h) {
+                (Some(w), Some(h)) if w > 0.0 && h > 0.0 => Some([w, h]),
+                _ => None,
+            };
+
+            Ok(UiNode::Image {
+                id: attr_opt(n, "id"),
+                tex,
+                size,
+                tint: attr_opt(n, "tint"),
+            })
         }
         "textbox" | "input" => {
             let id = attr(n, "id").unwrap_or_else(|| "textbox".to_string());

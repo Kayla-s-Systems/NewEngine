@@ -38,6 +38,7 @@
       <sourceFolder url="file://$MODULE_DIR$/neocore2/crates/newengine-editor-ui-egui/src" isTestSource="false" />
       <sourceFolder url="file://$MODULE_DIR$/neocore2/crates/newengine-terrain/src" isTestSource="false" />
       <sourceFolder url="file://$MODULE_DIR$/neocore2/crates/newengine-primitives/src" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/neocore2/crates/newengine-math/src" isTestSource="false" />
       <excludeFolder url="file://$MODULE_DIR$/neocore2/apps/editor/target" />
       <excludeFolder url="file://$MODULE_DIR$/neocore2/target" />
     </content>

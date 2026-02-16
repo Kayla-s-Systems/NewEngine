@@ -110,7 +110,7 @@ impl<E: Send + 'static> Module<E> for ConsoleLoggerModule {
             return Ok(());
         }
 
-        let builder = self.build_logger();
+        let mut builder = self.build_logger();
         let _ = builder.try_init();
 
         self.initialized = true;

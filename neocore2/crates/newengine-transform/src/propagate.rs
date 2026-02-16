@@ -6,32 +6,46 @@ use slotmap::Key;
 
 use crate::{GlobalTransform, Parent, Transform, TransformDirty, WorldPose};
 
-/// Reusable buffers for transform propagation.
+/// Reusable scratch buffers for transform propagation.
 ///
-/// Stored as a `World` resource to avoid per-frame heap churn in editor/runtime.
-///
-/// Notes:
-/// - This is intentionally *not* `pub(crate)` because the engine may want to pre-warm capacities
-///   or inspect stats in tooling.
-/// - Contents are scratch-only; never rely on values persisting across calls.
+/// This resource exists to keep the hot path allocation-free.
 #[derive(Default)]
 pub struct TransformPropagationScratch {
-    ids: Vec<EntityId>,
-    locals: Vec<Mat4>,
-    parents: Vec<Option<EntityId>>,
-    vis: Vec<u8>,
-    out: Vec<Mat4>,
-    stack: Vec<(usize, u8)>,
+    pub ids: Vec<EntityId>,
+    pub locals: Vec<Mat4>,
+    pub parents: Vec<Option<EntityId>>,
+    pub vis: Vec<u8>,
+    pub out: Vec<Mat4>,
+    pub stack: Vec<(usize, u8)>,
+    pub ensure_ids: Vec<EntityId>,
 }
-
 
 /// Ensures derived outputs (`GlobalTransform`, `WorldPose`) exist for all entities with `Transform`.
 ///
 /// Call once per frame before propagation (or on-demand when authoring).
 #[inline]
 pub fn ensure_transform_outputs(world: &mut World) {
-    let ids: Vec<EntityId> = world.query::<Transform>().map(|(id, _)| id).collect();
-    for id in ids {
+    // Two-phase: collect ids then insert, to avoid mutating while iterating storages.
+    if world.resource::<TransformPropagationScratch>().is_none() {
+        world.insert_resource(TransformPropagationScratch::default());
+    }
+
+    // Move scratch out to avoid borrow conflicts.
+    let mut scratch = {
+        let s = world
+            .resource_mut::<TransformPropagationScratch>()
+            .expect("TransformPropagationScratch must exist");
+        core::mem::take(s)
+    };
+
+    scratch.ensure_ids.clear();
+    scratch
+        .ensure_ids
+        .extend(world.query::<Transform>().map(|(id, _)| id));
+    scratch.ensure_ids.sort_unstable_by_key(|e| e.data().as_ffi());
+    scratch.ensure_ids.dedup();
+
+    for id in scratch.ensure_ids.iter().copied() {
         if world.get::<GlobalTransform>(id).is_none() {
             let _ = world.insert(id, GlobalTransform::default());
         }
@@ -39,6 +53,10 @@ pub fn ensure_transform_outputs(world: &mut World) {
             let _ = world.insert(id, WorldPose::default());
         }
     }
+
+    *world
+        .resource_mut::<TransformPropagationScratch>()
+        .expect("TransformPropagationScratch must exist") = scratch;
 }
 
 /// Propagates `Transform` + hierarchy into `GlobalTransform` and `WorldPose`.
@@ -47,19 +65,22 @@ pub fn ensure_transform_outputs(world: &mut World) {
 /// - deterministic for a fixed World state (stable ordering by EntityId)
 /// - cycle-safe (cycles degrade to local-space roots)
 /// - tolerant to broken parents (missing parent treated as root)
-/// - no per-entity HashMap allocations; uses dense vectors
+/// - allocation-free hot path (scratch is reused)
 #[inline]
 pub fn propagate_transforms(world: &mut World) {
     ensure_transform_outputs(world);
 
-    // Allocate once, reuse forever.
     if world.resource::<TransformPropagationScratch>().is_none() {
         world.insert_resource(TransformPropagationScratch::default());
     }
 
-    let scratch = world
-        .resource_mut::<TransformPropagationScratch>()
-        .expect("TransformPropagationScratch must exist");
+    // Move scratch out of the World to avoid borrow conflicts with queries/gets.
+    let mut scratch = {
+        let s = world
+            .resource_mut::<TransformPropagationScratch>()
+            .expect("TransformPropagationScratch must exist");
+        core::mem::take(s)
+    };
 
     // 1) Collect all entities that have Transform, deterministically ordered.
     scratch.ids.clear();
@@ -68,14 +89,13 @@ pub fn propagate_transforms(world: &mut World) {
     scratch.ids.dedup();
 
     if scratch.ids.is_empty() {
+        *world
+            .resource_mut::<TransformPropagationScratch>()
+            .expect("TransformPropagationScratch must exist") = scratch;
         return;
     }
 
-    // 2) Build index mapping (EntityId -> idx) without HashMap:
-    // We can’t avoid a map completely unless we accept O(n^2) parent lookup.
-    // But we can make it deterministic and allocate once per call: Vec + binary_search.
-    //
-    // We binary_search on sorted ids, so parent->idx is O(log n).
+    // 2) Build locals and parents.
     scratch.locals.clear();
     scratch.locals.reserve(scratch.ids.len());
     for &id in scratch.ids.iter() {
@@ -101,8 +121,6 @@ pub fn propagate_transforms(world: &mut World) {
     scratch.out.clear();
     scratch.out.resize(scratch.ids.len(), Mat4::IDENTITY);
 
-    // Stack frames: (node_idx, phase)
-    // phase 0 = enter, phase 1 = exit (after children/parent handled)
     scratch.stack.clear();
     scratch.stack.reserve(scratch.ids.len() * 2);
 
@@ -117,7 +135,7 @@ pub fn propagate_transforms(world: &mut World) {
             match phase {
                 0 => {
                     match scratch.vis[i] {
-                        2 => continue, // already done
+                        2 => continue,
                         1 => {
                             // Cycle edge reached: degrade to local as root.
                             scratch.out[i] = scratch.locals[i];
@@ -127,10 +145,9 @@ pub fn propagate_transforms(world: &mut World) {
                         _ => {}
                     }
 
-                    scratch.vis[i] = 1; // visiting
-                    scratch.stack.push((i, 1)); // exit later
+                    scratch.vis[i] = 1;
+                    scratch.stack.push((i, 1));
 
-                    // Push parent first (so it computes before node).
                     if let Some(pid) = scratch.parents[i] {
                         if let Ok(pidx) = scratch.ids.binary_search(&pid) {
                             if scratch.vis[pidx] != 2 {
@@ -140,18 +157,15 @@ pub fn propagate_transforms(world: &mut World) {
                     }
                 }
                 _ => {
-                    // exit: compute node from parent (if valid & computed) * local.
                     let local = scratch.locals[i];
                     let composed = if let Some(pid) = scratch.parents[i] {
                         if let Ok(pidx) = scratch.ids.binary_search(&pid) {
                             if scratch.vis[pidx] == 2 {
                                 scratch.out[pidx] * local
                             } else {
-                                // Parent in cycle or unresolved -> treat as root.
                                 local
                             }
                         } else {
-                            // Parent missing Transform -> root.
                             local
                         }
                     } else {
@@ -186,4 +200,9 @@ pub fn propagate_transforms(world: &mut World) {
 
         let _ = world.remove::<TransformDirty>(id);
     }
+
+    // Put scratch back.
+    *world
+        .resource_mut::<TransformPropagationScratch>()
+        .expect("TransformPropagationScratch must exist") = scratch;
 }

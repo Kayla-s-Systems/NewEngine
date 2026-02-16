@@ -1,0 +1,27 @@
+[package]
+name = "editor"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+crossbeam-channel = "0.5"
+env_logger = "0.11"
+log = "0.4"
+shaderc = "0.10.1"
+parking_lot = "0.12"
+glam = "0.32.0"
+serde_json = "1.0.149"
+
+newengine-core = { path = "../../crates/newengine-core" }
+newengine-ui = { path = "../../crates/newengine-ui" }
+newengine-platform-winit = { path = "../../crates/newengine-platform-winit" }
+newengine-modules-logging = { path = "../../crates/newengine-modules-logging" }
+newengine-modules-render-vulkan-ash = { path = "../../crates/newengine-modules-render-vulkan-ash" }
+
+newengine-scene = { path = "../../crates/newengine-scene" }
+newengine-transform = { path = "../../crates/newengine-transform" }
+newengine-ecs = { path = "../../crates/newengine-ecs" }
+newengine-viewport = { path = "../../crates/newengine-viewport" }
+newengine-camera = { path = "../../crates/newengine-camera" }
+newengine-primitives = { path = "../../crates/newengine-primitives" }
+hashbrown = "0.16.1"

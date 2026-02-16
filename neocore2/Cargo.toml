@@ -4,6 +4,7 @@ members = [
   "crates/newengine-core",
   "crates/newengine-platform-winit",
   "crates/newengine-modules-logging",
+    "crates/newengine-math",
   "apps/editor",
 ]
 

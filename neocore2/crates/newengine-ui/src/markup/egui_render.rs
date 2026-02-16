@@ -5,11 +5,49 @@ use crate::markup::substitute::substitute_vars;
 #[cfg(feature = "egui")]
 use crate::markup::theme::{UiDensity, UiThemeDesc, UiVisuals};
 #[cfg(feature = "egui")]
-use crate::markup::ui_node::UiNode;
+use crate::markup::ui_node::{UiIconSide, UiNode};
 #[cfg(feature = "egui")]
 use crate::markup::{UiEvent, UiEventKind, UiMarkupDoc, UiState};
 #[cfg(feature = "egui")]
 use serde_json::Value;
+
+#[cfg(feature = "egui")]
+fn resolve_tex_id(spec: &str) -> Option<egui::TextureId> {
+    let s = spec.trim();
+    if s.is_empty() {
+        return None;
+    }
+
+    let s = s.strip_prefix("user:").unwrap_or(s);
+    let s = s.strip_prefix("tex:").unwrap_or(s);
+    let id = s.parse::<u64>().ok()?;
+    Some(egui::TextureId::User(id))
+}
+
+#[cfg(feature = "egui")]
+fn parse_tint_rgba(tint: &str) -> Option<egui::Color32> {
+    let t = tint.trim();
+    if t.is_empty() {
+        return None;
+    }
+    let hex = t.strip_prefix('#').unwrap_or(t);
+    match hex.len() {
+        6 => {
+            let r = u8::from_str_radix(&hex[0..2], 16).ok()?;
+            let g = u8::from_str_radix(&hex[2..4], 16).ok()?;
+            let b = u8::from_str_radix(&hex[4..6], 16).ok()?;
+            return Some(egui::Color32::from_rgba_unmultiplied(r, g, b, 255));
+        }
+        8 => {
+            let r = u8::from_str_radix(&hex[0..2], 16).ok()?;
+            let g = u8::from_str_radix(&hex[2..4], 16).ok()?;
+            let b = u8::from_str_radix(&hex[4..6], 16).ok()?;
+            let a = u8::from_str_radix(&hex[6..8], 16).ok()?;
+            return Some(egui::Color32::from_rgba_unmultiplied(r, g, b, a));
+        }
+        _ => return None,
+    }
+}
 
 #[cfg(feature = "egui")]
 pub(crate) fn render_doc(doc: &UiMarkupDoc, ctx: &egui::Context, state: &mut UiState) {
@@ -67,7 +105,13 @@ fn render_in_ui(node: &UiNode, ui: &mut egui::Ui, state: &mut UiState) {
                 }
             });
         }
-        UiNode::Label { id, text } => {
+        UiNode::Label {
+            id,
+            text,
+            icon,
+            icon_side,
+            icon_size,
+        } => {
             let base = if let Some(id) = id.as_deref() {
                 state
                     .strings
@@ -78,11 +122,66 @@ fn render_in_ui(node: &UiNode, ui: &mut egui::Ui, state: &mut UiState) {
                 text.as_str()
             };
             let s = substitute_vars(base, &state.vars);
-            ui.label(s.as_ref());
+
+            let icon_spec = icon.as_deref().map(|v| substitute_vars(v, &state.vars));
+            let icon_tex = icon_spec
+                .as_ref()
+                .and_then(|v| resolve_tex_id(v.as_ref()));
+            let size = icon_size.unwrap_or(14.0).clamp(8.0, 64.0);
+
+            if let Some(tex_id) = icon_tex {
+                ui.horizontal(|ui| {
+                    match icon_side {
+                        UiIconSide::Left => {
+                            ui.add(egui::Image::new((tex_id, egui::vec2(size, size))));
+                            ui.label(s.as_ref());
+                        }
+                        UiIconSide::Right => {
+                            ui.label(s.as_ref());
+                            ui.add(egui::Image::new((tex_id, egui::vec2(size, size))));
+                        }
+                    }
+                });
+            } else {
+                ui.label(s.as_ref());
+            }
         }
-        UiNode::Button { id, text, on_click } => {
+        UiNode::Button {
+            id,
+            text,
+            icon,
+            icon_side,
+            icon_size,
+            on_click,
+        } => {
             let s = substitute_vars(text, &state.vars);
-            if ui.button(s.as_ref()).clicked() {
+
+            let icon_spec = icon.as_deref().map(|v| substitute_vars(v, &state.vars));
+            let icon_tex = icon_spec
+                .as_ref()
+                .and_then(|v| resolve_tex_id(v.as_ref()));
+            let size = icon_size.unwrap_or(14.0).clamp(8.0, 64.0);
+
+            let clicked = if let Some(tex_id) = icon_tex {
+                ui.horizontal(|ui| {
+                    match icon_side {
+                        UiIconSide::Left => {
+                            ui.add(egui::Image::new((tex_id, egui::vec2(size, size))));
+                            ui.button(s.as_ref()).clicked()
+                        }
+                        UiIconSide::Right => {
+                            let c = ui.button(s.as_ref()).clicked();
+                            ui.add(egui::Image::new((tex_id, egui::vec2(size, size))));
+                            c
+                        }
+                    }
+                })
+                    .inner
+            } else {
+                ui.button(s.as_ref()).clicked()
+            };
+
+            if clicked {
                 state.clicked.insert(id.clone(), true);
 
                 if !on_click.is_empty() {
@@ -94,6 +193,25 @@ fn render_in_ui(node: &UiNode, ui: &mut egui::Ui, state: &mut UiState) {
                     });
                 }
             }
+        }
+        UiNode::Image { id, tex, size, tint } => {
+            let spec = substitute_vars(tex, &state.vars);
+            let Some(tex_id) = resolve_tex_id(spec.as_ref()) else {
+                if let Some(id) = id.as_deref() {
+                    *state.unknown_tags.entry(format!("image:missing_tex:{id}")).or_insert(0) +=
+                        1;
+                }
+                return;
+            };
+
+            let size = size.unwrap_or([16.0, 16.0]);
+            let tint = tint
+                .as_deref()
+                .map(|t| substitute_vars(t, &state.vars))
+                .and_then(|t| parse_tint_rgba(t.as_ref()))
+                .unwrap_or(egui::Color32::WHITE);
+
+            ui.add(egui::Image::new((tex_id, egui::vec2(size[0], size[1]))).tint(tint));
         }
         UiNode::TextBox {
             id,

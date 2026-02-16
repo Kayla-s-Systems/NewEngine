@@ -1095,6 +1095,8 @@ dependencies = [
     "num-traits",
     "png",
     "tiff",
+    "zune-core 0.5.1",
+    "zune-jpeg 0.5.12",
 ]
 
 [[package]]
@@ -1360,6 +1362,8 @@ version = "0.1.0"
 dependencies = [
     "glam",
     "newengine-ecs",
+    "newengine-transform",
+    "slotmap",
 ]
 
 [[package]]
@@ -1394,6 +1398,16 @@ dependencies = [
     "fxhash",
     "hashbrown",
     "slotmap",
+]
+
+[[package]]
+name = "newengine-math"
+version = "0.2.0"
+dependencies = [
+    "abi_stable",
+    "log",
+    "parking_lot",
+    "serde",
 ]
 
 [[package]]
@@ -1457,10 +1471,14 @@ dependencies = [
 name = "newengine-scene"
 version = "0.1.0"
 dependencies = [
+    "glam",
     "hashbrown",
     "newengine-bounds",
     "newengine-ecs",
     "newengine-transform",
+    "serde",
+    "serde_json",
+    "slotmap",
 ]
 
 [[package]]
@@ -1480,6 +1498,7 @@ dependencies = [
     "bytemuck",
     "egui",
     "egui-winit",
+    "image",
     "newengine-plugin-api",
     "roxmltree 0.21.1",
     "serde",
@@ -2470,7 +2489,7 @@ dependencies = [
     "half",
     "quick-error",
     "weezl",
-    "zune-jpeg",
+    "zune-jpeg 0.4.21",
 ]
 
 [[package]]
@@ -2590,9 +2609,9 @@ checksum = "f8c1ae7cc0fdb8b842d65d127cb981574b0d2b249b74d1c7a2986863dc134f71"
 
 [[package]]
 name = "unicode-ident"
-version = "1.0.23"
+version = "1.0.24"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "537dd038a89878be9b64dd4bd1b260315c1bb94f4d784956b81e27a088d9a09e"
+checksum = "e6e4313cd5fcd3dad5cafa179702e2b244f760991f45397d14d4ebf38247da75"
 
 [[package]]
 name = "unicode-segmentation"
@@ -3393,12 +3412,27 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3f423a2c17029964870cfaabb1f13dfab7d092a62a29a89264f4d36990ca414a"
 
 [[package]]
+name = "zune-core"
+version = "0.5.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "cb8a0807f7c01457d0379ba880ba6322660448ddebc890ce29bb64da71fb40f9"
+
+[[package]]
 name = "zune-jpeg"
 version = "0.4.21"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "29ce2c8a9384ad323cf564b67da86e21d3cfdff87908bc1223ed5c99bc792713"
 dependencies = [
-    "zune-core",
+    "zune-core 0.4.12",
+]
+
+[[package]]
+name = "zune-jpeg"
+version = "0.5.12"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "410e9ecef634c709e3831c2cfdb8d9c32164fae1c67496d5b68fff728eec37fe"
+dependencies = [
+    "zune-core 0.5.1",
 ]
 
 [[patch.unused]]

@@ -2,6 +2,22 @@
 
 use smallvec::SmallVec;
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum UiIconSide {
+    Left,
+    Right,
+}
+
+impl UiIconSide {
+    #[inline]
+    pub(crate) fn from_str(s: &str) -> Self {
+        match s.trim().to_ascii_lowercase().as_str() {
+            "right" | "end" | "after" => Self::Right,
+            _ => Self::Left,
+        }
+    }
+}
+
 #[derive(Debug, Clone)]
 pub(crate) enum UiNode {
     Ui {
@@ -25,10 +41,16 @@ pub(crate) enum UiNode {
     Label {
         id: Option<String>,
         text: String,
+        icon: Option<String>,
+        icon_side: UiIconSide,
+        icon_size: Option<f32>,
     },
     Button {
         id: String,
         text: String,
+        icon: Option<String>,
+        icon_side: UiIconSide,
+        icon_size: Option<f32>,
         on_click: SmallVec<[String; 2]>,
     },
     TextBox {
@@ -73,6 +95,18 @@ pub(crate) enum UiNode {
     },
 
     Spacer,
+
+    /// Draw a texture as an UI element.
+    ///
+    /// `tex` must resolve to an `egui::TextureId::User(u64)`.
+    Image {
+        id: Option<String>,
+        tex: String,
+        /// Desired size in points (logical units). If omitted, 16x16 is used.
+        size: Option<[f32; 2]>,
+        /// Optional tint as RGBA hex: "#RRGGBBAA" or "#RRGGBB".
+        tint: Option<String>,
+    },
 
     Unknown {
         tag: String,

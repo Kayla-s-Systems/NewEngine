@@ -1,215 +1,258 @@
 #![forbid(unsafe_op_in_unsafe_fn)]
 
+use core::cmp::Ordering;
 use std::collections::{BTreeMap, BTreeSet};
-use std::sync::Arc;
 
-use blake3::Hasher;
+use abi_stable::std_types::{RBox, RResult, RSlice, RString, RVec};
+use log::{debug, warn};
+use parking_lot::RwLock;
 
-use crate::kernel::{MathFnDesc, MathFnFlags, MathFnId, MathValue, TypeTag};
+use crate::api::{MathError, MathFn_TO, MathRegistry, MathRegistry_TO, MathResult};
+use crate::desc::MathFnDesc;
+use crate::value::MathValue;
 
-#[derive(thiserror::Error, Debug)]
-pub enum MathError {
-    #[error("math: function not found: {0}")]
-    NotFound(String),
-
-    #[error("math: arity mismatch for {name}: expected {expected}, got {got}")]
-    ArityMismatch { name: &'static str, expected: usize, got: usize },
-
-    #[error("math: type mismatch for {name} at arg {index}: expected {expected:?}, got {got:?}")]
-    TypeMismatch {
-        name: &'static str,
-        index: usize,
-        expected: TypeTag,
-        got: TypeTag,
-    },
-
-    #[error("math: function already registered: {0}")]
-    AlreadyRegistered(String),
-
-    #[error("math: error in {name}: {msg}")]
-    Exec { name: &'static str, msg: String },
+struct Provider {
+    plugin_id: RString,
+    desc: MathFnDesc,
+    fun: MathFn_TO<'static, RBox<()>>,
+    ordinal: u64,
 }
 
-type MathFn = Arc<dyn Fn(&[MathValue]) -> Result<MathValue, MathError> + Send + Sync + 'static>;
+impl Provider {
+    fn cmp_effective(a: &Provider, b: &Provider) -> Ordering {
+        // Higher version wins.
+        match a.desc.version.cmp(&b.desc.version) {
+            Ordering::Equal => {}
+            other => return other,
+        }
 
-#[derive(Clone)]
-pub struct MathRegistry {
-    // Deterministic: order by id.
-    by_id: BTreeMap<MathFnId, (MathFnDesc, MathFn)>,
-    // Deterministic: order by name, then id.
-    by_name: BTreeMap<&'static str, BTreeSet<MathFnId>>,
-    revision: u64,
-}
+        // Then plugin_id lexical to make selection deterministic.
+        // Smaller plugin_id should win => reverse so "max" selects it.
+        match a.plugin_id.as_str().cmp(b.plugin_id.as_str()) {
+            Ordering::Equal => {}
+            other => return other.reverse(),
+        }
 
-impl Default for MathRegistry {
-    fn default() -> Self {
-        let mut r = Self {
-            by_id: BTreeMap::new(),
-            by_name: BTreeMap::new(),
-            revision: 0,
-        };
-        r.register_builtins();
-        r
+        // Then ordinal (stable tie-breaker).
+        a.ordinal.cmp(&b.ordinal).reverse()
     }
 }
 
-impl MathRegistry {
+#[derive(Default)]
+struct State {
+    providers: BTreeMap<RString, Vec<Provider>>,
+    by_plugin: BTreeMap<RString, BTreeSet<RString>>,
+    ordinal: u64,
+}
+
+#[derive(Default)]
+pub struct KernelMathRegistry {
+    s: RwLock<State>,
+}
+
+impl KernelMathRegistry {
     #[inline]
-    pub fn revision(&self) -> u64 {
-        self.revision
+    pub fn new() -> Self {
+        Self::default()
     }
 
-    pub fn compute_id(desc: &MathFnDesc) -> MathFnId {
-        let mut h = Hasher::new();
-        h.update(desc.name.as_bytes());
-        h.update(b"\0");
-        for t in desc.inputs {
-            h.update(&[*t as u8]);
+    /// Convert registry into ABI trait object.
+    ///
+    /// Uses TD_Opaque to satisfy abi_stable bounds across toolchain versions.
+    #[inline]
+    pub fn into_abi(self) -> MathRegistry_TO<'static, RBox<()>> {
+        MathRegistry_TO::from_value(self, abi_stable::type_level::downcasting::TD_Opaque)
+    }
+
+    #[inline]
+    fn pick_effective<'a>(providers: &'a [Provider]) -> Option<&'a Provider> {
+        providers
+            .iter()
+            .max_by(|a, b| Provider::cmp_effective(*a, *b))
+    }
+
+    fn validate_signature(desc: &MathFnDesc, inputs: &[MathValue]) -> Result<(), MathError> {
+        let sig = &desc.signature;
+
+        if sig.inputs.len() != inputs.len() {
+            return Err(MathError::InvalidArgs(RString::from(format!(
+                "arity mismatch: expected {}, got {}",
+                sig.inputs.len(),
+                inputs.len()
+            ))));
         }
-        h.update(b"\0");
-        h.update(&[desc.output as u8]);
-        let out = h.finalize();
-        let mut bytes = [0u8; 8];
-        bytes.copy_from_slice(&out.as_bytes()[..8]);
-        MathFnId(u64::from_le_bytes(bytes))
-    }
 
-    pub fn register(
-        &mut self,
-        desc: MathFnDesc,
-        f: impl Fn(&[MathValue]) -> Result<MathValue, MathError> + Send + Sync + 'static,
-    ) -> Result<MathFnId, MathError> {
-        let id = Self::compute_id(&desc);
-        if self.by_id.contains_key(&id) {
-            return Err(MathError::AlreadyRegistered(format!("{}", desc.name)));
+        for (i, (expected, got)) in sig.inputs.iter().zip(inputs.iter()).enumerate() {
+            let got_t = got.math_type();
+            if *expected != got_t {
+                return Err(MathError::InvalidArgs(RString::from(format!(
+                    "type mismatch at {}: expected {:?}, got {:?}",
+                    i, expected, got_t
+                ))));
+            }
         }
-        self.by_name.entry(desc.name).or_default().insert(id);
-        self.by_id.insert(id, (desc, Arc::new(f)));
-        self.revision = self.revision.wrapping_add(1);
-        Ok(id)
+
+        Ok(())
+    }
+}
+
+impl MathRegistry for KernelMathRegistry {
+    fn register_fn(&self, plugin_id: RString, fun: MathFn_TO<'static, RBox<()>>) -> MathResult<()> {
+        let desc = fun.desc();
+
+        if desc.id.is_empty() {
+            warn!("math: register_fn rejected: empty id (plugin={})", plugin_id);
+            return RResult::RErr(MathError::InvalidArgs(RString::from("desc.id is empty")));
+        }
+
+        debug!(
+            "math: register_fn plugin={} id={} v={} inputs={} outputs={} determinism={:?} call_kind={:?}",
+            plugin_id,
+            desc.id,
+            desc.version,
+            desc.signature.inputs.len(),
+            desc.signature.outputs.len(),
+            desc.determinism,
+            desc.call_kind
+        );
+
+        // Prepare locals BEFORE taking mutable borrows from the state.
+        let id = desc.id.clone();
+        let version = desc.version;
+
+        let (replaced, providers_now, ordinal_for_provider) = {
+            let mut st = self.s.write();
+            st.ordinal = st.ordinal.wrapping_add(1);
+            let ordinal = st.ordinal;
+
+            // Track ownership deterministically.
+            st.by_plugin
+                .entry(plugin_id.clone())
+                .or_default()
+                .insert(id.clone());
+
+            let list = st.providers.entry(id.clone()).or_default();
+
+            // Replace duplicate registration from the same plugin for the same id+version.
+            let mut replaced_local = false;
+            list.retain(|p| {
+                let keep = !(p.plugin_id == plugin_id && p.desc.version == version);
+                if !keep {
+                    replaced_local = true;
+                }
+                keep
+            });
+
+            list.push(Provider {
+                plugin_id: plugin_id.clone(),
+                desc,
+                fun,
+                ordinal,
+            });
+
+            (replaced_local, list.len(), ordinal)
+        };
+
+        if replaced {
+            debug!(
+                "math: register_fn replaced existing provider plugin={} id={} v={}",
+                plugin_id, id, version
+            );
+        }
+
+        debug!(
+            "math: register_fn done id={} v={} ordinal={} providers_now={}",
+            id, version, ordinal_for_provider, providers_now
+        );
+
+        RResult::ROk(())
     }
 
-    /// Register or replace an existing function with the same deterministic id.
-    /// This is intended for plugins that want to override specific implementations.
-    pub fn register_or_replace(
-        &mut self,
-        desc: MathFnDesc,
-        f: impl Fn(&[MathValue]) -> Result<MathValue, MathError> + Send + Sync + 'static,
-    ) -> MathFnId {
-        let id = Self::compute_id(&desc);
-        self.by_name.entry(desc.name).or_default().insert(id);
-        self.by_id.insert(id, (desc, Arc::new(f)));
-        self.revision = self.revision.wrapping_add(1);
-        id
-    }
+    fn unregister_plugin(&self, plugin_id: RString) -> MathResult<()> {
+        let (ids_count, removed_providers) = {
+            let mut st = self.s.write();
 
-    pub fn resolve(&self, name: &str, inputs: &[TypeTag]) -> Option<MathFnId> {
-        let ids = self.by_name.get(name)?;
-        // Prefer exact signature match.
-        for id in ids.iter().copied() {
-            if let Some((desc, _)) = self.by_id.get(&id) {
-                if desc.inputs == inputs {
-                    return Some(id);
+            let ids = match st.by_plugin.remove(&plugin_id) {
+                Some(ids) => ids,
+                None => {
+                    // no-op
+                    return {
+                        debug!("math: unregister_plugin no-op (plugin={})", plugin_id);
+                        RResult::ROk(())
+                    };
+                }
+            };
+
+            let ids_count = ids.len();
+            let mut removed_providers: usize = 0;
+
+            // Avoid borrowing `plugin_id` in closure directly (cleaner with clones).
+            let pid = plugin_id.clone();
+
+            for id in ids {
+                if let Some(list) = st.providers.get_mut(&id) {
+                    let before = list.len();
+                    list.retain(|p| p.plugin_id != pid);
+                    removed_providers += before.saturating_sub(list.len());
+
+                    if list.is_empty() {
+                        st.providers.remove(&id);
+                    }
                 }
             }
-        }
-        None
+
+            (ids_count, removed_providers)
+        };
+
+        debug!(
+        "math: unregister_plugin plugin={} ids={} removed_providers={}",
+        plugin_id, ids_count, removed_providers
+    );
+
+        RResult::ROk(())
     }
 
-    pub fn desc(&self, id: MathFnId) -> Option<&MathFnDesc> {
-        self.by_id.get(&id).map(|x| &x.0)
-    }
 
-    pub fn call(&self, id: MathFnId, args: &[MathValue]) -> Result<MathValue, MathError> {
-        let (desc, f) = self.by_id.get(&id).ok_or_else(|| MathError::NotFound(format!("{id:?}")))?;
-        if args.len() != desc.inputs.len() {
-            return Err(MathError::ArityMismatch { name: desc.name, expected: desc.inputs.len(), got: args.len() });
-        }
-        for (i, (arg, exp)) in args.iter().zip(desc.inputs.iter()).enumerate() {
-            let got = arg.type_tag();
-            if got != *exp {
-                return Err(MathError::TypeMismatch { name: desc.name, index: i, expected: *exp, got });
+    fn list(&self) -> MathResult<RVec<MathFnDesc>> {
+        let st = self.s.read();
+        let mut out = RVec::new();
+
+        for (_id, providers) in st.providers.iter() {
+            if let Some(p) = Self::pick_effective(providers) {
+                out.push(p.desc.clone());
             }
         }
-        f(args).map_err(|e| match e {
-            MathError::Exec { .. } => e,
-            other => MathError::Exec { name: desc.name, msg: other.to_string() },
-        })
+
+        debug!("math: list functions={}", out.len());
+        RResult::ROk(out)
     }
 
-    pub fn call_by_name(&self, name: &str, args: &[MathValue]) -> Result<MathValue, MathError> {
-        let tags: Vec<TypeTag> = args.iter().map(|v| v.type_tag()).collect();
-        let id = self.resolve(name, &tags).ok_or_else(|| MathError::NotFound(name.to_string()))?;
-        self.call(id, args)
-    }
+    fn call_by_id(&self, id: RString, inputs: RSlice<'_, MathValue>) -> MathResult<RVec<MathValue>> {
+        // Note: We keep the read-lock during the call to avoid cloning `MathFn_TO`,
+        // which may not implement `Clone` in the current abi_stable version.
+        // This is acceptable for the kernel/in-process registry. Providers should not
+        // re-enter the registry from within `call` to avoid lock inversion.
 
-    pub fn iter_descs(&self) -> impl Iterator<Item=(&MathFnId, &MathFnDesc)> {
-        self.by_id.iter().map(|(id, (d, _))| (id, d))
-    }
+        let st = self.s.read();
 
-    fn register_builtins(&mut self) {
-        use TypeTag::*;
-        let det_pure = MathFnFlags::DETERMINISTIC | MathFnFlags::PURE;
+        let providers = match st.providers.get(&id) {
+            Some(v) => v,
+            None => return RResult::RErr(MathError::NotFound),
+        };
 
-        let _ = self.register(
-            MathFnDesc::new("math.f32.add", &[F32, F32], F32, det_pure, "Adds two f32 values."),
-            |a| Ok(MathValue::F32(a[0].clone().as_f32().unwrap() + a[1].clone().as_f32().unwrap())),
-        );
+        let Some(p) = Self::pick_effective(providers) else {
+            return RResult::RErr(MathError::NotFound);
+        };
 
-        let _ = self.register(
-            MathFnDesc::new("math.vec3.add", &[Vec3, Vec3], Vec3, det_pure, "Adds two Vec3 vectors."),
-            |a| {
-                let x = match &a[0] {
-                    MathValue::Vec3(v) => *v,
-                    _ => unreachable!()
-                };
-                let y = match &a[1] {
-                    MathValue::Vec3(v) => *v,
-                    _ => unreachable!()
-                };
-                Ok(MathValue::Vec3(x + y))
-            },
-        );
+        debug!(
+        "math: call_by_id id={} -> plugin={} v={}",
+        id, p.plugin_id, p.desc.version
+    );
 
-        let _ = self.register(
-            MathFnDesc::new("math.vec3.dot", &[Vec3, Vec3], F32, det_pure, "Dot product of two Vec3 vectors."),
-            |a| {
-                let x = match &a[0] {
-                    MathValue::Vec3(v) => *v,
-                    _ => unreachable!()
-                };
-                let y = match &a[1] {
-                    MathValue::Vec3(v) => *v,
-                    _ => unreachable!()
-                };
-                Ok(MathValue::F32(x.dot(y)))
-            },
-        );
+        if let Err(e) = Self::validate_signature(&p.desc, inputs.as_slice()) {
+            return RResult::RErr(e);
+        }
 
-        let _ = self.register(
-            MathFnDesc::new("math.vec3.cross", &[Vec3, Vec3], Vec3, det_pure, "Cross product of two Vec3 vectors."),
-            |a| {
-                let x = match &a[0] {
-                    MathValue::Vec3(v) => *v,
-                    _ => unreachable!()
-                };
-                let y = match &a[1] {
-                    MathValue::Vec3(v) => *v,
-                    _ => unreachable!()
-                };
-                Ok(MathValue::Vec3(x.cross(y)))
-            },
-        );
-
-        let _ = self.register(
-            MathFnDesc::new("math.vec3.length", &[Vec3], F32, det_pure, "Vector length of Vec3."),
-            |a| {
-                let x = match &a[0] {
-                    MathValue::Vec3(v) => *v,
-                    _ => unreachable!()
-                };
-                Ok(MathValue::F32(x.length()))
-            },
-        );
+        p.fun.call(inputs)
     }
 }
