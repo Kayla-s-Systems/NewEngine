@@ -37,16 +37,22 @@ pub trait System: Send {
 struct Entry {
     stage: Stage,
     order: i32,
-    seq: u32,
+    seq: u64,
     sys: Box<dyn System>,
 }
 
 /// Deterministic system schedule.
 ///
 /// Ordering is by `(stage, order, insertion_seq)`.
+///
+/// Notes:
+/// - `insertion_seq` is a monotonic u64; we use saturating increment to guarantee stability even
+///   under pathological long-running sessions.
+/// - This schedule is intentionally minimal: no parallelism and no implicit dependencies.
+///   Higher-level executors can be built on top while keeping the ordering contract.
 pub struct Schedule {
     entries: Vec<Entry>,
-    next_seq: u32,
+    next_seq: u64,
 }
 
 impl Default for Schedule {
@@ -69,7 +75,8 @@ impl Schedule {
     #[inline]
     pub fn add(&mut self, sys: Box<dyn System>, order: i32) {
         let seq = self.next_seq;
-        self.next_seq = self.next_seq.wrapping_add(1).max(1);
+        self.next_seq = self.next_seq.saturating_add(1).max(1);
+
         let stage = sys.stage();
         self.entries.push(Entry {
             stage,
@@ -77,11 +84,19 @@ impl Schedule {
             seq,
             sys,
         });
-        self.entries.sort_by(|a, b| (a.stage, a.order, a.seq).cmp(&(b.stage, b.order, b.seq)));
+
+        self.entries
+            .sort_by(|a, b| (a.stage, a.order, a.seq).cmp(&(b.stage, b.order, b.seq)));
     }
 
     /// Runs a single stage.
-    pub fn run_stage(&mut self, stage: Stage, world: &mut World, commands: &mut Commands, frame: FrameCtx) {
+    pub fn run_stage(
+        &mut self,
+        stage: Stage,
+        world: &mut World,
+        commands: &mut Commands,
+        frame: FrameCtx,
+    ) {
         for e in self.entries.iter_mut().filter(|e| e.stage == stage) {
             e.sys.run(world, commands, frame);
         }

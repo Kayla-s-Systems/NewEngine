@@ -25,7 +25,8 @@ pub trait ErasedStorage: Any + Send + Sync {
 ///
 /// Tracking rules:
 /// - `insert` marks `added` (if new) and `changed`.
-/// - `get_mut` conservatively marks `changed`.
+/// - `get_mut` on [`World`](crate::World) does **not** implicitly mark `changed`.
+///   Use `get_mut_tracked` / `query_mut_tracked` or call `mark_changed`.
 /// - `remove` does not emit events by itself (use `Events<T>` or a higher-level log).
 pub struct Storage<T: Component> {
     pub(crate) map: SecondaryMap<EntityId, T>,

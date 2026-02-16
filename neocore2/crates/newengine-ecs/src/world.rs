@@ -149,14 +149,20 @@ impl World {
     fn storage_mut<T: Component>(&mut self) -> &mut Storage<T> {
         let tid = TypeId::of::<T>();
 
-        if !self.storages.contains_key(&tid) {
-            self.storages.insert(tid, Box::new(Storage::<T>::new()));
-        }
+        use hashbrown::hash_map::Entry;
 
-        self.storages
-            .get_mut(&tid)
-            .and_then(|b| b.as_any_mut().downcast_mut::<Storage<T>>())
-            .expect("storage type mismatch")
+        match self.storages.entry(tid) {
+            Entry::Occupied(e) => e
+                .into_mut()
+                .as_any_mut()
+                .downcast_mut::<Storage<T>>()
+                .expect("storage type mismatch"),
+            Entry::Vacant(e) => e
+                .insert(Box::new(Storage::<T>::new()))
+                .as_any_mut()
+                .downcast_mut::<Storage<T>>()
+                .expect("storage type mismatch"),
+        }
     }
 
     /// Returns immutable storage for `T` if it exists.
