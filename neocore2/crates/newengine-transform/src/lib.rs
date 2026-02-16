@@ -13,4 +13,5 @@ pub use hierarchy::set_parent;
 pub use propagate::{
     ensure_transform_outputs,
     propagate_transforms,
+    TransformPropagationScratch,
 };

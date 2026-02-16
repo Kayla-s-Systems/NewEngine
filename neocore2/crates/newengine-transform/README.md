@@ -26,3 +26,8 @@
   ## Ссылки
 
     - Архитектура workspace: `../../ARCHITECTURE.md`
+
+## Allocation-free propagation
+
+`propagate_transforms()` stores reusable scratch buffers in the ECS World as a resource: `TransformPropagationScratch`.
+This avoids per-frame heap churn and keeps propagation deterministic.
