@@ -44,9 +44,80 @@ impl Default for WindowPlacement {
 }
 
 #[derive(Debug, Clone)]
+pub struct StartupLoggingConfig {
+    /// Equivalent to env_logger filter string.
+    /// Example: "info,newengine_render=debug,wgpu=warn".
+    pub filter: Option<String>,
+
+    /// Default level when `filter` is not provided.
+    pub level: String,
+
+    /// "auto" | "always" | "never"
+    pub style: Option<String>,
+
+    /// Enable ANSI colors in console output.
+    pub colors: bool,
+
+    pub include_module_path: bool,
+    pub include_target: bool,
+    pub include_file: bool,
+    pub include_line_number: bool,
+
+    /// "seconds" | "millis" | "micros" | "nanos" | "none"
+    pub timestamp: Option<String>,
+
+    pub indent: Option<usize>,
+
+    /// "stdout" | "stderr"
+    pub console_target: Option<String>,
+
+    /// Optional file path for log output.
+    pub file_path: Option<String>,
+
+    /// If true and file_path is Some -> console + file.
+    /// If false and file_path is Some -> file only.
+    pub tee: bool,
+
+    /// Rotate when file grows beyond this size (bytes).
+    pub roll_max_bytes: Option<u64>,
+    /// Max number of size-rolled backups (path.1..path.N).
+    pub roll_max_files: usize,
+    /// Keep last N day-files (UTC epoch day) if daily rolling is enabled.
+    pub roll_keep_days: Option<usize>,
+}
+
+impl Default for StartupLoggingConfig {
+    #[inline]
+    fn default() -> Self {
+        Self {
+            filter: None,
+            level: "info".to_owned(),
+            style: None,
+            colors: true,
+            include_module_path: true,
+            include_target: true,
+            include_file: false,
+            include_line_number: false,
+            timestamp: Some("millis".to_owned()),
+            indent: None,
+            console_target: Some("stderr".to_owned()),
+            file_path: None,
+            tee: false,
+            roll_max_bytes: None,
+            roll_max_files: 5,
+            roll_keep_days: None,
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
 pub struct StartupConfig {
     pub source: StartupConfigSource,
 
+    /// Extended logging configuration.
+    pub logging: StartupLoggingConfig,
+
+    /// Legacy (kept for backward compat). Prefer `logging.level` and `logging.filter`.
     pub log_level: String,
     pub window_title: String,
     pub window_size: (u32, u32),
@@ -79,6 +150,8 @@ impl Default for StartupConfig {
     fn default() -> Self {
         Self {
             source: StartupConfigSource::Defaults,
+
+            logging: StartupLoggingConfig::default(),
 
             log_level: "info".to_owned(),
             window_title: "NewEngine".to_owned(),

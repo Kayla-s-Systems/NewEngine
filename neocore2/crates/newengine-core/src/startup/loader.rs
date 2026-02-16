@@ -68,11 +68,39 @@ struct RootJson {
 
 #[derive(Deserialize)]
 struct LoggingJson {
+    // Legacy:
     level: Option<String>,
     #[allow(dead_code)]
     colors: Option<bool>,
     #[allow(dead_code)]
     include_module: Option<bool>,
+
+    // Extended:
+    filter: Option<String>,
+    style: Option<String>,
+    target: Option<String>,
+    file: Option<String>,
+    tee: Option<bool>,
+
+    include: Option<LoggingIncludeJson>,
+    rolling: Option<LoggingRollingJson>,
+    timestamp: Option<String>,
+    indent: Option<usize>,
+}
+
+#[derive(Deserialize)]
+struct LoggingIncludeJson {
+    module_path: Option<bool>,
+    target: Option<bool>,
+    file: Option<bool>,
+    line: Option<bool>,
+}
+
+#[derive(Deserialize)]
+struct LoggingRollingJson {
+    max_bytes: Option<u64>,
+    max_files: Option<usize>,
+    keep_days: Option<usize>,
 }
 
 #[derive(Deserialize)]
@@ -118,8 +146,102 @@ struct UiJson {
 
 fn apply_root(cfg: &mut StartupConfig, report: &mut StartupLoadReport, src: RootJson) {
     if let Some(logging) = src.logging {
-        if let Some(level) = logging.level {
+        // Legacy: "logging.level" mirrors old "log_level" field.
+        if let Some(level) = logging.level.clone() {
+            apply_string(report, "logging.level", &mut cfg.logging.level, level.clone());
             apply_string(report, "log_level", &mut cfg.log_level, level);
+        }
+
+        if let Some(filter) = logging.filter {
+            apply_opt_string(report, "logging.filter", &mut cfg.logging.filter, filter);
+        }
+
+        if let Some(style) = logging.style {
+            apply_opt_string(report, "logging.style", &mut cfg.logging.style, style);
+        }
+
+        // target: stdout|stderr
+        if let Some(t) = logging.target {
+            apply_opt_string(report, "logging.target", &mut cfg.logging.console_target, t);
+        }
+
+        // file path + tee behavior
+        if let Some(fp) = logging.file {
+            apply_opt_string(report, "logging.file", &mut cfg.logging.file_path, fp);
+            // If tee not explicitly specified, default to true when file is set.
+            if logging.tee.is_none() && !cfg.logging.tee {
+                apply_bool(report, "logging.tee", &mut cfg.logging.tee, true);
+            }
+        }
+
+        if let Some(tee) = logging.tee {
+            apply_bool(report, "logging.tee", &mut cfg.logging.tee, tee);
+        }
+
+        // Legacy color + include_module mapping
+        if let Some(colors) = logging.colors {
+            apply_bool(report, "logging.colors", &mut cfg.logging.colors, colors);
+        }
+        if let Some(inc_mod) = logging.include_module {
+            apply_bool(report, "logging.include.module_path", &mut cfg.logging.include_module_path, inc_mod);
+        }
+
+        if let Some(inc) = logging.include {
+            if let Some(v) = inc.module_path {
+                apply_bool(report, "logging.include.module_path", &mut cfg.logging.include_module_path, v);
+            }
+            if let Some(v) = inc.target {
+                apply_bool(report, "logging.include.target", &mut cfg.logging.include_target, v);
+            }
+            if let Some(v) = inc.file {
+                apply_bool(report, "logging.include.file", &mut cfg.logging.include_file, v);
+            }
+            if let Some(v) = inc.line {
+                apply_bool(report, "logging.include.line", &mut cfg.logging.include_line_number, v);
+            }
+        }
+
+        if let Some(ts) = logging.timestamp {
+            // "none" means explicit disable
+            if ts.trim().eq_ignore_ascii_case("none") {
+                let from = cfg.logging.timestamp.clone().unwrap_or_else(|| "null".to_owned());
+                let to = "null".to_owned();
+                if cfg.logging.timestamp.is_some() {
+                    cfg.logging.timestamp = None;
+                    report.overrides.push(StartupOverride {
+                        key: "logging.timestamp",
+                        from,
+                        to,
+                    });
+                }
+            } else {
+                apply_opt_string(report, "logging.timestamp", &mut cfg.logging.timestamp, ts);
+            }
+        }
+
+        if let Some(indent) = logging.indent {
+            let from = cfg.logging.indent.map(|v| v.to_string()).unwrap_or_else(|| "null".to_owned());
+            let to = indent.to_string();
+            if cfg.logging.indent != Some(indent) {
+                cfg.logging.indent = Some(indent);
+                report.overrides.push(StartupOverride {
+                    key: "logging.indent",
+                    from,
+                    to,
+                });
+            }
+        }
+
+        if let Some(rolling) = logging.rolling {
+            if let Some(v) = rolling.max_bytes {
+                apply_opt_u64(report, "logging.rolling.max_bytes", &mut cfg.logging.roll_max_bytes, v);
+            }
+            if let Some(v) = rolling.max_files {
+                apply_usize(report, "logging.rolling.max_files", &mut cfg.logging.roll_max_files, v);
+            }
+            if let Some(v) = rolling.keep_days {
+                apply_opt_usize(report, "logging.rolling.keep_days", &mut cfg.logging.roll_keep_days, v);
+            }
         }
     }
 
@@ -267,6 +389,40 @@ fn apply_u32(report: &mut StartupLoadReport, key: &'static str, dst: &mut u32, v
 }
 
 #[inline]
+#[inline]
+fn apply_usize(report: &mut StartupLoadReport, key: &'static str, dst: &mut usize, v: usize) {
+    let from = dst.to_string();
+    let to = v.to_string();
+    if *dst != v {
+        *dst = v;
+        report.overrides.push(StartupOverride { key, from, to });
+    }
+}
+
+#[inline]
+fn apply_opt_u64(report: &mut StartupLoadReport, key: &'static str, dst: &mut Option<u64>, v: u64) {
+    let from = dst.map(|x| x.to_string()).unwrap_or_else(|| "null".to_owned());
+    let to = v.to_string();
+    if *dst != Some(v) {
+        *dst = Some(v);
+        report.overrides.push(StartupOverride { key, from, to });
+    }
+}
+
+#[inline]
+fn apply_opt_usize(
+    report: &mut StartupLoadReport,
+    key: &'static str,
+    dst: &mut Option<usize>,
+    v: usize,
+) {
+    let from = dst.map(|x| x.to_string()).unwrap_or_else(|| "null".to_owned());
+    let to = v.to_string();
+    if *dst != Some(v) {
+        *dst = Some(v);
+        report.overrides.push(StartupOverride { key, from, to });
+    }
+}
 fn apply_bool(report: &mut StartupLoadReport, key: &'static str, dst: &mut bool, v: bool) {
     let from = dst.to_string();
     let to = v.to_string();
