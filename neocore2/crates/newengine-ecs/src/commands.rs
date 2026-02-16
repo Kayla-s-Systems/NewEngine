@@ -154,6 +154,9 @@ impl Commands {
     #[inline]
     pub fn clear(&mut self) {
         self.ops.clear();
+        // Tokens are only meaningful while ops are alive.
+        // Resetting keeps memory usage predictable across frames.
+        self.next_token = 1;
     }
 
     /// Applies all recorded commands to the world.
@@ -191,6 +194,8 @@ impl Commands {
 
         // Phase 2: apply in original order.
         let ops = core::mem::take(&mut self.ops);
+        // The command buffer is now empty; reset token counter to avoid unbounded growth.
+        self.next_token = 1;
         for op in ops {
             match op {
                 Op::Spawn { .. } => {}

@@ -8,7 +8,7 @@ use hashbrown::HashMap;
 use slotmap::SlotMap;
 
 use crate::{
-    query::{Query, Query2, Query2A, Query2B, QueryMut},
+    query::{Query, Query2, Query2A, Query2B, QueryMut, QueryMutTracked},
     storage::{ErasedStorage, Storage},
     Component, EntityId,
 };
@@ -67,7 +67,9 @@ impl World {
     /// Advances the tick by 1.
     #[inline]
     pub fn advance_tick(&mut self) -> u64 {
-        self.tick = self.tick.wrapping_add(1).max(1);
+        // Intentionally saturating: tick wrap-around breaks `since_tick` semantics.
+        // u64 is effectively "never" for a game runtime, but this makes the invariant explicit.
+        self.tick = self.tick.saturating_add(1).max(1);
         self.tick
     }
 
@@ -343,11 +345,30 @@ impl World {
     }
 
     /// Zero-allocation mutable query over entities that have component `T`.
+    ///
+    /// Note: this iterator does **not** update change-tracking.
+    /// If you mutate components through it, prefer [`World::query_mut_tracked`]
+    /// (or call [`World::mark_changed`] manually).
     #[inline]
     pub fn query_mut<T: Component>(&mut self) -> QueryMut<'_, T> {
         QueryMut {
             iter: self.storage_mut_if_exists::<T>().map(|s| s.map.iter_mut()),
         }
+    }
+
+    /// Zero-allocation mutable query that marks every yielded entity as changed.
+    ///
+    /// Prefer this iterator for simulation systems that mutate components.
+    #[inline]
+    pub fn query_mut_tracked<T: Component>(&mut self) -> Option<QueryMutTracked<'_, T>> {
+        let tick = self.tick;
+        let s = self.storage_mut_if_exists::<T>()?;
+        let Storage { map, changed_tick, .. } = s;
+        Some(QueryMutTracked {
+            iter: map.iter_mut(),
+            changed_tick,
+            tick,
+        })
     }
 
     /// Zero-allocation join query over entities that have both `A` and `B`.

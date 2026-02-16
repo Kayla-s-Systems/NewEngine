@@ -32,6 +32,31 @@ impl<'a, T: 'static> Iterator for QueryMut<'a, T> {
     }
 }
 
+/// Mutable query iterator that conservatively marks every yielded entity as `changed`.
+///
+/// This is the recommended iterator for simulation systems that mutate components.
+///
+/// Change tracking semantics:
+/// - every `next()` that returns an item will write `changed_tick[id] = tick`
+/// - if the system *doesn't* mutate a yielded component, it may cause a false-positive change
+///   (conservative by design)
+pub struct QueryMutTracked<'a, T: 'static> {
+    pub(crate) iter: slotmap::secondary::IterMut<'a, EntityId, T>,
+    pub(crate) changed_tick: &'a mut SecondaryMap<EntityId, u64>,
+    pub(crate) tick: u64,
+}
+
+impl<'a, T: 'static> Iterator for QueryMutTracked<'a, T> {
+    type Item = (EntityId, &'a mut T);
+
+    #[inline]
+    fn next(&mut self) -> Option<Self::Item> {
+        let (id, v) = self.iter.next()?;
+        self.changed_tick.insert(id, self.tick);
+        Some((id, v))
+    }
+}
+
 /// Join query iterator over two component types.
 pub enum Query2<'a, A: 'static, B: 'static> {
     Empty,
