@@ -1,10 +1,9 @@
-use super::camera::GizmoCamera;
 use super::draw_axis::{axis_color, draw_axis, draw_axis_scale};
 use super::draw_rotate::draw_rotate_gizmo;
-use super::math::{axis_end, plane_basis, rotation_angle_on_plane, screen_to_world_at_ndc_z, world_to_screen};
+use super::math::{axis_end, plane_basis, rotation_angle_on_plane, screen_ray, screen_to_world_at_ndc_z, world_to_screen};
 use super::pick::{pick_non_rotate_axis, pick_rotate_axis};
 use super::types::{DragState, GizmoOutput, GizmoStyle, GizmoTransform};
-use crate::{GizmoAxis, GizmoMode};
+use crate::{GizmoAxis, GizmoMode, GizmoSpace};
 use egui::{Painter, Pos2, Rect};
 use newengine_math::Quat;
 
@@ -13,6 +12,7 @@ use newengine_math::Quat;
 /// This is intentionally renderer-agnostic and uses only `egui::Painter`.
 pub struct EguiGizmo {
     mode: GizmoMode,
+    space: GizmoSpace,
     style: GizmoStyle,
     drag: Option<DragState>,
 }
@@ -22,6 +22,7 @@ impl Default for EguiGizmo {
     fn default() -> Self {
         Self {
             mode: GizmoMode::default(),
+            space: GizmoSpace::default(),
             style: GizmoStyle::default(),
             drag: None,
         }
@@ -48,6 +49,19 @@ impl EguiGizmo {
     }
 
     #[inline]
+    pub fn space(&self) -> GizmoSpace {
+        self.space
+    }
+
+    #[inline]
+    pub fn set_space(&mut self, space: GizmoSpace) {
+        if self.space != space {
+            self.space = space;
+            self.drag = None;
+        }
+    }
+
+    #[inline]
     pub fn style(&self) -> GizmoStyle {
         self.style
     }
@@ -65,7 +79,7 @@ impl EguiGizmo {
     /// Returns true if the gizmo wants to capture mouse input this frame.
     ///
     /// This is designed to be queried before camera navigation / selection logic.
-    pub fn wants_capture_now(&self, ctx: &egui::Context, rect: Rect, camera: &impl GizmoCamera, tr: GizmoTransform) -> bool {
+    pub fn wants_capture_now(&self, ctx: &egui::Context, rect: Rect, camera: &impl super::camera::GizmoCamera, tr: GizmoTransform) -> bool {
         if self.drag.is_some() {
             return true;
         }
@@ -89,7 +103,7 @@ impl EguiGizmo {
         painter: &Painter,
         ctx: &egui::Context,
         rect: Rect,
-        camera: &impl GizmoCamera,
+        camera: &impl super::camera::GizmoCamera,
         tr: GizmoTransform,
     ) -> GizmoOutput {
         let mut out = GizmoOutput::default();
@@ -108,8 +122,22 @@ impl EguiGizmo {
         let just_pressed = ctx.input(|i| i.pointer.primary_pressed());
         if self.drag.is_none() && just_pressed {
             if let (Some(axis), Some(m)) = (hovered, mouse) {
-                let axis_world = (tr.rot * axis.vec3()).normalize_or_zero();
-                let (plane_u, plane_v) = plane_basis(axis_world);
+                let axes_rot = self.axes_rot(tr);
+                let axis_world = (axes_rot * axis.vec3()).normalize_or_zero();
+
+                // Rotation plane basis: prefer camera-aligned (stable when axis is near camera forward).
+                let (plane_u, plane_v) = if self.mode == GizmoMode::Rotate {
+                    let (_ro, view_dir) = screen_ray(camera, rect, center);
+                    let u = axis_world.cross(view_dir).normalize_or_zero();
+                    if u.length_squared() > 1e-10 {
+                        (u, axis_world.cross(u).normalize_or_zero())
+                    } else {
+                        plane_basis(axis_world)
+                    }
+                } else {
+                    plane_basis(axis_world)
+                };
+
                 let start_angle = rotation_angle_on_plane(camera, rect, tr.pos, axis_world, plane_u, plane_v, m);
 
                 self.drag = Some(DragState {
@@ -134,7 +162,8 @@ impl EguiGizmo {
             if !lmb_down {
                 self.drag = None;
             } else if let Some(m) = mouse {
-                let axis_world = (drag.start.rot * drag.axis.vec3()).normalize_or_zero();
+                let axes_rot = self.axes_rot(drag.start);
+                let axis_world = (axes_rot * drag.axis.vec3()).normalize_or_zero();
 
                 let new_tr = match drag.mode {
                     GizmoMode::Translate => {
@@ -174,6 +203,18 @@ impl EguiGizmo {
                         while da < -core::f32::consts::PI {
                             da += 2.0 * core::f32::consts::PI;
                         }
+
+                        let snap_enabled = if self.style.snap_on_shift {
+                            ctx.input(|i| i.modifiers.shift)
+                        } else {
+                            true
+                        };
+
+                        if snap_enabled && self.style.snap_rotate_deg > 0.0 {
+                            let step = (self.style.snap_rotate_deg.to_radians()).max(1e-6);
+                            da = (da / step).round() * step;
+                        }
+
                         let q = Quat::from_axis_angle(axis_world, da);
                         GizmoTransform {
                             pos: drag.start.pos,
@@ -203,23 +244,62 @@ impl EguiGizmo {
                     self.drag,
                     self.style,
                     center,
+                    self.axes_rot(tr),
                 );
             }
             _ => {
-                let x_end = axis_end(camera, rect, tr.pos, tr.rot, GizmoAxis::X, center, self.style.axis_len_pt);
-                let y_end = axis_end(camera, rect, tr.pos, tr.rot, GizmoAxis::Y, center, self.style.axis_len_pt);
-                let z_end = axis_end(camera, rect, tr.pos, tr.rot, GizmoAxis::Z, center, self.style.axis_len_pt);
+                let axes_rot = self.axes_rot(tr);
+
+                let x_end = axis_end(camera, rect, tr.pos, axes_rot, GizmoAxis::X, center, self.style.axis_len_pt);
+                let y_end = axis_end(camera, rect, tr.pos, axes_rot, GizmoAxis::Y, center, self.style.axis_len_pt);
+                let z_end = axis_end(camera, rect, tr.pos, axes_rot, GizmoAxis::Z, center, self.style.axis_len_pt);
 
                 match self.mode {
                     GizmoMode::Scale => {
-                        draw_axis_scale(painter, center, x_end, axis_color(GizmoAxis::X, hovered, out.active_axis, self.style.highlight_mul), self.style);
-                        draw_axis_scale(painter, center, y_end, axis_color(GizmoAxis::Y, hovered, out.active_axis, self.style.highlight_mul), self.style);
-                        draw_axis_scale(painter, center, z_end, axis_color(GizmoAxis::Z, hovered, out.active_axis, self.style.highlight_mul), self.style);
+                        draw_axis_scale(
+                            painter,
+                            center,
+                            x_end,
+                            axis_color(GizmoAxis::X, hovered, out.active_axis, self.style.highlight_mul),
+                            self.style,
+                        );
+                        draw_axis_scale(
+                            painter,
+                            center,
+                            y_end,
+                            axis_color(GizmoAxis::Y, hovered, out.active_axis, self.style.highlight_mul),
+                            self.style,
+                        );
+                        draw_axis_scale(
+                            painter,
+                            center,
+                            z_end,
+                            axis_color(GizmoAxis::Z, hovered, out.active_axis, self.style.highlight_mul),
+                            self.style,
+                        );
                     }
                     _ => {
-                        draw_axis(painter, center, x_end, axis_color(GizmoAxis::X, hovered, out.active_axis, self.style.highlight_mul), self.style);
-                        draw_axis(painter, center, y_end, axis_color(GizmoAxis::Y, hovered, out.active_axis, self.style.highlight_mul), self.style);
-                        draw_axis(painter, center, z_end, axis_color(GizmoAxis::Z, hovered, out.active_axis, self.style.highlight_mul), self.style);
+                        draw_axis(
+                            painter,
+                            center,
+                            x_end,
+                            axis_color(GizmoAxis::X, hovered, out.active_axis, self.style.highlight_mul),
+                            self.style,
+                        );
+                        draw_axis(
+                            painter,
+                            center,
+                            y_end,
+                            axis_color(GizmoAxis::Y, hovered, out.active_axis, self.style.highlight_mul),
+                            self.style,
+                        );
+                        draw_axis(
+                            painter,
+                            center,
+                            z_end,
+                            axis_color(GizmoAxis::Z, hovered, out.active_axis, self.style.highlight_mul),
+                            self.style,
+                        );
                     }
                 }
             }
@@ -228,11 +308,18 @@ impl EguiGizmo {
         out
     }
 
-    fn pick_axis(&self, camera: &impl GizmoCamera, rect: Rect, tr: GizmoTransform, mouse: Pos2) -> Option<GizmoAxis> {
+    fn axes_rot(&self, tr: GizmoTransform) -> Quat {
+        match self.space {
+            GizmoSpace::Local => tr.rot,
+            GizmoSpace::World => Quat::IDENTITY,
+        }
+    }
+
+    fn pick_axis(&self, camera: &impl super::camera::GizmoCamera, rect: Rect, tr: GizmoTransform, mouse: Pos2) -> Option<GizmoAxis> {
         match self.mode {
-            GizmoMode::Rotate => pick_rotate_axis(camera, rect, tr, mouse, self.style),
-            GizmoMode::Scale => pick_non_rotate_axis(camera, rect, tr, mouse, self.style, true),
-            GizmoMode::Translate => pick_non_rotate_axis(camera, rect, tr, mouse, self.style, false),
+            GizmoMode::Rotate => pick_rotate_axis(camera, rect, self.axes_rot(tr), tr, mouse, self.style),
+            GizmoMode::Scale => pick_non_rotate_axis(camera, rect, self.axes_rot(tr), tr, mouse, self.style, true),
+            GizmoMode::Translate => pick_non_rotate_axis(camera, rect, self.axes_rot(tr), tr, mouse, self.style, false),
         }
     }
 }

@@ -61,6 +61,10 @@ pub struct ViewportBridge {
     /// Incremented by UI when the user requests "frame scene" (e.g. hotkey F).
     frame_seq: AtomicU64,
 
+    /// Framing mode for the latest frame request.
+    /// 0 = frame selection first, 1 = frame entire scene.
+    frame_all: AtomicU64,
+
     camera_frame: Mutex<Option<ViewportCameraFrame>>,
 }
 
@@ -81,6 +85,7 @@ impl ViewportBridge {
             pick_xy: AtomicU64::new(0),
 
             frame_seq: AtomicU64::new(0),
+            frame_all: AtomicU64::new(0),
 
             camera_frame: Mutex::new(None),
         }
@@ -227,9 +232,13 @@ impl ViewportBridge {
         (seq, x, y)
     }
 
-    /// Publish an explicit "frame scene" request.
+    /// Publish an explicit framing request.
+    ///
+    /// If `all` is true, the renderer will frame the entire scene.
+    /// Otherwise it will try to frame selection first.
     #[inline]
-    pub fn publish_frame_request(&self) {
+    pub fn publish_frame_request(&self, all: bool) {
+        self.frame_all.store(all as u64, Ordering::Relaxed);
         self.frame_seq.fetch_add(1, Ordering::Relaxed);
     }
 
@@ -237,6 +246,11 @@ impl ViewportBridge {
     #[inline]
     pub fn read_frame_request(&self) -> u64 {
         self.frame_seq.load(Ordering::Relaxed)
+    }
+
+    #[inline]
+    pub fn read_frame_all(&self) -> bool {
+        self.frame_all.load(Ordering::Relaxed) != 0
     }
 
     /// Publish camera matrices and current viewport size (renderer -> UI).

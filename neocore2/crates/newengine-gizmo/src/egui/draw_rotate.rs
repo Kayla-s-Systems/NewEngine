@@ -16,6 +16,7 @@ pub(crate) fn draw_rotate_gizmo(
     drag: Option<DragState>,
     style: GizmoStyle,
     center: Pos2,
+    axes_rot: newengine_math::Quat,
 ) {
     let view_dir = {
         let (_ro, rd) = screen_ray(camera, rect, center);
@@ -23,12 +24,19 @@ pub(crate) fn draw_rotate_gizmo(
     };
 
     for axis in [GizmoAxis::X, GizmoAxis::Y, GizmoAxis::Z] {
-        let axis_world = (tr.rot * axis.vec3()).normalize_or_zero();
+        let axis_world = (axes_rot * axis.vec3()).normalize_or_zero();
         let (u, v) = plane_basis(axis_world);
 
         let color = axis_color(axis, hovered, active, style.highlight_mul);
-        draw_rotate_ring_front_half(p, camera, rect, tr.pos, axis_world, u, v, view_dir, style, color);
 
+        // Back half first (faded).
+        let back = Color32::from_rgba_unmultiplied(color.r(), color.g(), color.b(), style.rotate_back_alpha);
+        draw_rotate_ring_half(p, camera, rect, tr.pos, axis_world, u, v, view_dir, style, back, false);
+
+        // Front half on top.
+        draw_rotate_ring_half(p, camera, rect, tr.pos, axis_world, u, v, view_dir, style, color, true);
+
+        // Active drag wedge.
         if active == Some(axis) {
             if let Some(d) = drag {
                 if d.axis == axis && d.mode == GizmoMode::Rotate {
@@ -57,7 +65,7 @@ pub(crate) fn draw_rotate_gizmo(
     }
 }
 
-fn draw_rotate_ring_front_half(
+fn draw_rotate_ring_half(
     p: &Painter,
     camera: &impl GizmoCamera,
     rect: Rect,
@@ -68,6 +76,7 @@ fn draw_rotate_ring_front_half(
     view_dir: newengine_math::Vec3,
     style: GizmoStyle,
     color: Color32,
+    front: bool,
 ) {
     let radius_w = world_radius_for_screen(camera, rect, pivot, u, style.rotate_radius_pt);
     let d_plane = (view_dir - n * view_dir.dot(n)).normalize_or_zero();
@@ -78,8 +87,9 @@ fn draw_rotate_ring_front_half(
     for i in 0..=segs {
         let t = (i as f32 / segs as f32) * core::f32::consts::TAU;
         let r = u * t.cos() + v * t.sin();
+        let is_front = r.dot(d_plane) > 0.0;
 
-        if r.dot(d_plane) > 0.0 {
+        if is_front == front {
             let wp = pivot + r * radius_w;
             if let Some((sp, _)) = world_to_screen(camera, rect, wp) {
                 points.push(sp);

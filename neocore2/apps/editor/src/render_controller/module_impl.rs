@@ -335,23 +335,36 @@ impl<E: Send + 'static> Module<E> for EditorRenderController {
             let user_busy = look_drag || pan_drag || move_mask != 0 || ui_busy || bounds_changed;
             // UI-driven frame request (hotkey F / button).
             let frame_seq = self.viewport_bridge.read_frame_request();
+            let frame_all = self.viewport_bridge.read_frame_all();
             let explicit_frame = frame_seq != self.last_frame_seq;
             if explicit_frame {
                 self.last_frame_seq = frame_seq;
             }
 
             if explicit_frame || (!self.framed_once && !user_busy) {
-                let fovy = 60.0f32.to_radians();
-                orbit_frame_sphere(
-                    &mut self.orbit,
-                    bounds_center,
-                    bounds_radius,
-                    fovy,
-                    aspect,
-                    1.15,
-                );
+                let (fc, fr) = if explicit_frame && !frame_all {
+                    // Frame selection first (primary selection).
+                    let sel = self.scene_bridge.selection();
+                    if let Some(e) = sel {
+                        let world = scene.world();
+                        if let Some(b) = newengine_scene::selection_world_bounds(world, [e].into_iter()) {
+                            let c = b.center();
+                            let r = b.half_extents().length().max(0.001);
+                            (c, r)
+                        } else {
+                            (bounds_center, bounds_radius)
+                        }
+                    } else {
+                        (bounds_center, bounds_radius)
+                    }
+                } else {
+                    (bounds_center, bounds_radius)
+                };
 
-                self.framed_radius = bounds_radius;
+                let fovy = 60.0f32.to_radians();
+                orbit_frame_sphere(&mut self.orbit, fc, fr, fovy, aspect, 1.15);
+
+                self.framed_radius = fr;
                 self.framed_once = true;
 
                 Self::sync_rig_with_floor_lift(&mut self.orbit, &mut self.rig);

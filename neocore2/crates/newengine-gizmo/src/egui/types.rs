@@ -30,6 +30,12 @@ pub struct GizmoStyle {
     pub rotate_width_pt: f32,
     pub rotate_segments: u32,
     pub rotate_fill_alpha: u8,
+    pub rotate_back_alpha: u8,
+
+    /// Rotation snapping step (degrees). 0 disables snapping.
+    pub snap_rotate_deg: f32,
+    /// Enable snapping only while Shift is held.
+    pub snap_on_shift: bool,
 }
 
 impl Default for GizmoStyle {
@@ -46,6 +52,10 @@ impl Default for GizmoStyle {
             rotate_width_pt: 4.0,
             rotate_segments: 96,
             rotate_fill_alpha: 70,
+            rotate_back_alpha: 35,
+
+            snap_rotate_deg: 15.0,
+            snap_on_shift: true,
         }
     }
 }

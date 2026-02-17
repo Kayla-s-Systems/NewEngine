@@ -23,6 +23,23 @@ impl Default for GizmoMode {
     }
 }
 
+/// Transform space used by the gizmo.
+///
+/// `Local` uses the selected transform's rotation to orient axes.
+/// `World` uses world axes.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum GizmoSpace {
+    Local,
+    World,
+}
+
+impl Default for GizmoSpace {
+    #[inline]
+    fn default() -> Self {
+        Self::Local
+    }
+}
+
 /// Primary axis handles.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum GizmoAxis {

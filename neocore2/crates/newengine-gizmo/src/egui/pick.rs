@@ -3,6 +3,7 @@ use super::math::{axis_end, dist_to_segment, plane_basis, screen_ray, world_radi
 use super::types::{GizmoStyle, GizmoTransform};
 use crate::GizmoAxis;
 use egui::{Pos2, Rect};
+use newengine_math::Quat;
 
 pub(crate) fn pick_axis_lines(center: Pos2, x_end: Pos2, y_end: Pos2, z_end: Pos2, m: Pos2, r: f32) -> Option<GizmoAxis> {
     let mut best: Option<GizmoAxis> = None;
@@ -39,7 +40,14 @@ pub(crate) fn pick_axis_scale(center: Pos2, x_end: Pos2, y_end: Pos2, z_end: Pos
     best
 }
 
-pub(crate) fn pick_rotate_axis(camera: &impl GizmoCamera, rect: Rect, tr: GizmoTransform, mouse: Pos2, style: GizmoStyle) -> Option<GizmoAxis> {
+pub(crate) fn pick_rotate_axis(
+    camera: &impl GizmoCamera,
+    rect: Rect,
+    axes_rot: Quat,
+    tr: GizmoTransform,
+    mouse: Pos2,
+    style: GizmoStyle,
+) -> Option<GizmoAxis> {
     let Some((center, _)) = world_to_screen(camera, rect, tr.pos) else {
         return None;
     };
@@ -53,7 +61,7 @@ pub(crate) fn pick_rotate_axis(camera: &impl GizmoCamera, rect: Rect, tr: GizmoT
     let mut best_d = style.pick_radius_pt;
 
     for axis in [GizmoAxis::X, GizmoAxis::Y, GizmoAxis::Z] {
-        let axis_world = (tr.rot * axis.vec3()).normalize_or_zero();
+        let axis_world = (axes_rot * axis.vec3()).normalize_or_zero();
         let (u, v) = plane_basis(axis_world);
         let radius_w = world_radius_for_screen(camera, rect, tr.pos, u, style.rotate_radius_pt);
         let d_plane = (view_dir - axis_world * view_dir.dot(axis_world)).normalize_or_zero();
@@ -96,6 +104,7 @@ fn dist_to_polyline(p: Pos2, pts: &[Pos2]) -> f32 {
 pub(crate) fn pick_non_rotate_axis(
     camera: &impl GizmoCamera,
     rect: Rect,
+    axes_rot: Quat,
     tr: GizmoTransform,
     mouse: Pos2,
     style: GizmoStyle,
@@ -105,9 +114,9 @@ pub(crate) fn pick_non_rotate_axis(
         return None;
     };
 
-    let x_end = axis_end(camera, rect, tr.pos, tr.rot, GizmoAxis::X, center, style.axis_len_pt);
-    let y_end = axis_end(camera, rect, tr.pos, tr.rot, GizmoAxis::Y, center, style.axis_len_pt);
-    let z_end = axis_end(camera, rect, tr.pos, tr.rot, GizmoAxis::Z, center, style.axis_len_pt);
+    let x_end = axis_end(camera, rect, tr.pos, axes_rot, GizmoAxis::X, center, style.axis_len_pt);
+    let y_end = axis_end(camera, rect, tr.pos, axes_rot, GizmoAxis::Y, center, style.axis_len_pt);
+    let z_end = axis_end(camera, rect, tr.pos, axes_rot, GizmoAxis::Z, center, style.axis_len_pt);
 
     if scale_mode {
         pick_axis_scale(center, x_end, y_end, z_end, mouse, style)

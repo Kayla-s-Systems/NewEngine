@@ -23,6 +23,7 @@ use std::time::Duration;
 
 mod render_controller;
 mod ui;
+mod ui_contrib;
 mod viewport_bridge;
 mod plugin_manager;
 mod scene_bridge;
