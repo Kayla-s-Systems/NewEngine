@@ -13,6 +13,15 @@
 
 - Системы — fn pointers (без динамического диспетча в hot loop).
 
+## Parallel execution
+
+- Feature: `parallel`
+- Модель: детерминированные batch'и по `AccessMask` + commit через `CommandBuffer` в стабильном порядке.
+
+```bash
+cargo test -p newengine-sim --features parallel
+```
+
   ## Публичный API
 
     - Смотри `src/lib.rs` и модульные реэкспорты.

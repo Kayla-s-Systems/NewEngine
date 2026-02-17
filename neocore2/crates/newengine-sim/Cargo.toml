@@ -4,9 +4,14 @@ version = "0.1.0"
 readme = "README.md"
 edition = "2021"
 
+[features]
+default = []
+parallel = ["dep:rayon"]
+
 [dependencies]
 newengine-ecs = { path = "../newengine-ecs" }
 newengine-transform = { path = "../newengine-transform" }
 newengine-scene = { path = "../newengine-scene" }
 newengine-camera = { path = "../newengine-camera" }
 glam = "0.32.0"
+rayon = { version = "1.10", optional = true }
