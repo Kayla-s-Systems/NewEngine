@@ -12,6 +12,7 @@ mod registry;
 mod value;
 mod builtins;
 mod gpu;
+pub mod collections;
 
 #[macro_use]
 mod macros;
