@@ -17,7 +17,7 @@ impl Frustum {
     /// This extraction matches that convention.
     #[inline]
     pub fn from_view_proj(m: Mat4) -> Self {
-        // Mat4 stores columns; convert to rows by indexing.
+        // glam Mat4 stores columns; convert to rows by indexing.
         let r0 = Vec4::new(m.x_axis.x, m.y_axis.x, m.z_axis.x, m.w_axis.x);
         let r1 = Vec4::new(m.x_axis.y, m.y_axis.y, m.z_axis.y, m.w_axis.y);
         let r2 = Vec4::new(m.x_axis.z, m.y_axis.z, m.z_axis.z, m.w_axis.z);
