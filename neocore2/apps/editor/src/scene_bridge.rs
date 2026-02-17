@@ -6,6 +6,8 @@ use std::sync::Arc;
 use newengine_math::{EulerRot, Quat, Vec3};
 
 use newengine_ecs::EntityId;
+use newengine_materials::api::MaterialRegistryApi;
+use newengine_materials::{MaterialDescriptor, MaterialId, MaterialRef, MaterialRegistry};
 use newengine_primitives::{builtins, Primitive, PrimitiveId, PrimitiveRegistry};
 use newengine_scene::{spawn_named, Scene};
 use newengine_transform::Transform;
@@ -39,6 +41,18 @@ pub enum SceneCommand {
     SetPrimitiveColor {
         entity: EntityId,
         color: [f32; 4],
+    },
+
+    /// Assign a material id to an entity (adds/overwrites `MaterialRef`).
+    SetMaterial {
+        entity: EntityId,
+        material: MaterialId,
+    },
+
+    /// Update a material descriptor in the registry.
+    UpdateMaterial {
+        material: MaterialId,
+        desc: MaterialDescriptor,
     },
 }
 
@@ -104,6 +118,7 @@ pub struct SceneBridge {
     queue: Arc<Mutex<SceneQueue>>,
     selection: Arc<Mutex<Option<EntityId>>>,
     primitives: Arc<RwLock<PrimitiveRegistry>>,
+    materials: Arc<RwLock<MaterialRegistry>>,
     grid_settings: Arc<Mutex<GridSettings>>,
 }
 
@@ -117,6 +132,7 @@ impl SceneBridge {
             queue: Arc::new(Mutex::new(SceneQueue::default())),
             selection: Arc::new(Mutex::new(None)),
             primitives: Arc::new(RwLock::new(PrimitiveRegistry::with_builtins())),
+            materials: Arc::new(RwLock::new(MaterialRegistry::with_builtins())),
             grid_settings: Arc::new(Mutex::new(GridSettings::default())),
         }
     }
@@ -124,6 +140,26 @@ impl SceneBridge {
     #[inline]
     pub fn primitives(&self) -> Arc<RwLock<PrimitiveRegistry>> {
         Arc::clone(&self.primitives)
+    }
+
+    #[inline]
+    pub fn materials(&self) -> Arc<RwLock<MaterialRegistry>> {
+        Arc::clone(&self.materials)
+    }
+
+    /// Snapshot materials for UI.
+    ///
+    /// Returns sorted (name, id) pairs.
+    #[inline]
+    pub fn materials_snapshot(&self) -> Vec<(String, MaterialId)> {
+        let reg = self.materials.read();
+        let mut out: Vec<(String, MaterialId)> = reg
+            .ids()
+            .into_iter()
+            .filter_map(|id| reg.name(id).map(|n| (n, id)))
+            .collect();
+        out.sort_by(|a, b| a.0.cmp(&b.0));
+        out
     }
 
     /// Snapshot primitives for UI.
@@ -220,6 +256,22 @@ impl SceneBridge {
             .push(SceneCommand::SetPrimitiveColor { entity, color });
     }
 
+    #[inline]
+    pub fn cmd_set_material(&self, entity: EntityId, material: MaterialId) {
+        self.queue
+            .lock()
+            .cmds
+            .push(SceneCommand::SetMaterial { entity, material });
+    }
+
+    #[inline]
+    pub fn cmd_update_material(&self, material: MaterialId, desc: MaterialDescriptor) {
+        self.queue
+            .lock()
+            .cmds
+            .push(SceneCommand::UpdateMaterial { material, desc });
+    }
+
     /// Applies queued commands to the scene world.
     ///
     /// Call from the render/controller thread once per frame.
@@ -272,13 +324,15 @@ impl SceneBridge {
                         let e = spawn_named(world, name);
                         let _ = newengine_transform::set_parent(world, e, Some(root));
 
-                        let _ = world.insert(
-                            e,
-                            Primitive {
-                                id,
-                                color,
-                            },
-                        );
+                        let _ = world.insert(e, Primitive { id, color });
+
+                        // Default material for all spawned primitives.
+                        // Registry is deterministic: register_named returns existing id if present.
+                        let default_mat = self
+                            .materials
+                            .read()
+                            .register_named("Default", MaterialDescriptor::default());
+                        let _ = world.insert(e, MaterialRef { id: default_mat });
 
                         if let Some(t) = world.get_mut_tracked::<Transform>(e) {
                             t.position = Vec3::new(position[0], position[1], position[2]);
@@ -312,6 +366,16 @@ impl SceneBridge {
                         if let Some(p) = world.get_mut_tracked::<Primitive>(entity) {
                             p.color = color;
                         }
+                    }
+
+                    SceneCommand::SetMaterial { entity, material } => {
+                        let world = scene.world_mut();
+                        let _ = world.insert(entity, MaterialRef { id: material });
+                    }
+
+                    SceneCommand::UpdateMaterial { material, desc } => {
+                        // Registry update is editor-side shared state; do not touch the world.
+                        let _ = self.materials.read().set_desc(material, desc);
                     }
                 }
             }

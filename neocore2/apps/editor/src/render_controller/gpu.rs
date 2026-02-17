@@ -10,6 +10,40 @@ use newengine_core::{EngineError, EngineResult as CoreResult};
 use newengine_primitives::{PrimitiveId, PrimitiveRegistry, PrimitiveVertex};
 
 use shaderc::{CompileOptions, Compiler, OptimizationLevel, ShaderKind};
+use std::path::{Path, PathBuf};
+use std::sync::OnceLock;
+
+fn assets_root() -> &'static Path {
+    static ROOT: OnceLock<PathBuf> = OnceLock::new();
+    ROOT.get_or_init(|| {
+        if let Ok(exe) = std::env::current_exe() {
+            let mut cur = exe.parent().map(Path::to_path_buf);
+            for _ in 0..12 {
+                if let Some(dir) = cur.as_ref() {
+                    let cand = dir.join("assets");
+                    if cand.is_dir() {
+                        return cand;
+                    }
+                    cur = dir.parent().map(Path::to_path_buf);
+                } else {
+                    break;
+                }
+            }
+        }
+        std::env::current_dir()
+            .unwrap_or_else(|_| PathBuf::from("."))
+            .join("assets")
+    })
+}
+
+fn load_text_asset(rel: &str) -> CoreResult<String> {
+    let path = assets_root().join(rel);
+    let s = std::fs::read_to_string(&path).map_err(|e| {
+        EngineError::other(format!("asset.read failed rel='{rel}' path='{}' err='{e}'", path.display()))
+    })?;
+    log::debug!("asset.read ok kind=text rel='{rel}' path='{}' bytes={}", path.display(), s.len());
+    Ok(s)
+}
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub(super) struct GridMeshParams {
@@ -39,6 +73,9 @@ pub(super) struct LitPipeline {
     pub pipeline: newengine_core::render::PipelineId,
 }
 
+// std140 layout: mat4 (64) + vec4 (16) = 80 bytes.
+const LIT_UBO_SIZE: u64 = 80;
+
 #[derive(Clone, Copy)]
 pub(super) struct PrimitiveGpu {
     pub vb: newengine_core::render::BufferId,
@@ -55,7 +92,8 @@ pub(super) fn ensure_lit_pipeline(
     }
 
     let ubo = r.create_buffer(
-        BufferDesc::new(64, BufferUsage::Uniform, MemoryHint::CpuToGpu).with_label("editor_lit_ubo"),
+        BufferDesc::new(LIT_UBO_SIZE, BufferUsage::Uniform, MemoryHint::CpuToGpu)
+            .with_label("editor_lit_ubo"),
     )?;
 
     let bgl = r.create_bind_group_layout(
@@ -64,41 +102,16 @@ pub(super) fn ensure_lit_pipeline(
     let bg = r.create_bind_group(
         BindGroupDesc::new(bgl)
             .with_label("editor_lit_bg")
-            .with_uniform0(BufferBinding::new(ubo, 0, 64)),
+            .with_uniform0(BufferBinding::new(ubo, 0, LIT_UBO_SIZE)),
     )?;
 
     let compiler = shaderc::Compiler::new().map_err(|e| EngineError::other(format!("shaderc: Compiler: {e}")))?;
 
-    const VS_SRC: &str = r#"#version 450
-layout(location = 0) in vec3 a_pos;
-layout(location = 1) in vec3 a_nrm;
+    let vs_src = load_text_asset("shaders/editor_lit.vert")?;
+    let fs_src = load_text_asset("shaders/editor_lit.frag")?;
 
-layout(set = 0, binding = 0) uniform Ubo {
-    mat4 u_mvp;
-} u;
-
-layout(location = 0) out vec3 v_nrm;
-
-void main() {
-    v_nrm = a_nrm;
-    gl_Position = u.u_mvp * vec4(a_pos, 1.0);
-}
-"#;
-
-    const FS_SRC: &str = r#"#version 450
-layout(location = 0) in vec3 v_nrm;
-layout(location = 0) out vec4 o_col;
-
-void main() {
-    vec3 n = normalize(v_nrm);
-    vec3 l = normalize(vec3(0.35, 0.75, 0.55));
-    float ndl = clamp(dot(n, l) * 0.5 + 0.5, 0.0, 1.0);
-    o_col = vec4(vec3(ndl), 1.0);
-}
-"#;
-
-    let vs_spv = compile_glsl(&compiler, ShaderKind::Vertex, "editor_lit.vert", VS_SRC)?;
-    let fs_spv = compile_glsl(&compiler, ShaderKind::Fragment, "editor_lit.frag", FS_SRC)?;
+    let vs_spv = compile_glsl(&compiler, ShaderKind::Vertex, "editor_lit.vert", &vs_src)?;
+    let fs_spv = compile_glsl(&compiler, ShaderKind::Fragment, "editor_lit.frag", &fs_src)?;
 
     let vs = r.create_shader(ShaderDesc::new(ShaderStage::Vertex, "main", vs_spv).with_label("editor_lit_vs"))?;
     let fs = r.create_shader(ShaderDesc::new(ShaderStage::Fragment, "main", fs_spv).with_label("editor_lit_fs"))?;
@@ -200,36 +213,11 @@ pub(super) fn ensure_grid(
 
     let compiler = shaderc::Compiler::new().map_err(|e| EngineError::other(format!("shaderc: Compiler: {e}")))?;
 
-    // Editor grid in XZ plane, authored in unit space (spacing = 1.0).
-    // The caller scales/translates it to follow the camera (infinite feel).
-    // The caller provides MVP via the same UBO bind-group as the lit pipeline.
-    const VS_SRC: &str = r#"#version 450
-layout(location = 0) in vec3 a_pos;
-layout(location = 1) in vec4 a_col;
+    let vs_src = load_text_asset("shaders/editor_grid.vert")?;
+    let fs_src = load_text_asset("shaders/editor_grid.frag")?;
 
-layout(set = 0, binding = 0) uniform Ubo {
-    mat4 u_mvp;
-} u;
-
-layout(location = 0) out vec4 v_col;
-
-void main() {
-    v_col = a_col;
-    gl_Position = u.u_mvp * vec4(a_pos, 1.0);
-}
-"#;
-
-    const FS_SRC: &str = r#"#version 450
-layout(location = 0) in vec4 v_col;
-layout(location = 0) out vec4 o_col;
-
-void main() {
-    o_col = v_col;
-}
-"#;
-
-    let vs_spv = compile_glsl(&compiler, ShaderKind::Vertex, "editor_grid.vert", VS_SRC)?;
-    let fs_spv = compile_glsl(&compiler, ShaderKind::Fragment, "editor_grid.frag", FS_SRC)?;
+    let vs_spv = compile_glsl(&compiler, ShaderKind::Vertex, "editor_grid.vert", &vs_src)?;
+    let fs_spv = compile_glsl(&compiler, ShaderKind::Fragment, "editor_grid.frag", &fs_src)?;
 
     let vs = r.create_shader(ShaderDesc::new(ShaderStage::Vertex, "main", vs_spv).with_label("editor_grid_vs"))?;
     let fs = r.create_shader(ShaderDesc::new(ShaderStage::Fragment, "main", fs_spv).with_label("editor_grid_fs"))?;

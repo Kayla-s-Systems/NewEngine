@@ -5,6 +5,7 @@ use newengine_core::render::{
     require_render_api, BeginFrameDesc, BeginRenderTargetDesc, BufferSlice, Extent2D, IndexFormat, RectI32, Viewport,
 };
 use newengine_core::{EngineResult, Module, ModuleCtx};
+use newengine_materials::api::MaterialRegistryApi;
 use newengine_math::{Mat4, Quat, Vec3};
 use newengine_platform_winit::WinitWindowInitSize;
 use newengine_ui::draw::UiDrawList;
@@ -24,8 +25,9 @@ impl EditorRenderController {
     const MAX_PITCH_ABS: f32 = 1.5184364; // ~87 deg
     const MIN_DISTANCE: f32 = 0.30;
 
-    // Fit-to-bounds behavior: expand only when scene grows.
-    const FRAME_GROWTH_EPS: f32 = 1.08;
+    // NOTE: camera framing is explicit (hotkey/button) + startup/aspect changes.
+    // Auto-framing on scene growth is intentionally disabled to keep the world reference
+    // stable while transforming/animating objects (prevents the grid "moving with the object").
 
     #[inline]
     fn enforce_orbit_basic(orbit: &mut newengine_camera::OrbitController) {
@@ -125,16 +127,23 @@ impl EditorRenderController {
     }
 
     #[inline]
-    fn write_mat4_ubo(
+    fn write_lit_ubo(
         r: &mut dyn newengine_core::render::RenderApi,
         ubo: newengine_core::render::BufferId,
         m: Mat4,
+        base_color: [f32; 4],
     ) -> EngineResult<()> {
         let cols = m.to_cols_array();
-        let mut bytes: [u8; 64] = [0u8; 64];
+        // std140: mat4 (64) + vec4 (16)
+        let mut bytes: [u8; 80] = [0u8; 80];
         for (i, f) in cols.iter().enumerate() {
             let off = i * 4;
             bytes[off..off + 4].copy_from_slice(&f.to_ne_bytes());
+        }
+        let base_off = 64;
+        for i in 0..4 {
+            let off = base_off + i * 4;
+            bytes[off..off + 4].copy_from_slice(&base_color[i].to_ne_bytes());
         }
         r.write_buffer(ubo, 0, &bytes)
     }
@@ -309,7 +318,7 @@ impl<E: Send + 'static> Module<E> for EditorRenderController {
 
             // Framing:
             // - startup / aspect change: frame
-            // - scene growth: expand only (never shrink -> no annoying zoom-in on spawn)
+            // - explicit UI request (F)
             let aspect_changed = (aspect - self.last_aspect).abs() > 0.0005
                 || vp_w != self.last_vp_w
                 || vp_h != self.last_vp_h;
@@ -318,17 +327,25 @@ impl<E: Send + 'static> Module<E> for EditorRenderController {
             // We must not auto-frame while the gizmo is being dragged, otherwise orbit.target will
             // chase the changing scene bounds and the world grid will look like it's moving.
             let user_busy = look_drag || pan_drag || move_mask != 0 || ui_busy;
-            let need_expand = if self.framed_radius <= 0.0 {
-                true
-            } else {
-                bounds_radius > self.framed_radius * Self::FRAME_GROWTH_EPS
-            };
+            // UI-driven frame request (hotkey F / button).
+            let frame_seq = self.viewport_bridge.read_frame_request();
+            let explicit_frame = frame_seq != self.last_frame_seq;
+            if explicit_frame {
+                self.last_frame_seq = frame_seq;
+            }
 
-            if !user_busy && (!self.framed_once || aspect_changed || need_expand) {
+            if (!user_busy && (!self.framed_once || aspect_changed)) || explicit_frame {
                 let fovy = 60.0f32.to_radians();
-                orbit_frame_sphere(&mut self.orbit, bounds_center, bounds_radius, fovy, aspect, 1.15);
+                orbit_frame_sphere(
+                    &mut self.orbit,
+                    bounds_center,
+                    bounds_radius,
+                    fovy,
+                    aspect,
+                    1.15,
+                );
 
-                self.framed_radius = self.framed_radius.max(bounds_radius);
+                self.framed_radius = bounds_radius;
                 self.framed_once = true;
 
                 Self::sync_rig_with_floor_lift(&mut self.orbit, &mut self.rig);
@@ -413,7 +430,8 @@ impl<E: Send + 'static> Module<E> for EditorRenderController {
                     Vec3::new(cx, 0.0, cz),
                 );
 
-                Self::write_mat4_ubo(&mut **r, lit.ubo, viewproj * grid_model)?;
+                // Grid uses its own vertex colors; base_color is irrelevant but kept defined.
+                Self::write_lit_ubo(&mut **r, lit.ubo, viewproj * grid_model, [1.0, 1.0, 1.0, 1.0])?;
 
                 r.set_pipeline(g.pipeline)?;
                 r.set_bind_group(0, lit.bg)?;
@@ -425,12 +443,22 @@ impl<E: Send + 'static> Module<E> for EditorRenderController {
                 let world = scene.world();
                 let reg_lock = self.scene_bridge.primitives();
                 let reg = reg_lock.read();
+                let mats_lock = self.scene_bridge.materials();
+                let mats = mats_lock.read();
 
-                for (_id, prim, gt) in world.query2::<Primitive, GlobalTransform>() {
+                for (id, prim, gt) in world.query2::<Primitive, GlobalTransform>() {
                     let gpu = ensure_primitive_gpu(&reg, prim.id, &mut self.prim_cache, &mut **r)?;
 
                     let mvp = viewproj * gt.0;
-                    Self::write_mat4_ubo(&mut **r, lit.ubo, mvp)?;
+
+                    // Material-driven base color (fallback to primitive color).
+                    let base_color = world
+                        .get::<newengine_materials::MaterialRef>(id)
+                        .and_then(|mr| mats.get(mr.id))
+                        .map(|d| d.base_color)
+                        .unwrap_or(prim.color);
+
+                    Self::write_lit_ubo(&mut **r, lit.ubo, mvp, base_color)?;
 
                     r.set_pipeline(lit.pipeline)?;
                     r.set_bind_group(0, lit.bg)?;

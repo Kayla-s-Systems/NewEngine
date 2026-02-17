@@ -46,6 +46,9 @@ pub struct EditorRenderController {
     pub(super) last_bounds_radius: f32,
 
     pub(super) last_pick_seq: u64,
+
+    /// UI-triggered explicit "frame scene" requests.
+    pub(super) last_frame_seq: u64,
 }
 
 impl EditorRenderController {
@@ -103,6 +106,8 @@ impl EditorRenderController {
             last_bounds_radius: 1.0,
 
             last_pick_seq: 0,
+
+            last_frame_seq: 0,
         }
     }
 

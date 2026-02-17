@@ -54,6 +54,11 @@ pub struct ViewportBridge {
     pick_seq: AtomicU64,
     pick_xy: AtomicU64,
 
+    /// Explicit camera frame request (UI -> renderer).
+    ///
+    /// Incremented by UI when the user requests "frame scene" (e.g. hotkey F).
+    frame_seq: AtomicU64,
+
     camera_frame: Mutex<Option<ViewportCameraFrame>>,
 }
 
@@ -72,6 +77,8 @@ impl ViewportBridge {
 
             pick_seq: AtomicU64::new(0),
             pick_xy: AtomicU64::new(0),
+
+            frame_seq: AtomicU64::new(0),
 
             camera_frame: Mutex::new(None),
         }
@@ -216,6 +223,18 @@ impl ViewportBridge {
         let seq = self.pick_seq.load(Ordering::Relaxed);
         let (x, y) = Self::unpack_f32x2(self.pick_xy.load(Ordering::Relaxed));
         (seq, x, y)
+    }
+
+    /// Publish an explicit "frame scene" request.
+    #[inline]
+    pub fn publish_frame_request(&self) {
+        self.frame_seq.fetch_add(1, Ordering::Relaxed);
+    }
+
+    /// Read the current frame request sequence.
+    #[inline]
+    pub fn read_frame_request(&self) -> u64 {
+        self.frame_seq.load(Ordering::Relaxed)
     }
 
     /// Publish camera matrices and current viewport size (renderer -> UI).

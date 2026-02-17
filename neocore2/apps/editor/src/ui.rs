@@ -9,6 +9,8 @@ use std::sync::{Arc, Mutex};
 
 use newengine_ecs::EntityId;
 use newengine_gizmo::{GizmoAxis, GizmoMode};
+use newengine_materials::api::MaterialRegistryApi;
+use newengine_materials::{MaterialId, MaterialRef};
 use newengine_primitives::Primitive;
 use newengine_scene::components::Name;
 use newengine_transform::Transform;
@@ -59,6 +61,7 @@ pub struct EditorUiBuild {
     insp_rot_deg: [f32; 3],
     insp_scale: [f32; 3],
     insp_color: [f32; 4],
+    insp_material: MaterialId,
 
     gizmo_mode: GizmoMode,
     gizmo_drag: Option<GizmoDrag>,
@@ -130,6 +133,7 @@ impl EditorUiBuild {
             insp_rot_deg: [0.0; 3],
             insp_scale: [1.0, 1.0, 1.0],
             insp_color: [0.85, 0.85, 0.9, 1.0],
+            insp_material: MaterialId::invalid(),
 
             gizmo_mode: GizmoMode::Translate,
             gizmo_drag: None,
@@ -418,6 +422,12 @@ impl EditorUiBuild {
             self.insp_color = p.color;
         }
 
+        if let Some(mr) = w.get::<MaterialRef>(entity) {
+            self.insp_material = mr.id;
+        } else {
+            self.insp_material = MaterialId::invalid();
+        }
+
         self.selected_entity_cached = Some(entity);
     }
 
@@ -564,6 +574,73 @@ impl EditorUiBuild {
                         }
                     } else {
                         ui.label("(no Primitive component)");
+                    }
+                });
+
+                // Materials (foundation step).
+                ui.collapsing("Material", |ui| {
+                    let mats = self.scene_bridge.materials_snapshot();
+                    let current_label = mats
+                        .iter()
+                        .find(|x| x.1 == self.insp_material)
+                        .map(|x| x.0.as_str())
+                        .unwrap_or("<none>");
+
+                    egui::ComboBox::from_id_source("material_combo")
+                        .width(180.0)
+                        .selected_text(current_label)
+                        .show_ui(ui, |ui| {
+                            for (name, id) in &mats {
+                                ui.selectable_value(&mut self.insp_material, *id, name);
+                            }
+                        });
+
+                    if self.insp_material != MaterialId::invalid() {
+                        // Assign to entity on change.
+                        // (We keep it immediate; later this becomes a transaction/undo entry.)
+                        let scene = self.scene_bridge.scene();
+                        let s = scene.read();
+                        let w = s.world();
+                        let current = w.get::<MaterialRef>(e).map(|mr| mr.id).unwrap_or(MaterialId::invalid());
+                        if current != self.insp_material {
+                            self.scene_bridge.cmd_set_material(e, self.insp_material);
+                        }
+
+                        // Edit material parameters (shared in registry).
+                        let reg = self.scene_bridge.materials();
+                        let reg = reg.read();
+                        if let Some(mut desc) = reg.get(self.insp_material) {
+                            let mut changed = false;
+
+                            ui.horizontal(|ui| {
+                                ui.label("Base color");
+                                changed |= ui
+                                    .color_edit_button_rgba_unmultiplied(&mut desc.base_color)
+                                    .changed();
+                            });
+
+                            ui.horizontal(|ui| {
+                                ui.label("Metallic");
+                                changed |= ui
+                                    .add(egui::Slider::new(&mut desc.metallic, 0.0..=1.0))
+                                    .changed();
+                            });
+
+                            ui.horizontal(|ui| {
+                                ui.label("Roughness");
+                                changed |= ui
+                                    .add(egui::Slider::new(&mut desc.roughness, 0.02..=1.0))
+                                    .changed();
+                            });
+
+                            if changed {
+                                self.scene_bridge.cmd_update_material(self.insp_material, desc);
+                            }
+                        } else {
+                            ui.label("(material not found in registry)");
+                        }
+                    } else {
+                        ui.label("(no Material assigned)");
                     }
                 });
             });
@@ -812,6 +889,12 @@ impl EditorUiBuild {
 
             let wants_kb = ctx.wants_keyboard_input();
             let mut move_mask: u64 = 0;
+
+            // Explicit framing (Blender-like): press F while the viewport is active.
+            // This is intentionally explicit to keep the world reference stable while editing.
+            if active && !wants_kb && ctx.input(|i| i.key_pressed(egui::Key::F)) {
+                self.viewport_bridge.publish_frame_request();
+            }
 
             let rmb = active && ctx.input(|i| i.pointer.button_down(egui::PointerButton::Secondary));
             if rmb && !wants_kb {
