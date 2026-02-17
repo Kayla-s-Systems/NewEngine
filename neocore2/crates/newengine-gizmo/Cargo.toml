@@ -5,6 +5,8 @@ edition = "2021"
 
 [dependencies]
 newengine-math = { path = "../newengine-math" }
+egui = { version = "0.33", optional = true }
 
 [features]
 default = []
+egui = ["dep:egui"]

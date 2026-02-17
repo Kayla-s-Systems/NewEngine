@@ -31,6 +31,9 @@ pub enum GizmoAxis {
     Z,
 }
 
+#[cfg(feature = "egui")]
+pub mod egui;
+
 impl GizmoAxis {
     /// Unit vector for the axis.
     #[inline]
