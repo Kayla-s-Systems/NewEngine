@@ -1504,6 +1504,7 @@ version = "0.1.0"
 dependencies = [
     "ahash",
     "glam 0.32.0",
+    "log",
     "once_cell",
     "parking_lot",
     "serde",
@@ -1594,7 +1595,6 @@ dependencies = [
 name = "newengine-sim"
 version = "0.1.0"
 dependencies = [
-    "glam 0.32.0",
     "newengine-camera",
     "newengine-ecs",
     "newengine-math",

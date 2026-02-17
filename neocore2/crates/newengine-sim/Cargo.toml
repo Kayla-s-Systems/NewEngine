@@ -11,4 +11,3 @@ newengine-ecs = { path = "../newengine-ecs" }
 newengine-transform = { path = "../newengine-transform" }
 newengine-scene = { path = "../newengine-scene" }
 newengine-camera = { path = "../newengine-camera" }
-glam = "0.32.0"

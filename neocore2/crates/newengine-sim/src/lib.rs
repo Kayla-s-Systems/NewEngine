@@ -6,9 +6,9 @@
 
 use core::cmp::Ordering;
 
-use glam::{EulerRot, Quat, Vec2, Vec3};
 use newengine_camera::{CameraInput, CameraRig, OrbitController};
 use newengine_ecs::{EntityId, World};
+use newengine_math::{EulerRot, Quat, Vec2, Vec3};
 use newengine_scene::update_scene_world;
 use newengine_transform::Transform;
 
@@ -132,7 +132,6 @@ enum SimStage {
     Derived,
 }
 
-
 impl SimStage {
     pub const COUNT: usize = 4;
 
@@ -185,8 +184,12 @@ impl SimSchedule {
         self.next_seq = self.next_seq.wrapping_add(1).max(1);
 
         let idx = stage.as_usize();
-
-        self.stages[idx].push(SystemEntry { order, seq, name, f });
+        self.stages[idx].push(SystemEntry {
+            order,
+            seq,
+            name,
+            f,
+        });
         self.is_sorted[idx] = false;
     }
 
@@ -229,12 +232,27 @@ pub fn default_schedule() -> SimSchedule {
     let mut s = SimSchedule::new();
 
     // Controllers.
-    s.add_system(SimStage::Controllers, 10, "character_motor", sys_character_motor);
+    s.add_system(
+        SimStage::Controllers,
+        10,
+        "character_motor",
+        sys_character_motor,
+    );
     s.add_system(SimStage::Controllers, 20, "orbit_camera", sys_orbit_camera);
-    s.add_system(SimStage::Controllers, 30, "camera_rig_to_transform", sys_camera_rig_to_transform);
+    s.add_system(
+        SimStage::Controllers,
+        30,
+        "camera_rig_to_transform",
+        sys_camera_rig_to_transform,
+    );
 
     // Physics.
-    s.add_system(SimStage::Physics, 10, "integrate_velocities", sys_integrate_velocities);
+    s.add_system(
+        SimStage::Physics,
+        10,
+        "integrate_velocities",
+        sys_integrate_velocities,
+    );
 
     // Derived.
     s.add_system(SimStage::Derived, 10, "scene_derived", sys_scene_derived);
@@ -254,7 +272,9 @@ pub fn sys_character_motor(world: &mut World, frame: SimFrame) {
 
     let ids: Vec<EntityId> = world.query2_ids::<CharacterMotor, MotorInput>().collect();
     for id in ids {
-        let Some(mut motor) = world.remove::<CharacterMotor>(id) else { continue; };
+        let Some(mut motor) = world.remove::<CharacterMotor>(id) else {
+            continue;
+        };
         let Some(input) = world.get::<MotorInput>(id).copied() else {
             let _ = world.insert(id, motor);
             continue;
@@ -286,7 +306,10 @@ pub fn sys_character_motor(world: &mut World, frame: SimFrame) {
         let len = local.length();
         let vel = if len > 1e-6 {
             let dir = local / len;
-            let rot = world.get::<Transform>(id).map(|t| t.rotation).unwrap_or(Quat::IDENTITY);
+            let rot = world
+                .get::<Transform>(id)
+                .map(|t| t.rotation)
+                .unwrap_or(Quat::IDENTITY);
             (rot * dir) * (motor.move_speed * speed_mul)
         } else {
             Vec3::ZERO
@@ -308,14 +331,19 @@ pub fn sys_orbit_camera(world: &mut World, frame: SimFrame) {
         .query2_ids::<OrbitCameraMotor, CameraRigComp>()
         .collect();
     for id in ids {
-        let Some(mut motor) = world.remove::<OrbitCameraMotor>(id) else { continue; };
+        let Some(mut motor) = world.remove::<OrbitCameraMotor>(id) else {
+            continue;
+        };
         let Some(mut rig) = world.remove::<CameraRigComp>(id) else {
             let _ = world.insert(id, motor);
             continue;
         };
 
         // Gather input. If missing, apply with defaults (no movement).
-        let input = world.get::<CameraInputComp>(id).map(|c| c.0).unwrap_or_default();
+        let input = world
+            .get::<CameraInputComp>(id)
+            .map(|c| c.0)
+            .unwrap_or_default();
         motor.controller.apply(&mut rig.0, input, dt);
 
         let _ = world.insert(id, rig);
@@ -327,7 +355,9 @@ pub fn sys_orbit_camera(world: &mut World, frame: SimFrame) {
 pub fn sys_camera_rig_to_transform(world: &mut World, _frame: SimFrame) {
     let ids: Vec<EntityId> = world.query2_ids::<CameraRigComp, Transform>().collect();
     for id in ids {
-        let Some(rig) = world.get::<CameraRigComp>(id).copied() else { continue; };
+        let Some(rig) = world.get::<CameraRigComp>(id).copied() else {
+            continue;
+        };
         if let Some(t) = world.get_mut_tracked::<Transform>(id) {
             t.position = rig.0.position;
             t.rotation = rig.0.rotation;
@@ -345,7 +375,9 @@ pub fn sys_integrate_velocities(world: &mut World, frame: SimFrame) {
     // Translation.
     let ids: Vec<EntityId> = world.query2_ids::<Transform, Velocity>().collect();
     for id in ids {
-        let Some(v) = world.get::<Velocity>(id).copied() else { continue; };
+        let Some(v) = world.get::<Velocity>(id).copied() else {
+            continue;
+        };
         if let Some(t) = world.get_mut_tracked::<Transform>(id) {
             t.position += v.0 * dt;
         }
@@ -354,7 +386,9 @@ pub fn sys_integrate_velocities(world: &mut World, frame: SimFrame) {
     // Rotation.
     let ids: Vec<EntityId> = world.query2_ids::<Transform, AngularVelocity>().collect();
     for id in ids {
-        let Some(w) = world.get::<AngularVelocity>(id).copied() else { continue; };
+        let Some(w) = world.get::<AngularVelocity>(id).copied() else {
+            continue;
+        };
         if let Some(t) = world.get_mut_tracked::<Transform>(id) {
             let d = w.0 * dt;
             if d.is_finite() && d.length_squared() > 1e-12 {

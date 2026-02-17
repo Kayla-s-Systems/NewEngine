@@ -44,6 +44,7 @@
       <sourceFolder url="file://$MODULE_DIR$/neocore2/crates/newengine-gizmo/src" isTestSource="false" />
       <excludeFolder url="file://$MODULE_DIR$/neocore2/apps/editor/target" />
       <excludeFolder url="file://$MODULE_DIR$/neocore2/target" />
+      <excludeFolder url="file://$MODULE_DIR$/neocore2/crates/newengine-sim/target" />
     </content>
     <orderEntry type="inheritedJdk" />
     <orderEntry type="sourceFolder" forTests="false" />
