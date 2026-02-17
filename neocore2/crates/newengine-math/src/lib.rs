@@ -10,10 +10,14 @@
 
 mod registry;
 mod value;
-mod macros;
 mod builtins;
+mod gpu;
+
+#[macro_use]
+mod macros;
 
 pub use builtins::register_engine_builtins;
+pub use gpu::mat4_to_cols_bytes;
 pub use registry::{DynMathFn, MathFnId, MathRegistry, MathRegistryRef, ProviderId, RegisterMathFn};
 pub use value::{MathError, MathResult, MathValue, MathValueType, Signature};
 

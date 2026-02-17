@@ -151,17 +151,16 @@ impl MathRegistry {
 
     /// Registers multiple functions for the same provider.
     ///
-    /// Returns the number of successfully registered functions.
-    pub fn register_many<I>(&self, provider: ProviderId, funs: I) -> MathResult<usize>
+    /// Convenience API to reduce boilerplate in builtin packs and plugin init code.
+    #[inline]
+    pub fn register_many<I>(&self, provider: ProviderId, funs: I) -> MathResult<()>
     where
         I: IntoIterator<Item=Arc<dyn DynMathFn>>,
     {
-        let mut n = 0usize;
         for f in funs {
             self.register(provider.clone(), f)?;
-            n += 1;
         }
-        Ok(n)
+        Ok(())
     }
 
     /// Unregisters all functions provided by `provider`.
