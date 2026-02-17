@@ -10,6 +10,7 @@
 
 mod registry;
 mod value;
+mod macros;
 mod builtins;
 
 pub use builtins::register_engine_builtins;
