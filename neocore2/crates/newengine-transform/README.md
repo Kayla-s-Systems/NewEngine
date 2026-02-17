@@ -1,31 +1,31 @@
 # newengine-transform
 
-    Трансформы и иерархия: Parent/Children, Local/World матрицы, детерминированная пропагация.
+Трансформы и иерархия: `Parent/Children`, `Transform` (local), `GlobalTransform`/`WorldPose` (derived),
+детерминированная пропагация без аллокаций в hot path.
 
-    ## Роль в архитектуре
+## Роль в архитектуре
 
-    - **Слой:** `crates/newengine-transform`
-    - **Назначение:** Трансформы и иерархия: Parent/Children, Local/World матрицы, детерминированная пропагация.
+- **Слой:** `crates/newengine-transform`
+- **Назначение:** единый источник истины для трансформов, пригодный для редактора и рантайма.
 
-    ## Инварианты
+## Инварианты
 
-    - Иерархия должна оставаться консистентной (Parent↔Children).
+- Иерархия должна оставаться консистентной (`Parent` ↔ `Children`).
+- Пропагация должна быть детерминированной независимо от порядка в hash-коллекциях.
+- Математические типы берём только из `newengine-math` (не тянем `glam` напрямую).
 
-- Пропагация world-transform должна быть детерминированной независимо от HashMap порядка.
+## Публичный API
 
-  ## Публичный API
+- Смотри `src/lib.rs` и модульные реэкспорты.
 
-    - Смотри `src/lib.rs` и модульные реэкспорты.
-    - Для контрактов/ABI: фиксируйте изменения через версионирование (semver) и миграции.
+## Тестирование и профилирование
 
-  ## Тестирование и профилирование
+- Unit-тесты: `cargo test -p newengine-transform`
+- (Рекомендуется) bench/criterion для hot path.
 
-    - Unit-тесты: `cargo test -p newengine-transform`
-    - (Рекомендуется) bench/criterion для hot path.
+## Ссылки
 
-  ## Ссылки
-
-    - Архитектура workspace: `../../ARCHITECTURE.md`
+- Архитектура workspace: `../../ARCHITECTURE.md`
 
 ## Allocation-free propagation
 

@@ -67,8 +67,11 @@ pub(super) struct GridGpu {
 #[derive(Clone, Copy)]
 pub(super) struct LitPipeline {
     pub ubo: newengine_core::render::BufferId,
-    pub bgl: newengine_core::render::BindGroupLayoutId,
     pub bg: newengine_core::render::BindGroupId,
+    /// Dedicated UBO for grid pass to avoid per-draw UBO overwrite hazards.
+    pub grid_ubo: newengine_core::render::BufferId,
+    pub grid_bg: newengine_core::render::BindGroupId,
+    pub bgl: newengine_core::render::BindGroupLayoutId,
     pub vs: newengine_core::render::ShaderId,
     pub fs: newengine_core::render::ShaderId,
     pub pipeline: newengine_core::render::PipelineId,
@@ -96,6 +99,10 @@ pub(super) fn ensure_lit_pipeline(
         BufferDesc::new(LIT_UBO_SIZE, BufferUsage::Uniform, MemoryHint::CpuToGpu)
             .with_label("editor_lit_ubo"),
     )?;
+    let grid_ubo = r.create_buffer(
+        BufferDesc::new(LIT_UBO_SIZE, BufferUsage::Uniform, MemoryHint::CpuToGpu)
+            .with_label("editor_grid_ubo"),
+    )?;
 
     let bgl = r.create_bind_group_layout(
         BindGroupLayoutDesc::new(vec![BindingKind::UniformBuffer]).with_label("editor_lit_bgl"),
@@ -104,6 +111,11 @@ pub(super) fn ensure_lit_pipeline(
         BindGroupDesc::new(bgl)
             .with_label("editor_lit_bg")
             .with_uniform0(BufferBinding::new(ubo, 0, LIT_UBO_SIZE)),
+    )?;
+    let grid_bg = r.create_bind_group(
+        BindGroupDesc::new(bgl)
+            .with_label("editor_grid_bg")
+            .with_uniform0(BufferBinding::new(grid_ubo, 0, LIT_UBO_SIZE)),
     )?;
 
     let compiler = shaderc::Compiler::new().map_err(|e| EngineError::other(format!("shaderc: Compiler: {e}")))?;
@@ -137,8 +149,10 @@ pub(super) fn ensure_lit_pipeline(
 
     let p = LitPipeline {
         ubo,
-        bgl,
         bg,
+        grid_ubo,
+        grid_bg,
+        bgl,
         vs,
         fs,
         pipeline,

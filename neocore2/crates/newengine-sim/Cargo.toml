@@ -13,5 +13,5 @@ newengine-ecs = { path = "../newengine-ecs" }
 newengine-transform = { path = "../newengine-transform" }
 newengine-scene = { path = "../newengine-scene" }
 newengine-camera = { path = "../newengine-camera" }
-glam = "0.32.0"
+newengine-math = { path = "../newengine-math" }
 rayon = { version = "1.10", optional = true }

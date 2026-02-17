@@ -42,6 +42,8 @@
       <sourceFolder url="file://$MODULE_DIR$/neocore2/crates/newengine-math-types/src" isTestSource="false" />
       <sourceFolder url="file://$MODULE_DIR$/neocore2/crates/newengine-audio-api/src" isTestSource="false" />
       <sourceFolder url="file://$MODULE_DIR$/neocore2/crates/newengine-gizmo/src" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/neocore2/crates/newengine-materials/src" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/neocore2/crates/newengine-math/tests" isTestSource="true" />
       <excludeFolder url="file://$MODULE_DIR$/neocore2/apps/editor/target" />
       <excludeFolder url="file://$MODULE_DIR$/neocore2/target" />
       <excludeFolder url="file://$MODULE_DIR$/neocore2/crates/newengine-sim/target" />

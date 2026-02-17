@@ -1,8 +1,8 @@
 #![forbid(unsafe_op_in_unsafe_fn)]
 
-use glam::{EulerRot, Quat, Vec3};
 // kept for type-level coherence in downstream systems
 use newengine_ecs::{EntityId, World};
+use newengine_math::{EulerRot, Quat, Vec3};
 use newengine_scene::update_scene_world;
 use newengine_transform::Transform;
 

@@ -317,16 +317,25 @@ impl<E: Send + 'static> Module<E> for EditorRenderController {
             Self::sync_rig_with_floor_lift(&mut self.orbit, &mut self.rig);
 
             // Framing:
-            // - startup / aspect change: frame
-            // - explicit UI request (F)
-            let aspect_changed = (aspect - self.last_aspect).abs() > 0.0005
-                || vp_w != self.last_vp_w
-                || vp_h != self.last_vp_h;
+            // We keep framing strictly explicit (hotkey F / button) plus a single startup frame.
+            // Auto-framing on aspect/bounds changes is hostile to editing: during rotate/scale the
+            // scene bounds (often AABB-derived) can change every frame, which makes the orbit pivot
+            // chase the selection and looks like the grid/camera moves together with the object.
 
             // "Busy" means the user is actively controlling the camera OR manipulating scene objects.
             // We must not auto-frame while the gizmo is being dragged, otherwise orbit.target will
             // chase the changing scene bounds and the world grid will look like it's moving.
-            let user_busy = look_drag || pan_drag || move_mask != 0 || ui_busy;
+            //
+            // IMPORTANT: Even when the user releases the mouse, the scene bounds may keep changing
+            // for a frame (e.g. object rotation changes an AABB-derived bounds radius). Treat such
+            // changes as "busy" as well, otherwise the camera pivot will "chase" the selection and
+            // it will look like the grid/camera moves together with the object during rotate.
+            let bounds_center_delta = (bounds_center - self.last_bounds_center).length();
+            let bounds_radius_delta = (bounds_radius - self.last_bounds_radius).abs();
+            let bounds_changed = bounds_center_delta > (bounds_radius.max(0.001) * 0.0005)
+                || bounds_radius_delta > (bounds_radius.max(0.001) * 0.0005);
+
+            let user_busy = look_drag || pan_drag || move_mask != 0 || ui_busy || bounds_changed;
             // UI-driven frame request (hotkey F / button).
             let frame_seq = self.viewport_bridge.read_frame_request();
             let explicit_frame = frame_seq != self.last_frame_seq;
@@ -334,7 +343,7 @@ impl<E: Send + 'static> Module<E> for EditorRenderController {
                 self.last_frame_seq = frame_seq;
             }
 
-            if (!user_busy && (!self.framed_once || aspect_changed)) || explicit_frame {
+            if explicit_frame || (!self.framed_once && !user_busy) {
                 let fovy = 60.0f32.to_radians();
                 orbit_frame_sphere(
                     &mut self.orbit,
@@ -431,10 +440,10 @@ impl<E: Send + 'static> Module<E> for EditorRenderController {
                 );
 
                 // Grid uses its own vertex colors; base_color is irrelevant but kept defined.
-                Self::write_lit_ubo(&mut **r, lit.ubo, viewproj * grid_model, [1.0, 1.0, 1.0, 1.0])?;
+                Self::write_lit_ubo(&mut **r, lit.grid_ubo, viewproj * grid_model, [1.0, 1.0, 1.0, 1.0])?;
 
                 r.set_pipeline(g.pipeline)?;
-                r.set_bind_group(0, lit.bg)?;
+                r.set_bind_group(0, lit.grid_bg)?;
                 r.set_vertex_buffer(0, BufferSlice::new(g.vb, 0))?;
                 r.draw(newengine_core::render::DrawArgs::new(g.vertex_count))?;
             }
