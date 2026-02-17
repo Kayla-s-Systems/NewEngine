@@ -7,6 +7,7 @@ use newengine_core::render::{
     VertexLayout,
 };
 use newengine_core::{EngineError, EngineResult as CoreResult};
+use newengine_math::collections::FxHashMap;
 use newengine_primitives::{PrimitiveId, PrimitiveRegistry, PrimitiveVertex};
 
 use shaderc::{CompileOptions, Compiler, OptimizationLevel, ShaderKind};
@@ -150,7 +151,7 @@ pub(super) fn ensure_lit_pipeline(
 pub(super) fn ensure_primitive_gpu(
     reg: &PrimitiveRegistry,
     id: PrimitiveId,
-    cache: &mut hashbrown::HashMap<PrimitiveId, PrimitiveGpu>,
+    cache: &mut FxHashMap<PrimitiveId, PrimitiveGpu>,
     r: &mut dyn newengine_core::render::RenderApi,
 ) -> CoreResult<PrimitiveGpu> {
     if let Some(g) = cache.get(&id).copied() {

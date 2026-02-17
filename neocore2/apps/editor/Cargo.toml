@@ -25,4 +25,3 @@ newengine-camera = { path = "../../crates/newengine-camera" }
 newengine-primitives = { path = "../../crates/newengine-primitives" }
 newengine-gizmo = { path = "../../crates/newengine-gizmo" }
 newengine-materials = { path = "../../crates/newengine-materials" }
-hashbrown = "0.16.1"

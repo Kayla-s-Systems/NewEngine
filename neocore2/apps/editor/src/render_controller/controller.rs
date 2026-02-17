@@ -2,6 +2,7 @@
 
 use newengine_camera::{orbit_set_angles, CameraRig, OrbitController, Perspective, Projection};
 use newengine_core::render::Extent2D;
+use newengine_math::collections::FxHashMap;
 use newengine_math::Vec3;
 
 use crate::plugin_manager::PluginManagerBridge;
@@ -10,7 +11,7 @@ use crate::viewport_bridge::ViewportBridge;
 
 use super::gpu::{GridGpu, LitPipeline, PrimitiveGpu};
 
-type PrimGpuCache = hashbrown::HashMap<newengine_primitives::PrimitiveId, PrimitiveGpu>;
+type PrimGpuCache = FxHashMap<newengine_primitives::PrimitiveId, PrimitiveGpu>;
 
 pub struct EditorRenderController {
     pub(super) clear_color: [f32; 4],
