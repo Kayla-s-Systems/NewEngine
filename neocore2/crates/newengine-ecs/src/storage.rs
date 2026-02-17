@@ -2,7 +2,7 @@
 
 use core::any::{Any, TypeId};
 
-use slotmap::SecondaryMap;
+use newengine_math::collections::slot::SecondaryMap;
 
 use crate::{Component, EntityId};
 

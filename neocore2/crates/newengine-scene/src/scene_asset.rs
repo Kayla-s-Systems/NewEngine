@@ -135,7 +135,7 @@ impl Scene {
         }
 
         // Helper map EntityId -> guid.
-        let mut id_to_guid: hashbrown::HashMap<EntityId, u128> = hashbrown::HashMap::new();
+        let mut id_to_guid: newengine_math::collections::FxHashMap<EntityId, u128> = Default::default();
         for id in world.iter_entities() {
             if let Some(g) = world.get::<EntityGuid>(id) {
                 id_to_guid.insert(id, g.0);
@@ -213,7 +213,7 @@ impl Scene {
         });
 
         // Pass 1: spawn all entities and map guid -> EntityId.
-        let mut guid_to_id: hashbrown::HashMap<u128, EntityId> = hashbrown::HashMap::new();
+        let mut guid_to_id: newengine_math::collections::FxHashMap<u128, EntityId> = Default::default();
         for e in asset.entities.iter() {
             let id = world.spawn();
             let _ = world.insert(id, EntityGuid(e.guid));

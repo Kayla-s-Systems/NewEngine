@@ -1,12 +1,12 @@
 #![forbid(unsafe_op_in_unsafe_fn)]
 
-use slotmap::SecondaryMap;
+use newengine_math::collections::slot::SecondaryMap;
 
 use crate::EntityId;
 
 /// Immutable query iterator over a single component type.
 pub struct Query<'a, T: 'static> {
-    pub(crate) iter: Option<slotmap::secondary::Iter<'a, EntityId, T>>,
+    pub(crate) iter: Option<newengine_math::collections::slotmap::secondary::Iter<'a, EntityId, T>>,
 }
 
 impl<'a, T: 'static> Iterator for Query<'a, T> {
@@ -20,7 +20,7 @@ impl<'a, T: 'static> Iterator for Query<'a, T> {
 
 /// Mutable query iterator over a single component type.
 pub struct QueryMut<'a, T: 'static> {
-    pub(crate) iter: Option<slotmap::secondary::IterMut<'a, EntityId, T>>,
+    pub(crate) iter: Option<newengine_math::collections::slotmap::secondary::IterMut<'a, EntityId, T>>,
 }
 
 impl<'a, T: 'static> Iterator for QueryMut<'a, T> {
@@ -41,7 +41,7 @@ impl<'a, T: 'static> Iterator for QueryMut<'a, T> {
 /// - if the system *doesn't* mutate a yielded component, it may cause a false-positive change
 ///   (conservative by design)
 pub struct QueryMutTracked<'a, T: 'static> {
-    pub(crate) iter: slotmap::secondary::IterMut<'a, EntityId, T>,
+    pub(crate) iter: newengine_math::collections::slotmap::secondary::IterMut<'a, EntityId, T>,
     pub(crate) changed_tick: &'a mut SecondaryMap<EntityId, u64>,
     pub(crate) tick: u64,
 }
@@ -65,12 +65,12 @@ pub enum Query2<'a, A: 'static, B: 'static> {
 }
 
 pub struct Query2A<'a, A: 'static, B: 'static> {
-    pub(crate) iter: slotmap::secondary::Iter<'a, EntityId, A>,
+    pub(crate) iter: newengine_math::collections::slotmap::secondary::Iter<'a, EntityId, A>,
     pub(crate) b: &'a SecondaryMap<EntityId, B>,
 }
 
 pub struct Query2B<'a, A: 'static, B: 'static> {
-    pub(crate) iter: slotmap::secondary::Iter<'a, EntityId, B>,
+    pub(crate) iter: newengine_math::collections::slotmap::secondary::Iter<'a, EntityId, B>,
     pub(crate) a: &'a SecondaryMap<EntityId, A>,
 }
 

@@ -1,11 +1,8 @@
 #![forbid(unsafe_op_in_unsafe_fn)]
 
 use core::any::{Any, TypeId};
-use core::hash::BuildHasherDefault;
-
-use fxhash::FxHasher;
-use hashbrown::HashMap;
-use slotmap::SlotMap;
+use newengine_math::collections::slot::SlotMap;
+use newengine_math::collections::{hash_map::Entry, FxHashMap};
 
 use crate::{
     query::{Query, Query2, Query2A, Query2B, QueryMut, QueryMutTracked},
@@ -13,7 +10,9 @@ use crate::{
     Component, EntityId,
 };
 
-type FxHashMap<K, V> = HashMap<K, V, BuildHasherDefault<FxHasher>>;
+// Re-exported engine-wide deterministic hash map.
+// NOTE: The hasher choice is centralized in `newengine-math`.
+type FxHashMapLocal<K, V> = FxHashMap<K, V>;
 
 /// A small, deterministic ECS world.
 ///
@@ -25,8 +24,8 @@ type FxHashMap<K, V> = HashMap<K, V, BuildHasherDefault<FxHasher>>;
 /// - conservative change tracking (per-component added/changed ticks)
 pub struct World {
     entities: SlotMap<EntityId, ()>,
-    storages: FxHashMap<TypeId, Box<dyn ErasedStorage>>,
-    resources: FxHashMap<TypeId, Box<dyn Any + Send + Sync>>,
+    storages: FxHashMapLocal<TypeId, Box<dyn ErasedStorage>>,
+    resources: FxHashMapLocal<TypeId, Box<dyn Any + Send + Sync>>,
     tick: u64,
 }
 
@@ -42,8 +41,8 @@ impl World {
     pub fn new() -> Self {
         Self {
             entities: SlotMap::with_key(),
-            storages: FxHashMap::default(),
-            resources: FxHashMap::default(),
+            storages: FxHashMapLocal::default(),
+            resources: FxHashMapLocal::default(),
             tick: 1,
         }
     }
@@ -149,8 +148,6 @@ impl World {
     fn storage_mut<T: Component>(&mut self) -> &mut Storage<T> {
         let tid = TypeId::of::<T>();
 
-        use hashbrown::hash_map::Entry;
-
         match self.storages.entry(tid) {
             Entry::Occupied(e) => e
                 .into_mut()
@@ -191,7 +188,7 @@ impl World {
 
     /// Raw immutable access to the underlying component map.
     #[inline]
-    pub fn components<T: Component>(&self) -> Option<&slotmap::SecondaryMap<EntityId, T>> {
+    pub fn components<T: Component>(&self) -> Option<&newengine_math::collections::slot::SecondaryMap<EntityId, T>> {
         Some(&self.storage::<T>()?.map)
     }
 
@@ -199,7 +196,7 @@ impl World {
     #[inline]
     pub fn components_mut<T: Component>(
         &mut self,
-    ) -> Option<&mut slotmap::SecondaryMap<EntityId, T>> {
+    ) -> Option<&mut newengine_math::collections::slot::SecondaryMap<EntityId, T>> {
         Some(&mut self.storage_mut_if_exists::<T>()?.map)
     }
 

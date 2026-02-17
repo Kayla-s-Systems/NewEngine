@@ -7,4 +7,3 @@ edition = "2021"
 [dependencies]
 newengine-math = { path = "../newengine-math" }
 newengine-ecs = { path = "../newengine-ecs" }
-slotmap = "1.1.1"

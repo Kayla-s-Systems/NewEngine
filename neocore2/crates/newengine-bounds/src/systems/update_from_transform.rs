@@ -1,7 +1,7 @@
 #![forbid(unsafe_op_in_unsafe_fn)]
 
 use newengine_ecs::{EntityId, World};
-use slotmap::Key;
+use newengine_math::collections::slot::Key;
 
 use crate::{sphere_to_aabb, Bounds, BoundsKind};
 

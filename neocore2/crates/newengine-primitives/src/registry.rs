@@ -2,7 +2,7 @@
 
 use core::fmt;
 
-use hashbrown::HashMap;
+use newengine_math::collections::FxHashMap;
 
 use crate::{PrimitiveId, PrimitiveMesh};
 
@@ -37,14 +37,14 @@ struct Entry {
 /// - Built-ins are just registrations
 #[derive(Clone, Debug, Default)]
 pub struct PrimitiveRegistry {
-    entries: HashMap<PrimitiveId, Entry>,
+    entries: FxHashMap<PrimitiveId, Entry>,
 }
 
 impl PrimitiveRegistry {
     #[inline]
     pub fn new() -> Self {
         Self {
-            entries: HashMap::new(),
+            entries: FxHashMap::default(),
         }
     }
 

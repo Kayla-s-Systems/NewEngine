@@ -1,6 +1,6 @@
 #![forbid(unsafe_op_in_unsafe_fn)]
 
-use slotmap::{new_key_type, Key};
+use newengine_math::collections::slot::{new_key_type, Key};
 
 new_key_type! {
     pub struct EntityId;

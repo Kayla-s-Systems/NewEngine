@@ -9,7 +9,6 @@ newengine-ecs = { path = "../newengine-ecs" }
 newengine-math = { path = "../newengine-math" }
 
 newengine-transform = { path = "../newengine-transform", optional = true }
-slotmap = "1.1.1"
 
 [features]
 default = []
