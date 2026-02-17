@@ -11,7 +11,7 @@ use super::state::{
     CoreContext, DebugState, FrameManager, PipelinePack, SwapchainContext, TextOverlayResources,
     UiOverlayResources, VulkanRenderer,
 };
-use super::types::{FrameSync, FRAMES_IN_FLIGHT};
+use super::types::FrameSync;
 use crate::vulkan::resources::{DeferredFree, UploadCtx};
 
 use super::super::device::*;

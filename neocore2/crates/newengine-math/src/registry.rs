@@ -242,7 +242,7 @@ impl MathRegistry {
         if sig.inputs.len() != args.len() {
             return Err(MathError::InvalidArgs {
                 expected: sig.clone(),
-                got: args.iter().map(MathValue::ty).collect(),
+                got: arg_types(args),
                 arg_index: None,
             });
         }
@@ -254,10 +254,9 @@ impl MathRegistry {
             .enumerate()
         {
             if *exp != got {
-                let got_all = args.iter().map(MathValue::ty).collect::<Vec<_>>();
                 return Err(MathError::InvalidArgs {
                     expected: sig.clone(),
-                    got: got_all,
+                    got: arg_types(args),
                     arg_index: Some(i),
                 });
             }

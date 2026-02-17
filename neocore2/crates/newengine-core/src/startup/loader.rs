@@ -389,7 +389,6 @@ fn apply_u32(report: &mut StartupLoadReport, key: &'static str, dst: &mut u32, v
 }
 
 #[inline]
-#[inline]
 fn apply_usize(report: &mut StartupLoadReport, key: &'static str, dst: &mut usize, v: usize) {
     let from = dst.to_string();
     let to = v.to_string();

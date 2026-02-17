@@ -9,7 +9,7 @@ mod settings;
 mod spawn;
 
 pub use bounds::{
-    scene_world_bounds, selection_world_bounds, update_scene_world, SceneBounds,
+    scene_bounds_cached, scene_world_bounds, selection_world_bounds, update_scene_world, SceneBounds,
 };
 pub use components::{
     ActiveCamera, Controller, EntityGuid, Name, PropertyBag, PropertyValue, SceneRoot,

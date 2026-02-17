@@ -456,7 +456,6 @@ impl<E: Send + 'static> Engine<E> {
         }
 
         // Start stage (after successful init of all modules).
-        let mut started = 0usize;
         for i in 0..sorted.len() {
             self.sync_shutdown_state();
 
@@ -481,8 +480,6 @@ impl<E: Send + 'static> Engine<E> {
                     err,
                 ));
             }
-
-            started += 1;
 
             self.sync_shutdown_state();
             if self.is_exit_requested() {

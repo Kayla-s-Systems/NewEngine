@@ -6,7 +6,9 @@ use std::sync::atomic::{AtomicU64, Ordering};
 
 #[derive(Clone, Copy, Debug)]
 pub struct ViewportCameraFrame {
+    #[allow(dead_code)]
     pub view: Mat4,
+    #[allow(dead_code)]
     pub proj: Mat4,
     pub viewproj: Mat4,
     pub inv_viewproj: Mat4,

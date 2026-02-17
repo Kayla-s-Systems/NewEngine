@@ -6,6 +6,7 @@ use super::state::VulkanRenderer;
 
 impl VulkanRenderer {
     #[inline]
+    #[allow(dead_code)]
     pub fn set_debug_text(&mut self, text: &str) {
         self.debug.debug_text.clear();
         self.debug.debug_text.push_str(text);
@@ -41,6 +42,7 @@ impl VulkanRenderer {
     /// This method does NOT call `queue_wait_idle`.
     /// It returns a fence that will be signaled once the upload work is complete.
     #[inline]
+    #[allow(dead_code)]
     pub unsafe fn submit_upload<F: FnOnce(vk::CommandBuffer)>(&mut self, f: F) -> VkResult<vk::Fence> {
         let idx = self.frames.upload_cursor;
         self.frames.upload_cursor = (self.frames.upload_cursor + 1) % super::state::UPLOAD_CONTEXTS;
@@ -51,6 +53,7 @@ impl VulkanRenderer {
 
     /// Schedules a staging buffer for destruction after `fence` is signaled.
     #[inline]
+    #[allow(dead_code)]
     pub fn defer_free_staging_buffer(
         &mut self,
         fence: vk::Fence,

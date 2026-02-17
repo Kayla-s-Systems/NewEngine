@@ -11,7 +11,7 @@ use newengine_platform_winit::WinitWindowInitSize;
 use newengine_ui::draw::UiDrawList;
 
 use newengine_primitives::Primitive;
-use newengine_scene::{update_scene_world, SceneBounds};
+use newengine_scene::{scene_bounds_cached, update_scene_world};
 use newengine_transform::GlobalTransform;
 
 use super::controller::EditorRenderController;
@@ -174,7 +174,7 @@ impl EditorRenderController {
         let far3 = far.truncate() / far.w.max(1e-6);
 
         let ray_o: Vec3 = near3;
-        let mut ray_d: Vec3 = (far3 - near3);
+        let mut ray_d: Vec3 = far3 - near3;
         let len2 = ray_d.length_squared();
         if len2 <= 1e-12 {
             return None;
@@ -274,12 +274,9 @@ impl<E: Send + 'static> Module<E> for EditorRenderController {
 
             let (bounds_center, bounds_radius) = {
                 let world = scene.world();
-                if let Some(b) = world.resource::<SceneBounds>() {
-                    if let Some(s) = b.sphere {
-                        (s.center, s.radius.max(0.001))
-                    } else {
-                        self.default_bounds()
-                    }
+                let b = scene_bounds_cached(world);
+                if let Some(s) = b.sphere {
+                    (s.center, s.radius.max(0.001))
                 } else {
                     self.default_bounds()
                 }

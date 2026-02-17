@@ -443,6 +443,7 @@ macro_rules! define_id {
         pub struct $name(NonZeroU32);
 
         impl $name {
+            #[allow(dead_code)]
             #[inline]
             $vis_new fn new(v: u32) -> Self {
                 Self(NonZeroU32::new(v).expect(concat!(stringify!($name), " must be non-zero")))

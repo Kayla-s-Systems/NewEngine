@@ -1,7 +1,7 @@
 #![forbid(unsafe_op_in_unsafe_fn)]
 
 use newengine_platform_winit::egui;
-use newengine_ui::markup::{UiMarkupDoc, UiState};
+use newengine_ui::markup::UiMarkupDoc;
 use newengine_ui::UiBuildFn;
 
 use std::any::Any;
@@ -27,7 +27,6 @@ use crate::viewport_bridge::ViewportBridge;
 /// - Console is hidden by default.
 pub struct EditorUiBuild {
     shared_doc: Arc<Mutex<Option<UiMarkupDoc>>>,
-    state: UiState,
 
     viewport: Viewport,
 
@@ -126,7 +125,6 @@ impl EditorUiBuild {
 
         Self {
             shared_doc,
-            state: UiState::default(),
             viewport,
             viewport_bridge,
             scene_bridge,
@@ -173,6 +171,7 @@ impl EditorUiBuild {
         Some((egui::pos2(x_pt, y_pt), ndc.z))
     }
 
+    #[allow(dead_code)]
     #[inline]
     fn screen_to_world_at_ndc_z(
         frame: &crate::viewport_bridge::ViewportCameraFrame,
@@ -406,19 +405,19 @@ impl EditorUiBuild {
                         ui.add_enabled_ui(!gs.auto_spacing, |ui| {
                             ui.horizontal(|ui| {
                                 ui.label("Spacing");
-                                changed |= ui.add(egui::DragValue::new(&mut gs.spacing).speed(0.05).clamp_range(0.001..=10_000.0)).changed();
+                            changed |= ui.add(egui::DragValue::new(&mut gs.spacing).speed(0.05).range(0.001..=10_000.0)).changed();
                             });
                         });
 
                         ui.horizontal(|ui| {
                             ui.label("Extent");
-                            changed |= ui.add(egui::DragValue::new(&mut gs.half_lines).speed(1).clamp_range(8..=4096)).changed();
+                            changed |= ui.add(egui::DragValue::new(&mut gs.half_lines).speed(1).range(8..=4096)).changed();
                             ui.label("half-lines");
                         });
 
                         ui.horizontal(|ui| {
                             ui.label("Major every");
-                            changed |= ui.add(egui::DragValue::new(&mut gs.major_every).speed(1).clamp_range(1..=256)).changed();
+                            changed |= ui.add(egui::DragValue::new(&mut gs.major_every).speed(1).range(1..=256)).changed();
                         });
 
                         ui.horizontal(|ui| {
@@ -538,7 +537,7 @@ impl EditorUiBuild {
                         .map(|x| x.0.as_str())
                         .unwrap_or("<none>");
 
-                    egui::ComboBox::from_id_source("material_combo")
+                    egui::ComboBox::from_id_salt("material_combo")
                         .width(180.0)
                         .selected_text(current_label)
                         .show_ui(ui, |ui| {
@@ -633,7 +632,7 @@ impl EditorUiBuild {
                         .and_then(|id| prims.iter().find(|x| x.1 == id).map(|x| x.0.as_str()))
                         .unwrap_or("<none>");
 
-                    egui::ComboBox::from_id_source("add_primitive_combo")
+                    egui::ComboBox::from_id_salt("add_primitive_combo")
                         .width(160.0)
                         .selected_text(current_label)
                         .show_ui(ui, |ui| {
@@ -846,7 +845,7 @@ impl EditorUiBuild {
 
             let tex_user = self.viewport_bridge.read_tex_user();
 
-            ui.allocate_ui_at_rect(rect, |ui| {
+            ui.allocate_new_ui(egui::UiBuilder::new().max_rect(rect), |ui| {
                 if tex_user != 0 {
                     let tid = egui::TextureId::User(tex_user);
                     let st = egui::load::SizedTexture::new(tid, rect.size());

@@ -7,7 +7,7 @@ pub fn egui_output_to_draw_list(ctx: &egui::Context, output: egui::FullOutput, o
     let pixels_per_point = output.pixels_per_point;
     out.pixels_per_point = pixels_per_point;
 
-    let screen_rect = ctx.screen_rect();
+    let screen_rect = ctx.content_rect();
     let w_px = (screen_rect.width() * pixels_per_point).round().max(0.0) as u32;
     let h_px = (screen_rect.height() * pixels_per_point).round().max(0.0) as u32;
     out.screen_size_px = [w_px, h_px];

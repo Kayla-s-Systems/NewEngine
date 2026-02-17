@@ -43,6 +43,7 @@ impl PluginManagerUi {
     }
 
     #[inline]
+    #[allow(dead_code)]
     pub fn is_open(&self) -> bool {
         self.open
     }
@@ -137,7 +138,7 @@ impl PluginManagerUi {
 
                         ui.separator();
 
-                        egui::ComboBox::from_id_source("plugins_sort")
+                        egui::ComboBox::from_id_salt("plugins_sort")
                             .selected_text(match self.sort {
                                 PluginSort::Name => "Sort: Name",
                                 PluginSort::Id => "Sort: Id",
@@ -223,7 +224,7 @@ impl PluginManagerUi {
                             ui.label(egui::RichText::new("Plugins").strong());
 
                             egui::ScrollArea::vertical()
-                                .id_source("plugin_list")
+                                .id_salt("plugin_list")
                                 .auto_shrink([false; 2])
                                 .show(ui, |ui| {
                                     for p in plugins.iter() {

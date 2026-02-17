@@ -116,6 +116,7 @@ impl VulkanRenderApi {
     }
 
     #[inline]
+    #[allow(dead_code)]
     pub fn set_ui_draw_list(&mut self, ui: UiDrawList) {
         self.renderer.set_ui_draw_list(ui);
     }

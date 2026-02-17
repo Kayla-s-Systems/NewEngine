@@ -41,15 +41,18 @@ impl EditorRenderController {
         Ok(rt)
     }
 
+    #[allow(dead_code)]
     pub(super) fn viewport_rt(&self) -> Option<newengine_core::render::RenderTargetId> {
         self.viewport_rt
     }
 
+    #[allow(dead_code)]
     pub(super) fn viewport_rt_extent(&self) -> Extent2D {
         self.viewport_rt_extent
     }
 
     #[inline]
+    #[allow(dead_code)]
     pub(super) fn require_nonzero_viewport_extent(extent: Extent2D) -> Result<Extent2D, EngineError> {
         if extent.width == 0 || extent.height == 0 {
             return Err(EngineError::other("viewport extent is zero"));

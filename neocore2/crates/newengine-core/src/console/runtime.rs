@@ -640,6 +640,7 @@ impl ConsoleRuntime {
 }
 
 impl ConsoleRuntime {
+    #[allow(dead_code)]
     pub fn shared() -> Arc<Self> {
         Arc::new(Self::new())
     }

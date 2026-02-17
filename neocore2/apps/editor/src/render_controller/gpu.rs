@@ -57,7 +57,9 @@ pub(super) struct GridMeshParams {
 #[derive(Clone, Copy)]
 pub(super) struct GridGpu {
     pub vb: newengine_core::render::BufferId,
+    #[allow(dead_code)]
     pub vs: newengine_core::render::ShaderId,
+    #[allow(dead_code)]
     pub fs: newengine_core::render::ShaderId,
     pub pipeline: newengine_core::render::PipelineId,
     pub vertex_count: u32,
@@ -72,7 +74,9 @@ pub(super) struct LitPipeline {
     pub grid_ubo: newengine_core::render::BufferId,
     pub grid_bg: newengine_core::render::BindGroupId,
     pub bgl: newengine_core::render::BindGroupLayoutId,
+    #[allow(dead_code)]
     pub vs: newengine_core::render::ShaderId,
+    #[allow(dead_code)]
     pub fs: newengine_core::render::ShaderId,
     pub pipeline: newengine_core::render::PipelineId,
 }

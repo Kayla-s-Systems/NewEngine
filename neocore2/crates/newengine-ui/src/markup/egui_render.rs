@@ -316,7 +316,7 @@ fn render_in_ui(node: &UiNode, ui: &mut egui::Ui, state: &mut UiState) {
                 .unwrap_or("<select>");
 
             let mut changed = false;
-            egui::ComboBox::from_id_source(id)
+            egui::ComboBox::from_id_salt(id)
                 .selected_text(selected_label)
                 .show_ui(ui, |ui| {
                     for (v, l) in options.iter() {
@@ -345,7 +345,7 @@ fn render_in_ui(node: &UiNode, ui: &mut egui::Ui, state: &mut UiState) {
         UiNode::Scroll { id, children } => {
             let mut sa = egui::ScrollArea::vertical().auto_shrink([false; 2]);
             if let Some(id) = id.as_deref() {
-                sa = sa.id_source(id);
+                sa = sa.id_salt(id);
             }
             sa.show(ui, |ui| {
                 for c in children {

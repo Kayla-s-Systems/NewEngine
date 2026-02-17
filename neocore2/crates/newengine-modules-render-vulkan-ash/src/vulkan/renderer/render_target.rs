@@ -228,6 +228,7 @@ impl VulkanRenderer {
         rt.color.destroy(&self.core.device);
     }
 
+    #[allow(dead_code)]
     pub fn resize_render_target(&mut self, id: u32, extent: vk::Extent2D) -> VkResult<()> {
         let Some(existing) = self.render_targets.get(&id) else {
             return Err(VkRenderError::InvalidState("resize_render_target: unknown id"));

@@ -49,7 +49,7 @@ pub struct PipelinePack {
 }
 
 pub struct FrameManager {
-    pub(crate) frames: [FrameSync; FRAMES_IN_FLIGHT],
+    pub(super) frames: [FrameSync; FRAMES_IN_FLIGHT],
     pub(crate) frame_index: usize,
     pub(crate) images_in_flight: Vec<vk::Fence>,
     pub(crate) command_pool: vk::CommandPool,
@@ -60,6 +60,7 @@ pub struct FrameManager {
     pub(crate) upload_command_pool: vk::CommandPool,
 
     pub(crate) upload_ctxs: [UploadCtx; UPLOAD_CONTEXTS],
+    #[allow(dead_code)]
     pub(crate) upload_cursor: usize,
     pub(crate) deferred_free: DeferredFree,
 }
@@ -118,6 +119,7 @@ pub struct RenderTargetVk {
 
 pub struct DebugState {
     pub(crate) debug_text: String,
+    #[allow(dead_code)]
     pub(crate) start_time: Instant,
 
     pub(crate) pending_ui: Option<UiDrawList>,
