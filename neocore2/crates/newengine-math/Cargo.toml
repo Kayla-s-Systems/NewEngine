@@ -2,6 +2,7 @@
 name = "newengine-math"
 version = "0.1.0"
 edition = "2021"
+readme = "README.md"
 
 [features]
 # `newengine-math` is the single dependency point for math + low-level deterministic foundations.

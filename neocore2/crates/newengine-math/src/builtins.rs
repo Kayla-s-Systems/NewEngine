@@ -2,9 +2,7 @@
 
 use std::sync::Arc;
 
-use crate::{
-    ne_math_fn, DynMathFn, Mat4, MathRegistry, MathResult, ProviderId, Quat, Vec2, Vec3,
-};
+use crate::{ne_math_fn, DynMathFn, Mat4, MathRegistry, MathResult, ProviderId, Quat, Vec2, Vec3};
 
 /// Registers engine-provided math routines.
 ///

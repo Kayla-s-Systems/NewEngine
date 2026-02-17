@@ -35,18 +35,10 @@ impl fmt::Display for MathError {
         match self {
             MathError::NotFound { id } => write!(f, "math function not found: {id}"),
             MathError::InvalidArgs { expected, got, arg_index } => match arg_index {
-                Some(i) => write!(
-                    f,
-                    "invalid args at index {i}: expected {expected:?}, got {got:?}"
-                ),
+                Some(i) => write!(f, "invalid args at index {i}: expected {expected:?}, got {got:?}"),
                 None => write!(f, "invalid args: expected {expected:?}, got {got:?}"),
             },
-            MathError::SignatureConflict {
-                id,
-                expected,
-                got,
-                provider,
-            } => write!(
+            MathError::SignatureConflict { id, expected, got, provider } => write!(
                 f,
                 "signature conflict ({id}) provider={provider}: expected {expected:?}, got {got:?}"
             ),
