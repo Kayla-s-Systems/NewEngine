@@ -22,6 +22,10 @@ pub use gpu::mat4_to_cols_bytes;
 pub use registry::{DynMathFn, MathFnId, MathRegistry, MathRegistryRef, ProviderId, RegisterMathFn};
 pub use value::{MathError, MathResult, MathValue, MathValueType, Signature};
 
+/// Re-exported for use by `ne_math_fn!`.
+pub use once_cell::sync::Lazy;
+
+
 // -------------------------------------------------------------------------------------------------
 // Temporary backend (glam).
 // -------------------------------------------------------------------------------------------------
@@ -32,4 +36,13 @@ pub use glam::{EulerRot, Mat3, Mat4, Quat, Vec2, Vec3, Vec4};
 #[cfg(feature = "backend-glam")]
 pub mod prelude {
     pub use super::{EulerRot, Mat3, Mat4, Quat, Vec2, Vec3, Vec4};
+
+    #[cfg(feature = "collections")]
+    pub use super::collections::prelude::*;
+}
+
+/// Prelude for engine-wide collection policies.
+#[cfg(feature = "collections")]
+pub mod collections_prelude {
+    pub use crate::collections::prelude::*;
 }

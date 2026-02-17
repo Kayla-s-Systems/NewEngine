@@ -8,7 +8,7 @@ use parking_lot::RwLock;
 
 use log::debug;
 
-use crate::{MathError, MathResult, MathValue, MathValueType, Signature};
+use crate::{MathError, MathResult, MathValue, Signature};
 
 /// Human-readable identifier of a math function.
 ///
@@ -84,65 +84,90 @@ impl MathRegistry {
         let id: MathFnId = Arc::<str>::from(fun.id());
         let sig = fun.signature().clone();
 
-        let (replaced_same_provider, prev_active_provider): (bool, Option<ProviderId>) = {
-            let mut st = self.st.write();
+        let mut st = self.st.write();
 
-            // Track ids per provider without duplicates.
-            push_unique(st.by_provider.entry(provider.clone()).or_default(), id.clone());
-
-            let list = st.providers.entry(id.clone()).or_default();
-            let prev_active_provider = list.last().map(|e| e.provider.clone());
-
-            // If the same provider registers the same id again, replace its implementation
-            // and move it to the end so it becomes active.
-            if let Some(pos) = list.iter().position(|e| e.provider == provider) {
-                let _old = list.remove(pos);
-                list.push(ProviderEntry { provider: provider.clone(), fun });
-                (true, prev_active_provider)
-            } else {
-                list.push(ProviderEntry { provider: provider.clone(), fun });
-                (false, prev_active_provider)
+        // Contract enforcement: a given id must keep a single, stable signature.
+        // Allow replacing implementations, but reject attempts to "overload" the same id
+        // with a different signature.
+        if let Some(expected) = st
+            .providers
+            .get(&id)
+            .and_then(|list| list.first().map(|e| e.fun.signature().clone()))
+        {
+            if expected != sig {
+                return Err(MathError::SignatureConflict {
+                    id: id.to_string(),
+                    expected,
+                    got: sig,
+                    provider: provider.to_string(),
+                });
             }
+        }
+
+        // Track ids per provider without duplicates.
+        push_unique(st.by_provider.entry(provider.clone()).or_default(), id.clone());
+
+        let list = st.providers.entry(id.clone()).or_default();
+
+        let prev_active_provider = list.last().map(|e| e.provider.clone());
+
+        // If the same provider registers the same id again, replace its implementation
+        // and move it to the end so it becomes active.
+        let replaced_same_provider = if let Some(pos) = list.iter().position(|e| e.provider == provider) {
+            let _old = list.remove(pos);
+            list.push(ProviderEntry {
+                provider: provider.clone(),
+                fun,
+            });
+            true
+        } else {
+            list.push(ProviderEntry {
+                provider: provider.clone(),
+                fun,
+            });
+            false
         };
+
+        drop(st);
 
         match (replaced_same_provider, prev_active_provider) {
             (true, Some(prev)) if prev.as_ref() != provider.as_ref() => {
                 debug!(
-                    target: "newengine_math::registry",
-                    "math.register id='{}' provider='{}' replaced=true prev_active='{}' sig={:?}",
-                    id,
-                    provider,
-                    prev,
-                    sig
-                );
+                target: "newengine_math::registry",
+                "math.register id='{}' provider='{}' replaced=true prev_active='{}' sig={:?}",
+                id,
+                provider,
+                prev,
+                sig
+            );
             }
             (true, _) => {
                 debug!(
-                    target: "newengine_math::registry",
-                    "math.register id='{}' provider='{}' replaced=true sig={:?}",
-                    id,
-                    provider,
-                    sig
-                );
+                target: "newengine_math::registry",
+                "math.register id='{}' provider='{}' replaced=true sig={:?}",
+                id,
+                provider,
+                sig
+            );
             }
             (false, Some(prev)) if prev.as_ref() != provider.as_ref() => {
                 debug!(
-                    target: "newengine_math::registry",
-                    "math.register id='{}' provider='{}' override=true prev_active='{}' sig={:?}",
-                    id,
-                    provider,
-                    prev,
-                    sig
-                );
+                target: "newengine_math::registry",
+                "math.register id='{}' provider='{}' override=true prev_active='{}' sig={:?}",
+                id,
+                provider,
+                prev,
+                sig
+            );
             }
             _ => {
                 debug!(
-                    target: "newengine_math::registry",
-                    "math.register id='{}' provider='{}' sig={:?}",
-                    id,
-                    provider,
-                    sig
-                );
+                target: "newengine_math::registry",
+                "math.register id='{}' provider='{}' sig={:?}",
+                id,
+                provider,
+                sig
+            );
             }
         }
 
@@ -220,17 +245,18 @@ impl MathRegistry {
             return Err(MathError::InvalidArgs {
                 expected: sig.clone(),
                 got: args.iter().map(MathValue::ty).collect(),
+                arg_index: None,
             });
         }
 
         for (i, (exp, got)) in sig.inputs.iter().zip(args.iter().map(MathValue::ty)).enumerate() {
             if *exp != got {
-                let mut got_all = args.iter().map(MathValue::ty).collect::<Vec<_>>();
-                // Annotate the mismatch for debugging.
-                if let Some(slot) = got_all.get_mut(i) {
-                    *slot = got;
-                }
-                return Err(MathError::InvalidArgs { expected: sig.clone(), got: got_all });
+                let got_all = args.iter().map(MathValue::ty).collect::<Vec<_>>();
+                return Err(MathError::InvalidArgs {
+                    expected: sig.clone(),
+                    got: got_all,
+                    arg_index: Some(i),
+                });
             }
         }
 
@@ -258,9 +284,6 @@ impl MathRegistry {
     }
 }
 
-/// Small helper to build typed wrappers around dynamic functions.
-///
-/// This is intentionally minimal; higher-level ergonomic wrappers can live in engine modules.
-pub fn arg_types(args: &[MathValue]) -> Vec<MathValueType> {
-    args.iter().map(MathValue::ty).collect()
-}
+//pub fn arg_types(args: &[MathValue]) -> Vec<MathValueType> {
+//    args.iter().map(MathValue::ty).collect()
+//}

@@ -9,7 +9,24 @@ pub type MathResult<T> = Result<T, MathError>;
 #[derive(Debug, Clone)]
 pub enum MathError {
     NotFound { id: String },
-    InvalidArgs { expected: Signature, got: Vec<MathValueType> },
+    /// Arguments do not match the function signature.
+    ///
+    /// `arg_index` is set when the mismatch can be attributed to a single argument position.
+    InvalidArgs {
+        expected: Signature,
+        got: Vec<MathValueType>,
+        arg_index: Option<usize>,
+    },
+
+    /// A provider attempted to register the same `id` with a different signature.
+    ///
+    /// This is treated as a contract violation and rejected to prevent silent ABI/API breakage.
+    SignatureConflict {
+        id: String,
+        expected: Signature,
+        got: Signature,
+        provider: String,
+    },
     ProviderError { id: String, message: String },
 }
 
@@ -17,9 +34,22 @@ impl fmt::Display for MathError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             MathError::NotFound { id } => write!(f, "math function not found: {id}"),
-            MathError::InvalidArgs { expected, got } => {
-                write!(f, "invalid args: expected {expected:?}, got {got:?}")
-            }
+            MathError::InvalidArgs { expected, got, arg_index } => match arg_index {
+                Some(i) => write!(
+                    f,
+                    "invalid args at index {i}: expected {expected:?}, got {got:?}"
+                ),
+                None => write!(f, "invalid args: expected {expected:?}, got {got:?}"),
+            },
+            MathError::SignatureConflict {
+                id,
+                expected,
+                got,
+                provider,
+            } => write!(
+                f,
+                "signature conflict ({id}) provider={provider}: expected {expected:?}, got {got:?}"
+            ),
             MathError::ProviderError { id, message } => write!(f, "provider error ({id}): {message}"),
         }
     }

@@ -1,6 +1,5 @@
 #![forbid(unsafe_op_in_unsafe_fn)]
 
-use once_cell::sync::Lazy;
 use std::sync::Arc;
 
 use crate::{

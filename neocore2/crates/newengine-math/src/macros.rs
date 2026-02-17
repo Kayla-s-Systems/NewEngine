@@ -18,7 +18,7 @@ macro_rules! ne_math_fn {
         impl $name {
             #[inline]
             fn sig() -> &'static $crate::Signature {
-                static SIG: Lazy<$crate::Signature> = Lazy::new(|| $crate::Signature {
+                static SIG: $crate::Lazy<$crate::Signature> = $crate::Lazy::new(|| $crate::Signature {
                     inputs: vec![$($crate::MathValueType::$in_ty),*],
                     output: $crate::MathValueType::$out_ty,
                 });
@@ -30,6 +30,7 @@ macro_rules! ne_math_fn {
                 $crate::MathError::InvalidArgs {
                     expected: Self::sig().clone(),
                     got: args.iter().map(|v| v.ty()).collect(),
+                    arg_index: None,
                 }
             }
 

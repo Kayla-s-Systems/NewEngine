@@ -7,6 +7,8 @@
 //!
 //! The public surface is intentionally small:
 //! - `FxHashMap` / `FxHashSet` for fast, deterministic hashing
+//! - `SecureHashMap` / `SecureHashSet` for user-facing/untrusted inputs
+//! - `BTreeMap` / `BTreeSet` for stable iteration order
 //! - slotmap types for stable generational keys
 //! - re-exports of `hashbrown::hash_map` entry API
 
@@ -33,6 +35,23 @@ pub type FxHashMap<K, V> = HashMap<K, V, FxBuildHasher>;
 #[cfg(feature = "collections")]
 pub type FxHashSet<K> = HashSet<K, FxBuildHasher>;
 
+/// Secure, randomized hashing for untrusted input (network/JSON/modding).
+///
+/// This is not deterministic between runs by design.
+#[cfg(feature = "collections")]
+pub type SecureBuildHasher = ahash::RandomState;
+
+#[cfg(feature = "collections")]
+pub type SecureHashMap<K, V> = HashMap<K, V, SecureBuildHasher>;
+
+#[cfg(feature = "collections")]
+pub type SecureHashSet<K> = HashSet<K, SecureBuildHasher>;
+
+/// Stable-order maps/sets (sorted by key).
+#[cfg(feature = "collections")]
+pub use std::collections::{BTreeMap, BTreeSet};
+
+
 /// Re-exported `Entry`/iter APIs.
 #[cfg(feature = "collections")]
 pub mod hash_map {
@@ -49,3 +68,15 @@ pub mod slot {
 #[cfg(feature = "collections")]
 pub use slotmap as slotmap;
 
+
+/// Common collection policies.
+#[cfg(feature = "collections")]
+pub mod prelude {
+    pub use super::{
+        BTreeMap, BTreeSet, FxBuildHasher, FxHashMap, FxHashSet, SecureBuildHasher, SecureHashMap,
+        SecureHashSet,
+    };
+
+    pub use super::hash_map::*;
+    pub use super::slot::*;
+}
