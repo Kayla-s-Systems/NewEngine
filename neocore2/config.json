@@ -1,7 +1,7 @@
 {
   "logging": {
     "level": "debug",
-    "filter": "info,newengine_render=debug",
+    "filter": "debug,newengine_render=debug",
     "style": "auto",
     "target": "stderr",
     "file": "logs/editor.log",

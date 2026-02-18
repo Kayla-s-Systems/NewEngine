@@ -116,18 +116,18 @@ pub(crate) unsafe fn create_shader_module(device: &Device, bytes: &[u8]) -> VkRe
     Ok(device.create_shader_module(&ci, None)?)
 }
 
+pub(crate) unsafe fn create_shader_module_words(device: &Device, words: &[u32]) -> VkResult<vk::ShaderModule> {
+    let ci = vk::ShaderModuleCreateInfo::default().code(words);
+    Ok(device.create_shader_module(&ci, None)?)
+}
+
 pub(super) unsafe fn create_pipeline(
     device: &Device,
     render_pass: vk::RenderPass,
+    shaders: &crate::vulkan::ShaderPack,
 ) -> VkResult<(vk::PipelineLayout, vk::Pipeline)> {
-    let vert = create_shader_module(
-        device,
-        include_bytes!(concat!(env!("OUT_DIR"), "/tri.vert.spv")),
-    )?;
-    let frag = create_shader_module(
-        device,
-        include_bytes!(concat!(env!("OUT_DIR"), "/tri.frag.spv")),
-    )?;
+    let vert = create_shader_module_words(device, &shaders.tri_vert)?;
+    let frag = create_shader_module_words(device, &shaders.tri_frag)?;
 
     let entry = CString::new("main").unwrap();
 

@@ -198,7 +198,7 @@ impl VulkanRenderer {
             self.swapchain.format = new_format;
             self.pipelines.render_pass = create_render_pass(&self.core.device, self.swapchain.format)?;
 
-            let (pl, p) = create_pipeline(&self.core.device, self.pipelines.render_pass)?;
+            let (pl, p) = create_pipeline(&self.core.device, self.pipelines.render_pass, &self.shader_pack)?;
             self.pipelines.tri_pipeline_layout = pl;
             self.pipelines.tri_pipeline = p;
 
@@ -207,6 +207,7 @@ impl VulkanRenderer {
                     &self.core.device,
                     self.pipelines.render_pass,
                     self.text.desc_set_layout,
+                    &self.shader_pack,
                 )?;
                 self.pipelines.text_pipeline_layout = tpl;
                 self.pipelines.text_pipeline = tp;
@@ -217,6 +218,7 @@ impl VulkanRenderer {
                     &self.core.device,
                     self.pipelines.render_pass,
                     self.ui.desc_set_layout,
+                    &self.shader_pack,
                 )?;
                 self.pipelines.ui_pipeline_layout = upl;
                 self.pipelines.ui_pipeline = up;

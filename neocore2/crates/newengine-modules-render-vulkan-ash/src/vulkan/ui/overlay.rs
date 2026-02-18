@@ -28,6 +28,7 @@ impl VulkanRenderer {
                 &self.core.device,
                 self.pipelines.render_pass,
                 self.ui.desc_set_layout,
+                &self.shader_pack,
             )?;
             self.pipelines.ui_pipeline_layout = pl;
             self.pipelines.ui_pipeline = p;

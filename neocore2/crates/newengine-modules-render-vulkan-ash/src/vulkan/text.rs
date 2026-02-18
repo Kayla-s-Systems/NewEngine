@@ -5,8 +5,9 @@ use std::mem;
 use std::ptr;
 
 use super::device::*;
-use super::pipeline::create_shader_module;
+use super::pipeline::create_shader_module_words;
 use super::util::*;
+use super::ShaderPack;
 use super::VulkanRenderer;
 
 mod font8x8 {
@@ -40,15 +41,10 @@ pub(super) unsafe fn create_text_pipeline(
     device: &ash::Device,
     render_pass: vk::RenderPass,
     set_layout: vk::DescriptorSetLayout,
+    shaders: &ShaderPack,
 ) -> VkResult<(vk::PipelineLayout, vk::Pipeline)> {
-    let vert = create_shader_module(
-        device,
-        include_bytes!(concat!(env!("OUT_DIR"), "/text.vert.spv")),
-    )?;
-    let frag = create_shader_module(
-        device,
-        include_bytes!(concat!(env!("OUT_DIR"), "/text.frag.spv")),
-    )?;
+    let vert = create_shader_module_words(device, &shaders.text_vert)?;
+    let frag = create_shader_module_words(device, &shaders.text_frag)?;
 
     let entry = std::ffi::CString::new("main").unwrap();
 
@@ -171,6 +167,7 @@ impl VulkanRenderer {
                 &self.core.device,
                 self.pipelines.render_pass,
                 self.text.desc_set_layout,
+                &self.shader_pack,
             )?;
             self.pipelines.text_pipeline_layout = tpl;
             self.pipelines.text_pipeline = tp;

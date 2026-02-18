@@ -18,6 +18,7 @@ use super::super::device::*;
 use super::super::instance::*;
 use super::super::pipeline::*;
 use super::super::swapchain::*;
+use crate::vulkan::{ShaderBaker, ShaderPack};
 
 impl VulkanRenderer {
     pub unsafe fn new(
@@ -98,7 +99,11 @@ impl VulkanRenderer {
             format,
             vk::Format::D32_SFLOAT,
         )?;
-        let (tri_pipeline_layout, tri_pipeline) = create_pipeline(&device, render_pass)?;
+
+        let baker = ShaderBaker::new()?;
+        let shader_pack: ShaderPack = baker.bake_pack()?;
+
+        let (tri_pipeline_layout, tri_pipeline) = create_pipeline(&device, render_pass, &shader_pack)?;
         let framebuffers = create_framebuffers(&device, render_pass, &image_views, extent)?;
 
         let command_pool = device.create_command_pool(
@@ -250,6 +255,7 @@ impl VulkanRenderer {
             core,
             swapchain,
             pipelines,
+            shader_pack,
             frames: FrameManager {
                 frames,
                 frame_index: 0,

@@ -3,7 +3,8 @@ use crate::error::VkResult;
 use ash::vk;
 use std::mem;
 
-use super::super::pipeline::create_shader_module;
+use super::super::pipeline::create_shader_module_words;
+use crate::vulkan::ShaderPack;
 
 #[repr(C)]
 #[derive(Clone, Copy)]
@@ -16,15 +17,10 @@ pub unsafe fn create_ui_pipeline(
     device: &ash::Device,
     render_pass: vk::RenderPass,
     set_layout: vk::DescriptorSetLayout,
+    shaders: &ShaderPack,
 ) -> VkResult<(vk::PipelineLayout, vk::Pipeline)> {
-    let vert = create_shader_module(
-        device,
-        include_bytes!(concat!(env!("OUT_DIR"), "/ui.vert.spv")),
-    )?;
-    let frag = create_shader_module(
-        device,
-        include_bytes!(concat!(env!("OUT_DIR"), "/ui.frag.spv")),
-    )?;
+    let vert = create_shader_module_words(device, &shaders.ui_vert)?;
+    let frag = create_shader_module_words(device, &shaders.ui_frag)?;
 
     let entry = std::ffi::CString::new("main").unwrap();
 

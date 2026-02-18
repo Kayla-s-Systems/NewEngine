@@ -3,6 +3,7 @@
 use ahash::AHashMap;
 use bytemuck::{Pod, Zeroable};
 use newengine_core::error::{EngineError, EngineResult};
+use newengine_core::plugins::default_host_api;
 use newengine_core::render::{
     BeginRenderTargetDesc, BindGroupDesc, BindGroupLayoutDesc, BindingKind, BufferBinding, BufferDesc, BufferUsage,
     DrawIndexedArgs, Extent2D, IndexFormat, PipelineDesc, PrimitiveTopology, RectI32, RenderApi, RenderTargetDesc,
@@ -10,6 +11,11 @@ use newengine_core::render::{
 };
 use newengine_math::{Mat4, Vec3};
 use newengine_primitives::{PrimitiveId, PrimitiveRegistry, PrimitiveVertex};
+use newengine_ui::asset_access::wait_ready;
+use newengine_ui::{AssetAccess, AssetServiceClient};
+use std::io::Write;
+use std::path::{Path, PathBuf};
+use std::time::Duration;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum PrimitivePreviewSize {
@@ -265,11 +271,8 @@ impl PrimitivePreviewService {
                 .with_uniform0(BufferBinding::new(ubo, 0, std::mem::size_of::<PreviewUbo>() as u64)),
         )?;
 
-        let vs_bytes = include_bytes!(concat!(env!("OUT_DIR"), "/primitive_preview.vert.spv"));
-        let fs_bytes = include_bytes!(concat!(env!("OUT_DIR"), "/primitive_preview.frag.spv"));
-
-        let vs_words = Self::spirv_bytes_to_words(vs_bytes)?;
-        let fs_words = Self::spirv_bytes_to_words(fs_bytes)?;
+        let vs_words = Self::load_or_compile_spv_words("shaders/preview/primitive_preview.vert", ShaderStage::Vertex)?;
+        let fs_words = Self::load_or_compile_spv_words("shaders/preview/primitive_preview.frag", ShaderStage::Fragment)?;
 
         let vs = r.create_shader(
             ShaderDesc::new(ShaderStage::Vertex, "main", vs_words)
@@ -323,6 +326,119 @@ impl PrimitivePreviewService {
         }
         Ok(out)
     }
+
+    fn load_or_compile_spv_words(logical_path: &str, stage: ShaderStage) -> EngineResult<Vec<u32>> {
+        let assets = AssetServiceClient::new(default_host_api());
+
+        let id = assets
+            .load(logical_path)
+            .map_err(|e| EngineError::other(format!("asset.load failed path='{logical_path}' err='{e}'")))?;
+
+        wait_ready(&assets, &id, Duration::from_millis(500)).map_err(|e| {
+            EngineError::other(format!("asset.wait_ready failed path='{logical_path}' err='{e:?}'"))
+        })?;
+
+        let (_meta, payload) = assets
+            .blob_wire_v1(&id)
+            .map_err(|e| EngineError::other(format!("asset.blob_wire_v1 failed path='{logical_path}' err='{e}'")))?;
+
+        let src = std::str::from_utf8(&payload)
+            .map_err(|_| EngineError::other(format!("shader source is not utf8 path='{logical_path}'")))?;
+
+        let cache_dir = shader_cache_dir();
+        std::fs::create_dir_all(&cache_dir).map_err(|e| {
+            EngineError::other(format!("shader cache: create_dir_all failed dir='{}' err='{e}'", cache_dir.display()))
+        })?;
+
+        let key = shader_cache_key(src, stage, "main");
+        let out_path = cache_dir.join(shader_cache_filename(logical_path, stage, &key));
+
+        if let Ok(bytes) = std::fs::read(&out_path) {
+            if let Ok(words) = Self::spirv_bytes_to_words(&bytes) {
+                return Ok(words);
+            }
+        }
+
+        let compiler = shaderc::Compiler::new()
+            .map_err(|e| EngineError::other(format!("shaderc: failed to create compiler: {e:?}")))?;
+
+        let mut opts = shaderc::CompileOptions::new()
+            .map_err(|e| EngineError::other(format!("shaderc: failed to create options: {e:?}")))?;
+
+        opts.set_optimization_level(shaderc::OptimizationLevel::Performance);
+
+
+        let artifact = compiler
+            .compile_into_spirv(src, to_shaderc(stage), logical_path, "main", Some(&opts))
+            .map_err(|e| EngineError::other(format!("shaderc: compile failed path='{logical_path}' err='{e}'")))?;
+
+        let bytes = artifact.as_binary_u8();
+        let _ = atomic_write(&out_path, bytes);
+
+        Self::spirv_bytes_to_words(bytes)
+    }
+}
+
+fn shader_cache_dir() -> PathBuf {
+    if let Some(v) = std::env::var_os("NEWENGINE_SHADER_CACHE_DIR") {
+        return PathBuf::from(v);
+    }
+    PathBuf::from("cache").join("shaders")
+}
+
+fn to_shaderc(stage: ShaderStage) -> shaderc::ShaderKind {
+    match stage {
+        ShaderStage::Vertex => shaderc::ShaderKind::Vertex,
+        ShaderStage::Fragment => shaderc::ShaderKind::Fragment,
+        ShaderStage::Compute => shaderc::ShaderKind::Compute,
+    }
+}
+
+fn suffix(stage: ShaderStage) -> &'static str {
+    match stage {
+        ShaderStage::Vertex => "vert",
+        ShaderStage::Fragment => "frag",
+        ShaderStage::Compute => "comp",
+    }
+}
+
+fn shader_cache_key(src: &str, stage: ShaderStage, entry: &str) -> [u8; 32] {
+    let mut h = blake3::Hasher::new();
+    h.update(format!("{stage:?}").as_bytes());
+    h.update(b"\0");
+    h.update(entry.as_bytes());
+    h.update(b"\0");
+    h.update(src.as_bytes());
+    *h.finalize().as_bytes()
+}
+
+fn shader_cache_filename(logical_path: &str, stage: ShaderStage, key: &[u8; 32]) -> String {
+    let stem = Path::new(logical_path)
+        .file_name()
+        .and_then(|s| s.to_str())
+        .unwrap_or("shader");
+    format!("{stem}.{stage:?}.{}.spv", hex16(key))
+}
+
+fn hex16(key: &[u8; 32]) -> String {
+    const HEX: &[u8; 16] = b"0123456789abcdef";
+    let mut out = [0u8; 32];
+    for (i, b) in key[..16].iter().copied().enumerate() {
+        out[i * 2] = HEX[(b >> 4) as usize];
+        out[i * 2 + 1] = HEX[(b & 0x0F) as usize];
+    }
+    String::from_utf8_lossy(&out).to_string()
+}
+
+fn atomic_write(path: &Path, bytes: &[u8]) -> std::io::Result<()> {
+    let tmp = path.with_extension("spv.tmp");
+    {
+        let mut f = std::fs::File::create(&tmp)?;
+        f.write_all(bytes)?;
+        f.flush()?;
+    }
+    std::fs::rename(tmp, path)?;
+    Ok(())
 }
 
 fn upload_mesh(r: &mut dyn RenderApi, vertices: &[PrimitiveVertex], indices: &[u32]) -> EngineResult<GpuMesh> {

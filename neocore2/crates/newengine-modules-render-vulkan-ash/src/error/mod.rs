@@ -16,6 +16,9 @@ pub enum VkRenderError {
     #[error("Invalid render state: {0}")]
     InvalidState(&'static str),
 
+    #[error("Shader error: {0}")]
+    Shader(String),
+
     #[error("Vulkan error: {0}")]
     Vk(#[from] ash::vk::Result),
 }

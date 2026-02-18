@@ -140,6 +140,7 @@ pub struct VulkanRenderer {
     pub(crate) core: CoreContext,
     pub(crate) swapchain: SwapchainContext,
     pub(crate) pipelines: PipelinePack,
+    pub(crate) shader_pack: crate::vulkan::ShaderPack,
     pub(crate) frames: FrameManager,
     pub(crate) text: TextOverlayResources,
     pub(crate) ui: UiOverlayResources,
