@@ -7,6 +7,8 @@ use std::{env, path::PathBuf};
 
 use crate::logger::output::LogOutput;
 
+use newengine_core::startup::StartupLoggingConfig;
+
 #[derive(Debug, Clone)]
 pub struct ConsoleLoggerConfig {
     pub filter: Option<String>,
@@ -173,6 +175,81 @@ impl ConsoleLoggerConfig {
             roll_max_files,
             roll_keep_days,
         }
+    }
+
+
+    /// Applies `StartupLoggingConfig` (loaded from config.json) onto this config.
+    ///
+    /// Environment overrides (NEWENGINE_LOG, NEWENGINE_LOG_LEVEL, etc.) should be applied first
+    /// via `from_env()`, then `apply_startup_logging()` should be called only if no env override
+    /// is present.
+    pub fn apply_startup_logging(&mut self, s: &StartupLoggingConfig) {
+        self.filter = s.filter.clone().filter(|v| !v.trim().is_empty());
+
+        if self.filter.is_none() {
+            if let Ok(level) = s.level.parse::<LevelFilter>() {
+                self.level = level;
+            }
+        }
+
+        self.colors = s.colors;
+
+        self.include_module_path = s.include_module_path;
+        self.include_target = s.include_target;
+        self.include_file = s.include_file;
+        self.include_line_number = s.include_line_number;
+
+        self.indent = s.indent;
+
+        self.console_output = s
+            .console_target
+            .as_deref()
+            .map(str::trim)
+            .map(|v| v.to_ascii_lowercase())
+            .and_then(|v| match v.as_str() {
+                "stdout" => Some(LogOutput::Stdout),
+                "stderr" => Some(LogOutput::Stderr),
+                _ => None,
+            });
+
+        self.file_path = s
+            .file_path
+            .as_deref()
+            .map(str::trim)
+            .filter(|v| !v.is_empty())
+            .map(PathBuf::from);
+
+        self.tee = s.tee;
+
+        self.roll_max_bytes = s.roll_max_bytes;
+        self.roll_max_files = s.roll_max_files;
+        self.roll_keep_days = s.roll_keep_days;
+
+        self.timestamp = s
+            .timestamp
+            .as_deref()
+            .map(str::trim)
+            .map(|v| v.to_ascii_lowercase())
+            .and_then(|v| match v.as_str() {
+                "none" | "0" | "false" => None,
+                "seconds" | "sec" | "secs" | "s" => Some(TimestampPrecision::Seconds),
+                "millis" | "milliseconds" | "ms" => Some(TimestampPrecision::Millis),
+                "micros" | "microseconds" | "us" => Some(TimestampPrecision::Micros),
+                "nanos" | "nanoseconds" | "ns" => Some(TimestampPrecision::Nanos),
+                _ => Some(TimestampPrecision::Millis),
+            });
+
+        self.write_style = s
+            .style
+            .as_deref()
+            .map(str::trim)
+            .map(|v| v.to_ascii_lowercase())
+            .and_then(|v| match v.as_str() {
+                "always" | "true" | "1" => Some(WriteStyle::Always),
+                "never" | "false" | "0" => Some(WriteStyle::Never),
+                "auto" => Some(WriteStyle::Auto),
+                _ => None,
+            });
     }
 
     #[inline]
