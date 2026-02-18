@@ -9,6 +9,7 @@ ahash = "0.8"
 bytemuck = { version = "1.23", features = ["derive"] }
 newengine-core = { path = "../newengine-core" }
 newengine-ui = { path = "../newengine-ui" }
+newengine-assets = { path = "../newengine-assets" }
 newengine-primitives = { path = "../newengine-primitives" }
 newengine-math = { path = "../newengine-math", features = ["backend-glam"] }
 shaderc = "0.10.1"

@@ -1,14 +1,12 @@
 #![forbid(unsafe_op_in_unsafe_fn)]
 
-use roxmltree::Document;
-use std::time::Duration;
-
 use crate::markup::error::UiMarkupError;
 use crate::markup::parser::{parse_theme, parse_ui_root};
 use crate::markup::theme::UiThemeDesc;
 use crate::markup::ui_node::UiNode;
-
-use crate::asset_access::{wait_ready, AssetAccess};
+use newengine_assets::{wait_ready, AssetAccess};
+use roxmltree::Document;
+use std::time::Duration;
 
 #[derive(Debug, Clone)]
 pub struct UiMarkupDoc {

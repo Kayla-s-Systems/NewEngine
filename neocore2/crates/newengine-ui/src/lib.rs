@@ -7,9 +7,6 @@ pub mod input;
 pub mod provider;
 pub mod providers;
 
-pub mod asset_access;
-pub mod asset_service_client;
-
 pub mod ui_images;
 pub mod previews;
 
@@ -21,8 +18,7 @@ pub use provider::{
 };
 pub use providers::create_provider;
 
-pub use asset_access::{AssetAccess, AssetState, WaitReadyError};
-pub use asset_service_client::AssetServiceClient;
+pub use newengine_assets::{AssetAccess, AssetService, AssetServiceClient, AssetState, WaitReadyError};
 
 pub use previews::{UiPreviewDesc, UiPreviewHandle, UiPreviewKind, UiPreviewProvider};
 pub use ui_images::UiImageLoader;

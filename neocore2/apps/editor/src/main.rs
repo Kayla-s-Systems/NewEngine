@@ -12,10 +12,9 @@ use newengine_modules_render_vulkan_ash::VulkanAshRenderModule;
 use newengine_platform_winit::app::config::WinitAppIcon;
 use newengine_platform_winit::{run_winit_app_with_config, WinitAppConfig, WinitWindowPlacement};
 
-use newengine_ui::asset_access::wait_ready;
+use newengine_assets::{wait_ready, AssetAccess, AssetServiceClient};
 use newengine_ui::markup::UiMarkupDoc;
 use newengine_ui::UiBuildFn;
-use newengine_ui::{AssetAccess, AssetServiceClient};
 
 use std::sync::{Arc, Mutex};
 use std::time::Duration;

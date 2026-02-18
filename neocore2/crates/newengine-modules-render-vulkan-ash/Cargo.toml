@@ -8,6 +8,7 @@ edition = "2021"
 newengine-core = { path = "../newengine-core" }
 newengine-platform-winit = { path = "../newengine-platform-winit" }
 newengine-ui = { path = "../newengine-ui" }
+newengine-assets = { path = "../newengine-assets" }
 ash = "0.38"
 ash-window = "0.13"
 raw-window-handle = "0.6"

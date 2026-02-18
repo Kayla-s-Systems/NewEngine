@@ -767,6 +767,7 @@ version = "0.1.0"
 dependencies = [
  "crossbeam-channel",
  "log",
+    "newengine-assets",
  "newengine-camera",
  "newengine-core",
  "newengine-ecs",
@@ -1531,6 +1532,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "newengine-assets"
+version = "0.1.0"
+dependencies = [
+    "abi_stable",
+    "newengine-plugin-api",
+    "serde",
+    "serde_json",
+]
+
+[[package]]
 name = "newengine-bounds"
 version = "0.1.0"
 dependencies = [
@@ -1637,6 +1648,7 @@ dependencies = [
  "blake3",
  "bytemuck",
  "log",
+    "newengine-assets",
  "newengine-core",
  "newengine-platform-winit",
  "newengine-ui",
@@ -1685,6 +1697,7 @@ dependencies = [
  "ahash",
  "blake3",
  "bytemuck",
+    "newengine-assets",
  "newengine-core",
  "newengine-math",
  "newengine-primitives",
@@ -1744,6 +1757,7 @@ dependencies = [
  "egui",
  "egui-winit",
  "image",
+    "newengine-assets",
  "newengine-plugin-api",
  "roxmltree 0.21.1",
  "serde",

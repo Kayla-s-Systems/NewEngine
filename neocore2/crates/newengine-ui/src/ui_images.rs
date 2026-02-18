@@ -1,7 +1,5 @@
 #![forbid(unsafe_op_in_unsafe_fn)]
 
-use crate::asset_access::AssetAccess;
-
 // -------------------------------------------------------------------------------------------------
 // Stub (default): no image decoding feature.
 //
@@ -198,5 +196,6 @@ mod with_images {
     }
 }
 
+use newengine_assets::AssetAccess;
 #[cfg(all(feature = "egui", feature = "images"))]
 pub use with_images::UiImageLoader;

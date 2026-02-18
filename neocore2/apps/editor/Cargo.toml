@@ -12,6 +12,7 @@ newengine-math = { path = "../../crates/newengine-math" }
 
 newengine-core = { path = "../../crates/newengine-core" }
 newengine-ui = { path = "../../crates/newengine-ui" }
+newengine-assets = { path = "../../crates/newengine-assets" }
 newengine-platform-winit = { path = "../../crates/newengine-platform-winit" }
 newengine-modules-render-vulkan-ash = { path = "../../crates/newengine-modules-render-vulkan-ash" }
 

@@ -2,6 +2,7 @@
 
 use ahash::AHashMap;
 use bytemuck::{Pod, Zeroable};
+use newengine_assets::{wait_ready, AssetAccess, AssetServiceClient};
 use newengine_core::error::{EngineError, EngineResult};
 use newengine_core::plugins::default_host_api;
 use newengine_core::render::{
@@ -11,8 +12,6 @@ use newengine_core::render::{
 };
 use newengine_math::{Mat4, Vec3};
 use newengine_primitives::{PrimitiveId, PrimitiveRegistry, PrimitiveVertex};
-use newengine_ui::asset_access::wait_ready;
-use newengine_ui::{AssetAccess, AssetServiceClient};
 use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::time::Duration;
