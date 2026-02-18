@@ -1,36 +1,227 @@
-[2m2026-02-18T09:42:13.265028Z[0m [32m INFO[0m main ThreadId(01) [2mnewengine_core::engine[0m[2m:[0m plugins: starting (phase=load)
-[2m2026-02-18T09:42:13.265259Z[0m [32m INFO[0m main ThreadId(01) [2mnewengine_core::plugins::manager[0m[2m:[0m plugins: scanning directory 'C:\Users\Aiden\Documents\Kayla's Systems\NewEngine\neocore2\target\debug\../../engineModules'
-[2m2026-02-18T09:42:13.265596Z[0m [32m INFO[0m main ThreadId(01) [2mnewengine_core::plugins::manager[0m[2m:[0m plugins: found 2 candidate(s) in 'C:\Users\Aiden\Documents\Kayla's Systems\NewEngine\neocore2\target\debug\../../engineModules'
-[2m2026-02-18T09:42:13.265684Z[0m [32m INFO[0m main ThreadId(01) [2mnewengine_core::plugins::manager[0m[2m:[0m plugins: loading 'C:\Users\Aiden\Documents\Kayla's Systems\NewEngine\neocore2\target\debug\../../engineModules\assetManager-0.2.5-dev.dll'
-[2m2026-02-18T09:42:13.267114Z[0m [33m WARN[0m main ThreadId(01) [2mnewengine_core::plugins::host_api[0m[2m:[0m assets: importer failed 'C:\Users\Aiden\Documents\Kayla's Systems\NewEngine\neocore2\target\debug\../../importers\audioimporter-0.2.4-dev.dll' err='GetProcAddress failed'
-[2m2026-02-18T09:42:13.267651Z[0m [32m INFO[0m main ThreadId(01) [2mnewengine_core::plugins::host_api[0m[2m:[0m assets: importer loaded 'C:\Users\Aiden\Documents\Kayla's Systems\NewEngine\neocore2\target\debug\../../importers\fontImporter-0.2.0-dev.dll'
-[2m2026-02-18T09:42:13.268017Z[0m [32m INFO[0m main ThreadId(01) [2mnewengine_core::plugins::host_api[0m[2m:[0m 3d-importer: service registered (kalitech.import.3d.v1)
-[2m2026-02-18T09:42:13.268248Z[0m [32m INFO[0m main ThreadId(01) [2mnewengine_core::plugins::host_api[0m[2m:[0m assets: importer loaded 'C:\Users\Aiden\Documents\Kayla's Systems\NewEngine\neocore2\target\debug\../../importers\geometryImporter-0.1.0-dev.dll'
-[2m2026-02-18T09:42:13.268791Z[0m [32m INFO[0m main ThreadId(01) [2mnewengine_core::plugins::host_api[0m[2m:[0m assets: importer discovered id='kalitech.import.image.v1' type='kalitech.asset.texture' priority=0 format='image' method='import_image_v1' ext_hint=false exts=["ico", "jpg", "jpeg", "gif", "tga", "bmp", "png", "svg", "dds", "webp"]
-[2m2026-02-18T09:42:13.268964Z[0m [32m INFO[0m main ThreadId(01) [2mnewengine_core::plugins::host_api[0m[2m:[0m assets: importer loaded 'C:\Users\Aiden\Documents\Kayla's Systems\NewEngine\neocore2\target\debug\../../importers\imageImporter-0.2.4-dev.dll'
-[2m2026-02-18T09:42:13.269434Z[0m [32m INFO[0m main ThreadId(01) [2mnewengine_core::plugins::host_api[0m[2m:[0m text-importer: providers registered ok=14 failed=0
-[2m2026-02-18T09:42:13.269599Z[0m [32m INFO[0m main ThreadId(01) [2mnewengine_core::plugins::host_api[0m[2m:[0m assets: importer discovered id='kalitech.import.csv.v1' type='kalitech.asset.text' priority=100 format='csv' method='import_text_v1' ext_hint=true exts=["csv"]
-[2m2026-02-18T09:42:13.269736Z[0m [32m INFO[0m main ThreadId(01) [2mnewengine_core::plugins::host_api[0m[2m:[0m assets: importer discovered id='kalitech.import.glsl.v1' type='kalitech.asset.text' priority=100 format='glsl' method='import_text_v1' ext_hint=true exts=["glsl"]
-[2m2026-02-18T09:42:13.269877Z[0m [32m INFO[0m main ThreadId(01) [2mnewengine_core::plugins::host_api[0m[2m:[0m assets: importer discovered id='kalitech.import.hlsl.v1' type='kalitech.asset.text' priority=100 format='hlsl' method='import_text_v1' ext_hint=true exts=["hlsl"]
-[2m2026-02-18T09:42:13.270033Z[0m [32m INFO[0m main ThreadId(01) [2mnewengine_core::plugins::host_api[0m[2m:[0m assets: importer discovered id='kalitech.import.html.v1' type='kalitech.asset.text' priority=100 format='html' method='import_text_v1' ext_hint=true exts=["htm", "html"]
-[2m2026-02-18T09:42:13.270228Z[0m [32m INFO[0m main ThreadId(01) [2mnewengine_core::plugins::host_api[0m[2m:[0m assets: importer discovered id='kalitech.import.ini.v1' type='kalitech.asset.text' priority=100 format='ini' method='import_text_v1' ext_hint=true exts=["cfg", "ini"]
-[2m2026-02-18T09:42:13.270372Z[0m [32m INFO[0m main ThreadId(01) [2mnewengine_core::plugins::host_api[0m[2m:[0m assets: importer discovered id='kalitech.import.json.v1' type='kalitech.asset.text' priority=100 format='json' method='import_text_v1' ext_hint=true exts=["json"]
-[2m2026-02-18T09:42:13.270507Z[0m [32m INFO[0m main ThreadId(01) [2mnewengine_core::plugins::host_api[0m[2m:[0m assets: importer discovered id='kalitech.import.ron.v1' type='kalitech.asset.text' priority=100 format='ron' method='import_text_v1' ext_hint=true exts=["ron"]
-[2m2026-02-18T09:42:13.270647Z[0m [32m INFO[0m main ThreadId(01) [2mnewengine_core::plugins::host_api[0m[2m:[0m assets: importer discovered id='kalitech.import.shader.v1' type='kalitech.asset.text' priority=100 format='shader' method='import_text_v1' ext_hint=true exts=["comp", "frag", "vert"]
-[2m2026-02-18T09:42:13.270792Z[0m [32m INFO[0m main ThreadId(01) [2mnewengine_core::plugins::host_api[0m[2m:[0m assets: importer discovered id='kalitech.import.toml.v1' type='kalitech.asset.text' priority=100 format='toml' method='import_text_v1' ext_hint=true exts=["toml"]
-[2m2026-02-18T09:42:13.270929Z[0m [32m INFO[0m main ThreadId(01) [2mnewengine_core::plugins::host_api[0m[2m:[0m assets: importer discovered id='kalitech.import.txt.v1' type='kalitech.asset.text' priority=100 format='txt' method='import_text_v1' ext_hint=true exts=["md", "txt"]
-[2m2026-02-18T09:42:13.271072Z[0m [32m INFO[0m main ThreadId(01) [2mnewengine_core::plugins::host_api[0m[2m:[0m assets: importer discovered id='kalitech.import.ui.v1' type='kalitech.asset.text' priority=100 format='ui' method='import_text_v1' ext_hint=true exts=["ui"]
-[2m2026-02-18T09:42:13.271212Z[0m [32m INFO[0m main ThreadId(01) [2mnewengine_core::plugins::host_api[0m[2m:[0m assets: importer discovered id='kalitech.import.wgsl.v1' type='kalitech.asset.text' priority=100 format='wgsl' method='import_text_v1' ext_hint=true exts=["wgsl"]
-[2m2026-02-18T09:42:13.271347Z[0m [32m INFO[0m main ThreadId(01) [2mnewengine_core::plugins::host_api[0m[2m:[0m assets: importer discovered id='kalitech.import.xml.v1' type='kalitech.asset.text' priority=100 format='xml' method='import_text_v1' ext_hint=true exts=["xml"]
-[2m2026-02-18T09:42:13.271500Z[0m [32m INFO[0m main ThreadId(01) [2mnewengine_core::plugins::host_api[0m[2m:[0m assets: importer discovered id='kalitech.import.yaml.v1' type='kalitech.asset.text' priority=100 format='yaml' method='import_text_v1' ext_hint=true exts=["yaml", "yml"]
-[2m2026-02-18T09:42:13.271607Z[0m [32m INFO[0m main ThreadId(01) [2mnewengine_core::plugins::host_api[0m[2m:[0m assets: importer loaded 'C:\Users\Aiden\Documents\Kayla's Systems\NewEngine\neocore2\target\debug\../../importers\textimporter-0.2.4-dev.dll'
-[2m2026-02-18T09:42:13.271687Z[0m [32m INFO[0m main ThreadId(01) [2mnewengine_core::plugins::host_api[0m[2m:[0m assets: initialized
-[2m2026-02-18T09:42:13.271754Z[0m [32m INFO[0m main ThreadId(01) [2mnewengine_core::plugins::manager[0m[2m:[0m plugins: loaded id='assetManager' ver='0.2.5' from 'C:\Users\Aiden\Documents\Kayla's Systems\NewEngine\neocore2\target\debug\../../engineModules\assetManager-0.2.5-dev.dll'
-[2m2026-02-18T09:42:13.271844Z[0m [32m INFO[0m main ThreadId(01) [2mnewengine_core::plugins::manager[0m[2m:[0m plugins: loading 'C:\Users\Aiden\Documents\Kayla's Systems\NewEngine\neocore2\target\debug\../../engineModules\input-0.1.9-dev.dll'
-[2m2026-02-18T09:42:13.278858Z[0m [32m INFO[0m main ThreadId(01) [2mnewengine_core::plugins::host_api[0m[2m:[0m input: initialized (events + gilrs)
-[2m2026-02-18T09:42:13.278971Z[0m [32m INFO[0m main ThreadId(01) [2mnewengine_core::plugins::manager[0m[2m:[0m plugins: loaded id='input' ver='0.1.9' from 'C:\Users\Aiden\Documents\Kayla's Systems\NewEngine\neocore2\target\debug\../../engineModules\input-0.1.9-dev.dll'
-[2m2026-02-18T09:42:13.279156Z[0m [32m INFO[0m main ThreadId(01) [2mnewengine_core::engine[0m[2m:[0m plugins: done (phase=load count=2 elapsed_ms=13)
-[2m2026-02-18T09:42:13.453066Z[0m [33m WARN[0m main ThreadId(01) [2mnewengine_modules_render_vulkan_ash::vulkan::renderer::init[0m[2m:[0m Vulkan validation layer not found; running without validation.
-[2m2026-02-18T09:42:13.623869Z[0m [32m INFO[0m main ThreadId(01) [2mnewengine_core::engine[0m[2m:[0m plugins: diagnostics tag='after module init' loaded=2
-[2m2026-02-18T09:42:13.624029Z[0m [32m INFO[0m main ThreadId(01) [2mnewengine_core::engine[0m[2m:[0m plugins: diag [01/02] id='assetManager' ver='0.2.5' state='registered'
-[2m2026-02-18T09:42:13.624121Z[0m [32m INFO[0m main ThreadId(01) [2mnewengine_core::engine[0m[2m:[0m plugins: diag [02/02] id='input' ver='0.1.9' state='registered'
+2026-02-18T10:30:37.983977Z  INFO main ThreadId(01) newengine_core::startup::logging: === newengine-core STARTUP ===
+version      : 0.1.0
+target       : x86_64 (windows)
+pid          : 10624
+exe          : C:\Users\Aiden\Documents\Kayla's Systems\NewEngine\neocore2\target\debug\editor.exe
+cwd          : C:\Users\Aiden\Documents\Kayla's Systems\NewEngine\neocore2
+log.mode     : console+file
+log.filter   : info
+log.file     : logs/newengine.log
+log.colors   : true
+log.timestamp: millis
+log.target   : stderr
+build.ts     : unknown
+=== STARTUP END ===
+2026-02-18T10:30:37.984291Z  INFO main ThreadId(01) newengine_core::engine: plugins: starting (phase=load)
+2026-02-18T10:30:37.984405Z  INFO main ThreadId(01) newengine_core::plugins::manager: plugins: scanning directory 'C:\Users\Aiden\Documents\Kayla's Systems\NewEngine\neocore2\target\debug\../../engineModules'
+2026-02-18T10:30:37.984634Z  INFO main ThreadId(01) newengine_core::plugins::manager: plugins: found 2 candidate(s) in 'C:\Users\Aiden\Documents\Kayla's Systems\NewEngine\neocore2\target\debug\../../engineModules'
+2026-02-18T10:30:37.984716Z  INFO main ThreadId(01) newengine_core::plugins::manager: plugins: loading 'C:\Users\Aiden\Documents\Kayla's Systems\NewEngine\neocore2\target\debug\../../engineModules\assetManager-0.2.5-dev.dll'
+2026-02-18T10:30:37.985982Z  WARN main ThreadId(01) newengine_core::plugins::host_api: assets: importer failed 'C:\Users\Aiden\Documents\Kayla's Systems\NewEngine\neocore2\target\debug\../../importers\audioimporter-0.2.4-dev.dll' err='GetProcAddress failed'
+2026-02-18T10:30:37.986441Z  INFO main ThreadId(01) newengine_core::plugins::host_api: assets: importer loaded 'C:\Users\Aiden\Documents\Kayla's Systems\NewEngine\neocore2\target\debug\../../importers\fontImporter-0.2.0-dev.dll'
+2026-02-18T10:30:37.986788Z  INFO main ThreadId(01) newengine_core::plugins::host_api: 3d-importer: service registered (kalitech.import.3d.v1)
+2026-02-18T10:30:37.987021Z  INFO main ThreadId(01) newengine_core::plugins::host_api: assets: importer loaded 'C:\Users\Aiden\Documents\Kayla's Systems\NewEngine\neocore2\target\debug\../../importers\geometryImporter-0.1.0-dev.dll'
+2026-02-18T10:30:37.987602Z  INFO main ThreadId(01) newengine_core::plugins::host_api: assets: importer discovered id='kalitech.import.image.v1' type='kalitech.asset.texture' priority=0 format='image' method='import_image_v1' ext_hint=false exts=["ico", "jpg", "jpeg", "gif", "tga", "bmp", "png", "svg", "dds", "webp"]
+2026-02-18T10:30:37.987781Z  INFO main ThreadId(01) newengine_core::plugins::host_api: assets: importer loaded 'C:\Users\Aiden\Documents\Kayla's Systems\NewEngine\neocore2\target\debug\../../importers\imageImporter-0.2.4-dev.dll'
+2026-02-18T10:30:37.988224Z  INFO main ThreadId(01) newengine_core::plugins::host_api: text-importer: providers registered ok=14 failed=0
+2026-02-18T10:30:37.988379Z  INFO main ThreadId(01) newengine_core::plugins::host_api: assets: importer discovered id='kalitech.import.csv.v1' type='kalitech.asset.text' priority=100 format='csv' method='import_text_v1' ext_hint=true exts=["csv"]
+2026-02-18T10:30:37.988528Z  INFO main ThreadId(01) newengine_core::plugins::host_api: assets: importer discovered id='kalitech.import.glsl.v1' type='kalitech.asset.text' priority=100 format='glsl' method='import_text_v1' ext_hint=true exts=["glsl"]
+2026-02-18T10:30:37.988678Z  INFO main ThreadId(01) newengine_core::plugins::host_api: assets: importer discovered id='kalitech.import.hlsl.v1' type='kalitech.asset.text' priority=100 format='hlsl' method='import_text_v1' ext_hint=true exts=["hlsl"]
+2026-02-18T10:30:37.988844Z  INFO main ThreadId(01) newengine_core::plugins::host_api: assets: importer discovered id='kalitech.import.html.v1' type='kalitech.asset.text' priority=100 format='html' method='import_text_v1' ext_hint=true exts=["htm", "html"]
+2026-02-18T10:30:37.989003Z  INFO main ThreadId(01) newengine_core::plugins::host_api: assets: importer discovered id='kalitech.import.ini.v1' type='kalitech.asset.text' priority=100 format='ini' method='import_text_v1' ext_hint=true exts=["cfg", "ini"]
+2026-02-18T10:30:37.989162Z  INFO main ThreadId(01) newengine_core::plugins::host_api: assets: importer discovered id='kalitech.import.json.v1' type='kalitech.asset.text' priority=100 format='json' method='import_text_v1' ext_hint=true exts=["json"]
+2026-02-18T10:30:37.989307Z  INFO main ThreadId(01) newengine_core::plugins::host_api: assets: importer discovered id='kalitech.import.ron.v1' type='kalitech.asset.text' priority=100 format='ron' method='import_text_v1' ext_hint=true exts=["ron"]
+2026-02-18T10:30:37.989457Z  INFO main ThreadId(01) newengine_core::plugins::host_api: assets: importer discovered id='kalitech.import.shader.v1' type='kalitech.asset.text' priority=100 format='shader' method='import_text_v1' ext_hint=true exts=["comp", "frag", "vert"]
+2026-02-18T10:30:37.989606Z  INFO main ThreadId(01) newengine_core::plugins::host_api: assets: importer discovered id='kalitech.import.toml.v1' type='kalitech.asset.text' priority=100 format='toml' method='import_text_v1' ext_hint=true exts=["toml"]
+2026-02-18T10:30:37.989752Z  INFO main ThreadId(01) newengine_core::plugins::host_api: assets: importer discovered id='kalitech.import.txt.v1' type='kalitech.asset.text' priority=100 format='txt' method='import_text_v1' ext_hint=true exts=["md", "txt"]
+2026-02-18T10:30:37.989923Z  INFO main ThreadId(01) newengine_core::plugins::host_api: assets: importer discovered id='kalitech.import.ui.v1' type='kalitech.asset.text' priority=100 format='ui' method='import_text_v1' ext_hint=true exts=["ui"]
+2026-02-18T10:30:37.990116Z  INFO main ThreadId(01) newengine_core::plugins::host_api: assets: importer discovered id='kalitech.import.wgsl.v1' type='kalitech.asset.text' priority=100 format='wgsl' method='import_text_v1' ext_hint=true exts=["wgsl"]
+2026-02-18T10:30:37.990271Z  INFO main ThreadId(01) newengine_core::plugins::host_api: assets: importer discovered id='kalitech.import.xml.v1' type='kalitech.asset.text' priority=100 format='xml' method='import_text_v1' ext_hint=true exts=["xml"]
+2026-02-18T10:30:37.990434Z  INFO main ThreadId(01) newengine_core::plugins::host_api: assets: importer discovered id='kalitech.import.yaml.v1' type='kalitech.asset.text' priority=100 format='yaml' method='import_text_v1' ext_hint=true exts=["yaml", "yml"]
+2026-02-18T10:30:37.990547Z  INFO main ThreadId(01) newengine_core::plugins::host_api: assets: importer loaded 'C:\Users\Aiden\Documents\Kayla's Systems\NewEngine\neocore2\target\debug\../../importers\textimporter-0.2.4-dev.dll'
+2026-02-18T10:30:37.990624Z  INFO main ThreadId(01) newengine_core::plugins::host_api: assets: initialized
+2026-02-18T10:30:37.990699Z  INFO main ThreadId(01) newengine_core::plugins::manager: plugins: loaded id='assetManager' ver='0.2.5' from 'C:\Users\Aiden\Documents\Kayla's Systems\NewEngine\neocore2\target\debug\../../engineModules\assetManager-0.2.5-dev.dll'
+2026-02-18T10:30:37.990789Z  INFO main ThreadId(01) newengine_core::plugins::manager: plugins: loading 'C:\Users\Aiden\Documents\Kayla's Systems\NewEngine\neocore2\target\debug\../../engineModules\input-0.1.9-dev.dll'
+2026-02-18T10:30:37.997665Z  INFO main ThreadId(01) newengine_core::plugins::host_api: input: initialized (events + gilrs)
+2026-02-18T10:30:37.997760Z  INFO main ThreadId(01) newengine_core::plugins::manager: plugins: loaded id='input' ver='0.1.9' from 'C:\Users\Aiden\Documents\Kayla's Systems\NewEngine\neocore2\target\debug\../../engineModules\input-0.1.9-dev.dll'
+2026-02-18T10:30:37.997912Z  INFO main ThreadId(01) newengine_core::engine: plugins: done (phase=load count=2 elapsed_ms=13)
+2026-02-18T10:30:38.164143Z  WARN main ThreadId(01) newengine_modules_render_vulkan_ash::vulkan::renderer::init: Vulkan validation layer not found; running without validation.
+2026-02-18T10:30:38.340384Z  INFO main ThreadId(01) newengine_core::engine: plugins: diagnostics tag='after module init' loaded=2
+2026-02-18T10:30:38.340532Z  INFO main ThreadId(01) newengine_core::engine: plugins: diag [01/02] id='assetManager' ver='0.2.5' state='registered'
+2026-02-18T10:30:38.340619Z  INFO main ThreadId(01) newengine_core::engine: plugins: diag [02/02] id='input' ver='0.1.9' state='registered'
+2026-02-18T11:05:00.697033Z  INFO main ThreadId(01) startup.banner.pretty: === newengine-core STARTUP ===
+version      : 0.1.0
+target       : x86_64 (windows)
+pid          : 8732
+exe          : C:\Users\Aiden\Documents\Kayla's Systems\NewEngine\neocore2\target\debug\editor.exe
+cwd          : C:\Users\Aiden\Documents\Kayla's Systems\NewEngine\neocore2
+
+cpu          : Intel(R) Core(TM) i7-6950X CPU @ 3.00GHz
+cpu.cores    : 20
+ram.total_mb : 33386708
+gpu          : NVIDIA GeForce GTX 1080 Ti
+vram.mb      : 11106
+directx      : D3D12 feature_level=12_1
+
+log.mode     : console+file
+log.filter   : info
+log.file     : logs/newengine.log
+log.colors   : true
+log.timestamp: millis
+log.target   : stderr
+build.ts     : unknown
+=== STARTUP END ===
+2026-02-18T11:05:00.697221Z  INFO main ThreadId(01) startup.banner: startup engine=newengine-core ver=0.1.0 target=x86_64 os=windows pid=8732 exe="C:\Users\Aiden\Documents\Kayla's Systems\NewEngine\neocore2\target\debug\editor.exe" cwd="C:\Users\Aiden\Documents\Kayla's Systems\NewEngine\neocore2" cpu="Intel(R) Core(TM) i7-6950X CPU @ 3.00GHz" cores=20 ram_mb=33386708 gpu="NVIDIA GeForce GTX 1080 Ti" vram_mb=11106 dx="D3D12 feature_level=12_1" log_mode=console+file log_filter="info" log_file="logs/newengine.log" build_ts="unknown"
+2026-02-18T11:05:00.697739Z  INFO main ThreadId(01) newengine_core::engine: plugins: starting (phase=load)
+2026-02-18T11:05:00.697848Z  INFO main ThreadId(01) newengine_core::plugins::manager: plugins: scanning directory 'C:\Users\Aiden\Documents\Kayla's Systems\NewEngine\neocore2\target\debug\../../engineModules'
+2026-02-18T11:05:00.698096Z  INFO main ThreadId(01) newengine_core::plugins::manager: plugins: found 2 candidate(s) in 'C:\Users\Aiden\Documents\Kayla's Systems\NewEngine\neocore2\target\debug\../../engineModules'
+2026-02-18T11:05:00.698183Z  INFO main ThreadId(01) newengine_core::plugins::manager: plugins: loading 'C:\Users\Aiden\Documents\Kayla's Systems\NewEngine\neocore2\target\debug\../../engineModules\assetManager-0.2.5-dev.dll'
+2026-02-18T11:05:00.699717Z  WARN main ThreadId(01) newengine_core::plugins::host_api: assets: importer failed 'C:\Users\Aiden\Documents\Kayla's Systems\NewEngine\neocore2\target\debug\../../importers\audioimporter-0.2.4-dev.dll' err='GetProcAddress failed'
+2026-02-18T11:05:00.700321Z  INFO main ThreadId(01) newengine_core::plugins::host_api: assets: importer loaded 'C:\Users\Aiden\Documents\Kayla's Systems\NewEngine\neocore2\target\debug\../../importers\fontImporter-0.2.0-dev.dll'
+2026-02-18T11:05:00.700798Z  INFO main ThreadId(01) newengine_core::plugins::host_api: 3d-importer: service registered (kalitech.import.3d.v1)
+2026-02-18T11:05:00.701013Z  INFO main ThreadId(01) newengine_core::plugins::host_api: assets: importer loaded 'C:\Users\Aiden\Documents\Kayla's Systems\NewEngine\neocore2\target\debug\../../importers\geometryImporter-0.1.0-dev.dll'
+2026-02-18T11:05:00.701733Z  INFO main ThreadId(01) newengine_core::plugins::host_api: assets: importer discovered id='kalitech.import.image.v1' type='kalitech.asset.texture' priority=0 format='image' method='import_image_v1' ext_hint=false exts=["ico", "jpg", "jpeg", "gif", "tga", "bmp", "png", "svg", "dds", "webp"]
+2026-02-18T11:05:00.701875Z  INFO main ThreadId(01) newengine_core::plugins::host_api: assets: importer loaded 'C:\Users\Aiden\Documents\Kayla's Systems\NewEngine\neocore2\target\debug\../../importers\imageImporter-0.2.4-dev.dll'
+2026-02-18T11:05:00.702347Z  INFO main ThreadId(01) newengine_core::plugins::host_api: text-importer: providers registered ok=14 failed=0
+2026-02-18T11:05:00.702509Z  INFO main ThreadId(01) newengine_core::plugins::host_api: assets: importer discovered id='kalitech.import.csv.v1' type='kalitech.asset.text' priority=100 format='csv' method='import_text_v1' ext_hint=true exts=["csv"]
+2026-02-18T11:05:00.702702Z  INFO main ThreadId(01) newengine_core::plugins::host_api: assets: importer discovered id='kalitech.import.glsl.v1' type='kalitech.asset.text' priority=100 format='glsl' method='import_text_v1' ext_hint=true exts=["glsl"]
+2026-02-18T11:05:00.702870Z  INFO main ThreadId(01) newengine_core::plugins::host_api: assets: importer discovered id='kalitech.import.hlsl.v1' type='kalitech.asset.text' priority=100 format='hlsl' method='import_text_v1' ext_hint=true exts=["hlsl"]
+2026-02-18T11:05:00.703063Z  INFO main ThreadId(01) newengine_core::plugins::host_api: assets: importer discovered id='kalitech.import.html.v1' type='kalitech.asset.text' priority=100 format='html' method='import_text_v1' ext_hint=true exts=["htm", "html"]
+2026-02-18T11:05:00.703219Z  INFO main ThreadId(01) newengine_core::plugins::host_api: assets: importer discovered id='kalitech.import.ini.v1' type='kalitech.asset.text' priority=100 format='ini' method='import_text_v1' ext_hint=true exts=["cfg", "ini"]
+2026-02-18T11:05:00.703362Z  INFO main ThreadId(01) newengine_core::plugins::host_api: assets: importer discovered id='kalitech.import.json.v1' type='kalitech.asset.text' priority=100 format='json' method='import_text_v1' ext_hint=true exts=["json"]
+2026-02-18T11:05:00.703507Z  INFO main ThreadId(01) newengine_core::plugins::host_api: assets: importer discovered id='kalitech.import.ron.v1' type='kalitech.asset.text' priority=100 format='ron' method='import_text_v1' ext_hint=true exts=["ron"]
+2026-02-18T11:05:00.703654Z  INFO main ThreadId(01) newengine_core::plugins::host_api: assets: importer discovered id='kalitech.import.shader.v1' type='kalitech.asset.text' priority=100 format='shader' method='import_text_v1' ext_hint=true exts=["comp", "frag", "vert"]
+2026-02-18T11:05:00.703807Z  INFO main ThreadId(01) newengine_core::plugins::host_api: assets: importer discovered id='kalitech.import.toml.v1' type='kalitech.asset.text' priority=100 format='toml' method='import_text_v1' ext_hint=true exts=["toml"]
+2026-02-18T11:05:00.703954Z  INFO main ThreadId(01) newengine_core::plugins::host_api: assets: importer discovered id='kalitech.import.txt.v1' type='kalitech.asset.text' priority=100 format='txt' method='import_text_v1' ext_hint=true exts=["md", "txt"]
+2026-02-18T11:05:00.704145Z  INFO main ThreadId(01) newengine_core::plugins::host_api: assets: importer discovered id='kalitech.import.ui.v1' type='kalitech.asset.text' priority=100 format='ui' method='import_text_v1' ext_hint=true exts=["ui"]
+2026-02-18T11:05:00.704285Z  INFO main ThreadId(01) newengine_core::plugins::host_api: assets: importer discovered id='kalitech.import.wgsl.v1' type='kalitech.asset.text' priority=100 format='wgsl' method='import_text_v1' ext_hint=true exts=["wgsl"]
+2026-02-18T11:05:00.704427Z  INFO main ThreadId(01) newengine_core::plugins::host_api: assets: importer discovered id='kalitech.import.xml.v1' type='kalitech.asset.text' priority=100 format='xml' method='import_text_v1' ext_hint=true exts=["xml"]
+2026-02-18T11:05:00.704601Z  INFO main ThreadId(01) newengine_core::plugins::host_api: assets: importer discovered id='kalitech.import.yaml.v1' type='kalitech.asset.text' priority=100 format='yaml' method='import_text_v1' ext_hint=true exts=["yaml", "yml"]
+2026-02-18T11:05:00.704715Z  INFO main ThreadId(01) newengine_core::plugins::host_api: assets: importer loaded 'C:\Users\Aiden\Documents\Kayla's Systems\NewEngine\neocore2\target\debug\../../importers\textimporter-0.2.4-dev.dll'
+2026-02-18T11:05:00.704823Z  INFO main ThreadId(01) newengine_core::plugins::host_api: assets: initialized
+2026-02-18T11:05:00.704919Z  INFO main ThreadId(01) newengine_core::plugins::manager: plugins: loaded id='assetManager' ver='0.2.5' from 'C:\Users\Aiden\Documents\Kayla's Systems\NewEngine\neocore2\target\debug\../../engineModules\assetManager-0.2.5-dev.dll'
+2026-02-18T11:05:00.705051Z  INFO main ThreadId(01) newengine_core::plugins::manager: plugins: loading 'C:\Users\Aiden\Documents\Kayla's Systems\NewEngine\neocore2\target\debug\../../engineModules\input-0.1.9-dev.dll'
+2026-02-18T11:05:00.710566Z  INFO main ThreadId(01) newengine_core::plugins::host_api: input: initialized (events + gilrs)
+2026-02-18T11:05:00.710668Z  INFO main ThreadId(01) newengine_core::plugins::manager: plugins: loaded id='input' ver='0.1.9' from 'C:\Users\Aiden\Documents\Kayla's Systems\NewEngine\neocore2\target\debug\../../engineModules\input-0.1.9-dev.dll'
+2026-02-18T11:05:00.710891Z  INFO main ThreadId(01) newengine_core::engine: plugins: done (phase=load count=2 elapsed_ms=13)
+2026-02-18T11:05:00.878104Z  WARN main ThreadId(01) newengine_modules_render_vulkan_ash::vulkan::renderer::init: Vulkan validation layer not found; running without validation.
+2026-02-18T11:05:01.085430Z  INFO main ThreadId(01) newengine_core::engine: plugins: diagnostics tag='after module init' loaded=2
+2026-02-18T11:05:01.085576Z  INFO main ThreadId(01) newengine_core::engine: plugins: diag [01/02] id='assetManager' ver='0.2.5' state='registered'
+2026-02-18T11:05:01.085713Z  INFO main ThreadId(01) newengine_core::engine: plugins: diag [02/02] id='input' ver='0.1.9' state='registered'
+2026-02-18T11:11:47.907855Z  INFO main ThreadId(01) startup.banner.pretty: === newengine-core STARTUP ===
+version      : 0.1.0
+target       : x86_64 (windows)
+pid          : 12408
+exe          : C:\Users\Aiden\Documents\Kayla's Systems\NewEngine\neocore2\target\debug\editor.exe
+cwd          : C:\Users\Aiden\Documents\Kayla's Systems\NewEngine\neocore2
+
+cpu          : Intel(R) Core(TM) i7-6950X CPU @ 3.00GHz
+cpu.cores    : 20
+ram.total_mb : 32604
+gpu          : NVIDIA GeForce GTX 1080 Ti
+vram.mb      : 11106
+directx      : D3D12 feature_level=12_1
+
+log.mode     : console+file
+log.filter   : info
+log.file     : logs/newengine.log
+log.colors   : true
+log.timestamp: millis
+log.target   : stderr
+build.ts     : unknown
+=== STARTUP END ===
+2026-02-18T11:11:47.908031Z  INFO main ThreadId(01) startup.banner: startup engine=newengine-core ver=0.1.0 target=x86_64 os=windows pid=12408 exe="C:\Users\Aiden\Documents\Kayla's Systems\NewEngine\neocore2\target\debug\editor.exe" cwd="C:\Users\Aiden\Documents\Kayla's Systems\NewEngine\neocore2" cpu="Intel(R) Core(TM) i7-6950X CPU @ 3.00GHz" cores=20 ram_mb=32604 gpu="NVIDIA GeForce GTX 1080 Ti" vram_mb=11106 dx="D3D12 feature_level=12_1" log_mode=console+file log_filter="info" log_file="logs/newengine.log" build_ts="unknown"
+2026-02-18T11:11:47.908548Z  INFO main ThreadId(01) newengine_core::engine: plugins: starting (phase=load)
+2026-02-18T11:11:47.908644Z  INFO main ThreadId(01) newengine_core::plugins::manager: plugins: scanning directory 'C:\Users\Aiden\Documents\Kayla's Systems\NewEngine\neocore2\target\debug\../../engineModules'
+2026-02-18T11:11:47.908872Z  INFO main ThreadId(01) newengine_core::plugins::manager: plugins: found 2 candidate(s) in 'C:\Users\Aiden\Documents\Kayla's Systems\NewEngine\neocore2\target\debug\../../engineModules'
+2026-02-18T11:11:47.908947Z  INFO main ThreadId(01) newengine_core::plugins::manager: plugins: loading 'C:\Users\Aiden\Documents\Kayla's Systems\NewEngine\neocore2\target\debug\../../engineModules\assetManager-0.2.5-dev.dll'
+2026-02-18T11:11:47.910294Z  WARN main ThreadId(01) newengine_core::plugins::host_api: assets: importer failed 'C:\Users\Aiden\Documents\Kayla's Systems\NewEngine\neocore2\target\debug\../../importers\audioimporter-0.2.4-dev.dll' err='GetProcAddress failed'
+2026-02-18T11:11:47.910765Z  INFO main ThreadId(01) newengine_core::plugins::host_api: assets: importer loaded 'C:\Users\Aiden\Documents\Kayla's Systems\NewEngine\neocore2\target\debug\../../importers\fontImporter-0.2.0-dev.dll'
+2026-02-18T11:11:47.911140Z  INFO main ThreadId(01) newengine_core::plugins::host_api: 3d-importer: service registered (kalitech.import.3d.v1)
+2026-02-18T11:11:47.911354Z  INFO main ThreadId(01) newengine_core::plugins::host_api: assets: importer loaded 'C:\Users\Aiden\Documents\Kayla's Systems\NewEngine\neocore2\target\debug\../../importers\geometryImporter-0.1.0-dev.dll'
+2026-02-18T11:11:47.911913Z  INFO main ThreadId(01) newengine_core::plugins::host_api: assets: importer discovered id='kalitech.import.image.v1' type='kalitech.asset.texture' priority=0 format='image' method='import_image_v1' ext_hint=false exts=["ico", "jpg", "jpeg", "gif", "tga", "bmp", "png", "svg", "dds", "webp"]
+2026-02-18T11:11:47.912054Z  INFO main ThreadId(01) newengine_core::plugins::host_api: assets: importer loaded 'C:\Users\Aiden\Documents\Kayla's Systems\NewEngine\neocore2\target\debug\../../importers\imageImporter-0.2.4-dev.dll'
+2026-02-18T11:11:47.912512Z  INFO main ThreadId(01) newengine_core::plugins::host_api: text-importer: providers registered ok=14 failed=0
+2026-02-18T11:11:47.912651Z  INFO main ThreadId(01) newengine_core::plugins::host_api: assets: importer discovered id='kalitech.import.csv.v1' type='kalitech.asset.text' priority=100 format='csv' method='import_text_v1' ext_hint=true exts=["csv"]
+2026-02-18T11:11:47.912794Z  INFO main ThreadId(01) newengine_core::plugins::host_api: assets: importer discovered id='kalitech.import.glsl.v1' type='kalitech.asset.text' priority=100 format='glsl' method='import_text_v1' ext_hint=true exts=["glsl"]
+2026-02-18T11:11:47.912948Z  INFO main ThreadId(01) newengine_core::plugins::host_api: assets: importer discovered id='kalitech.import.hlsl.v1' type='kalitech.asset.text' priority=100 format='hlsl' method='import_text_v1' ext_hint=true exts=["hlsl"]
+2026-02-18T11:11:47.913109Z  INFO main ThreadId(01) newengine_core::plugins::host_api: assets: importer discovered id='kalitech.import.html.v1' type='kalitech.asset.text' priority=100 format='html' method='import_text_v1' ext_hint=true exts=["htm", "html"]
+2026-02-18T11:11:47.913258Z  INFO main ThreadId(01) newengine_core::plugins::host_api: assets: importer discovered id='kalitech.import.ini.v1' type='kalitech.asset.text' priority=100 format='ini' method='import_text_v1' ext_hint=true exts=["cfg", "ini"]
+2026-02-18T11:11:47.913402Z  INFO main ThreadId(01) newengine_core::plugins::host_api: assets: importer discovered id='kalitech.import.json.v1' type='kalitech.asset.text' priority=100 format='json' method='import_text_v1' ext_hint=true exts=["json"]
+2026-02-18T11:11:47.913538Z  INFO main ThreadId(01) newengine_core::plugins::host_api: assets: importer discovered id='kalitech.import.ron.v1' type='kalitech.asset.text' priority=100 format='ron' method='import_text_v1' ext_hint=true exts=["ron"]
+2026-02-18T11:11:47.913686Z  INFO main ThreadId(01) newengine_core::plugins::host_api: assets: importer discovered id='kalitech.import.shader.v1' type='kalitech.asset.text' priority=100 format='shader' method='import_text_v1' ext_hint=true exts=["comp", "frag", "vert"]
+2026-02-18T11:11:47.913830Z  INFO main ThreadId(01) newengine_core::plugins::host_api: assets: importer discovered id='kalitech.import.toml.v1' type='kalitech.asset.text' priority=100 format='toml' method='import_text_v1' ext_hint=true exts=["toml"]
+2026-02-18T11:11:47.913969Z  INFO main ThreadId(01) newengine_core::plugins::host_api: assets: importer discovered id='kalitech.import.txt.v1' type='kalitech.asset.text' priority=100 format='txt' method='import_text_v1' ext_hint=true exts=["md", "txt"]
+2026-02-18T11:11:47.914144Z  INFO main ThreadId(01) newengine_core::plugins::host_api: assets: importer discovered id='kalitech.import.ui.v1' type='kalitech.asset.text' priority=100 format='ui' method='import_text_v1' ext_hint=true exts=["ui"]
+2026-02-18T11:11:47.914281Z  INFO main ThreadId(01) newengine_core::plugins::host_api: assets: importer discovered id='kalitech.import.wgsl.v1' type='kalitech.asset.text' priority=100 format='wgsl' method='import_text_v1' ext_hint=true exts=["wgsl"]
+2026-02-18T11:11:47.914416Z  INFO main ThreadId(01) newengine_core::plugins::host_api: assets: importer discovered id='kalitech.import.xml.v1' type='kalitech.asset.text' priority=100 format='xml' method='import_text_v1' ext_hint=true exts=["xml"]
+2026-02-18T11:11:47.914575Z  INFO main ThreadId(01) newengine_core::plugins::host_api: assets: importer discovered id='kalitech.import.yaml.v1' type='kalitech.asset.text' priority=100 format='yaml' method='import_text_v1' ext_hint=true exts=["yaml", "yml"]
+2026-02-18T11:11:47.914682Z  INFO main ThreadId(01) newengine_core::plugins::host_api: assets: importer loaded 'C:\Users\Aiden\Documents\Kayla's Systems\NewEngine\neocore2\target\debug\../../importers\textimporter-0.2.4-dev.dll'
+2026-02-18T11:11:47.914770Z  INFO main ThreadId(01) newengine_core::plugins::host_api: assets: initialized
+2026-02-18T11:11:47.914846Z  INFO main ThreadId(01) newengine_core::plugins::manager: plugins: loaded id='assetManager' ver='0.2.5' from 'C:\Users\Aiden\Documents\Kayla's Systems\NewEngine\neocore2\target\debug\../../engineModules\assetManager-0.2.5-dev.dll'
+2026-02-18T11:11:47.914946Z  INFO main ThreadId(01) newengine_core::plugins::manager: plugins: loading 'C:\Users\Aiden\Documents\Kayla's Systems\NewEngine\neocore2\target\debug\../../engineModules\input-0.1.9-dev.dll'
+2026-02-18T11:11:47.920405Z  INFO main ThreadId(01) newengine_core::plugins::host_api: input: initialized (events + gilrs)
+2026-02-18T11:11:47.920517Z  INFO main ThreadId(01) newengine_core::plugins::manager: plugins: loaded id='input' ver='0.1.9' from 'C:\Users\Aiden\Documents\Kayla's Systems\NewEngine\neocore2\target\debug\../../engineModules\input-0.1.9-dev.dll'
+2026-02-18T11:11:47.920767Z  INFO main ThreadId(01) newengine_core::engine: plugins: done (phase=load count=2 elapsed_ms=12)
+2026-02-18T11:11:48.089593Z  WARN main ThreadId(01) newengine_modules_render_vulkan_ash::vulkan::renderer::init: Vulkan validation layer not found; running without validation.
+2026-02-18T11:11:48.301893Z  INFO main ThreadId(01) newengine_core::engine: plugins: diagnostics tag='after module init' loaded=2
+2026-02-18T11:11:48.302009Z  INFO main ThreadId(01) newengine_core::engine: plugins: diag [01/02] id='assetManager' ver='0.2.5' state='registered'
+2026-02-18T11:11:48.302085Z  INFO main ThreadId(01) newengine_core::engine: plugins: diag [02/02] id='input' ver='0.1.9' state='registered'
+2026-02-18T11:29:04.949889Z  INFO main ThreadId(01) startup.banner.pretty: === newengine-core STARTUP ===
+version      : 0.1.0
+target       : x86_64 (windows)
+pid          : 5504
+exe          : C:\Users\Aiden\Documents\Kayla's Systems\NewEngine\neocore2\target\debug\editor.exe
+cwd          : C:\Users\Aiden\Documents\Kayla's Systems\NewEngine\neocore2
+
+cpu          : Intel(R) Core(TM) i7-6950X CPU @ 3.00GHz
+cpu.cores    : 20
+ram.total_mb : 32604
+gpu          : NVIDIA GeForce GTX 1080 Ti
+vram.mb      : 11106
+directx      : D3D12 feature_level=12_1
+
+log.mode     : console+file
+log.filter   : info
+log.file     : logs/newengine.log
+log.colors   : true
+log.timestamp: millis
+log.target   : stderr
+build.ts     : unknown
+=== STARTUP END ===
+2026-02-18T11:29:04.950081Z  INFO main ThreadId(01) startup.banner: startup engine=newengine-core ver=0.1.0 target=x86_64 os=windows pid=5504 exe="C:\Users\Aiden\Documents\Kayla's Systems\NewEngine\neocore2\target\debug\editor.exe" cwd="C:\Users\Aiden\Documents\Kayla's Systems\NewEngine\neocore2" cpu="Intel(R) Core(TM) i7-6950X CPU @ 3.00GHz" cores=20 ram_mb=32604 gpu="NVIDIA GeForce GTX 1080 Ti" vram_mb=11106 dx="D3D12 feature_level=12_1" log_mode=console+file log_filter="info" log_file="logs/newengine.log" build_ts="unknown"
+2026-02-18T11:29:04.950672Z  INFO main ThreadId(01) newengine_core::engine: plugins: starting (phase=load)
+2026-02-18T11:29:04.950775Z  INFO main ThreadId(01) newengine_core::plugins::manager: plugins: scanning directory 'C:\Users\Aiden\Documents\Kayla's Systems\NewEngine\neocore2\target\debug\../../engineModules'
+2026-02-18T11:29:04.951018Z  INFO main ThreadId(01) newengine_core::plugins::manager: plugins: found 2 candidate(s) in 'C:\Users\Aiden\Documents\Kayla's Systems\NewEngine\neocore2\target\debug\../../engineModules'
+2026-02-18T11:29:04.951105Z  INFO main ThreadId(01) newengine_core::plugins::manager: plugins: loading 'C:\Users\Aiden\Documents\Kayla's Systems\NewEngine\neocore2\target\debug\../../engineModules\assetManager-0.2.5-dev.dll'
+2026-02-18T11:29:04.952602Z  WARN main ThreadId(01) newengine_core::plugins::host_api: assets: importer failed 'C:\Users\Aiden\Documents\Kayla's Systems\NewEngine\neocore2\target\debug\../../importers\audioimporter-0.2.4-dev.dll' err='GetProcAddress failed'
+2026-02-18T11:29:04.953144Z  INFO main ThreadId(01) newengine_core::plugins::host_api: assets: importer loaded 'C:\Users\Aiden\Documents\Kayla's Systems\NewEngine\neocore2\target\debug\../../importers\fontImporter-0.2.0-dev.dll'
+2026-02-18T11:29:04.953504Z  INFO main ThreadId(01) newengine_core::plugins::host_api: 3d-importer: service registered (kalitech.import.3d.v1)
+2026-02-18T11:29:04.953717Z  INFO main ThreadId(01) newengine_core::plugins::host_api: assets: importer loaded 'C:\Users\Aiden\Documents\Kayla's Systems\NewEngine\neocore2\target\debug\../../importers\geometryImporter-0.1.0-dev.dll'
+2026-02-18T11:29:04.954337Z  INFO main ThreadId(01) newengine_core::plugins::host_api: assets: importer discovered id='kalitech.import.image.v1' type='kalitech.asset.texture' priority=0 format='image' method='import_image_v1' ext_hint=false exts=["ico", "jpg", "jpeg", "gif", "tga", "bmp", "png", "svg", "dds", "webp"]
+2026-02-18T11:29:04.954478Z  INFO main ThreadId(01) newengine_core::plugins::host_api: assets: importer loaded 'C:\Users\Aiden\Documents\Kayla's Systems\NewEngine\neocore2\target\debug\../../importers\imageImporter-0.2.4-dev.dll'
+2026-02-18T11:29:04.954910Z  INFO main ThreadId(01) newengine_core::plugins::host_api: text-importer: providers registered ok=14 failed=0
+2026-02-18T11:29:04.955049Z  INFO main ThreadId(01) newengine_core::plugins::host_api: assets: importer discovered id='kalitech.import.csv.v1' type='kalitech.asset.text' priority=100 format='csv' method='import_text_v1' ext_hint=true exts=["csv"]
+2026-02-18T11:29:04.955194Z  INFO main ThreadId(01) newengine_core::plugins::host_api: assets: importer discovered id='kalitech.import.glsl.v1' type='kalitech.asset.text' priority=100 format='glsl' method='import_text_v1' ext_hint=true exts=["glsl"]
+2026-02-18T11:29:04.955344Z  INFO main ThreadId(01) newengine_core::plugins::host_api: assets: importer discovered id='kalitech.import.hlsl.v1' type='kalitech.asset.text' priority=100 format='hlsl' method='import_text_v1' ext_hint=true exts=["hlsl"]
+2026-02-18T11:29:04.955508Z  INFO main ThreadId(01) newengine_core::plugins::host_api: assets: importer discovered id='kalitech.import.html.v1' type='kalitech.asset.text' priority=100 format='html' method='import_text_v1' ext_hint=true exts=["htm", "html"]
+2026-02-18T11:29:04.955665Z  INFO main ThreadId(01) newengine_core::plugins::host_api: assets: importer discovered id='kalitech.import.ini.v1' type='kalitech.asset.text' priority=100 format='ini' method='import_text_v1' ext_hint=true exts=["cfg", "ini"]
+2026-02-18T11:29:04.955814Z  INFO main ThreadId(01) newengine_core::plugins::host_api: assets: importer discovered id='kalitech.import.json.v1' type='kalitech.asset.text' priority=100 format='json' method='import_text_v1' ext_hint=true exts=["json"]
+2026-02-18T11:29:04.955954Z  INFO main ThreadId(01) newengine_core::plugins::host_api: assets: importer discovered id='kalitech.import.ron.v1' type='kalitech.asset.text' priority=100 format='ron' method='import_text_v1' ext_hint=true exts=["ron"]
+2026-02-18T11:29:04.956102Z  INFO main ThreadId(01) newengine_core::plugins::host_api: assets: importer discovered id='kalitech.import.shader.v1' type='kalitech.asset.text' priority=100 format='shader' method='import_text_v1' ext_hint=true exts=["comp", "frag", "vert"]
+2026-02-18T11:29:04.956299Z  INFO main ThreadId(01) newengine_core::plugins::host_api: assets: importer discovered id='kalitech.import.toml.v1' type='kalitech.asset.text' priority=100 format='toml' method='import_text_v1' ext_hint=true exts=["toml"]
+2026-02-18T11:29:04.956444Z  INFO main ThreadId(01) newengine_core::plugins::host_api: assets: importer discovered id='kalitech.import.txt.v1' type='kalitech.asset.text' priority=100 format='txt' method='import_text_v1' ext_hint=true exts=["md", "txt"]
+2026-02-18T11:29:04.956618Z  INFO main ThreadId(01) newengine_core::plugins::host_api: assets: importer discovered id='kalitech.import.ui.v1' type='kalitech.asset.text' priority=100 format='ui' method='import_text_v1' ext_hint=true exts=["ui"]
+2026-02-18T11:29:04.956765Z  INFO main ThreadId(01) newengine_core::plugins::host_api: assets: importer discovered id='kalitech.import.wgsl.v1' type='kalitech.asset.text' priority=100 format='wgsl' method='import_text_v1' ext_hint=true exts=["wgsl"]
+2026-02-18T11:29:04.956908Z  INFO main ThreadId(01) newengine_core::plugins::host_api: assets: importer discovered id='kalitech.import.xml.v1' type='kalitech.asset.text' priority=100 format='xml' method='import_text_v1' ext_hint=true exts=["xml"]
+2026-02-18T11:29:04.957078Z  INFO main ThreadId(01) newengine_core::plugins::host_api: assets: importer discovered id='kalitech.import.yaml.v1' type='kalitech.asset.text' priority=100 format='yaml' method='import_text_v1' ext_hint=true exts=["yaml", "yml"]
+2026-02-18T11:29:04.957189Z  INFO main ThreadId(01) newengine_core::plugins::host_api: assets: importer loaded 'C:\Users\Aiden\Documents\Kayla's Systems\NewEngine\neocore2\target\debug\../../importers\textimporter-0.2.4-dev.dll'
+2026-02-18T11:29:04.957264Z  INFO main ThreadId(01) newengine_core::plugins::host_api: assets: initialized
+2026-02-18T11:29:04.957338Z  INFO main ThreadId(01) newengine_core::plugins::manager: plugins: loaded id='assetManager' ver='0.2.5' from 'C:\Users\Aiden\Documents\Kayla's Systems\NewEngine\neocore2\target\debug\../../engineModules\assetManager-0.2.5-dev.dll'
+2026-02-18T11:29:04.957436Z  INFO main ThreadId(01) newengine_core::plugins::manager: plugins: loading 'C:\Users\Aiden\Documents\Kayla's Systems\NewEngine\neocore2\target\debug\../../engineModules\input-0.1.9-dev.dll'
+2026-02-18T11:29:04.962844Z  INFO main ThreadId(01) newengine_core::plugins::host_api: input: initialized (events + gilrs)
+2026-02-18T11:29:04.962965Z  INFO main ThreadId(01) newengine_core::plugins::manager: plugins: loaded id='input' ver='0.1.9' from 'C:\Users\Aiden\Documents\Kayla's Systems\NewEngine\neocore2\target\debug\../../engineModules\input-0.1.9-dev.dll'
+2026-02-18T11:29:04.963207Z  INFO main ThreadId(01) newengine_core::engine: plugins: done (phase=load count=2 elapsed_ms=12)
+2026-02-18T11:29:05.131561Z  WARN main ThreadId(01) newengine_modules_render_vulkan_ash::vulkan::renderer::init: Vulkan validation layer not found; running without validation.
+2026-02-18T11:29:05.352511Z  INFO main ThreadId(01) newengine_core::engine: plugins: diagnostics tag='after module init' loaded=2
+2026-02-18T11:29:05.352662Z  INFO main ThreadId(01) newengine_core::engine: plugins: diag [01/02] id='assetManager' ver='0.2.5' state='registered'
+2026-02-18T11:29:05.352753Z  INFO main ThreadId(01) newengine_core::engine: plugins: diag [02/02] id='input' ver='0.1.9' state='registered'

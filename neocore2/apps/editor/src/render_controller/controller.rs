@@ -30,6 +30,8 @@ pub struct EditorRenderController {
     pub(super) plugins_bridge: std::sync::Arc<PluginManagerBridge>,
     pub(super) scene_bridge: std::sync::Arc<SceneBridge>,
 
+    pub(super) previews: std::sync::Arc<parking_lot::Mutex<newengine_previews::PrimitivePreviewService>>,
+
     pub(super) viewport_rt: Option<newengine_core::render::RenderTargetId>,
     pub(super) viewport_rt_extent: Extent2D,
 
@@ -59,6 +61,7 @@ impl EditorRenderController {
         viewport_bridge: std::sync::Arc<ViewportBridge>,
         plugins_bridge: std::sync::Arc<PluginManagerBridge>,
         scene_bridge: std::sync::Arc<SceneBridge>,
+        previews: std::sync::Arc<parking_lot::Mutex<newengine_previews::PrimitivePreviewService>>,
     ) -> Self {
         let mut orbit = OrbitController::default();
 
@@ -92,6 +95,7 @@ impl EditorRenderController {
             viewport_bridge,
             plugins_bridge,
             scene_bridge,
+            previews,
 
             viewport_rt: None,
             viewport_rt_extent: Extent2D::new(0, 0),

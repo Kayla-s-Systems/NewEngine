@@ -73,6 +73,7 @@ fn register_render_from_startup(
     viewport: Arc<viewport_bridge::ViewportBridge>,
     plugins: Arc<plugin_manager::PluginManagerBridge>,
     scene: Arc<scene_bridge::SceneBridge>,
+    previews: Arc<parking_lot::Mutex<newengine_previews::PrimitivePreviewService>>,
 ) -> EngineResult<()> {
     let backend = startup.render_backend.trim();
 
@@ -84,6 +85,7 @@ fn register_render_from_startup(
             viewport,
             plugins,
             scene,
+            previews,
         )))?;
 
         return Ok(());
@@ -174,6 +176,7 @@ fn main() -> EngineResult<()> {
     let viewport = Arc::new(viewport_bridge::ViewportBridge::new());
     let plugins = Arc::new(plugin_manager::PluginManagerBridge::new());
     let scene = Arc::new(scene_bridge::SceneBridge::new(newengine_scene::Scene::new()));
+    let previews = Arc::new(parking_lot::Mutex::new(newengine_previews::PrimitivePreviewService::new()));
 
     let mut engine = build_engine_from_startup(&startup)?;
 
@@ -184,6 +187,7 @@ fn main() -> EngineResult<()> {
         viewport.clone(),
         plugins.clone(),
         scene.clone(),
+        previews.clone(),
     )?;
 
     // 2) Load plugins BEFORE creating winit (required: providers must exist).
@@ -204,6 +208,7 @@ fn main() -> EngineResult<()> {
             viewport.clone(),
             plugins.clone(),
             scene.clone(),
+            previews.clone(),
         ))),
     };
 

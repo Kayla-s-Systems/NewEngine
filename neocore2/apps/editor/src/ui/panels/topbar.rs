@@ -43,7 +43,21 @@ pub(crate) fn draw(me: &mut EditorUiBuild, ctx: &egui::Context) {
                     .selected_text(current_label)
                     .show_ui(ui, |ui| {
                         for (name, id) in &prims {
-                            ui.selectable_value(&mut me.selected_primitive, Some(*id), name);
+                            let tex = me
+                                .previews
+                                .lock()
+                                .request(*id, newengine_previews::PrimitivePreviewSize::S48);
+
+                            ui.horizontal(|ui| {
+                                if tex.0 != 0 {
+                                    let tid = egui::TextureId::User(tex.0 as u64);
+                                    let st = egui::load::SizedTexture::new(tid, egui::vec2(24.0, 24.0));
+                                    ui.image(st);
+                                } else {
+                                    ui.add_space(24.0);
+                                }
+                                ui.selectable_value(&mut me.selected_primitive, Some(*id), name);
+                            });
                         }
                     });
 

@@ -11,6 +11,7 @@ use newengine_ui::{UiBuildFn, UiHub};
 use std::any::Any;
 use std::sync::{Arc, Mutex};
 
+
 use newengine_ecs::EntityId;
 use newengine_gizmo::egui::EguiGizmo;
 use newengine_materials::MaterialId;
@@ -41,6 +42,7 @@ pub struct EditorUiBuild {
 
     pub(crate) viewport_bridge: Arc<ViewportBridge>,
     pub(crate) scene_bridge: Arc<SceneBridge>,
+    pub(crate) previews: Arc<parking_lot::Mutex<newengine_previews::PrimitivePreviewService>>,
     pub(crate) plugins_bridge: Arc<crate::plugin_manager::PluginManagerBridge>,
     pub(crate) plugin_manager: Arc<Mutex<PluginManagerUi>>,
 
@@ -87,6 +89,7 @@ impl EditorUiBuild {
         viewport_bridge: Arc<ViewportBridge>,
         plugins_bridge: Arc<crate::plugin_manager::PluginManagerBridge>,
         scene_bridge: Arc<SceneBridge>,
+        previews: Arc<parking_lot::Mutex<newengine_previews::PrimitivePreviewService>>,
     ) -> Self {
         let cam = scene_bridge
             .scene()
@@ -102,6 +105,7 @@ impl EditorUiBuild {
             viewport,
             viewport_bridge,
             scene_bridge,
+            previews,
             plugins_bridge: Arc::clone(&plugins_bridge),
             plugin_manager: Arc::clone(&plugin_manager),
             ui_hub: UiHub::new(),

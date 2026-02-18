@@ -254,6 +254,14 @@ impl<E: Send + 'static> Module<E> for EditorRenderController {
         let (vp_w, vp_h) = self.viewport_bridge.read_extent();
         r.begin_frame(BeginFrameDesc::new(self.clear_color))?;
 
+        // Engine-level dynamic UI previews (primitive thumbnails, etc.).
+        // Apps are consumers: UI requests previews, renderer pumps them here.
+        let dt = ctx.frame().map(|f| f.dt).unwrap_or(0.016);
+        {
+            let mut p = self.previews.lock();
+            p.pump(&mut **r, dt)?;
+        }
+
         if vp_w > 0 && vp_h > 0 {
             let extent = Extent2D::new(vp_w, vp_h);
             let rt = self.ensure_viewport_rt(&mut **r, extent)?;
@@ -261,8 +269,6 @@ impl<E: Send + 'static> Module<E> for EditorRenderController {
             let (dx_px, dy_px, wheel_y, _hovered, look_drag, pan_drag, ui_busy) =
                 self.viewport_bridge.read_orbit_input();
             let move_mask = self.viewport_bridge.read_move_keys();
-            let dt = ctx.frame().map(|f| f.dt).unwrap_or(0.016);
-
             self.scene_bridge.apply_commands();
 
             let scene_lock = self.scene_bridge.scene();
