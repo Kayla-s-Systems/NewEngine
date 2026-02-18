@@ -5,6 +5,7 @@ use std::path::Path;
 use std::sync::OnceLock;
 
 use crate::startup::config::StartupLoggingConfig;
+use crate::startup::system_probe::SystemProbe;
 use tracing_appender::non_blocking::WorkerGuard;
 use tracing_subscriber::layer::Layer;
 use tracing_subscriber::{fmt, prelude::*, EnvFilter};
@@ -133,7 +134,7 @@ fn sanitize_path_for_banner(p: &str) -> String {
     p.replace('\n', " ").replace('\r', " ")
 }
 
-fn emit_startup_banner(
+fn emit_startup_banner_v2(
     cfg: &StartupLoggingConfig,
     filter_spec: &str,
     log_mode: &str,
@@ -157,13 +158,41 @@ fn emit_startup_banner(
 
     let build_ts = option_env!("VERGEN_BUILD_TIMESTAMP").or(option_env!("BUILD_TIMESTAMP"));
 
+    let sys = SystemProbe::probe();
+
+    let exe_s = exe
+        .as_ref()
+        .map(|p| sanitize_path_for_banner(&p.display().to_string()))
+        .unwrap_or_else(|| "<unknown>".to_owned());
+
+    let cwd_s = cwd
+        .as_ref()
+        .map(|p| sanitize_path_for_banner(&p.display().to_string()))
+        .unwrap_or_else(|| "<unknown>".to_owned());
+
+    let log_file_s = log_file
+        .map(sanitize_path_for_banner)
+        .unwrap_or_else(|| "<none>".to_owned());
+
+    let git_s = git_sha.map(|s| format!(" ({s})")).unwrap_or_default();
+
+    // Pretty (console-focused). Keep it readable.
     tracing::info!(
+        target: "startup.banner.pretty",
         "=== {engine_name} STARTUP ===\n\
          version      : {engine_ver}{git}\n\
          target       : {target} ({os})\n\
          pid          : {pid}\n\
          exe          : {exe}\n\
          cwd          : {cwd}\n\
+         \n\
+         cpu          : {cpu}\n\
+         cpu.cores    : {cores}\n\
+         ram.total_mb : {ram}\n\
+         gpu          : {gpu}\n\
+         vram.mb      : {vram}\n\
+         directx      : {dx}\n\
+         \n\
          log.mode     : {log_mode}\n\
          log.filter   : {filter}\n\
          log.file     : {log_file}\n\
@@ -172,26 +201,50 @@ fn emit_startup_banner(
          log.target   : {tgt}\n\
          build.ts     : {src}\n\
          === STARTUP END ===",
-        git = git_sha.map(|s| format!(" ({s})")).unwrap_or_default(),
+        git = git_s,
         os = std::env::consts::OS,
         pid = std::process::id(),
-        exe = exe
-            .as_ref()
-            .map(|p| sanitize_path_for_banner(&p.display().to_string()))
-            .unwrap_or_else(|| "<unknown>".to_owned()),
-        cwd = cwd
-            .as_ref()
-            .map(|p| sanitize_path_for_banner(&p.display().to_string()))
-            .unwrap_or_else(|| "<unknown>".to_owned()),
+        exe = exe_s,
+        cwd = cwd_s,
+        cpu = sys.cpu.as_deref().unwrap_or("unknown"),
+        cores = sys.cpu_cores_logical.map(|v| v.to_string()).unwrap_or_else(|| "unknown".to_owned()),
+        ram = sys.ram_total_mb.map(|v| v.to_string()).unwrap_or_else(|| "unknown".to_owned()),
+        gpu = sys.gpu.as_deref().unwrap_or("unknown"),
+        vram = sys.vram_dedicated_mb.map(|v| v.to_string()).unwrap_or_else(|| "unknown".to_owned()),
+        dx = sys.directx.as_deref().unwrap_or("unknown"),
         log_mode = log_mode,
         filter = filter_spec,
-        log_file = log_file
-            .map(sanitize_path_for_banner)
-            .unwrap_or_else(|| "<none>".to_owned()),
+        log_file = log_file_s,
         colors = cfg.colors,
         timestamp = cfg.timestamp.as_deref().unwrap_or("millis"),
         tgt = cfg.console_target.as_deref().unwrap_or("stderr"),
         src = build_ts.unwrap_or("unknown"),
+    );
+
+    // Compact (file/CI-friendly). One line.
+    tracing::info!(
+        target: "startup.banner",
+        "startup engine={} ver={}{} target={} os={} pid={} exe=\"{}\" cwd=\"{}\" \
+         cpu=\"{}\" cores={} ram_mb={} gpu=\"{}\" vram_mb={} dx=\"{}\" \
+         log_mode={} log_filter=\"{}\" log_file=\"{}\" build_ts=\"{}\"",
+        engine_name,
+        engine_ver,
+        git_s,
+        target,
+        std::env::consts::OS,
+        std::process::id(),
+        exe_s,
+        cwd_s,
+        sys.cpu.as_deref().unwrap_or("unknown"),
+        sys.cpu_cores_logical.unwrap_or(0),
+        sys.ram_total_mb.unwrap_or(0),
+        sys.gpu.as_deref().unwrap_or("unknown"),
+        sys.vram_dedicated_mb.unwrap_or(0),
+        sys.directx.as_deref().unwrap_or("unknown"),
+        log_mode,
+        filter_spec,
+        log_file_s,
+        build_ts.unwrap_or("unknown"),
     );
 }
 
@@ -354,7 +407,7 @@ pub fn init_startup_logging(
         (false, false) => "none",
     };
 
-    emit_startup_banner(
+    emit_startup_banner_v2(
         &cfg,
         &filter_spec,
         log_mode,

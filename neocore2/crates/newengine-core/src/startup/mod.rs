@@ -1,6 +1,7 @@
 mod config;
 mod logging;
 mod loader;
+mod system_probe;
 
 pub use config::{
     ConfigPaths, StartupConfig, StartupConfigSource, StartupLoadReport, StartupLoggingConfig,
