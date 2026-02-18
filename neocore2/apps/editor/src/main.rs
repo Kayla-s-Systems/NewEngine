@@ -108,7 +108,7 @@ fn build_engine_from_startup(startup: &StartupConfig) -> EngineResult<Engine<()>
         // StartupLoader already applied config.json overrides.
         // Engine must initialize process-wide logging from that resolved startup config,
         // otherwise defaults/env vars will silently win.
-        .with_startup_logging(startup.logging.clone(), Some(startup.log_level.clone()));
+        .with_startup_logging(startup.logging.clone());
 
     let engine: Engine<()> = Engine::new_with_config(config, services, bus, shutdown)?;
 

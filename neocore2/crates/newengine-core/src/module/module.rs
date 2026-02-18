@@ -1,8 +1,6 @@
 use crate::error::EngineResult;
 use crate::module::ModuleCtx;
 
-use std::any::Any;
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct ApiVersion {
     pub major: u16,
@@ -81,15 +79,6 @@ pub trait Module<E: Send + 'static>: Send {
     }
 
     fn render(&mut self, _ctx: &mut ModuleCtx<'_, E>) -> EngineResult<()> {
-        Ok(())
-    }
-
-    #[deprecated(note = "Use Engine::emit(...) + EventHub subscriptions instead")]
-    fn on_external_event(
-        &mut self,
-        _ctx: &mut ModuleCtx<'_, E>,
-        _event: &dyn Any,
-    ) -> EngineResult<()> {
         Ok(())
     }
 

@@ -3,7 +3,6 @@
 mod config;
 mod contracts;
 mod core;
-mod external_event;
 mod frame_loop;
 mod module_boot;
 mod panic;

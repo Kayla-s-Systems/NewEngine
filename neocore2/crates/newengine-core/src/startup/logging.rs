@@ -20,7 +20,7 @@ pub struct StartupLogHandle {
     _guard: WorkerGuard,
 }
 
-fn filter_from_cfg(cfg: &StartupLoggingConfig, legacy_level: Option<&str>) -> EnvFilter {
+fn filter_from_cfg(cfg: &StartupLoggingConfig) -> EnvFilter {
     if let Some(spec) = cfg
         .filter
         .as_deref()
@@ -35,14 +35,10 @@ fn filter_from_cfg(cfg: &StartupLoggingConfig, legacy_level: Option<&str>) -> En
         return EnvFilter::new(lvl.to_owned());
     }
 
-    if let Some(legacy) = legacy_level.map(str::trim).filter(|s| !s.is_empty()) {
-        return EnvFilter::new(legacy.to_owned());
-    }
-
     EnvFilter::new("info")
 }
 
-fn resolved_filter_spec(cfg: &StartupLoggingConfig, legacy_level: Option<&str>) -> String {
+fn resolved_filter_spec(cfg: &StartupLoggingConfig) -> String {
     if let Some(spec) = cfg
         .filter
         .as_deref()
@@ -55,10 +51,6 @@ fn resolved_filter_spec(cfg: &StartupLoggingConfig, legacy_level: Option<&str>) 
     let lvl = cfg.level.trim();
     if !lvl.is_empty() {
         return lvl.to_owned();
-    }
-
-    if let Some(legacy) = legacy_level.map(str::trim).filter(|s| !s.is_empty()) {
-        return legacy.to_owned();
     }
 
     "info".to_owned()
@@ -312,7 +304,6 @@ fn set_subscriber_console_and_file(
 /// - file output never contains ANSI escape sequences (even in tee mode)
 pub fn init_startup_logging(
     cfg: StartupLoggingConfig,
-    legacy_level: Option<&str>,
 ) -> Result<Option<StartupLogHandle>, Box<dyn std::error::Error>> {
     if LOG_INIT.get().is_some() {
         return Ok(None);
@@ -320,8 +311,8 @@ pub fn init_startup_logging(
 
     let _ = tracing_log::LogTracer::init();
 
-    let filter = filter_from_cfg(&cfg, legacy_level);
-    let filter_spec = resolved_filter_spec(&cfg, legacy_level);
+    let filter = filter_from_cfg(&cfg);
+    let filter_spec = resolved_filter_spec(&cfg);
 
     let timer = StartupTime {
         enabled: want_timestamp(cfg.timestamp.as_deref()),

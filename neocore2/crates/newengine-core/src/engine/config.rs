@@ -13,9 +13,6 @@ pub struct EngineConfig {
     /// The returned handle is kept alive by the engine instance.
     pub startup_logging: Option<StartupLoggingConfig>,
 
-    /// Legacy log level fallback for older startup configs.
-    pub legacy_log_level: Option<String>,
-
     /// Controls how the engine reacts to panics inside module callbacks.
     ///
     /// - When `true` (default), the engine converts panics to `EngineError` and requests shutdown.
@@ -30,7 +27,6 @@ impl Default for EngineConfig {
             fixed_dt_ms: 16,
             plugins_dir: None,
             startup_logging: Some(StartupLoggingConfig::auto()),
-            legacy_log_level: None,
             catch_panics: true,
         }
     }
@@ -43,19 +39,13 @@ impl EngineConfig {
             fixed_dt_ms,
             plugins_dir: None,
             startup_logging: None,
-            legacy_log_level: None,
             catch_panics: true,
         }
     }
 
     #[inline]
-    pub fn with_startup_logging(
-        mut self,
-        cfg: StartupLoggingConfig,
-        legacy_level: Option<String>,
-    ) -> Self {
+    pub fn with_startup_logging(mut self, cfg: StartupLoggingConfig) -> Self {
         self.startup_logging = Some(cfg);
-        self.legacy_log_level = legacy_level;
         self
     }
 

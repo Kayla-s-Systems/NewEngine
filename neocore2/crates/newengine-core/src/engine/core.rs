@@ -90,8 +90,7 @@ impl<E: Send + 'static> Engine<E> {
                 .startup_logging
                 .clone()
                 .unwrap_or_else(StartupLoggingConfig::auto);
-            let legacy = config.legacy_log_level.as_deref();
-            init_startup_logging(cfg, legacy)
+            init_startup_logging(cfg)
                 .map_err(|e| EngineError::Other(format!("logging init failed: {e}")))?
         };
 
