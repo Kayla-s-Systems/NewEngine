@@ -2,10 +2,11 @@
 
 use newengine_math::Vec3;
 
+use crate::registry::PrimitiveParams;
 use crate::{PrimitiveMesh, PrimitiveVertex};
 
 #[inline]
-pub fn build() -> PrimitiveMesh {
+pub fn build(_params: &PrimitiveParams) -> PrimitiveMesh {
     // Unit plane on XZ, centered at origin, normal +Y.
     let h = 0.5f32;
 

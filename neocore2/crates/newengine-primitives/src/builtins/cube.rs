@@ -2,10 +2,11 @@
 
 use newengine_math::Vec3;
 
+use crate::registry::PrimitiveParams;
 use crate::{PrimitiveMesh, PrimitiveVertex};
 
 #[inline]
-pub fn build() -> PrimitiveMesh {
+pub fn build(_params: &PrimitiveParams) -> PrimitiveMesh {
     // Unit cube centered at origin. 24 vertices (4 per face) for hard normals.
     let p = |x: f32, y: f32, z: f32, nx: f32, ny: f32, nz: f32| PrimitiveVertex {
         pos: [x, y, z],
