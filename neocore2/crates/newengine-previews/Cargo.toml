@@ -1,0 +1,16 @@
+[package]
+name = "newengine-previews"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+parking_lot = "0.12"
+ahash = "0.8"
+bytemuck = { version = "1.23", features = ["derive"] }
+newengine-core = { path = "../newengine-core" }
+newengine-ui = { path = "../newengine-ui" }
+newengine-primitives = { path = "../newengine-primitives" }
+newengine-math = { path = "../newengine-math", features = ["backend-glam"] }
+
+[build-dependencies]
+shaderc = "0.10.1"
