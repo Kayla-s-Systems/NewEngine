@@ -50,7 +50,7 @@ pub type FxHashSet<K> = HashSet<K, FxBuildHasher>;
 ///
 /// This is not deterministic between runs by design.
 #[cfg(feature = "collections")]
-pub type SecureBuildHasher = std::collections::hash_map::RandomState;
+pub type SecureBuildHasher = policy::SecureBuildHasher;
 
 /// Hash map for untrusted/external inputs (secure).
 #[cfg(feature = "collections")]
@@ -72,4 +72,5 @@ pub type BTreeSet<K> = std::collections::BTreeSet<K>;
 /// These are re-exported only for wiring. Prefer `collections::prelude::*` in downstream crates.
 #[cfg(feature = "collections")]
 pub use slotmap;
+
 
