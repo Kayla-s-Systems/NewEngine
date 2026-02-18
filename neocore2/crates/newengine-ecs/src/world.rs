@@ -8,7 +8,6 @@ use crate::{
 use core::any::{Any, TypeId};
 use newengine_math::collections::prelude::*;
 use newengine_math::collections::raw::hash_map::Entry;
-use newengine_math::collections::slotmap::SlotMap;
 
 
 /// A small, deterministic ECS world.
@@ -37,7 +36,7 @@ impl World {
     #[inline]
     pub fn new() -> Self {
         Self {
-            entities: SlotMap::with_key(),
+            entities: NeSlotMap::with_key(),
             storages: NeHashMap::default(),
             resources: NeHashMap::default(),
             tick: 1,
