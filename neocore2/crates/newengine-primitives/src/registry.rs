@@ -1,7 +1,7 @@
 #![forbid(unsafe_op_in_unsafe_fn)]
 
 use core::fmt;
-
+use newengine_math::collections::prelude::*;
 use newengine_math::collections::FxHashMap;
 
 use crate::{PrimitiveId, PrimitiveMesh};
@@ -37,7 +37,7 @@ struct Entry {
 /// - Built-ins are just registrations
 #[derive(Clone, Debug, Default)]
 pub struct PrimitiveRegistry {
-    entries: FxHashMap<PrimitiveId, Entry>,
+    entries: NeHashMap<PrimitiveId, Entry>,
 }
 
 impl PrimitiveRegistry {
