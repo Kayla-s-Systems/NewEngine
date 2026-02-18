@@ -1,7 +1,7 @@
 use crate::error::{EngineError, EngineResult};
 
+use newengine_math::collections::prelude::*;
 use std::any::{Any, TypeId};
-use std::collections::HashMap;
 
 /// Type-safe storage for engine-local resources and module APIs.
 ///
@@ -13,8 +13,8 @@ use std::collections::HashMap;
 /// Use explicit thread-safe APIs (Arc/Mutex/etc.) for cross-thread communication.
 #[derive(Default)]
 pub struct Resources {
-    typed: HashMap<TypeId, Box<dyn Any>>,
-    apis: HashMap<&'static str, Box<dyn Any>>,
+    typed: NeHashMap<TypeId, Box<dyn Any>>,
+    apis: NeHashMap<&'static str, Box<dyn Any>>,
 }
 
 impl Resources {

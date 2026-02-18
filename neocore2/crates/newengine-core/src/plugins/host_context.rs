@@ -3,8 +3,8 @@
 use abi_stable::std_types::RString;
 use newengine_plugin_api::{Blob, EventSinkV1Dyn, ServiceV1Dyn};
 
+use newengine_math::collections::prelude::*;
 use std::cell::RefCell;
-use std::collections::HashMap;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, OnceLock};
 
@@ -39,7 +39,7 @@ pub(crate) fn current_plugin_id() -> Option<String> {
 }
 
 pub struct HostContext {
-    pub services: Mutex<HashMap<String, ServiceEntry>>,
+    pub services: Mutex<NeHashMap<String, ServiceEntry>>,
     services_generation: AtomicU64,
 
     pub(crate) event_sinks: Mutex<Vec<EventSinkEntry>>,
@@ -53,7 +53,7 @@ static HOST_CTX: OnceLock<Arc<HostContext>> = OnceLock::new();
 /// Plugins register services and event sinks via HostApi into this context.
 pub fn init_host_context() {
     let ctx = Arc::new(HostContext {
-        services: Mutex::new(HashMap::new()),
+        services: Mutex::new(NeHashMap::default()),
         services_generation: AtomicU64::new(1),
         event_sinks: Mutex::new(Vec::new()),
     });
