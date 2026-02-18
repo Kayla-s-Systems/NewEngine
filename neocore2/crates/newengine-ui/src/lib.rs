@@ -11,6 +11,7 @@ pub mod asset_access;
 pub mod asset_service_client;
 
 pub mod ui_images;
+pub mod previews;
 
 pub mod markup;
 
@@ -23,6 +24,7 @@ pub use providers::create_provider;
 pub use asset_access::{AssetAccess, AssetState, WaitReadyError};
 pub use asset_service_client::AssetServiceClient;
 
+pub use previews::{UiPreviewDesc, UiPreviewHandle, UiPreviewKind, UiPreviewProvider};
 pub use ui_images::UiImageLoader;
 
 pub use markup::{UiMarkupDoc, UiState};
