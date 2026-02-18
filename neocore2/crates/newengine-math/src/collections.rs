@@ -1,19 +1,29 @@
 #![forbid(unsafe_op_in_unsafe_fn)]
 
-//! Deterministic, engine-wide collection types.
+//! Engine-wide collection types and policies.
 //!
-//! This module intentionally centralizes the engine's choice of hashing and generational-id
-//! containers so that other crates don't proliferate ad-hoc dependencies and hashers.
+//! This module centralizes container + hashing choices to avoid ad-hoc dependencies across crates.
 //!
-//! The public surface is intentionally small:
-//! - `FxHashMap` / `FxHashSet` for fast, deterministic hashing
-//! - `SecureHashMap` / `SecureHashSet` for user-facing/untrusted inputs
-//! - `BTreeMap` / `BTreeSet` for stable iteration order
-//! - slotmap types for stable generational keys
-//! - re-exports of `hashbrown::hash_map` entry API
+//! ## Determinism notes
+//! - HashMap/HashSet iteration order is NOT a determinism guarantee.
+//! - For stable iteration/serialization, use `BTreeMap/BTreeSet` or sort keys explicitly.
+//! - SlotMap keys are runtime handles; do not serialize them as stable IDs.
+//!
+//! ## API surface
+//! - Normal usage: `use newengine_math::collections::prelude::*;`
+//! - Escape hatch: `use newengine_math::collections::raw::...;` (implementation-specific APIs)
 
 #[cfg(feature = "collections")]
 use core::hash::BuildHasherDefault;
+
+#[cfg(feature = "collections")]
+pub mod policy;
+
+#[cfg(feature = "collections")]
+pub mod prelude;
+
+#[cfg(feature = "collections")]
+pub mod raw;
 
 #[cfg(feature = "collections")]
 pub use fxhash::FxHasher;
@@ -24,59 +34,42 @@ pub type FxBuildHasher = BuildHasherDefault<FxHasher>;
 #[cfg(feature = "collections")]
 pub use hashbrown::{HashMap, HashSet};
 
-/// Full `hashbrown` crate re-export for advanced APIs.
-#[cfg(feature = "collections")]
-pub use hashbrown as hashbrown;
-
-
+/// Fast, deterministic hash map for *internal engine data*.
+///
+/// ⚠️ Not DoS-resistant. Do not use for untrusted input.
 #[cfg(feature = "collections")]
 pub type FxHashMap<K, V> = HashMap<K, V, FxBuildHasher>;
 
+/// Fast, deterministic hash set for *internal engine data*.
+///
+/// ⚠️ Not DoS-resistant. Do not use for untrusted input.
 #[cfg(feature = "collections")]
 pub type FxHashSet<K> = HashSet<K, FxBuildHasher>;
 
-/// Secure, randomized hashing for untrusted input (network/JSON/modding).
+/// Secure, randomized hashing for untrusted inputs (network/JSON/modding).
 ///
 /// This is not deterministic between runs by design.
 #[cfg(feature = "collections")]
-pub type SecureBuildHasher = ahash::RandomState;
+pub type SecureBuildHasher = std::collections::hash_map::RandomState;
 
+/// Hash map for untrusted/external inputs (secure).
 #[cfg(feature = "collections")]
 pub type SecureHashMap<K, V> = HashMap<K, V, SecureBuildHasher>;
 
+/// Hash set for untrusted/external inputs (secure).
 #[cfg(feature = "collections")]
 pub type SecureHashSet<K> = HashSet<K, SecureBuildHasher>;
 
-/// Stable-order maps/sets (sorted by key).
+/// Stable-iteration containers.
 #[cfg(feature = "collections")]
-pub use std::collections::{BTreeMap, BTreeSet};
+pub type BTreeMap<K, V> = std::collections::BTreeMap<K, V>;
 
-
-/// Re-exported `Entry`/iter APIs.
 #[cfg(feature = "collections")]
-pub mod hash_map {
-    pub use hashbrown::hash_map::*;
-}
+pub type BTreeSet<K> = std::collections::BTreeSet<K>;
 
 /// Slotmap types (stable generational keys).
+///
+/// These are re-exported only for wiring. Prefer `collections::prelude::*` in downstream crates.
 #[cfg(feature = "collections")]
-pub mod slot {
-    pub use slotmap::{new_key_type, Key, SecondaryMap, SlotMap};
-}
+pub use slotmap;
 
-/// Full `slotmap` crate re-export for advanced APIs (e.g. `slotmap::secondary::Iter`).
-#[cfg(feature = "collections")]
-pub use slotmap as slotmap;
-
-
-/// Common collection policies.
-#[cfg(feature = "collections")]
-pub mod prelude {
-    pub use super::{
-        BTreeMap, BTreeSet, FxBuildHasher, FxHashMap, FxHashSet, SecureBuildHasher, SecureHashMap,
-        SecureHashSet,
-    };
-
-    pub use super::hash_map::*;
-    pub use super::slot::*;
-}
