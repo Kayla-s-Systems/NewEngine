@@ -23,22 +23,6 @@ impl ConsoleLoggerModule {
         }
     }
 
-    /// Installs the logger immediately.
-    ///
-    /// Returns `Err` if a global logger was already installed.
-    #[inline]
-    pub fn install_now(&mut self) -> Result<(), log::SetLoggerError> {
-        if self.initialized {
-            return Ok(());
-        }
-
-        let mut builder = self.build_logger();
-        builder.try_init()?;
-        self.initialized = true;
-        Ok(())
-    }
-
-    #[inline]
     fn build_logger(&self) -> Builder {
         let mut builder = Builder::new();
 
@@ -48,7 +32,6 @@ impl ConsoleLoggerModule {
             builder.filter_level(self.config.level);
         }
 
-        // Sink routing
         if let Some(path) = self.config.file_path.clone() {
             let file_writer: Option<Box<dyn std::io::Write + Send>> = if self.config.rolling_enabled()
             {
@@ -57,24 +40,14 @@ impl ConsoleLoggerModule {
                     max_files: self.config.roll_max_files,
                     keep_days: self.config.roll_keep_days,
                 };
-
-                match RollingFileWriter::open_append(path.clone(), rcfg) {
+                match RollingFileWriter::open_append(path, rcfg) {
                     Ok(w) => Some(Box::new(w)),
-                    Err(e) => {
-                        eprintln!(
-                            "logging: failed to open rolling log file '{}': {e}",
-                            path.display()
-                        );
-                        None
-                    }
+                    Err(_) => None,
                 }
             } else {
-                match LockedFileWriter::open_append(path.clone()) {
+                match LockedFileWriter::open_append(path) {
                     Ok(w) => Some(Box::new(w)),
-                    Err(e) => {
-                        eprintln!("logging: failed to open log file '{}': {e}", path.display());
-                        None
-                    }
+                    Err(_) => None,
                 }
             };
 
@@ -94,7 +67,6 @@ impl ConsoleLoggerModule {
         }
 
         let file_active = self.config.file_path.is_some();
-
         if let Some(style) = self.config.write_style {
             builder.write_style(style);
         } else if file_active || !self.config.colors {
@@ -108,7 +80,6 @@ impl ConsoleLoggerModule {
             .format_target(self.config.include_target);
 
         if self.config.include_file && self.config.include_line_number {
-            // env_logger has a dedicated helper for "source path" (file+line).
             builder.format_source_path(true);
         } else {
             builder.format_file(self.config.include_file);
@@ -139,14 +110,10 @@ impl<E: Send + 'static> Module<E> for ConsoleLoggerModule {
             return Ok(());
         }
 
-        // Idempotent init:
-        // - If bootstrap already installed the global logger, env_logger will return SetLoggerError.
-        // - That is not fatal for the engine; we just mark as initialized and continue.
-        match self.install_now() {
-            Ok(()) => {}
-            Err(_already_set) => {}
-        }
+        let mut builder = self.build_logger();
+        let _ = builder.try_init();
 
+        self.initialized = true;
         Ok(())
     }
 }

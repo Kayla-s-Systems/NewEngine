@@ -1,10 +1,9 @@
 #![forbid(unsafe_op_in_unsafe_fn)]
 
-use newengine_ecs::{EntityId, World};
-use newengine_math::collections::slot::Key;
-use newengine_math::{EulerRot, Mat4};
-
 use crate::{GlobalTransform, Parent, Transform, TransformDirty, WorldPose};
+use newengine_ecs::{EntityId, World};
+use newengine_math::collections_prelude::NeKey;
+use newengine_math::{EulerRot, Mat4};
 
 /// Reusable scratch buffers for transform propagation.
 ///

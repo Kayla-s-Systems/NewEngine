@@ -7,7 +7,6 @@ use newengine_core::{
     StartupConfig, StartupLoader,
 };
 
-use newengine_modules_logging::{ConsoleLoggerConfig, ConsoleLoggerModule};
 use newengine_modules_render_vulkan_ash::VulkanAshRenderModule;
 
 use newengine_platform_winit::app::config::WinitAppIcon;
@@ -102,47 +101,17 @@ fn build_engine_from_startup(startup: &StartupConfig) -> EngineResult<Engine<()>
     let services: Box<dyn Services> = Box::new(AppServices::new());
     let shutdown = ShutdownToken::new();
 
-    let config = EngineConfig::new(FIXED_DT_MS).with_plugins_dir(Some(startup.modules_dir.clone()));
+    let config = EngineConfig::new(FIXED_DT_MS)
+        .with_plugins_dir(Some(startup.modules_dir.clone()));
+    //.with_startup_logging(startup.logging.clone(), Some(startup.log_level.clone()));
 
-    let mut engine: Engine<()> = Engine::new_with_config(config, services, bus, shutdown)?;
-
-    // The logger module installs the global logger in `init()`. We still bootstrap logging
-    // before Engine::start() so early plugin logs are visible.
-    engine.register_module(Box::new(ConsoleLoggerModule::new(configure_logger(startup))))?;
+    let engine: Engine<()> = Engine::new_with_config(config, services, bus, shutdown)?;
 
     Ok(engine)
 }
 
-#[inline]
-fn configure_logger(startup: &StartupConfig) -> ConsoleLoggerConfig {
-    let mut cfg = ConsoleLoggerConfig::from_env();
-
-    // If NEWENGINE_LOG is set, keep it as authoritative (filter string).
-    if cfg.filter.is_some() {
-        return cfg;
-    }
-
-    if let Ok(level) = startup.log_level.parse::<log::LevelFilter>() {
-        cfg.level = level;
-    }
-
-    cfg
-}
 
 #[inline]
-fn bootstrap_logging(startup: &StartupConfig) {
-    // Ensure logs are available before Engine::start() and before plugin loading.
-    // The ConsoleLoggerModule will later attempt to install the logger and will no-op.
-    let mut builder = env_logger::Builder::new();
-
-    if let Ok(level) = startup.log_level.parse::<log::LevelFilter>() {
-        builder.filter_level(level);
-    } else {
-        builder.filter_level(log::LevelFilter::Info);
-    }
-
-    let _ = builder.try_init();
-}
 
 fn try_load_window_icon(startup: &StartupConfig) -> Option<WinitAppIcon> {
     let Some(path) = startup.window_icon_path.as_deref() else {
@@ -188,9 +157,6 @@ fn try_load_window_icon(startup: &StartupConfig) -> Option<WinitAppIcon> {
 fn main() -> EngineResult<()> {
     let paths = ConfigPaths::from_startup_str("config.json");
     let (startup, report) = StartupLoader::load_json(&paths)?;
-
-    // Bootstrap logging as early as possible, before any plugin activity.
-    bootstrap_logging(&startup);
 
     println!(
         "startup: loaded source={:?} file={:?} resolved_from={:?} overrides={}",

@@ -9,6 +9,7 @@ use crate::plugins::{
     default_host_api, init_host_context, PluginControlCommand, PluginControlQueue, PluginManager,
 };
 use crate::sched::Scheduler;
+use crate::startup::{init_startup_logging, StartupLogHandle, StartupLoggingConfig};
 use crate::sync::ShutdownToken;
 use newengine_math::{register_engine_builtins, MathRegistry};
 
@@ -24,6 +25,15 @@ pub struct EngineConfig {
     pub fixed_dt_ms: u32,
     pub plugins_dir: Option<PathBuf>,
 
+    /// Optional startup logging configuration (process-wide).
+    ///
+    /// If provided, the engine initializes logging during `Engine::new_with_config`.
+    /// The returned handle is kept alive by the engine instance.
+    pub startup_logging: Option<StartupLoggingConfig>,
+
+    /// Legacy log level fallback for older startup configs.
+    pub legacy_log_level: Option<String>,
+
     /// Controls how the engine reacts to panics inside module callbacks.
     ///
     /// - When `true` (default), the engine converts panics to `EngineError` and requests shutdown.
@@ -31,14 +41,42 @@ pub struct EngineConfig {
     pub catch_panics: bool,
 }
 
+
+impl Default for EngineConfig {
+    #[inline]
+    fn default() -> Self {
+        Self {
+            fixed_dt_ms: 16,
+            plugins_dir: None,
+            startup_logging: Some(StartupLoggingConfig::auto()),
+            legacy_log_level: None,
+            catch_panics: true,
+        }
+    }
+}
+
+
 impl EngineConfig {
     #[inline]
     pub fn new(fixed_dt_ms: u32) -> Self {
         Self {
             fixed_dt_ms,
             plugins_dir: None,
+            startup_logging: None,
+            legacy_log_level: None,
             catch_panics: true,
         }
+    }
+
+    #[inline]
+    pub fn with_startup_logging(
+        mut self,
+        cfg: StartupLoggingConfig,
+        legacy_level: Option<String>,
+    ) -> Self {
+        self.startup_logging = Some(cfg);
+        self.legacy_log_level = legacy_level;
+        self
     }
 
     #[inline]
@@ -70,6 +108,8 @@ pub struct Engine<E: Send + 'static> {
     plugins: PluginManager,
     plugins_loaded: bool,
     plugins_dir: Option<PathBuf>,
+
+    _log_handle: Option<StartupLogHandle>,
 
     shutdown: ShutdownToken,
     exit_requested: bool,
@@ -170,6 +210,16 @@ impl<E: Send + 'static> Engine<E> {
         bus: Bus<E>,
         shutdown: ShutdownToken,
     ) -> EngineResult<Self> {
+        let log_handle = {
+            let cfg = config
+                .startup_logging
+                .clone()
+                .unwrap_or_else(StartupLoggingConfig::auto);
+            let legacy = config.legacy_log_level.as_deref();
+            init_startup_logging(cfg, legacy)
+                .map_err(|e| EngineError::Other(format!("logging init failed: {e}")))?
+        };
+
         let fixed_dt = (config.fixed_dt_ms as f32 / 1000.0).max(0.001);
 
         let mut resources = Resources::default();
@@ -198,6 +248,8 @@ impl<E: Send + 'static> Engine<E> {
             plugins: PluginManager::new(),
             plugins_loaded: false,
             plugins_dir: config.plugins_dir,
+
+            _log_handle: log_handle,
 
             shutdown,
             exit_requested: false,

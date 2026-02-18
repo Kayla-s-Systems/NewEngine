@@ -110,6 +110,79 @@ impl Default for StartupLoggingConfig {
     }
 }
 
+
+impl StartupLoggingConfig {
+    /// Builds a sane default logging config for the whole process.
+    ///
+    /// Environment variables (if present) override defaults:
+    /// - NEWENGINE_LOG: full filter spec (e.g. "info,newengine_render=debug")
+    /// - NEWENGINE_LOG_LEVEL: default level if NEWENGINE_LOG is not set
+    /// - NEWENGINE_LOG_FILE: log file path
+    /// - NEWENGINE_LOG_TEE: "true|false" (when file is enabled)
+    /// - NEWENGINE_LOG_TARGET: "stdout|stderr"
+    /// - NEWENGINE_LOG_STYLE: "auto|always|never"
+    /// - NEWENGINE_LOG_COLORS: "true|false"
+    pub fn auto() -> Self {
+        use std::env;
+
+        fn parse_bool(v: Option<String>, default: bool) -> bool {
+            match v.as_deref().map(str::trim).map(str::to_ascii_lowercase) {
+                Some(s) if s == "1" || s == "true" || s == "yes" || s == "on" => true,
+                Some(s) if s == "0" || s == "false" || s == "no" || s == "off" => false,
+                _ => default,
+            }
+        }
+
+        let mut cfg = Self::default();
+
+        cfg.filter = env::var("NEWENGINE_LOG").ok().and_then(|s| {
+            let t = s.trim().to_owned();
+            (!t.is_empty()).then_some(t)
+        });
+
+        if cfg.filter.is_none() {
+            cfg.level = env::var("NEWENGINE_LOG_LEVEL")
+                .ok()
+                .and_then(|s| {
+                    let t = s.trim().to_owned();
+                    (!t.is_empty()).then_some(t)
+                })
+                .unwrap_or_else(|| cfg.level.clone());
+        }
+
+        cfg.style = env::var("NEWENGINE_LOG_STYLE").ok().and_then(|s| {
+            let t = s.trim().to_owned();
+            (!t.is_empty()).then_some(t)
+        });
+
+        cfg.colors = parse_bool(env::var("NEWENGINE_LOG_COLORS").ok(), cfg.colors);
+
+        cfg.console_target = env::var("NEWENGINE_LOG_TARGET").ok().and_then(|s| {
+            let t = s.trim().to_owned();
+            (!t.is_empty()).then_some(t)
+        });
+
+        cfg.file_path = env::var("NEWENGINE_LOG_FILE").ok().and_then(|s| {
+            let t = s.trim().to_owned();
+            (!t.is_empty()).then_some(t)
+        });
+
+        // Engine default: always have a file unless user explicitly disables it.
+        // You can disable file logging by setting NEWENGINE_LOG_FILE="" (empty) or "none".
+        if cfg.file_path.as_deref().map(|s| s.eq_ignore_ascii_case("none")).unwrap_or(false) {
+            cfg.file_path = None;
+        }
+        if cfg.file_path.is_none() {
+            cfg.file_path = Some("logs/newengine.log".to_owned());
+        }
+
+        cfg.tee = parse_bool(env::var("NEWENGINE_LOG_TEE").ok(), true);
+
+        cfg
+    }
+}
+
+
 #[derive(Debug, Clone)]
 pub struct StartupConfig {
     pub source: StartupConfigSource,
