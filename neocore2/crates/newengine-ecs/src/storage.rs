@@ -2,9 +2,9 @@
 
 use core::any::{Any, TypeId};
 
-use newengine_math::collections::slot::SecondaryMap;
-
 use crate::{Component, EntityId};
+use newengine_math::collections::prelude::*;
+use newengine_math::collections::slotmap::SecondaryMap;
 
 /// Type-erased component storage stored inside `World`.
 ///
@@ -29,9 +29,9 @@ pub trait ErasedStorage: Any + Send + Sync {
 ///   Use `get_mut_tracked` / `query_mut_tracked` or call `mark_changed`.
 /// - `remove` does not emit events by itself (use `Events<T>` or a higher-level log).
 pub struct Storage<T: Component> {
-    pub(crate) map: SecondaryMap<EntityId, T>,
-    pub(crate) added_tick: SecondaryMap<EntityId, u64>,
-    pub(crate) changed_tick: SecondaryMap<EntityId, u64>,
+    pub(crate) map: NeSecondaryMap<EntityId, T>,
+    pub(crate) added_tick: NeSecondaryMap<EntityId, u64>,
+    pub(crate) changed_tick: NeSecondaryMap<EntityId, u64>,
 }
 
 impl<T: Component> Storage<T> {

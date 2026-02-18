@@ -1,18 +1,15 @@
 #![forbid(unsafe_op_in_unsafe_fn)]
 
-use core::any::{Any, TypeId};
-use newengine_math::collections::slot::SlotMap;
-use newengine_math::collections::{hash_map::Entry, FxHashMap};
-
 use crate::{
     query::{Query, Query2, Query2A, Query2B, QueryMut, QueryMutTracked},
     storage::{ErasedStorage, Storage},
     Component, EntityId,
 };
+use core::any::{Any, TypeId};
+use newengine_math::collections::prelude::*;
+use newengine_math::collections::raw::hash_map::Entry;
+use newengine_math::collections::slotmap::SlotMap;
 
-// Re-exported engine-wide deterministic hash map.
-// NOTE: The hasher choice is centralized in `newengine-math`.
-type FxHashMapLocal<K, V> = FxHashMap<K, V>;
 
 /// A small, deterministic ECS world.
 ///
@@ -23,9 +20,9 @@ type FxHashMapLocal<K, V> = FxHashMap<K, V>;
 /// - thread-safe storages/resources (Send + Sync), so scene bridges can safely share it
 /// - conservative change tracking (per-component added/changed ticks)
 pub struct World {
-    entities: SlotMap<EntityId, ()>,
-    storages: FxHashMapLocal<TypeId, Box<dyn ErasedStorage>>,
-    resources: FxHashMapLocal<TypeId, Box<dyn Any + Send + Sync>>,
+    entities: NeSlotMap<EntityId, ()>,
+    storages: NeHashMap<TypeId, Box<dyn ErasedStorage>>,
+    resources: NeHashMap<TypeId, Box<dyn Any + Send + Sync>>,
     tick: u64,
 }
 
@@ -41,8 +38,8 @@ impl World {
     pub fn new() -> Self {
         Self {
             entities: SlotMap::with_key(),
-            storages: FxHashMapLocal::default(),
-            resources: FxHashMapLocal::default(),
+            storages: NeHashMap::default(),
+            resources: NeHashMap::default(),
             tick: 1,
         }
     }
@@ -188,15 +185,13 @@ impl World {
 
     /// Raw immutable access to the underlying component map.
     #[inline]
-    pub fn components<T: Component>(&self) -> Option<&newengine_math::collections::slot::SecondaryMap<EntityId, T>> {
+    pub fn components<T: Component>(&self) -> Option<&NeSecondaryMap<EntityId, T>> {
         Some(&self.storage::<T>()?.map)
     }
 
     /// Raw mutable access to the underlying component map (does not create it).
     #[inline]
-    pub fn components_mut<T: Component>(
-        &mut self,
-    ) -> Option<&mut newengine_math::collections::slot::SecondaryMap<EntityId, T>> {
+    pub fn components_mut<T: Component>(&mut self) -> Option<&mut NeSecondaryMap<EntityId, T>> {
         Some(&mut self.storage_mut_if_exists::<T>()?.map)
     }
 
