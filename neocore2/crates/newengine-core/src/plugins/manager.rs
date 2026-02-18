@@ -1,11 +1,11 @@
 #![forbid(unsafe_op_in_unsafe_fn)]
 
 use libloading::Library;
+use newengine_math::collections::prelude::*;
 use newengine_plugin_api::{
     CapabilityDesc, HostApiV1, PluginDescriptor, PluginInfo, PluginKind, PluginModuleDyn,
     PluginModuleV2Dyn, PluginRootV1Ref,
 };
-use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 
 use crate::plugins::host_context::{unregister_by_owner, with_current_plugin_id};
@@ -62,7 +62,7 @@ struct LoadedPlugin {
 
 pub struct PluginManager {
     loaded: Vec<LoadedPlugin>,
-    loaded_ids: HashSet<String>,
+    loaded_ids: NeHashSet<String>,
 }
 
 impl PluginManager {
@@ -70,7 +70,7 @@ impl PluginManager {
     pub fn new() -> Self {
         Self {
             loaded: Vec::new(),
-            loaded_ids: HashSet::new(),
+            loaded_ids: NeHashSet::default(),
         }
     }
 
