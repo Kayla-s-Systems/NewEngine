@@ -36,7 +36,8 @@ pub enum GizmoSpace {
 impl Default for GizmoSpace {
     #[inline]
     fn default() -> Self {
-        Self::Local
+        // Industry default (e.g. DCC tools / Unreal): operate in World space unless explicitly switched.
+        Self::World
     }
 }
 
@@ -46,6 +47,11 @@ pub enum GizmoAxis {
     X,
     Y,
     Z,
+    /// Screen-space handle.
+    ///
+    /// For rotation this corresponds to "free rotate" around the camera view axis
+    /// (industry standard: UE/DCC outer ring).
+    Screen,
 }
 
 #[cfg(feature = "egui")]
@@ -59,6 +65,7 @@ impl GizmoAxis {
             GizmoAxis::X => Vec3::X,
             GizmoAxis::Y => Vec3::Y,
             GizmoAxis::Z => Vec3::Z,
+            GizmoAxis::Screen => Vec3::ZERO,
         }
     }
 }

@@ -21,7 +21,9 @@ pub(crate) fn world_to_screen(camera: &impl GizmoCamera, rect: Rect, world: Vec3
     let (vp_w, vp_h) = camera.viewport_px();
 
     let v = vp * Vec4::new(world.x, world.y, world.z, 1.0);
-    if !v.w.is_finite() || v.w.abs() < 1e-6 {
+    // Reject points behind the camera (clip-space w <= 0) and pathological projections.
+    // Without this, points behind the camera can project to finite NDC and produce huge rings/lines.
+    if !v.w.is_finite() || v.w <= 1e-6 {
         return None;
     }
     let ndc = v / v.w;
@@ -135,5 +137,33 @@ pub(crate) fn world_radius_for_screen(camera: &impl GizmoCamera, rect: Rect, piv
         return 1.0;
     };
     let d = (u - c).length().max(1.0);
+    desired_px / d
+}
+
+/// Computes a stable world-space radius for a rotation ring that should appear with ~constant
+/// on-screen size.
+///
+/// Uses two orthonormal in-plane directions and picks the more stable screen delta. This prevents
+/// explosive radii when one direction becomes nearly parallel to the view ray.
+#[inline]
+pub(crate) fn world_radius_for_screen_plane(
+    camera: &impl GizmoCamera,
+    rect: Rect,
+    pivot: Vec3,
+    u: Vec3,
+    v: Vec3,
+    desired_px: f32,
+) -> f32 {
+    let Some((c, _)) = world_to_screen(camera, rect, pivot) else { return 1.0; };
+
+    let du = world_to_screen(camera, rect, pivot + u).map(|x| (x.0 - c).length());
+    let dv = world_to_screen(camera, rect, pivot + v).map(|x| (x.0 - c).length());
+
+    // Prefer the larger delta (less degenerate projection). Clamp to avoid infinity.
+    let mut d = 0.0_f32;
+    if let Some(x) = du { d = d.max(x); }
+    if let Some(x) = dv { d = d.max(x); }
+    d = d.max(6.0);
+
     desired_px / d
 }

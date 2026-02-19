@@ -9,6 +9,7 @@ use newengine_ecs::EntityId;
 use newengine_materials::api::MaterialRegistryApi;
 use newengine_materials::{MaterialDescriptor, MaterialId, MaterialRef, MaterialRegistry};
 use newengine_primitives::{builtins, Primitive, PrimitiveId, PrimitiveRegistry};
+use newengine_scene::{components::SceneRoot, SceneState};
 use newengine_scene::{spawn_named, Scene};
 use newengine_transform::Transform;
 
@@ -54,6 +55,26 @@ pub enum SceneCommand {
         material: MaterialId,
         desc: MaterialDescriptor,
     },
+}
+
+#[inline]
+fn place_spawn_position(base: Vec3, primitive_index: usize) -> Vec3 {
+    // Deterministic, editor-friendly placement.
+    //
+    // If we always spawn at the exact same coordinates, objects overlap perfectly and it *looks*
+    // like the previous one disappears.
+    // Place new objects on a small grid in XZ around the requested base position.
+    //
+    // NOTE: Intentionally simple and deterministic (no RNG, no camera dependency).
+    let spacing = 1.75_f32;
+    let cols = 6_usize;
+
+    let x = (primitive_index % cols) as f32;
+    let z = (primitive_index / cols) as f32;
+
+    // Center around base so early spawns distribute on both sides.
+    let cx = (cols as f32 - 1.0) * 0.5;
+    base + Vec3::new((x - cx) * spacing, 0.0, z * spacing)
 }
 
 #[derive(Default)]
@@ -314,12 +335,45 @@ impl SceneBridge {
                     } => {
                         // 1) Take immutable data from scene BEFORE world_mut().
                         let root_opt = scene.root();
+                        let cam_opt = scene.active_camera();
 
                         // 2) Now take world_mut (locks mutable borrow of scene).
                         let world = scene.world_mut();
 
                         // 3) Resolve root using world only.
-                        let root = root_opt.unwrap_or_else(|| world.spawn());
+                        //
+                        // IMPORTANT:
+                        // If the scene root marker/state was not bootstrapped (or was removed by
+                        // a tool/plugin), spawning primitives must not fall back to a plain
+                        // `world.spawn()` root. Some higher-level tooling assumes `SceneRoot` +
+                        // `SceneState.root` exist; without them objects can look like they
+                        // "replace" each other (overlap at the origin / detach from expected
+                        // hierarchy).
+                        let root = match root_opt {
+                            Some(r) => r,
+                            None => {
+                                let r = spawn_named(world, "Root");
+                                let _ = world.insert(r, SceneRoot);
+
+                                // Keep SceneState consistent.
+                                if world.resource::<SceneState>().is_none() {
+                                    world.insert_resource(SceneState::new(Some(r), cam_opt));
+                                } else if let Some(st) = world.resource_mut::<SceneState>() {
+                                    st.root = Some(r);
+                                }
+
+                                r
+                            }
+                        };
+
+                        // Place new primitives deterministically so they don't overlap and
+                        // visually "replace" each other.
+                        // Use a join query count instead of raw storage `len()`.
+                        // This stays correct even if the storage contains tombstones.
+                        let prim_index = world.query::<Primitive>().count();
+
+                        let base_pos = Vec3::new(position[0], position[1], position[2]);
+                        let spawn_pos = place_spawn_position(base_pos, prim_index);
 
                         let e = spawn_named(world, name);
                         let _ = newengine_transform::set_parent(world, e, Some(root));
@@ -335,7 +389,7 @@ impl SceneBridge {
                         let _ = world.insert(e, MaterialRef { id: default_mat });
 
                         if let Some(t) = world.get_mut_tracked::<Transform>(e) {
-                            t.position = Vec3::new(position[0], position[1], position[2]);
+                            t.position = spawn_pos;
                             t.scale = Vec3::new(scale[0], scale[1], scale[2]);
                         }
 

@@ -12,12 +12,14 @@ mod registry;
 mod value;
 mod builtins;
 mod gpu;
+mod ext;
 pub mod collections;
 
 #[macro_use]
 mod macros;
 
 pub use builtins::register_engine_builtins;
+pub use ext::{Vec2Ext, Vec3Ext};
 pub use gpu::mat4_to_cols_bytes;
 pub use registry::{DynMathFn, MathFnId, MathRegistry, MathRegistryRef, ProviderId, RegisterMathFn};
 pub use value::{MathError, MathResult, MathValue, MathValueType, Signature};
@@ -36,6 +38,7 @@ pub use glam::{EulerRot, Mat3, Mat4, Quat, Vec2, Vec3, Vec4};
 #[cfg(feature = "backend-glam")]
 pub mod prelude {
     pub use super::{EulerRot, Mat3, Mat4, Quat, Vec2, Vec3, Vec4};
+    pub use super::{Vec2Ext, Vec3Ext};
 
     #[cfg(feature = "collections")]
     pub use super::collections::prelude::*;

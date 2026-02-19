@@ -123,22 +123,28 @@ impl EguiGizmo {
         if self.drag.is_none() && just_pressed {
             if let (Some(axis), Some(m)) = (hovered, mouse) {
                 let axes_rot = self.axes_rot(tr);
-                let axis_world = (axes_rot * axis.vec3()).normalize_or_zero();
 
-                // Rotation plane basis: prefer camera-aligned (stable when axis is near camera forward).
-                let (plane_u, plane_v) = if self.mode == GizmoMode::Rotate {
-                    let (_ro, view_dir) = screen_ray(camera, rect, center);
-                    let u = axis_world.cross(view_dir).normalize_or_zero();
-                    if u.length_squared() > 1e-10 {
-                        (u, axis_world.cross(u).normalize_or_zero())
-                    } else {
-                        plane_basis(axis_world)
+                let (_axis_world, plane_u, plane_v, start_angle) = match (self.mode, axis) {
+                    (GizmoMode::Rotate, GizmoAxis::Screen) => {
+                        // Screen-space outer ring: rotate around the camera view axis.
+                        // Angle is computed purely in screen space for maximum stability.
+                        let (_ro, view_dir) = screen_ray(camera, rect, center);
+                        let axis_world = view_dir.normalize_or_zero();
+                        let du = m - center;
+                        let start_angle = du.y.atan2(du.x);
+                        (axis_world, newengine_math::Vec3::ZERO, newengine_math::Vec3::ZERO, start_angle)
                     }
-                } else {
-                    plane_basis(axis_world)
-                };
+                    _ => {
+                        let axis_world = (axes_rot * axis.vec3()).normalize_or_zero();
 
-                let start_angle = rotation_angle_on_plane(camera, rect, tr.pos, axis_world, plane_u, plane_v, m);
+                        // Rotation plane basis must match render: world-space axis plane.
+                        // Camera-aligned bases make the visible rings drift / desync from interaction.
+                        let (plane_u, plane_v) = plane_basis(axis_world);
+
+                        let start_angle = rotation_angle_on_plane(camera, rect, tr.pos, axis_world, plane_u, plane_v, m);
+                        (axis_world, plane_u, plane_v, start_angle)
+                    }
+                };
 
                 self.drag = Some(DragState {
                     mode: self.mode,
@@ -149,12 +155,14 @@ impl EguiGizmo {
                     plane_u,
                     plane_v,
                     start_angle,
+                    last_angle: start_angle,
+                    accum_angle: 0.0,
                 });
             }
         }
 
         // Drag update.
-        if let Some(drag) = self.drag {
+        if let Some(mut drag) = self.drag {
             out.active_axis = Some(drag.axis);
             out.capture = true;
 
@@ -163,7 +171,12 @@ impl EguiGizmo {
                 self.drag = None;
             } else if let Some(m) = mouse {
                 let axes_rot = self.axes_rot(drag.start);
-                let axis_world = (axes_rot * drag.axis.vec3()).normalize_or_zero();
+                let axis_world = if drag.mode == GizmoMode::Rotate && drag.axis == GizmoAxis::Screen {
+                    let (_ro, view_dir) = screen_ray(camera, rect, center);
+                    view_dir.normalize_or_zero()
+                } else {
+                    (axes_rot * drag.axis.vec3()).normalize_or_zero()
+                };
 
                 let new_tr = match drag.mode {
                     GizmoMode::Translate => {
@@ -186,6 +199,11 @@ impl EguiGizmo {
                             GizmoAxis::X => s.x = (s.x + delta).max(0.001),
                             GizmoAxis::Y => s.y = (s.y + delta).max(0.001),
                             GizmoAxis::Z => s.z = (s.z + delta).max(0.001),
+                            GizmoAxis::Screen => {
+                                // Screen handle is not exposed for scaling.
+                                // Keep deterministic behavior and avoid silent weirdness.
+                                debug_assert!(false, "Screen axis should not be used for scale");
+                            }
                         }
 
                         GizmoTransform {
@@ -195,14 +213,26 @@ impl EguiGizmo {
                         }
                     }
                     GizmoMode::Rotate => {
-                        let a1 = rotation_angle_on_plane(camera, rect, drag.start.pos, axis_world, drag.plane_u, drag.plane_v, m);
-                        let mut da = a1 - drag.start_angle;
-                        while da > core::f32::consts::PI {
-                            da -= 2.0 * core::f32::consts::PI;
+                        let a1 = if drag.axis == GizmoAxis::Screen {
+                            let du = m - center;
+                            du.y.atan2(du.x)
+                        } else {
+                            rotation_angle_on_plane(camera, rect, drag.start.pos, axis_world, drag.plane_u, drag.plane_v, m)
+                        };
+
+                        // Incremental angle unwrapping: allows continuous rotation beyond ±π without flips.
+                        let mut delta = a1 - drag.last_angle;
+                        while delta > core::f32::consts::PI {
+                            delta -= 2.0 * core::f32::consts::PI;
                         }
-                        while da < -core::f32::consts::PI {
-                            da += 2.0 * core::f32::consts::PI;
+                        while delta < -core::f32::consts::PI {
+                            delta += 2.0 * core::f32::consts::PI;
                         }
+
+                        drag.last_angle = a1;
+                        drag.accum_angle += delta;
+
+                        let mut da = drag.accum_angle;
 
                         let snap_enabled = if self.style.snap_on_shift {
                             ctx.input(|i| i.modifiers.shift)
@@ -225,6 +255,9 @@ impl EguiGizmo {
                 };
 
                 out.transform = Some(new_tr);
+
+                // Persist drag state (required for continuous rotate unwrapping).
+                self.drag = Some(drag);
             }
         } else {
             out.capture = self.wants_capture_now(ctx, rect, camera, tr);
@@ -304,6 +337,11 @@ impl EguiGizmo {
                 }
             }
         }
+
+        // Center handle (visual only for now): improves readability and matches common in-game gizmo aesthetics.
+        let r = self.style.center_radius_pt.max(2.0);
+        painter.circle_filled(center, r, egui::Color32::from_rgb(240, 240, 240));
+        painter.circle_stroke(center, r, egui::Stroke::new(1.0, egui::Color32::from_rgb(20, 20, 20)));
 
         out
     }

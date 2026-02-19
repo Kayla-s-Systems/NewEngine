@@ -140,7 +140,7 @@ impl ShaderBaker {
         entry: &str,
     ) -> VkResult<Vec<u32>> {
         let mut opts = shaderc::CompileOptions::new()
-            .map_err(|e| VkRenderError::Shader("shaderc: failed to create options".to_string()))?;
+            .map_err(|_e| VkRenderError::Shader("shaderc: failed to create options".to_string()))?;
         opts.set_optimization_level(shaderc::OptimizationLevel::Performance);
 
         let artifact = self

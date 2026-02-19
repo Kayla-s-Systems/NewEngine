@@ -30,7 +30,15 @@ pub(crate) fn draw(me: &mut EditorUiBuild, ctx: &egui::Context) {
         me.viewport.set_extent(px_w, px_h);
         me.viewport_bridge.publish_extent(px_w, px_h);
 
-        let shift = ctx.input(|i| i.modifiers.shift);
+        let (shift, rmb_down, raw_scroll_y, dropped_files) = ctx.input(|i| {
+            (
+                i.modifiers.shift,
+                i.pointer.button_down(egui::PointerButton::Secondary),
+                i.raw_scroll_delta.y,
+                i.raw.dropped_files.clone(),
+            )
+        });
+
         let nav_rotate = resp.dragged_by(egui::PointerButton::Middle) && !shift;
         let nav_pan = resp.dragged_by(egui::PointerButton::Middle) && shift;
         let nav_drag = nav_rotate || nav_pan;
@@ -38,55 +46,39 @@ pub(crate) fn draw(me: &mut EditorUiBuild, ctx: &egui::Context) {
         let active = resp.hovered() || nav_drag;
 
         // Gizmo hotkeys:
-        // - W/E/R (industry standard) when RMB is NOT held
-        // - 1/2/3 as an always-available fallback.
+        // - Q/W/E/R when RMB is NOT held
+        // - 1/2/3 always available
         if active && !ctx.wants_keyboard_input() {
-            let rmb = ctx.input(|i| i.pointer.button_down(egui::PointerButton::Secondary));
-            if !rmb {
-                ctx.input(|i| {
-                    if i.key_pressed(egui::Key::Q) {
-                        me.editor.active_tool = newengine_editor_core::ToolId::Select;
-                    }
-                    if i.key_pressed(egui::Key::W) || i.key_pressed(egui::Key::Num1) {
-                        me.gizmo.set_mode(GizmoMode::Translate);
-                        me.editor.gizmo_mode = newengine_editor_core::GizmoMode::Translate;
-                        me.editor.active_tool = newengine_editor_core::ToolId::Translate;
-                    }
-                    if i.key_pressed(egui::Key::E) || i.key_pressed(egui::Key::Num2) {
-                        me.gizmo.set_mode(GizmoMode::Rotate);
-                        me.editor.gizmo_mode = newengine_editor_core::GizmoMode::Rotate;
-                        me.editor.active_tool = newengine_editor_core::ToolId::Rotate;
-                    }
-                    if i.key_pressed(egui::Key::R) || i.key_pressed(egui::Key::Num3) {
-                        me.gizmo.set_mode(GizmoMode::Scale);
-                        me.editor.gizmo_mode = newengine_editor_core::GizmoMode::Scale;
-                        me.editor.active_tool = newengine_editor_core::ToolId::Scale;
-                    }
-                });
-            } else {
-                ctx.input(|i| {
-                    if i.key_pressed(egui::Key::Num1) {
-                        me.gizmo.set_mode(GizmoMode::Translate);
-                        me.editor.gizmo_mode = newengine_editor_core::GizmoMode::Translate;
-                        me.editor.active_tool = newengine_editor_core::ToolId::Translate;
-                    }
-                    if i.key_pressed(egui::Key::Num2) {
-                        me.gizmo.set_mode(GizmoMode::Rotate);
-                        me.editor.gizmo_mode = newengine_editor_core::GizmoMode::Rotate;
-                        me.editor.active_tool = newengine_editor_core::ToolId::Rotate;
-                    }
-                    if i.key_pressed(egui::Key::Num3) {
-                        me.gizmo.set_mode(GizmoMode::Scale);
-                        me.editor.gizmo_mode = newengine_editor_core::GizmoMode::Scale;
-                        me.editor.active_tool = newengine_editor_core::ToolId::Scale;
-                    }
-                });
-            }
+            ctx.input(|i| {
+                let allow_qwer = !rmb_down;
+
+                let pressed_q = allow_qwer && i.key_pressed(egui::Key::Q);
+                let pressed_w = (allow_qwer && i.key_pressed(egui::Key::W)) || i.key_pressed(egui::Key::Num1);
+                let pressed_e = (allow_qwer && i.key_pressed(egui::Key::E)) || i.key_pressed(egui::Key::Num2);
+                let pressed_r = (allow_qwer && i.key_pressed(egui::Key::R)) || i.key_pressed(egui::Key::Num3);
+
+                if pressed_q {
+                    me.editor.active_tool = newengine_editor_core::ToolId::Select;
+                }
+                if pressed_w {
+                    me.gizmo.set_mode(GizmoMode::Translate);
+                    me.editor.gizmo_mode = newengine_editor_core::GizmoMode::Translate;
+                    me.editor.active_tool = newengine_editor_core::ToolId::Translate;
+                }
+                if pressed_e {
+                    me.gizmo.set_mode(GizmoMode::Rotate);
+                    me.editor.gizmo_mode = newengine_editor_core::GizmoMode::Rotate;
+                    me.editor.active_tool = newengine_editor_core::ToolId::Rotate;
+                }
+                if pressed_r {
+                    me.gizmo.set_mode(GizmoMode::Scale);
+                    me.editor.gizmo_mode = newengine_editor_core::GizmoMode::Scale;
+                    me.editor.active_tool = newengine_editor_core::ToolId::Scale;
+                }
+            });
         }
 
         // Sync selection from render-thread picking into editor state.
-        // Render thread only reports the last picked entity; UI applies selection semantics
-        // (replace/add/toggle) based on modifiers captured at click time.
         let picked = me.scene_bridge.selection();
         if picked != me.editor.selection.primary() {
             if let Some(e) = picked {
@@ -100,11 +92,9 @@ pub(crate) fn draw(me: &mut EditorUiBuild, ctx: &egui::Context) {
                         me.editor.selection.set_single(Some(e));
                     }
                 } else {
-                    // Fallback: replace selection.
                     me.editor.selection.set_single(Some(e));
                 }
 
-                // Keep scene_bridge primary selection in sync with editor primary.
                 me.scene_bridge.set_selection(me.editor.selection.primary());
 
                 if let Some(primary) = me.editor.selection.primary() {
@@ -115,7 +105,7 @@ pub(crate) fn draw(me: &mut EditorUiBuild, ctx: &egui::Context) {
             }
         }
 
-        // Determine whether gizmo wants to capture input this frame (prevents orbit/selection conflicts).
+        // Determine whether gizmo wants to capture input this frame.
         let mut gizmo_capture_now = false;
         let gizmo_enabled = me.editor.active_tool != newengine_editor_core::ToolId::Select;
         if gizmo_enabled {
@@ -130,24 +120,21 @@ pub(crate) fn draw(me: &mut EditorUiBuild, ctx: &egui::Context) {
         }
 
         // Click-to-select (picking handled on render thread).
-        // We capture modifiers here to apply deterministic multi-selection semantics later.
         if resp.clicked_by(egui::PointerButton::Primary) && !nav_drag && !gizmo_capture_now {
             if let Some(pos) = resp.interact_pointer_pos() {
                 let mods = ctx.input(|i| i.modifiers);
-                let toggle = mods.command; // Ctrl on Windows/Linux, Cmd on macOS.
+                let toggle = mods.command;
                 let additive = mods.shift;
                 me.pending_pick = Some(super::super::PendingPick { additive, toggle });
 
                 let local = pos - rect.min;
-                let ppp = ctx.pixels_per_point().max(0.0001);
                 let x_px = (local.x * ppp).clamp(0.0, rect.width() * ppp);
                 let y_px = (local.y * ppp).clamp(0.0, rect.height() * ppp);
                 me.viewport_bridge.publish_pick_request(x_px, y_px);
             }
         }
 
-        let mut dx_px = 0.0f32;
-        let mut dy_px = 0.0f32;
+        let (mut dx_px, mut dy_px) = (0.0f32, 0.0f32);
         if nav_drag {
             if let Some(pos) = resp.interact_pointer_pos() {
                 if let Some(prev) = me.last_drag_pos {
@@ -161,20 +148,15 @@ pub(crate) fn draw(me: &mut EditorUiBuild, ctx: &egui::Context) {
             me.last_drag_pos = None;
         }
 
-        let wheel_y_points = if active {
-            ctx.input(|i| i.raw_scroll_delta.y)
-        } else {
-            0.0
-        };
+        let wheel_y_points = if active { raw_scroll_y } else { 0.0 };
         let wheel_y = (wheel_y_points / 240.0).clamp(-2.0, 2.0);
 
         // Drag & drop models onto the viewport.
-        let snap = me.plugins_bridge.read();
-        let exts = util::infer_model_exts(&snap);
-
         if active {
-            let dropped: Vec<_> = ctx.input(|i| i.raw.dropped_files.clone());
-            for f in dropped {
+            let snap = me.plugins_bridge.read();
+            let exts = util::infer_model_exts(&snap);
+
+            for f in dropped_files {
                 if let Some(path) = f.path {
                     let p = path.display().to_string();
                     let ext = path
@@ -198,7 +180,6 @@ pub(crate) fn draw(me: &mut EditorUiBuild, ctx: &egui::Context) {
 
         let look_drag = nav_rotate && !gizmo_capture_now;
         let pan_drag = nav_pan && !gizmo_capture_now;
-        // UI busy flag is critical for renderer-side camera framing logic.
         let ui_busy = gizmo_capture_now || me.gizmo.is_dragging();
         me.viewport_bridge
             .publish_orbit_input(dx_px, dy_px, wheel_y, active, look_drag, pan_drag, ui_busy);
@@ -206,20 +187,22 @@ pub(crate) fn draw(me: &mut EditorUiBuild, ctx: &egui::Context) {
         let wants_kb = ctx.wants_keyboard_input();
         let mut move_mask: u64 = 0;
 
-        // Explicit framing (Blender-like):
-        // - F: frame selection (or scene if nothing selected)
+        // Explicit framing:
+        // - F: frame selection
         // - Shift+F: frame entire scene
         if active && !wants_kb {
-            let frame_sel = ctx.input(|i| i.key_pressed(egui::Key::F) && !i.modifiers.shift);
-            let frame_all = ctx.input(|i| i.key_pressed(egui::Key::F) && i.modifiers.shift);
-            if frame_sel {
-                me.viewport_bridge.publish_frame_request(false);
-            } else if frame_all {
-                me.viewport_bridge.publish_frame_request(true);
-            }
+            ctx.input(|i| {
+                let frame_sel = i.key_pressed(egui::Key::F) && !i.modifiers.shift;
+                let frame_all = i.key_pressed(egui::Key::F) && i.modifiers.shift;
+                if frame_sel {
+                    me.viewport_bridge.publish_frame_request(false);
+                } else if frame_all {
+                    me.viewport_bridge.publish_frame_request(true);
+                }
+            });
         }
 
-        let rmb = active && ctx.input(|i| i.pointer.button_down(egui::PointerButton::Secondary));
+        let rmb = active && rmb_down;
         if rmb && !wants_kb {
             ctx.input(|i| {
                 if i.key_down(egui::Key::W) {
@@ -291,11 +274,9 @@ pub(crate) fn draw(me: &mut EditorUiBuild, ctx: &egui::Context) {
                         gizmo_out = Some(me.gizmo.run(ui.painter(), ctx, rect, &cam, gizmo_in));
                     }
 
-                    // Live transform update + command commit on drag end (undo/redo).
                     let is_dragging = gizmo_enabled && me.gizmo.is_dragging();
 
                     if is_dragging && !me.gizmo_was_dragging {
-                        // Drag begins: capture "before" snapshot.
                         if let Some((p0, r0, s0, _)) = me.read_selected_pose(e) {
                             let (y0, p0e, r0e) = r0.to_euler(newengine_math::EulerRot::YXZ);
                             me.gizmo_drag_begin = Some((
@@ -314,11 +295,11 @@ pub(crate) fn draw(me: &mut EditorUiBuild, ctx: &egui::Context) {
                     }
 
                     if !is_dragging && me.gizmo_was_dragging {
-                        // Drag ended: commit a single command.
                         if let Some((ent, before)) = me.gizmo_drag_begin.take() {
                             if let Some((p1, r1, s1, _)) = me.read_selected_pose(ent) {
                                 let (y1, p1e, r1e) = r1.to_euler(newengine_math::EulerRot::YXZ);
-                                let after = newengine_editor_core::TransformSnapshot::new(p1, (y1, p1e, r1e), s1);
+                                let after =
+                                    newengine_editor_core::TransformSnapshot::new(p1, (y1, p1e, r1e), s1);
                                 if before != after {
                                     me.editor.commands.push(newengine_editor_core::EditorCommand::SetTransform {
                                         entity: ent,
