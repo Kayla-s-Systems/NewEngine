@@ -11,7 +11,6 @@ use newengine_ui::{UiBuildFn, UiHub};
 use std::any::Any;
 use std::sync::{Arc, Mutex};
 
-
 use newengine_ecs::EntityId;
 use newengine_gizmo::egui::EguiGizmo;
 use newengine_materials::MaterialId;
@@ -26,6 +25,19 @@ use crate::plugin_manager::PluginManagerUi;
 use crate::scene_bridge::SceneBridge;
 use crate::ui_contrib::plugin_manager::PluginManagerContributor;
 use crate::viewport_bridge::ViewportBridge;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum LightSpawnKind {
+    Directional,
+    Point,
+}
+
+impl Default for LightSpawnKind {
+    #[inline]
+    fn default() -> Self {
+        Self::Point
+    }
+}
 
 /// Minimal editor UI: foundation-first.
 ///
@@ -53,6 +65,9 @@ pub struct EditorUiBuild {
 
     pub(crate) console_open: bool,
     pub(crate) console_input: String,
+
+    // Lights UI.
+    pub(crate) selected_light_kind: LightSpawnKind,
 
     // Primitives UI.
     pub(crate) selected_primitive: Option<newengine_primitives::PrimitiveId>,
@@ -109,21 +124,29 @@ impl EditorUiBuild {
             plugins_bridge: Arc::clone(&plugins_bridge),
             plugin_manager: Arc::clone(&plugin_manager),
             ui_hub: UiHub::new(),
+
             last_drag_pos: None,
+
             console_open: false,
             console_input: String::new(),
+
+            selected_light_kind: LightSpawnKind::default(),
+
             selected_primitive: None,
+
             selected_entity_cached: None,
             insp_pos: [0.0; 3],
             insp_rot_deg: [0.0; 3],
             insp_scale: [1.0, 1.0, 1.0],
             insp_color: [0.85, 0.85, 0.9, 1.0],
             insp_material: MaterialId::invalid(),
+
             gizmo: EguiGizmo::new(),
 
             editor: EditorState::new(),
             gizmo_was_dragging: false,
             gizmo_drag_begin: None,
+
             pending_pick: None,
         };
 
@@ -232,14 +255,17 @@ impl EditorUiBuild {
         let mut user_data = ();
         self.ui_hub.run(ctx_any, &mut user_data);
     }
-}
 
-impl EditorUiBuild {
     #[inline]
     fn apply_editor_command_undo(&self, cmd: EditorCommand) {
         match cmd {
             EditorCommand::SetTransform { entity, before, .. } => {
-                self.scene_bridge.cmd_set_transform(entity, before.position, before.rotation_ypr, before.scale);
+                self.scene_bridge.cmd_set_transform(
+                    entity,
+                    before.position,
+                    before.rotation_ypr,
+                    before.scale,
+                );
             }
         }
     }
@@ -248,7 +274,12 @@ impl EditorUiBuild {
     fn apply_editor_command_redo(&self, cmd: EditorCommand) {
         match cmd {
             EditorCommand::SetTransform { entity, after, .. } => {
-                self.scene_bridge.cmd_set_transform(entity, after.position, after.rotation_ypr, after.scale);
+                self.scene_bridge.cmd_set_transform(
+                    entity,
+                    after.position,
+                    after.rotation_ypr,
+                    after.scale,
+                );
             }
         }
     }

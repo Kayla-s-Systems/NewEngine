@@ -75,6 +75,46 @@ pub(crate) fn draw(me: &mut EditorUiBuild, ctx: &egui::Context) {
                 }
             }
 
+
+            ui.separator();
+
+            // Lights: foundation-level editor spawns (no hardcoded renderer dependencies).
+            {
+                use crate::ui::LightSpawnKind;
+
+                let current_label = match me.selected_light_kind {
+                    LightSpawnKind::Directional => "Directional",
+                    LightSpawnKind::Point => "Point",
+                };
+
+                egui::ComboBox::from_id_salt("add_light_combo")
+                    .width(130.0)
+                    .selected_text(current_label)
+                    .show_ui(ui, |ui| {
+                        ui.selectable_value(&mut me.selected_light_kind, LightSpawnKind::Directional, "Directional");
+                        ui.selectable_value(&mut me.selected_light_kind, LightSpawnKind::Point, "Point");
+                    });
+
+                if ui.button("Add Light").clicked() {
+                    match me.selected_light_kind {
+                        LightSpawnKind::Directional => {
+                            // Spawn a sun-like light above the origin looking down.
+                            me.scene_bridge.cmd_spawn_directional_light(
+                                "Sun".to_string(),
+                                newengine_math::Vec3::new(0.0, 6.0, 0.0),
+                                newengine_math::Vec3::new(-0.35, -1.0, -0.25),
+                            );
+                        }
+                        LightSpawnKind::Point => {
+                            me.scene_bridge.cmd_spawn_point_light(
+                                "PointLight".to_string(),
+                                newengine_math::Vec3::new(0.0, 2.0, 0.0),
+                            );
+                        }
+                    }
+                }
+            }
+
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                 if let Ok(mut pm) = me.plugin_manager.lock() {
                     pm.topbar_button(ui);

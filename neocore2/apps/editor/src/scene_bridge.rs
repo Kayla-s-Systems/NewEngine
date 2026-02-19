@@ -7,7 +7,9 @@ use newengine_math::{EulerRot, Quat, Vec3};
 
 use newengine_ecs::EntityId;
 use newengine_materials::api::MaterialRegistryApi;
-use newengine_materials::{MaterialDescriptor, MaterialId, MaterialRef, MaterialRegistry};
+use newengine_materials::{
+    MaterialDescriptor, MaterialDomain, MaterialId, MaterialOverrides, MaterialRef, MaterialRegistry, ShadingModel,
+};
 use newengine_primitives::{builtins, Primitive, PrimitiveId, PrimitiveRegistry};
 use newengine_scene::{components::SceneRoot, SceneState};
 use newengine_scene::{spawn_named, Scene};
@@ -54,6 +56,41 @@ pub enum SceneCommand {
     UpdateMaterial {
         material: MaterialId,
         desc: MaterialDescriptor,
+    },
+
+    /// Spawn a directional light entity.
+    SpawnDirectionalLight {
+        name: String,
+        position: [f32; 3],
+        direction_ws: [f32; 3],
+    },
+
+    /// Spawn a point light entity.
+    SpawnPointLight {
+        name: String,
+        position: [f32; 3],
+    },
+
+    /// Set world ambient light resource.
+    SetAmbientLight {
+        color: [f32; 3],
+        intensity: f32,
+    },
+
+    /// Update parameters of a directional light component.
+    SetDirectionalLight {
+        entity: EntityId,
+        direction_ws: [f32; 3],
+        color: [f32; 3],
+        intensity: f32,
+    },
+
+    /// Update parameters of a point light component.
+    SetPointLight {
+        entity: EntityId,
+        color: [f32; 3],
+        intensity: f32,
+        range: f32,
     },
 }
 
@@ -235,6 +272,51 @@ impl SceneBridge {
             .push(SceneCommand::UpdateMaterial { material, desc });
     }
 
+
+    #[inline]
+    pub fn cmd_spawn_directional_light(&self, name: String, position: Vec3, direction_ws: Vec3) {
+        let d = direction_ws.normalize_or_zero();
+        self.queue.lock().cmds.push(SceneCommand::SpawnDirectionalLight {
+            name,
+            position: [position.x, position.y, position.z],
+            direction_ws: [d.x, d.y, d.z],
+        });
+    }
+
+    #[inline]
+    pub fn cmd_spawn_point_light(&self, name: String, position: Vec3) {
+        self.queue.lock().cmds.push(SceneCommand::SpawnPointLight {
+            name,
+            position: [position.x, position.y, position.z],
+        });
+    }
+
+    #[inline]
+    pub fn cmd_set_ambient_light(&self, color: [f32; 3], intensity: f32) {
+        self.queue.lock().cmds.push(SceneCommand::SetAmbientLight { color, intensity });
+    }
+
+    #[inline]
+    pub fn cmd_set_directional_light(&self, entity: EntityId, direction_ws: Vec3, color: [f32; 3], intensity: f32) {
+        let d = direction_ws.normalize_or_zero();
+        self.queue.lock().cmds.push(SceneCommand::SetDirectionalLight {
+            entity,
+            direction_ws: [d.x, d.y, d.z],
+            color,
+            intensity,
+        });
+    }
+
+    #[inline]
+    pub fn cmd_set_point_light(&self, entity: EntityId, color: [f32; 3], intensity: f32, range: f32) {
+        self.queue.lock().cmds.push(SceneCommand::SetPointLight {
+            entity,
+            color,
+            intensity,
+            range,
+        });
+    }
+
     /// Applies queued commands to the scene world.
     ///
     /// Call from the render/controller thread once per frame.
@@ -259,6 +341,12 @@ impl SceneBridge {
             // downstream systems that use `query_changed(since_tick)` (e.g. transform propagation)
             // can miss updates, causing the gizmo/overlay to move while geometry stays put.
             scene.world_mut().advance_tick();
+
+            // Shared default base material (asset). Instances will reference it.
+            let default_mat = self
+                .materials
+                .read()
+                .register_named("Default", MaterialDescriptor::default());
 
             for cmd in cmds {
                 match cmd {
@@ -322,12 +410,7 @@ impl SceneBridge {
 
                         let _ = world.insert(e, Primitive { id, color });
 
-                        // Default material for all spawned primitives.
-                        // Registry is deterministic: register_named returns existing id if present.
-                        let default_mat = self
-                            .materials
-                            .read()
-                            .register_named("Default", MaterialDescriptor::default());
+                        // Material is bound later via the invariant pass (entity-local instance).
                         let _ = world.insert(e, MaterialRef { id: default_mat });
 
                         if let Some(t) = world.get_mut_tracked::<Transform>(e) {
@@ -362,6 +445,27 @@ impl SceneBridge {
                         if let Some(p) = world.get_mut_tracked::<Primitive>(entity) {
                             p.color = color;
                         }
+
+                        // Ensure color changes are local to the entity by using a material instance.
+                        // This avoids mutating global material assets.
+                        let base = world
+                            .get::<MaterialRef>(entity)
+                            .map(|mr| mr.id)
+                            .filter(|id| id.is_valid())
+                            .unwrap_or(default_mat);
+
+                        let inst_name = format!("__prim_{:016x}", entity.stable_u64());
+                        let inst_id = self.materials.read().register_instance_named(
+                            base,
+                            &inst_name,
+                            MaterialOverrides {
+                                domain: Some(MaterialDomain::Surface),
+                                shading_model: Some(ShadingModel::Unlit),
+                                base_color: Some(color),
+                                ..MaterialOverrides::default()
+                            },
+                        );
+                        let _ = world.insert(entity, MaterialRef { id: inst_id });
                     }
 
                     SceneCommand::SetMaterial { entity, material } => {
@@ -373,39 +477,47 @@ impl SceneBridge {
                         // Registry update is editor-side shared state; do not touch the world.
                         let _ = self.materials.read().set_desc(material, desc);
                     }
+                    _ => {}
                 }
             }
 
             // Hard invariant for renderable entities: if an entity has a `Primitive`, it must have
             // a valid `MaterialRef`. This prepares the scene for future renderables (meshes, models)
             // and removes fragile fallback logic from the renderer.
-            // Hard invariant for renderable entities: if an entity has a `Primitive`, it must have
-            // a valid `MaterialRef`. This prepares the scene for future renderables (meshes, models)
-            // and removes fragile fallback logic from the renderer.
-            let default_mat = self
-                .materials
-                .read()
-                .register_named("Default", MaterialDescriptor::default());
-
             let world = scene.world_mut();
 
-            // Phase 1: collect (read-only)
-            let mut fix_list: Vec<EntityId> = Vec::new();
-            for (e, _p) in world.query::<Primitive>() {
-                let needs_fix = match world.get::<MaterialRef>(e) {
-                    None => true,
-                    Some(mr) => !mr.id.is_valid(),
-                };
-                if needs_fix {
-                    fix_list.push(e);
-                }
+            // Pass 1: collect material instance ids for primitives without mutating `world` during query iteration.
+            let mut prim_updates = Vec::new();
+            for (e, p) in world.query::<Primitive>() {
+                // Always bind primitives through an entity-local material instance.
+                // This makes the renderer fully material-driven.
+                let color = p.color;
+
+                let base = world
+                    .get::<MaterialRef>(e)
+                    .map(|mr| mr.id)
+                    .filter(|id| id.is_valid() && id.is_asset())
+                    .unwrap_or(default_mat);
+
+                let inst_name = format!("__prim_{:016x}", e.stable_u64());
+                let inst_id = self.materials.read().register_instance_named(
+                    base,
+                    &inst_name,
+                    MaterialOverrides {
+                        domain: Some(MaterialDomain::Surface),
+                        shading_model: Some(ShadingModel::Unlit),
+                        base_color: Some(color),
+                        ..MaterialOverrides::default()
+                    },
+                );
+
+                prim_updates.push((e, inst_id));
             }
 
-            // Phase 2: apply (mutable)
-            for e in fix_list {
-                let _ = world.insert(e, MaterialRef { id: default_mat });
+            // Pass 2: apply updates after the immutable query borrow is dropped.
+            for (e, inst_id) in prim_updates {
+                let _ = world.insert(e, MaterialRef { id: inst_id });
             }
-
         } // scene write lock dropped here
 
         if let Some(sel) = pending_selection {

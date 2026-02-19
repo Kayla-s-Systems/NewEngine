@@ -1,13 +1,38 @@
 #![forbid(unsafe_op_in_unsafe_fn)]
 
+use newengine_lighting::{AmbientLight, DirectionalLight, PointLight};
 use newengine_materials::api::MaterialRegistryApi;
 use newengine_materials::MaterialId;
 use newengine_materials::MaterialRef;
 use newengine_platform_winit::egui;
 use newengine_primitives::Primitive;
 use newengine_scene::components::Name;
+use newengine_transform::GlobalTransform;
 
 use super::super::EditorUiBuild;
+
+#[inline]
+fn dir_to_yaw_pitch_deg(d: newengine_math::Vec3) -> (f32, f32) {
+    let dn = d.normalize_or_zero();
+    // yaw around Y, pitch around X (looking down negative Y is pitch -90).
+    let yaw = dn.x.atan2(dn.z);
+    let pitch = (-dn.y).asin();
+    (yaw.to_degrees(), pitch.to_degrees())
+}
+
+#[inline]
+fn yaw_pitch_deg_to_dir(yaw_deg: f32, pitch_deg: f32) -> newengine_math::Vec3 {
+    let yaw = yaw_deg.to_radians();
+    let pitch = pitch_deg.to_radians();
+    let cy = yaw.cos();
+    let sy = yaw.sin();
+    let cp = pitch.cos();
+    let sp = pitch.sin();
+    // Inverse of dir_to_yaw_pitch_deg convention.
+    newengine_math::Vec3::new(sy * cp, -sp, cy * cp).normalize_or_zero()
+}
+
+
 
 pub(crate) fn draw(me: &mut EditorUiBuild, ctx: &egui::Context) {
     egui::SidePanel::right("inspector")
@@ -106,6 +131,110 @@ pub(crate) fn draw(me: &mut EditorUiBuild, ctx: &egui::Context) {
                     }
                 } else {
                     ui.label("(no Primitive component)");
+                }
+            });
+
+
+            // Lighting (editor-first, deterministic, module-driven).
+            ui.collapsing("Lighting", |ui| {
+                // Global ambient (resource).
+                {
+                    let scene = me.scene_bridge.scene();
+                    let s = scene.read();
+                    let w = s.world();
+                    let amb = w.resource::<AmbientLight>().copied().unwrap_or_default();
+
+                    let mut amb_rgb = amb.color;
+                    let mut amb_int = amb.intensity;
+
+                    ui.horizontal(|ui| {
+                        ui.label("Ambient");
+                        ui.color_edit_button_rgb(&mut amb_rgb);
+                    });
+                    ui.horizontal(|ui| {
+                        ui.label("Ambient intensity");
+                        ui.add(egui::Slider::new(&mut amb_int, 0.0..=2.0));
+                    });
+
+                    if amb_rgb != amb.color || (amb_int - amb.intensity).abs() > 1e-6 {
+                        me.scene_bridge.cmd_set_ambient_light(amb_rgb, amb_int);
+                    }
+
+                    ui.separator();
+                }
+
+                let scene = me.scene_bridge.scene();
+                let s = scene.read();
+                let w = s.world();
+
+                if let Some(dl) = w.get::<DirectionalLight>(e).copied() {
+                    ui.label("Directional Light");
+
+                    let mut rgb = dl.color;
+                    let mut intensity = dl.intensity;
+
+                    let d = newengine_math::Vec3::new(dl.direction_ws[0], dl.direction_ws[1], dl.direction_ws[2]);
+                    let (mut yaw_deg, mut pitch_deg) = dir_to_yaw_pitch_deg(d);
+
+                    ui.horizontal(|ui| {
+                        ui.label("Color");
+                        ui.color_edit_button_rgb(&mut rgb);
+                    });
+
+                    ui.horizontal(|ui| {
+                        ui.label("Intensity");
+                        ui.add(egui::Slider::new(&mut intensity, 0.0..=50.0));
+                    });
+
+                    ui.horizontal(|ui| {
+                        ui.label("Yaw (deg)");
+                        ui.add(egui::DragValue::new(&mut yaw_deg).speed(0.25));
+                    });
+                    ui.horizontal(|ui| {
+                        ui.label("Pitch (deg)");
+                        ui.add(egui::DragValue::new(&mut pitch_deg).speed(0.25));
+                    });
+
+                    let new_dir = yaw_pitch_deg_to_dir(yaw_deg, pitch_deg);
+                    if rgb != dl.color || (intensity - dl.intensity).abs() > 1e-6
+                        || (new_dir.x - dl.direction_ws[0]).abs() > 1e-4
+                        || (new_dir.y - dl.direction_ws[1]).abs() > 1e-4
+                        || (new_dir.z - dl.direction_ws[2]).abs() > 1e-4
+                    {
+                        me.scene_bridge.cmd_set_directional_light(e, new_dir, rgb, intensity);
+                    }
+                } else if let Some(pl) = w.get::<PointLight>(e).copied() {
+                    ui.label("Point Light");
+
+                    let mut rgb = pl.color;
+                    let mut intensity = pl.intensity;
+                    let mut range = pl.range;
+
+                    ui.horizontal(|ui| {
+                        ui.label("Color");
+                        ui.color_edit_button_rgb(&mut rgb);
+                    });
+
+                    ui.horizontal(|ui| {
+                        ui.label("Intensity");
+                        ui.add(egui::Slider::new(&mut intensity, 0.0..=200.0));
+                    });
+
+                    ui.horizontal(|ui| {
+                        ui.label("Range");
+                        ui.add(egui::Slider::new(&mut range, 0.1..=100.0));
+                    });
+
+                    if rgb != pl.color || (intensity - pl.intensity).abs() > 1e-6 || (range - pl.range).abs() > 1e-6 {
+                        me.scene_bridge.cmd_set_point_light(e, rgb, intensity, range);
+                    }
+
+                    if let Some(gt) = w.get::<GlobalTransform>(e) {
+                        let p = gt.0.w_axis;
+                        ui.label(format!("Position: [{:.2}, {:.2}, {:.2}]", p.x, p.y, p.z));
+                    }
+                } else {
+                    ui.label("(no Light component on selection)");
                 }
             });
 

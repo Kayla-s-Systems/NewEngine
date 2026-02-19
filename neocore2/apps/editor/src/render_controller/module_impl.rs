@@ -10,12 +10,109 @@ use newengine_math::{Mat4, Quat, Vec3};
 use newengine_platform_winit::WinitWindowInitSize;
 use newengine_ui::draw::UiDrawList;
 
+use newengine_lighting::{AmbientLight, DirectionalLight, PointLight};
+use newengine_primitives::builtins as prim_builtins;
 use newengine_primitives::Primitive;
 use newengine_scene::{scene_bounds_cached, update_scene_world};
 use newengine_transform::GlobalTransform;
 
 use super::controller::EditorRenderController;
 use super::gpu::{ensure_grid, ensure_lit_pipeline, ensure_primitive_gpu, GridMeshParams};
+
+
+#[inline]
+fn quat_from_forward_z(dir_ws: Vec3) -> Quat {
+    let fwd = Vec3::Z;
+    let d = dir_ws.normalize_or_zero();
+    if d.length_squared() <= 1e-8 {
+        return Quat::IDENTITY;
+    }
+    Quat::from_rotation_arc(fwd, d)
+}
+
+const MAX_POINT_LIGHTS: usize = 4;
+
+#[derive(Clone, Copy, Debug, Default)]
+struct PackedLights {
+    ambient: [f32; 4],
+    dir_dir_intensity: [f32; 4],
+    dir_color: [f32; 4],
+    point_pos_range: [[f32; 4]; MAX_POINT_LIGHTS],
+    point_color_intensity: [[f32; 4]; MAX_POINT_LIGHTS],
+    point_count_pad: [f32; 4],
+}
+
+impl PackedLights {
+    const UBO_SIZE: usize = 336;
+
+    #[inline]
+    fn from_world(world: &newengine_ecs::World) -> Self {
+        // Ambient resource (deterministic default).
+        let amb = world.resource::<AmbientLight>().copied().unwrap_or_default();
+        let ambient = [amb.color[0], amb.color[1], amb.color[2], amb.intensity];
+
+        // Directional: pick the first by stable key to keep determinism.
+        let mut best_dir: Option<(u64, DirectionalLight)> = None;
+        for (e, l) in world.query::<DirectionalLight>() {
+            let k = e.stable_u64();
+            if best_dir.map(|(bk, _)| k < bk).unwrap_or(true) {
+                best_dir = Some((k, *l));
+            }
+        }
+        let dir = best_dir.map(|(_, l)| l).unwrap_or_default();
+        let dir_dir_intensity = [dir.direction_ws[0], dir.direction_ws[1], dir.direction_ws[2], dir.intensity];
+        let dir_color = [dir.color[0], dir.color[1], dir.color[2], 0.0];
+
+        // Points: gather, sort by stable id, take N.
+        let mut pts: Vec<(u64, [f32; 4], [f32; 4])> = Vec::new();
+        for (e, pl, gt) in world.query2::<PointLight, GlobalTransform>() {
+            let m = gt.0;
+            let pos = [m.w_axis.x, m.w_axis.y, m.w_axis.z, pl.range.max(1e-3)];
+            let col = [pl.color[0], pl.color[1], pl.color[2], pl.intensity.max(0.0)];
+            pts.push((e.stable_u64(), pos, col));
+        }
+        pts.sort_by(|a, b| a.0.cmp(&b.0));
+
+        let mut out = Self {
+            ambient,
+            dir_dir_intensity,
+            dir_color,
+            ..Self::default()
+        };
+
+        let n = pts.len().min(MAX_POINT_LIGHTS);
+        for i in 0..n {
+            out.point_pos_range[i] = pts[i].1;
+            out.point_color_intensity[i] = pts[i].2;
+        }
+        out.point_count_pad = [n as f32, 0.0, 0.0, 0.0];
+        out
+    }
+
+    #[inline]
+    fn write_into(&self, bytes: &mut [u8; Self::UBO_SIZE]) {
+        // Layout offsets (bytes):
+        // 0..128 reserved for matrices + base_color.
+        let mut off = 144;
+
+        fn write_vec4(dst: &mut [u8], off: &mut usize, v: [f32; 4]) {
+            for i in 0..4 {
+                let o = *off + i * 4;
+                dst[o..o + 4].copy_from_slice(&v[i].to_ne_bytes());
+            }
+            *off += 16;
+        }
+
+        write_vec4(bytes, &mut off, self.ambient);
+        write_vec4(bytes, &mut off, self.dir_dir_intensity);
+        write_vec4(bytes, &mut off, self.dir_color);
+        for i in 0..MAX_POINT_LIGHTS {
+            write_vec4(bytes, &mut off, self.point_pos_range[i]);
+            write_vec4(bytes, &mut off, self.point_color_intensity[i]);
+        }
+        write_vec4(bytes, &mut off, self.point_count_pad);
+    }
+}
 
 impl EditorRenderController {
     // Editor "floor" constraint: camera must stay above this Y.
@@ -146,22 +243,44 @@ impl EditorRenderController {
     fn write_lit_ubo(
         r: &mut dyn newengine_core::render::RenderApi,
         ubo: newengine_core::render::BufferId,
-        m: Mat4,
+        mvp: Mat4,
+        model: Mat4,
         base_color: [f32; 4],
+        lights: &PackedLights,
     ) -> EngineResult<()> {
-        let cols = m.to_cols_array();
-        // std140: mat4 (64) + vec4 (16)
-        let mut bytes: [u8; 80] = [0u8; 80];
-        for (i, f) in cols.iter().enumerate() {
+        let mut bytes: [u8; PackedLights::UBO_SIZE] = [0u8; PackedLights::UBO_SIZE];
+
+        // mat4 mvp
+        let mvp_cols = mvp.to_cols_array();
+        for (i, f) in mvp_cols.iter().enumerate() {
             let off = i * 4;
             bytes[off..off + 4].copy_from_slice(&f.to_ne_bytes());
         }
-        let base_off = 64;
+
+        // mat4 model
+        let model_cols = model.to_cols_array();
+        let model_off = 64;
+        for (i, f) in model_cols.iter().enumerate() {
+            let off = model_off + i * 4;
+            bytes[off..off + 4].copy_from_slice(&f.to_ne_bytes());
+        }
+
+        // vec4 base_color
+        let base_off = 128;
         for i in 0..4 {
             let off = base_off + i * 4;
             bytes[off..off + 4].copy_from_slice(&base_color[i].to_ne_bytes());
         }
+
+        // Lighting block (std140 vec4-aligned).
+        lights.write_into(&mut bytes);
+
         r.write_buffer(ubo, 0, &bytes)
+    }
+
+    #[inline]
+    fn collect_lights(world: &newengine_ecs::World) -> PackedLights {
+        PackedLights::from_world(world)
     }
 
     #[inline]
@@ -435,6 +554,8 @@ impl<E: Send + 'static> Module<E> for EditorRenderController {
 
             let lit = ensure_lit_pipeline(&mut self.lit, &mut **r)?;
 
+            let world_lights = Self::collect_lights(scene.world());
+
             // Grid stays on y=0 always (world floor), independent from orbit.target.y
             if bounds_radius.is_finite() {
                 let g = ensure_grid(
@@ -457,7 +578,14 @@ impl<E: Send + 'static> Module<E> for EditorRenderController {
                 );
 
                 // Grid uses its own vertex colors; base_color is irrelevant but kept defined.
-                Self::write_lit_ubo(&mut **r, lit.grid_ubo, viewproj * grid_model, [1.0, 1.0, 1.0, 1.0])?;
+                Self::write_lit_ubo(
+                    &mut **r,
+                    lit.grid_ubo,
+                    viewproj * grid_model,
+                    grid_model,
+                    [1.0, 1.0, 1.0, 1.0],
+                    &world_lights,
+                )?;
 
                 r.set_pipeline(g.pipeline)?;
                 r.set_bind_group(0, lit.grid_bg)?;
@@ -475,22 +603,105 @@ impl<E: Send + 'static> Module<E> for EditorRenderController {
                 for (id, prim, gt) in world.query2::<Primitive, GlobalTransform>() {
                     let gpu = ensure_primitive_gpu(&reg, prim.id, &mut self.prim_cache, &mut **r)?;
 
-                    let mvp = viewproj * gt.0;
+                    let model = gt.0;
+                    let mvp = viewproj * model;
 
-                    // Material-driven base color (fallback to primitive color).
+                    // Material-driven base color.
+                    // SceneBridge guarantees that every Primitive has a valid MaterialRef.
                     let base_color = world
                         .get::<newengine_materials::MaterialRef>(id)
                         .and_then(|mr| mats.get(mr.id))
                         .map(|d| d.base_color)
-                        .unwrap_or(prim.color);
+                        .unwrap_or([1.0, 0.0, 1.0, 1.0]);
 
-                    Self::write_lit_ubo(&mut **r, lit.ubo, mvp, base_color)?;
+                    Self::write_lit_ubo(&mut **r, lit.ubo, mvp, model, base_color, &world_lights)?;
 
                     r.set_pipeline(lit.pipeline)?;
                     r.set_bind_group(0, lit.bg)?;
                     r.set_vertex_buffer(0, BufferSlice::new(gpu.vb, 0))?;
                     r.set_index_buffer(BufferSlice::new(gpu.ib, 0), IndexFormat::U32)?;
                     r.draw_indexed(newengine_core::render::DrawIndexedArgs::new(gpu.index_count))?;
+                }
+            }
+
+
+            // Editor light gizmos (pure overlay; does not mutate the world).
+            // Deterministic order: stable entity key.
+            {
+                let world = scene.world();
+                let reg_lock = self.scene_bridge.primitives();
+                let reg = reg_lock.read();
+
+                // Point lights: sphere icon.
+                let sphere_id = prim_builtins::ID_SPHERE_UV;
+                let sphere_gpu = ensure_primitive_gpu(&reg, sphere_id, &mut self.prim_cache, &mut **r)?;
+
+                // Directional lights: cone arrow icon.
+                let cone_id = prim_builtins::ID_CONE;
+                let cone_gpu = ensure_primitive_gpu(&reg, cone_id, &mut self.prim_cache, &mut **r)?;
+
+                // Draw directionals first for readability.
+                let mut dirs: Vec<(u64, DirectionalLight, Mat4)> = Vec::new();
+                for (e, l, gt) in world.query2::<DirectionalLight, GlobalTransform>() {
+                    dirs.push((e.stable_u64(), *l, gt.0));
+                }
+                dirs.sort_by(|a, b| a.0.cmp(&b.0));
+
+                for (_k, dl, m) in dirs {
+                    let pos = Vec3::new(m.w_axis.x, m.w_axis.y, m.w_axis.z);
+                    let dir = Vec3::new(dl.direction_ws[0], dl.direction_ws[1], dl.direction_ws[2]).normalize_or_zero();
+
+                    // Cone pointing along light direction.
+                    let rot = quat_from_forward_z(dir);
+                    let scale = Vec3::splat(0.35);
+                    let model = Mat4::from_scale_rotation_translation(scale, rot, pos);
+                    let mvp = viewproj * model;
+
+                    let base_color = [1.0, 0.95, 0.35, 1.0];
+                    Self::write_lit_ubo(&mut **r, lit.ubo, mvp, model, base_color, &world_lights)?;
+
+                    r.set_pipeline(lit.pipeline)?;
+                    r.set_bind_group(0, lit.bg)?;
+                    r.set_vertex_buffer(0, BufferSlice::new(cone_gpu.vb, 0))?;
+                    r.set_index_buffer(BufferSlice::new(cone_gpu.ib, 0), IndexFormat::U32)?;
+                    r.draw_indexed(newengine_core::render::DrawIndexedArgs::new(cone_gpu.index_count))?;
+
+                    // Direction line marker: draw a thin stretched cone as a cheap line.
+                    let line_len = 1.2_f32;
+                    let line_pos = pos + dir * (line_len * 0.5);
+                    let line_scale = Vec3::new(0.08, 0.08, line_len);
+                    let line_model = Mat4::from_scale_rotation_translation(line_scale, rot, line_pos);
+                    let line_mvp = viewproj * line_model;
+                    let line_color = [1.0, 0.85, 0.25, 1.0];
+                    Self::write_lit_ubo(&mut **r, lit.ubo, line_mvp, line_model, line_color, &world_lights)?;
+
+                    r.set_pipeline(lit.pipeline)?;
+                    r.set_bind_group(0, lit.bg)?;
+                    r.set_vertex_buffer(0, BufferSlice::new(cone_gpu.vb, 0))?;
+                    r.set_index_buffer(BufferSlice::new(cone_gpu.ib, 0), IndexFormat::U32)?;
+                    r.draw_indexed(newengine_core::render::DrawIndexedArgs::new(cone_gpu.index_count))?;
+                }
+
+                let mut pts: Vec<(u64, Mat4)> = Vec::new();
+                for (e, _pl, gt) in world.query2::<PointLight, GlobalTransform>() {
+                    pts.push((e.stable_u64(), gt.0));
+                }
+                pts.sort_by(|a, b| a.0.cmp(&b.0));
+
+                for (_k, m) in pts {
+                    let pos = Vec3::new(m.w_axis.x, m.w_axis.y, m.w_axis.z);
+                    let scale = Vec3::splat(0.18);
+                    let model = Mat4::from_scale_rotation_translation(scale, Quat::IDENTITY, pos);
+                    let mvp = viewproj * model;
+
+                    let base_color = [1.0, 0.75, 0.25, 1.0];
+                    Self::write_lit_ubo(&mut **r, lit.ubo, mvp, model, base_color, &world_lights)?;
+
+                    r.set_pipeline(lit.pipeline)?;
+                    r.set_bind_group(0, lit.bg)?;
+                    r.set_vertex_buffer(0, BufferSlice::new(sphere_gpu.vb, 0))?;
+                    r.set_index_buffer(BufferSlice::new(sphere_gpu.ib, 0), IndexFormat::U32)?;
+                    r.draw_indexed(newengine_core::render::DrawIndexedArgs::new(sphere_gpu.index_count))?;
                 }
             }
 

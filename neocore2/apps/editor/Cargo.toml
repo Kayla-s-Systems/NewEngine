@@ -24,5 +24,6 @@ newengine-camera = { path = "../../crates/newengine-camera" }
 newengine-primitives = { path = "../../crates/newengine-primitives" }
 newengine-gizmo = { path = "../../crates/newengine-gizmo", features = ["egui"] }
 newengine-materials = { path = "../../crates/newengine-materials" }
+newengine-lighting = { path = "../../crates/newengine-lighting" }
 newengine-editor-core = { path = "../../crates/newengine-editor-core" }
 newengine-previews = { path = "../../crates/newengine-previews" }

@@ -81,8 +81,17 @@ pub(super) struct LitPipeline {
     pub pipeline: newengine_core::render::PipelineId,
 }
 
-// std140 layout: mat4 (64) + vec4 (16) = 80 bytes.
-const LIT_UBO_SIZE: u64 = 80;
+// std140 layout (see assets/shaders/editor_lit.*):
+// mat4 mvp (64)
+// mat4 model (64)
+// vec4 base_color (16)
+// vec4 ambient (16)
+// vec4 dir_dir_intensity (16)
+// vec4 dir_color (16)
+// point lights: 4 * (vec4 pos_range + vec4 color_intensity) = 4 * 32 = 128
+// vec4 point_count_pad (16)
+// Total: 336 bytes.
+const LIT_UBO_SIZE: u64 = 336;
 
 #[derive(Clone, Copy)]
 pub(super) struct PrimitiveGpu {
