@@ -25,6 +25,13 @@ impl EditorRenderController {
     const MAX_PITCH_ABS: f32 = 1.5184364; // ~87 deg
     const MIN_DISTANCE: f32 = 0.30;
 
+    // Editor grid is an overlay (not part of render world). We keep it fixed and deterministic.
+    const GRID_HALF_LINES: i32 = 80;
+    const GRID_MAJOR_EVERY: i32 = 10;
+    const GRID_MINOR_COLOR: [f32; 4] = [0.32, 0.32, 0.34, 1.0];
+    const GRID_MAJOR_COLOR: [f32; 4] = [0.45, 0.45, 0.48, 1.0];
+    const GRID_BACKGROUND_COLOR: [f32; 4] = [0.10, 0.10, 0.11, 1.0];
+
     // NOTE: camera framing is explicit (hotkey/button) + startup/aspect changes.
     // Auto-framing on scene growth is intentionally disabled to keep the world reference
     // stable while transforming/animating objects (prevents the grid "moving with the object").
@@ -36,6 +43,15 @@ impl EditorRenderController {
 
         // Allow pitch both directions, but keep away from singularities.
         orbit.pitch = orbit.pitch.clamp(-Self::MAX_PITCH_ABS, Self::MAX_PITCH_ABS);
+    }
+
+    #[inline]
+    fn grid_spacing(camera_distance: f32) -> f32 {
+        let d = camera_distance.max(0.01);
+        // Quantize to powers of 10 to keep the grid stable while zooming.
+        let base = (d * 0.08).max(0.05);
+        let pow10 = 10.0f32.powf(base.log10().floor());
+        pow10.clamp(0.05, 1000.0)
     }
 
     #[inline]
@@ -409,12 +425,10 @@ impl<E: Send + 'static> Module<E> for EditorRenderController {
                 self.scene_bridge.set_selection(picked);
             }
 
-            let grid_settings = self.scene_bridge.grid_settings();
-
             r.begin_render_target(
                 BeginRenderTargetDesc::new(rt)
                     .with_clear_depth(1.0)
-                    .with_clear_color(grid_settings.background_color),
+                    .with_clear_color(Self::GRID_BACKGROUND_COLOR),
             )?;
             r.set_viewport(Viewport::full(extent))?;
             r.set_scissor(RectI32::new(0, 0, vp_w as i32, vp_h as i32))?;
@@ -428,31 +442,18 @@ impl<E: Send + 'static> Module<E> for EditorRenderController {
                     &mut **r,
                     lit.bgl,
                     GridMeshParams {
-                        half_lines: grid_settings.half_lines as i32,
-                        major_every: grid_settings.major_every as i32,
-                        minor_color: grid_settings.minor_color,
-                        major_color: grid_settings.major_color,
+                        half_lines: Self::GRID_HALF_LINES,
+                        major_every: Self::GRID_MAJOR_EVERY,
+                        minor_color: Self::GRID_MINOR_COLOR,
+                        major_color: Self::GRID_MAJOR_COLOR,
                     },
                 )?;
-                let spacing = grid_settings.effective_spacing(self.orbit.distance);
-
-                // IMPORTANT (Editor UX): the grid is a world-space reference plane.
-                // It must NOT follow selection/orbit target, otherwise transforming objects
-                // makes the grid appear to "move with the object".
-                // If you ever want an "infinite grid" variant, expose it as an explicit toggle.
-                let (cx, cz) = if grid_settings.follow_camera {
-                    (
-                        (self.orbit.target.x / spacing).round() * spacing,
-                        (self.orbit.target.z / spacing).round() * spacing,
-                    )
-                } else {
-                    (0.0, 0.0)
-                };
+                let spacing = Self::grid_spacing(self.orbit.distance);
 
                 let grid_model = Mat4::from_scale_rotation_translation(
                     Vec3::new(spacing, 1.0, spacing),
                     Quat::IDENTITY,
-                    Vec3::new(cx, 0.0, cz),
+                    Vec3::ZERO,
                 );
 
                 // Grid uses its own vertex colors; base_color is irrelevant but kept defined.

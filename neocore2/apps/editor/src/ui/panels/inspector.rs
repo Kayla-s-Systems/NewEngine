@@ -7,8 +7,6 @@ use newengine_platform_winit::egui;
 use newengine_primitives::Primitive;
 use newengine_scene::components::Name;
 
-use crate::scene_bridge::GridSettings;
-
 use super::super::EditorUiBuild;
 
 pub(crate) fn draw(me: &mut EditorUiBuild, ctx: &egui::Context) {
@@ -20,64 +18,7 @@ pub(crate) fn draw(me: &mut EditorUiBuild, ctx: &egui::Context) {
             ui.heading("Inspector");
             ui.add_space(6.0);
 
-            // Viewport / Grid (editor-only).
-            {
-                ui.group(|ui| {
-                    ui.label(egui::RichText::new("Viewport").strong());
-                    ui.add_space(4.0);
-
-                    let mut gs: GridSettings = me.scene_bridge.grid_settings();
-                    let mut changed = false;
-
-                    changed |= ui.checkbox(&mut gs.auto_spacing, "Auto grid spacing").changed();
-
-                    ui.add_enabled_ui(!gs.auto_spacing, |ui| {
-                        ui.horizontal(|ui| {
-                            ui.label("Spacing");
-                            changed |= ui
-                                .add(egui::DragValue::new(&mut gs.spacing).speed(0.05).range(0.001..=10_000.0))
-                                .changed();
-                        });
-                    });
-
-                    ui.horizontal(|ui| {
-                        ui.label("Extent");
-                        changed |= ui
-                            .add(egui::DragValue::new(&mut gs.half_lines).speed(1).range(8..=4096))
-                            .changed();
-                        ui.label("half-lines");
-                    });
-
-                    ui.horizontal(|ui| {
-                        ui.label("Major every");
-                        changed |= ui
-                            .add(egui::DragValue::new(&mut gs.major_every).speed(1).range(1..=256))
-                            .changed();
-                    });
-
-                    ui.horizontal(|ui| {
-                        ui.label("Minor");
-                        changed |= ui.color_edit_button_rgba_unmultiplied(&mut gs.minor_color).changed();
-                    });
-
-                    ui.horizontal(|ui| {
-                        ui.label("Major");
-                        changed |= ui.color_edit_button_rgba_unmultiplied(&mut gs.major_color).changed();
-                    });
-
-                    ui.horizontal(|ui| {
-                        ui.label("Background");
-                        changed |= ui
-                            .color_edit_button_rgba_unmultiplied(&mut gs.background_color)
-                            .changed();
-                    });
-
-                    if changed {
-                        me.scene_bridge.set_grid_settings(gs);
-                    }
-                });
-                ui.add_space(8.0);
-            }
+            // Viewport controls intentionally removed: grid is an editor overlay with fixed defaults.
 
             let sel_count = me.editor.selection.len();
             let selected = me.editor.selection.primary();
@@ -219,6 +160,34 @@ pub(crate) fn draw(me: &mut EditorUiBuild, ctx: &egui::Context) {
                             ui.label("Roughness");
                             changed |= ui
                                 .add(egui::Slider::new(&mut desc.roughness, 0.02..=1.0))
+                                .changed();
+                        });
+
+                        ui.horizontal(|ui| {
+                            ui.label("Emissive");
+                            changed |= ui
+                                .color_edit_button_rgb(&mut desc.emissive)
+                                .changed();
+                        });
+
+                        ui.horizontal(|ui| {
+                            ui.label("Normal scale");
+                            changed |= ui
+                                .add(egui::Slider::new(&mut desc.normal_scale, 0.0..=4.0))
+                                .changed();
+                        });
+
+                        ui.horizontal(|ui| {
+                            ui.label("AO strength");
+                            changed |= ui
+                                .add(egui::Slider::new(&mut desc.occlusion_strength, 0.0..=1.0))
+                                .changed();
+                        });
+
+                        ui.horizontal(|ui| {
+                            ui.label("Alpha cutoff");
+                            changed |= ui
+                                .add(egui::Slider::new(&mut desc.alpha_cutoff, 0.0..=1.0))
                                 .changed();
                         });
 

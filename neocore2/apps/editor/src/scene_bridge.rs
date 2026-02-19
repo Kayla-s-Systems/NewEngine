@@ -82,52 +82,8 @@ struct SceneQueue {
     cmds: Vec<SceneCommand>,
 }
 
-#[derive(Debug, Clone, Copy)]
-pub struct GridSettings {
-    pub auto_spacing: bool,
-    pub spacing: f32,
-    pub follow_camera: bool,
-    pub half_lines: u32,
-    pub major_every: u32,
-    pub minor_color: [f32; 4],
-    pub major_color: [f32; 4],
-    pub background_color: [f32; 4],
-}
-
-impl Default for GridSettings {
-    #[inline]
-    fn default() -> Self {
-        // Neutral, Blender-like defaults: readable grid, not “space”.
-        Self {
-            auto_spacing: true,
-            spacing: 1.0,
-            follow_camera: false,
-            half_lines: 80,
-            major_every: 10,
-            minor_color: [0.32, 0.32, 0.34, 1.0],
-            major_color: [0.45, 0.45, 0.48, 1.0],
-            background_color: [0.10, 0.10, 0.11, 1.0],
-        }
-    }
-}
-
-impl GridSettings {
-    /// Compute the effective grid spacing for the current camera distance.
-    ///
-    /// This keeps renderer logic data-driven and avoids hardcoded grid math spread across modules.
-    #[inline]
-    pub fn effective_spacing(&self, camera_distance: f32) -> f32 {
-        if self.auto_spacing {
-            let d = camera_distance.max(0.01);
-            // Heuristic: quantize to powers of 10 to keep the grid stable while zooming.
-            let base = (d * 0.08).max(0.05);
-            let pow10 = 10.0f32.powf(base.log10().floor());
-            pow10.clamp(0.05, 1000.0)
-        } else {
-            self.spacing.max(0.0001)
-        }
-    }
-}
+// Grid is an editor overlay with fixed defaults. We intentionally avoid exposing runtime tuning
+// knobs from the scene layer to keep render world clean and deterministic.
 
 /// Thread-safe bridge between UI and the scene world.
 ///
@@ -140,7 +96,6 @@ pub struct SceneBridge {
     selection: Arc<Mutex<Option<EntityId>>>,
     primitives: Arc<RwLock<PrimitiveRegistry>>,
     materials: Arc<RwLock<MaterialRegistry>>,
-    grid_settings: Arc<Mutex<GridSettings>>,
 }
 
 impl SceneBridge {
@@ -154,7 +109,6 @@ impl SceneBridge {
             selection: Arc::new(Mutex::new(None)),
             primitives: Arc::new(RwLock::new(PrimitiveRegistry::with_builtins())),
             materials: Arc::new(RwLock::new(MaterialRegistry::with_builtins())),
-            grid_settings: Arc::new(Mutex::new(GridSettings::default())),
         }
     }
 
@@ -200,18 +154,6 @@ impl SceneBridge {
     #[inline]
     pub fn scene(&self) -> Arc<RwLock<Scene>> {
         Arc::clone(&self.scene)
-    }
-
-    /// Get current grid settings snapshot.
-    #[inline]
-    pub fn grid_settings(&self) -> GridSettings {
-        *self.grid_settings.lock()
-    }
-
-    /// Replace grid settings (editor-side).
-    #[inline]
-    pub fn set_grid_settings(&self, settings: GridSettings) {
-        *self.grid_settings.lock() = settings;
     }
 
     #[inline]
@@ -433,6 +375,37 @@ impl SceneBridge {
                     }
                 }
             }
+
+            // Hard invariant for renderable entities: if an entity has a `Primitive`, it must have
+            // a valid `MaterialRef`. This prepares the scene for future renderables (meshes, models)
+            // and removes fragile fallback logic from the renderer.
+            // Hard invariant for renderable entities: if an entity has a `Primitive`, it must have
+            // a valid `MaterialRef`. This prepares the scene for future renderables (meshes, models)
+            // and removes fragile fallback logic from the renderer.
+            let default_mat = self
+                .materials
+                .read()
+                .register_named("Default", MaterialDescriptor::default());
+
+            let world = scene.world_mut();
+
+            // Phase 1: collect (read-only)
+            let mut fix_list: Vec<EntityId> = Vec::new();
+            for (e, _p) in world.query::<Primitive>() {
+                let needs_fix = match world.get::<MaterialRef>(e) {
+                    None => true,
+                    Some(mr) => !mr.id.is_valid(),
+                };
+                if needs_fix {
+                    fix_list.push(e);
+                }
+            }
+
+            // Phase 2: apply (mutable)
+            for e in fix_list {
+                let _ = world.insert(e, MaterialRef { id: default_mat });
+            }
+
         } // scene write lock dropped here
 
         if let Some(sel) = pending_selection {
