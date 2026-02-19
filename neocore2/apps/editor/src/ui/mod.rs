@@ -1,6 +1,7 @@
 #![forbid(unsafe_op_in_unsafe_fn)]
 
 mod camera;
+mod icons;
 mod panels;
 mod util;
 
@@ -59,6 +60,8 @@ pub struct EditorUiBuild {
     pub(crate) plugin_manager: Arc<Mutex<PluginManagerUi>>,
 
     pub(crate) ui_hub: UiHub,
+
+    pub(crate) icons: icons::EditorIconLoader,
 
     // Orbit interaction (UI-driven, not via global input plugin).
     pub(crate) last_drag_pos: Option<egui::Pos2>,
@@ -124,6 +127,8 @@ impl EditorUiBuild {
             plugins_bridge: Arc::clone(&plugins_bridge),
             plugin_manager: Arc::clone(&plugin_manager),
             ui_hub: UiHub::new(),
+
+            icons: icons::EditorIconLoader::new(),
 
             last_drag_pos: None,
 
@@ -203,6 +208,9 @@ impl EditorUiBuild {
         let Some(ctx) = ctx_any.downcast_mut::<egui::Context>() else {
             return;
         };
+
+        // Keep editor icon textures hot and fully driven by AssetManager.
+        self.icons.pump(ctx);
 
         let _maybe_doc = {
             self.shared_doc

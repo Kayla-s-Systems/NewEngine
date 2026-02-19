@@ -1,5 +1,6 @@
 #![forbid(unsafe_op_in_unsafe_fn)]
 
+use newengine_lighting::{DirectionalLight, PointLight};
 use newengine_platform_winit::egui;
 use newengine_primitives::Primitive;
 use newengine_scene::components::Name;
@@ -34,6 +35,14 @@ pub(crate) fn draw(me: &mut EditorUiBuild, ctx: &egui::Context) {
 
             egui::ScrollArea::vertical().auto_shrink([false; 2]).show(ui, |ui| {
                 for (name, e, has_prim) in items {
+                    let icon_kind = if w.get::<DirectionalLight>(e).is_some() {
+                        Some(crate::ui::icons::EditorIconKind::DirectionalLight)
+                    } else if w.get::<PointLight>(e).is_some() {
+                        Some(crate::ui::icons::EditorIconKind::PointLight)
+                    } else {
+                        None
+                    };
+
                     let mut label = name;
                     if has_prim {
                         label.push_str("  [Prim]");
@@ -41,7 +50,23 @@ pub(crate) fn draw(me: &mut EditorUiBuild, ctx: &egui::Context) {
 
                     let is_sel = me.editor.selection.contains(e);
                     let is_primary = primary == Some(e);
-                    let sel = ui.selectable_label(is_sel, label);
+
+                    let sel = ui
+                        .horizontal(|ui| {
+                            if let Some(kind) = icon_kind {
+                                if let Some(tid) = me.icons.tex_id(kind) {
+                                    let st = egui::load::SizedTexture::new(tid, egui::vec2(16.0, 16.0));
+                                    ui.image(st);
+                                } else {
+                                    ui.add_space(16.0);
+                                }
+                            } else {
+                                ui.add_space(16.0);
+                            }
+
+                            ui.selectable_label(is_sel, label)
+                        })
+                        .inner;
 
                     if sel.clicked() {
                         if mods.command {

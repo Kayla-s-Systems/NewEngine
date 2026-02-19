@@ -91,8 +91,25 @@ pub(crate) fn draw(me: &mut EditorUiBuild, ctx: &egui::Context) {
                     .width(130.0)
                     .selected_text(current_label)
                     .show_ui(ui, |ui| {
-                        ui.selectable_value(&mut me.selected_light_kind, LightSpawnKind::Directional, "Directional");
-                        ui.selectable_value(&mut me.selected_light_kind, LightSpawnKind::Point, "Point");
+                        ui.horizontal(|ui| {
+                            if let Some(tid) = me.icons.tex_id(crate::ui::icons::EditorIconKind::DirectionalLight) {
+                                let st = egui::load::SizedTexture::new(tid, egui::vec2(16.0, 16.0));
+                                ui.image(st);
+                            } else {
+                                ui.add_space(16.0);
+                            }
+                            ui.selectable_value(&mut me.selected_light_kind, LightSpawnKind::Directional, "Directional");
+                        });
+
+                        ui.horizontal(|ui| {
+                            if let Some(tid) = me.icons.tex_id(crate::ui::icons::EditorIconKind::PointLight) {
+                                let st = egui::load::SizedTexture::new(tid, egui::vec2(16.0, 16.0));
+                                ui.image(st);
+                            } else {
+                                ui.add_space(16.0);
+                            }
+                            ui.selectable_value(&mut me.selected_light_kind, LightSpawnKind::Point, "Point");
+                        });
                     });
 
                 if ui.button("Add Light").clicked() {

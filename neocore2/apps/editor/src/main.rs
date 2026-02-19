@@ -12,6 +12,7 @@ use newengine_modules_render_vulkan_ash::VulkanAshRenderModule;
 use newengine_platform_winit::app::config::WinitAppIcon;
 use newengine_platform_winit::{run_winit_app_with_config, WinitAppConfig, WinitWindowPlacement};
 
+use newengine_assets::asset_access::AssetService;
 use newengine_assets::{wait_ready, AssetAccess, AssetServiceClient};
 use newengine_ui::markup::UiMarkupDoc;
 use newengine_ui::UiBuildFn;
@@ -195,6 +196,53 @@ fn main() -> EngineResult<()> {
 
     // 2) Load plugins BEFORE creating winit (required: providers must exist).
     engine.load_plugins_once()?;
+
+    // 2.1) Mount editor-local assets directory into AssetManager.
+    // This keeps the editor self-contained: icons, UI markup, shader fallbacks, etc.
+    {
+        let assets = AssetServiceClient::new(newengine_core::plugins::default_host_api());
+
+        fn try_mount(assets: &AssetServiceClient, path: &std::path::Path) {
+            if !path.is_dir() {
+                return;
+            }
+            let p = path.to_string_lossy().to_string();
+            match assets.mount_dir(&p) {
+                Ok(()) => {
+                    log::debug!("asset.mount_dir ok path='{p}'");
+                }
+                Err(e) => {
+                    log::warn!("asset.mount_dir failed path='{p}' err='{e}'");
+                }
+            }
+        }
+
+        // 1) Explicit override.
+        if let Ok(p) = std::env::var("NEWENGINE_EDITOR_ASSETS_DIR") {
+            try_mount(&assets, std::path::Path::new(&p));
+        }
+
+        // 2) Next to the executable.
+        if let Ok(exe) = std::env::current_exe() {
+            if let Some(dir) = exe.parent() {
+                try_mount(&assets, &dir.join("assets"));
+            }
+        }
+
+        // 3) Dev mode: search for `apps/editor/assets` upwards.
+        if let Ok(exe) = std::env::current_exe() {
+            let mut cur = exe.parent().map(|p| p.to_path_buf());
+            for _ in 0..6 {
+                let Some(base) = cur.clone() else { break };
+                let cand = base.join("apps").join("editor").join("assets");
+                if cand.is_dir() {
+                    try_mount(&assets, &cand);
+                    break;
+                }
+                cur = base.parent().map(|p| p.to_path_buf());
+            }
+        }
+    }
 
     // 3) Resolve window icon via AssetManager service.
     let icon = try_load_window_icon(&startup);

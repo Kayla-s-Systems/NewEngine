@@ -15,6 +15,8 @@ use newengine_scene::{components::SceneRoot, SceneState};
 use newengine_scene::{spawn_named, Scene};
 use newengine_transform::Transform;
 
+use newengine_lighting::{AmbientLight, DirectionalLight, PointLight};
+
 use crate::scene_bootstrap::bootstrap_editor_scene;
 
 /// Scene commands produced by UI/editor tools and consumed by the render/controller side.
@@ -477,7 +479,158 @@ impl SceneBridge {
                         // Registry update is editor-side shared state; do not touch the world.
                         let _ = self.materials.read().set_desc(material, desc);
                     }
-                    _ => {}
+
+                    SceneCommand::SpawnDirectionalLight {
+                        name,
+                        position,
+                        direction_ws,
+                    } => {
+                        let root_opt = scene.root();
+                        let cam_opt = scene.active_camera();
+                        let world = scene.world_mut();
+
+                        let root = match root_opt {
+                            Some(r) => r,
+                            None => {
+                                let r = spawn_named(world, "Root");
+                                let _ = world.insert(r, SceneRoot);
+                                if world.resource::<SceneState>().is_none() {
+                                    world.insert_resource(SceneState::new(Some(r), cam_opt));
+                                } else if let Some(st) = world.resource_mut::<SceneState>() {
+                                    st.root = Some(r);
+                                }
+                                r
+                            }
+                        };
+
+                        let e = spawn_named(world, name);
+                        let _ = newengine_transform::set_parent(world, e, Some(root));
+                        let mut dl = DirectionalLight::default();
+                        dl.direction_ws = direction_ws;
+                        let _ = world.insert(e, dl);
+
+                        if let Some(t) = world.get_mut_tracked::<Transform>(e) {
+                            t.position = Vec3::new(position[0], position[1], position[2]);
+                        }
+
+                        log::debug!(
+                            "scene: spawned DirectionalLight id={:016x} pos=({:.3},{:.3},{:.3}) dir=({:.3},{:.3},{:.3})",
+                            e.stable_u64(),
+                            position[0],
+                            position[1],
+                            position[2],
+                            direction_ws[0],
+                            direction_ws[1],
+                            direction_ws[2]
+                        );
+                        pending_selection = Some(Some(e));
+                    }
+
+                    SceneCommand::SpawnPointLight { name, position } => {
+                        let root_opt = scene.root();
+                        let cam_opt = scene.active_camera();
+                        let world = scene.world_mut();
+
+                        let root = match root_opt {
+                            Some(r) => r,
+                            None => {
+                                let r = spawn_named(world, "Root");
+                                let _ = world.insert(r, SceneRoot);
+                                if world.resource::<SceneState>().is_none() {
+                                    world.insert_resource(SceneState::new(Some(r), cam_opt));
+                                } else if let Some(st) = world.resource_mut::<SceneState>() {
+                                    st.root = Some(r);
+                                }
+                                r
+                            }
+                        };
+
+                        let e = spawn_named(world, name);
+                        let _ = newengine_transform::set_parent(world, e, Some(root));
+                        let _ = world.insert(e, PointLight::default());
+
+                        if let Some(t) = world.get_mut_tracked::<Transform>(e) {
+                            t.position = Vec3::new(position[0], position[1], position[2]);
+                        }
+
+                        log::debug!(
+                            "scene: spawned PointLight id={:016x} pos=({:.3},{:.3},{:.3})",
+                            e.stable_u64(),
+                            position[0],
+                            position[1],
+                            position[2]
+                        );
+                        pending_selection = Some(Some(e));
+                    }
+
+                    SceneCommand::SetAmbientLight { color, intensity } => {
+                        let world = scene.world_mut();
+                        match world.resource_mut::<AmbientLight>() {
+                            Some(a) => {
+                                a.color = color;
+                                a.intensity = intensity;
+                            }
+                            None => {
+                                world.insert_resource(AmbientLight { color, intensity });
+                            }
+                        }
+                        log::debug!(
+                            "scene: set AmbientLight color=({:.3},{:.3},{:.3}) intensity={:.3}",
+                            color[0], color[1], color[2], intensity
+                        );
+                    }
+
+                    SceneCommand::SetDirectionalLight {
+                        entity,
+                        direction_ws,
+                        color,
+                        intensity,
+                    } => {
+                        let world = scene.world_mut();
+                        if let Some(dl) = world.get_mut_tracked::<DirectionalLight>(entity) {
+                            dl.direction_ws = direction_ws;
+                            dl.color = color;
+                            dl.intensity = intensity;
+                            log::debug!(
+                                "scene: set DirectionalLight id={:016x} dir=({:.3},{:.3},{:.3}) color=({:.3},{:.3},{:.3}) intensity={:.3}",
+                                entity.stable_u64(),
+                                direction_ws[0], direction_ws[1], direction_ws[2],
+                                color[0], color[1], color[2],
+                                intensity
+                            );
+                        } else {
+                            log::warn!(
+                                "scene: SetDirectionalLight ignored (missing component) id={:016x}",
+                                entity.stable_u64()
+                            );
+                        }
+                    }
+
+                    SceneCommand::SetPointLight {
+                        entity,
+                        color,
+                        intensity,
+                        range,
+                    } => {
+                        let world = scene.world_mut();
+                        if let Some(pl) = world.get_mut_tracked::<PointLight>(entity) {
+                            pl.color = color;
+                            pl.intensity = intensity;
+                            pl.range = range;
+                            log::debug!(
+                                "scene: set PointLight id={:016x} color=({:.3},{:.3},{:.3}) intensity={:.3} range={:.3}",
+                                entity.stable_u64(),
+                                color[0], color[1], color[2],
+                                intensity,
+                                range
+                            );
+                        } else {
+                            log::warn!(
+                                "scene: SetPointLight ignored (missing component) id={:016x}",
+                                entity.stable_u64()
+                            );
+                        }
+                    }
                 }
             }
 

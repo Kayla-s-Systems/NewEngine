@@ -73,6 +73,14 @@ impl PackedLights {
         }
         pts.sort_by(|a, b| a.0.cmp(&b.0));
 
+        if pts.len() > MAX_POINT_LIGHTS {
+            log::warn!(
+                "render: point lights truncated: requested={} max={} (deterministic keep=min stable id)",
+                pts.len(),
+                MAX_POINT_LIGHTS
+            );
+        }
+
         let mut out = Self {
             ambient,
             dir_dir_intensity,
@@ -86,6 +94,15 @@ impl PackedLights {
             out.point_color_intensity[i] = pts[i].2;
         }
         out.point_count_pad = [n as f32, 0.0, 0.0, 0.0];
+
+        if log::log_enabled!(log::Level::Debug) {
+            log::debug!(
+                "render: lights packed amb_intensity={:.3} dir_intensity={:.3} point_count={}",
+                out.ambient[3],
+                out.dir_dir_intensity[3],
+                n
+            );
+        }
         out
     }
 
