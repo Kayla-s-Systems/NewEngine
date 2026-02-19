@@ -1,6 +1,6 @@
 #![forbid(unsafe_op_in_unsafe_fn)]
 
-use ahash::AHashMap;
+use newengine_math::collections::FxHashMap;
 use smallvec::SmallVec;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -20,10 +20,10 @@ pub struct UiEvent {
 
 #[derive(Debug, Default)]
 pub struct UiState {
-    pub strings: AHashMap<String, String>,
-    pub clicked: AHashMap<String, bool>,
-    pub vars: AHashMap<String, String>,
-    pub unknown_tags: AHashMap<String, u32>,
+    pub strings: FxHashMap<String, String>,
+    pub clicked: FxHashMap<String, bool>,
+    pub vars: FxHashMap<String, String>,
+    pub unknown_tags: FxHashMap<String, u32>,
 
     events: Vec<UiEvent>,
 }

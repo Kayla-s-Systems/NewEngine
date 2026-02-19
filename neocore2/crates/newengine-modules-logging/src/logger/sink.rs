@@ -2,11 +2,12 @@
 
 use std::{
     cmp::Ordering,
+    collections::{HashMap, VecDeque},
     fs::{File, OpenOptions},
     io::{self, BufWriter, Write},
     path::{Path, PathBuf},
     sync::Mutex,
-    time::{SystemTime, UNIX_EPOCH},
+    time::{Duration, Instant, SystemTime, UNIX_EPOCH},
 };
 
 use crate::logger::output::LogOutput;
@@ -62,6 +63,211 @@ impl Write for LockedFileWriter {
 pub struct TeeWriter {
     console: LogOutput,
     file: Box<dyn Write + Send>,
+}
+
+pub struct ConsoleWriter {
+    console: LogOutput,
+}
+
+impl ConsoleWriter {
+    #[inline]
+    pub fn new(console: LogOutput) -> Self {
+        Self { console }
+    }
+}
+
+impl Write for ConsoleWriter {
+    #[inline]
+    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+        match self.console {
+            LogOutput::Stdout => io::stdout().lock().write_all(buf)?,
+            LogOutput::Stderr => io::stderr().lock().write_all(buf)?,
+        }
+        Ok(buf.len())
+    }
+
+    #[inline]
+    fn flush(&mut self) -> io::Result<()> {
+        match self.console {
+            LogOutput::Stdout => io::stdout().lock().flush(),
+            LogOutput::Stderr => io::stderr().lock().flush(),
+        }
+    }
+}
+
+/// Logger-level deduplication wrapper.
+///
+/// Suppresses repeated *formatted* log lines within a time window. The key is derived from the
+/// formatted line with the timestamp prefix removed (best-effort), so it works with env_logger
+/// default formatting without requiring any record-level hooks.
+///
+/// This is designed to stop per-frame spam (render telemetry) from flooding logs.
+pub struct DedupWriter<W: Write> {
+    inner: W,
+    st: Mutex<DedupState>,
+}
+
+struct DedupState {
+    window: Duration,
+    capacity: usize,
+    buf: Vec<u8>,
+    map: HashMap<u64, DedupEntry>,
+    lru: VecDeque<u64>,
+}
+
+struct DedupEntry {
+    last_emit: Instant,
+    suppressed: u32,
+}
+
+impl<W: Write> DedupWriter<W> {
+    pub fn new(inner: W, window: Duration, capacity: usize) -> Self {
+        Self {
+            inner,
+            st: Mutex::new(DedupState {
+                window,
+                capacity: capacity.max(16),
+                buf: Vec::with_capacity(4096),
+                map: HashMap::new(),
+                lru: VecDeque::new(),
+            }),
+        }
+    }
+
+    #[inline]
+    fn key_from_line(line: &[u8]) -> u64 {
+        // Best-effort: strip timestamp prefix by finding the first occurrence of a level token.
+        // This matches env_logger default format: "<ts> <LEVEL> ...: <msg>".
+        const TOKENS: [&[u8]; 5] = [b" TRACE ", b" DEBUG ", b" INFO ", b" WARN ", b" ERROR "];
+        let mut start = 0usize;
+        for t in TOKENS {
+            if let Some(i) = find_subslice(line, t) {
+                start = i + 1; // keep leading space before LEVEL out
+                break;
+            }
+        }
+        let slice = &line[start..];
+        use std::hash::{Hash, Hasher};
+        let mut h = std::collections::hash_map::DefaultHasher::new();
+        slice.hash(&mut h);
+        h.finish()
+    }
+
+    fn flush_line_locked(st: &mut DedupState, inner: &mut W, line: &[u8]) -> io::Result<()> {
+        let now = Instant::now();
+        let key = Self::key_from_line(line);
+
+        if let Some(e) = st.map.get_mut(&key) {
+            let within = now.duration_since(e.last_emit) <= st.window;
+            if within {
+                e.suppressed = e.suppressed.saturating_add(1);
+                touch_lru(&mut st.lru, key);
+                return Ok(());
+            }
+
+            // Window elapsed: emit summary (if any), then emit line.
+            if e.suppressed > 0 {
+                write_suppressed(inner, e.suppressed)?;
+                e.suppressed = 0;
+            }
+            e.last_emit = now;
+            touch_lru(&mut st.lru, key);
+            inner.write_all(line)?;
+            inner.write_all(b"\n")?;
+            return Ok(());
+        }
+
+        // New key: ensure capacity.
+        st.map.insert(
+            key,
+            DedupEntry {
+                last_emit: now,
+                suppressed: 0,
+            },
+        );
+        st.lru.push_back(key);
+        evict_if_needed(st);
+
+        inner.write_all(line)?;
+        inner.write_all(b"\n")?;
+        Ok(())
+    }
+}
+
+impl<W: Write> Write for DedupWriter<W> {
+    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+        let mut st = self
+            .st
+            .lock()
+            .map_err(|_| io::Error::new(io::ErrorKind::Other, "dedup log mutex poisoned"))?;
+
+        st.buf.extend_from_slice(buf);
+
+        while let Some(pos) = memchr_nl(&st.buf) {
+            let line = st.buf.drain(..pos).collect::<Vec<u8>>();
+            // drop '\n'
+            let _ = st.buf.drain(..1);
+            if !line.is_empty() {
+                DedupWriter::<W>::flush_line_locked(&mut st, &mut self.inner, &line)?;
+            }
+        }
+
+        Ok(buf.len())
+    }
+
+    fn flush(&mut self) -> io::Result<()> {
+        // Flush any trailing partial line as-is (no dedup).
+        let mut st = self
+            .st
+            .lock()
+            .map_err(|_| io::Error::new(io::ErrorKind::Other, "dedup log mutex poisoned"))?;
+
+        if !st.buf.is_empty() {
+            self.inner.write_all(&st.buf)?;
+            st.buf.clear();
+        }
+        self.inner.flush()
+    }
+}
+
+#[inline]
+fn write_suppressed<W: Write>(w: &mut W, n: u32) -> io::Result<()> {
+    // Keep this short and grep-friendly.
+    // We intentionally don't try to mimic timestamp formatting here.
+    writeln!(w, "[dedup] suppressed {} repeated lines", n)
+}
+
+#[inline]
+fn evict_if_needed(st: &mut DedupState) {
+    while st.map.len() > st.capacity {
+        if let Some(k) = st.lru.pop_front() {
+            st.map.remove(&k);
+        } else {
+            break;
+        }
+    }
+}
+
+#[inline]
+fn touch_lru(lru: &mut VecDeque<u64>, key: u64) {
+    // Small O(n) is fine; capacity is bounded.
+    if let Some(pos) = lru.iter().position(|&k| k == key) {
+        lru.remove(pos);
+    }
+    lru.push_back(key);
+}
+
+#[inline]
+fn memchr_nl(buf: &[u8]) -> Option<usize> {
+    buf.iter().position(|&b| b == b'\n')
+}
+
+#[inline]
+fn find_subslice(hay: &[u8], needle: &[u8]) -> Option<usize> {
+    if needle.is_empty() || hay.len() < needle.len() {
+        return None;
+    }
+    hay.windows(needle.len()).position(|w| w == needle)
 }
 
 impl TeeWriter {

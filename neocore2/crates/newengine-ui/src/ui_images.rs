@@ -23,7 +23,16 @@ impl UiImageLoader {
 
     #[cfg(feature = "egui")]
     #[inline]
-    pub fn pump(&mut self, _ctx: &egui::Context, _assets: &dyn AssetAccess, _state: &mut crate::markup::UiState) {}
+    pub fn pump(&mut self, _ctx: &egui::Context, _assets: &dyn AssetAccess) {}
+
+    #[cfg(feature = "egui")]
+    #[inline]
+    pub fn pump_into_state(&mut self, _ctx: &egui::Context, _assets: &dyn AssetAccess, _state: &mut crate::markup::UiState) {}
+
+    #[inline]
+    pub fn tex_id_u64(&self, _key: &str) -> Option<u64> {
+        None
+    }
 }
 
 // -------------------------------------------------------------------------------------------------
@@ -33,8 +42,8 @@ impl UiImageLoader {
 #[cfg(all(feature = "egui", feature = "images"))]
 mod with_images {
     use super::*;
-    use ahash::AHashMap;
     use image::GenericImageView;
+    use newengine_math::collections::FxHashMap;
 
     type TexHandle = egui::TextureHandle;
 
@@ -49,12 +58,13 @@ mod with_images {
     /// 1) `loader.request(assets, "pm.refresh", "ui/icons/refresh.png")`
     /// 2) `loader.pump(ctx, assets, state)`
     /// 3) Markup refers to `$tex.pm.refresh` (a u64).
-    #[derive(Debug, Default)]
+    #[derive(Default)]
     pub struct UiImageLoader {
-        slots: AHashMap<String, Slot>,
+        slots: FxHashMap<String, Slot>,
     }
 
-    #[derive(Debug, Clone)]
+    #[derive(Clone)]
+    #[allow(dead_code)]
     enum Slot {
         Empty { path: String },
         Loading { path: String, id_hex32: String },
@@ -83,9 +93,44 @@ mod with_images {
         /// - `tex.<key>` = u64 (egui TextureId::User)
         /// - `tex.<key>.w` / `tex.<key>.h` = u32 (pixels)
         /// - `tex.<key>.state` = "ready" | "loading" | "failed"
-        pub fn pump(&mut self, ctx: &egui::Context, assets: &dyn AssetAccess, state: &mut crate::markup::UiState) {
+        pub fn pump(&mut self, ctx: &egui::Context, assets: &dyn AssetAccess) {
+            self.pump_internal(ctx, assets, None);
+        }
+
+        /// Same as `pump`, but also publishes `$tex.*` vars into `UiState` for markup-driven UIs.
+        pub fn pump_into_state(
+            &mut self,
+            ctx: &egui::Context,
+            assets: &dyn AssetAccess,
+            state: &mut crate::markup::UiState,
+        ) {
+            self.pump_internal(ctx, assets, Some(state));
+        }
+
+        /// Returns `egui::TextureId::User(u64)` for a ready texture.
+        ///
+        /// Note: `u64 == 0` is a valid id in egui.
+        #[inline]
+        pub fn tex_id_u64(&self, key: &str) -> Option<u64> {
+            match self.slots.get(key)? {
+                Slot::Ready { handle, .. } => match handle.id() {
+                    egui::TextureId::User(u) => Some(u),
+                    _ => None,
+                },
+                _ => None,
+            }
+        }
+
+        fn pump_internal(
+            &mut self,
+            ctx: &egui::Context,
+            assets: &dyn AssetAccess,
+            mut state: Option<&mut crate::markup::UiState>,
+        ) {
             // 1) Advance pending loads.
-            let keys: Vec<String> = self.slots.keys().cloned().collect();
+            // Deterministic pumping order.
+            let mut keys: Vec<String> = self.slots.keys().cloned().collect();
+            keys.sort();
             for k in keys {
                 let slot = self.slots.get_mut(&k).expect("slot must exist");
                 match slot {
@@ -95,15 +140,19 @@ mod with_images {
                                 path: path.clone(),
                                 id_hex32,
                             };
-                            state.set_var(format!("tex.{k}.state"), "loading");
+                            if let Some(s) = state.as_deref_mut() {
+                                s.set_var(format!("tex.{k}.state"), "loading");
+                            }
                         }
                         Err(e) => {
                             *slot = Slot::Failed {
                                 path: path.clone(),
                                 error: e.clone(),
                             };
-                            state.set_var(format!("tex.{k}.state"), "failed");
-                            state.set_var(format!("tex.{k}.error"), e);
+                            if let Some(s) = state.as_deref_mut() {
+                                s.set_var(format!("tex.{k}.state"), "failed");
+                                s.set_var(format!("tex.{k}.error"), e);
+                            }
                         }
                     },
                     Slot::Loading { path, id_hex32 } => {
@@ -123,10 +172,12 @@ mod with_images {
                                             _ => 0,
                                         };
 
-                                        state.set_var(format!("tex.{k}"), id_u64.to_string());
-                                        state.set_var(format!("tex.{k}.w"), w.to_string());
-                                        state.set_var(format!("tex.{k}.h"), h.to_string());
-                                        state.set_var(format!("tex.{k}.state"), "ready");
+                                        if let Some(s) = state.as_deref_mut() {
+                                            s.set_var(format!("tex.{k}"), id_u64.to_string());
+                                            s.set_var(format!("tex.{k}.w"), w.to_string());
+                                            s.set_var(format!("tex.{k}.h"), h.to_string());
+                                            s.set_var(format!("tex.{k}.state"), "ready");
+                                        }
                                         *slot = Slot::Ready { handle, w, h };
                                     }
                                     Err(e) => {
@@ -134,8 +185,10 @@ mod with_images {
                                             path: path.clone(),
                                             error: e.clone(),
                                         };
-                                        state.set_var(format!("tex.{k}.state"), "failed");
-                                        state.set_var(format!("tex.{k}.error"), e);
+                                        if let Some(s) = state.as_deref_mut() {
+                                            s.set_var(format!("tex.{k}.state"), "failed");
+                                            s.set_var(format!("tex.{k}.error"), e);
+                                        }
                                     }
                                 },
                                 Err(e) => {
@@ -143,12 +196,16 @@ mod with_images {
                                         path: path.clone(),
                                         error: e.clone(),
                                     };
-                                    state.set_var(format!("tex.{k}.state"), "failed");
-                                    state.set_var(format!("tex.{k}.error"), e);
+                                    if let Some(s) = state.as_deref_mut() {
+                                        s.set_var(format!("tex.{k}.state"), "failed");
+                                        s.set_var(format!("tex.{k}.error"), e);
+                                    }
                                 }
                             },
                             Ok(crate::AssetState::Loading) | Ok(crate::AssetState::Unloaded) => {
-                                state.set_var(format!("tex.{k}.state"), "loading");
+                                if let Some(s) = state.as_deref_mut() {
+                                    s.set_var(format!("tex.{k}.state"), "loading");
+                                }
                             }
                             Ok(crate::AssetState::Failed) => {
                                 let e = format!("asset failed: {path}");
@@ -156,25 +213,33 @@ mod with_images {
                                     path: path.clone(),
                                     error: e.clone(),
                                 };
-                                state.set_var(format!("tex.{k}.state"), "failed");
-                                state.set_var(format!("tex.{k}.error"), e);
+                                if let Some(s) = state.as_deref_mut() {
+                                    s.set_var(format!("tex.{k}.state"), "failed");
+                                    s.set_var(format!("tex.{k}.error"), e);
+                                }
                             }
                             Err(e) => {
                                 *slot = Slot::Failed {
                                     path: path.clone(),
                                     error: e.clone(),
                                 };
-                                state.set_var(format!("tex.{k}.state"), "failed");
-                                state.set_var(format!("tex.{k}.error"), e);
+                                if let Some(s) = state.as_deref_mut() {
+                                    s.set_var(format!("tex.{k}.state"), "failed");
+                                    s.set_var(format!("tex.{k}.error"), e);
+                                }
                             }
                         }
                     }
                     Slot::Ready { .. } => {
-                        state.set_var(format!("tex.{k}.state"), "ready");
+                        if let Some(s) = state.as_deref_mut() {
+                            s.set_var(format!("tex.{k}.state"), "ready");
+                        }
                     }
                     Slot::Failed { error, .. } => {
-                        state.set_var(format!("tex.{k}.state"), "failed");
-                        state.set_var(format!("tex.{k}.error"), error.clone());
+                        if let Some(s) = state.as_deref_mut() {
+                            s.set_var(format!("tex.{k}.state"), "failed");
+                            s.set_var(format!("tex.{k}.error"), error.clone());
+                        }
                     }
                 }
             }
@@ -192,7 +257,7 @@ mod with_images {
             pixels.push(egui::Color32::from_rgba_unmultiplied(r, g, b, a));
         }
 
-        Ok((egui::ColorImage { size: [w as usize, h as usize], pixels }, w, h))
+        Ok((egui::ColorImage { size: [w as usize, h as usize], source_size: Default::default(), pixels }, w, h))
     }
 }
 

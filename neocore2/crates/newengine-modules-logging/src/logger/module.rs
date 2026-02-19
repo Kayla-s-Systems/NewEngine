@@ -6,7 +6,7 @@ use newengine_core::{EngineResult, Module, ModuleCtx};
 
 use crate::logger::{
     config::ConsoleLoggerConfig,
-    sink::{LockedFileWriter, RollingConfig, RollingFileWriter, TeeWriter},
+    sink::{ConsoleWriter, DedupWriter, LockedFileWriter, RollingConfig, RollingFileWriter, TeeWriter},
 };
 
 pub struct ConsoleLoggerModule {
@@ -54,16 +54,44 @@ impl ConsoleLoggerModule {
             if let Some(w) = file_writer {
                 if self.config.tee {
                     let console = self.config.effective_console_output();
-                    let tee = TeeWriter::new(console, w);
-                    builder.target(Target::Pipe(Box::new(tee)));
+                    let tee: Box<dyn std::io::Write + Send> = if let Some(ms) = self.config.dedup_window_ms {
+                        let dd = DedupWriter::new(
+                            TeeWriter::new(console, w),
+                            std::time::Duration::from_millis(ms),
+                            self.config.dedup_capacity,
+                        );
+                        Box::new(dd)
+                    } else {
+                        Box::new(TeeWriter::new(console, w))
+                    };
+                    builder.target(Target::Pipe(tee));
                 } else {
-                    builder.target(Target::Pipe(w));
+                    let out: Box<dyn std::io::Write + Send> = if let Some(ms) = self.config.dedup_window_ms {
+                        Box::new(DedupWriter::new(
+                            w,
+                            std::time::Duration::from_millis(ms),
+                            self.config.dedup_capacity,
+                        ))
+                    } else {
+                        w
+                    };
+                    builder.target(Target::Pipe(out));
                 }
             } else {
                 builder.target(self.config.effective_console_output().to_env_target());
             }
         } else {
-            builder.target(self.config.effective_console_output().to_env_target());
+            if let Some(ms) = self.config.dedup_window_ms {
+                let console = self.config.effective_console_output();
+                let w = DedupWriter::new(
+                    ConsoleWriter::new(console),
+                    std::time::Duration::from_millis(ms),
+                    self.config.dedup_capacity,
+                );
+                builder.target(Target::Pipe(Box::new(w)));
+            } else {
+                builder.target(self.config.effective_console_output().to_env_target());
+            }
         }
 
         let file_active = self.config.file_path.is_some();

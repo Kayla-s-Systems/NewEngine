@@ -60,7 +60,7 @@ use newengine_math::collections_prelude::*;
 
 Доступны (через `newengine_math::collections::prelude` или `newengine_math::collections_prelude`):
 
-- `FxHashMap / FxHashSet` — **детерминизм + скорость** (фиксированный seed)
+- `FxHashMap / FxHashSet` — **детерминизм + скорость** (фиксированный _seed)
 - `SecureHashMap / SecureHashSet` — **DoS-устойчивость** для untrusted input
 - `BTreeMap / BTreeSet` — **стабильный порядок итерации** (sorted by key)
 - slotmap (`SlotMap`, `SecondaryMap`, `Key`, `new_key_type`) — стабильные generational keys

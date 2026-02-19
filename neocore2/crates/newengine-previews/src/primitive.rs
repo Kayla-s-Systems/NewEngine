@@ -57,22 +57,18 @@ struct GpuMesh {
 struct CpuMesh {
     vertices: Vec<PrimitiveVertex>,
     indices: Vec<u32>,
-    radius: f32,
 }
 
 #[derive(Debug)]
 struct Slot {
-    id: PrimitiveId,
     size: PrimitivePreviewSize,
-
-    radius: f32,
-
     // Allocated lazily on the render thread.
     rt: Option<RenderTargetId>,
     ui_tex: UiTexId,
     mesh: Option<GpuMesh>,
     cpu: Option<CpuMesh>,
 
+    radius: f32,
     seed: u32,
     dirty: bool,
 }
@@ -127,9 +123,10 @@ impl PrimitivePreviewService {
             return slot.ui_tex;
         }
 
-        let (radius, seed) = estimate_radius_and_seed(id);
+        let (radius, _seed) = estimate_radius_and_seed(id);
 
         // Build CPU mesh now (deterministic), upload later (render thread).
+        let (radius, seed) = estimate_radius_and_seed(id);
         let mesh = match self.reg.build_mesh(id) {
             Ok(m) => m,
             Err(_e) => {
@@ -143,17 +140,15 @@ impl PrimitivePreviewService {
         self.slots.insert(
             key,
             Slot {
-                id,
                 size,
-                radius,
                 rt: None,
                 ui_tex: UiTexId(0),
                 mesh: None,
                 cpu: Some(CpuMesh {
                     vertices: mesh.vertices,
                     indices: mesh.indices,
-                    radius,
                 }),
+                radius,
                 seed,
                 dirty: true,
             },
@@ -416,7 +411,7 @@ fn shader_cache_filename(logical_path: &str, stage: ShaderStage, key: &[u8; 32])
         .file_name()
         .and_then(|s| s.to_str())
         .unwrap_or("shader");
-    format!("{stem}.{stage:?}.{}.spv", hex16(key))
+    format!("{stem}.{}.{}.spv", suffix(stage), hex16(key))
 }
 
 fn hex16(key: &[u8; 32]) -> String {

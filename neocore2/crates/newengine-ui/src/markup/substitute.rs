@@ -2,10 +2,10 @@
 
 use std::borrow::Cow;
 
-use ahash::AHashMap;
+use newengine_math::collections::FxHashMap;
 
 #[inline]
-pub fn substitute_vars<'a>(src: &'a str, vars: &AHashMap<String, String>) -> Cow<'a, str> {
+pub fn substitute_vars<'a>(src: &'a str, vars: &FxHashMap<String, String>) -> Cow<'a, str> {
     if !src.contains('$') {
         return Cow::Borrowed(src);
     }

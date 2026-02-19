@@ -71,7 +71,7 @@ impl ShaderBaker {
         }
 
         let compiler = shaderc::Compiler::new()
-            .map_err(|e| VkRenderError::Shader("shaderc: failed to create compiler".to_string()))?;
+            .map_err(|_| VkRenderError::Shader("shaderc: failed to create compiler".to_string()))?;
 
         Ok(Self {
             assets,

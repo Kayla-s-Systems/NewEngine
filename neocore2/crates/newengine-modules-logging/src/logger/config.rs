@@ -31,6 +31,15 @@ pub struct ConsoleLoggerConfig {
     pub roll_max_files: usize,
     /// If set, rotate when UTC day changes; keeps only last N day-files.
     pub roll_keep_days: Option<usize>,
+
+    /// If set (>0), suppress repeated log lines within this time window (milliseconds).
+    ///
+    /// This is a logger-level protection against per-frame spam (e.g. render telemetry),
+    /// and is applied after formatting, so it works for any log producer.
+    pub dedup_window_ms: Option<u64>,
+
+    /// Max number of distinct dedup keys tracked at once (LRU).
+    pub dedup_capacity: usize,
 }
 
 impl Default for ConsoleLoggerConfig {
@@ -155,6 +164,18 @@ impl ConsoleLoggerConfig {
             .and_then(|v| v.trim().parse::<usize>().ok())
             .filter(|&v| v > 0);
 
+        let dedup_window_ms = env::var("NEWENGINE_LOG_DEDUP_WINDOW_MS")
+            .ok()
+            .or_else(|| env::var("NEWENGINE_LOG_DEDUP_MS").ok())
+            .and_then(|v| v.trim().parse::<u64>().ok())
+            .filter(|&v| v > 0);
+
+        let dedup_capacity = env::var("NEWENGINE_LOG_DEDUP_CAPACITY")
+            .ok()
+            .and_then(|v| v.trim().parse::<usize>().ok())
+            .filter(|&v| v > 0)
+            .unwrap_or(2048);
+
         Self {
             filter,
             level,
@@ -172,6 +193,8 @@ impl ConsoleLoggerConfig {
             roll_max_bytes,
             roll_max_files,
             roll_keep_days,
+            dedup_window_ms,
+            dedup_capacity,
         }
     }
 

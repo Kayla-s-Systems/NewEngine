@@ -16,6 +16,7 @@ images = ["dep:image"]
 [dependencies]
 newengine-plugin-api = { path = "../newengine-plugin-api" }
 newengine-assets = { path = "../newengine-assets" }
+newengine-math = { path = "../newengine-math" }
 ahash = "0.8"
 roxmltree = "0.21.1"
 smallvec = "1.13"

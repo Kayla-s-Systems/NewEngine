@@ -77,7 +77,7 @@ fn draw_rotate_axis_rings(
     style: GizmoStyle,
     axes_rot: newengine_math::Quat,
 ) {
-    let Some((c2, c_ndc_z)) = world_to_screen(camera, rect, tr.pos) else {
+    let Some((_c2, c_ndc_z)) = world_to_screen(camera, rect, tr.pos) else {
         return;
     };
 
@@ -167,7 +167,7 @@ fn draw_ring_with_depth_cue(
     let mut cur_front = pts[0].front;
     cur.push(pts[0].p);
 
-    let mut flush = |p: &Painter, cur: &mut Vec<Pos2>, is_front: bool| {
+    let flush = |p: &Painter, cur: &mut Vec<Pos2>, is_front: bool| {
         if cur.len() < 2 {
             cur.clear();
             return;
@@ -203,7 +203,6 @@ fn draw_ring_with_depth_cue(
     };
 
     for w2 in pts.windows(2) {
-        let a = w2[0];
         let b = w2[1];
         if b.front != cur_front {
             cur.push(b.p);
@@ -237,7 +236,6 @@ fn draw_dashed_polyline(p: &Painter, pts: &[Pos2], stroke: Stroke, dash: f32, ga
         let mut t = 0.0;
         if carry > 0.0 {
             t += carry.min(len);
-            carry = 0.0;
         }
 
         while t < len {
@@ -394,25 +392,17 @@ fn draw_rotate_wedge(
     camera: &impl GizmoCamera,
     rect: Rect,
     pivot: newengine_math::Vec3,
-    n: newengine_math::Vec3,
+    _n: newengine_math::Vec3,
     u: newengine_math::Vec3,
     v: newengine_math::Vec3,
     a0: f32,
     a1: f32,
-    view_dir: newengine_math::Vec3,
+    _view_dir: newengine_math::Vec3,
     style: GizmoStyle,
     fill: Color32,
     outline: Stroke,
 ) {
     let radius_w = world_radius_for_screen(camera, rect, pivot, u, style.rotate_radius_pt);
-
-    // Same degeneracy handling as for ring halves.
-    let mut d_plane = view_dir - n * view_dir.dot(n);
-    if d_plane.dot(d_plane) < 1e-6 {
-        d_plane = u;
-    } else {
-        d_plane = d_plane.normalize_or_zero();
-    }
 
     let mut da = a1 - a0;
     while da > core::f32::consts::PI {
