@@ -1,3 +1,5 @@
+use crate::api::{MaterialDomain, MaterialPermutationKey, ShadingModel};
+
 /// Material feature flags.
 ///
 /// Keep these renderer-agnostic; backends map them to pipeline state.
@@ -44,6 +46,12 @@ impl MaterialFlags {
 #[derive(Clone, Copy, Debug, PartialEq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct MaterialDescriptor {
+    /// High-level routing into render graph.
+    pub domain: MaterialDomain,
+
+    /// BRDF / shading family.
+    pub shading_model: ShadingModel,
+
     pub base_color: [f32; 4],
 
     /// Emissive radiance (linear). Kept separate from base_color for PBR-friendly workflows.
@@ -65,10 +73,30 @@ pub struct MaterialDescriptor {
     pub reserved: [u32; 2],
 }
 
+impl MaterialDescriptor {
+    /// Create a deterministic permutation key used by render backends.
+    ///
+    /// Note: This is intentionally a pure function of descriptor fields.
+    #[inline]
+    pub fn permutation_key(&self) -> MaterialPermutationKey {
+        // Layout (little-endian, deterministic across platforms):
+        // [ domain:8 | shading:8 | _pad:16 | flags:32 ]
+        let d = (self.domain as u64) & 0xFF;
+        let s = (self.shading_model as u64) & 0xFF;
+        let f = self.flags.0 as u64;
+
+        let v = (d) | (s << 8) | (f << 32);
+        // Keep 0 reserved.
+        MaterialPermutationKey(if v == 0 { 1 } else { v })
+    }
+}
+
 impl Default for MaterialDescriptor {
     #[inline]
     fn default() -> Self {
         Self {
+            domain: MaterialDomain::Surface,
+            shading_model: ShadingModel::PbrMetallicRoughness,
             base_color: [0.85, 0.85, 0.90, 1.0],
             emissive: [0.0, 0.0, 0.0],
             metallic: 0.0,

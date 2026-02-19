@@ -8,6 +8,8 @@ use core::hash::{Hash, Hasher};
 pub struct MaterialId(pub u64);
 
 impl MaterialId {
+    const INSTANCE_BIT: u64 = 1u64 << 63;
+
     #[inline]
     pub const fn invalid() -> Self {
         Self(0)
@@ -16,6 +18,21 @@ impl MaterialId {
     #[inline]
     pub const fn is_valid(self) -> bool {
         self.0 != 0
+    }
+
+    #[inline]
+    pub const fn is_instance(self) -> bool {
+        (self.0 & Self::INSTANCE_BIT) != 0
+    }
+
+    #[inline]
+    pub const fn is_asset(self) -> bool {
+        self.is_valid() && !self.is_instance()
+    }
+
+    #[inline]
+    pub const fn raw(self) -> u64 {
+        self.0
     }
 }
 
@@ -50,8 +67,28 @@ pub fn fnv1a64(bytes: &[u8]) -> u64 {
 #[inline]
 pub fn material_id_from_name(name: &str) -> MaterialId {
     let mut v = fnv1a64(name.as_bytes());
+    // Keep top bit clear for asset ids.
+    v &= !MaterialId::INSTANCE_BIT;
     if v == 0 {
         v = 1;
+    }
+    MaterialId(v)
+}
+
+/// Create a deterministic instance id from a base material and instance name.
+///
+/// Instance ids have the top bit set to distinguish them from asset ids.
+#[inline]
+pub fn material_instance_id(base: MaterialId, instance_name: &str) -> MaterialId {
+    let mut buf = [0u8; 8];
+    buf.copy_from_slice(&base.0.to_le_bytes());
+    let h1 = fnv1a64(&buf);
+    let h2 = fnv1a64(instance_name.as_bytes());
+
+    let mut v = h1 ^ h2;
+    v |= MaterialId::INSTANCE_BIT;
+    if v == MaterialId::INSTANCE_BIT {
+        v |= 1;
     }
     MaterialId(v)
 }
