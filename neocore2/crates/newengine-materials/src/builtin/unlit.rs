@@ -8,10 +8,14 @@ pub fn register(reg: &MaterialRegistry) {
         "NeutralGrey",
         MaterialDescriptor {
             base_color: [0.55, 0.55, 0.58, 1.0],
+            emissive: [0.0, 0.0, 0.0],
             metallic: 0.0,
             roughness: 0.85,
+            normal_scale: 1.0,
+            occlusion_strength: 1.0,
+            alpha_cutoff: 0.5,
             flags: MaterialFlags::NONE,
-            reserved: [0; 4],
+            reserved: [0; 2],
         },
     );
 
@@ -19,10 +23,14 @@ pub fn register(reg: &MaterialRegistry) {
         "Red",
         MaterialDescriptor {
             base_color: [0.95, 0.25, 0.25, 1.0],
+            emissive: [0.0, 0.0, 0.0],
             metallic: 0.0,
             roughness: 0.75,
+            normal_scale: 1.0,
+            occlusion_strength: 1.0,
+            alpha_cutoff: 0.5,
             flags: MaterialFlags::NONE,
-            reserved: [0; 4],
+            reserved: [0; 2],
         },
     );
 }

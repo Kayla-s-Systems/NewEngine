@@ -31,18 +31,38 @@ impl MaterialFlags {
 
 /// Minimal, forward-compatible material descriptor.
 ///
-/// This starts small and editor-friendly while leaving room for growth.
-/// Texture binding is intentionally not part of the base contract yet.
+/// Design goals:
+/// - Renderer-agnostic (no backend-specific pipeline state).
+/// - Compact, `Copy`, editor-friendly.
+/// - Deterministic defaults.
+/// - Extensible without leaking renderer details into gameplay/scene.
+///
+/// Notes:
+/// - Texture binding is intentionally not part of the base contract yet.
+///   It should be layered via asset-driven material instances once the
+///   asset system provides stable texture handles/ids.
 #[derive(Clone, Copy, Debug, PartialEq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct MaterialDescriptor {
     pub base_color: [f32; 4],
+
+    /// Emissive radiance (linear). Kept separate from base_color for PBR-friendly workflows.
+    pub emissive: [f32; 3],
     pub metallic: f32,
     pub roughness: f32,
+
+    /// Normal map scale (1.0 = unchanged).
+    pub normal_scale: f32,
+
+    /// Ambient occlusion strength (1.0 = full effect).
+    pub occlusion_strength: f32,
+
+    /// Alpha test cutoff for masked materials (used when `ALPHA_TEST` is set).
+    pub alpha_cutoff: f32,
     pub flags: MaterialFlags,
 
     /// Reserved for future expansions (must keep ABI/layout stable within the crate).
-    pub reserved: [u32; 4],
+    pub reserved: [u32; 2],
 }
 
 impl Default for MaterialDescriptor {
@@ -50,10 +70,14 @@ impl Default for MaterialDescriptor {
     fn default() -> Self {
         Self {
             base_color: [0.85, 0.85, 0.90, 1.0],
+            emissive: [0.0, 0.0, 0.0],
             metallic: 0.0,
             roughness: 0.75,
+            normal_scale: 1.0,
+            occlusion_strength: 1.0,
+            alpha_cutoff: 0.5,
             flags: MaterialFlags::NONE,
-            reserved: [0; 4],
+            reserved: [0; 2],
         }
     }
 }
