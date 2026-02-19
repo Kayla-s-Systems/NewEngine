@@ -123,7 +123,7 @@ impl PrimitivePreviewService {
             return slot.ui_tex;
         }
 
-        let (radius, _seed) = estimate_radius_and_seed(id);
+        let (_seed) = estimate_radius_and_seed(id);
 
         // Build CPU mesh now (deterministic), upload later (render thread).
         let (radius, seed) = estimate_radius_and_seed(id);

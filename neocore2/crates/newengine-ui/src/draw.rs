@@ -1,6 +1,7 @@
-use ahash::AHashMap;
 use bytemuck::{Pod, Zeroable};
 use smallvec::SmallVec;
+
+use newengine_math::collections::FxHashMap;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 #[repr(transparent)]
@@ -113,7 +114,7 @@ pub struct UiTexture {
 
 #[derive(Debug, Clone)]
 pub struct UiTextureDelta {
-    pub set: AHashMap<UiTexId, UiTexture>,
+    pub set: FxHashMap<UiTexId, UiTexture>,
     pub patches: Vec<UiTexturePatch>,
     pub free: Vec<UiTexId>,
 }
@@ -122,7 +123,7 @@ impl UiTextureDelta {
     #[inline]
     pub fn new() -> Self {
         Self {
-            set: AHashMap::new(),
+            set: FxHashMap::default(),
             patches: Vec::new(),
             free: Vec::new(),
         }
