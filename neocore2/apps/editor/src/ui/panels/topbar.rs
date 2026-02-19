@@ -1,6 +1,7 @@
 #![forbid(unsafe_op_in_unsafe_fn)]
 
 use newengine_platform_winit::egui;
+use newengine_ui::BuiltinUiIcon;
 
 use super::super::EditorUiBuild;
 
@@ -15,7 +16,7 @@ pub(crate) fn draw(me: &mut EditorUiBuild, ctx: &egui::Context) {
 
             ui.separator();
 
-            if ui.button("New Scene").clicked() {
+            if me.icons.icon_button(ui, BuiltinUiIcon::Reset, "New Scene").clicked() {
                 me.scene_bridge.cmd_new_scene();
             }
 
@@ -61,7 +62,7 @@ pub(crate) fn draw(me: &mut EditorUiBuild, ctx: &egui::Context) {
                         }
                     });
 
-                if ui.button("Add").clicked() {
+                if me.icons.icon_button(ui, BuiltinUiIcon::Load, "Add").clicked() {
                     if let Some(id) = me.selected_primitive {
                         let name = prims
                             .iter()
@@ -69,8 +70,17 @@ pub(crate) fn draw(me: &mut EditorUiBuild, ctx: &egui::Context) {
                             .map(|x| x.0.clone())
                             .unwrap_or_else(|| "Primitive".to_string());
 
-                        me.scene_bridge
-                            .cmd_spawn_primitive(id, name, newengine_math::Vec3::new(0.0, 0.5, 0.0));
+                        me.scene_bridge.cmd_spawn_primitive(
+                            id,
+                            name,
+                            {
+                                // Spawn near camera, not at a hardcoded far-away coordinate.
+                                let (cam_pos, cam_fwd) = me.viewport_bridge.read_camera_spawn();
+                                let mut p = cam_pos + cam_fwd * 3.0;
+                                p.y = p.y.max(0.5);
+                                p
+                            },
+                        );
                     }
                 }
             }
@@ -92,7 +102,7 @@ pub(crate) fn draw(me: &mut EditorUiBuild, ctx: &egui::Context) {
                     .selected_text(current_label)
                     .show_ui(ui, |ui| {
                         ui.horizontal(|ui| {
-                            if let Some(tid) = me.icons.tex_id(crate::ui::icons::EditorIconKind::DirectionalLight) {
+                            if let Some(tid) = me.icons.tex_id(BuiltinUiIcon::LightDirectional) {
                                 let st = egui::load::SizedTexture::new(tid, egui::vec2(16.0, 16.0));
                                 ui.image(st);
                             } else {
@@ -102,7 +112,7 @@ pub(crate) fn draw(me: &mut EditorUiBuild, ctx: &egui::Context) {
                         });
 
                         ui.horizontal(|ui| {
-                            if let Some(tid) = me.icons.tex_id(crate::ui::icons::EditorIconKind::PointLight) {
+                            if let Some(tid) = me.icons.tex_id(BuiltinUiIcon::LightPoint) {
                                 let st = egui::load::SizedTexture::new(tid, egui::vec2(16.0, 16.0));
                                 ui.image(st);
                             } else {
@@ -112,7 +122,10 @@ pub(crate) fn draw(me: &mut EditorUiBuild, ctx: &egui::Context) {
                         });
                     });
 
-                if ui.button("Add Light").clicked() {
+                if me.icons.icon_button(ui, match me.selected_light_kind {
+                    LightSpawnKind::Directional => BuiltinUiIcon::LightDirectional,
+                    LightSpawnKind::Point => BuiltinUiIcon::LightPoint
+                }, "Add Light").clicked() {
                     match me.selected_light_kind {
                         LightSpawnKind::Directional => {
                             // Spawn a sun-like light above the origin looking down.
@@ -136,7 +149,7 @@ pub(crate) fn draw(me: &mut EditorUiBuild, ctx: &egui::Context) {
                 if let Ok(mut pm) = me.plugin_manager.lock() {
                     pm.topbar_button(ui);
                 }
-                if ui.button("Console").clicked() {
+                if me.icons.icon_button(ui, BuiltinUiIcon::Console, "Console").clicked() {
                     me.console_open = !me.console_open;
                 }
             });

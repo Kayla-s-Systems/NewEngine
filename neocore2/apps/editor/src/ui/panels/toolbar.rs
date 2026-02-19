@@ -2,6 +2,7 @@
 
 use newengine_gizmo::GizmoMode;
 use newengine_platform_winit::egui;
+use newengine_ui::BuiltinUiIcon;
 
 use super::super::EditorUiBuild;
 
@@ -18,23 +19,52 @@ pub(crate) fn draw(me: &mut EditorUiBuild, ctx: &egui::Context) {
             ui.separator();
             ui.add_space(4.0);
 
-            let button = |ui: &mut egui::Ui, label: &str, active: bool| -> egui::Response {
-                let mut b = egui::Button::new(label).min_size(egui::vec2(44.0, 36.0));
-                if active {
-                    b = b.fill(ui.visuals().selection.bg_fill);
+            let icon_tool_button = |me: &mut EditorUiBuild,
+                                    ui: &mut egui::Ui,
+                                    icon: Option<BuiltinUiIcon>,
+                                    fallback_label: &str,
+                                    active: bool,
+            | -> egui::Response {
+                let fill = if active { ui.visuals().selection.bg_fill } else { egui::Color32::TRANSPARENT };
+
+                match icon.and_then(|i| me.icons.tex_id(i)) {
+                    Some(tid) => {
+                        let st = egui::load::SizedTexture::new(tid, egui::vec2(20.0, 20.0));
+                        ui.add(
+                            egui::Button::image(st)
+                                .min_size(egui::vec2(44.0, 36.0))
+                                .fill(fill),
+                        )
+                    }
+                    None => ui.add(
+                        egui::Button::new(fallback_label)
+                            .min_size(egui::vec2(44.0, 36.0))
+                            .fill(fill),
+                    ),
                 }
-                ui.add(b)
             };
 
             ui.vertical(|ui| {
-                if button(ui, "Q", me.editor.active_tool == newengine_editor_core::ToolId::Select)
+                if icon_tool_button(
+                    me,
+                    ui,
+                    None,
+                    "Q",
+                    me.editor.active_tool == newengine_editor_core::ToolId::Select,
+                )
                     .on_hover_text("Select (Q)")
                     .clicked()
                 {
                     me.editor.active_tool = newengine_editor_core::ToolId::Select;
                 }
 
-                if button(ui, "W", me.gizmo.mode() == GizmoMode::Translate)
+                if icon_tool_button(
+                    me,
+                    ui,
+                    Some(BuiltinUiIcon::GizmoTranslate),
+                    "W",
+                    me.gizmo.mode() == GizmoMode::Translate,
+                )
                     .on_hover_text("Move (W)")
                     .clicked()
                 {
@@ -42,7 +72,13 @@ pub(crate) fn draw(me: &mut EditorUiBuild, ctx: &egui::Context) {
                     me.editor.active_tool = newengine_editor_core::ToolId::Translate;
                 }
 
-                if button(ui, "E", me.gizmo.mode() == GizmoMode::Rotate)
+                if icon_tool_button(
+                    me,
+                    ui,
+                    Some(BuiltinUiIcon::GizmoRotate),
+                    "E",
+                    me.gizmo.mode() == GizmoMode::Rotate,
+                )
                     .on_hover_text("Rotate (E)")
                     .clicked()
                 {
@@ -50,7 +86,13 @@ pub(crate) fn draw(me: &mut EditorUiBuild, ctx: &egui::Context) {
                     me.editor.active_tool = newengine_editor_core::ToolId::Rotate;
                 }
 
-                if button(ui, "R", me.gizmo.mode() == GizmoMode::Scale)
+                if icon_tool_button(
+                    me,
+                    ui,
+                    Some(BuiltinUiIcon::GizmoScale),
+                    "R",
+                    me.gizmo.mode() == GizmoMode::Scale,
+                )
                     .on_hover_text("Scale (R)")
                     .clicked()
                 {

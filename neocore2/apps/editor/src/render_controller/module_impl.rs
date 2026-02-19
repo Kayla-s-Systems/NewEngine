@@ -16,8 +16,8 @@ use newengine_primitives::Primitive;
 use newengine_scene::{scene_bounds_cached, update_scene_world};
 use newengine_transform::GlobalTransform;
 
-use super::controller::EditorRenderController;
-use super::gpu::{ensure_grid, ensure_lit_pipeline, ensure_primitive_gpu, GridMeshParams};
+use super::controller::{EditorRenderController, PerDrawUbo};
+use super::gpu::{ensure_grid, ensure_lit_pipeline, ensure_primitive_gpu, GridMeshParams, LIT_UBO_SIZE};
 
 
 #[inline]
@@ -96,12 +96,13 @@ impl PackedLights {
         out.point_count_pad = [n as f32, 0.0, 0.0, 0.0];
 
         if log::log_enabled!(log::Level::Debug) {
-            log::debug!(
+            /*log::debug!(
                 "render: lights packed amb_intensity={:.3} dir_intensity={:.3} point_count={}",
                 out.ambient[3],
                 out.dir_dir_intensity[3],
                 n
             );
+            */
         }
         out
     }
@@ -363,6 +364,61 @@ impl EditorRenderController {
 
         best_e
     }
+
+    #[inline]
+    fn ensure_per_draw_ubo(
+        &mut self,
+        r: &mut dyn newengine_core::render::RenderApi,
+        lit: super::gpu::LitPipeline,
+        key: u64,
+    ) -> EngineResult<PerDrawUbo> {
+        if let Some(e) = self.per_draw_ubo.get(&key).copied() {
+            return Ok(e);
+        }
+
+        let ubo = r.create_buffer(
+            newengine_core::render::BufferDesc::new(
+                LIT_UBO_SIZE,
+                newengine_core::render::BufferUsage::Uniform,
+                newengine_core::render::MemoryHint::CpuToGpu,
+            )
+                .with_label("editor_lit_entity_ubo"),
+        )?;
+
+        let bg = r.create_bind_group(
+            newengine_core::render::BindGroupDesc::new(lit.bgl)
+                .with_label("editor_lit_entity_bg")
+                .with_uniform0(newengine_core::render::BufferBinding::new(ubo, 0, LIT_UBO_SIZE)),
+        )?;
+
+        let entry = PerDrawUbo {
+            ubo,
+            bg,
+            last_seen_frame: self.frame_index,
+        };
+        self.per_draw_ubo.insert(key, entry);
+        Ok(entry)
+    }
+
+    fn gc_per_draw_ubos(&mut self, r: &mut dyn newengine_core::render::RenderApi) {
+        // Destroy resources that haven't been touched in a while.
+        // A small grace window avoids churn during transient UI toggles.
+        let now = self.frame_index;
+        let grace = 2_u64;
+
+        let mut dead: Vec<u64> = Vec::new();
+        for (k, v) in &self.per_draw_ubo {
+            if now.saturating_sub(v.last_seen_frame) > grace {
+                dead.push(*k);
+            }
+        }
+        for k in dead {
+            if let Some(v) = self.per_draw_ubo.remove(&k) {
+                r.destroy_bind_group(v.bg);
+                r.destroy_buffer(v.ubo);
+            }
+        }
+    }
 }
 
 impl<E: Send + 'static> Module<E> for EditorRenderController {
@@ -405,6 +461,8 @@ impl<E: Send + 'static> Module<E> for EditorRenderController {
 
         let (vp_w, vp_h) = self.viewport_bridge.read_extent();
         r.begin_frame(BeginFrameDesc::new(self.clear_color))?;
+
+        self.frame_index = self.frame_index.saturating_add(1).max(1);
 
         // Engine-level dynamic UI previews (primitive thumbnails, etc.).
         // Apps are consumers: UI requests previews, renderer pumps them here.
@@ -547,6 +605,12 @@ impl<E: Send + 'static> Module<E> for EditorRenderController {
             let view = self.rig.view_matrix();
             let viewproj = proj * view;
 
+            // Publish camera state for deterministic "spawn near camera" placement.
+            let inv_view = view.inverse();
+            let cam_pos = Vec3::new(inv_view.w_axis.x, inv_view.w_axis.y, inv_view.w_axis.z);
+            let cam_fwd = -Vec3::new(inv_view.z_axis.x, inv_view.z_axis.y, inv_view.z_axis.z);
+            self.viewport_bridge.publish_camera_spawn(cam_pos, cam_fwd);
+
             // Make camera matrices available to the UI for overlays (selection highlight, gizmos).
             self.viewport_bridge
                 .publish_camera_frame(view, proj, vp_w, vp_h);
@@ -631,10 +695,15 @@ impl<E: Send + 'static> Module<E> for EditorRenderController {
                         .map(|d| d.base_color)
                         .unwrap_or([1.0, 0.0, 1.0, 1.0]);
 
-                    Self::write_lit_ubo(&mut **r, lit.ubo, mvp, model, base_color, &world_lights)?;
+                    let key = id.stable_u64();
+                    let mut per = self.ensure_per_draw_ubo(&mut **r, lit, key)?;
+                    per.last_seen_frame = self.frame_index;
+                    self.per_draw_ubo.insert(key, per);
+
+                    Self::write_lit_ubo(&mut **r, per.ubo, mvp, model, base_color, &world_lights)?;
 
                     r.set_pipeline(lit.pipeline)?;
-                    r.set_bind_group(0, lit.bg)?;
+                    r.set_bind_group(0, per.bg)?;
                     r.set_vertex_buffer(0, BufferSlice::new(gpu.vb, 0))?;
                     r.set_index_buffer(BufferSlice::new(gpu.ib, 0), IndexFormat::U32)?;
                     r.draw_indexed(newengine_core::render::DrawIndexedArgs::new(gpu.index_count))?;
@@ -664,7 +733,7 @@ impl<E: Send + 'static> Module<E> for EditorRenderController {
                 }
                 dirs.sort_by(|a, b| a.0.cmp(&b.0));
 
-                for (_k, dl, m) in dirs {
+                for (k, dl, m) in dirs {
                     let pos = Vec3::new(m.w_axis.x, m.w_axis.y, m.w_axis.z);
                     let dir = Vec3::new(dl.direction_ws[0], dl.direction_ws[1], dl.direction_ws[2]).normalize_or_zero();
 
@@ -675,10 +744,13 @@ impl<E: Send + 'static> Module<E> for EditorRenderController {
                     let mvp = viewproj * model;
 
                     let base_color = [1.0, 0.95, 0.35, 1.0];
-                    Self::write_lit_ubo(&mut **r, lit.ubo, mvp, model, base_color, &world_lights)?;
+                    let mut per = self.ensure_per_draw_ubo(&mut **r, lit, k)?;
+                    per.last_seen_frame = self.frame_index;
+                    self.per_draw_ubo.insert(k, per);
+                    Self::write_lit_ubo(&mut **r, per.ubo, mvp, model, base_color, &world_lights)?;
 
                     r.set_pipeline(lit.pipeline)?;
-                    r.set_bind_group(0, lit.bg)?;
+                    r.set_bind_group(0, per.bg)?;
                     r.set_vertex_buffer(0, BufferSlice::new(cone_gpu.vb, 0))?;
                     r.set_index_buffer(BufferSlice::new(cone_gpu.ib, 0), IndexFormat::U32)?;
                     r.draw_indexed(newengine_core::render::DrawIndexedArgs::new(cone_gpu.index_count))?;
@@ -690,10 +762,14 @@ impl<E: Send + 'static> Module<E> for EditorRenderController {
                     let line_model = Mat4::from_scale_rotation_translation(line_scale, rot, line_pos);
                     let line_mvp = viewproj * line_model;
                     let line_color = [1.0, 0.85, 0.25, 1.0];
-                    Self::write_lit_ubo(&mut **r, lit.ubo, line_mvp, line_model, line_color, &world_lights)?;
+                    let line_key = k ^ 0xD1A1_0000_0000_0000u64;
+                    let mut per2 = self.ensure_per_draw_ubo(&mut **r, lit, line_key)?;
+                    per2.last_seen_frame = self.frame_index;
+                    self.per_draw_ubo.insert(line_key, per2);
+                    Self::write_lit_ubo(&mut **r, per2.ubo, line_mvp, line_model, line_color, &world_lights)?;
 
                     r.set_pipeline(lit.pipeline)?;
-                    r.set_bind_group(0, lit.bg)?;
+                    r.set_bind_group(0, per2.bg)?;
                     r.set_vertex_buffer(0, BufferSlice::new(cone_gpu.vb, 0))?;
                     r.set_index_buffer(BufferSlice::new(cone_gpu.ib, 0), IndexFormat::U32)?;
                     r.draw_indexed(newengine_core::render::DrawIndexedArgs::new(cone_gpu.index_count))?;
@@ -705,17 +781,20 @@ impl<E: Send + 'static> Module<E> for EditorRenderController {
                 }
                 pts.sort_by(|a, b| a.0.cmp(&b.0));
 
-                for (_k, m) in pts {
+                for (k, m) in pts {
                     let pos = Vec3::new(m.w_axis.x, m.w_axis.y, m.w_axis.z);
                     let scale = Vec3::splat(0.18);
                     let model = Mat4::from_scale_rotation_translation(scale, Quat::IDENTITY, pos);
                     let mvp = viewproj * model;
 
                     let base_color = [1.0, 0.75, 0.25, 1.0];
-                    Self::write_lit_ubo(&mut **r, lit.ubo, mvp, model, base_color, &world_lights)?;
+                    let mut per = self.ensure_per_draw_ubo(&mut **r, lit, k)?;
+                    per.last_seen_frame = self.frame_index;
+                    self.per_draw_ubo.insert(k, per);
+                    Self::write_lit_ubo(&mut **r, per.ubo, mvp, model, base_color, &world_lights)?;
 
                     r.set_pipeline(lit.pipeline)?;
-                    r.set_bind_group(0, lit.bg)?;
+                    r.set_bind_group(0, per.bg)?;
                     r.set_vertex_buffer(0, BufferSlice::new(sphere_gpu.vb, 0))?;
                     r.set_index_buffer(BufferSlice::new(sphere_gpu.ib, 0), IndexFormat::U32)?;
                     r.draw_indexed(newengine_core::render::DrawIndexedArgs::new(sphere_gpu.index_count))?;
@@ -732,6 +811,8 @@ impl<E: Send + 'static> Module<E> for EditorRenderController {
         if let Some(ui) = ui {
             r.set_ui_draw_list(ui);
         }
+
+        self.gc_per_draw_ubos(&mut **r);
 
         r.end_frame()?;
         Ok(())

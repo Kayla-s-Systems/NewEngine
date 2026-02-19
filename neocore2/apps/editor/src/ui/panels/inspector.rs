@@ -8,6 +8,7 @@ use newengine_platform_winit::egui;
 use newengine_primitives::Primitive;
 use newengine_scene::components::Name;
 use newengine_transform::GlobalTransform;
+use newengine_ui::BuiltinUiIcon;
 
 use super::super::EditorUiBuild;
 
@@ -168,7 +169,13 @@ pub(crate) fn draw(me: &mut EditorUiBuild, ctx: &egui::Context) {
                 let w = s.world();
 
                 if let Some(dl) = w.get::<DirectionalLight>(e).copied() {
-                    ui.label("Directional Light");
+                    ui.horizontal(|ui| {
+                        if let Some(tid) = me.icons.tex_id(BuiltinUiIcon::LightDirectional) {
+                            let st = egui::load::SizedTexture::new(tid, egui::vec2(16.0, 16.0));
+                            ui.image(st);
+                        }
+                        ui.label("Directional Light");
+                    });
 
                     let mut rgb = dl.color;
                     let mut intensity = dl.intensity;
@@ -204,7 +211,13 @@ pub(crate) fn draw(me: &mut EditorUiBuild, ctx: &egui::Context) {
                         me.scene_bridge.cmd_set_directional_light(e, new_dir, rgb, intensity);
                     }
                 } else if let Some(pl) = w.get::<PointLight>(e).copied() {
-                    ui.label("Point Light");
+                    ui.horizontal(|ui| {
+                        if let Some(tid) = me.icons.tex_id(BuiltinUiIcon::LightPoint) {
+                            let st = egui::load::SizedTexture::new(tid, egui::vec2(16.0, 16.0));
+                            ui.image(st);
+                        }
+                        ui.label("Point Light");
+                    });
 
                     let mut rgb = pl.color;
                     let mut intensity = pl.intensity;

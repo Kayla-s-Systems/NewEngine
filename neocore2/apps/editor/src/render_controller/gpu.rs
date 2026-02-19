@@ -208,7 +208,7 @@ pub(super) struct LitPipeline {
 // point lights: 4 * (vec4 pos_range + vec4 color_intensity) = 4 * 32 = 128
 // vec4 point_count_pad (16)
 // Total: 336 bytes.
-const LIT_UBO_SIZE: u64 = 336;
+pub(super) const LIT_UBO_SIZE: u64 = 336;
 
 #[derive(Clone, Copy)]
 pub(super) struct PrimitiveGpu {

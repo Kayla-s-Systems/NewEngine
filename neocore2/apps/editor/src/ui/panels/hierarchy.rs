@@ -4,6 +4,7 @@ use newengine_lighting::{DirectionalLight, PointLight};
 use newengine_platform_winit::egui;
 use newengine_primitives::Primitive;
 use newengine_scene::components::Name;
+use newengine_ui::BuiltinUiIcon;
 
 use super::super::EditorUiBuild;
 
@@ -36,9 +37,9 @@ pub(crate) fn draw(me: &mut EditorUiBuild, ctx: &egui::Context) {
             egui::ScrollArea::vertical().auto_shrink([false; 2]).show(ui, |ui| {
                 for (name, e, has_prim) in items {
                     let icon_kind = if w.get::<DirectionalLight>(e).is_some() {
-                        Some(crate::ui::icons::EditorIconKind::DirectionalLight)
+                        Some(BuiltinUiIcon::LightDirectional)
                     } else if w.get::<PointLight>(e).is_some() {
-                        Some(crate::ui::icons::EditorIconKind::PointLight)
+                        Some(BuiltinUiIcon::LightPoint)
                     } else {
                         None
                     };

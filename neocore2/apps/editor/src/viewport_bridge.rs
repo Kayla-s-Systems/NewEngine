@@ -1,6 +1,6 @@
 #![forbid(unsafe_op_in_unsafe_fn)]
 
-use newengine_math::Mat4;
+use newengine_math::{Mat4, Vec3};
 use parking_lot::Mutex;
 use std::sync::atomic::{AtomicU64, Ordering};
 
@@ -66,6 +66,17 @@ pub struct ViewportBridge {
     frame_all: AtomicU64,
 
     camera_frame: Mutex<Option<ViewportCameraFrame>>,
+
+    /// Latest editor camera state (renderer -> UI).
+    ///
+    /// Used for deterministic "spawn near camera" placement initiated from UI.
+    camera_spawn: Mutex<CameraSpawnState>,
+}
+
+#[derive(Clone, Copy, Debug)]
+struct CameraSpawnState {
+    pos: Vec3,
+    forward: Vec3,
 }
 
 
@@ -88,7 +99,32 @@ impl ViewportBridge {
             frame_all: AtomicU64::new(0),
 
             camera_frame: Mutex::new(None),
+
+            camera_spawn: Mutex::new(CameraSpawnState {
+                pos: Vec3::ZERO,
+                forward: -Vec3::Z,
+            }),
         }
+    }
+
+    /// Publish the latest editor camera position and forward direction.
+    ///
+    /// Called from the render/controller thread once per frame.
+    #[inline]
+    pub fn publish_camera_spawn(&self, pos: Vec3, forward: Vec3) {
+        *self.camera_spawn.lock() = CameraSpawnState {
+            pos,
+            forward: forward.normalize_or_zero(),
+        };
+    }
+
+    /// Read the latest camera position and forward direction.
+    ///
+    /// Called from UI thread when the user requests spawning objects.
+    #[inline]
+    pub fn read_camera_spawn(&self) -> (Vec3, Vec3) {
+        let s = *self.camera_spawn.lock();
+        (s.pos, s.forward)
     }
 
     #[inline]

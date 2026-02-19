@@ -3,35 +3,8 @@
 use newengine_assets::AssetServiceClient;
 use newengine_core::plugins::default_host_api;
 use newengine_platform_winit::egui;
-use newengine_ui::UiImageLoader;
-
-/// Editor-local icon kinds.
-///
-/// This is intentionally small and stable: UI code should depend on these logical kinds,
-/// while the actual paths remain data.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub enum EditorIconKind {
-    DirectionalLight,
-    PointLight,
-}
-
-impl EditorIconKind {
-    #[inline]
-    pub const fn key(self) -> &'static str {
-        match self {
-            Self::DirectionalLight => "sun",
-            Self::PointLight => "light",
-        }
-    }
-
-    #[inline]
-    pub const fn default_path(self) -> &'static str {
-        match self {
-            Self::DirectionalLight => "ui/icons/sun.png",
-            Self::PointLight => "ui/icons/light.png",
-        }
-    }
-}
+use newengine_ui::ui_icons;
+use newengine_ui::{BuiltinUiIcon, UiImageLoader, EDITOR_DEFAULT_ICONS};
 
 /// Deterministic, editor-local icon loader.
 ///
@@ -59,10 +32,8 @@ impl EditorIconLoader {
         let assets = AssetServiceClient::new(default_host_api());
         let mut loader = UiImageLoader::new();
 
-        // Default editor icon set.
-        for kind in [EditorIconKind::DirectionalLight, EditorIconKind::PointLight] {
-            loader.request(&assets, kind.key(), kind.default_path());
-        }
+        // Default editor icon set (shared base implementation).
+        ui_icons::request_builtin_icons(&mut loader, &assets, EDITOR_DEFAULT_ICONS);
 
         Self { assets, loader }
     }
@@ -71,9 +42,13 @@ impl EditorIconLoader {
     ///
     /// Note: `u64 == 0` is a valid texture id in egui.
     #[inline]
-    pub fn tex_id(&self, kind: EditorIconKind) -> Option<egui::TextureId> {
-        let id = self.loader.tex_id_u64(kind.key())?;
-        Some(egui::TextureId::User(id))
+    pub fn tex_id(&self, icon: BuiltinUiIcon) -> Option<egui::TextureId> {
+        ui_icons::tex_id(&self.loader, icon)
+    }
+
+    #[inline]
+    pub fn icon_button(&self, ui: &mut egui::Ui, icon: BuiltinUiIcon, label: &str) -> egui::Response {
+        ui_icons::icon_button(ui, self.tex_id(icon), label)
     }
 
     /// Pumps icon loading and uploads newly ready textures into egui.
@@ -85,7 +60,7 @@ impl EditorIconLoader {
     ///
     /// Useful for branding/skins without touching UI code.
     #[inline]
-    pub fn set_icon_path(&mut self, kind: EditorIconKind, path: impl Into<String>) {
-        self.loader.request(&self.assets, kind.key(), path);
+    pub fn set_icon_path(&mut self, icon: BuiltinUiIcon, path: impl Into<String>) {
+        self.loader.request(&self.assets, icon.key(), path);
     }
 }

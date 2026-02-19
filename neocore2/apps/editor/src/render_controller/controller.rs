@@ -13,6 +13,13 @@ use super::gpu::{GridGpu, LitPipeline, PrimitiveGpu};
 
 type PrimGpuCache = FxHashMap<newengine_primitives::PrimitiveId, PrimitiveGpu>;
 
+#[derive(Clone, Copy)]
+pub(super) struct PerDrawUbo {
+    pub ubo: newengine_core::render::BufferId,
+    pub bg: newengine_core::render::BindGroupId,
+    pub last_seen_frame: u64,
+}
+
 pub struct EditorRenderController {
     pub(super) clear_color: [f32; 4],
     pub(super) last_w: u32,
@@ -38,6 +45,15 @@ pub struct EditorRenderController {
     pub(super) grid: Option<GridGpu>,
     pub(super) lit: Option<LitPipeline>,
     pub(super) prim_cache: PrimGpuCache,
+
+    /// Per-entity/per-draw uniform buffers to avoid "last write wins" hazards.
+    ///
+    /// Many backends (notably Vulkan) record draw commands first and execute them later.
+    /// If we keep a single UBO and overwrite it between draws, all draws can observe the
+    /// final UBO contents, making it look like objects replace each other.
+    pub(super) per_draw_ubo: FxHashMap<u64, PerDrawUbo>,
+
+    pub(super) frame_index: u64,
 
     // Camera framing:
     // - frame_once on startup/aspect change
@@ -103,6 +119,10 @@ impl EditorRenderController {
             grid: None,
             lit: None,
             prim_cache: PrimGpuCache::default(),
+
+            per_draw_ubo: FxHashMap::default(),
+
+            frame_index: 0,
 
             framed_once: false,
             framed_radius: 0.0,

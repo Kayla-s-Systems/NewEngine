@@ -26,6 +26,7 @@ use crate::scene_bootstrap::bootstrap_editor_scene;
 pub enum SceneCommand {
     /// Replace the current scene with a fresh one (root + camera).
     NewScene,
+
     SpawnPrimitive {
         id: PrimitiveId,
         name: String,
@@ -121,9 +122,6 @@ struct SceneQueue {
     cmds: Vec<SceneCommand>,
 }
 
-// Grid is an editor overlay with fixed defaults. We intentionally avoid exposing runtime tuning
-// knobs from the scene layer to keep render world clean and deterministic.
-
 /// Thread-safe bridge between UI and the scene world.
 ///
 /// - UI pushes commands (no world mutation).
@@ -212,7 +210,6 @@ impl SceneBridge {
 
     #[inline]
     pub fn cmd_spawn_primitive(&self, id: PrimitiveId, name: String, position: Vec3) {
-        // Default scale presets for common built-ins.
         let scale = if id == builtins::ID_PLANE {
             [10.0, 1.0, 10.0]
         } else {
@@ -274,7 +271,6 @@ impl SceneBridge {
             .push(SceneCommand::UpdateMaterial { material, desc });
     }
 
-
     #[inline]
     pub fn cmd_spawn_directional_light(&self, name: String, position: Vec3, direction_ws: Vec3) {
         let d = direction_ws.normalize_or_zero();
@@ -331,24 +327,41 @@ impl SceneBridge {
             std::mem::take(&mut q.cmds)
         };
 
-        // Defer selection until after we release the scene write lock.
         let mut pending_selection: Option<Option<EntityId>> = None;
 
         {
             let mut scene = self.scene.write();
 
-            // IMPORTANT:
-            // The ECS relies on a monotonically increasing tick for change tracking.
-            // `get_mut_tracked()` tags writes with the current tick. If tick does not advance,
-            // downstream systems that use `query_changed(since_tick)` (e.g. transform propagation)
-            // can miss updates, causing the gizmo/overlay to move while geometry stays put.
             scene.world_mut().advance_tick();
 
-            // Shared default base material (asset). Instances will reference it.
             let default_mat = self
                 .materials
                 .read()
                 .register_named("Default", MaterialDescriptor::default());
+
+            #[inline]
+            fn ensure_root(scene: &mut Scene) -> EntityId {
+                if let Some(r) = scene.root() {
+                    return r;
+                }
+
+                let cam_opt = scene.active_camera();
+
+                let world = scene.world_mut();
+                let r = spawn_named(world, "Root");
+                let _ = world.insert(r, SceneRoot);
+
+                if world.resource::<SceneState>().is_none() {
+                    world.insert_resource(SceneState::new(Some(r), cam_opt));
+                } else if let Some(st) = world.resource_mut::<SceneState>() {
+                    st.root = Some(r);
+                    if st.active_camera.is_none() {
+                        st.active_camera = cam_opt;
+                    }
+                }
+
+                r
+            }
 
             for cmd in cmds {
                 match cmd {
@@ -365,43 +378,9 @@ impl SceneBridge {
                         scale,
                         color,
                     } => {
-                        // 1) Take immutable data from scene BEFORE world_mut().
-                        let root_opt = scene.root();
-                        let cam_opt = scene.active_camera();
-
-                        // 2) Now take world_mut (locks mutable borrow of scene).
+                        let root = ensure_root(&mut *scene);
                         let world = scene.world_mut();
 
-                        // 3) Resolve root using world only.
-                        //
-                        // IMPORTANT:
-                        // If the scene root marker/state was not bootstrapped (or was removed by
-                        // a tool/plugin), spawning primitives must not fall back to a plain
-                        // `world.spawn()` root. Some higher-level tooling assumes `SceneRoot` +
-                        // `SceneState.root` exist; without them objects can look like they
-                        // "replace" each other (overlap at the origin / detach from expected
-                        // hierarchy).
-                        let root = match root_opt {
-                            Some(r) => r,
-                            None => {
-                                let r = spawn_named(world, "Root");
-                                let _ = world.insert(r, SceneRoot);
-
-                                // Keep SceneState consistent.
-                                if world.resource::<SceneState>().is_none() {
-                                    world.insert_resource(SceneState::new(Some(r), cam_opt));
-                                } else if let Some(st) = world.resource_mut::<SceneState>() {
-                                    st.root = Some(r);
-                                }
-
-                                r
-                            }
-                        };
-
-                        // Place new primitives deterministically so they don't overlap and
-                        // visually "replace" each other.
-                        // Use a join query count instead of raw storage `len()`.
-                        // This stays correct even if the storage contains tombstones.
                         let prim_index = world.query::<Primitive>().count();
 
                         let base_pos = Vec3::new(position[0], position[1], position[2]);
@@ -411,8 +390,6 @@ impl SceneBridge {
                         let _ = newengine_transform::set_parent(world, e, Some(root));
 
                         let _ = world.insert(e, Primitive { id, color });
-
-                        // Material is bound later via the invariant pass (entity-local instance).
                         let _ = world.insert(e, MaterialRef { id: default_mat });
 
                         if let Some(t) = world.get_mut_tracked::<Transform>(e) {
@@ -448,8 +425,6 @@ impl SceneBridge {
                             p.color = color;
                         }
 
-                        // Ensure color changes are local to the entity by using a material instance.
-                        // This avoids mutating global material assets.
                         let base = world
                             .get::<MaterialRef>(entity)
                             .map(|mr| mr.id)
@@ -476,7 +451,6 @@ impl SceneBridge {
                     }
 
                     SceneCommand::UpdateMaterial { material, desc } => {
-                        // Registry update is editor-side shared state; do not touch the world.
                         let _ = self.materials.read().set_desc(material, desc);
                     }
 
@@ -485,26 +459,12 @@ impl SceneBridge {
                         position,
                         direction_ws,
                     } => {
-                        let root_opt = scene.root();
-                        let cam_opt = scene.active_camera();
+                        let root = ensure_root(&mut *scene);
                         let world = scene.world_mut();
-
-                        let root = match root_opt {
-                            Some(r) => r,
-                            None => {
-                                let r = spawn_named(world, "Root");
-                                let _ = world.insert(r, SceneRoot);
-                                if world.resource::<SceneState>().is_none() {
-                                    world.insert_resource(SceneState::new(Some(r), cam_opt));
-                                } else if let Some(st) = world.resource_mut::<SceneState>() {
-                                    st.root = Some(r);
-                                }
-                                r
-                            }
-                        };
 
                         let e = spawn_named(world, name);
                         let _ = newengine_transform::set_parent(world, e, Some(root));
+
                         let mut dl = DirectionalLight::default();
                         dl.direction_ws = direction_ws;
                         let _ = world.insert(e, dl);
@@ -527,23 +487,8 @@ impl SceneBridge {
                     }
 
                     SceneCommand::SpawnPointLight { name, position } => {
-                        let root_opt = scene.root();
-                        let cam_opt = scene.active_camera();
+                        let root = ensure_root(&mut *scene);
                         let world = scene.world_mut();
-
-                        let root = match root_opt {
-                            Some(r) => r,
-                            None => {
-                                let r = spawn_named(world, "Root");
-                                let _ = world.insert(r, SceneRoot);
-                                if world.resource::<SceneState>().is_none() {
-                                    world.insert_resource(SceneState::new(Some(r), cam_opt));
-                                } else if let Some(st) = world.resource_mut::<SceneState>() {
-                                    st.root = Some(r);
-                                }
-                                r
-                            }
-                        };
 
                         let e = spawn_named(world, name);
                         let _ = newengine_transform::set_parent(world, e, Some(root));
@@ -576,7 +521,10 @@ impl SceneBridge {
                         }
                         log::debug!(
                             "scene: set AmbientLight color=({:.3},{:.3},{:.3}) intensity={:.3}",
-                            color[0], color[1], color[2], intensity
+                            color[0],
+                            color[1],
+                            color[2],
+                            intensity
                         );
                     }
 
@@ -594,8 +542,12 @@ impl SceneBridge {
                             log::debug!(
                                 "scene: set DirectionalLight id={:016x} dir=({:.3},{:.3},{:.3}) color=({:.3},{:.3},{:.3}) intensity={:.3}",
                                 entity.stable_u64(),
-                                direction_ws[0], direction_ws[1], direction_ws[2],
-                                color[0], color[1], color[2],
+                                direction_ws[0],
+                                direction_ws[1],
+                                direction_ws[2],
+                                color[0],
+                                color[1],
+                                color[2],
                                 intensity
                             );
                         } else {
@@ -620,7 +572,9 @@ impl SceneBridge {
                             log::debug!(
                                 "scene: set PointLight id={:016x} color=({:.3},{:.3},{:.3}) intensity={:.3} range={:.3}",
                                 entity.stable_u64(),
-                                color[0], color[1], color[2],
+                                color[0],
+                                color[1],
+                                color[2],
                                 intensity,
                                 range
                             );
@@ -634,16 +588,10 @@ impl SceneBridge {
                 }
             }
 
-            // Hard invariant for renderable entities: if an entity has a `Primitive`, it must have
-            // a valid `MaterialRef`. This prepares the scene for future renderables (meshes, models)
-            // and removes fragile fallback logic from the renderer.
             let world = scene.world_mut();
 
-            // Pass 1: collect material instance ids for primitives without mutating `world` during query iteration.
             let mut prim_updates = Vec::new();
             for (e, p) in world.query::<Primitive>() {
-                // Always bind primitives through an entity-local material instance.
-                // This makes the renderer fully material-driven.
                 let color = p.color;
 
                 let base = world
@@ -667,11 +615,10 @@ impl SceneBridge {
                 prim_updates.push((e, inst_id));
             }
 
-            // Pass 2: apply updates after the immutable query borrow is dropped.
             for (e, inst_id) in prim_updates {
                 let _ = world.insert(e, MaterialRef { id: inst_id });
             }
-        } // scene write lock dropped here
+        }
 
         if let Some(sel) = pending_selection {
             self.set_selection(sel);
