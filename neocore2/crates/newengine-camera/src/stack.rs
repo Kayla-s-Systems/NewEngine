@@ -145,7 +145,7 @@ impl CameraStack {
 
         if input.has_anchor {
             rig.position = input.anchor_pos_ws;
-            rig.rotation = input.anchor_rot_ws.normalize();
+            rig.rotation = input.anchor_rot_ws.normalize_or_identity();
         }
 
         let mut jitter_px = Vec2::ZERO;
@@ -155,7 +155,7 @@ impl CameraStack {
             let out = m.apply(&rig, &proj, &input);
 
             rig.position += out.pose.dpos_ws;
-            rig.rotation = (rig.rotation * out.pose.drot_ls).normalize();
+            rig.rotation = (rig.rotation * out.pose.drot_ls).normalize_or_identity();
 
             jitter_px += out.proj.jitter_px;
             fovy_add += out.proj.fovy_add;

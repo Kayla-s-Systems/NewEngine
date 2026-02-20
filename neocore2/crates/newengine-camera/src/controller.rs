@@ -1,6 +1,6 @@
 #![forbid(unsafe_op_in_unsafe_fn)]
 
-use newengine_math::{Quat, Vec2, Vec3};
+use newengine_math::{wrap_pi, Quat, Vec2, Vec3};
 
 use crate::rig::CameraRig;
 
@@ -65,11 +65,14 @@ impl FreeFlyController {
             }
         }
 
+        // Prevent unbounded growth (precision loss in `sin/cos` over long sessions).
+        self.yaw = wrap_pi(self.yaw);
+
         self.pitch = self.pitch.clamp(-self.pitch_limit, self.pitch_limit);
 
         let rot_yaw = Quat::from_rotation_y(self.yaw);
         let rot_pitch = Quat::from_rotation_x(self.pitch);
-        rig.rotation = rot_yaw * rot_pitch;
+        rig.rotation = (rot_yaw * rot_pitch).normalize_or_identity();
 
         let local = Vec3::new(input.move_axis.x, input.move_axis.y, -input.move_axis.z);
         let len = local.length();
@@ -136,6 +139,9 @@ impl OrbitController {
             }
         }
 
+        // Prevent unbounded growth (precision loss in `sin/cos` over long sessions).
+        self.yaw = wrap_pi(self.yaw);
+
         self.pitch = self.pitch.clamp(-self.pitch_limit, self.pitch_limit);
 
         // Dolly via mouse wheel (zoom_delta) and via move_axis.z (e.g. middle-mouse drag).
@@ -155,7 +161,7 @@ impl OrbitController {
         // Build rotation.
         let rot_yaw = Quat::from_rotation_y(self.yaw);
         let rot_pitch = Quat::from_rotation_x(self.pitch);
-        let rot = rot_yaw * rot_pitch;
+        let rot = (rot_yaw * rot_pitch).normalize_or_identity();
 
         // Pan in camera plane using move_axis.xy.
         let pan = Vec2::new(input.move_axis.x, input.move_axis.y);

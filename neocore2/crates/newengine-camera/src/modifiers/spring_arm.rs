@@ -136,5 +136,5 @@ fn exp_smooth_vec3(current: Vec3, target: Vec3, speed: f32, dt: f32) -> Vec3 {
 #[inline]
 fn exp_smooth_quat(current: Quat, target: Quat, speed: f32, dt: f32) -> Quat {
     let k = exp_smooth(speed, dt);
-    current.slerp(target, k).normalize()
+    current.slerp(target, k).normalize_or_identity()
 }

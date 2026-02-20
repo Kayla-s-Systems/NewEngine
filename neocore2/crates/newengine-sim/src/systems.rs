@@ -151,7 +151,7 @@ pub fn sys_integrate_velocities(world: &World, frame: SimFrame, cmd: &mut Comman
         }
         let dq = Quat::from_euler(EulerRot::YXZ, d.y, d.x, d.z);
         let mut next = t;
-        next.rotation = (next.rotation * dq).normalize();
+        next.rotation = (next.rotation * dq).normalize_or_identity();
         cmd.insert(id, next);
     }
 }
