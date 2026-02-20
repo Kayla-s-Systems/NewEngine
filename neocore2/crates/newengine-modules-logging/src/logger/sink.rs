@@ -79,9 +79,26 @@ impl ConsoleWriter {
 impl Write for ConsoleWriter {
     #[inline]
     fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+        // NOTE:
+        // On Windows (and when running under cargo), stdout can be block-buffered.
+        // env_logger may not call `flush()` per-record, which can make logs appear "missing"
+        // until the buffer fills or the process exits.
+        // We flush opportunistically when we detect a line break.
         match self.console {
-            LogOutput::Stdout => io::stdout().lock().write_all(buf)?,
-            LogOutput::Stderr => io::stderr().lock().write_all(buf)?,
+            LogOutput::Stdout => {
+                let mut out = io::stdout().lock();
+                out.write_all(buf)?;
+                if buf.contains(&b'\n') {
+                    out.flush()?;
+                }
+            }
+            LogOutput::Stderr => {
+                let mut out = io::stderr().lock();
+                out.write_all(buf)?;
+                if buf.contains(&b'\n') {
+                    out.flush()?;
+                }
+            }
         }
         Ok(buf.len())
     }
@@ -279,9 +296,22 @@ impl TeeWriter {
 impl Write for TeeWriter {
     #[inline]
     fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+        // See ConsoleWriter::write() note about stdout buffering.
         match self.console {
-            LogOutput::Stdout => io::stdout().lock().write_all(buf)?,
-            LogOutput::Stderr => io::stderr().lock().write_all(buf)?,
+            LogOutput::Stdout => {
+                let mut out = io::stdout().lock();
+                out.write_all(buf)?;
+                if buf.contains(&b'\n') {
+                    out.flush()?;
+                }
+            }
+            LogOutput::Stderr => {
+                let mut out = io::stderr().lock();
+                out.write_all(buf)?;
+                if buf.contains(&b'\n') {
+                    out.flush()?;
+                }
+            }
         }
         self.file.write_all(buf)?;
         Ok(buf.len())

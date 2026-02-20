@@ -1,8 +1,7 @@
 #![forbid(unsafe_op_in_unsafe_fn)]
 
 use env_logger::fmt::{Target, TimestampPrecision, WriteStyle};
-use env_logger::Builder;
-use std::sync::OnceLock;
+use env_logger::{Builder, Logger};
 
 use crate::logger::{
     config::ConsoleLoggerConfig,
@@ -11,26 +10,12 @@ use crate::logger::{
     },
 };
 
-static INIT_ONCE: OnceLock<()> = OnceLock::new();
-
-/// Initializes process-wide logging (log crate global logger).
+/// Builds an `env_logger::Logger` instance configured for NewEngine.
 ///
-/// This function is idempotent and safe to call multiple times.
-///
-/// It configures console/file output and formatting according to `ConsoleLoggerConfig`.
-pub fn init_console_logger(cfg: &ConsoleLoggerConfig) -> Result<(), String> {
-    if INIT_ONCE.get().is_some() {
-        return Ok(());
-    }
-
-    let mut builder = build_logger(cfg);
-
-    // env_logger returns an error if another logger was already installed.
-    // For engine determinism we treat "already initialized" as Ok.
-    let _ = builder.try_init();
-
-    let _ = INIT_ONCE.set(());
-    Ok(())
+/// The returned logger is NOT installed globally. The host process owns the global `log`
+/// backend and forwards records into the logging plugin via a service.
+pub fn build_env_logger(cfg: &ConsoleLoggerConfig) -> Result<Logger, String> {
+    Ok(build_logger(cfg).build())
 }
 
 fn build_logger(cfg: &ConsoleLoggerConfig) -> Builder {

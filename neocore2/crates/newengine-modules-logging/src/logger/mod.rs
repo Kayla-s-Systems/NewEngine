@@ -6,5 +6,5 @@ pub mod output;
 pub mod sink;
 
 pub use config::ConsoleLoggerConfig;
-pub use init::init_console_logger;
+pub use init::build_env_logger;
 pub use output::LogOutput;
