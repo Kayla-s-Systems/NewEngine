@@ -119,7 +119,6 @@ impl PluginManager {
 
     pub fn load_from_dir(&mut self, dir: &Path, host: HostApiV1) -> Result<(), PluginLoadError> {
         let dir = resolve_plugins_dir(dir)?;
-        log::info!("plugins: scanning directory '{}'", dir.display());
 
         if let Err(e) = std::fs::create_dir_all(&dir) {
             return Err(PluginLoadError {
@@ -147,15 +146,51 @@ impl PluginManager {
             candidates.push(p);
         }
 
-        candidates.sort();
+        // Deterministic load order + "logger first" bootstrap.
+        //
+        // Constraint: engine MUST NOT emit logs unless a logging plugin is present.
+        // Therefore the core cannot use `eprintln!` or any fallback.
+        //
+        // But we still want plugin loading itself to become observable once the logging plugin
+        // has installed the process-wide `log` backend.
+        //
+        // Solution: two-phase load.
+        //  1) Load candidate DLLs that *look like* logging modules first. Their `init()` installs
+        //     the global logger.
+        //  2) After that, emit diagnostics and load the rest normally.
+        //
+        // This is intentionally filename-based (not kind/capability-based) to keep the ABI
+        // contracts clean and avoid hardcoding semantic categories into the core.
+        fn is_logging_candidate(p: &Path) -> bool {
+            p.file_name()
+                .and_then(|s| s.to_str())
+                .map(|s| s.to_ascii_lowercase())
+                .is_some_and(|s| s.contains("logging"))
+        }
 
+        candidates.sort();
+        let (mut loggers, mut rest): (Vec<PathBuf>, Vec<PathBuf>) =
+            candidates.into_iter().partition(|p| is_logging_candidate(p));
+
+        // Stable, deterministic: keep path order inside each partition.
+        loggers.sort();
+        rest.sort();
+
+        // Phase 1: bootstrap logging.
+        for path in &loggers {
+            let _ = self.load_one(path, host.clone());
+        }
+
+        // Phase 2: now that a logging module (if any) had a chance to install the backend,
+        // we can emit diagnostics through `log`.
+        log::info!("plugins: scanning directory '{}'", dir.display());
         log::info!(
             "plugins: found {} candidate(s) in '{}'",
-            candidates.len(),
+            loggers.len() + rest.len(),
             dir.display()
         );
 
-        for path in candidates {
+        for path in rest {
             match self.load_one(&path, host.clone()) {
                 Ok(()) => {}
                 Err(e) => {

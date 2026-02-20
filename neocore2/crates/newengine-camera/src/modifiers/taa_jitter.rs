@@ -41,7 +41,11 @@ impl CameraModifier for TaaJitter {
         let (hx, hy) = halton_2_3(self.index);
         self.index = self.index.wrapping_add(1);
 
-        let jitter = (Vec2::new(hx, hy) - Vec2::splat(0.5)) * self.scale_px;
+        let base = Vec2::new(hx, hy) - Vec2::splat(0.5);
+        let jitter = Vec2::new(
+            base.x * self.scale_px.x,
+            base.y * self.scale_px.y,
+        );
 
         let mut out = ModifierOutput::default();
         out.proj.jitter_px = jitter;

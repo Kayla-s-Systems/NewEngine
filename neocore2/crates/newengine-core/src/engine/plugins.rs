@@ -22,7 +22,6 @@ impl<E: Send + 'static> Engine<E> {
         }
 
         let phase = "load";
-        Self::log_phase_begin("plugins", phase, None);
         let t0 = Instant::now();
 
         let host = default_host_api();
@@ -45,6 +44,8 @@ impl<E: Send + 'static> Engine<E> {
         self.plugins_loaded = true;
 
         let loaded = self.plugins.snapshot().len();
+        // Emit diagnostics after `load_*` so an optional logging plugin can install
+        // the global `log` backend during its `init()`.
         Self::log_phase_ok("plugins", phase, Some(loaded), Self::elapsed_since(t0));
 
         Ok(())

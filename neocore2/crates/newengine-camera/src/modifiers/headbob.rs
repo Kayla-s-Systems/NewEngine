@@ -35,41 +35,58 @@ impl Default for HeadBob {
 }
 
 impl CameraModifier for HeadBob {
-    fn apply(&mut self, rig: &CameraRig, _proj: &Projection, input: &CameraStackInput) -> ModifierOutput {
-        if !self.enabled {
-            return ModifierOutput::default();
-        }
-
-        if !input.is_grounded {
+    fn apply(
+        &mut self,
+        rig: &CameraRig,
+        _proj: &Projection,
+        input: &CameraStackInput,
+    ) -> ModifierOutput {
+        if !self.enabled || !input.is_grounded {
             return ModifierOutput::default();
         }
 
         let dt = input.dt.max(0.0);
         let speed = input.velocity_ws.length();
+
         if !speed.is_finite() || speed < self.min_speed {
             return ModifierOutput::default();
         }
 
-        let mut intensity = input.intensity;
-        if !intensity.is_finite() {
-            intensity = 1.0;
-        }
+        let mut intensity = if input.intensity.is_finite() {
+            input.intensity
+        } else {
+            1.0
+        };
         intensity = intensity.clamp(0.0, 4.0);
 
-        let freq = self.frequency.max(0.001) * speed.max(0.0);
+        let freq = self.frequency.max(0.001) * speed;
         self.time = (self.time + dt * freq).min(1.0e9);
 
-        // Classic walk bob: 2x vertical, 1x lateral.
-        let s1 = (self.time * std::f32::consts::TAU).sin();
-        let s2 = (self.time * std::f32::consts::TAU * 2.0).sin();
+        let phase = self.time * std::f32::consts::TAU;
 
-        let local_pos = Vec3::new(s1, s2.abs(), 0.0) * (self.amplitude_pos * intensity);
-        let local_rot = Vec3::new(s2, 0.0, -s1) * (self.amplitude_rot * intensity);
+        // Classic walk bob: 2x vertical, 1x lateral
+        let s1 = phase.sin();
+        let s2 = (phase * 2.0).sin();
+
+        // Explicit component-wise scaling (deterministic, no Vec3*Vec3 needed)
+        let local_pos = Vec3::new(
+            s1 * self.amplitude_pos.x * intensity,
+            s2.abs() * self.amplitude_pos.y * intensity,
+            0.0,
+        );
+
+        let local_rot = Vec3::new(
+            s2 * self.amplitude_rot.x * intensity,
+            0.0,
+            -s1 * self.amplitude_rot.z * intensity,
+        );
 
         let dpos_ws = rig.rotation * local_pos;
-        let drot = Quat::from_rotation_z(local_rot.z)
-            * Quat::from_rotation_y(local_rot.y)
-            * Quat::from_rotation_x(local_rot.x);
+
+        let drot =
+            Quat::from_rotation_z(local_rot.z)
+                * Quat::from_rotation_y(local_rot.y)
+                * Quat::from_rotation_x(local_rot.x);
 
         let mut out = ModifierOutput::default();
         out.pose.dpos_ws = dpos_ws;

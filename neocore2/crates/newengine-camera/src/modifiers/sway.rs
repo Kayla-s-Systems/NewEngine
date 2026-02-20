@@ -45,8 +45,19 @@ impl CameraModifier for Sway {
         let s = phase.sin();
         let c = phase.cos();
 
-        let local_pos = Vec3::new(s, c.abs(), 0.0) * (self.amplitude_pos * intensity);
-        let local_rot = Vec3::new(c, s * 0.5, -s) * (self.amplitude_rot * intensity);
+        let local_pos = Vec3::new(
+            s * self.amplitude_pos.x * intensity,
+            c.abs() * self.amplitude_pos.y * intensity,
+            0.0,
+        );
+
+        let local_rot = Vec3::new(
+            c * self.amplitude_rot.x * intensity,
+            (s * 0.5) * self.amplitude_rot.y * intensity,
+            -s * self.amplitude_rot.z * intensity,
+        );
+
+
 
         let dpos_ws = rig.rotation * local_pos;
         let drot = Quat::from_rotation_z(local_rot.z)

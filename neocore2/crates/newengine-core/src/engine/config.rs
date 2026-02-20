@@ -7,10 +7,11 @@ pub struct EngineConfig {
     pub fixed_dt_ms: u32,
     pub plugins_dir: Option<PathBuf>,
 
-    /// Optional startup logging configuration (process-wide).
+    /// Optional startup logging configuration.
     ///
-    /// If provided, the engine initializes logging during `Engine::new_with_config`.
-    /// The returned handle is kept alive by the engine instance.
+    /// The engine applies this configuration to NEWENGINE_LOG_* environment variables
+    /// deterministically during `Engine::new_with_config`.
+    /// Actual logging is expected to be initialized by a runtime logging plugin (DLL).
     pub startup_logging: Option<StartupLoggingConfig>,
 
     /// Controls how the engine reacts to panics inside module callbacks.

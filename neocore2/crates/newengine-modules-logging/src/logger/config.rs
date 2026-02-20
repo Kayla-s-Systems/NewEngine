@@ -86,11 +86,11 @@ impl ConsoleLoggerConfig {
             .ok()
             .map(|v| !matches!(v.as_str(), "0" | "false"))
             .unwrap_or(true);
-        let include_file = env::var("NEWENGINE_LOG_FILE")
+        let include_file = env::var("NEWENGINE_LOG_INCLUDE_FILE")
             .ok()
             .map(|v| matches!(v.as_str(), "1" | "true"))
             .unwrap_or(false);
-        let include_line_number = env::var("NEWENGINE_LOG_LINE")
+        let include_line_number = env::var("NEWENGINE_LOG_INCLUDE_LINE")
             .ok()
             .map(|v| matches!(v.as_str(), "1" | "true"))
             .unwrap_or(false);

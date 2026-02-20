@@ -11,7 +11,7 @@ newengine-core = { path = "../newengine-core" }
 newengine-ui = { path = "../newengine-ui" }
 newengine-assets = { path = "../newengine-assets" }
 newengine-primitives = { path = "../newengine-primitives" }
-newengine-math = { path = "../newengine-math", features = ["backend-glam"] }
+newengine-math = { path = "../newengine-math" }
 shaderc = "0.10.1"
 blake3 = "1.5.5"
 

@@ -52,12 +52,22 @@ impl CameraModifier for NoiseShake {
         let n1 = hash_noise_1d(s ^ 0xA1, t);
         let n2 = hash_noise_1d(s ^ 0xB2, t + 17.0);
         let n3 = hash_noise_1d(s ^ 0xC3, t + 31.0);
-        let pos = Vec3::new(n1, n2, n3) * (self.amplitude_pos * intensity);
+        let pos = Vec3::new(
+            n1 * self.amplitude_pos.x * intensity,
+            n2 * self.amplitude_pos.y * intensity,
+            n3 * self.amplitude_pos.z * intensity,
+        );
+
 
         let r1 = hash_noise_1d(s ^ 0xD4, t + 7.0);
         let r2 = hash_noise_1d(s ^ 0xE5, t + 19.0);
         let r3 = hash_noise_1d(s ^ 0xF6, t + 43.0);
-        let rot = Vec3::new(r1, r2, r3) * (self.amplitude_rot * intensity);
+        let rot = Vec3::new(
+            r1 * self.amplitude_rot.x * intensity,
+            r2 * self.amplitude_rot.y * intensity,
+            r3 * self.amplitude_rot.z * intensity,
+        );
+
         let drot = Quat::from_rotation_z(rot.z) * Quat::from_rotation_y(rot.y) * Quat::from_rotation_x(rot.x);
 
         let mut out = ModifierOutput::default();

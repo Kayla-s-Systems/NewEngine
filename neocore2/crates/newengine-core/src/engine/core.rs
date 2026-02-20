@@ -3,7 +3,7 @@ use crate::events::EventHub;
 use crate::module::{Bus, Module, Resources, Services};
 use crate::plugins::{init_host_context, PluginControlQueue, PluginManager};
 use crate::sched::Scheduler;
-use crate::startup::{init_startup_logging, StartupLogHandle, StartupLoggingConfig};
+use crate::startup::{apply_startup_logging_env, StartupLoggingConfig};
 use crate::sync::ShutdownToken;
 
 use newengine_math::{register_engine_builtins, MathRegistry};
@@ -31,8 +31,6 @@ pub struct Engine<E: Send + 'static> {
     pub(super) plugins: PluginManager,
     pub(super) plugins_loaded: bool,
     pub(super) plugins_dir: Option<PathBuf>,
-
-    pub(super) _log_handle: Option<StartupLogHandle>,
 
     pub(super) shutdown: ShutdownToken,
     pub(super) exit_requested: bool,
@@ -85,14 +83,14 @@ impl<E: Send + 'static> Engine<E> {
         bus: Bus<E>,
         shutdown: ShutdownToken,
     ) -> EngineResult<Self> {
-        let log_handle = {
-            let cfg = config
-                .startup_logging
-                .clone()
-                .unwrap_or_else(StartupLoggingConfig::auto);
-            init_startup_logging(cfg)
-                .map_err(|e| EngineError::Other(format!("logging init failed: {e}")))?
-        };
+        // Logging is provided by an optional runtime plugin (DLL).
+        // The engine still must enforce the resolved config deterministically;
+        // we do so by writing NEWENGINE_LOG_* env vars before any plugin is loaded.
+        let cfg = config
+            .startup_logging
+            .clone()
+            .unwrap_or_else(StartupLoggingConfig::auto);
+        apply_startup_logging_env(&cfg);
 
         let fixed_dt = (config.fixed_dt_ms as f32 / 1000.0).max(0.001);
 
@@ -119,8 +117,6 @@ impl<E: Send + 'static> Engine<E> {
             plugins: PluginManager::new(),
             plugins_loaded: false,
             plugins_dir: config.plugins_dir,
-
-            _log_handle: log_handle,
 
             shutdown,
             exit_requested: false,

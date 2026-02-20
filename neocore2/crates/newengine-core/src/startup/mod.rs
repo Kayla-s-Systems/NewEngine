@@ -1,5 +1,5 @@
 mod config;
-mod logging;
+mod env_apply;
 mod loader;
 mod system_probe;
 
@@ -8,6 +8,6 @@ pub use config::{
     StartupOverride, StartupResolvedFrom, UiBackend, WindowPlacement,
 };
 
-pub use logging::{init_startup_logging, StartupLogHandle};
+pub use env_apply::apply_startup_logging_env;
 
 pub use loader::StartupLoader;
