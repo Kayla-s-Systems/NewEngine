@@ -4,8 +4,8 @@ use crate::{Vec2, Vec3};
 
 /// Extension methods for [`Vec2`] and [`Vec3`].
 ///
-/// This exists to provide stable, engine-level naming across temporary backends.
-/// Today the backend is `glam`; later it may be replaced. Keep call sites stable.
+/// This exists to provide stable, engine-level naming across potential math backends.
+/// Keep call sites stable.
 pub trait Vec2Ext {
     /// Returns squared length of the vector.
     fn length_sq(self) -> f32;

@@ -6,14 +6,10 @@ readme = "README.md"
 
 [features]
 # `newengine-math` is the single dependency point for math + low-level deterministic foundations.
-default = ["backend-glam", "collections"]
-
-## Temporary backend: re-export glam types while the engine migrates.
-## When we replace the backend, the public API of this crate must stay stable.
-backend-glam = ["dep:glam"]
+default = ["collections"]
 
 ## Serde support for math types.
-serde = ["dep:serde", "glam?/serde"]
+serde = ["dep:serde"]
 
 ## Shared deterministic collections + ids (re-exported).
 collections = ["dep:hashbrown", "dep:slotmap", "dep:fxhash"]
@@ -30,6 +26,3 @@ hashbrown = { version = "0.16.1", optional = true }
 slotmap = { version = "1.1.1", optional = true }
 fxhash = { version = "0.2", optional = true }
 
-# NOTE: We intentionally keep glam as an implementation detail of the engine math layer.
-# Other crates must not depend on glam directly.
-glam = { version = "0.32.0", default-features = false, features = ["std", "libm"], optional = true }
