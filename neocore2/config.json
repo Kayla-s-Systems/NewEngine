@@ -2,7 +2,8 @@
   "logging": {
     "level": "debug",
     "filter": "debug,newengine_render=debug",
-    "style": "auto",
+    "style": "always",
+    "colors": true,
     "target": "stderr",
     "file": "logs/editor.log",
     "tee": true,
@@ -13,12 +14,7 @@
       "line": false
     },
     "timestamp": "millis",
-    "indent": 2,
-    "rolling": {
-      "max_bytes": 33554432,
-      "max_files": 5,
-      "keep_days": 7
-    }
+    "indent": 2
   },
   "window": {
     "title": "NewEngine Editor",

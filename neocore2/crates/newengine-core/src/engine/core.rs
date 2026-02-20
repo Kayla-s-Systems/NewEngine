@@ -1,9 +1,10 @@
 use crate::error::{EngineError, EngineResult};
 use crate::events::EventHub;
 use crate::module::{Bus, Module, Resources, Services};
+use crate::plugins::startup_config_service::init_startup_config_service;
 use crate::plugins::{init_host_context, PluginControlQueue, PluginManager};
 use crate::sched::Scheduler;
-use crate::startup::{apply_startup_logging_env, StartupLoggingConfig};
+use crate::startup::StartupLoggingConfig;
 use crate::sync::ShutdownToken;
 
 use newengine_math::{register_engine_builtins, MathRegistry};
@@ -84,13 +85,12 @@ impl<E: Send + 'static> Engine<E> {
         shutdown: ShutdownToken,
     ) -> EngineResult<Self> {
         // Logging is provided by an optional runtime plugin (DLL).
-        // The engine still must enforce the resolved config deterministically;
-        // we do so by writing NEWENGINE_LOG_* env vars before any plugin is loaded.
+        // No logging plugin -> no process logger installed -> all `log::*` calls become no-ops.
+        // We expose the resolved startup logging config to plugins via a small host service.
         let cfg = config
             .startup_logging
             .clone()
             .unwrap_or_else(StartupLoggingConfig::auto);
-        apply_startup_logging_env(&cfg);
 
         let fixed_dt = (config.fixed_dt_ms as f32 / 1000.0).max(0.001);
 
@@ -98,6 +98,9 @@ impl<E: Send + 'static> Engine<E> {
         resources.insert(PluginControlQueue::default());
 
         init_host_context();
+
+        // Must be available before any plugin init() runs.
+        init_startup_config_service(cfg.clone());
 
         register_engine_builtins(MathRegistry::global())
             .map_err(|e| EngineError::Other(format!("math init failed: {e}")))?;

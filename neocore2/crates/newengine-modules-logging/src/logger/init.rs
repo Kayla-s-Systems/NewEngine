@@ -88,9 +88,13 @@ fn build_logger(cfg: &ConsoleLoggerConfig) -> Builder {
     let file_active = cfg.file_path.is_some();
     if let Some(style) = cfg.write_style {
         builder.write_style(style);
-    } else if file_active || !cfg.colors {
+    } else if !cfg.colors {
+        builder.write_style(WriteStyle::Never);
+    } else if file_active && !cfg.tee {
+        // File-only output: keep it clean (no ANSI).
         builder.write_style(WriteStyle::Never);
     } else {
+        // Console present (direct or tee): allow colors.
         builder.write_style(WriteStyle::Auto);
     }
 

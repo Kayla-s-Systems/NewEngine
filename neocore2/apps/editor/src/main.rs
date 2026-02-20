@@ -164,17 +164,6 @@ fn main() -> EngineResult<()> {
     let paths = ConfigPaths::from_startup_str("config.json");
     let (startup, report) = StartupLoader::load_json(&paths)?;
 
-    println!(
-        "startup: loaded source={:?} file={:?} resolved_from={:?} overrides={}",
-        report.source,
-        report.file,
-        report.resolved_from,
-        report.overrides.len()
-    );
-    for ov in report.overrides.iter() {
-        println!("startup: override {}: '{}' -> '{}'", ov.key, ov.from, ov.to);
-    }
-
     let startup = Arc::new(startup);
 
     let viewport = Arc::new(viewport_bridge::ViewportBridge::new());
@@ -285,6 +274,6 @@ fn main() -> EngineResult<()> {
         Ok(())
     })?;
 
-    println!("engine stopped");
+    log::info!("engine stopped");
     Ok(())
 }

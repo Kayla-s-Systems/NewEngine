@@ -287,6 +287,35 @@ fn find_subslice(hay: &[u8], needle: &[u8]) -> Option<usize> {
     hay.windows(needle.len()).position(|w| w == needle)
 }
 
+#[inline]
+fn strip_ansi_csi(buf: &[u8]) -> Vec<u8> {
+    // Strip common ANSI CSI sequences (e.g. ESC[...m) used for colors.
+    // Keeps everything else intact.
+    let mut out = Vec::with_capacity(buf.len());
+    let mut i = 0usize;
+
+    while i < buf.len() {
+        if buf[i] == 0x1b && i + 1 < buf.len() && buf[i + 1] == b'[' {
+            // CSI: ESC[
+            i += 2;
+            // Skip until final byte in the CSI range '@'..'~' (ECMA-48).
+            while i < buf.len() {
+                let b = buf[i];
+                i += 1;
+                if (b'@'..=b'~').contains(&b) {
+                    break;
+                }
+            }
+            continue;
+        }
+
+        out.push(buf[i]);
+        i += 1;
+    }
+
+    out
+}
+
 impl TeeWriter {
     pub fn new(console: LogOutput, file: Box<dyn Write + Send>) -> Self {
         Self { console, file }
@@ -313,7 +342,10 @@ impl Write for TeeWriter {
                 }
             }
         }
-        self.file.write_all(buf)?;
+
+        // File: strip ANSI sequences so logs stay clean/grep-friendly.
+        let clean = strip_ansi_csi(buf);
+        self.file.write_all(&clean)?;
         Ok(buf.len())
     }
 

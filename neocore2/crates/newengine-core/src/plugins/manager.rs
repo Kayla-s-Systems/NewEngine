@@ -9,6 +9,7 @@ use newengine_plugin_api::{
 use std::path::{Path, PathBuf};
 
 use crate::plugins::host_context::{unregister_by_owner, with_current_plugin_id};
+use crate::plugins::install_forward_logger_once;
 use crate::plugins::paths::{default_plugins_dir, is_dynamic_lib, resolve_plugins_dir};
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
@@ -181,6 +182,11 @@ impl PluginManager {
             let _ = self.load_one(path, host.clone());
         }
 
+        // IMPORTANT:
+        // The logging plugin cannot install a host-wide `log` backend from inside the DLL.
+        // The host must install a forwarder that routes records to the plugin-owned sink.
+        install_forward_logger_once(host.clone());
+
         // Phase 2: now that a logging module (if any) had a chance to install the backend,
         // we can emit diagnostics through `log`.
         log::info!("plugins: scanning directory '{}'", dir.display());
@@ -204,7 +210,9 @@ impl PluginManager {
 
     #[inline]
     pub fn load_path(&mut self, path: &Path, host: HostApiV1) -> Result<(), PluginLoadError> {
-        self.load_one(path, host)
+        let res = self.load_one(path, host.clone());
+        install_forward_logger_once(host);
+        res
     }
 
     #[inline]
@@ -327,7 +335,8 @@ impl PluginManager {
 
         let path = self.loaded[idx].path.clone();
         self.unload_at(idx);
-        self.load_one(&path, host)?;
+        self.load_one(&path, host.clone())?;
+        install_forward_logger_once(host);
         Ok(true)
     }
 
