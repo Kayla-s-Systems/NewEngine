@@ -1,3 +1,4 @@
+// Copyright (c) 2026 NewEngine | Kayla's Systems. All rights reserved.
 //! Engine-wide collections prelude (the normal API).
 //!
 //! # Contract
@@ -8,7 +9,7 @@
 //! - Untrusted/secure containers: `NeSecureHashMap`, `NeSecureHashSet`
 //! - SlotMap aliases: `NeSlotMap`, `NeSecondaryMap`, `NeKey`, `ne_new_key_type`
 
-use core::hash::{Hash};
+use core::hash::Hash;
 
 use super::{FxHashMap, FxHashSet};
 
@@ -57,8 +58,8 @@ pub type NeBTreeSet<K> = super::BTreeSet<K>;
 
 pub type NeSlotMap<K, V> = super::slotmap::SlotMap<K, V>;
 pub type NeSecondaryMap<K, V> = super::slotmap::SecondaryMap<K, V>;
-pub use super::slotmap::Key as NeKey;
 pub use super::slotmap::new_key_type as ne_new_key_type;
+pub use super::slotmap::Key as NeKey;
 
 // ------------------------
 // Explicit constructors

@@ -1,3 +1,4 @@
+// Copyright (c) 2026 NewEngine | Kayla's Systems. All rights reserved.
 #![forbid(unsafe_op_in_unsafe_fn)]
 
 use core::ops::{Mul, MulAssign};
@@ -7,7 +8,15 @@ use serde::{Deserialize, Serialize};
 
 use crate::{Quat, Vec3};
 
-/// 3x3 float matrix in **column-major** form.
+/// 3×3 matrix of `f32` stored in **column-major** form.
+///
+/// Layout:
+/// - `x_axis` is column 0
+/// - `y_axis` is column 1
+/// - `z_axis` is column 2
+///
+/// This matches common GPU conventions and allows efficient multiplication by a vector:
+/// `M * v = x_axis * v.x + y_axis * v.y + z_axis * v.z`.
 #[derive(Debug, Clone, Copy, PartialEq)]
 #[repr(C)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
@@ -29,14 +38,20 @@ impl Mat3 {
         Self { x_axis, y_axis, z_axis }
     }
 
+    /// Builds a **rotation** matrix from a quaternion.
+    ///
+    /// Notes:
+    /// - For a *pure* rotation (orthonormal matrix), `q` should be normalized.
+    /// - This implementation is intentionally consistent with `Quat * Vec3` rotation
+    ///   (i.e. `q * v * q⁻¹`).
+    ///
+    /// The previous implementation had sign errors in the `w`-terms, which caused view-matrix
+    /// construction (via quaternion-to-matrix) to diverge from quaternion-vector rotation.
+    /// That divergence manifests as "non-linear" or "uneven" camera motion.
     #[inline]
     pub fn from_quat(q: Quat) -> Self {
-        // Column-major rotation matrix.
-        //
-        // Must be consistent with `Quat * Vec3` rotation (q * v * q^-1).
-        // The previous implementation had sign errors in the `w` terms, producing a matrix
-        // that did not match quaternion-vector rotation, which breaks camera motion/render coherence.
-
+        // The algebra is arranged to minimize multiplies.
+        // This is the canonical form used by many math libraries.
         let x2 = q.x + q.x;
         let y2 = q.y + q.y;
         let z2 = q.z + q.z;
@@ -51,6 +66,7 @@ impl Mat3 {
         let wy = q.w * y2;
         let wz = q.w * z2;
 
+        // Row-major elements (m00..m22), then packed into column vectors.
         let m00 = 1.0 - (yy + zz);
         let m01 = xy - wz;
         let m02 = xz + wy;
@@ -73,6 +89,7 @@ impl Mat3 {
 
 impl Mul for Mat3 {
     type Output = Self;
+
     #[inline]
     fn mul(self, rhs: Self) -> Self::Output {
         let a = self;
@@ -95,9 +112,9 @@ impl MulAssign for Mat3 {
 
 impl Mul<Vec3> for Mat3 {
     type Output = Vec3;
+
     #[inline]
     fn mul(self, rhs: Vec3) -> Self::Output {
-        // Column-major: v' = x*vx + y*vy + z*vz
         self.x_axis * rhs.x + self.y_axis * rhs.y + self.z_axis * rhs.z
     }
 }
@@ -105,7 +122,6 @@ impl Mul<Vec3> for Mat3 {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::Vec3;
 
     #[inline]
     fn xorshift32(state: &mut u32) -> u32 {
@@ -119,7 +135,7 @@ mod tests {
 
     #[inline]
     fn f32_from_u32(x: u32) -> f32 {
-        // Map to [-1, 1]
+        // Map to [-1, 1].
         let v = (x as f32) * (1.0 / (u32::MAX as f32));
         v * 2.0 - 1.0
     }
@@ -128,7 +144,7 @@ mod tests {
     fn mat3_from_quat_matches_quat_vec_rotation() {
         let mut rng = 0xC0FFEEu32;
 
-        for _ in 0..2048 {
+        for _ in 0..4096 {
             let q = Quat::from_xyzw(
                 f32_from_u32(xorshift32(&mut rng)),
                 f32_from_u32(xorshift32(&mut rng)),
@@ -146,9 +162,7 @@ mod tests {
             let a = q * v;
             let b = Mat3::from_quat(q) * v;
 
-            let d = a - b;
-            let err = d.length();
-
+            let err = (a - b).length();
             assert!(
                 err <= 1.0e-4,
                 "Mat3::from_quat mismatch: err={} a={:?} b={:?} q={:?} v={:?}",
@@ -158,6 +172,41 @@ mod tests {
                 q,
                 v
             );
+        }
+    }
+
+    #[test]
+    fn mat3_from_quat_is_orthonormal_for_unit_quat() {
+        let mut rng = 0xBADC0DEu32;
+
+        for _ in 0..2048 {
+            let q = Quat::from_xyzw(
+                f32_from_u32(xorshift32(&mut rng)),
+                f32_from_u32(xorshift32(&mut rng)),
+                f32_from_u32(xorshift32(&mut rng)),
+                f32_from_u32(xorshift32(&mut rng)),
+            )
+                .normalize_or_identity();
+
+            let m = Mat3::from_quat(q);
+
+            let x = m.x_axis;
+            let y = m.y_axis;
+            let z = m.z_axis;
+
+            // Unit length.
+            assert!((x.length() - 1.0).abs() <= 1.0e-4);
+            assert!((y.length() - 1.0).abs() <= 1.0e-4);
+            assert!((z.length() - 1.0).abs() <= 1.0e-4);
+
+            // Orthogonality.
+            assert!(x.dot(y).abs() <= 1.0e-4);
+            assert!(x.dot(z).abs() <= 1.0e-4);
+            assert!(y.dot(z).abs() <= 1.0e-4);
+
+            // Right-handed basis (x × y = z).
+            let c = x.cross(y);
+            assert!((c - z).length() <= 1.0e-4);
         }
     }
 }

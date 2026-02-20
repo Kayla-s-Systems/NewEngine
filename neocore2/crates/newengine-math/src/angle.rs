@@ -1,3 +1,4 @@
+// Copyright (c) 2026 NewEngine | Kayla's Systems. All rights reserved.
 #![forbid(unsafe_op_in_unsafe_fn)]
 
 /// Angle helpers (radians).

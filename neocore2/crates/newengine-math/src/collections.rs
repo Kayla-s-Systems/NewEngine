@@ -1,3 +1,4 @@
+// Copyright (c) 2026 NewEngine | Kayla's Systems. All rights reserved.
 #![forbid(unsafe_op_in_unsafe_fn)]
 
 //! Engine-wide collection types and policies.
@@ -72,5 +73,6 @@ pub type BTreeSet<K> = std::collections::BTreeSet<K>;
 /// These are re-exported only for wiring. Prefer `collections::prelude::*` in downstream crates.
 #[cfg(feature = "collections")]
 pub use slotmap;
+
 
 
