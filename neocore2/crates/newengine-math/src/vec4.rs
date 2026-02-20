@@ -165,3 +165,11 @@ impl DivAssign<f32> for Vec4 {
         *self = *self / rhs;
     }
 }
+
+impl Mul<Vec4> for f32 {
+    type Output = Vec4;
+    #[inline]
+    fn mul(self, rhs: Vec4) -> Self::Output {
+        rhs * self
+    }
+}

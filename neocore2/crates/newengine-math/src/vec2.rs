@@ -70,6 +70,18 @@ impl Vec2 {
         self / self.length()
     }
 
+    #[inline]
+    pub fn is_finite(self) -> bool {
+        self.x.is_finite() && self.y.is_finite()
+    }
+
+    /// Linear interpolation.
+    #[inline]
+    pub fn lerp(self, rhs: Self, t: f32) -> Self {
+        let t = t.clamp(0.0, 1.0);
+        Self::new(self.x + (rhs.x - self.x) * t, self.y + (rhs.y - self.y) * t)
+    }
+
     /// Component-wise minimum.
     #[inline]
     pub fn min(self, rhs: Self) -> Self {
@@ -164,5 +176,13 @@ impl DivAssign<f32> for Vec2 {
     #[inline]
     fn div_assign(&mut self, rhs: f32) {
         *self = *self / rhs;
+    }
+}
+
+impl Mul<Vec2> for f32 {
+    type Output = Vec2;
+    #[inline]
+    fn mul(self, rhs: Vec2) -> Self::Output {
+        rhs * self
     }
 }

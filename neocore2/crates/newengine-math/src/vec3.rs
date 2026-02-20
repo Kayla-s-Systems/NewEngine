@@ -82,6 +82,17 @@ impl Vec3 {
         self / self.length()
     }
 
+    /// Linear interpolation.
+    #[inline]
+    pub fn lerp(self, rhs: Self, t: f32) -> Self {
+        let t = t.clamp(0.0, 1.0);
+        Self::new(
+            self.x + (rhs.x - self.x) * t,
+            self.y + (rhs.y - self.y) * t,
+            self.z + (rhs.z - self.z) * t,
+        )
+    }
+
     /// Component-wise minimum.
     #[inline]
     pub fn min(self, rhs: Self) -> Self {
@@ -194,5 +205,13 @@ impl DivAssign<f32> for Vec3 {
     #[inline]
     fn div_assign(&mut self, rhs: f32) {
         *self = *self / rhs;
+    }
+}
+
+impl Mul<Vec3> for f32 {
+    type Output = Vec3;
+    #[inline]
+    fn mul(self, rhs: Vec3) -> Self::Output {
+        rhs * self
     }
 }

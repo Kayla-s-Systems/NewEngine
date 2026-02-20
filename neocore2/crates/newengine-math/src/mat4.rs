@@ -107,7 +107,7 @@ impl Mat4 {
         }
 
         let rot_m = Mat3::from_cols(rx, ry, rz);
-        let rot = Quat::from_mat3(&rot_m).normalize();
+        let rot = Quat::from_mat3(&rot_m).normalize_or_identity();
 
         let scale = Vec3::new(sx, sy, sz);
         let trans = Vec3::new(self.w_axis.x, self.w_axis.y, self.w_axis.z);

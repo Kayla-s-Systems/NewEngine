@@ -12,6 +12,7 @@ mod registry;
 mod value;
 mod builtins;
 mod gpu;
+mod angle;
 mod ext;
 mod euler;
 mod vec2;
@@ -25,6 +26,7 @@ pub mod collections;
 #[macro_use]
 mod macros;
 
+pub use angle::wrap_pi;
 pub use builtins::register_engine_builtins;
 pub use euler::EulerRot;
 pub use ext::{Vec2Ext, Vec3Ext};
@@ -43,6 +45,7 @@ pub use once_cell::sync::Lazy;
 
 
 pub mod prelude {
+    pub use super::wrap_pi;
     pub use super::{EulerRot, Mat3, Mat4, Quat, Vec2, Vec3, Vec4};
     pub use super::{Vec2Ext, Vec3Ext};
 

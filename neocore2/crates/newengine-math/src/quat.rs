@@ -53,6 +53,25 @@ impl Quat {
     }
 
     #[inline]
+    pub fn is_finite(self) -> bool {
+        self.x.is_finite() && self.y.is_finite() && self.z.is_finite() && self.w.is_finite()
+    }
+
+    /// Normalizes the quaternion, returning identity if the input is not finite or too small.
+    #[inline]
+    pub fn normalize_or_identity(self) -> Self {
+        if !self.is_finite() {
+            return Self::IDENTITY;
+        }
+        let ls = self.length_squared();
+        if !ls.is_finite() || ls < 1e-12 {
+            return Self::IDENTITY;
+        }
+        let inv = 1.0 / ls.sqrt();
+        Self::from_xyzw(self.x * inv, self.y * inv, self.z * inv, self.w * inv)
+    }
+
+    #[inline]
     pub fn from_axis_angle(axis: Vec3, angle: f32) -> Self {
         let half = 0.5 * angle;
         let (s, c) = half.sin_cos();
