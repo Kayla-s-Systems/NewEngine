@@ -1,10 +1,9 @@
 use crate::error::{EngineError, EngineResult};
 use crate::events::EventHub;
 use crate::module::{Bus, Module, Resources, Services};
-use crate::plugins::startup_config_service::init_startup_config_service;
+use crate::plugins::plugin_config_service::init_plugin_config_service;
 use crate::plugins::{init_host_context, PluginControlQueue, PluginManager};
 use crate::sched::Scheduler;
-use crate::startup::StartupLoggingConfig;
 use crate::sync::ShutdownToken;
 
 use newengine_math::{register_engine_builtins, MathRegistry};
@@ -74,7 +73,18 @@ impl<E: Send + 'static> Engine<E> {
         bus: Bus<E>,
         shutdown: ShutdownToken,
     ) -> EngineResult<Self> {
-        let config = EngineConfig::new(fixed_dt_ms);
+        // Backward-compatible convenience: if the host has already resolved a `StartupConfig`
+        // (via `StartupLoader`), reuse its modules directory and per-plugin overrides.
+        //
+        // This prevents a common integration footgun where the app loads config.json but then
+        // forgets to forward plugin overrides into `EngineConfig`.
+        let config = if let Some(startup) = crate::startup::last_startup_config() {
+            EngineConfig::new(fixed_dt_ms)
+                .with_plugins_dir(Some(startup.modules_dir.clone()))
+                .with_plugin_overrides(startup.plugins.clone())
+        } else {
+            EngineConfig::new(fixed_dt_ms)
+        };
         Self::new_with_config(config, services, bus, shutdown)
     }
 
@@ -86,11 +96,6 @@ impl<E: Send + 'static> Engine<E> {
     ) -> EngineResult<Self> {
         // Logging is provided by an optional runtime plugin (DLL).
         // No logging plugin -> no process logger installed -> all `log::*` calls become no-ops.
-        // We expose the resolved startup logging config to plugins via a small host service.
-        let cfg = config
-            .startup_logging
-            .clone()
-            .unwrap_or_else(StartupLoggingConfig::auto);
 
         let fixed_dt = (config.fixed_dt_ms as f32 / 1000.0).max(0.001);
 
@@ -100,7 +105,8 @@ impl<E: Send + 'static> Engine<E> {
         init_host_context();
 
         // Must be available before any plugin init() runs.
-        init_startup_config_service(cfg.clone());
+        init_plugin_config_service(config.plugin_overrides.clone());
+
 
         register_engine_builtins(MathRegistry::global())
             .map_err(|e| EngineError::Other(format!("math init failed: {e}")))?;

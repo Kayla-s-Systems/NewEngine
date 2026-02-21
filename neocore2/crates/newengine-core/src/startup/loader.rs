@@ -1,10 +1,10 @@
 #![forbid(unsafe_op_in_unsafe_fn)]
 
 use crate::error::{EngineError, EngineResult};
-use crate::startup::config::UiBackend;
+use crate::startup::config::{StartupPluginOverride, UiBackend};
 use crate::startup::{
-    ConfigPaths, StartupConfig, StartupConfigSource, StartupLoadReport, StartupOverride,
-    StartupResolvedFrom, WindowPlacement,
+    ConfigPaths, StartupConfig, StartupConfigSource, StartupLoadReport,
+    StartupOverride, StartupResolvedFrom, WindowPlacement,
 };
 use serde::Deserialize;
 use std::fs;
@@ -53,6 +53,8 @@ impl StartupLoader {
             Err(e) => return Err(e),
         }
 
+        crate::startup::set_last_load_report(report.clone());
+        crate::startup::set_last_startup_config(cfg.clone());
         Ok((cfg, report))
     }
 }
@@ -60,10 +62,12 @@ impl StartupLoader {
 #[derive(Deserialize)]
 struct RootJson {
     window: Option<WindowJson>,
+    /// Legacy (pre-plugin). Mapped to plugins["newengine.logging"] for backward compatibility.
     logging: Option<LoggingJson>,
     engine: Option<EngineJson>,
     render: Option<RenderJson>,
     ui: Option<UiJson>,
+    plugins: Option<std::collections::HashMap<String, serde_json::Value>>,
 }
 
 #[derive(Deserialize)]
@@ -146,104 +150,101 @@ struct UiJson {
 
 fn apply_root(cfg: &mut StartupConfig, report: &mut StartupLoadReport, src: RootJson) {
     if let Some(logging) = src.logging {
-        // Legacy: "logging.level" mirrors old "log_level" field.
-        if let Some(level) = logging.level.clone() {
-            apply_string(report, "logging.level", &mut cfg.logging.level, level.clone());
-            apply_string(report, "log_level", &mut cfg.log_level, level);
-        }
+        // Backward compatibility: old top-level `logging` maps to plugins["newengine.logging"].
+        let mut o = serde_json::Map::new();
 
+        if let Some(level) = logging.level {
+            o.insert("level".to_owned(), serde_json::Value::String(level));
+        }
         if let Some(filter) = logging.filter {
-            apply_opt_string(report, "logging.filter", &mut cfg.logging.filter, filter);
+            o.insert("filter".to_owned(), serde_json::Value::String(filter));
         }
-
         if let Some(style) = logging.style {
-            apply_opt_string(report, "logging.style", &mut cfg.logging.style, style);
+            o.insert("style".to_owned(), serde_json::Value::String(style));
         }
-
-        // target: stdout|stderr
         if let Some(t) = logging.target {
-            apply_opt_string(report, "logging.target", &mut cfg.logging.console_target, t);
+            o.insert("console_target".to_owned(), serde_json::Value::String(t));
         }
-
-        // file path + tee behavior
         if let Some(fp) = logging.file {
-            apply_opt_string(report, "logging.file", &mut cfg.logging.file_path, fp);
-            // If tee not explicitly specified, default to true when file is set.
-            if logging.tee.is_none() && !cfg.logging.tee {
-                apply_bool(report, "logging.tee", &mut cfg.logging.tee, true);
-            }
+            o.insert("file_path".to_owned(), serde_json::Value::String(fp));
         }
-
         if let Some(tee) = logging.tee {
-            apply_bool(report, "logging.tee", &mut cfg.logging.tee, tee);
+            o.insert("tee".to_owned(), serde_json::Value::Bool(tee));
         }
-
-        // Legacy color + include_module mapping
         if let Some(colors) = logging.colors {
-            apply_bool(report, "logging.colors", &mut cfg.logging.colors, colors);
-        }
-        if let Some(inc_mod) = logging.include_module {
-            apply_bool(report, "logging.include.module_path", &mut cfg.logging.include_module_path, inc_mod);
+            o.insert("colors".to_owned(), serde_json::Value::Bool(colors));
         }
 
+        // Legacy include_module -> include_module_path
+        if let Some(inc_mod) = logging.include_module {
+            o.insert("include_module_path".to_owned(), serde_json::Value::Bool(inc_mod));
+        }
         if let Some(inc) = logging.include {
             if let Some(v) = inc.module_path {
-                apply_bool(report, "logging.include.module_path", &mut cfg.logging.include_module_path, v);
+                o.insert("include_module_path".to_owned(), serde_json::Value::Bool(v));
             }
             if let Some(v) = inc.target {
-                apply_bool(report, "logging.include.target", &mut cfg.logging.include_target, v);
+                o.insert("include_target".to_owned(), serde_json::Value::Bool(v));
             }
             if let Some(v) = inc.file {
-                apply_bool(report, "logging.include.file", &mut cfg.logging.include_file, v);
+                o.insert("include_file".to_owned(), serde_json::Value::Bool(v));
             }
             if let Some(v) = inc.line {
-                apply_bool(report, "logging.include.line", &mut cfg.logging.include_line_number, v);
+                o.insert("include_line_number".to_owned(), serde_json::Value::Bool(v));
             }
         }
 
         if let Some(ts) = logging.timestamp {
-            // "none" means explicit disable
-            if ts.trim().eq_ignore_ascii_case("none") {
-                let from = cfg.logging.timestamp.clone().unwrap_or_else(|| "null".to_owned());
-                let to = "null".to_owned();
-                if cfg.logging.timestamp.is_some() {
-                    cfg.logging.timestamp = None;
-                    report.overrides.push(StartupOverride {
-                        key: "logging.timestamp",
-                        from,
-                        to,
-                    });
-                }
-            } else {
-                apply_opt_string(report, "logging.timestamp", &mut cfg.logging.timestamp, ts);
+            o.insert("timestamp".to_owned(), serde_json::Value::String(ts));
+        }
+        if let Some(indent) = logging.indent {
+            o.insert("indent".to_owned(), serde_json::Value::Number(serde_json::Number::from(indent as u64)));
+        }
+        if let Some(rolling) = logging.rolling {
+            if let Some(v) = rolling.max_bytes {
+                o.insert("roll_max_bytes".to_owned(), serde_json::Value::Number(serde_json::Number::from(v)));
+            }
+            if let Some(v) = rolling.max_files {
+                o.insert("roll_max_files".to_owned(), serde_json::Value::Number(serde_json::Number::from(v as u64)));
+            }
+            if let Some(v) = rolling.keep_days {
+                o.insert("roll_keep_days".to_owned(), serde_json::Value::Number(serde_json::Number::from(v as u64)));
             }
         }
 
-        if let Some(indent) = logging.indent {
-            let from = cfg.logging.indent.map(|v| v.to_string()).unwrap_or_else(|| "null".to_owned());
-            let to = indent.to_string();
-            if cfg.logging.indent != Some(indent) {
-                cfg.logging.indent = Some(indent);
-                report.overrides.push(StartupOverride {
-                    key: "logging.indent",
-                    from,
+        cfg.plugins
+            .entry("newengine.logging".to_owned())
+            .or_insert_with(|| serde_json::Value::Object(serde_json::Map::new()))
+            .as_object_mut()
+            .map(|dst| dst.extend(o));
+
+        report.overrides.push(StartupOverride {
+            key: "logging",
+            from: "legacy".to_owned(),
+            to: "plugins.newengine.logging".to_owned(),
+        });
+    }
+
+    if let Some(mut plugins) = src.plugins {
+        // Deterministic merge: config.json plugins override defaults (plugin-owned).
+        // Also emit a report entry per plugin id so the logging plugin can print it later.
+        let mut ids: Vec<String> = plugins.keys().cloned().collect();
+        ids.sort();
+
+        for id in ids {
+            if let Some(v) = plugins.remove(&id) {
+                let to = summarize_json(&v);
+                cfg.plugins.insert(id.clone(), v);
+                report.plugin_overrides.push(StartupPluginOverride {
+                    plugin_id: id,
+                    key: "plugins.*",
+                    from: "<plugin defaults>".to_owned(),
                     to,
                 });
             }
         }
-
-        if let Some(rolling) = logging.rolling {
-            if let Some(v) = rolling.max_bytes {
-                apply_opt_u64(report, "logging.rolling.max_bytes", &mut cfg.logging.roll_max_bytes, v);
-            }
-            if let Some(v) = rolling.max_files {
-                apply_usize(report, "logging.rolling.max_files", &mut cfg.logging.roll_max_files, v);
-            }
-            if let Some(v) = rolling.keep_days {
-                apply_opt_usize(report, "logging.rolling.keep_days", &mut cfg.logging.roll_keep_days, v);
-            }
-        }
     }
+
 
     if let Some(w) = src.window {
         if let Some(t) = w.title {
@@ -277,21 +278,42 @@ fn apply_root(cfg: &mut StartupConfig, report: &mut StartupLoadReport, src: Root
         }
     }
 
+
     if let Some(engine) = src.engine {
+        // Legacy engine-side asset settings are translated into plugin overrides.
+        // NewEngine vNext: AssetManager is a plugin with its own config contract.
+        let mut legacy_assets = serde_json::Map::new();
+
         if let Some(root) = engine.assets_root {
-            apply_path(report, "assets_root", &mut cfg.assets_root, root);
+            legacy_assets.insert("assets_root".to_string(), serde_json::Value::String(root));
         }
         if let Some(steps) = engine.asset_pump_steps {
-            apply_u32(report, "asset_pump_steps", &mut cfg.asset_pump_steps, steps);
+            legacy_assets.insert("pump_steps".to_string(), serde_json::Value::Number((steps as u64).into()));
         }
         if let Some(enabled) = engine.asset_filesystem_source {
-            apply_bool(
-                report,
-                "asset_filesystem_source",
-                &mut cfg.asset_filesystem_source,
-                enabled,
-            );
+            legacy_assets.insert("filesystem".to_string(), serde_json::Value::Bool(enabled));
         }
+
+        if !legacy_assets.is_empty() {
+            let pid = "newengine.assets".to_string();
+            let entry = cfg
+                .plugins
+                .entry(pid.clone())
+                .or_insert_with(|| serde_json::Value::Object(serde_json::Map::new()));
+
+            let obj = entry.as_object_mut().unwrap();
+            for (k, v) in legacy_assets {
+                obj.insert(k, v);
+        }
+
+            report.plugin_overrides.push(StartupPluginOverride {
+                plugin_id: pid,
+                key: "engine.* (legacy assets config)",
+                from: "legacy".to_string(),
+                to: "plugins.newengine.assets (translated)".to_string(),
+            });
+        }
+
         if let Some(dir) = engine.modules_dir {
             apply_path(report, "modules_dir", &mut cfg.modules_dir, dir);
         }
@@ -525,4 +547,20 @@ fn resolve_startup_file_optional(
     }
 
     Ok(None)
+}
+
+fn summarize_json(v: &serde_json::Value) -> String {
+    // Compact representation with a hard cap to avoid log spam.
+    // (Plugins should keep their base config inside the DLL; config.json carries overrides only.)
+    const MAX: usize = 512;
+    match serde_json::to_string(v) {
+        Ok(s) if s.len() <= MAX => s,
+        Ok(s) => {
+            let mut out = s;
+            out.truncate(MAX);
+            out.push_str("…");
+            out
+        }
+        Err(_) => "<invalid json>".to_owned(),
+    }
 }

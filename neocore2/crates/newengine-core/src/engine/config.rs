@@ -1,18 +1,20 @@
-use crate::startup::StartupLoggingConfig;
+use serde_json::Value;
 
+use std::collections::HashMap;
 use std::path::PathBuf;
+
+use crate::startup::StartupConfig;
 
 #[derive(Debug, Clone)]
 pub struct EngineConfig {
     pub fixed_dt_ms: u32,
     pub plugins_dir: Option<PathBuf>,
 
-    /// Optional startup logging configuration.
+    /// Per-plugin override objects, taken from `config.json.plugins`.
     ///
-    /// The engine applies this configuration to NEWENGINE_LOG_* environment variables
-    /// deterministically during `Engine::new_with_config`.
-    /// Actual logging is expected to be initialized by a runtime logging plugin (DLL).
-    pub startup_logging: Option<StartupLoggingConfig>,
+    /// The host exposes these overrides to plugins via the `newengine.config.v1` service.
+    /// Plugins are expected to merge overrides into their own base configuration.
+    pub plugin_overrides: HashMap<String, Value>,
 
     /// Controls how the engine reacts to panics inside module callbacks.
     ///
@@ -27,7 +29,7 @@ impl Default for EngineConfig {
         Self {
             fixed_dt_ms: 16,
             plugins_dir: None,
-            startup_logging: Some(StartupLoggingConfig::auto()),
+            plugin_overrides: HashMap::new(),
             catch_panics: true,
         }
     }
@@ -39,20 +41,32 @@ impl EngineConfig {
         Self {
             fixed_dt_ms,
             plugins_dir: None,
-            startup_logging: None,
+            plugin_overrides: HashMap::new(),
             catch_panics: true,
         }
     }
 
+    /// Builds an engine config from a resolved startup config.
+    ///
+    /// The startup config is the single source of truth for:
+    /// - module scan directory (`modules_dir`)
+    /// - per-plugin override objects (`plugins`)
     #[inline]
-    pub fn with_startup_logging(mut self, cfg: StartupLoggingConfig) -> Self {
-        self.startup_logging = Some(cfg);
-        self
+    pub fn from_startup(startup: &StartupConfig, fixed_dt_ms: u32) -> Self {
+        Self::new(fixed_dt_ms)
+            .with_plugins_dir(Some(startup.modules_dir.clone()))
+            .with_plugin_overrides(startup.plugins.clone())
     }
 
     #[inline]
     pub fn with_plugins_dir(mut self, dir: Option<PathBuf>) -> Self {
         self.plugins_dir = dir;
+        self
+    }
+
+    #[inline]
+    pub fn with_plugin_overrides(mut self, overrides: HashMap<String, Value>) -> Self {
+        self.plugin_overrides = overrides;
         self
     }
 

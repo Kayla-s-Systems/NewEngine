@@ -25,11 +25,9 @@ impl<E: Send + 'static> Engine<E> {
         let t0 = Instant::now();
 
         let host = default_host_api();
-
-        let load_result = if let Some(dir) = self.plugins_dir.as_deref() {
-            self.plugins.load_from_dir(dir, host)
-        } else {
-            self.plugins.load_default(host)
+        let load_result = match self.plugins_dir.as_deref() {
+            Some(dir) => self.plugins.load_from_dir(dir, host),
+            None => self.plugins.load_default(host),
         };
 
         if let Err(e) = load_result {
@@ -41,6 +39,7 @@ impl<E: Send + 'static> Engine<E> {
             );
         }
 
+        // Mark as loaded even if some plugins failed to load (non-fatal path).
         self.plugins_loaded = true;
 
         let loaded = self.plugins.snapshot().len();
@@ -53,13 +52,15 @@ impl<E: Send + 'static> Engine<E> {
 
     pub(super) fn log_plugins_diagnostics(&self, tag: &'static str) {
         let list = self.plugins.snapshot();
-        log::info!("plugins: diagnostics tag='{}' loaded={}", tag, list.len());
+        let n = list.len();
+        log::info!("plugins: diagnostics tag='{}' loaded={}", tag, n);
 
+        // Keep INFO concise and stable.
         for (i, p) in list.iter().enumerate() {
             log::info!(
                 "plugins: diag [{:02}/{:02}] id='{}' ver='{}' state='{}'",
                 i.saturating_add(1),
-                list.len().max(1),
+                n.max(1),
                 p.id,
                 p.version,
                 p.state
@@ -91,48 +92,87 @@ impl<E: Send + 'static> Engine<E> {
 
         for cmd in queue.drain() {
             did_any = true;
+
+            // Host API is cheap, but do not re-create it multiple times per command.
+            // Create per command to avoid any lifetime/aliasing surprises and keep semantics clean.
             let host = default_host_api();
 
             match cmd {
                 PluginControlCommand::Rescan => {
+                    let phase = "rescan";
+                    let t0 = Instant::now();
+
                     let dir = self.plugins_dir.clone();
-                    let res = if let Some(d) = dir.as_deref() {
-                        self.plugins.load_from_dir(d, host)
-                    } else {
-                        self.plugins.load_default(host)
+                    let res = match dir.as_deref() {
+                        Some(d) => self.plugins.load_from_dir(d, host),
+                        None => self.plugins.load_default(host),
                     };
 
                     match res {
                         Ok(()) => {
+                            let loaded = self.plugins.snapshot().len();
                             last_action = Some("plugins: rescan".to_string());
+                            Self::log_phase_ok("plugins", phase, Some(loaded), Self::elapsed_since(t0));
                         }
                         Err(e) => {
-                            last_error = Some(format!("plugins: rescan failed: {e}"));
+                            last_error = Some(format!(
+                                "plugins: rescan failed ({}): {e}",
+                                Self::elapsed_since(t0)
+                            ));
+                            log::warn!(
+                                "plugins: non-fatal rescan error (phase={} {}): {}",
+                                phase,
+                                Self::elapsed_since(t0),
+                                e
+                            );
                         }
                     }
                 }
-                PluginControlCommand::LoadPath(path) => match self.plugins.load_path(&path, host) {
-                    Ok(()) => {
-                        last_action = Some(format!("plugins: load '{}'", path.display()));
+
+                PluginControlCommand::LoadPath(path) => {
+                    let phase = "load_path";
+                    let t0 = Instant::now();
+
+                    match self.plugins.load_path(&path, host) {
+                        Ok(()) => {
+                            last_action = Some(format!("plugins: load '{}'", path.display()));
+                            let loaded = self.plugins.snapshot().len();
+                            Self::log_phase_ok("plugins", phase, Some(loaded), Self::elapsed_since(t0));
+                        }
+                        Err(e) => {
+                            last_error = Some(format!(
+                                "plugins: load failed path='{}' ({}): {e}",
+                                path.display(),
+                                Self::elapsed_since(t0)
+                            ));
+                        }
                     }
-                    Err(e) => {
-                        last_error = Some(format!("plugins: load failed: {e}"));
-                    }
-                },
+                }
+
                 PluginControlCommand::ReloadId(id) | PluginControlCommand::EnableId(id) => {
+                    let phase = "reload";
+                    let t0 = Instant::now();
+
                     match self.plugins.reload_by_id(&id, host) {
                         Ok(true) => {
                             self.plugins.start_by_id(&id);
                             last_action = Some(format!("plugins: reloaded id='{}'", id));
+                            let loaded = self.plugins.snapshot().len();
+                            Self::log_phase_ok("plugins", phase, Some(loaded), Self::elapsed_since(t0));
                         }
                         Ok(false) => {
                             last_error = Some(format!("plugins: unknown id='{}'", id));
                         }
                         Err(e) => {
-                            last_error = Some(format!("plugins: reload failed: {e}"));
+                            last_error = Some(format!(
+                                "plugins: reload failed id='{}' ({}): {e}",
+                                id,
+                                Self::elapsed_since(t0)
+                            ));
                         }
                     }
                 }
+
                 PluginControlCommand::StartId(id) => {
                     if self.plugins.start_by_id(&id) {
                         last_action = Some(format!("plugins: start id='{}'", id));
@@ -140,6 +180,7 @@ impl<E: Send + 'static> Engine<E> {
                         last_error = Some(format!("plugins: unknown id='{}'", id));
                     }
                 }
+
                 PluginControlCommand::StopId(id) => {
                     if self.plugins.stop_by_id(&id) {
                         last_action = Some(format!("plugins: stop id='{}'", id));
@@ -147,6 +188,7 @@ impl<E: Send + 'static> Engine<E> {
                         last_error = Some(format!("plugins: unknown id='{}'", id));
                     }
                 }
+
                 PluginControlCommand::DisableId(id) => {
                     if self
                         .plugins

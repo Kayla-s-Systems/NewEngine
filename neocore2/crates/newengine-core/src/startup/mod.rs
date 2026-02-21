@@ -1,13 +1,15 @@
 mod config;
-mod env_apply;
 mod loader;
+mod report_store;
 mod system_probe;
 
 pub use config::{
-    ConfigPaths, StartupConfig, StartupConfigSource, StartupLoadReport, StartupLoggingConfig,
-    StartupOverride, StartupResolvedFrom, UiBackend, WindowPlacement,
+    ConfigPaths, StartupConfig, StartupConfigSource, StartupLoadReport, StartupOverride,
+    StartupResolvedFrom, UiBackend, WindowPlacement,
 };
 
-pub use env_apply::apply_startup_logging_env;
-
 pub use loader::StartupLoader;
+
+pub use report_store::{
+    last_load_report, last_startup_config, set_last_load_report, set_last_startup_config,
+};
