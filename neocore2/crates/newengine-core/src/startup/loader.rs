@@ -9,11 +9,13 @@ use crate::startup::{
 use serde::Deserialize;
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::time::Instant;
 
 pub struct StartupLoader;
 
 impl StartupLoader {
     pub fn load_json(paths: &ConfigPaths) -> EngineResult<(StartupConfig, StartupLoadReport)> {
+        let t0 = Instant::now();
         let mut cfg = StartupConfig::default();
         let mut report = StartupLoadReport::new();
 
@@ -23,6 +25,9 @@ impl StartupLoader {
             Ok(Some((resolved, from))) => {
                 report.file = Some(resolved.clone());
                 report.resolved_from = from;
+
+                let meta_len = fs::metadata(&resolved).ok().map(|m| m.len() as usize);
+                report.file_bytes = meta_len;
 
                 let data = fs::read_to_string(&resolved).map_err(|e| {
                     EngineError::Other(format!(
@@ -53,6 +58,7 @@ impl StartupLoader {
             Err(e) => return Err(e),
         }
 
+        report.total_ms = Some(t0.elapsed().as_millis().min(u128::from(u32::MAX)) as u32);
         crate::startup::set_last_load_report(report.clone());
         crate::startup::set_last_startup_config(cfg.clone());
         Ok((cfg, report))

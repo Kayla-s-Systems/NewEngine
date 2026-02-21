@@ -59,9 +59,37 @@ impl PluginManager {
         loggers.sort();
         rest.sort();
 
+        log::debug!(
+            "plugins: candidates loggers={} rest={} (logger-first load)",
+            loggers.len(),
+            rest.len()
+        );
+        if log::log_enabled!(log::Level::Debug) {
+            for p in loggers.iter().chain(rest.iter()) {
+                log::debug!("plugins: candidate '{}'", p.display());
+            }
+        }
+
         // 1) Try to load logging plugins first (best-effort).
         for path in &loggers {
             let _ = self.load_one(path, host.clone());
+        }
+
+        // If startup config specifies overrides for the logging plugin but we found no logging candidate,
+        // it's usually a packaging/layout issue (wrong modules_dir, missing DLL, wrong name, etc.).
+        if loggers.is_empty() {
+            if let Some(r) = crate::startup::last_load_report() {
+                let has_logging_override = r
+                    .plugin_overrides
+                    .iter()
+                    .any(|o| o.plugin_id == "newengine.logging");
+                if has_logging_override {
+                    log::warn!(
+                        "plugins: no logging plugin candidate found in '{}' but startup has overrides for 'newengine.logging'",
+                        dir.display()
+                    );
+                }
+            }
         }
 
         // 2) Install forward logger after potential logging plugin init().
@@ -86,6 +114,13 @@ impl PluginManager {
                 Err(e) => {
                     log::warn!("plugins: failed to load '{}': {}", path.display(), e);
                 }
+            }
+        }
+
+        log::info!("plugins: load complete loaded_count={}", self.loaded.len());
+        if log::log_enabled!(log::Level::Debug) {
+            for p in self.loaded.iter() {
+                log::debug!("plugins: loaded '{}' ver='{}' path='{}'", p.info.id, p.info.version, p.path.display());
             }
         }
 

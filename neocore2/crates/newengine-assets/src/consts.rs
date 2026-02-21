@@ -20,4 +20,11 @@ pub mod method {
     pub const SOURCES_JSON: &str = "asset.sources_json";
     pub const MOUNT_PAK: &str = "asset.mount_pak";
     pub const MOUNT_DIR: &str = "asset.mount_dir";
+
+    // VFS layered mounting (priority-driven).
+    pub const MOUNT_PAK_PRIO: &str = "asset.mount_pak_prio";
+    pub const MOUNT_DIR_PRIO: &str = "asset.mount_dir_prio";
+
+    // Debug/diagnostics.
+    pub const RESOLVE_TRACE_JSON: &str = "asset.resolve_trace_json";
 }

@@ -7,7 +7,7 @@ use std::time::Duration;
 
 use crate::error::{VkRenderError, VkResult};
 use blake3::Hasher;
-use newengine_assets::{wait_ready, AssetAccess, AssetServiceClient};
+use newengine_assets::{wait_ready, AssetAccess, AssetService, AssetServiceClient};
 use newengine_core::plugins::default_host_api;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -82,15 +82,16 @@ impl ShaderBaker {
 
     pub fn bake_pack(&self) -> VkResult<ShaderPack> {
         Ok(ShaderPack {
-            tri_vert: self.load_or_compile_words("shaders/test/tri.vert", ShaderStage::Vertex)?,
-            tri_frag: self.load_or_compile_words("shaders/test/tri.frag", ShaderStage::Fragment)?,
+            tri_vert: self.load_or_compile_words("shaders/editor_grid.vert", ShaderStage::Vertex)?,
+            tri_frag: self.load_or_compile_words("shaders/editor_grid.frag", ShaderStage::Fragment)?,
+
             text_vert: self.load_or_compile_words("shaders/ui/text.vert", ShaderStage::Vertex)?,
             text_frag: self.load_or_compile_words("shaders/ui/text.frag", ShaderStage::Fragment)?,
+
             ui_vert: self.load_or_compile_words("shaders/ui/ui.vert", ShaderStage::Vertex)?,
             ui_frag: self.load_or_compile_words("shaders/ui/ui.frag", ShaderStage::Fragment)?,
         })
     }
-
     pub fn load_or_compile_words(&self, logical_path: &str, stage: ShaderStage) -> VkResult<Vec<u32>> {
         let src = self.load_text_asset(logical_path)?;
 
@@ -112,17 +113,65 @@ impl ShaderBaker {
     }
 
     fn load_text_asset(&self, logical_path: &str) -> VkResult<String> {
-        let id = self
-            .assets
-            .load(logical_path)
-            .map_err(|e| VkRenderError::Shader(format!("asset.load failed path='{logical_path}' err='{e}'")))?;
+        // Some legacy/broken shader packs were built with an "assets/" prefix in NEPAK keys.
+        // Keep strict VFS access (no raw fs), but tolerate alternate logical paths.
+        let mut candidates: Vec<String> = Vec::with_capacity(2);
+        candidates.push(logical_path.to_owned());
 
-        wait_ready(&self.assets, &id, Duration::from_millis(500)).map_err(|e| {
-            VkRenderError::Shader(format!("asset.wait_ready failed path='{logical_path}' err='{e:?}'"))
+        if let Some(rest) = logical_path.strip_prefix("shaders/") {
+            candidates.push(format!("assets/{rest}"));
+        }
+
+        let mut first_err: Option<VkRenderError> = None;
+
+        for (i, cand) in candidates.iter().enumerate() {
+            match self.load_text_asset_once(cand) {
+                Ok(s) => {
+                    if i != 0 {
+                        log::warn!(
+                            "shader: path remap '{}' -> '{}' (fix your pak to use 'shaders/' keys)",
+                            logical_path,
+                            cand
+                        );
+                    }
+                    return Ok(s);
+                }
+                Err(e) => {
+                    if first_err.is_none() {
+                        first_err = Some(e);
+                    }
+                }
+            }
+        }
+
+        Err(first_err.unwrap_or_else(|| {
+            VkRenderError::Shader(format!("shader: no candidates for path='{logical_path}'"))
+        }))
+    }
+
+    fn load_text_asset_once(&self, logical_path: &str) -> VkResult<String> {
+        let id = self.assets.load(logical_path).map_err(|e| {
+            VkRenderError::Shader(format!("asset.load failed path='{logical_path}' err='{e}'"))
         })?;
 
+        log::debug!("shader: requesting '{}'", logical_path);
+
+        if let Err(e) = wait_ready(&self.assets, &id, Duration::from_secs(5)) {
+            let trace = self
+                .assets
+                .resolve_trace_json(logical_path)
+                .map(|v| v.to_string())
+                .unwrap_or_else(|te| format!("{{\"trace_error\":\"{te}\"}}"));
+
+            return Err(VkRenderError::Shader(format!(
+                "asset not ready path='{logical_path}' id='{id}' err='{e:?}' trace={trace}"
+            )));
+        }
+
         let (_meta, payload) = self.assets.blob_wire_v1(&id).map_err(|e| {
-            VkRenderError::Shader(format!("asset.blob_wire_v1 failed path='{logical_path}' err='{e}'"))
+            VkRenderError::Shader(format!(
+                "asset.blob_wire_v1 failed path='{logical_path}' id='{id}' err='{e}'"
+            ))
         })?;
 
         let s = std::str::from_utf8(&payload).map_err(|_| {

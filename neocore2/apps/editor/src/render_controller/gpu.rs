@@ -10,61 +10,40 @@ use newengine_core::{EngineError, EngineResult as CoreResult};
 use newengine_math::collections::FxHashMap;
 use newengine_primitives::{PrimitiveId, PrimitiveRegistry, PrimitiveVertex};
 
-use shaderc::{CompileOptions, Compiler, OptimizationLevel, ShaderKind};
-use std::path::{Path, PathBuf};
-use std::sync::OnceLock;
+use newengine_assets::{wait_ready, AssetAccess, AssetServiceClient};
+use newengine_core::plugins::default_host_api;
 
-fn assets_root() -> &'static Path {
-    static ROOT: OnceLock<PathBuf> = OnceLock::new();
-    ROOT.get_or_init(|| {
-        if let Ok(exe) = std::env::current_exe() {
-            let mut cur = exe.parent().map(Path::to_path_buf);
-            for _ in 0..12 {
-                if let Some(dir) = cur.as_ref() {
-                    let cand = dir.join("assets");
-                    if cand.is_dir() {
-                        return cand;
-                    }
-                    cur = dir.parent().map(Path::to_path_buf);
-                } else {
-                    break;
-                }
-            }
-        }
-        std::env::current_dir()
-            .unwrap_or_else(|_| PathBuf::from("."))
-            .join("assets")
-    })
-}
+use shaderc::{CompileOptions, Compiler, OptimizationLevel, ShaderKind};
+
 
 fn load_text_asset(rel: &str) -> CoreResult<String> {
-    let path = assets_root().join(rel);
-    match std::fs::read_to_string(&path) {
-        Ok(s) => {
-            log::debug!(
-                "asset.read ok kind=text rel='{rel}' path='{}' bytes={}",
-                path.display(),
-                s.len()
-            );
-            Ok(s)
+    // Hard rule: assets are loaded only through AssetManager/VFS so `.pak` layering works.
+    // This codepath is kept for the legacy editor renderer and must not touch the filesystem.
+    let assets = AssetServiceClient::new(default_host_api());
+
+    let id = assets
+        .load(rel)
+        .map_err(|e| EngineError::other(format!("asset.load failed path='{rel}' err='{e}'")))?;
+
+    if let Err(e) = wait_ready(&assets, &id, std::time::Duration::from_secs(2)) {
+        if let Some(fallback) = builtin_text_asset(rel) {
+            log::warn!("asset not ready, using builtin fallback path='{rel}' err='{e:?}'");
+            return Ok(fallback.to_string());
         }
-        Err(e) => {
-            // Editor should remain usable even if the working directory does not include `assets/`.
-            // We provide built-in fallback shaders for the lit pass.
-            // This also makes diagnostics much clearer than a hard failure.
-            if let Some(fallback) = builtin_text_asset(rel) {
-                log::warn!(
-                    "asset.read failed, using builtin fallback rel='{rel}' path='{}' err='{e}'",
-                    path.display()
-                );
-                return Ok(fallback.to_string());
-            }
-            Err(EngineError::other(format!(
-                "asset.read failed rel='{rel}' path='{}' err='{e}'",
-                path.display()
-            )))
-        }
+        return Err(EngineError::other(format!(
+            "asset not ready path='{rel}' id='{id}' err='{e:?}'"
+        )));
     }
+
+    let (_meta, payload) = assets
+        .blob_wire_v1(&id)
+        .map_err(|e| EngineError::other(format!("asset.blob_wire_v1 failed path='{rel}' err='{e}'")))?;
+
+    let s = std::str::from_utf8(&payload)
+        .map_err(|_| EngineError::other(format!("asset is not utf8 path='{rel}'")))?
+        .to_string();
+
+    Ok(s)
 }
 
 #[inline]

@@ -1,6 +1,7 @@
 #![forbid(unsafe_op_in_unsafe_fn)]
 
 use std::path::Path;
+use std::time::Instant;
 
 use abi_stable::std_types::RVec;
 use libloading::Library;
@@ -21,6 +22,7 @@ use super::PluginManager;
 impl PluginManager {
     pub(crate) fn load_one(&mut self, path: &Path, host: HostApiV1) -> Result<(), PluginLoadError> {
         log::info!("plugins: loading '{}'", path.display());
+        let t0 = Instant::now();
 
         let lib = unsafe { Library::new(path) }.map_err(|e| PluginLoadError {
             path: path.to_path_buf(),
@@ -98,6 +100,11 @@ impl PluginManager {
             info.id,
             info.version,
             path.display()
+        );
+        log::debug!(
+            "plugins: load timing id='{}' elapsed_ms={}",
+            info.id,
+            t0.elapsed().as_millis()
         );
 
         self.loaded_ids.insert(id_str);

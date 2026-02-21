@@ -162,7 +162,7 @@ fn try_load_window_icon(startup: &StartupConfig) -> Option<WinitAppIcon> {
 
 fn main() -> EngineResult<()> {
     let paths = ConfigPaths::from_startup_str("config.json");
-    let (startup, report) = StartupLoader::load_json(&paths)?;
+    let (startup, _report) = StartupLoader::load_json(&paths)?;
 
     let startup = Arc::new(startup);
 

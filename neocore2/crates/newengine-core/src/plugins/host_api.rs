@@ -5,7 +5,28 @@ use abi_stable::std_types::{RResult, RString};
 use newengine_plugin_api::{
     Blob, CapabilityId, EventSinkV1Dyn, HostApiV1, MethodName, ServiceV1Dyn,
 };
+use std::cell::Cell;
 use std::sync::Arc;
+
+thread_local! {
+    static IN_HOST_API_LOG: Cell<bool> = const { Cell::new(false) };
+}
+
+#[inline]
+fn debug_no_recurse(args: std::fmt::Arguments<'_>) {
+    if !log::log_enabled!(log::Level::Debug) {
+        return;
+    }
+
+    IN_HOST_API_LOG.with(|f| {
+        if f.get() {
+            return;
+        }
+        f.set(true);
+        log::debug!("{}", args);
+        f.set(false);
+    });
+}
 
 extern "C" fn host_log_info(s: RString) {
     log::info!("{}", s);
@@ -23,6 +44,7 @@ pub(crate) fn host_register_service_impl(svc: ServiceV1Dyn<'static>) -> RResult<
     let service_id = svc.id().to_string();
     let describe_json = svc.describe().to_string();
     let owner = crate::plugins::host_context::current_plugin_id();
+    let owner_for_log = owner.as_deref().unwrap_or("<none>").to_string();
 
     let c = ctx();
 
@@ -49,6 +71,13 @@ pub(crate) fn host_register_service_impl(svc: ServiceV1Dyn<'static>) -> RResult<
         );
         crate::plugins::host_context::bump_services_generation();
     }
+
+    debug_no_recurse(format_args!(
+        "services: registered id='{}' owner='{}' describe_len={}",
+        service_id,
+        owner_for_log,
+        describe_json.len()
+    ));
 
     RResult::ROk(())
 }
@@ -77,10 +106,42 @@ pub(crate) extern "C" fn call_service_v1(
         }
     };
 
-    svc.call(method, payload)
+    /*
+    debug_no_recurse(format_args!(
+        "services: call id='{}' method='{}' payload_len={}",
+        id,
+        method,
+        payload.len()
+    )); */
+
+    let res = svc.call(method.clone(), payload);
+
+    match &res {
+        /* RResult::ROk(b) => debug_no_recurse(format_args!(
+            "services: call ok id='{}' method='{}' result_len={}",
+            id,
+            method,
+            b.len()
+        )),*/
+        RResult::RErr(e) => debug_no_recurse(format_args!(
+            "services: call err id='{}' method='{}' err='{}'",
+            id,
+            method,
+            e
+        )),
+        _ => {}
+    }
+
+    res
 }
 
 extern "C" fn host_emit_event_v1(topic: RString, payload: Blob) -> RResult<(), RString> {
+    debug_no_recurse(format_args!(
+        "events: emit topic='{}' payload_len={}",
+        topic,
+        payload.len()
+    ));
+
     match crate::plugins::host_context::emit_plugin_event(topic, payload) {
         Ok(()) => RResult::ROk(()),
         Err(e) => RResult::RErr(RString::from(e)),
@@ -88,6 +149,8 @@ extern "C" fn host_emit_event_v1(topic: RString, payload: Blob) -> RResult<(), R
 }
 
 extern "C" fn host_subscribe_events_v1(sink: EventSinkV1Dyn<'static>) -> RResult<(), RString> {
+    debug_no_recurse(format_args!("events: subscribe"));
+
     match crate::plugins::host_context::subscribe_event_sink(sink) {
         Ok(()) => RResult::ROk(()),
         Err(e) => RResult::RErr(RString::from(e)),

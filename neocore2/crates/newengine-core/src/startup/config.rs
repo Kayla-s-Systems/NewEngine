@@ -142,6 +142,10 @@ pub struct StartupLoadReport {
     pub source: StartupConfigSource,
     pub file: Option<PathBuf>,
     pub resolved_from: StartupResolvedFrom,
+    /// Size of the loaded config file in bytes (if any).
+    pub file_bytes: Option<usize>,
+    /// Total load+parse+apply wall time in milliseconds.
+    pub total_ms: Option<u32>,
     pub overrides: Vec<StartupOverride>,
     pub plugin_overrides: Vec<StartupPluginOverride>,
 }
@@ -153,6 +157,8 @@ impl StartupLoadReport {
             source: StartupConfigSource::Defaults,
             file: None,
             resolved_from: StartupResolvedFrom::NotProvided,
+            file_bytes: None,
+            total_ms: None,
             overrides: Vec::new(),
             plugin_overrides: Vec::new(),
         }
@@ -183,6 +189,14 @@ impl StartupLoadReport {
             self.overrides.len(),
             self.plugin_overrides.len()
         );
+
+        if log::log_enabled!(log::Level::Debug) {
+            log::debug!(
+                "startup: metrics file_bytes={:?} total_ms={:?}",
+                self.file_bytes,
+                self.total_ms
+            );
+        }
 
         for o in &self.overrides {
             log::info!("startup: override {}: '{}' -> '{}'", o.key, o.from, o.to);

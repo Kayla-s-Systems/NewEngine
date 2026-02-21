@@ -54,6 +54,21 @@ pub trait AssetService: AssetAccess {
 
     /// Mount a directory at runtime (if supported by the service).
     fn mount_dir(&self, path_to_dir: &str) -> Result<(), String>;
+
+    /// Mount a `.pak` layer with an explicit priority.
+    ///
+    /// Priority is a stable and deterministic tie-breaker across mounted sources.
+    fn mount_pak_prio(&self, path_to_pak: &str, priority: i32) -> Result<(), String>;
+
+    /// Mount a directory layer with an explicit priority.
+    ///
+    /// Priority is a stable and deterministic tie-breaker across mounted sources.
+    fn mount_dir_prio(&self, path_to_dir: &str, priority: i32) -> Result<(), String>;
+
+    /// Returns a deterministic trace describing which sources contain the asset.
+    ///
+    /// This is intended for production-grade debugging ("loose vs pak", patches, etc.).
+    fn resolve_trace_json(&self, logical_path: &str) -> Result<serde_json::Value, String>;
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

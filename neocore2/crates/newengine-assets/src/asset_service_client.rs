@@ -245,4 +245,40 @@ impl AssetService for AssetServiceClient {
         let bytes = self.call_try_methods(&methods, path_to_dir.as_bytes().to_vec())?;
         Self::decode_ok_unit(bytes)
     }
+
+    fn mount_pak_prio(&self, path_to_pak: &str, priority: i32) -> Result<(), String> {
+        // Contract payload: json { path, priority }
+        let methods = [method::MOUNT_PAK_PRIO, "mount_pak_prio", "asset.mount_pak_prio"];
+        let payload = serde_json::json!({
+            "path": path_to_pak,
+            "priority": priority
+        })
+            .to_string()
+            .into_bytes();
+        let bytes = self.call_try_methods(&methods, payload)?;
+        Self::decode_ok_unit(bytes)
+    }
+
+    fn mount_dir_prio(&self, path_to_dir: &str, priority: i32) -> Result<(), String> {
+        // Contract payload: json { path, priority }
+        let methods = [method::MOUNT_DIR_PRIO, "mount_dir_prio", "asset.mount_dir_prio"];
+        let payload = serde_json::json!({
+            "path": path_to_dir,
+            "priority": priority
+        })
+            .to_string()
+            .into_bytes();
+        let bytes = self.call_try_methods(&methods, payload)?;
+        Self::decode_ok_unit(bytes)
+    }
+
+    fn resolve_trace_json(&self, logical_path: &str) -> Result<serde_json::Value, String> {
+        let methods = [
+            method::RESOLVE_TRACE_JSON,
+            "resolve_trace_json",
+            "asset.resolve_trace_json",
+        ];
+        let bytes = self.call_try_methods(&methods, logical_path.as_bytes().to_vec())?;
+        Self::decode_ok_json(bytes)
+    }
 }

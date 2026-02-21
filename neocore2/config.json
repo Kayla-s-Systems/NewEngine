@@ -55,7 +55,35 @@
       "importers_dir": "importers",
       "filesystem": true,
       "mount_paks": true,
-      "pump_steps": 16
+      "pump_steps": 16,
+      "pak_scan": {
+        "recursive": true,
+        "max_depth": 64,
+        "follow_symlinks": false,
+        "extensions": [
+          "nepak",
+          "pak"
+        ],
+        "rescan_interval_ms": 0
+      },
+      "layers": [
+        {
+          "type": "dir",
+          "path": "assets",
+          "priority": 200
+        },
+        {
+          "type": "pak_glob",
+          "dir": "assets",
+          "pattern": "patch*.nepak",
+          "priority": 150
+        },
+        {
+          "type": "pak",
+          "path": "assets/shaders.pak",
+          "priority": 100
+        }
+      ]
     }
   }
 }
