@@ -89,11 +89,27 @@ impl<E: Send + 'static> Engine<E> {
     }
 
     pub fn new_with_config(
-        config: EngineConfig,
+        mut config: EngineConfig,
         services: Box<dyn Services>,
         bus: Bus<E>,
         shutdown: ShutdownToken,
     ) -> EngineResult<Self> {
+        // Integration footgun guard:
+        // many apps build a custom `EngineConfig` and forget to forward startup-derived
+        // plugin overrides (and sometimes the modules_dir) into it.
+        //
+        // If the app used `StartupLoader`, reuse that resolved config unless the caller
+        // explicitly provided their own values.
+        if let Some(startup) = crate::startup::last_startup_config() {
+            if config.plugins_dir.is_none() {
+                config.plugins_dir = Some(startup.modules_dir.clone());
+            }
+
+            if config.plugin_overrides.is_empty() && !startup.plugins.is_empty() {
+                config.plugin_overrides = startup.plugins.clone();
+            }
+        }
+
         // Logging is provided by an optional runtime plugin (DLL).
         // No logging plugin -> no process logger installed -> all `log::*` calls become no-ops.
 

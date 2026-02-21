@@ -170,6 +170,14 @@ fn init_with_overrides(
                     .into_result()
                     .map_err(|e| e.to_string())?;
 
+                log::debug!(
+                    "plugins: config defaults id='{}' content_type='{}' len={} fmt_v={} ",
+                    id_str,
+                    defaults.content_type,
+                    defaults.bytes.len(),
+                    defaults.format_version
+                );
+
                 let mut patches = RVec::<ConfigPatchV1>::new();
                 if overrides_non_empty {
                     patches.push(config_patch_from_json_merge_patch(
@@ -185,6 +193,26 @@ fn init_with_overrides(
                     .config_apply_patches_v1(&defaults, patches)
                     .into_result()
                     .map_err(|e| e.to_string())?;
+
+                // Cheap delivery sanity: content type + length + short preview.
+                // This is intentionally `debug!` so production logs stay clean.
+                {
+                    const PREVIEW_MAX: usize = 200;
+                    let s = String::from_utf8_lossy(applied.effective.bytes.as_slice());
+                    let mut preview = s.to_string();
+                    if preview.len() > PREVIEW_MAX {
+                        preview.truncate(PREVIEW_MAX);
+                        preview.push_str("…");
+                    }
+                    log::debug!(
+                        "plugins: config effective id='{}' content_type='{}' len={} changed={} preview='{}'",
+                        id_str,
+                        applied.effective.content_type,
+                        applied.effective.bytes.len(),
+                        applied.changed,
+                        preview
+                    );
+                }
 
                 for d in applied.diags.iter() {
                     match d.level {
