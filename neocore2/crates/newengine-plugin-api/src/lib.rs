@@ -2,6 +2,7 @@
 #![allow(non_local_definitions)]
 
 pub mod capability;
+pub mod config;
 pub mod host;
 pub mod module;
 pub mod root;
@@ -11,6 +12,7 @@ pub mod types;
 pub mod prelude;
 
 pub use capability::*;
+pub use config::*;
 pub use host::*;
 pub use module::*;
 pub use root::*;

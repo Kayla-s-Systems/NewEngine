@@ -2,6 +2,7 @@
 
 pub use crate::{
     capability::*,
+    config::*,
     export_plugin_root,
     host::*,
     module::*,

@@ -1,21 +1,4 @@
 {
-  "logging": {
-    "level": "debug",
-    "filter": "debug,newengine_render=debug",
-    "style": "always",
-    "colors": true,
-    "target": "stderr",
-    "file": "logs/editor.log",
-    "tee": true,
-    "include": {
-      "module_path": true,
-      "target": true,
-      "file": true,
-      "line": false
-    },
-    "timestamp": "millis",
-    "indent": 2
-  },
   "window": {
     "title": "NewEngine Editor",
     "icon": "ui/engine.ico",
@@ -35,19 +18,44 @@
     "backend": "egui"
   },
   "engine": {
-    "modules_dir": "../../engineModules",
-    "assets_root": "assets",
-    "asset_pump_steps": 16,
-    "asset_filesystem_source": true
+    "modules_dir": "../../engineModules"
   },
   "render": {
     "backend": "vulkan_ash",
     "clear_color": [
-      0.00,
+      0.0,
       0.0,
       0.0,
       0.0
     ],
     "debug_text": "NewEngine | Vulkan"
+  },
+  "plugins": {
+    "newengine.logging": {
+      "level": "debug",
+      "style": "auto",
+      "colors": true,
+      "file": "logs/editor.log",
+      "tee": true,
+      "include": {
+        "module_path": true,
+        "target": true,
+        "file": true,
+        "line": false
+      },
+      "timestamp": "millis",
+      "indent": 2,
+      "dedup": {
+        "window_ms": 250,
+        "capacity": 4096
+      }
+    },
+    "newengine.assets": {
+      "assets_root": "assets",
+      "importers_dir": "importers",
+      "filesystem": true,
+      "mount_paks": true,
+      "pump_steps": 16
+    }
   }
 }
