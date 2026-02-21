@@ -49,6 +49,7 @@
       <sourceFolder url="file://$MODULE_DIR$/neocore2/apps/editor_launcher/src" isTestSource="false" />
       <sourceFolder url="file://$MODULE_DIR$/neocore2/crates/newengine-previews/src" isTestSource="false" />
       <sourceFolder url="file://$MODULE_DIR$/neocore2/crates/newengine-lighting/src" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/neocore2/crates/newengine-notifications/src" isTestSource="false" />
       <excludeFolder url="file://$MODULE_DIR$/neocore2/apps/editor/target" />
       <excludeFolder url="file://$MODULE_DIR$/neocore2/target" />
       <excludeFolder url="file://$MODULE_DIR$/neocore2/crates/newengine-sim/target" />

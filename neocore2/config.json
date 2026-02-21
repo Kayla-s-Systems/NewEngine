@@ -82,6 +82,11 @@
           "type": "pak",
           "path": "assets/shaders.pak",
           "priority": 100
+        },
+        {
+          "path": "assets/ui.pak",
+          "priority": 120,
+          "type": "pak"
         }
       ]
     }

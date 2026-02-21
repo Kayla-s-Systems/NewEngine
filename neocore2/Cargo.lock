@@ -1520,6 +1520,7 @@ dependencies = [
     "egui",
     "image",
     "log",
+    "newengine-assets",
     "newengine-core",
     "newengine-plugin-api",
     "newengine-ui",
