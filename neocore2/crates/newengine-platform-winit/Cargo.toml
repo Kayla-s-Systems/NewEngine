@@ -8,10 +8,9 @@ edition = "2021"
 winit = "0.30"
 newengine-core = { path = "../newengine-core" }
 newengine-ui = { path = "../newengine-ui"}
-newengine-assets = { path = "../newengine-assets" }
 abi_stable = "0.11"
 newengine-plugin-api = { path = "../newengine-plugin-api" }
-image = { version = "0.25", default-features = false, features = ["png", "ico"] }
+image = { version = "0.25", default-features = false, features = ["png"] }
 egui = { version = "0.33.3" }
 raw-window-handle = "0.6.2"
 log = "0.4.29"
