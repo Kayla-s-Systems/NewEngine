@@ -30,20 +30,20 @@ pub struct ViewportBridge {
     extent_wh: AtomicU64,
     tex_user: AtomicU64,
 
-    /// Packed orbit input (dx, dy) in *physical pixels* for the last UI frame.
+    /// Packed camera input (dx, dy) in *physical pixels* for the last UI frame.
     /// Low 32 bits: f32::to_bits(dx), high 32 bits: f32::to_bits(dy).
-    orbit_delta_xy: AtomicU64,
+    look_delta_xy: AtomicU64,
 
     /// Mouse wheel delta Y (positive -> zoom in) for the last UI frame.
     /// Stored as f32 bits in low 32 bits.
-    orbit_wheel_y: AtomicU64,
+    wheel_y: AtomicU64,
 
     /// Orbit interaction flags.
     /// bit0: hovered
-    /// bit1: look_drag (orbit rotate)
-    /// bit2: pan_drag (orbit pan)
+    /// bit1: look_drag (camera rotate)
+    /// bit2: pan_drag (camera pan)
     /// bit3: ui_busy (UI captured input; e.g. gizmo drag/hover)
-    orbit_flags: AtomicU64,
+    input_flags: AtomicU64,
 
     /// Packed movement keys for editor-style camera.
     /// bit0: W, bit1: A, bit2: S, bit3: D, bit4: Q, bit5: E, bit6: Shift
@@ -87,9 +87,9 @@ impl ViewportBridge {
             extent_wh: AtomicU64::new(0),
             tex_user: AtomicU64::new(0),
 
-            orbit_delta_xy: AtomicU64::new(0),
-            orbit_wheel_y: AtomicU64::new(0),
-            orbit_flags: AtomicU64::new(0),
+            look_delta_xy: AtomicU64::new(0),
+            wheel_y: AtomicU64::new(0),
+            input_flags: AtomicU64::new(0),
             move_keys: AtomicU64::new(0),
 
             pick_seq: AtomicU64::new(0),
@@ -184,15 +184,15 @@ impl ViewportBridge {
         f32::from_bits(v as u32)
     }
 
-    /// Publish orbit interaction state from UI.
+    /// Publish camera interaction state from UI.
     ///
     /// - `dx_px`, `dy_px` are cursor deltas in **physical pixels**.
     /// - `wheel_y` is wheel delta Y (positive -> zoom in).
     /// - `hovered` is true when the viewport rect is hovered.
-    /// - `look_drag` is true while orbit rotation is captured.
-    /// - `pan_drag` is true while orbit panning is captured.
+    /// - `look_drag` is true while camera rotation is captured.
+    /// - `pan_drag` is true while camera panning is captured.
     #[inline]
-    pub fn publish_orbit_input(
+    pub fn publish_camera_input(
         &self,
         dx_px: f32,
         dy_px: f32,
@@ -202,9 +202,9 @@ impl ViewportBridge {
         pan_drag: bool,
         ui_busy: bool,
     ) {
-        self.orbit_delta_xy
+        self.look_delta_xy
             .store(Self::pack_f32x2(dx_px, dy_px), Ordering::Relaxed);
-        self.orbit_wheel_y
+        self.wheel_y
             .store(Self::pack_f32(wheel_y), Ordering::Relaxed);
         let mut flags: u64 = 0;
         if hovered {
@@ -219,7 +219,7 @@ impl ViewportBridge {
         if ui_busy {
             flags |= 8;
         }
-        self.orbit_flags.store(flags, Ordering::Relaxed);
+        self.input_flags.store(flags, Ordering::Relaxed);
     }
 
 
@@ -235,12 +235,12 @@ impl ViewportBridge {
         self.move_keys.load(Ordering::Relaxed)
     }
 
-    /// Read orbit input published by UI for this frame.
+    /// Read camera input published by UI for this frame.
     #[inline]
-    pub fn read_orbit_input(&self) -> (f32, f32, f32, bool, bool, bool, bool) {
-        let (dx, dy) = Self::unpack_f32x2(self.orbit_delta_xy.load(Ordering::Relaxed));
-        let wheel = Self::unpack_f32(self.orbit_wheel_y.load(Ordering::Relaxed));
-        let flags = self.orbit_flags.load(Ordering::Relaxed);
+    pub fn read_camera_input(&self) -> (f32, f32, f32, bool, bool, bool, bool) {
+        let (dx, dy) = Self::unpack_f32x2(self.look_delta_xy.load(Ordering::Relaxed));
+        let wheel = Self::unpack_f32(self.wheel_y.load(Ordering::Relaxed));
+        let flags = self.input_flags.load(Ordering::Relaxed);
         let hovered = (flags & 1) != 0;
         let look_drag = (flags & 2) != 0;
         let pan_drag = (flags & 4) != 0;

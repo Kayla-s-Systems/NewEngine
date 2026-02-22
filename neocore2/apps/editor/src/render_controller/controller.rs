@@ -1,6 +1,6 @@
 #![forbid(unsafe_op_in_unsafe_fn)]
 
-use newengine_camera::{orbit_set_angles, CameraRig, OrbitController, Perspective, Projection};
+use newengine_camera::{Perspective, Projection};
 use newengine_core::render::Extent2D;
 use newengine_math::collections::FxHashMap;
 use newengine_math::Vec3;
@@ -28,9 +28,6 @@ pub struct EditorRenderController {
     pub(super) last_vp_w: u32,
     pub(super) last_vp_h: u32,
     pub(super) last_aspect: f32,
-
-    pub(super) orbit: OrbitController,
-    pub(super) rig: CameraRig,
     pub(super) projection: Projection,
 
     pub(super) viewport_bridge: std::sync::Arc<ViewportBridge>,
@@ -79,15 +76,9 @@ impl EditorRenderController {
         scene_bridge: std::sync::Arc<SceneBridge>,
         previews: std::sync::Arc<parking_lot::Mutex<newengine_previews::PrimitivePreviewService>>,
     ) -> Self {
-        let mut orbit = OrbitController::default();
+        // Camera controller state lives in ECS (EditorCameraController + CameraRigComp).
 
-        // Blender-like editor orbit:
-        // - pivot around target
-        // - camera above ground looking down (pitch negative)
-        orbit_set_angles(&mut orbit, 0.7853982, -0.55);
-        orbit.distance = 6.0;
 
-        let rig = CameraRig::default();
         let projection = Projection::Perspective(Perspective::new(
             60.0f32.to_radians(),
             1.0,
@@ -104,8 +95,6 @@ impl EditorRenderController {
             last_vp_h: 0,
             last_aspect: 1.0,
 
-            orbit,
-            rig,
             projection,
 
             viewport_bridge,

@@ -27,3 +27,4 @@ newengine-materials = { path = "../../crates/newengine-materials" }
 newengine-lighting = { path = "../../crates/newengine-lighting" }
 newengine-editor-core = { path = "../../crates/newengine-editor-core" }
 newengine-previews = { path = "../../crates/newengine-previews" }
+newengine-sim = { path = "../../crates/newengine-sim" }

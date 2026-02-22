@@ -5,20 +5,21 @@ use newengine_core::render::{
     require_render_api, BeginFrameDesc, BeginRenderTargetDesc, BufferSlice, Extent2D, IndexFormat, RectI32, Viewport,
 };
 use newengine_core::{EngineResult, Module, ModuleCtx};
-use newengine_materials::api::MaterialRegistryApi;
-use newengine_math::{Mat4, Quat, Vec3};
+use newengine_math::{Mat4, Quat, Vec2, Vec3};
 use newengine_platform_winit::WinitWindowInitSize;
 use newengine_ui::draw::UiDrawList;
 
 use newengine_lighting::{AmbientLight, DirectionalLight, PointLight};
+use newengine_materials::api::MaterialRegistryApi;
 use newengine_primitives::builtins as prim_builtins;
 use newengine_primitives::Primitive;
 use newengine_scene::{scene_bounds_cached, update_scene_world};
+use newengine_sim::CameraRigComp;
 use newengine_transform::GlobalTransform;
 
 use super::controller::{EditorRenderController, PerDrawUbo};
 use super::gpu::{ensure_grid, ensure_lit_pipeline, ensure_primitive_gpu, GridMeshParams, LIT_UBO_SIZE};
-
+use crate::editor_camera::{EditorCameraController, EditorCameraMode};
 
 #[inline]
 fn quat_from_forward_z(dir_ws: Vec3) -> Quat {
@@ -47,11 +48,9 @@ impl PackedLights {
 
     #[inline]
     fn from_world(world: &newengine_ecs::World) -> Self {
-        // Ambient resource (deterministic default).
         let amb = world.resource::<AmbientLight>().copied().unwrap_or_default();
         let ambient = [amb.color[0], amb.color[1], amb.color[2], amb.intensity];
 
-        // Directional: pick the first by stable key to keep determinism.
         let mut best_dir: Option<(u64, DirectionalLight)> = None;
         for (e, l) in world.query::<DirectionalLight>() {
             let k = e.stable_u64();
@@ -63,7 +62,6 @@ impl PackedLights {
         let dir_dir_intensity = [dir.direction_ws[0], dir.direction_ws[1], dir.direction_ws[2], dir.intensity];
         let dir_color = [dir.color[0], dir.color[1], dir.color[2], 0.0];
 
-        // Points: gather, sort by stable id, take N.
         let mut pts: Vec<(u64, [f32; 4], [f32; 4])> = Vec::new();
         for (e, pl, gt) in world.query2::<PointLight, GlobalTransform>() {
             let m = gt.0;
@@ -95,22 +93,11 @@ impl PackedLights {
         }
         out.point_count_pad = [n as f32, 0.0, 0.0, 0.0];
 
-        if log::log_enabled!(log::Level::Debug) {
-            /*log::debug!(
-                "render: lights packed amb_intensity={:.3} dir_intensity={:.3} point_count={}",
-                out.ambient[3],
-                out.dir_dir_intensity[3],
-                n
-            );
-            */
-        }
         out
     }
 
     #[inline]
     fn write_into(&self, bytes: &mut [u8; Self::UBO_SIZE]) {
-        // Layout offsets (bytes):
-        // 0..128 reserved for matrices + base_color.
         let mut off = 144;
 
         fn write_vec4(dst: &mut [u8], off: &mut usize, v: [f32; 4]) {
@@ -133,37 +120,27 @@ impl PackedLights {
 }
 
 impl EditorRenderController {
-    // Editor "floor" constraint: camera must stay above this Y.
     const MIN_CAMERA_Y: f32 = 0.10;
 
-    // Blender-like orbit constraints.
-    const MAX_PITCH_ABS: f32 = 1.5184364; // ~87 deg
+    const MAX_PITCH_ABS: f32 = 1.5184364;
     const MIN_DISTANCE: f32 = 0.30;
 
-    // Editor grid is an overlay (not part of render world). We keep it fixed and deterministic.
     const GRID_HALF_LINES: i32 = 80;
     const GRID_MAJOR_EVERY: i32 = 10;
     const GRID_MINOR_COLOR: [f32; 4] = [0.32, 0.32, 0.34, 1.0];
     const GRID_MAJOR_COLOR: [f32; 4] = [0.45, 0.45, 0.48, 1.0];
     const GRID_BACKGROUND_COLOR: [f32; 4] = [0.10, 0.10, 0.11, 1.0];
 
-    // NOTE: camera framing is explicit (hotkey/button) + startup/aspect changes.
-    // Auto-framing on scene growth is intentionally disabled to keep the world reference
-    // stable while transforming/animating objects (prevents the grid "moving with the object").
-
     #[inline]
     fn enforce_orbit_basic(orbit: &mut newengine_camera::OrbitController) {
         orbit.distance = orbit.distance.max(Self::MIN_DISTANCE);
         orbit.pitch_limit = orbit.pitch_limit.min(Self::MAX_PITCH_ABS);
-
-        // Allow pitch both directions, but keep away from singularities.
         orbit.pitch = orbit.pitch.clamp(-Self::MAX_PITCH_ABS, Self::MAX_PITCH_ABS);
     }
 
     #[inline]
     fn grid_spacing(camera_distance: f32) -> f32 {
         let d = camera_distance.max(0.01);
-        // Quantize to powers of 10 to keep the grid stable while zooming.
         let base = (d * 0.08).max(0.05);
         let pow10 = 10.0f32.powf(base.log10().floor());
         pow10.clamp(0.05, 1000.0)
@@ -171,13 +148,6 @@ impl EditorRenderController {
 
     #[inline]
     fn compute_rot(orbit: &newengine_camera::OrbitController) -> Quat {
-        // We keep the convention consistent with our rig math:
-        // orbit.pitch grows when looking "up" (mouse up), but to keep camera above Y,
-        // we invert in rotation_x to keep the intuitive editor feel stable.
-        //
-        // The important part is not the sign itself, but that:
-        // - mouse up increases pitch and raises camera around target
-        // - floor constraint is achieved by lifting target, not clamping pitch
         let rot_yaw = Quat::from_rotation_y(orbit.yaw);
         let rot_pitch = Quat::from_rotation_x(-orbit.pitch);
         rot_yaw * rot_pitch
@@ -190,10 +160,6 @@ impl EditorRenderController {
     ) {
         Self::enforce_orbit_basic(orbit);
 
-        // We solve the floor constraint by lifting the pivot (target),
-        // which preserves Blender-like orbit behavior around objects.
-        //
-        // One lift is usually enough. Second pass makes it robust if pitch is extreme.
         for _ in 0..2 {
             let rot = Self::compute_rot(orbit);
             let pos = orbit.target + (rot * Vec3::Z) * orbit.distance;
@@ -208,7 +174,6 @@ impl EditorRenderController {
             orbit.target.y += dy;
         }
 
-        // Final assignment (after lifts)
         let rot = Self::compute_rot(orbit);
         let mut pos = orbit.target + (rot * Vec3::Z) * orbit.distance;
         if pos.y < Self::MIN_CAMERA_Y {
@@ -216,45 +181,6 @@ impl EditorRenderController {
         }
         rig.position = pos;
         rig.rotation = rot;
-    }
-
-    #[inline]
-    fn apply_move_axes(orbit: &mut newengine_camera::OrbitController, mask: u64, dt: f32, base_speed: f32) {
-        if mask == 0 {
-            return;
-        }
-
-        let mut dir = Vec3::ZERO;
-
-        // 0..3: WASD
-        if (mask & (1 << 0)) != 0 {
-            dir.z -= 1.0;
-        }
-        if (mask & (1 << 2)) != 0 {
-            dir.z += 1.0;
-        }
-        if (mask & (1 << 1)) != 0 {
-            dir.x -= 1.0;
-        }
-        if (mask & (1 << 3)) != 0 {
-            dir.x += 1.0;
-        }
-
-        // 4..5: vertical track (optional; bind in input layer if you want)
-        if (mask & (1 << 4)) != 0 {
-            dir.y += 1.0;
-        }
-        if (mask & (1 << 5)) != 0 {
-            dir.y -= 1.0;
-        }
-
-        if dir.length_squared() <= 1e-6 {
-            return;
-        }
-
-        let speed_mul = if (mask & (1 << 6)) != 0 { 3.5 } else { 1.0 };
-        let v = dir.normalize() * (base_speed * speed_mul * dt);
-        orbit.target += v;
     }
 
     #[inline]
@@ -268,14 +194,12 @@ impl EditorRenderController {
     ) -> EngineResult<()> {
         let mut bytes: [u8; PackedLights::UBO_SIZE] = [0u8; PackedLights::UBO_SIZE];
 
-        // mat4 mvp
         let mvp_cols = mvp.to_cols_array();
         for (i, f) in mvp_cols.iter().enumerate() {
             let off = i * 4;
             bytes[off..off + 4].copy_from_slice(&f.to_ne_bytes());
         }
 
-        // mat4 model
         let model_cols = model.to_cols_array();
         let model_off = 64;
         for (i, f) in model_cols.iter().enumerate() {
@@ -283,14 +207,12 @@ impl EditorRenderController {
             bytes[off..off + 4].copy_from_slice(&f.to_ne_bytes());
         }
 
-        // vec4 base_color
         let base_off = 128;
         for i in 0..4 {
             let off = base_off + i * 4;
             bytes[off..off + 4].copy_from_slice(&base_color[i].to_ne_bytes());
         }
 
-        // Lighting block (std140 vec4-aligned).
         lights.write_into(&mut bytes);
 
         r.write_buffer(ubo, 0, &bytes)
@@ -316,7 +238,6 @@ impl EditorRenderController {
 
         let inv = viewproj.inverse();
 
-        // NDC: x in [-1,1], y in [-1,1] (top-left origin in pixels).
         let x = ((x_px + 0.5) / vp_w as f32) * 2.0 - 1.0;
         let y = 1.0 - ((y_px + 0.5) / vp_h as f32) * 2.0;
 
@@ -334,7 +255,6 @@ impl EditorRenderController {
         }
         ray_d *= len2.sqrt().recip();
 
-        // Best-effort bounds: sphere from matrix scale.
         let mut best_t = f32::INFINITY;
         let mut best_e: Option<newengine_ecs::EntityId> = None;
 
@@ -347,7 +267,6 @@ impl EditorRenderController {
             let sz = Vec3::new(m.z_axis.x, m.z_axis.y, m.z_axis.z).length();
             let r = 0.8660254 * sx.max(sy).max(sz).max(1e-3);
 
-            // Ray-sphere intersection.
             let oc = ray_o - center;
             let b = oc.dot(ray_d);
             let c = oc.length_squared() - r * r;
@@ -401,8 +320,6 @@ impl EditorRenderController {
     }
 
     fn gc_per_draw_ubos(&mut self, r: &mut dyn newengine_core::render::RenderApi) {
-        // Destroy resources that haven't been touched in a while.
-        // A small grace window avoids churn during transient UI toggles.
         let now = self.frame_index;
         let grace = 2_u64;
 
@@ -433,7 +350,6 @@ impl<E: Send + 'static> Module<E> for EditorRenderController {
             self.plugins_bridge.publish(snap.clone());
         }
 
-        // Apply plugin control commands produced by the editor UI.
         if let Some(q) = ctx.resources_mut().get_mut::<newengine_core::plugins::PluginControlQueue>() {
             for cmd in self.plugins_bridge.drain_cmds() {
                 q.push(cmd);
@@ -464,8 +380,6 @@ impl<E: Send + 'static> Module<E> for EditorRenderController {
 
         self.frame_index = self.frame_index.saturating_add(1).max(1);
 
-        // Engine-level dynamic UI previews (primitive thumbnails, etc.).
-        // Apps are consumers: UI requests previews, renderer pumps them here.
         let dt = ctx.frame().map(|f| f.dt).unwrap_or(0.016);
         {
             let mut p = self.previews.lock();
@@ -477,8 +391,27 @@ impl<E: Send + 'static> Module<E> for EditorRenderController {
             let rt = self.ensure_viewport_rt(&mut **r, extent)?;
 
             let (dx_px, dy_px, wheel_y, _hovered, look_drag, pan_drag, ui_busy) =
-                self.viewport_bridge.read_orbit_input();
+                self.viewport_bridge.read_camera_input();
+
             let move_mask = self.viewport_bridge.read_move_keys();
+
+            // Single source of truth for move bits.
+            const MOVE_W: u64 = 1 << 0;
+            const MOVE_A: u64 = 1 << 1;
+            const MOVE_S: u64 = 1 << 2;
+            const MOVE_D: u64 = 1 << 3;
+            const MOVE_UP: u64 = 1 << 4;
+            const MOVE_DOWN: u64 = 1 << 5;
+            const MOVE_SHIFT: u64 = 1 << 6;
+
+            let shift = (move_mask & MOVE_SHIFT) != 0;
+
+            let aspect = if vp_h > 0 {
+                (vp_w as f32 / vp_h as f32).max(1e-6)
+            } else {
+                1.0
+            };
+
             self.scene_bridge.apply_commands();
 
             let scene_lock = self.scene_bridge.scene();
@@ -499,57 +432,77 @@ impl<E: Send + 'static> Module<E> for EditorRenderController {
             };
 
             let base_speed = (bounds_radius.max(0.01) * 2.0).clamp(0.5, 200.0);
-            Self::apply_move_axes(&mut self.orbit, move_mask, dt, base_speed);
+
+            // Resolve active camera controller state from ECS (no renderer-owned controller state).
+            let cam_id = scene.active_camera().unwrap_or_else(|| scene.root().unwrap_or_default());
+            let world_mut = scene.world_mut();
+
+            let mut ctrl = world_mut
+                .get::<EditorCameraController>(cam_id)
+                .copied()
+                .unwrap_or_default();
+
+            let mut rig = world_mut
+                .get::<CameraRigComp>(cam_id)
+                .copied()
+                .map(|c| c.0)
+                .unwrap_or_default();
+
+            // Deterministic decode.
+            let fwd = ((move_mask & MOVE_W) != 0) as i32 - ((move_mask & MOVE_S) != 0) as i32;
+            let right = ((move_mask & MOVE_D) != 0) as i32 - ((move_mask & MOVE_A) != 0) as i32;
+            let up = ((move_mask & MOVE_UP) != 0) as i32 - ((move_mask & MOVE_DOWN) != 0) as i32;
 
             let mut move_axis = Vec3::ZERO;
-            if pan_drag {
-                // Pan in camera plane: pixels -> normalized units.
-                // Scale is tuned inside OrbitController via pan_speed * distance.
+            let mut speed_mul = if shift { 2.0 } else { 1.0 };
+
+            // Orbit-only pan drag.
+            if pan_drag && ctrl.mode == EditorCameraMode::Orbit {
                 move_axis.x = -dx_px;
                 move_axis.y = dy_px;
             }
 
+            if ctrl.mode == EditorCameraMode::Fly {
+                move_axis.x = right as f32;
+                move_axis.y = up as f32;
+                move_axis.z = fwd as f32;
+            } else {
+                move_axis.x += (right as f32) * base_speed;
+                move_axis.z += (fwd as f32) * base_speed;
+            }
+
             let input = CameraInput {
                 look_active: look_drag,
-                look_delta: newengine_math::Vec2::new(dx_px, -dy_px),
+                look_delta: Vec2::new(dx_px, -dy_px),
                 move_axis,
-                speed_mul: 1.0,
+                speed_mul,
                 zoom_delta: wheel_y,
             };
 
-            // Viewport aspect (vp_h > 0 in this branch).
-            let aspect = vp_w as f32 / (vp_h as f32);
+            if ctrl.mode == EditorCameraMode::Orbit {
+                ctrl.orbit.look_sens = 0.0045;
+                ctrl.orbit.dolly_speed = (bounds_radius * 0.25).clamp(0.05, 10.0);
+                ctrl.orbit.pan_speed = (bounds_radius * 0.0025).clamp(0.001, 1.0);
 
-            self.orbit.look_sens = 0.0045;
-            self.orbit.dolly_speed = (bounds_radius * 0.25).clamp(0.05, 10.0);
-            self.orbit.pan_speed = (bounds_radius * 0.0025).clamp(0.001, 1.0);
+                Self::enforce_orbit_basic(&mut ctrl.orbit);
+                ctrl.apply(&mut rig, input, dt);
+                Self::sync_rig_with_floor_lift(&mut ctrl.orbit, &mut rig);
+            } else {
+                ctrl.fly.look_sens = 0.0045;
+                ctrl.fly.move_speed = (bounds_radius * 0.75).clamp(0.5, 200.0);
+                ctrl.apply(&mut rig, input, dt);
+            }
 
-            // Apply controller then enforce floor by lifting pivot (Blender-like).
-            Self::enforce_orbit_basic(&mut self.orbit);
-            self.orbit.apply(&mut self.rig, input, dt);
-            Self::sync_rig_with_floor_lift(&mut self.orbit, &mut self.rig);
+            let _ = world_mut.insert(cam_id, ctrl);
+            let _ = world_mut.insert(cam_id, CameraRigComp(rig));
 
-            // Framing:
-            // We keep framing strictly explicit (hotkey F / button) plus a single startup frame.
-            // Auto-framing on aspect/bounds changes is hostile to editing: during rotate/scale the
-            // scene bounds (often AABB-derived) can change every frame, which makes the orbit pivot
-            // chase the selection and looks like the grid/camera moves together with the object.
-
-            // "Busy" means the user is actively controlling the camera OR manipulating scene objects.
-            // We must not auto-frame while the gizmo is being dragged, otherwise orbit.target will
-            // chase the changing scene bounds and the world grid will look like it's moving.
-            //
-            // IMPORTANT: Even when the user releases the mouse, the scene bounds may keep changing
-            // for a frame (e.g. object rotation changes an AABB-derived bounds radius). Treat such
-            // changes as "busy" as well, otherwise the camera pivot will "chase" the selection and
-            // it will look like the grid/camera moves together with the object during rotate.
+            // Framing
             let bounds_center_delta = (bounds_center - self.last_bounds_center).length();
             let bounds_radius_delta = (bounds_radius - self.last_bounds_radius).abs();
             let bounds_changed = bounds_center_delta > (bounds_radius.max(0.001) * 0.0005)
                 || bounds_radius_delta > (bounds_radius.max(0.001) * 0.0005);
 
             let user_busy = look_drag || pan_drag || move_mask != 0 || ui_busy || bounds_changed;
-            // UI-driven frame request (hotkey F / button).
             let frame_seq = self.viewport_bridge.read_frame_request();
             let frame_all = self.viewport_bridge.read_frame_all();
             let explicit_frame = frame_seq != self.last_frame_seq;
@@ -559,7 +512,6 @@ impl<E: Send + 'static> Module<E> for EditorRenderController {
 
             if explicit_frame || (!self.framed_once && !user_busy) {
                 let (fc, fr) = if explicit_frame && !frame_all {
-                    // Frame selection first (primary selection).
                     let sel = self.scene_bridge.selection();
                     if let Some(e) = sel {
                         let world = scene.world();
@@ -578,12 +530,12 @@ impl<E: Send + 'static> Module<E> for EditorRenderController {
                 };
 
                 let fovy = 60.0f32.to_radians();
-                orbit_frame_sphere(&mut self.orbit, fc, fr, fovy, aspect, 1.15);
+                orbit_frame_sphere(&mut ctrl.orbit, fc, fr, fovy, aspect, 1.15);
 
                 self.framed_radius = fr;
                 self.framed_once = true;
 
-                Self::sync_rig_with_floor_lift(&mut self.orbit, &mut self.rig);
+                Self::sync_rig_with_floor_lift(&mut ctrl.orbit, &mut rig);
             }
 
             self.last_bounds_center = bounds_center;
@@ -593,7 +545,7 @@ impl<E: Send + 'static> Module<E> for EditorRenderController {
             self.last_vp_w = vp_w;
             self.last_vp_h = vp_h;
 
-            let (near, far) = auto_near_far_from_sphere(self.orbit.distance, bounds_radius);
+            let (near, far) = auto_near_far_from_sphere(ctrl.orbit.distance, bounds_radius);
             self.projection = Projection::Perspective(Perspective::new(
                 60.0f32.to_radians(),
                 aspect,
@@ -602,20 +554,16 @@ impl<E: Send + 'static> Module<E> for EditorRenderController {
             ));
 
             let proj = self.projection.matrix();
-            let view = self.rig.view_matrix();
+            let view = rig.view_matrix();
             let viewproj = proj * view;
 
-            // Publish camera state for deterministic "spawn near camera" placement.
             let inv_view = view.inverse();
             let cam_pos = Vec3::new(inv_view.w_axis.x, inv_view.w_axis.y, inv_view.w_axis.z);
             let cam_fwd = -Vec3::new(inv_view.z_axis.x, inv_view.z_axis.y, inv_view.z_axis.z);
             self.viewport_bridge.publish_camera_spawn(cam_pos, cam_fwd);
 
-            // Make camera matrices available to the UI for overlays (selection highlight, gizmos).
-            self.viewport_bridge
-                .publish_camera_frame(view, proj, vp_w, vp_h);
+            self.viewport_bridge.publish_camera_frame(view, proj, vp_w, vp_h);
 
-            // Selection picking: UI requests a pick with a cursor position.
             let (pick_seq, pick_x, pick_y) = self.viewport_bridge.read_pick_request();
             if pick_seq != self.last_pick_seq {
                 self.last_pick_seq = pick_seq;
@@ -634,10 +582,8 @@ impl<E: Send + 'static> Module<E> for EditorRenderController {
             r.set_scissor(RectI32::new(0, 0, vp_w as i32, vp_h as i32))?;
 
             let lit = ensure_lit_pipeline(&mut self.lit, &mut **r)?;
-
             let world_lights = Self::collect_lights(scene.world());
 
-            // Grid stays on y=0 always (world floor), independent from orbit.target.y
             if bounds_radius.is_finite() {
                 let g = ensure_grid(
                     &mut self.grid,
@@ -650,7 +596,7 @@ impl<E: Send + 'static> Module<E> for EditorRenderController {
                         major_color: Self::GRID_MAJOR_COLOR,
                     },
                 )?;
-                let spacing = Self::grid_spacing(self.orbit.distance);
+                let spacing = Self::grid_spacing(ctrl.orbit.distance);
 
                 let grid_model = Mat4::from_scale_rotation_translation(
                     Vec3::new(spacing, 1.0, spacing),
@@ -658,7 +604,6 @@ impl<E: Send + 'static> Module<E> for EditorRenderController {
                     Vec3::ZERO,
                 );
 
-                // Grid uses its own vertex colors; base_color is irrelevant but kept defined.
                 Self::write_lit_ubo(
                     &mut **r,
                     lit.grid_ubo,
@@ -687,8 +632,6 @@ impl<E: Send + 'static> Module<E> for EditorRenderController {
                     let model = gt.0;
                     let mvp = viewproj * model;
 
-                    // Material-driven base color.
-                    // SceneBridge guarantees that every Primitive has a valid MaterialRef.
                     let base_color = world
                         .get::<newengine_materials::MaterialRef>(id)
                         .and_then(|mr| mats.get(mr.id))
@@ -710,23 +653,17 @@ impl<E: Send + 'static> Module<E> for EditorRenderController {
                 }
             }
 
-
-            // Editor light gizmos (pure overlay; does not mutate the world).
-            // Deterministic order: stable entity key.
             {
                 let world = scene.world();
                 let reg_lock = self.scene_bridge.primitives();
                 let reg = reg_lock.read();
 
-                // Point lights: sphere icon.
                 let sphere_id = prim_builtins::ID_SPHERE_UV;
                 let sphere_gpu = ensure_primitive_gpu(&reg, sphere_id, &mut self.prim_cache, &mut **r)?;
 
-                // Directional lights: cone arrow icon.
                 let cone_id = prim_builtins::ID_CONE;
                 let cone_gpu = ensure_primitive_gpu(&reg, cone_id, &mut self.prim_cache, &mut **r)?;
 
-                // Draw directionals first for readability.
                 let mut dirs: Vec<(u64, DirectionalLight, Mat4)> = Vec::new();
                 for (e, l, gt) in world.query2::<DirectionalLight, GlobalTransform>() {
                     dirs.push((e.stable_u64(), *l, gt.0));
@@ -737,7 +674,6 @@ impl<E: Send + 'static> Module<E> for EditorRenderController {
                     let pos = Vec3::new(m.w_axis.x, m.w_axis.y, m.w_axis.z);
                     let dir = Vec3::new(dl.direction_ws[0], dl.direction_ws[1], dl.direction_ws[2]).normalize_or_zero();
 
-                    // Cone pointing along light direction.
                     let rot = quat_from_forward_z(dir);
                     let scale = Vec3::splat(0.35);
                     let model = Mat4::from_scale_rotation_translation(scale, rot, pos);
@@ -755,7 +691,6 @@ impl<E: Send + 'static> Module<E> for EditorRenderController {
                     r.set_index_buffer(BufferSlice::new(cone_gpu.ib, 0), IndexFormat::U32)?;
                     r.draw_indexed(newengine_core::render::DrawIndexedArgs::new(cone_gpu.index_count))?;
 
-                    // Direction line marker: draw a thin stretched cone as a cheap line.
                     let line_len = 1.2_f32;
                     let line_pos = pos + dir * (line_len * 0.5);
                     let line_scale = Vec3::new(0.08, 0.08, line_len);

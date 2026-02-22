@@ -5,6 +5,9 @@ use newengine_scene::components::{ActiveCamera, SceneRoot};
 use newengine_scene::{spawn_named, Scene, SceneState};
 use newengine_transform::set_parent;
 
+use crate::editor_camera::EditorCameraController;
+use newengine_sim::CameraRigComp;
+
 /// Editor bootstrap for a fresh scene.
 ///
 /// `newengine-scene` must remain foundation-first; editor defaults live here.
@@ -33,6 +36,10 @@ pub fn bootstrap_editor_scene(scene: &mut Scene) {
 
     let cam = spawn_named(world, "Camera");
     world.insert(cam, ActiveCamera);
+
+    // Editor camera controller composition (no renderer coupling).
+    world.insert(cam, CameraRigComp::default());
+    world.insert(cam, EditorCameraController::default());
 
     set_parent(world, cam, Some(root));
 

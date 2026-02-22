@@ -182,7 +182,7 @@ pub(crate) fn draw(me: &mut EditorUiBuild, ctx: &egui::Context) {
         let pan_drag = nav_pan && !gizmo_capture_now;
         let ui_busy = gizmo_capture_now || me.gizmo.is_dragging();
         me.viewport_bridge
-            .publish_orbit_input(dx_px, dy_px, wheel_y, active, look_drag, pan_drag, ui_busy);
+            .publish_camera_input(dx_px, dy_px, wheel_y, active, look_drag, pan_drag, ui_busy);
 
         let wants_kb = ctx.wants_keyboard_input();
         let mut move_mask: u64 = 0;
