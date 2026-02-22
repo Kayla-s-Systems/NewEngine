@@ -18,7 +18,7 @@
     "backend": "egui"
   },
   "engine": {
-    "modules_dir": "../../engineModules"
+    "modules_dir": "../../plugins"
   },
   "render": {
     "backend": "vulkan_ash",
@@ -52,7 +52,7 @@
     },
     "newengine.assets": {
       "assets_root": "assets",
-      "importers_dir": "importers",
+      "importers_dir": "plugins/importers",
       "filesystem": true,
       "mount_paks": true,
       "pump_steps": 16,
@@ -66,29 +66,29 @@
         ],
         "rescan_interval_ms": 0
       },
-      "layers": [
-        {
-          "type": "dir",
-          "path": "assets",
-          "priority": 200
-        },
-        {
-          "type": "pak_glob",
-          "dir": "assets",
-          "pattern": "patch*.nepak",
-          "priority": 150
-        },
-        {
-          "type": "pak",
-          "path": "assets/shaders.pak",
-          "priority": 100
-        },
-        {
-          "path": "assets/ui.pak",
-          "priority": 120,
-          "type": "pak"
-        }
-      ]
+      "vfs": {
+        "mounts": [
+          {
+            "type": "overlay",
+            "priority": 100
+          },
+          {
+            "type": "disk",
+            "path": "assets/",
+            "priority": 80
+          },
+          {
+            "type": "pak",
+            "path": "content/",
+            "priority": 60
+          },
+          {
+            "type": "http",
+            "url": "https://cdn.game.com/",
+            "priority": 20
+          }
+        ]
+      }
     }
   }
 }
