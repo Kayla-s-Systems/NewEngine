@@ -113,9 +113,40 @@ impl ShaderBaker {
     }
 
     fn load_text_asset(&self, logical_path: &str) -> VkResult<String> {
-        // Contract: shader sources must be addressed through AssetManager.
-        // No raw filesystem fallbacks or path remaps.
-        self.load_text_asset_once(logical_path)
+        // Some legacy/broken shader packs were built with an "assets/" prefix in NEPAK keys.
+        // Keep strict VFS access (no raw fs), but tolerate alternate logical paths.
+        let mut candidates: Vec<String> = Vec::with_capacity(2);
+        candidates.push(logical_path.to_owned());
+
+        if let Some(rest) = logical_path.strip_prefix("shaders/") {
+            candidates.push(format!("assets/{rest}"));
+        }
+
+        let mut first_err: Option<VkRenderError> = None;
+
+        for (i, cand) in candidates.iter().enumerate() {
+            match self.load_text_asset_once(cand) {
+                Ok(s) => {
+                    if i != 0 {
+                        log::warn!(
+                            "shader: path remap '{}' -> '{}' (fix your pak to use 'shaders/' keys)",
+                            logical_path,
+                            cand
+                        );
+                    }
+                    return Ok(s);
+                }
+                Err(e) => {
+                    if first_err.is_none() {
+                        first_err = Some(e);
+                    }
+                }
+            }
+        }
+
+        Err(first_err.unwrap_or_else(|| {
+            VkRenderError::Shader(format!("shader: no candidates for path='{logical_path}'"))
+        }))
     }
 
     fn load_text_asset_once(&self, logical_path: &str) -> VkResult<String> {
@@ -219,24 +250,21 @@ fn hex16(key: &[u8; 32]) -> String {
 
 fn read_spv_words(path: &Path) -> Result<Vec<u32>, std::io::Error> {
     let mut f = fs::File::open(path)?;
-    let len = f.metadata().map(|m| m.len() as usize).unwrap_or(0);
-
-    if len < 4 {
+    let mut bytes = Vec::new();
+    f.read_to_end(&mut bytes)?;
+    if bytes.len() < 4 {
         return Err(std::io::Error::new(
             std::io::ErrorKind::InvalidData,
             "spv: too small",
         ));
     }
 
-    if len % 4 != 0 {
+    if bytes.len() % 4 != 0 {
         return Err(std::io::Error::new(
             std::io::ErrorKind::InvalidData,
             "spv: unaligned",
         ));
     }
-
-    let mut bytes: Vec<u8> = vec![0u8; len];
-    f.read_exact(&mut bytes)?;
 
     // Magic number 0x07230203 (little endian).
     if bytes[0] != 0x03 || bytes[1] != 0x02 || bytes[2] != 0x23 || bytes[3] != 0x07 {
@@ -246,8 +274,10 @@ fn read_spv_words(path: &Path) -> Result<Vec<u32>, std::io::Error> {
         ));
     }
 
-    let mut out: Vec<u32> = Vec::with_capacity(bytes.len() / 4);
-    out.extend(bytes.chunks_exact(4).map(|c| u32::from_le_bytes([c[0], c[1], c[2], c[3]])));
+    let mut out = Vec::with_capacity(bytes.len() / 4);
+    for chunk in bytes.chunks_exact(4) {
+        out.push(u32::from_le_bytes([chunk[0], chunk[1], chunk[2], chunk[3]]));
+    }
     Ok(out)
 }
 
@@ -255,12 +285,9 @@ fn write_spv_words(path: &Path, words: &[u32]) -> Result<(), std::io::Error> {
     let tmp = path.with_extension("spv.tmp");
     {
         let mut f = fs::File::create(&tmp)?;
-        // One buffered write reduces syscalls and improves determinism on slow disks.
-        let mut buf: Vec<u8> = Vec::with_capacity(words.len() * 4);
         for &w in words {
-            buf.extend_from_slice(&w.to_le_bytes());
+            f.write_all(&w.to_le_bytes())?;
         }
-        f.write_all(&buf)?;
         f.flush()?;
     }
     fs::rename(tmp, path)?;

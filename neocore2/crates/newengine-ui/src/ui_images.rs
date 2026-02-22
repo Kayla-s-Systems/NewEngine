@@ -43,6 +43,7 @@ impl UiImageLoader {
 mod with_images {
     use super::*;
     use image::GenericImageView;
+    use newengine_assets::AssetState;
     use newengine_math::collections::FxHashMap;
 
     type TexHandle = egui::TextureHandle;
@@ -228,6 +229,7 @@ mod with_images {
                                     s.set_var(format!("tex.{k}.error"), e);
                                 }
                             }
+                            Ok(AssetState::Unknown) => {}
                         }
                     }
                     Slot::Ready { .. } => {

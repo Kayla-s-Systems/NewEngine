@@ -16,20 +16,16 @@ pub struct AssetServiceClient {
     host: HostApiV1,
     service_id: RString,
 
-    // Hot path: avoid per-call allocations for common method names.
-    m_load: RString,
-    m_pump: RString,
-    m_state_json: RString,
-    m_blob_wire_v1: RString,
-    m_reload: RString,
-    m_info_json: RString,
-    m_formats_json: RString,
-    m_sources_json: RString,
-    m_mount_pak: RString,
-    m_mount_dir: RString,
-    m_mount_pak_prio: RString,
-    m_mount_dir_prio: RString,
-    m_resolve_trace_json: RString,
+    // Cache MethodName allocations; clones are cheap.
+    m_load: MethodName,
+    m_reload: MethodName,
+    m_pump: MethodName,
+    m_info_json: MethodName,
+    m_state_json: MethodName,
+    m_blob_wire_v1: MethodName,
+    m_resolve_trace_json: MethodName,
+    m_preload_many_v1: MethodName,
+    m_get_state_v1: MethodName,
 }
 
 impl AssetServiceClient {
@@ -48,20 +44,15 @@ impl AssetServiceClient {
             host,
             service_id: RString::from(service_id),
 
-            // Prefer the canonical v1 names from `consts::method`.
-            m_load: RString::from(method::LOAD),
-            m_pump: RString::from(method::PUMP),
-            m_state_json: RString::from(method::STATE_JSON),
-            m_blob_wire_v1: RString::from(method::BLOB_WIRE_V1),
-            m_reload: RString::from(method::RELOAD),
-            m_info_json: RString::from(method::INFO_JSON),
-            m_formats_json: RString::from(method::FORMATS_JSON),
-            m_sources_json: RString::from(method::SOURCES_JSON),
-            m_mount_pak: RString::from(method::MOUNT_PAK),
-            m_mount_dir: RString::from(method::MOUNT_DIR),
-            m_mount_pak_prio: RString::from(method::MOUNT_PAK_PRIO),
-            m_mount_dir_prio: RString::from(method::MOUNT_DIR_PRIO),
-            m_resolve_trace_json: RString::from(method::RESOLVE_TRACE_JSON),
+            m_load: MethodName::from(method::LOAD),
+            m_reload: MethodName::from(method::RELOAD),
+            m_pump: MethodName::from(method::PUMP),
+            m_info_json: MethodName::from(method::INFO_JSON),
+            m_state_json: MethodName::from(method::STATE_JSON),
+            m_blob_wire_v1: MethodName::from(method::BLOB_WIRE_V1),
+            m_resolve_trace_json: MethodName::from(method::RESOLVE_TRACE_JSON),
+            m_preload_many_v1: MethodName::from(method::PRELOAD_MANY_V1),
+            m_get_state_v1: MethodName::from(method::GET_STATE_V1),
         }
     }
 
@@ -71,12 +62,11 @@ impl AssetServiceClient {
     }
 
     #[inline]
-
-    fn call_method(&self, method_name: &RString, payload: &[u8]) -> Result<Vec<u8>, String> {
+    fn call(&self, method_name: MethodName, payload: Vec<u8>) -> Result<Vec<u8>, String> {
         let res = (self.host.call_service_v1)(
             self.service_id.clone(),
-            MethodName::from(method_name.clone()),
-            Blob::from(payload.to_vec()),
+            method_name,
+            Blob::from(payload),
         );
 
         res.into_result()
@@ -84,8 +74,22 @@ impl AssetServiceClient {
             .map_err(|e| e.to_string())
     }
 
-    // NOTE: we intentionally do not provide method fallbacks here.
-    // This client is part of the engine<->plugin contract and must be deterministic.
+    #[inline]
+    fn call_raw(&self, method_name: MethodName, payload: Vec<u8>) -> Result<Vec<u8>, String> {
+        self.call(method_name, payload)
+    }
+
+    /// Compatibility shim: we keep multiple method names in call sites, but we no longer
+    /// pay the allocation cost of cloning the payload for retries.
+    ///
+    /// NewEngine AssetManager v0.3+ guarantees the canonical method names.
+    #[inline]
+    fn call_try_methods(&self, methods: &[&'static str], payload: Vec<u8>) -> Result<Vec<u8>, String> {
+        let Some(&first) = methods.first() else {
+            return Err("asset service call failed: empty methods".to_string());
+        };
+        self.call_raw(MethodName::from(first), payload)
+    }
 
     #[inline]
     fn decode_utf8(bytes: Vec<u8>) -> Result<String, String> {
@@ -203,87 +207,101 @@ impl AssetServiceClient {
 impl AssetAccess for AssetServiceClient {
     fn load(&self, logical_path: &str) -> Result<String, String> {
         // Contract payload: utf8 logical_path
-        let bytes = self.call_method(&self.m_load, logical_path.as_bytes())?;
+        let bytes = self.call_raw(self.m_load.clone(), logical_path.as_bytes().to_vec())?;
         Self::decode_load_like(bytes, "load")
     }
 
     fn pump(&self) {
         // Contract payload: empty
-        let _ = self.call_method(&self.m_pump, &[]);
+        let _ = self.call_raw(self.m_pump.clone(), Vec::new());
     }
 
     fn state(&self, id_hex32: &str) -> Result<AssetState, String> {
-        // Contract payload: utf8 id_u128_hex32
-        let bytes = self.call_method(&self.m_state_json, id_hex32.as_bytes())?;
+        // Fast-path: binary state (16 bytes LE id -> 1 byte state).
+        if let Ok(id_u128) = u128::from_str_radix(id_hex32.trim(), 16) {
+            if let Ok(bytes) = self.call_raw(self.m_get_state_v1.clone(), id_u128.to_le_bytes().to_vec()) {
+                let code = bytes.first().copied().unwrap_or(0);
+                return Ok(match code {
+                    2 => AssetState::Ready,
+                    1 => AssetState::Loading,
+                    3 => AssetState::Failed,
+                    0 => AssetState::Unloaded,
+                    _ => AssetState::Unknown,
+                });
+            }
+        }
+
+        // Fallback JSON (compat / diagnostics).
+        let bytes = self.call_raw(self.m_state_json.clone(), id_hex32.as_bytes().to_vec())?;
         Self::decode_state_json_response(bytes)
     }
 
     fn blob_wire_v1(&self, id_hex32: &str) -> Result<(String, Vec<u8>), String> {
         // Contract payload: utf8 id_u128_hex32
-        let bytes = self.call_method(&self.m_blob_wire_v1, id_hex32.as_bytes())?;
+        let bytes = self.call_raw(self.m_blob_wire_v1.clone(), id_hex32.as_bytes().to_vec())?;
         Self::decode_blob_wire_v1(bytes)
     }
 }
 
 impl AssetService for AssetServiceClient {
     fn reload(&self, logical_path: &str) -> Result<String, String> {
-        let bytes = self.call_method(&self.m_reload, logical_path.as_bytes())?;
+        let bytes = self.call_raw(self.m_reload.clone(), logical_path.as_bytes().to_vec())?;
         Self::decode_load_like(bytes, "reload")
     }
 
     fn info_json(&self, logical_path: &str) -> Result<serde_json::Value, String> {
-        let bytes = self.call_method(&self.m_info_json, logical_path.as_bytes())?;
+        let bytes = self.call_raw(self.m_info_json.clone(), logical_path.as_bytes().to_vec())?;
         Self::decode_ok_json(bytes)
     }
 
     fn formats_json(&self) -> Result<serde_json::Value, String> {
-        let bytes = self.call_method(&self.m_formats_json, &[])?;
+        let bytes = self.call_raw(MethodName::from(method::FORMATS_JSON), Vec::new())?;
         Self::decode_ok_json(bytes)
     }
 
     fn sources_json(&self) -> Result<serde_json::Value, String> {
-        let bytes = self.call_method(&self.m_sources_json, &[])?;
+        let bytes = self.call_raw(MethodName::from(method::SOURCES_JSON), Vec::new())?;
         Self::decode_ok_json(bytes)
     }
 
     fn mount_pak(&self, path_to_pak: &str) -> Result<(), String> {
-        let bytes = self.call_method(&self.m_mount_pak, path_to_pak.as_bytes())?;
+        let bytes = self.call_raw(MethodName::from(method::MOUNT_PAK), path_to_pak.as_bytes().to_vec())?;
         Self::decode_ok_unit(bytes)
     }
 
     fn mount_dir(&self, path_to_dir: &str) -> Result<(), String> {
-        let bytes = self.call_method(&self.m_mount_dir, path_to_dir.as_bytes())?;
+        let bytes = self.call_raw(MethodName::from(method::MOUNT_DIR), path_to_dir.as_bytes().to_vec())?;
         Self::decode_ok_unit(bytes)
     }
 
     fn mount_pak_prio(&self, path_to_pak: &str, priority: i32) -> Result<(), String> {
         // Contract payload: json { path, priority }
-        let m0 = &self.m_mount_pak_prio;
+        let method_name = MethodName::from(method::MOUNT_PAK_PRIO);
         let payload = serde_json::json!({
             "path": path_to_pak,
             "priority": priority
         })
             .to_string()
             .into_bytes();
-        let bytes = self.call_method(m0, &payload)?;
+        let bytes = self.call_raw(method_name, payload)?;
         Self::decode_ok_unit(bytes)
     }
 
     fn mount_dir_prio(&self, path_to_dir: &str, priority: i32) -> Result<(), String> {
         // Contract payload: json { path, priority }
-        let m0 = &self.m_mount_dir_prio;
+        let method_name = MethodName::from(method::MOUNT_DIR_PRIO);
         let payload = serde_json::json!({
             "path": path_to_dir,
             "priority": priority
         })
             .to_string()
             .into_bytes();
-        let bytes = self.call_method(m0, &payload)?;
+        let bytes = self.call_raw(method_name, payload)?;
         Self::decode_ok_unit(bytes)
     }
 
     fn resolve_trace_json(&self, logical_path: &str) -> Result<serde_json::Value, String> {
-        let bytes = self.call_method(&self.m_resolve_trace_json, logical_path.as_bytes())?;
+        let bytes = self.call_raw(self.m_resolve_trace_json.clone(), logical_path.as_bytes().to_vec())?;
         Self::decode_ok_json(bytes)
     }
 }

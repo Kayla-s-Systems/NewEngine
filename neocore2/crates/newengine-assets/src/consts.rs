@@ -16,6 +16,10 @@ pub mod method {
     pub const STATE_JSON: &str = "asset.state_json";
     pub const BLOB_WIRE_V1: &str = "asset.blob_wire_v1";
 
+    // Fast-path / batch APIs.
+    pub const PRELOAD_MANY_V1: &str = "asset.preload_many_v1";
+    pub const GET_STATE_V1: &str = "asset.get_state_v1";
+
     pub const FORMATS_JSON: &str = "asset.formats_json";
     pub const SOURCES_JSON: &str = "asset.sources_json";
     pub const MOUNT_PAK: &str = "asset.mount_pak";

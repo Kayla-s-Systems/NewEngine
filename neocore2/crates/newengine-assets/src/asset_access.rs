@@ -9,6 +9,7 @@ pub enum AssetState {
     Loading,
     Ready,
     Failed,
+    Unknown,
 }
 
 /// Minimal engine-facing AssetManager access surface.
@@ -90,6 +91,7 @@ pub fn wait_ready<A: AssetAccess>(assets: &A, id_hex32: &str, timeout: Duration)
             Ok(AssetState::Failed) => return Err(WaitReadyError::Failed(id_hex32.to_string())),
             Ok(AssetState::Loading) | Ok(AssetState::Unloaded) => {}
             Err(e) => return Err(WaitReadyError::Transport(e)),
+            Ok(AssetState::Unknown) => { log::warn!("Unknown  asset: {}", id_hex32); }
         }
 
         if Instant::now() >= deadline {
