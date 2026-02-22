@@ -224,9 +224,9 @@ pub fn default_schedule() -> SimSchedule {
     s.add_system(
         SimStage::Controllers,
         20,
-        "orbit_camera",
+        "camera_controller",
         AccessMask::write(crate::Subsystem::Camera as u32),
-        systems::sys_orbit_camera,
+        systems::sys_camera_controller,
     );
     // Depends on orbit_camera -> same subsystem => serialized.
     s.add_system(

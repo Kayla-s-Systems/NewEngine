@@ -26,6 +26,6 @@ pub use schedule::{default_schedule, SimSchedule, SimStage};
 pub use time::SimFrame;
 
 pub use systems::{
-    sys_camera_rig_to_transform, sys_character_motor, sys_integrate_velocities, sys_orbit_camera,
+    sys_camera_rig_to_transform, sys_character_motor, sys_integrate_velocities,
     sys_scene_derived,
 };

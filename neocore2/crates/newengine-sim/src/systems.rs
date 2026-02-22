@@ -7,8 +7,8 @@ use newengine_scene::update_scene_world;
 use newengine_transform::Transform;
 
 use crate::{
-    AngularVelocity, CameraInputComp, CameraRigComp, CharacterMotor, CommandBuffer, MotorInput,
-    OrbitCameraMotor, SimFrame, Velocity,
+    AngularVelocity, CameraInputComp, CameraMotor, CameraRigComp, CharacterMotor, CommandBuffer,
+    MotorInput, SimFrame, Velocity,
 };
 
 /// Applies `MotorInput` to `CharacterMotor` and writes `Transform`/`Velocity` updates.
@@ -69,16 +69,16 @@ pub fn sys_character_motor(world: &World, frame: SimFrame, cmd: &mut CommandBuff
     }
 }
 
-/// Applies orbit controller input to `CameraRigComp`.
-pub fn sys_orbit_camera(world: &World, frame: SimFrame, cmd: &mut CommandBuffer) {
+/// Applies camera controller input to `CameraRigComp`.
+pub fn sys_camera_controller(world: &World, frame: SimFrame, cmd: &mut CommandBuffer) {
     let dt = frame.dt;
     if !dt.is_finite() || dt <= 0.0 {
         return;
     }
 
-    let ids: Vec<EntityId> = world.query2_ids::<OrbitCameraMotor, CameraRigComp>().collect();
+    let ids: Vec<EntityId> = world.query2_ids::<CameraMotor, CameraRigComp>().collect();
     for id in ids {
-        let Some(mut motor) = world.get::<OrbitCameraMotor>(id).copied() else {
+        let Some(mut motor) = world.get::<CameraMotor>(id).copied() else {
             continue;
         };
         let Some(mut rig) = world.get::<CameraRigComp>(id).copied() else {
