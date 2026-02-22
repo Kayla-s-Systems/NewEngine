@@ -19,7 +19,7 @@ cmake -B build
 cmake --build build
 ```
 
-## Hello, world!
+## Hello, _world!
 
 A port of Jolt's "HelloWorld" example is provided in [HelloWorld/main.cpp](HelloWorld/main.cpp).
 

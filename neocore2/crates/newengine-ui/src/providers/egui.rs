@@ -41,40 +41,83 @@ impl EguiUiProvider {
 
     #[inline]
     fn egui_key_from_input(u: u32) -> Option<egui::Key> {
-        let backspace = winit::keyboard::KeyCode::Backspace as u32;
-        let enter = winit::keyboard::KeyCode::Enter as u32;
-        let tab = winit::keyboard::KeyCode::Tab as u32;
-        let escape = winit::keyboard::KeyCode::Escape as u32;
+        use winit::keyboard::KeyCode as KC;
 
-        let up = winit::keyboard::KeyCode::ArrowUp as u32;
-        let down = winit::keyboard::KeyCode::ArrowDown as u32;
-        let left = winit::keyboard::KeyCode::ArrowLeft as u32;
-        let right = winit::keyboard::KeyCode::ArrowRight as u32;
-
-        let home = winit::keyboard::KeyCode::Home as u32;
-        let end = winit::keyboard::KeyCode::End as u32;
-        let page_up = winit::keyboard::KeyCode::PageUp as u32;
-        let page_down = winit::keyboard::KeyCode::PageDown as u32;
-        let insert = winit::keyboard::KeyCode::Insert as u32;
-        let delete = winit::keyboard::KeyCode::Delete as u32;
+        // NOTE: The INPUT plugin reports `winit::keyboard::KeyCode` discriminants as `u32`.
+        // We translate them into `egui::Key` so UI code can use `ctx.input(|i| i.key_down(..))`.
 
         Some(match u {
-            x if x == backspace => egui::Key::Backspace,
-            x if x == enter => egui::Key::Enter,
-            x if x == tab => egui::Key::Tab,
-            x if x == escape => egui::Key::Escape,
+            x if x == (KC::Backspace as u32) => egui::Key::Backspace,
+            x if x == (KC::Enter as u32) => egui::Key::Enter,
+            x if x == (KC::Tab as u32) => egui::Key::Tab,
+            x if x == (KC::Escape as u32) => egui::Key::Escape,
+            x if x == (KC::Space as u32) => egui::Key::Space,
 
-            x if x == up => egui::Key::ArrowUp,
-            x if x == down => egui::Key::ArrowDown,
-            x if x == left => egui::Key::ArrowLeft,
-            x if x == right => egui::Key::ArrowRight,
+            x if x == (KC::ArrowUp as u32) => egui::Key::ArrowUp,
+            x if x == (KC::ArrowDown as u32) => egui::Key::ArrowDown,
+            x if x == (KC::ArrowLeft as u32) => egui::Key::ArrowLeft,
+            x if x == (KC::ArrowRight as u32) => egui::Key::ArrowRight,
 
-            x if x == home => egui::Key::Home,
-            x if x == end => egui::Key::End,
-            x if x == page_up => egui::Key::PageUp,
-            x if x == page_down => egui::Key::PageDown,
-            x if x == insert => egui::Key::Insert,
-            x if x == delete => egui::Key::Delete,
+            x if x == (KC::Home as u32) => egui::Key::Home,
+            x if x == (KC::End as u32) => egui::Key::End,
+            x if x == (KC::PageUp as u32) => egui::Key::PageUp,
+            x if x == (KC::PageDown as u32) => egui::Key::PageDown,
+            x if x == (KC::Insert as u32) => egui::Key::Insert,
+            x if x == (KC::Delete as u32) => egui::Key::Delete,
+
+            // Letters (WASD etc.)
+            x if x == (KC::KeyA as u32) => egui::Key::A,
+            x if x == (KC::KeyB as u32) => egui::Key::B,
+            x if x == (KC::KeyC as u32) => egui::Key::C,
+            x if x == (KC::KeyD as u32) => egui::Key::D,
+            x if x == (KC::KeyE as u32) => egui::Key::E,
+            x if x == (KC::KeyF as u32) => egui::Key::F,
+            x if x == (KC::KeyG as u32) => egui::Key::G,
+            x if x == (KC::KeyH as u32) => egui::Key::H,
+            x if x == (KC::KeyI as u32) => egui::Key::I,
+            x if x == (KC::KeyJ as u32) => egui::Key::J,
+            x if x == (KC::KeyK as u32) => egui::Key::K,
+            x if x == (KC::KeyL as u32) => egui::Key::L,
+            x if x == (KC::KeyM as u32) => egui::Key::M,
+            x if x == (KC::KeyN as u32) => egui::Key::N,
+            x if x == (KC::KeyO as u32) => egui::Key::O,
+            x if x == (KC::KeyP as u32) => egui::Key::P,
+            x if x == (KC::KeyQ as u32) => egui::Key::Q,
+            x if x == (KC::KeyR as u32) => egui::Key::R,
+            x if x == (KC::KeyS as u32) => egui::Key::S,
+            x if x == (KC::KeyT as u32) => egui::Key::T,
+            x if x == (KC::KeyU as u32) => egui::Key::U,
+            x if x == (KC::KeyV as u32) => egui::Key::V,
+            x if x == (KC::KeyW as u32) => egui::Key::W,
+            x if x == (KC::KeyX as u32) => egui::Key::X,
+            x if x == (KC::KeyY as u32) => egui::Key::Y,
+            x if x == (KC::KeyZ as u32) => egui::Key::Z,
+
+            // Digits
+            x if x == (KC::Digit0 as u32) => egui::Key::Num0,
+            x if x == (KC::Digit1 as u32) => egui::Key::Num1,
+            x if x == (KC::Digit2 as u32) => egui::Key::Num2,
+            x if x == (KC::Digit3 as u32) => egui::Key::Num3,
+            x if x == (KC::Digit4 as u32) => egui::Key::Num4,
+            x if x == (KC::Digit5 as u32) => egui::Key::Num5,
+            x if x == (KC::Digit6 as u32) => egui::Key::Num6,
+            x if x == (KC::Digit7 as u32) => egui::Key::Num7,
+            x if x == (KC::Digit8 as u32) => egui::Key::Num8,
+            x if x == (KC::Digit9 as u32) => egui::Key::Num9,
+
+            // Function keys
+            x if x == (KC::F1 as u32) => egui::Key::F1,
+            x if x == (KC::F2 as u32) => egui::Key::F2,
+            x if x == (KC::F3 as u32) => egui::Key::F3,
+            x if x == (KC::F4 as u32) => egui::Key::F4,
+            x if x == (KC::F5 as u32) => egui::Key::F5,
+            x if x == (KC::F6 as u32) => egui::Key::F6,
+            x if x == (KC::F7 as u32) => egui::Key::F7,
+            x if x == (KC::F8 as u32) => egui::Key::F8,
+            x if x == (KC::F9 as u32) => egui::Key::F9,
+            x if x == (KC::F10 as u32) => egui::Key::F10,
+            x if x == (KC::F11 as u32) => egui::Key::F11,
+            x if x == (KC::F12 as u32) => egui::Key::F12,
 
             _ => return None,
         })

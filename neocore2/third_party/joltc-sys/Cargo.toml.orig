@@ -11,7 +11,7 @@ exclude = ["JoltC/JoltPhysics/Assets", "JoltC/JoltPhysics/TestFramework", "JoltC
 [features]
 default = []
 
-# Changes all world coordinates to use f64 instead of 32 coordinates.
+# Changes all _world coordinates to use f64 instead of 32 coordinates.
 double-precision = []
 
 # Changes ObjectLayer and related types to be u32 instead of u16.

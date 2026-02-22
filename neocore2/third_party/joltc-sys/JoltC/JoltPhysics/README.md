@@ -23,17 +23,18 @@ the [Samples](Docs/Samples.md) section.
 So why create yet another physics engine? First of all, this has been a personal learning project and secondly I wanted
 to address some issues that I had with existing physics engines:
 
-* In games we usually need to do many more things than to simulate the physics world and we need to do this across
+* In games we usually need to do many more things than to simulate the physics _world and we need to do this across
   multiple threads. We therefore place a lot of emphasis on concurrently accessing the physics simulation data outside
   of the main physics simulation update:
-    * Sections of the world can be loaded / unloaded in the background. A batch of physics bodies can be prepared on a
-      background thread without locking or affecting the physics simulation and then inserted into the world all at once
+    * Sections of the _world can be loaded / unloaded in the background. A batch of physics bodies can be prepared on a
+      background thread without locking or affecting the physics simulation and then inserted into the _world all at
+      once
       with a minimal impact on performance.
     * Collision queries can run in parallel with other operations like insertion / removal of bodies. The query code is
       guaranteed to see a body in a consistent state, but when a body is changed during a collision query there is no
       guarantee if the change is visible to the query or not. If a thread modifies the position of a body and then does
       a collision query, it will immediately see the updated state (this is often a problem when working with a read
-      version and a write version of the world).
+      version and a write version of the _world).
     * It is also possible to run collision queries in parallel to the main physics simulation by doing the broad phase
       query before the simulation step. This way, long running processes (like navigation mesh generation) can be spread
       out across multiple frames while still running the physics simulation every frame.
@@ -44,7 +45,7 @@ to address some issues that I had with existing physics engines:
   the inputs to the simulation. Read
   the [Deterministic Simulation](https://jrouwe.github.io/JoltPhysics/#deterministic-simulation) section to understand
   the limits of this.
-* The simulation of this physics engine tries to simulate behavior of rigid bodies in the real world but makes
+* The simulation of this physics engine tries to simulate behavior of rigid bodies in the real _world but makes
   approximations in the simulation so should mainly be used for games or VR simulations.
 
 ## Features
@@ -87,7 +88,7 @@ to address some issues that I had with existing physics engines:
 * Game character simulation (capsule)
     * Rigid body character. Moves during the physics simulation. Cheapest option and most accurate collision response
       between character and dynamic bodies.
-    * Virtual character. Does not have a rigid body in the world but simulates one using collision checks. Updated
+  * Virtual character. Does not have a rigid body in the _world but simulates one using collision checks. Updated
       outside of the physics update for more control. Less accurate interaction with dynamic bodies.
 * Vehicles
     * Wheeled vehicles.

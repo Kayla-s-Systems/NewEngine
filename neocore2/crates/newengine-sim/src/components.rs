@@ -1,6 +1,6 @@
 #![forbid(unsafe_op_in_unsafe_fn)]
 
-use newengine_camera::{CameraController, CameraInput, CameraRig};
+use newengine_camera::{CameraInput, CameraRig, OrbitController};
 use newengine_math::{Vec2, Vec3};
 
 /// Linear velocity in world space (units/sec).
@@ -45,6 +45,12 @@ pub struct CharacterMotor {
     pub move_speed: f32,
 
     pub pitch_limit: f32,
+
+    /// Forward axis sign for converting local input to engine world convention.
+    ///
+    /// - +1.0: forward is +Z
+    /// - -1.0: forward is -Z
+    pub forward_sign_z: f32,
 }
 
 impl Default for CharacterMotor {
@@ -56,24 +62,24 @@ impl Default for CharacterMotor {
             look_sens: 0.0025,
             move_speed: 6.0,
             pitch_limit: 1.54,
+            forward_sign_z: -1.0,
         }
     }
 }
 
-/// ECS-bridge for `newengine-camera` controllers.
+/// ECS-bridge for `newengine-camera` orbit controller.
 ///
 /// The camera crate is pure math; this component wires it to ECS entities.
-/// The actual input mapping is handled externally (editor/game/plugin), by writing `CameraInputComp`.
 #[derive(Clone, Copy, Debug)]
-pub struct CameraMotor {
-    pub controller: CameraController,
+pub struct OrbitCameraMotor {
+    pub controller: OrbitController,
 }
 
-impl Default for CameraMotor {
+impl Default for OrbitCameraMotor {
     #[inline]
     fn default() -> Self {
         Self {
-            controller: CameraController::default(),
+            controller: OrbitController::default(),
         }
     }
 }

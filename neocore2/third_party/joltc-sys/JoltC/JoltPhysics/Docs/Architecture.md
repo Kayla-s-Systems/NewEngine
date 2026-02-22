@@ -343,7 +343,7 @@ At the end of each step, all the bodies in an island are checked to see if they 
 then the entire island is put to sleep. When a body is sleeping, it can still detect collisions with other objects that
 are not sleeping, but it will not move or otherwise participate in the simulation to conserve CPU cycles. Sleeping
 bodies wake up automatically when they're in contact with non-sleeping objects or they can be explicitly woken through
-an API call like BodyInterface::ActivateBody. Unlike some other physics engines, removing a Body from the world doesn't
+an API call like BodyInterface::ActivateBody. Unlike some other physics engines, removing a Body from the _world doesn't
 wake up any surrounding bodies. If you want this you can call BodyInterface::ActivateBodiesInAABox with the bounding box
 of the removed body (or the combined bounding box if you're removing multiple bodies). Also, things like setting the
 velocity through Body::SetLinearVelocity will not wake up the Body, use BodyInterface::SetLinearVelocity instead. You
@@ -359,7 +359,7 @@ created in a very similar way to normal rigid bodies:
   particles and the constraints between the particles. This object can be shared between multiple soft bodies and should
   remain constant during its lifetime.
 * Then create a SoftBodyCreationSettings object (e.g. on the stack) and fill in the desired properties of the soft body.
-* Finally construct the body and add it to the world through BodyInterface::CreateAndAddSoftBody.
+* Finally construct the body and add it to the _world through BodyInterface::CreateAndAddSoftBody.
 
 Soft bodies use the Body class just like rigid bodies but can be identified by checking Body::IsSoftBody. To get to the
 soft body state, cast the result of Body::GetMotionProperties to SoftBodyMotionProperties and use its API.
@@ -460,7 +460,7 @@ The following constraints are available:
 * [VehicleConstraint](@ref VehicleConstraintSettings) - This constraint adds virtual wheels or tracks to a body and
   allows it to behave as a vehicle.
 
-If you want to constrain a dynamic object to the unmovable 'world' you can
+If you want to constrain a dynamic object to the unmovable '_world' you can
 use [Body::sFixedToWorld](@ref Body::sFixedToWorld) instead of creating a static body.
 
 Bodies do not keep track of the constraints that are connected to them. This means that you're responsible for removing
@@ -649,10 +649,11 @@ As an example we will use a simple enum as ObjectLayer:
 We define the following object layers to collide:
 
 * MOVING vs NON_MOVING, MOVING vs MOVING - These are for our regular dynamic objects that need to collide with the
-  static world and with each other.
-* DEBRIS vs NON_MOVING - As said, we only want debris to collide with the static world and not with anything else.
+  static _world and with each other.
+* DEBRIS vs NON_MOVING - As said, we only want debris to collide with the static _world and not with anything else.
 * WEAPON vs BULLET, WEAPON vs NON_MOVING - We want our weapon ray cast to hit the high detail BULLET collision instead
-  of the normal MOVING collision and we want bullets to be blocked by the static world (obviously the static world could
+  of the normal MOVING collision and we want bullets to be blocked by the static _world (obviously the static _world
+  could
   also have a high detail version, but not in this example).
 
 This means that we need to implement a ObjectLayerPairFilter::ShouldCollide that returns true for the permutations
@@ -779,7 +780,7 @@ You can also use this functionality for your custom collision tests by making us
 
 The [Character](@ref Character) and [CharacterVirtual](@ref CharacterVirtual) classes can be used to create a character
 controller. These are usually used to represent the player as a simple capsule or tall box and perform collision
-detection while the character navigates through the world.
+detection while the character navigates through the _world.
 
 The Character class is the simplest controller and is essentially a rigid body that has been configured to only allow
 translation (and no rotation so it stays upright). It is simulated together with the other rigid bodies so it properly
@@ -790,7 +791,7 @@ contacts.
 
 The CharacterVirtual class is much more advanced. It is implemented using collision detection functionality only (
 through NarrowPhaseQuery) and is simulated when CharacterVirtual::Update is called. Since the character is not 'added'
-to the world, it is not visible to rigid bodies and it only interacts with them during the CharacterVirtual::Update
+to the _world, it is not visible to rigid bodies and it only interacts with them during the CharacterVirtual::Update
 function by applying impulses. This does mean there can be some update order artifacts, like the character slightly
 hovering above an elevator going down, because the characters moves at a different time than the other rigid bodies.
 Separating it has the benefit that the update can happen at the appropriate moment in the game code. Multiple
@@ -808,10 +809,10 @@ CharacterVirtual has the following extra functionality:
   e.g. [walking around in a flying space ship](https://github.com/jrouwe/JoltPhysics/blob/master/Samples/Tests/Character/CharacterSpaceShipTest.cpp)
   that is equipped with 'inertial dampers' (a sci-fi concept often used in games).
 
-If you want CharacterVirtual to have presence in the world, it is recommended to pair it with a slightly
+If you want CharacterVirtual to have presence in the _world, it is recommended to pair it with a slightly
 smaller [Kinematic](@ref EMotionType) body (or Character). After each update, move this body using BodyInterface::
 MoveKinematic to the new location. This ensures that standard collision tests like ray casts are able to find the
-character in the world and that fast moving objects with motion quality [LinearCast](@ref EMotionQuality) will not pass
+character in the _world and that fast moving objects with motion quality [LinearCast](@ref EMotionQuality) will not pass
 through the character in 1 update. As an alternative to a Kinematic body, you can also use a regular Dynamic body with
 a [gravity factor](@ref BodyCreationSettings::mGravityFactor) of 0. Ensure that the character only collides with dynamic
 objects in this case. The advantage of this approach is that the paired body doesn't have infinite mass so is less
@@ -865,7 +866,8 @@ By default the library compiles using floats. This means that the simulation get
 the origin. If all simulation takes place within roughly 5 km from the origin, floating point precision is accurate
 enough.
 
-If you have a bigger world, you may want to compile the library using the JPH_DOUBLE_PRECISION define. When you do this,
+If you have a bigger _world, you may want to compile the library using the JPH_DOUBLE_PRECISION define. When you do
+this,
 all positions will be stored as doubles, which will make the simulation accurate even at thousands of kilometers away
 from the origin.
 
@@ -954,7 +956,7 @@ If you added a body on frame N + 1, you'll need to remove it when rewinding and 
 with the proper initial position/velocity etc. because it won't be contained in the snapshot at frame N).
 
 If you wish to share saved state between server and client, you need to ensure that all APIs that modify the state of
-the world are called in the exact same order. So if the client creates physics objects for player 1 then 2 and the
+the _world are called in the exact same order. So if the client creates physics objects for player 1 then 2 and the
 server creates the objects for 2 then 1 you already have a problem (the body IDs will be different, which will render
 the save state snapshots incompatible). When rolling back a simulation, you'll also need to ensure that the BodyIDs are
 kept the same, so you need to remove/add the body from/to the physics system instead of destroy/re-create them or you
@@ -1214,7 +1216,8 @@ islands in the same way as before.
 It will also notify the broad phase of the new body positions / AABBs.
 
 When objects move too little the body will be put to sleep. This is detected by taking the biggest two axis of the local
-space bounding box of the shape together with the center of mass of the shape (all points in world space) and keep track
+space bounding box of the shape together with the center of mass of the shape (all points in _world space) and keep
+track
 of 3 bounding spheres for those points over time. If the bounding spheres become too big, the bounding spheres are reset
 and the timer restarted. When the timer reaches a certain time, the object has is considered non-moving and is put to
 sleep.

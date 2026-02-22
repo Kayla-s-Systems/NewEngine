@@ -70,5 +70,37 @@ impl EditorCameraController {
             }
         }
     }
+    /// Synchronizes orbit controller state from the current rig transform.
+    ///
+    /// Ensures seamless Fly -> Orbit transition without position "snap-back".
+    #[inline]
+    pub fn sync_orbit_from_rig(&mut self, rig: &CameraRig) {
+        let fwd = rig.forward();
+        // Derive yaw/pitch from forward vector. Convention: forward is -Z.
+        let yaw = (-fwd.x).atan2(-fwd.z);
+        let pitch = (-fwd.y).clamp(-1.0, 1.0).asin();
+
+        self.orbit.yaw = yaw;
+        self.orbit.pitch = pitch;
+
+        let d = self.orbit.distance.max(self.orbit.min_distance).min(self.orbit.max_distance);
+        self.orbit.distance = d;
+
+        // Orbit target is in front of the camera by distance along forward.
+        self.orbit.target = rig.position + fwd * d;
+    }
+
+    /// Synchronizes fly controller orientation from the current rig transform.
+    ///
+    /// Avoids the first-frame rotation snap when entering Fly.
+    #[inline]
+    pub fn sync_fly_from_rig(&mut self, rig: &CameraRig) {
+        let fwd = rig.forward();
+        let yaw = (-fwd.x).atan2(-fwd.z);
+        let pitch = (-fwd.y).clamp(-1.0, 1.0).asin();
+
+        self.fly.yaw = yaw;
+        self.fly.pitch = pitch;
+    }
 }
 

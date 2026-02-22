@@ -18,7 +18,7 @@ information.
   class. (277b818ffefed4f15477ff1e6d0cc07065899903)
 * 20240223 - Added ConvexShape::ESupportMode::Default. If you have custom convex shapes you need to handle this in
   ConvexShape::GetSupportFunction. (0f67cc2915c5e34a4a38480580dad73888a1952e)
-* 20240216 - Restriction angular motion using EAllowedDOFs now works in world space rather than in local space. This
+* 20240216 - Restriction angular motion using EAllowedDOFs now works in _world space rather than in local space. This
   change was made to be more in line with other physics engines and to fix some issues with constraints. If you need the
   old behavior then
   copy [this](https://github.com/jrouwe/JoltPhysics/blob/9631e217e54b8492ac36471f2aa966df40d6c2ad/Jolt/Physics/Body/MotionProperties.cpp#L33-L118)
@@ -134,12 +134,12 @@ information.
 * 20221231 - ObjectLayerPairFilter and ObjectVsBroadPhaseLayerFilter are now objects instead of function pointers. (
   4315ad53e354f094f753664fcf7a52870f6915e4)
 * 20221208 - ContactListener::OnContactValidate is reporting collisions relative to inBaseOffset. Add this to the
-  contact point if you want world space positions. (428611482825e369e60e0a5daf17c69a4d0f2a6f)
+  contact point if you want _world space positions. (428611482825e369e60e0a5daf17c69a4d0f2a6f)
 * 20221204 - Changes related to double precision support for positions (a2c1c22059fa031faf0208258e654bcff79a63e4)
     * In many places in the public API Vec3 has been replaced by RVec3 (a Vec3 of Real values which can either be double
       or float depending on if JPH_DOUBLE_PRECISION is defined). In the same way RMat44 replaces Mat44. When compiling
       in single precision mode (the default) you should not notice a change.
-    * Shape::GetSubmergedVolume now takes a plane that's relative to inCenterOfMassTransform instead of one in world
+  * Shape::GetSubmergedVolume now takes a plane that's relative to inCenterOfMassTransform instead of one in _world
       space
     * Many of the NarrowPhaseQuery and TransformedShape collision queries now have a 'base offset' that you need to
       specify. Go to [Big Worlds](https://jrouwe.github.io/JoltPhysics/#big-worlds) for more info.
@@ -179,7 +179,7 @@ information.
   4f7c925c31f39eda1d8d68e4e72456b5def93d9b)
 * 20220516 - Constraint::GetType was renamed to GetSubType, a new GetType function was introduced (
   3e2151a009e8f11ca724754b2bd25e14d2654fb6)
-* 20220516 - *SBS* - Added possibility to save the current state of the physics world as a scene (
+* 20220516 - *SBS* - Added possibility to save the current state of the physics _world as a scene (
   3e2151a009e8f11ca724754b2bd25e14d2654fb6)
 * 20220510 - Factory::sInstance must now be allocated by the application prior to calling RegisterTypes() and has
   changed to a pointer (3ca62973dae7cda7a9ceece698438a45b9ad1433)

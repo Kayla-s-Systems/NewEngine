@@ -134,6 +134,13 @@ pub(crate) fn draw(me: &mut EditorUiBuild, ctx: &egui::Context) {
             }
         }
 
+        let wants_kb = ctx.wants_keyboard_input();
+
+        // Free-fly capture: RMB held while viewport is active and UI is not capturing.
+        // This mirrors common DCC/UE editor behavior: RMB activates look + WASD.
+        let fly_rmb = active && rmb_down && !wants_kb;
+
+        // Pointer delta is used for free-fly look. Middle-drag uses explicit drag tracking.
         let (mut dx_px, mut dy_px) = (0.0f32, 0.0f32);
         if nav_drag {
             if let Some(pos) = resp.interact_pointer_pos() {
@@ -146,6 +153,12 @@ pub(crate) fn draw(me: &mut EditorUiBuild, ctx: &egui::Context) {
             }
         } else {
             me.last_drag_pos = None;
+
+            if fly_rmb {
+                let d = ctx.input(|i| i.pointer.delta());
+                dx_px = d.x * ppp;
+                dy_px = d.y * ppp;
+            }
         }
 
         let wheel_y_points = if active { raw_scroll_y } else { 0.0 };
@@ -178,13 +191,11 @@ pub(crate) fn draw(me: &mut EditorUiBuild, ctx: &egui::Context) {
             }
         }
 
-        let look_drag = nav_rotate && !gizmo_capture_now;
+        let look_drag = (nav_rotate || fly_rmb) && !gizmo_capture_now;
         let pan_drag = nav_pan && !gizmo_capture_now;
         let ui_busy = gizmo_capture_now || me.gizmo.is_dragging();
         me.viewport_bridge
-            .publish_camera_input(dx_px, dy_px, wheel_y, active, look_drag, pan_drag, ui_busy);
-
-        let wants_kb = ctx.wants_keyboard_input();
+            .publish_camera_input(dx_px, dy_px, wheel_y, active, look_drag, pan_drag, ui_busy, fly_rmb);
         let mut move_mask: u64 = 0;
 
         // Explicit framing:
@@ -202,8 +213,7 @@ pub(crate) fn draw(me: &mut EditorUiBuild, ctx: &egui::Context) {
             });
         }
 
-        let rmb = active && rmb_down;
-        if rmb && !wants_kb {
+        if fly_rmb {
             ctx.input(|i| {
                 if i.key_down(egui::Key::W) {
                     move_mask |= 1 << 0;

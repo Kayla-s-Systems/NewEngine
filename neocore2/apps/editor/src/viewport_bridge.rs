@@ -43,6 +43,7 @@ pub struct ViewportBridge {
     /// bit1: look_drag (camera rotate)
     /// bit2: pan_drag (camera pan)
     /// bit3: ui_busy (UI captured input; e.g. gizmo drag/hover)
+    /// bit4: fly_rmb (RMB-held free-fly capture)
     input_flags: AtomicU64,
 
     /// Packed movement keys for editor-style camera.
@@ -201,6 +202,7 @@ impl ViewportBridge {
         look_drag: bool,
         pan_drag: bool,
         ui_busy: bool,
+        fly_rmb: bool,
     ) {
         self.look_delta_xy
             .store(Self::pack_f32x2(dx_px, dy_px), Ordering::Relaxed);
@@ -218,6 +220,9 @@ impl ViewportBridge {
         }
         if ui_busy {
             flags |= 8;
+        }
+        if fly_rmb {
+            flags |= 16;
         }
         self.input_flags.store(flags, Ordering::Relaxed);
     }
@@ -237,7 +242,7 @@ impl ViewportBridge {
 
     /// Read camera input published by UI for this frame.
     #[inline]
-    pub fn read_camera_input(&self) -> (f32, f32, f32, bool, bool, bool, bool) {
+    pub fn read_camera_input(&self) -> (f32, f32, f32, bool, bool, bool, bool, bool) {
         let (dx, dy) = Self::unpack_f32x2(self.look_delta_xy.load(Ordering::Relaxed));
         let wheel = Self::unpack_f32(self.wheel_y.load(Ordering::Relaxed));
         let flags = self.input_flags.load(Ordering::Relaxed);
@@ -245,7 +250,8 @@ impl ViewportBridge {
         let look_drag = (flags & 2) != 0;
         let pan_drag = (flags & 4) != 0;
         let ui_busy = (flags & 8) != 0;
-        (dx, dy, wheel, hovered, look_drag, pan_drag, ui_busy)
+        let fly_rmb = (flags & 16) != 0;
+        (dx, dy, wheel, hovered, look_drag, pan_drag, ui_busy, fly_rmb)
     }
 
     /// Publish a pick request from UI.

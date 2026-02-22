@@ -390,7 +390,7 @@ impl<E: Send + 'static> Module<E> for EditorRenderController {
             let extent = Extent2D::new(vp_w, vp_h);
             let rt = self.ensure_viewport_rt(&mut **r, extent)?;
 
-            let (dx_px, dy_px, wheel_y, _hovered, look_drag, pan_drag, ui_busy) =
+            let (dx_px, dy_px, wheel_y, _hovered, look_drag, pan_drag, ui_busy, fly_rmb) =
                 self.viewport_bridge.read_camera_input();
 
             let move_mask = self.viewport_bridge.read_move_keys();
@@ -442,11 +442,36 @@ impl<E: Send + 'static> Module<E> for EditorRenderController {
                 .copied()
                 .unwrap_or_default();
 
+            // Mode hint from UI: RMB-held capture means "editor fly".
+            // When not captured, fall back to orbit for safe UI interaction.
+            let prev_mode = ctrl.mode;
+            let desired_mode = if fly_rmb {
+                EditorCameraMode::Fly
+            } else {
+                EditorCameraMode::Orbit
+            };
+
             let mut rig = world_mut
                 .get::<CameraRigComp>(cam_id)
                 .copied()
                 .map(|c| c.0)
                 .unwrap_or_default();
+
+            if prev_mode != desired_mode {
+                match (prev_mode, desired_mode) {
+                    (EditorCameraMode::Fly, EditorCameraMode::Orbit) => {
+                        // Preserve world position: sync orbit target/yaw/pitch from current rig.
+                        ctrl.sync_orbit_from_rig(&rig);
+                    }
+                    (EditorCameraMode::Orbit, EditorCameraMode::Fly) => {
+                        // Avoid first-frame rotation snap when entering Fly.
+                        ctrl.sync_fly_from_rig(&rig);
+                    }
+                    _ => {}
+                }
+            }
+
+            ctrl.mode = desired_mode;
 
             // Deterministic decode.
             let fwd = ((move_mask & MOVE_W) != 0) as i32 - ((move_mask & MOVE_S) != 0) as i32;

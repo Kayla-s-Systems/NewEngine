@@ -5,7 +5,7 @@
   See [here](https://github.com/GaijinEntertainment/DagorEngine/tree/main/prog/engine/phys/physJolt).
 * [ezEngine](https://github.com/ezEngine/ezEngine) - An open source C++ game engine.
 * [Godot Jolt](https://github.com/godot-jolt/godot-jolt) - Godot extension that integrates the Jolt physics engine
-* [Horizon Forbidden West](https://www.playstation.com/en-us/games/horizon-forbidden-west/) - An open world action RPG
+* [Horizon Forbidden West](https://www.playstation.com/en-us/games/horizon-forbidden-west/) - An open _world action RPG
   adventure.
 * [HypeHype](https://www.hypehype.com/) - A mobile app to create, remix and play games.
   See [this](https://twitter.com/SebAaltonen/status/1726871354228482237) X post.

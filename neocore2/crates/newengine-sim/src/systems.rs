@@ -2,83 +2,61 @@
 
 // kept for type-level coherence in downstream systems
 use newengine_ecs::{EntityId, World};
-use newengine_math::{EulerRot, Quat, Vec3};
+use newengine_math::{EulerRot, Quat};
 use newengine_scene::update_scene_world;
 use newengine_transform::Transform;
 
 use crate::{
-    AngularVelocity, CameraInputComp, CameraMotor, CameraRigComp, CharacterMotor, CommandBuffer,
-    MotorInput, SimFrame, Velocity,
+    step_character_motor,
+    AngularVelocity, CameraInputComp, CameraRigComp, CharacterMotor, CommandBuffer, MotorInput,
+    OrbitCameraMotor, SimFrame, Velocity,
 };
 
 /// Applies `MotorInput` to `CharacterMotor` and writes `Transform`/`Velocity` updates.
 pub fn sys_character_motor(world: &World, frame: SimFrame, cmd: &mut CommandBuffer) {
     let dt = frame.dt;
-    if !dt.is_finite() || dt <= 0.0 {
+    if !(dt.is_finite() && dt > 0.0) {
         return;
     }
 
     let ids: Vec<EntityId> = world.query2_ids::<CharacterMotor, MotorInput>().collect();
     for id in ids {
-        let Some(mut motor) = world.get::<CharacterMotor>(id).copied() else {
+        let Some(motor) = world.get::<CharacterMotor>(id).copied() else {
             continue;
         };
         let Some(input) = world.get::<MotorInput>(id).copied() else {
             continue;
         };
 
-        let speed_mul = if input.speed_mul.is_finite() && input.speed_mul > 0.0 {
-            input.speed_mul
-        } else {
-            1.0
+        let current = world.get::<Transform>(id).copied();
+        let current_rot = current.map(|t| t.rotation).unwrap_or(Quat::IDENTITY);
+
+        let Some(step) = step_character_motor(motor, input, current_rot, dt) else {
+            continue;
         };
 
-        if input.look_active {
-            if input.look_delta.x.is_finite() {
-                motor.yaw += input.look_delta.x * motor.look_sens;
-            }
-            if input.look_delta.y.is_finite() {
-                motor.pitch += input.look_delta.y * motor.look_sens;
-            }
-        }
-        motor.pitch = motor.pitch.clamp(-motor.pitch_limit, motor.pitch_limit);
-
-        // Update orientation.
-        if let Some(t) = world.get::<Transform>(id).copied() {
+        if let Some(t) = current {
             let mut next = t;
-            next.rotation = Quat::from_euler(EulerRot::YXZ, motor.yaw, motor.pitch, 0.0);
+            next.rotation = step.rotation;
             cmd.insert(id, next);
         }
 
-        // Convert input axes to world velocity. Convention: forward is -Z.
-        let local = Vec3::new(input.move_axis.x, input.move_axis.y, -input.move_axis.z);
-        let len = local.length();
-        let vel = if len > 1e-6 {
-            let dir = local / len;
-            let rot = world
-                .get::<Transform>(id)
-                .map(|t| t.rotation)
-                .unwrap_or(Quat::IDENTITY);
-            (rot * dir) * (motor.move_speed * speed_mul)
-        } else {
-            Vec3::ZERO
-        };
-
-        cmd.insert(id, Velocity(vel));
-        cmd.insert(id, motor);
+        cmd.insert(id, Velocity(step.velocity_ws));
+        cmd.insert(id, step.motor);
     }
 }
 
-/// Applies camera controller input to `CameraRigComp`.
-pub fn sys_camera_controller(world: &World, frame: SimFrame, cmd: &mut CommandBuffer) {
+
+/// Applies orbit controller input to `CameraRigComp`.
+pub fn sys_orbit_camera(world: &World, frame: SimFrame, cmd: &mut CommandBuffer) {
     let dt = frame.dt;
     if !dt.is_finite() || dt <= 0.0 {
         return;
     }
 
-    let ids: Vec<EntityId> = world.query2_ids::<CameraMotor, CameraRigComp>().collect();
+    let ids: Vec<EntityId> = world.query2_ids::<OrbitCameraMotor, CameraRigComp>().collect();
     for id in ids {
-        let Some(mut motor) = world.get::<CameraMotor>(id).copied() else {
+        let Some(mut motor) = world.get::<OrbitCameraMotor>(id).copied() else {
             continue;
         };
         let Some(mut rig) = world.get::<CameraRigComp>(id).copied() else {
@@ -156,9 +134,9 @@ pub fn sys_integrate_velocities(world: &World, frame: SimFrame, cmd: &mut Comman
     }
 }
 
-/// Updates derived scene data (world pose, bounds, cached scene bounds).
-pub fn sys_scene_derived(world: &World, _frame: SimFrame, cmd: &mut CommandBuffer) {
-    // `update_scene_world` mutates the world, so we execute it as a command.
+/// Updates derived scene data (_world pose, bounds, cached scene bounds).
+pub fn sys_scene_derived(_world: &World, _frame: SimFrame, cmd: &mut CommandBuffer) {
+    // `update_scene_world` mutates the _world, so we execute it as a command.
     // This preserves deterministic ordering while allowing parallelism in earlier batches.
     cmd.push(Box::new(SceneDerivedCmd {
         _phantom: core::marker::PhantomData,

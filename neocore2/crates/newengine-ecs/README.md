@@ -40,8 +40,8 @@ struct MoveSys;
 impl System for MoveSys {
    fn name(&self) -> &'static str { "move" }
    fn stage(&self) -> Stage { Stage::FixedSim }
-   fn run(&mut self, world: &mut World, _cmd: &mut Commands, frame: FrameCtx) {
-      if let Some(it) = world.query_mut_tracked::<Pos>() {
+   fn run(&mut self, _world: &mut World, _cmd: &mut Commands, frame: FrameCtx) {
+      if let Some(it) = _world.query_mut_tracked::<Pos>() {
          for (_id, p) in it {
             p.0 += frame.fixed_dt;
          }

@@ -45,6 +45,24 @@ impl Default for FreeFlyController {
 }
 
 impl FreeFlyController {
+    /// Synchronize controller angles from rig rotation.
+    /// This is required when switching modes (e.g. Orbit -> Fly) to avoid snaps.
+    #[inline]
+    pub fn sync_from_rig(&mut self, rig: &CameraRig) {
+        // Convention:
+        // +Z is backward, so forward is -Z.
+        let fwd = rig.rotation * (-Vec3::Z);
+
+        let fy = fwd.y.clamp(-1.0, 1.0);
+        let pitch = fy.asin();
+
+        // yaw = atan2(x, -z) so that forward (0,0,-1) => yaw=0
+        let yaw = fwd.x.atan2(-fwd.z);
+
+        self.yaw = wrap_pi(yaw);
+        self.pitch = pitch.clamp(-self.pitch_limit, self.pitch_limit);
+    }
+
     #[inline]
     pub fn apply(&mut self, rig: &mut CameraRig, input: CameraInput, dt: f32) {
         let speed_mul = if input.speed_mul.is_finite() && input.speed_mul > 0.0 {
@@ -67,15 +85,17 @@ impl FreeFlyController {
 
         // Prevent unbounded growth (precision loss in `sin/cos` over long sessions).
         self.yaw = wrap_pi(self.yaw);
-
         self.pitch = self.pitch.clamp(-self.pitch_limit, self.pitch_limit);
 
         let rot_yaw = Quat::from_rotation_y(self.yaw);
         let rot_pitch = Quat::from_rotation_x(self.pitch);
         rig.rotation = (rot_yaw * rot_pitch).normalize_or_identity();
 
+        // Note: input.move_axis.z is "forward" by contract,
+        // but our rig forward is -Z, hence the minus.
         let local = Vec3::new(input.move_axis.x, input.move_axis.y, -input.move_axis.z);
         let len = local.length();
+
         if len > 1e-6 && dt.is_finite() && dt > 0.0 {
             let dir = local / len;
             let delta = dir * (self.move_speed * speed_mul * dt);
@@ -119,6 +139,26 @@ impl Default for OrbitController {
 }
 
 impl OrbitController {
+    /// Synchronize orbit state from current rig transform.
+    /// This is required when switching modes (e.g. Fly -> Orbit) to avoid snaps.
+    #[inline]
+    pub fn sync_from_rig(&mut self, rig: &CameraRig) {
+        // Extract yaw/pitch from rig rotation using the same convention as FreeFly.
+        let fwd = rig.rotation * (-Vec3::Z);
+
+        let fy = fwd.y.clamp(-1.0, 1.0);
+        let pitch = fy.asin();
+        let yaw = fwd.x.atan2(-fwd.z);
+
+        self.yaw = wrap_pi(yaw);
+        self.pitch = pitch.clamp(-self.pitch_limit, self.pitch_limit);
+
+        // Keep distance, but recompute target so the rig stays in place:
+        // rig.position = target + back * distance  =>  target = rig.position - back * distance
+        let back = rig.rotation * Vec3::Z; // +Z is backward
+        self.target = rig.position - back * self.distance;
+    }
+
     #[inline]
     pub fn apply(&mut self, rig: &mut CameraRig, input: CameraInput, dt: f32) {
         let speed_mul = if input.speed_mul.is_finite() && input.speed_mul > 0.0 {
@@ -141,7 +181,6 @@ impl OrbitController {
 
         // Prevent unbounded growth (precision loss in `sin/cos` over long sessions).
         self.yaw = wrap_pi(self.yaw);
-
         self.pitch = self.pitch.clamp(-self.pitch_limit, self.pitch_limit);
 
         // Dolly via mouse wheel (zoom_delta) and via move_axis.z (e.g. middle-mouse drag).

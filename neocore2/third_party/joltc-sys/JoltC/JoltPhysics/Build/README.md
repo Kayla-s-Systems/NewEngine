@@ -5,7 +5,7 @@
 Each platform supports multiple build targets
 
 - Debug - Debug version of the library, turns on asserts
-- Release - Release version of the library, no asserts but includes profiling support and can draw the world and
+- Release - Release version of the library, no asserts but includes profiling support and can draw the _world and
   simulation properties
 - ReleaseASAN - As Release but turns on Address Sanitizer (clang only) to find bugs
 - ReleaseUBSAN - As Release but turns on Undefined Behavior Sanitizer (clang only) to find bugs
@@ -26,7 +26,7 @@ There are a number of user configurable defines that turn on/off certain feature
 	<ul>
 		<li>JPH_PROFILE_ENABLED - Turns on the internal profiler.</li>
 		<li>JPH_EXTERNAL_PROFILE - Turns on the internal profiler but forwards the information to a user defined external system (see Profiler.h).</li>
-		<li>JPH_DEBUG_RENDERER - Adds support to draw lines and triangles, used to be able to debug draw the state of the world.</li>
+		<li>JPH_DEBUG_RENDERER - Adds support to draw lines and triangles, used to be able to debug draw the state of the _world.</li>
 		<li>JPH_DISABLE_TEMP_ALLOCATOR - Disables the temporary memory allocator, used mainly to allow ASAN to do its job.</li>
 		<li>JPH_DISABLE_CUSTOM_ALLOCATOR - Disables the ability to override the memory allocator.</li>
 		<li>JPH_FLOATING_POINT_EXCEPTIONS_ENABLED - Turns on division by zero and invalid floating point exception support in order to detect bugs (Windows only).</li>
