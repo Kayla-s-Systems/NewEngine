@@ -16,9 +16,11 @@ pub trait Vec2Ext {
 }
 
 impl Vec2Ext for Vec2 {
+    #[inline]
     fn length_sq(self) -> f32 {
         self.length_squared()
     }
+    #[inline]
     fn distance_sq(self, other: Vec2) -> f32 {
         self.distance_squared(other)
     }
@@ -34,9 +36,11 @@ pub trait Vec3Ext {
 }
 
 impl Vec3Ext for Vec3 {
+    #[inline]
     fn length_sq(self) -> f32 {
         self.length_squared()
     }
+    #[inline]
     fn distance_sq(self, other: Vec3) -> f32 {
         self.distance_squared(other)
     }

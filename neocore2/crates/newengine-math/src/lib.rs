@@ -14,6 +14,7 @@ mod value;
 mod builtins;
 mod gpu;
 mod angle;
+mod scalar;
 mod ext;
 mod euler;
 mod vec2;

@@ -49,8 +49,14 @@ impl Quat {
 
     #[inline]
     pub fn normalize(self) -> Self {
-        let inv = 1.0 / self.length();
-        Self::from_xyzw(self.x * inv, self.y * inv, self.z * inv, self.w * inv)
+        // Keep `normalize()` stable: never emit NaNs for zero/invalid inputs.
+        // For unit quaternions this is branch-free after inlining.
+        let inv = crate::scalar::inv_sqrt_checked(self.length_squared());
+        if inv != 0.0 {
+            Self::from_xyzw(self.x * inv, self.y * inv, self.z * inv, self.w * inv)
+        } else {
+            Self::IDENTITY
+        }
     }
 
     #[inline]
@@ -65,11 +71,15 @@ impl Quat {
             return Self::IDENTITY;
         }
         let ls = self.length_squared();
-        if !ls.is_finite() || ls < 1e-12 {
+        if ls < 1e-12 {
             return Self::IDENTITY;
         }
-        let inv = 1.0 / ls.sqrt();
-        Self::from_xyzw(self.x * inv, self.y * inv, self.z * inv, self.w * inv)
+        let inv = crate::scalar::inv_sqrt_checked(ls);
+        if inv != 0.0 {
+            Self::from_xyzw(self.x * inv, self.y * inv, self.z * inv, self.w * inv)
+        } else {
+            Self::IDENTITY
+        }
     }
 
     #[inline]

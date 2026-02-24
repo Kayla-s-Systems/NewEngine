@@ -70,17 +70,14 @@ impl Vec3 {
 
     #[inline]
     pub fn normalize_or_zero(self) -> Self {
-        let len = self.length();
-        if len > 0.0 {
-            self / len
-        } else {
-            Self::ZERO
-        }
+        let inv_len = crate::scalar::inv_sqrt_checked(self.length_squared());
+        if inv_len != 0.0 { self * inv_len } else { Self::ZERO }
     }
 
     #[inline]
     pub fn normalize(self) -> Self {
-        self / self.length()
+        // Keep `normalize()` stable: never emit NaNs for zero/invalid inputs.
+        self.normalize_or_zero()
     }
 
     /// Linear interpolation.
