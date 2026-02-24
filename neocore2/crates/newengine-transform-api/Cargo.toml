@@ -1,0 +1,13 @@
+[package]
+name = "newengine-transform-api"
+version = "0.1.0"
+edition = "2021"
+
+[features]
+default = []
+ecs = ["dep:newengine-ecs"]
+
+[dependencies]
+newengine-math = { path = "../newengine-math" }
+newengine-service-api = { path = "../newengine-service-api" }
+newengine-ecs = { path = "../newengine-ecs", optional = true }
