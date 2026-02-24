@@ -94,7 +94,7 @@ impl Mat4 {
 
         // Normalize basis (remove scale first, then Gram-Schmidt to remove shear drift).
         let mut rx = (x * inv_sx).normalize_or_zero();
-        let mut ry = (y * inv_sy);
+        let mut ry = y * inv_sy;
         ry = (ry - rx * ry.dot(rx)).normalize_or_zero();
         let mut rz = rx.cross(ry);
 

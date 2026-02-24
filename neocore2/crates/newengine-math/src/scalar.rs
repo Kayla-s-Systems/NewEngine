@@ -9,20 +9,27 @@
 /// - Stabilize normalization (avoid NaNs on zero/denormals).
 /// - Keep hot paths branch-light and consistent across vector/quaternion types.
 
-#[inline(always)]
+// Copyright (c) 2026 NewEngine | Kayla's Systems. All rights reserved.
+
+#[inline]
 pub(crate) fn inv_sqrt_checked(x: f32) -> f32 {
-    // `sqrt` is well-defined for non-negative numbers. For anything else, fall back to 0.
-    // This avoids propagating NaNs/Infs through camera/controller math.
+    // Avoid NaN/Inf and denormals propagation
     if x.is_finite() && x > 0.0 {
-        1.0 / x.sqrt()
+        let r = x.sqrt();
+        if r.is_finite() && r > 0.0 {
+            1.0 / r
+        } else {
+            0.0
+        }
     } else {
         0.0
     }
 }
 
-#[inline(always)]
+#[inline]
+#[allow(dead_code)]
 pub(crate) fn inv_checked(x: f32) -> f32 {
-    if x.is_finite() && x != 0.0 {
+    if x.is_finite() && x.abs() > 0.0 {
         1.0 / x
     } else {
         0.0
