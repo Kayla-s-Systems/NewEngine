@@ -1,10 +1,10 @@
 #![forbid(unsafe_op_in_unsafe_fn)]
 
-mod headbob;
-mod spring_arm;
 mod ads;
+mod headbob;
 mod noise_shake;
 mod recoil;
+mod spring_arm;
 mod sway;
 mod taa_jitter;
 mod weapon_sway;

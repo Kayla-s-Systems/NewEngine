@@ -2,6 +2,4 @@
 
 mod world;
 
-pub use world::{
-    JoltInitDesc, PhysicsError, PhysicsWorld, WorldLimits,
-};
+pub use world::{JoltInitDesc, PhysicsError, PhysicsWorld, WorldLimits};

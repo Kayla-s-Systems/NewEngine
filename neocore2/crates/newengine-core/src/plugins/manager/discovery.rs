@@ -53,8 +53,9 @@ impl PluginManager {
         }
 
         candidates.sort();
-        let (mut loggers, mut rest): (Vec<PathBuf>, Vec<PathBuf>) =
-            candidates.into_iter().partition(|p| is_logging_candidate(p));
+        let (mut loggers, mut rest): (Vec<PathBuf>, Vec<PathBuf>) = candidates
+            .into_iter()
+            .partition(|p| is_logging_candidate(p));
 
         loggers.sort();
         rest.sort();
@@ -120,7 +121,12 @@ impl PluginManager {
         log::info!("plugins: load complete loaded_count={}", self.loaded.len());
         if log::log_enabled!(log::Level::Debug) {
             for p in self.loaded.iter() {
-                log::debug!("plugins: loaded '{}' ver='{}' path='{}'", p.info.id, p.info.version, p.path.display());
+                log::debug!(
+                    "plugins: loaded '{}' ver='{}' path='{}'",
+                    p.info.id,
+                    p.info.version,
+                    p.path.display()
+                );
             }
         }
 

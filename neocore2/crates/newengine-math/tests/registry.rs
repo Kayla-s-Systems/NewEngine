@@ -40,7 +40,10 @@ fn register_and_override_same_id_same_signature() {
     let a = newengine_math::Vec2::new(1.0, 2.0);
     let b = newengine_math::Vec2::new(3.0, 4.0);
     let out = reg
-        .call("test.vec2.dot.v1", &[MathValue::Vec2(a), MathValue::Vec2(b)])
+        .call(
+            "test.vec2.dot.v1",
+            &[MathValue::Vec2(a), MathValue::Vec2(b)],
+        )
         .unwrap();
 
     match out {
@@ -97,7 +100,10 @@ fn call_reports_mismatching_argument_index() {
     let err = reg
         .call(
             "test.vec2.dot.v1",
-            &[MathValue::Vec2(newengine_math::Vec2::ZERO), MathValue::F32(1.0)],
+            &[
+                MathValue::Vec2(newengine_math::Vec2::ZERO),
+                MathValue::F32(1.0),
+            ],
         )
         .unwrap_err();
 

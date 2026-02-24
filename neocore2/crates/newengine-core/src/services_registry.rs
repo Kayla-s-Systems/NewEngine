@@ -189,7 +189,11 @@ impl ServiceRegistry {
 
         match policy {
             MissingServicePolicy::Optional => {
-                log::warn!("missing optional service={:?} interface={:?}", service, iface)
+                log::warn!(
+                    "missing optional service={:?} interface={:?}",
+                    service,
+                    iface
+                )
             }
             MissingServicePolicy::RequiredSoft => log::error!(
                 "missing required service={:?} interface={:?} (soft)",

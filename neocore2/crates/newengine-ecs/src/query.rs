@@ -44,6 +44,7 @@ impl<'a, T: 'static> Iterator for QueryMut<'a, T> {
 pub struct QueryMutTracked<'a, T: 'static> {
     pub(crate) iter: IterMut<'a, EntityId, T>,
     pub(crate) changed_tick: &'a mut NeSecondaryMap<EntityId, u64>,
+    pub(crate) max_changed_tick: &'a mut u64,
     pub(crate) tick: u64,
 }
 
@@ -54,6 +55,9 @@ impl<'a, T: 'static> Iterator for QueryMutTracked<'a, T> {
     fn next(&mut self) -> Option<Self::Item> {
         let (id, v) = self.iter.next()?;
         self.changed_tick.insert(id, self.tick);
+        if *self.max_changed_tick < self.tick {
+            *self.max_changed_tick = self.tick;
+        }
         Some((id, v))
     }
 }

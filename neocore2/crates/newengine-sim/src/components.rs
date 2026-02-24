@@ -1,6 +1,7 @@
 #![forbid(unsafe_op_in_unsafe_fn)]
 
 use newengine_camera::{CameraInput, CameraRig, OrbitController};
+use newengine_ecs::EntityId;
 use newengine_math::{Vec2, Vec3};
 
 /// Linear velocity in world space (units/sec).
@@ -91,3 +92,47 @@ pub struct CameraRigComp(pub CameraRig);
 /// Camera input stored as a component (written by input/editor).
 #[derive(Clone, Copy, Debug, Default)]
 pub struct CameraInputComp(pub CameraInput);
+
+/// Follow target controller for camera entities.
+///
+/// This is an ECS-level composition primitive:
+/// - the controller stores *intent/params*
+/// - the motor stores *state*
+/// - the system performs the actual pose update deterministically
+#[derive(Clone, Copy, Debug)]
+pub struct FollowTargetCameraController {
+    /// Target entity to follow.
+    pub target: EntityId,
+    /// Offset in the target's local space.
+    pub offset_ls: Vec3,
+    /// Optional additional rotation offset applied when `follow_rotation` is true.
+    pub rot_offset: newengine_math::Quat,
+    /// If true, camera rotation follows target rotation (plus `rot_offset`).
+    /// If false, camera will look at the target.
+    pub follow_rotation: bool,
+    /// Smoothing time constant (seconds). 0 => no smoothing.
+    pub smooth_time: f32,
+    /// Max speed clamp for position smoothing (units/sec). <=0 => unlimited.
+    pub max_speed: f32,
+}
+
+impl Default for FollowTargetCameraController {
+    #[inline]
+    fn default() -> Self {
+        Self {
+            target: EntityId::default(),
+            offset_ls: Vec3::new(0.0, 1.6, 4.0),
+            rot_offset: newengine_math::Quat::IDENTITY,
+            follow_rotation: false,
+            smooth_time: 0.12,
+            max_speed: 0.0,
+        }
+    }
+}
+
+/// Motor state for [`FollowTargetCameraController`].
+#[derive(Clone, Copy, Debug, Default)]
+pub struct FollowTargetCameraMotor {
+    /// Internal velocity used by the smooth damp step.
+    pub vel_ws: Vec3,
+}

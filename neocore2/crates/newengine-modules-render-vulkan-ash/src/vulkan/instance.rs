@@ -6,7 +6,7 @@ pub(super) unsafe fn has_instance_layer(entry: &Entry, name: &CStr) -> bool {
         .enumerate_instance_layer_properties()
         .unwrap_or_default();
 
-    layers.iter().any(|l| {
-        CStr::from_ptr(l.layer_name.as_ptr()) == name
-    })
+    layers
+        .iter()
+        .any(|l| CStr::from_ptr(l.layer_name.as_ptr()) == name)
 }

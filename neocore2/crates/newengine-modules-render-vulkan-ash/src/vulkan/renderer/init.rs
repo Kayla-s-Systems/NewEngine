@@ -103,7 +103,8 @@ impl VulkanRenderer {
         let baker = ShaderBaker::new()?;
         let shader_pack: ShaderPack = baker.bake_pack()?;
 
-        let (tri_pipeline_layout, tri_pipeline) = create_pipeline(&device, render_pass, &shader_pack)?;
+        let (tri_pipeline_layout, tri_pipeline) =
+            create_pipeline(&device, render_pass, &shader_pack)?;
         let framebuffers = create_framebuffers(&device, render_pass, &image_views, extent)?;
 
         let command_pool = device.create_command_pool(
@@ -152,12 +153,16 @@ impl VulkanRenderer {
         }
 
         let make_frame = |device: &Device| -> VkResult<FrameSync> {
-            let image_available = device.create_semaphore(&vk::SemaphoreCreateInfo::default(), None)?;
+            let image_available =
+                device.create_semaphore(&vk::SemaphoreCreateInfo::default(), None)?;
             let in_flight = device.create_fence(
                 &vk::FenceCreateInfo::default().flags(vk::FenceCreateFlags::SIGNALED),
                 None,
             )?;
-            Ok(FrameSync { image_available, in_flight })
+            Ok(FrameSync {
+                image_available,
+                in_flight,
+            })
         };
 
         let frames = [make_frame(&device)?, make_frame(&device)?];
@@ -165,7 +170,8 @@ impl VulkanRenderer {
 
         let mut render_finished = Vec::with_capacity(images.len());
         for _ in 0..images.len() {
-            render_finished.push(device.create_semaphore(&vk::SemaphoreCreateInfo::default(), None)?);
+            render_finished
+                .push(device.create_semaphore(&vk::SemaphoreCreateInfo::default(), None)?);
         }
 
         let core = CoreContext {

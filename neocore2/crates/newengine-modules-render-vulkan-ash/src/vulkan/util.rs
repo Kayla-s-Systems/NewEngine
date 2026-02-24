@@ -52,7 +52,14 @@ pub unsafe fn transition_image_layout(
     old_layout: vk::ImageLayout,
     new_layout: vk::ImageLayout,
 ) {
-    transition_image_layout_aspect(device, cmd, image, old_layout, new_layout, vk::ImageAspectFlags::COLOR);
+    transition_image_layout_aspect(
+        device,
+        cmd,
+        image,
+        old_layout,
+        new_layout,
+        vk::ImageAspectFlags::COLOR,
+    );
 }
 
 pub unsafe fn transition_image_layout_aspect(

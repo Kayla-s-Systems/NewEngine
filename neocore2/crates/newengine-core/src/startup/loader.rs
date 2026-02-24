@@ -3,8 +3,8 @@
 use crate::error::{EngineError, EngineResult};
 use crate::startup::config::{StartupPluginOverride, UiBackend};
 use crate::startup::{
-    ConfigPaths, StartupConfig, StartupConfigSource, StartupLoadReport,
-    StartupOverride, StartupResolvedFrom, WindowPlacement,
+    ConfigPaths, StartupConfig, StartupConfigSource, StartupLoadReport, StartupOverride,
+    StartupResolvedFrom, WindowPlacement,
 };
 use serde::Deserialize;
 use std::fs;
@@ -183,7 +183,10 @@ fn apply_root(cfg: &mut StartupConfig, report: &mut StartupLoadReport, src: Root
 
         // Legacy include_module -> include_module_path
         if let Some(inc_mod) = logging.include_module {
-            o.insert("include_module_path".to_owned(), serde_json::Value::Bool(inc_mod));
+            o.insert(
+                "include_module_path".to_owned(),
+                serde_json::Value::Bool(inc_mod),
+            );
         }
         if let Some(inc) = logging.include {
             if let Some(v) = inc.module_path {
@@ -204,17 +207,29 @@ fn apply_root(cfg: &mut StartupConfig, report: &mut StartupLoadReport, src: Root
             o.insert("timestamp".to_owned(), serde_json::Value::String(ts));
         }
         if let Some(indent) = logging.indent {
-            o.insert("indent".to_owned(), serde_json::Value::Number(serde_json::Number::from(indent as u64)));
+            o.insert(
+                "indent".to_owned(),
+                serde_json::Value::Number(serde_json::Number::from(indent as u64)),
+            );
         }
         if let Some(rolling) = logging.rolling {
             if let Some(v) = rolling.max_bytes {
-                o.insert("roll_max_bytes".to_owned(), serde_json::Value::Number(serde_json::Number::from(v)));
+                o.insert(
+                    "roll_max_bytes".to_owned(),
+                    serde_json::Value::Number(serde_json::Number::from(v)),
+                );
             }
             if let Some(v) = rolling.max_files {
-                o.insert("roll_max_files".to_owned(), serde_json::Value::Number(serde_json::Number::from(v as u64)));
+                o.insert(
+                    "roll_max_files".to_owned(),
+                    serde_json::Value::Number(serde_json::Number::from(v as u64)),
+                );
             }
             if let Some(v) = rolling.keep_days {
-                o.insert("roll_keep_days".to_owned(), serde_json::Value::Number(serde_json::Number::from(v as u64)));
+                o.insert(
+                    "roll_keep_days".to_owned(),
+                    serde_json::Value::Number(serde_json::Number::from(v as u64)),
+                );
             }
         }
 
@@ -251,7 +266,6 @@ fn apply_root(cfg: &mut StartupConfig, report: &mut StartupLoadReport, src: Root
         }
     }
 
-
     if let Some(w) = src.window {
         if let Some(t) = w.title {
             apply_string(report, "window_title", &mut cfg.window_title, t);
@@ -284,7 +298,6 @@ fn apply_root(cfg: &mut StartupConfig, report: &mut StartupLoadReport, src: Root
         }
     }
 
-
     if let Some(engine) = src.engine {
         // Legacy engine-side asset settings are translated into plugin overrides.
         // NewEngine vNext: AssetManager is a plugin with its own config contract.
@@ -294,7 +307,10 @@ fn apply_root(cfg: &mut StartupConfig, report: &mut StartupLoadReport, src: Root
             legacy_assets.insert("assets_root".to_string(), serde_json::Value::String(root));
         }
         if let Some(steps) = engine.asset_pump_steps {
-            legacy_assets.insert("pump_steps".to_string(), serde_json::Value::Number((steps as u64).into()));
+            legacy_assets.insert(
+                "pump_steps".to_string(),
+                serde_json::Value::Number((steps as u64).into()),
+            );
         }
         if let Some(enabled) = engine.asset_filesystem_source {
             legacy_assets.insert("filesystem".to_string(), serde_json::Value::Bool(enabled));
@@ -310,7 +326,7 @@ fn apply_root(cfg: &mut StartupConfig, report: &mut StartupLoadReport, src: Root
             let obj = entry.as_object_mut().unwrap();
             for (k, v) in legacy_assets {
                 obj.insert(k, v);
-        }
+            }
 
             report.plugin_overrides.push(StartupPluginOverride {
                 plugin_id: pid,
@@ -330,10 +346,20 @@ fn apply_root(cfg: &mut StartupConfig, report: &mut StartupLoadReport, src: Root
             apply_string(report, "render_backend", &mut cfg.render_backend, backend);
         }
         if let Some(color) = render.clear_color {
-            apply_color(report, "render_clear_color", &mut cfg.render_clear_color, color);
+            apply_color(
+                report,
+                "render_clear_color",
+                &mut cfg.render_clear_color,
+                color,
+            );
         }
         if let Some(text) = render.debug_text {
-            apply_string(report, "render_debug_text", &mut cfg.render_debug_text, text);
+            apply_string(
+                report,
+                "render_debug_text",
+                &mut cfg.render_debug_text,
+                text,
+            );
         }
     }
 
@@ -377,11 +403,7 @@ fn apply_string(report: &mut StartupLoadReport, key: &'static str, dst: &mut Str
     let from = dst.clone();
     if from != v {
         *dst = v.clone();
-        report.overrides.push(StartupOverride {
-            key,
-            from,
-            to: v,
-        });
+        report.overrides.push(StartupOverride { key, from, to: v });
     }
 }
 
@@ -431,7 +453,9 @@ fn apply_usize(report: &mut StartupLoadReport, key: &'static str, dst: &mut usiz
 #[inline]
 #[allow(dead_code)]
 fn apply_opt_u64(report: &mut StartupLoadReport, key: &'static str, dst: &mut Option<u64>, v: u64) {
-    let from = dst.map(|x| x.to_string()).unwrap_or_else(|| "null".to_owned());
+    let from = dst
+        .map(|x| x.to_string())
+        .unwrap_or_else(|| "null".to_owned());
     let to = v.to_string();
     if *dst != Some(v) {
         *dst = Some(v);
@@ -447,7 +471,9 @@ fn apply_opt_usize(
     dst: &mut Option<usize>,
     v: usize,
 ) {
-    let from = dst.map(|x| x.to_string()).unwrap_or_else(|| "null".to_owned());
+    let from = dst
+        .map(|x| x.to_string())
+        .unwrap_or_else(|| "null".to_owned());
     let to = v.to_string();
     if *dst != Some(v) {
         *dst = Some(v);
@@ -495,7 +521,12 @@ fn apply_placement(
 }
 
 #[inline]
-fn apply_ui_backend(report: &mut StartupLoadReport, key: &'static str, dst: &mut UiBackend, v: UiBackend) {
+fn apply_ui_backend(
+    report: &mut StartupLoadReport,
+    key: &'static str,
+    dst: &mut UiBackend,
+    v: UiBackend,
+) {
     let from = format!("{:?}", dst);
     let to = format!("{:?}", v);
     if *dst != v {
@@ -516,12 +547,7 @@ fn apply_path(report: &mut StartupLoadReport, key: &'static str, dst: &mut PathB
 }
 
 #[inline]
-fn apply_color(
-    report: &mut StartupLoadReport,
-    key: &'static str,
-    dst: &mut [f32; 4],
-    v: [f32; 4],
-) {
+fn apply_color(report: &mut StartupLoadReport, key: &'static str, dst: &mut [f32; 4], v: [f32; 4]) {
     let from = format!("{:.3},{:.3},{:.3},{:.3}", dst[0], dst[1], dst[2], dst[3]);
     let to = format!("{:.3},{:.3},{:.3},{:.3}", v[0], v[1], v[2], v[3]);
     if *dst != v {
@@ -549,9 +575,8 @@ fn resolve_startup_file_optional(
     }
 
     // CWD
-    let cwd = std::env::current_dir().map_err(|e| {
-        EngineError::Other(format!("startup: current_dir failed err={}", e))
-    })?;
+    let cwd = std::env::current_dir()
+        .map_err(|e| EngineError::Other(format!("startup: current_dir failed err={}", e)))?;
     let in_cwd = cwd.join(p);
     if in_cwd.exists() {
         return Ok(Some((in_cwd, StartupResolvedFrom::Cwd)));

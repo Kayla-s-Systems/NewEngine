@@ -22,7 +22,11 @@ fn sanitize_dt(dt: f32) -> Option<f32> {
 
 #[inline]
 fn sanitize_speed_mul(m: f32) -> f32 {
-    if m.is_finite() && m > 0.0 { m } else { 1.0 }
+    if m.is_finite() && m > 0.0 {
+        m
+    } else {
+        1.0
+    }
 }
 
 #[inline]
@@ -55,7 +59,12 @@ fn sanitize_vec3(v: Vec3) -> Vec3 {
 /// - desired new rotation (yaw/pitch)
 /// - desired world-space velocity
 #[inline]
-pub fn step_character_motor(motor: CharacterMotor, input: MotorInput, current_rot: Quat, dt: f32) -> Option<CharacterMotorStep> {
+pub fn step_character_motor(
+    motor: CharacterMotor,
+    input: MotorInput,
+    current_rot: Quat,
+    dt: f32,
+) -> Option<CharacterMotorStep> {
     let dt = sanitize_dt(dt)?;
     let mut motor = motor;
 
@@ -67,7 +76,11 @@ pub fn step_character_motor(motor: CharacterMotor, input: MotorInput, current_ro
         motor.pitch = motor.pitch + d.y * motor.look_sens;
     }
 
-    let pitch_limit = if motor.pitch_limit.is_finite() && motor.pitch_limit > 0.0 { motor.pitch_limit } else { 1.54 };
+    let pitch_limit = if motor.pitch_limit.is_finite() && motor.pitch_limit > 0.0 {
+        motor.pitch_limit
+    } else {
+        1.54
+    };
     motor.pitch = motor.pitch.clamp(-pitch_limit, pitch_limit);
 
     // Orientation from yaw/pitch.
@@ -90,7 +103,11 @@ pub fn step_character_motor(motor: CharacterMotor, input: MotorInput, current_ro
     let len = local.length();
     let velocity_ws = if len > 1e-6 {
         let dir = local / len;
-        let move_speed = if motor.move_speed.is_finite() && motor.move_speed >= 0.0 { motor.move_speed } else { 0.0 };
+        let move_speed = if motor.move_speed.is_finite() && motor.move_speed >= 0.0 {
+            motor.move_speed
+        } else {
+            0.0
+        };
         (current_rot * dir) * (move_speed * speed_mul)
     } else {
         Vec3::ZERO
@@ -99,6 +116,9 @@ pub fn step_character_motor(motor: CharacterMotor, input: MotorInput, current_ro
     // dt currently only used for clamping / future accel integration; keep to avoid API churn.
     let _ = dt;
 
-    Some(CharacterMotorStep { motor, rotation, velocity_ws })
+    Some(CharacterMotorStep {
+        motor,
+        rotation,
+        velocity_ws,
+    })
 }
-

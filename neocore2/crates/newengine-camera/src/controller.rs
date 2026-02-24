@@ -158,7 +158,19 @@ impl OrbitController {
 
         // Keep current distance, but recompute target so that rig stays exactly in place.
         self.distance = self.distance.clamp(self.min_distance, self.max_distance);
-        let back = rig.rotation * Vec3::Z; // +Z is backward.
+
+        // IMPORTANT:
+        // Recompute `target` using the *reconstructed* rotation (the same one `apply()` will use).
+        // Even tiny numeric / branch differences between extracting yaw/pitch from `rig.rotation`
+        // and rebuilding a quaternion can cause a snap (often ~2*distance) on the first orbit frame.
+        // Using the reconstructed rotation guarantees that:
+        //   target + (rot*Z)*distance == rig.position
+        // once `apply()` runs.
+        let rot_yaw = Quat::from_rotation_y(self.yaw);
+        let rot_pitch = Quat::from_rotation_x(self.pitch);
+        let rot = (rot_yaw * rot_pitch).normalize_or_identity();
+
+        let back = rot * Vec3::Z; // +Z is backward.
         self.target = rig.position - back * self.distance;
     }
 

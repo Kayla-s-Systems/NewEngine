@@ -150,12 +150,14 @@ impl EguiUiProvider {
 
         // egui expects positions in "points" (logical units).
         // INPUT plugin usually reports physical pixels.
-        let ppp = raw.viewport().native_pixels_per_point.unwrap_or(1.0).max(0.0001);
+        let ppp = raw
+            .viewport()
+            .native_pixels_per_point
+            .unwrap_or(1.0)
+            .max(0.0001);
         let to_pt = |v: f32| v / ppp;
 
-        let mouse_pos_pt = input
-            .mouse_pos
-            .map(|(x, y)| egui::pos2(to_pt(x), to_pt(y)));
+        let mouse_pos_pt = input.mouse_pos.map(|(x, y)| egui::pos2(to_pt(x), to_pt(y)));
 
         if let Some(pos) = mouse_pos_pt {
             raw.events.push(egui::Event::PointerMoved(pos));
@@ -237,8 +239,9 @@ impl EguiUiProvider {
         }
 
         if !input.ime_preedit.is_empty() {
-            raw.events
-                .push(egui::Event::Ime(egui::ImeEvent::Preedit(input.ime_preedit.clone())));
+            raw.events.push(egui::Event::Ime(egui::ImeEvent::Preedit(
+                input.ime_preedit.clone(),
+            )));
         }
     }
 }

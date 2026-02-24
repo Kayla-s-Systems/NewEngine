@@ -3,9 +3,7 @@
 use newengine_bounds::{Aabb, Bounds, BoundsKind, Sphere};
 use newengine_ecs::{EntityId, World};
 use newengine_math::collections_prelude::NeKey;
-use newengine_transform_api::runtime::TransformRuntimeApi;
-use newengine_transform_api::{GlobalTransform, Parent, Transform, TransformDirty};
-
+use newengine_transform::{propagate_transforms, GlobalTransform, Parent, Transform, TransformDirty};
 
 /// Cached scene bounds (union of all `Bounds` world-space data).
 #[derive(Clone, Copy, Debug, Default)]
@@ -69,16 +67,10 @@ fn any_transform_inputs_dirty(world: &World, since_tick: u64) -> bool {
     if world.query::<TransformDirty>().next().is_some() {
         return true;
     }
-    if world.query_changed::<Transform>(since_tick).next().is_some() {
+    if world.any_changed_since::<Transform>(since_tick) || world.any_added_since::<Transform>(since_tick) {
         return true;
     }
-    if world.query_added::<Transform>(since_tick).next().is_some() {
-        return true;
-    }
-    if world.query_changed::<Parent>(since_tick).next().is_some() {
-        return true;
-    }
-    if world.query_added::<Parent>(since_tick).next().is_some() {
+    if world.any_changed_since::<Parent>(since_tick) || world.any_added_since::<Parent>(since_tick) {
         return true;
     }
     false
@@ -86,16 +78,12 @@ fn any_transform_inputs_dirty(world: &World, since_tick: u64) -> bool {
 
 #[inline]
 fn any_bounds_inputs_dirty(world: &World, since_tick: u64) -> bool {
-    if world.query_changed::<GlobalTransform>(since_tick).next().is_some() {
+    if world.any_changed_since::<GlobalTransform>(since_tick)
+        || world.any_added_since::<GlobalTransform>(since_tick)
+    {
         return true;
     }
-    if world.query_added::<GlobalTransform>(since_tick).next().is_some() {
-        return true;
-    }
-    if world.query_changed::<Bounds>(since_tick).next().is_some() {
-        return true;
-    }
-    if world.query_added::<Bounds>(since_tick).next().is_some() {
+    if world.any_changed_since::<Bounds>(since_tick) || world.any_added_since::<Bounds>(since_tick) {
         return true;
     }
     false
@@ -191,7 +179,7 @@ pub fn selection_world_bounds(world: &World, entities: impl Iterator<Item=Entity
 /// - updates `Bounds` world_* from `GlobalTransform` (dirty-gated)
 /// - caches union bounds as `SceneBounds` (dirty-gated)
 #[inline]
-pub fn update_scene_world(world: &mut World, transform: Option<TransformRuntimeApi>) {
+pub fn update_scene_world(world: &mut World) {
     ensure_resources(world);
 
     let tick_now = world.tick();
@@ -205,9 +193,7 @@ pub fn update_scene_world(world: &mut World, transform: Option<TransformRuntimeA
             .last_transform_tick;
 
         if since == 0 || any_transform_inputs_dirty(world, since) {
-            if let Some(api) = transform {
-                api.propagate(world);
-            }
+            propagate_transforms(world);
             ran_transforms = true;
 
             world.resource_mut::<SceneDerivedCache>()
@@ -244,8 +230,9 @@ pub fn update_scene_world(world: &mut World, transform: Option<TransformRuntimeA
 
         let dirty = since == 0
             || ran_bounds
-            || world.query_changed::<Bounds>(since).next().is_some()
-            || world.query_added::<Bounds>(since).next().is_some();
+            || world.entities_changed_since(since)
+            || world.any_changed_since::<Bounds>(since)
+            || world.any_added_since::<Bounds>(since);
 
         if dirty {
             let aabb = scene_world_bounds(world);

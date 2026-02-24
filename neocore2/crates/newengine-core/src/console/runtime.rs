@@ -598,9 +598,8 @@ impl ConsoleRuntime {
             Ok(b) => {
                 let bytes = b.into_vec();
                 if let Ok(v) = serde_json::from_slice::<serde_json::Value>(&bytes) {
-                    return Ok(serde_json::to_string_pretty(&v).unwrap_or_else(|_| {
-                        String::from_utf8_lossy(&bytes).to_string()
-                    }));
+                    return Ok(serde_json::to_string_pretty(&v)
+                        .unwrap_or_else(|_| String::from_utf8_lossy(&bytes).to_string()));
                 }
                 Ok(String::from_utf8_lossy(&bytes).to_string())
             }

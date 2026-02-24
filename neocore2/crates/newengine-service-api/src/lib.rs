@@ -68,7 +68,6 @@ pub const fn hash_u128(s: &str) -> u128 {
     ((h1 as u128) << 64) | (h2 as u128)
 }
 
-
 /// Trait implemented by typed interface wrappers in `*-api` crates.
 pub trait ServiceInterface: Sized {
     type VTable;

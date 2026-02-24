@@ -45,7 +45,9 @@ pub struct MaterialRef {
 impl Default for MaterialRef {
     #[inline]
     fn default() -> Self {
-        Self { id: MaterialId::invalid() }
+        Self {
+            id: MaterialId::invalid(),
+        }
     }
 }
 

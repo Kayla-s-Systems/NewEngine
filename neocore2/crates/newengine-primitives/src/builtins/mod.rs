@@ -1,14 +1,14 @@
 #![forbid(unsafe_op_in_unsafe_fn)]
 
+mod capsule;
+mod cone;
 mod cube;
 mod cylinder;
 mod disc;
+mod grid;
 mod plane;
 mod sphere;
 mod torus;
-mod cone;
-mod capsule;
-mod grid;
 
 use crate::registry::PrimitiveParams;
 use crate::{fnv1a_64, PrimitiveId, PrimitiveRegistry};

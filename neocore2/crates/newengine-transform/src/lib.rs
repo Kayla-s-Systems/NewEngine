@@ -5,6 +5,9 @@ mod hierarchy;
 #[cfg(feature = "ecs")]
 mod propagate;
 
+#[cfg(feature = "ecs")]
+mod world_space;
+
 pub use newengine_transform_api::{GlobalTransform, Transform, WorldPose};
 
 #[cfg(feature = "ecs")]
@@ -14,10 +17,10 @@ pub use newengine_transform_api::{Children, Parent, TransformDirty};
 pub use hierarchy::set_parent;
 
 #[cfg(feature = "ecs")]
-pub use propagate::{
-    ensure_transform_outputs,
-    propagate_transforms,
-};
+pub use propagate::{ensure_transform_outputs, propagate_transforms};
+
+#[cfg(feature = "ecs")]
+pub use world_space::{read_entity_world_pose, write_entity_local_from_world_pose};
 
 #[cfg(feature = "ecs")]
 pub mod service {
@@ -66,7 +69,12 @@ pub mod service {
         unsafe { propagate_transforms(&mut *world) };
     }
 
-    unsafe fn set_parent_thunk(_instance: *mut (), world: *mut World, child: EntityId, parent: Option<EntityId>) {
+    unsafe fn set_parent_thunk(
+        _instance: *mut (),
+        world: *mut World,
+        child: EntityId,
+        parent: Option<EntityId>,
+    ) {
         unsafe { set_parent(&mut *world, child, parent) };
     }
 

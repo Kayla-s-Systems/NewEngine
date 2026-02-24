@@ -172,10 +172,18 @@ impl VulkanRenderApi {
 
     fn buffer_usage_flags(u: BufferUsage) -> vk::BufferUsageFlags {
         match u {
-            BufferUsage::Vertex => vk::BufferUsageFlags::VERTEX_BUFFER | vk::BufferUsageFlags::TRANSFER_DST,
-            BufferUsage::Index => vk::BufferUsageFlags::INDEX_BUFFER | vk::BufferUsageFlags::TRANSFER_DST,
-            BufferUsage::Uniform => vk::BufferUsageFlags::UNIFORM_BUFFER | vk::BufferUsageFlags::TRANSFER_DST,
-            BufferUsage::Storage => vk::BufferUsageFlags::STORAGE_BUFFER | vk::BufferUsageFlags::TRANSFER_DST,
+            BufferUsage::Vertex => {
+                vk::BufferUsageFlags::VERTEX_BUFFER | vk::BufferUsageFlags::TRANSFER_DST
+            }
+            BufferUsage::Index => {
+                vk::BufferUsageFlags::INDEX_BUFFER | vk::BufferUsageFlags::TRANSFER_DST
+            }
+            BufferUsage::Uniform => {
+                vk::BufferUsageFlags::UNIFORM_BUFFER | vk::BufferUsageFlags::TRANSFER_DST
+            }
+            BufferUsage::Storage => {
+                vk::BufferUsageFlags::STORAGE_BUFFER | vk::BufferUsageFlags::TRANSFER_DST
+            }
             BufferUsage::Staging => vk::BufferUsageFlags::TRANSFER_SRC,
         }
     }
@@ -183,8 +191,12 @@ impl VulkanRenderApi {
     fn memory_props(h: MemoryHint) -> vk::MemoryPropertyFlags {
         match h {
             MemoryHint::GpuOnly => vk::MemoryPropertyFlags::DEVICE_LOCAL,
-            MemoryHint::CpuToGpu => vk::MemoryPropertyFlags::HOST_VISIBLE | vk::MemoryPropertyFlags::HOST_COHERENT,
-            MemoryHint::GpuToCpu => vk::MemoryPropertyFlags::HOST_VISIBLE | vk::MemoryPropertyFlags::HOST_COHERENT,
+            MemoryHint::CpuToGpu => {
+                vk::MemoryPropertyFlags::HOST_VISIBLE | vk::MemoryPropertyFlags::HOST_COHERENT
+            }
+            MemoryHint::GpuToCpu => {
+                vk::MemoryPropertyFlags::HOST_VISIBLE | vk::MemoryPropertyFlags::HOST_COHERENT
+            }
         }
     }
 
@@ -287,10 +299,21 @@ impl VulkanRenderApi {
 
         for c in self.recorded.drain(..) {
             match c {
-                RecordedCmd::SetViewport(vp) => device.cmd_set_viewport(cmd, 0, std::slice::from_ref(&vp)),
-                RecordedCmd::SetScissor(sc) => device.cmd_set_scissor(cmd, 0, std::slice::from_ref(&sc)),
-                RecordedCmd::BindPipeline(p) => device.cmd_bind_pipeline(cmd, vk::PipelineBindPoint::GRAPHICS, p),
-                RecordedCmd::BindDescriptorSets { layout, first_set, sets, set_count } => {
+                RecordedCmd::SetViewport(vp) => {
+                    device.cmd_set_viewport(cmd, 0, std::slice::from_ref(&vp))
+                }
+                RecordedCmd::SetScissor(sc) => {
+                    device.cmd_set_scissor(cmd, 0, std::slice::from_ref(&sc))
+                }
+                RecordedCmd::BindPipeline(p) => {
+                    device.cmd_bind_pipeline(cmd, vk::PipelineBindPoint::GRAPHICS, p)
+                }
+                RecordedCmd::BindDescriptorSets {
+                    layout,
+                    first_set,
+                    sets,
+                    set_count,
+                } => {
                     device.cmd_bind_descriptor_sets(
                         cmd,
                         vk::PipelineBindPoint::GRAPHICS,
@@ -300,7 +323,12 @@ impl VulkanRenderApi {
                         &[],
                     );
                 }
-                RecordedCmd::BindVertexBuffer { first_binding, buffers, offsets, count } => {
+                RecordedCmd::BindVertexBuffer {
+                    first_binding,
+                    buffers,
+                    offsets,
+                    count,
+                } => {
                     device.cmd_bind_vertex_buffers(
                         cmd,
                         first_binding,
@@ -308,10 +336,20 @@ impl VulkanRenderApi {
                         &offsets[..count as usize],
                     );
                 }
-                RecordedCmd::BindIndexBuffer { buffer, offset, index_type } => {
+                RecordedCmd::BindIndexBuffer {
+                    buffer,
+                    offset,
+                    index_type,
+                } => {
                     device.cmd_bind_index_buffer(cmd, buffer, offset, index_type);
                 }
-                RecordedCmd::Draw(a) => device.cmd_draw(cmd, a.vertex_count, a.instance_count, a.first_vertex, a.first_instance),
+                RecordedCmd::Draw(a) => device.cmd_draw(
+                    cmd,
+                    a.vertex_count,
+                    a.instance_count,
+                    a.first_vertex,
+                    a.first_instance,
+                ),
                 RecordedCmd::DrawIndexed(a) => device.cmd_draw_indexed(
                     cmd,
                     a.index_count,
@@ -382,7 +420,9 @@ impl RenderApi for VulkanRenderApi {
         self.current_bind_groups = [None, None, None, None];
         self.active_render_target = None;
 
-        self.renderer.begin_frame(desc.clear_color).map_err(|e| EngineError::other(e.to_string()))
+        self.renderer
+            .begin_frame(desc.clear_color)
+            .map_err(|e| EngineError::other(e.to_string()))
     }
 
     #[inline]
@@ -394,14 +434,17 @@ impl RenderApi for VulkanRenderApi {
         unsafe {
             self.flush_recorded()?;
         }
-        self.renderer.end_frame().map_err(|e| EngineError::other(e.to_string()))
+        self.renderer
+            .end_frame()
+            .map_err(|e| EngineError::other(e.to_string()))
     }
 
     fn resize(&mut self, width: u32, height: u32) -> EngineResult<()> {
         self.target = Extent2D::new(width, height);
-        self.renderer.resize(width, height).map_err(|e| EngineError::other(e.to_string()))
+        self.renderer
+            .resize(width, height)
+            .map_err(|e| EngineError::other(e.to_string()))
     }
-
 
     fn create_render_target(&mut self, desc: RenderTargetDesc) -> EngineResult<RenderTargetId> {
         if desc.extent.width == 0 || desc.extent.height == 0 {
@@ -444,7 +487,9 @@ impl RenderApi for VulkanRenderApi {
     fn render_target_ui_tex_id(&self, id: RenderTargetId) -> EngineResult<UiTexId> {
         let key = id.0.get();
         if !self.renderer.render_targets.contains_key(&key) {
-            return Err(EngineError::other("render_target_ui_tex_id: unknown render target"));
+            return Err(EngineError::other(
+                "render_target_ui_tex_id: unknown render target",
+            ));
         }
 
         Ok(ui_reserved::external_from_u32(key))
@@ -550,7 +595,8 @@ impl RenderApi for VulkanRenderApi {
                         data.len() as vk::DeviceSize,
                         vk::MemoryMapFlags::empty(),
                     )
-                    .map_err(|e| EngineError::other(e.to_string()))? as *mut u8;
+                    .map_err(|e| EngineError::other(e.to_string()))?
+                    as *mut u8;
 
                 std::ptr::copy_nonoverlapping(data.as_ptr(), ptr, data.len());
                 device.unmap_memory(b.memory);
@@ -585,7 +631,12 @@ impl RenderApi for VulkanRenderApi {
                         .dst_offset(offset as vk::DeviceSize)
                         .size(data.len() as vk::DeviceSize);
 
-                    device.cmd_copy_buffer(cmd, staging.buffer, b.buffer, std::slice::from_ref(&region));
+                    device.cmd_copy_buffer(
+                        cmd,
+                        staging.buffer,
+                        b.buffer,
+                        std::slice::from_ref(&region),
+                    );
 
                     let (dst_stage, dst_access) = if b.usage.intersects(
                         vk::BufferUsageFlags::VERTEX_BUFFER | vk::BufferUsageFlags::INDEX_BUFFER,
@@ -596,12 +647,14 @@ impl RenderApi for VulkanRenderApi {
                         )
                     } else if b.usage.contains(vk::BufferUsageFlags::UNIFORM_BUFFER) {
                         (
-                            vk::PipelineStageFlags::VERTEX_SHADER | vk::PipelineStageFlags::FRAGMENT_SHADER,
+                            vk::PipelineStageFlags::VERTEX_SHADER
+                                | vk::PipelineStageFlags::FRAGMENT_SHADER,
                             vk::AccessFlags::UNIFORM_READ,
                         )
                     } else if b.usage.contains(vk::BufferUsageFlags::STORAGE_BUFFER) {
                         (
-                            vk::PipelineStageFlags::VERTEX_SHADER | vk::PipelineStageFlags::FRAGMENT_SHADER,
+                            vk::PipelineStageFlags::VERTEX_SHADER
+                                | vk::PipelineStageFlags::FRAGMENT_SHADER,
                             vk::AccessFlags::SHADER_READ | vk::AccessFlags::SHADER_WRITE,
                         )
                     } else {
@@ -666,7 +719,14 @@ impl RenderApi for VulkanRenderApi {
             let entry = CString::new(desc.entry)
                 .map_err(|_| EngineError::other("ShaderDesc.entry must be a valid C string"))?;
 
-            self.shaders.insert(id, VkShader { module, stage, entry });
+            self.shaders.insert(
+                id,
+                VkShader {
+                    module,
+                    stage,
+                    entry,
+                },
+            );
         }
 
         Ok(id)
@@ -674,19 +734,36 @@ impl RenderApi for VulkanRenderApi {
 
     fn destroy_shader(&mut self, id: ShaderId) {
         if let Some(s) = self.shaders.remove(&id) {
-            unsafe { self.renderer.core.device.destroy_shader_module(s.module, None); }
+            unsafe {
+                self.renderer
+                    .core
+                    .device
+                    .destroy_shader_module(s.module, None);
+            }
         }
     }
 
     fn create_pipeline(&mut self, desc: PipelineDesc) -> EngineResult<PipelineId> {
         let id = PipelineId::new(self.alloc_u32());
 
-        let vs = self.shaders.get(&desc.vs).ok_or_else(|| EngineError::other("create_pipeline: invalid vs"))?.clone();
-        let fs = self.shaders.get(&desc.fs).ok_or_else(|| EngineError::other("create_pipeline: invalid fs"))?.clone();
+        let vs = self
+            .shaders
+            .get(&desc.vs)
+            .ok_or_else(|| EngineError::other("create_pipeline: invalid vs"))?
+            .clone();
+        let fs = self
+            .shaders
+            .get(&desc.fs)
+            .ok_or_else(|| EngineError::other("create_pipeline: invalid fs"))?
+            .clone();
 
-        let mut set_layouts: Vec<vk::DescriptorSetLayout> = Vec::with_capacity(desc.bind_group_layouts.len());
+        let mut set_layouts: Vec<vk::DescriptorSetLayout> =
+            Vec::with_capacity(desc.bind_group_layouts.len());
         for l_id in &desc.bind_group_layouts {
-            let l = self.bg_layouts.get(l_id).ok_or_else(|| EngineError::other("create_pipeline: invalid bind group layout"))?;
+            let l = self
+                .bg_layouts
+                .get(l_id)
+                .ok_or_else(|| EngineError::other("create_pipeline: invalid bind group layout"))?;
             set_layouts.push(l.layout);
         }
 
@@ -694,11 +771,19 @@ impl RenderApi for VulkanRenderApi {
             let device = &self.renderer.core.device;
 
             let layout_ci = vk::PipelineLayoutCreateInfo::default().set_layouts(&set_layouts);
-            let layout = device.create_pipeline_layout(&layout_ci, None).map_err(|e| EngineError::other(e.to_string()))?;
+            let layout = device
+                .create_pipeline_layout(&layout_ci, None)
+                .map_err(|e| EngineError::other(e.to_string()))?;
 
             let stages = [
-                vk::PipelineShaderStageCreateInfo::default().stage(vs.stage).module(vs.module).name(&vs.entry),
-                vk::PipelineShaderStageCreateInfo::default().stage(fs.stage).module(fs.module).name(&fs.entry),
+                vk::PipelineShaderStageCreateInfo::default()
+                    .stage(vs.stage)
+                    .module(vs.module)
+                    .name(&vs.entry),
+                vk::PipelineShaderStageCreateInfo::default()
+                    .stage(fs.stage)
+                    .module(fs.module)
+                    .name(&fs.entry),
             ];
 
             let mut binding_descs: Vec<vk::VertexInputBindingDescription> = Vec::new();
@@ -727,8 +812,11 @@ impl RenderApi for VulkanRenderApi {
                 .vertex_binding_descriptions(&binding_descs)
                 .vertex_attribute_descriptions(&attr_descs);
 
-            let ia = vk::PipelineInputAssemblyStateCreateInfo::default().topology(Self::map_topology(desc.topology));
-            let vp = vk::PipelineViewportStateCreateInfo::default().viewport_count(1).scissor_count(1);
+            let ia = vk::PipelineInputAssemblyStateCreateInfo::default()
+                .topology(Self::map_topology(desc.topology));
+            let vp = vk::PipelineViewportStateCreateInfo::default()
+                .viewport_count(1)
+                .scissor_count(1);
 
             let rs = vk::PipelineRasterizationStateCreateInfo::default()
                 .polygon_mode(vk::PolygonMode::FILL)
@@ -736,7 +824,8 @@ impl RenderApi for VulkanRenderApi {
                 .front_face(vk::FrontFace::COUNTER_CLOCKWISE)
                 .line_width(1.0);
 
-            let ms = vk::PipelineMultisampleStateCreateInfo::default().rasterization_samples(vk::SampleCountFlags::TYPE_1);
+            let ms = vk::PipelineMultisampleStateCreateInfo::default()
+                .rasterization_samples(vk::SampleCountFlags::TYPE_1);
 
             let depth_state = vk::PipelineDepthStencilStateCreateInfo::default()
                 .depth_test_enable(true)
@@ -754,7 +843,8 @@ impl RenderApi for VulkanRenderApi {
                         | vk::ColorComponentFlags::A,
                 );
 
-            let cb = vk::PipelineColorBlendStateCreateInfo::default().attachments(std::slice::from_ref(&ca));
+            let cb = vk::PipelineColorBlendStateCreateInfo::default()
+                .attachments(std::slice::from_ref(&ca));
 
             let dyn_states = [vk::DynamicState::VIEWPORT, vk::DynamicState::SCISSOR];
             let ds = vk::PipelineDynamicStateCreateInfo::default().dynamic_states(&dyn_states);
@@ -782,7 +872,8 @@ impl RenderApi for VulkanRenderApi {
                 gp = gp.depth_stencil_state(&depth_state);
             }
 
-            let pipelines = device.create_graphics_pipelines(vk::PipelineCache::null(), &[gp], None);
+            let pipelines =
+                device.create_graphics_pipelines(vk::PipelineCache::null(), &[gp], None);
             let pipeline = match pipelines {
                 Ok(v) => v[0],
                 Err((_, e)) => return Err(EngineError::other(e.to_string())),
@@ -808,13 +899,17 @@ impl RenderApi for VulkanRenderApi {
         }
     }
 
-    fn create_bind_group_layout(&mut self, desc: BindGroupLayoutDesc) -> EngineResult<BindGroupLayoutId> {
+    fn create_bind_group_layout(
+        &mut self,
+        desc: BindGroupLayoutDesc,
+    ) -> EngineResult<BindGroupLayoutId> {
         let id = BindGroupLayoutId::new(self.alloc_u32());
 
         unsafe {
             let device = &self.renderer.core.device;
 
-            let mut vk_bindings: Vec<vk::DescriptorSetLayoutBinding> = Vec::with_capacity(desc.bindings.len());
+            let mut vk_bindings: Vec<vk::DescriptorSetLayoutBinding> =
+                Vec::with_capacity(desc.bindings.len());
             for (i, k) in desc.bindings.iter().enumerate() {
                 let ty = match k {
                     BindingKind::Texture2D => vk::DescriptorType::SAMPLED_IMAGE,
@@ -837,7 +932,13 @@ impl RenderApi for VulkanRenderApi {
                 .create_descriptor_set_layout(&ci, None)
                 .map_err(|e| EngineError::other(e.to_string()))?;
 
-            self.bg_layouts.insert(id, VkBgLayout { layout, bindings: desc.bindings });
+            self.bg_layouts.insert(
+                id,
+                VkBgLayout {
+                    layout,
+                    bindings: desc.bindings,
+                },
+            );
         }
 
         Ok(id)
@@ -845,7 +946,12 @@ impl RenderApi for VulkanRenderApi {
 
     fn destroy_bind_group_layout(&mut self, id: BindGroupLayoutId) {
         if let Some(l) = self.bg_layouts.remove(&id) {
-            unsafe { self.renderer.core.device.destroy_descriptor_set_layout(l.layout, None); }
+            unsafe {
+                self.renderer
+                    .core
+                    .device
+                    .destroy_descriptor_set_layout(l.layout, None);
+            }
         }
     }
 
@@ -939,11 +1045,12 @@ impl RenderApi for VulkanRenderApi {
             for (binding, k) in l.bindings.iter().enumerate() {
                 match k {
                     BindingKind::UniformBuffer => {
-                        let Some(bb) = desc.uniform0 else { continue; };
-                        let b = *self
-                            .buffers
-                            .get(&bb.buffer)
-                            .ok_or_else(|| EngineError::other("create_bind_group: invalid uniform0 buffer"))?;
+                        let Some(bb) = desc.uniform0 else {
+                            continue;
+                        };
+                        let b = *self.buffers.get(&bb.buffer).ok_or_else(|| {
+                            EngineError::other("create_bind_group: invalid uniform0 buffer")
+                        })?;
 
                         buf_infos.push(
                             vk::DescriptorBufferInfo::default()
@@ -959,11 +1066,12 @@ impl RenderApi for VulkanRenderApi {
                         });
                     }
                     BindingKind::StorageBuffer => {
-                        let Some(bb) = desc.storage0 else { continue; };
-                        let b = *self
-                            .buffers
-                            .get(&bb.buffer)
-                            .ok_or_else(|| EngineError::other("create_bind_group: invalid storage0 buffer"))?;
+                        let Some(bb) = desc.storage0 else {
+                            continue;
+                        };
+                        let b = *self.buffers.get(&bb.buffer).ok_or_else(|| {
+                            EngineError::other("create_bind_group: invalid storage0 buffer")
+                        })?;
 
                         buf_infos.push(
                             vk::DescriptorBufferInfo::default()
@@ -1024,7 +1132,10 @@ impl RenderApi for VulkanRenderApi {
         if let Some(bg) = self.bind_groups.remove(&id) {
             unsafe {
                 if bg.pool != vk::DescriptorPool::null() {
-                    self.renderer.core.device.destroy_descriptor_pool(bg.pool, None);
+                    self.renderer
+                        .core
+                        .device
+                        .destroy_descriptor_pool(bg.pool, None);
                 }
             }
         }
@@ -1045,15 +1156,24 @@ impl RenderApi for VulkanRenderApi {
 
     fn set_scissor(&mut self, rect: RectI32) -> EngineResult<()> {
         let sc = vk::Rect2D {
-            offset: vk::Offset2D { x: rect.x, y: rect.y },
-            extent: vk::Extent2D { width: rect.w.max(0) as u32, height: rect.h.max(0) as u32 },
+            offset: vk::Offset2D {
+                x: rect.x,
+                y: rect.y,
+            },
+            extent: vk::Extent2D {
+                width: rect.w.max(0) as u32,
+                height: rect.h.max(0) as u32,
+            },
         };
         self.recorded.push(RecordedCmd::SetScissor(sc));
         Ok(())
     }
 
     fn set_pipeline(&mut self, pipeline: PipelineId) -> EngineResult<()> {
-        let p = *self.pipelines.get(&pipeline).ok_or_else(|| EngineError::other("set_pipeline: invalid PipelineId"))?;
+        let p = *self
+            .pipelines
+            .get(&pipeline)
+            .ok_or_else(|| EngineError::other("set_pipeline: invalid PipelineId"))?;
         self.current_pipeline = Some(pipeline);
         self.recorded.push(RecordedCmd::BindPipeline(p.pipeline));
         Ok(())
@@ -1081,20 +1201,33 @@ impl RenderApi for VulkanRenderApi {
     }
 
     fn draw(&mut self, args: DrawArgs) -> EngineResult<()> {
-        let Some(pipeline_id) = self.current_pipeline else { return self.err("draw: no pipeline bound"); };
-        let p = *self.pipelines.get(&pipeline_id).ok_or_else(|| EngineError::other("draw: invalid current pipeline"))?;
+        let Some(pipeline_id) = self.current_pipeline else {
+            return self.err("draw: no pipeline bound");
+        };
+        let p = *self
+            .pipelines
+            .get(&pipeline_id)
+            .ok_or_else(|| EngineError::other("draw: invalid current pipeline"))?;
 
         let mut sets = [vk::DescriptorSet::null(); 4];
         let mut set_count = 0u32;
         for (i, bg_id) in self.current_bind_groups.iter().enumerate() {
             if let Some(bg_id) = bg_id {
-                let bg = *self.bind_groups.get(bg_id).ok_or_else(|| EngineError::other("draw: invalid bind group"))?;
+                let bg = *self
+                    .bind_groups
+                    .get(bg_id)
+                    .ok_or_else(|| EngineError::other("draw: invalid bind group"))?;
                 sets[i] = bg.set;
                 set_count = (i as u32) + 1;
             }
         }
         if set_count > 0 {
-            self.recorded.push(RecordedCmd::BindDescriptorSets { layout: p.layout, first_set: 0, sets, set_count });
+            self.recorded.push(RecordedCmd::BindDescriptorSets {
+                layout: p.layout,
+                first_set: 0,
+                sets,
+                set_count,
+            });
         }
 
         let mut bufs = [vk::Buffer::null(); 4];
@@ -1102,14 +1235,22 @@ impl RenderApi for VulkanRenderApi {
         let mut count = 0u32;
         for (i, s) in self.current_vertex.iter().enumerate() {
             if let Some(s) = s {
-                let b = *self.buffers.get(&s.buffer).ok_or_else(|| EngineError::other("draw: invalid vertex buffer"))?;
+                let b = *self
+                    .buffers
+                    .get(&s.buffer)
+                    .ok_or_else(|| EngineError::other("draw: invalid vertex buffer"))?;
                 bufs[i] = b.buffer;
                 offs[i] = s.offset as u64;
                 count = (i as u32) + 1;
             }
         }
         if count > 0 {
-            self.recorded.push(RecordedCmd::BindVertexBuffer { first_binding: 0, buffers: bufs, offsets: offs, count });
+            self.recorded.push(RecordedCmd::BindVertexBuffer {
+                first_binding: 0,
+                buffers: bufs,
+                offsets: offs,
+                count,
+            });
         }
 
         self.recorded.push(RecordedCmd::Draw(args));
@@ -1117,20 +1258,33 @@ impl RenderApi for VulkanRenderApi {
     }
 
     fn draw_indexed(&mut self, args: DrawIndexedArgs) -> EngineResult<()> {
-        let Some(pipeline_id) = self.current_pipeline else { return self.err("draw_indexed: no pipeline bound"); };
-        let p = *self.pipelines.get(&pipeline_id).ok_or_else(|| EngineError::other("draw_indexed: invalid current pipeline"))?;
+        let Some(pipeline_id) = self.current_pipeline else {
+            return self.err("draw_indexed: no pipeline bound");
+        };
+        let p = *self
+            .pipelines
+            .get(&pipeline_id)
+            .ok_or_else(|| EngineError::other("draw_indexed: invalid current pipeline"))?;
 
         let mut sets = [vk::DescriptorSet::null(); 4];
         let mut set_count = 0u32;
         for (i, bg_id) in self.current_bind_groups.iter().enumerate() {
             if let Some(bg_id) = bg_id {
-                let bg = *self.bind_groups.get(bg_id).ok_or_else(|| EngineError::other("draw_indexed: invalid bind group"))?;
+                let bg = *self
+                    .bind_groups
+                    .get(bg_id)
+                    .ok_or_else(|| EngineError::other("draw_indexed: invalid bind group"))?;
                 sets[i] = bg.set;
                 set_count = (i as u32) + 1;
             }
         }
         if set_count > 0 {
-            self.recorded.push(RecordedCmd::BindDescriptorSets { layout: p.layout, first_set: 0, sets, set_count });
+            self.recorded.push(RecordedCmd::BindDescriptorSets {
+                layout: p.layout,
+                first_set: 0,
+                sets,
+                set_count,
+            });
         }
 
         let mut bufs = [vk::Buffer::null(); 4];
@@ -1138,18 +1292,31 @@ impl RenderApi for VulkanRenderApi {
         let mut count = 0u32;
         for (i, s) in self.current_vertex.iter().enumerate() {
             if let Some(s) = s {
-                let b = *self.buffers.get(&s.buffer).ok_or_else(|| EngineError::other("draw_indexed: invalid vertex buffer"))?;
+                let b = *self
+                    .buffers
+                    .get(&s.buffer)
+                    .ok_or_else(|| EngineError::other("draw_indexed: invalid vertex buffer"))?;
                 bufs[i] = b.buffer;
                 offs[i] = s.offset as u64;
                 count = (i as u32) + 1;
             }
         }
         if count > 0 {
-            self.recorded.push(RecordedCmd::BindVertexBuffer { first_binding: 0, buffers: bufs, offsets: offs, count });
+            self.recorded.push(RecordedCmd::BindVertexBuffer {
+                first_binding: 0,
+                buffers: bufs,
+                offsets: offs,
+                count,
+            });
         }
 
-        let Some((idx_slice, fmt)) = self.current_index else { return self.err("draw_indexed: no index buffer bound"); };
-        let ib = *self.buffers.get(&idx_slice.buffer).ok_or_else(|| EngineError::other("draw_indexed: invalid index buffer"))?;
+        let Some((idx_slice, fmt)) = self.current_index else {
+            return self.err("draw_indexed: no index buffer bound");
+        };
+        let ib = *self
+            .buffers
+            .get(&idx_slice.buffer)
+            .ok_or_else(|| EngineError::other("draw_indexed: invalid index buffer"))?;
 
         self.recorded.push(RecordedCmd::BindIndexBuffer {
             buffer: ib.buffer,

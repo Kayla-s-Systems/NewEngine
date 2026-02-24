@@ -35,7 +35,11 @@ impl Mat3 {
 
     #[inline]
     pub const fn from_cols(x_axis: Vec3, y_axis: Vec3, z_axis: Vec3) -> Self {
-        Self { x_axis, y_axis, z_axis }
+        Self {
+            x_axis,
+            y_axis,
+            z_axis,
+        }
     }
 
     /// Builds a **rotation** matrix from a quaternion.

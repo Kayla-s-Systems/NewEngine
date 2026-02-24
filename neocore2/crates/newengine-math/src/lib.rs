@@ -9,21 +9,21 @@
 //! - A dynamic registry for higher-level math routines (noise, intersections, special transforms),
 //!   enabling plugins to extend/override functionality without leaking third-party math deps.
 
-mod registry;
-mod value;
-mod builtins;
-mod gpu;
 mod angle;
-mod scalar;
-mod ext;
+mod builtins;
+pub mod collections;
 mod euler;
+mod ext;
+mod gpu;
+mod mat3;
+mod mat4;
+mod quat;
+mod registry;
+mod scalar;
+mod value;
 mod vec2;
 mod vec3;
 mod vec4;
-mod quat;
-mod mat3;
-mod mat4;
-pub mod collections;
 
 #[macro_use]
 mod macros;
@@ -36,7 +36,9 @@ pub use gpu::mat4_to_cols_bytes;
 pub use mat3::Mat3;
 pub use mat4::Mat4;
 pub use quat::Quat;
-pub use registry::{DynMathFn, MathFnId, MathRegistry, MathRegistryRef, ProviderId, RegisterMathFn};
+pub use registry::{
+    DynMathFn, MathFnId, MathRegistry, MathRegistryRef, ProviderId, RegisterMathFn,
+};
 pub use value::{MathError, MathResult, MathValue, MathValueType, Signature};
 pub use vec2::Vec2;
 pub use vec3::Vec3;

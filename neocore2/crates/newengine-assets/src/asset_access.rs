@@ -80,7 +80,11 @@ pub enum WaitReadyError {
 }
 
 /// Wait until the asset reaches `Ready` or `Failed`, periodically calling `pump()`.
-pub fn wait_ready<A: AssetAccess>(assets: &A, id_hex32: &str, timeout: Duration) -> Result<(), WaitReadyError> {
+pub fn wait_ready<A: AssetAccess>(
+    assets: &A,
+    id_hex32: &str,
+    timeout: Duration,
+) -> Result<(), WaitReadyError> {
     let deadline = Instant::now() + timeout;
 
     loop {
@@ -91,7 +95,9 @@ pub fn wait_ready<A: AssetAccess>(assets: &A, id_hex32: &str, timeout: Duration)
             Ok(AssetState::Failed) => return Err(WaitReadyError::Failed(id_hex32.to_string())),
             Ok(AssetState::Loading) | Ok(AssetState::Unloaded) => {}
             Err(e) => return Err(WaitReadyError::Transport(e)),
-            Ok(AssetState::Unknown) => { log::warn!("Unknown  asset: {}", id_hex32); }
+            Ok(AssetState::Unknown) => {
+                log::warn!("Unknown  asset: {}", id_hex32);
+            }
         }
 
         if Instant::now() >= deadline {

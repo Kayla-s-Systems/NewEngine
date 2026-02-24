@@ -27,7 +27,12 @@ impl Default for Sway {
 }
 
 impl CameraModifier for Sway {
-    fn apply(&mut self, rig: &CameraRig, _proj: &Projection, input: &CameraStackInput) -> ModifierOutput {
+    fn apply(
+        &mut self,
+        rig: &CameraRig,
+        _proj: &Projection,
+        input: &CameraStackInput,
+    ) -> ModifierOutput {
         if !self.enabled {
             return ModifierOutput::default();
         }
@@ -56,8 +61,6 @@ impl CameraModifier for Sway {
             (s * 0.5) * self.amplitude_rot.y * intensity,
             -s * self.amplitude_rot.z * intensity,
         );
-
-
 
         let dpos_ws = rig.rotation * local_pos;
         let drot = Quat::from_rotation_z(local_rot.z)

@@ -112,7 +112,12 @@ impl<E: Send + 'static> Engine<E> {
                         Ok(()) => {
                             let loaded = self.plugins.snapshot().len();
                             last_action = Some("plugins: rescan".to_string());
-                            Self::log_phase_ok("plugins", phase, Some(loaded), Self::elapsed_since(t0));
+                            Self::log_phase_ok(
+                                "plugins",
+                                phase,
+                                Some(loaded),
+                                Self::elapsed_since(t0),
+                            );
                         }
                         Err(e) => {
                             last_error = Some(format!(
@@ -137,7 +142,12 @@ impl<E: Send + 'static> Engine<E> {
                         Ok(()) => {
                             last_action = Some(format!("plugins: load '{}'", path.display()));
                             let loaded = self.plugins.snapshot().len();
-                            Self::log_phase_ok("plugins", phase, Some(loaded), Self::elapsed_since(t0));
+                            Self::log_phase_ok(
+                                "plugins",
+                                phase,
+                                Some(loaded),
+                                Self::elapsed_since(t0),
+                            );
                         }
                         Err(e) => {
                             last_error = Some(format!(
@@ -158,7 +168,12 @@ impl<E: Send + 'static> Engine<E> {
                             self.plugins.start_by_id(&id);
                             last_action = Some(format!("plugins: reloaded id='{}'", id));
                             let loaded = self.plugins.snapshot().len();
-                            Self::log_phase_ok("plugins", phase, Some(loaded), Self::elapsed_since(t0));
+                            Self::log_phase_ok(
+                                "plugins",
+                                phase,
+                                Some(loaded),
+                                Self::elapsed_since(t0),
+                            );
                         }
                         Ok(false) => {
                             last_error = Some(format!("plugins: unknown id='{}'", id));

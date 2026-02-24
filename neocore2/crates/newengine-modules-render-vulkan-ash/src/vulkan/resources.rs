@@ -203,7 +203,11 @@ impl DeferredFree {
         if buffer == vk::Buffer::null() && memory == vk::DeviceMemory::null() {
             return;
         }
-        self.items.push(DeferredItem::Buffer { fence, buffer, memory });
+        self.items.push(DeferredItem::Buffer {
+            fence,
+            buffer,
+            memory,
+        });
     }
 
     #[inline]
@@ -211,7 +215,8 @@ impl DeferredFree {
         if pool == vk::DescriptorPool::null() {
             return;
         }
-        self.items.push(DeferredItem::DescriptorPool { fence, pool });
+        self.items
+            .push(DeferredItem::DescriptorPool { fence, pool });
     }
 
     #[inline]

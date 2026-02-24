@@ -26,7 +26,9 @@ impl PluginManager {
             if self.loaded[i].state != PluginState::Running {
                 continue;
             }
-            self.call_plugin(i, "fixed_update", |m| rresult_unit_to_string(m.fixed_update(dt)));
+            self.call_plugin(i, "fixed_update", |m| {
+                rresult_unit_to_string(m.fixed_update(dt))
+            });
         }
         Ok(())
     }
@@ -165,7 +167,10 @@ impl PluginManager {
             }
         }
 
-        if idx < self.loaded.len() && op == "start" && self.loaded[idx].state == PluginState::Registered {
+        if idx < self.loaded.len()
+            && op == "start"
+            && self.loaded[idx].state == PluginState::Registered
+        {
             self.loaded[idx].state = PluginState::Running;
         }
     }

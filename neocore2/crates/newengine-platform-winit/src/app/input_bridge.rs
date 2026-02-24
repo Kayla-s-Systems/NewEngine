@@ -47,7 +47,8 @@ pub fn poll_input_frame(engine: &Engine<impl Send + 'static>) -> Option<UiInputF
 
     let state_json = call_service_utf8(engine, SID, "state_json")?;
     let text_json = call_service_utf8(engine, SID, "text_take_json").unwrap_or_else(|| "{}".into());
-    let ime_json = call_service_utf8(engine, SID, "ime_commit_take_json").unwrap_or_else(|| "{}".into());
+    let ime_json =
+        call_service_utf8(engine, SID, "ime_commit_take_json").unwrap_or_else(|| "{}".into());
 
     let mut out = UiInputFrame::default();
 

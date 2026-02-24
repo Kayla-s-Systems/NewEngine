@@ -16,7 +16,11 @@ pub(crate) fn dist_to_segment(p: Pos2, a: Pos2, b: Pos2) -> f32 {
     (p - q).length()
 }
 
-pub(crate) fn world_to_screen(camera: &impl GizmoCamera, rect: Rect, world: Vec3) -> Option<(Pos2, f32)> {
+pub(crate) fn world_to_screen(
+    camera: &impl GizmoCamera,
+    rect: Rect,
+    world: Vec3,
+) -> Option<(Pos2, f32)> {
     let vp = camera.viewproj();
     let (vp_w, vp_h) = camera.viewport_px();
 
@@ -42,7 +46,12 @@ pub(crate) fn world_to_screen(camera: &impl GizmoCamera, rect: Rect, world: Vec3
     Some((Pos2::new(x_pt, y_pt), ndc.z))
 }
 
-pub(crate) fn screen_to_world_at_ndc_z(camera: &impl GizmoCamera, rect: Rect, screen: Pos2, ndc_z: f32) -> Vec3 {
+pub(crate) fn screen_to_world_at_ndc_z(
+    camera: &impl GizmoCamera,
+    rect: Rect,
+    screen: Pos2,
+    ndc_z: f32,
+) -> Vec3 {
     let (vp_w, vp_h) = camera.viewport_px();
     let ppp = (rect.width() / vp_w as f32).max(1e-6);
 
@@ -76,7 +85,9 @@ pub(crate) fn axis_end(
     let d = (unit_s - center).length().max(1.0);
     let len_world = desired_len_pt / d;
     let end_world = pos + dir_world * len_world;
-    world_to_screen(camera, rect, end_world).map(|x| x.0).unwrap_or(center)
+    world_to_screen(camera, rect, end_world)
+        .map(|x| x.0)
+        .unwrap_or(center)
 }
 
 #[inline]
@@ -98,7 +109,12 @@ pub(crate) fn screen_ray(camera: &impl GizmoCamera, rect: Rect, screen: Pos2) ->
     (p0, dir)
 }
 
-pub(crate) fn ray_plane_intersect(ray_o: Vec3, ray_d: Vec3, plane_p: Vec3, plane_n: Vec3) -> Option<Vec3> {
+pub(crate) fn ray_plane_intersect(
+    ray_o: Vec3,
+    ray_d: Vec3,
+    plane_p: Vec3,
+    plane_n: Vec3,
+) -> Option<Vec3> {
     let denom = plane_n.dot(ray_d);
     if denom.abs() < 1e-6 {
         return None;
@@ -129,7 +145,13 @@ pub(crate) fn rotation_angle_on_plane(
     y.atan2(x)
 }
 
-pub(crate) fn world_radius_for_screen(camera: &impl GizmoCamera, rect: Rect, pivot: Vec3, dir: Vec3, desired_px: f32) -> f32 {
+pub(crate) fn world_radius_for_screen(
+    camera: &impl GizmoCamera,
+    rect: Rect,
+    pivot: Vec3,
+    dir: Vec3,
+    desired_px: f32,
+) -> f32 {
     let Some((c, _)) = world_to_screen(camera, rect, pivot) else {
         return 1.0;
     };
@@ -154,15 +176,21 @@ pub(crate) fn world_radius_for_screen_plane(
     v: Vec3,
     desired_px: f32,
 ) -> f32 {
-    let Some((c, _)) = world_to_screen(camera, rect, pivot) else { return 1.0; };
+    let Some((c, _)) = world_to_screen(camera, rect, pivot) else {
+        return 1.0;
+    };
 
     let du = world_to_screen(camera, rect, pivot + u).map(|x| (x.0 - c).length());
     let dv = world_to_screen(camera, rect, pivot + v).map(|x| (x.0 - c).length());
 
     // Prefer the larger delta (less degenerate projection). Clamp to avoid infinity.
     let mut d = 0.0_f32;
-    if let Some(x) = du { d = d.max(x); }
-    if let Some(x) = dv { d = d.max(x); }
+    if let Some(x) = du {
+        d = d.max(x);
+    }
+    if let Some(x) = dv {
+        d = d.max(x);
+    }
     d = d.max(6.0);
 
     desired_px / d

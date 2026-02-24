@@ -92,7 +92,10 @@ impl VulkanRenderer {
         if self.ui.desc_pool != vk::DescriptorPool::null() {
             for (_id, ds) in self.ui.external.drain() {
                 if ds != vk::DescriptorSet::null() {
-                    let _ = self.core.device.free_descriptor_sets(self.ui.desc_pool, &[ds]);
+                    let _ = self
+                        .core
+                        .device
+                        .free_descriptor_sets(self.ui.desc_pool, &[ds]);
                 }
             }
         } else {
@@ -633,21 +636,27 @@ impl VulkanRenderer {
             .descriptor_type(vk::DescriptorType::COMBINED_IMAGE_SAMPLER)
             .image_info(std::slice::from_ref(&img));
 
-        self.core.device.update_descriptor_sets(std::slice::from_ref(&write), &[]);
+        self.core
+            .device
+            .update_descriptor_sets(std::slice::from_ref(&write), &[]);
         self.ui.external.insert(id, desc_set);
         Ok(())
     }
 
     pub(crate) unsafe fn ui_unregister_external_texture(&mut self, id: u32) {
-        let Some(ds) = self.ui.external.remove(&id) else { return; };
+        let Some(ds) = self.ui.external.remove(&id) else {
+            return;
+        };
         if ds == vk::DescriptorSet::null() {
             return;
         }
         if self.ui.desc_pool != vk::DescriptorPool::null() {
-            let _ = self.core.device.free_descriptor_sets(self.ui.desc_pool, &[ds]);
+            let _ = self
+                .core
+                .device
+                .free_descriptor_sets(self.ui.desc_pool, &[ds]);
         }
     }
-
 
     unsafe fn ui_draw_cmd(&mut self, cmd: vk::CommandBuffer, c: &UiDrawCmd) -> VkResult<()> {
         // Resolve texture descriptor set:
@@ -705,10 +714,7 @@ impl VulkanRenderer {
         );
 
         let first_index = c.index_range.start;
-        let index_count = c
-            .index_range
-            .end
-            .saturating_sub(c.index_range.start);
+        let index_count = c.index_range.end.saturating_sub(c.index_range.start);
 
         if index_count == 0 {
             return Ok(());

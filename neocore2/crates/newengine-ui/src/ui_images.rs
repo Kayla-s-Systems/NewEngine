@@ -19,7 +19,12 @@ impl UiImageLoader {
     }
 
     #[inline]
-    pub fn request(&mut self, _assets: &dyn AssetAccess, _key: impl Into<String>, _path: impl Into<String>) {}
+    pub fn request(
+        &mut self,
+        _assets: &dyn AssetAccess,
+        _key: impl Into<String>,
+        _path: impl Into<String>,
+    ) {}
 
     #[cfg(feature = "egui")]
     #[inline]
@@ -27,7 +32,12 @@ impl UiImageLoader {
 
     #[cfg(feature = "egui")]
     #[inline]
-    pub fn pump_into_state(&mut self, _ctx: &egui::Context, _assets: &dyn AssetAccess, _state: &mut crate::markup::UiState) {}
+    pub fn pump_into_state(
+        &mut self,
+        _ctx: &egui::Context,
+        _assets: &dyn AssetAccess,
+        _state: &mut crate::markup::UiState,
+    ) {}
 
     #[inline]
     pub fn tex_id_u64(&self, _key: &str) -> Option<u64> {
@@ -82,7 +92,12 @@ mod with_images {
         /// Schedule a texture load for `key`.
         ///
         /// `key` is a stable logical name used in markup via `$tex.<key>`.
-        pub fn request(&mut self, _assets: &dyn AssetAccess, key: impl Into<String>, path: impl Into<String>) {
+        pub fn request(
+            &mut self,
+            _assets: &dyn AssetAccess,
+            key: impl Into<String>,
+            path: impl Into<String>,
+        ) {
             let key = key.into();
             let path = path.into();
             self.slots.entry(key).or_insert(Slot::Empty { path });
@@ -253,13 +268,22 @@ mod with_images {
         let rgba = dyn_img.to_rgba8();
         let (w, h) = dyn_img.dimensions();
 
-        let mut pixels: Vec<egui::Color32> = Vec::with_capacity((w as usize).saturating_mul(h as usize));
+        let mut pixels: Vec<egui::Color32> =
+            Vec::with_capacity((w as usize).saturating_mul(h as usize));
         for p in rgba.pixels() {
             let [r, g, b, a] = p.0;
             pixels.push(egui::Color32::from_rgba_unmultiplied(r, g, b, a));
         }
 
-        Ok((egui::ColorImage { size: [w as usize, h as usize], source_size: Default::default(), pixels }, w, h))
+        Ok((
+            egui::ColorImage {
+                size: [w as usize, h as usize],
+                source_size: Default::default(),
+                pixels,
+            },
+            w,
+            h,
+        ))
     }
 }
 

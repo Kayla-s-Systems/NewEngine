@@ -2,7 +2,11 @@ use crate::draw::*;
 use crate::texture::reserved;
 
 /// Convert egui output into engine draw list.
-pub fn egui_output_to_draw_list(ctx: &egui::Context, output: egui::FullOutput, out: &mut UiDrawList) {
+pub fn egui_output_to_draw_list(
+    ctx: &egui::Context,
+    output: egui::FullOutput,
+    out: &mut UiDrawList,
+) {
     // Prefer the per-viewport scale from the frame output.
     let pixels_per_point = output.pixels_per_point;
     out.pixels_per_point = pixels_per_point;
@@ -15,11 +19,17 @@ pub fn egui_output_to_draw_list(ctx: &egui::Context, output: egui::FullOutput, o
     apply_texture_delta(&output.textures_delta, &mut out.texture_delta);
 
     let clipped_primitives = ctx.tessellate(output.shapes, pixels_per_point);
-    for egui::ClippedPrimitive { clip_rect, primitive } in clipped_primitives {
+    for egui::ClippedPrimitive {
+        clip_rect,
+        primitive,
+    } in clipped_primitives
+    {
         let clip = clip_rect_to_px(clip_rect, pixels_per_point);
 
         match primitive {
-            egui::epaint::Primitive::Mesh(m) => push_egui_mesh(&m, clip, pixels_per_point, &mut out.mesh),
+            egui::epaint::Primitive::Mesh(m) => {
+                push_egui_mesh(&m, clip, pixels_per_point, &mut out.mesh)
+            }
             egui::epaint::Primitive::Callback(_) => {}
         }
     }
@@ -49,7 +59,11 @@ fn push_egui_mesh(mesh: &egui::epaint::Mesh, clip: UiRect, ppp: f32, out: &mut U
         let pos_px = [v.pos.x * ppp, v.pos.y * ppp];
         let uv = [v.uv.x, v.uv.y];
         let color = egui_color_to_rgba8(v.color);
-        out.vertices.push(UiVertex { pos: pos_px, uv, color });
+        out.vertices.push(UiVertex {
+            pos: pos_px,
+            uv,
+            color,
+        });
     }
 
     for &i in &mesh.indices {
@@ -106,7 +120,13 @@ fn apply_texture_delta(delta: &egui::TexturesDelta, out: &mut UiTextureDelta) {
                 rgba8,
             });
         } else {
-            out.set.insert(tex_id, UiTexture { size: [w, h], rgba8 });
+            out.set.insert(
+                tex_id,
+                UiTexture {
+                    size: [w, h],
+                    rgba8,
+                },
+            );
         }
     }
 

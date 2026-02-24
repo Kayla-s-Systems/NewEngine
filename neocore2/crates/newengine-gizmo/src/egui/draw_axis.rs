@@ -2,7 +2,12 @@ use super::types::GizmoStyle;
 use crate::GizmoAxis;
 use egui::{Color32, CornerRadius, Painter, Pos2, Rect, Stroke, StrokeKind};
 
-pub(crate) fn axis_color(axis: GizmoAxis, hovered: Option<GizmoAxis>, active: Option<GizmoAxis>, highlight_mul: f32) -> Color32 {
+pub(crate) fn axis_color(
+    axis: GizmoAxis,
+    hovered: Option<GizmoAxis>,
+    active: Option<GizmoAxis>,
+    highlight_mul: f32,
+) -> Color32 {
     let base = match axis {
         GizmoAxis::X => Color32::from_rgb(220, 70, 70),
         GizmoAxis::Y => Color32::from_rgb(80, 210, 110),
@@ -48,7 +53,11 @@ pub(crate) fn draw_axis(p: &Painter, a: Pos2, b: Pos2, color: Color32, style: Gi
     let right = stem_end - perp * (head_w * 0.5);
 
     let tri = vec![b, left, right];
-    p.add(egui::Shape::convex_polygon(tri.clone(), color, Stroke::NONE));
+    p.add(egui::Shape::convex_polygon(
+        tri.clone(),
+        color,
+        Stroke::NONE,
+    ));
     p.add(egui::Shape::closed_line(
         tri,
         Stroke::new(1.0, Color32::from_rgb(20, 20, 20)),
@@ -66,7 +75,10 @@ pub(crate) fn draw_axis_scale(p: &Painter, a: Pos2, b: Pos2, color: Color32, sty
     p.line_segment([a, stem_end], stroke);
 
     let half = cap * 0.5;
-    let r = Rect::from_min_max(Pos2::new(b.x - half, b.y - half), Pos2::new(b.x + half, b.y + half));
+    let r = Rect::from_min_max(
+        Pos2::new(b.x - half, b.y - half),
+        Pos2::new(b.x + half, b.y + half),
+    );
 
     // Solid cube-like handle in screen space.
     let cr = CornerRadius::same(2);

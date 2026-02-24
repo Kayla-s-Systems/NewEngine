@@ -16,9 +16,9 @@ fn has_device_extension(
             .unwrap_or_default()
     };
 
-    props.iter().any(|p| unsafe {
-        CStr::from_ptr(p.extension_name.as_ptr()) == required
-    })
+    props
+        .iter()
+        .any(|p| unsafe { CStr::from_ptr(p.extension_name.as_ptr()) == required })
 }
 
 pub(super) fn pick_physical_device(
@@ -42,16 +42,13 @@ pub(super) fn pick_physical_device(
         }
 
         // Must have surface formats / present modes.
-        let formats = unsafe {
-            surface_loader.get_physical_device_surface_formats(pd, surface)
-        }?;
+        let formats = unsafe { surface_loader.get_physical_device_surface_formats(pd, surface) }?;
         if formats.is_empty() {
             continue;
         }
 
-        let present_modes = unsafe {
-            surface_loader.get_physical_device_surface_present_modes(pd, surface)
-        }?;
+        let present_modes =
+            unsafe { surface_loader.get_physical_device_surface_present_modes(pd, surface) }?;
         if present_modes.is_empty() {
             continue;
         }
@@ -120,7 +117,9 @@ pub(super) fn find_memory_type(
         }
     }
 
-    Err(VkRenderError::AshWindow("No compatible memory type found".into()))
+    Err(VkRenderError::AshWindow(
+        "No compatible memory type found".into(),
+    ))
 }
 
 pub(super) fn create_buffer(

@@ -23,6 +23,7 @@ pub struct World {
     storages: NeHashMap<TypeId, Box<dyn ErasedStorage>>,
     resources: NeHashMap<TypeId, Box<dyn Any + Send + Sync>>,
     tick: u64,
+    entities_changed_tick: u64,
 }
 
 impl Default for World {
@@ -40,6 +41,7 @@ impl World {
             storages: NeHashMap::default(),
             resources: NeHashMap::default(),
             tick: 1,
+            entities_changed_tick: 0,
         }
     }
 
@@ -69,8 +71,29 @@ impl World {
     }
 
     #[inline]
+    pub fn any_changed_since<T: Component>(&self, since_tick: u64) -> bool {
+        self.storage::<T>()
+            .map(|s| s.max_changed_tick > since_tick)
+            .unwrap_or(false)
+    }
+
+    #[inline]
+    pub fn any_added_since<T: Component>(&self, since_tick: u64) -> bool {
+        self.storage::<T>()
+            .map(|s| s.max_added_tick > since_tick)
+            .unwrap_or(false)
+    }
+
+    #[inline]
+    pub fn entities_changed_since(&self, since_tick: u64) -> bool {
+        self.entities_changed_tick > since_tick
+    }
+
+    #[inline]
     pub fn spawn(&mut self) -> EntityId {
-        self.entities.insert(())
+        let id = self.entities.insert(());
+        self.entities_changed_tick = self.tick;
+        id
     }
 
     #[inline]
@@ -92,6 +115,7 @@ impl World {
         for s in self.storages.values_mut() {
             s.remove_entity(id);
         }
+        self.entities_changed_tick = self.tick;
         true
     }
 
@@ -209,9 +233,12 @@ impl World {
 
         if existed {
             s.changed_tick.insert(id, tick);
+            s.max_changed_tick = s.max_changed_tick.max(tick);
         } else {
             s.added_tick.insert(id, tick);
             s.changed_tick.insert(id, tick);
+            s.max_added_tick = s.max_added_tick.max(tick);
+            s.max_changed_tick = s.max_changed_tick.max(tick);
         }
 
         true
@@ -220,10 +247,22 @@ impl World {
     /// Removes a component from an entity (does not create storage).
     #[inline]
     pub fn remove<T: Component>(&mut self, id: EntityId) -> Option<T> {
+        // Получаем tick до мутируемого заимствования
+        let tick = self.tick;
+
+        // Мутируем хранилище компонента
         let s = self.storage_mut_if_exists::<T>()?;
+
+        // Удаляем компонент и его метки
         let v = s.map.remove(id);
         let _ = s.added_tick.remove(id);
         let _ = s.changed_tick.remove(id);
+
+        // Если компонент был найден и удалён, обновляем максимальный tick
+        if v.is_some() {
+            s.max_changed_tick = s.max_changed_tick.max(tick);
+        }
+
         v
     }
 
@@ -263,11 +302,13 @@ impl World {
         // Mark-changed only if the component actually exists.
         if let Some(v) = s.map.get_mut(id) {
             s.changed_tick.insert(id, tick);
+            s.max_changed_tick = s.max_changed_tick.max(tick);
             return Some(v);
         }
 
         None
     }
+
 
     /// Marks a component as changed for the current world tick.
     ///
@@ -279,11 +320,11 @@ impl World {
             return;
         }
 
-        let tick = self.tick;
-        let s = self.storage_mut_if_exists::<T>();
-        if let Some(s) = s {
+        let tick = self.tick; // Сначала получаем tick
+        if let Some(s) = self.storage_mut_if_exists::<T>() { // Затем мутируем self
             if s.map.contains_key(id) {
                 s.changed_tick.insert(id, tick);
+                s.max_changed_tick = s.max_changed_tick.max(tick);
             }
         }
     }
@@ -360,10 +401,11 @@ impl World {
     pub fn query_mut_tracked<T: Component>(&mut self) -> Option<QueryMutTracked<'_, T>> {
         let tick = self.tick;
         let s = self.storage_mut_if_exists::<T>()?;
-        let Storage { map, changed_tick, .. } = s;
+        let Storage { map, changed_tick, max_changed_tick, .. } = s;
         Some(QueryMutTracked {
             iter: map.iter_mut(),
             changed_tick,
+            max_changed_tick,
             tick,
         })
     }

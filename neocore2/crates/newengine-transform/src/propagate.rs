@@ -41,7 +41,9 @@ pub fn ensure_transform_outputs(world: &mut World) {
     scratch
         .ensure_ids
         .extend(world.query::<Transform>().map(|(id, _)| id));
-    scratch.ensure_ids.sort_unstable_by_key(|e| e.data().as_ffi());
+    scratch
+        .ensure_ids
+        .sort_unstable_by_key(|e| e.data().as_ffi());
     scratch.ensure_ids.dedup();
 
     for id in scratch.ensure_ids.iter().copied() {
@@ -83,7 +85,9 @@ pub fn propagate_transforms(world: &mut World) {
 
     // 1) Collect all entities that have Transform, deterministically ordered.
     scratch.ids.clear();
-    scratch.ids.extend(world.query::<Transform>().map(|(id, _)| id));
+    scratch
+        .ids
+        .extend(world.query::<Transform>().map(|(id, _)| id));
     scratch.ids.sort_unstable_by_key(|e| e.data().as_ffi());
     scratch.ids.dedup();
 

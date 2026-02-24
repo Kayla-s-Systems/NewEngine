@@ -95,7 +95,11 @@ pub const EDITOR_DEFAULT_ICONS: &[BuiltinUiIcon] = &[
 
 /// Registers built-in icon paths in the image loader.
 #[inline]
-pub fn request_builtin_icons(loader: &mut UiImageLoader, assets: &dyn AssetAccess, icons: &[BuiltinUiIcon]) {
+pub fn request_builtin_icons(
+    loader: &mut UiImageLoader,
+    assets: &dyn AssetAccess,
+    icons: &[BuiltinUiIcon],
+) {
     for icon in icons {
         loader.request(assets, icon.key(), icon.default_path());
     }
@@ -103,7 +107,11 @@ pub fn request_builtin_icons(loader: &mut UiImageLoader, assets: &dyn AssetAcces
 
 /// Registers a single built-in icon.
 #[inline]
-pub fn request_builtin_icon(loader: &mut UiImageLoader, assets: &dyn AssetAccess, icon: BuiltinUiIcon) {
+pub fn request_builtin_icon(
+    loader: &mut UiImageLoader,
+    assets: &dyn AssetAccess,
+    icon: BuiltinUiIcon,
+) {
     loader.request(assets, icon.key(), icon.default_path());
 }
 
@@ -123,7 +131,11 @@ mod egui_ext {
     ///
     /// - If the icon is not ready, falls back to a text-only button.
     /// - Keeps sizing consistent across the editor.
-    pub fn icon_button(ui: &mut egui::Ui, tid: Option<egui::TextureId>, label: &str) -> egui::Response {
+    pub fn icon_button(
+        ui: &mut egui::Ui,
+        tid: Option<egui::TextureId>,
+        label: &str,
+    ) -> egui::Response {
         let min = egui::vec2(0.0, 28.0);
 
         match tid {

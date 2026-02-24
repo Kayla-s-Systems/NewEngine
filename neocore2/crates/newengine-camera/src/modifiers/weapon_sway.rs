@@ -44,7 +44,12 @@ impl Default for WeaponSway {
 }
 
 impl CameraModifier for WeaponSway {
-    fn apply(&mut self, _rig: &CameraRig, _proj: &Projection, input: &CameraStackInput) -> ModifierOutput {
+    fn apply(
+        &mut self,
+        _rig: &CameraRig,
+        _proj: &Projection,
+        input: &CameraStackInput,
+    ) -> ModifierOutput {
         let dt = input.dt.max(0.0);
 
         let mut intensity = input.intensity;

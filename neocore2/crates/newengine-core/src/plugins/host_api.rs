@@ -125,9 +125,7 @@ pub(crate) extern "C" fn call_service_v1(
         )),*/
         RResult::RErr(e) => debug_no_recurse(format_args!(
             "services: call err id='{}' method='{}' err='{}'",
-            id,
-            method,
-            e
+            id, method, e
         )),
         _ => {}
     }

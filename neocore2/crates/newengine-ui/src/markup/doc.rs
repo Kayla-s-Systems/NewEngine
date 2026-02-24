@@ -20,9 +20,7 @@ impl UiMarkupDoc {
         logical_path: &str,
         timeout: Duration,
     ) -> Result<Self, UiMarkupError> {
-        let id_hex32 = assets
-            .load(logical_path)
-            .map_err(UiMarkupError::Enqueue)?;
+        let id_hex32 = assets.load(logical_path).map_err(UiMarkupError::Enqueue)?;
 
         wait_ready(assets, &id_hex32, timeout).map_err(|_| UiMarkupError::Timeout {
             path: logical_path.to_string(),

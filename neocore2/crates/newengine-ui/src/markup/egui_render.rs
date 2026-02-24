@@ -124,22 +124,18 @@ fn render_in_ui(node: &UiNode, ui: &mut egui::Ui, state: &mut UiState) {
             let s = substitute_vars(base, &state.vars);
 
             let icon_spec = icon.as_deref().map(|v| substitute_vars(v, &state.vars));
-            let icon_tex = icon_spec
-                .as_ref()
-                .and_then(|v| resolve_tex_id(v.as_ref()));
+            let icon_tex = icon_spec.as_ref().and_then(|v| resolve_tex_id(v.as_ref()));
             let size = icon_size.unwrap_or(14.0).clamp(8.0, 64.0);
 
             if let Some(tex_id) = icon_tex {
-                ui.horizontal(|ui| {
-                    match icon_side {
-                        UiIconSide::Left => {
-                            ui.add(egui::Image::new((tex_id, egui::vec2(size, size))));
-                            ui.label(s.as_ref());
-                        }
-                        UiIconSide::Right => {
-                            ui.label(s.as_ref());
-                            ui.add(egui::Image::new((tex_id, egui::vec2(size, size))));
-                        }
+                ui.horizontal(|ui| match icon_side {
+                    UiIconSide::Left => {
+                        ui.add(egui::Image::new((tex_id, egui::vec2(size, size))));
+                        ui.label(s.as_ref());
+                    }
+                    UiIconSide::Right => {
+                        ui.label(s.as_ref());
+                        ui.add(egui::Image::new((tex_id, egui::vec2(size, size))));
                     }
                 });
             } else {
@@ -157,23 +153,19 @@ fn render_in_ui(node: &UiNode, ui: &mut egui::Ui, state: &mut UiState) {
             let s = substitute_vars(text, &state.vars);
 
             let icon_spec = icon.as_deref().map(|v| substitute_vars(v, &state.vars));
-            let icon_tex = icon_spec
-                .as_ref()
-                .and_then(|v| resolve_tex_id(v.as_ref()));
+            let icon_tex = icon_spec.as_ref().and_then(|v| resolve_tex_id(v.as_ref()));
             let size = icon_size.unwrap_or(14.0).clamp(8.0, 64.0);
 
             let clicked = if let Some(tex_id) = icon_tex {
-                ui.horizontal(|ui| {
-                    match icon_side {
-                        UiIconSide::Left => {
-                            ui.add(egui::Image::new((tex_id, egui::vec2(size, size))));
-                            ui.button(s.as_ref()).clicked()
-                        }
-                        UiIconSide::Right => {
-                            let c = ui.button(s.as_ref()).clicked();
-                            ui.add(egui::Image::new((tex_id, egui::vec2(size, size))));
-                            c
-                        }
+                ui.horizontal(|ui| match icon_side {
+                    UiIconSide::Left => {
+                        ui.add(egui::Image::new((tex_id, egui::vec2(size, size))));
+                        ui.button(s.as_ref()).clicked()
+                    }
+                    UiIconSide::Right => {
+                        let c = ui.button(s.as_ref()).clicked();
+                        ui.add(egui::Image::new((tex_id, egui::vec2(size, size))));
+                        c
                     }
                 })
                     .inner
@@ -194,12 +186,19 @@ fn render_in_ui(node: &UiNode, ui: &mut egui::Ui, state: &mut UiState) {
                 }
             }
         }
-        UiNode::Image { id, tex, size, tint } => {
+        UiNode::Image {
+            id,
+            tex,
+            size,
+            tint,
+        } => {
             let spec = substitute_vars(tex, &state.vars);
             let Some(tex_id) = resolve_tex_id(spec.as_ref()) else {
                 if let Some(id) = id.as_deref() {
-                    *state.unknown_tags.entry(format!("image:missing_tex:{id}")).or_insert(0) +=
-                        1;
+                    *state
+                        .unknown_tags
+                        .entry(format!("image:missing_tex:{id}"))
+                        .or_insert(0) += 1;
                 }
                 return;
             };

@@ -23,7 +23,9 @@ unsafe fn find_memory_type(
             return Ok(i);
         }
     }
-    Err(VkRenderError::AshWindow("No compatible memory type found".into()))
+    Err(VkRenderError::AshWindow(
+        "No compatible memory type found".into(),
+    ))
 }
 
 #[inline]
@@ -32,7 +34,12 @@ fn ui_external_id(render_target_id: u32) -> u32 {
 }
 
 impl VulkanRenderer {
-    pub fn create_render_target(&mut self, id: u32, extent: vk::Extent2D, with_depth: bool) -> VkResult<()> {
+    pub fn create_render_target(
+        &mut self,
+        id: u32,
+        extent: vk::Extent2D,
+        with_depth: bool,
+    ) -> VkResult<()> {
         unsafe {
             self.destroy_render_target(id);
         }
@@ -126,7 +133,9 @@ impl VulkanRenderer {
                     .allocation_size(depth_req.size)
                     .memory_type_index(depth_mem_type);
                 let depth_mem = self.core.device.allocate_memory(&depth_alloc_info, None)?;
-                self.core.device.bind_image_memory(depth_image, depth_mem, 0)?;
+                self.core
+                    .device
+                    .bind_image_memory(depth_image, depth_mem, 0)?;
 
                 let depth_view_info = vk::ImageViewCreateInfo::default()
                     .image(depth_image)
@@ -231,7 +240,9 @@ impl VulkanRenderer {
     #[allow(dead_code)]
     pub fn resize_render_target(&mut self, id: u32, extent: vk::Extent2D) -> VkResult<()> {
         let Some(existing) = self.render_targets.get(&id) else {
-            return Err(VkRenderError::InvalidState("resize_render_target: unknown id"));
+            return Err(VkRenderError::InvalidState(
+                "resize_render_target: unknown id",
+            ));
         };
 
         if existing.extent.width == extent.width && existing.extent.height == extent.height {

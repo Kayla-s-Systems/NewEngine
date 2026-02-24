@@ -75,7 +75,10 @@ pub trait PluginModuleV3: Send + Sync {
 
     /// Applies effective config live after init.
     /// Should return diagnostics; use Error level if restart is required.
-    fn config_update_live_v1(&mut self, effective: &ConfigBlobV1) -> RResult<RVec<ConfigDiagV1>, RString>;
+    fn config_update_live_v1(
+        &mut self,
+        effective: &ConfigBlobV1,
+    ) -> RResult<RVec<ConfigDiagV1>, RString>;
 
     // ---------------- Lifecycle ----------------
 

@@ -16,7 +16,9 @@ use winit::{
 };
 
 use newengine_ui::draw::UiDrawList;
-use newengine_ui::{create_provider, UiBuildFn, UiFrameDesc, UiProvider, UiProviderKind, UiProviderOptions};
+use newengine_ui::{
+    create_provider, UiBuildFn, UiFrameDesc, UiProvider, UiProviderKind, UiProviderOptions,
+};
 
 use crate::app::config::{WinitAppConfig, WinitWindowPlacement};
 use crate::app::input_bridge::{emit_plugin_json, poll_input_frame};
@@ -91,7 +93,10 @@ where
     }
 
     #[inline]
-    fn build_window_attributes(event_loop: &ActiveEventLoop, config: &WinitAppConfig) -> WindowAttributes {
+    fn build_window_attributes(
+        event_loop: &ActiveEventLoop,
+        config: &WinitAppConfig,
+    ) -> WindowAttributes {
         let (width, height) = config.size;
         let mut attrs = WindowAttributes::default()
             .with_title(config.title.clone())
@@ -122,8 +127,10 @@ where
                 let ms = monitor.size();
                 let mp = monitor.position();
 
-                let cx = mp.x.saturating_add(((ms.width as i32).saturating_sub(width as i32)) / 2);
-                let cy = mp.y.saturating_add(((ms.height as i32).saturating_sub(height as i32)) / 2);
+                let cx =
+                    mp.x.saturating_add(((ms.width as i32).saturating_sub(width as i32)) / 2);
+                let cy =
+                    mp.y.saturating_add(((ms.height as i32).saturating_sub(height as i32)) / 2);
 
                 attrs = attrs.with_position(PhysicalPosition::new(
                     cx.saturating_add(ox),
@@ -151,12 +158,21 @@ where
 
     #[inline]
     fn emit_resized(&mut self, width: u32, height: u32) {
-        self.engine.resources_mut().insert(WinitWindowInitSize { width, height });
-        let _ = self.engine.emit(HostEvent::Window(WindowHostEvent::Resized { width, height }));
+        self.engine
+            .resources_mut()
+            .insert(WinitWindowInitSize { width, height });
+        let _ = self
+            .engine
+            .emit(HostEvent::Window(WindowHostEvent::Resized {
+                width,
+                height,
+            }));
     }
 
     fn install_window_handles_resource(&mut self) {
-        let Some(w) = &self.window else { return; };
+        let Some(w) = &self.window else {
+            return;
+        };
 
         let window = match w.window_handle() {
             Ok(h) => h.as_raw(),
@@ -168,16 +184,24 @@ where
             Err(_) => return,
         };
 
-        self.engine.resources_mut().insert(WinitWindowHandles { window, display });
+        self.engine
+            .resources_mut()
+            .insert(WinitWindowHandles { window, display });
     }
 
     fn install_window_init_size_resource(&mut self) {
-        let Some((width, height)) = self.window_size() else { return; };
-        self.engine.resources_mut().insert(WinitWindowInitSize { width, height });
+        let Some((width, height)) = self.window_size() else {
+            return;
+        };
+        self.engine
+            .resources_mut()
+            .insert(WinitWindowInitSize { width, height });
     }
 
     fn emit_ready(&mut self) {
-        let Some((width, height)) = self.window_size() else { return; };
+        let Some((width, height)) = self.window_size() else {
+            return;
+        };
         let _ = self
             .engine
             .events()
@@ -186,7 +210,9 @@ where
 
     #[inline]
     fn emit_focused(&mut self, focused: bool) {
-        let _ = self.engine.emit(HostEvent::Window(WindowHostEvent::Focused(focused)));
+        let _ = self
+            .engine
+            .emit(HostEvent::Window(WindowHostEvent::Focused(focused)));
     }
 
     #[inline]
@@ -240,7 +266,9 @@ where
 
         self.shutting_down = true;
 
-        let _ = self.engine.emit(HostEvent::Window(WindowHostEvent::CloseRequested));
+        let _ = self
+            .engine
+            .emit(HostEvent::Window(WindowHostEvent::CloseRequested));
         let _ = self.engine.request_exit();
 
         if let Err(e) = self.engine.shutdown() {
@@ -448,7 +476,9 @@ where
             }
 
             let out = self.ui.run_frame(w, desc, build);
-            self.engine.resources_mut().insert::<UiDrawList>(out.draw_list);
+            self.engine
+                .resources_mut()
+                .insert::<UiDrawList>(out.draw_list);
         }
 
         match self.engine.step() {

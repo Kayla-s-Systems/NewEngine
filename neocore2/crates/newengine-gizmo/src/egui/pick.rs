@@ -1,14 +1,27 @@
 use super::camera::GizmoCamera;
-use super::math::{axis_end, dist_to_segment, plane_basis, world_radius_for_screen_plane, world_to_screen};
+use super::math::{
+    axis_end, dist_to_segment, plane_basis, world_radius_for_screen_plane, world_to_screen,
+};
 use super::types::{GizmoStyle, GizmoTransform};
 use crate::GizmoAxis;
 use egui::{Pos2, Rect};
 use newengine_math::Quat;
 
-pub(crate) fn pick_axis_lines(center: Pos2, x_end: Pos2, y_end: Pos2, z_end: Pos2, m: Pos2, r: f32) -> Option<GizmoAxis> {
+pub(crate) fn pick_axis_lines(
+    center: Pos2,
+    x_end: Pos2,
+    y_end: Pos2,
+    z_end: Pos2,
+    m: Pos2,
+    r: f32,
+) -> Option<GizmoAxis> {
     let mut best: Option<GizmoAxis> = None;
     let mut best_d = r;
-    for (axis, end) in [(GizmoAxis::X, x_end), (GizmoAxis::Y, y_end), (GizmoAxis::Z, z_end)] {
+    for (axis, end) in [
+        (GizmoAxis::X, x_end),
+        (GizmoAxis::Y, y_end),
+        (GizmoAxis::Z, z_end),
+    ] {
         let d = dist_to_segment(m, center, end);
         if d <= best_d {
             best_d = d;
@@ -18,15 +31,29 @@ pub(crate) fn pick_axis_lines(center: Pos2, x_end: Pos2, y_end: Pos2, z_end: Pos
     best
 }
 
-pub(crate) fn pick_axis_scale(center: Pos2, x_end: Pos2, y_end: Pos2, z_end: Pos2, m: Pos2, style: GizmoStyle) -> Option<GizmoAxis> {
+pub(crate) fn pick_axis_scale(
+    center: Pos2,
+    x_end: Pos2,
+    y_end: Pos2,
+    z_end: Pos2,
+    m: Pos2,
+    style: GizmoStyle,
+) -> Option<GizmoAxis> {
     let cube = style.axis_cap_pt.max(6.0);
     let half = cube * 0.5;
     let r = style.pick_radius_pt.max(6.0);
 
     let mut best: Option<GizmoAxis> = None;
     let mut best_d = r;
-    for (axis, end) in [(GizmoAxis::X, x_end), (GizmoAxis::Y, y_end), (GizmoAxis::Z, z_end)] {
-        let rect = Rect::from_min_max(Pos2::new(end.x - half, end.y - half), Pos2::new(end.x + half, end.y + half));
+    for (axis, end) in [
+        (GizmoAxis::X, x_end),
+        (GizmoAxis::Y, y_end),
+        (GizmoAxis::Z, z_end),
+    ] {
+        let rect = Rect::from_min_max(
+            Pos2::new(end.x - half, end.y - half),
+            Pos2::new(end.x + half, end.y + half),
+        );
         if rect.contains(m) {
             return Some(axis);
         }
@@ -75,7 +102,9 @@ pub(crate) fn pick_rotate_axis(
     // Only allow it when the cursor isn't already on one of the axis rings.
     if best.is_none() {
         let d = mouse.distance(center);
-        let ring = style.screen_ring_radius_pt.max(style.rotate_radius_pt + 8.0);
+        let ring = style
+            .screen_ring_radius_pt
+            .max(style.rotate_radius_pt + 8.0);
         let ring_w = style.screen_ring_width_pt.max(2.0);
         let ring_band = (ring_w * 0.75 + style.pick_radius_pt).max(6.0);
         let ring_d = (d - ring).abs();
@@ -137,9 +166,33 @@ pub(crate) fn pick_non_rotate_axis(
         return None;
     };
 
-    let x_end = axis_end(camera, rect, tr.pos, axes_rot, GizmoAxis::X, center, style.axis_len_pt);
-    let y_end = axis_end(camera, rect, tr.pos, axes_rot, GizmoAxis::Y, center, style.axis_len_pt);
-    let z_end = axis_end(camera, rect, tr.pos, axes_rot, GizmoAxis::Z, center, style.axis_len_pt);
+    let x_end = axis_end(
+        camera,
+        rect,
+        tr.pos,
+        axes_rot,
+        GizmoAxis::X,
+        center,
+        style.axis_len_pt,
+    );
+    let y_end = axis_end(
+        camera,
+        rect,
+        tr.pos,
+        axes_rot,
+        GizmoAxis::Y,
+        center,
+        style.axis_len_pt,
+    );
+    let z_end = axis_end(
+        camera,
+        rect,
+        tr.pos,
+        axes_rot,
+        GizmoAxis::Z,
+        center,
+        style.axis_len_pt,
+    );
 
     if scale_mode {
         pick_axis_scale(center, x_end, y_end, z_end, mouse, style)

@@ -83,7 +83,6 @@ fn normalize_mem_to_mb(raw: u64) -> u64 {
     }
 }
 
-
 #[cfg(windows)]
 fn probe_windows_dxgi_d3d12() -> Option<WinDxInfo> {
     use windows::Win32::Graphics::Dxgi::{CreateDXGIFactory1, IDXGIAdapter1, IDXGIFactory1};

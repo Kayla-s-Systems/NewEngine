@@ -1,6 +1,9 @@
 use super::draw_axis::{axis_color, draw_axis, draw_axis_scale};
 use super::draw_rotate::draw_rotate_gizmo;
-use super::math::{axis_end, plane_basis, rotation_angle_on_plane, screen_ray, screen_to_world_at_ndc_z, world_to_screen};
+use super::math::{
+    axis_end, plane_basis, rotation_angle_on_plane, screen_ray, screen_to_world_at_ndc_z,
+    world_to_screen,
+};
 use super::pick::{pick_non_rotate_axis, pick_rotate_axis};
 use super::types::{DragState, GizmoOutput, GizmoStyle, GizmoTransform};
 use crate::{GizmoAxis, GizmoMode, GizmoSpace};
@@ -79,7 +82,13 @@ impl EguiGizmo {
     /// Returns true if the gizmo wants to capture mouse input this frame.
     ///
     /// This is designed to be queried before camera navigation / selection logic.
-    pub fn wants_capture_now(&self, ctx: &egui::Context, rect: Rect, camera: &impl super::camera::GizmoCamera, tr: GizmoTransform) -> bool {
+    pub fn wants_capture_now(
+        &self,
+        ctx: &egui::Context,
+        rect: Rect,
+        camera: &impl super::camera::GizmoCamera,
+        tr: GizmoTransform,
+    ) -> bool {
         if self.drag.is_some() {
             return true;
         }
@@ -114,7 +123,9 @@ impl EguiGizmo {
         };
 
         let mouse = ctx.input(|i| i.pointer.interact_pos());
-        let hovered = mouse.filter(|m| rect.contains(*m)).and_then(|m| self.pick_axis(camera, rect, tr, m));
+        let hovered = mouse
+            .filter(|m| rect.contains(*m))
+            .and_then(|m| self.pick_axis(camera, rect, tr, m));
 
         out.hovered_axis = hovered;
 
@@ -132,7 +143,12 @@ impl EguiGizmo {
                         let axis_world = view_dir.normalize_or_zero();
                         let du = m - center;
                         let start_angle = du.y.atan2(du.x);
-                        (axis_world, newengine_math::Vec3::ZERO, newengine_math::Vec3::ZERO, start_angle)
+                        (
+                            axis_world,
+                            newengine_math::Vec3::ZERO,
+                            newengine_math::Vec3::ZERO,
+                            start_angle,
+                        )
                     }
                     _ => {
                         let axis_world = (axes_rot * axis.vec3()).normalize_or_zero();
@@ -141,7 +157,9 @@ impl EguiGizmo {
                         // Camera-aligned bases make the visible rings drift / desync from interaction.
                         let (plane_u, plane_v) = plane_basis(axis_world);
 
-                        let start_angle = rotation_angle_on_plane(camera, rect, tr.pos, axis_world, plane_u, plane_v, m);
+                        let start_angle = rotation_angle_on_plane(
+                            camera, rect, tr.pos, axis_world, plane_u, plane_v, m,
+                        );
                         (axis_world, plane_u, plane_v, start_angle)
                     }
                 };
@@ -171,7 +189,8 @@ impl EguiGizmo {
                 self.drag = None;
             } else if let Some(m) = mouse {
                 let axes_rot = self.axes_rot(drag.start);
-                let axis_world = if drag.mode == GizmoMode::Rotate && drag.axis == GizmoAxis::Screen {
+                let axis_world = if drag.mode == GizmoMode::Rotate && drag.axis == GizmoAxis::Screen
+                {
                     let (_ro, view_dir) = screen_ray(camera, rect, center);
                     view_dir.normalize_or_zero()
                 } else {
@@ -180,7 +199,8 @@ impl EguiGizmo {
 
                 let new_tr = match drag.mode {
                     GizmoMode::Translate => {
-                        let ws0 = screen_to_world_at_ndc_z(camera, rect, drag.start_mouse, drag.ndc_z);
+                        let ws0 =
+                            screen_to_world_at_ndc_z(camera, rect, drag.start_mouse, drag.ndc_z);
                         let ws1 = screen_to_world_at_ndc_z(camera, rect, m, drag.ndc_z);
                         let delta = (ws1 - ws0).dot(axis_world);
                         GizmoTransform {
@@ -190,7 +210,8 @@ impl EguiGizmo {
                         }
                     }
                     GizmoMode::Scale => {
-                        let ws0 = screen_to_world_at_ndc_z(camera, rect, drag.start_mouse, drag.ndc_z);
+                        let ws0 =
+                            screen_to_world_at_ndc_z(camera, rect, drag.start_mouse, drag.ndc_z);
                         let ws1 = screen_to_world_at_ndc_z(camera, rect, m, drag.ndc_z);
                         let delta = (ws1 - ws0).dot(axis_world);
 
@@ -217,7 +238,15 @@ impl EguiGizmo {
                             let du = m - center;
                             du.y.atan2(du.x)
                         } else {
-                            rotation_angle_on_plane(camera, rect, drag.start.pos, axis_world, drag.plane_u, drag.plane_v, m)
+                            rotation_angle_on_plane(
+                                camera,
+                                rect,
+                                drag.start.pos,
+                                axis_world,
+                                drag.plane_u,
+                                drag.plane_v,
+                                m,
+                            )
                         };
 
                         // Incremental angle unwrapping: allows continuous rotation beyond ±π without flips.
@@ -283,9 +312,33 @@ impl EguiGizmo {
             _ => {
                 let axes_rot = self.axes_rot(tr);
 
-                let x_end = axis_end(camera, rect, tr.pos, axes_rot, GizmoAxis::X, center, self.style.axis_len_pt);
-                let y_end = axis_end(camera, rect, tr.pos, axes_rot, GizmoAxis::Y, center, self.style.axis_len_pt);
-                let z_end = axis_end(camera, rect, tr.pos, axes_rot, GizmoAxis::Z, center, self.style.axis_len_pt);
+                let x_end = axis_end(
+                    camera,
+                    rect,
+                    tr.pos,
+                    axes_rot,
+                    GizmoAxis::X,
+                    center,
+                    self.style.axis_len_pt,
+                );
+                let y_end = axis_end(
+                    camera,
+                    rect,
+                    tr.pos,
+                    axes_rot,
+                    GizmoAxis::Y,
+                    center,
+                    self.style.axis_len_pt,
+                );
+                let z_end = axis_end(
+                    camera,
+                    rect,
+                    tr.pos,
+                    axes_rot,
+                    GizmoAxis::Z,
+                    center,
+                    self.style.axis_len_pt,
+                );
 
                 match self.mode {
                     GizmoMode::Scale => {
@@ -293,21 +346,36 @@ impl EguiGizmo {
                             painter,
                             center,
                             x_end,
-                            axis_color(GizmoAxis::X, hovered, out.active_axis, self.style.highlight_mul),
+                            axis_color(
+                                GizmoAxis::X,
+                                hovered,
+                                out.active_axis,
+                                self.style.highlight_mul,
+                            ),
                             self.style,
                         );
                         draw_axis_scale(
                             painter,
                             center,
                             y_end,
-                            axis_color(GizmoAxis::Y, hovered, out.active_axis, self.style.highlight_mul),
+                            axis_color(
+                                GizmoAxis::Y,
+                                hovered,
+                                out.active_axis,
+                                self.style.highlight_mul,
+                            ),
                             self.style,
                         );
                         draw_axis_scale(
                             painter,
                             center,
                             z_end,
-                            axis_color(GizmoAxis::Z, hovered, out.active_axis, self.style.highlight_mul),
+                            axis_color(
+                                GizmoAxis::Z,
+                                hovered,
+                                out.active_axis,
+                                self.style.highlight_mul,
+                            ),
                             self.style,
                         );
                     }
@@ -316,21 +384,36 @@ impl EguiGizmo {
                             painter,
                             center,
                             x_end,
-                            axis_color(GizmoAxis::X, hovered, out.active_axis, self.style.highlight_mul),
+                            axis_color(
+                                GizmoAxis::X,
+                                hovered,
+                                out.active_axis,
+                                self.style.highlight_mul,
+                            ),
                             self.style,
                         );
                         draw_axis(
                             painter,
                             center,
                             y_end,
-                            axis_color(GizmoAxis::Y, hovered, out.active_axis, self.style.highlight_mul),
+                            axis_color(
+                                GizmoAxis::Y,
+                                hovered,
+                                out.active_axis,
+                                self.style.highlight_mul,
+                            ),
                             self.style,
                         );
                         draw_axis(
                             painter,
                             center,
                             z_end,
-                            axis_color(GizmoAxis::Z, hovered, out.active_axis, self.style.highlight_mul),
+                            axis_color(
+                                GizmoAxis::Z,
+                                hovered,
+                                out.active_axis,
+                                self.style.highlight_mul,
+                            ),
                             self.style,
                         );
                     }
@@ -341,7 +424,11 @@ impl EguiGizmo {
         // Center handle (visual only for now): improves readability and matches common in-game gizmo aesthetics.
         let r = self.style.center_radius_pt.max(2.0);
         painter.circle_filled(center, r, egui::Color32::from_rgb(240, 240, 240));
-        painter.circle_stroke(center, r, egui::Stroke::new(1.0, egui::Color32::from_rgb(20, 20, 20)));
+        painter.circle_stroke(
+            center,
+            r,
+            egui::Stroke::new(1.0, egui::Color32::from_rgb(20, 20, 20)),
+        );
 
         out
     }
@@ -353,11 +440,29 @@ impl EguiGizmo {
         }
     }
 
-    fn pick_axis(&self, camera: &impl super::camera::GizmoCamera, rect: Rect, tr: GizmoTransform, mouse: Pos2) -> Option<GizmoAxis> {
+    fn pick_axis(
+        &self,
+        camera: &impl super::camera::GizmoCamera,
+        rect: Rect,
+        tr: GizmoTransform,
+        mouse: Pos2,
+    ) -> Option<GizmoAxis> {
         match self.mode {
-            GizmoMode::Rotate => pick_rotate_axis(camera, rect, self.axes_rot(tr), tr, mouse, self.style),
-            GizmoMode::Scale => pick_non_rotate_axis(camera, rect, self.axes_rot(tr), tr, mouse, self.style, true),
-            GizmoMode::Translate => pick_non_rotate_axis(camera, rect, self.axes_rot(tr), tr, mouse, self.style, false),
+            GizmoMode::Rotate => {
+                pick_rotate_axis(camera, rect, self.axes_rot(tr), tr, mouse, self.style)
+            }
+            GizmoMode::Scale => {
+                pick_non_rotate_axis(camera, rect, self.axes_rot(tr), tr, mouse, self.style, true)
+            }
+            GizmoMode::Translate => pick_non_rotate_axis(
+                camera,
+                rect,
+                self.axes_rot(tr),
+                tr,
+                mouse,
+                self.style,
+                false,
+            ),
         }
     }
 }

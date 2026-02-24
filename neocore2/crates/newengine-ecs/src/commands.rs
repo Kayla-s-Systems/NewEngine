@@ -173,6 +173,7 @@ impl Commands {
     ///
     /// Returns a monotonic list of resolved `(EntityToken, EntityId)` pairs for all tokens
     /// created via [`Commands::spawn`] in this buffer.
+    #[must_use]
     pub fn apply(&mut self, world: &mut World) -> Vec<(EntityToken, EntityId)> {
         if self.ops.is_empty() {
             return Vec::new();

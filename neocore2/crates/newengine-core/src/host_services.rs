@@ -7,7 +7,11 @@ use crate::plugins::host_api;
 use crate::plugins::host_context;
 
 #[inline]
-pub fn call_service_v1(capability_id: &str, method: &str, payload: &[u8]) -> Result<Vec<u8>, String> {
+pub fn call_service_v1(
+    capability_id: &str,
+    method: &str,
+    payload: &[u8],
+) -> Result<Vec<u8>, String> {
     let cap: CapabilityId = RString::from(capability_id);
     let m: MethodName = RString::from(method);
     let blob: Blob = Blob::from(payload.to_vec());

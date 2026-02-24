@@ -185,9 +185,8 @@ impl PhysicsWorld {
     pub fn new(desc: JoltInitDesc) -> Result<Self, PhysicsError> {
         jolt_global_acquire()?;
 
-        let temp_allocator = unsafe {
-            sys::JPC_TempAllocatorImpl_new(desc.temp_allocator_bytes as c_uint)
-        };
+        let temp_allocator =
+            unsafe { sys::JPC_TempAllocatorImpl_new(desc.temp_allocator_bytes as c_uint) };
         if temp_allocator.is_null() {
             jolt_global_release();
             return Err(PhysicsError::Init("TempAllocatorImpl_new returned null"));
@@ -255,7 +254,6 @@ impl PhysicsWorld {
 
         Ok(())
     }
-
 
     /// Raw pointer to the underlying `JPC_PhysicsSystem`.
     #[inline]

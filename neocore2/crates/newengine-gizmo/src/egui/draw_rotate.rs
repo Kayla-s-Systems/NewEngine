@@ -1,6 +1,9 @@
 use super::camera::GizmoCamera;
 use super::draw_axis::axis_color;
-use super::math::{plane_basis, rotation_angle_on_plane, screen_ray, world_radius_for_screen, world_radius_for_screen_plane, world_to_screen};
+use super::math::{
+    plane_basis, rotation_angle_on_plane, screen_ray, world_radius_for_screen,
+    world_radius_for_screen_plane, world_to_screen,
+};
 use super::types::{DragState, GizmoStyle, GizmoTransform};
 use crate::{GizmoAxis, GizmoMode};
 use egui::{Color32, Painter, Pos2, Rect, Stroke};
@@ -24,7 +27,9 @@ pub(crate) fn draw_rotate_gizmo(
     };
 
     // UE-like outer screen-space ring (free rotate around view axis).
-    draw_screen_ring(p, ctx, rect, camera, tr, hovered, active, drag, style, center);
+    draw_screen_ring(
+        p, ctx, rect, camera, tr, hovered, active, drag, style, center,
+    );
 
     // UE5-style rotation widget: full rings in world space.
     // Constant on-screen size is achieved by computing a world-space radius per ring.
@@ -46,8 +51,15 @@ pub(crate) fn draw_rotate_gizmo(
         let axis_world = (axes_rot * axis.vec3()).normalize_or_zero();
         let color = axis_color(axis, hovered, active, style.highlight_mul);
         let mouse = ctx.input(|i| i.pointer.interact_pos()).unwrap_or(center);
-        let a1 = rotation_angle_on_plane(camera, rect, tr.pos, axis_world, d.plane_u, d.plane_v, mouse);
-        let fill = Color32::from_rgba_unmultiplied(color.r(), color.g(), color.b(), style.rotate_fill_alpha);
+        let a1 = rotation_angle_on_plane(
+            camera, rect, tr.pos, axis_world, d.plane_u, d.plane_v, mouse,
+        );
+        let fill = Color32::from_rgba_unmultiplied(
+            color.r(),
+            color.g(),
+            color.b(),
+            style.rotate_fill_alpha,
+        );
         let outline = Stroke::new(style.rotate_width_pt, color);
         draw_rotate_wedge(
             p,
@@ -100,7 +112,8 @@ fn draw_rotate_axis_rings(
         let w_front = (w_base + style.rotate_front_width_add_pt).max(2.0);
         let w_back = (w_base * style.rotate_back_width_mul).max(1.5);
 
-        let back = Color32::from_rgba_unmultiplied(col.r(), col.g(), col.b(), style.rotate_back_alpha);
+        let back =
+            Color32::from_rgba_unmultiplied(col.r(), col.g(), col.b(), style.rotate_back_alpha);
 
         let ring = build_axis_ring_world(camera, rect, tr.pos, c_ndc_z, axis_world, r_pt, segs);
         if ring.len() < 3 {
@@ -177,7 +190,14 @@ fn draw_ring_with_depth_cue(
         let ow = (w + 2.0).max(w + 1.0);
 
         // UE5-ish glow: wide translucent pass under the colored stroke.
-        let glow_w = (w + style.rotate_glow_width_add_pt + if hot { style.rotate_hot_glow_width_add_pt } else { 0.0 }).max(w + 2.0);
+        let glow_w = (w
+            + style.rotate_glow_width_add_pt
+            + if hot {
+            style.rotate_hot_glow_width_add_pt
+        } else {
+            0.0
+        })
+            .max(w + 2.0);
         let mut glow_a = style.rotate_glow_alpha as i32;
         if hot {
             glow_a += style.rotate_hot_glow_alpha_add as i32;
@@ -186,18 +206,44 @@ fn draw_ring_with_depth_cue(
         let glow_col = if is_front {
             Color32::from_rgba_unmultiplied(front.r(), front.g(), front.b(), glow_a)
         } else {
-            Color32::from_rgba_unmultiplied(back.r(), back.g(), back.b(), (glow_a as u16 * 2 / 3) as u8)
+            Color32::from_rgba_unmultiplied(
+                back.r(),
+                back.g(),
+                back.b(),
+                (glow_a as u16 * 2 / 3) as u8,
+            )
         };
 
         if is_front {
-            p.add(egui::Shape::line(cur.clone(), Stroke::new(glow_w, glow_col)));
+            p.add(egui::Shape::line(
+                cur.clone(),
+                Stroke::new(glow_w, glow_col),
+            ));
             p.add(egui::Shape::line(cur.clone(), Stroke::new(ow, outline)));
             p.add(egui::Shape::line(cur.clone(), Stroke::new(w, front)));
         } else {
             // Dashed back half.
-            draw_dashed_polyline(p, cur, Stroke::new(glow_w, glow_col), style.rotate_back_dash_pt, style.rotate_back_gap_pt);
-            draw_dashed_polyline(p, cur, Stroke::new(ow, outline), style.rotate_back_dash_pt, style.rotate_back_gap_pt);
-            draw_dashed_polyline(p, cur, Stroke::new(w, back), style.rotate_back_dash_pt, style.rotate_back_gap_pt);
+            draw_dashed_polyline(
+                p,
+                cur,
+                Stroke::new(glow_w, glow_col),
+                style.rotate_back_dash_pt,
+                style.rotate_back_gap_pt,
+            );
+            draw_dashed_polyline(
+                p,
+                cur,
+                Stroke::new(ow, outline),
+                style.rotate_back_dash_pt,
+                style.rotate_back_gap_pt,
+            );
+            draw_dashed_polyline(
+                p,
+                cur,
+                Stroke::new(w, back),
+                style.rotate_back_dash_pt,
+                style.rotate_back_gap_pt,
+            );
         }
         cur.clear();
     };
@@ -270,7 +316,9 @@ fn draw_screen_ring(
     style: GizmoStyle,
     center: Pos2,
 ) {
-    let ring_r = style.screen_ring_radius_pt.max(style.rotate_radius_pt + 8.0);
+    let ring_r = style
+        .screen_ring_radius_pt
+        .max(style.rotate_radius_pt + 8.0);
     let base = axis_color(GizmoAxis::Screen, hovered, active, style.highlight_mul);
     let w = if hovered == Some(GizmoAxis::Screen) || active == Some(GizmoAxis::Screen) {
         style.screen_ring_width_pt * 1.35
@@ -280,7 +328,8 @@ fn draw_screen_ring(
 
     // UE5: screen ring should not be always visible.
     // Show it only on hover/active/drag to avoid visual clutter and pick conflicts.
-    let show = hovered == Some(GizmoAxis::Screen) || active == Some(GizmoAxis::Screen) || drag.is_some();
+    let show =
+        hovered == Some(GizmoAxis::Screen) || active == Some(GizmoAxis::Screen) || drag.is_some();
     if !show {
         let _ = (camera, rect, tr);
         return;
@@ -303,7 +352,9 @@ fn draw_screen_ring(
                     da += core::f32::consts::TAU;
                 }
 
-                let steps = ((style.rotate_segments as f32) * (da.abs() / core::f32::consts::TAU)).ceil().max(24.0) as usize;
+                let steps = ((style.rotate_segments as f32) * (da.abs() / core::f32::consts::TAU))
+                    .ceil()
+                    .max(24.0) as usize;
                 let mut pts: Vec<Pos2> = Vec::with_capacity(steps + 1);
                 for i in 0..=steps {
                     let t = d.start_angle + da * (i as f32 / steps as f32);
@@ -324,8 +375,12 @@ fn draw_screen_ring(
                     hint.push(center + egui::vec2(t.cos() * inner_r, t.sin() * inner_r));
                 }
                 if hint.len() >= 2 {
-                    let hint_col = Color32::from_rgba_unmultiplied(base.r(), base.g(), base.b(), 90);
-                    p.add(egui::Shape::line(hint, Stroke::new((w * 0.45).max(1.5), hint_col)));
+                    let hint_col =
+                        Color32::from_rgba_unmultiplied(base.r(), base.g(), base.b(), 90);
+                    p.add(egui::Shape::line(
+                        hint,
+                        Stroke::new((w * 0.45).max(1.5), hint_col),
+                    ));
                 }
             }
         }
@@ -351,7 +406,13 @@ fn draw_rotate_ring_half(
     radius_add_pt: f32,
     width_mul: f32,
 ) {
-    let radius_w = world_radius_for_screen(camera, rect, pivot, u, style.rotate_radius_pt + radius_add_pt);
+    let radius_w = world_radius_for_screen(
+        camera,
+        rect,
+        pivot,
+        u,
+        style.rotate_radius_pt + radius_add_pt,
+    );
     // Project view direction onto the rotation plane. If the camera looks almost exactly along the
     // rotation axis, the projection degenerates and the arc orientation becomes unstable.
     // In that case, fall back to a stable in-plane direction (u).
@@ -367,7 +428,11 @@ fn draw_rotate_ring_half(
     let segs = style.rotate_segments.max(24) as usize;
     let half_span = (style.rotate_arc_deg.clamp(15.0, 175.0)).to_radians() * 0.5;
     let phi = d_plane.dot(v).atan2(d_plane.dot(u));
-    let center_t = if front { phi } else { phi + core::f32::consts::PI };
+    let center_t = if front {
+        phi
+    } else {
+        phi + core::f32::consts::PI
+    };
     let t0 = center_t - half_span;
     let t1 = center_t + half_span;
 
@@ -412,7 +477,9 @@ fn draw_rotate_wedge(
         da += core::f32::consts::TAU;
     }
 
-    let steps = ((style.rotate_segments as f32) * (da.abs() / core::f32::consts::TAU)).ceil().max(12.0) as usize;
+    let steps = ((style.rotate_segments as f32) * (da.abs() / core::f32::consts::TAU))
+        .ceil()
+        .max(12.0) as usize;
     let Some((c2, _)) = world_to_screen(camera, rect, pivot) else {
         return;
     };
@@ -437,9 +504,32 @@ fn draw_rotate_wedge(
         // UE-style active sector: filled wedge + internal grid mesh.
         // We draw it in projected world-space to keep perspective consistent.
         if style.rotate_plane_fill_alpha != 0 {
-            let fill2 = Color32::from_rgba_unmultiplied(fill.r(), fill.g(), fill.b(), style.rotate_plane_fill_alpha);
-            let grid = Color32::from_rgba_unmultiplied(outline.color.r(), outline.color.g(), outline.color.b(), style.rotate_plane_grid_alpha);
-            draw_world_wedge_mesh(p, camera, rect, pivot, u, v, radius_w, a0, a0 + da, fill2, grid, style);
+            let fill2 = Color32::from_rgba_unmultiplied(
+                fill.r(),
+                fill.g(),
+                fill.b(),
+                style.rotate_plane_fill_alpha,
+            );
+            let grid = Color32::from_rgba_unmultiplied(
+                outline.color.r(),
+                outline.color.g(),
+                outline.color.b(),
+                style.rotate_plane_grid_alpha,
+            );
+            draw_world_wedge_mesh(
+                p,
+                camera,
+                rect,
+                pivot,
+                u,
+                v,
+                radius_w,
+                a0,
+                a0 + da,
+                fill2,
+                grid,
+                style,
+            );
         } else {
             // Minimal fallback: subtle fill without mesh.
             let mut poly: Vec<Pos2> = Vec::with_capacity(pts.len() + 1);
@@ -472,8 +562,12 @@ fn draw_world_wedge_mesh(
         da += core::f32::consts::TAU;
     }
 
-    let steps = ((style.rotate_segments as f32) * (da.abs() / core::f32::consts::TAU)).ceil().max(24.0) as usize;
-    let Some((c2, _)) = world_to_screen(camera, rect, pivot) else { return; };
+    let steps = ((style.rotate_segments as f32) * (da.abs() / core::f32::consts::TAU))
+        .ceil()
+        .max(24.0) as usize;
+    let Some((c2, _)) = world_to_screen(camera, rect, pivot) else {
+        return;
+    };
 
     // Outer arc in screen space from projected world points.
     let mut arc: Vec<Pos2> = Vec::with_capacity(steps + 1);

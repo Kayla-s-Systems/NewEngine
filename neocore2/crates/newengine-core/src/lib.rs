@@ -1,20 +1,20 @@
 pub mod bus;
+pub mod console;
 pub mod core_invariants;
 pub mod engine;
 pub mod error;
 pub mod events;
 pub mod frame;
 pub mod host_events;
+pub mod host_services;
 pub mod module;
 pub mod plugins;
+pub mod render;
 pub mod sched;
+pub mod services_registry;
+pub mod startup;
 pub mod sync;
 mod system_info;
-pub mod render;
-pub mod startup;
-pub mod console;
-pub mod host_services;
-pub mod services_registry;
 
 pub use host_services::{call_service_v1, describe_service, list_service_ids};
 
@@ -37,12 +37,6 @@ pub use render::{
 };
 
 pub use startup::{
-    ConfigPaths,
-    StartupConfig,
-    StartupConfigSource,
-    StartupLoadReport,
-    StartupLoader,
-    StartupOverride,
-    StartupResolvedFrom,
-    WindowPlacement,
+    ConfigPaths, StartupConfig, StartupConfigSource, StartupLoadReport, StartupLoader,
+    StartupOverride, StartupResolvedFrom, WindowPlacement,
 };

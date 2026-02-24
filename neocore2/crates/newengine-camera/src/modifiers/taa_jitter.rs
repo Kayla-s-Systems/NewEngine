@@ -33,7 +33,12 @@ impl TaaJitter {
 }
 
 impl CameraModifier for TaaJitter {
-    fn apply(&mut self, _rig: &CameraRig, _proj: &Projection, _input: &CameraStackInput) -> ModifierOutput {
+    fn apply(
+        &mut self,
+        _rig: &CameraRig,
+        _proj: &Projection,
+        _input: &CameraStackInput,
+    ) -> ModifierOutput {
         if !self.enabled {
             return ModifierOutput::default();
         }
@@ -42,10 +47,7 @@ impl CameraModifier for TaaJitter {
         self.index = self.index.wrapping_add(1);
 
         let base = Vec2::new(hx, hy) - Vec2::splat(0.5);
-        let jitter = Vec2::new(
-            base.x * self.scale_px.x,
-            base.y * self.scale_px.y,
-        );
+        let jitter = Vec2::new(base.x * self.scale_px.x, base.y * self.scale_px.y);
 
         let mut out = ModifierOutput::default();
         out.proj.jitter_px = jitter;

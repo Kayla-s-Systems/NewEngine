@@ -32,7 +32,11 @@ impl Transform {
         scale: Vec3,
     ) -> Self {
         let rotation = Quat::from_euler(EulerRot::YXZ, yaw, pitch, roll);
-        Self { position, rotation, scale }
+        Self {
+            position,
+            rotation,
+            scale,
+        }
     }
 
     /// Returns (yaw, pitch, roll) in radians using engine-default conventions.

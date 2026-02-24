@@ -43,7 +43,10 @@ impl VulkanRenderer {
     /// It returns a fence that will be signaled once the upload work is complete.
     #[inline]
     #[allow(dead_code)]
-    pub unsafe fn submit_upload<F: FnOnce(vk::CommandBuffer)>(&mut self, f: F) -> VkResult<vk::Fence> {
+    pub unsafe fn submit_upload<F: FnOnce(vk::CommandBuffer)>(
+        &mut self,
+        f: F,
+    ) -> VkResult<vk::Fence> {
         let idx = self.frames.upload_cursor;
         self.frames.upload_cursor = (self.frames.upload_cursor + 1) % super::state::UPLOAD_CONTEXTS;
 

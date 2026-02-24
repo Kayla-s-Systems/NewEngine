@@ -54,10 +54,14 @@ impl<E: Send + 'static> Engine<E> {
             };
 
             if let Err(e) = self.plugins.fixed_update_all(self.fixed_dt) {
-                return Err(EngineError::Other(format!("plugins: fixed_update failed: {e}")));
+                return Err(EngineError::Other(format!(
+                    "plugins: fixed_update failed: {e}"
+                )));
             }
 
-            self.run_stage(&fixed_frame, ModuleStage::FixedUpdate, |m, ctx| m.fixed_update(ctx))?;
+            self.run_stage(&fixed_frame, ModuleStage::FixedUpdate, |m, ctx| {
+                m.fixed_update(ctx)
+            })?;
         }
 
         let frame = Frame {

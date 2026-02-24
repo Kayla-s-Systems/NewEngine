@@ -61,11 +61,8 @@ impl AssetServiceClient {
 
     #[inline]
     fn call(&self, method_name: MethodName, payload: Vec<u8>) -> Result<Vec<u8>, String> {
-        let res = (self.host.call_service_v1)(
-            self.service_id.clone(),
-            method_name,
-            Blob::from(payload),
-        );
+        let res =
+            (self.host.call_service_v1)(self.service_id.clone(), method_name, Blob::from(payload));
 
         res.into_result()
             .map(|v| v.into_vec())
@@ -205,7 +202,9 @@ impl AssetAccess for AssetServiceClient {
     fn state(&self, id_hex32: &str) -> Result<AssetState, String> {
         // Fast-path: binary state (16 bytes LE id -> 1 byte state).
         if let Ok(id_u128) = u128::from_str_radix(id_hex32.trim(), 16) {
-            if let Ok(bytes) = self.call_raw(self.m_get_state_v1.clone(), id_u128.to_le_bytes().to_vec()) {
+            if let Ok(bytes) =
+                self.call_raw(self.m_get_state_v1.clone(), id_u128.to_le_bytes().to_vec())
+            {
                 let code = bytes.first().copied().unwrap_or(0);
                 return Ok(match code {
                     2 => AssetState::Ready,
@@ -251,12 +250,18 @@ impl AssetService for AssetServiceClient {
     }
 
     fn mount_pak(&self, path_to_pak: &str) -> Result<(), String> {
-        let bytes = self.call_raw(MethodName::from(method::MOUNT_PAK), path_to_pak.as_bytes().to_vec())?;
+        let bytes = self.call_raw(
+            MethodName::from(method::MOUNT_PAK),
+            path_to_pak.as_bytes().to_vec(),
+        )?;
         Self::decode_ok_unit(bytes)
     }
 
     fn mount_dir(&self, path_to_dir: &str) -> Result<(), String> {
-        let bytes = self.call_raw(MethodName::from(method::MOUNT_DIR), path_to_dir.as_bytes().to_vec())?;
+        let bytes = self.call_raw(
+            MethodName::from(method::MOUNT_DIR),
+            path_to_dir.as_bytes().to_vec(),
+        )?;
         Self::decode_ok_unit(bytes)
     }
 
@@ -287,7 +292,10 @@ impl AssetService for AssetServiceClient {
     }
 
     fn resolve_trace_json(&self, logical_path: &str) -> Result<serde_json::Value, String> {
-        let bytes = self.call_raw(self.m_resolve_trace_json.clone(), logical_path.as_bytes().to_vec())?;
+        let bytes = self.call_raw(
+            self.m_resolve_trace_json.clone(),
+            logical_path.as_bytes().to_vec(),
+        )?;
         Self::decode_ok_json(bytes)
     }
 }

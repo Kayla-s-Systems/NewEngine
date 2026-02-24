@@ -117,7 +117,12 @@ impl PluginDescriptorBuilder {
         describe_json: impl Into<RString>,
     ) -> Self {
         self.push(
-            CapabilityDesc::new(id, CapabilityRole::Provides, CapabilityKind::ServiceV1, version)
+            CapabilityDesc::new(
+                id,
+                CapabilityRole::Provides,
+                CapabilityKind::ServiceV1,
+                version,
+            )
                 .with_json(describe_json),
         )
     }
@@ -130,7 +135,12 @@ impl PluginDescriptorBuilder {
         describe_json: impl Into<RString>,
     ) -> Self {
         self.push(
-            CapabilityDesc::new(id, CapabilityRole::Requires, CapabilityKind::ServiceV1, version)
+            CapabilityDesc::new(
+                id,
+                CapabilityRole::Requires,
+                CapabilityKind::ServiceV1,
+                version,
+            )
                 .with_json(describe_json),
         )
     }
@@ -143,7 +153,12 @@ impl PluginDescriptorBuilder {
         describe_json: impl Into<RString>,
     ) -> Self {
         self.push(
-            CapabilityDesc::new(id, CapabilityRole::Provides, CapabilityKind::EventsV1, version)
+            CapabilityDesc::new(
+                id,
+                CapabilityRole::Provides,
+                CapabilityKind::EventsV1,
+                version,
+            )
                 .with_json(describe_json),
         )
     }

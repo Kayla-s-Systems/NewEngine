@@ -4,7 +4,10 @@ use ash::vk;
 use ash::Device;
 use std::ffi::CString;
 
-pub(super) unsafe fn create_render_pass(device: &Device, format: vk::Format) -> VkResult<vk::RenderPass> {
+pub(super) unsafe fn create_render_pass(
+    device: &Device,
+    format: vk::Format,
+) -> VkResult<vk::RenderPass> {
     let color = vk::AttachmentDescription::default()
         .format(format)
         .samples(vk::SampleCountFlags::TYPE_1)
@@ -75,9 +78,18 @@ pub(super) unsafe fn create_render_pass_with_depth(
     let dep = vk::SubpassDependency::default()
         .src_subpass(vk::SUBPASS_EXTERNAL)
         .dst_subpass(0)
-        .src_stage_mask(vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT | vk::PipelineStageFlags::EARLY_FRAGMENT_TESTS)
-        .dst_stage_mask(vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT | vk::PipelineStageFlags::EARLY_FRAGMENT_TESTS)
-        .dst_access_mask(vk::AccessFlags::COLOR_ATTACHMENT_WRITE | vk::AccessFlags::DEPTH_STENCIL_ATTACHMENT_WRITE);
+        .src_stage_mask(
+            vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT
+                | vk::PipelineStageFlags::EARLY_FRAGMENT_TESTS,
+        )
+        .dst_stage_mask(
+            vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT
+                | vk::PipelineStageFlags::EARLY_FRAGMENT_TESTS,
+        )
+        .dst_access_mask(
+            vk::AccessFlags::COLOR_ATTACHMENT_WRITE
+                | vk::AccessFlags::DEPTH_STENCIL_ATTACHMENT_WRITE,
+        );
 
     let attachments = [color, depth];
     let rp = vk::RenderPassCreateInfo::default()
@@ -109,14 +121,20 @@ pub(super) unsafe fn create_framebuffers(
     Ok(fbs)
 }
 
-pub(crate) unsafe fn create_shader_module(device: &Device, bytes: &[u8]) -> VkResult<vk::ShaderModule> {
+pub(crate) unsafe fn create_shader_module(
+    device: &Device,
+    bytes: &[u8],
+) -> VkResult<vk::ShaderModule> {
     let words = ash::util::read_spv(&mut std::io::Cursor::new(bytes))
         .map_err(|e| VkRenderError::AshWindow(e.to_string()))?;
     let ci = vk::ShaderModuleCreateInfo::default().code(&words);
     Ok(device.create_shader_module(&ci, None)?)
 }
 
-pub(crate) unsafe fn create_shader_module_words(device: &Device, words: &[u32]) -> VkResult<vk::ShaderModule> {
+pub(crate) unsafe fn create_shader_module_words(
+    device: &Device,
+    words: &[u32],
+) -> VkResult<vk::ShaderModule> {
     let ci = vk::ShaderModuleCreateInfo::default().code(words);
     Ok(device.create_shader_module(&ci, None)?)
 }
@@ -182,8 +200,8 @@ pub(super) unsafe fn create_pipeline(
                 | vk::ColorComponentFlags::A,
         );
 
-    let cb = vk::PipelineColorBlendStateCreateInfo::default()
-        .attachments(std::slice::from_ref(&ca));
+    let cb =
+        vk::PipelineColorBlendStateCreateInfo::default().attachments(std::slice::from_ref(&ca));
 
     let dyn_states = [vk::DynamicState::VIEWPORT, vk::DynamicState::SCISSOR];
     let ds = vk::PipelineDynamicStateCreateInfo::default().dynamic_states(&dyn_states);

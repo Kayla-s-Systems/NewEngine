@@ -75,7 +75,12 @@ pub struct ModifierOutput {
 ///
 /// Modifiers are applied in order. Each modifier sees the current state produced by previous ones.
 pub trait CameraModifier: Send + Sync {
-    fn apply(&mut self, rig: &CameraRig, proj: &Projection, input: &CameraStackInput) -> ModifierOutput;
+    fn apply(
+        &mut self,
+        rig: &CameraRig,
+        proj: &Projection,
+        input: &CameraStackInput,
+    ) -> ModifierOutput;
 }
 
 /// Universal camera rig pipeline.

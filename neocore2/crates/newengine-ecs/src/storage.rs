@@ -32,6 +32,8 @@ pub struct Storage<T: Component> {
     pub(crate) map: NeSecondaryMap<EntityId, T>,
     pub(crate) added_tick: NeSecondaryMap<EntityId, u64>,
     pub(crate) changed_tick: NeSecondaryMap<EntityId, u64>,
+    pub(crate) max_added_tick: u64,
+    pub(crate) max_changed_tick: u64,
 }
 
 impl<T: Component> Storage<T> {
@@ -41,6 +43,8 @@ impl<T: Component> Storage<T> {
             map: SecondaryMap::new(),
             added_tick: SecondaryMap::new(),
             changed_tick: SecondaryMap::new(),
+            max_added_tick: 0,
+            max_changed_tick: 0,
         }
     }
 
@@ -68,6 +72,7 @@ impl<T: Component> Storage<T> {
     pub fn mark_changed(&mut self, id: EntityId, tick: u64) {
         if self.map.contains_key(id) {
             self.changed_tick.insert(id, tick);
+            self.max_changed_tick = self.max_changed_tick.max(tick);
         }
     }
 
@@ -76,6 +81,8 @@ impl<T: Component> Storage<T> {
         if self.map.contains_key(id) {
             self.added_tick.insert(id, tick);
             self.changed_tick.insert(id, tick);
+            self.max_added_tick = self.max_added_tick.max(tick);
+            self.max_changed_tick = self.max_changed_tick.max(tick);
         }
     }
 

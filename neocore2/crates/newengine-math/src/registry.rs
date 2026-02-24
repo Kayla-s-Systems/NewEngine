@@ -117,27 +117,31 @@ impl MathRegistry {
         }
 
         // Track ids per provider without duplicates.
-        push_unique(st.by_provider.entry(provider.clone()).or_default(), id.clone());
+        push_unique(
+            st.by_provider.entry(provider.clone()).or_default(),
+            id.clone(),
+        );
 
         let list = st.providers.entry(id.clone()).or_default();
         let prev_active_provider = list.last().map(|e| e.provider.clone());
 
         // If the same provider registers the same id again, replace its implementation
         // and move it to the end so it becomes active.
-        let replaced_same_provider = if let Some(pos) = list.iter().position(|e| e.provider == provider) {
-            let _old = list.remove(pos);
-            list.push(ProviderEntry {
-                provider: provider.clone(),
-                fun,
-            });
-            true
-        } else {
-            list.push(ProviderEntry {
-                provider: provider.clone(),
-                fun,
-            });
-            false
-        };
+        let replaced_same_provider =
+            if let Some(pos) = list.iter().position(|e| e.provider == provider) {
+                let _old = list.remove(pos);
+                list.push(ProviderEntry {
+                    provider: provider.clone(),
+                    fun,
+                });
+                true
+            } else {
+                list.push(ProviderEntry {
+                    provider: provider.clone(),
+                    fun,
+                });
+                false
+            };
 
         drop(st);
 

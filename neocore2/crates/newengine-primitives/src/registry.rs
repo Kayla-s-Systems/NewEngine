@@ -100,11 +100,14 @@ impl PrimitiveRegistry {
         defaults: PrimitiveParams,
         build: PrimitiveBuildFn,
     ) {
-        self.entries.insert(id, Entry {
-            name,
-            defaults,
-            build,
-        });
+        self.entries.insert(
+            id,
+            Entry {
+                name,
+                defaults,
+                build,
+            },
+        );
     }
 
     #[inline]

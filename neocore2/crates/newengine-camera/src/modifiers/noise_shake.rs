@@ -32,7 +32,12 @@ impl Default for NoiseShake {
 }
 
 impl CameraModifier for NoiseShake {
-    fn apply(&mut self, _rig: &CameraRig, _proj: &Projection, input: &CameraStackInput) -> ModifierOutput {
+    fn apply(
+        &mut self,
+        _rig: &CameraRig,
+        _proj: &Projection,
+        input: &CameraStackInput,
+    ) -> ModifierOutput {
         if !self.enabled {
             return ModifierOutput::default();
         }
@@ -58,7 +63,6 @@ impl CameraModifier for NoiseShake {
             n3 * self.amplitude_pos.z * intensity,
         );
 
-
         let r1 = hash_noise_1d(s ^ 0xD4, t + 7.0);
         let r2 = hash_noise_1d(s ^ 0xE5, t + 19.0);
         let r3 = hash_noise_1d(s ^ 0xF6, t + 43.0);
@@ -68,7 +72,9 @@ impl CameraModifier for NoiseShake {
             r3 * self.amplitude_rot.z * intensity,
         );
 
-        let drot = Quat::from_rotation_z(rot.z) * Quat::from_rotation_y(rot.y) * Quat::from_rotation_x(rot.x);
+        let drot = Quat::from_rotation_z(rot.z)
+            * Quat::from_rotation_y(rot.y)
+            * Quat::from_rotation_x(rot.x);
 
         let mut out = ModifierOutput::default();
         out.pose.dpos_ws = pos;

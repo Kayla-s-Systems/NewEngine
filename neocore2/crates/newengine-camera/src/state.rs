@@ -59,7 +59,8 @@ impl CameraState {
         // jitter is applied to projection (TAA-ready).
         let proj = apply_jitter(proj, self.jitter, self.viewport_wh);
 
-        let mats = CameraMatrices::new(view, proj, self.rig.position, self.viewport_wh, self.jitter);
+        let mats =
+            CameraMatrices::new(view, proj, self.rig.position, self.viewport_wh, self.jitter);
         let frustum = Frustum::from_view_proj(mats.view_proj);
         (mats, frustum)
     }

@@ -13,10 +13,12 @@ use newengine_ecs::{EntityId, World};
 use newengine_service_api::{hash_u128, InterfaceId, ServiceInterface, ServiceKey};
 
 /// Service key for the transform runtime service (systems + utilities).
-pub const TRANSFORM_SERVICE: ServiceKey = ServiceKey::new(hash_u128("kalitech.transform.service.v1"));
+pub const TRANSFORM_SERVICE: ServiceKey =
+    ServiceKey::new(hash_u128("kalitech.transform.service.v1"));
 
 /// Interface id for `ITransformRuntime` v1.
-pub const ITRANSFORM_RUNTIME_V1: InterfaceId = InterfaceId::new(hash_u128("kalitech.transform.ITransformRuntime.v1"));
+pub const ITRANSFORM_RUNTIME_V1: InterfaceId =
+    InterfaceId::new(hash_u128("kalitech.transform.ITransformRuntime.v1"));
 
 /// Sets (or clears) a parent link and maintains `Children` lists.
 ///
@@ -119,7 +121,10 @@ pub mod runtime {
         const INTERFACE_ID: InterfaceId = ITRANSFORM_RUNTIME_V1;
 
         unsafe fn from_raw(instance: *mut (), vtable: *const Self::VTable) -> Self {
-            Self { instance, vtbl: vtable }
+            Self {
+                instance,
+                vtbl: vtable,
+            }
         }
     }
 }

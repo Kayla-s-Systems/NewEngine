@@ -6,9 +6,10 @@ use newengine_assets::{wait_ready, AssetAccess, AssetServiceClient};
 use newengine_core::error::{EngineError, EngineResult};
 use newengine_core::plugins::default_host_api;
 use newengine_core::render::{
-    BeginRenderTargetDesc, BindGroupDesc, BindGroupLayoutDesc, BindingKind, BufferBinding, BufferDesc, BufferUsage,
-    DrawIndexedArgs, Extent2D, IndexFormat, PipelineDesc, PrimitiveTopology, RectI32, RenderApi, RenderTargetDesc,
-    RenderTargetId, ShaderDesc, ShaderStage, TextureFormat, UiTexId, VertexAttribute, VertexFormat, VertexLayout,
+    BeginRenderTargetDesc, BindGroupDesc, BindGroupLayoutDesc, BindingKind, BufferBinding,
+    BufferDesc, BufferUsage, DrawIndexedArgs, Extent2D, IndexFormat, PipelineDesc,
+    PrimitiveTopology, RectI32, RenderApi, RenderTargetDesc, RenderTargetId, ShaderDesc,
+    ShaderStage, TextureFormat, UiTexId, VertexAttribute, VertexFormat, VertexLayout,
 };
 use newengine_math::{Mat4, Vec3};
 use newengine_primitives::{PrimitiveId, PrimitiveRegistry, PrimitiveVertex};
@@ -136,7 +137,6 @@ impl PrimitivePreviewService {
             }
         };
 
-
         self.slots.insert(
             key,
             Slot {
@@ -162,14 +162,22 @@ impl PrimitivePreviewService {
         self.ensure_gpu_state(r)?;
         self.t = (self.t + dt).min(10_000.0);
 
-        let pipeline = self.pipeline.ok_or_else(|| EngineError::other("primitive preview: missing pipeline"))?;
-        let bg = self.bg.ok_or_else(|| EngineError::other("primitive preview: missing bind group"))?;
-        let ubo = self.ubo.ok_or_else(|| EngineError::other("primitive preview: missing ubo"))?;
+        let pipeline = self
+            .pipeline
+            .ok_or_else(|| EngineError::other("primitive preview: missing pipeline"))?;
+        let bg = self
+            .bg
+            .ok_or_else(|| EngineError::other("primitive preview: missing bind group"))?;
+        let ubo = self
+            .ubo
+            .ok_or_else(|| EngineError::other("primitive preview: missing ubo"))?;
 
         // We render a small budget each frame; keep it simple for now.
         let keys: Vec<(PrimitiveId, PrimitivePreviewSize)> = self.slots.keys().copied().collect();
         for k in keys {
-            let Some(slot) = self.slots.get_mut(&k) else { continue };
+            let Some(slot) = self.slots.get_mut(&k) else {
+                continue;
+            };
 
             // Lazily allocate GPU resources.
             if slot.rt.is_none() || slot.mesh.is_none() {
@@ -211,8 +219,12 @@ impl PrimitivePreviewService {
             r.write_buffer(ubo, 0, bytemuck::bytes_of(&u))?;
 
             let clear = [0.10, 0.105, 0.11, 1.0];
-            let rt = slot.rt.ok_or_else(|| EngineError::other("primitive preview: missing render target"))?;
-            let mesh = slot.mesh.ok_or_else(|| EngineError::other("primitive preview: missing gpu mesh"))?;
+            let rt = slot
+                .rt
+                .ok_or_else(|| EngineError::other("primitive preview: missing render target"))?;
+            let mesh = slot
+                .mesh
+                .ok_or_else(|| EngineError::other("primitive preview: missing gpu mesh"))?;
 
             r.begin_render_target(
                 BeginRenderTargetDesc::new(rt)
@@ -222,13 +234,21 @@ impl PrimitivePreviewService {
 
             let extent = Extent2D::new(slot.size.px(), slot.size.px());
             r.set_viewport(newengine_core::render::Viewport::full(extent))?;
-            r.set_scissor(RectI32::new(0, 0, extent.width as i32, extent.height as i32))?;
+            r.set_scissor(RectI32::new(
+                0,
+                0,
+                extent.width as i32,
+                extent.height as i32,
+            ))?;
 
             r.set_pipeline(pipeline)?;
             r.set_bind_group(0, bg)?;
 
             r.set_vertex_buffer(0, newengine_core::render::BufferSlice::new(mesh.vb, 0))?;
-            r.set_index_buffer(newengine_core::render::BufferSlice::new(mesh.ib, 0), IndexFormat::U32)?;
+            r.set_index_buffer(
+                newengine_core::render::BufferSlice::new(mesh.ib, 0),
+                IndexFormat::U32,
+            )?;
 
             r.draw_indexed(DrawIndexedArgs::new(mesh.index_count))?;
 
@@ -256,17 +276,28 @@ impl PrimitivePreviewService {
         )?;
 
         let bgl = r.create_bind_group_layout(
-            BindGroupLayoutDesc::new(vec![BindingKind::UniformBuffer]).with_label("primitive_preview_bgl"),
+            BindGroupLayoutDesc::new(vec![BindingKind::UniformBuffer])
+                .with_label("primitive_preview_bgl"),
         )?;
 
         let bg = r.create_bind_group(
             BindGroupDesc::new(bgl)
                 .with_label("primitive_preview_bg")
-                .with_uniform0(BufferBinding::new(ubo, 0, std::mem::size_of::<PreviewUbo>() as u64)),
+                .with_uniform0(BufferBinding::new(
+                    ubo,
+                    0,
+                    std::mem::size_of::<PreviewUbo>() as u64,
+                )),
         )?;
 
-        let vs_words = Self::load_or_compile_spv_words("shaders/preview/primitive_preview.vert", ShaderStage::Vertex)?;
-        let fs_words = Self::load_or_compile_spv_words("shaders/preview/primitive_preview.frag", ShaderStage::Fragment)?;
+        let vs_words = Self::load_or_compile_spv_words(
+            "shaders/preview/primitive_preview.vert",
+            ShaderStage::Vertex,
+        )?;
+        let fs_words = Self::load_or_compile_spv_words(
+            "shaders/preview/primitive_preview.frag",
+            ShaderStage::Fragment,
+        )?;
 
         let vs = r.create_shader(
             ShaderDesc::new(ShaderStage::Vertex, "main", vs_words)
@@ -306,7 +337,9 @@ impl PrimitivePreviewService {
     /// The input length must be divisible by 4.
     fn spirv_bytes_to_words(bytes: &[u8]) -> EngineResult<Vec<u32>> {
         if bytes.is_empty() {
-            return Err(EngineError::other("primitive preview: SPIR-V bytecode is empty"));
+            return Err(EngineError::other(
+                "primitive preview: SPIR-V bytecode is empty",
+            ));
         }
         if bytes.len() % 4 != 0 {
             return Err(EngineError::other(
@@ -324,24 +357,32 @@ impl PrimitivePreviewService {
     fn load_or_compile_spv_words(logical_path: &str, stage: ShaderStage) -> EngineResult<Vec<u32>> {
         let assets = AssetServiceClient::new(default_host_api());
 
-        let id = assets
-            .load(logical_path)
-            .map_err(|e| EngineError::other(format!("asset.load failed path='{logical_path}' err='{e}'")))?;
-
-        wait_ready(&assets, &id, Duration::from_millis(500)).map_err(|e| {
-            EngineError::other(format!("asset.wait_ready failed path='{logical_path}' err='{e:?}'"))
+        let id = assets.load(logical_path).map_err(|e| {
+            EngineError::other(format!("asset.load failed path='{logical_path}' err='{e}'"))
         })?;
 
-        let (_meta, payload) = assets
-            .blob_wire_v1(&id)
-            .map_err(|e| EngineError::other(format!("asset.blob_wire_v1 failed path='{logical_path}' err='{e}'")))?;
+        wait_ready(&assets, &id, Duration::from_millis(500)).map_err(|e| {
+            EngineError::other(format!(
+                "asset.wait_ready failed path='{logical_path}' err='{e:?}'"
+            ))
+        })?;
 
-        let src = std::str::from_utf8(&payload)
-            .map_err(|_| EngineError::other(format!("shader source is not utf8 path='{logical_path}'")))?;
+        let (_meta, payload) = assets.blob_wire_v1(&id).map_err(|e| {
+            EngineError::other(format!(
+                "asset.blob_wire_v1 failed path='{logical_path}' err='{e}'"
+            ))
+        })?;
+
+        let src = std::str::from_utf8(&payload).map_err(|_| {
+            EngineError::other(format!("shader source is not utf8 path='{logical_path}'"))
+        })?;
 
         let cache_dir = shader_cache_dir();
         std::fs::create_dir_all(&cache_dir).map_err(|e| {
-            EngineError::other(format!("shader cache: create_dir_all failed dir='{}' err='{e}'", cache_dir.display()))
+            EngineError::other(format!(
+                "shader cache: create_dir_all failed dir='{}' err='{e}'",
+                cache_dir.display()
+            ))
         })?;
 
         let key = shader_cache_key(src, stage, "main");
@@ -353,18 +394,22 @@ impl PrimitivePreviewService {
             }
         }
 
-        let compiler = shaderc::Compiler::new()
-            .map_err(|e| EngineError::other(format!("shaderc: failed to create compiler: {e:?}")))?;
+        let compiler = shaderc::Compiler::new().map_err(|e| {
+            EngineError::other(format!("shaderc: failed to create compiler: {e:?}"))
+        })?;
 
         let mut opts = shaderc::CompileOptions::new()
             .map_err(|e| EngineError::other(format!("shaderc: failed to create options: {e:?}")))?;
 
         opts.set_optimization_level(shaderc::OptimizationLevel::Performance);
 
-
         let artifact = compiler
             .compile_into_spirv(src, to_shaderc(stage), logical_path, "main", Some(&opts))
-            .map_err(|e| EngineError::other(format!("shaderc: compile failed path='{logical_path}' err='{e}'")))?;
+            .map_err(|e| {
+                EngineError::other(format!(
+                    "shaderc: compile failed path='{logical_path}' err='{e}'"
+                ))
+            })?;
 
         let bytes = artifact.as_binary_u8();
         let _ = atomic_write(&out_path, bytes);
@@ -435,7 +480,11 @@ fn atomic_write(path: &Path, bytes: &[u8]) -> std::io::Result<()> {
     Ok(())
 }
 
-fn upload_mesh(r: &mut dyn RenderApi, vertices: &[PrimitiveVertex], indices: &[u32]) -> EngineResult<GpuMesh> {
+fn upload_mesh(
+    r: &mut dyn RenderApi,
+    vertices: &[PrimitiveVertex],
+    indices: &[u32],
+) -> EngineResult<GpuMesh> {
     if vertices.is_empty() || indices.is_empty() {
         return Err(EngineError::other("primitive preview: empty mesh"));
     }

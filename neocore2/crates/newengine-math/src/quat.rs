@@ -2,9 +2,9 @@
 #![forbid(unsafe_op_in_unsafe_fn)]
 
 use core::ops::{Mul, MulAssign};
-
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
+use std::ops::Div;
 
 use crate::{EulerRot, Mat3, Vec3};
 
@@ -64,6 +64,16 @@ impl Quat {
         self.x.is_finite() && self.y.is_finite() && self.z.is_finite() && self.w.is_finite()
     }
 
+    #[inline]
+    pub fn inverse(self) -> Self {
+        let len_sq = self.length_squared();
+        if len_sq > 0.0 {
+            self.conjugate() / len_sq
+        } else {
+            Self::IDENTITY
+        }
+    }
+
     /// Normalizes the quaternion, returning identity if the input is not finite or too small.
     #[inline]
     pub fn normalize_or_identity(self) -> Self {
@@ -119,7 +129,8 @@ impl Quat {
         match order {
             EulerRot::YXZ => {
                 // q = qy * qx * qz
-                (Self::from_rotation_y(a) * Self::from_rotation_x(b) * Self::from_rotation_z(c)).normalize()
+                (Self::from_rotation_y(a) * Self::from_rotation_x(b) * Self::from_rotation_z(c))
+                    .normalize()
             }
         }
     }
@@ -306,6 +317,20 @@ impl MulAssign for Quat {
     #[inline]
     fn mul_assign(&mut self, rhs: Self) {
         *self = *self * rhs;
+    }
+}
+
+impl Div<f32> for Quat {
+    type Output = Self;
+
+    #[inline]
+    fn div(self, rhs: f32) -> Self::Output {
+        Self {
+            x: self.x / rhs,
+            y: self.y / rhs,
+            z: self.z / rhs,
+            w: self.w / rhs,
+        }
     }
 }
 

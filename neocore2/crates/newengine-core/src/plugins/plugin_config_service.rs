@@ -65,7 +65,9 @@ impl ServiceV1 for ConfigService {
     fn call(&self, method: MethodName, payload: Blob) -> RResult<Blob, RString> {
         match method.as_str() {
             METHOD_GET_PLUGIN_JSON => {
-                let plugin_id = String::from_utf8_lossy(payload.as_slice()).trim().to_owned();
+                let plugin_id = String::from_utf8_lossy(payload.as_slice())
+                    .trim()
+                    .to_owned();
                 if plugin_id.is_empty() {
                     return RResult::RErr(RString::from("plugin_id is empty"));
                 }
@@ -74,7 +76,9 @@ impl ServiceV1 for ConfigService {
 
                 match serde_json::to_vec(&v) {
                     Ok(bytes) => RResult::ROk(Blob::from(bytes)),
-                    Err(e) => RResult::RErr(RString::from(format!("config json encode failed: {e}"))),
+                    Err(e) => {
+                        RResult::RErr(RString::from(format!("config json encode failed: {e}")))
+                    }
                 }
             }
             _ => RResult::RErr(RString::from("unknown method")),
@@ -91,7 +95,6 @@ pub fn get_plugin_overrides_with_env(plugin_id: &str) -> Value {
         .map(|s| s.plugin_overrides_with_env(plugin_id))
         .unwrap_or_else(|| Value::Object(Map::new()))
 }
-
 
 /// Registers a core service that exposes per-plugin overrides to plugins.
 ///
@@ -179,7 +182,9 @@ fn set_path(root: &mut Value, path: &[&str], value: Value) {
             *cur = Value::Object(Map::new());
         }
         let obj = cur.as_object_mut().unwrap();
-        cur = obj.entry((*key).to_owned()).or_insert_with(|| Value::Object(Map::new()));
+        cur = obj
+            .entry((*key).to_owned())
+            .or_insert_with(|| Value::Object(Map::new()));
     }
 }
 
@@ -228,17 +233,15 @@ fn summarize_value_for_log(v: &Value) -> String {
                 out
             }
         }
-        _ => {
-            match serde_json::to_string(v) {
-                Ok(s) if s.len() <= MAX => s,
-                Ok(s) => {
-                    let mut out = s;
-                    out.truncate(MAX);
-                    out.push_str("…");
-                    out
-                }
-                Err(_) => "<unprintable>".to_owned(),
+        _ => match serde_json::to_string(v) {
+            Ok(s) if s.len() <= MAX => s,
+            Ok(s) => {
+                let mut out = s;
+                out.truncate(MAX);
+                out.push_str("…");
+                out
             }
-        }
+            Err(_) => "<unprintable>".to_owned(),
+        },
     }
 }

@@ -15,7 +15,12 @@ use crate::projection::{Perspective, Projection};
 ///
 /// `margin` is a multiplicative factor applied to the radius (e.g. 1.15).
 #[inline]
-pub fn fit_distance_for_sphere_perspective(fovy: f32, aspect: f32, radius: f32, margin: f32) -> f32 {
+pub fn fit_distance_for_sphere_perspective(
+    fovy: f32,
+    aspect: f32,
+    radius: f32,
+    margin: f32,
+) -> f32 {
     let r = (radius.abs().max(1e-6)) * margin.max(1.0);
     let aspect = aspect.max(1e-6);
     let fovy = fovy.max(1e-6);
@@ -81,5 +86,10 @@ pub fn frame_orbit_to_sphere(
 /// Convenience constructor for a reasonable default perspective used by both editor and game.
 #[inline]
 pub fn default_perspective(viewport_aspect: f32) -> Projection {
-    Projection::Perspective(Perspective::new(60.0f32.to_radians(), viewport_aspect, 0.01, 10_000.0))
+    Projection::Perspective(Perspective::new(
+        60.0f32.to_radians(),
+        viewport_aspect,
+        0.01,
+        10_000.0,
+    ))
 }

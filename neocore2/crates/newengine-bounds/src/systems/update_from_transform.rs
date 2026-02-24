@@ -12,7 +12,10 @@ struct BoundsUpdateFromTransformScratch {
 
 #[inline]
 fn ensure_scratch(world: &mut World) {
-    if world.resource::<BoundsUpdateFromTransformScratch>().is_none() {
+    if world
+        .resource::<BoundsUpdateFromTransformScratch>()
+        .is_none()
+    {
         world.insert_resource(BoundsUpdateFromTransformScratch::default());
     }
 }

@@ -1,6 +1,7 @@
 use crate::api::{
-    bump_id, material_id_from_name, material_instance_id, MaterialDescriptor, MaterialId, MaterialInstanceDesc,
-    MaterialOverrides, MaterialProvider, MaterialRegistryApi, MaterialSnapshotItem,
+    bump_id, material_id_from_name, material_instance_id, MaterialDescriptor, MaterialId,
+    MaterialInstanceDesc, MaterialOverrides, MaterialProvider, MaterialRegistryApi,
+    MaterialSnapshotItem,
 };
 use crate::errors::{MaterialError, MaterialResult};
 use parking_lot::RwLock;
@@ -8,8 +9,13 @@ use std::sync::Arc;
 
 #[derive(Clone, Debug)]
 enum EntryKind {
-    Asset { desc: MaterialDescriptor },
-    Instance { base: MaterialId, overrides: MaterialOverrides },
+    Asset {
+        desc: MaterialDescriptor,
+    },
+    Instance {
+        base: MaterialId,
+        overrides: MaterialOverrides,
+    },
 }
 
 #[derive(Clone, Debug)]
@@ -112,7 +118,12 @@ impl MaterialRegistry {
     /// Register a deterministic instance for an existing base material.
     ///
     /// If an instance with the same name already exists, returns its existing id.
-    pub fn register_instance_named(&self, base: MaterialId, name: &str, overrides: MaterialOverrides) -> MaterialId {
+    pub fn register_instance_named(
+        &self,
+        base: MaterialId,
+        name: &str,
+        overrides: MaterialOverrides,
+    ) -> MaterialId {
         // Fast path by name.
         {
             let v = self.inner.read();
@@ -144,7 +155,11 @@ impl MaterialRegistry {
     }
 
     /// Update overrides for a specific instance id.
-    pub fn set_instance_overrides(&self, id: MaterialId, overrides: MaterialOverrides) -> MaterialResult<()> {
+    pub fn set_instance_overrides(
+        &self,
+        id: MaterialId,
+        overrides: MaterialOverrides,
+    ) -> MaterialResult<()> {
         if !id.is_valid() || !id.is_instance() {
             return Err(MaterialError::InvalidId);
         }

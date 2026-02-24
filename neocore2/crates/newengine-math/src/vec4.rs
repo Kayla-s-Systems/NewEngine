@@ -53,10 +53,7 @@ impl Vec4 {
 
     #[inline]
     pub fn is_finite(self) -> bool {
-        self.x.is_finite()
-            && self.y.is_finite()
-            && self.z.is_finite()
-            && self.w.is_finite()
+        self.x.is_finite() && self.y.is_finite() && self.z.is_finite() && self.w.is_finite()
     }
 
     #[inline]
@@ -110,7 +107,12 @@ impl Add for Vec4 {
     type Output = Self;
     #[inline]
     fn add(self, rhs: Self) -> Self::Output {
-        Self::new(self.x + rhs.x, self.y + rhs.y, self.z + rhs.z, self.w + rhs.w)
+        Self::new(
+            self.x + rhs.x,
+            self.y + rhs.y,
+            self.z + rhs.z,
+            self.w + rhs.w,
+        )
     }
 }
 
@@ -125,7 +127,12 @@ impl Sub for Vec4 {
     type Output = Self;
     #[inline]
     fn sub(self, rhs: Self) -> Self::Output {
-        Self::new(self.x - rhs.x, self.y - rhs.y, self.z - rhs.z, self.w - rhs.w)
+        Self::new(
+            self.x - rhs.x,
+            self.y - rhs.y,
+            self.z - rhs.z,
+            self.w - rhs.w,
+        )
     }
 }
 

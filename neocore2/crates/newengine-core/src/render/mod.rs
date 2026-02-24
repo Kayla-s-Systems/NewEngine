@@ -553,7 +553,11 @@ pub struct BufferBinding {
 impl BufferBinding {
     #[inline]
     pub const fn new(buffer: BufferId, offset: u64, size: u64) -> Self {
-        Self { buffer, offset, size }
+        Self {
+            buffer,
+            offset,
+            size,
+        }
     }
 }
 
@@ -668,7 +672,10 @@ pub trait RenderApi: Send {
     fn create_pipeline(&mut self, desc: PipelineDesc) -> EngineResult<PipelineId>;
     fn destroy_pipeline(&mut self, id: PipelineId);
 
-    fn create_bind_group_layout(&mut self, desc: BindGroupLayoutDesc) -> EngineResult<BindGroupLayoutId>;
+    fn create_bind_group_layout(
+        &mut self,
+        desc: BindGroupLayoutDesc,
+    ) -> EngineResult<BindGroupLayoutId>;
     fn destroy_bind_group_layout(&mut self, id: BindGroupLayoutId);
 
     fn create_bind_group(&mut self, desc: BindGroupDesc) -> EngineResult<BindGroupId>;
@@ -706,7 +713,8 @@ impl RenderApiRef {
 pub fn require_render_api<'a, E: Send + 'static>(
     ctx: &'a crate::module::ModuleCtx<'_, E>,
 ) -> EngineResult<&'a RenderApiRef> {
-    ctx.api_required::<RenderApiRef>(RENDER_API_ID).map_err(|_| {
-        EngineError::other("Render API is not available (missing render backend module?)")
-    })
+    ctx.api_required::<RenderApiRef>(RENDER_API_ID)
+        .map_err(|_| {
+            EngineError::other("Render API is not available (missing render backend module?)")
+        })
 }

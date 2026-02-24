@@ -83,10 +83,9 @@ impl CameraModifier for HeadBob {
 
         let dpos_ws = rig.rotation * local_pos;
 
-        let drot =
-            Quat::from_rotation_z(local_rot.z)
-                * Quat::from_rotation_y(local_rot.y)
-                * Quat::from_rotation_x(local_rot.x);
+        let drot = Quat::from_rotation_z(local_rot.z)
+            * Quat::from_rotation_y(local_rot.y)
+            * Quat::from_rotation_x(local_rot.x);
 
         let mut out = ModifierOutput::default();
         out.pose.dpos_ws = dpos_ws;

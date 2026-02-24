@@ -123,7 +123,6 @@ impl<E: Send + 'static> Engine<E> {
         // Must be available before any plugin init() runs.
         init_plugin_config_service(config.plugin_overrides.clone());
 
-
         register_engine_builtins(MathRegistry::global())
             .map_err(|e| EngineError::Other(format!("math init failed: {e}")))?;
 
@@ -169,7 +168,9 @@ impl<E: Send + 'static> Engine<E> {
 
         let id = module.id();
         if self.module_ids.contains(id) {
-            return Err(EngineError::Other(format!("module already registered: {id}")));
+            return Err(EngineError::Other(format!(
+                "module already registered: {id}"
+            )));
         }
 
         self.modules.push(module);

@@ -41,7 +41,8 @@ impl<E: Send + 'static> Engine<E> {
 
             let module_id = m.id();
 
-            let mut ctx = ModuleCtx::new(services, resources, bus, events, scheduler, exit_requested);
+            let mut ctx =
+                ModuleCtx::new(services, resources, bus, events, scheduler, exit_requested);
             ctx.set_frame(frame);
 
             let result = if self.catch_panics {

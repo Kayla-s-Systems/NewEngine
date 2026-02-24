@@ -38,7 +38,12 @@ impl Default for AdsFov {
 }
 
 impl CameraModifier for AdsFov {
-    fn apply(&mut self, _rig: &CameraRig, proj: &Projection, input: &CameraStackInput) -> ModifierOutput {
+    fn apply(
+        &mut self,
+        _rig: &CameraRig,
+        proj: &Projection,
+        input: &CameraStackInput,
+    ) -> ModifierOutput {
         let dt = input.dt.max(0.0);
         let target = if input.is_aiming { 1.0 } else { 0.0 };
 

@@ -72,7 +72,6 @@ impl CameraRig {
         self.position += delta_world;
     }
 
-
     /// Sets the rig transform from a look-at target.
     ///
     /// Convention: camera forward is -Z.

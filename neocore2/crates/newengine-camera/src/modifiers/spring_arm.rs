@@ -87,7 +87,12 @@ impl Default for SpringArm {
 }
 
 impl CameraModifier for SpringArm {
-    fn apply(&mut self, rig: &CameraRig, _proj: &Projection, input: &CameraStackInput) -> ModifierOutput {
+    fn apply(
+        &mut self,
+        rig: &CameraRig,
+        _proj: &Projection,
+        input: &CameraStackInput,
+    ) -> ModifierOutput {
         let dt = input.dt.max(0.0);
 
         // Anchor is the current rig pose.
@@ -109,13 +114,15 @@ impl CameraModifier for SpringArm {
         // Initialize on the first tick to avoid a snap from zero.
         if !self.initialized {
             self.smoothed_pos = desired;
-            self.smoothed_rot = crate::rig::CameraRig::from_look_at(desired, look_at, Vec3::Y).rotation;
+            self.smoothed_rot =
+                crate::rig::CameraRig::from_look_at(desired, look_at, Vec3::Y).rotation;
             self.initialized = true;
         }
 
         self.smoothed_pos = exp_smooth_vec3(self.smoothed_pos, desired, self.pos_smooth, dt);
 
-        let target_rot = crate::rig::CameraRig::from_look_at(self.smoothed_pos, look_at, Vec3::Y).rotation;
+        let target_rot =
+            crate::rig::CameraRig::from_look_at(self.smoothed_pos, look_at, Vec3::Y).rotation;
         self.smoothed_rot = exp_smooth_quat(self.smoothed_rot, target_rot, self.rot_smooth, dt);
 
         let mut out = ModifierOutput::default();

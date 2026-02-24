@@ -54,7 +54,12 @@ impl Recoil {
 }
 
 impl CameraModifier for Recoil {
-    fn apply(&mut self, _rig: &CameraRig, _proj: &Projection, input: &CameraStackInput) -> ModifierOutput {
+    fn apply(
+        &mut self,
+        _rig: &CameraRig,
+        _proj: &Projection,
+        input: &CameraStackInput,
+    ) -> ModifierOutput {
         if !self.enabled {
             self.pending_kick = Vec2::ZERO;
             return ModifierOutput::default();

@@ -16,7 +16,10 @@ pub struct UiFrameDesc {
 impl UiFrameDesc {
     #[inline]
     pub fn new(dt_sec: f32) -> Self {
-        Self { dt_sec, input: None }
+        Self {
+            dt_sec,
+            input: None,
+        }
     }
 
     #[inline]

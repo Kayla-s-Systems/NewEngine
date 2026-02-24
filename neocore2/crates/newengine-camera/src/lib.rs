@@ -8,10 +8,10 @@ pub mod state;
 pub mod types;
 
 // ADD:
-pub mod frame;
-pub mod util;
 pub mod editor;
+pub mod frame;
 pub mod game;
+pub mod util;
 
 // Universal gameplay/editor camera stack with deterministic modifiers.
 pub mod modifiers;

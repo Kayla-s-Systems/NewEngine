@@ -14,7 +14,10 @@ impl Elapsed {
     fn from_duration(d: Duration) -> Self {
         let us = d.as_micros();
         if us < 1000 {
-            Self { value: us, unit: "us" }
+            Self {
+                value: us,
+                unit: "us",
+            }
         } else {
             Self {
                 value: d.as_millis(),
@@ -52,7 +55,11 @@ impl<E: Send + 'static> Engine<E> {
 
     #[allow(dead_code)]
     #[inline]
-    pub(super) fn phase_err(phase: &'static str, elapsed: Elapsed, e: impl fmt::Display) -> crate::error::EngineError {
+    pub(super) fn phase_err(
+        phase: &'static str,
+        elapsed: Elapsed,
+        e: impl fmt::Display,
+    ) -> crate::error::EngineError {
         crate::error::EngineError::Other(format!("plugins: failed (phase={phase} {elapsed}): {e}"))
     }
 }

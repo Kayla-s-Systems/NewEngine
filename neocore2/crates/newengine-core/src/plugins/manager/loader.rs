@@ -89,7 +89,13 @@ impl PluginManager {
             );
         }
 
-        init_with_overrides(&mut module_any, &id_str, host, overrides_non_empty, &overrides)
+        init_with_overrides(
+            &mut module_any,
+            &id_str,
+            host,
+            overrides_non_empty,
+            &overrides,
+        )
             .map_err(|e| PluginLoadError {
                 path: path.to_path_buf(),
                 message: format!("init failed: {e}"),
@@ -132,7 +138,11 @@ fn select_abi(root: PluginRootV1Ref) -> (ModuleAdapterAny, PluginInfo, Option<Pl
             version: d.version.clone(),
         };
         log::debug!("plugins: abi selected v3 id='{}'", info.id);
-        (ModuleAdapterAny::V3(V3Adapter { module: m3 }), info, Some(d))
+        (
+            ModuleAdapterAny::V3(V3Adapter { module: m3 }),
+            info,
+            Some(d),
+        )
     } else if let Some(create_v2) = root.create_v2() {
         let m2 = create_v2();
         let d = m2.descriptor();
@@ -142,7 +152,11 @@ fn select_abi(root: PluginRootV1Ref) -> (ModuleAdapterAny, PluginInfo, Option<Pl
             version: d.version.clone(),
         };
         log::debug!("plugins: abi selected v2 id='{}'", info.id);
-        (ModuleAdapterAny::V2(V2Adapter { module: m2 }), info, Some(d))
+        (
+            ModuleAdapterAny::V2(V2Adapter { module: m2 }),
+            info,
+            Some(d),
+        )
     } else {
         let m1: PluginModuleDyn<'static> = root.create()();
         let info = m1.info();

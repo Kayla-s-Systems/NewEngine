@@ -2,7 +2,9 @@
 
 use newengine_math::{Quat, Vec2, Vec3};
 
-use crate::modifiers::{AdsFov, HeadBob, NoiseShake, Recoil, SpringArm, Sway, TaaJitter, WeaponSway};
+use crate::modifiers::{
+    AdsFov, HeadBob, NoiseShake, Recoil, SpringArm, Sway, TaaJitter, WeaponSway,
+};
 use crate::{CameraRig, CameraStack, Perspective, Projection};
 
 /// A practical set of presets for gameplay cameras.
@@ -19,7 +21,12 @@ impl GameCameraPresets {
         let aspect = (viewport_w.max(1) as f32) / (viewport_h.max(1) as f32);
 
         let rig = CameraRig::new(Vec3::ZERO, Quat::IDENTITY);
-        let proj = Projection::Perspective(Perspective::new(60.0_f32.to_radians(), aspect, 0.01, 10_000.0));
+        let proj = Projection::Perspective(Perspective::new(
+            60.0_f32.to_radians(),
+            aspect,
+            0.01,
+            10_000.0,
+        ));
 
         let mut stack = CameraStack::new(rig, proj);
         stack.set_viewport(viewport_w, viewport_h);
@@ -42,7 +49,12 @@ impl GameCameraPresets {
         let aspect = (viewport_w.max(1) as f32) / (viewport_h.max(1) as f32);
 
         let rig = CameraRig::new(Vec3::ZERO, Quat::IDENTITY);
-        let proj = Projection::Perspective(Perspective::new(60.0_f32.to_radians(), aspect, 0.01, 10_000.0));
+        let proj = Projection::Perspective(Perspective::new(
+            60.0_f32.to_radians(),
+            aspect,
+            0.01,
+            10_000.0,
+        ));
 
         let mut stack = CameraStack::new(rig, proj);
         stack.set_viewport(viewport_w, viewport_h);
@@ -56,7 +68,11 @@ impl GameCameraPresets {
         arm.collision_radius = 0.2;
 
         stack.push_modifier(Box::new(arm));
-        stack.push_modifier(Box::new(AdsFov::new(60.0_f32.to_radians(), 45.0_f32.to_radians(), 14.0)));
+        stack.push_modifier(Box::new(AdsFov::new(
+            60.0_f32.to_radians(),
+            45.0_f32.to_radians(),
+            14.0,
+        )));
         stack.push_modifier(Box::new(Sway::default()));
         stack.push_modifier(Box::new(NoiseShake::default()));
         let mut jitter = TaaJitter::default();

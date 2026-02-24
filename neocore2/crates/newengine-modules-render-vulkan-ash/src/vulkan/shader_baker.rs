@@ -84,8 +84,18 @@ impl ShaderBaker {
         // The core "tri" pipeline must be independent from editor shaders.
         // It uses no descriptor sets and no vertex buffers.
         Ok(ShaderPack {
-            tri_vert: self.compile_inline_words(BUILTIN_TRI_VERT, "builtin_tri.vert", ShaderStage::Vertex, "main")?,
-            tri_frag: self.compile_inline_words(BUILTIN_TRI_FRAG, "builtin_tri.frag", ShaderStage::Fragment, "main")?,
+            tri_vert: self.compile_inline_words(
+                BUILTIN_TRI_VERT,
+                "builtin_tri.vert",
+                ShaderStage::Vertex,
+                "main",
+            )?,
+            tri_frag: self.compile_inline_words(
+                BUILTIN_TRI_FRAG,
+                "builtin_tri.frag",
+                ShaderStage::Fragment,
+                "main",
+            )?,
 
             text_vert: self.load_or_compile_words("shaders/ui/text.vert", ShaderStage::Vertex)?,
             text_frag: self.load_or_compile_words("shaders/ui/text.frag", ShaderStage::Fragment)?,
@@ -104,7 +114,9 @@ impl ShaderBaker {
     ) -> VkResult<Vec<u32>> {
         let opt = shaderc::OptimizationLevel::Performance;
         let key = shader_cache_key(src, stage, entry, opt);
-        let out_path = self.cache_dir.join(shader_cache_filename(logical_name, stage, &key));
+        let out_path = self
+            .cache_dir
+            .join(shader_cache_filename(logical_name, stage, &key));
 
         if let Ok(words) = read_spv_words(&out_path) {
             return Ok(words);
@@ -114,11 +126,17 @@ impl ShaderBaker {
         let _ = write_spv_words(&out_path, &words);
         Ok(words)
     }
-    pub fn load_or_compile_words(&self, logical_path: &str, stage: ShaderStage) -> VkResult<Vec<u32>> {
+    pub fn load_or_compile_words(
+        &self,
+        logical_path: &str,
+        stage: ShaderStage,
+    ) -> VkResult<Vec<u32>> {
         let src = self.load_text_asset(logical_path)?;
 
         let key = shader_cache_key(&src, stage, "main", shaderc::OptimizationLevel::Performance);
-        let out_path = self.cache_dir.join(shader_cache_filename(logical_path, stage, &key));
+        let out_path = self
+            .cache_dir
+            .join(shader_cache_filename(logical_path, stage, &key));
 
         if let Ok(words) = read_spv_words(&out_path) {
             return Ok(words);
@@ -217,7 +235,11 @@ impl ShaderBaker {
         let artifact = self
             .compiler
             .compile_into_spirv(src, stage.to_shaderc(), logical_path, entry, Some(&opts))
-            .map_err(|e| VkRenderError::Shader(format!("shaderc: compile failed path='{logical_path}' err='{e}'")))?;
+            .map_err(|e| {
+                VkRenderError::Shader(format!(
+                    "shaderc: compile failed path='{logical_path}' err='{e}'"
+                ))
+            })?;
 
         Ok(artifact.as_binary().to_vec())
     }

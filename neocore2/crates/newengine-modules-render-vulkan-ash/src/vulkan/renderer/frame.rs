@@ -13,7 +13,9 @@ impl VulkanRenderer {
         }
 
         if self.debug.in_frame {
-            return Err(VkRenderError::InvalidState("begin_frame called while already in frame"));
+            return Err(VkRenderError::InvalidState(
+                "begin_frame called while already in frame",
+            ));
         }
 
         if self.debug.target_width == 0 || self.debug.target_height == 0 {
@@ -100,7 +102,9 @@ impl VulkanRenderer {
 
     pub fn end_frame(&mut self) -> VkResult<()> {
         if !self.debug.in_frame {
-            return Err(VkRenderError::InvalidState("end_frame called without begin_frame"));
+            return Err(VkRenderError::InvalidState(
+                "end_frame called without begin_frame",
+            ));
         }
 
         let frame = self.frames.frames[self.frames.frame_index];
@@ -264,7 +268,9 @@ impl VulkanRenderer {
 
         self.end_active_pass(cmd)?;
 
-        let Some(rt) = self.render_targets.get_mut(&target_id) else { return Ok(()); };
+        let Some(rt) = self.render_targets.get_mut(&target_id) else {
+            return Ok(());
+        };
         if rt.color.image == vk::Image::null() || rt.framebuffer == vk::Framebuffer::null() {
             return Ok(());
         }
@@ -292,7 +298,9 @@ impl VulkanRenderer {
 
         let clear_rgba = clear_color.unwrap_or(self.frame_clear_color);
         let clear_color_v = vk::ClearValue {
-            color: vk::ClearColorValue { float32: clear_rgba },
+            color: vk::ClearColorValue {
+                float32: clear_rgba,
+            },
         };
 
         let clear_depth_v = vk::ClearValue {

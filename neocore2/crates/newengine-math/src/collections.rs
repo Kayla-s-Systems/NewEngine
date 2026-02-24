@@ -74,5 +74,3 @@ pub type BTreeSet<K> = std::collections::BTreeSet<K>;
 #[cfg(feature = "collections")]
 pub use slotmap;
 
-
-

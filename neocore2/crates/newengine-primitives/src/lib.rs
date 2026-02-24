@@ -11,7 +11,9 @@ mod vertex;
 pub use component::Primitive;
 pub use id::{fnv1a_64, PrimitiveId};
 pub use mesh::PrimitiveMesh;
-pub use registry::{PrimitiveBuildError, PrimitiveBuildFn, PrimitiveDesc, PrimitiveParams, PrimitiveRegistry};
+pub use registry::{
+    PrimitiveBuildError, PrimitiveBuildFn, PrimitiveDesc, PrimitiveParams, PrimitiveRegistry,
+};
 pub use vertex::PrimitiveVertex;
 
 #[cfg(test)]
