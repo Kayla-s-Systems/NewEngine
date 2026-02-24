@@ -119,10 +119,10 @@ pub fn run_test<S: SmokeTest>() {
 
         let mut test = S::setup(physics_system);
 
-        // TODO: register body activation listener
-        // TODO: register contact listener
+        // DOCTRINE: register body activation listener
+        // DOCTRINE: register contact listener
 
-        // TODO: PhysicsSystem::OptimizeBroadPhase
+        // DOCTRINE: PhysicsSystem::OptimizeBroadPhase
 
         let delta_time = 1.0 / 60.0;
         let collision_steps = 1;

@@ -10,8 +10,8 @@ parallel = ["dep:rayon"]
 
 [dependencies]
 newengine-ecs = { path = "../newengine-ecs" }
-newengine-transform = { path = "../newengine-transform" }
-newengine-scene = { path = "../newengine-scene" }
+newengine-transform = { path = "../newengine-transform", default-features = false }
+newengine-scene = { path = "../newengine-scene", features = ["runtime"] }
 newengine-camera = { path = "../newengine-camera" }
 newengine-math = { path = "../newengine-math" }
 rayon = { version = "1.10", optional = true }

@@ -4,10 +4,23 @@ version = "0.1.0"
 readme = "README.md"
 edition = "2021"
 
+[features]
+# Pure scene-domain types (GUIDs, semantic components, settings) by default.
+default = []
+
+# Runtime integration layer (ECS world + transform/bounds systems).
+# This is intentionally opt-in to keep the scene domain isolated.
+runtime = [
+    "dep:newengine-ecs",
+    "dep:newengine-transform",
+    "newengine-transform/ecs",
+    "dep:newengine-bounds",
+    "dep:newengine-math",
+]
+
 [dependencies]
-newengine-ecs = { path = "../newengine-ecs" }
-newengine-transform = { path = "../newengine-transform" }
-newengine-bounds = { path = "../newengine-bounds" }
-newengine-math = { path = "../newengine-math" }
+newengine-ecs = { path = "../newengine-ecs", optional = true }
+newengine-transform = { path = "../newengine-transform", optional = true, default-features = false }
+newengine-bounds = { path = "../newengine-bounds", optional = true }
+newengine-math = { path = "../newengine-math", optional = true }
 serde = { version = "1.0", features = ["derive"] }
-serde_json = "1.0"

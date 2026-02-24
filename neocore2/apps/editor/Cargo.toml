@@ -16,8 +16,8 @@ newengine-assets = { path = "../../crates/newengine-assets" }
 newengine-platform-winit = { path = "../../crates/newengine-platform-winit" }
 newengine-modules-render-vulkan-ash = { path = "../../crates/newengine-modules-render-vulkan-ash" }
 
-newengine-scene = { path = "../../crates/newengine-scene" }
-newengine-transform = { path = "../../crates/newengine-transform" }
+newengine-scene = { path = "../../crates/newengine-scene", features = ["runtime"] }
+newengine-transform = { path = "../../crates/newengine-transform", features = ["ecs"], default-features = false }
 newengine-ecs = { path = "../../crates/newengine-ecs" }
 newengine-viewport = { path = "../../crates/newengine-viewport" }
 newengine-camera = { path = "../../crates/newengine-camera" }
@@ -28,4 +28,3 @@ newengine-lighting = { path = "../../crates/newengine-lighting" }
 newengine-editor-core = { path = "../../crates/newengine-editor-core" }
 newengine-previews = { path = "../../crates/newengine-previews" }
 newengine-sim = { path = "../../crates/newengine-sim" }
-gpu = "0.2.3"
