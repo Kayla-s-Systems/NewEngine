@@ -150,6 +150,6 @@ struct SceneDerivedCmd {
 impl crate::Command for SceneDerivedCmd {
     #[inline]
     fn apply(self: Box<Self>, world: &mut World) {
-        update_scene_world(world);
+        update_scene_world(world, None);
     }
 }

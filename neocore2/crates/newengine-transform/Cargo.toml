@@ -5,9 +5,12 @@ readme = "README.md"
 edition = "2021"
 
 [dependencies]
+newengine-transform-api = { path = "../newengine-transform-api", default-features = false }
+newengine-core = { path = "../newengine-core", default-features = false }
+newengine-service-api = { path = "../newengine-service-api" }
 newengine-math = { path = "../newengine-math" }
 newengine-ecs = { path = "../newengine-ecs", optional = true }
 
 [features]
 default = []
-ecs = ["dep:newengine-ecs"]
+ecs = ["dep:newengine-ecs", "newengine-transform-api/ecs"]

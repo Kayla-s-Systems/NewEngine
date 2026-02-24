@@ -3,7 +3,9 @@
 use newengine_bounds::{Aabb, Bounds, BoundsKind, Sphere};
 use newengine_ecs::{EntityId, World};
 use newengine_math::collections_prelude::NeKey;
-use newengine_transform::{propagate_transforms, GlobalTransform, Parent, Transform, TransformDirty};
+use newengine_transform_api::runtime::TransformRuntimeApi;
+use newengine_transform_api::{GlobalTransform, Parent, Transform, TransformDirty};
+
 
 /// Cached scene bounds (union of all `Bounds` world-space data).
 #[derive(Clone, Copy, Debug, Default)]
@@ -189,7 +191,7 @@ pub fn selection_world_bounds(world: &World, entities: impl Iterator<Item=Entity
 /// - updates `Bounds` world_* from `GlobalTransform` (dirty-gated)
 /// - caches union bounds as `SceneBounds` (dirty-gated)
 #[inline]
-pub fn update_scene_world(world: &mut World) {
+pub fn update_scene_world(world: &mut World, transform: Option<TransformRuntimeApi>) {
     ensure_resources(world);
 
     let tick_now = world.tick();
@@ -203,7 +205,9 @@ pub fn update_scene_world(world: &mut World) {
             .last_transform_tick;
 
         if since == 0 || any_transform_inputs_dirty(world, since) {
-            propagate_transforms(world);
+            if let Some(api) = transform {
+                api.propagate(world);
+            }
             ran_transforms = true;
 
             world.resource_mut::<SceneDerivedCache>()
