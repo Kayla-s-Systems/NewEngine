@@ -51,8 +51,6 @@
       }
     },
     "newengine.assets": {
-      "assets_root": "assets",
-      "importers_dir": "plugins/importers",
       "filesystem": true,
       "mount_paks": true,
       "pump_steps": 16,
