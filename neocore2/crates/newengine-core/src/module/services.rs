@@ -4,4 +4,7 @@
 /// Extend via Resources if you need typed APIs.
 pub trait Services: Send + Sync {
     fn logger(&self) -> &dyn log::Log;
+
+    /// In-process service registry (IoC / composition root).
+    fn service_registry(&self) -> &crate::ServiceRegistry;
 }

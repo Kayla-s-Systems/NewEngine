@@ -14,8 +14,12 @@ pub mod render;
 pub mod startup;
 pub mod console;
 pub mod host_services;
+pub mod services_registry;
 
 pub use host_services::{call_service_v1, describe_service, list_service_ids};
+
+pub use newengine_service_api::{InterfaceId, ServiceInterface, ServiceKey};
+pub use services_registry::{ErasedService, MissingServicePolicy, ServiceRegistry};
 
 pub use bus::Bus;
 pub use engine::{Engine, EngineConfig};
