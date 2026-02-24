@@ -2,9 +2,8 @@
 
 use newengine_core::render::{
     BindGroupDesc, BindGroupLayoutDesc, BindingKind, BufferBinding, BufferDesc, BufferSlice,
-    BufferUsage, DrawIndexedArgs, IndexFormat, MemoryHint, PipelineDesc,
-    PrimitiveTopology, ShaderDesc, ShaderStage, TextureFormat, VertexAttribute, VertexFormat,
-    VertexLayout,
+    BufferUsage, DrawIndexedArgs, IndexFormat, MemoryHint, PipelineDesc, PrimitiveTopology,
+    ShaderDesc, ShaderStage, TextureFormat, VertexAttribute, VertexFormat, VertexLayout,
 };
 use newengine_core::{EngineError, EngineResult as CoreResult};
 use newengine_math::collections::FxHashMap;
@@ -14,7 +13,6 @@ use newengine_assets::{wait_ready, AssetAccess, AssetServiceClient};
 use newengine_core::plugins::default_host_api;
 
 use shaderc::{CompileOptions, Compiler, OptimizationLevel, ShaderKind};
-
 
 fn load_text_asset(rel: &str) -> CoreResult<String> {
     // Hard rule: assets are loaded only through AssetManager/VFS so `.pak` layering works.
@@ -35,9 +33,9 @@ fn load_text_asset(rel: &str) -> CoreResult<String> {
         )));
     }
 
-    let (_meta, payload) = assets
-        .blob_wire_v1(&id)
-        .map_err(|e| EngineError::other(format!("asset.blob_wire_v1 failed path='{rel}' err='{e}'")))?;
+    let (_meta, payload) = assets.blob_wire_v1(&id).map_err(|e| {
+        EngineError::other(format!("asset.blob_wire_v1 failed path='{rel}' err='{e}'"))
+    })?;
 
     let s = std::str::from_utf8(&payload)
         .map_err(|_| EngineError::other(format!("asset is not utf8 path='{rel}'")))?
@@ -215,7 +213,8 @@ pub(super) fn ensure_lit_pipeline(
             .with_uniform0(BufferBinding::new(grid_ubo, 0, LIT_UBO_SIZE)),
     )?;
 
-    let compiler = shaderc::Compiler::new().map_err(|e| EngineError::other(format!("shaderc: Compiler: {e}")))?;
+    let compiler = shaderc::Compiler::new()
+        .map_err(|e| EngineError::other(format!("shaderc: Compiler: {e}")))?;
 
     let vs_src = load_text_asset("shaders/editor_lit.vert")?;
     let fs_src = load_text_asset("shaders/editor_lit.frag")?;
@@ -223,8 +222,12 @@ pub(super) fn ensure_lit_pipeline(
     let vs_spv = compile_glsl(&compiler, ShaderKind::Vertex, "editor_lit.vert", &vs_src)?;
     let fs_spv = compile_glsl(&compiler, ShaderKind::Fragment, "editor_lit.frag", &fs_src)?;
 
-    let vs = r.create_shader(ShaderDesc::new(ShaderStage::Vertex, "main", vs_spv).with_label("editor_lit_vs"))?;
-    let fs = r.create_shader(ShaderDesc::new(ShaderStage::Fragment, "main", fs_spv).with_label("editor_lit_fs"))?;
+    let vs = r.create_shader(
+        ShaderDesc::new(ShaderStage::Vertex, "main", vs_spv).with_label("editor_lit_vs"),
+    )?;
+    let fs = r.create_shader(
+        ShaderDesc::new(ShaderStage::Fragment, "main", fs_spv).with_label("editor_lit_fs"),
+    )?;
 
     let stride = std::mem::size_of::<PrimitiveVertex>() as u32;
     let layout = VertexLayout::new(
@@ -271,7 +274,8 @@ pub(super) fn ensure_primitive_gpu(
         .build_mesh(id)
         .map_err(|e| EngineError::other(format!("{e}")))?;
 
-    let mut vbytes: Vec<u8> = Vec::with_capacity(mesh.vertices.len() * std::mem::size_of::<PrimitiveVertex>());
+    let mut vbytes: Vec<u8> =
+        Vec::with_capacity(mesh.vertices.len() * std::mem::size_of::<PrimitiveVertex>());
     for v in &mesh.vertices {
         vbytes.extend_from_slice(&v.pos[0].to_ne_bytes());
         vbytes.extend_from_slice(&v.pos[1].to_ne_bytes());
@@ -287,13 +291,21 @@ pub(super) fn ensure_primitive_gpu(
     }
 
     let vb = r.create_buffer(
-        BufferDesc::new(vbytes.len() as u64, BufferUsage::Vertex, MemoryHint::CpuToGpu)
+        BufferDesc::new(
+            vbytes.len() as u64,
+            BufferUsage::Vertex,
+            MemoryHint::CpuToGpu,
+        )
             .with_label("editor_prim_vb"),
     )?;
     r.write_buffer(vb, 0, &vbytes)?;
 
     let ib = r.create_buffer(
-        BufferDesc::new(ibytes.len() as u64, BufferUsage::Index, MemoryHint::CpuToGpu)
+        BufferDesc::new(
+            ibytes.len() as u64,
+            BufferUsage::Index,
+            MemoryHint::CpuToGpu,
+        )
             .with_label("editor_prim_ib"),
     )?;
     r.write_buffer(ib, 0, &ibytes)?;
@@ -308,7 +320,6 @@ pub(super) fn ensure_primitive_gpu(
     Ok(gpu)
 }
 
-
 pub(super) fn ensure_grid(
     cached: &mut Option<GridGpu>,
     r: &mut dyn newengine_core::render::RenderApi,
@@ -321,7 +332,8 @@ pub(super) fn ensure_grid(
         }
     }
 
-    let compiler = shaderc::Compiler::new().map_err(|e| EngineError::other(format!("shaderc: Compiler: {e}")))?;
+    let compiler = shaderc::Compiler::new()
+        .map_err(|e| EngineError::other(format!("shaderc: Compiler: {e}")))?;
 
     let vs_src = load_text_asset("shaders/editor_grid.vert")?;
     let fs_src = load_text_asset("shaders/editor_grid.frag")?;
@@ -329,8 +341,12 @@ pub(super) fn ensure_grid(
     let vs_spv = compile_glsl(&compiler, ShaderKind::Vertex, "editor_grid.vert", &vs_src)?;
     let fs_spv = compile_glsl(&compiler, ShaderKind::Fragment, "editor_grid.frag", &fs_src)?;
 
-    let vs = r.create_shader(ShaderDesc::new(ShaderStage::Vertex, "main", vs_spv).with_label("editor_grid_vs"))?;
-    let fs = r.create_shader(ShaderDesc::new(ShaderStage::Fragment, "main", fs_spv).with_label("editor_grid_fs"))?;
+    let vs = r.create_shader(
+        ShaderDesc::new(ShaderStage::Vertex, "main", vs_spv).with_label("editor_grid_vs"),
+    )?;
+    let fs = r.create_shader(
+        ShaderDesc::new(ShaderStage::Fragment, "main", fs_spv).with_label("editor_grid_fs"),
+    )?;
 
     let vb = build_unit_grid_vb(r, params)?;
 
@@ -339,7 +355,11 @@ pub(super) fn ensure_grid(
         stride,
         vec![
             VertexAttribute::new(0, 0, VertexFormat::Float32x3),
-            VertexAttribute::new(1, (3 * std::mem::size_of::<f32>()) as u32, VertexFormat::Float32x4),
+            VertexAttribute::new(
+                1,
+                (3 * std::mem::size_of::<f32>()) as u32,
+                VertexFormat::Float32x4,
+            ),
         ],
     );
 
@@ -372,7 +392,6 @@ fn unit_grid_vertex_count(half_lines: i32) -> u32 {
     2 * per_axis * 2
 }
 
-
 fn build_unit_grid_vb(
     r: &mut dyn newengine_core::render::RenderApi,
     params: GridMeshParams,
@@ -399,7 +418,11 @@ fn build_unit_grid_vb(
     for i in -half_lines..=half_lines {
         let z = i as f32;
         let is_major = (i.rem_euclid(major_every)) == 0;
-        let col = if is_major { params.major_color } else { params.minor_color };
+        let col = if is_major {
+            params.major_color
+        } else {
+            params.minor_color
+        };
         push([-half, 0.0, z], col);
         push([half, 0.0, z], col);
     }
@@ -408,13 +431,21 @@ fn build_unit_grid_vb(
     for i in -half_lines..=half_lines {
         let x = i as f32;
         let is_major = (i.rem_euclid(major_every)) == 0;
-        let col = if is_major { params.major_color } else { params.minor_color };
+        let col = if is_major {
+            params.major_color
+        } else {
+            params.minor_color
+        };
         push([x, 0.0, -half], col);
         push([x, 0.0, half], col);
     }
 
     let vb = r.create_buffer(
-        BufferDesc::new(bytes.len() as u64, BufferUsage::Vertex, MemoryHint::CpuToGpu)
+        BufferDesc::new(
+            bytes.len() as u64,
+            BufferUsage::Vertex,
+            MemoryHint::CpuToGpu,
+        )
             .with_label("editor_grid_vb"),
     )?;
 
@@ -423,7 +454,6 @@ fn build_unit_grid_vb(
 
     Ok(vb)
 }
-
 
 fn compile_glsl(
     compiler: &Compiler,

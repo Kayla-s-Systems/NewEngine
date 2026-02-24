@@ -18,6 +18,7 @@ newengine-modules-render-vulkan-ash = { path = "../../crates/newengine-modules-r
 
 newengine-scene = { path = "../../crates/newengine-scene", features = ["runtime"] }
 newengine-transform = { path = "../../crates/newengine-transform", features = ["ecs"], default-features = false }
+newengine-transform-api = { path = "../../crates/newengine-transform-api", features = ["ecs"], default-features = false }
 newengine-ecs = { path = "../../crates/newengine-ecs" }
 newengine-viewport = { path = "../../crates/newengine-viewport" }
 newengine-camera = { path = "../../crates/newengine-camera" }

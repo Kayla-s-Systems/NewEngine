@@ -34,59 +34,64 @@ pub(crate) fn draw(me: &mut EditorUiBuild, ctx: &egui::Context) {
                     .then_with(|| a.1.stable_u64().cmp(&b.1.stable_u64()))
             });
 
-            egui::ScrollArea::vertical().auto_shrink([false; 2]).show(ui, |ui| {
-                for (name, e, has_prim) in items {
-                    let icon_kind = if w.get::<DirectionalLight>(e).is_some() {
-                        Some(BuiltinUiIcon::LightDirectional)
-                    } else if w.get::<PointLight>(e).is_some() {
-                        Some(BuiltinUiIcon::LightPoint)
-                    } else {
-                        None
-                    };
+            egui::ScrollArea::vertical()
+                .auto_shrink([false; 2])
+                .show(ui, |ui| {
+                    for (name, e, has_prim) in items {
+                        let icon_kind = if w.get::<DirectionalLight>(e).is_some() {
+                            Some(BuiltinUiIcon::LightDirectional)
+                        } else if w.get::<PointLight>(e).is_some() {
+                            Some(BuiltinUiIcon::LightPoint)
+                        } else {
+                            None
+                        };
 
-                    let mut label = name;
-                    if has_prim {
-                        label.push_str("  [Prim]");
-                    }
+                        let mut label = name;
+                        if has_prim {
+                            label.push_str("  [Prim]");
+                        }
 
-                    let is_sel = me.editor.selection.contains(e);
-                    let is_primary = primary == Some(e);
+                        let is_sel = me.editor.selection.contains(e);
+                        let is_primary = primary == Some(e);
 
-                    let sel = ui
-                        .horizontal(|ui| {
-                            if let Some(kind) = icon_kind {
-                                if let Some(tid) = me.icons.tex_id(kind) {
-                                    let st = egui::load::SizedTexture::new(tid, egui::vec2(16.0, 16.0));
-                                    ui.image(st);
+                        let sel = ui
+                            .horizontal(|ui| {
+                                if let Some(kind) = icon_kind {
+                                    if let Some(tid) = me.icons.tex_id(kind) {
+                                        let st = egui::load::SizedTexture::new(
+                                            tid,
+                                            egui::vec2(16.0, 16.0),
+                                        );
+                                        ui.image(st);
+                                    } else {
+                                        ui.add_space(16.0);
+                                    }
                                 } else {
                                     ui.add_space(16.0);
                                 }
+
+                                ui.selectable_label(is_sel, label)
+                            })
+                            .inner;
+
+                        if sel.clicked() {
+                            if mods.command {
+                                me.editor.selection.toggle(e);
+                            } else if mods.shift {
+                                me.editor.selection.add(e);
                             } else {
-                                ui.add_space(16.0);
+                                me.editor.selection.set_single(Some(e));
                             }
-
-                            ui.selectable_label(is_sel, label)
-                        })
-                        .inner;
-
-                    if sel.clicked() {
-                        if mods.command {
-                            me.editor.selection.toggle(e);
-                        } else if mods.shift {
-                            me.editor.selection.add(e);
-                        } else {
-                            me.editor.selection.set_single(Some(e));
-                        }
-                        me.scene_bridge.set_selection(me.editor.selection.primary());
-                        if is_primary {
-                            // Keep inspector cache stable.
-                            if let Some(p) = me.editor.selection.primary() {
-                                me.refresh_inspector_cache(p);
+                            me.scene_bridge.set_selection(me.editor.selection.primary());
+                            if is_primary {
+                                // Keep inspector cache stable.
+                                if let Some(p) = me.editor.selection.primary() {
+                                    me.refresh_inspector_cache(p);
+                                }
                             }
                         }
                     }
-                }
-            });
+                });
 
             ui.separator();
             if ui.button("Deselect").clicked() {

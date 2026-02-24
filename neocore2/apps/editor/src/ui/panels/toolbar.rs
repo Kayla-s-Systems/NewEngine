@@ -23,9 +23,13 @@ pub(crate) fn draw(me: &mut EditorUiBuild, ctx: &egui::Context) {
                                     ui: &mut egui::Ui,
                                     icon: Option<BuiltinUiIcon>,
                                     fallback_label: &str,
-                                    active: bool,
-            | -> egui::Response {
-                let fill = if active { ui.visuals().selection.bg_fill } else { egui::Color32::TRANSPARENT };
+                                    active: bool|
+                                    -> egui::Response {
+                let fill = if active {
+                    ui.visuals().selection.bg_fill
+                } else {
+                    egui::Color32::TRANSPARENT
+                };
 
                 match icon.and_then(|i| me.icons.tex_id(i)) {
                     Some(tid) => {

@@ -30,14 +30,14 @@ pub(crate) fn draw(me: &mut EditorUiBuild, ctx: &egui::Context) {
         me.viewport.set_extent(px_w, px_h);
         me.viewport_bridge.publish_extent(px_w, px_h);
 
-        let (shift, rmb_down, rmb_pressed, rmb_released, raw_scroll_y, dropped_files) = ctx.input(|i| {
+        let (shift, rmb_pressed, rmb_released, raw_scroll_y, dropped_files, esc_pressed) = ctx.input(|i| {
             (
                 i.modifiers.shift,
-                i.pointer.button_down(egui::PointerButton::Secondary),
                 i.pointer.button_pressed(egui::PointerButton::Secondary),
                 i.pointer.button_released(egui::PointerButton::Secondary),
                 i.raw_scroll_delta.y,
                 i.raw.dropped_files.clone(),
+                i.key_pressed(egui::Key::Escape),
             )
         });
 
@@ -45,14 +45,14 @@ pub(crate) fn draw(me: &mut EditorUiBuild, ctx: &egui::Context) {
         let nav_pan = resp.dragged_by(egui::PointerButton::Middle) && shift;
         let nav_drag = nav_rotate || nav_pan;
 
-        let active = resp.hovered() || nav_drag;
+        let hovered = resp.hovered() || nav_drag;
 
         // Gizmo hotkeys:
-        // - Q/W/E/R when RMB is NOT held
+        // - Q/W/E/R when RMB free-fly is NOT active
         // - 1/2/3 always available
-        if active && !ctx.wants_keyboard_input() {
+        if hovered && !ctx.wants_keyboard_input() {
             ctx.input(|i| {
-                let allow_qwer = !rmb_down;
+                let allow_qwer = !(me.fly_latch.is_captured() || rmb_pressed);
 
                 let pressed_q = allow_qwer && i.key_pressed(egui::Key::Q);
                 let pressed_w = (allow_qwer && i.key_pressed(egui::Key::W)) || i.key_pressed(egui::Key::Num1);
@@ -121,6 +121,30 @@ pub(crate) fn draw(me: &mut EditorUiBuild, ctx: &egui::Context) {
             }
         }
 
+        // RMB free-fly capture is **latched**.
+        //
+        // AAA policy:
+        // - toggle only on explicit press/release edges
+        // - ignore transient `button_down` flaps caused by pointer-lock
+        // - allow Esc to force-cancel capture
+        if esc_pressed {
+            me.fly_latch.cancel();
+        }
+
+        let (fly_rmb, fly_rmb_changed) = me
+            .fly_latch
+            .update(rmb_pressed, rmb_released, hovered && !gizmo_capture_now);
+
+        if fly_rmb_changed {
+            // Cursor lock/unlock can warp the pointer; drop any baseline to avoid a delta spike.
+            me.last_fly_drag_pos = None;
+            me.last_nav_drag_pos = None;
+        }
+
+        // While RMB capture is active we must treat the viewport as active even if the backend
+        // temporarily reports pointer outside of the rect.
+        let active = hovered || fly_rmb;
+
         // Click-to-select (picking handled on render thread).
         if resp.clicked_by(egui::PointerButton::Primary) && !nav_drag && !gizmo_capture_now {
             if let Some(pos) = resp.interact_pointer_pos() {
@@ -138,53 +162,21 @@ pub(crate) fn draw(me: &mut EditorUiBuild, ctx: &egui::Context) {
 
         let wants_kb = ctx.wants_keyboard_input();
 
-        // RMB free-fly capture is **latched**.
-        //
-        // Do NOT gate it by `wants_keyboard_input`: egui may briefly toggle keyboard focus
-        // during pointer capture/lock transitions, which would flicker the mode and cause
-        // visible position snaps.
-        //
-        // Also do NOT drop capture immediately on a single-frame `button_down == false`,
-        // since some platforms/backends can momentarily report it during pointer-lock.
-        // We instead require a few consecutive misses before force-dropping the latch.
-        if rmb_released {
-            me.fly_rmb_capture = false;
-            me.rmb_down_miss_frames = 0;
-        }
-        if active && rmb_pressed && !gizmo_capture_now {
-            me.fly_rmb_capture = true;
-            me.rmb_down_miss_frames = 0;
-        }
-        if me.fly_rmb_capture {
-            if rmb_down {
-                me.rmb_down_miss_frames = 0;
-            } else {
-                me.rmb_down_miss_frames = me.rmb_down_miss_frames.saturating_add(1);
-                // If the backend missed the release event, eventually drop capture.
-                // Threshold >1 avoids Orbit<->Fly flicker.
-                if me.rmb_down_miss_frames >= 3 {
-                    me.fly_rmb_capture = false;
-                    me.rmb_down_miss_frames = 0;
-                }
-            }
+        if rmb_pressed || rmb_released {
+            let p = resp.interact_pointer_pos();
+            log::info!(
+                "viewport: RMB edge pressed={} released={} hovered={} gizmo_capture={} fly_rmb_after={} ptr={:?}",
+                rmb_pressed,
+                rmb_released,
+                hovered,
+                gizmo_capture_now,
+                fly_rmb,
+                p
+            );
         }
 
-        // Free-fly capture: RMB pressed within viewport latches the mode until release.
-        let fly_rmb = me.fly_rmb_capture;
-
-        let fly_rmb_changed = fly_rmb != me.prev_fly_rmb;
-        if fly_rmb_changed {
-            // Cursor lock/unlock can warp the pointer; drop any baseline to avoid a delta spike.
-            me.last_fly_drag_pos = None;
-            me.last_nav_drag_pos = None;
-        }
-        me.prev_fly_rmb = fly_rmb;
-
-        // Middle-drag and RMB free-fly both use explicit drag tracking.
-        //
-        // IMPORTANT: Do NOT use `pointer.delta()` for RMB capture.
-        // `pointer.delta()` includes motion that happened *before* capture toggled on,
-        // which produces a visible view-direction "snap" on press/release.
+        // Middle-drag uses explicit drag tracking (absolute positions).
+        // RMB free-fly uses relative motion (`pointer.delta()`), robust to cursor warp.
         let (mut dx_px, mut dy_px) = (0.0f32, 0.0f32);
         if nav_drag {
             // Prevent stale baseline if the user switches from RMB free-fly to MMB nav.
@@ -200,24 +192,19 @@ pub(crate) fn draw(me: &mut EditorUiBuild, ctx: &egui::Context) {
         } else {
             me.last_nav_drag_pos = None;
 
-            if fly_rmb && !fly_rmb_changed {
-                if let Some(pos) = resp.interact_pointer_pos() {
-                    if let Some(prev) = me.last_fly_drag_pos {
-                        let d = pos - prev;
-                        dx_px = d.x * ppp;
-                        dy_px = d.y * ppp;
-                    }
-                    me.last_fly_drag_pos = Some(pos);
-                }
-            } else {
-                me.last_fly_drag_pos = None;
+            if fly_rmb {
+                let d = ctx.input(|i| i.pointer.delta());
+                dx_px = d.x * ppp;
+                dy_px = d.y * ppp;
             }
+            me.last_fly_drag_pos = None;
         }
 
         // Defensive: cursor lock/unlock (platform-level) may warp the cursor, causing a huge one-frame delta.
         // Treat that as a baseline reset instead of a camera impulse.
-        let max_delta = (rect.width().max(rect.height()) * ppp).max(1.0) * 0.5;
-        if dx_px.abs() > max_delta || dy_px.abs() > max_delta {
+        // We use a fixed cap (in px/frame) to remain stable across viewport sizes.
+        let max_delta_px = 160.0;
+        if dx_px.abs() > max_delta_px || dy_px.abs() > max_delta_px {
             dx_px = 0.0;
             dy_px = 0.0;
             me.last_fly_drag_pos = None;
@@ -225,7 +212,11 @@ pub(crate) fn draw(me: &mut EditorUiBuild, ctx: &egui::Context) {
         }
 
         let wheel_y_points = if active { raw_scroll_y } else { 0.0 };
-        let wheel_y = (wheel_y_points / 240.0).clamp(-2.0, 2.0);
+        let mut wheel_y = (wheel_y_points / 240.0).clamp(-2.0, 2.0);
+
+        // Suppress synthetic deltas around RMB capture transitions.
+        me.fly_latch
+            .suppress_motion_if_needed(&mut dx_px, &mut dy_px, &mut wheel_y);
 
         // Drag & drop models onto the viewport.
         if active {
@@ -279,25 +270,25 @@ pub(crate) fn draw(me: &mut EditorUiBuild, ctx: &egui::Context) {
         if fly_rmb {
             ctx.input(|i| {
                 if i.key_down(egui::Key::W) {
-                    move_mask |= 1 << 0;
+                    move_mask |= newengine_viewport::input::MOVE_W;
                 }
                 if i.key_down(egui::Key::A) {
-                    move_mask |= 1 << 1;
+                    move_mask |= newengine_viewport::input::MOVE_A;
                 }
                 if i.key_down(egui::Key::S) {
-                    move_mask |= 1 << 2;
+                    move_mask |= newengine_viewport::input::MOVE_S;
                 }
                 if i.key_down(egui::Key::D) {
-                    move_mask |= 1 << 3;
+                    move_mask |= newengine_viewport::input::MOVE_D;
                 }
                 if i.key_down(egui::Key::Q) {
-                    move_mask |= 1 << 4;
+                    move_mask |= newengine_viewport::input::MOVE_UP;
                 }
                 if i.key_down(egui::Key::E) {
-                    move_mask |= 1 << 5;
+                    move_mask |= newengine_viewport::input::MOVE_DOWN;
                 }
                 if i.modifiers.shift {
-                    move_mask |= 1 << 6;
+                    move_mask |= newengine_viewport::input::MOVE_SHIFT;
                 }
             });
         }

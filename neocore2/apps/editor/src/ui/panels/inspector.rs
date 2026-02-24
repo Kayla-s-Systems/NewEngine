@@ -33,8 +33,6 @@ fn yaw_pitch_deg_to_dir(yaw_deg: f32, pitch_deg: f32) -> newengine_math::Vec3 {
     newengine_math::Vec3::new(sy * cp, -sp, cy * cp).normalize_or_zero()
 }
 
-
-
 pub(crate) fn draw(me: &mut EditorUiBuild, ctx: &egui::Context) {
     egui::SidePanel::right("inspector")
         .resizable(true)
@@ -54,9 +52,7 @@ pub(crate) fn draw(me: &mut EditorUiBuild, ctx: &egui::Context) {
             };
 
             if sel_count > 1 {
-                ui.label(format!(
-                    "Selected: {sel_count} entities (editing primary)"
-                ));
+                ui.label(format!("Selected: {sel_count} entities (editing primary)"));
             }
 
             if me.selected_entity_cached != Some(e) {
@@ -80,33 +76,56 @@ pub(crate) fn draw(me: &mut EditorUiBuild, ctx: &egui::Context) {
 
                 ui.horizontal(|ui| {
                     ui.label("Position");
-                    changed |= ui.add(egui::DragValue::new(&mut me.insp_pos[0]).speed(0.05)).changed();
-                    changed |= ui.add(egui::DragValue::new(&mut me.insp_pos[1]).speed(0.05)).changed();
-                    changed |= ui.add(egui::DragValue::new(&mut me.insp_pos[2]).speed(0.05)).changed();
+                    changed |= ui
+                        .add(egui::DragValue::new(&mut me.insp_pos[0]).speed(0.05))
+                        .changed();
+                    changed |= ui
+                        .add(egui::DragValue::new(&mut me.insp_pos[1]).speed(0.05))
+                        .changed();
+                    changed |= ui
+                        .add(egui::DragValue::new(&mut me.insp_pos[2]).speed(0.05))
+                        .changed();
                 });
 
                 ui.horizontal(|ui| {
                     ui.label("Rotation (deg)");
-                    changed |= ui.add(egui::DragValue::new(&mut me.insp_rot_deg[0]).speed(0.25)).changed();
-                    changed |= ui.add(egui::DragValue::new(&mut me.insp_rot_deg[1]).speed(0.25)).changed();
-                    changed |= ui.add(egui::DragValue::new(&mut me.insp_rot_deg[2]).speed(0.25)).changed();
+                    changed |= ui
+                        .add(egui::DragValue::new(&mut me.insp_rot_deg[0]).speed(0.25))
+                        .changed();
+                    changed |= ui
+                        .add(egui::DragValue::new(&mut me.insp_rot_deg[1]).speed(0.25))
+                        .changed();
+                    changed |= ui
+                        .add(egui::DragValue::new(&mut me.insp_rot_deg[2]).speed(0.25))
+                        .changed();
                 });
 
                 ui.horizontal(|ui| {
                     ui.label("Scale");
-                    changed |= ui.add(egui::DragValue::new(&mut me.insp_scale[0]).speed(0.05)).changed();
-                    changed |= ui.add(egui::DragValue::new(&mut me.insp_scale[1]).speed(0.05)).changed();
-                    changed |= ui.add(egui::DragValue::new(&mut me.insp_scale[2]).speed(0.05)).changed();
+                    changed |= ui
+                        .add(egui::DragValue::new(&mut me.insp_scale[0]).speed(0.05))
+                        .changed();
+                    changed |= ui
+                        .add(egui::DragValue::new(&mut me.insp_scale[1]).speed(0.05))
+                        .changed();
+                    changed |= ui
+                        .add(egui::DragValue::new(&mut me.insp_scale[2]).speed(0.05))
+                        .changed();
                 });
 
                 if changed {
-                    let pos = newengine_math::Vec3::new(me.insp_pos[0], me.insp_pos[1], me.insp_pos[2]);
+                    let pos =
+                        newengine_math::Vec3::new(me.insp_pos[0], me.insp_pos[1], me.insp_pos[2]);
                     let ypr = (
                         me.insp_rot_deg[0].to_radians(),
                         me.insp_rot_deg[1].to_radians(),
                         me.insp_rot_deg[2].to_radians(),
                     );
-                    let scale = newengine_math::Vec3::new(me.insp_scale[0], me.insp_scale[1], me.insp_scale[2]);
+                    let scale = newengine_math::Vec3::new(
+                        me.insp_scale[0],
+                        me.insp_scale[1],
+                        me.insp_scale[2],
+                    );
                     me.scene_bridge.cmd_set_transform(e, pos, ypr, scale);
                 }
             });
@@ -134,7 +153,6 @@ pub(crate) fn draw(me: &mut EditorUiBuild, ctx: &egui::Context) {
                     ui.label("(no Primitive component)");
                 }
             });
-
 
             // Lighting (editor-first, deterministic, module-driven).
             ui.collapsing("Lighting", |ui| {
@@ -180,7 +198,11 @@ pub(crate) fn draw(me: &mut EditorUiBuild, ctx: &egui::Context) {
                     let mut rgb = dl.color;
                     let mut intensity = dl.intensity;
 
-                    let d = newengine_math::Vec3::new(dl.direction_ws[0], dl.direction_ws[1], dl.direction_ws[2]);
+                    let d = newengine_math::Vec3::new(
+                        dl.direction_ws[0],
+                        dl.direction_ws[1],
+                        dl.direction_ws[2],
+                    );
                     let (mut yaw_deg, mut pitch_deg) = dir_to_yaw_pitch_deg(d);
 
                     ui.horizontal(|ui| {
@@ -203,12 +225,14 @@ pub(crate) fn draw(me: &mut EditorUiBuild, ctx: &egui::Context) {
                     });
 
                     let new_dir = yaw_pitch_deg_to_dir(yaw_deg, pitch_deg);
-                    if rgb != dl.color || (intensity - dl.intensity).abs() > 1e-6
+                    if rgb != dl.color
+                        || (intensity - dl.intensity).abs() > 1e-6
                         || (new_dir.x - dl.direction_ws[0]).abs() > 1e-4
                         || (new_dir.y - dl.direction_ws[1]).abs() > 1e-4
                         || (new_dir.z - dl.direction_ws[2]).abs() > 1e-4
                     {
-                        me.scene_bridge.cmd_set_directional_light(e, new_dir, rgb, intensity);
+                        me.scene_bridge
+                            .cmd_set_directional_light(e, new_dir, rgb, intensity);
                     }
                 } else if let Some(pl) = w.get::<PointLight>(e).copied() {
                     ui.horizontal(|ui| {
@@ -238,8 +262,12 @@ pub(crate) fn draw(me: &mut EditorUiBuild, ctx: &egui::Context) {
                         ui.add(egui::Slider::new(&mut range, 0.1..=100.0));
                     });
 
-                    if rgb != pl.color || (intensity - pl.intensity).abs() > 1e-6 || (range - pl.range).abs() > 1e-6 {
-                        me.scene_bridge.cmd_set_point_light(e, rgb, intensity, range);
+                    if rgb != pl.color
+                        || (intensity - pl.intensity).abs() > 1e-6
+                        || (range - pl.range).abs() > 1e-6
+                    {
+                        me.scene_bridge
+                            .cmd_set_point_light(e, rgb, intensity, range);
                     }
 
                     if let Some(gt) = w.get::<GlobalTransform>(e) {
@@ -295,7 +323,9 @@ pub(crate) fn draw(me: &mut EditorUiBuild, ctx: &egui::Context) {
 
                         ui.horizontal(|ui| {
                             ui.label("Metallic");
-                            changed |= ui.add(egui::Slider::new(&mut desc.metallic, 0.0..=1.0)).changed();
+                            changed |= ui
+                                .add(egui::Slider::new(&mut desc.metallic, 0.0..=1.0))
+                                .changed();
                         });
 
                         ui.horizontal(|ui| {
@@ -307,9 +337,7 @@ pub(crate) fn draw(me: &mut EditorUiBuild, ctx: &egui::Context) {
 
                         ui.horizontal(|ui| {
                             ui.label("Emissive");
-                            changed |= ui
-                                .color_edit_button_rgb(&mut desc.emissive)
-                                .changed();
+                            changed |= ui.color_edit_button_rgb(&mut desc.emissive).changed();
                         });
 
                         ui.horizontal(|ui| {

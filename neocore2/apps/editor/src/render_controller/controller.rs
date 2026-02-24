@@ -35,10 +35,15 @@ pub struct EditorRenderController {
     pub(super) plugins_bridge: std::sync::Arc<PluginManagerBridge>,
     pub(super) scene_bridge: std::sync::Arc<SceneBridge>,
 
-    pub(super) previews: std::sync::Arc<parking_lot::Mutex<newengine_previews::PrimitivePreviewService>>,
+    pub(super) previews:
+        std::sync::Arc<parking_lot::Mutex<newengine_previews::PrimitivePreviewService>>,
 
     pub(super) viewport_rt: Option<newengine_core::render::RenderTargetId>,
     pub(super) viewport_rt_extent: Extent2D,
+
+    /// Render targets must be destroyed only after in-flight command buffers are done.
+    /// We approximate this with a small frame delay (triple-buffer friendly).
+    pub(super) deferred_rts: Vec<(newengine_core::render::RenderTargetId, u64)>,
 
     pub(super) grid: Option<GridGpu>,
     pub(super) lit: Option<LitPipeline>,
@@ -79,13 +84,8 @@ impl EditorRenderController {
     ) -> Self {
         // Camera controller state lives in ECS (EditorCameraController + CameraRigComp).
 
-
-        let projection = Projection::Perspective(Perspective::new(
-            60.0f32.to_radians(),
-            1.0,
-            0.01,
-            1000.0,
-        ));
+        let projection =
+            Projection::Perspective(Perspective::new(60.0f32.to_radians(), 1.0, 0.01, 1000.0));
 
         Self {
             clear_color,
@@ -105,6 +105,8 @@ impl EditorRenderController {
 
             viewport_rt: None,
             viewport_rt_extent: Extent2D::new(0, 0),
+
+            deferred_rts: Vec::new(),
 
             grid: None,
             lit: None,
@@ -149,7 +151,11 @@ impl EditorRenderController {
         let bg = r.create_bind_group(
             newengine_core::render::BindGroupDesc::new(lit.bgl)
                 .with_label("editor_lit_entity_bg")
-                .with_uniform0(newengine_core::render::BufferBinding::new(ubo, 0, LIT_UBO_SIZE)),
+                .with_uniform0(newengine_core::render::BufferBinding::new(
+                    ubo,
+                    0,
+                    LIT_UBO_SIZE,
+                )),
         )?;
 
         let entry = PerDrawUbo {
@@ -175,6 +181,22 @@ impl EditorRenderController {
             if let Some(v) = self.per_draw_ubo.remove(&k) {
                 r.destroy_bind_group(v.bg);
                 r.destroy_buffer(v.ubo);
+            }
+        }
+    }
+
+    pub(super) fn gc_deferred_rts(&mut self, r: &mut dyn newengine_core::render::RenderApi) {
+        let now = self.frame_index;
+        let grace = 4_u64;
+
+        let mut i = 0;
+        while i < self.deferred_rts.len() {
+            let (rt, born) = self.deferred_rts[i];
+            if now.saturating_sub(born) > grace {
+                r.destroy_render_target(rt);
+                self.deferred_rts.swap_remove(i);
+            } else {
+                i += 1;
             }
         }
     }

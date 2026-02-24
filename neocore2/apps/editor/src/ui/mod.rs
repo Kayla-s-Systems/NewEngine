@@ -70,15 +70,8 @@ pub struct EditorUiBuild {
     pub(crate) last_nav_drag_pos: Option<egui::Pos2>,
     pub(crate) last_fly_drag_pos: Option<egui::Pos2>,
 
-    /// Latched RMB free-fly capture.
-    ///
-    /// IMPORTANT: do not derive this directly from `ctx.wants_keyboard_input()`.
-    /// Egui can temporarily flip that flag during pointer-lock/capture transitions,
-    /// which would cause mode flicker (Orbit <-> Fly) and visible camera snaps.
-    pub(crate) fly_rmb_capture: bool,
-    pub(crate) rmb_down_miss_frames: u8,
-
-    pub(crate) prev_fly_rmb: bool,
+    /// Latched RMB free-fly capture state.
+    pub(crate) fly_latch: newengine_viewport::nav::FlyRmbLatch,
 
     pub(crate) console_open: bool,
     pub(crate) console_input: String,
@@ -130,7 +123,9 @@ impl EditorUiBuild {
             .expect("scene has no active camera");
         let viewport = Viewport::new(Some(cam));
 
-        let plugin_manager = Arc::new(Mutex::new(PluginManagerUi::new(Arc::clone(&plugins_bridge))));
+        let plugin_manager = Arc::new(Mutex::new(PluginManagerUi::new(Arc::clone(
+            &plugins_bridge,
+        ))));
 
         let mut me = Self {
             shared_doc,
@@ -146,9 +141,7 @@ impl EditorUiBuild {
 
             last_nav_drag_pos: None,
             last_fly_drag_pos: None,
-            fly_rmb_capture: false,
-            rmb_down_miss_frames: 0,
-            prev_fly_rmb: false,
+            fly_latch: newengine_viewport::nav::FlyRmbLatch::default(),
 
             console_open: false,
             console_input: String::new(),

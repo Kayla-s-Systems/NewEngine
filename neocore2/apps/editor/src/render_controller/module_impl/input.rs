@@ -17,7 +17,7 @@ pub(super) struct ViewportInputSnap {
 impl ViewportInputSnap {
     #[inline]
     pub(super) fn read(bridge: &crate::viewport_bridge::ViewportBridge) -> Self {
-        let (dx_px, dy_px, wheel_y, _hovered, look_drag, pan_drag, ui_busy, fly_rmb) =
+        let (dx_px, dy_px, wheel_y, _active, look_drag, pan_drag, ui_busy, fly_rmb) =
             bridge.read_camera_input();
         let move_mask = bridge.read_move_keys();
         Self {

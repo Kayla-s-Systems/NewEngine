@@ -42,5 +42,8 @@ pub(super) fn selection_bounds(
     let b = newengine_scene::selection_world_bounds(world, [e].into_iter())?;
     let c = b.center();
     let r = b.half_extents().length().max(0.001);
-    Some(SelectionBoundsSnap { center: c, radius: r })
+    Some(SelectionBoundsSnap {
+        center: c,
+        radius: r,
+    })
 }

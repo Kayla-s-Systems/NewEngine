@@ -21,7 +21,8 @@ impl EditorRenderController {
                 return Ok(rt);
             }
 
-            r.destroy_render_target(rt);
+            // Do not destroy immediately: GPU may still reference the old framebuffer.
+            self.deferred_rts.push((rt, self.frame_index));
             self.viewport_rt = None;
         }
 
@@ -53,7 +54,9 @@ impl EditorRenderController {
 
     #[inline]
     #[allow(dead_code)]
-    pub(super) fn require_nonzero_viewport_extent(extent: Extent2D) -> Result<Extent2D, EngineError> {
+    pub(super) fn require_nonzero_viewport_extent(
+        extent: Extent2D,
+    ) -> Result<Extent2D, EngineError> {
         if extent.width == 0 || extent.height == 0 {
             return Err(EngineError::other("viewport extent is zero"));
         }

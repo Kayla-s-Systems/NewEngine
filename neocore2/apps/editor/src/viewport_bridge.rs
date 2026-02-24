@@ -39,7 +39,7 @@ pub struct ViewportBridge {
     wheel_y: AtomicU64,
 
     /// Orbit interaction flags.
-    /// bit0: hovered
+    /// bit0: active (viewport wants input; stable during pointer-lock)
     /// bit1: look_drag (camera rotate)
     /// bit2: pan_drag (camera pan)
     /// bit3: ui_busy (UI captured input; e.g. gizmo drag/hover)
@@ -79,7 +79,6 @@ struct CameraSpawnState {
     pos: Vec3,
     forward: Vec3,
 }
-
 
 impl ViewportBridge {
     #[inline]
@@ -141,8 +140,7 @@ impl ViewportBridge {
     /// Publish the desired viewport pixel extent from UI.
     #[inline]
     pub fn publish_extent(&self, w: u32, h: u32) {
-        self.extent_wh
-            .store(Self::pack_wh(w, h), Ordering::Relaxed);
+        self.extent_wh.store(Self::pack_wh(w, h), Ordering::Relaxed);
     }
 
     /// Read the desired viewport pixel extent.
@@ -189,7 +187,7 @@ impl ViewportBridge {
     ///
     /// - `dx_px`, `dy_px` are cursor deltas in **physical pixels**.
     /// - `wheel_y` is wheel delta Y (positive -> zoom in).
-    /// - `hovered` is true when the viewport rect is hovered.
+    /// - `active` is true when the viewport wants input.
     /// - `look_drag` is true while camera rotation is captured.
     /// - `pan_drag` is true while camera panning is captured.
     #[inline]
@@ -198,7 +196,7 @@ impl ViewportBridge {
         dx_px: f32,
         dy_px: f32,
         wheel_y: f32,
-        hovered: bool,
+        active: bool,
         look_drag: bool,
         pan_drag: bool,
         ui_busy: bool,
@@ -209,7 +207,7 @@ impl ViewportBridge {
         self.wheel_y
             .store(Self::pack_f32(wheel_y), Ordering::Relaxed);
         let mut flags: u64 = 0;
-        if hovered {
+        if active {
             flags |= 1;
         }
         if look_drag {
@@ -226,7 +224,6 @@ impl ViewportBridge {
         }
         self.input_flags.store(flags, Ordering::Relaxed);
     }
-
 
     /// Publish per-frame movement key mask from UI.
     #[inline]
@@ -254,12 +251,12 @@ impl ViewportBridge {
         let (dx, dy) = Self::unpack_f32x2(self.look_delta_xy.swap(0, Ordering::Relaxed));
         let wheel = Self::unpack_f32(self.wheel_y.swap(0, Ordering::Relaxed));
         let flags = self.input_flags.load(Ordering::Relaxed);
-        let hovered = (flags & 1) != 0;
+        let active = (flags & 1) != 0;
         let look_drag = (flags & 2) != 0;
         let pan_drag = (flags & 4) != 0;
         let ui_busy = (flags & 8) != 0;
         let fly_rmb = (flags & 16) != 0;
-        (dx, dy, wheel, hovered, look_drag, pan_drag, ui_busy, fly_rmb)
+        (dx, dy, wheel, active, look_drag, pan_drag, ui_busy, fly_rmb)
     }
 
     /// Publish a pick request from UI.

@@ -47,7 +47,12 @@ impl EditorIconLoader {
     }
 
     #[inline]
-    pub fn icon_button(&self, ui: &mut egui::Ui, icon: BuiltinUiIcon, label: &str) -> egui::Response {
+    pub fn icon_button(
+        &self,
+        ui: &mut egui::Ui,
+        icon: BuiltinUiIcon,
+        label: &str,
+    ) -> egui::Response {
         ui_icons::icon_button(ui, self.tex_id(icon), label)
     }
 

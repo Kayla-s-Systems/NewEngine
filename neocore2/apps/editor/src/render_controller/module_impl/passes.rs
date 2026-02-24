@@ -13,7 +13,10 @@ use super::super::gpu::{ensure_grid, ensure_primitive_gpu, GridMeshParams};
 use super::lights::PackedLights;
 use super::EditorRenderController;
 
-pub(super) fn publish_camera_spawn(bridge: &crate::viewport_bridge::ViewportBridge, rig: &newengine_camera::CameraRig) {
+pub(super) fn publish_camera_spawn(
+    bridge: &crate::viewport_bridge::ViewportBridge,
+    rig: &newengine_camera::CameraRig,
+) {
     let view = rig.view_matrix();
     let inv_view = view.inverse();
     let cam_pos = Vec3::new(inv_view.w_axis.x, inv_view.w_axis.y, inv_view.w_axis.z);
@@ -26,7 +29,8 @@ pub(super) fn draw_grid(
     r: &mut dyn newengine_core::render::RenderApi,
     lit: super::super::gpu::LitPipeline,
     viewproj: Mat4,
-    ctrl: &crate::editor_camera::EditorCameraController,
+    rig: &newengine_camera::CameraRig,
+    focus: Vec3,
     bounds_radius: f32,
     lights: &PackedLights,
 ) -> newengine_core::EngineResult<()> {
@@ -46,7 +50,8 @@ pub(super) fn draw_grid(
         },
     )?;
 
-    let spacing = EditorRenderController::grid_spacing(ctrl.orbit.distance);
+    let cam_dist = (rig.position - focus).length();
+    let spacing = EditorRenderController::grid_spacing(cam_dist);
 
     let grid_model = Mat4::from_scale_rotation_translation(
         Vec3::new(spacing, 1.0, spacing),
@@ -107,7 +112,9 @@ pub(super) fn draw_primitives(
         r.set_bind_group(0, per.bg)?;
         r.set_vertex_buffer(0, BufferSlice::new(gpu.vb, 0))?;
         r.set_index_buffer(BufferSlice::new(gpu.ib, 0), IndexFormat::U32)?;
-        r.draw_indexed(newengine_core::render::DrawIndexedArgs::new(gpu.index_count))?;
+        r.draw_indexed(newengine_core::render::DrawIndexedArgs::new(
+            gpu.index_count,
+        ))?;
     }
 
     Ok(())
@@ -140,7 +147,8 @@ pub(super) fn draw_light_gizmos(
 
     for (k, dl, m) in dirs {
         let pos = Vec3::new(m.w_axis.x, m.w_axis.y, m.w_axis.z);
-        let dir = Vec3::new(dl.direction_ws[0], dl.direction_ws[1], dl.direction_ws[2]).normalize_or_zero();
+        let dir = Vec3::new(dl.direction_ws[0], dl.direction_ws[1], dl.direction_ws[2])
+            .normalize_or_zero();
 
         let rot = quat_from_forward_z(dir);
         let scale = Vec3::splat(0.35);
@@ -157,7 +165,9 @@ pub(super) fn draw_light_gizmos(
         r.set_bind_group(0, per.bg)?;
         r.set_vertex_buffer(0, BufferSlice::new(cone_gpu.vb, 0))?;
         r.set_index_buffer(BufferSlice::new(cone_gpu.ib, 0), IndexFormat::U32)?;
-        r.draw_indexed(newengine_core::render::DrawIndexedArgs::new(cone_gpu.index_count))?;
+        r.draw_indexed(newengine_core::render::DrawIndexedArgs::new(
+            cone_gpu.index_count,
+        ))?;
 
         let line_len = 1.2_f32;
         let line_pos = pos + dir * (line_len * 0.5);
@@ -175,7 +185,9 @@ pub(super) fn draw_light_gizmos(
         r.set_bind_group(0, per2.bg)?;
         r.set_vertex_buffer(0, BufferSlice::new(cone_gpu.vb, 0))?;
         r.set_index_buffer(BufferSlice::new(cone_gpu.ib, 0), IndexFormat::U32)?;
-        r.draw_indexed(newengine_core::render::DrawIndexedArgs::new(cone_gpu.index_count))?;
+        r.draw_indexed(newengine_core::render::DrawIndexedArgs::new(
+            cone_gpu.index_count,
+        ))?;
     }
 
     let mut pts: Vec<(u64, Mat4)> = Vec::new();
@@ -200,7 +212,9 @@ pub(super) fn draw_light_gizmos(
         r.set_bind_group(0, per.bg)?;
         r.set_vertex_buffer(0, BufferSlice::new(sphere_gpu.vb, 0))?;
         r.set_index_buffer(BufferSlice::new(sphere_gpu.ib, 0), IndexFormat::U32)?;
-        r.draw_indexed(newengine_core::render::DrawIndexedArgs::new(sphere_gpu.index_count))?;
+        r.draw_indexed(newengine_core::render::DrawIndexedArgs::new(
+            sphere_gpu.index_count,
+        ))?;
     }
 
     Ok(())

@@ -165,7 +165,9 @@ pub(super) fn draw_selection_outline(
     let y_dir = rot * newengine_math::Vec3::Y;
     let z_dir = rot * newengine_math::Vec3::Z;
 
-    let p0 = world_to_screen(frame, rect, pos).map(|v| v.0).unwrap_or(center);
+    let p0 = world_to_screen(frame, rect, pos)
+        .map(|v| v.0)
+        .unwrap_or(center);
     if let Some((px, _)) = world_to_screen(frame, rect, pos + x_dir * 0.35) {
         let v = px - p0;
         let l = v.length().max(1e-4);

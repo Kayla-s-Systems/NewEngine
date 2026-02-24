@@ -16,7 +16,11 @@ pub(crate) fn draw(me: &mut EditorUiBuild, ctx: &egui::Context) {
 
             ui.separator();
 
-            if me.icons.icon_button(ui, BuiltinUiIcon::Reset, "New Scene").clicked() {
+            if me
+                .icons
+                .icon_button(ui, BuiltinUiIcon::Reset, "New Scene")
+                .clicked()
+            {
                 me.scene_bridge.cmd_new_scene();
             }
 
@@ -52,7 +56,8 @@ pub(crate) fn draw(me: &mut EditorUiBuild, ctx: &egui::Context) {
                             ui.horizontal(|ui| {
                                 if tex.0 != 0 {
                                     let tid = egui::TextureId::User(tex.0 as u64);
-                                    let st = egui::load::SizedTexture::new(tid, egui::vec2(24.0, 24.0));
+                                    let st =
+                                        egui::load::SizedTexture::new(tid, egui::vec2(24.0, 24.0));
                                     ui.image(st);
                                 } else {
                                     ui.add_space(24.0);
@@ -62,7 +67,11 @@ pub(crate) fn draw(me: &mut EditorUiBuild, ctx: &egui::Context) {
                         }
                     });
 
-                if me.icons.icon_button(ui, BuiltinUiIcon::Load, "Add").clicked() {
+                if me
+                    .icons
+                    .icon_button(ui, BuiltinUiIcon::Load, "Add")
+                    .clicked()
+                {
                     if let Some(id) = me.selected_primitive {
                         let name = prims
                             .iter()
@@ -70,21 +79,16 @@ pub(crate) fn draw(me: &mut EditorUiBuild, ctx: &egui::Context) {
                             .map(|x| x.0.clone())
                             .unwrap_or_else(|| "Primitive".to_string());
 
-                        me.scene_bridge.cmd_spawn_primitive(
-                            id,
-                            name,
-                            {
-                                // Spawn near camera, not at a hardcoded far-away coordinate.
-                                let (cam_pos, cam_fwd) = me.viewport_bridge.read_camera_spawn();
-                                let mut p = cam_pos + cam_fwd * 3.0;
-                                p.y = p.y.max(0.5);
-                                p
-                            },
-                        );
+                        me.scene_bridge.cmd_spawn_primitive(id, name, {
+                            // Spawn near camera, not at a hardcoded far-away coordinate.
+                            let (cam_pos, cam_fwd) = me.viewport_bridge.read_camera_spawn();
+                            let mut p = cam_pos + cam_fwd * 3.0;
+                            p.y = p.y.max(0.5);
+                            p
+                        });
                     }
                 }
             }
-
 
             ui.separator();
 
@@ -108,7 +112,11 @@ pub(crate) fn draw(me: &mut EditorUiBuild, ctx: &egui::Context) {
                             } else {
                                 ui.add_space(16.0);
                             }
-                            ui.selectable_value(&mut me.selected_light_kind, LightSpawnKind::Directional, "Directional");
+                            ui.selectable_value(
+                                &mut me.selected_light_kind,
+                                LightSpawnKind::Directional,
+                                "Directional",
+                            );
                         });
 
                         ui.horizontal(|ui| {
@@ -118,14 +126,26 @@ pub(crate) fn draw(me: &mut EditorUiBuild, ctx: &egui::Context) {
                             } else {
                                 ui.add_space(16.0);
                             }
-                            ui.selectable_value(&mut me.selected_light_kind, LightSpawnKind::Point, "Point");
+                            ui.selectable_value(
+                                &mut me.selected_light_kind,
+                                LightSpawnKind::Point,
+                                "Point",
+                            );
                         });
                     });
 
-                if me.icons.icon_button(ui, match me.selected_light_kind {
-                    LightSpawnKind::Directional => BuiltinUiIcon::LightDirectional,
-                    LightSpawnKind::Point => BuiltinUiIcon::LightPoint
-                }, "Add Light").clicked() {
+                if me
+                    .icons
+                    .icon_button(
+                        ui,
+                        match me.selected_light_kind {
+                            LightSpawnKind::Directional => BuiltinUiIcon::LightDirectional,
+                            LightSpawnKind::Point => BuiltinUiIcon::LightPoint,
+                        },
+                        "Add Light",
+                    )
+                    .clicked()
+                {
                     match me.selected_light_kind {
                         LightSpawnKind::Directional => {
                             // Spawn a sun-like light above the origin looking down.
@@ -149,7 +169,11 @@ pub(crate) fn draw(me: &mut EditorUiBuild, ctx: &egui::Context) {
                 if let Ok(mut pm) = me.plugin_manager.lock() {
                     pm.topbar_button(ui);
                 }
-                if me.icons.icon_button(ui, BuiltinUiIcon::Console, "Console").clicked() {
+                if me
+                    .icons
+                    .icon_button(ui, BuiltinUiIcon::Console, "Console")
+                    .clicked()
+                {
                     me.console_open = !me.console_open;
                 }
             });

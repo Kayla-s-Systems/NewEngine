@@ -96,9 +96,7 @@ impl PluginManagerUi {
             .collect();
 
         match self.sort {
-            PluginSort::Name => {
-                plugins.sort_by(|a, b| a.name.cmp(&b.name).then(a.id.cmp(&b.id)))
-            }
+            PluginSort::Name => plugins.sort_by(|a, b| a.name.cmp(&b.name).then(a.id.cmp(&b.id))),
             PluginSort::Id => plugins.sort_by(|a, b| a.id.cmp(&b.id)),
             PluginSort::State => {
                 plugins.sort_by(|a, b| a.state.cmp(&b.state).then(a.id.cmp(&b.id)))
@@ -107,9 +105,17 @@ impl PluginManagerUi {
 
         let total = snap.plugins.len();
         let running = snap.plugins.iter().filter(|p| p.state == "running").count();
-        let registered = snap.plugins.iter().filter(|p| p.state == "registered").count();
+        let registered = snap
+            .plugins
+            .iter()
+            .filter(|p| p.state == "registered")
+            .count();
         let stopped = snap.plugins.iter().filter(|p| p.state == "stopped").count();
-        let disabled = snap.plugins.iter().filter(|p| p.state == "disabled").count();
+        let disabled = snap
+            .plugins
+            .iter()
+            .filter(|p| p.state == "disabled")
+            .count();
 
         let selected = self
             .selected_plugin

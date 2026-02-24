@@ -20,25 +20,29 @@ use newengine_ui::UiBuildFn;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
+mod editor_camera;
+mod plugin_manager;
 mod render_controller;
+mod scene_bootstrap;
+mod scene_bridge;
+mod shared;
 mod ui;
 mod ui_contrib;
 mod viewport_bridge;
-mod plugin_manager;
-mod scene_bridge;
-mod scene_bootstrap;
-mod editor_camera;
-mod shared;
 
 const FIXED_DT_MS: u32 = 16;
 const UI_MARKUP_PATH: &str = "ui/editor.xml";
 
-struct AppServices;
+struct AppServices {
+    registry: newengine_core::ServiceRegistry,
+}
 
 impl AppServices {
     #[inline]
     fn new() -> Self {
-        Self
+        Self {
+            registry: newengine_core::ServiceRegistry::new(),
+        }
     }
 }
 
@@ -46,6 +50,11 @@ impl Services for AppServices {
     #[inline]
     fn logger(&self) -> &dyn log::Log {
         log::logger()
+    }
+
+    #[inline]
+    fn service_registry(&self) -> &newengine_core::ServiceRegistry {
+        &self.registry
     }
 }
 
@@ -101,22 +110,22 @@ fn build_engine_from_startup(startup: &StartupConfig) -> EngineResult<Engine<()>
     let (tx, rx) = unbounded::<()>();
     let bus: Bus<()> = Bus::new(tx, rx);
 
-    let services: Box<dyn Services> = Box::new(AppServices::new());
+    let app_services = AppServices::new();
+    newengine_transform::service::register(app_services.service_registry());
+    let services: Box<dyn Services> = Box::new(app_services);
     let shutdown = ShutdownToken::new();
 
-    let config = EngineConfig::new(FIXED_DT_MS)
-        .with_plugins_dir(Some(startup.modules_dir.clone()));
-        // IMPORTANT:
-        // StartupLoader already applied config.json overrides.
-        // Engine must initialize process-wide logging from that resolved startup config,
-        // otherwise defaults/env vars will silently win.
+    let config = EngineConfig::new(FIXED_DT_MS).with_plugins_dir(Some(startup.modules_dir.clone()));
+    // IMPORTANT:
+    // StartupLoader already applied config.json overrides.
+    // Engine must initialize process-wide logging from that resolved startup config,
+    // otherwise defaults/env vars will silently win.
     // .with_startup_logging(startup.logging.clone());
 
     let engine: Engine<()> = Engine::new_with_config(config, services, bus, shutdown)?;
 
     Ok(engine)
 }
-
 
 #[inline]
 
@@ -170,7 +179,9 @@ fn main() -> EngineResult<()> {
     let viewport = Arc::new(viewport_bridge::ViewportBridge::new());
     let plugins = Arc::new(plugin_manager::PluginManagerBridge::new());
     let scene = Arc::new(scene_bridge::SceneBridge::new(newengine_scene::Scene::new()));
-    let previews = Arc::new(parking_lot::Mutex::new(newengine_previews::PrimitivePreviewService::new()));
+    let previews = Arc::new(parking_lot::Mutex::new(
+        newengine_previews::PrimitivePreviewService::new(),
+    ));
 
     let mut engine = build_engine_from_startup(&startup)?;
 
@@ -253,9 +264,11 @@ fn main() -> EngineResult<()> {
         ))),
     };
 
-
     // Load markup via AssetManager service (no AssetStore in-process).
-    if !matches!(startup.ui_backend, newengine_core::startup::UiBackend::Disabled) {
+    if !matches!(
+        startup.ui_backend,
+        newengine_core::startup::UiBackend::Disabled
+    ) {
         let assets = AssetServiceClient::new(newengine_core::plugins::default_host_api());
 
         let doc = UiMarkupDoc::load(&assets, UI_MARKUP_PATH, Duration::from_millis(250))

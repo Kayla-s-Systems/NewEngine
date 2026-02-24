@@ -20,7 +20,10 @@ impl PackedLights {
 
     #[inline]
     pub(super) fn from_world(world: &newengine_ecs::World) -> Self {
-        let amb = world.resource::<AmbientLight>().copied().unwrap_or_default();
+        let amb = world
+            .resource::<AmbientLight>()
+            .copied()
+            .unwrap_or_default();
         let ambient = [amb.color[0], amb.color[1], amb.color[2], amb.intensity];
 
         let mut best_dir: Option<(u64, DirectionalLight)> = None;
@@ -31,7 +34,12 @@ impl PackedLights {
             }
         }
         let dir = best_dir.map(|(_, l)| l).unwrap_or_default();
-        let dir_dir_intensity = [dir.direction_ws[0], dir.direction_ws[1], dir.direction_ws[2], dir.intensity];
+        let dir_dir_intensity = [
+            dir.direction_ws[0],
+            dir.direction_ws[1],
+            dir.direction_ws[2],
+            dir.intensity,
+        ];
         let dir_color = [dir.color[0], dir.color[1], dir.color[2], 0.0];
 
         let mut pts: Vec<(u64, [f32; 4], [f32; 4])> = Vec::new();

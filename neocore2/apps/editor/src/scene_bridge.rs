@@ -8,7 +8,8 @@ use newengine_math::{EulerRot, Quat, Vec3};
 use newengine_ecs::EntityId;
 use newengine_materials::api::MaterialRegistryApi;
 use newengine_materials::{
-    MaterialDescriptor, MaterialDomain, MaterialId, MaterialOverrides, MaterialRef, MaterialRegistry, ShadingModel,
+    MaterialDescriptor, MaterialDomain, MaterialId, MaterialOverrides, MaterialRef,
+    MaterialRegistry, ShadingModel,
 };
 use newengine_primitives::{builtins, Primitive, PrimitiveId, PrimitiveRegistry};
 use newengine_scene::{components::SceneRoot, SceneState};
@@ -44,10 +45,7 @@ pub enum SceneCommand {
     },
 
     /// Set primitive color (if entity has `Primitive`).
-    SetPrimitiveColor {
-        entity: EntityId,
-        color: [f32; 4],
-    },
+    SetPrimitiveColor { entity: EntityId, color: [f32; 4] },
 
     /// Assign a material id to an entity (adds/overwrites `MaterialRef`).
     SetMaterial {
@@ -69,16 +67,10 @@ pub enum SceneCommand {
     },
 
     /// Spawn a point light entity.
-    SpawnPointLight {
-        name: String,
-        position: [f32; 3],
-    },
+    SpawnPointLight { name: String, position: [f32; 3] },
 
     /// Set world ambient light resource.
-    SetAmbientLight {
-        color: [f32; 3],
-        intensity: f32,
-    },
+    SetAmbientLight { color: [f32; 3], intensity: f32 },
 
     /// Update parameters of a directional light component.
     SetDirectionalLight {
@@ -274,11 +266,14 @@ impl SceneBridge {
     #[inline]
     pub fn cmd_spawn_directional_light(&self, name: String, position: Vec3, direction_ws: Vec3) {
         let d = direction_ws.normalize_or_zero();
-        self.queue.lock().cmds.push(SceneCommand::SpawnDirectionalLight {
-            name,
-            position: [position.x, position.y, position.z],
-            direction_ws: [d.x, d.y, d.z],
-        });
+        self.queue
+            .lock()
+            .cmds
+            .push(SceneCommand::SpawnDirectionalLight {
+                name,
+                position: [position.x, position.y, position.z],
+                direction_ws: [d.x, d.y, d.z],
+            });
     }
 
     #[inline]
@@ -291,22 +286,40 @@ impl SceneBridge {
 
     #[inline]
     pub fn cmd_set_ambient_light(&self, color: [f32; 3], intensity: f32) {
-        self.queue.lock().cmds.push(SceneCommand::SetAmbientLight { color, intensity });
+        self.queue
+            .lock()
+            .cmds
+            .push(SceneCommand::SetAmbientLight { color, intensity });
     }
 
     #[inline]
-    pub fn cmd_set_directional_light(&self, entity: EntityId, direction_ws: Vec3, color: [f32; 3], intensity: f32) {
+    pub fn cmd_set_directional_light(
+        &self,
+        entity: EntityId,
+        direction_ws: Vec3,
+        color: [f32; 3],
+        intensity: f32,
+    ) {
         let d = direction_ws.normalize_or_zero();
-        self.queue.lock().cmds.push(SceneCommand::SetDirectionalLight {
-            entity,
-            direction_ws: [d.x, d.y, d.z],
-            color,
-            intensity,
-        });
+        self.queue
+            .lock()
+            .cmds
+            .push(SceneCommand::SetDirectionalLight {
+                entity,
+                direction_ws: [d.x, d.y, d.z],
+                color,
+                intensity,
+            });
     }
 
     #[inline]
-    pub fn cmd_set_point_light(&self, entity: EntityId, color: [f32; 3], intensity: f32, range: f32) {
+    pub fn cmd_set_point_light(
+        &self,
+        entity: EntityId,
+        color: [f32; 3],
+        intensity: f32,
+        range: f32,
+    ) {
         self.queue.lock().cmds.push(SceneCommand::SetPointLight {
             entity,
             color,

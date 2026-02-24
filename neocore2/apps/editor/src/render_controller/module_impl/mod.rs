@@ -1,7 +1,9 @@
 #![forbid(unsafe_op_in_unsafe_fn)]
 
 use newengine_camera::{auto_near_far_from_sphere, Perspective, Projection};
-use newengine_core::render::{require_render_api, BeginFrameDesc, BeginRenderTargetDesc, Extent2D, RectI32, Viewport};
+use newengine_core::render::{
+    require_render_api, BeginFrameDesc, BeginRenderTargetDesc, Extent2D, RectI32, Viewport,
+};
 use newengine_core::{EngineResult, Module, ModuleCtx};
 use newengine_math::{Quat, Vec3};
 use newengine_platform_winit::WinitWindowInitSize;
@@ -9,7 +11,10 @@ use newengine_ui::draw::UiDrawList;
 
 use super::controller::EditorRenderController;
 use super::gpu::ensure_lit_pipeline;
+use newengine_core::MissingServicePolicy;
 use newengine_scene::update_scene_world;
+use newengine_transform_api::runtime::TransformRuntimeApi;
+use newengine_transform_api::TRANSFORM_SERVICE;
 
 mod camera;
 mod input;
@@ -34,11 +39,6 @@ fn quat_from_forward_z(dir_ws: Vec3) -> Quat {
 }
 
 impl EditorRenderController {
-    pub(super) const MIN_CAMERA_Y: f32 = 0.10;
-
-    pub(super) const MAX_PITCH_ABS: f32 = 1.5184364;
-    pub(super) const MIN_DISTANCE: f32 = 0.30;
-
     pub(super) const GRID_HALF_LINES: i32 = 80;
     pub(super) const GRID_MAJOR_EVERY: i32 = 10;
     pub(super) const GRID_MINOR_COLOR: [f32; 4] = [0.32, 0.32, 0.34, 1.0];
@@ -46,55 +46,11 @@ impl EditorRenderController {
     pub(super) const GRID_BACKGROUND_COLOR: [f32; 4] = [0.10, 0.10, 0.11, 1.0];
 
     #[inline]
-    pub(super) fn enforce_orbit_basic(orbit: &mut newengine_camera::OrbitController) {
-        orbit.distance = orbit.distance.max(Self::MIN_DISTANCE);
-        orbit.pitch_limit = orbit.pitch_limit.min(Self::MAX_PITCH_ABS);
-        orbit.pitch = orbit.pitch.clamp(-Self::MAX_PITCH_ABS, Self::MAX_PITCH_ABS);
-    }
-
-    #[inline]
     pub(super) fn grid_spacing(camera_distance: f32) -> f32 {
         let d = camera_distance.max(0.01);
         let base = (d * 0.08).max(0.05);
         let pow10 = 10.0f32.powf(base.log10().floor());
         pow10.clamp(0.05, 1000.0)
-    }
-
-    #[inline]
-    pub(super) fn compute_rot(orbit: &newengine_camera::OrbitController) -> Quat {
-        let rot_yaw = Quat::from_rotation_y(orbit.yaw);
-        let rot_pitch = Quat::from_rotation_x(orbit.pitch);
-        rot_yaw * rot_pitch
-    }
-
-    #[inline]
-    pub(super) fn sync_rig_with_floor_lift(
-        orbit: &mut newengine_camera::OrbitController,
-        rig: &mut newengine_camera::CameraRig,
-    ) {
-        Self::enforce_orbit_basic(orbit);
-
-        for _ in 0..2 {
-            let rot = Self::compute_rot(orbit);
-            let pos = orbit.target + (rot * Vec3::Z) * orbit.distance;
-
-            if pos.y >= Self::MIN_CAMERA_Y {
-                rig.position = pos;
-                rig.rotation = rot;
-                return;
-            }
-
-            let dy = Self::MIN_CAMERA_Y - pos.y;
-            orbit.target.y += dy;
-        }
-
-        let rot = Self::compute_rot(orbit);
-        let mut pos = orbit.target + (rot * Vec3::Z) * orbit.distance;
-        if pos.y < Self::MIN_CAMERA_Y {
-            pos.y = Self::MIN_CAMERA_Y;
-        }
-        rig.position = pos;
-        rig.rotation = rot;
     }
 
     #[inline]
@@ -128,7 +84,10 @@ impl<E: Send + 'static> Module<E> for EditorRenderController {
     fn render(&mut self, ctx: &mut ModuleCtx<'_, E>) -> EngineResult<()> {
         let ui: Option<UiDrawList> = ctx.resources_mut().remove::<UiDrawList>();
 
-        if let Some(snap) = ctx.resources().get::<newengine_core::plugins::PluginsSnapshot>() {
+        if let Some(snap) = ctx
+            .resources()
+            .get::<newengine_core::plugins::PluginsSnapshot>()
+        {
             self.plugins_bridge.publish(snap.clone());
         }
         if let Some(q) = ctx
@@ -169,6 +128,14 @@ impl<E: Send + 'static> Module<E> for EditorRenderController {
 
             let aspect = (vp_w as f32 / vp_h as f32).max(1e-6);
 
+            let transform_api: Option<TransformRuntimeApi> = ctx
+                .services()
+                .service_registry()
+                .require_interface::<TransformRuntimeApi>(
+                    TRANSFORM_SERVICE,
+                    MissingServicePolicy::Optional,
+                );
+
             self.scene_bridge.apply_commands();
             let scene_lock = self.scene_bridge.scene();
             let mut scene = scene_lock.write();
@@ -198,7 +165,7 @@ impl<E: Send + 'static> Module<E> for EditorRenderController {
                 frame_all,
             };
 
-            let CameraUpdateResult { rig, ctrl } =
+            let CameraUpdateResult { rig, .. } =
                 camera::update_camera_and_persist(self, &mut scene, &mut input, params);
 
             self.last_bounds_center = params.bounds.center;
@@ -208,20 +175,18 @@ impl<E: Send + 'static> Module<E> for EditorRenderController {
             self.last_vp_w = vp_w;
             self.last_vp_h = vp_h;
 
-            let (near, far) = auto_near_far_from_sphere(ctrl.orbit.distance, params.bounds.radius);
-            self.projection = Projection::Perspective(Perspective::new(
-                60.0f32.to_radians(),
-                aspect,
-                near,
-                far,
-            ));
+            let cam_dist = (rig.position - params.bounds.center).length().max(0.01);
+            let (near, far) = auto_near_far_from_sphere(cam_dist, params.bounds.radius);
+            self.projection =
+                Projection::Perspective(Perspective::new(60.0f32.to_radians(), aspect, near, far));
 
             let proj = self.projection.matrix();
             let view = rig.view_matrix();
             let viewproj = proj * view;
 
             passes::publish_camera_spawn(&self.viewport_bridge, &rig);
-            self.viewport_bridge.publish_camera_frame(view, proj, vp_w, vp_h);
+            self.viewport_bridge
+                .publish_camera_frame(view, proj, vp_w, vp_h);
 
             picking::handle_picking(self, &scene, viewproj, vp_w, vp_h);
 
@@ -236,15 +201,17 @@ impl<E: Send + 'static> Module<E> for EditorRenderController {
             let lit = ensure_lit_pipeline(&mut self.lit, &mut **r)?;
             let world_lights = lights::collect_lights(scene.world());
 
-            passes::draw_grid(self, &mut **r, lit, viewproj, &ctrl, params.bounds.radius, &world_lights)?;
-            passes::draw_primitives(
+            passes::draw_grid(
                 self,
                 &mut **r,
-                &scene,
                 lit,
                 viewproj,
+                &rig,
+                params.bounds.center,
+                params.bounds.radius,
                 &world_lights,
             )?;
+            passes::draw_primitives(self, &mut **r, &scene, lit, viewproj, &world_lights)?;
             passes::draw_light_gizmos(
                 self,
                 &mut **r,
@@ -267,6 +234,7 @@ impl<E: Send + 'static> Module<E> for EditorRenderController {
         }
 
         self.gc_per_draw_ubos(&mut **r);
+        self.gc_deferred_rts(&mut **r);
         r.end_frame()?;
         Ok(())
     }
