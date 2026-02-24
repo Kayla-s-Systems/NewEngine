@@ -1,0 +1,14 @@
+[advisories]
+version = 2
+
+[bans]
+multiple-versions = "warn"
+wildcards = "allow"
+deny = [
+    { name = "glam" },
+    { name = "nalgebra" },
+    { name = "cgmath" },
+    { name = "euclid" },
+    { name = "vek" },
+    { name = "mint" }
+]

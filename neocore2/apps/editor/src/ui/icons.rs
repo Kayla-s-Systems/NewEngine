@@ -60,6 +60,7 @@ impl EditorIconLoader {
     ///
     /// Useful for branding/skins without touching UI code.
     #[inline]
+    #[allow(dead_code)]
     pub fn set_icon_path(&mut self, icon: BuiltinUiIcon, path: impl Into<String>) {
         self.loader.request(&self.assets, icon.key(), path);
     }

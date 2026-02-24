@@ -148,7 +148,7 @@ impl VulkanRenderer {
 
             let wait_stages = [vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT];
             let wait_sems = [frame.image_available];
-            let signal_sems = [frame.render_finished];
+            let signal_sems = [self.swapchain.render_finished[idx]];
             let cmd_bufs = [cmd];
 
             let submit_infos = [vk::SubmitInfo::default()

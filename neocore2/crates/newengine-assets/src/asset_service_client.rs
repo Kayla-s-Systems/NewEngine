@@ -24,7 +24,6 @@ pub struct AssetServiceClient {
     m_state_json: MethodName,
     m_blob_wire_v1: MethodName,
     m_resolve_trace_json: MethodName,
-    m_preload_many_v1: MethodName,
     m_get_state_v1: MethodName,
 }
 
@@ -51,7 +50,6 @@ impl AssetServiceClient {
             m_state_json: MethodName::from(method::STATE_JSON),
             m_blob_wire_v1: MethodName::from(method::BLOB_WIRE_V1),
             m_resolve_trace_json: MethodName::from(method::RESOLVE_TRACE_JSON),
-            m_preload_many_v1: MethodName::from(method::PRELOAD_MANY_V1),
             m_get_state_v1: MethodName::from(method::GET_STATE_V1),
         }
     }
@@ -77,18 +75,6 @@ impl AssetServiceClient {
     #[inline]
     fn call_raw(&self, method_name: MethodName, payload: Vec<u8>) -> Result<Vec<u8>, String> {
         self.call(method_name, payload)
-    }
-
-    /// Compatibility shim: we keep multiple method names in call sites, but we no longer
-    /// pay the allocation cost of cloning the payload for retries.
-    ///
-    /// NewEngine AssetManager v0.3+ guarantees the canonical method names.
-    #[inline]
-    fn call_try_methods(&self, methods: &[&'static str], payload: Vec<u8>) -> Result<Vec<u8>, String> {
-        let Some(&first) = methods.first() else {
-            return Err("asset service call failed: empty methods".to_string());
-        };
-        self.call_raw(MethodName::from(first), payload)
     }
 
     #[inline]

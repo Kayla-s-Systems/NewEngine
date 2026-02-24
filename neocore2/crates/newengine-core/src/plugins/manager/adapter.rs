@@ -119,11 +119,6 @@ pub(crate) enum ModuleAdapterAny {
 
 impl ModuleAdapterAny {
     #[inline]
-    pub(crate) fn is_v1(&self) -> bool {
-        matches!(self, Self::V1(_))
-    }
-
-    #[inline]
     pub(crate) fn as_v1(&self) -> Option<&PluginModuleDyn<'static>> {
         match self {
             Self::V1(a) => Some(&a.module),

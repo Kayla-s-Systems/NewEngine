@@ -63,8 +63,22 @@ pub struct EditorUiBuild {
 
     pub(crate) icons: icons::EditorIconLoader,
 
-    // Orbit interaction (UI-driven, not via global input plugin).
-    pub(crate) last_drag_pos: Option<egui::Pos2>,
+    // Viewport navigation interaction (UI-driven, not via global input plugin).
+    //
+    // Track MMB orbit/pan and RMB free-fly separately.
+    // Mixing them causes a first-frame delta spike when capture toggles.
+    pub(crate) last_nav_drag_pos: Option<egui::Pos2>,
+    pub(crate) last_fly_drag_pos: Option<egui::Pos2>,
+
+    /// Latched RMB free-fly capture.
+    ///
+    /// IMPORTANT: do not derive this directly from `ctx.wants_keyboard_input()`.
+    /// Egui can temporarily flip that flag during pointer-lock/capture transitions,
+    /// which would cause mode flicker (Orbit <-> Fly) and visible camera snaps.
+    pub(crate) fly_rmb_capture: bool,
+    pub(crate) rmb_down_miss_frames: u8,
+
+    pub(crate) prev_fly_rmb: bool,
 
     pub(crate) console_open: bool,
     pub(crate) console_input: String,
@@ -130,7 +144,11 @@ impl EditorUiBuild {
 
             icons: icons::EditorIconLoader::new(),
 
-            last_drag_pos: None,
+            last_nav_drag_pos: None,
+            last_fly_drag_pos: None,
+            fly_rmb_capture: false,
+            rmb_down_miss_frames: 0,
+            prev_fly_rmb: false,
 
             console_open: false,
             console_input: String::new(),

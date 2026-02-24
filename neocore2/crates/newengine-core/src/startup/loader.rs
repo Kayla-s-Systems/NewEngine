@@ -407,6 +407,7 @@ fn apply_opt_string(
 }
 
 #[inline]
+#[allow(dead_code)]
 fn apply_u32(report: &mut StartupLoadReport, key: &'static str, dst: &mut u32, v: u32) {
     let from = dst.to_string();
     let to = v.to_string();
@@ -417,6 +418,7 @@ fn apply_u32(report: &mut StartupLoadReport, key: &'static str, dst: &mut u32, v
 }
 
 #[inline]
+#[allow(dead_code)]
 fn apply_usize(report: &mut StartupLoadReport, key: &'static str, dst: &mut usize, v: usize) {
     let from = dst.to_string();
     let to = v.to_string();
@@ -427,6 +429,7 @@ fn apply_usize(report: &mut StartupLoadReport, key: &'static str, dst: &mut usiz
 }
 
 #[inline]
+#[allow(dead_code)]
 fn apply_opt_u64(report: &mut StartupLoadReport, key: &'static str, dst: &mut Option<u64>, v: u64) {
     let from = dst.map(|x| x.to_string()).unwrap_or_else(|| "null".to_owned());
     let to = v.to_string();
@@ -437,6 +440,7 @@ fn apply_opt_u64(report: &mut StartupLoadReport, key: &'static str, dst: &mut Op
 }
 
 #[inline]
+#[allow(dead_code)]
 fn apply_opt_usize(
     report: &mut StartupLoadReport,
     key: &'static str,
@@ -450,6 +454,7 @@ fn apply_opt_usize(
         report.overrides.push(StartupOverride { key, from, to });
     }
 }
+#[allow(dead_code)]
 fn apply_bool(report: &mut StartupLoadReport, key: &'static str, dst: &mut bool, v: bool) {
     let from = dst.to_string();
     let to = v.to_string();

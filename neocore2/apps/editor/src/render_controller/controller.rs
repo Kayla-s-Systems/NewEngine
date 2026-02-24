@@ -9,6 +9,7 @@ use crate::plugin_manager::PluginManagerBridge;
 use crate::scene_bridge::SceneBridge;
 use crate::viewport_bridge::ViewportBridge;
 
+use super::gpu::LIT_UBO_SIZE;
 use super::gpu::{GridGpu, LitPipeline, PrimitiveGpu};
 
 type PrimGpuCache = FxHashMap<newengine_primitives::PrimitiveId, PrimitiveGpu>;
@@ -126,7 +127,55 @@ impl EditorRenderController {
     }
 
     #[inline]
-    pub(super) fn default_bounds(&self) -> (Vec3, f32) {
-        (Vec3::ZERO, 1.0)
+    pub(super) fn ensure_per_draw_ubo(
+        &mut self,
+        r: &mut dyn newengine_core::render::RenderApi,
+        lit: super::gpu::LitPipeline,
+        key: u64,
+    ) -> newengine_core::EngineResult<PerDrawUbo> {
+        if let Some(e) = self.per_draw_ubo.get(&key).copied() {
+            return Ok(e);
+        }
+
+        let ubo = r.create_buffer(
+            newengine_core::render::BufferDesc::new(
+                LIT_UBO_SIZE,
+                newengine_core::render::BufferUsage::Uniform,
+                newengine_core::render::MemoryHint::CpuToGpu,
+            )
+                .with_label("editor_lit_entity_ubo"),
+        )?;
+
+        let bg = r.create_bind_group(
+            newengine_core::render::BindGroupDesc::new(lit.bgl)
+                .with_label("editor_lit_entity_bg")
+                .with_uniform0(newengine_core::render::BufferBinding::new(ubo, 0, LIT_UBO_SIZE)),
+        )?;
+
+        let entry = PerDrawUbo {
+            ubo,
+            bg,
+            last_seen_frame: self.frame_index,
+        };
+        self.per_draw_ubo.insert(key, entry);
+        Ok(entry)
+    }
+
+    pub(super) fn gc_per_draw_ubos(&mut self, r: &mut dyn newengine_core::render::RenderApi) {
+        let now = self.frame_index;
+        let grace = 2_u64;
+
+        let mut dead: Vec<u64> = Vec::new();
+        for (k, v) in &self.per_draw_ubo {
+            if now.saturating_sub(v.last_seen_frame) > grace {
+                dead.push(*k);
+            }
+        }
+        for k in dead {
+            if let Some(v) = self.per_draw_ubo.remove(&k) {
+                r.destroy_bind_group(v.bg);
+                r.destroy_buffer(v.ubo);
+            }
+        }
     }
 }

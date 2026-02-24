@@ -81,9 +81,11 @@ impl ShaderBaker {
     }
 
     pub fn bake_pack(&self) -> VkResult<ShaderPack> {
+        // The core "tri" pipeline must be independent from editor shaders.
+        // It uses no descriptor sets and no vertex buffers.
         Ok(ShaderPack {
-            tri_vert: self.load_or_compile_words("shaders/editor_grid.vert", ShaderStage::Vertex)?,
-            tri_frag: self.load_or_compile_words("shaders/editor_grid.frag", ShaderStage::Fragment)?,
+            tri_vert: self.compile_inline_words(BUILTIN_TRI_VERT, "builtin_tri.vert", ShaderStage::Vertex, "main")?,
+            tri_frag: self.compile_inline_words(BUILTIN_TRI_FRAG, "builtin_tri.frag", ShaderStage::Fragment, "main")?,
 
             text_vert: self.load_or_compile_words("shaders/ui/text.vert", ShaderStage::Vertex)?,
             text_frag: self.load_or_compile_words("shaders/ui/text.frag", ShaderStage::Fragment)?,
@@ -91,6 +93,26 @@ impl ShaderBaker {
             ui_vert: self.load_or_compile_words("shaders/ui/ui.vert", ShaderStage::Vertex)?,
             ui_frag: self.load_or_compile_words("shaders/ui/ui.frag", ShaderStage::Fragment)?,
         })
+    }
+
+    fn compile_inline_words(
+        &self,
+        src: &str,
+        logical_name: &str,
+        stage: ShaderStage,
+        entry: &str,
+    ) -> VkResult<Vec<u32>> {
+        let opt = shaderc::OptimizationLevel::Performance;
+        let key = shader_cache_key(src, stage, entry, opt);
+        let out_path = self.cache_dir.join(shader_cache_filename(logical_name, stage, &key));
+
+        if let Ok(words) = read_spv_words(&out_path) {
+            return Ok(words);
+        }
+
+        let words = self.compile_glsl_words(src, logical_name, stage, entry)?;
+        let _ = write_spv_words(&out_path, &words);
+        Ok(words)
     }
     pub fn load_or_compile_words(&self, logical_path: &str, stage: ShaderStage) -> VkResult<Vec<u32>> {
         let src = self.load_text_asset(logical_path)?;
@@ -200,6 +222,24 @@ impl ShaderBaker {
         Ok(artifact.as_binary().to_vec())
     }
 }
+
+const BUILTIN_TRI_VERT: &str = r#"#version 450
+vec2 POS[3] = vec2[](
+    vec2(-1.0, -1.0),
+    vec2( 3.0, -1.0),
+    vec2(-1.0,  3.0)
+);
+void main() {
+    gl_Position = vec4(POS[gl_VertexIndex], 0.0, 1.0);
+}
+"#;
+
+const BUILTIN_TRI_FRAG: &str = r#"#version 450
+layout(location = 0) out vec4 outColor;
+void main() {
+    outColor = vec4(0.05, 0.10, 0.20, 1.0);
+}
+"#;
 
 fn shader_cache_dir() -> PathBuf {
     // Opt-in override for editor / CI.

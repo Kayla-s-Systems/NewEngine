@@ -28,6 +28,9 @@ pub struct SwapchainContext {
     pub(crate) swapchain: vk::SwapchainKHR,
     pub(crate) images: Vec<vk::Image>,
     pub(crate) image_views: Vec<vk::ImageView>,
+    /// Semaphore signaled by rendering and waited by presentation.
+    /// Must be per-swapchain-image to avoid binary semaphore reuse hazards.
+    pub(crate) render_finished: Vec<vk::Semaphore>,
     pub(crate) format: vk::Format,
     pub(crate) extent: vk::Extent2D,
     pub(crate) framebuffers: Vec<vk::Framebuffer>,

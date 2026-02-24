@@ -1,0 +1,97 @@
+#![forbid(unsafe_op_in_unsafe_fn)]
+
+use newengine_lighting::{AmbientLight, DirectionalLight, PointLight};
+use newengine_transform::GlobalTransform;
+
+const MAX_POINT_LIGHTS: usize = 4;
+
+#[derive(Clone, Copy, Debug, Default)]
+pub(super) struct PackedLights {
+    pub ambient: [f32; 4],
+    pub dir_dir_intensity: [f32; 4],
+    pub dir_color: [f32; 4],
+    pub point_pos_range: [[f32; 4]; MAX_POINT_LIGHTS],
+    pub point_color_intensity: [[f32; 4]; MAX_POINT_LIGHTS],
+    pub point_count_pad: [f32; 4],
+}
+
+impl PackedLights {
+    pub(super) const UBO_SIZE: usize = 336;
+
+    #[inline]
+    pub(super) fn from_world(world: &newengine_ecs::World) -> Self {
+        let amb = world.resource::<AmbientLight>().copied().unwrap_or_default();
+        let ambient = [amb.color[0], amb.color[1], amb.color[2], amb.intensity];
+
+        let mut best_dir: Option<(u64, DirectionalLight)> = None;
+        for (e, l) in world.query::<DirectionalLight>() {
+            let k = e.stable_u64();
+            if best_dir.map(|(bk, _)| k < bk).unwrap_or(true) {
+                best_dir = Some((k, *l));
+            }
+        }
+        let dir = best_dir.map(|(_, l)| l).unwrap_or_default();
+        let dir_dir_intensity = [dir.direction_ws[0], dir.direction_ws[1], dir.direction_ws[2], dir.intensity];
+        let dir_color = [dir.color[0], dir.color[1], dir.color[2], 0.0];
+
+        let mut pts: Vec<(u64, [f32; 4], [f32; 4])> = Vec::new();
+        for (e, pl, gt) in world.query2::<PointLight, GlobalTransform>() {
+            let m = gt.0;
+            let pos = [m.w_axis.x, m.w_axis.y, m.w_axis.z, pl.range.max(1e-3)];
+            let col = [pl.color[0], pl.color[1], pl.color[2], pl.intensity.max(0.0)];
+            pts.push((e.stable_u64(), pos, col));
+        }
+        pts.sort_by(|a, b| a.0.cmp(&b.0));
+
+        if pts.len() > MAX_POINT_LIGHTS {
+            log::warn!(
+                "render: point lights truncated: requested={} max={} (deterministic keep=min stable id)",
+                pts.len(),
+                MAX_POINT_LIGHTS
+            );
+        }
+
+        let mut out = Self {
+            ambient,
+            dir_dir_intensity,
+            dir_color,
+            ..Self::default()
+        };
+
+        let n = pts.len().min(MAX_POINT_LIGHTS);
+        for i in 0..n {
+            out.point_pos_range[i] = pts[i].1;
+            out.point_color_intensity[i] = pts[i].2;
+        }
+        out.point_count_pad = [n as f32, 0.0, 0.0, 0.0];
+
+        out
+    }
+
+    #[inline]
+    pub(super) fn write_into(&self, bytes: &mut [u8; Self::UBO_SIZE]) {
+        let mut off = 144;
+
+        fn write_vec4(dst: &mut [u8], off: &mut usize, v: [f32; 4]) {
+            for i in 0..4 {
+                let o = *off + i * 4;
+                dst[o..o + 4].copy_from_slice(&v[i].to_ne_bytes());
+            }
+            *off += 16;
+        }
+
+        write_vec4(bytes, &mut off, self.ambient);
+        write_vec4(bytes, &mut off, self.dir_dir_intensity);
+        write_vec4(bytes, &mut off, self.dir_color);
+        for i in 0..MAX_POINT_LIGHTS {
+            write_vec4(bytes, &mut off, self.point_pos_range[i]);
+            write_vec4(bytes, &mut off, self.point_color_intensity[i]);
+        }
+        write_vec4(bytes, &mut off, self.point_count_pad);
+    }
+}
+
+#[inline]
+pub(super) fn collect_lights(world: &newengine_ecs::World) -> PackedLights {
+    PackedLights::from_world(world)
+}

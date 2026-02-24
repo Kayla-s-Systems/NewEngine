@@ -38,14 +38,6 @@ impl<E: Send + 'static> Engine<E> {
     }
 
     #[inline]
-    pub(super) fn log_phase_begin(scope: &'static str, phase: &'static str, count: Option<usize>) {
-        match count {
-            Some(n) => log::info!("{scope}: starting (phase={phase} count={n})"),
-            None => log::info!("{scope}: starting (phase={phase})"),
-        }
-    }
-
-    #[inline]
     pub(super) fn log_phase_ok(
         scope: &'static str,
         phase: &'static str,

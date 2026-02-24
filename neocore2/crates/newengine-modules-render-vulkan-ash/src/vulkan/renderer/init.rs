@@ -152,23 +152,21 @@ impl VulkanRenderer {
         }
 
         let make_frame = |device: &Device| -> VkResult<FrameSync> {
-            let image_available =
-                device.create_semaphore(&vk::SemaphoreCreateInfo::default(), None)?;
-            let render_finished =
-                device.create_semaphore(&vk::SemaphoreCreateInfo::default(), None)?;
+            let image_available = device.create_semaphore(&vk::SemaphoreCreateInfo::default(), None)?;
             let in_flight = device.create_fence(
                 &vk::FenceCreateInfo::default().flags(vk::FenceCreateFlags::SIGNALED),
                 None,
             )?;
-            Ok(FrameSync {
-                image_available,
-                render_finished,
-                in_flight,
-            })
+            Ok(FrameSync { image_available, in_flight })
         };
 
         let frames = [make_frame(&device)?, make_frame(&device)?];
         let images_in_flight = vec![vk::Fence::null(); images.len()];
+
+        let mut render_finished = Vec::with_capacity(images.len());
+        for _ in 0..images.len() {
+            render_finished.push(device.create_semaphore(&vk::SemaphoreCreateInfo::default(), None)?);
+        }
 
         let core = CoreContext {
             instance,
@@ -185,6 +183,7 @@ impl VulkanRenderer {
             swapchain,
             images,
             image_views,
+            render_finished,
             format,
             extent,
             framebuffers,

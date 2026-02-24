@@ -243,8 +243,16 @@ impl ViewportBridge {
     /// Read camera input published by UI for this frame.
     #[inline]
     pub fn read_camera_input(&self) -> (f32, f32, f32, bool, bool, bool, bool, bool) {
-        let (dx, dy) = Self::unpack_f32x2(self.look_delta_xy.load(Ordering::Relaxed));
-        let wheel = Self::unpack_f32(self.wheel_y.load(Ordering::Relaxed));
+        // Consume per-frame deltas.
+        //
+        // UI can publish deltas only while dragging/captured. If we only `load()` here,
+        // the renderer can accidentally reuse a stale delta across multiple frames,
+        // which manifests as a jerk/snap when toggling RMB capture (and can accumulate
+        // drift when switching camera modes).
+        //
+        // Using `swap(0)` makes these inputs strictly one-frame.
+        let (dx, dy) = Self::unpack_f32x2(self.look_delta_xy.swap(0, Ordering::Relaxed));
+        let wheel = Self::unpack_f32(self.wheel_y.swap(0, Ordering::Relaxed));
         let flags = self.input_flags.load(Ordering::Relaxed);
         let hovered = (flags & 1) != 0;
         let look_drag = (flags & 2) != 0;

@@ -140,6 +140,11 @@ impl SimSchedule {
 #[inline]
 fn run_stage_single_thread(world: &mut World, systems: &[SystemEntry], frame: SimFrame) {
     for s in systems {
+        #[cfg(debug_assertions)]
+        {
+            // Keep metadata alive for debugging/profiling builds.
+            let _ = (s.name, s.access);
+        }
         let mut cb = CommandBuffer::new();
         (s.f)(world, frame, &mut cb);
         if !cb.is_empty() {

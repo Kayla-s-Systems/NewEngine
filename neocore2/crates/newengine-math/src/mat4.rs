@@ -67,7 +67,7 @@ impl Mat4 {
     /// - Preserves negative scale via determinant sign.
     #[inline]
     pub fn to_scale_rotation_translation(self) -> (Vec3, Quat, Vec3) {
-        // Column-major basis vectors
+        // Column-major basis vectors (ignore w).
         let x = Vec3::new(self.x_axis.x, self.x_axis.y, self.x_axis.z);
         let y = Vec3::new(self.y_axis.x, self.y_axis.y, self.y_axis.z);
         let z = Vec3::new(self.z_axis.x, self.z_axis.y, self.z_axis.z);
@@ -76,35 +76,35 @@ impl Mat4 {
         let mut sy = y.length();
         let mut sz = z.length();
 
-        // Avoid division by zero / NaNs
+        // Robustness against NaNs/denormals.
         let eps = 1.0e-8;
-        if !sx.is_finite() || sx < eps { sx = 0.0; }
-        if !sy.is_finite() || sy < eps { sy = 0.0; }
-        if !sz.is_finite() || sz < eps { sz = 0.0; }
+        if !sx.is_finite() || sx < eps {
+            sx = 0.0;
+        }
+        if !sy.is_finite() || sy < eps {
+            sy = 0.0;
+        }
+        if !sz.is_finite() || sz < eps {
+            sz = 0.0;
+        }
 
         let inv_sx = if sx > 0.0 { 1.0 / sx } else { 0.0 };
         let inv_sy = if sy > 0.0 { 1.0 / sy } else { 0.0 };
-        let inv_sz = if sz > 0.0 { 1.0 / sz } else { 0.0 };
+        // `inv_sz` intentionally removed: `rz` is reconstructed via cross() after orthonormalization.
 
-        // Normalize basis
-        let mut rx = x * inv_sx;
+        // Normalize basis (remove scale first, then Gram-Schmidt to remove shear drift).
+        let mut rx = (x * inv_sx).normalize_or_zero();
         let mut ry = y * inv_sy;
-        let mut rz = z * inv_sz;
-
-        // Orthonormalize (Gram-Schmidt) to remove shear drift
-        // rx = normalize(rx)
-        rx = rx.normalize_or_zero();
-        // ry = normalize(ry - rx*dot(ry,rx))
         ry = (ry - rx * ry.dot(rx)).normalize_or_zero();
-        // rz = cross(rx, ry) (ensure orthonormal)
-        rz = rx.cross(ry);
+        let mut rz = rx.cross(ry);
 
-        // Detect reflection (negative determinant) and fold it into scale.
+        // Ensure a right-handed orthonormal frame and preserve negative scale via determinant sign.
+        // det = dot(rx, cross(ry, rz)) for a 3x3 basis with columns (rx, ry, rz).
         let det = rx.dot(ry.cross(rz));
         if det < 0.0 {
-            // Flip one axis; fold sign into scale
             sx = -sx;
             rx = -rx;
+            rz = rx.cross(ry);
         }
 
         let rot_m = Mat3::from_cols(rx, ry, rz);
@@ -386,6 +386,7 @@ impl Mat4 {
 
 impl Mul for Mat4 {
     type Output = Self;
+
     #[inline]
     fn mul(self, rhs: Self) -> Self::Output {
         let a = self;
@@ -408,6 +409,7 @@ impl MulAssign for Mat4 {
 
 impl Mul<Vec4> for Mat4 {
     type Output = Vec4;
+
     #[inline]
     fn mul(self, rhs: Vec4) -> Self::Output {
         // Column-major: v' = x*vx + y*vy + z*vz + w*vw

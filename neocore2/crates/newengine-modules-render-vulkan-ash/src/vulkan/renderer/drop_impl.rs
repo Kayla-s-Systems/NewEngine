@@ -37,13 +37,17 @@ impl Drop for VulkanRenderer {
                 if f.in_flight != vk::Fence::null() {
                     self.core.device.destroy_fence(f.in_flight, None);
                 }
-                if f.render_finished != vk::Semaphore::null() {
-                    self.core.device.destroy_semaphore(f.render_finished, None);
-                }
                 if f.image_available != vk::Semaphore::null() {
                     self.core.device.destroy_semaphore(f.image_available, None);
                 }
             }
+
+            for &s in &self.swapchain.render_finished {
+                if s != vk::Semaphore::null() {
+                    self.core.device.destroy_semaphore(s, None);
+                }
+            }
+            self.swapchain.render_finished.clear();
 
             if self.frames.command_pool != vk::CommandPool::null() {
                 if !self.frames.command_buffers.is_empty() {

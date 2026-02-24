@@ -3,5 +3,8 @@ CMAKE_GENERATOR = "Ninja"
 CMAKE_BUILD_PARALLEL_LEVEL = "8"
 CMAKE_ARGS = "-DCMAKE_C_FLAGS=/WX- -DCMAKE_CXX_FLAGS=/WX- /wd4514"
 
+[alias]
+check-math = "deny check bans"
+
 [patch.crates-io]
 joltc-sys = { path = "third_party/joltc-sys" }

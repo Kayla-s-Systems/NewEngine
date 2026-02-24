@@ -1,6 +1,7 @@
 #![forbid(unsafe_op_in_unsafe_fn)]
 
 use newengine_camera::{CameraInput, CameraRig, FreeFlyController, OrbitController};
+use newengine_math::Vec2;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum EditorCameraMode {
@@ -26,6 +27,8 @@ pub struct EditorCameraController {
     pub fly: FreeFlyController,
 
     pub fly_speed: f32,
+
+    was_look_active: bool,
 }
 
 impl Default for EditorCameraController {
@@ -33,7 +36,7 @@ impl Default for EditorCameraController {
     fn default() -> Self {
         let mut orbit = OrbitController::default();
         // Deterministic default framing; can be overridden by UI/scene framing logic.
-        orbit.yaw = 0.7853982;
+        orbit.yaw = std::f32::consts::FRAC_PI_4;
         orbit.pitch = -0.55;
         orbit.distance = 6.0;
 
@@ -45,7 +48,8 @@ impl Default for EditorCameraController {
             mode: EditorCameraMode::Orbit,
             orbit,
             fly,
-            fly_speed: 6.0,
+            fly_speed: 2.0,
+            was_look_active: false,
         }
     }
 }
@@ -56,6 +60,24 @@ impl EditorCameraController {
         if !(dt.is_finite() && dt > 0.0) {
             return;
         }
+
+        // Look activation edge: synchronize controller state from the current rig pose and
+        // suppress the first-frame look delta (cursor grab often produces a large synthetic delta).
+        let mut input = input;
+        if input.look_active && !self.was_look_active {
+            match self.mode {
+                EditorCameraMode::Orbit => {
+                    self.orbit.distance = self.orbit.distance.clamp(self.orbit.min_distance, self.orbit.max_distance);
+                    self.orbit.sync_from_rig(rig);
+                }
+                EditorCameraMode::Fly => {
+                    self.fly.sync_from_rig(rig);
+                }
+            }
+
+            input.look_delta = Vec2::ZERO;
+        }
+        self.was_look_active = input.look_active;
 
         match self.mode {
             EditorCameraMode::Orbit => {
@@ -70,24 +92,25 @@ impl EditorCameraController {
             }
         }
     }
+
     /// Synchronizes orbit controller state from the current rig transform.
     ///
     /// Ensures seamless Fly -> Orbit transition without position "snap-back".
     #[inline]
     pub fn sync_orbit_from_rig(&mut self, rig: &CameraRig) {
-        let fwd = rig.forward();
-        // Derive yaw/pitch from forward vector. Convention: forward is -Z.
-        let yaw = (-fwd.x).atan2(-fwd.z);
-        let pitch = (-fwd.y).clamp(-1.0, 1.0).asin();
+        // Fly -> Orbit must preserve the UPDATED world pose (position + rotation) produced by Fly.
+        //
+        // The canonical `OrbitController::sync_from_rig()` does exactly that:
+        // - extracts yaw/pitch from `rig.rotation`
+        // - recomputes `target` so that `rig.position` stays unchanged for the current `distance`
+        //
+        // Any attempt to keep the previous pivot (`target`) will project the camera onto the orbit ray,
+        // producing a visible snap/backwards kick when the Fly camera is not exactly on the orbit sphere.
+        self.orbit.distance = self.orbit.distance.clamp(self.orbit.min_distance, self.orbit.max_distance);
+        self.orbit.sync_from_rig(rig);
 
-        self.orbit.yaw = yaw;
-        self.orbit.pitch = pitch;
-
-        let d = self.orbit.distance.max(self.orbit.min_distance).min(self.orbit.max_distance);
-        self.orbit.distance = d;
-
-        // Orbit target is in front of the camera by distance along forward.
-        self.orbit.target = rig.position + fwd * d;
+        // Avoid re-triggering a look edge after explicit mode sync.
+        self.was_look_active = false;
     }
 
     /// Synchronizes fly controller orientation from the current rig transform.
@@ -95,12 +118,11 @@ impl EditorCameraController {
     /// Avoids the first-frame rotation snap when entering Fly.
     #[inline]
     pub fn sync_fly_from_rig(&mut self, rig: &CameraRig) {
-        let fwd = rig.forward();
-        let yaw = (-fwd.x).atan2(-fwd.z);
-        let pitch = (-fwd.y).clamp(-1.0, 1.0).asin();
+        // Delegate to the canonical implementation to avoid convention drift.
+        // Any mismatch here causes a visible snap when re-entering Fly.
+        self.fly.sync_from_rig(rig);
 
-        self.fly.yaw = yaw;
-        self.fly.pitch = pitch;
+        // Avoid re-triggering a look edge after explicit mode sync.
+        self.was_look_active = false;
     }
 }
-

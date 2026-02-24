@@ -247,6 +247,19 @@ impl VulkanRenderer {
                 .command_buffer_count(new_image_count as u32),
         )?;
 
+        for &s in &self.swapchain.render_finished {
+            if s != vk::Semaphore::null() {
+                self.core.device.destroy_semaphore(s, None);
+            }
+        }
+        self.swapchain.render_finished.clear();
+        self.swapchain.render_finished.reserve(new_image_count);
+        for _ in 0..new_image_count {
+            self.swapchain
+                .render_finished
+                .push(self.core.device.create_semaphore(&vk::SemaphoreCreateInfo::default(), None)?);
+        }
+
         self.swapchain.swapchain = new_swapchain;
         self.swapchain.images = new_images;
         self.swapchain.extent = new_extent;

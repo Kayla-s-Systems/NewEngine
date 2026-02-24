@@ -49,6 +49,7 @@ pub struct EditorCamera {
     pub orbit: OrbitController,
     pub margin: f32,
     pub focus_radius: f32,
+    was_look_active: bool,
 }
 
 impl Default for EditorCamera {
@@ -70,6 +71,7 @@ impl Default for EditorCamera {
             orbit,
             margin: 1.08,
             focus_radius: 1.0,
+            was_look_active: false,
         }
     }
 }
@@ -120,10 +122,22 @@ impl EditorCamera {
     /// Updates orbit controller, writes rig, computes matrices + frustum.
     #[inline]
     pub fn update(&mut self, input: Option<CameraInput>, dt: f32) -> (CameraMatrices, Frustum) {
-        if let Some(i) = input {
+        if let Some(mut i) = input {
+            // RMB (or any look activation) must not teleport the camera.
+            // If the rig has been modified externally (framing, switching controllers, etc.),
+            // stale orbit state would reconstruct `rig.position` from `(target, distance)`.
+            // Sync exactly on the activation edge and suppress the first-frame delta (cursor grab
+            // frequently produces a synthetic large delta).
+            if i.look_active && !self.was_look_active {
+                self.orbit.sync_from_rig(&self.state.rig);
+                i.look_delta = Vec2::ZERO;
+            }
+            self.was_look_active = i.look_active;
+
             self.orbit.apply(&mut self.state.rig, i, dt);
         } else {
             // Still must refresh rig from orbit (for cases when orbit was modified directly).
+            self.was_look_active = false;
             self.orbit.apply(
                 &mut self.state.rig,
                 CameraInput {

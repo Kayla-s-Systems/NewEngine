@@ -1,0 +1,9 @@
+[package]
+name = "newengine-ui-draw"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+newengine-math = { path = "../newengine-math" }
+bytemuck = { version = "1.16", features = ["derive"] }
+smallvec = "1.13"

@@ -30,10 +30,12 @@ pub(crate) fn draw(me: &mut EditorUiBuild, ctx: &egui::Context) {
         me.viewport.set_extent(px_w, px_h);
         me.viewport_bridge.publish_extent(px_w, px_h);
 
-        let (shift, rmb_down, raw_scroll_y, dropped_files) = ctx.input(|i| {
+        let (shift, rmb_down, rmb_pressed, rmb_released, raw_scroll_y, dropped_files) = ctx.input(|i| {
             (
                 i.modifiers.shift,
                 i.pointer.button_down(egui::PointerButton::Secondary),
+                i.pointer.button_pressed(egui::PointerButton::Secondary),
+                i.pointer.button_released(egui::PointerButton::Secondary),
                 i.raw_scroll_delta.y,
                 i.raw.dropped_files.clone(),
             )
@@ -136,29 +138,90 @@ pub(crate) fn draw(me: &mut EditorUiBuild, ctx: &egui::Context) {
 
         let wants_kb = ctx.wants_keyboard_input();
 
-        // Free-fly capture: RMB held while viewport is active and UI is not capturing.
-        // This mirrors common DCC/UE editor behavior: RMB activates look + WASD.
-        let fly_rmb = active && rmb_down && !wants_kb;
+        // RMB free-fly capture is **latched**.
+        //
+        // Do NOT gate it by `wants_keyboard_input`: egui may briefly toggle keyboard focus
+        // during pointer capture/lock transitions, which would flicker the mode and cause
+        // visible position snaps.
+        //
+        // Also do NOT drop capture immediately on a single-frame `button_down == false`,
+        // since some platforms/backends can momentarily report it during pointer-lock.
+        // We instead require a few consecutive misses before force-dropping the latch.
+        if rmb_released {
+            me.fly_rmb_capture = false;
+            me.rmb_down_miss_frames = 0;
+        }
+        if active && rmb_pressed && !gizmo_capture_now {
+            me.fly_rmb_capture = true;
+            me.rmb_down_miss_frames = 0;
+        }
+        if me.fly_rmb_capture {
+            if rmb_down {
+                me.rmb_down_miss_frames = 0;
+            } else {
+                me.rmb_down_miss_frames = me.rmb_down_miss_frames.saturating_add(1);
+                // If the backend missed the release event, eventually drop capture.
+                // Threshold >1 avoids Orbit<->Fly flicker.
+                if me.rmb_down_miss_frames >= 3 {
+                    me.fly_rmb_capture = false;
+                    me.rmb_down_miss_frames = 0;
+                }
+            }
+        }
 
-        // Pointer delta is used for free-fly look. Middle-drag uses explicit drag tracking.
+        // Free-fly capture: RMB pressed within viewport latches the mode until release.
+        let fly_rmb = me.fly_rmb_capture;
+
+        let fly_rmb_changed = fly_rmb != me.prev_fly_rmb;
+        if fly_rmb_changed {
+            // Cursor lock/unlock can warp the pointer; drop any baseline to avoid a delta spike.
+            me.last_fly_drag_pos = None;
+            me.last_nav_drag_pos = None;
+        }
+        me.prev_fly_rmb = fly_rmb;
+
+        // Middle-drag and RMB free-fly both use explicit drag tracking.
+        //
+        // IMPORTANT: Do NOT use `pointer.delta()` for RMB capture.
+        // `pointer.delta()` includes motion that happened *before* capture toggled on,
+        // which produces a visible view-direction "snap" on press/release.
         let (mut dx_px, mut dy_px) = (0.0f32, 0.0f32);
         if nav_drag {
+            // Prevent stale baseline if the user switches from RMB free-fly to MMB nav.
+            me.last_fly_drag_pos = None;
             if let Some(pos) = resp.interact_pointer_pos() {
-                if let Some(prev) = me.last_drag_pos {
+                if let Some(prev) = me.last_nav_drag_pos {
                     let d = pos - prev;
                     dx_px = d.x * ppp;
                     dy_px = d.y * ppp;
                 }
-                me.last_drag_pos = Some(pos);
+                me.last_nav_drag_pos = Some(pos);
             }
         } else {
-            me.last_drag_pos = None;
+            me.last_nav_drag_pos = None;
 
-            if fly_rmb {
-                let d = ctx.input(|i| i.pointer.delta());
-                dx_px = d.x * ppp;
-                dy_px = d.y * ppp;
+            if fly_rmb && !fly_rmb_changed {
+                if let Some(pos) = resp.interact_pointer_pos() {
+                    if let Some(prev) = me.last_fly_drag_pos {
+                        let d = pos - prev;
+                        dx_px = d.x * ppp;
+                        dy_px = d.y * ppp;
+                    }
+                    me.last_fly_drag_pos = Some(pos);
+                }
+            } else {
+                me.last_fly_drag_pos = None;
             }
+        }
+
+        // Defensive: cursor lock/unlock (platform-level) may warp the cursor, causing a huge one-frame delta.
+        // Treat that as a baseline reset instead of a camera impulse.
+        let max_delta = (rect.width().max(rect.height()) * ppp).max(1.0) * 0.5;
+        if dx_px.abs() > max_delta || dy_px.abs() > max_delta {
+            dx_px = 0.0;
+            dy_px = 0.0;
+            me.last_fly_drag_pos = None;
+            me.last_nav_drag_pos = None;
         }
 
         let wheel_y_points = if active { raw_scroll_y } else { 0.0 };
