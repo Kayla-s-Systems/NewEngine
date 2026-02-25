@@ -7,9 +7,9 @@ use newengine_scene::update_scene_world;
 use newengine_transform::{Parent, Transform};
 
 use crate::{
-    step_character_motor, step_follow_camera, AngularVelocity, CameraInputComp, CameraRigComp,
-    CharacterMotor, CommandBuffer, FollowTargetCameraController, FollowTargetCameraMotor,
-    MotorInput, OrbitCameraMotor, SimFrame, Velocity,
+    step_character_motor, AngularVelocity, CameraInputComp, CameraRigComp, CharacterMotor,
+    CommandBuffer, FollowTargetCameraController, FollowTargetCameraMotor, MotorInput,
+    OrbitCameraMotor, SimFrame, Velocity, step_follow_camera,
 };
 
 #[derive(Clone, Copy, Debug, Default)]

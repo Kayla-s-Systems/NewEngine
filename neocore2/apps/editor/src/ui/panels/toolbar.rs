@@ -24,7 +24,7 @@ pub(crate) fn draw(me: &mut EditorUiBuild, ctx: &egui::Context) {
                                     icon: Option<BuiltinUiIcon>,
                                     fallback_label: &str,
                                     active: bool|
-                                    -> egui::Response {
+                -> egui::Response {
                 let fill = if active {
                     ui.visuals().selection.bg_fill
                 } else {

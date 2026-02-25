@@ -136,6 +136,15 @@ impl<E: Send + 'static> Module<E> for EditorRenderController {
                     MissingServicePolicy::Optional,
                 );
 
+            // Drive ECS change-tracking deterministically from the render/controller frame index.
+            // Without this, `update_scene_world()` can stop propagating transforms/bounds, which
+            // breaks camera/world pose stability across input mode transitions.
+            {
+                let scene_lock = self.scene_bridge.scene();
+                let mut scene = scene_lock.write();
+                scene.world_mut().set_tick(self.frame_index);
+            }
+
             self.scene_bridge.apply_commands();
             let scene_lock = self.scene_bridge.scene();
             let mut scene = scene_lock.write();
@@ -164,6 +173,15 @@ impl<E: Send + 'static> Module<E> for EditorRenderController {
                 explicit_frame,
                 frame_all,
             };
+
+            // IMPORTANT:
+            // `update_scene_world()` advanced derived caches to `world.tick()`.
+            // The camera writes `Transform` after this point. If we keep the same tick,
+            // the change-tracking gate (`max_changed_tick > since_tick`) will never see
+            // those writes (they would be == last_transform_tick).
+            // Advance the tick once for the controller phase so camera pose commits are
+            // visible to the next frame's `update_scene_world()`.
+            scene.world_mut().advance_tick();
 
             let CameraUpdateResult { rig, .. } =
                 camera::update_camera_and_persist(self, &mut scene, &mut input, params);

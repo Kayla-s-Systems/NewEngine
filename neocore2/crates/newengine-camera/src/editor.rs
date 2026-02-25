@@ -329,13 +329,22 @@ impl EditorNavController {
             return;
         }
 
-        // Sanitize look delta: cursor warps can appear as a large delta burst.
-        // Treat that as "no input" instead of a camera impulse.
+        // Sanitize look delta: cursor warps/pointer-lock can inject large per-frame deltas.
+        // Clamp instead of zeroing to avoid locking movement/rotation on high-DPI devices.
         let max_delta = self.limits.max_look_delta_px.max(1.0);
-        if input.look_delta.x.abs() > max_delta || input.look_delta.y.abs() > max_delta {
-            input.look_delta = Vec2::ZERO;
+        if input.look_delta.x.is_finite() {
+            input.look_delta.x = input.look_delta.x.clamp(-max_delta, max_delta);
+        } else {
+            input.look_delta.x = 0.0;
+        }
+        if input.look_delta.y.is_finite() {
+            input.look_delta.y = input.look_delta.y.clamp(-max_delta, max_delta);
+        } else {
+            input.look_delta.y = 0.0;
+        }
+
+        if !input.zoom_delta.is_finite() {
             input.zoom_delta = 0.0;
-            input.move_axis = Vec3::ZERO;
         }
 
         // Look activation edge: sync internal angles from current rig pose and suppress
@@ -356,7 +365,6 @@ impl EditorNavController {
 
             input.look_delta = Vec2::ZERO;
             input.zoom_delta = 0.0;
-            input.move_axis = Vec3::ZERO;
         }
         self.was_look_active = input.look_active;
 
@@ -384,6 +392,16 @@ impl EditorNavController {
             .distance
             .clamp(self.orbit.min_distance, self.orbit.max_distance);
         self.orbit.sync_from_rig(rig);
+        self.was_look_active = false;
+    }
+
+    /// Synchronizes fly controller state from the current rig pose.
+    ///
+    /// Useful when the rig is authored externally (e.g. parenting, follow retargeting, editor tools)
+    /// and we want to enter/continue Fly navigation without a snap.
+    #[inline]
+    pub fn sync_fly_from_rig(&mut self, rig: &CameraRig) {
+        self.fly.sync_from_rig(rig);
         self.was_look_active = false;
     }
 

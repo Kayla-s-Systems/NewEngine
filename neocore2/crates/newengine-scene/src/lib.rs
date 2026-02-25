@@ -14,9 +14,9 @@ pub use bounds::{
 pub use components::{
     ActiveCamera, Controller, EntityGuid, Name, PropertyBag, PropertyValue, SceneRoot,
 };
-pub use guid::{ensure_entity_guid, GuidAllocator};
 pub use scene::Scene;
 pub use scene_asset::{SceneAsset, SceneAssetError, SceneAssetOptions};
+pub use guid::{ensure_entity_guid, GuidAllocator};
 pub use settings::{ForwardAxis, SceneSettings, UnitScaleMeters, UpAxis};
 pub use spawn::{name_or, spawn_named};
 pub use state::SceneState;

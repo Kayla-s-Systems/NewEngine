@@ -140,6 +140,12 @@ pub(super) fn update_camera_and_persist(
 
     let mut rig = ensure_camera_rig(world, cam_id);
 
+    // NOTE:
+    // Camera rig/controller are authoritative in the editor.
+    // We intentionally do not "pull" pose from `GlobalTransform` every frame because derived
+    // transforms are dirty-gated by ticks and can be one phase behind, which would cause snaps
+    // (camera returning to a stale pose) and effectively lock Fly navigation.
+
     let follow_ctrl = world.get::<FollowTargetCameraController>(cam_id).copied();
 
     // Navigation mode (RMB capture => Fly, otherwise Orbit).

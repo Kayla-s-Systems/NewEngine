@@ -33,18 +33,10 @@
   "plugins": {
     "newengine.logging": {
       "level": "debug",
-      "style": "auto",
-      "colors": true,
       "file": "logs/editor.log",
-      "tee": true,
       "include": {
-        "module_path": true,
-        "target": true,
-        "file": true,
-        "line": false
+        "file": true
       },
-      "timestamp": "millis",
-      "indent": 2,
       "dedup": {
         "window_ms": 250,
         "capacity": 4096

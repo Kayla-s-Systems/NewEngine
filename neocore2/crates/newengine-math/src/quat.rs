@@ -2,9 +2,9 @@
 #![forbid(unsafe_op_in_unsafe_fn)]
 
 use core::ops::{Mul, MulAssign};
+use std::ops::Div;
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
-use std::ops::Div;
 
 use crate::{EulerRot, Mat3, Vec3};
 

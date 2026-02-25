@@ -345,7 +345,8 @@ impl SceneBridge {
         {
             let mut scene = self.scene.write();
 
-            scene.world_mut().advance_tick();
+            // World tick is driven by the render/controller loop (frame index).
+            // Scene commands must not advance ticks implicitly.
 
             let default_mat = self
                 .materials

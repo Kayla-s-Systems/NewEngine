@@ -47,7 +47,6 @@ pub use vec4::Vec4;
 /// Re-exported for use by `ne_math_fn!`.
 pub use once_cell::sync::Lazy;
 
-
 pub mod prelude {
     pub use super::wrap_pi;
     pub use super::{EulerRot, Mat3, Mat4, Quat, Vec2, Vec3, Vec4};

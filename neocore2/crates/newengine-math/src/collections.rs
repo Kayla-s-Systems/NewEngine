@@ -73,4 +73,3 @@ pub type BTreeSet<K> = std::collections::BTreeSet<K>;
 /// These are re-exported only for wiring. Prefer `collections::prelude::*` in downstream crates.
 #[cfg(feature = "collections")]
 pub use slotmap;
-
