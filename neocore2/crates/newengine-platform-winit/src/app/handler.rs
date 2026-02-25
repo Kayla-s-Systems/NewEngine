@@ -2,14 +2,15 @@
 
 use std::time::Instant;
 
-use newengine_core::host_events::{HostEvent, WindowHostEvent};
+use newengine_core::events::EventSub;
+use newengine_core::host_events::{CursorGrabMode, CursorState, HostEvent, WindowHostEvent};
 use newengine_core::startup::UiBackend;
 use newengine_core::{Engine, EngineError, EngineResult};
 use raw_window_handle::{HasDisplayHandle, HasWindowHandle};
 use winit::{
     application::ApplicationHandler,
     dpi::{PhysicalPosition, PhysicalSize},
-    event::{ElementState, Ime, MouseScrollDelta, WindowEvent},
+    event::{DeviceEvent, ElementState, Ime, MouseScrollDelta, WindowEvent},
     event_loop::ActiveEventLoop,
     keyboard::PhysicalKey,
     window::{Icon, Window, WindowAttributes, WindowId},
@@ -19,6 +20,8 @@ use newengine_ui::draw::UiDrawList;
 use newengine_ui::{
     create_provider, UiBuildFn, UiFrameDesc, UiProvider, UiProviderKind, UiProviderOptions,
 };
+
+use newengine_ui::UiInputFrame;
 
 use crate::app::config::{WinitAppConfig, WinitWindowPlacement};
 use crate::app::input_bridge::{emit_plugin_json, poll_input_frame};
@@ -37,6 +40,14 @@ where
 
     window: Option<Window>,
     last_cursor_pos: Option<(f32, f32)>,
+
+    host_events: EventSub<HostEvent>,
+
+    cursor_captured: bool,
+    capture_anchor_px: Option<(f32, f32)>,
+    virtual_cursor_px: Option<(f32, f32)>,
+    raw_mouse_delta_px: (f32, f32),
+    suppress_next_mouse_delta: bool,
 
     ui: Box<dyn UiProvider>,
     ui_build: Option<Box<dyn UiBuildFn>>,
@@ -75,6 +86,8 @@ where
             );
         }
 
+        let host_events = engine.events().subscribe::<HostEvent>();
+
         let ui = create_provider(UiProviderOptions { kind });
 
         Self {
@@ -85,11 +98,160 @@ where
             fatal: None,
             window: None,
             last_cursor_pos: None,
+
+            host_events,
+
+            cursor_captured: false,
+            capture_anchor_px: None,
+            virtual_cursor_px: None,
+            raw_mouse_delta_px: (0.0, 0.0),
+            suppress_next_mouse_delta: false,
             ui,
             ui_build,
             last_frame_instant: None,
             shutting_down: false,
         }
+    }
+
+    #[inline]
+    fn apply_cursor_state(window: &Window, state: CursorState) {
+        window.set_cursor_visible(state.visible);
+
+        use winit::window::CursorGrabMode as WinitGrab;
+
+        let mut desired = match state.grab {
+            CursorGrabMode::None => None,
+            CursorGrabMode::Confined => Some(WinitGrab::Confined),
+            CursorGrabMode::Locked => Some(WinitGrab::Locked),
+        };
+
+        while let Some(mode) = desired.take() {
+            if window.set_cursor_grab(mode).is_ok() {
+                return;
+            }
+
+            desired = match mode {
+                WinitGrab::Locked => Some(WinitGrab::Confined),
+                WinitGrab::Confined => None,
+                WinitGrab::None => None,
+            };
+        }
+
+        let _ = window.set_cursor_grab(WinitGrab::None);
+    }
+
+    #[inline]
+    fn begin_capture(&mut self) {
+        let Some(window) = self.window.as_ref() else {
+            return;
+        };
+        self.cursor_captured = true;
+        self.raw_mouse_delta_px = (0.0, 0.0);
+        self.suppress_next_mouse_delta = true;
+
+        let anchor = self
+            .last_cursor_pos
+            .or_else(|| {
+                let s = window.inner_size();
+                Some((s.width as f32 * 0.5, s.height as f32 * 0.5))
+            })
+            .unwrap_or((0.0, 0.0));
+
+        self.capture_anchor_px = Some(anchor);
+        self.virtual_cursor_px = Some(anchor);
+
+        Self::apply_cursor_state(window, CursorState::captured_locked());
+        self.last_cursor_pos = None;
+    }
+
+    #[inline]
+    fn end_capture(&mut self) {
+        let Some(window) = self.window.as_ref() else {
+            return;
+        };
+        self.cursor_captured = false;
+        self.raw_mouse_delta_px = (0.0, 0.0);
+        self.suppress_next_mouse_delta = true;
+
+        Self::apply_cursor_state(window, CursorState::released());
+
+        if let Some(p) = self.capture_anchor_px {
+            let _ = window.set_cursor_position(PhysicalPosition::new(p.0 as f64, p.1 as f64));
+            self.last_cursor_pos = Some(p);
+        } else {
+            self.last_cursor_pos = None;
+        }
+
+        self.capture_anchor_px = None;
+        self.virtual_cursor_px = None;
+    }
+
+    #[inline]
+    fn drain_cursor_requests(&mut self) {
+        let mut last: Option<CursorState> = None;
+        self.host_events.drain(|ev| {
+            if let HostEvent::Window(WindowHostEvent::Cursor(s)) = ev.as_ref() {
+                last = Some(*s);
+            }
+        });
+
+        let Some(state) = last else {
+            return;
+        };
+
+        let want_capture = state.grab != CursorGrabMode::None;
+        if want_capture != self.cursor_captured {
+            if want_capture {
+                self.begin_capture();
+            } else {
+                self.end_capture();
+            }
+            return;
+        }
+
+        if let Some(window) = self.window.as_ref() {
+            Self::apply_cursor_state(window, state);
+        }
+    }
+
+    #[inline]
+    fn patch_input_for_capture(&mut self, input: &mut UiInputFrame) {
+        let Some(window) = self.window.as_ref() else {
+            return;
+        };
+        let mut dx = self.raw_mouse_delta_px.0;
+        let mut dy = self.raw_mouse_delta_px.1;
+        self.raw_mouse_delta_px = (0.0, 0.0);
+
+        if self.suppress_next_mouse_delta {
+            dx = 0.0;
+            dy = 0.0;
+            self.suppress_next_mouse_delta = false;
+        }
+
+        input.mouse_delta = (dx, dy);
+
+        let s = window.inner_size();
+        let w = s.width.max(1) as f32;
+        let h = s.height.max(1) as f32;
+
+        let anchor = self
+            .capture_anchor_px
+            .unwrap_or((w * 0.5, h * 0.5));
+
+        let mut pos = self.virtual_cursor_px.unwrap_or(anchor);
+        pos.0 += dx;
+        pos.1 += dy;
+
+        let margin = 2.0;
+        if pos.0 < margin || pos.0 > (w - margin) || pos.1 < margin || pos.1 > (h - margin) {
+            pos = anchor;
+            input.mouse_delta = (0.0, 0.0);
+            self.suppress_next_mouse_delta = true;
+        }
+
+        self.virtual_cursor_px = Some(pos);
+        input.mouse_pos = Some(pos);
     }
 
     #[inline]
@@ -341,6 +503,13 @@ where
 
             WindowEvent::Focused(focused) => {
                 self.emit_focused(focused);
+
+                // Best-effort safety: don't keep the cursor grabbed across focus loss.
+                if !focused {
+                    if self.cursor_captured {
+                        self.end_capture();
+                    }
+                }
             }
 
             // forward-only to input plugin
@@ -450,6 +619,22 @@ where
         self.request_redraw();
     }
 
+    fn device_event(
+        &mut self,
+        _event_loop: &ActiveEventLoop,
+        _device_id: winit::event::DeviceId,
+        event: DeviceEvent,
+    ) {
+        if !self.cursor_captured {
+            return;
+        }
+
+        if let DeviceEvent::MouseMotion { delta } = event {
+            self.raw_mouse_delta_px.0 += delta.0 as f32;
+            self.raw_mouse_delta_px.1 += delta.1 as f32;
+        }
+    }
+
     fn about_to_wait(&mut self, event_loop: &ActiveEventLoop) {
         if self.fatal.is_some() {
             self.shutdown_and_exit(event_loop);
@@ -466,8 +651,29 @@ where
             return;
         }
 
+        // Apply cursor requests produced by engine modules on the previous frame.
+        self.drain_cursor_requests();
+
         let dt = self.frame_dt_seconds();
-        let input = poll_input_frame(&self.engine);
+        let mut input = poll_input_frame(&self.engine);
+
+        // When the cursor is captured, prefer raw device motion and keep the UI pointer stable.
+        if self.cursor_captured {
+            if input.is_none() {
+                input = Some(UiInputFrame::default());
+            }
+            if let Some(ref mut frame) = input {
+                self.patch_input_for_capture(frame);
+            }
+        } else {
+            // Keep anchor in sync with the real cursor for a clean capture edge.
+            if let Some(ref f) = input {
+                if let Some(pos) = f.mouse_pos {
+                    self.last_cursor_pos = Some(pos);
+                }
+            }
+            self.raw_mouse_delta_px = (0.0, 0.0);
+        }
 
         if let (Some(w), Some(build)) = (self.window.as_ref(), self.ui_build.as_deref_mut()) {
             let mut desc = UiFrameDesc::new(dt);

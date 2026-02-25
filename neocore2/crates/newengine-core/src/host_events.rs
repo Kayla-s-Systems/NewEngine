@@ -20,6 +20,51 @@ pub enum WindowHostEvent {
     },
     Focused(bool),
     CloseRequested,
+
+    /// Requests a platform cursor mode change.
+    ///
+    /// This event is consumed by the platform host (e.g. winit) and should be published by
+    /// runtime/editor modules based on their current interaction mode.
+    Cursor(CursorState),
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CursorGrabMode {
+    None,
+    Confined,
+    Locked,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct CursorState {
+    pub visible: bool,
+    pub grab: CursorGrabMode,
+}
+
+impl CursorState {
+    #[inline]
+    pub const fn released() -> Self {
+        Self {
+            visible: true,
+            grab: CursorGrabMode::None,
+        }
+    }
+
+    #[inline]
+    pub const fn captured_locked() -> Self {
+        Self {
+            visible: false,
+            grab: CursorGrabMode::Locked,
+        }
+    }
+
+    #[inline]
+    pub const fn captured_confined() -> Self {
+        Self {
+            visible: false,
+            grab: CursorGrabMode::Confined,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy)]
