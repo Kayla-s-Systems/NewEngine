@@ -71,6 +71,8 @@ pub struct EditorRenderController {
 
     /// UI-triggered explicit "frame scene" requests.
     pub(super) last_frame_seq: u64,
+
+    pub(super) camera_capture_active: bool,
 }
 
 impl EditorRenderController {
@@ -125,6 +127,8 @@ impl EditorRenderController {
             last_pick_seq: 0,
 
             last_frame_seq: 0,
+
+            camera_capture_active: false,
         }
     }
 

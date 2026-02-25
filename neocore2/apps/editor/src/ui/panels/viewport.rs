@@ -248,8 +248,6 @@ pub(crate) fn draw(me: &mut EditorUiBuild, ctx: &egui::Context) {
         let look_drag = (nav_rotate || fly_rmb) && !gizmo_capture_now;
         let pan_drag = nav_pan && !gizmo_capture_now;
         let ui_busy = gizmo_capture_now || me.gizmo.is_dragging();
-        me.viewport_bridge
-            .publish_camera_input(dx_px, dy_px, wheel_y, active, look_drag, pan_drag, ui_busy, fly_rmb);
         let mut move_mask: u64 = 0;
 
         // Explicit framing:
@@ -292,7 +290,17 @@ pub(crate) fn draw(me: &mut EditorUiBuild, ctx: &egui::Context) {
                 }
             });
         }
-        me.viewport_bridge.publish_move_keys(move_mask);
+        me.viewport_bridge.publish_camera_input(
+            dx_px,
+            dy_px,
+            wheel_y,
+            active,
+            look_drag,
+            pan_drag,
+            ui_busy,
+            fly_rmb,
+            move_mask,
+        );
 
         let tex_user = me.viewport_bridge.read_tex_user();
 

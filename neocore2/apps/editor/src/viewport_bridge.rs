@@ -22,7 +22,7 @@ pub struct ViewportCameraFrame {
 /// texture id that the UI displays via `egui::TextureId::User(tex_id)`.
 ///
 /// Notes:
-/// - The bridge is lock-free; the state fits into atomics.
+/// - The bridge is mostly lock-free; viewport UI input is passed as one mutex-guarded packet to avoid torn snapshots.
 /// - Width/height are stored as a packed `u64` (`w` in low 32 bits, `h` in high 32 bits).
 /// - `tex_user` is an opaque `u64` passed through unchanged.
 #[derive(Debug)]
@@ -30,25 +30,11 @@ pub struct ViewportBridge {
     extent_wh: AtomicU64,
     tex_user: AtomicU64,
 
-    /// Packed camera input (dx, dy) in *physical pixels* for the last UI frame.
-    /// Low 32 bits: f32::to_bits(dx), high 32 bits: f32::to_bits(dy).
-    look_delta_xy: AtomicU64,
-
-    /// Mouse wheel delta Y (positive -> zoom in) for the last UI frame.
-    /// Stored as f32 bits in low 32 bits.
-    wheel_y: AtomicU64,
-
-    /// Orbit interaction flags.
-    /// bit0: active (viewport wants input; stable during pointer-lock)
-    /// bit1: look_drag (camera rotate)
-    /// bit2: pan_drag (camera pan)
-    /// bit3: ui_busy (UI captured input; e.g. gizmo drag/hover)
-    /// bit4: fly_rmb (RMB-held free-fly capture)
-    input_flags: AtomicU64,
-
-    /// Packed movement keys for editor-style camera.
-    /// bit0: W, bit1: A, bit2: S, bit3: D, bit4: Q, bit5: E, bit6: Shift
-    move_keys: AtomicU64,
+    /// UI -> renderer camera input snapshot.
+    ///
+    /// Stored under a mutex as a single packet to avoid torn reads across threads.
+    /// We intentionally keep deltas (`dx/dy/wheel`) one-shot and consume them on read.
+    ui_input: Mutex<UiCameraInputState>,
 
     /// Selection pick request.
     ///
@@ -80,6 +66,19 @@ struct CameraSpawnState {
     forward: Vec3,
 }
 
+#[derive(Clone, Copy, Debug, Default)]
+struct UiCameraInputState {
+    dx_px: f32,
+    dy_px: f32,
+    wheel_y: f32,
+    active: bool,
+    look_drag: bool,
+    pan_drag: bool,
+    ui_busy: bool,
+    fly_rmb: bool,
+    move_keys: u64,
+}
+
 impl ViewportBridge {
     #[inline]
     pub fn new() -> Self {
@@ -87,10 +86,7 @@ impl ViewportBridge {
             extent_wh: AtomicU64::new(0),
             tex_user: AtomicU64::new(0),
 
-            look_delta_xy: AtomicU64::new(0),
-            wheel_y: AtomicU64::new(0),
-            input_flags: AtomicU64::new(0),
-            move_keys: AtomicU64::new(0),
+            ui_input: Mutex::new(UiCameraInputState::default()),
 
             pick_seq: AtomicU64::new(0),
             pick_xy: AtomicU64::new(0),
@@ -173,16 +169,6 @@ impl ViewportBridge {
         (a, b)
     }
 
-    #[inline]
-    fn pack_f32(a: f32) -> u64 {
-        a.to_bits() as u64
-    }
-
-    #[inline]
-    fn unpack_f32(v: u64) -> f32 {
-        f32::from_bits(v as u32)
-    }
-
     /// Publish camera interaction state from UI.
     ///
     /// - `dx_px`, `dy_px` are cursor deltas in **physical pixels**.
@@ -201,62 +187,44 @@ impl ViewportBridge {
         pan_drag: bool,
         ui_busy: bool,
         fly_rmb: bool,
+        move_keys: u64,
     ) {
-        self.look_delta_xy
-            .store(Self::pack_f32x2(dx_px, dy_px), Ordering::Relaxed);
-        self.wheel_y
-            .store(Self::pack_f32(wheel_y), Ordering::Relaxed);
-        let mut flags: u64 = 0;
-        if active {
-            flags |= 1;
-        }
-        if look_drag {
-            flags |= 2;
-        }
-        if pan_drag {
-            flags |= 4;
-        }
-        if ui_busy {
-            flags |= 8;
-        }
-        if fly_rmb {
-            flags |= 16;
-        }
-        self.input_flags.store(flags, Ordering::Relaxed);
-    }
-
-    /// Publish per-frame movement key mask from UI.
-    #[inline]
-    pub fn publish_move_keys(&self, mask: u64) {
-        self.move_keys.store(mask, Ordering::Relaxed);
-    }
-
-    /// Read per-frame movement key mask.
-    #[inline]
-    pub fn read_move_keys(&self) -> u64 {
-        self.move_keys.load(Ordering::Relaxed)
+        let mut s = self.ui_input.lock();
+        s.dx_px = dx_px;
+        s.dy_px = dy_px;
+        s.wheel_y = wheel_y;
+        s.active = active;
+        s.look_drag = look_drag;
+        s.pan_drag = pan_drag;
+        s.ui_busy = ui_busy;
+        s.fly_rmb = fly_rmb;
+        s.move_keys = move_keys;
     }
 
     /// Read camera input published by UI for this frame.
     #[inline]
-    pub fn read_camera_input(&self) -> (f32, f32, f32, bool, bool, bool, bool, bool) {
-        // Consume per-frame deltas.
+    pub fn read_camera_input(&self) -> (f32, f32, f32, bool, bool, bool, bool, bool, u64) {
+        // Read and consume the latest UI packet atomically.
         //
-        // UI can publish deltas only while dragging/captured. If we only `load()` here,
-        // the renderer can accidentally reuse a stale delta across multiple frames,
-        // which manifests as a jerk/snap when toggling RMB capture (and can accumulate
-        // drift when switching camera modes).
-        //
-        // Using `swap(0)` makes these inputs strictly one-frame.
-        let (dx, dy) = Self::unpack_f32x2(self.look_delta_xy.swap(0, Ordering::Relaxed));
-        let wheel = Self::unpack_f32(self.wheel_y.swap(0, Ordering::Relaxed));
-        let flags = self.input_flags.load(Ordering::Relaxed);
-        let active = (flags & 1) != 0;
-        let look_drag = (flags & 2) != 0;
-        let pan_drag = (flags & 4) != 0;
-        let ui_busy = (flags & 8) != 0;
-        let fly_rmb = (flags & 16) != 0;
-        (dx, dy, wheel, active, look_drag, pan_drag, ui_busy, fly_rmb)
+        // This avoids torn snapshots where `(fly_rmb, look_drag, dx/dy)` come from different UI
+        // frames, which was causing camera mode flicker and apparent pose "snap back" on RMB
+        // press/release transitions.
+        let mut s = self.ui_input.lock();
+        let out = (
+            s.dx_px,
+            s.dy_px,
+            s.wheel_y,
+            s.active,
+            s.look_drag,
+            s.pan_drag,
+            s.ui_busy,
+            s.fly_rmb,
+            s.move_keys,
+        );
+        s.dx_px = 0.0;
+        s.dy_px = 0.0;
+        s.wheel_y = 0.0;
+        out
     }
 
     /// Publish a pick request from UI.

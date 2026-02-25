@@ -1,6 +1,7 @@
 #![forbid(unsafe_op_in_unsafe_fn)]
 
 use newengine_camera::{auto_near_far_from_sphere, Perspective, Projection};
+use newengine_core::host_events::{CursorState, HostEvent, WindowHostEvent};
 use newengine_core::render::{
     require_render_api, BeginFrameDesc, BeginRenderTargetDesc, Extent2D, RectI32, Viewport,
 };
@@ -74,6 +75,24 @@ impl EditorRenderController {
         }
         Ok(())
     }
+
+    #[inline]
+    fn sync_camera_capture<E: Send>(&mut self, ctx: &ModuleCtx<'_, E>, want_capture: bool) {
+        if want_capture == self.camera_capture_active {
+            return;
+        }
+        self.camera_capture_active = want_capture;
+
+        let state = if want_capture {
+            CursorState::captured_locked()
+        } else {
+            CursorState::released()
+        };
+
+        let _ = ctx
+            .events()
+            .publish(HostEvent::Window(WindowHostEvent::Cursor(state)));
+    }
 }
 
 impl<E: Send + 'static> Module<E> for EditorRenderController {
@@ -125,6 +144,10 @@ impl<E: Send + 'static> Module<E> for EditorRenderController {
             let rt = self.ensure_viewport_rt(&mut **r, extent)?;
 
             let mut input = ViewportInputSnap::read(&self.viewport_bridge);
+
+            // AAA camera policy: when free-fly is active, capture cursor and switch to
+            // relative look mode (cursor hidden + grabbed).
+            self.sync_camera_capture(ctx, input.fly_rmb && input.active);
 
             let aspect = (vp_w as f32 / vp_h as f32).max(1e-6);
 
@@ -245,6 +268,9 @@ impl<E: Send + 'static> Module<E> for EditorRenderController {
             let win_extent = Extent2D::new(w, h);
             r.set_viewport(Viewport::full(win_extent))?;
             r.set_scissor(RectI32::new(0, 0, w as i32, h as i32))?;
+        } else {
+            // Viewport is not active (no RT). Ensure we don't keep the cursor captured.
+            self.sync_camera_capture(ctx, false);
         }
 
         if let Some(ui) = ui {
