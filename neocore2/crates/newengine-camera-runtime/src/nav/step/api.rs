@@ -11,19 +11,11 @@ use super::resync::ensure_mode_without_impulse;
 use super::tune::tune_controller;
 
 use crate::nav::helpers::{compute_user_busy, ensure_camera_rig};
-use crate::nav::input::cursor_state_for_nav;
 
 use crate::nav::{
-    BoundsSphere, CameraNavFrameRequest, CameraNavInput, CameraNavParams, CameraNavResult,
-    CameraNavState,
+    CameraNavFrameRequest, CameraNavInput, CameraNavParams, CameraNavResult, CameraNavState,
 };
 
-/// Step camera navigation deterministically.
-///
-/// Contract:
-/// - app is a thin adapter: feeds `CameraNavInput` and bounds, consumes `CameraNavResult`
-/// - mode switches (Orbit/Fly) never teleport the rig
-/// - cursor capture policy is derived from input (`active && fly_rmb`)
 pub fn step_camera_nav(
     state: &mut CameraNavState,
     world: &mut World,
@@ -97,6 +89,7 @@ pub fn step_camera_nav(
         if let Some(res) = try_step_follow_orbit(
             world,
             cam_id,
+            input,
             params,
             bounds,
             &mut ctrl,

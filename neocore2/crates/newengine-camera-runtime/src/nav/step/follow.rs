@@ -1,21 +1,20 @@
-use newengine_camera::{CameraRig, EditorNavController, EditorNavMode};
+use newengine_camera::{CameraRig, EditorNavController};
 use newengine_ecs::{EntityId, World};
-use newengine_sim::{
-    step_follow_camera, FollowTargetCameraController, FollowTargetCameraMotor,
-};
+use newengine_sim::{step_follow_camera, FollowTargetCameraController, FollowTargetCameraMotor};
 use newengine_transform::read_entity_world_pose;
 
 use crate::nav::helpers::{
     compute_projection, persist_camera_pose, retarget_follow_to_rig, target_has_transform,
 };
 use crate::nav::input::cursor_state_for_nav;
-use crate::nav::{BoundsSphere, CameraNavParams, CameraNavResult, CameraNavState};
+use crate::nav::{BoundsSphere, CameraNavInput, CameraNavParams, CameraNavResult, CameraNavState};
 use newengine_sim::CameraRigComp;
 
 #[inline]
 pub(crate) fn try_step_follow_orbit(
     world: &mut World,
     cam_id: EntityId,
+    input: &CameraNavInput,
     params: CameraNavParams,
     bounds: BoundsSphere,
     ctrl: &mut EditorNavController,
@@ -23,9 +22,7 @@ pub(crate) fn try_step_follow_orbit(
     follow_ctrl: Option<FollowTargetCameraController>,
     state: &mut CameraNavState,
 ) -> Option<CameraNavResult> {
-    let Some(mut follow) = follow_ctrl else {
-        return None;
-    };
+    let Some(mut follow) = follow_ctrl else { return None };
 
     if !follow.follow_rotation {
         follow = retarget_follow_to_rig(world, cam_id, follow, rig);
@@ -79,9 +76,7 @@ pub(crate) fn try_step_follow_orbit(
     state.last_bounds_radius = bounds.radius;
 
     let projection = compute_projection(rig, bounds, params.aspect);
-    let cursor = cursor_state_for_nav(&crate::nav::CameraNavInput {
-        ..Default::default()
-    });
+    let cursor = cursor_state_for_nav(input);
 
     Some(CameraNavResult {
         rig: *rig,
