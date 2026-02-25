@@ -1,0 +1,83 @@
+use newengine_core::host_events::CursorState;
+use newengine_math::{Vec2, Vec3};
+use newengine_viewport::input::{
+    MOVE_A, MOVE_D, MOVE_DOWN, MOVE_S, MOVE_SHIFT, MOVE_UP, MOVE_W,
+};
+
+use newengine_camera::{CameraInput, EditorNavMode};
+
+/// Minimal, renderer-agnostic viewport navigation input snapshot.
+///
+/// Produced by any UI/game layer and consumed by camera navigation systems.
+#[derive(Clone, Copy, Debug, Default)]
+pub struct CameraNavInput {
+    pub dx_px: f32,
+    pub dy_px: f32,
+    pub wheel_y: f32,
+
+    /// True when the viewport wants input (hovered, focused, or explicitly active).
+    pub active: bool,
+
+    /// True while look rotation is active.
+    pub look_drag: bool,
+    /// True while pan interaction is active.
+    pub pan_drag: bool,
+    /// True when UI is consuming input (gizmo, text input, etc.).
+    pub ui_busy: bool,
+
+    /// Latched free-fly intent (e.g. RMB capture).
+    pub fly_rmb: bool,
+
+    /// Movement key bitmask (`newengine_viewport::input::*`).
+    pub move_mask: u64,
+}
+
+impl CameraNavInput {
+    #[inline]
+    pub fn clear_motion(&mut self) {
+        self.dx_px = 0.0;
+        self.dy_px = 0.0;
+        self.wheel_y = 0.0;
+    }
+}
+
+#[inline]
+pub fn cursor_state_for_nav(input: &CameraNavInput) -> CursorState {
+    if input.active && input.fly_rmb {
+        CursorState::captured_locked()
+    } else {
+        CursorState::released()
+    }
+}
+
+#[inline]
+pub(crate) fn build_camera_input(input: &CameraNavInput, mode: EditorNavMode) -> CameraInput {
+    let shift = (input.move_mask & MOVE_SHIFT) != 0;
+
+    let fwd = ((input.move_mask & MOVE_W) != 0) as i32 - ((input.move_mask & MOVE_S) != 0) as i32;
+    let right =
+        ((input.move_mask & MOVE_D) != 0) as i32 - ((input.move_mask & MOVE_A) != 0) as i32;
+    let up = ((input.move_mask & MOVE_UP) != 0) as i32 - ((input.move_mask & MOVE_DOWN) != 0) as i32;
+
+    let mut move_axis = Vec3::ZERO;
+    let speed_mul = if shift { 2.0 } else { 1.0 };
+
+    if input.pan_drag && mode == EditorNavMode::Orbit {
+        move_axis.x = -input.dx_px;
+        move_axis.y = input.dy_px;
+    }
+
+    if mode == EditorNavMode::Fly {
+        move_axis.x = right as f32;
+        move_axis.y = up as f32;
+        move_axis.z = fwd as f32;
+    }
+
+    CameraInput {
+        look_active: input.look_drag,
+        look_delta: Vec2::new(-input.dx_px, -input.dy_px),
+        move_axis,
+        speed_mul,
+        zoom_delta: input.wheel_y,
+    }
+}
