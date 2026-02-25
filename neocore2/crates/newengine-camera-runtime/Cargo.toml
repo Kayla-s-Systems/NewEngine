@@ -1,0 +1,17 @@
+[package]
+name = "newengine-camera-runtime"
+version = "0.1.0"
+edition = "2021"
+readme = "README.md"
+
+[features]
+default = []
+
+[dependencies]
+newengine-camera = { path = "../newengine-camera" }
+newengine-core = { path = "../newengine-core" }
+newengine-ecs = { path = "../newengine-ecs" }
+newengine-math = { path = "../newengine-math" }
+newengine-sim = { path = "../newengine-sim" }
+newengine-transform = { path = "../newengine-transform", features = ["ecs"], default-features = false }
+newengine-viewport = { path = "../newengine-viewport" }
