@@ -22,6 +22,7 @@ newengine-transform-api = { path = "../../crates/newengine-transform-api", featu
 newengine-ecs = { path = "../../crates/newengine-ecs" }
 newengine-viewport = { path = "../../crates/newengine-viewport" }
 newengine-camera = { path = "../../crates/newengine-camera" }
+newengine-camera-runtime = { path = "../../crates/newengine-camera-runtime" }
 newengine-primitives = { path = "../../crates/newengine-primitives" }
 newengine-gizmo = { path = "../../crates/newengine-gizmo", features = ["egui"] }
 newengine-materials = { path = "../../crates/newengine-materials" }

@@ -1,6 +1,9 @@
 #![forbid(unsafe_op_in_unsafe_fn)]
 
-use newengine_camera::{auto_near_far_from_sphere, Perspective, Projection};
+use newengine_camera_runtime::{
+    cursor_state_for_nav, step_camera_nav, BoundsSphere as CamBoundsSphere, CameraNavFrameRequest,
+    CameraNavInput, CameraNavParams,
+};
 use newengine_core::host_events::{CursorState, HostEvent, WindowHostEvent};
 use newengine_core::render::{
     require_render_api, BeginFrameDesc, BeginRenderTargetDesc, Extent2D, RectI32, Viewport,
@@ -12,12 +15,8 @@ use newengine_ui::draw::UiDrawList;
 
 use super::controller::EditorRenderController;
 use super::gpu::ensure_lit_pipeline;
-use newengine_core::MissingServicePolicy;
 use newengine_scene::update_scene_world;
-use newengine_transform_api::runtime::TransformRuntimeApi;
-use newengine_transform_api::TRANSFORM_SERVICE;
 
-mod camera;
 mod input;
 mod lights;
 mod passes;
@@ -25,9 +24,7 @@ mod passes_ubo;
 mod picking;
 mod scene;
 
-use camera::{CameraUpdateParams, CameraUpdateResult};
 use input::ViewportInputSnap;
-use scene::BoundsSnap;
 
 #[inline]
 fn quat_from_forward_z(dir_ws: Vec3) -> Quat {
@@ -77,21 +74,14 @@ impl EditorRenderController {
     }
 
     #[inline]
-    fn sync_camera_capture<E: Send>(&mut self, ctx: &ModuleCtx<'_, E>, want_capture: bool) {
-        if want_capture == self.camera_capture_active {
+    fn sync_cursor_state<E: Send>(&mut self, ctx: &ModuleCtx<'_, E>, desired: CursorState) {
+        if desired == self.last_cursor_state {
             return;
         }
-        self.camera_capture_active = want_capture;
-
-        let state = if want_capture {
-            CursorState::captured_locked()
-        } else {
-            CursorState::released()
-        };
-
+        self.last_cursor_state = desired;
         let _ = ctx
             .events()
-            .publish(HostEvent::Window(WindowHostEvent::Cursor(state)));
+            .publish(HostEvent::Window(WindowHostEvent::Cursor(desired)));
     }
 }
 
@@ -143,21 +133,24 @@ impl<E: Send + 'static> Module<E> for EditorRenderController {
             let extent = Extent2D::new(vp_w, vp_h);
             let rt = self.ensure_viewport_rt(&mut **r, extent)?;
 
-            let mut input = ViewportInputSnap::read(&self.viewport_bridge);
+            let input = ViewportInputSnap::read(&self.viewport_bridge);
 
-            // AAA camera policy: when free-fly is active, capture cursor and switch to
-            // relative look mode (cursor hidden + grabbed).
-            self.sync_camera_capture(ctx, input.fly_rmb && input.active);
+            let mut nav_input = CameraNavInput {
+                dx_px: input.dx_px,
+                dy_px: input.dy_px,
+                wheel_y: input.wheel_y,
+                active: input.active,
+                look_drag: input.look_drag,
+                pan_drag: input.pan_drag,
+                ui_busy: input.ui_busy,
+                fly_rmb: input.fly_rmb,
+                move_mask: input.move_mask,
+            };
+
+            // AAA camera policy: when free-fly is active and viewport is active, capture cursor.
+            self.sync_cursor_state(ctx, cursor_state_for_nav(&nav_input));
 
             let aspect = (vp_w as f32 / vp_h as f32).max(1e-6);
-
-            let transform_api: Option<TransformRuntimeApi> = ctx
-                .services()
-                .service_registry()
-                .require_interface::<TransformRuntimeApi>(
-                    TRANSFORM_SERVICE,
-                    MissingServicePolicy::Optional,
-                );
 
             // Drive ECS change-tracking deterministically from the render/controller frame index.
             // Without this, `update_scene_world()` can stop propagating transforms/bounds, which
@@ -181,20 +174,22 @@ impl<E: Send + 'static> Module<E> for EditorRenderController {
             let sel = self.scene_bridge.selection();
             let sel_bounds = scene::selection_bounds(&scene, sel);
 
-            let (user_busy, explicit_frame, frame_all) =
-                self.scene_compute_framing_flags(&input, &bounds);
-
-            let base_speed = (bounds.radius.max(0.01) * 2.0).clamp(0.5, 200.0);
-
-            let params = CameraUpdateParams {
+            let params = CameraNavParams {
                 dt,
                 aspect,
-                bounds,
-                sel_bounds,
-                base_speed,
-                user_busy,
-                explicit_frame,
-                frame_all,
+                bounds: CamBoundsSphere {
+                    center: bounds.center,
+                    radius: bounds.radius,
+                },
+                selection_bounds: sel_bounds.map(|b| CamBoundsSphere {
+                    center: b.center,
+                    radius: b.radius,
+                }),
+            };
+
+            let frame_req = CameraNavFrameRequest {
+                seq: self.viewport_bridge.read_frame_request(),
+                all: self.viewport_bridge.read_frame_all(),
             };
 
             // IMPORTANT:
@@ -206,20 +201,25 @@ impl<E: Send + 'static> Module<E> for EditorRenderController {
             // visible to the next frame's `update_scene_world()`.
             scene.world_mut().advance_tick();
 
-            let CameraUpdateResult { rig, .. } =
-                camera::update_camera_and_persist(self, &mut scene, &mut input, params);
+            let cam_id = scene
+                .active_camera()
+                .unwrap_or_else(|| scene.root().unwrap_or_default());
 
-            self.last_bounds_center = params.bounds.center;
-            self.last_bounds_radius = params.bounds.radius;
+            let out = step_camera_nav(
+                &mut self.camera_nav,
+                scene.world_mut(),
+                cam_id,
+                &mut nav_input,
+                params,
+                frame_req,
+            );
+
+            let rig = out.rig;
+            self.projection = out.projection;
 
             self.last_aspect = aspect;
             self.last_vp_w = vp_w;
             self.last_vp_h = vp_h;
-
-            let cam_dist = (rig.position - params.bounds.center).length().max(0.01);
-            let (near, far) = auto_near_far_from_sphere(cam_dist, params.bounds.radius);
-            self.projection =
-                Projection::Perspective(Perspective::new(60.0f32.to_radians(), aspect, near, far));
 
             let proj = self.projection.matrix();
             let view = rig.view_matrix();
@@ -270,7 +270,7 @@ impl<E: Send + 'static> Module<E> for EditorRenderController {
             r.set_scissor(RectI32::new(0, 0, w as i32, h as i32))?;
         } else {
             // Viewport is not active (no RT). Ensure we don't keep the cursor captured.
-            self.sync_camera_capture(ctx, false);
+            self.sync_cursor_state(ctx, CursorState::released());
         }
 
         if let Some(ui) = ui {
@@ -284,31 +284,3 @@ impl<E: Send + 'static> Module<E> for EditorRenderController {
     }
 }
 
-impl EditorRenderController {
-    #[inline]
-    fn scene_compute_framing_flags(
-        &mut self,
-        input: &ViewportInputSnap,
-        bounds: &BoundsSnap,
-    ) -> (bool, bool, bool) {
-        let bounds_center_delta = (bounds.center - self.last_bounds_center).length();
-        let bounds_radius_delta = (bounds.radius - self.last_bounds_radius).abs();
-        let eps = bounds.radius.max(0.001) * 0.0005;
-        let bounds_changed = bounds_center_delta > eps || bounds_radius_delta > eps;
-
-        let user_busy = input.look_drag
-            || input.pan_drag
-            || input.move_mask != 0
-            || input.ui_busy
-            || bounds_changed;
-
-        let frame_seq = self.viewport_bridge.read_frame_request();
-        let frame_all = self.viewport_bridge.read_frame_all();
-        let explicit_frame = frame_seq != self.last_frame_seq;
-        if explicit_frame {
-            self.last_frame_seq = frame_seq;
-        }
-
-        (user_busy, explicit_frame, frame_all)
-    }
-}

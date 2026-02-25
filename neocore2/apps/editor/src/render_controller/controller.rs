@@ -1,9 +1,9 @@
 #![forbid(unsafe_op_in_unsafe_fn)]
 
 use newengine_camera::{Perspective, Projection};
+use newengine_core::host_events::CursorState;
 use newengine_core::render::Extent2D;
 use newengine_math::collections::FxHashMap;
-use newengine_math::Vec3;
 
 use crate::plugin_manager::PluginManagerBridge;
 use crate::scene_bridge::SceneBridge;
@@ -58,21 +58,13 @@ pub struct EditorRenderController {
 
     pub(super) frame_index: u64,
 
-    // Camera framing:
-    // - frame_once on startup/aspect change
-    // - expand frame only when scene grows (never shrink on spawn)
-    pub(super) framed_once: bool,
-    pub(super) framed_radius: f32,
-
-    pub(super) last_bounds_center: Vec3,
-    pub(super) last_bounds_radius: f32,
-
     pub(super) last_pick_seq: u64,
 
-    /// UI-triggered explicit "frame scene" requests.
-    pub(super) last_frame_seq: u64,
+    /// Engine-owned camera navigation state (opaque for the app).
+    pub(super) camera_nav: newengine_camera_runtime::CameraNavState,
 
-    pub(super) camera_capture_active: bool,
+    /// Cached cursor mode last published to the host.
+    pub(super) last_cursor_state: CursorState,
 }
 
 impl EditorRenderController {
@@ -118,17 +110,10 @@ impl EditorRenderController {
 
             frame_index: 0,
 
-            framed_once: false,
-            framed_radius: 0.0,
-
-            last_bounds_center: Vec3::ZERO,
-            last_bounds_radius: 1.0,
-
             last_pick_seq: 0,
 
-            last_frame_seq: 0,
-
-            camera_capture_active: false,
+            camera_nav: newengine_camera_runtime::CameraNavState::default(),
+            last_cursor_state: CursorState::released(),
         }
     }
 
