@@ -84,6 +84,10 @@ pub struct CameraNavState {
 
     last_frame_seq: u64,
 
+    // RMB fly-capture latch state.
+    // Used to detect capture begin/end edges even if controller mode is temporarily desynced.
+    last_fly_rmb: bool,
+
     last_bounds_center: Vec3,
     last_bounds_radius: f32,
 }
@@ -95,6 +99,7 @@ impl Default for CameraNavState {
             framed_once: false,
             framed_radius: 0.0,
             last_frame_seq: 0,
+            last_fly_rmb: false,
             last_bounds_center: Vec3::ZERO,
             last_bounds_radius: 1.0,
         }
@@ -250,21 +255,41 @@ pub fn step_camera_nav(
 
     let follow_ctrl = world.get::<FollowTargetCameraController>(cam_id).copied();
 
-    let explicit_frame = frame_req.seq != state.last_frame_seq;
-    if explicit_frame {
-        state.last_frame_seq = frame_req.seq;
-    }
+    // Capture edges (RMB grab/release) must never inject camera impulses.
+    // We treat capture begin/end as a first-class state transition independent of controller mode.
+    // This is a hard AAA invariant:
+    // - rig position/rotation must remain stable across capture transitions
+    // - yaw/pitch must be preserved when leaving capture
+    // - any synthetic cursor warp deltas are ignored
+    if input.fly_rmb != state.last_fly_rmb {
+        let capture_begin = input.fly_rmb;
+        state.last_fly_rmb = input.fly_rmb;
 
-    let user_busy = compute_user_busy(state, input, bounds);
-
-    // Mode switch must not create impulses.
-    if ctrl.mode != desired_mode {
+        // Drop all one-shot motion on the transition frame.
         input.clear_motion();
-        ctrl.set_mode(desired_mode, &rig);
 
-        // If the camera has a follow controller, convert the current rig into follow params.
-        // This prevents a snap-back when Fly capture ends.
-        if desired_mode == EditorNavMode::Orbit {
+        // Snapshot local transform before writes (for diagnostics).
+        let pre_local = world.get::<Transform>(cam_id).copied();
+
+        if capture_begin {
+            // Enter Fly capture.
+            if ctrl.mode != EditorNavMode::Fly {
+                ctrl.set_mode(EditorNavMode::Fly, &rig);
+            } else {
+                // Defensive: even if mode is already Fly, resync angles and suppress the next delta.
+                ctrl.sync_fly_from_rig(&rig);
+            }
+        } else {
+            // Leave Fly capture -> Orbit.
+            if ctrl.mode != EditorNavMode::Orbit {
+                ctrl.set_mode(EditorNavMode::Orbit, &rig);
+            } else {
+                // Defensive: avoid snap-back if some external code touched the rig while in Orbit.
+                ctrl.sync_orbit_from_rig(&rig);
+            }
+
+            // If the camera is attached, retarget follow parameters to the current rig.
+            // This prevents a "return to old offset" on release.
             if let Some(follow) = follow_ctrl {
                 let _ = retarget_follow_to_rig(world, cam_id, follow, &rig);
             }
@@ -274,7 +299,59 @@ pub fn step_camera_nav(
         let _ = world.insert(cam_id, CameraRigComp(rig));
         persist_camera_pose(world, cam_id, &rig);
 
+        let post_local = world.get::<Transform>(cam_id).copied();
+
+        log::info!(
+            "camera_nav: capture {} cam={:?} mode={:?} rig_pos={:?} rig_rot={:?} orbit(yaw={:.5} pitch={:.5} dist={:.4} tgt={:?}) fly(yaw={:.5} pitch={:.5}) input(active={} look={} pan={} ui_busy={} move_mask=0x{:X}) local_pre={:?} local_post={:?}",
+            if capture_begin { "BEGIN" } else { "END" },
+            cam_id,
+            ctrl.mode,
+            rig.position,
+            rig.rotation,
+            ctrl.orbit.yaw,
+            ctrl.orbit.pitch,
+            ctrl.orbit.distance,
+            ctrl.orbit.target,
+            ctrl.fly.yaw,
+            ctrl.fly.pitch,
+            input.active,
+            input.look_drag,
+            input.pan_drag,
+            input.ui_busy,
+            input.move_mask,
+            pre_local,
+            post_local,
+        );
+
         // Update bounds tracking on every frame, even on early exits.
+        state.last_bounds_center = bounds.center;
+        state.last_bounds_radius = bounds.radius;
+
+        let projection = compute_projection(&rig, bounds, params.aspect);
+        let cursor = cursor_state_for_nav(input);
+        return CameraNavResult {
+            rig,
+            controller: ctrl,
+            projection,
+            cursor,
+        };
+    }
+
+    let explicit_frame = frame_req.seq != state.last_frame_seq;
+    if explicit_frame {
+        state.last_frame_seq = frame_req.seq;
+    }
+
+    let user_busy = compute_user_busy(state, input, bounds);
+
+    // Safety: if controller mode is desynced (e.g. corrupted ECS state), force it without impulses.
+    if ctrl.mode != desired_mode {
+        input.clear_motion();
+        ctrl.set_mode(desired_mode, &rig);
+        let _ = world.insert(cam_id, ctrl);
+        let _ = world.insert(cam_id, CameraRigComp(rig));
+        persist_camera_pose(world, cam_id, &rig);
+
         state.last_bounds_center = bounds.center;
         state.last_bounds_radius = bounds.radius;
 

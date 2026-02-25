@@ -58,7 +58,11 @@ impl FreeFlyController {
         let pitch = fy.asin();
 
         // yaw = atan2(x, -z) so that forward (0,0,-1) => yaw=0
-        let yaw = fwd.x.atan2(-fwd.z);
+        // Sign convention:
+        // forward is -Z. With right-handed +Y-up math, a positive yaw rotates the camera to the left,
+        // so `fwd.x` becomes negative for positive yaw. To recover the same yaw later fed into
+        // `Quat::from_rotation_y(yaw)`, we must invert X when extracting yaw from forward.
+        let yaw = (-fwd.x).atan2(-fwd.z);
 
         self.yaw = wrap_pi(yaw);
         self.pitch = pitch.clamp(-self.pitch_limit, self.pitch_limit);
@@ -151,7 +155,8 @@ impl OrbitController {
 
         let fy = fwd.y.clamp(-1.0, 1.0);
         let pitch = fy.asin();
-        let yaw = fwd.x.atan2(-fwd.z);
+        // NOTE: keep the same yaw sign convention as `FreeFlyController`.
+        let yaw = (-fwd.x).atan2(-fwd.z);
 
         self.yaw = wrap_pi(yaw);
         self.pitch = pitch.clamp(-self.pitch_limit, self.pitch_limit);

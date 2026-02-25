@@ -162,18 +162,8 @@ pub(crate) fn draw(me: &mut EditorUiBuild, ctx: &egui::Context) {
 
         let wants_kb = ctx.wants_keyboard_input();
 
-        if rmb_pressed || rmb_released {
-            let p = resp.interact_pointer_pos();
-            log::info!(
-                "viewport: RMB edge pressed={} released={} hovered={} gizmo_capture={} fly_rmb_after={} ptr={:?}",
-                rmb_pressed,
-                rmb_released,
-                hovered,
-                gizmo_capture_now,
-                fly_rmb,
-                p
-            );
-        }
+        // NOTE: avoid UI-level logging for camera capture/navigation.
+        // Navigation diagnostics are logged by the runtime camera system.
 
         // Middle-drag uses explicit drag tracking (absolute positions).
         // RMB free-fly uses relative motion (`pointer.delta()`), robust to cursor warp.

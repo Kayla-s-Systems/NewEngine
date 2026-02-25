@@ -8,6 +8,7 @@ readme = "README.md"
 default = []
 
 [dependencies]
+log = "0.4.29"
 newengine-camera = { path = "../newengine-camera" }
 newengine-core = { path = "../newengine-core" }
 newengine-ecs = { path = "../newengine-ecs" }
