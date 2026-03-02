@@ -1,5 +1,5 @@
 [package]
-name = "crash-reporter"
+name = "newengine-crash-reporter"
 version = "0.1.0"
 edition = "2021"
 

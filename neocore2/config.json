@@ -33,7 +33,7 @@
   "plugins": {
     "newengine.logging": {
       "level": "debug",
-      "file": "logs/editor.log",
+      "file": "cache/logs/editor.log",
       "include": {
         "file": true
       },

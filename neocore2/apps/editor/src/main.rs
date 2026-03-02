@@ -230,14 +230,10 @@ fn main_impl() -> EngineResult<()> {
                 return;
             }
             let p = path.to_string_lossy().to_string();
-            match assets.mount_dir(&p) {
-                Ok(()) => {
-                    log::debug!("asset.mount_dir ok path='{p}'");
-                }
-                Err(e) => {
-                    log::warn!("asset.mount_dir failed path='{p}' err='{e}'");
-                }
-            }
+            assets.mount_dir(&p).map_err(|e| EngineError::other(format!(
+                "editor startup: asset.mount_dir failed path='{}': {e}",
+                path.display()
+            ))).expect("OMFG We couldn't mount assets!1!11!!1");
         }
 
         // 1) Explicit override.

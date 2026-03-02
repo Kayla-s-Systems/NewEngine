@@ -210,13 +210,36 @@ fn spawn_reporter(cfg: &CrashReporterConfig, report_path: &Path) -> std::io::Res
         resolve_reporter_path(cfg)
     };
 
-    let mut cmd = Command::new(exe);
+    if !exe.is_file() {
+        eprintln!(
+            "[newengine] crash reporter not found: '{}'. Expected '{}' next to the app or set NEWENGINE_CRASH_REPORTER_PATH.",
+            exe.display(),
+            cfg.reporter_exe_name
+        );
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::NotFound,
+            format!("crash reporter not found: {}", exe.display()),
+        ));
+    }
+
+    let mut cmd = Command::new(&exe);
     cmd.env("NEWENGINE_CRASH_REPORTER_CHILD", "1");
     cmd.arg("--report").arg(report_path);
     cmd.arg("--product").arg(&cfg.product_name);
     cmd.arg("--app").arg(&cfg.app_name);
     cmd.arg("--version").arg(&cfg.app_version);
-    let _ = cmd.spawn()?;
+    match cmd.spawn() {
+        Ok(_) => {}
+        Err(e) => {
+            if e.kind() == std::io::ErrorKind::NotFound {
+                eprintln!(
+                    "[newengine] failed to launch crash reporter (not found): '{}'.",
+                    exe.display()
+                );
+            }
+            return Err(e);
+        }
+    }
     Ok(())
 }
 
