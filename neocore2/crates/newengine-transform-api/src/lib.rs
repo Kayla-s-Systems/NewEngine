@@ -5,6 +5,17 @@ mod components;
 pub use components::{GlobalTransform, Transform, WorldPose};
 
 #[cfg(feature = "ecs")]
+pub mod world_space;
+
+#[cfg(feature = "ecs")]
+pub use world_space::{
+    read_entity_world_pose,
+    read_entity_world_pose_local_chain,
+    write_entity_local_from_world_pose,
+    write_entity_local_from_world_pose_local_chain,
+};
+
+#[cfg(feature = "ecs")]
 pub use components::{Children, Parent, TransformDirty};
 
 #[cfg(feature = "ecs")]

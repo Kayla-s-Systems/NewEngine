@@ -1,6 +1,7 @@
 #![forbid(unsafe_op_in_unsafe_fn)]
 
 mod adapter;
+mod cap_validate;
 mod config_patch;
 mod discovery;
 mod lifecycle;

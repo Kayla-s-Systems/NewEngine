@@ -2,7 +2,27 @@
 
 use core::marker::PhantomData;
 
+#[cfg(debug_assertions)]
+use core::any::TypeId;
+
 use newengine_ecs::{EntityId, World};
+
+/// Debug classification for command validation.
+#[cfg(debug_assertions)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum CommandTag {
+    Insert {
+        type_id: TypeId,
+        type_name: &'static str,
+    },
+    Remove {
+        type_id: TypeId,
+        type_name: &'static str,
+    },
+    /// A sanctioned transform write path (via intent/patch command).
+    TransformWrite,
+    Other(&'static str),
+}
 
 /// A command produced by a system and applied after execution.
 ///
@@ -11,6 +31,13 @@ use newengine_ecs::{EntityId, World};
 pub trait Command: Send {
     /// Apply this command.
     fn apply(self: Box<Self>, world: &mut World);
+
+    /// Debug tag used for stage validation.
+    #[cfg(debug_assertions)]
+    #[inline]
+    fn tag(&self) -> CommandTag {
+        CommandTag::Other(core::any::type_name::<Self>())
+    }
 }
 
 /// Per-system command buffer.
@@ -47,6 +74,12 @@ impl CommandBuffer {
         }
     }
 
+    #[cfg(debug_assertions)]
+    #[inline]
+    pub(crate) fn iter(&self) -> impl Iterator<Item=&dyn Command> {
+        self.cmds.iter().map(|c| &**c)
+    }
+
     #[inline]
     pub fn insert<T>(&mut self, entity: EntityId, value: T)
     where
@@ -80,6 +113,15 @@ where
     fn apply(self: Box<Self>, world: &mut World) {
         let _ = world.insert(self.entity, self.value);
     }
+
+    #[cfg(debug_assertions)]
+    #[inline]
+    fn tag(&self) -> CommandTag {
+        CommandTag::Insert {
+            type_id: TypeId::of::<T>(),
+            type_name: core::any::type_name::<T>(),
+        }
+    }
 }
 
 struct RemoveCmd<T>
@@ -110,5 +152,14 @@ where
     #[inline]
     fn apply(self: Box<Self>, world: &mut World) {
         let _ = world.remove::<T>(self.entity);
+    }
+
+    #[cfg(debug_assertions)]
+    #[inline]
+    fn tag(&self) -> CommandTag {
+        CommandTag::Remove {
+            type_id: TypeId::of::<T>(),
+            type_name: core::any::type_name::<T>(),
+        }
     }
 }

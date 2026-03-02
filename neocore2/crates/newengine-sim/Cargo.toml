@@ -10,7 +10,7 @@ parallel = ["dep:rayon"]
 
 [dependencies]
 newengine-ecs = { path = "../newengine-ecs" }
-newengine-transform = { path = "../newengine-transform", default-features = false }
+newengine-transform-api = { path = "../newengine-transform-api", features = ["ecs"], default-features = false }
 newengine-scene = { path = "../newengine-scene", features = ["runtime"] }
 newengine-camera = { path = "../newengine-camera" }
 newengine-math = { path = "../newengine-math" }

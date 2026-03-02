@@ -1,7 +1,7 @@
 use newengine_camera::{CameraRig, EditorNavController};
 use newengine_ecs::{EntityId, World};
 use newengine_sim::{step_follow_camera, FollowTargetCameraController, FollowTargetCameraMotor};
-use newengine_transform::read_entity_world_pose;
+use newengine_transform_api::read_entity_world_pose_local_chain;
 
 use crate::nav::helpers::{
     compute_projection, persist_camera_pose, retarget_follow_to_rig, target_has_transform,
@@ -32,7 +32,7 @@ pub(crate) fn try_step_follow_orbit(
         return None;
     }
 
-    let Some((target_pos, target_rot)) = read_entity_world_pose(world, follow.target) else {
+    let Some((target_pos, target_rot)) = read_entity_world_pose_local_chain(world, follow.target) else {
         return None;
     };
 

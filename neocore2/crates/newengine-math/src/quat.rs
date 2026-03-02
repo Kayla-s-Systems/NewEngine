@@ -124,14 +124,35 @@ impl Quat {
     /// Create from Euler angles.
     ///
     /// For `EulerRot::YXZ` inputs are (yaw_y, pitch_x, roll_z).
+    ///
+    /// Convention: `EulerRot::ABC` means `R = Ra(a) * Rb(b) * Rc(c)`.
     #[inline]
     pub fn from_euler(order: EulerRot, a: f32, b: f32, c: f32) -> Self {
         match order {
-            EulerRot::YXZ => {
-                // q = qy * qx * qz
-                (Self::from_rotation_y(a) * Self::from_rotation_x(b) * Self::from_rotation_z(c))
-                    .normalize()
-            }
+            EulerRot::XYZ => (Self::from_rotation_x(a)
+                * Self::from_rotation_y(b)
+                * Self::from_rotation_z(c))
+                .normalize(),
+            EulerRot::XZY => (Self::from_rotation_x(a)
+                * Self::from_rotation_z(b)
+                * Self::from_rotation_y(c))
+                .normalize(),
+            EulerRot::YXZ => (Self::from_rotation_y(a)
+                * Self::from_rotation_x(b)
+                * Self::from_rotation_z(c))
+                .normalize(),
+            EulerRot::YZX => (Self::from_rotation_y(a)
+                * Self::from_rotation_z(b)
+                * Self::from_rotation_x(c))
+                .normalize(),
+            EulerRot::ZXY => (Self::from_rotation_z(a)
+                * Self::from_rotation_x(b)
+                * Self::from_rotation_y(c))
+                .normalize(),
+            EulerRot::ZYX => (Self::from_rotation_z(a)
+                * Self::from_rotation_y(b)
+                * Self::from_rotation_x(c))
+                .normalize(),
         }
     }
 
@@ -199,29 +220,106 @@ impl Quat {
     /// Returns angles in radians.
     #[inline]
     pub fn to_euler(self, order: EulerRot) -> (f32, f32, f32) {
+        let m = Mat3::from_quat(self);
+
+        // Row-major elements m[row][col], with column-major storage.
+        let m00 = m.x_axis.x;
+        let m01 = m.y_axis.x;
+        let m02 = m.z_axis.x;
+        let m10 = m.x_axis.y;
+        let m11 = m.y_axis.y;
+        let m12 = m.z_axis.y;
+        let m20 = m.x_axis.z;
+        let m21 = m.y_axis.z;
+        let m22 = m.z_axis.z;
+
+        const EPS: f32 = 1.0e-6;
+
         match order {
-            EulerRot::YXZ => {
-                // Derived from rotation matrix for YXZ.
-                // We convert to matrix elements and then extract.
-                let m = Mat3::from_quat(self);
-
-                // Pitch around X from m[1][2] with sign conventions matching our Mat3.
-                // Using standard YXZ extraction (right-handed).
-                //
-                // m = Ry(yaw) * Rx(pitch) * Rz(roll)
-                let sp = (-m.y_axis.z).clamp(-1.0, 1.0);
-                let pitch = sp.asin();
-
-                let cp = pitch.cos();
-                if cp.abs() < 1e-6 {
-                    // Gimbal lock.
-                    let yaw = (-m.z_axis.x).atan2(m.x_axis.x);
-                    let roll = 0.0;
-                    (yaw, pitch, roll)
+            EulerRot::XYZ => {
+                // R = Rx(a) * Ry(b) * Rz(c)
+                let b = m02.clamp(-1.0, 1.0).asin();
+                let cb = b.cos();
+                if cb.abs() < EPS {
+                    // Gimbal lock: set c = 0.
+                    let a = m21.atan2(m11);
+                    (a, b, 0.0)
                 } else {
-                    let yaw = m.x_axis.z.atan2(m.z_axis.z);
-                    let roll = m.y_axis.x.atan2(m.y_axis.y);
-                    (yaw, pitch, roll)
+                    let a = (-m12).atan2(m22);
+                    let c = (-m01).atan2(m00);
+                    (a, b, c)
+                }
+            }
+            EulerRot::XZY => {
+                // R = Rx(a) * Rz(b) * Ry(c)
+                let b = (-m01).clamp(-1.0, 1.0).asin();
+                let cb = b.cos();
+                if cb.abs() < EPS {
+                    // Gimbal lock: set c = 0.
+                    let sb = b.sin();
+                    let sign = if sb >= 0.0 { 1.0 } else { -1.0 };
+                    let a = (m20 * sign).atan2(m22);
+                    (a, b, 0.0)
+                } else {
+                    let a = m21.atan2(m11);
+                    let c = m02.atan2(m00);
+                    (a, b, c)
+                }
+            }
+            EulerRot::YXZ => {
+                // R = Ry(a) * Rx(b) * Rz(c)
+                let b = (-m21).clamp(-1.0, 1.0).asin();
+                let cb = b.cos();
+                if cb.abs() < EPS {
+                    // Gimbal lock: set c = 0.
+                    let a = (-m02).atan2(m00);
+                    (a, b, 0.0)
+                } else {
+                    let a = m20.atan2(m22);
+                    let c = m01.atan2(m11);
+                    (a, b, c)
+                }
+            }
+            EulerRot::YZX => {
+                // R = Ry(a) * Rz(b) * Rx(c)
+                let b = m10.clamp(-1.0, 1.0).asin();
+                let cb = b.cos();
+                if cb.abs() < EPS {
+                    // Gimbal lock: set c = 0.
+                    let a = m21.atan2(-m01);
+                    (a, b, 0.0)
+                } else {
+                    let a = (-m20).atan2(m00);
+                    let c = (-m12).atan2(m11);
+                    (a, b, c)
+                }
+            }
+            EulerRot::ZXY => {
+                // R = Rz(a) * Rx(b) * Ry(c)
+                let b = m21.clamp(-1.0, 1.0).asin();
+                let cb = b.cos();
+                if cb.abs() < EPS {
+                    // Gimbal lock: set c = 0.
+                    let a = m10.atan2(m00);
+                    (a, b, 0.0)
+                } else {
+                    let a = (-m01).atan2(m11);
+                    let c = (-m20).atan2(m22);
+                    (a, b, c)
+                }
+            }
+            EulerRot::ZYX => {
+                // R = Rz(a) * Ry(b) * Rx(c)
+                let b = (-m20).clamp(-1.0, 1.0).asin();
+                let cb = b.cos();
+                if cb.abs() < EPS {
+                    // Gimbal lock: set c = 0.
+                    let a = (-m01).atan2(m11);
+                    (a, b, 0.0)
+                } else {
+                    let a = m10.atan2(m00);
+                    let c = m21.atan2(m22);
+                    (a, b, c)
                 }
             }
         }
@@ -342,5 +440,87 @@ impl Mul<Vec3> for Quat {
         let qv = Vec3::new(self.x, self.y, self.z);
         let t = qv.cross(rhs) * 2.0;
         rhs + t * self.w + qv.cross(t)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[inline]
+    fn xorshift32(state: &mut u32) -> u32 {
+        let mut x = *state;
+        x ^= x << 13;
+        x ^= x >> 17;
+        x ^= x << 5;
+        *state = x;
+        x
+    }
+
+    #[inline]
+    fn f32_from_u32(x: u32) -> f32 {
+        // Map to [-PI, PI].
+        let v = (x as f32) * (1.0 / (u32::MAX as f32));
+        (v * 2.0 - 1.0) * core::f32::consts::PI
+    }
+
+    #[inline]
+    fn quat_equiv(a: Quat, b: Quat) -> bool {
+        // q and -q represent the same rotation.
+        let d = a.dot(b).abs();
+        (1.0 - d) <= 1.0e-4
+    }
+
+    #[test]
+    fn euler_roundtrip_supported_orders() {
+        let mut rng = 0xA11CEu32;
+
+        let orders = [
+            EulerRot::XYZ,
+            EulerRot::XZY,
+            EulerRot::YXZ,
+            EulerRot::YZX,
+            EulerRot::ZXY,
+            EulerRot::ZYX,
+        ];
+
+        for &order in &orders {
+            let mut tested = 0usize;
+            for _ in 0..8192 {
+                let a = f32_from_u32(xorshift32(&mut rng));
+                let b = f32_from_u32(xorshift32(&mut rng));
+                let c = f32_from_u32(xorshift32(&mut rng));
+
+                // Avoid gimbal lock regions; this is a roundtrip test, not a singularity test.
+                if b.cos().abs() < 0.2 {
+                    continue;
+                }
+
+                let q0 = Quat::from_euler(order, a, b, c);
+                let (a1, b1, c1) = q0.to_euler(order);
+                let q1 = Quat::from_euler(order, a1, b1, c1);
+
+                assert!(
+                    quat_equiv(q0, q1),
+                    "Euler roundtrip mismatch: order={:?} a0={} b0={} c0={} a1={} b1={} c1={} q0={:?} q1={:?}",
+                    order,
+                    a,
+                    b,
+                    c,
+                    a1,
+                    b1,
+                    c1,
+                    q0,
+                    q1
+                );
+
+                tested += 1;
+                if tested >= 512 {
+                    break;
+                }
+            }
+
+            assert!(tested >= 128, "Not enough samples tested for order={:?}", order);
+        }
     }
 }

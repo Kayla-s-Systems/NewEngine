@@ -1,76 +1,18 @@
 #![forbid(unsafe_op_in_unsafe_fn)]
 
-// kept for type-level coherence in downstream systems
 use newengine_ecs::{EntityId, World};
-use newengine_math::{EulerRot, Quat, Vec3};
+// kept for type-level coherence in downstream systems
+use newengine_math::prelude::NeKey;
+use newengine_math::{EulerRot, Quat};
 use newengine_scene::update_scene_world;
-use newengine_transform::{Parent, Transform};
+use newengine_transform_api::{read_entity_world_pose_local_chain, Transform};
 
 use crate::{
-    step_character_motor, AngularVelocity, CameraInputComp, CameraRigComp, CharacterMotor,
-    CommandBuffer, FollowTargetCameraController, FollowTargetCameraMotor, MotorInput,
-    OrbitCameraMotor, SimFrame, Velocity, step_follow_camera,
+    step_character_motor, step_follow_camera, AngularVelocity, CameraInputComp, CameraRigComp,
+    CharacterMotor, CommandBuffer, FollowTargetCameraController, FollowTargetCameraMotor,
+    MotorInput, OrbitCameraMotor, SimFrame, TransformCommandBufferExt,
+    Velocity,
 };
-
-#[derive(Clone, Copy, Debug, Default)]
-struct PoseSrt {
-    pos: Vec3,
-    rot: Quat,
-    scale: Vec3,
-}
-
-#[inline]
-fn compose_srt(parent: PoseSrt, local: PoseSrt) -> PoseSrt {
-    let scaled_local = local.pos.mul_comp(parent.scale);
-    let rotated_local = parent.rot * scaled_local;
-    PoseSrt {
-        pos: parent.pos + rotated_local,
-        rot: (parent.rot * local.rot).normalize_or_identity(),
-        scale: parent.scale.mul_comp(local.scale),
-    }
-}
-
-#[inline]
-fn world_pose_from_local_chain(world: &World, entity: EntityId) -> Option<PoseSrt> {
-    let t0 = *world.get::<Transform>(entity)?;
-
-    let mut chain: Vec<EntityId> = Vec::with_capacity(8);
-    let mut cur = entity;
-    while let Some(p) = world.get::<Parent>(cur).copied() {
-        chain.push(p.0);
-        cur = p.0;
-    }
-
-    let mut acc = PoseSrt {
-        pos: Vec3::ZERO,
-        rot: Quat::IDENTITY,
-        scale: Vec3::ONE,
-    };
-
-    for &p in chain.iter().rev() {
-        if let Some(pt) = world.get::<Transform>(p).copied() {
-            acc = compose_srt(
-                acc,
-                PoseSrt {
-                    pos: pt.position,
-                    rot: pt.rotation.normalize_or_identity(),
-                    scale: pt.scale,
-                },
-            );
-        } else {
-            break;
-        }
-    }
-
-    Some(compose_srt(
-        acc,
-        PoseSrt {
-            pos: t0.position,
-            rot: t0.rotation.normalize_or_identity(),
-            scale: t0.scale,
-        },
-    ))
-}
 
 /// Applies `MotorInput` to `CharacterMotor` and writes `Transform`/`Velocity` updates.
 pub fn sys_character_motor(world: &World, frame: SimFrame, cmd: &mut CommandBuffer) {
@@ -95,10 +37,8 @@ pub fn sys_character_motor(world: &World, frame: SimFrame, cmd: &mut CommandBuff
             continue;
         };
 
-        if let Some(t) = current {
-            let mut next = t;
-            next.rotation = step.rotation;
-            cmd.insert(id, next);
+        if current.is_some() {
+            cmd.transform_set_local_rotation(id, step.rotation);
         }
 
         cmd.insert(id, Velocity(step.velocity_ws));
@@ -160,7 +100,7 @@ pub fn sys_camera_follow(world: &World, frame: SimFrame, cmd: &mut CommandBuffer
         };
 
         // Target must exist and have a transform.
-        let Some(target_wp) = world_pose_from_local_chain(world, ctrl.target) else {
+        let Some((target_pos, target_rot)) = read_entity_world_pose_local_chain(world, ctrl.target) else {
             continue;
         };
 
@@ -172,8 +112,8 @@ pub fn sys_camera_follow(world: &World, frame: SimFrame, cmd: &mut CommandBuffer
         let Some(step) = step_follow_camera(
             rig.0.position,
             rig.0.rotation,
-            target_wp.pos,
-            target_wp.rot,
+            target_pos,
+            target_rot,
             ctrl.offset_ls,
             ctrl.rot_offset,
             ctrl.follow_rotation,
@@ -198,61 +138,66 @@ pub fn sys_camera_follow(world: &World, frame: SimFrame, cmd: &mut CommandBuffer
     }
 }
 
-/// Copies `CameraRigComp` to `Transform`.
+
+/// Copies `CameraRigComp` (world pose) into local `Transform` with parent-aware conversion.
 pub fn sys_camera_rig_to_transform(world: &World, _frame: SimFrame, cmd: &mut CommandBuffer) {
     let ids: Vec<EntityId> = world.query2_ids::<CameraRigComp, Transform>().collect();
     for id in ids {
         let Some(rig) = world.get::<CameraRigComp>(id).copied() else {
             continue;
         };
-        let Some(t) = world.get::<Transform>(id).copied() else {
-            continue;
-        };
-        let mut next = t;
-        next.position = rig.0.position;
-        next.rotation = rig.0.rotation;
-        cmd.insert(id, next);
+
+        // Preserve local scale, but author position/rotation in world space.
+        cmd.transform_set_world_pose(id, rig.0.position, rig.0.rotation);
     }
 }
 
+
 /// Integrates velocities into transforms.
+///
+/// Semantics:
+/// - `Velocity` is world-space linear velocity (units/sec)
+/// - `AngularVelocity` is local-space angular velocity (rad/sec)
+///
+/// For parented entities, translation is applied in world space and converted back to local space
+/// deterministically via the current local transform chain.
 pub fn sys_integrate_velocities(world: &World, frame: SimFrame, cmd: &mut CommandBuffer) {
     let dt = frame.dt;
     if !dt.is_finite() || dt <= 0.0 {
         return;
     }
 
-    // Translation.
-    let ids: Vec<EntityId> = world.query2_ids::<Transform, Velocity>().collect();
-    for id in ids {
-        let Some(t) = world.get::<Transform>(id).copied() else {
-            continue;
-        };
-        let Some(v) = world.get::<Velocity>(id).copied() else {
-            continue;
-        };
-        let mut next = t;
-        next.position += v.0 * dt;
-        cmd.insert(id, next);
-    }
+    // Collect candidates deterministically: (Transform+Velocity) U (Transform+AngularVelocity)
+    let mut ids: Vec<EntityId> = world.query2_ids::<Transform, Velocity>().collect();
+    ids.extend(world.query2_ids::<Transform, AngularVelocity>());
+    ids.sort_unstable_by_key(|id| id.data().as_ffi());
+    ids.dedup();
 
-    // Rotation.
-    let ids: Vec<EntityId> = world.query2_ids::<Transform, AngularVelocity>().collect();
     for id in ids {
-        let Some(t) = world.get::<Transform>(id).copied() else {
+        let Some((pos_ws, rot_ws)) = read_entity_world_pose_local_chain(world, id) else {
             continue;
         };
-        let Some(w) = world.get::<AngularVelocity>(id).copied() else {
-            continue;
-        };
-        let d = w.0 * dt;
-        if !(d.is_finite() && d.length_squared() > 1e-12) {
-            continue;
+
+        let mut next_pos_ws = pos_ws;
+        let mut next_rot_ws = rot_ws;
+
+        if let Some(v) = world.get::<Velocity>(id).copied() {
+            let d = v.0 * dt;
+            if d.is_finite() {
+                next_pos_ws = next_pos_ws + d;
+            }
         }
-        let dq = Quat::from_euler(EulerRot::YXZ, d.y, d.x, d.z);
-        let mut next = t;
-        next.rotation = (next.rotation * dq).normalize_or_identity();
-        cmd.insert(id, next);
+
+        if let Some(w) = world.get::<AngularVelocity>(id).copied() {
+            let d = w.0 * dt;
+            if d.is_finite() && d.length_squared() > 1e-12 {
+                let dq = Quat::from_euler(EulerRot::YXZ, d.y, d.x, d.z);
+                next_rot_ws = (next_rot_ws * dq).normalize_or_identity();
+            }
+        }
+
+        // Commit as a world-pose write (parent-aware), preserving local scale.
+        cmd.transform_set_world_pose(id, next_pos_ws, next_rot_ws);
     }
 }
 

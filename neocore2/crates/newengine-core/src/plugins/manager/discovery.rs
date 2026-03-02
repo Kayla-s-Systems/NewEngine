@@ -119,6 +119,9 @@ impl PluginManager {
         }
 
         log::info!("plugins: load complete loaded_count={}", self.loaded.len());
+
+        // Enforce declared capability dependencies before starting plugins.
+        self.validate_required_capabilities();
         if log::log_enabled!(log::Level::Debug) {
             for p in self.loaded.iter() {
                 log::debug!(

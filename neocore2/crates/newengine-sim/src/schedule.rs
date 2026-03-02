@@ -118,13 +118,13 @@ impl SimSchedule {
 
         #[cfg(feature = "parallel")]
         {
-            run_stage_parallel(world, systems, frame);
+            run_stage_parallel(world, stage, systems, frame);
             return;
         }
 
         #[cfg(not(feature = "parallel"))]
         {
-            run_stage_single_thread(world, systems, frame);
+            run_stage_single_thread(world, stage, systems, frame);
         }
     }
 
@@ -138,7 +138,7 @@ impl SimSchedule {
 }
 
 #[inline]
-fn run_stage_single_thread(world: &mut World, systems: &[SystemEntry], frame: SimFrame) {
+fn run_stage_single_thread(world: &mut World, stage: SimStage, systems: &[SystemEntry], frame: SimFrame) {
     for s in systems {
         #[cfg(debug_assertions)]
         {
@@ -147,6 +147,8 @@ fn run_stage_single_thread(world: &mut World, systems: &[SystemEntry], frame: Si
         }
         let mut cb = CommandBuffer::new();
         (s.f)(world, frame, &mut cb);
+        #[cfg(debug_assertions)]
+        validate_commands(stage, s.name, &cb);
         if !cb.is_empty() {
             cb.apply_all(world);
         }
@@ -154,7 +156,7 @@ fn run_stage_single_thread(world: &mut World, systems: &[SystemEntry], frame: Si
 }
 
 #[cfg(feature = "parallel")]
-fn run_stage_parallel(world: &mut World, systems: &[SystemEntry], frame: SimFrame) {
+fn run_stage_parallel(world: &mut World, stage: SimStage, systems: &[SystemEntry], frame: SimFrame) {
     use std::sync::mpsc;
 
     let batches = build_batches(systems);
@@ -164,7 +166,7 @@ fn run_stage_parallel(world: &mut World, systems: &[SystemEntry], frame: SimFram
         // Systems are required to only read from `world` and write to their command buffers.
         let wref: &World = world;
 
-        let (tx, rx) = mpsc::channel::<((i32, u32), CommandBuffer)>();
+        let (tx, rx) = mpsc::channel::<((i32, u32), &'static str, CommandBuffer)>();
 
         rayon::scope(|scope| {
             for sys in batch {
@@ -172,17 +174,19 @@ fn run_stage_parallel(world: &mut World, systems: &[SystemEntry], frame: SimFram
                 scope.spawn(move |_| {
                     let mut cb = CommandBuffer::new();
                     (sys.f)(wref, frame, &mut cb);
-                    let _ = tx.send(((sys.order, sys.seq), cb));
+                    let _ = tx.send(((sys.order, sys.seq), sys.name, cb));
                 });
             }
         });
 
         drop(tx);
 
-        let mut collected: Vec<((i32, u32), CommandBuffer)> = rx.into_iter().collect();
+        let mut collected: Vec<((i32, u32), &'static str, CommandBuffer)> = rx.into_iter().collect();
         collected.sort_by(|a, b| a.0.0.cmp(&b.0.0).then(a.0.1.cmp(&b.0.1)));
 
-        for (_key, cb) in collected {
+        for (_key, name, cb) in collected {
+            #[cfg(debug_assertions)]
+            validate_commands(stage, name, &cb);
             if !cb.is_empty() {
                 cb.apply_all(world);
             }
@@ -209,6 +213,36 @@ fn build_batches<'a>(systems: &'a [SystemEntry]) -> Vec<Vec<&'a SystemEntry>> {
     }
 
     batches
+}
+
+
+#[cfg(debug_assertions)]
+fn validate_commands(stage: SimStage, system: &'static str, cb: &CommandBuffer) {
+    use crate::commands::CommandTag;
+    use core::any::TypeId;
+    use newengine_transform_api::Transform;
+
+    // Policy: in simulation stages, Transform writes must go through the transform command helpers,
+    // not through raw component insertion (which overwrites fields and hides conflicts).
+    if stage != SimStage::Controllers && stage != SimStage::Physics {
+        return;
+    }
+
+    let tid = TypeId::of::<Transform>();
+
+    for c in cb.iter() {
+        match c.tag() {
+            CommandTag::Insert { type_id, type_name } if type_id == tid => {
+                panic!(
+                    "sim: forbidden direct Transform insert in stage={:?} system='{}' (cmd type={}). Use TransformCommandBufferExt::* helpers to emit deterministic intents instead.",
+                    stage,
+                    system,
+                    type_name
+                );
+            }
+            _ => {}
+        }
+    }
 }
 
 /// A production-lean default schedule.

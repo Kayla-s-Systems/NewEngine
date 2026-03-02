@@ -4,7 +4,7 @@ use newengine_math::Vec3;
 use newengine_sim::{
     follow_params_from_pose, CameraRigComp, FollowTargetCameraController, FollowTargetCameraMotor,
 };
-use newengine_transform::{read_entity_world_pose, write_entity_local_from_world_pose, Transform};
+use newengine_transform_api::{read_entity_world_pose_local_chain, write_entity_local_from_world_pose_local_chain, Transform};
 
 use super::BoundsSphere;
 use newengine_camera::CameraRig;
@@ -15,7 +15,7 @@ pub(crate) fn ensure_camera_rig(world: &mut World, cam_id: EntityId) -> CameraRi
         return r.0;
     }
 
-    let rig = read_entity_world_pose(world, cam_id)
+    let rig = read_entity_world_pose_local_chain(world, cam_id)
         .map(|(pos, rot)| CameraRig {
             position: pos,
             rotation: rot,
@@ -28,7 +28,7 @@ pub(crate) fn ensure_camera_rig(world: &mut World, cam_id: EntityId) -> CameraRi
 
 #[inline]
 pub(crate) fn persist_camera_pose(world: &mut World, cam_id: EntityId, rig: &CameraRig) {
-    write_entity_local_from_world_pose(world, cam_id, rig.position, rig.rotation);
+    write_entity_local_from_world_pose_local_chain(world, cam_id, rig.position, rig.rotation);
 }
 
 #[inline]
@@ -38,7 +38,7 @@ pub(crate) fn retarget_follow_to_rig(
     mut follow: FollowTargetCameraController,
     rig: &CameraRig,
 ) -> FollowTargetCameraController {
-    if let Some((target_pos, target_rot)) = read_entity_world_pose(world, follow.target) {
+    if let Some((target_pos, target_rot)) = read_entity_world_pose_local_chain(world, follow.target) {
         follow.follow_rotation = true;
 
         let (offset_ls, rot_offset) =

@@ -19,6 +19,7 @@ mod controllers;
 mod schedule;
 mod systems;
 mod time;
+mod transform_cmd;
 
 pub use access::{AccessMask, Subsystem};
 pub use commands::{Command, CommandBuffer};
@@ -35,6 +36,8 @@ pub use components::*;
 pub use controllers::*;
 pub use schedule::{default_schedule, SimSchedule, SimStage};
 pub use time::SimFrame;
+
+pub use transform_cmd::TransformCommandBufferExt;
 
 pub use systems::{
     sys_camera_follow, sys_camera_rig_to_transform, sys_character_motor, sys_integrate_velocities,
