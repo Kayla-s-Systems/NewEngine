@@ -2,6 +2,23 @@
 name = "editor"
 version = "0.1.0"
 edition = "2021"
+description = "NewEngine Editor"
+authors = ["Kayla's Systems"]
+homepage = "https://example.com"
+repository = "https://example.com/repo"
+license = "Proprietary"
+
+[package.metadata.newengine.winres]
+icon = "assets/editor.ico"
+# optional overrides:
+# product_name = "NewEngine"
+# file_description = "NewEngine Editor"
+# company_name = "Kayla's Systems"
+# original_filename = "editor.exe"
+# internal_name = "editor"
+# string_file_info_block = "041904B0" # ru-RU unicode
+# lang_id = 0x0419
+# codepage = 1200
 
 [dependencies]
 crossbeam-channel = "0.5"
@@ -30,3 +47,7 @@ newengine-lighting = { path = "../../crates/newengine-lighting" }
 newengine-editor-core = { path = "../../crates/newengine-editor-core" }
 newengine-previews = { path = "../../crates/newengine-previews" }
 newengine-sim = { path = "../../crates/newengine-sim" }
+
+[build-dependencies]
+embed-resource = "2"
+toml = "0.8"

@@ -170,11 +170,26 @@ fn try_load_window_icon(startup: &StartupConfig) -> Option<WinitAppIcon> {
     }
 }
 
-fn main() -> EngineResult<()> {
-    newengine_core::crash::install_panic_hook(newengine_core::crash::CrashReporterConfig {
-        product_name: "NewEngine".to_owned(),
-        app_name: "editor".to_owned(),
-        app_version: env!("CARGO_PKG_VERSION").to_owned(),
+fn main() {
+    if let Err(e) = main_impl() {
+        if !matches!(e, EngineError::ExitRequested) {
+            let _ = newengine_core::EngineErrorReporter::report_fatal_engine_error(&e);
+            log::error!("editor fatal: {e}");
+            eprintln!("Error: {e}");
+            std::process::exit(1);
+        }
+        std::process::exit(0);
+    }
+}
+
+fn main_impl() -> EngineResult<()> {
+    newengine_core::EngineErrorReporter::install(newengine_core::EngineErrorReporterConfig {
+        crash: newengine_core::crash::CrashReporterConfig {
+            product_name: "NewEngine".to_owned(),
+            app_name: "editor".to_owned(),
+            app_version: env!("CARGO_PKG_VERSION").to_owned(),
+            ..Default::default()
+        },
         ..Default::default()
     });
 

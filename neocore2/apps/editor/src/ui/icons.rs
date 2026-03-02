@@ -61,6 +61,14 @@ impl EditorIconLoader {
         self.loader.pump(ctx, &self.assets);
     }
 
+    pub fn pump_into_state(
+        &mut self,
+        ctx: &egui::Context,
+        state: &mut newengine_ui::markup::UiState,
+    ) {
+        self.loader.pump_into_state(ctx, &self.assets, state);
+    }
+
     /// Schedule/override an icon path (data-driven).
     ///
     /// Useful for branding/skins without touching UI code.

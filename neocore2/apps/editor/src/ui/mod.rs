@@ -61,6 +61,8 @@ pub struct EditorUiBuild {
 
     pub(crate) ui_hub: UiHub,
 
+    pub(crate) markup_state: newengine_ui::markup::UiState,
+
     pub(crate) icons: icons::EditorIconLoader,
 
     // Viewport navigation interaction (UI-driven, not via global input plugin).
@@ -137,6 +139,8 @@ impl EditorUiBuild {
             plugin_manager: Arc::clone(&plugin_manager),
             ui_hub: UiHub::new(),
 
+            markup_state: newengine_ui::markup::UiState::default(),
+
             icons: icons::EditorIconLoader::new(),
 
             last_nav_drag_pos: None,
@@ -170,6 +174,121 @@ impl EditorUiBuild {
             .register(Box::new(PluginManagerContributor::new(plugin_manager)));
 
         me
+    }
+
+    #[inline]
+    fn update_markup_vars(&mut self) {
+        let entities = self.scene_bridge.scene().read().world().entity_count();
+        self.markup_state
+            .set_var("stats.entities", entities.to_string());
+
+        let mut prims = self.scene_bridge.primitives_snapshot();
+        prims.sort_by(|a, b| a.0.cmp(&b.0));
+
+        let mut json = String::from("[");
+        for (i, (name, id)) in prims.iter().enumerate() {
+            if i != 0 {
+                json.push(',');
+            }
+            json.push_str("{\"value\":\"");
+            json.push_str(&id.0.to_string());
+            json.push_str("\",\"label\":\"");
+            push_json_escaped(&mut json, name);
+            json.push_str("\"}");
+        }
+        json.push(']');
+        self.markup_state.set_var("editor.prims_options", json);
+
+        if !self.markup_state.vars.contains_key("editor.primitive_sel") {
+            if let Some((_, id)) = prims.first() {
+                self.markup_state
+                    .set_var("editor.primitive_sel", id.0.to_string());
+            }
+        }
+
+        if !self.markup_state.vars.contains_key("editor.light_sel") {
+            self.markup_state.set_var("editor.light_sel", "point");
+        }
+    }
+
+    #[inline]
+    fn dispatch_markup_actions(&mut self) {
+        for ev in self.markup_state.drain_events() {
+            for a in ev.actions.iter() {
+                self.exec_markup_action(a);
+            }
+        }
+    }
+
+    fn exec_markup_action(&mut self, action: &str) {
+        match action {
+            "editor.new_scene" => {
+                self.scene_bridge.cmd_new_scene();
+                self.editor.commands.clear();
+                self.editor.selection.clear();
+            }
+            "editor.toggle_console" => {
+                self.console_open = !self.console_open;
+            }
+            "editor.toggle_plugins" => {
+                if let Ok(mut pm) = self.plugin_manager.lock() {
+                    pm.toggle();
+                }
+            }
+            "editor.add_primitive" => {
+                let Some(sel) = self
+                    .markup_state
+                    .vars
+                    .get("editor.primitive_sel")
+                    .cloned()
+                else {
+                    return;
+                };
+
+                let Ok(id_u64) = sel.parse::<u64>() else {
+                    return;
+                };
+                let pid = newengine_primitives::PrimitiveId(id_u64);
+
+                let prims = self.scene_bridge.primitives_snapshot();
+                let name = prims
+                    .iter()
+                    .find(|x| x.1 == pid)
+                    .map(|x| x.0.clone())
+                    .unwrap_or_else(|| "Primitive".to_string());
+
+                let (cam_pos, cam_fwd) = self.viewport_bridge.read_camera_spawn();
+                let mut p = cam_pos + cam_fwd * 3.0;
+                p.y = p.y.max(0.5);
+
+                self.scene_bridge.cmd_spawn_primitive(pid, name, p);
+            }
+            "editor.add_light" => {
+                let kind = self
+                    .markup_state
+                    .vars
+                    .get("editor.light_sel")
+                    .map(|s| s.as_str())
+                    .unwrap_or("point");
+
+                match kind {
+                    "dir" | "directional" => {
+                        self.scene_bridge.cmd_spawn_directional_light(
+                            "Sun".to_string(),
+                            newengine_math::Vec3::new(0.0, 6.0, 0.0),
+                            newengine_math::Vec3::new(-0.35, -1.0, -0.25),
+                        );
+                    }
+                    _ => {
+                        self.scene_bridge.cmd_spawn_point_light(
+                            "PointLight".to_string(),
+                            newengine_math::Vec3::new(0.0, 2.0, 0.0),
+                        );
+                    }
+                }
+            }
+            _ => {}
+        }
     }
 
     pub(crate) fn read_selected_pose(
@@ -220,15 +339,15 @@ impl EditorUiBuild {
             return;
         };
 
-        // Keep editor icon textures hot and fully driven by AssetManager.
-        self.icons.pump(ctx);
+        let maybe_doc = self
+            .shared_doc
+            .lock()
+            .ok()
+            .and_then(|g| g.as_ref().cloned());
 
-        let _maybe_doc = {
-            self.shared_doc
-                .lock()
-                .ok()
-                .and_then(|g| g.as_ref().cloned())
-        };
+        // Keep editor icon textures hot and fully driven by AssetManager.
+        // Also publish `$tex.*` vars into markup state.
+        self.icons.pump_into_state(ctx, &mut self.markup_state);
 
         if ctx.input(|i| i.key_pressed(egui::Key::F1)) {
             self.console_open = !self.console_open;
@@ -264,7 +383,13 @@ impl EditorUiBuild {
             }
         }
 
-        panels::topbar::draw(self, ctx);
+        if let Some(doc) = maybe_doc.as_ref() {
+            self.update_markup_vars();
+            newengine_ui::markup::render_egui(doc, ctx, &mut self.markup_state);
+            self.dispatch_markup_actions();
+        } else {
+            panels::topbar::draw(self, ctx);
+        }
         panels::toolbar::draw(self, ctx);
         panels::hierarchy::draw(self, ctx);
         panels::inspector::draw(self, ctx);
@@ -308,5 +433,20 @@ impl UiBuildFn for EditorUiBuild {
     #[inline]
     fn build(&mut self, ctx_any: &mut dyn Any) {
         self.build_ui(ctx_any);
+    }
+}
+
+#[inline]
+fn push_json_escaped(out: &mut String, s: &str) {
+    for ch in s.chars() {
+        match ch {
+            '\\' => out.push_str("\\\\"),
+            '"' => out.push_str("\\\""),
+            '\n' => out.push_str("\\n"),
+            '\r' => out.push_str("\\r"),
+            '\t' => out.push_str("\\t"),
+            c if c.is_control() => {}
+            c => out.push(c),
+        }
     }
 }
