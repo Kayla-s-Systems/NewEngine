@@ -14,7 +14,7 @@
 - `Playing`: фиксированный шаг симуляции.
 - `Paused`: step-by-step.
 
-## TODO AAA
+## Roadmap
 
 - Undo/Redo транзакции.
 - Prefab/SceneAsset сериализация.

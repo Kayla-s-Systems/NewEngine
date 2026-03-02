@@ -220,6 +220,16 @@ fn main_impl() -> EngineResult<()> {
     // 2) Load plugins BEFORE creating winit (required: providers must exist).
     engine.load_plugins_once()?;
 
+    // Hard requirement: the editor UI/markup path depends on AssetManager being available.
+    if !newengine_core::plugins::has_service(newengine_assets::consts::ASSET_SERVICE_ID) {
+        let services = newengine_core::plugins::list_services();
+        return Err(EngineError::other(format!(
+            "required plugin service not found: {} (loaded: [{}])",
+            newengine_assets::consts::ASSET_SERVICE_ID,
+            services.join(", "),
+        )));
+    }
+
     // 2.1) Mount editor-local assets directory into AssetManager.
     // This keeps the editor self-contained: icons, UI markup, shader fallbacks, etc.
     {
@@ -229,11 +239,15 @@ fn main_impl() -> EngineResult<()> {
             if !path.is_dir() {
                 return;
             }
+
             let p = path.to_string_lossy().to_string();
-            assets.mount_dir(&p).map_err(|e| EngineError::other(format!(
-                "editor startup: asset.mount_dir failed path='{}': {e}",
-                path.display()
-            ))).expect("OMFG We couldn't mount assets!1!11!!1");
+            if let Err(e) = assets.mount_dir(&p) {
+                log::error!(
+                    "editor startup: asset.mount_dir failed path='{}' err='{}'",
+                    path.display(),
+                    e
+                );
+            }
         }
 
         // 1) Explicit override.

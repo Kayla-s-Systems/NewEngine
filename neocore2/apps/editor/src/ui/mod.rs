@@ -118,12 +118,8 @@ impl EditorUiBuild {
         scene_bridge: Arc<SceneBridge>,
         previews: Arc<parking_lot::Mutex<newengine_previews::PrimitivePreviewService>>,
     ) -> Self {
-        let cam = scene_bridge
-            .scene()
-            .read()
-            .active_camera()
-            .expect("scene has no active camera");
-        let viewport = Viewport::new(Some(cam));
+        let cam = scene_bridge.scene().read().active_camera();
+        let viewport = Viewport::new(cam);
 
         let plugin_manager = Arc::new(Mutex::new(PluginManagerUi::new(Arc::clone(
             &plugins_bridge,
