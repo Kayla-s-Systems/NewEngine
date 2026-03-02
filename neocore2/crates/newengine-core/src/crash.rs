@@ -145,7 +145,7 @@ fn report_fatal_impl(
     Some(out_path)
 }
 
-fn panic_message(info: &std::panic::PanicInfo<'_>) -> String {
+fn panic_message(info: &std::panic::PanicHookInfo<'_>) -> String {
     if let Some(s) = info.payload().downcast_ref::<&str>() {
         s.to_string()
     } else if let Some(s) = info.payload().downcast_ref::<String>() {

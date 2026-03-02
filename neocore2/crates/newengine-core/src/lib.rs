@@ -4,6 +4,7 @@ pub mod core_invariants;
 pub mod engine;
 pub mod error;
 pub mod crash;
+pub mod error_reporter;
 pub mod events;
 pub mod frame;
 pub mod host_events;
@@ -25,6 +26,7 @@ pub use services_registry::{ErasedService, MissingServicePolicy, ServiceRegistry
 pub use bus::Bus;
 pub use engine::{Engine, EngineConfig};
 pub use error::{EngineError, EngineResult, ModuleStage};
+pub use error_reporter::{EngineErrorReporter, EngineErrorReporterConfig};
 pub use events::{EventHub, EventSub};
 pub use frame::Frame;
 pub use host_events::WindowHostEvent;
