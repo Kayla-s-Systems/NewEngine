@@ -171,6 +171,13 @@ fn try_load_window_icon(startup: &StartupConfig) -> Option<WinitAppIcon> {
 }
 
 fn main() -> EngineResult<()> {
+    newengine_core::crash::install_panic_hook(newengine_core::crash::CrashReporterConfig {
+        product_name: "NewEngine".to_owned(),
+        app_name: "editor".to_owned(),
+        app_version: env!("CARGO_PKG_VERSION").to_owned(),
+        ..Default::default()
+    });
+
     let paths = ConfigPaths::from_startup_str("config.json");
     let (startup, _report) = StartupLoader::load_json(&paths)?;
 
