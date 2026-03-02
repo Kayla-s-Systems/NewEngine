@@ -36,16 +36,16 @@ fn parse_tint_rgba(tint: &str) -> Option<egui::Color32> {
             let r = u8::from_str_radix(&hex[0..2], 16).ok()?;
             let g = u8::from_str_radix(&hex[2..4], 16).ok()?;
             let b = u8::from_str_radix(&hex[4..6], 16).ok()?;
-            return Some(egui::Color32::from_rgba_unmultiplied(r, g, b, 255));
+            Some(egui::Color32::from_rgba_unmultiplied(r, g, b, 255))
         }
         8 => {
             let r = u8::from_str_radix(&hex[0..2], 16).ok()?;
             let g = u8::from_str_radix(&hex[2..4], 16).ok()?;
             let b = u8::from_str_radix(&hex[4..6], 16).ok()?;
             let a = u8::from_str_radix(&hex[6..8], 16).ok()?;
-            return Some(egui::Color32::from_rgba_unmultiplied(r, g, b, a));
+            Some(egui::Color32::from_rgba_unmultiplied(r, g, b, a))
         }
-        _ => return None,
+        _ => None,
     }
 }
 
@@ -89,6 +89,104 @@ fn render_root(root: &UiNode, ctx: &egui::Context, state: &mut UiState) {
 }
 
 #[cfg(feature = "egui")]
+fn parse_select_options_str(options_raw: &str) -> Vec<(String, String)> {
+    let mut options = Vec::new();
+    for part in options_raw.split(|c| c == ',' || c == ';') {
+        let p = part.trim();
+        if p.is_empty() {
+            continue;
+        }
+        // value|label or just value
+        if let Some((v, l)) = p.split_once('|') {
+            options.push((v.trim().to_string(), l.trim().to_string()));
+        } else {
+            options.push((p.to_string(), p.to_string()));
+        }
+    }
+    options
+}
+
+#[cfg(feature = "egui")]
+fn parse_select_options_json(src: &str) -> Vec<(String, String)> {
+    let parsed: Value = match serde_json::from_str(src) {
+        Ok(v) => v,
+        Err(_) => return Vec::new(),
+    };
+
+    let Some(arr) = parsed.as_array() else {
+        return Vec::new();
+    };
+
+    let mut out = Vec::with_capacity(arr.len());
+    for it in arr {
+        match it {
+            Value::Object(obj) => {
+                let v = obj
+                    .get("value")
+                    .or_else(|| obj.get("v"))
+                    .map(|x| match x {
+                        Value::String(s) => s.clone(),
+                        Value::Number(n) => n.to_string(),
+                        Value::Bool(b) => b.to_string(),
+                        _ => x.to_string(),
+                    })
+                    .unwrap_or_default();
+                let l = obj
+                    .get("label")
+                    .or_else(|| obj.get("l"))
+                    .map(|x| match x {
+                        Value::String(s) => s.clone(),
+                        Value::Number(n) => n.to_string(),
+                        Value::Bool(b) => b.to_string(),
+                        _ => x.to_string(),
+                    })
+                    .unwrap_or_else(|| v.clone());
+                if !v.is_empty() {
+                    out.push((v, l));
+                }
+            }
+            Value::Array(pair) if pair.len() >= 1 => {
+                let v = match &pair[0] {
+                    Value::String(s) => s.clone(),
+                    Value::Number(n) => n.to_string(),
+                    Value::Bool(b) => b.to_string(),
+                    other => other.to_string(),
+                };
+                let l = if pair.len() >= 2 {
+                    match &pair[1] {
+                        Value::String(s) => s.clone(),
+                        Value::Number(n) => n.to_string(),
+                        Value::Bool(b) => b.to_string(),
+                        other => other.to_string(),
+                    }
+                } else {
+                    v.clone()
+                };
+                if !v.is_empty() {
+                    out.push((v, l));
+                }
+            }
+            Value::String(s) => {
+                if !s.is_empty() {
+                    out.push((s.clone(), s.clone()));
+                }
+            }
+            Value::Number(n) => {
+                let v = n.to_string();
+                out.push((v.clone(), v));
+            }
+            Value::Bool(b) => {
+                let v = b.to_string();
+                out.push((v.clone(), v));
+            }
+            _ => {}
+        }
+    }
+
+    out
+}
+
+#[cfg(feature = "egui")]
 fn render_in_ui(node: &UiNode, ui: &mut egui::Ui, state: &mut UiState) {
     match node {
         UiNode::Row { children } => {
@@ -104,6 +202,17 @@ fn render_in_ui(node: &UiNode, ui: &mut egui::Ui, state: &mut UiState) {
                     render_in_ui(c, ui, state);
                 }
             });
+        }
+        UiNode::Flex => {
+            let avail = ui.available_size();
+            let dir = ui.layout().main_dir;
+            let v = match dir {
+                egui::Direction::LeftToRight | egui::Direction::RightToLeft => avail.x,
+                egui::Direction::TopDown | egui::Direction::BottomUp => avail.y,
+            };
+            if v.is_finite() && v > 0.0 {
+                ui.add_space(v);
+            }
         }
         UiNode::Label {
             id,
@@ -156,21 +265,22 @@ fn render_in_ui(node: &UiNode, ui: &mut egui::Ui, state: &mut UiState) {
             let icon_tex = icon_spec.as_ref().and_then(|v| resolve_tex_id(v.as_ref()));
             let size = icon_size.unwrap_or(14.0).clamp(8.0, 64.0);
 
-            let clicked = if let Some(tex_id) = icon_tex {
-                ui.horizontal(|ui| match icon_side {
-                    UiIconSide::Left => {
-                        ui.add(egui::Image::new((tex_id, egui::vec2(size, size))));
-                        ui.button(s.as_ref()).clicked()
-                    }
-                    UiIconSide::Right => {
+            let clicked = match (icon_tex, icon_side) {
+                (Some(tex_id), UiIconSide::Left) => {
+                    let st = egui::load::SizedTexture::new(tex_id, egui::vec2(size, size));
+                    ui.add(egui::Button::image_and_text(st, s.as_ref()).min_size(egui::vec2(0.0, 28.0)))
+                        .clicked()
+                }
+                (Some(tex_id), UiIconSide::Right) => {
+                    // Fallback: separate widgets. Click area covers only the button itself.
+                    ui.horizontal(|ui| {
                         let c = ui.button(s.as_ref()).clicked();
                         ui.add(egui::Image::new((tex_id, egui::vec2(size, size))));
                         c
-                    }
-                })
+                    })
                     .inner
-            } else {
-                ui.button(s.as_ref()).clicked()
+                }
+                (None, _) => ui.button(s.as_ref()).clicked(),
             };
 
             if clicked {
@@ -272,28 +382,21 @@ fn render_in_ui(node: &UiNode, ui: &mut egui::Ui, state: &mut UiState) {
             bind,
             on_change,
         } => {
-            let text = substitute_vars(text, &state.vars);
+            let cur = state.vars.get(bind).cloned().unwrap_or_default();
+            let mut v = cur == "true" || cur == "1" || cur == "yes";
 
-            let cur = state
-                .vars
-                .get(bind)
-                .map(|s| {
-                    let v = s.trim().to_ascii_lowercase();
-                    v == "1" || v == "true" || v == "yes" || v == "on"
-                })
-                .unwrap_or(false);
+            let label = substitute_vars(text, &state.vars);
+            let changed = ui.checkbox(&mut v, label.as_ref()).changed();
 
-            let mut v = cur;
-            let changed = ui.checkbox(&mut v, text.as_ref()).changed();
             if changed {
-                let v_str = if v { "true" } else { "false" };
-                state.vars.insert(bind.clone(), v_str.to_string());
+                let new_val = if v { "true" } else { "false" };
+                state.vars.insert(bind.clone(), new_val.to_string());
 
                 if !on_change.is_empty() {
                     state.push_event(UiEvent {
                         kind: UiEventKind::Change,
                         target_id: id.clone(),
-                        value: Some(v_str.to_string()),
+                        value: Some(new_val.to_string()),
                         actions: on_change.clone(),
                     });
                 }
@@ -302,13 +405,35 @@ fn render_in_ui(node: &UiNode, ui: &mut egui::Ui, state: &mut UiState) {
         UiNode::Select {
             id,
             bind,
+            options_raw,
             options,
             on_change,
         } => {
-            let cur = state.vars.get(bind).cloned().unwrap_or_default();
-            let mut selected = cur;
+            let mut selected = state.vars.get(bind).cloned().unwrap_or_default();
 
-            let selected_label = options
+            // Options may be dynamic (var substitution) or JSON.
+            let spec = substitute_vars(options_raw, &state.vars);
+            let spec_trim = spec.trim_start();
+            let dynamic = options_raw.contains('$') || spec_trim.starts_with('[');
+
+            let options_now = if dynamic {
+                if spec_trim.starts_with('[') {
+                    parse_select_options_json(spec_trim)
+                } else {
+                    parse_select_options_str(spec.as_ref())
+                }
+            } else {
+                options.clone()
+            };
+
+            if selected.is_empty() {
+                if let Some((v, _)) = options_now.first() {
+                    selected = v.clone();
+                    state.vars.insert(bind.clone(), selected.clone());
+                }
+            }
+
+            let selected_label = options_now
                 .iter()
                 .find(|(v, _)| *v == selected)
                 .map(|(_, l)| l.as_str())
@@ -318,7 +443,7 @@ fn render_in_ui(node: &UiNode, ui: &mut egui::Ui, state: &mut UiState) {
             egui::ComboBox::from_id_salt(id)
                 .selected_text(selected_label)
                 .show_ui(ui, |ui| {
-                    for (v, l) in options.iter() {
+                    for (v, l) in options_now.iter() {
                         if ui.selectable_value(&mut selected, v.clone(), l).clicked() {
                             changed = true;
                         }

@@ -90,6 +90,7 @@ fn parse_node(n: Node) -> Result<UiNode, String> {
         "col" | "column" => Ok(UiNode::Column {
             children: parse_children(n)?,
         }),
+        "flex" => Ok(UiNode::Flex),
         "label" => {
             let icon = attr_opt(n, "icon");
             let icon_side = attr_str(n, "icon_side")
@@ -194,19 +195,7 @@ fn parse_node(n: Node) -> Result<UiNode, String> {
             let bind = attr(n, "bind").unwrap_or_else(|| id.clone());
 
             let options_raw = attr(n, "options").unwrap_or_default();
-            let mut options = Vec::new();
-            for part in options_raw.split(|c| c == ',' || c == ';') {
-                let p = part.trim();
-                if p.is_empty() {
-                    continue;
-                }
-                // value|label or just value
-                if let Some((v, l)) = p.split_once('|') {
-                    options.push((v.trim().to_string(), l.trim().to_string()));
-                } else {
-                    options.push((p.to_string(), p.to_string()));
-                }
-            }
+            let options = parse_select_options_str(&options_raw);
 
             let mut on_change = SmallVec::<[String; 2]>::new();
             parse_actions_for(&n, UiEventKind::Change, &mut on_change);
@@ -214,6 +203,7 @@ fn parse_node(n: Node) -> Result<UiNode, String> {
             Ok(UiNode::Select {
                 id,
                 bind,
+                options_raw,
                 options,
                 on_change,
             })
@@ -238,6 +228,24 @@ fn parse_node(n: Node) -> Result<UiNode, String> {
             children: parse_children(n)?,
         }),
     }
+}
+
+#[inline]
+fn parse_select_options_str(options_raw: &str) -> Vec<(String, String)> {
+    let mut options = Vec::new();
+    for part in options_raw.split(|c| c == ',' || c == ';') {
+        let p = part.trim();
+        if p.is_empty() {
+            continue;
+        }
+        // value|label or just value
+        if let Some((v, l)) = p.split_once('|') {
+            options.push((v.trim().to_string(), l.trim().to_string()));
+        } else {
+            options.push((p.to_string(), p.to_string()));
+        }
+    }
+    options
 }
 
 fn attr(n: Node, key: &str) -> Option<String> {

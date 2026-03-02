@@ -65,12 +65,12 @@ impl Default for GlobalTransform {
 /// Parent link (tree).
 #[cfg(feature = "ecs")]
 #[derive(Clone, Copy, Debug)]
-pub struct Parent(pub newengine_ecs::EntityId);
+pub struct Parent(pub newengine_entity::EntityId);
 
 /// Children list (maintained by editor/gameplay code).
 #[cfg(feature = "ecs")]
 #[derive(Clone, Debug, Default)]
-pub struct Children(pub Vec<newengine_ecs::EntityId>);
+pub struct Children(pub Vec<newengine_entity::EntityId>);
 
 /// Marks a node as needing recomputation (optional; currently used as a hint only).
 #[cfg(feature = "ecs")]

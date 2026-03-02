@@ -247,18 +247,18 @@ impl World {
     /// Removes a component from an entity (does not create storage).
     #[inline]
     pub fn remove<T: Component>(&mut self, id: EntityId) -> Option<T> {
-        // Получаем tick до мутируемого заимствования
+        // Capture tick before taking a mutable borrow of storage.
         let tick = self.tick;
 
-        // Мутируем хранилище компонента
+        // Mutate component storage.
         let s = self.storage_mut_if_exists::<T>()?;
 
-        // Удаляем компонент и его метки
+        // Remove the component and its tracking entries.
         let v = s.map.remove(id);
         let _ = s.added_tick.remove(id);
         let _ = s.changed_tick.remove(id);
 
-        // Если компонент был найден и удалён, обновляем максимальный tick
+        // If the component existed, update the max tick.
         if v.is_some() {
             s.max_changed_tick = s.max_changed_tick.max(tick);
         }
@@ -320,8 +320,8 @@ impl World {
             return;
         }
 
-        let tick = self.tick; // Сначала получаем tick
-        if let Some(s) = self.storage_mut_if_exists::<T>() { // Затем мутируем self
+        let tick = self.tick;
+        if let Some(s) = self.storage_mut_if_exists::<T>() {
             if s.map.contains_key(id) {
                 s.changed_tick.insert(id, tick);
                 s.max_changed_tick = s.max_changed_tick.max(tick);

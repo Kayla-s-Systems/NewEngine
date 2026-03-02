@@ -6,3 +6,4 @@ edition = "2021"
 
 [dependencies]
 newengine-math = { path = "../newengine-math" }
+newengine-entity = { path = "../newengine-entity" }

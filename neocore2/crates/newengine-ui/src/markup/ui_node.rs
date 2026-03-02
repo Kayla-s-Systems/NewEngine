@@ -38,6 +38,11 @@ pub(crate) enum UiNode {
         children: Vec<UiNode>,
     },
 
+    /// Flexible spacer that consumes remaining space on the main axis.
+    ///
+    /// In horizontal layouts it expands width; in vertical layouts it expands height.
+    Flex,
+
     Label {
         id: Option<String>,
         text: String,
@@ -72,7 +77,19 @@ pub(crate) enum UiNode {
     Select {
         id: String,
         bind: String,
-        /// (value, label)
+        /// Raw options spec as declared in markup.
+        ///
+        /// Supported forms:
+        /// - Comma/semicolon separated list: "v|Label, v2|Label2" or "v, v2"
+        /// - A JSON array after substitution via `$vars`, e.g. `$editor.prims_options`.
+        ///   Each element can be:
+        ///   - {"value":"...","label":"..."}
+        ///   - {"v":"...","l":"..."}
+        ///   - ["value","label"]
+        options_raw: String,
+        /// Parsed options for the static form (fast path).
+        ///
+        /// If `options_raw` contains `$` or parses as JSON, render path will re-parse per frame.
         options: Vec<(String, String)>,
         on_change: SmallVec<[String; 2]>,
     },

@@ -5,9 +5,10 @@ edition = "2021"
 
 [features]
 default = []
-ecs = ["dep:newengine-ecs"]
+ecs = ["dep:newengine-entity"]
 
 [dependencies]
 newengine-math = { path = "../newengine-math" }
+newengine-ecs = { path = "../newengine-ecs" }
 newengine-service-api = { path = "../newengine-service-api" }
-newengine-ecs = { path = "../newengine-ecs", optional = true }
+newengine-entity = { path = "../newengine-entity", optional = true }
