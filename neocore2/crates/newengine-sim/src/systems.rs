@@ -4,7 +4,6 @@ use newengine_ecs::{EntityId, World};
 // kept for type-level coherence in downstream systems
 use newengine_math::prelude::NeKey;
 use newengine_math::{EulerRot, Quat};
-use newengine_scene::update_scene_world;
 use newengine_transform_api::{read_entity_world_pose_local_chain, Transform};
 
 use crate::{
@@ -201,22 +200,3 @@ pub fn sys_integrate_velocities(world: &World, frame: SimFrame, cmd: &mut Comman
     }
 }
 
-/// Updates derived scene data (_world pose, bounds, cached scene bounds).
-pub fn sys_scene_derived(_world: &World, _frame: SimFrame, cmd: &mut CommandBuffer) {
-    // `update_scene_world` mutates the _world, so we execute it as a command.
-    // This preserves deterministic ordering while allowing parallelism in earlier batches.
-    cmd.push(Box::new(SceneDerivedCmd {
-        _phantom: core::marker::PhantomData,
-    }));
-}
-
-struct SceneDerivedCmd {
-    _phantom: core::marker::PhantomData<()>,
-}
-
-impl crate::Command for SceneDerivedCmd {
-    #[inline]
-    fn apply(self: Box<Self>, world: &mut World) {
-        update_scene_world(world);
-    }
-}

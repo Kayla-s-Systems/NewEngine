@@ -5,7 +5,8 @@ use core::fmt;
 use serde::{Deserialize, Serialize};
 
 use newengine_ecs::{EntityId, World};
-use newengine_transform::{Parent, Transform};
+use newengine_transform::set_parent;
+use newengine_transform_api::{Parent, Transform};
 
 use crate::components::{ActiveCamera, EntityGuid, Name, SceneRoot};
 use crate::guid::{ensure_entity_guid, GuidAllocator};
@@ -231,7 +232,7 @@ impl Scene {
         for e in asset.entities.iter() {
             let Some(&id) = guid_to_id.get(&e.guid) else { continue; };
             let parent_id = e.parent.and_then(|pg| guid_to_id.get(&pg).copied());
-            let _ = newengine_transform::set_parent(&mut world, id, parent_id);
+            let _ = set_parent(&mut world, id, parent_id);
         }
 
         // Markers: root/camera.

@@ -292,14 +292,6 @@ pub fn default_schedule() -> SimSchedule {
         systems::sys_integrate_velocities,
     );
 
-    // Derived.
-    s.add_system(
-        SimStage::Derived,
-        10,
-        "scene_derived",
-        AccessMask::write(crate::Subsystem::Scene as u32),
-        systems::sys_scene_derived,
-    );
 
     s
 }

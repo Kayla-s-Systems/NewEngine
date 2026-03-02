@@ -29,7 +29,10 @@ pub use components::{
     AngularVelocity, CameraInputComp, CameraRigComp, CharacterMotor, FollowTargetCameraController,
     FollowTargetCameraMotor, MotorInput, OrbitCameraMotor, Velocity,
 };
-pub use controllers::{step_character_motor, step_follow_camera, CharacterMotorStep, FollowCameraStep};
+pub use controllers::{
+    follow_params_from_pose, step_character_motor, step_follow_camera, CharacterMotorStep,
+    FollowCameraStep,
+};
 
 // Also keep glob re-exports for backwards compatibility inside the workspace.
 pub use components::*;
@@ -41,5 +44,5 @@ pub use transform_cmd::TransformCommandBufferExt;
 
 pub use systems::{
     sys_camera_follow, sys_camera_rig_to_transform, sys_character_motor, sys_integrate_velocities,
-    sys_orbit_camera, sys_scene_derived,
+    sys_orbit_camera,
 };

@@ -1,7 +1,7 @@
 #![forbid(unsafe_op_in_unsafe_fn)]
 
 use newengine_ecs::{EntityId, World};
-use newengine_transform::Transform;
+use newengine_transform_api::Transform;
 
 use crate::components::Name;
 use crate::guid::ensure_entity_guid;

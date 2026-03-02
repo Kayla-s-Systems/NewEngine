@@ -1,6 +1,5 @@
 #![forbid(unsafe_op_in_unsafe_fn)]
 
-use ahash::AHashMap;
 use bytemuck::{Pod, Zeroable};
 use newengine_assets::{wait_ready, AssetAccess, AssetServiceClient};
 use newengine_core::error::{EngineError, EngineResult};
@@ -11,6 +10,7 @@ use newengine_core::render::{
     PrimitiveTopology, RectI32, RenderApi, RenderTargetDesc, RenderTargetId, ShaderDesc,
     ShaderStage, TextureFormat, UiTexId, VertexAttribute, VertexFormat, VertexLayout,
 };
+use newengine_math::collections::FxHashMap;
 use newengine_math::{Mat4, Vec3};
 use newengine_primitives::{PrimitiveId, PrimitiveRegistry, PrimitiveVertex};
 use std::io::Write;
@@ -82,7 +82,7 @@ struct Slot {
 #[derive(Debug)]
 pub struct PrimitivePreviewService {
     reg: PrimitiveRegistry,
-    slots: AHashMap<(PrimitiveId, PrimitivePreviewSize), Slot>,
+    slots: FxHashMap<(PrimitiveId, PrimitivePreviewSize), Slot>,
 
     // GPU state
     bgl: Option<newengine_core::render::BindGroupLayoutId>,
@@ -105,7 +105,7 @@ impl PrimitivePreviewService {
     pub fn new() -> Self {
         Self {
             reg: PrimitiveRegistry::with_builtins(),
-            slots: AHashMap::new(),
+            slots: Default::default(),
             bgl: None,
             bg: None,
             ubo: None,

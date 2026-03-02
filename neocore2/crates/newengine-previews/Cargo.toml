@@ -5,7 +5,6 @@ edition = "2021"
 
 [dependencies]
 parking_lot = "0.12"
-ahash = "0.8"
 bytemuck = { version = "1.23", features = ["derive"] }
 newengine-core = { path = "../newengine-core" }
 newengine-ui = { path = "../newengine-ui" }

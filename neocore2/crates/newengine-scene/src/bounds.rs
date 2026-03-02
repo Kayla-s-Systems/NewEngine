@@ -3,7 +3,8 @@
 use newengine_bounds::{Aabb, Bounds, BoundsKind, Sphere};
 use newengine_ecs::{EntityId, World};
 use newengine_math::collections_prelude::NeKey;
-use newengine_transform::{propagate_transforms, GlobalTransform, Parent, Transform, TransformDirty};
+use newengine_transform::propagate_transforms;
+use newengine_transform_api::{GlobalTransform, Parent, Transform, TransformDirty};
 
 /// Cached scene bounds (union of all `Bounds` world-space data).
 #[derive(Clone, Copy, Debug, Default)]
