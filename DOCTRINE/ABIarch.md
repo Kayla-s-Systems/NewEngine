@@ -18,7 +18,7 @@
 
 # 1️⃣ Разделение доменов
 
-## 🔷 ECS — `ecs.world.v1`
+## 🔷 ECS — `ecs._world.v1`
 
 Отвечает за:
 
@@ -147,7 +147,7 @@ hierarchy.provider.v1 (optional)
 
 Если сервиса нет:
 
-* world = local
+* _world = local
 * propagation отключается
 * логируется деградация
 
@@ -161,7 +161,7 @@ Camera не владеет Transform.
 
 Она:
 
-1. Читает world transform
+1. Читает _world transform
 2. Обновляет rig state
 3. Возвращает intent
 4. Engine применяет intent
@@ -226,8 +226,8 @@ Result<ServiceHandle, MissingService>
 
 ### Примеры
 
-* Нет Transform → Scene работает без world pose
-* Нет Hierarchy → world = local
+* Нет Transform → Scene работает без _world pose
+* Нет Hierarchy → _world = local
 * Нет Camera → fallback camera
 * Нет Scene → ECS работает автономно
 
