@@ -24,7 +24,11 @@ pub(super) fn default_bounds() -> BoundsSnap {
 
 #[inline]
 pub(super) fn scene_bounds(scene: &newengine_scene::Scene) -> Option<BoundsSnap> {
-    let world = scene.world();
+    scene_bounds_world(scene.world())
+}
+
+#[inline]
+pub(super) fn scene_bounds_world(world: &newengine_ecs::World) -> Option<BoundsSnap> {
     let b = newengine_scene::scene_bounds_cached(world);
     b.sphere.map(|s| BoundsSnap {
         center: s.center,
@@ -37,8 +41,15 @@ pub(super) fn selection_bounds(
     scene: &newengine_scene::Scene,
     sel: Option<newengine_ecs::EntityId>,
 ) -> Option<SelectionBoundsSnap> {
+    selection_bounds_world(scene.world(), sel)
+}
+
+#[inline]
+pub(super) fn selection_bounds_world(
+    world: &newengine_ecs::World,
+    sel: Option<newengine_ecs::EntityId>,
+) -> Option<SelectionBoundsSnap> {
     let e = sel?;
-    let world = scene.world();
     let b = newengine_scene::selection_world_bounds(world, [e].into_iter())?;
     let c = b.center();
     let r = b.half_extents().length().max(0.001);

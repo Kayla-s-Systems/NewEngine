@@ -79,6 +79,10 @@ pub fn set_parent(world: &mut World, child: EntityId, parent: Option<EntityId>) 
         }
     }
 
+    // Parent topology affects world-space evaluation.
+    // We mark the child dirty so runtimes can cheaply gate derived updates.
+    let _ = world.insert(child, TransformDirty);
+
     true
 }
 

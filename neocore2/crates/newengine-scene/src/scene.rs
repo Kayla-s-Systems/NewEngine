@@ -72,6 +72,36 @@ impl Scene {
         true
     }
 
+    /// Runs a deterministic scene frame with strict single-source-of-truth semantics.
+    ///
+    /// Pipeline:
+    /// 1) `world.tick = frame_tick` (authoring/sim inputs)
+    /// 2) `update_scene_world()` (derive bounds / world poses for controllers)
+    /// 3) `world.tick++` (controller phase; camera/nav writes)
+    /// 4) `controller(world)`
+    /// 5) `update_scene_world()` again (derive outputs for rendering)
+    ///
+    /// Why this exists:
+    /// - Avoids ad-hoc tick juggling in higher layers.
+    /// - Preserves change-tracking invariants without hidden allocations.
+    #[inline]
+    pub fn run_frame<R, F: FnOnce(&mut World) -> R>(&mut self, frame_tick: u64, controller: F) -> R {
+        self.world.set_tick(frame_tick);
+
+        // Pre: derived state for controller logic (bounds/world pose queries).
+        crate::update_scene_world(&mut self.world);
+
+        // Separate phase so writes done by controllers are visible to the post update.
+        self.world.advance_tick();
+
+        let out = controller(&mut self.world);
+
+        // Post: derived state for rendering/picking.
+        crate::update_scene_world(&mut self.world);
+
+        out
+    }
+
 
     #[inline]
     fn reconcile_unique_marker<C: Component>(&mut self) -> (Option<EntityId>, bool) {

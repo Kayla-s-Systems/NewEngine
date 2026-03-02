@@ -15,7 +15,6 @@ use newengine_ui::draw::UiDrawList;
 
 use super::controller::EditorRenderController;
 use super::gpu::ensure_lit_pipeline;
-use newengine_scene::update_scene_world;
 
 mod input;
 mod lights;
@@ -152,84 +151,75 @@ impl<E: Send + 'static> Module<E> for EditorRenderController {
 
             let aspect = (vp_w as f32 / vp_h as f32).max(1e-6);
 
-            // Drive ECS change-tracking deterministically from the render/controller frame index.
-            // Without this, `update_scene_world()` can stop propagating transforms/bounds, which
-            // breaks camera/world pose stability across input mode transitions.
-            {
-                let scene_lock = self.scene_bridge.scene();
-                let mut scene = scene_lock.write();
-                scene.world_mut().set_tick(self.frame_index);
-            }
-
             self.scene_bridge.apply_commands();
             let scene_lock = self.scene_bridge.scene();
             let mut scene = scene_lock.write();
 
-            {
-                let world_mut = scene.world_mut();
-                update_scene_world(world_mut);
-            }
+            // Single source of truth: scene drives tick phasing + derived updates.
+            // Pre-pass provides bounds/world poses for controller logic.
+            // Post-pass commits camera/nav writes into derived outputs for rendering.
+            let (rig, viewproj) = scene.run_frame(self.frame_index, |world| {
+                let bounds = scene::scene_bounds_world(world).unwrap_or_else(|| scene::default_bounds());
+                let sel = self.scene_bridge.selection();
+                let sel_bounds = scene::selection_bounds_world(world, sel);
 
-            let bounds = scene::scene_bounds(&scene).unwrap_or_else(|| scene::default_bounds());
-            let sel = self.scene_bridge.selection();
-            let sel_bounds = scene::selection_bounds(&scene, sel);
+                let params = CameraNavParams {
+                    dt,
+                    aspect,
+                    bounds: CamBoundsSphere {
+                        center: bounds.center,
+                        radius: bounds.radius,
+                    },
+                    selection_bounds: sel_bounds.map(|b| CamBoundsSphere {
+                        center: b.center,
+                        radius: b.radius,
+                    }),
+                };
 
-            let params = CameraNavParams {
-                dt,
-                aspect,
-                bounds: CamBoundsSphere {
-                    center: bounds.center,
-                    radius: bounds.radius,
-                },
-                selection_bounds: sel_bounds.map(|b| CamBoundsSphere {
-                    center: b.center,
-                    radius: b.radius,
-                }),
-            };
+                let frame_req = CameraNavFrameRequest {
+                    seq: self.viewport_bridge.read_frame_request(),
+                    all: self.viewport_bridge.read_frame_all(),
+                };
 
-            let frame_req = CameraNavFrameRequest {
-                seq: self.viewport_bridge.read_frame_request(),
-                all: self.viewport_bridge.read_frame_all(),
-            };
+                let cam_id = world
+                    .resource::<newengine_scene::SceneState>()
+                    .and_then(|s| s.active_camera.or(s.root))
+                    .unwrap_or_default();
 
-            // IMPORTANT:
-            // `update_scene_world()` advanced derived caches to `world.tick()`.
-            // The camera writes `Transform` after this point. If we keep the same tick,
-            // the change-tracking gate (`max_changed_tick > since_tick`) will never see
-            // those writes (they would be == last_transform_tick).
-            // Advance the tick once for the controller phase so camera pose commits are
-            // visible to the next frame's `update_scene_world()`.
-            scene.world_mut().advance_tick();
+                let out = step_camera_nav(
+                    &mut self.camera_nav,
+                    world,
+                    cam_id,
+                    &mut nav_input,
+                    params,
+                    frame_req,
+                );
 
-            let cam_id = scene
-                .active_camera()
-                .unwrap_or_else(|| scene.root().unwrap_or_default());
+                let rig = out.rig;
+                self.projection = out.projection;
 
-            let out = step_camera_nav(
-                &mut self.camera_nav,
-                scene.world_mut(),
-                cam_id,
-                &mut nav_input,
-                params,
-                frame_req,
-            );
+                self.last_aspect = aspect;
+                self.last_vp_w = vp_w;
+                self.last_vp_h = vp_h;
 
-            let rig = out.rig;
-            self.projection = out.projection;
+                let proj = self.projection.matrix();
+                let view = rig.view_matrix();
+                let viewproj = proj * view;
 
-            self.last_aspect = aspect;
-            self.last_vp_w = vp_w;
-            self.last_vp_h = vp_h;
+                (rig, viewproj)
+            });
 
             let proj = self.projection.matrix();
             let view = rig.view_matrix();
-            let viewproj = proj * view;
 
             passes::publish_camera_spawn(&self.viewport_bridge, &rig);
             self.viewport_bridge
                 .publish_camera_frame(view, proj, vp_w, vp_h);
 
             picking::handle_picking(self, &scene, viewproj, vp_w, vp_h);
+
+            // Bounds used below are now up-to-date after the scene post-pass.
+            let bounds = scene::scene_bounds(&scene).unwrap_or_else(|| scene::default_bounds());
 
             r.begin_render_target(
                 BeginRenderTargetDesc::new(rt)
@@ -248,8 +238,8 @@ impl<E: Send + 'static> Module<E> for EditorRenderController {
                 lit,
                 viewproj,
                 &rig,
-                params.bounds.center,
-                params.bounds.radius,
+                bounds.center,
+                bounds.radius,
                 &world_lights,
             )?;
             passes::draw_primitives(self, &mut **r, &scene, lit, viewproj, &world_lights)?;

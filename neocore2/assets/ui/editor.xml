@@ -1,0 +1,22 @@
+<ui visuals="dark" density="default" font_size="14" scale="1.0">
+    <topbar>
+        <label text="NewEngine Editor"/>
+        <separator/>
+
+        <label text="entities: $stats.entities"/>
+        <separator/>
+
+        <button id="new_scene" text="New Scene" icon="$tex.reset" on_click="editor.new_scene"/>
+
+        <select id="primitive_sel" bind="editor.primitive_sel" options="$editor.prims_options"/>
+        <button id="add_primitive" text="Add" icon="$tex.load" on_click="editor.add_primitive"/>
+
+        <select id="light_sel" bind="editor.light_sel" options="dir|Directional, point|Point"/>
+        <button id="add_light" text="Add Light" icon="$tex.light_point" on_click="editor.add_light"/>
+
+        <flex/>
+
+        <button id="plugins" text="Plugins" icon="$tex.refresh" on_click="editor.toggle_plugins"/>
+        <button id="console" text="Console" icon="$tex.console" on_click="editor.toggle_console"/>
+    </topbar>
+</ui>
