@@ -1,33 +1,30 @@
 # newengine-transform
 
-Трансформы и иерархия: `Parent/Children`, `Transform` (local), `GlobalTransform`/`WorldPose` (derived),
-детерминированная пропагация без аллокаций в hot path.
+Рантайм-алгоритмы трансформа: иерархия и детерминированная пропагация `Transform` → `GlobalTransform/WorldPose`.
 
-## Роль в архитектуре
+## Ответственность
 
-- **Слой:** `crates/newengine-transform`
-- **Назначение:** единый источник истины для трансформов, пригодный для редактора и рантайма.
+- Алгоритмы и системные helpers (feature `ecs`):
+    - `set_parent` (делегирует в `newengine-transform-api`)
+    - `ensure_transform_outputs`
+    - `propagate_transforms` (allocation-free через scratch resource)
+    - world-space helpers
+
+## Не ответственность
+
+- Не определяет компоненты/контракты (это `newengine-transform-api`).
+- Не тянет `newengine-core` по умолчанию.
+
+## Features
+
+- `ecs` — включает ECS-интеграцию (иерархия/propagate/world-space).
+- `service` — **опциональная** регистрация transform runtime в `newengine-core::ServiceRegistry`.
 
 ## Инварианты
 
-- Иерархия должна оставаться консистентной (`Parent` ↔ `Children`).
-- Пропагация должна быть детерминированной независимо от порядка в hash-коллекциях.
-- Математические типы берём только из `newengine-math` (не тянем `glam` напрямую).
-
-## Публичный API
-
-- Смотри `src/lib.rs` и модульные реэкспорты.
-
-## Тестирование и профилирование
-
-- Unit-тесты: `cargo test -p newengine-transform`
-- (Рекомендуется) bench/criterion для hot path.
+- Детерминизм: сортировка по `EntityId::stable_u64()` и отсутствие зависимости от порядка hash-итерации.
+- Hot path без аллокаций: scratch хранится в `World` через `resource_mut_or_insert_default`.
 
 ## Ссылки
 
-- Архитектура workspace: `../../ARCHITECTURE.md`
-
-## Allocation-free propagation
-
-`propagate_transforms()` stores reusable scratch buffers in the ECS World as a resource: `TransformPropagationScratch`.
-This avoids per-frame heap churn and keeps propagation deterministic.
+- `../../ARCHITECTURE.md`

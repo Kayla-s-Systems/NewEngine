@@ -150,6 +150,33 @@ impl World {
             .and_then(|b| b.downcast_mut::<T>())
     }
 
+    /// Returns a mutable resource reference, inserting the resource if missing.
+    ///
+    /// This is intended for allocation-free "scratch" resources used by systems.
+    #[inline]
+    pub fn resource_mut_or_insert_with<T: 'static + Send + Sync>(
+        &mut self,
+        f: impl FnOnce() -> T,
+    ) -> &mut T {
+        let tid = TypeId::of::<T>();
+        match self.resources.entry(tid) {
+            Entry::Occupied(e) => e
+                .into_mut()
+                .downcast_mut::<T>()
+                .expect("resource type mismatch"),
+            Entry::Vacant(e) => e
+                .insert(Box::new(f()))
+                .downcast_mut::<T>()
+                .expect("resource type mismatch"),
+        }
+    }
+
+    /// Returns a mutable resource reference, inserting `T::default()` if missing.
+    #[inline]
+    pub fn resource_mut_or_insert_default<T: Default + 'static + Send + Sync>(&mut self) -> &mut T {
+        self.resource_mut_or_insert_with(T::default)
+    }
+
     /// Removes a resource.
     #[inline]
     pub fn remove_resource<T: 'static + Send + Sync>(&mut self) -> Option<T> {

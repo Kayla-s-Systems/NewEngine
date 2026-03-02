@@ -124,10 +124,6 @@ impl Scene {
 
         let world = self.world_mut();
 
-        // Ensure allocator exists.
-        if world.resource::<GuidAllocator>().is_none() {
-            world.insert_resource(GuidAllocator::default());
-        }
 
         // Pass 1: ensure GUID for every entity.
         let ids: Vec<EntityId> = world.iter_entities().collect();
@@ -155,7 +151,7 @@ impl Scene {
             .and_then(|(id, _)| id_to_guid.get(&id).copied());
 
         // Allocator state.
-        let alloc = *world.resource::<GuidAllocator>().expect("allocator present");
+        let alloc = *world.resource_mut_or_insert_default::<GuidAllocator>();
 
         // Entities.
         let mut entities: Vec<SceneEntityAsset> = Vec::with_capacity(world.entity_count());

@@ -24,18 +24,8 @@ pub struct TransformPropagationScratch {
 /// Call once per frame before propagation (or on-demand when authoring).
 #[inline]
 pub fn ensure_transform_outputs(world: &mut World) {
-    // Two-phase: collect ids then insert, to avoid mutating while iterating storages.
-    if world.resource::<TransformPropagationScratch>().is_none() {
-        world.insert_resource(TransformPropagationScratch::default());
-    }
-
     // Move scratch out to avoid borrow conflicts.
-    let mut scratch = {
-        let s = world
-            .resource_mut::<TransformPropagationScratch>()
-            .expect("TransformPropagationScratch must exist");
-        core::mem::take(s)
-    };
+    let mut scratch = core::mem::take(world.resource_mut_or_insert_default::<TransformPropagationScratch>());
 
     scratch.ensure_ids.clear();
     scratch
@@ -55,9 +45,7 @@ pub fn ensure_transform_outputs(world: &mut World) {
         }
     }
 
-    *world
-        .resource_mut::<TransformPropagationScratch>()
-        .expect("TransformPropagationScratch must exist") = scratch;
+    *world.resource_mut_or_insert_default::<TransformPropagationScratch>() = scratch;
 }
 
 /// Propagates `Transform` + hierarchy into `GlobalTransform` and `WorldPose`.
@@ -71,17 +59,8 @@ pub fn ensure_transform_outputs(world: &mut World) {
 pub fn propagate_transforms(world: &mut World) {
     ensure_transform_outputs(world);
 
-    if world.resource::<TransformPropagationScratch>().is_none() {
-        world.insert_resource(TransformPropagationScratch::default());
-    }
-
     // Move scratch out of the World to avoid borrow conflicts with queries/gets.
-    let mut scratch = {
-        let s = world
-            .resource_mut::<TransformPropagationScratch>()
-            .expect("TransformPropagationScratch must exist");
-        core::mem::take(s)
-    };
+    let mut scratch = core::mem::take(world.resource_mut_or_insert_default::<TransformPropagationScratch>());
 
     // 1) Collect all entities that have Transform, deterministically ordered.
     scratch.ids.clear();
@@ -92,9 +71,7 @@ pub fn propagate_transforms(world: &mut World) {
     scratch.ids.dedup();
 
     if scratch.ids.is_empty() {
-        *world
-            .resource_mut::<TransformPropagationScratch>()
-            .expect("TransformPropagationScratch must exist") = scratch;
+        *world.resource_mut_or_insert_default::<TransformPropagationScratch>() = scratch;
         return;
     }
 
@@ -205,7 +182,5 @@ pub fn propagate_transforms(world: &mut World) {
     }
 
     // Put scratch back.
-    *world
-        .resource_mut::<TransformPropagationScratch>()
-        .expect("TransformPropagationScratch must exist") = scratch;
+    *world.resource_mut_or_insert_default::<TransformPropagationScratch>() = scratch;
 }

@@ -323,9 +323,14 @@ fn apply_root(cfg: &mut StartupConfig, report: &mut StartupLoadReport, src: Root
                 .entry(pid.clone())
                 .or_insert_with(|| serde_json::Value::Object(serde_json::Map::new()));
 
-            let obj = entry.as_object_mut().unwrap();
-            for (k, v) in legacy_assets {
-                obj.insert(k, v);
+            if !entry.is_object() {
+                *entry = serde_json::Value::Object(serde_json::Map::new());
+            }
+
+            if let Some(obj) = entry.as_object_mut() {
+                for (k, v) in legacy_assets {
+                    obj.insert(k, v);
+                }
             }
 
             report.plugin_overrides.push(StartupPluginOverride {

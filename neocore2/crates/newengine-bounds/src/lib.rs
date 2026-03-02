@@ -20,4 +20,4 @@ pub use components::{Bounds, BoundsKind};
 pub use sphere::Sphere;
 pub use traits::Boundable;
 
-pub(crate) use convert::{aabb_to_sphere, sphere_to_aabb};
+pub use convert::{aabb_to_sphere, sphere_to_aabb};

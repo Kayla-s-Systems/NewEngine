@@ -1,7 +1,17 @@
 # newengine-camera-runtime
 
-Runtime helpers that wire `newengine-camera` controllers to ECS and host interaction.
+Runtime-обвязка, которая подключает `newengine-camera` к ECS/симуляции и host-вводу.
 
-- No renderer coupling
-- Deterministic camera navigation (Orbit/Fly)
-- ECS-friendly composition with follow controllers
+## Ответственность
+
+- ECS-системы и helpers для навигации камеры (Orbit/Fly) в контексте viewport.
+- Интеграция с `newengine-sim` (stages/commands) без привязки к конкретному render backend.
+
+## Не ответственность
+
+- Не содержит чистую математику камеры (это `newengine-camera`).
+- Не реализует UI (это `newengine-ui`/editor).
+
+## Ссылки
+
+- `../../ARCHITECTURE.md`

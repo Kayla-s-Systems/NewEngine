@@ -148,7 +148,9 @@ mod with_images {
             let mut keys: Vec<String> = self.slots.keys().cloned().collect();
             keys.sort();
             for k in keys {
-                let slot = self.slots.get_mut(&k).expect("slot must exist");
+                let Some(slot) = self.slots.get_mut(&k) else {
+                    continue;
+                };
                 match slot {
                     Slot::Empty { path } => match assets.load(path) {
                         Ok(id_hex32) => {

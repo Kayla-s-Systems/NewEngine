@@ -1,9 +1,22 @@
 # newengine-entity
 
-Foundation crate that defines the **EntityId** type for the whole NewEngine ecosystem.
+Фундаментальный крейт, который определяет **EntityId** для всего NewEngine.
 
-## Why
+## Ответственность
 
-Entity identity must be **independent** from a specific ECS storage implementation.
-This keeps layer boundaries clean and enables multiple ECS backends while preserving
-stable cross-crate contracts.
+- `EntityId` — runtime идентичность сущности (generational key), детерминированно сортируемая.
+- Базовые мета-типы для tooling: `EntityKind`, `EntityName`, `EntityMeta`.
+
+## Не ответственность
+
+- Не хранит компоненты и не содержит ECS.
+- Не содержит сериализации/сцен, persistent id и т.д.
+
+## Инварианты
+
+- `EntityId` не используется как persistent id (для этого есть `newengine-scene::EntityGuid`).
+- Любая детерминированная сортировка по сущностям должна опираться на `EntityId::stable_u64()`.
+
+## Ссылки
+
+- `../../ARCHITECTURE.md`

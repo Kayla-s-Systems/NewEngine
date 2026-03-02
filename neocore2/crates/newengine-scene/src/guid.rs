@@ -42,14 +42,10 @@ pub fn ensure_entity_guid(world: &mut World, id: EntityId) -> EntityGuid {
         return *g;
     }
 
-    if world.resource::<GuidAllocator>().is_none() {
-        world.insert_resource(GuidAllocator::default());
-    }
-
     let g = world
-        .resource_mut::<GuidAllocator>()
-        .expect("allocator inserted")
+        .resource_mut_or_insert_default::<GuidAllocator>()
         .alloc();
+
     let _ = world.insert(id, g);
     g
 }

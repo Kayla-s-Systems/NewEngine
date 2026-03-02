@@ -1,6 +1,7 @@
 #![forbid(unsafe_op_in_unsafe_fn)]
 
 use newengine_ecs::{EntityId, World};
+use newengine_math::collections_prelude::NeKey;
 
 use crate::{sphere_to_aabb, Bounds, BoundsKind};
 
@@ -10,35 +11,17 @@ struct BoundsUpdateFromTransformScratch {
     ids: Vec<EntityId>,
 }
 
-#[inline]
-fn ensure_scratch(world: &mut World) {
-    if world
-        .resource::<BoundsUpdateFromTransformScratch>()
-        .is_none()
-    {
-        world.insert_resource(BoundsUpdateFromTransformScratch::default());
-    }
-}
-
 /// Updates world-space bounds from `newengine_transform::Transform`.
 ///
-/// Enabled by the `transform` crate feature.
-///
-/// AAA contract:
+/// Contract:
 /// - deterministic iteration (stable entity id order)
 /// - no per-frame heap churn (scratch is a resource)
-/// - mutations are tracked (only mark changed when derived data differs)
+/// - mutations are tracked (mark changed only when derived data differs)
 #[inline]
 pub fn update_bounds_from_transform_system(world: &mut World) {
-    ensure_scratch(world);
-
     // Move scratch out to avoid borrow conflicts with world queries/gets.
-    let mut scratch = {
-        let s = world
-            .resource_mut::<BoundsUpdateFromTransformScratch>()
-            .expect("BoundsUpdateFromTransformScratch must exist");
-        core::mem::take(s)
-    };
+    let mut scratch =
+        core::mem::take(world.resource_mut_or_insert_default::<BoundsUpdateFromTransformScratch>());
 
     scratch.ids.clear();
     scratch
@@ -84,7 +67,5 @@ pub fn update_bounds_from_transform_system(world: &mut World) {
         }
     }
 
-    *world
-        .resource_mut::<BoundsUpdateFromTransformScratch>()
-        .expect("BoundsUpdateFromTransformScratch must exist") = scratch;
+    *world.resource_mut_or_insert_default::<BoundsUpdateFromTransformScratch>() = scratch;
 }

@@ -20,6 +20,6 @@ pub struct PluginsSnapshot {
 pub use control::{PluginControlCommand, PluginControlQueue, PluginControlResult};
 pub use forward_logger::{install_forward_logger_once, LOGGING_SINK_SERVICE_ID};
 pub use host_api::default_host_api;
-pub use host_context::init_host_context;
+pub use host_context::{has_service, init_host_context, list_services};
 pub use manager::{PluginManager, PluginSnapshotEntry};
 pub use plugin_config_service::{init_plugin_config_service, CONFIG_SERVICE_ID};

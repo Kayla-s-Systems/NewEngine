@@ -1,14 +1,18 @@
 # newengine-assets
 
-Engine-side **AssetManager service contract** and a small, protocol-first client.
+Engine-side контракт для **AssetManager** (как сервис) + небольшой protocol-first client.
 
-This crate exists so any engine subsystem (renderer, editor core, UI, tools, etc.) can interact with the
-AssetManager runtime plugin (DLL) without depending on UI crates or on a concrete AssetManager implementation.
+## Ответственность
 
-## What you get
+- `AssetServiceClient` — обращение к AssetManager через `HostApiV1::call_service_v1`.
+- Минимальные трейты `AssetService/AssetAccess` для тестируемости и подмены.
+- Константы контрактов: service id и имена методов.
 
-- `AssetServiceClient`: calls the AssetManager service through `HostApiV1::call_service_v1`.
-- `AssetService` / `AssetAccess`: minimal traits for systems that want to stay mockable/testable.
-- Contract constants: service id and canonical method names.
+## Не ответственность
 
-The concrete AssetManager implementation lives in the `newengine-AssetManager` plugin.
+- Не содержит реализацию AssetManager (она живёт в отдельном плагине).
+- Не зависит от UI/рендера.
+
+## Ссылки
+
+- `../../ARCHITECTURE.md`

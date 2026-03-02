@@ -1,28 +1,33 @@
 # newengine-scene
 
-    Сцена: World + сценовые компоненты/инварианты (root, active camera), derived state (bounds/кэши).
+Scene-домен NewEngine: persistent identity, семантические компоненты и (опционально) рантайм-обвязка поверх ECS.
 
-    ## Роль в архитектуре
+## Ответственность
 
-    - **Слой:** `crates/newengine-scene`
-    - **Назначение:** Сцена: World + сценовые компоненты/инварианты (root, active camera), derived state (bounds/кэши).
+- Scene contracts (по умолчанию):
+    - `EntityGuid`, `Name`, `PropertyBag`
+    - маркеры ролей: `SceneRoot`, `ActiveCamera`
+    - `SceneSettings` (оси/масштаб единиц)
 
-    ## Инварианты
+- Runtime (feature `runtime`):
+    - `Scene` = owned `World` + `SceneSettings`
+    - инварианты (`SceneState`, reconcile unique markers)
+    - derived state pipeline: `update_scene_world`
 
-    - Сцена валидирует свои фундаментальные роли (root/camera) детерминированно.
+## Не ответственность
 
-- Derived обновляется отдельными системами, сцена сама не выполняет рендер/инпут.
+- Не содержит renderer/viewport/UI.
+- Не делает «магических» спавнов по умолчанию: bootstrap (root/camera) — задача верхних слоёв.
 
-  ## Публичный API
+## Features
 
-    - Смотри `src/lib.rs` и модульные реэкспорты.
-    - Для контрактов/ABI: фиксируйте изменения через версионирование (semver) и миграции.
+- `runtime` — включает интеграцию с ECS + Transform + Bounds.
 
-  ## Тестирование и профилирование
+## Инварианты
 
-    - Unit-тесты: `cargo test -p newengine-scene`
-    - (Рекомендуется) bench/criterion для hot path.
+- `EntityGuid` — единственный persistent id для сцены.
+- Derived state обновляется централизованно (`update_scene_world`), а не распределённо.
 
-  ## Ссылки
+## Ссылки
 
-    - Архитектура workspace: `../../ARCHITECTURE.md`
+- `../../ARCHITECTURE.md`

@@ -173,7 +173,7 @@ fn set_path(root: &mut Value, path: &[&str], value: Value) {
             if !cur.is_object() {
                 *cur = Value::Object(Map::new());
             }
-            let obj = cur.as_object_mut().unwrap();
+            let Some(obj) = cur.as_object_mut() else { return; };
             obj.insert((*key).to_owned(), value);
             return;
         }
@@ -181,7 +181,7 @@ fn set_path(root: &mut Value, path: &[&str], value: Value) {
         if !cur.is_object() {
             *cur = Value::Object(Map::new());
         }
-        let obj = cur.as_object_mut().unwrap();
+        let Some(obj) = cur.as_object_mut() else { return; };
         cur = obj
             .entry((*key).to_owned())
             .or_insert_with(|| Value::Object(Map::new()));

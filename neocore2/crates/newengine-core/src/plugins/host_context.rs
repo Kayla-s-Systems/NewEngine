@@ -28,14 +28,25 @@ thread_local! {
 pub(crate) fn with_current_plugin_id<R>(plugin_id: &str, f: impl FnOnce() -> R) -> R {
     CURRENT_PLUGIN_ID.with(|c| {
         let prev = c.replace(Some(plugin_id.to_owned()));
-        let out = f();
-        c.replace(prev);
-        out
+
+        struct Restore<'a> {
+            cell: &'a RefCell<Option<String>>,
+            prev: Option<String>,
+        }
+
+        impl<'a> Drop for Restore<'a> {
+            fn drop(&mut self) {
+                let _ = self.cell.replace(self.prev.take());
+            }
+        }
+
+        let _restore = Restore { cell: c, prev };
+        f()
     })
 }
 
 pub(crate) fn current_plugin_id() -> Option<String> {
-    CURRENT_PLUGIN_ID.with(|c| c.borrow().clone())
+    CURRENT_PLUGIN_ID.with(|c| (*c.borrow()).clone())
 }
 
 pub struct HostContext {
@@ -51,17 +62,30 @@ static HOST_CTX: OnceLock<Arc<HostContext>> = OnceLock::new();
 ///
 /// Core must not depend on concrete plugin-owned subsystems (assets/input/render/etc).
 /// Plugins register services and event sinks via HostApi into this context.
-pub fn init_host_context() {
-    let ctx = Arc::new(HostContext {
+fn make_default_ctx() -> Arc<HostContext> {
+    Arc::new(HostContext {
         services: Mutex::new(NeHashMap::default()),
         services_generation: AtomicU64::new(1),
         event_sinks: Mutex::new(Vec::new()),
-    });
-    let _ = HOST_CTX.set(ctx);
+    })
 }
 
+/// Initializes global host context.
+///
+/// Safe to call multiple times; after the first initialization it becomes a no-op.
+///
+/// Core must not depend on concrete plugin-owned subsystems (assets/input/render/etc).
+/// Plugins register services and event sinks via HostApi into this context.
+pub fn init_host_context() {
+    let _ = HOST_CTX.set(make_default_ctx());
+}
+
+/// Returns the global host context.
+///
+/// This function never panics: if the context wasn't explicitly initialized yet,
+/// it will be lazily created.
 pub fn ctx() -> Arc<HostContext> {
-    HOST_CTX.get().expect("HostContext not initialized").clone()
+    HOST_CTX.get_or_init(make_default_ctx).clone()
 }
 
 #[inline]
@@ -74,12 +98,38 @@ pub fn bump_services_generation() {
     ctx().services_generation.fetch_add(1, Ordering::AcqRel);
 }
 
+/// Returns true if a plugin-owned service with the given id is currently registered.
+#[inline]
+pub fn has_service(service_id: &str) -> bool {
+    let c = ctx();
+    let g = match c.services.lock() {
+        Ok(v) => v,
+        Err(e) => e.into_inner(),
+    };
+    g.contains_key(service_id)
+}
+
+/// Returns a stable, sorted list of registered plugin-owned service ids.
+///
+/// Intended for diagnostics and crash reports.
+pub fn list_services() -> Vec<String> {
+    let c = ctx();
+    let g = match c.services.lock() {
+        Ok(v) => v,
+        Err(e) => e.into_inner(),
+    };
+
+    let mut out: Vec<String> = g.keys().cloned().collect();
+    out.sort();
+    out
+}
+
 pub fn subscribe_event_sink(sink: EventSinkV1Dyn<'static>) -> Result<(), String> {
     let c = ctx();
-    let mut g = c
-        .event_sinks
-        .lock()
-        .map_err(|_| "event_sinks mutex poisoned".to_string())?;
+    let mut g = match c.event_sinks.lock() {
+        Ok(v) => v,
+        Err(e) => e.into_inner(),
+    };
 
     g.push(EventSinkEntry {
         owner_plugin_id: current_plugin_id(),
@@ -93,18 +143,18 @@ pub fn publish_event(topic: &str, payload: &[u8]) -> Result<(), String> {
     let c = ctx();
 
     let sinks: Vec<EventSinkEntry> = {
-        let g = c
-            .event_sinks
-            .lock()
-            .map_err(|_| "event_sinks mutex poisoned".to_string())?;
+        let g = match c.event_sinks.lock() {
+            Ok(v) => v,
+            Err(e) => e.into_inner(),
+        };
         g.clone()
     };
 
     for s in sinks {
-        let mut guard = s
-            .sink
-            .lock()
-            .map_err(|_| "event sink mutex poisoned".to_string())?;
+        let mut guard = match s.sink.lock() {
+            Ok(v) => v,
+            Err(e) => e.into_inner(),
+        };
         let _ = guard.on_event(RString::from(topic), Blob::from(payload.to_vec()));
     }
 
@@ -126,7 +176,7 @@ pub fn unregister_by_owner(owner_plugin_id: &str) {
     {
         let mut g = match c.services.lock() {
             Ok(v) => v,
-            Err(_) => return,
+            Err(e) => e.into_inner(),
         };
 
         let before = g.len();
@@ -139,7 +189,7 @@ pub fn unregister_by_owner(owner_plugin_id: &str) {
     {
         let mut g = match c.event_sinks.lock() {
             Ok(v) => v,
-            Err(_) => return,
+            Err(e) => e.into_inner(),
         };
         g.retain(|ent| ent.owner_plugin_id.as_deref() != Some(owner_plugin_id));
     }

@@ -1,26 +1,23 @@
 # newengine-bounds
 
-Bounds/volumes: AABB/сферы и утилиты для derived состояния сцены.
+Bounds/volumes домен: `Aabb`, `Sphere`, компонент `Bounds` и утилиты derived состояния.
 
-## Роль в архитектуре
+## Ответственность
 
-- **Слой:** `crates/newengine-bounds`
-- **Назначение:** Bounds/volumes: AABB/сферы и утилиты для derived состояния сцены.
+- Геометрические примитивы: `Aabb`, `Sphere`.
+- Компонент `Bounds` (local + derived world-space данные).
+- Конвертеры: `aabb_to_sphere`, `sphere_to_aabb`.
+- Системы обновления bounds из `Transform` или `Mat4` (без аллокаций в hot path).
+
+## Не ответственность
+
+- Не содержит логики сцены/рендера/физики.
 
 ## Инварианты
 
-- Bounds должны быть cheap и детерминированны (без NaN propagation).
-
-## Публичный API
-
-- Смотри `src/lib.rs` и модульные реэкспорты.
-- Для контрактов/ABI: фиксируйте изменения через версионирование (semver) и миграции.
-
-## Тестирование и профилирование
-
-- Unit-тесты: `cargo test -p newengine-bounds`
-- (Рекомендуется) bench/criterion для hot path.
+- Детерминированность: стабильный порядок и отсутствие зависимости от hash-итерации.
+- Hot path без heap churn: scratch хранится в `World` как resource.
 
 ## Ссылки
 
-- Архитектура workspace: `../../ARCHITECTURE.md`
+- `../../ARCHITECTURE.md`

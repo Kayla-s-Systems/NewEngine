@@ -22,10 +22,9 @@ pub use propagate::{ensure_transform_outputs, propagate_transforms};
 #[cfg(feature = "ecs")]
 pub use world_space::{read_entity_world_pose, write_entity_local_from_world_pose};
 
-#[cfg(feature = "ecs")]
+#[cfg(all(feature = "ecs", feature = "service"))]
 pub mod service {
-    use newengine_core::{ErasedService, ServiceRegistry};
-    use newengine_service_api::InterfaceId;
+    use newengine_core::{ErasedService, InterfaceId, ServiceRegistry};
     use newengine_transform_api::runtime::TransformRuntimeVTable;
     use newengine_transform_api::{ITRANSFORM_RUNTIME_V1, TRANSFORM_SERVICE};
 

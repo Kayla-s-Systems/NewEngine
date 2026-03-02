@@ -112,7 +112,7 @@ impl TextureDesc {
             extent,
             format,
             usage,
-            mip_levels: NonZeroU32::new(1).unwrap(),
+            mip_levels: NonZeroU32::MIN,
         }
     }
 

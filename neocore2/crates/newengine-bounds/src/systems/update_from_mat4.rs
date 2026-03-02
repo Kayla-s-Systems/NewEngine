@@ -12,30 +12,16 @@ struct BoundsUpdateFromMat4Scratch {
     ids: Vec<EntityId>,
 }
 
-#[inline]
-fn ensure_scratch(world: &mut World) {
-    if world.resource::<BoundsUpdateFromMat4Scratch>().is_none() {
-        world.insert_resource(BoundsUpdateFromMat4Scratch::default());
-    }
-}
-
 /// Updates `Bounds` for entities that have both `Mat4` and `Bounds`.
 ///
-/// AAA contract:
+/// Contract:
 /// - deterministic iteration (stable entity id order)
 /// - no per-frame heap churn (scratch is a resource)
-/// - mutations are tracked (only mark changed when derived data differs)
+/// - mutations are tracked (mark changed only when derived data differs)
 #[inline]
 pub fn update_bounds_from_mat4_system(world: &mut World) {
-    ensure_scratch(world);
-
     // Move scratch out to avoid borrow conflicts with world queries/gets.
-    let mut scratch = {
-        let s = world
-            .resource_mut::<BoundsUpdateFromMat4Scratch>()
-            .expect("BoundsUpdateFromMat4Scratch must exist");
-        core::mem::take(s)
-    };
+    let mut scratch = core::mem::take(world.resource_mut_or_insert_default::<BoundsUpdateFromMat4Scratch>());
 
     scratch.ids.clear();
     scratch.ids.extend(world.query2_ids::<Mat4, Bounds>());
@@ -82,7 +68,5 @@ pub fn update_bounds_from_mat4_system(world: &mut World) {
     }
 
     // Put scratch back (preserve capacities).
-    *world
-        .resource_mut::<BoundsUpdateFromMat4Scratch>()
-        .expect("BoundsUpdateFromMat4Scratch must exist") = scratch;
+    *world.resource_mut_or_insert_default::<BoundsUpdateFromMat4Scratch>() = scratch;
 }

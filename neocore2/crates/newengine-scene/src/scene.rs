@@ -132,7 +132,9 @@ impl Scene {
         }
 
         // Pass 2: remove all non-keepers.
-        let keep_id = keep.expect("count>0 implies keep");
+        let Some(keep_id) = keep else {
+            return (None, false);
+        };
         let mut to_remove: Vec<EntityId> = Vec::with_capacity(count.saturating_sub(1));
         for (id, _) in self.world.query::<C>() {
             if id != keep_id {

@@ -1,6 +1,6 @@
 #![forbid(unsafe_op_in_unsafe_fn)]
 
-use newengine_bounds::{Aabb, Bounds, BoundsKind, Sphere};
+use newengine_bounds::{aabb_to_sphere, sphere_to_aabb, Aabb, Bounds, BoundsKind, Sphere};
 use newengine_ecs::{EntityId, World};
 use newengine_math::collections_prelude::NeKey;
 use newengine_transform::propagate_transforms;
@@ -13,25 +13,14 @@ pub struct SceneBounds {
     pub sphere: Option<Sphere>,
 }
 
-/// AAA cache for derived scene state.
+/// Cache for derived scene state.
 ///
-/// We cache "last processed tick" per stage to avoid doing expensive work every frame.
-#[derive(Clone, Copy, Debug)]
+/// We store "last processed tick" per stage to avoid doing expensive work every frame.
+#[derive(Clone, Copy, Debug, Default)]
 pub struct SceneDerivedCache {
     pub last_transform_tick: u64,
     pub last_bounds_tick: u64,
     pub last_union_tick: u64,
-}
-
-impl Default for SceneDerivedCache {
-    #[inline]
-    fn default() -> Self {
-        Self {
-            last_transform_tick: 0,
-            last_bounds_tick: 0,
-            last_union_tick: 0,
-        }
-    }
 }
 
 /// Reusable scratch buffers for bounds update and union computations.
@@ -41,39 +30,19 @@ struct SceneBoundsScratch {
 }
 
 #[inline]
-fn ensure_resources(world: &mut World) {
-    if world.resource::<SceneDerivedCache>().is_none() {
-        world.insert_resource(SceneDerivedCache::default());
-    }
-    if world.resource::<SceneBounds>().is_none() {
-        world.insert_resource(SceneBounds::default());
-    }
-    if world.resource::<SceneBoundsScratch>().is_none() {
-        world.insert_resource(SceneBoundsScratch::default());
-    }
-}
-
-#[inline]
-fn aabb_to_sphere(aabb: Aabb) -> Sphere {
-    let center = aabb.center();
-    let he = aabb.half_extents();
-    Sphere {
-        center,
-        radius: he.length(),
-    }
-}
-
-#[inline]
 fn any_transform_inputs_dirty(world: &World, since_tick: u64) -> bool {
     if world.query::<TransformDirty>().next().is_some() {
         return true;
     }
+
     if world.any_changed_since::<Transform>(since_tick) || world.any_added_since::<Transform>(since_tick) {
         return true;
     }
+
     if world.any_changed_since::<Parent>(since_tick) || world.any_added_since::<Parent>(since_tick) {
         return true;
     }
+
     false
 }
 
@@ -84,21 +53,18 @@ fn any_bounds_inputs_dirty(world: &World, since_tick: u64) -> bool {
     {
         return true;
     }
+
     if world.any_changed_since::<Bounds>(since_tick) || world.any_added_since::<Bounds>(since_tick) {
         return true;
     }
+
     false
 }
 
 #[inline]
 fn update_bounds_from_global_transform(world: &mut World) {
     // Move scratch out to avoid borrow conflicts with world queries/gets.
-    let mut scratch = {
-        let s = world
-            .resource_mut::<SceneBoundsScratch>()
-            .expect("SceneBoundsScratch must exist");
-        core::mem::take(s)
-    };
+    let mut scratch = core::mem::take(world.resource_mut_or_insert_default::<SceneBoundsScratch>());
 
     scratch.ids.clear();
     scratch.ids.extend(world.query2_ids::<GlobalTransform, Bounds>());
@@ -127,9 +93,7 @@ fn update_bounds_from_global_transform(world: &mut World) {
 
         let mut world_aabb = src.local_aabb.transformed(m);
         if src.kind == BoundsKind::Sphere {
-            // Equivalent to newengine_bounds::sphere_to_aabb, but kept local to avoid using crate-private API.
-            let r = newengine_math::Vec3::splat(world_sphere.radius);
-            world_aabb = Aabb::new(world_sphere.center - r, world_sphere.center + r);
+            world_aabb = sphere_to_aabb(world_sphere);
         }
 
         if let Some(dst) = world.get_mut::<Bounds>(id) {
@@ -142,9 +106,7 @@ fn update_bounds_from_global_transform(world: &mut World) {
         }
     }
 
-    *world
-        .resource_mut::<SceneBoundsScratch>()
-        .expect("SceneBoundsScratch must exist") = scratch;
+    *world.resource_mut_or_insert_default::<SceneBoundsScratch>() = scratch;
 }
 
 /// Computes union world AABB for all entities that have `Bounds`.
@@ -175,78 +137,57 @@ pub fn selection_world_bounds(world: &World, entities: impl Iterator<Item=Entity
     Some(acc)
 }
 
-/// Updates derived scene state (AAA):
+/// Updates derived scene state:
 /// - propagates `Transform` -> `GlobalTransform`/`WorldPose` (dirty-gated)
 /// - updates `Bounds` world_* from `GlobalTransform` (dirty-gated)
 /// - caches union bounds as `SceneBounds` (dirty-gated)
 #[inline]
 pub fn update_scene_world(world: &mut World) {
-    ensure_resources(world);
+    // Ensure core resources exist.
+    let _ = world.resource_mut_or_insert_default::<SceneDerivedCache>();
+    let _ = world.resource_mut_or_insert_default::<SceneBounds>();
+    let _ = world.resource_mut_or_insert_default::<SceneBoundsScratch>();
 
     let tick_now = world.tick();
 
     // Stage 1: transforms.
+    let last_transform_tick = { world.resource_mut_or_insert_default::<SceneDerivedCache>().last_transform_tick };
     let mut ran_transforms = false;
-    {
-        let since = world
-            .resource::<SceneDerivedCache>()
-            .expect("SceneDerivedCache must exist")
-            .last_transform_tick;
 
-        if since == 0 || any_transform_inputs_dirty(world, since) {
-            propagate_transforms(world);
-            ran_transforms = true;
-
-            world.resource_mut::<SceneDerivedCache>()
-                .expect("SceneDerivedCache must exist")
-                .last_transform_tick = tick_now;
-        }
+    if last_transform_tick == 0 || any_transform_inputs_dirty(world, last_transform_tick) {
+        propagate_transforms(world);
+        ran_transforms = true;
+        world.resource_mut_or_insert_default::<SceneDerivedCache>().last_transform_tick = tick_now;
     }
 
     // Stage 2: bounds derived from GlobalTransform.
+    let last_bounds_tick = { world.resource_mut_or_insert_default::<SceneDerivedCache>().last_bounds_tick };
     let mut ran_bounds = false;
-    {
-        let since = world
-            .resource::<SceneDerivedCache>()
-            .expect("SceneDerivedCache must exist")
-            .last_bounds_tick;
 
-        let dirty = since == 0 || ran_transforms || any_bounds_inputs_dirty(world, since);
-        if dirty {
-            update_bounds_from_global_transform(world);
-            ran_bounds = true;
-
-            world.resource_mut::<SceneDerivedCache>()
-                .expect("SceneDerivedCache must exist")
-                .last_bounds_tick = tick_now;
-        }
+    let bounds_dirty = last_bounds_tick == 0 || ran_transforms || any_bounds_inputs_dirty(world, last_bounds_tick);
+    if bounds_dirty {
+        update_bounds_from_global_transform(world);
+        ran_bounds = true;
+        world.resource_mut_or_insert_default::<SceneDerivedCache>().last_bounds_tick = tick_now;
     }
 
     // Stage 3: cache union.
-    {
-        let since = world
-            .resource::<SceneDerivedCache>()
-            .expect("SceneDerivedCache must exist")
-            .last_union_tick;
+    let last_union_tick = { world.resource_mut_or_insert_default::<SceneDerivedCache>().last_union_tick };
+    let union_dirty = last_union_tick == 0
+        || ran_bounds
+        || world.entities_changed_since(last_union_tick)
+        || world.any_changed_since::<Bounds>(last_union_tick)
+        || world.any_added_since::<Bounds>(last_union_tick);
 
-        let dirty = since == 0
-            || ran_bounds
-            || world.entities_changed_since(since)
-            || world.any_changed_since::<Bounds>(since)
-            || world.any_added_since::<Bounds>(since);
+    if union_dirty {
+        let aabb = scene_world_bounds(world);
+        let sphere = aabb.map(aabb_to_sphere);
 
-        if dirty {
-            let aabb = scene_world_bounds(world);
-            let sphere = aabb.map(aabb_to_sphere);
+        let sb = world.resource_mut_or_insert_default::<SceneBounds>();
+        sb.aabb = aabb;
+        sb.sphere = sphere;
 
-            let sb = world.resource_mut::<SceneBounds>().expect("SceneBounds must exist");
-            sb.aabb = aabb;
-            sb.sphere = sphere;
-
-            world.resource_mut::<SceneDerivedCache>()
-                .expect("SceneDerivedCache must exist")
-                .last_union_tick = tick_now;
-        }
+        world.resource_mut_or_insert_default::<SceneDerivedCache>().last_union_tick = tick_now;
     }
 }
 

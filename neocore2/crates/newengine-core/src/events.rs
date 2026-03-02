@@ -228,7 +228,7 @@ struct Inner {
 
 impl Inner {
     fn add_subscriber(&self, type_id: TypeId, sub: Subscriber) {
-        let mut map = self.chans.write().expect("EventHub channels poisoned");
+        let mut map = self.chans.write().unwrap_or_else(|p| p.into_inner());
         let next = match map.get(&type_id) {
             Some(cur) => {
                 let mut v: Vec<Subscriber> = (**cur).clone();
@@ -241,7 +241,7 @@ impl Inner {
     }
 
     fn remove_subscriber(&self, type_id: TypeId, sub_id: u64) {
-        let mut map = self.chans.write().expect("EventHub channels poisoned");
+        let mut map = self.chans.write().unwrap_or_else(|p| p.into_inner());
         let Some(cur) = map.get(&type_id) else { return };
 
         let mut v: Vec<Subscriber> = Vec::with_capacity(cur.len().saturating_sub(1));
@@ -260,7 +260,7 @@ impl Inner {
 
     fn publish_typed(&self, type_id: TypeId, ev: Arc<dyn Any + Send + Sync>) -> EngineResult<()> {
         let subs = {
-            let map = self.chans.read().expect("EventHub channels poisoned");
+            let map = self.chans.read().unwrap_or_else(|p| p.into_inner());
             map.get(&type_id).cloned()
         };
 
@@ -297,7 +297,7 @@ impl Inner {
             return Ok(());
         }
 
-        let mut map = self.chans.write().expect("EventHub channels poisoned");
+        let mut map = self.chans.write().unwrap_or_else(|p| p.into_inner());
         let Some(cur) = map.get(&type_id) else {
             return Ok(());
         };
