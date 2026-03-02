@@ -3,6 +3,7 @@ pub mod console;
 pub mod core_invariants;
 pub mod engine;
 pub mod error;
+pub mod crash;
 pub mod events;
 pub mod frame;
 pub mod host_events;
