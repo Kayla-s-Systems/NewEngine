@@ -21,6 +21,10 @@ pub enum CommandTag {
     },
     /// A sanctioned transform write path (via intent/patch command).
     TransformWrite,
+    /// Appends a controller-produced intent batch into the world queue.
+    IntentQueueAppend,
+    /// Clears the world intent queue after the dedicated apply stage has consumed it.
+    IntentQueueClear,
     Other(&'static str),
 }
 

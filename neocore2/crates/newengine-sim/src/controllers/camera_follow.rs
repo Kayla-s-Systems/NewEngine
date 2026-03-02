@@ -1,6 +1,12 @@
 #![forbid(unsafe_op_in_unsafe_fn)]
 
+use newengine_ecs::EntityId;
 use newengine_math::{Mat3, Quat, Vec3};
+
+use crate::{
+    CameraRigComp, ControllerCtx, FollowTargetCameraController, FollowTargetCameraMotor, Intent,
+    IntentSink,
+};
 
 /// Output of a follow-camera motor step.
 #[derive(Clone, Copy, Debug)]
@@ -156,6 +162,51 @@ pub fn step_follow_camera(
         next_rot,
         next_vel,
     })
+}
+
+/// ECS-agnostic controller runner producing semantic intents.
+#[inline]
+pub fn run_follow_camera_controller(
+    entity: EntityId,
+    ctx: &ControllerCtx<'_>,
+    ctrl: FollowTargetCameraController,
+    rig: CameraRigComp,
+    motor: FollowTargetCameraMotor,
+    out: &mut impl IntentSink,
+) {
+    let Some((target_pos, target_rot)) = ctx.read_world_pose(ctrl.target) else {
+        return;
+    };
+
+    let Some(step) = step_follow_camera(
+        rig.0.position,
+        rig.0.rotation,
+        target_pos,
+        target_rot,
+        ctrl.offset_ls,
+        ctrl.rot_offset,
+        ctrl.follow_rotation,
+        motor.vel_ws,
+        ctrl.smooth_time,
+        ctrl.max_speed,
+        ctx.dt(),
+    ) else {
+        return;
+    };
+
+    out.emit(Intent::SetCameraRig {
+        entity,
+        value: CameraRigComp(newengine_camera::CameraRig {
+            position: step.next_pos,
+            rotation: step.next_rot,
+        }),
+    });
+    out.emit(Intent::SetFollowTargetCameraMotor {
+        entity,
+        value: FollowTargetCameraMotor {
+            vel_ws: step.next_vel,
+        },
+    });
 }
 
 /// Computes follow-controller parameters (`offset_ls`, `rot_offset`) that reproduce a desired

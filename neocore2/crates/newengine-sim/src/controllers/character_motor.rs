@@ -1,8 +1,9 @@
 #![forbid(unsafe_op_in_unsafe_fn)]
 
+use newengine_ecs::EntityId;
 use newengine_math::{EulerRot, Quat, Vec2, Vec3};
 
-use crate::{CharacterMotor, MotorInput};
+use crate::{CharacterMotor, ControllerCtx, Intent, IntentSink, MotorInput, Velocity};
 
 #[derive(Clone, Copy, Debug)]
 pub struct CharacterMotorStep {
@@ -121,4 +122,34 @@ pub fn step_character_motor(
         rotation,
         velocity_ws,
     })
+}
+
+/// ECS-agnostic controller runner producing semantic intents.
+#[inline]
+pub fn run_character_motor_controller(
+    entity: EntityId,
+    ctx: &ControllerCtx<'_>,
+    motor: CharacterMotor,
+    input: MotorInput,
+    out: &mut impl IntentSink,
+) {
+    let Some(step) = step_character_motor(motor, input, ctx.local_rotation_or_identity(entity), ctx.dt()) else {
+        return;
+    };
+
+    if ctx.has_transform(entity) {
+        out.emit(Intent::TransformSetLocalRotation {
+            entity,
+            rotation: step.rotation,
+        });
+    }
+
+    out.emit(Intent::SetVelocity {
+        entity,
+        value: Velocity(step.velocity_ws),
+    });
+    out.emit(Intent::SetCharacterMotor {
+        entity,
+        value: step.motor,
+    });
 }

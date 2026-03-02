@@ -15,7 +15,9 @@
 mod access;
 mod commands;
 mod components;
+mod controller_ctx;
 mod controllers;
+mod intent;
 mod schedule;
 mod systems;
 mod time;
@@ -29,9 +31,14 @@ pub use components::{
     AngularVelocity, CameraInputComp, CameraRigComp, CharacterMotor, FollowTargetCameraController,
     FollowTargetCameraMotor, MotorInput, OrbitCameraMotor, Velocity,
 };
+pub use controller_ctx::{ControllerCtx, EntityControllerV1};
 pub use controllers::{
-    follow_params_from_pose, step_character_motor, step_follow_camera, CharacterMotorStep,
+    follow_params_from_pose, run_character_motor_controller, run_follow_camera_controller,
+    run_orbit_camera_controller, step_character_motor, step_follow_camera, CharacterMotorStep,
     FollowCameraStep,
+};
+pub use intent::{
+    ControllerIntentQueue, Intent, IntentBuffer, IntentCommandBufferExt, IntentSink,
 };
 
 // Also keep glob re-exports for backwards compatibility inside the workspace.
@@ -43,6 +50,6 @@ pub use time::SimFrame;
 pub use transform_cmd::TransformCommandBufferExt;
 
 pub use systems::{
-    sys_camera_follow, sys_camera_rig_to_transform, sys_character_motor, sys_integrate_velocities,
-    sys_orbit_camera,
+    sys_apply_controller_intents, sys_camera_follow, sys_camera_rig_to_transform,
+    sys_character_motor, sys_integrate_velocities, sys_orbit_camera,
 };

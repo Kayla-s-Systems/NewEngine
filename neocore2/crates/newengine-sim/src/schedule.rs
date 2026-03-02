@@ -12,16 +12,18 @@ use crate::{access::AccessMask, commands::CommandBuffer, systems, SimFrame};
 pub enum SimStage {
     /// Inputs are produced externally (winit/plugin) and written into components/resources.
     Input = 0,
-    /// Controllers translate inputs to desired motion / camera.
+    /// Controllers translate inputs to semantic intents only.
     Controllers = 1,
+    /// A single, ordered stage applies controller intents to ECS state.
+    ApplyIntents = 2,
     /// Kinematic integration / physics.
-    Physics = 2,
+    Physics = 3,
     /// Derived world state (transforms, bounds, scene caches).
-    Derived = 3,
+    Derived = 4,
 }
 
 impl SimStage {
-    pub const COUNT: usize = 4;
+    pub const COUNT: usize = 5;
 
     #[inline]
     pub const fn as_usize(self) -> usize {
@@ -132,13 +134,19 @@ impl SimSchedule {
     pub fn run_default_pipeline(&mut self, world: &mut World, frame: SimFrame) {
         self.run_stage(world, SimStage::Input, frame);
         self.run_stage(world, SimStage::Controllers, frame);
+        self.run_stage(world, SimStage::ApplyIntents, frame);
         self.run_stage(world, SimStage::Physics, frame);
         self.run_stage(world, SimStage::Derived, frame);
     }
 }
 
 #[inline]
-fn run_stage_single_thread(world: &mut World, stage: SimStage, systems: &[SystemEntry], frame: SimFrame) {
+fn run_stage_single_thread(
+    world: &mut World,
+    stage: SimStage,
+    systems: &[SystemEntry],
+    frame: SimFrame,
+) {
     for s in systems {
         #[cfg(debug_assertions)]
         {
@@ -215,29 +223,31 @@ fn build_batches<'a>(systems: &'a [SystemEntry]) -> Vec<Vec<&'a SystemEntry>> {
     batches
 }
 
-
 #[cfg(debug_assertions)]
 fn validate_commands(stage: SimStage, system: &'static str, cb: &CommandBuffer) {
     use crate::commands::CommandTag;
     use core::any::TypeId;
     use newengine_transform_api::Transform;
 
-    // Policy: in simulation stages, Transform writes must go through the transform command helpers,
-    // not through raw component insertion (which overwrites fields and hides conflicts).
-    if stage != SimStage::Controllers && stage != SimStage::Physics {
-        return;
-    }
-
     let tid = TypeId::of::<Transform>();
 
     for c in cb.iter() {
-        match c.tag() {
-            CommandTag::Insert { type_id, type_name } if type_id == tid => {
+        match (stage, c.tag()) {
+            (SimStage::Controllers, CommandTag::IntentQueueAppend) => {}
+            (SimStage::Controllers, other) => {
+                panic!(
+                    "sim: forbidden direct world mutation in stage={:?} system='{}' (cmd={:?}). Controllers must emit IntentBuffer and enqueue it; only ApplyIntents/Physics may commit world writes.",
+                    stage,
+                    system,
+                    other,
+                );
+            }
+            (_, CommandTag::Insert { type_id, type_name }) if type_id == tid => {
                 panic!(
                     "sim: forbidden direct Transform insert in stage={:?} system='{}' (cmd type={}). Use TransformCommandBufferExt::* helpers to emit deterministic intents instead.",
                     stage,
                     system,
-                    type_name
+                    type_name,
                 );
             }
             _ => {}
@@ -252,7 +262,7 @@ fn validate_commands(stage: SimStage, system: &'static str, cb: &CommandBuffer) 
 pub fn default_schedule() -> SimSchedule {
     let mut s = SimSchedule::new();
 
-    // Controllers.
+    // Controllers emit intents only.
     s.add_system(
         SimStage::Controllers,
         10,
@@ -274,10 +284,18 @@ pub fn default_schedule() -> SimSchedule {
         AccessMask::write(crate::Subsystem::Camera as u32),
         systems::sys_camera_follow,
     );
-    // Depends on orbit_camera -> same subsystem => serialized.
+
+    // Single ordered apply stage.
     s.add_system(
-        SimStage::Controllers,
-        30,
+        SimStage::ApplyIntents,
+        10,
+        "apply_controller_intents",
+        AccessMask::rw(0, (1u128 << (crate::Subsystem::Gameplay as u32)) | (1u128 << (crate::Subsystem::Camera as u32))),
+        systems::sys_apply_controller_intents,
+    );
+    s.add_system(
+        SimStage::ApplyIntents,
+        20,
         "camera_rig_to_transform",
         AccessMask::write(crate::Subsystem::Camera as u32),
         systems::sys_camera_rig_to_transform,
@@ -291,7 +309,6 @@ pub fn default_schedule() -> SimSchedule {
         AccessMask::write(crate::Subsystem::Gameplay as u32),
         systems::sys_integrate_velocities,
     );
-
 
     s
 }

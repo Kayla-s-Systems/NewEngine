@@ -7,20 +7,31 @@ use newengine_math::{EulerRot, Quat};
 use newengine_transform_api::{read_entity_world_pose_local_chain, Transform};
 
 use crate::{
-    step_character_motor, step_follow_camera, AngularVelocity, CameraInputComp, CameraRigComp,
-    CharacterMotor, CommandBuffer, FollowTargetCameraController, FollowTargetCameraMotor,
-    MotorInput, OrbitCameraMotor, SimFrame, TransformCommandBufferExt,
-    Velocity,
+    run_character_motor_controller, run_follow_camera_controller, run_orbit_camera_controller,
+    AngularVelocity, CameraInputComp, CameraRigComp, CharacterMotor, CommandBuffer,
+    ControllerCtx, ControllerIntentQueue, FollowTargetCameraController,
+    FollowTargetCameraMotor, IntentBuffer, IntentCommandBufferExt, MotorInput, OrbitCameraMotor,
+    SimFrame, TransformCommandBufferExt, Velocity,
 };
 
-/// Applies `MotorInput` to `CharacterMotor` and writes `Transform`/`Velocity` updates.
+#[inline]
+fn sort_ids(ids: &mut Vec<EntityId>) {
+    ids.sort_unstable_by_key(|id| id.data().as_ffi());
+}
+
+/// Applies `MotorInput` to `CharacterMotor` and emits semantic intents.
 pub fn sys_character_motor(world: &World, frame: SimFrame, cmd: &mut CommandBuffer) {
     let dt = frame.dt;
     if !(dt.is_finite() && dt > 0.0) {
         return;
     }
 
-    let ids: Vec<EntityId> = world.query2_ids::<CharacterMotor, MotorInput>().collect();
+    let mut ids: Vec<EntityId> = world.query2_ids::<CharacterMotor, MotorInput>().collect();
+    sort_ids(&mut ids);
+
+    let ctx = ControllerCtx::new(world, frame);
+    let mut intents = IntentBuffer::new();
+
     for id in ids {
         let Some(motor) = world.get::<CharacterMotor>(id).copied() else {
             continue;
@@ -29,118 +40,107 @@ pub fn sys_character_motor(world: &World, frame: SimFrame, cmd: &mut CommandBuff
             continue;
         };
 
-        let current = world.get::<Transform>(id).copied();
-        let current_rot = current.map(|t| t.rotation).unwrap_or(Quat::IDENTITY);
+        run_character_motor_controller(id, &ctx, motor, input, &mut intents);
+    }
 
-        let Some(step) = step_character_motor(motor, input, current_rot, dt) else {
-            continue;
-        };
-
-        if current.is_some() {
-            cmd.transform_set_local_rotation(id, step.rotation);
-        }
-
-        cmd.insert(id, Velocity(step.velocity_ws));
-        cmd.insert(id, step.motor);
+    if !intents.is_empty() {
+        cmd.enqueue_intents(intents);
     }
 }
 
-/// Applies orbit controller input to `CameraRigComp`.
+/// Applies orbit controller input and emits semantic intents.
 pub fn sys_orbit_camera(world: &World, frame: SimFrame, cmd: &mut CommandBuffer) {
     let dt = frame.dt;
     if !dt.is_finite() || dt <= 0.0 {
         return;
     }
 
-    let ids: Vec<EntityId> = world
-        .query2_ids::<OrbitCameraMotor, CameraRigComp>()
-        .collect();
+    let mut ids: Vec<EntityId> = world.query2_ids::<OrbitCameraMotor, CameraRigComp>().collect();
+    sort_ids(&mut ids);
+
+    let mut intents = IntentBuffer::new();
+
     for id in ids {
-        let Some(mut motor) = world.get::<OrbitCameraMotor>(id).copied() else {
+        let Some(motor) = world.get::<OrbitCameraMotor>(id).copied() else {
             continue;
         };
-        let Some(mut rig) = world.get::<CameraRigComp>(id).copied() else {
+        let Some(rig) = world.get::<CameraRigComp>(id).copied() else {
             continue;
         };
 
-        // Gather input. If missing, apply with defaults (no movement).
         let input = world
             .get::<CameraInputComp>(id)
             .map(|c| c.0)
             .unwrap_or_default();
 
-        motor.controller.apply(&mut rig.0, input, dt);
+        run_orbit_camera_controller(id, motor, rig.0, input, dt, &mut intents);
+    }
 
-        cmd.insert(id, rig);
-        cmd.insert(id, motor);
+    if !intents.is_empty() {
+        cmd.enqueue_intents(intents);
     }
 }
 
 /// Follow target controller for camera entities.
 ///
-/// This system updates `CameraRigComp` (world pose) based on the target entity transform chain.
-/// The resulting rig is then copied into `Transform` by `sys_camera_rig_to_transform`.
+/// This system emits rig/motor intents only. `Transform` is updated later in the dedicated apply
+/// stage via `sys_camera_rig_to_transform`.
 pub fn sys_camera_follow(world: &World, frame: SimFrame, cmd: &mut CommandBuffer) {
     let dt = frame.dt;
     if !dt.is_finite() || dt <= 0.0 {
         return;
     }
 
-    let ids: Vec<EntityId> = world
+    let mut ids: Vec<EntityId> = world
         .query2_ids::<FollowTargetCameraController, CameraRigComp>()
         .collect();
+    sort_ids(&mut ids);
+
+    let ctx = ControllerCtx::new(world, frame);
+    let mut intents = IntentBuffer::new();
 
     for id in ids {
         let Some(ctrl) = world.get::<FollowTargetCameraController>(id).copied() else {
             continue;
         };
-        let Some(mut rig) = world.get::<CameraRigComp>(id).copied() else {
+        let Some(rig) = world.get::<CameraRigComp>(id).copied() else {
             continue;
         };
-
-        // Target must exist and have a transform.
-        let Some((target_pos, target_rot)) = read_entity_world_pose_local_chain(world, ctrl.target) else {
-            continue;
-        };
-
         let motor = world
             .get::<FollowTargetCameraMotor>(id)
             .copied()
             .unwrap_or_default();
 
-        let Some(step) = step_follow_camera(
-            rig.0.position,
-            rig.0.rotation,
-            target_pos,
-            target_rot,
-            ctrl.offset_ls,
-            ctrl.rot_offset,
-            ctrl.follow_rotation,
-            motor.vel_ws,
-            ctrl.smooth_time,
-            ctrl.max_speed,
-            dt,
-        ) else {
-            continue;
-        };
+        run_follow_camera_controller(id, &ctx, ctrl, rig, motor, &mut intents);
+    }
 
-        rig.0.position = step.next_pos;
-        rig.0.rotation = step.next_rot;
-
-        cmd.insert(id, rig);
-        cmd.insert(
-            id,
-            FollowTargetCameraMotor {
-                vel_ws: step.next_vel,
-            },
-        );
+    if !intents.is_empty() {
+        cmd.enqueue_intents(intents);
     }
 }
 
+/// Applies queued controller intents in a single, ordered stage.
+pub fn sys_apply_controller_intents(world: &World, _frame: SimFrame, cmd: &mut CommandBuffer) {
+    let Some(queue) = world.resource::<ControllerIntentQueue>() else {
+        return;
+    };
+    if queue.is_empty() {
+        return;
+    }
+
+    let intents = queue.snapshot();
+    for intent in &intents {
+        intent.apply_to(cmd);
+    }
+
+    cmd.clear_controller_intents();
+}
 
 /// Copies `CameraRigComp` (world pose) into local `Transform` with parent-aware conversion.
 pub fn sys_camera_rig_to_transform(world: &World, _frame: SimFrame, cmd: &mut CommandBuffer) {
-    let ids: Vec<EntityId> = world.query2_ids::<CameraRigComp, Transform>().collect();
+    let mut ids: Vec<EntityId> = world.query2_ids::<CameraRigComp, Transform>().collect();
+    sort_ids(&mut ids);
+
     for id in ids {
         let Some(rig) = world.get::<CameraRigComp>(id).copied() else {
             continue;
@@ -150,7 +150,6 @@ pub fn sys_camera_rig_to_transform(world: &World, _frame: SimFrame, cmd: &mut Co
         cmd.transform_set_world_pose(id, rig.0.position, rig.0.rotation);
     }
 }
-
 
 /// Integrates velocities into transforms.
 ///
@@ -169,7 +168,7 @@ pub fn sys_integrate_velocities(world: &World, frame: SimFrame, cmd: &mut Comman
     // Collect candidates deterministically: (Transform+Velocity) U (Transform+AngularVelocity)
     let mut ids: Vec<EntityId> = world.query2_ids::<Transform, Velocity>().collect();
     ids.extend(world.query2_ids::<Transform, AngularVelocity>());
-    ids.sort_unstable_by_key(|id| id.data().as_ffi());
+    sort_ids(&mut ids);
     ids.dedup();
 
     for id in ids {
@@ -199,4 +198,3 @@ pub fn sys_integrate_velocities(world: &World, frame: SimFrame, cmd: &mut Comman
         cmd.transform_set_world_pose(id, next_pos_ws, next_rot_ws);
     }
 }
-
