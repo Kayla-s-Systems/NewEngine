@@ -12,11 +12,10 @@ use newengine_modules_render_vulkan_ash::VulkanAshRenderModule;
 use newengine_platform_winit::app::config::WinitAppIcon;
 use newengine_platform_winit::{run_winit_app_with_config, WinitAppConfig, WinitWindowPlacement};
 
-use newengine_assets::asset_access::AssetService;
-use newengine_assets::{wait_ready, AssetAccess, AssetServiceClient};
-use newengine_ui::markup::UiMarkupDoc;
-use newengine_ui::UiBuildFn;
+use newengine_assets::{wait_ready, AssetAccess, AssetService, AssetServiceClient};
+use newengine_ui::{UiBuildFn, UiMarkupDoc};
 
+use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
@@ -116,58 +115,145 @@ fn build_engine_from_startup(startup: &StartupConfig) -> EngineResult<Engine<()>
     let shutdown = ShutdownToken::new();
 
     let config = EngineConfig::new(FIXED_DT_MS).with_plugins_dir(Some(startup.modules_dir.clone()));
-    // IMPORTANT:
-    // StartupLoader already applied config.json overrides.
-    // Engine must initialize process-wide logging from that resolved startup config,
-    // otherwise defaults/env vars will silently win.
-    // .with_startup_logging(startup.logging.clone());
 
     let engine: Engine<()> = Engine::new_with_config(config, services, bus, shutdown)?;
-
     Ok(engine)
 }
 
-#[inline]
+fn collect_editor_asset_roots() -> Vec<PathBuf> {
+    let mut roots: Vec<PathBuf> = Vec::new();
 
-fn try_load_window_icon(startup: &StartupConfig) -> Option<WinitAppIcon> {
+    // 1) Explicit override.
+    if let Ok(p) = std::env::var("NEWENGINE_EDITOR_ASSETS_DIR") {
+        roots.push(PathBuf::from(p));
+    }
+
+    // 2) Next to the executable.
+    if let Ok(exe) = std::env::current_exe() {
+        if let Some(dir) = exe.parent() {
+            roots.push(dir.join("assets"));
+        }
+    }
+
+    // 3) Dev mode: search for `apps/editor/assets` upwards.
+    if let Ok(exe) = std::env::current_exe() {
+        let mut cur = exe.parent().map(|p| p.to_path_buf());
+        for _ in 0..6 {
+            let Some(base) = cur.clone() else { break };
+            let cand = base.join("apps").join("editor").join("assets");
+            if cand.is_dir() {
+                roots.push(cand);
+                break;
+            }
+            cur = base.parent().map(|p| p.to_path_buf());
+        }
+    }
+
+    roots
+}
+
+fn mount_asset_roots_best_effort(assets: &AssetServiceClient, roots: &[PathBuf]) {
+    fn try_mount(assets: &AssetServiceClient, path: &std::path::Path) {
+        if !path.is_dir() {
+            return;
+        }
+
+        let p = path.to_string_lossy().to_string();
+        if let Err(e) = assets.mount_dir(&p) {
+            log::warn!(
+                "editor startup: asset.mount_dir failed path='{}' err='{}'",
+                path.display(),
+                e
+            );
+        }
+    }
+
+    for r in roots.iter() {
+        try_mount(assets, r);
+    }
+}
+
+fn try_load_window_icon_best_effort(
+    startup: &StartupConfig,
+    assets: Option<&AssetServiceClient>,
+    roots: &[PathBuf],
+) -> Option<WinitAppIcon> {
     let Some(path) = startup.window_icon_path.as_deref() else {
         return None;
     };
 
-    // AssetManager is a plugin now; load via service client.
-    let assets = AssetServiceClient::new(newengine_core::plugins::default_host_api());
+    // 1) Prefer AssetManager service when available (pak/http/etc).
+    if let Some(assets) = assets {
+        let id_hex32 = match assets.load(path) {
+            Ok(v) => v,
+            Err(e) => {
+                log::warn!("window icon: asset.load failed path='{path}' err='{e}'");
+                return None;
+            }
+        };
 
-    let id_hex32 = match assets.load(path) {
-        Ok(v) => v,
-        Err(e) => {
-            log::warn!("window icon: asset.load failed path='{path}' err='{e}'");
-            return None;
-        }
-    };
-
-    match wait_ready(&assets, &id_hex32, Duration::from_millis(500)) {
-        Ok(()) => {}
-        Err(e) => {
+        if let Err(e) = wait_ready(assets, &id_hex32, Duration::from_millis(500)) {
             log::warn!("window icon: wait_ready failed path='{path}' err='{e:?}'");
             return None;
         }
+
+        let (_meta_json, payload) = match assets.blob_wire_v1(&id_hex32) {
+            Ok(v) => v,
+            Err(e) => {
+                log::warn!("window icon: blob_wire_v1 failed path='{path}' err='{e}'");
+                return None;
+            }
+        };
+
+        return match WinitAppIcon::from_png_bytes(&payload) {
+            Ok(icon) => Some(icon),
+            Err(e) => {
+                log::warn!("window icon: decode failed path='{path}' err='{e}'");
+                None
+            }
+        };
     }
 
-    let (_meta_json, payload) = match assets.blob_wire_v1(&id_hex32) {
-        Ok(v) => v,
-        Err(e) => {
-            log::warn!("window icon: blob_wire_v1 failed path='{path}' err='{e}'");
-            return None;
-        }
-    };
+    // 2) Fallback: direct filesystem read (relative to roots and/or absolute).
+    let mut candidates: Vec<PathBuf> = Vec::new();
+    let p = PathBuf::from(path);
 
-    match WinitAppIcon::from_png_bytes(&payload) {
-        Ok(icon) => Some(icon),
-        Err(e) => {
-            log::warn!("window icon: decode failed path='{path}' err='{e}'");
-            None
+    if p.is_absolute() {
+        candidates.push(p);
+    } else {
+        candidates.push(PathBuf::from(path));
+        for r in roots.iter() {
+            candidates.push(r.join(path));
         }
     }
+
+    for c in candidates {
+        if !c.is_file() {
+            continue;
+        }
+
+        match std::fs::read(&c) {
+            Ok(bytes) => match WinitAppIcon::from_png_bytes(&bytes) {
+                Ok(icon) => return Some(icon),
+                Err(e) => {
+                    log::warn!(
+                        "window icon: decode failed file='{}' err='{}'",
+                        c.display(),
+                        e
+                    );
+                }
+            },
+            Err(e) => {
+                log::warn!(
+                    "window icon: read failed file='{}' err='{}'",
+                    c.display(),
+                    e
+                );
+            }
+        }
+    }
+
+    None
 }
 
 fn main() {
@@ -195,8 +281,9 @@ fn main_impl() -> EngineResult<()> {
 
     let paths = ConfigPaths::from_startup_str("config.json");
     let (startup, _report) = StartupLoader::load_json(&paths)?;
-
     let startup = Arc::new(startup);
+
+    let asset_roots = collect_editor_asset_roots();
 
     let viewport = Arc::new(viewport_bridge::ViewportBridge::new());
     let plugins = Arc::new(plugin_manager::PluginManagerBridge::new());
@@ -207,7 +294,7 @@ fn main_impl() -> EngineResult<()> {
 
     let mut engine = build_engine_from_startup(&startup)?;
 
-    // 1) Register render (backend + controller) so the module set is complete before window creation.
+    // 1) Register render so the module set is complete before window creation.
     register_render_from_startup(
         &mut engine,
         &startup,
@@ -220,65 +307,26 @@ fn main_impl() -> EngineResult<()> {
     // 2) Load plugins BEFORE creating winit (required: providers must exist).
     engine.load_plugins_once()?;
 
-    // Hard requirement: the editor UI/markup path depends on AssetManager being available.
-    if !newengine_core::plugins::has_service(newengine_assets::consts::ASSET_SERVICE_ID) {
-        let services = newengine_core::plugins::list_services();
-        return Err(EngineError::other(format!(
-            "required plugin service not found: {} (loaded: [{}])",
-            newengine_assets::consts::ASSET_SERVICE_ID,
-            services.join(", "),
-        )));
+    // AssetManager is optional: missing service is not fatal.
+    let assets = AssetServiceClient::new(newengine_core::plugins::default_host_api());
+    let assets_available =
+        newengine_core::plugins::has_service(newengine_assets::consts::ASSET_SERVICE_ID);
+
+    if assets_available {
+        mount_asset_roots_best_effort(&assets, &asset_roots);
+    } else {
+        log::warn!(
+            "editor startup: AssetManager service '{}' not found; running in degraded mode",
+            newengine_assets::consts::ASSET_SERVICE_ID
+        );
     }
 
-    // 2.1) Mount editor-local assets directory into AssetManager.
-    // This keeps the editor self-contained: icons, UI markup, shader fallbacks, etc.
-    {
-        let assets = AssetServiceClient::new(newengine_core::plugins::default_host_api());
-
-        fn try_mount(assets: &AssetServiceClient, path: &std::path::Path) {
-            if !path.is_dir() {
-                return;
-            }
-
-            let p = path.to_string_lossy().to_string();
-            if let Err(e) = assets.mount_dir(&p) {
-                log::error!(
-                    "editor startup: asset.mount_dir failed path='{}' err='{}'",
-                    path.display(),
-                    e
-                );
-            }
-        }
-
-        // 1) Explicit override.
-        if let Ok(p) = std::env::var("NEWENGINE_EDITOR_ASSETS_DIR") {
-            try_mount(&assets, std::path::Path::new(&p));
-        }
-
-        // 2) Next to the executable.
-        if let Ok(exe) = std::env::current_exe() {
-            if let Some(dir) = exe.parent() {
-                try_mount(&assets, &dir.join("assets"));
-            }
-        }
-
-        // 3) Dev mode: search for `apps/editor/assets` upwards.
-        if let Ok(exe) = std::env::current_exe() {
-            let mut cur = exe.parent().map(|p| p.to_path_buf());
-            for _ in 0..6 {
-                let Some(base) = cur.clone() else { break };
-                let cand = base.join("apps").join("editor").join("assets");
-                if cand.is_dir() {
-                    try_mount(&assets, &cand);
-                    break;
-                }
-                cur = base.parent().map(|p| p.to_path_buf());
-            }
-        }
-    }
-
-    // 3) Resolve window icon via AssetManager service.
-    let icon = try_load_window_icon(&startup);
+    // 3) Resolve window icon (best-effort).
+    let icon = try_load_window_icon_best_effort(
+        &startup,
+        if assets_available { Some(&assets) } else { None },
+        &asset_roots,
+    );
 
     let mut winit_cfg = winit_config_from_startup(&startup);
     winit_cfg.icon = icon;
@@ -296,26 +344,35 @@ fn main_impl() -> EngineResult<()> {
         ))),
     };
 
-    // Load markup via AssetManager service (no AssetStore in-process).
-    if !matches!(
-        startup.ui_backend,
-        newengine_core::startup::UiBackend::Disabled
-    ) {
-        let assets = AssetServiceClient::new(newengine_core::plugins::default_host_api());
+    // Load markup best-effort (AssetManager -> filesystem roots).
+    if ui_build.is_some() {
+        let assets_opt: Option<&dyn newengine_ui::AssetAccess> =
+            if assets_available { Some(&assets) } else { None };
 
-        let doc = UiMarkupDoc::load(&assets, UI_MARKUP_PATH, Duration::from_millis(250))
-            .map_err(|e| EngineError::other(format!("ui: load failed: {e}")))?;
-
-        if let Ok(mut g) = shared_doc.lock() {
-            *g = Some(doc);
+        match UiMarkupDoc::load_best_effort(
+            assets_opt,
+            &asset_roots,
+            UI_MARKUP_PATH,
+            Duration::from_millis(250),
+        ) {
+            Ok(doc) => {
+                if let Ok(mut g) = shared_doc.lock() {
+                    *g = Some(doc);
+                }
+            }
+            Err(e) => {
+                log::warn!(
+                    "ui markup: load failed path='{}' err='{}' (degraded mode)",
+                    UI_MARKUP_PATH,
+                    e
+                );
+            }
         }
     }
 
     let startup_for_after = Arc::clone(&startup);
 
     run_winit_app_with_config(engine, winit_cfg, ui_build, move |_engine| {
-        // Window-dependent work is handled by modules via WinitWindowHandles.
-        // Keep this closure intentionally minimal.
         let _startup = &startup_for_after;
         Ok(())
     })?;
