@@ -25,16 +25,8 @@ pub fn call_service_utf8(
     service_id: &str,
     method: &str,
 ) -> Option<String> {
-    let c = newengine_core::plugins::host_context::ctx();
-
-    let svc = {
-        let g = c.services.lock().ok()?;
-        g.get(service_id)?.service.clone()
-    };
-
-    let res = svc.call(RString::from(method), Blob::from(Vec::new()));
-    let blob = res.into_result().ok()?;
-    let bytes: Vec<u8> = blob.into_vec();
+    let bytes = newengine_core::host_services::call_service_v1_optional(service_id, method, &[])
+        .ok()??;
     Some(String::from_utf8_lossy(&bytes).to_string())
 }
 /// Polls input snapshot from the canonical INPUT plugin and maps it into UiInputFrame.

@@ -2,6 +2,7 @@
 
 use newengine_plugin_api::{Blob, CapabilityId, HostApiV1, MethodName};
 use serde::Serialize;
+use std::cell::Cell;
 use std::sync::OnceLock;
 
 /// Well-known service id exposed by the logging plugin.
@@ -30,6 +31,31 @@ struct ForwardToPluginLogger {
     sink_id: CapabilityId,
 }
 
+thread_local! {
+    static IN_FORWARD_LOG: Cell<bool> = const { Cell::new(false) };
+}
+
+struct ForwardGuard;
+
+impl Drop for ForwardGuard {
+    #[inline]
+    fn drop(&mut self) {
+        IN_FORWARD_LOG.with(|f| f.set(false));
+    }
+}
+
+#[inline]
+fn try_enter_forward_guard() -> Option<ForwardGuard> {
+    IN_FORWARD_LOG.with(|f| {
+        if f.get() {
+            None
+        } else {
+            f.set(true);
+            Some(ForwardGuard)
+        }
+    })
+}
+
 impl ForwardToPluginLogger {
     #[inline]
     fn send_json(&self, method: &str, json: Vec<u8>) {
@@ -54,6 +80,20 @@ impl log::Log for ForwardToPluginLogger {
             return;
         }
 
+        // Prevent re-entrant forwarding loops.
+        // Example: the sink plugin logs via `log::*` while processing `write_json`.
+        let _guard = match try_enter_forward_guard() {
+            Some(g) => g,
+            None => {
+                return;
+            }
+        };
+
+        // Do not forward logs produced by this module itself.
+        if record.target().starts_with("newengine_core::plugins::forward_logger") {
+            return;
+        }
+
         let wire = LogRecordWire {
             level: record.level().as_str(),
             target: record.target(),
@@ -72,6 +112,13 @@ impl log::Log for ForwardToPluginLogger {
     }
 
     fn flush(&self) {
+        let _guard = match try_enter_forward_guard() {
+            Some(g) => g,
+            None => {
+                return;
+            }
+        };
+
         self.send_json(METHOD_FLUSH, Vec::new());
     }
 }

@@ -5,6 +5,7 @@ use newengine_plugin_api::{Blob, EventSinkV1Dyn, ServiceV1Dyn};
 
 use newengine_math::collections::prelude::*;
 use std::cell::RefCell;
+use std::panic;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, OnceLock};
 
@@ -151,11 +152,38 @@ pub fn publish_event(topic: &str, payload: &[u8]) -> Result<(), String> {
     };
 
     for s in sinks {
+        let owner = s.owner_plugin_id.clone();
+
         let mut guard = match s.sink.lock() {
             Ok(v) => v,
-            Err(e) => e.into_inner(),
+            Err(_) => {
+                if let Some(pid) = owner.as_deref() {
+                    log::error!("events: sink mutex poisoned owner='{}' topic='{}'", pid, topic);
+                    unregister_by_owner(pid);
+                } else {
+                    log::error!("events: sink mutex poisoned owner='<none>' topic='{}'", topic);
+                }
+                continue;
+            }
         };
-        let _ = guard.on_event(RString::from(topic), Blob::from(payload.to_vec()));
+
+        let res = panic::catch_unwind(panic::AssertUnwindSafe(|| {
+            match owner.as_deref() {
+                Some(pid) => with_current_plugin_id(pid, || {
+                    guard.on_event(RString::from(topic), Blob::from(payload.to_vec()))
+                }),
+                None => guard.on_event(RString::from(topic), Blob::from(payload.to_vec())),
+            }
+        }));
+
+        if res.is_err() {
+            if let Some(pid) = owner.as_deref() {
+                log::error!("events: sink panicked owner='{}' topic='{}'", pid, topic);
+                unregister_by_owner(pid);
+            } else {
+                log::error!("events: sink panicked owner='<none>' topic='{}'", topic);
+            }
+        }
     }
 
     Ok(())

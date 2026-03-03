@@ -6,6 +6,7 @@ use newengine_plugin_api::{
     Blob, CapabilityId, EventSinkV1Dyn, HostApiV1, MethodName, ServiceV1Dyn,
 };
 use std::cell::Cell;
+use std::panic;
 use std::sync::Arc;
 
 thread_local! {
@@ -94,14 +95,14 @@ pub(crate) extern "C" fn call_service_v1(
     let id = cap_id.to_string();
     let c = ctx();
 
-    let svc = {
+    let (svc, owner) = {
         let g = match c.services.lock() {
             Ok(v) => v,
             Err(_) => return RResult::RErr(RString::from("services mutex poisoned")),
         };
 
         match g.get(&id) {
-            Some(v) => v.service.clone(),
+            Some(v) => (v.service.clone(), v.owner_plugin_id.clone()),
             None => return RResult::RErr(RString::from(format!("service not found: {id}"))),
         }
     };
@@ -114,7 +115,31 @@ pub(crate) extern "C" fn call_service_v1(
         payload.len()
     )); */
 
-    let res = svc.call(method.clone(), payload);
+    let res = panic::catch_unwind(panic::AssertUnwindSafe(|| {
+        match owner.as_deref() {
+            Some(pid) => crate::plugins::host_context::with_current_plugin_id(pid, || {
+                svc.call(method.clone(), payload)
+            }),
+            None => svc.call(method.clone(), payload),
+        }
+    }));
+
+    let res = match res {
+        Ok(v) => v,
+        Err(_) => {
+            let owner_for_log = owner.as_deref().unwrap_or("<none>");
+            log::error!(
+                "services: panic in call id='{}' method='{}' owner='{}'",
+                id,
+                method,
+                owner_for_log
+            );
+            if let Some(pid) = owner.as_deref() {
+                crate::plugins::host_context::unregister_by_owner(pid);
+            }
+            return RResult::RErr(RString::from("service panicked"));
+        }
+    };
 
     match &res {
         /* RResult::ROk(b) => debug_no_recurse(format_args!(
