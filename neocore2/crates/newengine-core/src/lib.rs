@@ -18,13 +18,13 @@ pub mod startup;
 pub mod sync;
 mod system_info;
 
-pub use host_services::{call_service_v1, describe_service, list_service_ids};
+pub use host_services::{call_service_v1, call_service_v1_optional, describe_service, list_service_ids};
 
 pub use newengine_service_api::{InterfaceId, ServiceInterface, ServiceKey};
 pub use services_registry::{ErasedService, MissingServicePolicy, ServiceRegistry};
 
 pub use bus::Bus;
-pub use engine::{Engine, EngineConfig};
+pub use engine::{Engine, EngineConfig, ModuleFaultTolerance};
 pub use error::{EngineError, EngineResult, ModuleStage};
 pub use error_reporter::{EngineErrorReporter, EngineErrorReporterConfig};
 pub use events::{EventHub, EventSub};

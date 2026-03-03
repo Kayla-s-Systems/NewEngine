@@ -5,10 +5,11 @@ mod contracts;
 mod core;
 mod frame_loop;
 mod module_boot;
+mod module_slot;
 mod panic;
 mod plugins;
 mod run_stage;
 mod timing;
 
-pub use config::EngineConfig;
+pub use config::{EngineConfig, ModuleFaultTolerance};
 pub use core::Engine;

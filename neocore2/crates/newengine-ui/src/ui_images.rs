@@ -1,5 +1,6 @@
 #![forbid(unsafe_op_in_unsafe_fn)]
 
+use crate::asset::{AssetAccess, AssetState};
 // -------------------------------------------------------------------------------------------------
 // Stub (default): no image decoding feature.
 //
@@ -53,7 +54,6 @@ impl UiImageLoader {
 mod with_images {
     use super::*;
     use image::GenericImageView;
-    use newengine_assets::AssetState;
     use newengine_math::collections::FxHashMap;
 
     type TexHandle = egui::TextureHandle;
@@ -289,6 +289,5 @@ mod with_images {
     }
 }
 
-use newengine_assets::AssetAccess;
 #[cfg(all(feature = "egui", feature = "images"))]
 pub use with_images::UiImageLoader;

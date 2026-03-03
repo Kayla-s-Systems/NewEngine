@@ -6,11 +6,12 @@ use crate::module::ApiVersion;
 use std::collections::HashMap;
 
 impl<E: Send + 'static> Engine<E> {
-    pub(super) fn validate_api_contracts(&self) -> EngineResult<()> {
+    pub(super) fn validate_api_contracts_strict(&self) -> EngineResult<()> {
         let mut provided: HashMap<&'static str, ApiVersion> = HashMap::new();
         let mut provider: HashMap<&'static str, &'static str> = HashMap::new();
 
-        for m in self.modules.iter() {
+        for s in self.modules.iter() {
+            let m = s.module.as_ref();
             for p in m.provides().iter() {
                 match provided.get(p.id) {
                     Some(v) if *v >= p.version => {}
@@ -22,7 +23,8 @@ impl<E: Send + 'static> Engine<E> {
             }
         }
 
-        for m in self.modules.iter() {
+        for s in self.modules.iter() {
+            let m = s.module.as_ref();
             for r in m.requires().iter() {
                 let Some(have) = provided.get(r.id) else {
                     return Err(EngineError::Other(format!(

@@ -5,6 +5,22 @@ use std::path::PathBuf;
 
 use crate::startup::StartupConfig;
 
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ModuleFaultTolerance {
+    /// Fail-fast: any module init/start/update error aborts the engine.
+    Strict,
+    /// Host-first: module failures disable the module (warn/error) and the engine keeps running.
+    Resilient,
+}
+
+impl Default for ModuleFaultTolerance {
+    #[inline]
+    fn default() -> Self {
+        Self::Resilient
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct EngineConfig {
     pub fixed_dt_ms: u32,
@@ -15,6 +31,9 @@ pub struct EngineConfig {
     /// The host exposes these overrides to plugins via the `newengine.config.v1` service.
     /// Plugins are expected to merge overrides into their own base configuration.
     pub plugin_overrides: HashMap<String, Value>,
+
+    /// Controls how the engine handles module failures (missing deps / errors).
+    pub module_fault_tolerance: ModuleFaultTolerance,
 
     /// Controls how the engine reacts to panics inside module callbacks.
     ///
@@ -30,6 +49,7 @@ impl Default for EngineConfig {
             fixed_dt_ms: 16,
             plugins_dir: None,
             plugin_overrides: HashMap::new(),
+            module_fault_tolerance: ModuleFaultTolerance::Resilient,
             catch_panics: true,
         }
     }
@@ -42,6 +62,7 @@ impl EngineConfig {
             fixed_dt_ms,
             plugins_dir: None,
             plugin_overrides: HashMap::new(),
+            module_fault_tolerance: ModuleFaultTolerance::Resilient,
             catch_panics: true,
         }
     }
@@ -67,6 +88,12 @@ impl EngineConfig {
     #[inline]
     pub fn with_plugin_overrides(mut self, overrides: HashMap<String, Value>) -> Self {
         self.plugin_overrides = overrides;
+        self
+    }
+
+    #[inline]
+    pub fn with_module_fault_tolerance(mut self, mode: ModuleFaultTolerance) -> Self {
+        self.module_fault_tolerance = mode;
         self
     }
 

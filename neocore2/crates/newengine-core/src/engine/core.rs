@@ -13,13 +13,15 @@ use std::collections::HashSet;
 use std::path::PathBuf;
 use std::time::Instant;
 
-use super::EngineConfig;
+use super::module_slot::ModuleSlot;
+use super::{EngineConfig, ModuleFaultTolerance};
 
 pub struct Engine<E: Send + 'static> {
     pub(super) fixed_dt: f32,
     pub(super) catch_panics: bool,
     pub(super) services: Box<dyn Services>,
-    pub(super) modules: Vec<Box<dyn Module<E>>>,
+    pub(super) modules: Vec<ModuleSlot<E>>,
+    pub(super) module_fault_tolerance: ModuleFaultTolerance,
     pub(super) module_ids: HashSet<&'static str>,
 
     pub resources: Resources,
@@ -131,6 +133,7 @@ impl<E: Send + 'static> Engine<E> {
             catch_panics: config.catch_panics,
             services,
             modules: Vec::new(),
+            module_fault_tolerance: config.module_fault_tolerance,
             module_ids: HashSet::new(),
 
             resources,
@@ -173,7 +176,7 @@ impl<E: Send + 'static> Engine<E> {
             )));
         }
 
-        self.modules.push(module);
+        self.modules.push(ModuleSlot::new(module));
         self.module_ids.insert(id);
         Ok(())
     }

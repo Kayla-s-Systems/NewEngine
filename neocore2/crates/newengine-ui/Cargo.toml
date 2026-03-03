@@ -10,12 +10,18 @@ egui = ["provider-egui"]
 provider-egui = ["dep:winit", "dep:egui", "dep:egui-winit"]
 provider-null = []
 
+# Optional adapter to the AssetManager crate.
+#
+# Keeping this behind a feature allows `newengine-ui` to be used in tools/headless builds
+# or minimal hosts without pulling the whole asset pipeline.
+assets = ["dep:newengine-assets"]
+
 # Image decoding for UI textures (icons, textured widgets).
 images = ["dep:image"]
 
 [dependencies]
 newengine-plugin-api = { path = "../newengine-plugin-api" }
-newengine-assets = { path = "../newengine-assets" }
+newengine-assets = { path = "../newengine-assets", optional = true }
 newengine-math = { path = "../newengine-math" }
 roxmltree = "0.21.1"
 smallvec = "1.13"
