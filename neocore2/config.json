@@ -56,29 +56,28 @@
         ],
         "rescan_interval_ms": 0
       },
-      "layers": {
-        "mounts": [
-          {
-            "type": "overlay",
-            "priority": 100
-          },
-          {
-            "type": "disk",
-            "path": "assets/",
-            "priority": 80
-          },
-          {
-            "type": "pak",
-            "path": "content/",
-            "priority": 60
-          },
-          {
-            "type": "http",
-            "url": "https://cdn.game.com/",
-            "priority": 20
-          }
-        ]
-      }
+      "layers": [
+        {
+          "type": "dir",
+          "priority": 100,
+          "path": "assets/",
+          "mount": ""
+        },
+        {
+          "type": "pak_glob",
+          "priority": 60,
+          "dir": "content/",
+          "pattern": "*",
+          "mount": ""
+        },
+        {
+          "type": "pak_glob",
+          "priority": 80,
+          "dir": "assets/",
+          "pattern": "*",
+          "mount": ""
+        }
+      ]
     }
   }
 }
