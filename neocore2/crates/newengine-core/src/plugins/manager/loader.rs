@@ -11,7 +11,9 @@ use newengine_plugin_api::{
     PluginRootV1Ref,
 };
 
-use crate::plugins::host_context::{unregister_by_owner, with_current_plugin_id};
+use crate::plugins::host_context::{
+    register_plugin_descriptor, unregister_by_owner, with_current_plugin_id,
+};
 use crate::plugins::plugin_config_service::get_plugin_overrides_with_env;
 
 use super::adapter::{ModuleAdapterAny, V1Adapter, V2Adapter, V3Adapter};
@@ -87,6 +89,11 @@ impl PluginManager {
                 id_str,
                 path.display()
             );
+        }
+
+        // Register descriptor metadata for runtime validation (services/sinks).
+        if let Some(d) = descriptor.clone() {
+            register_plugin_descriptor(&id_str, d);
         }
 
         init_with_overrides(

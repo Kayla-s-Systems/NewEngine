@@ -22,42 +22,23 @@ pub fn call_service_v1(
     }
 }
 
-#[inline]
-#[inline]
 pub fn call_service_v1_optional(
     capability_id: &str,
     method: &str,
     payload: &[u8],
 ) -> Result<Option<Vec<u8>>, String> {
-    // Fast path: check registry first (no allocation if missing).
-    let c = host_context::ctx();
-    let g = match c.services.lock() {
-        Ok(v) => v,
-        Err(_) => return Ok(None),
-    };
-    if !g.contains_key(capability_id) {
+    // Fast path: avoid any allocation if missing.
+    if !crate::plugins::has_service(capability_id) {
         return Ok(None);
     }
-    drop(g);
     call_service_v1(capability_id, method, payload).map(Some)
 }
 
 pub fn list_service_ids() -> Vec<String> {
-    let c = host_context::ctx();
-    let g = match c.services.lock() {
-        Ok(v) => v,
-        Err(_) => return Vec::new(),
-    };
-
-    let mut out: Vec<String> = g.keys().cloned().collect();
-    out.sort();
-    out
+    crate::plugins::list_services()
 }
 
 #[inline]
 pub fn describe_service(service_id: &str) -> Option<String> {
-    let c = host_context::ctx();
-    let g = c.services.lock().ok()?;
-    let svc = g.get(service_id)?.clone();
-    Some(svc.describe_json.to_string())
+    host_context::describe_service(service_id)
 }

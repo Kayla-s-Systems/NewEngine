@@ -1,23 +1,25 @@
 #![forbid(unsafe_op_in_unsafe_fn)]
 
 use abi_stable::std_types::RString;
-use newengine_plugin_api::{Blob, EventSinkV1Dyn, ServiceV1Dyn};
+use newengine_plugin_api::{
+    Blob, CapabilityKind, CapabilityRole, EventSinkV1Dyn, PluginDescriptor, ServiceV1Dyn,
+};
 
 use newengine_math::collections::prelude::*;
 use std::cell::RefCell;
-use std::panic;
+use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, OnceLock};
 
 #[derive(Clone)]
-pub struct ServiceEntry {
+pub(crate) struct ServiceEntry {
     pub owner_plugin_id: Option<String>,
     pub service: Arc<ServiceV1Dyn<'static>>,
     pub describe_json: String,
 }
 
 #[derive(Clone)]
-pub struct EventSinkEntry {
+pub(crate) struct EventSinkEntry {
     pub owner_plugin_id: Option<String>,
     pub sink: Arc<Mutex<EventSinkV1Dyn<'static>>>,
 }
@@ -50,11 +52,17 @@ pub(crate) fn current_plugin_id() -> Option<String> {
     CURRENT_PLUGIN_ID.with(|c| (*c.borrow()).clone())
 }
 
-pub struct HostContext {
-    pub services: Mutex<NeHashMap<String, ServiceEntry>>,
+pub(crate) struct HostContext {
+    pub(crate) services: Mutex<NeHashMap<String, ServiceEntry>>,
     services_generation: AtomicU64,
 
     pub(crate) event_sinks: Mutex<Vec<EventSinkEntry>>,
+
+    /// Declared plugin descriptors keyed by plugin id.
+    ///
+    /// This is host-owned metadata used to validate runtime registrations (services/sinks)
+    /// against the plugin's declared capabilities.
+    pub(crate) plugin_descriptors: Mutex<NeHashMap<String, PluginDescriptor>>,
 }
 
 static HOST_CTX: OnceLock<Arc<HostContext>> = OnceLock::new();
@@ -68,6 +76,7 @@ fn make_default_ctx() -> Arc<HostContext> {
         services: Mutex::new(NeHashMap::default()),
         services_generation: AtomicU64::new(1),
         event_sinks: Mutex::new(Vec::new()),
+        plugin_descriptors: Mutex::new(NeHashMap::default()),
     })
 }
 
@@ -85,7 +94,7 @@ pub fn init_host_context() {
 ///
 /// This function never panics: if the context wasn't explicitly initialized yet,
 /// it will be lazily created.
-pub fn ctx() -> Arc<HostContext> {
+pub(crate) fn ctx() -> Arc<HostContext> {
     HOST_CTX.get_or_init(make_default_ctx).clone()
 }
 
@@ -125,6 +134,14 @@ pub fn list_services() -> Vec<String> {
     out
 }
 
+/// Returns the `describe()` JSON for the given service id, if present.
+#[inline]
+pub fn describe_service(service_id: &str) -> Option<String> {
+    let c = ctx();
+    let g = c.services.lock().ok()?;
+    Some(g.get(service_id)?.describe_json.clone())
+}
+
 pub fn subscribe_event_sink(sink: EventSinkV1Dyn<'static>) -> Result<(), String> {
     let c = ctx();
     let mut g = match c.event_sinks.lock() {
@@ -151,38 +168,60 @@ pub fn publish_event(topic: &str, payload: &[u8]) -> Result<(), String> {
         g.clone()
     };
 
+    // Avoid per-sink payload construction by cloning a single Vec.
+    let payload_vec: Vec<u8> = payload.to_vec();
+
+    let mut bad_owners: Vec<String> = Vec::new();
+
     for s in sinks {
         let owner = s.owner_plugin_id.clone();
 
         let mut guard = match s.sink.lock() {
             Ok(v) => v,
             Err(_) => {
-                if let Some(pid) = owner.as_deref() {
-                    log::error!("events: sink mutex poisoned owner='{}' topic='{}'", pid, topic);
-                    unregister_by_owner(pid);
+                if let Some(pid) = owner {
+                    log::error!(
+                        "events: sink mutex poisoned; owner='{}' topic='{}' (auto-unregister)",
+                        pid,
+                        topic
+                    );
+                    bad_owners.push(pid);
                 } else {
-                    log::error!("events: sink mutex poisoned owner='<none>' topic='{}'", topic);
+                    log::error!("events: sink mutex poisoned; owner=<host> topic='{}'", topic);
                 }
                 continue;
             }
         };
 
-        let res = panic::catch_unwind(panic::AssertUnwindSafe(|| {
-            match owner.as_deref() {
-                Some(pid) => with_current_plugin_id(pid, || {
-                    guard.on_event(RString::from(topic), Blob::from(payload.to_vec()))
-                }),
-                None => guard.on_event(RString::from(topic), Blob::from(payload.to_vec())),
-            }
-        }));
+        let call = || {
+            // Blob is consumed by on_event(); clone bytes per sink.
+            let _ = guard.on_event(RString::from(topic), Blob::from(payload_vec.clone()));
+        };
 
-        if res.is_err() {
-            if let Some(pid) = owner.as_deref() {
-                log::error!("events: sink panicked owner='{}' topic='{}'", pid, topic);
-                unregister_by_owner(pid);
+        let r = match owner.as_deref() {
+            Some(pid) => catch_unwind(AssertUnwindSafe(|| with_current_plugin_id(pid, call))),
+            None => catch_unwind(AssertUnwindSafe(call)),
+        };
+
+        if r.is_err() {
+            if let Some(pid) = owner {
+                log::error!(
+                    "events: sink panicked; owner='{}' topic='{}' (auto-unregister)",
+                    pid,
+                    topic
+                );
+                bad_owners.push(pid);
             } else {
-                log::error!("events: sink panicked owner='<none>' topic='{}'", topic);
+                log::error!("events: sink panicked; owner=<host> topic='{}'", topic);
             }
+        }
+    }
+
+    if !bad_owners.is_empty() {
+        bad_owners.sort();
+        bad_owners.dedup();
+        for pid in bad_owners {
+            unregister_by_owner(&pid);
         }
     }
 
@@ -221,4 +260,53 @@ pub fn unregister_by_owner(owner_plugin_id: &str) {
         };
         g.retain(|ent| ent.owner_plugin_id.as_deref() != Some(owner_plugin_id));
     }
+
+    // Also drop declared descriptor to keep metadata consistent with lifecycle.
+    {
+        let mut g = match c.plugin_descriptors.lock() {
+            Ok(v) => v,
+            Err(e) => e.into_inner(),
+        };
+        g.remove(owner_plugin_id);
+    }
+}
+
+/// Registers a plugin descriptor (host-owned metadata) for runtime validation.
+///
+/// Called by the plugin loader *before* `init()` so that service registrations during
+/// init can be validated against declared capabilities.
+pub(crate) fn register_plugin_descriptor(plugin_id: &str, d: PluginDescriptor) {
+    let c = ctx();
+    let mut g = match c.plugin_descriptors.lock() {
+        Ok(v) => v,
+        Err(e) => e.into_inner(),
+    };
+    g.insert(plugin_id.to_owned(), d);
+}
+
+/// Returns:
+/// - `Some(true)` if the plugin has a descriptor and declares `Provides(ServiceV1, service_id)`.
+/// - `Some(false)` if the plugin has a descriptor but does not declare that capability.
+/// - `None` if the plugin has no known descriptor (ABI v1 or loader did not register it).
+pub(crate) fn plugin_declares_provided_service(
+    plugin_id: &str,
+    service_id: &str,
+) -> Option<bool> {
+    let c = ctx();
+    let g = c.plugin_descriptors.lock().ok()?;
+    let d = g.get(plugin_id)?;
+
+    for cap in d.capabilities.iter() {
+        if cap.role != CapabilityRole::Provides {
+            continue;
+        }
+        if cap.kind != CapabilityKind::ServiceV1 {
+            continue;
+        }
+        if cap.id.as_str() == service_id {
+            return Some(true);
+        }
+    }
+
+    Some(false)
 }

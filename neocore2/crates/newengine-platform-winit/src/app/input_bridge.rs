@@ -1,22 +1,12 @@
 #![forbid(unsafe_op_in_unsafe_fn)]
 
-use abi_stable::std_types::RString;
 use newengine_core::Engine;
-use newengine_plugin_api::Blob;
 use newengine_ui::UiInputFrame;
 
 /// Emits JSON event into plugin host context.
 #[inline]
 pub fn emit_plugin_json(topic: &'static str, value: serde_json::Value) {
-    let bytes = match serde_json::to_vec(&value) {
-        Ok(b) => b,
-        Err(_) => return,
-    };
-
-    let _ = newengine_core::plugins::host_context::emit_plugin_event(
-        RString::from(topic),
-        Blob::from(bytes),
-    );
+    let _ = newengine_core::plugins::emit_plugin_json(topic, &value);
 }
 
 /// Calls a service method returning UTF-8 payload (best-effort).
@@ -25,7 +15,7 @@ pub fn call_service_utf8(
     service_id: &str,
     method: &str,
 ) -> Option<String> {
-    let bytes = newengine_core::host_services::call_service_v1_optional(service_id, method, &[])
+    let bytes = newengine_core::call_service_v1_optional(service_id, method, &[])
         .ok()??;
     Some(String::from_utf8_lossy(&bytes).to_string())
 }

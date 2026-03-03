@@ -6,7 +6,7 @@ use newengine_plugin_api::{
     Blob, CapabilityId, EventSinkV1Dyn, HostApiV1, MethodName, ServiceV1Dyn,
 };
 use std::cell::Cell;
-use std::panic;
+use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::sync::Arc;
 
 thread_local! {
@@ -46,6 +46,27 @@ pub(crate) fn host_register_service_impl(svc: ServiceV1Dyn<'static>) -> RResult<
     let describe_json = svc.describe().to_string();
     let owner = crate::plugins::host_context::current_plugin_id();
     let owner_for_log = owner.as_deref().unwrap_or("<none>").to_string();
+
+    // Enforce declared capabilities for ABI v2/v3 plugins.
+    // ABI v1 plugins have no descriptor -> best-effort allow with warning.
+    if let Some(pid) = owner.as_deref() {
+        match crate::plugins::host_context::plugin_declares_provided_service(pid, &service_id) {
+            Some(true) => {}
+            Some(false) => {
+                return RResult::RErr(RString::from(format!(
+                    "service not declared in descriptor: plugin='{}' service='{}'",
+                    pid, service_id
+                )));
+            }
+            None => {
+                log::warn!(
+                    "services: plugin has no descriptor; skipping capability validation plugin='{}' service='{}'",
+                    pid,
+                    service_id
+                );
+            }
+        }
+    }
 
     let c = ctx();
 
@@ -115,30 +136,30 @@ pub(crate) extern "C" fn call_service_v1(
         payload.len()
     )); */
 
-    let res = panic::catch_unwind(panic::AssertUnwindSafe(|| {
-        match owner.as_deref() {
-            Some(pid) => crate::plugins::host_context::with_current_plugin_id(pid, || {
-                svc.call(method.clone(), payload)
-            }),
-            None => svc.call(method.clone(), payload),
-        }
-    }));
+    let do_call = || svc.call(method.clone(), payload);
 
-    let res = match res {
-        Ok(v) => v,
-        Err(_) => {
-            let owner_for_log = owner.as_deref().unwrap_or("<none>");
+    let res = match owner.as_deref() {
+        Some(pid) => catch_unwind(AssertUnwindSafe(|| {
+            crate::plugins::host_context::with_current_plugin_id(pid, do_call)
+        }))
+            .unwrap_or_else(|_| {
             log::error!(
-                "services: panic in call id='{}' method='{}' owner='{}'",
+                "services: call panicked id='{}' method='{}' owner='{}' (auto-unregister)",
                 id,
                 method,
-                owner_for_log
+                pid
             );
-            if let Some(pid) = owner.as_deref() {
                 crate::plugins::host_context::unregister_by_owner(pid);
-            }
-            return RResult::RErr(RString::from("service panicked"));
-        }
+                RResult::RErr(RString::from("service panicked"))
+            }),
+        None => catch_unwind(AssertUnwindSafe(do_call)).unwrap_or_else(|_| {
+            log::error!(
+                "services: call panicked id='{}' method='{}' owner=<host>",
+                id,
+                method
+            );
+            RResult::RErr(RString::from("service panicked"))
+        }),
     };
 
     match &res {

@@ -35,24 +35,23 @@ thread_local! {
     static IN_FORWARD_LOG: Cell<bool> = const { Cell::new(false) };
 }
 
-struct ForwardGuard;
-
-impl Drop for ForwardGuard {
-    #[inline]
-    fn drop(&mut self) {
-        IN_FORWARD_LOG.with(|f| f.set(false));
-    }
-}
-
 #[inline]
-fn try_enter_forward_guard() -> Option<ForwardGuard> {
-    IN_FORWARD_LOG.with(|f| {
-        if f.get() {
-            None
-        } else {
-            f.set(true);
-            Some(ForwardGuard)
+fn with_reentrancy_guard(f: impl FnOnce()) {
+    IN_FORWARD_LOG.with(|c| {
+        if c.get() {
+            return;
         }
+        c.set(true);
+
+        struct Restore<'a>(&'a Cell<bool>);
+        impl<'a> Drop for Restore<'a> {
+            fn drop(&mut self) {
+                self.0.set(false);
+            }
+        }
+
+        let _restore = Restore(c);
+        f();
     })
 }
 
@@ -80,46 +79,29 @@ impl log::Log for ForwardToPluginLogger {
             return;
         }
 
-        // Prevent re-entrant forwarding loops.
-        // Example: the sink plugin logs via `log::*` while processing `write_json`.
-        let _guard = match try_enter_forward_guard() {
-            Some(g) => g,
-            None => {
-                return;
-            }
-        };
+        with_reentrancy_guard(|| {
+            let wire = LogRecordWire {
+                level: record.level().as_str(),
+                target: record.target(),
+                module_path: record.module_path(),
+                file: record.file(),
+                line: record.line(),
+                message: record.args().to_string(),
+            };
 
-        // Do not forward logs produced by this module itself.
-        if record.target().starts_with("newengine_core::plugins::forward_logger") {
-            return;
-        }
+            let json = match serde_json::to_vec(&wire) {
+                Ok(v) => v,
+                Err(_) => return,
+            };
 
-        let wire = LogRecordWire {
-            level: record.level().as_str(),
-            target: record.target(),
-            module_path: record.module_path(),
-            file: record.file(),
-            line: record.line(),
-            message: record.args().to_string(),
-        };
-
-        let json = match serde_json::to_vec(&wire) {
-            Ok(v) => v,
-            Err(_) => return,
-        };
-
-        self.send_json(METHOD_WRITE_JSON, json);
+            self.send_json(METHOD_WRITE_JSON, json);
+        });
     }
 
     fn flush(&self) {
-        let _guard = match try_enter_forward_guard() {
-            Some(g) => g,
-            None => {
-                return;
-            }
-        };
-
-        self.send_json(METHOD_FLUSH, Vec::new());
+        with_reentrancy_guard(|| {
+            self.send_json(METHOD_FLUSH, Vec::new());
+        });
     }
 }
 
@@ -140,17 +122,7 @@ pub fn install_forward_logger_once(host: HostApiV1) {
         return;
     }
 
-    // Check if the sink service exists.
-    let has_sink = {
-        let c = crate::plugins::host_context::ctx();
-        let g = match c.services.lock() {
-            Ok(v) => v,
-            Err(_) => return,
-        };
-        g.contains_key(&LOGGING_SINK_SERVICE_ID.to_string())
-    };
-
-    if !has_sink {
+    if !crate::plugins::has_service(LOGGING_SINK_SERVICE_ID) {
         return;
     }
 
