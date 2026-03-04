@@ -431,6 +431,18 @@ impl RenderApi for VulkanRenderApi {
     }
 
     fn end_frame(&mut self) -> EngineResult<()> {
+        // When the window is minimized (0x0) or the swapchain is out-of-date, VulkanRenderer
+        // intentionally suppresses frame begin. In that case we must treat end_frame as a no-op.
+        if !self.renderer.debug.in_frame {
+            self.recorded.clear();
+            self.active_render_target = None;
+            self.current_pipeline = None;
+            self.current_vertex = [None, None, None, None];
+            self.current_index = None;
+            self.current_bind_groups = [None, None, None, None];
+            return Ok(());
+        }
+
         unsafe {
             self.flush_recorded()?;
         }

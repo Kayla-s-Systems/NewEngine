@@ -2,9 +2,9 @@ mod error;
 mod render_api;
 mod vulkan;
 
-use newengine_core::host_events::{WindowHandles, WindowInitSize};
 use newengine_core::render::{RenderApiRef, RENDER_API_ID, RENDER_API_PROVIDE};
 use newengine_core::{EngineError, EngineResult, Module, ModuleCtx};
+use newengine_core::host_events::{WindowHandles, WindowInitSize};
 
 use crate::error::VkRenderError;
 use crate::render_api::VulkanRenderApi;

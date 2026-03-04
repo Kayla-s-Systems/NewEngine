@@ -54,6 +54,8 @@ where
 
     last_frame_instant: Option<Instant>,
     shutting_down: bool,
+
+    minimized: bool,
 }
 
 impl<E, F> App<E, F>
@@ -110,6 +112,8 @@ where
             ui_build,
             last_frame_instant: None,
             shutting_down: false,
+
+            minimized: false,
         }
     }
 
@@ -320,6 +324,14 @@ where
 
     #[inline]
     fn emit_resized(&mut self, width: u32, height: u32) {
+        let minimized = width == 0 || height == 0;
+        if minimized != self.minimized {
+            self.minimized = minimized;
+            let _ = self
+                .engine
+                .emit(HostEvent::Window(WindowHostEvent::MinimizedChanged(minimized)));
+        }
+
         self.engine
             .resources_mut()
             .insert(WinitWindowInitSize { width, height });

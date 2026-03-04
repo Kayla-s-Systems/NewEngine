@@ -18,6 +18,11 @@ pub enum WindowHostEvent {
         width: u32,
         height: u32,
     },
+    /// Window minimize/restore state change.
+    ///
+    /// On many platforms a minimized window reports a 0x0 inner size. This event allows
+    /// runtime systems (especially renderer backends) to suppress swapchain work deterministically.
+    MinimizedChanged(bool),
     Focused(bool),
     CloseRequested,
 
