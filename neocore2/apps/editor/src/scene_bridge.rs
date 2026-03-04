@@ -89,6 +89,15 @@ pub enum SceneCommand {
     },
 }
 
+/// Editor-only base material reference for primitives.
+///
+/// `MaterialRef` on a primitive points to an instance id produced by the editor.
+/// The selected base asset material is stored here so the inspector can show/edit it deterministically.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub struct PrimitiveMaterialBase {
+    pub id: MaterialId,
+}
+
 #[inline]
 fn place_spawn_position(base: Vec3, primitive_index: usize) -> Vec3 {
     // Deterministic, editor-friendly placement.
@@ -158,9 +167,9 @@ impl SceneBridge {
     pub fn materials_snapshot(&self) -> Vec<(String, MaterialId)> {
         let reg = self.materials.read();
         let mut out: Vec<(String, MaterialId)> = reg
-            .ids()
+            .snapshot()
             .into_iter()
-            .filter_map(|id| reg.name(id).map(|n| (n, id)))
+            .map(|it| (it.name, it.id))
             .collect();
         out.sort_by(|a, b| a.0.cmp(&b.0));
         out
@@ -348,10 +357,34 @@ impl SceneBridge {
             // World tick is driven by the render/controller loop (frame index).
             // Scene commands must not advance ticks implicitly.
 
-            let default_mat = self
-                .materials
-                .read()
-                .register_named("Default", MaterialDescriptor::default());
+            let mats = self.materials.read();
+            let default_mat = mats.register_named("Default", MaterialDescriptor::default());
+
+            #[inline]
+            fn ensure_primitive_base(world: &mut newengine_ecs::World, e: EntityId, base: MaterialId) {
+                let _ = world.insert(e, PrimitiveMaterialBase { id: base });
+            }
+
+            #[inline]
+            fn apply_primitive_instance(
+                world: &mut newengine_ecs::World,
+                mats: &MaterialRegistry,
+                e: EntityId,
+                base: MaterialId,
+                color: [f32; 4],
+            ) {
+                let inst_name = format!("__prim_{:016x}", e.stable_u64());
+                let overrides = MaterialOverrides {
+                    domain: Some(MaterialDomain::Surface),
+                    shading_model: Some(ShadingModel::Unlit),
+                    base_color: Some(color),
+                    ..MaterialOverrides::default()
+                };
+
+                let inst_id = mats.register_instance_named(base, &inst_name, overrides.clone());
+                let _ = mats.set_instance_overrides(inst_id, overrides);
+                let _ = world.insert(e, MaterialRef { id: inst_id });
+            }
 
             #[inline]
             fn ensure_root(scene: &mut Scene) -> EntityId {
@@ -404,7 +437,9 @@ impl SceneBridge {
                         let _ = newengine_transform::set_parent(world, e, Some(root));
 
                         let _ = world.insert(e, Primitive { id, color });
-                        let _ = world.insert(e, MaterialRef { id: default_mat });
+
+                        ensure_primitive_base(world, e, default_mat);
+                        apply_primitive_instance(world, &*mats, e, default_mat, color);
 
                         if let Some(t) = world.get_mut_tracked::<Transform>(e) {
                             t.position = spawn_pos;
@@ -440,32 +475,34 @@ impl SceneBridge {
                         }
 
                         let base = world
-                            .get::<MaterialRef>(entity)
-                            .map(|mr| mr.id)
-                            .filter(|id| id.is_valid())
+                            .get::<PrimitiveMaterialBase>(entity)
+                            .map(|x| x.id)
+                            .filter(|id| id.is_asset())
                             .unwrap_or(default_mat);
 
-                        let inst_name = format!("__prim_{:016x}", entity.stable_u64());
-                        let inst_id = self.materials.read().register_instance_named(
-                            base,
-                            &inst_name,
-                            MaterialOverrides {
-                                domain: Some(MaterialDomain::Surface),
-                                shading_model: Some(ShadingModel::Unlit),
-                                base_color: Some(color),
-                                ..MaterialOverrides::default()
-                            },
-                        );
-                        let _ = world.insert(entity, MaterialRef { id: inst_id });
+                        ensure_primitive_base(world, entity, base);
+                        apply_primitive_instance(world, &*mats, entity, base, color);
                     }
 
                     SceneCommand::SetMaterial { entity, material } => {
                         let world = scene.world_mut();
-                        let _ = world.insert(entity, MaterialRef { id: material });
+
+                        if world.get::<Primitive>(entity).is_some() {
+                            let base = if material.is_asset() { material } else { default_mat };
+                            let color = world
+                                .get::<Primitive>(entity)
+                                .map(|p| p.color)
+                                .unwrap_or([1.0, 1.0, 1.0, 1.0]);
+
+                            ensure_primitive_base(world, entity, base);
+                            apply_primitive_instance(world, &*mats, entity, base, color);
+                        } else {
+                            let _ = world.insert(entity, MaterialRef { id: material });
+                        }
                     }
 
                     SceneCommand::UpdateMaterial { material, desc } => {
-                        let _ = self.materials.read().set_desc(material, desc);
+                        let _ = mats.set_desc(material, desc);
                     }
 
                     SceneCommand::SpawnDirectionalLight {
@@ -600,37 +637,6 @@ impl SceneBridge {
                         }
                     }
                 }
-            }
-
-            let world = scene.world_mut();
-
-            let mut prim_updates = Vec::new();
-            for (e, p) in world.query::<Primitive>() {
-                let color = p.color;
-
-                let base = world
-                    .get::<MaterialRef>(e)
-                    .map(|mr| mr.id)
-                    .filter(|id| id.is_valid() && id.is_asset())
-                    .unwrap_or(default_mat);
-
-                let inst_name = format!("__prim_{:016x}", e.stable_u64());
-                let inst_id = self.materials.read().register_instance_named(
-                    base,
-                    &inst_name,
-                    MaterialOverrides {
-                        domain: Some(MaterialDomain::Surface),
-                        shading_model: Some(ShadingModel::Unlit),
-                        base_color: Some(color),
-                        ..MaterialOverrides::default()
-                    },
-                );
-
-                prim_updates.push((e, inst_id));
-            }
-
-            for (e, inst_id) in prim_updates {
-                let _ = world.insert(e, MaterialRef { id: inst_id });
             }
         }
 

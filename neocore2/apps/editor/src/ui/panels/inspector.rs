@@ -10,6 +10,8 @@ use newengine_scene::components::Name;
 use newengine_transform::GlobalTransform;
 use newengine_ui::BuiltinUiIcon;
 
+use crate::scene_bridge::PrimitiveMaterialBase;
+
 use super::super::EditorUiBuild;
 
 #[inline]
@@ -301,10 +303,15 @@ pub(crate) fn draw(me: &mut EditorUiBuild, ctx: &egui::Context) {
                     let scene = me.scene_bridge.scene();
                     let s = scene.read();
                     let w = s.world();
-                    let current = w
-                        .get::<MaterialRef>(e)
-                        .map(|mr| mr.id)
-                        .unwrap_or(MaterialId::invalid());
+                    let current = if w.get::<Primitive>(e).is_some() {
+                        w.get::<PrimitiveMaterialBase>(e)
+                            .map(|b| b.id)
+                            .unwrap_or(MaterialId::invalid())
+                    } else {
+                        w.get::<MaterialRef>(e)
+                            .map(|mr| mr.id)
+                            .unwrap_or(MaterialId::invalid())
+                    };
                     if current != me.insp_material {
                         me.scene_bridge.cmd_set_material(e, me.insp_material);
                     }

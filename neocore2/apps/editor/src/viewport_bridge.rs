@@ -233,8 +233,8 @@ impl ViewportBridge {
     #[inline]
     pub fn publish_pick_request(&self, x_px: f32, y_px: f32) {
         self.pick_xy
-            .store(Self::pack_f32x2(x_px, y_px), Ordering::Relaxed);
-        self.pick_seq.fetch_add(1, Ordering::Relaxed);
+            .store(Self::pack_f32x2(x_px, y_px), Ordering::Release);
+        self.pick_seq.fetch_add(1, Ordering::Release);
     }
 
     /// Read the latest pick request.
@@ -242,8 +242,8 @@ impl ViewportBridge {
     /// Returns (seq, x_px, y_px). The caller should track the last processed `seq`.
     #[inline]
     pub fn read_pick_request(&self) -> (u64, f32, f32) {
-        let seq = self.pick_seq.load(Ordering::Relaxed);
-        let (x, y) = Self::unpack_f32x2(self.pick_xy.load(Ordering::Relaxed));
+        let seq = self.pick_seq.load(Ordering::Acquire);
+        let (x, y) = Self::unpack_f32x2(self.pick_xy.load(Ordering::Acquire));
         (seq, x, y)
     }
 
@@ -253,19 +253,19 @@ impl ViewportBridge {
     /// Otherwise it will try to frame selection first.
     #[inline]
     pub fn publish_frame_request(&self, all: bool) {
-        self.frame_all.store(all as u64, Ordering::Relaxed);
-        self.frame_seq.fetch_add(1, Ordering::Relaxed);
+        self.frame_all.store(all as u64, Ordering::Release);
+        self.frame_seq.fetch_add(1, Ordering::Release);
     }
 
     /// Read the current frame request sequence.
     #[inline]
     pub fn read_frame_request(&self) -> u64 {
-        self.frame_seq.load(Ordering::Relaxed)
+        self.frame_seq.load(Ordering::Acquire)
     }
 
     #[inline]
     pub fn read_frame_all(&self) -> bool {
-        self.frame_all.load(Ordering::Relaxed) != 0
+        self.frame_all.load(Ordering::Acquire) != 0
     }
 
     /// Publish camera matrices and current viewport size (renderer -> UI).

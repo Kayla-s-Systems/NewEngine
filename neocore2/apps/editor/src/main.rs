@@ -3,8 +3,8 @@
 use crossbeam_channel::unbounded;
 
 use newengine_core::{
-    Bus, ConfigPaths, Engine, EngineConfig, EngineError, EngineResult, Services, ShutdownToken,
-    StartupConfig, StartupLoader,
+    Bus, ConfigPaths, Engine, EngineConfig, EngineError, EngineResult, ModuleFaultTolerance, PluginFaultTolerance,
+    Services, ShutdownToken, StartupConfig, StartupLoader,
 };
 
 use newengine_modules_render_vulkan_ash::VulkanAshRenderModule;
@@ -114,7 +114,10 @@ fn build_engine_from_startup(startup: &StartupConfig) -> EngineResult<Engine<()>
     let services: Box<dyn Services> = Box::new(app_services);
     let shutdown = ShutdownToken::new();
 
-    let config = EngineConfig::new(FIXED_DT_MS).with_plugins_dir(Some(startup.modules_dir.clone()));
+    let config = EngineConfig::new(FIXED_DT_MS)
+        .with_plugins_dir(Some(startup.modules_dir.clone()))
+        .with_module_fault_tolerance(ModuleFaultTolerance::Strict)
+        .with_plugin_fault_tolerance(PluginFaultTolerance::Strict);
 
     let engine: Engine<()> = Engine::new_with_config(config, services, bus, shutdown)?;
     Ok(engine)
@@ -205,7 +208,7 @@ fn try_load_window_icon_best_effort(
             }
         };
 
-        return match WinitAppIcon::from_png_bytes(&payload) {
+        return match WinitAppIcon::from_image_bytes(&payload) {
             Ok(icon) => Some(icon),
             Err(e) => {
                 log::warn!("window icon: decode failed path='{path}' err='{e}'");
@@ -233,7 +236,7 @@ fn try_load_window_icon_best_effort(
         }
 
         match std::fs::read(&c) {
-            Ok(bytes) => match WinitAppIcon::from_png_bytes(&bytes) {
+            Ok(bytes) => match WinitAppIcon::from_image_bytes(&bytes) {
                 Ok(icon) => return Some(icon),
                 Err(e) => {
                     log::warn!(
@@ -332,7 +335,7 @@ fn main_impl() -> EngineResult<()> {
     winit_cfg.icon = icon;
 
     // UI builder exists immediately; document is loaded after plugins are ready.
-    let shared_doc: Arc<Mutex<Option<UiMarkupDoc>>> = Arc::new(Mutex::new(None));
+    let shared_doc: Arc<Mutex<Option<Arc<UiMarkupDoc>>>> = Arc::new(Mutex::new(None));
     let ui_build: Option<Box<dyn UiBuildFn>> = match startup.ui_backend {
         newengine_core::startup::UiBackend::Disabled => None,
         _ => Some(Box::new(ui::EditorUiBuild::new(
@@ -357,7 +360,7 @@ fn main_impl() -> EngineResult<()> {
         ) {
             Ok(doc) => {
                 if let Ok(mut g) = shared_doc.lock() {
-                    *g = Some(doc);
+                    *g = Some(Arc::new(doc));
                 }
             }
             Err(e) => {

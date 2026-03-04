@@ -23,7 +23,7 @@ use newengine_viewport::Viewport;
 use newengine_editor_core::{EditorCommand, EditorState, TransformSnapshot};
 
 use crate::plugin_manager::PluginManagerUi;
-use crate::scene_bridge::SceneBridge;
+use crate::scene_bridge::{PrimitiveMaterialBase, SceneBridge};
 use crate::ui_contrib::plugin_manager::PluginManagerContributor;
 use crate::viewport_bridge::ViewportBridge;
 
@@ -49,7 +49,7 @@ impl Default for LightSpawnKind {
 ///
 /// Non-goals (for now): undo/redo, docking, command bus. Those will be layered on top.
 pub struct EditorUiBuild {
-    pub(crate) shared_doc: Arc<Mutex<Option<UiMarkupDoc>>>,
+    pub(crate) shared_doc: Arc<Mutex<Option<Arc<UiMarkupDoc>>>>,
 
     pub(crate) viewport: Viewport,
 
@@ -112,7 +112,7 @@ pub(crate) struct PendingPick {
 impl EditorUiBuild {
     #[inline]
     pub fn new(
-        shared_doc: Arc<Mutex<Option<UiMarkupDoc>>>,
+        shared_doc: Arc<Mutex<Option<Arc<UiMarkupDoc>>>>,
         viewport_bridge: Arc<ViewportBridge>,
         plugins_bridge: Arc<crate::plugin_manager::PluginManagerBridge>,
         scene_bridge: Arc<SceneBridge>,
@@ -320,7 +320,13 @@ impl EditorUiBuild {
             self.insp_color = p.color;
         }
 
-        if let Some(mr) = w.get::<MaterialRef>(entity) {
+        if w.get::<Primitive>(entity).is_some() {
+            if let Some(b) = w.get::<PrimitiveMaterialBase>(entity) {
+                self.insp_material = b.id;
+            } else {
+                self.insp_material = MaterialId::invalid();
+            }
+        } else if let Some(mr) = w.get::<MaterialRef>(entity) {
             self.insp_material = mr.id;
         } else {
             self.insp_material = MaterialId::invalid();
@@ -339,7 +345,7 @@ impl EditorUiBuild {
             .shared_doc
             .lock()
             .ok()
-            .and_then(|g| g.as_ref().cloned());
+            .and_then(|g| g.as_ref().map(Arc::clone));
 
         // Keep editor icon textures hot and fully driven by AssetManager.
         // Also publish `$tex.*` vars into markup state.
@@ -381,7 +387,7 @@ impl EditorUiBuild {
 
         if let Some(doc) = maybe_doc.as_ref() {
             self.update_markup_vars();
-            newengine_ui::markup::render_egui(doc, ctx, &mut self.markup_state);
+            newengine_ui::markup::render_egui(doc.as_ref(), ctx, &mut self.markup_state);
             self.dispatch_markup_actions();
         } else {
             panels::topbar::draw(self, ctx);
