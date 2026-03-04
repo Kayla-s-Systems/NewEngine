@@ -3,10 +3,30 @@
 use newengine_core::Engine;
 use newengine_ui::UiInputFrame;
 
-/// Emits JSON event into plugin host context.
+/// Canonical input service capability id.
+pub const INPUT_SERVICE_ID: &str = "newengine.input.v1";
+
+/// Sends a JSON event to the canonical input service.
+///
+/// This is the ONLY ingress path for platform input.
 #[inline]
-pub fn emit_plugin_json(topic: &'static str, value: serde_json::Value) {
-    let _ = newengine_core::plugins::emit_plugin_json(topic, &value);
+pub fn send_input_json(
+    _engine: &Engine<impl Send + 'static>,
+    topic: &'static str,
+    data: serde_json::Value,
+) {
+    if !newengine_core::plugins::has_service(INPUT_SERVICE_ID) {
+        return;
+    }
+
+    let payload = serde_json::json!({
+        "topic": topic,
+        "data": data,
+    });
+
+    if let Ok(bytes) = serde_json::to_vec(&payload) {
+        let _ = newengine_core::call_service_v1_optional(INPUT_SERVICE_ID, "ingest_json", &bytes);
+    }
 }
 
 /// Calls a service method returning UTF-8 payload (best-effort).
@@ -24,13 +44,11 @@ pub fn call_service_utf8(
 /// IMPORTANT: No UI backend should consume platform input directly.
 /// All input must flow through the INPUT plugin.
 pub fn poll_input_frame(engine: &Engine<impl Send + 'static>) -> Option<UiInputFrame> {
-    // Canonical input service
-    const SID: &str = "kalitech.input.v1";
-
-    let state_json = call_service_utf8(engine, SID, "state_json")?;
-    let text_json = call_service_utf8(engine, SID, "text_take_json").unwrap_or_else(|| "{}".into());
-    let ime_json =
-        call_service_utf8(engine, SID, "ime_commit_take_json").unwrap_or_else(|| "{}".into());
+    let state_json = call_service_utf8(engine, INPUT_SERVICE_ID, "state_json")?;
+    let text_json = call_service_utf8(engine, INPUT_SERVICE_ID, "text_take_json")
+        .unwrap_or_else(|| "{}".into());
+    let ime_json = call_service_utf8(engine, INPUT_SERVICE_ID, "ime_commit_take_json")
+        .unwrap_or_else(|| "{}".into());
 
     let mut out = UiInputFrame::default();
 

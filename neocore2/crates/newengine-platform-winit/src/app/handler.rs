@@ -24,7 +24,7 @@ use newengine_ui::{
 use newengine_ui::UiInputFrame;
 
 use crate::app::config::{WinitAppConfig, WinitWindowPlacement};
-use crate::app::input_bridge::{emit_plugin_json, poll_input_frame};
+use crate::app::input_bridge::{poll_input_frame, send_input_json};
 use crate::app::resources::{WinitWindowHandles, WinitWindowInitSize};
 
 pub(crate) struct App<E, F>
@@ -535,7 +535,8 @@ where
                 let state = Self::map_state_str(event.state);
                 let repeat = event.repeat;
 
-                emit_plugin_json(
+                send_input_json(
+                    &self.engine,
                     "winit.key",
                     serde_json::json!({
                         "key": key,
@@ -547,7 +548,8 @@ where
 
                 if let Some(text) = event.text.as_ref() {
                     for ch in text.chars() {
-                        emit_plugin_json(
+                        send_input_json(
+                            &self.engine,
                             "winit.text_char",
                             serde_json::json!({
                                 "cp": ch as u32
@@ -561,7 +563,8 @@ where
                 let b = Self::map_mouse_button_u32(button);
                 let st = Self::map_state_str(state);
 
-                emit_plugin_json(
+                send_input_json(
+                    &self.engine,
                     "winit.mouse_button",
                     serde_json::json!({
                         "button": b,
@@ -576,7 +579,8 @@ where
                     MouseScrollDelta::PixelDelta(p) => (p.x as f32, p.y as f32),
                 };
 
-                emit_plugin_json(
+                send_input_json(
+                    &self.engine,
                     "winit.mouse_wheel",
                     serde_json::json!({
                         "dx": dx,
@@ -590,7 +594,8 @@ where
                 let y = position.y as f32;
 
                 if let Some((px, py)) = self.last_cursor_pos {
-                    emit_plugin_json(
+                    send_input_json(
+                        &self.engine,
                         "winit.mouse_delta",
                         serde_json::json!({
                             "dx": x - px,
@@ -601,7 +606,8 @@ where
 
                 self.last_cursor_pos = Some((x, y));
 
-                emit_plugin_json(
+                send_input_json(
+                    &self.engine,
                     "winit.mouse_move",
                     serde_json::json!({
                         "x": x,
@@ -612,7 +618,8 @@ where
 
             WindowEvent::Ime(ime) => match ime {
                 Ime::Commit(text) => {
-                    emit_plugin_json(
+                    send_input_json(
+                        &self.engine,
                         "winit.ime_commit",
                         serde_json::json!({
                             "text": text
@@ -620,7 +627,8 @@ where
                     );
                 }
                 Ime::Preedit(text, _) => {
-                    emit_plugin_json(
+                    send_input_json(
+                        &self.engine,
                         "winit.ime_preedit",
                         serde_json::json!({
                             "text": text

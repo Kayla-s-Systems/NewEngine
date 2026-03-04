@@ -21,10 +21,35 @@ struct PluginConfigStore {
 
 impl PluginConfigStore {
     fn plugin_overrides_with_env(&self, plugin_id: &str) -> Value {
+        fn merge_object(dst: &mut Map<String, Value>, src: &Map<String, Value>) {
+            for (k, v) in src.iter() {
+                if !dst.contains_key(k) {
+                    dst.insert(k.clone(), v.clone());
+                }
+            }
+        }
+
+        // Back-compat aliasing: older configs may still use "input".
+        // - If new id has no overrides, use the legacy block.
+        // - If both exist, the new id wins per-key.
+        let legacy_id = if plugin_id == "newengine.input" { Some("input") } else { None };
+
         let mut root = match self.overrides.get(plugin_id) {
             Some(v) => v.clone(),
             None => Value::Object(Map::new()),
         };
+
+        if let Some(legacy_id) = legacy_id {
+            if let Some(legacy) = self.overrides.get(legacy_id) {
+                match (legacy, &mut root) {
+                    (Value::Object(src), Value::Object(dst)) => merge_object(dst, src),
+                    (Value::Object(src), other) if other.is_null() => {
+                        *other = Value::Object(src.clone())
+                    }
+                    _ => {}
+                }
+            }
+        }
 
         apply_env_overrides(plugin_id, &mut root);
         root
