@@ -194,3 +194,12 @@ pub struct WindowHandles {
     pub window: RawWindowHandle,
     pub display: RawDisplayHandle,
 }
+
+/// Initial window size provided by the platform host.
+///
+/// This is intentionally platform-agnostic and can be produced by any platform plugin.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct WindowInitSize {
+    pub width: u32,
+    pub height: u32,
+}
