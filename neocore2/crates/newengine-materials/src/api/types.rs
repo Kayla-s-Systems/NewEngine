@@ -41,17 +41,20 @@ impl Default for ShadingModel {
 
 /// Deterministic material permutation key.
 ///
-/// The renderer can use this key to cache pipelines / bind group layouts.
+/// Render backends can use this key to cache pipelines and layout variants.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[repr(transparent)]
 pub struct MaterialPermutationKey(pub u64);
 
 impl MaterialPermutationKey {
+    /// Returns the sentinel invalid key.
     #[inline]
     pub const fn invalid() -> Self {
         Self(0)
     }
 
+    /// Returns `true` when the key is non-zero.
     #[inline]
     pub const fn is_valid(self) -> bool {
         self.0 != 0
