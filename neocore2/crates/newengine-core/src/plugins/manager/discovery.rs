@@ -11,12 +11,32 @@ use super::types::PluginLoadError;
 use super::PluginManager;
 
 impl PluginManager {
+    #[inline]
     pub fn load_default(&mut self, host: HostApiV1) -> Result<(), PluginLoadError> {
-        let dir = default_plugins_dir()?;
-        self.load_from_dir(&dir, host)
+        self.load_default_with_policy(host, false)
     }
 
+    #[inline]
+    pub fn load_default_with_policy(
+        &mut self,
+        host: HostApiV1,
+        strict: bool,
+    ) -> Result<(), PluginLoadError> {
+        let dir = default_plugins_dir()?;
+        self.load_from_dir_with_policy(&dir, host, strict)
+    }
+
+    #[inline]
     pub fn load_from_dir(&mut self, dir: &Path, host: HostApiV1) -> Result<(), PluginLoadError> {
+        self.load_from_dir_with_policy(dir, host, false)
+    }
+
+    pub fn load_from_dir_with_policy(
+        &mut self,
+        dir: &Path,
+        host: HostApiV1,
+        strict: bool,
+    ) -> Result<(), PluginLoadError> {
         let dir = resolve_plugins_dir(dir)?;
 
         if let Err(e) = std::fs::create_dir_all(&dir) {
@@ -71,9 +91,14 @@ impl PluginManager {
             }
         }
 
-        // 1) Try to load logging plugins first (best-effort).
+        let mut load_errors: Vec<PluginLoadError> = Vec::new();
+
+        // 1) Try to load logging plugins first.
         for path in &loggers {
-            let _ = self.load_one(path, host.clone());
+            if let Err(e) = self.load_one(path, host.clone()) {
+                log::warn!("plugins: failed to load '{}': {}", path.display(), e);
+                load_errors.push(e);
+            }
         }
 
         // If startup config specifies overrides for the logging plugin but we found no logging candidate,
@@ -114,6 +139,7 @@ impl PluginManager {
                 Ok(()) => {}
                 Err(e) => {
                     log::warn!("plugins: failed to load '{}': {}", path.display(), e);
+                    load_errors.push(e);
                 }
             }
         }
@@ -131,6 +157,24 @@ impl PluginManager {
                     p.path.display()
                 );
             }
+        }
+
+        if strict && !load_errors.is_empty() {
+            let mut msg = String::new();
+            use std::fmt::Write as _;
+            let _ = writeln!(
+                msg,
+                "one or more plugins failed to load (count={}):",
+                load_errors.len()
+            );
+            for e in load_errors.iter() {
+                let _ = writeln!(msg, "- path='{}' err='{}'", e.path.display(), e.message);
+            }
+
+            return Err(PluginLoadError {
+                path: dir.clone(),
+                message: msg,
+            });
         }
 
         Ok(())

@@ -24,7 +24,7 @@ pub use newengine_service_api::{InterfaceId, ServiceInterface, ServiceKey};
 pub use services_registry::{ErasedService, MissingServicePolicy, ServiceRegistry};
 
 pub use bus::Bus;
-pub use engine::{Engine, EngineConfig, ModuleFaultTolerance};
+pub use engine::{Engine, EngineConfig, ModuleFaultTolerance, PluginFaultTolerance};
 pub use error::{EngineError, EngineResult, ModuleStage};
 pub use error_reporter::{EngineErrorReporter, EngineErrorReporterConfig};
 pub use events::{EventHub, EventSub};

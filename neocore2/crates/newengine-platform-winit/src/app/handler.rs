@@ -416,9 +416,13 @@ where
 
     fn set_fatal_and_exit(&mut self, event_loop: &ActiveEventLoop, e: EngineError) {
         log::error!("winit host fatal: {e}");
-        let _ = newengine_core::EngineErrorReporter::report_fatal_engine_error(&e);
         self.fatal = Some(e);
         self.shutdown_and_exit(event_loop);
+    }
+
+    #[inline]
+    pub(crate) fn take_fatal_error(&mut self) -> Option<EngineError> {
+        self.fatal.take()
     }
 
     fn shutdown_and_exit(&mut self, event_loop: &ActiveEventLoop) {
@@ -691,10 +695,7 @@ where
         match self.engine.step() {
             Ok(_) => self.request_redraw(),
             Err(EngineError::ExitRequested) => self.shutdown_and_exit(event_loop),
-            Err(e) => {
-                log::error!("engine.step failed: {e}");
-                self.shutdown_and_exit(event_loop);
-            }
+            Err(e) => self.set_fatal_and_exit(event_loop, e),
         }
     }
 }

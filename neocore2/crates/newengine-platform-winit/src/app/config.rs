@@ -22,12 +22,12 @@ pub struct WinitAppIcon {
 }
 
 impl WinitAppIcon {
-    /// Decodes PNG bytes into RGBA8 icon.
+    /// Decodes image bytes into RGBA8 icon.
     ///
     /// # Errors
     /// Returns error string if decoding fails.
-    pub fn from_png_bytes(png: &[u8]) -> Result<Self, String> {
-        let img = image::load_from_memory(png).map_err(|e| e.to_string())?;
+    pub fn from_image_bytes(bytes: &[u8]) -> Result<Self, String> {
+        let img = image::load_from_memory(bytes).map_err(|e| e.to_string())?;
         let rgba = img.to_rgba8();
         let (width, height) = rgba.dimensions();
         Ok(Self {

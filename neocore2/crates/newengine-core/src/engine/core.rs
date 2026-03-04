@@ -14,7 +14,7 @@ use std::path::PathBuf;
 use std::time::Instant;
 
 use super::module_slot::ModuleSlot;
-use super::{EngineConfig, ModuleFaultTolerance};
+use super::{EngineConfig, ModuleFaultTolerance, PluginFaultTolerance};
 
 pub struct Engine<E: Send + 'static> {
     pub(super) fixed_dt: f32,
@@ -22,6 +22,7 @@ pub struct Engine<E: Send + 'static> {
     pub(super) services: Box<dyn Services>,
     pub(super) modules: Vec<ModuleSlot<E>>,
     pub(super) module_fault_tolerance: ModuleFaultTolerance,
+    pub(super) plugin_fault_tolerance: PluginFaultTolerance,
     pub(super) module_ids: HashSet<&'static str>,
 
     pub resources: Resources,
@@ -134,6 +135,7 @@ impl<E: Send + 'static> Engine<E> {
             services,
             modules: Vec::new(),
             module_fault_tolerance: config.module_fault_tolerance,
+            plugin_fault_tolerance: config.plugin_fault_tolerance,
             module_ids: HashSet::new(),
 
             resources,

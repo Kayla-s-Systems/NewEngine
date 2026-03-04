@@ -21,6 +21,21 @@ impl Default for ModuleFaultTolerance {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PluginFaultTolerance {
+    /// Fail-fast: any plugin load error aborts the engine start.
+    Strict,
+    /// Best-effort: plugin load errors are logged and ignored; the engine keeps running.
+    Resilient,
+}
+
+impl Default for PluginFaultTolerance {
+    #[inline]
+    fn default() -> Self {
+        Self::Resilient
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct EngineConfig {
     pub fixed_dt_ms: u32,
@@ -34,6 +49,11 @@ pub struct EngineConfig {
 
     /// Controls how the engine handles module failures (missing deps / errors).
     pub module_fault_tolerance: ModuleFaultTolerance,
+
+    /// Controls how the engine handles plugin load failures (invalid DLL, missing symbols, init errors).
+    ///
+    /// Note: "plugin absent" (not present on disk) is not an error; it's just a degraded capability set.
+    pub plugin_fault_tolerance: PluginFaultTolerance,
 
     /// Controls how the engine reacts to panics inside module callbacks.
     ///
@@ -50,6 +70,7 @@ impl Default for EngineConfig {
             plugins_dir: None,
             plugin_overrides: HashMap::new(),
             module_fault_tolerance: ModuleFaultTolerance::Resilient,
+            plugin_fault_tolerance: PluginFaultTolerance::Resilient,
             catch_panics: true,
         }
     }
@@ -63,6 +84,7 @@ impl EngineConfig {
             plugins_dir: None,
             plugin_overrides: HashMap::new(),
             module_fault_tolerance: ModuleFaultTolerance::Resilient,
+            plugin_fault_tolerance: PluginFaultTolerance::Resilient,
             catch_panics: true,
         }
     }
@@ -94,6 +116,12 @@ impl EngineConfig {
     #[inline]
     pub fn with_module_fault_tolerance(mut self, mode: ModuleFaultTolerance) -> Self {
         self.module_fault_tolerance = mode;
+        self
+    }
+
+    #[inline]
+    pub fn with_plugin_fault_tolerance(mut self, mode: PluginFaultTolerance) -> Self {
+        self.plugin_fault_tolerance = mode;
         self
     }
 

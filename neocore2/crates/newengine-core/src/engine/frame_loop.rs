@@ -28,7 +28,7 @@ impl<E: Send + 'static> Engine<E> {
 
         self.scheduler.begin_frame(Duration::from_secs_f32(dt));
 
-        self.process_plugin_control();
+        self.process_plugin_control()?;
         self.expose_plugins_snapshot();
 
         let mut steps_to_run = (self.acc / self.fixed_dt).floor() as u32;

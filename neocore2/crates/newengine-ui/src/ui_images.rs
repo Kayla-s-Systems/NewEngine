@@ -145,6 +145,7 @@ mod with_images {
         ) {
             // 1) Advance pending loads.
             // Deterministic pumping order.
+            assets.pump();
             let mut keys: Vec<String> = self.slots.keys().cloned().collect();
             keys.sort();
             for k in keys {
@@ -174,7 +175,6 @@ mod with_images {
                         }
                     },
                     Slot::Loading { path, id_hex32 } => {
-                        assets.pump();
                         match assets.state(id_hex32) {
                             Ok(crate::AssetState::Ready) => match assets.blob_wire_v1(id_hex32) {
                                 Ok((_meta, bytes)) => match decode_to_color_image(&bytes) {

@@ -33,5 +33,11 @@ where
 
     event_loop
         .run_app(&mut app)
-        .map_err(|e| EngineError::Other(e.to_string()))
+        .map_err(|e| EngineError::Other(e.to_string()))?;
+
+    if let Some(fatal) = app.take_fatal_error() {
+        return Err(fatal);
+    }
+
+    Ok(())
 }

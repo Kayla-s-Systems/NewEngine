@@ -1,4 +1,4 @@
-use super::Engine;
+use super::{Engine, PluginFaultTolerance};
 
 use crate::error::{EngineError, EngineResult};
 use crate::plugins::{default_host_api, PluginControlCommand, PluginControlQueue, PluginsSnapshot};
@@ -21,22 +21,35 @@ impl<E: Send + 'static> Engine<E> {
             return Ok(());
         }
 
+        let strict = matches!(self.plugin_fault_tolerance, PluginFaultTolerance::Strict);
+
         let phase = "load";
         let t0 = Instant::now();
 
         let host = default_host_api();
         let load_result = match self.plugins_dir.as_deref() {
-            Some(dir) => self.plugins.load_from_dir(dir, host),
-            None => self.plugins.load_default(host),
+            Some(dir) => self.plugins.load_from_dir_with_policy(dir, host, strict),
+            None => self.plugins.load_default_with_policy(host, strict),
         };
 
         if let Err(e) = load_result {
-            log::warn!(
-                "plugins: non-fatal load error (phase={} {}): {}",
-                phase,
-                Self::elapsed_since(t0),
-                e
-            );
+            match self.plugin_fault_tolerance {
+                PluginFaultTolerance::Strict => {
+                    return Err(EngineError::Other(format!(
+                        "plugins: load failed (phase={} {}): {e}",
+                        phase,
+                        Self::elapsed_since(t0)
+                    )));
+                }
+                PluginFaultTolerance::Resilient => {
+                    log::warn!(
+                        "plugins: non-fatal load error (phase={} {}): {}",
+                        phase,
+                        Self::elapsed_since(t0),
+                        e
+                    );
+                }
+            }
         }
 
         // Mark as loaded even if some plugins failed to load (non-fatal path).
@@ -81,10 +94,12 @@ impl<E: Send + 'static> Engine<E> {
         }
     }
 
-    pub(super) fn process_plugin_control(&mut self) {
+    pub(super) fn process_plugin_control(&mut self) -> EngineResult<()> {
         let Some(queue) = self.resources.get_mut::<PluginControlQueue>() else {
-            return;
+            return Ok(());
         };
+
+        let strict = matches!(self.plugin_fault_tolerance, PluginFaultTolerance::Strict);
 
         let mut did_any = false;
         let mut last_action: Option<String> = None;
@@ -104,8 +119,8 @@ impl<E: Send + 'static> Engine<E> {
 
                     let dir = self.plugins_dir.clone();
                     let res = match dir.as_deref() {
-                        Some(d) => self.plugins.load_from_dir(d, host),
-                        None => self.plugins.load_default(host),
+                        Some(d) => self.plugins.load_from_dir_with_policy(d, host, strict),
+                        None => self.plugins.load_default_with_policy(host, strict),
                     };
 
                     match res {
@@ -124,6 +139,11 @@ impl<E: Send + 'static> Engine<E> {
                                 "plugins: rescan failed ({}): {e}",
                                 Self::elapsed_since(t0)
                             ));
+                            if strict {
+                                return Err(EngineError::Other(
+                                    last_error.clone().unwrap_or_else(|| e.to_string()),
+                                ));
+                            }
                             log::warn!(
                                 "plugins: non-fatal rescan error (phase={} {}): {}",
                                 phase,
@@ -155,6 +175,11 @@ impl<E: Send + 'static> Engine<E> {
                                 path.display(),
                                 Self::elapsed_since(t0)
                             ));
+                            if strict {
+                                return Err(EngineError::Other(
+                                    last_error.clone().unwrap_or_else(|| e.to_string()),
+                                ));
+                            }
                         }
                     }
                 }
@@ -184,6 +209,11 @@ impl<E: Send + 'static> Engine<E> {
                                 id,
                                 Self::elapsed_since(t0)
                             ));
+                            if strict {
+                                return Err(EngineError::Other(
+                                    last_error.clone().unwrap_or_else(|| e.to_string()),
+                                ));
+                            }
                         }
                     }
                 }
@@ -221,6 +251,8 @@ impl<E: Send + 'static> Engine<E> {
             queue.result.last_action = last_action;
             queue.result.last_error = last_error;
         }
+
+        Ok(())
     }
 
     pub(super) fn expose_plugins_snapshot(&mut self) {

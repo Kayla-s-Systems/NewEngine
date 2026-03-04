@@ -11,5 +11,5 @@ mod plugins;
 mod run_stage;
 mod timing;
 
-pub use config::{EngineConfig, ModuleFaultTolerance};
+pub use config::{EngineConfig, ModuleFaultTolerance, PluginFaultTolerance};
 pub use core::Engine;
