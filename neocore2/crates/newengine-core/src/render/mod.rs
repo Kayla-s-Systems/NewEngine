@@ -1,7 +1,7 @@
 use crate::error::{EngineError, EngineResult};
 use crate::module::{ApiProvide, ApiVersion};
 
-pub use newengine_ui::draw::{UiDrawList, UiTexId};
+pub use newengine_ui_draw::{UiDrawList, UiTexId};
 use parking_lot::{Mutex, MutexGuard};
 use std::num::NonZeroU32;
 use std::sync::Arc;

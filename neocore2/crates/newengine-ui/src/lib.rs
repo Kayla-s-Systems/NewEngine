@@ -21,10 +21,10 @@ pub use provider::{
 };
 pub use providers::create_provider;
 
-pub use asset::{wait_ready, AssetAccess, AssetState, WaitReadyError};
+pub use asset::{wait_ready, AssetAccess, AssetService, AssetState, WaitReadyError};
 
 #[cfg(feature = "assets")]
-pub use asset::{AssetService, AssetServiceClient};
+pub use asset::AssetServiceClient;
 
 pub use previews::{UiPreviewDesc, UiPreviewHandle, UiPreviewKind, UiPreviewProvider};
 pub use ui_icons::{BuiltinUiIcon, EDITOR_DEFAULT_ICONS};
