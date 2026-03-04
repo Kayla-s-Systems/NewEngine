@@ -343,8 +343,15 @@ pub(crate) fn draw(me: &mut EditorUiBuild, ctx: &egui::Context) {
                         });
 
                         ui.horizontal(|ui| {
-                            ui.label("Emissive");
+                            ui.label("Emissive color");
                             changed |= ui.color_edit_button_rgb(&mut desc.emissive).changed();
+                        });
+
+                        ui.horizontal(|ui| {
+                            ui.label("Emissive strength");
+                            changed |= ui
+                                .add(egui::Slider::new(&mut desc.emissive_strength, 0.0..=50.0))
+                                .changed();
                         });
 
                         ui.horizontal(|ui| {

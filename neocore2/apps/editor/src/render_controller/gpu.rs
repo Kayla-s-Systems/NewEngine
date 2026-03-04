@@ -47,8 +47,8 @@ fn load_text_asset(rel: &str) -> CoreResult<String> {
 #[inline]
 fn builtin_text_asset(rel: &str) -> Option<&'static str> {
     match rel {
-        "shaders/editor_lit.vert" => Some(BUILTIN_EDITOR_LIT_VERT),
-        "shaders/editor_lit.frag" => Some(BUILTIN_EDITOR_LIT_FRAG),
+        "shaders/editor_lit_v2.vert" => Some(BUILTIN_EDITOR_LIT_VERT),
+        "shaders/editor_lit_v2.frag" => Some(BUILTIN_EDITOR_LIT_FRAG),
         _ => None,
     }
 }
@@ -64,6 +64,7 @@ layout(set = 0, binding = 0, std140) uniform Ubo {
     mat4 u_mvp;
     mat4 u_model;
     vec4 u_base_color;
+    vec4 u_emissive;
     vec4 u_ambient;
     vec4 u_dir_dir_intensity;
     vec4 u_dir_color;
@@ -95,6 +96,7 @@ layout(set = 0, binding = 0, std140) uniform Ubo {
     mat4 u_mvp;
     mat4 u_model;
     vec4 u_base_color;
+    vec4 u_emissive;
     vec4 u_ambient;
     vec4 u_dir_dir_intensity;
     vec4 u_dir_color;
@@ -110,6 +112,7 @@ float saturate(float x) { return clamp(x, 0.0, 1.0); }
 void main() {
     vec3 N = normalize(v_wnrm);
     vec3 base = v_base.rgb;
+    vec3 emissive = ubo.u_emissive.rgb;
 
     vec3 lit = ubo.u_ambient.rgb * ubo.u_ambient.a;
 
@@ -135,7 +138,7 @@ void main() {
         lit += col * (inten * NdLp * att * fade * fade);
     }
 
-    vec3 out_rgb = base * lit;
+    vec3 out_rgb = base * lit + emissive;
     o_color = vec4(out_rgb, v_base.a);
 }
 "#;
@@ -177,13 +180,14 @@ pub(super) struct LitPipeline {
 // mat4 mvp (64)
 // mat4 model (64)
 // vec4 base_color (16)
+// vec4 emissive (16)
 // vec4 ambient (16)
 // vec4 dir_dir_intensity (16)
 // vec4 dir_color (16)
 // point lights: 4 * (vec4 pos_range + vec4 color_intensity) = 4 * 32 = 128
 // vec4 point_count_pad (16)
-// Total: 336 bytes.
-pub(super) const LIT_UBO_SIZE: u64 = 336;
+// Total: 352 bytes.
+pub(super) const LIT_UBO_SIZE: u64 = 352;
 
 #[derive(Clone, Copy)]
 pub(super) struct PrimitiveGpu {
@@ -216,11 +220,11 @@ pub(super) fn ensure_lit_pipeline(
     let compiler = shaderc::Compiler::new()
         .map_err(|e| EngineError::other(format!("shaderc: Compiler: {e}")))?;
 
-    let vs_src = load_text_asset("shaders/editor_lit.vert")?;
-    let fs_src = load_text_asset("shaders/editor_lit.frag")?;
+    let vs_src = load_text_asset("shaders/editor_lit_v2.vert")?;
+    let fs_src = load_text_asset("shaders/editor_lit_v2.frag")?;
 
-    let vs_spv = compile_glsl(&compiler, ShaderKind::Vertex, "editor_lit.vert", &vs_src)?;
-    let fs_spv = compile_glsl(&compiler, ShaderKind::Fragment, "editor_lit.frag", &fs_src)?;
+    let vs_spv = compile_glsl(&compiler, ShaderKind::Vertex, "editor_lit_v2.vert", &vs_src)?;
+    let fs_spv = compile_glsl(&compiler, ShaderKind::Fragment, "editor_lit_v2.frag", &fs_src)?;
 
     let vs = r.create_shader(
         ShaderDesc::new(ShaderStage::Vertex, "main", vs_spv).with_label("editor_lit_vs"),

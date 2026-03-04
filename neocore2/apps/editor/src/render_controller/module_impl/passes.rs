@@ -65,6 +65,7 @@ pub(super) fn draw_grid(
         viewproj * grid_model,
         grid_model,
         [1.0, 1.0, 1.0, 1.0],
+        [0.0, 0.0, 0.0],
         lights,
     )?;
 
@@ -95,18 +96,18 @@ pub(super) fn draw_primitives(
         let model = gt.0;
         let mvp = viewproj * model;
 
-        let base_color = world
+        let (base_color, emissive_radiance) = world
             .get::<newengine_materials::MaterialRef>(id)
             .and_then(|mr| mats.get(mr.id))
-            .map(|d| d.base_color)
-            .unwrap_or([1.0, 0.0, 1.0, 1.0]);
+            .map(|d| (d.base_color, d.emissive_radiance()))
+            .unwrap_or(([1.0, 0.0, 1.0, 1.0], [0.0, 0.0, 0.0]));
 
         let key = id.stable_u64();
         let mut per = this.ensure_per_draw_ubo(r, lit, key)?;
         per.last_seen_frame = this.frame_index;
         this.per_draw_ubo.insert(key, per);
 
-        super::passes_ubo::write_lit_ubo(r, per.ubo, mvp, model, base_color, lights)?;
+        super::passes_ubo::write_lit_ubo(r, per.ubo, mvp, model, base_color, emissive_radiance, lights)?;
 
         r.set_pipeline(lit.pipeline)?;
         r.set_bind_group(0, per.bg)?;
@@ -159,7 +160,7 @@ pub(super) fn draw_light_gizmos(
         let mut per = this.ensure_per_draw_ubo(r, lit, k)?;
         per.last_seen_frame = this.frame_index;
         this.per_draw_ubo.insert(k, per);
-        super::passes_ubo::write_lit_ubo(r, per.ubo, mvp, model, base_color, lights)?;
+        super::passes_ubo::write_lit_ubo(r, per.ubo, mvp, model, base_color, [0.0, 0.0, 0.0], lights)?;
 
         r.set_pipeline(lit.pipeline)?;
         r.set_bind_group(0, per.bg)?;
@@ -179,7 +180,7 @@ pub(super) fn draw_light_gizmos(
         let mut per2 = this.ensure_per_draw_ubo(r, lit, line_key)?;
         per2.last_seen_frame = this.frame_index;
         this.per_draw_ubo.insert(line_key, per2);
-        super::passes_ubo::write_lit_ubo(r, per2.ubo, line_mvp, line_model, line_color, lights)?;
+        super::passes_ubo::write_lit_ubo(r, per2.ubo, line_mvp, line_model, line_color, [0.0, 0.0, 0.0], lights)?;
 
         r.set_pipeline(lit.pipeline)?;
         r.set_bind_group(0, per2.bg)?;
@@ -206,7 +207,7 @@ pub(super) fn draw_light_gizmos(
         let mut per = this.ensure_per_draw_ubo(r, lit, k)?;
         per.last_seen_frame = this.frame_index;
         this.per_draw_ubo.insert(k, per);
-        super::passes_ubo::write_lit_ubo(r, per.ubo, mvp, model, base_color, lights)?;
+        super::passes_ubo::write_lit_ubo(r, per.ubo, mvp, model, base_color, [0.0, 0.0, 0.0], lights)?;
 
         r.set_pipeline(lit.pipeline)?;
         r.set_bind_group(0, per.bg)?;

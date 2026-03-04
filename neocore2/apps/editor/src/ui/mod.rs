@@ -22,6 +22,7 @@ use newengine_viewport::Viewport;
 
 use newengine_editor_core::{EditorCommand, EditorState, TransformSnapshot};
 
+use crate::material_pipeline::MaterialPipeline;
 use crate::plugin_manager::PluginManagerUi;
 use crate::scene_bridge::{PrimitiveMaterialBase, SceneBridge};
 use crate::ui_contrib::plugin_manager::PluginManagerContributor;
@@ -64,6 +65,8 @@ pub struct EditorUiBuild {
     pub(crate) markup_state: newengine_ui::markup::UiState,
 
     pub(crate) icons: icons::EditorIconLoader,
+
+    pub(crate) material_pipeline: MaterialPipeline,
 
     // Viewport navigation interaction (UI-driven, not via global input plugin).
     //
@@ -138,6 +141,8 @@ impl EditorUiBuild {
             markup_state: newengine_ui::markup::UiState::default(),
 
             icons: icons::EditorIconLoader::new(),
+
+            material_pipeline: MaterialPipeline::new(),
 
             last_nav_drag_pos: None,
             last_fly_drag_pos: None,
@@ -346,6 +351,10 @@ impl EditorUiBuild {
             .lock()
             .ok()
             .and_then(|g| g.as_ref().map(Arc::clone));
+
+        // Poll asset-driven materials (JSON -> cached .nemat -> registry).
+        let mats = self.scene_bridge.materials();
+        self.material_pipeline.pump(&mats);
 
         // Keep editor icon textures hot and fully driven by AssetManager.
         // Also publish `$tex.*` vars into markup state.

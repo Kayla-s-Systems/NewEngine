@@ -16,7 +16,7 @@ pub(super) struct PackedLights {
 }
 
 impl PackedLights {
-    pub(super) const UBO_SIZE: usize = 336;
+    pub(super) const UBO_SIZE: usize = 352;
 
     #[inline]
     pub(super) fn from_world(world: &newengine_ecs::World) -> Self {
@@ -78,7 +78,7 @@ impl PackedLights {
 
     #[inline]
     pub(super) fn write_into(&self, bytes: &mut [u8; Self::UBO_SIZE]) {
-        let mut off = 144;
+        let mut off = 160;
 
         fn write_vec4(dst: &mut [u8], off: &mut usize, v: [f32; 4]) {
             for i in 0..4 {

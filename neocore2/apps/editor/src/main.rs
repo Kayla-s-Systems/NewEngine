@@ -20,6 +20,7 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 mod editor_camera;
+mod material_pipeline;
 mod plugin_manager;
 mod render_controller;
 mod scene_bootstrap;

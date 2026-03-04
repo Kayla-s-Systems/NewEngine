@@ -12,6 +12,7 @@ pub(super) fn write_lit_ubo(
     mvp: Mat4,
     model: Mat4,
     base_color: [f32; 4],
+    emissive_radiance: [f32; 3],
     lights: &PackedLights,
 ) -> EngineResult<()> {
     let mut bytes: [u8; PackedLights::UBO_SIZE] = [0u8; PackedLights::UBO_SIZE];
@@ -34,6 +35,14 @@ pub(super) fn write_lit_ubo(
         let off = base_off + i * 4;
         bytes[off..off + 4].copy_from_slice(&base_color[i].to_ne_bytes());
     }
+
+    // std140 vec3 is padded to vec4.
+    let em_off = 144;
+    for i in 0..3 {
+        let off = em_off + i * 4;
+        bytes[off..off + 4].copy_from_slice(&emissive_radiance[i].to_ne_bytes());
+    }
+    bytes[em_off + 12..em_off + 16].copy_from_slice(&0.0_f32.to_ne_bytes());
 
     lights.write_into(&mut bytes);
 

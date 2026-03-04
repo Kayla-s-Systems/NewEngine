@@ -1,0 +1,8 @@
+[package]
+name = "materialc"
+version = "0.1.0"
+edition = "2021"
+license = "Proprietary"
+
+[dependencies]
+newengine-materials = { path = "../../crates/newengine-materials", features = ["serde"] }

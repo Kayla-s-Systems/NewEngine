@@ -381,8 +381,7 @@ impl SceneBridge {
                     ..MaterialOverrides::default()
                 };
 
-                let inst_id = mats.register_instance_named(base, &inst_name, overrides.clone());
-                let _ = mats.set_instance_overrides(inst_id, overrides);
+                let inst_id = mats.upsert_instance_named(base, &inst_name, overrides);
                 let _ = world.insert(e, MaterialRef { id: inst_id });
             }
 
