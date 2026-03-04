@@ -52,7 +52,7 @@ pub struct StartupConfig {
     pub window_size: (u32, u32),
     pub window_placement: WindowPlacement,
 
-    /// Path inside assets root, resolved via AssetManager + existing importers.
+    /// Logical path resolved via the AssetManager plugin VFS.
     /// Example: "ui/icon.png".
     pub window_icon_path: Option<String>,
 

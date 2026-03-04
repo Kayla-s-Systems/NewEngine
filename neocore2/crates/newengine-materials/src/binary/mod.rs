@@ -6,19 +6,16 @@
 //! storing materials on disk and in caches.
 //!
 //! The format is intentionally conservative:
-//! - no platform-dependent struct layout;
-//! - no `unsafe`;
-//! - explicit versioning;
-//! - a fixed-size descriptor payload for stable caches.
+//! - No platform-dependent struct layout.
+//! - No `unsafe`.
+//! - Explicit versioning.
 //!
-//! Recommended file extension: `.nemat`.
+//! File extension recommendation: `.nemat`.
 
 mod codec;
 mod error;
 mod format;
 mod io;
-#[cfg(test)]
-mod tests;
 mod types;
 
 #[cfg(feature = "serde")]
@@ -30,7 +27,6 @@ pub use format::{
     MATERIAL_BINARY_HEADER_SIZE,
     MATERIAL_BINARY_MAGIC,
     MATERIAL_BINARY_VERSION,
-    MATERIAL_DESCRIPTOR_SIZE,
 };
 pub use types::MaterialBinaryAsset;
 

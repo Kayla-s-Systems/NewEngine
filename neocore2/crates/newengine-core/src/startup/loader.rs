@@ -136,10 +136,14 @@ struct WindowPlacementJson {
 
 #[derive(Deserialize)]
 struct EngineJson {
-    assets_root: Option<String>,
-    asset_pump_steps: Option<u32>,
-    asset_filesystem_source: Option<bool>,
     modules_dir: Option<String>,
+
+    /// Unknown keys are preserved to produce deterministic diagnostics.
+    ///
+    /// Engine-side asset settings are intentionally NOT supported anymore:
+    /// assets must be configured via the AssetManager plugin (`plugins.newengine.assets`).
+    #[serde(flatten)]
+    extra: std::collections::HashMap<String, serde_json::Value>,
 }
 
 #[derive(Deserialize)]
@@ -299,50 +303,21 @@ fn apply_root(cfg: &mut StartupConfig, report: &mut StartupLoadReport, src: Root
     }
 
     if let Some(engine) = src.engine {
-        // Legacy engine-side asset settings are translated into plugin overrides.
-        // NewEngine vNext: AssetManager is a plugin with its own config contract.
-        let mut legacy_assets = serde_json::Map::new();
-
-        if let Some(root) = engine.assets_root {
-            legacy_assets.insert("assets_root".to_string(), serde_json::Value::String(root));
-        }
-        if let Some(steps) = engine.asset_pump_steps {
-            legacy_assets.insert(
-                "pump_steps".to_string(),
-                serde_json::Value::Number((steps as u64).into()),
-            );
-        }
-        if let Some(enabled) = engine.asset_filesystem_source {
-            legacy_assets.insert("filesystem".to_string(), serde_json::Value::Bool(enabled));
-        }
-
-        if !legacy_assets.is_empty() {
-            let pid = "newengine.assets".to_string();
-            let entry = cfg
-                .plugins
-                .entry(pid.clone())
-                .or_insert_with(|| serde_json::Value::Object(serde_json::Map::new()));
-
-            if !entry.is_object() {
-                *entry = serde_json::Value::Object(serde_json::Map::new());
-            }
-
-            if let Some(obj) = entry.as_object_mut() {
-                for (k, v) in legacy_assets {
-                    obj.insert(k, v);
-                }
-            }
-
-            report.plugin_overrides.push(StartupPluginOverride {
-                plugin_id: pid,
-                key: "engine.* (legacy assets config)",
-                from: "legacy".to_string(),
-                to: "plugins.newengine.assets (translated)".to_string(),
-            });
-        }
-
         if let Some(dir) = engine.modules_dir {
             apply_path(report, "modules_dir", &mut cfg.modules_dir, dir);
+        }
+
+        if !engine.extra.is_empty() {
+            let mut keys: Vec<String> = engine.extra.keys().cloned().collect();
+            keys.sort();
+            report.overrides.push(StartupOverride {
+                key: "engine.*",
+                from: "provided".to_owned(),
+                to: format!(
+                    "ignored unknown engine keys: {} (configure plugins via `plugins.*`)",
+                    keys.join(", ")
+                ),
+            });
         }
     }
 

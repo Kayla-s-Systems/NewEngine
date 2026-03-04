@@ -3,64 +3,16 @@ use crate::api::{MaterialDescriptor, MaterialDomain, MaterialFlags, ShadingModel
 use super::error::{MaterialBinaryError, MaterialBinaryResult};
 use super::io::{push_f32, push_u16, push_u32, read_f32, read_u16, read_u32, read_u8};
 
-/// Current `.nemat` binary format version.
+/// Current binary format version.
 pub const MATERIAL_BINARY_VERSION: u16 = 1;
 
-/// Fixed binary container header size in bytes.
+/// Fixed header size in bytes.
 pub const MATERIAL_BINARY_HEADER_SIZE: usize = 24;
 
-/// Magic bytes written at the start of every `.nemat` file.
+/// Magic bytes (8).
 pub const MATERIAL_BINARY_MAGIC: [u8; 8] = *b"NEMAT\0\0\0";
 
-/// Encoded size of [`MaterialDescriptor`] in bytes.
-pub const MATERIAL_DESCRIPTOR_SIZE: usize = 68;
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) struct MaterialBinaryHeader {
-    pub version: u16,
-    pub payload_size: u32,
-    pub flags: u32,
-    pub reserved: u32,
-}
-
-#[inline]
-pub(crate) fn write_header_into(out: &mut Vec<u8>, header: MaterialBinaryHeader) {
-    out.extend_from_slice(&MATERIAL_BINARY_MAGIC);
-    push_u16(out, header.version);
-    push_u16(out, MATERIAL_BINARY_HEADER_SIZE as u16);
-    push_u32(out, header.payload_size);
-    push_u32(out, header.flags);
-    push_u32(out, header.reserved);
-}
-
-#[inline]
-pub(crate) fn read_header(bytes: &[u8]) -> MaterialBinaryResult<MaterialBinaryHeader> {
-    if bytes.len() < MATERIAL_BINARY_HEADER_SIZE {
-        return Err(MaterialBinaryError::InvalidHeader);
-    }
-
-    if bytes[..8] != MATERIAL_BINARY_MAGIC {
-        return Err(MaterialBinaryError::InvalidMagic);
-    }
-
-    let mut off = 8usize;
-    let version = read_u16(bytes, &mut off)?;
-    if version != MATERIAL_BINARY_VERSION {
-        return Err(MaterialBinaryError::UnsupportedVersion { found: version });
-    }
-
-    let header_size = read_u16(bytes, &mut off)? as usize;
-    if header_size != MATERIAL_BINARY_HEADER_SIZE {
-        return Err(MaterialBinaryError::InvalidHeader);
-    }
-
-    Ok(MaterialBinaryHeader {
-        version,
-        payload_size: read_u32(bytes, &mut off)?,
-        flags: read_u32(bytes, &mut off)?,
-        reserved: read_u32(bytes, &mut off)?,
-    })
-}
+pub(crate) const MATERIAL_DESCRIPTOR_SIZE: usize = 68;
 
 #[inline]
 pub(crate) fn encode_descriptor_into(out: &mut Vec<u8>, desc: &MaterialDescriptor) {
@@ -93,10 +45,33 @@ pub(crate) fn decode_descriptor_from(
     bytes: &[u8],
     off: &mut usize,
 ) -> MaterialBinaryResult<MaterialDescriptor> {
-    let domain = decode_material_domain(read_u8(bytes, off)?)?;
-    let shading_model = decode_shading_model(read_u8(bytes, off)?)?;
+    let domain_u8 = read_u8(bytes, off)?;
+    let shading_u8 = read_u8(bytes, off)?;
     let _ = read_u16(bytes, off)?;
     let flags = read_u32(bytes, off)?;
+
+    let domain = match domain_u8 {
+        0 => MaterialDomain::Surface,
+        1 => MaterialDomain::PostProcess,
+        2 => MaterialDomain::Ui,
+        v => {
+            return Err(MaterialBinaryError::InvalidEnumValue {
+                field: "domain",
+                value: v,
+            })
+        }
+    };
+
+    let shading_model = match shading_u8 {
+        0 => ShadingModel::Unlit,
+        1 => ShadingModel::PbrMetallicRoughness,
+        v => {
+            return Err(MaterialBinaryError::InvalidEnumValue {
+                field: "shading_model",
+                value: v,
+            })
+        }
+    };
 
     let mut base_color = [0.0_f32; 4];
     for item in &mut base_color {
@@ -132,29 +107,4 @@ pub(crate) fn decode_descriptor_from(
         flags: MaterialFlags(flags),
         reserved: [r0, r1],
     })
-}
-
-#[inline]
-fn decode_material_domain(value: u8) -> MaterialBinaryResult<MaterialDomain> {
-    match value {
-        0 => Ok(MaterialDomain::Surface),
-        1 => Ok(MaterialDomain::PostProcess),
-        2 => Ok(MaterialDomain::Ui),
-        v => Err(MaterialBinaryError::InvalidEnumValue {
-            field: "domain",
-            value: v,
-        }),
-    }
-}
-
-#[inline]
-fn decode_shading_model(value: u8) -> MaterialBinaryResult<ShadingModel> {
-    match value {
-        0 => Ok(ShadingModel::Unlit),
-        1 => Ok(ShadingModel::PbrMetallicRoughness),
-        v => Err(MaterialBinaryError::InvalidEnumValue {
-            field: "shading_model",
-            value: v,
-        }),
-    }
 }
