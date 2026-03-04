@@ -12,6 +12,7 @@ pub struct MaterialOverrides {
 
     pub base_color: Option<[f32; 4]>,
     pub emissive: Option<[f32; 3]>,
+    pub emissive_strength: Option<f32>,
     pub metallic: Option<f32>,
     pub roughness: Option<f32>,
     pub normal_scale: Option<f32>,
@@ -35,6 +36,9 @@ impl MaterialOverrides {
         }
         if let Some(v) = self.emissive {
             base.emissive = v;
+        }
+        if let Some(v) = self.emissive_strength {
+            base.emissive_strength = v;
         }
         if let Some(v) = self.metallic {
             base.metallic = v;

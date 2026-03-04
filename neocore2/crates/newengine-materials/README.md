@@ -27,3 +27,10 @@ let list = reg.snapshot();
 
 Textures and GPU bindings are intentionally not part of the base descriptor yet.
 They should be introduced once the asset pipeline exposes a stable texture handle contract.
+
+## Binary format
+
+The crate provides a deterministic binary container for materials (recommended extension: `.nemat`).
+
+- `newengine_materials::binary::{MaterialBinaryAsset, encode_asset, decode_asset}`
+- Emission uses `emissive` (color) * `emissive_strength` (scalar), which supports HDR-style bloom workflows.

@@ -83,6 +83,32 @@ impl MaterialRegistry {
         id
     }
 
+    /// Upsert a material descriptor by name.
+    ///
+    /// - If an asset with the same name exists, updates its descriptor and returns its id.
+    /// - If an instance exists with the same name, returns its id unchanged.
+    pub fn upsert_named(&self, name: &str, desc: MaterialDescriptor) -> MaterialId {
+        {
+            let mut v = self.inner.write();
+            if let Some(e) = v.iter_mut().find(|e| e.name == name) {
+                match &mut e.kind {
+                    EntryKind::Asset { desc: cur } => {
+                        {
+                            let mut d = desc;
+                            d.sanitize_in_place();
+                            *cur = d;
+                        }
+                    }
+                    EntryKind::Instance { .. } => {}
+                }
+                return e.id;
+            }
+        }
+
+        self.register_named(name, desc)
+    }
+
+
     /// Register a provider output.
     #[inline]
     pub fn register_provider(&self, provider: &dyn MaterialProvider) -> MaterialId {
@@ -106,7 +132,11 @@ impl MaterialRegistry {
 
         match &mut e.kind {
             EntryKind::Asset { desc: cur } => {
-                *cur = desc;
+                {
+                    let mut d = desc;
+                    d.sanitize_in_place();
+                    *cur = d;
+                }
             }
             EntryKind::Instance { .. } => {
                 return Err(MaterialError::InvalidId);
@@ -147,6 +177,33 @@ impl MaterialRegistry {
 
         id
     }
+
+    /// Upsert a deterministic instance by name.
+    ///
+    /// If an instance with the same name already exists, its base and overrides are updated.
+    /// If an asset exists with the same name, its id is returned unchanged.
+    pub fn upsert_instance_named(
+        &self,
+        base: MaterialId,
+        name: &str,
+        overrides: MaterialOverrides,
+    ) -> MaterialId {
+        let mut v = self.inner.write();
+        if let Some(e) = v.iter_mut().find(|e| e.name == name) {
+            match &mut e.kind {
+                EntryKind::Instance { base: b, overrides: o } => {
+                    *b = base;
+                    *o = overrides;
+                }
+                EntryKind::Asset { .. } => {}
+            }
+            return e.id;
+        }
+
+        drop(v);
+        self.register_instance_named(base, name, overrides)
+    }
+
 
     /// Register an instance by descriptor.
     #[inline]

@@ -10,6 +10,7 @@
 pub mod api;
 pub mod builtin;
 pub mod core;
+pub mod binary;
 
 #[cfg(feature = "serde")]
 pub mod serde;
@@ -20,5 +21,8 @@ pub use crate::api::{MaterialDescriptor, MaterialFlags, MaterialId, MaterialRef}
 pub use crate::api::{
     MaterialDomain, MaterialInstanceDesc, MaterialOverrides, MaterialPermutationKey, ShadingModel,
 };
+pub use crate::binary::{decode_asset as decode_material_asset, encode_asset as encode_material_asset};
+pub use crate::binary::{decode_descriptor as decode_material_descriptor, encode_descriptor as encode_material_descriptor};
+pub use crate::binary::{MaterialBinaryAsset, MaterialBinaryError, MaterialBinaryResult};
 pub use crate::core::MaterialRegistry;
 pub use crate::errors::{MaterialError, MaterialResult};
