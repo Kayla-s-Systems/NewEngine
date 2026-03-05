@@ -4,6 +4,7 @@ use std::path::{Path, PathBuf};
 
 use newengine_plugin_api::HostApiV1;
 
+use crate::path_fmt::{canonicalize_if_exists, display_clean};
 use crate::plugins::install_forward_logger_once;
 use crate::plugins::paths::{default_plugins_dir, is_dynamic_lib, resolve_plugins_dir};
 
@@ -45,6 +46,9 @@ impl PluginManager {
                 message: format!("create_dir_all failed: {e}"),
             });
         }
+
+        // Now that it exists, canonicalize to eliminate `..` / `.` segments.
+        let dir = canonicalize_if_exists(&dir);
 
         let rd = std::fs::read_dir(&dir).map_err(|e| PluginLoadError {
             path: dir.clone(),
@@ -112,7 +116,7 @@ impl PluginManager {
                 if has_logging_override {
                     log::warn!(
                         "plugins: no logging plugin candidate found in '{}' but startup has overrides for 'newengine.logging'",
-                        dir.display()
+                        display_clean(&dir)
                     );
                 }
             }
@@ -128,11 +132,11 @@ impl PluginManager {
             r.emit_logs();
         }
 
-        log::info!("plugins: scanning directory '{}'", dir.display());
+        log::info!("plugins: scanning directory '{}'", display_clean(&dir));
         log::info!(
             "plugins: found {} candidate(s) in '{}'",
             loggers.len() + rest.len(),
-            dir.display()
+            display_clean(&dir)
         );
 
         // 4) Load the rest.

@@ -185,9 +185,9 @@ fn pretty_abs_path(path: &Path) -> String {
     {
         let s = s.as_ref();
         if let Some(rest) = s.strip_prefix(r"\\?\\") {
-            return rest.to_string();
+            return rest.replace('\\', "/");
         }
-        return s.to_string();
+        return s.replace('\\', "/");
     }
 
     #[cfg(not(windows))]

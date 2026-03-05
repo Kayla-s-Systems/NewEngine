@@ -6,6 +6,8 @@ use crate::startup;
 
 use std::fmt::Write as _;
 use std::path::PathBuf;
+
+use crate::path_fmt::display_clean;
 use std::sync::OnceLock;
 
 /// High-level engine error reporting facade.
@@ -172,7 +174,7 @@ fn write_startup_config(out: &mut String, cfg: &startup::StartupConfig) {
     let _ = writeln!(out, "  - window_size: {}x{}", cfg.window_size.0, cfg.window_size.1);
     let _ = writeln!(out, "  - window_placement: {:?}", cfg.window_placement);
     let _ = writeln!(out, "  - window_icon_path: {:?}", cfg.window_icon_path);
-    let _ = writeln!(out, "  - modules_dir: {}", cfg.modules_dir.display());
+    let _ = writeln!(out, "  - modules_dir: {}", display_clean(&cfg.modules_dir));
     let _ = writeln!(out, "  - render_backend: {}", cfg.render_backend);
     let _ = writeln!(out, "  - ui_backend: {:?}", cfg.ui_backend);
     let _ = writeln!(out, "  - plugins: {}", cfg.plugins.len());

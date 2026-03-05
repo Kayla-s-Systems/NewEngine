@@ -4,6 +4,8 @@ use serde_json::Value;
 use std::collections::HashMap;
 use std::path::PathBuf;
 
+use crate::path_fmt::display_clean;
+
 #[derive(Debug, Clone)]
 pub enum StartupConfigSource {
     Defaults,
@@ -172,13 +174,13 @@ impl StartupLoadReport {
     pub fn emit_logs(&self) {
         let src = match &self.source {
             StartupConfigSource::Defaults => "Defaults".to_owned(),
-            StartupConfigSource::File { path } => format!("File({})", path.display()),
+            StartupConfigSource::File { path } => format!("File({})", display_clean(path)),
         };
 
         let file = self
             .file
             .as_ref()
-            .map(|p| p.display().to_string())
+            .map(|p| display_clean(p))
             .unwrap_or_else(|| "<none>".to_owned());
 
         log::info!(

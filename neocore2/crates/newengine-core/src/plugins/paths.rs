@@ -3,6 +3,7 @@
 use std::ffi::OsStr;
 use std::path::{Path, PathBuf};
 
+use crate::path_fmt::canonicalize_if_exists;
 use crate::plugins::manager::PluginLoadError;
 
 pub(crate) fn resolve_plugins_dir(dir: &Path) -> Result<PathBuf, PluginLoadError> {
@@ -13,15 +14,15 @@ pub(crate) fn resolve_plugins_dir(dir: &Path) -> Result<PathBuf, PluginLoadError
     let is_dot = dir == Path::new(".");
 
     if dir.is_absolute() && !is_dot {
-        return Ok(dir.to_path_buf());
+        return Ok(canonicalize_if_exists(dir));
     }
 
     let base = default_plugins_dir()?;
     if is_dot {
-        return Ok(base);
+        return Ok(canonicalize_if_exists(&base));
     }
 
-    Ok(base.join(dir))
+    Ok(canonicalize_if_exists(&base.join(dir)))
 }
 
 pub(crate) fn is_dynamic_lib(p: &Path) -> bool {
