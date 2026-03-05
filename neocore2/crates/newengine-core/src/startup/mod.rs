@@ -13,3 +13,5 @@ pub use loader::StartupLoader;
 pub use report_store::{
     last_load_report, last_startup_config, set_last_load_report, set_last_startup_config,
 };
+
+pub(crate) use system_probe::SystemProbe;

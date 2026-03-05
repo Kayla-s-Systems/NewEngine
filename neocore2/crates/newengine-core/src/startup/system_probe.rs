@@ -13,6 +13,8 @@ pub struct SystemProbe {
 }
 
 impl SystemProbe {
+    const TABLE_WIDTH: usize = 47;
+
     #[inline]
     pub fn probe() -> Self {
         let mut out = Self::default();
@@ -34,6 +36,48 @@ impl SystemProbe {
 
         out
     }
+
+
+    pub fn emit_table(&self, stage: &str) {
+        let title = format!("SystemProbe :: Host [{}]", stage);
+
+        log::info!("┌{}", "─".repeat(Self::TABLE_WIDTH));
+        log::info!("│ {}", title);
+        log::info!("├{}", "─".repeat(Self::TABLE_WIDTH));
+
+        self.emit_row("os", self.os.as_deref());
+        self.emit_row("cpu", self.cpu.as_deref());
+        self.emit_row(
+            "cpu_cores_logical",
+            self.cpu_cores_logical
+                .map(|v| v.to_string())
+                .as_deref(),
+        );
+        self.emit_row(
+            "ram_total_mb",
+            self.ram_total_mb.map(|v| v.to_string()).as_deref(),
+        );
+        self.emit_row("gpu", self.gpu.as_deref());
+        self.emit_row(
+            "vram_dedicated_mb",
+            self.vram_dedicated_mb
+                .map(|v| v.to_string())
+                .as_deref(),
+        );
+        self.emit_row("directx", self.directx.as_deref());
+
+        log::info!("└{}", "─".repeat(Self::TABLE_WIDTH));
+    }
+
+    fn emit_row(&self, key: &str, value: Option<&str>) {
+        let value = value
+            .map(str::trim)
+            .filter(|v| !v.is_empty())
+            .unwrap_or("<unknown>");
+
+        log::info!("│   {:<18} : {}", key, value);
+    }
+
 }
 
 fn probe_sysinfo() -> (Option<String>, Option<String>, Option<u32>, Option<u64>) {

@@ -122,6 +122,8 @@ impl PluginManager {
         install_forward_logger_once(host.clone());
 
         // 3) Emit deferred startup diagnostics (now log backend can exist).
+        crate::startup::SystemProbe::probe().emit_table("startup");
+
         if let Some(r) = crate::startup::last_load_report() {
             r.emit_logs();
         }
