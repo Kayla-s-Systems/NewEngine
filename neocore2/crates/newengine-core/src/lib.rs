@@ -13,6 +13,7 @@ pub mod module;
 pub mod plugins;
 pub(crate) mod path_fmt;
 pub mod render;
+pub mod run_id;
 pub mod sched;
 pub mod services_registry;
 pub mod startup;
@@ -34,6 +35,8 @@ pub use host_events::WindowHostEvent;
 pub use module::{ApiProvide, ApiRequire, ApiVersion, Module, ModuleCtx, Resources, Services};
 pub use sched::Scheduler;
 pub use sync::ShutdownToken;
+
+pub use run_id::{init_run_id, run_id};
 
 pub use render::{
     BeginFrameDesc, BeginRenderTargetDesc, Color4, RenderApi, RenderApiRef, RenderTargetDesc,

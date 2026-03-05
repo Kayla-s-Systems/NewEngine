@@ -98,6 +98,7 @@ fn report_fatal_impl(
     let sys = SystemInfo::collect();
     let thread = std::thread::current();
     let thread_name = thread.name().unwrap_or("<unnamed>");
+    let run_id = crate::run_id::run_id();
 
     let now = std::time::SystemTime::now();
     let unix_ms = now
@@ -112,6 +113,9 @@ fn report_fatal_impl(
     let _ = writeln!(text, "{} Crash Report", cfg.product_name);
     let _ = writeln!(text, "Title: {title}");
     let _ = writeln!(text, "App: {} ({})", cfg.app_name, cfg.app_version);
+    if let Some(id) = run_id {
+        let _ = writeln!(text, "RunId: {id}");
+    }
     let _ = writeln!(text, "PID: {}", sys.pid);
     let _ = writeln!(text, "Thread: {thread_name}");
     let _ = writeln!(text, "TimestampUnixMs: {unix_ms}");
@@ -136,7 +140,7 @@ fn report_fatal_impl(
     }
 
     let out_dir = resolve_crash_dir(&cfg, sys.exe.as_deref());
-    let out_path = write_report_file(&out_dir, sys.pid, unix_ms, &text).ok()?;
+    let out_path = write_report_file(&out_dir, sys.pid, unix_ms, run_id, &text).ok()?;
 
     if cfg.spawn_reporter {
         let _ = spawn_reporter(&cfg, &out_path);
@@ -171,14 +175,24 @@ fn resolve_crash_dir(cfg: &CrashReporterConfig, exe: Option<&Path>) -> PathBuf {
         .join(&cfg.crash_dir_name)
 }
 
-fn write_report_file(dir: &Path, pid: u32, unix_ms: u64, text: &str) -> std::io::Result<PathBuf> {
+fn write_report_file(
+    dir: &Path,
+    pid: u32,
+    unix_ms: u64,
+    run_id: Option<&str>,
+    text: &str,
+) -> std::io::Result<PathBuf> {
     std::fs::create_dir_all(dir)?;
 
     let mut n = 0u32;
     loop {
         let suffix = if n == 0 { String::new() } else { format!("_{n}") };
 
-        let file = format!("crash_{unix_ms}_pid{pid}{suffix}.txt");
+        let file = if let Some(id) = run_id {
+            format!("crash_{unix_ms}_pid{pid}_run{id}{suffix}.txt")
+        } else {
+            format!("crash_{unix_ms}_pid{pid}{suffix}.txt")
+        };
         let path = dir.join(file);
 
         match std::fs::OpenOptions::new()
