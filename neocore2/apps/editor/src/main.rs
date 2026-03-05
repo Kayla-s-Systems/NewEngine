@@ -260,6 +260,38 @@ fn try_load_window_icon_best_effort(
     None
 }
 
+#[inline]
+fn shard_log_path_by_run_id(original: &str, run_id: &str) -> Option<String> {
+    use std::path::Path;
+
+    let s = original.trim();
+    if s.is_empty() {
+        return None;
+    }
+
+    let p = Path::new(s);
+    let parent = p.parent();
+    let file_name = p.file_name()?.to_string_lossy();
+    let (stem, ext) = match (p.file_stem(), p.extension()) {
+        (Some(stem), Some(ext)) => (stem.to_string_lossy(), Some(ext.to_string_lossy())),
+        (Some(stem), None) => (stem.to_string_lossy(), None),
+        _ => return None,
+    };
+
+    // Preserve extension when possible.
+    let new_file = match ext.as_deref() {
+        Some("log") => format!("{stem}.{run_id}.log"),
+        Some(e) if !e.is_empty() => format!("{stem}.{run_id}.{e}"),
+        _ => format!("{file_name}.{run_id}.log"),
+    };
+
+    Some(
+        parent
+            .map(|d| d.join(&new_file).to_string_lossy().to_string())
+            .unwrap_or(new_file),
+    )
+}
+
 fn main() {
     if let Err(e) = main_impl() {
         if !matches!(e, EngineError::ExitRequested) {
@@ -273,6 +305,10 @@ fn main() {
 }
 
 fn main_impl() -> EngineResult<()> {
+    // Prologue: generate a process-wide Run ID to correlate logs/crash reports/artifacts.
+    let run_id = newengine_core::init_run_id().to_owned();
+    std::env::set_var("NEWENGINE_RUN_ID", &run_id);
+
     newengine_core::EngineErrorReporter::install(newengine_core::EngineErrorReporterConfig {
         crash: newengine_core::crash::CrashReporterConfig {
             product_name: "NewEngine".to_owned(),
@@ -286,6 +322,20 @@ fn main_impl() -> EngineResult<()> {
     let paths = ConfigPaths::from_startup_str("config.json");
     let (startup, _report) = StartupLoader::load_json(&paths)?;
     let startup = Arc::new(startup);
+
+    // Logging plugin reads environment variables on load; ensure the log file path is sharded by Run ID.
+    // Example: cache/logs/editor.log -> cache/logs/editor.<run_id>.log
+    if std::env::var_os("NEWENGINE_LOG_FILE").is_none() {
+        if let Some(p) = startup
+            .plugins
+            .get("newengine.logging")
+            .and_then(|v| v.get("file").and_then(|x| x.as_str()).or_else(|| v.get("file_path").and_then(|x| x.as_str())))
+        {
+            if let Some(sharded) = shard_log_path_by_run_id(p, &run_id) {
+                std::env::set_var("NEWENGINE_LOG_FILE", sharded);
+            }
+        }
+    }
 
     let asset_roots = collect_editor_asset_roots();
 
