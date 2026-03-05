@@ -1,6 +1,6 @@
 #![forbid(unsafe_op_in_unsafe_fn)]
 
-use std::path::Path;
+use std::path::{Component, Path, PathBuf};
 use std::time::Instant;
 
 use abi_stable::std_types::RVec;
@@ -23,7 +23,8 @@ use super::PluginManager;
 
 impl PluginManager {
     pub(crate) fn load_one(&mut self, path: &Path, host: HostApiV1) -> Result<(), PluginLoadError> {
-        log::info!("plugins: loading '{}'", path.display());
+        let pretty_path = pretty_abs_path(path);
+        log::info!("plugins: loading '{}'", pretty_path.as_str());
         let t0 = Instant::now();
 
         let lib = unsafe { Library::new(path) }.map_err(|e| PluginLoadError {
@@ -43,7 +44,7 @@ impl PluginManager {
         let has_v2 = root.create_v2().is_some();
         log::debug!(
             "plugins: abi probe path='{}' v3={} v2={} ",
-            path.display(),
+            pretty_path.as_str(),
             has_v3,
             has_v2
         );
@@ -73,7 +74,7 @@ impl PluginManager {
             log::warn!(
                 "plugins: duplicate id='{}' from '{}' ignored (already loaded)",
                 id_str,
-                path.display()
+                pretty_path.as_str()
             );
             shutdown_adapter_any(module_any);
             return Ok(());
@@ -87,7 +88,7 @@ impl PluginManager {
             log::error!(
                 "plugins: override present for id='{}' but plugin ABI is not V3; overrides will be ignored. path='{}'",
                 id_str,
-                path.display()
+                pretty_path.as_str()
             );
         }
 
@@ -112,7 +113,7 @@ impl PluginManager {
             "plugins: loaded id='{}' ver='{}' from '{}'",
             info.id,
             info.version,
-            path.display()
+            pretty_path.as_str()
         );
         log::debug!(
             "plugins: load timing id='{}' elapsed_ms={}",
@@ -170,6 +171,54 @@ fn select_abi(root: PluginRootV1Ref) -> (ModuleAdapterAny, PluginInfo, Option<Pl
         log::debug!("plugins: abi selected v1 id='{}'", info.id);
         (ModuleAdapterAny::V1(V1Adapter { module: m1 }), info, None)
     }
+}
+
+fn pretty_abs_path(path: &Path) -> String {
+    // Prefer filesystem canonicalization (removes '..' and follows symlinks).
+    // If it fails (e.g. file doesn't exist yet), fall back to a purely lexical normalization.
+    let p = std::fs::canonicalize(path).unwrap_or_else(|_| normalize_lexical(path));
+
+    // Windows readability: canonicalize() often returns verbatim paths (\\?\C:\...).
+    // Keep UNC paths intact but strip the verbatim prefix for local drive paths.
+    let s = p.to_string_lossy();
+    #[cfg(windows)]
+    {
+        let s = s.as_ref();
+        if let Some(rest) = s.strip_prefix(r"\\?\\") {
+            return rest.to_string();
+        }
+        return s.to_string();
+    }
+
+    #[cfg(not(windows))]
+    {
+        s.to_string()
+    }
+}
+
+fn normalize_lexical(path: &Path) -> PathBuf {
+    let abs = if path.is_absolute() {
+        path.to_path_buf()
+    } else {
+        std::env::current_dir().unwrap_or_else(|_| PathBuf::from(".")).join(path)
+    };
+
+    let mut out = PathBuf::new();
+    for c in abs.components() {
+        match c {
+            Component::CurDir => {}
+            Component::ParentDir => {
+                // Pop only if we have something to pop and it's not a prefix/root component.
+                let popped = out.pop();
+                if !popped {
+                    out.push("..");
+                }
+            }
+            other => out.push(other.as_os_str()),
+        }
+    }
+
+    out
 }
 
 fn init_with_overrides(
