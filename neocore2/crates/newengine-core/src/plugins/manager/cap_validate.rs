@@ -26,9 +26,6 @@ fn collect_providers(loaded: &[LoadedPlugin]) -> HashMap<CapKey, u32> {
     let mut out: HashMap<CapKey, u32> = HashMap::new();
 
     // Engine/Host baseline capabilities.
-    // These are provided by the host runtime (HostApiV1) regardless of which plugins are present.
-    // Without this, any plugin that correctly declares `Requires(host.events.v1)` or
-    // `Requires(host.services.v1)` would be disabled during validation.
     out.insert(cap_key("host.services.v1", CapabilityKind::ServiceV1 as u8), 1);
     out.insert(cap_key("host.events.v1", CapabilityKind::EventsV1 as u8), 1);
 
@@ -58,7 +55,9 @@ fn collect_providers(loaded: &[LoadedPlugin]) -> HashMap<CapKey, u32> {
 }
 
 #[inline]
-fn first_missing_requirement(d: &PluginDescriptor, providers: &HashMap<CapKey, u32>) -> Option<String> {
+fn missing_requirements(d: &PluginDescriptor, providers: &HashMap<CapKey, u32>) -> Vec<String> {
+    let mut out: Vec<String> = Vec::new();
+
     for c in d.capabilities.iter() {
         if c.role != CapabilityRole::Requires {
             continue;
@@ -67,8 +66,8 @@ fn first_missing_requirement(d: &PluginDescriptor, providers: &HashMap<CapKey, u
         let key = cap_key(c.id.as_str(), c.kind as u8);
         let pv = providers.get(&key).copied().unwrap_or(0);
         if pv < c.version {
-            return Some(format!(
-                "missing required capability id='{}' kind={} req_v={} avail_v={}",
+            out.push(format!(
+                "{}(kind={} req_v={} avail_v={})",
                 c.id,
                 c.kind as u8,
                 c.version,
@@ -77,7 +76,23 @@ fn first_missing_requirement(d: &PluginDescriptor, providers: &HashMap<CapKey, u
         }
     }
 
-    None
+    out.sort();
+    out.dedup();
+    out
+}
+
+#[inline]
+fn count_caps(d: &PluginDescriptor) -> (usize, usize) {
+    let mut provides = 0usize;
+    let mut requires = 0usize;
+    for c in d.capabilities.iter() {
+        match c.role {
+            CapabilityRole::Provides => provides = provides.saturating_add(1),
+            CapabilityRole::Requires => requires = requires.saturating_add(1),
+            _ => {}
+        }
+    }
+    (provides, requires)
 }
 
 impl PluginManager {
@@ -93,8 +108,33 @@ impl PluginManager {
             iteration = iteration.saturating_add(1);
             let providers = collect_providers(&self.loaded);
 
+            if log::log_enabled!(log::Level::Debug) {
+                let mut checked = 0usize;
+                let mut disabled = 0usize;
+                let mut with_desc = 0usize;
+
+                for p in self.loaded.iter() {
+                    checked = checked.saturating_add(1);
+                    if p.state == PluginState::Disabled {
+                        disabled = disabled.saturating_add(1);
+                    }
+                    if p.descriptor.is_some() {
+                        with_desc = with_desc.saturating_add(1);
+                    }
+                }
+
+                log::debug!(
+                    "plugins: caps validate iter={} providers={} plugins={} disabled={} described={} ",
+                    iteration,
+                    providers.len(),
+                    checked,
+                    disabled,
+                    with_desc
+                );
+            }
+
             // Collect in deterministic order.
-            let mut to_disable: Vec<(String, String)> = Vec::new();
+            let mut to_disable: Vec<(String, Vec<String>)> = Vec::new();
 
             for p in self.loaded.iter() {
                 if p.state == PluginState::Disabled {
@@ -104,8 +144,17 @@ impl PluginManager {
                     continue;
                 };
 
-                if let Some(reason) = first_missing_requirement(d, &providers) {
-                    to_disable.push((p.info.id.to_string(), reason));
+                let missing = missing_requirements(d, &providers);
+                if !missing.is_empty() {
+                    to_disable.push((p.info.id.to_string(), missing));
+                } else if log::log_enabled!(log::Level::Debug) {
+                    let (prov, req) = count_caps(d);
+                    log::debug!(
+                        "plugins: caps ok id='{}' provides={} requires={} ",
+                        p.info.id,
+                        prov,
+                        req
+                    );
                 }
             }
 
@@ -116,14 +165,21 @@ impl PluginManager {
             to_disable.sort_by(|a, b| a.0.cmp(&b.0));
             to_disable.dedup_by(|a, b| a.0 == b.0);
 
-            for (id, reason) in to_disable {
-                log::error!("plugins: disable id='{}' reason='{}'", id, reason);
-                let _ = self.disable_by_id(&id, reason);
+            for (id, missing) in to_disable {
+                log::error!(
+                    "plugins: disable id='{}' reason='missing required capability(s)' missing=[{}]",
+                    id,
+                    missing.join(", ")
+                );
+                let _ = self.disable_by_id(&id, "missing required capability(s)".to_owned());
             }
 
             // Safety valve: avoid accidental infinite loops if state handling changes.
             if iteration > 32 {
-                log::error!("plugins: capability validation exceeded iteration cap ({}), aborting validation", iteration);
+                log::error!(
+                    "plugins: capability validation exceeded iteration cap ({}), aborting validation",
+                    iteration
+                );
                 break;
             }
         }

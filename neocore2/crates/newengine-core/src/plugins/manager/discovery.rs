@@ -55,8 +55,13 @@ impl PluginManager {
             message: format!("read_dir failed: {e}"),
         })?;
 
+        let mut entries_total: usize = 0;
+        let mut skipped_non_dynlib: usize = 0;
+
         let mut candidates: Vec<PathBuf> = Vec::new();
         for ent in rd {
+            entries_total = entries_total.saturating_add(1);
+
             let ent = ent.map_err(|e| PluginLoadError {
                 path: dir.clone(),
                 message: format!("read_dir entry failed: {e}"),
@@ -64,6 +69,7 @@ impl PluginManager {
 
             let p = ent.path();
             if !is_dynamic_lib(&p) {
+                skipped_non_dynlib = skipped_non_dynlib.saturating_add(1);
                 continue;
             }
             candidates.push(p);
@@ -76,6 +82,14 @@ impl PluginManager {
                 .is_some_and(|s| s.contains("logging"))
         }
 
+        #[inline]
+        fn file_name_only(p: &Path) -> String {
+            p.file_name()
+                .and_then(|s| s.to_str())
+                .map(str::to_owned)
+                .unwrap_or_else(|| "<unnamed>".to_owned())
+        }
+
         candidates.sort();
         let (mut loggers, mut rest): (Vec<PathBuf>, Vec<PathBuf>) = candidates
             .into_iter()
@@ -84,14 +98,33 @@ impl PluginManager {
         loggers.sort();
         rest.sort();
 
+        // Pre-format candidate lists once (file names only, stable ordering).
+        let logger_list: Vec<String> = loggers.iter().map(|p| file_name_only(p)).collect();
+        let rest_list: Vec<String> = rest.iter().map(|p| file_name_only(p)).collect();
+        let all_list: Vec<String> = logger_list
+            .iter()
+            .cloned()
+            .chain(rest_list.iter().cloned())
+            .collect();
+
+        if log::log_enabled!(log::Level::Debug) {
+            log::debug!(
+                "plugins: scan summary dir='{}' entries_total={} dynlibs={} skipped_non_dynlib={} ",
+                display_clean(&dir),
+                entries_total,
+                all_list.len(),
+                skipped_non_dynlib
+            );
+        }
+
         log::debug!(
             "plugins: candidates loggers={} rest={} (logger-first load)",
             loggers.len(),
             rest.len()
         );
         if log::log_enabled!(log::Level::Debug) {
-            for p in loggers.iter().chain(rest.iter()) {
-                log::debug!("plugins: candidate '{}'", p.display());
+            for name in logger_list.iter().chain(rest_list.iter()) {
+                log::debug!("plugins: candidate '{}'", name);
             }
         }
 
@@ -134,9 +167,10 @@ impl PluginManager {
 
         log::info!("plugins: scanning directory '{}'", display_clean(&dir));
         log::info!(
-            "plugins: found {} candidate(s) in '{}'",
-            loggers.len() + rest.len(),
-            display_clean(&dir)
+            "plugins: found {} candidate(s) in '{}' [{}]",
+            all_list.len(),
+            display_clean(&dir),
+            all_list.join(", ")
         );
 
         // 4) Load the rest.
