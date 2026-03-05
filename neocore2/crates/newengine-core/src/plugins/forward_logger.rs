@@ -17,6 +17,9 @@ const METHOD_FLUSH: &str = "flush";
 struct LogRecordWire<'a> {
     #[serde(skip_serializing_if = "Option::is_none")]
     run_id: Option<&'a str>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    run_tag: Option<&'a str>,
+
     level: &'a str,
     target: &'a str,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -84,6 +87,8 @@ impl log::Log for ForwardToPluginLogger {
         with_reentrancy_guard(|| {
             let wire = LogRecordWire {
                 run_id: crate::run_id::run_id(),
+                run_tag: crate::run_id::run_tag(),
+
                 level: record.level().as_str(),
                 target: record.target(),
                 module_path: record.module_path(),

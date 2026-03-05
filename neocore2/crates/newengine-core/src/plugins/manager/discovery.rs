@@ -158,6 +158,12 @@ impl PluginManager {
         // 2) Install forward logger after potential logging plugin init().
         install_forward_logger_once(host.clone());
 
+        // 2.1) Emit primary run id as early as possible (first lines in actual log file).
+        {
+            let rid = crate::run_id::run_id().unwrap_or("<unknown>");
+            log::info!("startup: Run ID: {}", rid);
+        }
+
         // 3) Emit deferred startup diagnostics (now log backend can exist).
         crate::startup::SystemProbe::probe().emit_table("startup");
 

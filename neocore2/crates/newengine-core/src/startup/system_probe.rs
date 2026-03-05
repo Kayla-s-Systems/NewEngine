@@ -37,13 +37,15 @@ impl SystemProbe {
         out
     }
 
-
     pub fn emit_table(&self, stage: &str) {
         let title = format!("SystemProbe :: Host [{}]", stage);
 
         log::info!("┌{}", "─".repeat(Self::TABLE_WIDTH));
         log::info!("│ {}", title);
         log::info!("├{}", "─".repeat(Self::TABLE_WIDTH));
+
+        self.emit_row("run_tag", crate::run_id::run_tag());
+        self.emit_row("run_id", crate::run_id::run_id());
 
         self.emit_row("os", self.os.as_deref());
         self.emit_row("cpu", self.cpu.as_deref());
@@ -77,7 +79,6 @@ impl SystemProbe {
 
         log::info!("│   {:<18} : {}", key, value);
     }
-
 }
 
 fn probe_sysinfo() -> (Option<String>, Option<String>, Option<u32>, Option<u64>) {
@@ -86,7 +87,6 @@ fn probe_sysinfo() -> (Option<String>, Option<String>, Option<u32>, Option<u64>)
     let mut sys = System::new_all();
     sys.refresh_all();
 
-    // Works for sysinfo builds where these are associated fns.
     let os = System::long_os_version()
         .or_else(System::name)
         .map(|s| s.trim().to_owned())
@@ -100,7 +100,6 @@ fn probe_sysinfo() -> (Option<String>, Option<String>, Option<u32>, Option<u64>)
 
     let cores = Some(sys.cpus().len() as u32);
 
-    // sysinfo typically reports KiB.
     let ram_mb = Some(normalize_mem_to_mb(sys.total_memory() as u64));
 
     (os, cpu, cores, ram_mb)
@@ -115,15 +114,10 @@ struct WinDxInfo {
 }
 
 fn normalize_mem_to_mb(raw: u64) -> u64 {
-    // sysinfo historically returned KiB, but in some builds/platforms it can be bytes.
-    //
-    // Heuristic:
-    // - If raw is larger than 1_000_000_000, it is almost certainly bytes (>= ~1GB).
-    // - Otherwise treat as KiB.
     if raw >= 1_000_000_000 {
-        raw / (1024 * 1024) // bytes -> MiB
+        raw / (1024 * 1024)
     } else {
-        raw / 1024 // KiB -> MiB
+        raw / 1024
     }
 }
 
@@ -144,7 +138,6 @@ fn probe_windows_dxgi_d3d12() -> Option<WinDxInfo> {
             Err(_) => break,
         };
 
-        // windows 0.62.2: GetDesc1() returns Result<DXGI_ADAPTER_DESC1>, no args.
         let desc = unsafe { adapter.GetDesc1().ok()? };
 
         let dedicated = desc.DedicatedVideoMemory as u64;
@@ -193,11 +186,7 @@ fn probe_d3d12_feature_level(
 
     for lvl in levels {
         let mut dev: Option<ID3D12Device> = None;
-
-        // windows 0.62.2: D3D12CreateDevice(adapter, level, &mut Option<ID3D12Device>)
-        // Some bindings require `Some(adapter)`; keep it robust with a single call form:
         let ok = unsafe { D3D12CreateDevice(adapter, lvl, &mut dev).is_ok() } && dev.is_some();
-
         if ok {
             return Some(lvl);
         }

@@ -98,7 +98,6 @@ fn report_fatal_impl(
     let sys = SystemInfo::collect();
     let thread = std::thread::current();
     let thread_name = thread.name().unwrap_or("<unnamed>");
-    let run_id = crate::run_id::run_id();
 
     let now = std::time::SystemTime::now();
     let unix_ms = now
@@ -107,18 +106,20 @@ fn report_fatal_impl(
         .map(|d| d.as_millis() as u64)
         .unwrap_or(0);
 
+    let rid = crate::run_id::run_id().unwrap_or("<unknown>");
+    let rtag = crate::run_id::run_tag().unwrap_or("<unknown>");
+
     let mut text = String::new();
     use std::fmt::Write as _;
 
     let _ = writeln!(text, "{} Crash Report", cfg.product_name);
     let _ = writeln!(text, "Title: {title}");
     let _ = writeln!(text, "App: {} ({})", cfg.app_name, cfg.app_version);
-    if let Some(id) = run_id {
-        let _ = writeln!(text, "RunId: {id}");
-    }
     let _ = writeln!(text, "PID: {}", sys.pid);
     let _ = writeln!(text, "Thread: {thread_name}");
     let _ = writeln!(text, "TimestampUnixMs: {unix_ms}");
+    let _ = writeln!(text, "RunTag: {rtag}");
+    let _ = writeln!(text, "RunId: {rid}");
     let _ = writeln!(text, "OS: {} {} ({})", sys.os, sys.arch, sys.family);
     if let Some(n) = sys.logical_cpus {
         let _ = writeln!(text, "LogicalCPUs: {n}");
@@ -140,7 +141,7 @@ fn report_fatal_impl(
     }
 
     let out_dir = resolve_crash_dir(&cfg, sys.exe.as_deref());
-    let out_path = write_report_file(&out_dir, sys.pid, unix_ms, run_id, &text).ok()?;
+    let out_path = write_report_file(&out_dir, sys.pid, unix_ms, rid, rtag, &text).ok()?;
 
     if cfg.spawn_reporter {
         let _ = spawn_reporter(&cfg, &out_path);
@@ -179,7 +180,8 @@ fn write_report_file(
     dir: &Path,
     pid: u32,
     unix_ms: u64,
-    run_id: Option<&str>,
+    run_id: &str,
+    run_tag: &str,
     text: &str,
 ) -> std::io::Result<PathBuf> {
     std::fs::create_dir_all(dir)?;
@@ -188,11 +190,7 @@ fn write_report_file(
     loop {
         let suffix = if n == 0 { String::new() } else { format!("_{n}") };
 
-        let file = if let Some(id) = run_id {
-            format!("crash_{unix_ms}_pid{pid}_run{id}{suffix}.txt")
-        } else {
-            format!("crash_{unix_ms}_pid{pid}{suffix}.txt")
-        };
+        let file = format!("crash_{unix_ms}_pid{pid}_run{run_tag}{suffix}.txt");
         let path = dir.join(file);
 
         match std::fs::OpenOptions::new()
@@ -232,47 +230,29 @@ fn spawn_reporter(cfg: &CrashReporterConfig, report_path: &Path) -> std::io::Res
         );
         return Err(std::io::Error::new(
             std::io::ErrorKind::NotFound,
-            format!("crash reporter not found: {}", exe.display()),
+            "crash reporter not found",
         ));
     }
 
-    let mut cmd = Command::new(&exe);
+    let mut cmd = Command::new(exe);
     cmd.env("NEWENGINE_CRASH_REPORTER_CHILD", "1");
-    cmd.arg("--report").arg(report_path);
-    cmd.arg("--product").arg(&cfg.product_name);
-    cmd.arg("--app").arg(&cfg.app_name);
-    cmd.arg("--version").arg(&cfg.app_version);
-    match cmd.spawn() {
-        Ok(_) => {}
-        Err(e) => {
-            if e.kind() == std::io::ErrorKind::NotFound {
-                eprintln!(
-                    "[newengine] failed to launch crash reporter (not found): '{}'.",
-                    exe.display()
-                );
-            }
-            return Err(e);
-        }
-    }
+    cmd.arg(report_path);
+
+    let _ = cmd.spawn()?;
     Ok(())
 }
 
 fn resolve_reporter_path(cfg: &CrashReporterConfig) -> PathBuf {
-    let base = cfg.reporter_exe_name.as_str();
-    let file = if cfg!(windows) {
-        format!("{base}.exe")
+    let base = std::env::current_exe()
+        .ok()
+        .and_then(|p| p.parent().map(|p| p.to_path_buf()))
+        .unwrap_or_else(|| std::env::current_dir().unwrap_or_else(|_| std::env::temp_dir()));
+
+    let name = if cfg!(windows) {
+        format!("{}.exe", cfg.reporter_exe_name)
     } else {
-        base.to_owned()
+        cfg.reporter_exe_name.clone()
     };
 
-    if let Ok(exe) = std::env::current_exe() {
-        if let Some(dir) = exe.parent() {
-            let cand = dir.join(&file);
-            if cand.is_file() {
-                return cand;
-            }
-        }
-    }
-
-    PathBuf::from(file)
+    base.join(name)
 }
