@@ -1,7 +1,6 @@
 use newengine_camera::{CameraRig, EditorNavController, EditorNavMode};
 use newengine_ecs::{EntityId, World};
 use newengine_sim::FollowTargetCameraController;
-use newengine_transform_api::Transform;
 
 use crate::nav::helpers::{compute_projection, persist_camera_pose, retarget_follow_to_rig};
 use crate::nav::input::cursor_state_for_nav;
@@ -29,7 +28,7 @@ pub(crate) fn handle_capture_edge(
 
     input.clear_motion();
 
-    let pre_local = world.get::<Transform>(cam_id).copied();
+    //let pre_local = world.get::<Transform>(cam_id).copied();
 
     if capture_begin {
         if ctrl.mode != EditorNavMode::Fly {
@@ -53,8 +52,9 @@ pub(crate) fn handle_capture_edge(
     let _ = world.insert(cam_id, CameraRigComp(*rig));
     persist_camera_pose(world, cam_id, rig);
 
-    let post_local = world.get::<Transform>(cam_id).copied();
+    //let post_local = world.get::<Transform>(cam_id).copied();
 
+    /*
     log::debug!(
         "camera_nav: capture {} cam={:?} mode={:?} rig_pos={:?} rig_rot={:?} orbit(yaw={:.5} pitch={:.5} dist={:.4} tgt={:?}) fly(yaw={:.5} pitch={:.5}) input(active={} look={} pan={} ui_busy={} move_mask=0x{:X}) local_pre={:?} local_post={:?}",
         if capture_begin { "BEGIN" } else { "END" },
@@ -75,7 +75,7 @@ pub(crate) fn handle_capture_edge(
         input.move_mask,
         pre_local,
         post_local,
-    );
+    ); */
 
     state.last_bounds_center = bounds.center;
     state.last_bounds_radius = bounds.radius;

@@ -33,51 +33,22 @@
   "plugins": {
     "newengine.logging": {
       "level": "debug",
+      "colors": true,
+      "timestamp": "millis",
+      "format": {
+        "preset": "aaa",
+        "time": "time",
+        "brackets": true,
+        "sep": " │ ",
+        "level_width": 5
+      },
       "file": "cache/logs/editor.log",
-      "include": {
-        "file": true
-      },
-      "dedup": {
-        "window_ms": 250,
-        "capacity": 4096
+      "tee": true,
+      "rolling": {
+        "max_bytes": 33554432,
+        "max_files": 5,
+        "keep_days": 7
       }
-    },
-    "newengine.assets": {
-      "filesystem": true,
-      "mount_paks": true,
-      "pump_steps": 16,
-      "pak_scan": {
-        "recursive": true,
-        "max_depth": 64,
-        "follow_symlinks": false,
-        "extensions": [
-          "nepak",
-          "pak"
-        ],
-        "rescan_interval_ms": 0
-      },
-      "layers": [
-        {
-          "type": "dir",
-          "priority": 100,
-          "path": "assets/",
-          "mount": ""
-        },
-        {
-          "type": "pak_glob",
-          "priority": 60,
-          "dir": "content/",
-          "pattern": "*",
-          "mount": ""
-        },
-        {
-          "type": "pak_glob",
-          "priority": 80,
-          "dir": "assets/",
-          "pattern": "*",
-          "mount": ""
-        }
-      ]
     }
   }
 }

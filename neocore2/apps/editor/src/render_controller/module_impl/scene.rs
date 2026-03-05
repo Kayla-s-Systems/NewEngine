@@ -37,14 +37,6 @@ pub(super) fn scene_bounds_world(world: &newengine_ecs::World) -> Option<BoundsS
 }
 
 #[inline]
-pub(super) fn selection_bounds(
-    scene: &newengine_scene::Scene,
-    sel: Option<newengine_ecs::EntityId>,
-) -> Option<SelectionBoundsSnap> {
-    selection_bounds_world(scene.world(), sel)
-}
-
-#[inline]
 pub(super) fn selection_bounds_world(
     world: &newengine_ecs::World,
     sel: Option<newengine_ecs::EntityId>,

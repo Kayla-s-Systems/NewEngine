@@ -42,8 +42,6 @@ pub use intent::{
 };
 
 // Also keep glob re-exports for backwards compatibility inside the workspace.
-pub use components::*;
-pub use controllers::*;
 pub use schedule::{default_schedule, SimSchedule, SimStage};
 pub use time::SimFrame;
 

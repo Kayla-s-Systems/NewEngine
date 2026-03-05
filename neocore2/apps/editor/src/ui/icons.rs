@@ -56,10 +56,6 @@ impl EditorIconLoader {
         ui_icons::icon_button(ui, self.tex_id(icon), label)
     }
 
-    /// Pumps icon loading and uploads newly ready textures into egui.
-    pub fn pump(&mut self, ctx: &egui::Context) {
-        self.loader.pump(ctx, &self.assets);
-    }
 
     pub fn pump_into_state(
         &mut self,
