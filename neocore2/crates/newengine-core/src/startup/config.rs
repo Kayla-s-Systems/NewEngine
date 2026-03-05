@@ -2,9 +2,9 @@
 
 use serde_json::Value;
 use std::collections::HashMap;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
-use crate::path_fmt::display_clean;
+use crate::path_fmt::{canonicalize_if_exists, display_clean};
 
 #[derive(Debug, Clone)]
 pub enum StartupConfigSource {
@@ -200,8 +200,26 @@ impl StartupLoadReport {
             );
         }
 
+        let base_dir: PathBuf = self
+            .file
+            .as_ref()
+            .and_then(|p| p.parent().map(Path::to_path_buf))
+            .unwrap_or_else(|| std::env::current_dir().unwrap_or_else(|_| PathBuf::from(".")));
+
+        let exe_dir: Option<PathBuf> = std::env::current_exe()
+            .ok()
+            .and_then(|p| p.parent().map(Path::to_path_buf));
+
         for o in &self.overrides {
-            log::info!("startup: override {}: '{}' -> '{}'", o.key, o.from, o.to);
+            let to = match o.key {
+                "modules_dir" => exe_dir
+                    .as_ref()
+                    .map(|d| display_clean(&canonicalize_if_exists(&d.join(&o.to))))
+                    .unwrap_or_else(|| o.to.clone()),
+                "window_icon" => display_clean(&canonicalize_if_exists(&base_dir.join(&o.to))),
+                _ => o.to.clone(),
+            };
+            log::info!("startup: override {}: '{}' -> '{}'", o.key, o.from, to);
         }
 
         for o in &self.plugin_overrides {

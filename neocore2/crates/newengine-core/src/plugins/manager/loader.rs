@@ -1,6 +1,6 @@
 #![forbid(unsafe_op_in_unsafe_fn)]
 
-use std::path::{Component, Path, PathBuf};
+use std::path::{Path, PathBuf};
 use std::time::Instant;
 
 use abi_stable::std_types::RVec;
@@ -11,15 +11,24 @@ use newengine_plugin_api::{
     PluginRootV1Ref,
 };
 
+use crate::path_fmt::{canonicalize_if_exists, display_clean};
 use crate::plugins::host_context::{
     register_plugin_descriptor, unregister_by_owner, with_current_plugin_id,
 };
 use crate::plugins::plugin_config_service::get_plugin_overrides_with_env;
 
+
 use super::adapter::{ModuleAdapterAny, V1Adapter, V2Adapter, V3Adapter};
 use super::config_patch::config_patch_from_json_merge_patch;
 use super::types::{LoadedPlugin, PluginLoadError, PluginState};
 use super::PluginManager;
+
+fn pretty_abs_path(path: &Path) -> String {
+    // Best-effort canonicalization for log output.
+    // If the path does not exist (or cannot be canonicalized), keep the original.
+    let p = canonicalize_if_exists(path);
+    display_clean(&p)
+}
 
 impl PluginManager {
     pub(crate) fn load_one(&mut self, path: &Path, host: HostApiV1) -> Result<(), PluginLoadError> {
@@ -171,54 +180,6 @@ fn select_abi(root: PluginRootV1Ref) -> (ModuleAdapterAny, PluginInfo, Option<Pl
         log::debug!("plugins: abi selected v1 id='{}'", info.id);
         (ModuleAdapterAny::V1(V1Adapter { module: m1 }), info, None)
     }
-}
-
-fn pretty_abs_path(path: &Path) -> String {
-    // Prefer filesystem canonicalization (removes '..' and follows symlinks).
-    // If it fails (e.g. file doesn't exist yet), fall back to a purely lexical normalization.
-    let p = std::fs::canonicalize(path).unwrap_or_else(|_| normalize_lexical(path));
-
-    // Windows readability: canonicalize() often returns verbatim paths (\\?\C:\...).
-    // Keep UNC paths intact but strip the verbatim prefix for local drive paths.
-    let s = p.to_string_lossy();
-    #[cfg(windows)]
-    {
-        let s = s.as_ref();
-        if let Some(rest) = s.strip_prefix(r"\\?\\") {
-            return rest.replace('\\', "/");
-        }
-        return s.replace('\\', "/");
-    }
-
-    #[cfg(not(windows))]
-    {
-        s.to_string()
-    }
-}
-
-fn normalize_lexical(path: &Path) -> PathBuf {
-    let abs = if path.is_absolute() {
-        path.to_path_buf()
-    } else {
-        std::env::current_dir().unwrap_or_else(|_| PathBuf::from(".")).join(path)
-    };
-
-    let mut out = PathBuf::new();
-    for c in abs.components() {
-        match c {
-            Component::CurDir => {}
-            Component::ParentDir => {
-                // Pop only if we have something to pop and it's not a prefix/root component.
-                let popped = out.pop();
-                if !popped {
-                    out.push("..");
-                }
-            }
-            other => out.push(other.as_os_str()),
-        }
-    }
-
-    out
 }
 
 fn init_with_overrides(

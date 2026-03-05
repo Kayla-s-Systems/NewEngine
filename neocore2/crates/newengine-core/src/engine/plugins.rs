@@ -1,7 +1,9 @@
 use super::{Engine, PluginFaultTolerance};
 
 use crate::error::{EngineError, EngineResult};
+use crate::path_fmt::display_clean;
 use crate::plugins::{default_host_api, PluginControlCommand, PluginControlQueue, PluginsSnapshot};
+
 
 use std::time::Instant;
 
@@ -88,7 +90,7 @@ impl<E: Send + 'static> Engine<E> {
                     p.version,
                     p.kind,
                     p.capabilities.len(),
-                    p.path.display()
+                    display_clean(&p.path)
                 );
             }
         }

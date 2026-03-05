@@ -17,11 +17,17 @@ pub(crate) fn canonicalize_if_exists(p: &Path) -> PathBuf {
 
 /// Formats a path for logs as a stable, Windows-friendly string.
 ///
-/// - Strips the `\\?\` verbatim prefix (if present).
+/// - Strips the Windows verbatim prefix (`\\?\`) if present.
+/// - Also strips its slash-normalized form (`//?/`) if present.
 /// - Uses forward slashes (`/`) for readability/stability in logs.
 #[inline]
 pub(crate) fn display_clean(p: &Path) -> String {
     let s = p.to_string_lossy();
+
+    // Note: some code paths may already have normalized separators before logging.
+    // Handle both representations to avoid leaking the prefix into logs.
     let s = s.strip_prefix(r"\\?\").unwrap_or(&s);
+    let s = s.strip_prefix("//?/").unwrap_or(s);
+
     s.replace('\\', "/")
 }

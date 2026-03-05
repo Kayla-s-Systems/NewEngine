@@ -100,7 +100,7 @@ impl PluginManager {
         // 1) Try to load logging plugins first.
         for path in &loggers {
             if let Err(e) = self.load_one(path, host.clone()) {
-                log::warn!("plugins: failed to load '{}': {}", path.display(), e);
+                log::warn!("plugins: failed to load '{}': {}", display_clean(path), e);
                 load_errors.push(e);
             }
         }
@@ -144,7 +144,7 @@ impl PluginManager {
             match self.load_one(&path, host.clone()) {
                 Ok(()) => {}
                 Err(e) => {
-                    log::warn!("plugins: failed to load '{}': {}", path.display(), e);
+                    log::warn!("plugins: failed to load '{}': {}", display_clean(&path), e);
                     load_errors.push(e);
                 }
             }
@@ -160,7 +160,7 @@ impl PluginManager {
                     "plugins: loaded '{}' ver='{}' path='{}'",
                     p.info.id,
                     p.info.version,
-                    p.path.display()
+                    display_clean(&p.path)
                 );
             }
         }
@@ -174,7 +174,7 @@ impl PluginManager {
                 load_errors.len()
             );
             for e in load_errors.iter() {
-                let _ = writeln!(msg, "- path='{}' err='{}'", e.path.display(), e.message);
+                let _ = writeln!(msg, "- path='{}' err='{}'", display_clean(&e.path), e.message);
             }
 
             return Err(PluginLoadError {
