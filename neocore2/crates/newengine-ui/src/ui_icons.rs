@@ -11,6 +11,13 @@ use crate::{AssetAccess, UiImageLoader};
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum BuiltinUiIcon {
     AppLogo,
+
+    FileNew,
+    FileOpen,
+    FileSave,
+
+    AssetManager,
+
     Refresh,
     Load,
     Reset,
@@ -37,6 +44,13 @@ impl BuiltinUiIcon {
     pub const fn key(self) -> &'static str {
         match self {
             Self::AppLogo => "app_logo",
+
+            Self::FileNew => "file_new",
+            Self::FileOpen => "file_open",
+            Self::FileSave => "file_save",
+
+            Self::AssetManager => "asset_manager",
+
             Self::Refresh => "refresh",
             Self::Load => "load",
             Self::Reset => "reset",
@@ -59,6 +73,13 @@ impl BuiltinUiIcon {
     pub const fn default_path(self) -> &'static str {
         match self {
             Self::AppLogo => "ui/icons/app_logo.png",
+
+            Self::FileNew => "ui/icons/file_new.png",
+            Self::FileOpen => "ui/icons/file_open.png",
+            Self::FileSave => "ui/icons/file_save.png",
+
+            Self::AssetManager => "ui/icons/asset_manager.png",
+
             Self::Refresh => "ui/icons/refresh.png",
             Self::Load => "ui/icons/load.png",
             Self::Reset => "ui/icons/reset.png",
@@ -82,13 +103,25 @@ impl BuiltinUiIcon {
 /// This is intentionally conservative (small) to keep startup cheap.
 pub const EDITOR_DEFAULT_ICONS: &[BuiltinUiIcon] = &[
     BuiltinUiIcon::AppLogo,
+    BuiltinUiIcon::FileNew,
+    BuiltinUiIcon::FileOpen,
+    BuiltinUiIcon::FileSave,
+    BuiltinUiIcon::AssetManager,
+
     BuiltinUiIcon::Refresh,
     BuiltinUiIcon::Load,
     BuiltinUiIcon::Reset,
     BuiltinUiIcon::Console,
+    BuiltinUiIcon::Enable,
+    BuiltinUiIcon::Disable,
+    BuiltinUiIcon::Close,
+
     BuiltinUiIcon::GizmoTranslate,
     BuiltinUiIcon::GizmoRotate,
     BuiltinUiIcon::GizmoScale,
+    BuiltinUiIcon::Play,
+    BuiltinUiIcon::Stop,
+
     BuiltinUiIcon::LightDirectional,
     BuiltinUiIcon::LightPoint,
 ];
