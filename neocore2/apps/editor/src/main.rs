@@ -25,6 +25,7 @@ mod plugin_manager;
 mod render_controller;
 mod scene_bootstrap;
 mod scene_bridge;
+mod scene_io_service;
 mod shared;
 mod ui;
 mod ui_contrib;
@@ -144,6 +145,13 @@ fn collect_editor_asset_roots() -> Vec<PathBuf> {
         let mut cur = exe.parent().map(|p| p.to_path_buf());
         for _ in 0..6 {
             let Some(base) = cur.clone() else { break };
+
+            // Project-level shared assets (shaders, UI packs, etc.).
+            let shared_assets = base.join("assets");
+            if shared_assets.is_dir() {
+                roots.push(shared_assets);
+            }
+
             let cand = base.join("apps").join("editor").join("assets");
             if cand.is_dir() {
                 roots.push(cand);
@@ -153,7 +161,15 @@ fn collect_editor_asset_roots() -> Vec<PathBuf> {
         }
     }
 
-    roots
+    // Dedup but keep stable order.
+    let mut out: Vec<PathBuf> = Vec::new();
+    let mut set: std::collections::HashSet<PathBuf> = std::collections::HashSet::new();
+    for r in roots {
+        if set.insert(r.clone()) {
+            out.push(r);
+        }
+    }
+    out
 }
 
 fn mount_asset_roots_best_effort(assets: &AssetServiceClient, roots: &[PathBuf]) {
@@ -360,6 +376,9 @@ fn main_impl() -> EngineResult<()> {
 
     // 2) Load plugins BEFORE creating winit (required: providers must exist).
     engine.load_plugins_once()?;
+
+    // 2.1) Host fallback services (only when not provided by plugins).
+    scene_io_service::register_scene_io_best_effort(scene.clone());
 
     // AssetManager is optional: missing service is not fatal.
     let assets = AssetServiceClient::new(newengine_core::plugins::default_host_api());

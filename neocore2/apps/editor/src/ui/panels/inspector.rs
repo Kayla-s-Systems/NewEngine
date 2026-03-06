@@ -12,6 +12,7 @@ use newengine_ui::BuiltinUiIcon;
 
 use crate::scene_bridge::PrimitiveMaterialBase;
 
+use super::super::util;
 use super::super::EditorUiBuild;
 
 #[inline]
@@ -36,12 +37,33 @@ fn yaw_pitch_deg_to_dir(yaw_deg: f32, pitch_deg: f32) -> newengine_math::Vec3 {
 }
 
 pub(crate) fn draw(me: &mut EditorUiBuild, ctx: &egui::Context) {
+    let max_w = util::details_max_width(ctx, me.layout.show_left_toolbar, me.layout.show_outliner);
+
     egui::SidePanel::right("inspector")
         .resizable(true)
         .default_width(300.0)
         .min_width(260.0)
+        .max_width(max_w)
         .show(ctx, |ui| {
-            ui.heading("Inspector");
+            ui.heading("Details");
+
+            ui.horizontal(|ui| {
+                ui.label("Search");
+                ui.add(
+                    egui::TextEdit::singleline(&mut me.details_filter)
+                        .hint_text("transform, material, lighting...")
+                        .desired_width(f32::INFINITY),
+                );
+                if me
+                    .icons
+                    .icon_button(ui, BuiltinUiIcon::Close, "")
+                    .on_hover_text("Clear")
+                    .clicked()
+                {
+                    me.details_filter.clear();
+                }
+            });
+
             ui.add_space(6.0);
 
             // Viewport controls intentionally removed: grid is an editor overlay with fixed defaults.
@@ -72,8 +94,12 @@ pub(crate) fn draw(me: &mut EditorUiBuild, ctx: &egui::Context) {
 
             ui.separator();
 
+            let filter = me.details_filter.trim().to_ascii_lowercase();
+            let wants = |name: &str, f: &str| f.is_empty() || name.to_ascii_lowercase().contains(f);
+
             // Transform
-            ui.collapsing("Transform", |ui| {
+            if wants("Transform", &filter) {
+                ui.collapsing("Transform", |ui| {
                 let mut changed = false;
 
                 ui.horizontal(|ui| {
@@ -115,7 +141,7 @@ pub(crate) fn draw(me: &mut EditorUiBuild, ctx: &egui::Context) {
                         .changed();
                 });
 
-                if changed {
+                    if changed {
                     let pos =
                         newengine_math::Vec3::new(me.insp_pos[0], me.insp_pos[1], me.insp_pos[2]);
                     let ypr = (
@@ -129,11 +155,13 @@ pub(crate) fn draw(me: &mut EditorUiBuild, ctx: &egui::Context) {
                         me.insp_scale[2],
                     );
                     me.scene_bridge.cmd_set_transform(e, pos, ypr, scale);
-                }
-            });
+                    }
+                });
+            }
 
             // Primitive
-            ui.collapsing("Primitive", |ui| {
+            if wants("Primitive", &filter) {
+                ui.collapsing("Primitive", |ui| {
                 let scene = me.scene_bridge.scene();
                 let s = scene.read();
                 let w = s.world();
@@ -154,10 +182,12 @@ pub(crate) fn draw(me: &mut EditorUiBuild, ctx: &egui::Context) {
                 } else {
                     ui.label("(no Primitive component)");
                 }
-            });
+                });
+            }
 
             // Lighting (editor-first, deterministic, module-driven).
-            ui.collapsing("Lighting", |ui| {
+            if wants("Lighting", &filter) {
+                ui.collapsing("Lighting", |ui| {
                 // Global ambient (resource).
                 {
                     let scene = me.scene_bridge.scene();
@@ -279,10 +309,12 @@ pub(crate) fn draw(me: &mut EditorUiBuild, ctx: &egui::Context) {
                 } else {
                     ui.label("(no Light component on selection)");
                 }
-            });
+                });
+            }
 
             // Materials (foundation step).
-            ui.collapsing("Material", |ui| {
+            if wants("Material", &filter) {
+                ui.collapsing("Material", |ui| {
                 let mats = me.scene_bridge.materials_snapshot();
                 let current_label = mats
                     .iter()
@@ -384,6 +416,7 @@ pub(crate) fn draw(me: &mut EditorUiBuild, ctx: &egui::Context) {
                 } else {
                     ui.label("(no Material assigned)");
                 }
-            });
+                });
+            }
         });
 }

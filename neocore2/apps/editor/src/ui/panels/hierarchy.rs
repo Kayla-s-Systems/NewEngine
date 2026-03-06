@@ -6,15 +6,37 @@ use newengine_primitives::Primitive;
 use newengine_scene::components::Name;
 use newengine_ui::BuiltinUiIcon;
 
+use super::super::util;
 use super::super::EditorUiBuild;
 
 pub(crate) fn draw(me: &mut EditorUiBuild, ctx: &egui::Context) {
+    let max_w = util::outliner_max_width(ctx, me.layout.show_left_toolbar, me.layout.show_details);
+
     egui::SidePanel::left("hierarchy")
         .resizable(true)
         .default_width(240.0)
         .min_width(200.0)
+        .max_width(max_w)
         .show(ctx, |ui| {
-            ui.heading("Hierarchy");
+            ui.heading("World Outliner");
+
+            ui.horizontal(|ui| {
+                ui.label("Search");
+                ui.add(
+                    egui::TextEdit::singleline(&mut me.outliner_filter)
+                        .hint_text("filter...")
+                        .desired_width(f32::INFINITY),
+                );
+                if me
+                    .icons
+                    .icon_button(ui, BuiltinUiIcon::Close, "")
+                    .on_hover_text("Clear")
+                    .clicked()
+                {
+                    me.outliner_filter.clear();
+                }
+            });
+
             ui.add_space(6.0);
 
             let primary = me.editor.selection.primary();
@@ -34,10 +56,16 @@ pub(crate) fn draw(me: &mut EditorUiBuild, ctx: &egui::Context) {
                     .then_with(|| a.1.stable_u64().cmp(&b.1.stable_u64()))
             });
 
+            let filter = me.outliner_filter.trim().to_ascii_lowercase();
+
             egui::ScrollArea::vertical()
                 .auto_shrink([false; 2])
                 .show(ui, |ui| {
                     for (name, e, has_prim) in items {
+                        if !filter.is_empty() && !name.to_ascii_lowercase().contains(&filter) {
+                            continue;
+                        }
+
                         let icon_kind = if w.get::<DirectionalLight>(e).is_some() {
                             Some(BuiltinUiIcon::LightDirectional)
                         } else if w.get::<PointLight>(e).is_some() {

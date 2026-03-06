@@ -13,7 +13,7 @@ use newengine_materials::{
 };
 use newengine_primitives::{builtins, Primitive, PrimitiveId, PrimitiveRegistry};
 use newengine_scene::{components::SceneRoot, SceneState};
-use newengine_scene::{spawn_named, Scene};
+use newengine_scene::{spawn_named, Scene, SceneAsset};
 use newengine_transform::Transform;
 
 use newengine_lighting::{AmbientLight, DirectionalLight, PointLight};
@@ -27,6 +27,9 @@ use crate::scene_bootstrap::bootstrap_editor_scene;
 pub enum SceneCommand {
     /// Replace the current scene with a fresh one (root + camera).
     NewScene,
+
+    /// Replace the current scene from a serialized scene asset.
+    LoadSceneAsset { asset: SceneAsset },
 
     SpawnPrimitive {
         id: PrimitiveId,
@@ -207,6 +210,11 @@ impl SceneBridge {
     #[inline]
     pub fn cmd_new_scene(&self) {
         self.queue.lock().cmds.push(SceneCommand::NewScene);
+    }
+
+    #[inline]
+    pub fn cmd_load_scene_asset(&self, asset: SceneAsset) {
+        self.queue.lock().cmds.push(SceneCommand::LoadSceneAsset { asset });
     }
 
     #[inline]
@@ -414,6 +422,21 @@ impl SceneBridge {
                     SceneCommand::NewScene => {
                         *scene = Scene::new();
                         bootstrap_editor_scene(&mut *scene);
+                        pending_selection = Some(scene.active_camera());
+                    }
+
+                    SceneCommand::LoadSceneAsset { asset } => {
+                        *scene = Scene::new();
+
+                        if let Err(e) = scene.load_asset(&asset) {
+                            log::error!("scene.load_asset failed: {e}");
+                            bootstrap_editor_scene(&mut *scene);
+                        } else {
+                            // Ensure editor-side invariants (camera/controller/resources) without
+                            // duplicating authoring data.
+                            bootstrap_editor_scene(&mut *scene);
+                        }
+
                         pending_selection = Some(scene.active_camera());
                     }
 

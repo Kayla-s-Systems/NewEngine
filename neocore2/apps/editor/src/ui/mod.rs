@@ -9,6 +9,10 @@ use newengine_platform_winit::egui;
 use newengine_ui::markup::UiMarkupDoc;
 use newengine_ui::{UiBuildFn, UiHub};
 
+use newengine_assets::AssetServiceClient;
+use newengine_core::plugins::{default_host_api, has_service};
+use newengine_scene_io::SceneIoClient;
+
 use std::any::Any;
 use std::sync::{Arc, Mutex};
 
@@ -68,6 +72,18 @@ pub struct EditorUiBuild {
 
     pub(crate) material_pipeline: MaterialPipeline,
 
+    pub(crate) layout: EditorUiLayout,
+
+    pub(crate) assets: Option<AssetServiceClient>,
+    pub(crate) asset_ui: AssetManagerUiState,
+
+    pub(crate) scene_io: Option<SceneIoClient>,
+    pub(crate) scene_io_ui: SceneIoUiState,
+
+    pub(crate) outliner_filter: String,
+    pub(crate) details_filter: String,
+
+
     // Viewport navigation interaction (UI-driven, not via global input plugin).
     //
     // Track MMB orbit/pan and RMB free-fly separately.
@@ -104,6 +120,92 @@ pub struct EditorUiBuild {
     // Viewport picking is processed on render thread, but selection semantics (replace/add/toggle)
     // are decided by UI at click time.
     pub(crate) pending_pick: Option<PendingPick>,
+}
+
+#[derive(Debug, Clone)]
+pub(crate) struct EditorUiLayout {
+    pub(crate) show_left_toolbar: bool,
+    pub(crate) show_outliner: bool,
+    pub(crate) show_details: bool,
+}
+
+impl Default for EditorUiLayout {
+    #[inline]
+    fn default() -> Self {
+        Self {
+            // UE-style default: tools on the top toolbar.
+            show_left_toolbar: false,
+            show_outliner: true,
+            show_details: true,
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub(crate) struct AssetManagerUiState {
+    pub(crate) open: bool,
+
+    pub(crate) path: String,
+    pub(crate) last_id: Option<String>,
+    pub(crate) last_state: String,
+    pub(crate) last_meta_json: String,
+    pub(crate) last_trace_json: String,
+    pub(crate) sources_json: String,
+    pub(crate) formats_json: String,
+    pub(crate) last_error: String,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum SceneIoMode {
+    Load,
+    Save,
+}
+
+#[derive(Debug, Clone)]
+pub(crate) struct SceneIoUiState {
+    pub(crate) open: bool,
+    pub(crate) mode: SceneIoMode,
+    pub(crate) path: String,
+    pub(crate) pretty: bool,
+    pub(crate) include_empty_entities: bool,
+
+    pub(crate) formats_json: String,
+    pub(crate) last_status: String,
+    pub(crate) last_error: String,
+}
+
+impl Default for SceneIoUiState {
+    #[inline]
+    fn default() -> Self {
+        Self {
+            open: false,
+            mode: SceneIoMode::Load,
+            path: "scenes/example.scene.json".to_string(),
+            pretty: true,
+            include_empty_entities: false,
+
+            formats_json: String::new(),
+            last_status: String::new(),
+            last_error: String::new(),
+        }
+    }
+}
+
+impl Default for AssetManagerUiState {
+    #[inline]
+    fn default() -> Self {
+        Self {
+            open: false,
+            path: String::new(),
+            last_id: None,
+            last_state: String::new(),
+            last_meta_json: String::new(),
+            last_trace_json: String::new(),
+            sources_json: String::new(),
+            formats_json: String::new(),
+            last_error: String::new(),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -144,6 +246,26 @@ impl EditorUiBuild {
 
             material_pipeline: MaterialPipeline::new(),
 
+            layout: EditorUiLayout::default(),
+
+            assets: if has_service(newengine_assets::consts::ASSET_SERVICE_ID) {
+                Some(AssetServiceClient::new(default_host_api()))
+            } else {
+                None
+            },
+            asset_ui: AssetManagerUiState::default(),
+
+            scene_io: if has_service(newengine_scene_io::SCENE_IO_SERVICE_ID) {
+                Some(SceneIoClient::new(default_host_api()))
+            } else {
+                None
+            },
+            scene_io_ui: SceneIoUiState::default(),
+
+            outliner_filter: String::new(),
+            details_filter: String::new(),
+
+
             last_nav_drag_pos: None,
             last_fly_drag_pos: None,
             fly_latch: newengine_viewport::nav::FlyRmbLatch::default(),
@@ -178,6 +300,7 @@ impl EditorUiBuild {
     }
 
     #[inline]
+    #[allow(dead_code)]
     fn update_markup_vars(&mut self) {
         let entities = self.scene_bridge.scene().read().world().entity_count();
         self.markup_state
@@ -213,6 +336,7 @@ impl EditorUiBuild {
     }
 
     #[inline]
+    #[allow(dead_code)]
     fn dispatch_markup_actions(&mut self) {
         for ev in self.markup_state.drain_events() {
             for a in ev.actions.iter() {
@@ -221,6 +345,7 @@ impl EditorUiBuild {
         }
     }
 
+    #[allow(dead_code)]
     fn exec_markup_action(&mut self, action: &str) {
         match action {
             "editor.new_scene" => {
@@ -346,11 +471,8 @@ impl EditorUiBuild {
             return;
         };
 
-        let maybe_doc = self
-            .shared_doc
-            .lock()
-            .ok()
-            .and_then(|g| g.as_ref().map(Arc::clone));
+        // NOTE: asset-driven markup is currently not part of the editor shell.
+        // We keep `shared_doc` for future data-driven UI prototyping.
 
         // Poll asset-driven materials (JSON -> cached .nemat -> registry).
         let mats = self.scene_bridge.materials();
@@ -360,6 +482,8 @@ impl EditorUiBuild {
         // Also publish `$tex.*` vars into markup state.
         self.icons.pump_into_state(ctx, &mut self.markup_state);
 
+        let wants_kb = ctx.wants_keyboard_input();
+
         if ctx.input(|i| i.key_pressed(egui::Key::F1)) {
             self.console_open = !self.console_open;
         }
@@ -368,14 +492,25 @@ impl EditorUiBuild {
                 pm.toggle();
             }
         }
-        if ctx.input(|i| i.modifiers.ctrl && i.key_pressed(egui::Key::N)) {
-            self.scene_bridge.cmd_new_scene();
-            self.editor.commands.clear();
-            self.editor.selection.clear();
+        if !wants_kb {
+            if ctx.input(|i| i.modifiers.command && i.key_pressed(egui::Key::N)) {
+                self.scene_bridge.cmd_new_scene();
+                self.editor.commands.clear();
+                self.editor.selection.clear();
+            }
+
+            if ctx.input(|i| i.modifiers.command && i.key_pressed(egui::Key::O)) {
+                self.scene_io_ui.open = true;
+                self.scene_io_ui.mode = SceneIoMode::Load;
+            }
+
+            if ctx.input(|i| i.modifiers.command && i.key_pressed(egui::Key::S)) {
+                self.scene_io_ui.open = true;
+                self.scene_io_ui.mode = SceneIoMode::Save;
+            }
         }
 
         // Undo/Redo (industry standard).
-        let wants_kb = ctx.wants_keyboard_input();
         if !wants_kb {
             let undo = ctx.input(|i| i.modifiers.command && i.key_pressed(egui::Key::Z));
             let redo = ctx.input(|i| {
@@ -394,18 +529,23 @@ impl EditorUiBuild {
             }
         }
 
-        if let Some(doc) = maybe_doc.as_ref() {
-            self.update_markup_vars();
-            newengine_ui::markup::render_egui(doc.as_ref(), ctx, &mut self.markup_state);
-            self.dispatch_markup_actions();
-        } else {
-            panels::topbar::draw(self, ctx);
+        panels::menubar::draw(self, ctx);
+        panels::top_toolbar::draw(self, ctx);
+
+        if self.layout.show_left_toolbar {
+            panels::toolbar::draw(self, ctx);
         }
-        panels::toolbar::draw(self, ctx);
-        panels::hierarchy::draw(self, ctx);
-        panels::inspector::draw(self, ctx);
+        if self.layout.show_outliner {
+            panels::hierarchy::draw(self, ctx);
+        }
+        if self.layout.show_details {
+            panels::inspector::draw(self, ctx);
+        }
+
         panels::viewport::draw(self, ctx);
         panels::console::draw(self, ctx);
+        panels::asset_manager::draw(self, ctx);
+        panels::scene_io::draw(self, ctx);
 
         let mut user_data = ();
         self.ui_hub.run(ctx_any, &mut user_data);

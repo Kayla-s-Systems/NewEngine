@@ -21,11 +21,13 @@ icon = "assets/editor.ico"
 # codepage = 1200
 
 [dependencies]
+abi_stable = { version = "0.11" }
 crossbeam-channel = "0.5"
 log = "0.4"
 shaderc = "0.10.1"
 parking_lot = "0.12"
 blake3 = "1"
+serde_json = "1"
 newengine-math = { path = "../../crates/newengine-math" }
 
 newengine-core = { path = "../../crates/newengine-core" }
@@ -48,6 +50,8 @@ newengine-lighting = { path = "../../crates/newengine-lighting" }
 newengine-editor-core = { path = "../../crates/newengine-editor-core" }
 newengine-previews = { path = "../../crates/newengine-previews" }
 newengine-sim = { path = "../../crates/newengine-sim" }
+newengine-scene-io = { path = "../../crates/newengine-scene-io" }
+newengine-plugin-api = { path = "../../crates/newengine-plugin-api" }
 
 [build-dependencies]
 embed-resource = "2"
