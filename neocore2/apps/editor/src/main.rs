@@ -391,7 +391,8 @@ fn main_impl() -> EngineResult<()> {
         previews.clone(),
     )?;
 
-    engine.load_plugins_once()?;
+    engine.preload_bootstrap_plugins()?;
+    engine.emit_plugins_diagnostics("after bootstrap preload");
     scene_io_service::register_scene_io_best_effort(scene.clone());
 
     let assets = AssetServiceClient::new(newengine_core::plugins::default_host_api());
@@ -401,8 +402,8 @@ fn main_impl() -> EngineResult<()> {
     if assets_available {
         mount_asset_roots_best_effort(&assets, &asset_roots);
     } else {
-        log::warn!(
-            "editor startup: AssetManager service '{}' not found; running in degraded mode",
+        log::info!(
+            "editor startup: AssetManager service '{}' is not available during bootstrap/platform init; using filesystem fallback for early assets",
             newengine_assets::consts::ASSET_SERVICE_ID
         );
     }

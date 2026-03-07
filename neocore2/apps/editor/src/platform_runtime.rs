@@ -15,7 +15,9 @@ use newengine_platform_api::{
     PlatformCursorPollV1, PlatformCursorStateV1, PlatformHostApiV1, PlatformRuntimeRunFnV1,
     PlatformStepResultV1, PlatformSurfaceMetricsV1, PlatformWindowReadyV1,
 };
-use newengine_ui::{create_provider, UiBuildFn, UiFrameDesc, UiProvider, UiProviderKind, UiProviderOptions};
+use newengine_ui::{
+    create_provider, UiBuildFn, UiFrameDesc, UiProvider, UiProviderKind, UiProviderOptions,
+};
 use raw_window_handle::{RawDisplayHandle, RawWindowHandle};
 
 use crate::platform_input::poll_input_frame;
@@ -56,8 +58,9 @@ impl EditorPlatformRuntime {
         let lib = unsafe { Library::new(runtime_path) }
             .map_err(|e| EngineError::other(format!("platform runtime load failed: {e}")))?;
 
-        let run: libloading::Symbol<PlatformRuntimeRunFnV1> = unsafe { lib.get(PLATFORM_RUNTIME_SYMBOL) }
-            .map_err(|e| EngineError::other(format!("platform runtime symbol missing: {e}")))?;
+        let run: libloading::Symbol<PlatformRuntimeRunFnV1> =
+            unsafe { lib.get(PLATFORM_RUNTIME_SYMBOL) }
+                .map_err(|e| EngineError::other(format!("platform runtime symbol missing: {e}")))?;
 
         log::info!(
             "platform runtime: entry resolved symbol='{}' title='{}' size={}x{}",
@@ -95,7 +98,14 @@ impl EditorPlatformRuntime {
     }
 
     fn on_window_ready(&mut self, ready: PlatformWindowReadyV1) -> EngineResult<()> {
-        log::info!("platform runtime: window ready backend={:?} size={}x{} ppp={:.3}", ready.handles.backend, ready.surface.width, ready.surface.height, ready.surface.pixels_per_point);
+        log::info!(
+            "platform runtime: window ready backend={:?} size={}x{} ppp={:.3}",
+            ready.handles.backend,
+            ready.surface.width,
+            ready.surface.height,
+            ready.surface.pixels_per_point
+        );
+
         self.surface = ready.surface;
         let (display, window) = native_to_raw_handles(ready.handles)?;
 
@@ -106,20 +116,53 @@ impl EditorPlatformRuntime {
         });
 
         if !self.started {
-            self.engine.start()?;
-            self.started = true;
+            match self.engine.load_engine_plugins_once() {
+                Ok(count) => {
+                    log::info!(
+                        "platform runtime: engine plugins init completed loaded_count={}",
+                        count
+                    );
+                }
+                Err(e) => {
+                    log::error!("platform runtime: engine plugins init failed: {}", e);
+                    return Err(e);
+                }
+            }
+
+            match self.engine.start() {
+                Ok(()) => {
+                    self.started = true;
+                    log::info!("platform runtime: engine.start completed");
+                }
+                Err(e) => {
+                    log::error!("platform runtime: engine.start failed: {}", e);
+                    return Err(e);
+                }
+            }
         }
 
-        self.engine.emit(HostEvent::Window(WindowHostEvent::Ready {
+        match self.engine.emit(HostEvent::Window(WindowHostEvent::Ready {
             width: ready.surface.width,
             height: ready.surface.height,
-        }))?;
+        })) {
+            Ok(()) => {}
+            Err(e) => {
+                log::error!("platform runtime: emit WindowReady failed: {}", e);
+                return Err(e);
+            }
+        }
 
         Ok(())
     }
 
     fn on_window_resized(&mut self, metrics: PlatformSurfaceMetricsV1) -> EngineResult<()> {
-        log::debug!("platform runtime: resized {}x{} ppp={:.3}", metrics.width, metrics.height, metrics.pixels_per_point);
+        log::debug!(
+            "platform runtime: resized {}x{} ppp={:.3}",
+            metrics.width,
+            metrics.height,
+            metrics.pixels_per_point
+        );
+
         self.surface = metrics;
         self.engine.resources_mut().insert(WindowInitSize {
             width: metrics.width,
@@ -129,7 +172,8 @@ impl EditorPlatformRuntime {
         let minimized = metrics.width == 0 || metrics.height == 0;
         if minimized != self.minimized {
             self.minimized = minimized;
-            self.engine.emit(HostEvent::Window(WindowHostEvent::MinimizedChanged(minimized)))?;
+            self.engine
+                .emit(HostEvent::Window(WindowHostEvent::MinimizedChanged(minimized)))?;
         }
 
         self.engine.emit(HostEvent::Window(WindowHostEvent::Resized {
@@ -141,13 +185,15 @@ impl EditorPlatformRuntime {
 
     fn on_window_focused(&mut self, focused: bool) -> EngineResult<()> {
         log::debug!("platform runtime: focused={focused}");
-        self.engine.emit(HostEvent::Window(WindowHostEvent::Focused(focused)))?;
+        self.engine
+            .emit(HostEvent::Window(WindowHostEvent::Focused(focused)))?;
         Ok(())
     }
 
     fn on_close_requested(&mut self) -> EngineResult<()> {
         log::info!("platform runtime: close requested");
-        self.engine.emit(HostEvent::Window(WindowHostEvent::CloseRequested))?;
+        self.engine
+            .emit(HostEvent::Window(WindowHostEvent::CloseRequested))?;
         self.engine.request_exit()?;
         Ok(())
     }
@@ -167,8 +213,12 @@ impl EditorPlatformRuntime {
         }
 
         match self.engine.step() {
-            Ok(()) => Ok(PlatformStepResultV1 { exit_requested: false }),
-            Err(EngineError::ExitRequested) => Ok(PlatformStepResultV1 { exit_requested: true }),
+            Ok(()) => Ok(PlatformStepResultV1 {
+                exit_requested: false,
+            }),
+            Err(EngineError::ExitRequested) => Ok(PlatformStepResultV1 {
+                exit_requested: true,
+            }),
             Err(e) => Err(e),
         }
     }
@@ -287,16 +337,32 @@ fn native_to_raw_handles(
 }
 
 pub fn detect_platform_runtime_path(modules_dir: &Path) -> EngineResult<PathBuf> {
+    type PlatformRuntimeEntryFn = unsafe extern "C" fn(
+        abi_stable::std_types::RString,
+        newengine_platform_api::PlatformHostApiV1,
+        newengine_platform_api::PlatformAppConfigV1,
+    ) -> abi_stable::std_types::RResult<(), abi_stable::std_types::RString>;
+
     #[inline]
-    fn is_runtime_name(path: &Path) -> bool {
+    fn is_runtime_candidate(path: &Path) -> bool {
+        if !path.is_file() {
+            return false;
+        }
+
         let Some(name) = path.file_name().and_then(|s| s.to_str()) else {
             return false;
         };
+
         let lower = name.to_ascii_lowercase();
-        (lower.ends_with(".dll") || lower.ends_with(".so") || lower.ends_with(".dylib"))
-            && (lower.contains("platform-winit")
-            || lower.contains("platform_winit")
-            || lower.starts_with("newengine_platform_"))
+        if !(lower.ends_with(".dll") || lower.ends_with(".so") || lower.ends_with(".dylib")) {
+            return false;
+        }
+
+        let Ok(lib) = (unsafe { libloading::Library::new(path) }) else {
+            return false;
+        };
+
+        unsafe { lib.get::<PlatformRuntimeEntryFn>(PLATFORM_RUNTIME_SYMBOL) }.is_ok()
     }
 
     #[inline]
@@ -306,7 +372,7 @@ pub fn detect_platform_runtime_path(modules_dir: &Path) -> EngineResult<PathBuf>
         };
         for ent in rd.flatten() {
             let path = ent.path();
-            if is_runtime_name(&path) {
+            if is_runtime_candidate(&path) {
                 out.push(path);
             }
         }
@@ -359,7 +425,7 @@ pub fn detect_platform_runtime_path(modules_dir: &Path) -> EngineResult<PathBuf>
 
     candidates.into_iter().next().ok_or_else(|| {
         EngineError::other(format!(
-            "platform runtime DLL not found; searched [{}] and expected file name containing 'platform-winit' or 'platform_winit'",
+            "platform runtime DLL not found; searched [{}] and expected exported symbol 'newengine_platform_runtime_run_v1'",
             search_dirs
                 .iter()
                 .map(|p| p.display().to_string())
@@ -368,4 +434,3 @@ pub fn detect_platform_runtime_path(modules_dir: &Path) -> EngineResult<PathBuf>
         ))
     })
 }
-

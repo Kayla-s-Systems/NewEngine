@@ -2,16 +2,82 @@ use super::{Engine, PluginFaultTolerance};
 
 use crate::error::{EngineError, EngineResult};
 use crate::path_fmt::display_clean;
-use crate::plugins::{default_host_api, PluginControlCommand, PluginControlQueue, PluginsSnapshot};
-
+use crate::plugins::{
+    default_host_api, PluginControlCommand, PluginControlQueue, PluginsSnapshot,
+};
 
 use std::time::Instant;
 
 impl<E: Send + 'static> Engine<E> {
-    /// Loads plugins once (idempotent).
-    ///
-    /// The engine core never hardcodes plugin categories (assets, input, render, etc.).
-    /// Any capability registration and secondary loading (e.g. importers) is owned by plugins.
+    pub fn preload_bootstrap_plugins(&mut self) -> EngineResult<()> {
+        let strict = matches!(self.plugin_fault_tolerance, PluginFaultTolerance::Strict);
+        let host = default_host_api();
+
+        let res = match self.plugins_dir.as_deref() {
+            Some(dir) => self.plugins.load_bootstrap_from_dir(dir, host, strict),
+            None => self.plugins.load_bootstrap_default(host, strict),
+        };
+
+        match res {
+            Ok(()) => Ok(()),
+            Err(e) => Err(EngineError::Other(format!(
+                "plugins: bootstrap load failed: {e}"
+            ))),
+        }
+    }
+
+    pub fn load_engine_plugins_once(&mut self) -> EngineResult<usize> {
+        if self.engine_plugins_loaded {
+            log::debug!("plugins: engine load skipped (already loaded)");
+            return Ok(0);
+        }
+
+        let strict = matches!(self.plugin_fault_tolerance, PluginFaultTolerance::Strict);
+        let phase = "engine-load";
+        let t0 = Instant::now();
+        let host = default_host_api();
+
+        let load_result = match self.plugins_dir.as_deref() {
+            Some(dir) => self.plugins.load_engine_from_dir(dir, host, strict),
+            None => self.plugins.load_engine_default(host, strict),
+        };
+
+        if let Err(e) = load_result {
+            match self.plugin_fault_tolerance {
+                PluginFaultTolerance::Strict => {
+                    return Err(EngineError::Other(format!(
+                        "plugins: engine load failed (phase={} {}): {e}",
+                        phase,
+                        Self::elapsed_since(t0)
+                    )));
+                }
+                PluginFaultTolerance::Resilient => {
+                    log::warn!(
+                        "plugins: non-fatal engine load error (phase={} {}): {}",
+                        phase,
+                        Self::elapsed_since(t0),
+                        e
+                    );
+                }
+            }
+        }
+
+        self.engine_plugins_loaded = true;
+
+        self.plugins.validate_required_capabilities();
+
+        let loaded = self.plugins.snapshot().len();
+        Self::log_phase_ok("plugins", phase, Some(loaded), Self::elapsed_since(t0));
+        self.log_plugins_diagnostics("after engine plugins init");
+
+        Ok(loaded)
+    }
+
+    #[inline]
+    pub fn emit_plugins_diagnostics(&self, tag: &'static str) {
+        self.log_plugins_diagnostics(tag);
+    }
+
     #[inline]
     pub fn load_plugins_once(&mut self) -> EngineResult<()> {
         self.try_load_plugins_once()
@@ -24,7 +90,6 @@ impl<E: Send + 'static> Engine<E> {
         }
 
         let strict = matches!(self.plugin_fault_tolerance, PluginFaultTolerance::Strict);
-
         let phase = "load";
         let t0 = Instant::now();
 
@@ -54,12 +119,9 @@ impl<E: Send + 'static> Engine<E> {
             }
         }
 
-        // Mark as loaded even if some plugins failed to load (non-fatal path).
         self.plugins_loaded = true;
 
         let loaded = self.plugins.snapshot().len();
-        // Emit diagnostics after `load_*` so an optional logging plugin can install
-        // the global `log` backend during its `init()`.
         Self::log_phase_ok("plugins", phase, Some(loaded), Self::elapsed_since(t0));
 
         Ok(())
@@ -68,9 +130,9 @@ impl<E: Send + 'static> Engine<E> {
     pub(super) fn log_plugins_diagnostics(&self, tag: &'static str) {
         let list = self.plugins.snapshot();
         let n = list.len();
+
         log::info!("plugins: diagnostics tag='{}' loaded={}", tag, n);
 
-        // Keep INFO concise and stable.
         for (i, p) in list.iter().enumerate() {
             log::info!(
                 "plugins: diag [{:02}/{:02}] id='{}' ver='{}' state='{}'",
@@ -109,9 +171,6 @@ impl<E: Send + 'static> Engine<E> {
 
         for cmd in queue.drain() {
             did_any = true;
-
-            // Host API is cheap, but do not re-create it multiple times per command.
-            // Create per command to avoid any lifetime/aliasing surprises and keep semantics clean.
             let host = default_host_api();
 
             match cmd {

@@ -6,6 +6,7 @@ pub mod config;
 pub mod host;
 pub mod module;
 pub mod root;
+pub mod scan;
 pub mod service;
 pub mod types;
 
@@ -16,5 +17,6 @@ pub use config::*;
 pub use host::*;
 pub use module::*;
 pub use root::*;
+pub use scan::*;
 pub use service::*;
 pub use types::*;

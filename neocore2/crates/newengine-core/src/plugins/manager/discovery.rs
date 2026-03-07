@@ -2,14 +2,73 @@
 
 use std::path::{Path, PathBuf};
 
-use newengine_plugin_api::HostApiV1;
+use libloading::Library;
+use newengine_plugin_api::{
+    HostApiV1, PluginBootstrapPhase, PluginDescriptor, PluginInfo, PluginModuleDyn,
+    PluginRootV1Ref, PluginSignatureV1,
+};
 
 use crate::path_fmt::{canonicalize_if_exists, display_clean};
 use crate::plugins::install_forward_logger_once;
 use crate::plugins::paths::{default_plugins_dir, is_dynamic_lib, resolve_plugins_dir};
 
+use super::adapter::{ModuleAdapterAny, V1Adapter, V2Adapter, V3Adapter};
 use super::types::PluginLoadError;
 use super::PluginManager;
+
+const PLATFORM_RUNTIME_SYMBOL: &[u8] = b"newengine_platform_runtime_run_v1\0";
+const PLUGIN_SIGNATURE_SYMBOL: &[u8] = b"newengine_plugin_signature_v1\0";
+const PLUGIN_ROOT_SYMBOL: &[u8] = b"export_plugin_root\0";
+
+#[derive(Debug, Clone)]
+enum ScannedDynlibKind {
+    PlatformRuntime,
+    Plugin {
+        id: String,
+        version: String,
+        phase: PluginBootstrapPhase,
+        descriptor_kind: Option<newengine_plugin_api::PluginKind>,
+        capabilities: usize,
+    },
+    Unknown,
+}
+
+#[derive(Debug, Clone)]
+struct ScannedDynlib {
+    path: PathBuf,
+    file_name: String,
+    kind: ScannedDynlibKind,
+}
+
+#[derive(Copy, Clone)]
+enum LoadPhaseFilter {
+    All,
+    BootstrapOnly,
+    EngineOnly,
+}
+
+impl LoadPhaseFilter {
+    #[inline]
+    fn allows(self, phase: PluginBootstrapPhase) -> bool {
+        match self {
+            Self::All => true,
+            Self::BootstrapOnly => matches!(phase, PluginBootstrapPhase::Bootstrap),
+            Self::EngineOnly => matches!(
+                phase,
+                PluginBootstrapPhase::Platform | PluginBootstrapPhase::Engine
+            ),
+        }
+    }
+
+    #[inline]
+    fn label(self) -> &'static str {
+        match self {
+            Self::All => "all",
+            Self::BootstrapOnly => "bootstrap-only",
+            Self::EngineOnly => "engine-only",
+        }
+    }
+}
 
 impl PluginManager {
     #[inline]
@@ -28,6 +87,56 @@ impl PluginManager {
     }
 
     #[inline]
+    pub fn load_bootstrap_default(
+        &mut self,
+        host: HostApiV1,
+        strict: bool,
+    ) -> Result<(), PluginLoadError> {
+        let dir = default_plugins_dir()?;
+        self.load_from_dir_with_policy_and_filter(
+            &dir,
+            host,
+            strict,
+            LoadPhaseFilter::BootstrapOnly,
+        )
+    }
+
+    #[inline]
+    pub fn load_bootstrap_from_dir(
+        &mut self,
+        dir: &Path,
+        host: HostApiV1,
+        strict: bool,
+    ) -> Result<(), PluginLoadError> {
+        self.load_from_dir_with_policy_and_filter(
+            dir,
+            host,
+            strict,
+            LoadPhaseFilter::BootstrapOnly,
+        )
+    }
+
+    #[inline]
+    pub fn load_engine_default(
+        &mut self,
+        host: HostApiV1,
+        strict: bool,
+    ) -> Result<(), PluginLoadError> {
+        let dir = default_plugins_dir()?;
+        self.load_from_dir_with_policy_and_filter(&dir, host, strict, LoadPhaseFilter::EngineOnly)
+    }
+
+    #[inline]
+    pub fn load_engine_from_dir(
+        &mut self,
+        dir: &Path,
+        host: HostApiV1,
+        strict: bool,
+    ) -> Result<(), PluginLoadError> {
+        self.load_from_dir_with_policy_and_filter(dir, host, strict, LoadPhaseFilter::EngineOnly)
+    }
+
+    #[inline]
     pub fn load_from_dir(&mut self, dir: &Path, host: HostApiV1) -> Result<(), PluginLoadError> {
         self.load_from_dir_with_policy(dir, host, false)
     }
@@ -38,6 +147,16 @@ impl PluginManager {
         host: HostApiV1,
         strict: bool,
     ) -> Result<(), PluginLoadError> {
+        self.load_from_dir_with_policy_and_filter(dir, host, strict, LoadPhaseFilter::All)
+    }
+
+    fn load_from_dir_with_policy_and_filter(
+        &mut self,
+        dir: &Path,
+        host: HostApiV1,
+        strict: bool,
+        filter: LoadPhaseFilter,
+    ) -> Result<(), PluginLoadError> {
         let dir = resolve_plugins_dir(dir)?;
 
         if let Err(e) = std::fs::create_dir_all(&dir) {
@@ -47,9 +166,7 @@ impl PluginManager {
             });
         }
 
-        // Now that it exists, canonicalize to eliminate `..` / `.` segments.
         let dir = canonicalize_if_exists(&dir);
-
         let rd = std::fs::read_dir(&dir).map_err(|e| PluginLoadError {
             path: dir.clone(),
             message: format!("read_dir failed: {e}"),
@@ -57,12 +174,11 @@ impl PluginManager {
 
         let mut entries_total: usize = 0;
         let mut skipped_non_dynlib: usize = 0;
+        let mut scanned: Vec<ScannedDynlib> = Vec::new();
+        let mut scan_errors: Vec<String> = Vec::new();
 
-        let mut skipped_platform_runtime: usize = 0;
-        let mut candidates: Vec<PathBuf> = Vec::new();
         for ent in rd {
             entries_total = entries_total.saturating_add(1);
-
             let ent = ent.map_err(|e| PluginLoadError {
                 path: dir.clone(),
                 message: format!("read_dir entry failed: {e}"),
@@ -73,151 +189,151 @@ impl PluginManager {
                 skipped_non_dynlib = skipped_non_dynlib.saturating_add(1);
                 continue;
             }
-            if is_platform_runtime_candidate(&p) {
-                skipped_platform_runtime = skipped_platform_runtime.saturating_add(1);
-                continue;
+
+            match scan_dynamic_lib(&p) {
+                Ok(v) => scanned.push(v),
+                Err(e) => {
+                    log::warn!("plugins: scan failed for '{}': {}", display_clean(&p), e);
+                    scan_errors.push(format!("{}: {}", display_clean(&p), e));
+                }
             }
-            candidates.push(p);
         }
 
-        fn is_platform_runtime_candidate(p: &Path) -> bool {
-            p.file_name()
-                .and_then(|s| s.to_str())
-                .map(|s| s.to_ascii_lowercase())
-                .is_some_and(|s| {
-                    s.contains("platform-winit")
-                        || s.contains("platform_winit")
-                        || s.contains("platform_runtime")
-                        || s.starts_with("newengine_platform_")
-                })
+        scanned.sort_by(|a, b| a.file_name.cmp(&b.file_name));
+
+        let mut platform_runtime_count = 0usize;
+        let mut bootstrap_total = 0usize;
+        let mut engine_total = 0usize;
+        let mut bootstrap_candidates: Vec<PathBuf> = Vec::new();
+        let mut engine_candidates: Vec<PathBuf> = Vec::new();
+        let mut unknown_dynlibs: Vec<String> = Vec::new();
+
+        for item in &scanned {
+            match &item.kind {
+                ScannedDynlibKind::PlatformRuntime => {
+                    platform_runtime_count = platform_runtime_count.saturating_add(1);
+                }
+                ScannedDynlibKind::Plugin { phase, .. } => {
+                    match phase {
+                        PluginBootstrapPhase::Bootstrap => {
+                            bootstrap_total = bootstrap_total.saturating_add(1);
+                        }
+                        PluginBootstrapPhase::Platform | PluginBootstrapPhase::Engine => {
+                            engine_total = engine_total.saturating_add(1);
+                        }
+                    }
+
+                    if filter.allows(*phase) {
+                        match phase {
+                            PluginBootstrapPhase::Bootstrap => {
+                                bootstrap_candidates.push(item.path.clone())
+                            }
+                            PluginBootstrapPhase::Platform | PluginBootstrapPhase::Engine => {
+                                engine_candidates.push(item.path.clone())
+                            }
+                        }
+                    }
+                }
+                ScannedDynlibKind::Unknown => unknown_dynlibs.push(item.file_name.clone()),
+            }
         }
-
-        fn is_logging_candidate(p: &Path) -> bool {
-            p.file_name()
-                .and_then(|s| s.to_str())
-                .map(|s| s.to_ascii_lowercase())
-                .is_some_and(|s| s.contains("logging"))
-        }
-
-        #[inline]
-        fn file_name_only(p: &Path) -> String {
-            p.file_name()
-                .and_then(|s| s.to_str())
-                .map(str::to_owned)
-                .unwrap_or_else(|| "<unnamed>".to_owned())
-        }
-
-        candidates.sort();
-        let (mut loggers, mut rest): (Vec<PathBuf>, Vec<PathBuf>) = candidates
-            .into_iter()
-            .partition(|p| is_logging_candidate(p));
-
-        loggers.sort();
-        rest.sort();
-
-        // Pre-format candidate lists once (file names only, stable ordering).
-        let logger_list: Vec<String> = loggers.iter().map(|p| file_name_only(p)).collect();
-        let rest_list: Vec<String> = rest.iter().map(|p| file_name_only(p)).collect();
-        let all_list: Vec<String> = logger_list
-            .iter()
-            .cloned()
-            .chain(rest_list.iter().cloned())
-            .collect();
 
         if log::log_enabled!(log::Level::Debug) {
             log::debug!(
-                "plugins: scan summary dir='{}' entries_total={} dynlibs={} skipped_non_dynlib={} skipped_platform_runtime={} ",
+                "plugins: scan summary dir='{}' entries_total={} dynlibs={} skipped_non_dynlib={} platform_runtime_candidates={} unknown_dynlibs={} scan_errors={}",
                 display_clean(&dir),
                 entries_total,
-                all_list.len(),
+                scanned.len(),
                 skipped_non_dynlib,
-                skipped_platform_runtime
+                platform_runtime_count,
+                unknown_dynlibs.len(),
+                scan_errors.len(),
             );
         }
 
-        log::debug!(
-            "plugins: candidates loggers={} rest={} (logger-first load)",
-            loggers.len(),
-            rest.len()
-        );
-        if log::log_enabled!(log::Level::Debug) {
-            for name in logger_list.iter().chain(rest_list.iter()) {
-                log::debug!("plugins: candidate '{}'", name);
+        log::info!("[bootstrap] PluginDiscovery :: Phase 1 [scan]");
+        for item in &scanned {
+            match &item.kind {
+                ScannedDynlibKind::PlatformRuntime => {
+                    log::info!(
+                        "[bootstrap] {} | type=platform-runtime | id=<platform-runtime> | ver=- | priority=platform",
+                        item.file_name
+                    );
+                }
+                ScannedDynlibKind::Plugin {
+                    id,
+                    version,
+                    phase,
+                    descriptor_kind,
+                    capabilities,
+                } => {
+                    log::info!(
+                        "[bootstrap] {} | phase={} | kind={:?} | id={} | ver={} | caps={}",
+                        item.file_name,
+                        phase_name(*phase),
+                        descriptor_kind,
+                        id,
+                        version,
+                        capabilities,
+                    );
+                }
+                ScannedDynlibKind::Unknown => {
+                    log::info!(
+                        "[bootstrap] {} | type=unknown-dynlib | id=<unknown> | ver=- | priority=skip",
+                        item.file_name
+                    );
+                }
+            }
+        }
+
+        if !scan_errors.is_empty() {
+            for err in &scan_errors {
+                log::warn!("plugins: scan error {}", err);
             }
         }
 
         let mut load_errors: Vec<PluginLoadError> = Vec::new();
 
-        // 1) Try to load logging plugins first.
-        for path in &loggers {
+        for path in bootstrap_candidates.iter().chain(engine_candidates.iter()) {
             if let Err(e) = self.load_one(path, host.clone()) {
                 log::warn!("plugins: failed to load '{}': {}", display_clean(path), e);
                 load_errors.push(e);
             }
         }
 
-        // If startup config specifies overrides for the logging plugin but we found no logging candidate,
-        // it's usually a packaging/layout issue (wrong modules_dir, missing DLL, wrong name, etc.).
-        if loggers.is_empty() {
-            if let Some(r) = crate::startup::last_load_report() {
-                let has_logging_override = r
-                    .plugin_overrides
-                    .iter()
-                    .any(|o| o.plugin_id == "newengine.logging");
-                if has_logging_override {
-                    log::warn!(
-                        "plugins: no logging plugin candidate found in '{}' but startup has overrides for 'newengine.logging'",
-                        display_clean(&dir)
-                    );
-                }
-            }
-        }
-
-        // 2) Install forward logger after potential logging plugin init().
         install_forward_logger_once(host.clone());
 
-        // 2.1) Emit primary run id as early as possible (first lines in actual log file).
         {
             let rid = crate::run_id::run_id().unwrap_or("<unknown>");
             log::info!("startup: Run ID: {}", rid);
         }
 
-        // 3) Emit deferred startup diagnostics (now log backend can exist).
         crate::startup::SystemProbe::probe().emit_table("startup");
-
         if let Some(r) = crate::startup::last_load_report() {
             r.emit_logs();
         }
 
         log::info!("plugins: scanning directory '{}'", display_clean(&dir));
         log::info!(
-            "plugins: found {} candidate(s) in '{}' [{}]",
-            all_list.len(),
+            "plugins: phase discovery bootstrap={} engine={} platform_runtime={} unknown={} dir='{}'",
+            bootstrap_total,
+            engine_total,
+            platform_runtime_count,
+            unknown_dynlibs.len(),
             display_clean(&dir),
-            all_list.join(", ")
         );
-        if skipped_platform_runtime > 0 {
-            log::info!(
-                "plugins: skipped {} platform runtime candidate(s) in '{}' (loaded separately from runtime ABI)",
-                skipped_platform_runtime,
-                display_clean(&dir)
-            );
-        }
-
-        // 4) Load the rest.
-        for path in rest {
-            match self.load_one(&path, host.clone()) {
-                Ok(()) => {}
-                Err(e) => {
-                    log::warn!("plugins: failed to load '{}': {}", display_clean(&path), e);
-                    load_errors.push(e);
-                }
-            }
-        }
+        log::info!(
+            "plugins: phase selection filter='{}' bootstrap={} engine={} platform_runtime={} unknown={} dir='{}'",
+            filter.label(),
+            bootstrap_candidates.len(),
+            engine_candidates.len(),
+            platform_runtime_count,
+            unknown_dynlibs.len(),
+            display_clean(&dir),
+        );
 
         log::info!("plugins: load complete loaded_count={}", self.loaded.len());
 
-        // Enforce declared capability dependencies before starting plugins.
         self.validate_required_capabilities();
         if log::log_enabled!(log::Level::Debug) {
             for p in self.loaded.iter() {
@@ -230,18 +346,34 @@ impl PluginManager {
             }
         }
 
-        if strict && !load_errors.is_empty() {
+        if strict && (!load_errors.is_empty() || !scan_errors.is_empty()) {
             let mut msg = String::new();
             use std::fmt::Write as _;
-            let _ = writeln!(
-                msg,
-                "one or more plugins failed to load (count={}):",
-                load_errors.len()
-            );
-            for e in load_errors.iter() {
-                let _ = writeln!(msg, "- path='{}' err='{}'", display_clean(&e.path), e.message);
+            if !scan_errors.is_empty() {
+                let _ = writeln!(
+                    msg,
+                    "one or more dynamic libraries failed signature scan (count={}):",
+                    scan_errors.len()
+                );
+                for e in &scan_errors {
+                    let _ = writeln!(msg, "- {}", e);
+                }
             }
-
+            if !load_errors.is_empty() {
+                let _ = writeln!(
+                    msg,
+                    "one or more plugins failed to load (count={}):",
+                    load_errors.len()
+                );
+                for e in load_errors.iter() {
+                    let _ = writeln!(
+                        msg,
+                        "- path='{}' err='{}'",
+                        display_clean(&e.path),
+                        e.message
+                    );
+                }
+            }
             return Err(PluginLoadError {
                 path: dir.clone(),
                 message: msg,
@@ -256,5 +388,112 @@ impl PluginManager {
         let res = self.load_one(path, host.clone());
         install_forward_logger_once(host);
         res
+    }
+}
+
+fn phase_name(phase: PluginBootstrapPhase) -> &'static str {
+    match phase {
+        PluginBootstrapPhase::Bootstrap => "bootstrap",
+        PluginBootstrapPhase::Platform => "platform",
+        PluginBootstrapPhase::Engine => "engine",
+    }
+}
+
+fn file_name_only(p: &Path) -> String {
+    p.file_name()
+        .and_then(|s| s.to_str())
+        .map(str::to_owned)
+        .unwrap_or_else(|| "<unnamed>".to_owned())
+}
+
+fn scan_dynamic_lib(path: &Path) -> Result<ScannedDynlib, String> {
+    let file_name = file_name_only(path);
+    let lib = unsafe { Library::new(path) }.map_err(|e| format!("Library::new failed: {e}"))?;
+
+    if unsafe { lib.get::<unsafe extern "C" fn()>(PLATFORM_RUNTIME_SYMBOL) }.is_ok() {
+        return Ok(ScannedDynlib {
+            path: path.to_path_buf(),
+            file_name,
+            kind: ScannedDynlibKind::PlatformRuntime,
+        });
+    }
+
+    if let Ok(sym) =
+        unsafe { lib.get::<unsafe extern "C" fn() -> PluginSignatureV1>(PLUGIN_SIGNATURE_SYMBOL) }
+    {
+        let sig = unsafe { sym() };
+        return Ok(ScannedDynlib {
+            path: path.to_path_buf(),
+            file_name,
+            kind: ScannedDynlibKind::Plugin {
+                id: sig.id.to_string(),
+                version: sig.version.to_string(),
+                phase: sig.bootstrap_phase,
+                descriptor_kind: Some(sig.kind),
+                capabilities: 0,
+            },
+        });
+    }
+
+    if let Ok(sym) = unsafe { lib.get::<unsafe extern "C" fn() -> PluginRootV1Ref>(PLUGIN_ROOT_SYMBOL) } {
+        let root = unsafe { sym() };
+        let (_module, info, descriptor) = select_abi_for_scan(root);
+        let (phase, descriptor_kind, capabilities) = match descriptor {
+            Some(d) => (PluginBootstrapPhase::Engine, Some(d.kind), d.capabilities.len()),
+            None => (PluginBootstrapPhase::Engine, None, 0),
+        };
+        return Ok(ScannedDynlib {
+            path: path.to_path_buf(),
+            file_name,
+            kind: ScannedDynlibKind::Plugin {
+                id: info.id.to_string(),
+                version: info.version.to_string(),
+                phase,
+                descriptor_kind,
+                capabilities,
+            },
+        });
+    }
+
+    Ok(ScannedDynlib {
+        path: path.to_path_buf(),
+        file_name,
+        kind: ScannedDynlibKind::Unknown,
+    })
+}
+
+fn select_abi_for_scan(
+    root: PluginRootV1Ref,
+) -> (ModuleAdapterAny, PluginInfo, Option<PluginDescriptor>) {
+    if let Some(create_v3) = root.create_v3() {
+        let m3 = create_v3();
+        let d = m3.descriptor_v3();
+        let info = PluginInfo {
+            id: d.id.clone(),
+            name: d.name.clone(),
+            version: d.version.clone(),
+        };
+        (
+            ModuleAdapterAny::V3(V3Adapter { module: m3 }),
+            info,
+            Some(d),
+        )
+    } else if let Some(create_v2) = root.create_v2() {
+        let m2 = create_v2();
+        let d = m2.descriptor();
+        let info = PluginInfo {
+            id: d.id.clone(),
+            name: d.name.clone(),
+            version: d.version.clone(),
+        };
+        (
+            ModuleAdapterAny::V2(V2Adapter { module: m2 }),
+            info,
+            Some(d),
+        )
+    } else {
+        let m1: PluginModuleDyn<'static> = root.create()();
+        let info = m1.info();
+        (ModuleAdapterAny::V1(V1Adapter { module: m1 }), info, None)
     }
 }

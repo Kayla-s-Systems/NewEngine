@@ -33,6 +33,7 @@ pub struct Engine<E: Send + 'static> {
 
     pub(super) plugins: PluginManager,
     pub(super) plugins_loaded: bool,
+    pub(super) engine_plugins_loaded: bool,
     pub(super) plugins_dir: Option<PathBuf>,
 
     pub(super) shutdown: ShutdownToken,
@@ -76,11 +77,6 @@ impl<E: Send + 'static> Engine<E> {
         bus: Bus<E>,
         shutdown: ShutdownToken,
     ) -> EngineResult<Self> {
-        // Backward-compatible convenience: if the host has already resolved a `StartupConfig`
-        // (via `StartupLoader`), reuse its modules directory and per-plugin overrides.
-        //
-        // This prevents a common integration footgun where the app loads config.json but then
-        // forgets to forward plugin overrides into `EngineConfig`.
         let config = if let Some(startup) = crate::startup::last_startup_config() {
             EngineConfig::new(fixed_dt_ms)
                 .with_plugins_dir(Some(startup.modules_dir.clone()))
@@ -97,12 +93,6 @@ impl<E: Send + 'static> Engine<E> {
         bus: Bus<E>,
         shutdown: ShutdownToken,
     ) -> EngineResult<Self> {
-        // Integration footgun guard:
-        // many apps build a custom `EngineConfig` and forget to forward startup-derived
-        // plugin overrides (and sometimes the modules_dir) into it.
-        //
-        // If the app used `StartupLoader`, reuse that resolved config unless the caller
-        // explicitly provided their own values.
         if let Some(startup) = crate::startup::last_startup_config() {
             if config.plugins_dir.is_none() {
                 config.plugins_dir = Some(startup.modules_dir.clone());
@@ -113,17 +103,12 @@ impl<E: Send + 'static> Engine<E> {
             }
         }
 
-        // Logging is provided by an optional runtime plugin (DLL).
-        // No logging plugin -> no process logger installed -> all `log::*` calls become no-ops.
-
         let fixed_dt = (config.fixed_dt_ms as f32 / 1000.0).max(0.001);
 
         let mut resources = Resources::default();
         resources.insert(PluginControlQueue::default());
 
         init_host_context();
-
-        // Must be available before any plugin init() runs.
         init_plugin_config_service(config.plugin_overrides.clone());
 
         register_engine_builtins(MathRegistry::global())
@@ -145,6 +130,7 @@ impl<E: Send + 'static> Engine<E> {
 
             plugins: PluginManager::new(),
             plugins_loaded: false,
+            engine_plugins_loaded: false,
             plugins_dir: config.plugins_dir,
 
             shutdown,
