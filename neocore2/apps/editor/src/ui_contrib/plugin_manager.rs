@@ -2,7 +2,7 @@
 
 use std::sync::{Arc, Mutex};
 
-use newengine_platform_winit::egui;
+use egui;
 use newengine_ui::{UiContributor, UiDynFrame, UiLayer, UiOrder};
 
 use crate::plugin_manager::PluginManagerUi;

@@ -1,7 +1,7 @@
 #![forbid(unsafe_op_in_unsafe_fn)]
 
+use egui;
 use newengine_assets::{AssetAccess, AssetService};
-use newengine_platform_winit::egui;
 
 use super::super::EditorUiBuild;
 

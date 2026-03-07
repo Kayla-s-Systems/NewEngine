@@ -1,8 +1,8 @@
 #![forbid(unsafe_op_in_unsafe_fn)]
 
+use egui;
 use newengine_assets::AssetServiceClient;
 use newengine_core::plugins::default_host_api;
-use newengine_platform_winit::egui;
 use newengine_ui::ui_icons;
 use newengine_ui::{BuiltinUiIcon, UiImageLoader, EDITOR_DEFAULT_ICONS};
 

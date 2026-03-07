@@ -151,7 +151,7 @@ pub fn request_builtin_icon(
 #[cfg(feature = "egui")]
 mod egui_ext {
     use super::*;
-    use egui_winit::egui;
+    use egui;
 
     /// Returns egui `TextureId::User(u64)` when the icon texture is ready.
     #[inline]

@@ -5,7 +5,7 @@ mod icons;
 mod panels;
 mod util;
 
-use newengine_platform_winit::egui;
+use egui;
 use newengine_ui::markup::UiMarkupDoc;
 use newengine_ui::{UiBuildFn, UiHub};
 

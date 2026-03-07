@@ -4,13 +4,13 @@ use newengine_camera_runtime::{
     cursor_state_for_nav, step_camera_nav, BoundsSphere as CamBoundsSphere, CameraNavFrameRequest,
     CameraNavInput, CameraNavParams,
 };
+use newengine_core::host_events::WindowInitSize;
 use newengine_core::host_events::{CursorState, HostEvent, WindowHostEvent};
 use newengine_core::render::{
     require_render_api, BeginFrameDesc, BeginRenderTargetDesc, Extent2D, RectI32, Viewport,
 };
 use newengine_core::{EngineResult, Module, ModuleCtx};
 use newengine_math::{Quat, Vec3};
-use newengine_platform_winit::WinitWindowInitSize;
 use newengine_ui::draw::UiDrawList;
 
 use super::controller::EditorRenderController;
@@ -53,7 +53,7 @@ impl EditorRenderController {
     #[inline]
     fn read_window_size<E: Send>(ctx: &ModuleCtx<'_, E>) -> (u32, u32) {
         ctx.resources()
-            .get::<WinitWindowInitSize>()
+            .get::<WindowInitSize>()
             .map(|s| (s.width, s.height))
             .unwrap_or((0, 0))
     }

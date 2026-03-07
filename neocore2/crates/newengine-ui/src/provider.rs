@@ -11,6 +11,12 @@ pub struct UiFrameDesc {
 
     /// Input snapshot provided by the host (must originate from INPUT plugin).
     pub input: Option<UiInputFrame>,
+
+    /// Physical surface size in pixels.
+    pub surface_size_px: [u32; 2],
+
+    /// Native pixels per logical point.
+    pub pixels_per_point: f32,
 }
 
 impl UiFrameDesc {
@@ -19,12 +25,21 @@ impl UiFrameDesc {
         Self {
             dt_sec,
             input: None,
+            surface_size_px: [0, 0],
+            pixels_per_point: 1.0,
         }
     }
 
     #[inline]
     pub fn with_input(mut self, input: UiInputFrame) -> Self {
         self.input = Some(input);
+        self
+    }
+
+    #[inline]
+    pub fn with_surface(mut self, width: u32, height: u32, pixels_per_point: f32) -> Self {
+        self.surface_size_px = [width, height];
+        self.pixels_per_point = pixels_per_point.max(0.0001);
         self
     }
 }

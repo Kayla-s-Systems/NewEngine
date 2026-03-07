@@ -1,10 +1,10 @@
 #![forbid(unsafe_op_in_unsafe_fn)]
 
+use egui;
 use newengine_lighting::{AmbientLight, DirectionalLight, PointLight};
 use newengine_materials::api::MaterialRegistryApi;
 use newengine_materials::MaterialId;
 use newengine_materials::MaterialRef;
-use newengine_platform_winit::egui;
 use newengine_primitives::Primitive;
 use newengine_scene::components::Name;
 use newengine_transform::GlobalTransform;

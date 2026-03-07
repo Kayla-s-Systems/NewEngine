@@ -9,7 +9,6 @@ mod translate;
 
 pub struct EguiUiProvider {
     ctx: egui::Context,
-    state: Option<egui_winit::State>,
     draw_list: UiDrawList,
 }
 
@@ -18,33 +17,13 @@ impl EguiUiProvider {
     pub fn new() -> Self {
         Self {
             ctx: egui::Context::default(),
-            state: None,
             draw_list: UiDrawList::new(),
         }
     }
 
     #[inline]
-    fn ensure_state(&mut self, window: &winit::window::Window) -> &mut egui_winit::State {
-        if self.state.is_none() {
-            let s = egui_winit::State::new(
-                self.ctx.clone(),
-                egui::ViewportId::ROOT,
-                window,
-                Some(window.scale_factor() as f32),
-                None,
-                None,
-            );
-            self.state = Some(s);
-        }
-        self.state.as_mut().unwrap()
-    }
-
-    #[inline]
     fn egui_key_from_input(u: u32) -> Option<egui::Key> {
         use winit::keyboard::KeyCode as KC;
-
-        // NOTE: The INPUT plugin reports `winit::keyboard::KeyCode` discriminants as `u32`.
-        // We translate them into `egui::Key` so UI code can use `ctx.input(|i| i.key_down(..))`.
 
         Some(match u {
             x if x == (KC::Backspace as u32) => egui::Key::Backspace,
@@ -52,20 +31,16 @@ impl EguiUiProvider {
             x if x == (KC::Tab as u32) => egui::Key::Tab,
             x if x == (KC::Escape as u32) => egui::Key::Escape,
             x if x == (KC::Space as u32) => egui::Key::Space,
-
             x if x == (KC::ArrowUp as u32) => egui::Key::ArrowUp,
             x if x == (KC::ArrowDown as u32) => egui::Key::ArrowDown,
             x if x == (KC::ArrowLeft as u32) => egui::Key::ArrowLeft,
             x if x == (KC::ArrowRight as u32) => egui::Key::ArrowRight,
-
             x if x == (KC::Home as u32) => egui::Key::Home,
             x if x == (KC::End as u32) => egui::Key::End,
             x if x == (KC::PageUp as u32) => egui::Key::PageUp,
             x if x == (KC::PageDown as u32) => egui::Key::PageDown,
             x if x == (KC::Insert as u32) => egui::Key::Insert,
             x if x == (KC::Delete as u32) => egui::Key::Delete,
-
-            // Letters (WASD etc.)
             x if x == (KC::KeyA as u32) => egui::Key::A,
             x if x == (KC::KeyB as u32) => egui::Key::B,
             x if x == (KC::KeyC as u32) => egui::Key::C,
@@ -92,8 +67,6 @@ impl EguiUiProvider {
             x if x == (KC::KeyX as u32) => egui::Key::X,
             x if x == (KC::KeyY as u32) => egui::Key::Y,
             x if x == (KC::KeyZ as u32) => egui::Key::Z,
-
-            // Digits
             x if x == (KC::Digit0 as u32) => egui::Key::Num0,
             x if x == (KC::Digit1 as u32) => egui::Key::Num1,
             x if x == (KC::Digit2 as u32) => egui::Key::Num2,
@@ -104,8 +77,6 @@ impl EguiUiProvider {
             x if x == (KC::Digit7 as u32) => egui::Key::Num7,
             x if x == (KC::Digit8 as u32) => egui::Key::Num8,
             x if x == (KC::Digit9 as u32) => egui::Key::Num9,
-
-            // Function keys
             x if x == (KC::F1 as u32) => egui::Key::F1,
             x if x == (KC::F2 as u32) => egui::Key::F2,
             x if x == (KC::F3 as u32) => egui::Key::F3,
@@ -118,7 +89,6 @@ impl EguiUiProvider {
             x if x == (KC::F10 as u32) => egui::Key::F10,
             x if x == (KC::F11 as u32) => egui::Key::F11,
             x if x == (KC::F12 as u32) => egui::Key::F12,
-
             _ => return None,
         })
     }
@@ -127,13 +97,10 @@ impl EguiUiProvider {
     fn compute_modifiers(input: &UiInputFrame) -> egui::Modifiers {
         let ctrl_l = winit::keyboard::KeyCode::ControlLeft as u32;
         let ctrl_r = winit::keyboard::KeyCode::ControlRight as u32;
-
         let shift_l = winit::keyboard::KeyCode::ShiftLeft as u32;
         let shift_r = winit::keyboard::KeyCode::ShiftRight as u32;
-
         let alt_l = winit::keyboard::KeyCode::AltLeft as u32;
         let alt_r = winit::keyboard::KeyCode::AltRight as u32;
-
         let ctrl = input.is_key_down(ctrl_l) || input.is_key_down(ctrl_r);
 
         egui::Modifiers {
@@ -145,18 +112,10 @@ impl EguiUiProvider {
         }
     }
 
-    fn inject_input_events(raw: &mut egui::RawInput, input: &UiInputFrame) {
+    fn inject_input_events(raw: &mut egui::RawInput, input: &UiInputFrame, pixels_per_point: f32) {
         raw.modifiers = Self::compute_modifiers(input);
-
-        // egui expects positions in "points" (logical units).
-        // INPUT plugin usually reports physical pixels.
-        let ppp = raw
-            .viewport()
-            .native_pixels_per_point
-            .unwrap_or(1.0)
-            .max(0.0001);
+        let ppp = pixels_per_point.max(0.0001);
         let to_pt = |v: f32| v / ppp;
-
         let mouse_pos_pt = input.mouse_pos.map(|(x, y)| egui::pos2(to_pt(x), to_pt(y)));
 
         if let Some(pos) = mouse_pos_pt {
@@ -198,7 +157,6 @@ impl EguiUiProvider {
             }
         }
 
-        // Wheel: convert to points as well.
         if input.mouse_wheel.0 != 0.0 || input.mouse_wheel.1 != 0.0 {
             raw.events.push(egui::Event::MouseWheel {
                 unit: egui::MouseWheelUnit::Point,
@@ -218,6 +176,7 @@ impl EguiUiProvider {
                 });
             }
         }
+
         for &k in input.keys_released.iter() {
             if let Some(key) = Self::egui_key_from_input(k) {
                 raw.events.push(egui::Event::Key {
@@ -262,39 +221,32 @@ impl UiProvider for EguiUiProvider {
         self
     }
 
-    fn on_platform_event(&mut self, _window: &dyn Any, _event: &dyn Any) {
-        // HARD NOOP: input must come exclusively from INPUT plugin.
-    }
+    fn on_platform_event(&mut self, _window: &dyn Any, _event: &dyn Any) {}
 
     fn run_frame(
         &mut self,
-        window: &dyn Any,
+        _window: &dyn Any,
         frame: UiFrameDesc,
         build: &mut dyn UiBuildFn,
     ) -> UiFrameOutput {
-        let Some(w) = window.downcast_ref::<winit::window::Window>() else {
-            return UiFrameOutput::empty();
-        };
+        let ppp = frame.pixels_per_point.max(0.0001);
+        let screen_w_pt = frame.surface_size_px[0] as f32 / ppp;
+        let screen_h_pt = frame.surface_size_px[1] as f32 / ppp;
 
-        // Base input for screen rect/ppp/time (no events are fed via egui_winit::State).
-        let mut raw_input = {
-            let state = self.ensure_state(w);
-            state.take_egui_input(w)
-        };
+        let mut raw_input = egui::RawInput::default();
+        raw_input.predicted_dt = frame.dt_sec.max(0.0001);
+        raw_input.screen_rect = Some(egui::Rect::from_min_size(
+            egui::Pos2::ZERO,
+            egui::vec2(screen_w_pt, screen_h_pt),
+        ));
 
-        // Inject canonical input from INPUT plugin snapshot.
         if let Some(ref input) = frame.input {
-            Self::inject_input_events(&mut raw_input, input);
+            Self::inject_input_events(&mut raw_input, input, ppp);
         }
 
         self.ctx.begin_pass(raw_input);
         build.build(&mut self.ctx);
         let full_output = self.ctx.end_pass();
-
-        {
-            let state = self.ensure_state(w);
-            state.handle_platform_output(w, full_output.platform_output.clone());
-        }
 
         self.draw_list.clear();
         translate::egui_output_to_draw_list(&self.ctx, full_output, &mut self.draw_list);

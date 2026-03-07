@@ -28,12 +28,15 @@ shaderc = "0.10.1"
 parking_lot = "0.12"
 blake3 = "1"
 serde_json = "1"
+libloading = "0.9"
+image = { version = "0.25", default-features = false, features = ["png", "ico"] }
+egui = "0.33.3"
 newengine-math = { path = "../../crates/newengine-math" }
 
 newengine-core = { path = "../../crates/newengine-core" }
 newengine-ui = { path = "../../crates/newengine-ui", features = ["images", "assets"] }
 newengine-assets = { path = "../../crates/newengine-assets" }
-newengine-platform-winit = { path = "../../crates/newengine-platform-winit" }
+newengine-platform-api = { path = "../../crates/newengine-platform-api" }
 newengine-modules-render-vulkan-ash = { path = "../../crates/newengine-modules-render-vulkan-ash" }
 
 newengine-scene = { path = "../../crates/newengine-scene", features = ["runtime"] }
@@ -52,6 +55,7 @@ newengine-previews = { path = "../../crates/newengine-previews" }
 newengine-sim = { path = "../../crates/newengine-sim" }
 newengine-scene-io = { path = "../../crates/newengine-scene-io" }
 newengine-plugin-api = { path = "../../crates/newengine-plugin-api" }
+raw-window-handle = "0.6.2"
 
 [build-dependencies]
 embed-resource = "2"

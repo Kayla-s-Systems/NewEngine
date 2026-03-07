@@ -1,6 +1,6 @@
 #![forbid(unsafe_op_in_unsafe_fn)]
 
-use newengine_platform_winit::egui;
+use egui;
 use newengine_ui::BuiltinUiIcon;
 
 use super::super::EditorUiBuild;

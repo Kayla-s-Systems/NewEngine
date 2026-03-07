@@ -1,7 +1,7 @@
 #![forbid(unsafe_op_in_unsafe_fn)]
 
+use egui;
 use newengine_lighting::{DirectionalLight, PointLight};
-use newengine_platform_winit::egui;
 use newengine_primitives::Primitive;
 use newengine_scene::components::Name;
 use newengine_ui::BuiltinUiIcon;

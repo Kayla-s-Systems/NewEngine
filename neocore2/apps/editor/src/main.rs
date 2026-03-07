@@ -2,18 +2,20 @@
 
 use crossbeam_channel::unbounded;
 
+use abi_stable::std_types::{ROption, RVec};
 use newengine_core::{
-    Bus, ConfigPaths, Engine, EngineConfig, EngineError, EngineResult, ModuleFaultTolerance, PluginFaultTolerance,
-    Services, ShutdownToken, StartupConfig, StartupLoader,
+    Bus, ConfigPaths, Engine, EngineConfig, EngineError, EngineResult, ModuleFaultTolerance,
+    PluginFaultTolerance, Services, ShutdownToken, StartupConfig, StartupLoader,
 };
 
 use newengine_modules_render_vulkan_ash::VulkanAshRenderModule;
-
-use newengine_platform_winit::app::config::WinitAppIcon;
-use newengine_platform_winit::{run_winit_app_with_config, WinitAppConfig, WinitWindowPlacement};
+use newengine_platform_api::{
+    PlatformAppConfigV1, PlatformAppIconV1, PlatformWindowPlacementKindV1,
+    PlatformWindowPlacementV1,
+};
 
 use newengine_assets::{wait_ready, AssetAccess, AssetService, AssetServiceClient};
-use newengine_ui::{UiBuildFn, UiMarkupDoc};
+use newengine_ui::{UiBuildFn, UiMarkupDoc, UiProviderKind};
 
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
@@ -21,6 +23,8 @@ use std::time::Duration;
 
 mod editor_camera;
 mod material_pipeline;
+mod platform_input;
+mod platform_runtime;
 mod plugin_manager;
 mod render_controller;
 mod scene_bootstrap;
@@ -60,20 +64,34 @@ impl Services for AppServices {
 }
 
 #[inline]
-fn winit_config_from_startup(startup: &StartupConfig) -> WinitAppConfig {
+fn platform_config_from_startup(startup: &StartupConfig) -> PlatformAppConfigV1 {
     let placement = match startup.window_placement {
-        newengine_core::startup::WindowPlacement::Default => WinitWindowPlacement::OsDefault,
-        newengine_core::startup::WindowPlacement::Centered { offset } => {
-            WinitWindowPlacement::Centered { offset }
-        }
+        newengine_core::startup::WindowPlacement::Default => PlatformWindowPlacementV1 {
+            kind: PlatformWindowPlacementKindV1::OsDefault,
+            x: 0,
+            y: 0,
+        },
+        newengine_core::startup::WindowPlacement::Centered { offset } => PlatformWindowPlacementV1 {
+            kind: PlatformWindowPlacementKindV1::Centered,
+            x: offset.0,
+            y: offset.1,
+        },
     };
 
-    WinitAppConfig {
-        title: startup.window_title.clone(),
-        size: startup.window_size,
+    PlatformAppConfigV1 {
+        title: startup.window_title.clone().into(),
+        width: startup.window_size.0,
+        height: startup.window_size.1,
         placement,
-        ui_backend: startup.ui_backend.clone(),
-        icon: None,
+        icon: ROption::RNone,
+    }
+}
+
+#[inline]
+fn ui_provider_kind_from_startup(startup: &StartupConfig) -> UiProviderKind {
+    match startup.ui_backend {
+        newengine_core::startup::UiBackend::Disabled => UiProviderKind::Null,
+        _ => UiProviderKind::Egui,
     }
 }
 
@@ -128,25 +146,21 @@ fn build_engine_from_startup(startup: &StartupConfig) -> EngineResult<Engine<()>
 fn collect_editor_asset_roots() -> Vec<PathBuf> {
     let mut roots: Vec<PathBuf> = Vec::new();
 
-    // 1) Explicit override.
     if let Ok(p) = std::env::var("NEWENGINE_EDITOR_ASSETS_DIR") {
         roots.push(PathBuf::from(p));
     }
 
-    // 2) Next to the executable.
     if let Ok(exe) = std::env::current_exe() {
         if let Some(dir) = exe.parent() {
             roots.push(dir.join("assets"));
         }
     }
 
-    // 3) Dev mode: search for `apps/editor/assets` upwards.
     if let Ok(exe) = std::env::current_exe() {
         let mut cur = exe.parent().map(|p| p.to_path_buf());
         for _ in 0..6 {
             let Some(base) = cur.clone() else { break };
 
-            // Project-level shared assets (shaders, UI packs, etc.).
             let shared_assets = base.join("assets");
             if shared_assets.is_dir() {
                 roots.push(shared_assets);
@@ -161,7 +175,6 @@ fn collect_editor_asset_roots() -> Vec<PathBuf> {
         }
     }
 
-    // Dedup but keep stable order.
     let mut out: Vec<PathBuf> = Vec::new();
     let mut set: std::collections::HashSet<PathBuf> = std::collections::HashSet::new();
     for r in roots {
@@ -197,12 +210,11 @@ fn try_load_window_icon_best_effort(
     startup: &StartupConfig,
     assets: Option<&AssetServiceClient>,
     roots: &[PathBuf],
-) -> Option<WinitAppIcon> {
+) -> Option<PlatformAppIconV1> {
     let Some(path) = startup.window_icon_path.as_deref() else {
         return None;
     };
 
-    // 1) Prefer AssetManager service when available (pak/http/etc).
     if let Some(assets) = assets {
         let id_hex32 = match assets.load(path) {
             Ok(v) => v,
@@ -225,16 +237,9 @@ fn try_load_window_icon_best_effort(
             }
         };
 
-        return match WinitAppIcon::from_image_bytes(&payload) {
-            Ok(icon) => Some(icon),
-            Err(e) => {
-                log::warn!("window icon: decode failed path='{path}' err='{e}'");
-                None
-            }
-        };
+        return decode_window_icon(&payload, path);
     }
 
-    // 2) Fallback: direct filesystem read (relative to roots and/or absolute).
     let mut candidates: Vec<PathBuf> = Vec::new();
     let p = PathBuf::from(path);
 
@@ -253,16 +258,11 @@ fn try_load_window_icon_best_effort(
         }
 
         match std::fs::read(&c) {
-            Ok(bytes) => match WinitAppIcon::from_image_bytes(&bytes) {
-                Ok(icon) => return Some(icon),
-                Err(e) => {
-                    log::warn!(
-                        "window icon: decode failed file='{}' err='{}'",
-                        c.display(),
-                        e
-                    );
+            Ok(bytes) => {
+                if let Some(icon) = decode_window_icon(&bytes, &c.to_string_lossy()) {
+                    return Some(icon);
                 }
-            },
+            }
             Err(e) => {
                 log::warn!(
                     "window icon: read failed file='{}' err='{}'",
@@ -274,6 +274,24 @@ fn try_load_window_icon_best_effort(
     }
 
     None
+}
+
+fn decode_window_icon(bytes: &[u8], label: &str) -> Option<PlatformAppIconV1> {
+    match image::load_from_memory(bytes) {
+        Ok(img) => {
+            let rgba = img.to_rgba8();
+            let (width, height) = rgba.dimensions();
+            Some(PlatformAppIconV1 {
+                rgba: RVec::from(rgba.into_raw()),
+                width,
+                height,
+            })
+        }
+        Err(e) => {
+            log::warn!("window icon: decode failed path='{}' err='{}'", label, e);
+            None
+        }
+    }
 }
 
 #[inline]
@@ -294,7 +312,6 @@ fn shard_log_path_by_run_id(original: &str, run_id: &str) -> Option<String> {
         _ => return None,
     };
 
-    // Preserve extension when possible.
     let new_file = match ext.as_deref() {
         Some("log") => format!("{stem}.{run_id}.log"),
         Some(e) if !e.is_empty() => format!("{stem}.{run_id}.{e}"),
@@ -321,7 +338,6 @@ fn main() {
 }
 
 fn main_impl() -> EngineResult<()> {
-    // Prologue: generate a process-wide Run ID to correlate logs/crash reports/artifacts.
     let run_id = newengine_core::init_run_id().to_owned();
     std::env::set_var("NEWENGINE_RUN_ID", &run_id);
 
@@ -339,13 +355,15 @@ fn main_impl() -> EngineResult<()> {
     let (startup, _report) = StartupLoader::load_json(&paths)?;
     let startup = Arc::new(startup);
 
-    // Logging plugin reads environment variables on load; ensure the log file path is sharded by Run ID.
-    // Example: cache/logs/editor.log -> cache/logs/editor.<run_id>.log
     if std::env::var_os("NEWENGINE_LOG_FILE").is_none() {
         if let Some(p) = startup
             .plugins
             .get("newengine.logging")
-            .and_then(|v| v.get("file").and_then(|x| x.as_str()).or_else(|| v.get("file_path").and_then(|x| x.as_str())))
+            .and_then(|v| {
+                v.get("file")
+                    .and_then(|x| x.as_str())
+                    .or_else(|| v.get("file_path").and_then(|x| x.as_str()))
+            })
         {
             if let Some(sharded) = shard_log_path_by_run_id(p, &run_id) {
                 std::env::set_var("NEWENGINE_LOG_FILE", sharded);
@@ -364,7 +382,6 @@ fn main_impl() -> EngineResult<()> {
 
     let mut engine = build_engine_from_startup(&startup)?;
 
-    // 1) Register render so the module set is complete before window creation.
     register_render_from_startup(
         &mut engine,
         &startup,
@@ -374,13 +391,9 @@ fn main_impl() -> EngineResult<()> {
         previews.clone(),
     )?;
 
-    // 2) Load plugins BEFORE creating winit (required: providers must exist).
     engine.load_plugins_once()?;
-
-    // 2.1) Host fallback services (only when not provided by plugins).
     scene_io_service::register_scene_io_best_effort(scene.clone());
 
-    // AssetManager is optional: missing service is not fatal.
     let assets = AssetServiceClient::new(newengine_core::plugins::default_host_api());
     let assets_available =
         newengine_core::plugins::has_service(newengine_assets::consts::ASSET_SERVICE_ID);
@@ -394,17 +407,15 @@ fn main_impl() -> EngineResult<()> {
         );
     }
 
-    // 3) Resolve window icon (best-effort).
     let icon = try_load_window_icon_best_effort(
         &startup,
         if assets_available { Some(&assets) } else { None },
         &asset_roots,
     );
 
-    let mut winit_cfg = winit_config_from_startup(&startup);
-    winit_cfg.icon = icon;
+    let mut platform_cfg = platform_config_from_startup(&startup);
+    platform_cfg.icon = icon.map_or(ROption::RNone, ROption::RSome);
 
-    // UI builder exists immediately; document is loaded after plugins are ready.
     let shared_doc: Arc<Mutex<Option<Arc<UiMarkupDoc>>>> = Arc::new(Mutex::new(None));
     let ui_build: Option<Box<dyn UiBuildFn>> = match startup.ui_backend {
         newengine_core::startup::UiBackend::Disabled => None,
@@ -417,7 +428,6 @@ fn main_impl() -> EngineResult<()> {
         ))),
     };
 
-    // Load markup best-effort (AssetManager -> filesystem roots).
     if ui_build.is_some() {
         let assets_opt: Option<&dyn newengine_ui::AssetAccess> =
             if assets_available { Some(&assets) } else { None };
@@ -443,12 +453,15 @@ fn main_impl() -> EngineResult<()> {
         }
     }
 
-    let startup_for_after = Arc::clone(&startup);
+    let runtime_path = platform_runtime::detect_platform_runtime_path(&startup.modules_dir)?;
+    log::info!("editor: selected platform runtime {}", runtime_path.display());
+    let runtime = platform_runtime::EditorPlatformRuntime::new(
+        engine,
+        ui_provider_kind_from_startup(&startup),
+        ui_build,
+    );
 
-    run_winit_app_with_config(engine, winit_cfg, ui_build, move |_engine| {
-        let _startup = &startup_for_after;
-        Ok(())
-    })?;
+    runtime.run(&runtime_path, platform_cfg)?;
 
     log::info!("engine stopped");
     Ok(())

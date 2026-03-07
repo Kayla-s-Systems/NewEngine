@@ -1,8 +1,8 @@
 #![forbid(unsafe_op_in_unsafe_fn)]
 
+use egui;
 use newengine_gizmo::egui::GizmoTransform;
 use newengine_gizmo::GizmoMode;
-use newengine_platform_winit::egui;
 
 use super::super::camera::FrameCamera;
 use super::super::util;

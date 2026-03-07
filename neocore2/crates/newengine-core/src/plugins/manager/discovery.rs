@@ -58,6 +58,7 @@ impl PluginManager {
         let mut entries_total: usize = 0;
         let mut skipped_non_dynlib: usize = 0;
 
+        let mut skipped_platform_runtime: usize = 0;
         let mut candidates: Vec<PathBuf> = Vec::new();
         for ent in rd {
             entries_total = entries_total.saturating_add(1);
@@ -72,7 +73,23 @@ impl PluginManager {
                 skipped_non_dynlib = skipped_non_dynlib.saturating_add(1);
                 continue;
             }
+            if is_platform_runtime_candidate(&p) {
+                skipped_platform_runtime = skipped_platform_runtime.saturating_add(1);
+                continue;
+            }
             candidates.push(p);
+        }
+
+        fn is_platform_runtime_candidate(p: &Path) -> bool {
+            p.file_name()
+                .and_then(|s| s.to_str())
+                .map(|s| s.to_ascii_lowercase())
+                .is_some_and(|s| {
+                    s.contains("platform-winit")
+                        || s.contains("platform_winit")
+                        || s.contains("platform_runtime")
+                        || s.starts_with("newengine_platform_")
+                })
         }
 
         fn is_logging_candidate(p: &Path) -> bool {
@@ -109,11 +126,12 @@ impl PluginManager {
 
         if log::log_enabled!(log::Level::Debug) {
             log::debug!(
-                "plugins: scan summary dir='{}' entries_total={} dynlibs={} skipped_non_dynlib={} ",
+                "plugins: scan summary dir='{}' entries_total={} dynlibs={} skipped_non_dynlib={} skipped_platform_runtime={} ",
                 display_clean(&dir),
                 entries_total,
                 all_list.len(),
-                skipped_non_dynlib
+                skipped_non_dynlib,
+                skipped_platform_runtime
             );
         }
 
@@ -178,6 +196,13 @@ impl PluginManager {
             display_clean(&dir),
             all_list.join(", ")
         );
+        if skipped_platform_runtime > 0 {
+            log::info!(
+                "plugins: skipped {} platform runtime candidate(s) in '{}' (loaded separately from runtime ABI)",
+                skipped_platform_runtime,
+                display_clean(&dir)
+            );
+        }
 
         // 4) Load the rest.
         for path in rest {

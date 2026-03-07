@@ -2,7 +2,7 @@
 
 use std::sync::Arc;
 
-use newengine_platform_winit::egui;
+use egui;
 
 use super::bridge::PluginManagerBridge;
 

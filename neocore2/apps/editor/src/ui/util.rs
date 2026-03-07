@@ -1,6 +1,6 @@
 #![forbid(unsafe_op_in_unsafe_fn)]
 
-use newengine_platform_winit::egui;
+use egui;
 
 const OUTLINER_MIN_W: f32 = 200.0;
 const DETAILS_MIN_W: f32 = 260.0;
