@@ -1,28 +1,45 @@
 #![forbid(unsafe_op_in_unsafe_fn)]
 
+use std::collections::HashSet;
 use std::num::NonZeroIsize;
 use std::path::{Path, PathBuf};
 
-use abi_stable::std_types::{RResult, RString};
+use abi_stable::std_types::{RResult, RString, RVec};
 use libloading::Library;
 use newengine_core::events::EventSub;
 use newengine_core::host_events::{
     CursorGrabMode, CursorState, HostEvent, WindowHandles, WindowHostEvent, WindowInitSize,
 };
-use newengine_core::{Engine, EngineError, EngineResult};
+use newengine_core::{Engine, EngineError, EngineResult, StartupConfig};
 use newengine_platform_api::{
     NativeWindowBackendV1, NativeWindowHandlesV1, PlatformAppConfigV1, PlatformCursorGrabModeV1,
     PlatformCursorPollV1, PlatformCursorStateV1, PlatformHostApiV1, PlatformRuntimeRunFnV1,
-    PlatformStepResultV1, PlatformSurfaceMetricsV1, PlatformWindowReadyV1,
+    PlatformStepResultV1, PlatformSurfaceMetricsV1, PlatformWindowPlacementKindV1,
+    PlatformWindowPlacementV1, PlatformWindowReadyV1,
+};
+use newengine_plugin_api::{
+    ConfigBlobV1, ConfigDiagLevelV1, ConfigPatchSourceV1, ConfigPatchV1, HostApiV1,
+    PluginRootV1Ref, PluginSignatureV1,
 };
 use newengine_ui::{
     create_provider, UiBuildFn, UiFrameDesc, UiProvider, UiProviderKind, UiProviderOptions,
 };
 use raw_window_handle::{RawDisplayHandle, RawWindowHandle};
+use serde_json::Value;
 
 use crate::platform_input::poll_input_frame;
 
 const PLATFORM_RUNTIME_SYMBOL: &[u8] = b"newengine_platform_runtime_run_v1\0";
+const PLUGIN_ROOT_SYMBOL: &[u8] = b"export_plugin_root\0";
+const PLUGIN_SIGNATURE_SYMBOL: &[u8] = b"newengine_plugin_signature_v1\0";
+const PLATFORM_PLUGIN_ID: &str = "newengine.platform.winit";
+const CT_JSON_MERGE_PATCH: &str = "application/merge-patch+json";
+
+pub struct ResolvedPlatformRuntimeConfig {
+    pub plugin_id: String,
+    pub config: PlatformAppConfigV1,
+    pub icon_path: Option<String>,
+}
 
 pub struct EditorPlatformRuntime {
     engine: Engine<()>,
@@ -58,9 +75,8 @@ impl EditorPlatformRuntime {
         let lib = unsafe { Library::new(runtime_path) }
             .map_err(|e| EngineError::other(format!("platform runtime load failed: {e}")))?;
 
-        let run: libloading::Symbol<PlatformRuntimeRunFnV1> =
-            unsafe { lib.get(PLATFORM_RUNTIME_SYMBOL) }
-                .map_err(|e| EngineError::other(format!("platform runtime symbol missing: {e}")))?;
+        let run: libloading::Symbol<PlatformRuntimeRunFnV1> = unsafe { lib.get(PLATFORM_RUNTIME_SYMBOL) }
+            .map_err(|e| EngineError::other(format!("platform runtime symbol missing: {e}")))?;
 
         log::info!(
             "platform runtime: entry resolved symbol='{}' title='{}' size={}x{}",
@@ -336,11 +352,295 @@ fn native_to_raw_handles(
     ))
 }
 
+#[inline]
+pub fn legacy_platform_config_from_startup(startup: &StartupConfig) -> PlatformAppConfigV1 {
+    let placement = match startup.window_placement {
+        newengine_core::startup::WindowPlacement::Default => PlatformWindowPlacementV1 {
+            kind: PlatformWindowPlacementKindV1::OsDefault,
+            x: 0,
+            y: 0,
+        },
+        newengine_core::startup::WindowPlacement::Centered { offset } => PlatformWindowPlacementV1 {
+            kind: PlatformWindowPlacementKindV1::Centered,
+            x: offset.0,
+            y: offset.1,
+        },
+    };
+
+    PlatformAppConfigV1 {
+        title: startup.window_title.clone().into(),
+        width: startup.window_size.0,
+        height: startup.window_size.1,
+        placement,
+        icon: abi_stable::std_types::ROption::RNone,
+    }
+}
+
+#[inline]
+fn config_patch_from_json_merge_patch(name: &str, priority: i32, value: &Value) -> ConfigPatchV1 {
+    let bytes = serde_json::to_vec(value).unwrap_or_default();
+    ConfigPatchV1 {
+        source: ConfigPatchSourceV1::HostRule,
+        content_type: RString::from(CT_JSON_MERGE_PATCH),
+        bytes: RVec::from(bytes),
+        priority,
+        name: RString::from(name),
+    }
+}
+
+#[inline]
+fn is_non_empty_object(value: &Value) -> bool {
+    matches!(value, Value::Object(map) if !map.is_empty())
+}
+
+fn platform_config_from_effective_blob(blob: &ConfigBlobV1) -> Result<PlatformAppConfigV1, String> {
+    if blob.content_type.as_str() != "application/json" {
+        return Err(format!(
+            "unsupported platform config content_type '{}'",
+            blob.content_type
+        ));
+    }
+
+    let value: Value = serde_json::from_slice(blob.bytes.as_slice())
+        .map_err(|e| format!("platform config parse failed: {e}"))?;
+
+    let obj = value
+        .as_object()
+        .ok_or_else(|| "platform config must be a JSON object".to_owned())?;
+
+    let title = obj
+        .get("title")
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|v| !v.is_empty())
+        .unwrap_or("NewEngine")
+        .to_owned();
+
+    let width = obj
+        .get("width")
+        .and_then(Value::as_u64)
+        .map(|v| v as u32)
+        .unwrap_or(1600)
+        .clamp(64, 16384);
+
+    let height = obj
+        .get("height")
+        .and_then(Value::as_u64)
+        .map(|v| v as u32)
+        .unwrap_or(900)
+        .clamp(64, 16384);
+
+    let placement_obj = obj.get("placement").and_then(Value::as_object);
+    let placement_mode = placement_obj
+        .and_then(|it| it.get("mode"))
+        .and_then(Value::as_str)
+        .unwrap_or("os_default");
+
+    let placement = match placement_mode {
+        "os_default" | "default" => PlatformWindowPlacementV1 {
+            kind: PlatformWindowPlacementKindV1::OsDefault,
+            x: 0,
+            y: 0,
+        },
+        "centered" | "center" | "centre" => PlatformWindowPlacementV1 {
+            kind: PlatformWindowPlacementKindV1::Centered,
+            x: placement_obj
+                .and_then(|it| it.get("x"))
+                .and_then(Value::as_i64)
+                .map(|v| v.clamp(i32::MIN as i64, i32::MAX as i64) as i32)
+                .unwrap_or(0),
+            y: placement_obj
+                .and_then(|it| it.get("y"))
+                .and_then(Value::as_i64)
+                .map(|v| v.clamp(i32::MIN as i64, i32::MAX as i64) as i32)
+                .unwrap_or(0),
+        },
+        "absolute" => PlatformWindowPlacementV1 {
+            kind: PlatformWindowPlacementKindV1::Absolute,
+            x: placement_obj
+                .and_then(|it| it.get("x"))
+                .and_then(Value::as_i64)
+                .map(|v| v.clamp(i32::MIN as i64, i32::MAX as i64) as i32)
+                .unwrap_or(0),
+            y: placement_obj
+                .and_then(|it| it.get("y"))
+                .and_then(Value::as_i64)
+                .map(|v| v.clamp(i32::MIN as i64, i32::MAX as i64) as i32)
+                .unwrap_or(0),
+        },
+        other => {
+            return Err(format!("unsupported placement.mode '{other}'"));
+        }
+    };
+
+    Ok(PlatformAppConfigV1 {
+        title: title.into(),
+        width,
+        height,
+        placement,
+        icon: abi_stable::std_types::ROption::RNone,
+    })
+}
+
+fn log_platform_config_diags(plugin_id: &str, diags: &[newengine_plugin_api::ConfigDiagV1]) {
+    for diag in diags {
+        match diag.level {
+            ConfigDiagLevelV1::Info => log::info!(
+                "platform runtime: config info id='{}' {} {}",
+                plugin_id,
+                diag.code,
+                diag.message
+            ),
+            ConfigDiagLevelV1::Warn => log::warn!(
+                "platform runtime: config warn id='{}' {} {}",
+                plugin_id,
+                diag.code,
+                diag.message
+            ),
+            ConfigDiagLevelV1::Error => log::error!(
+                "platform runtime: config error id='{}' {} {}",
+                plugin_id,
+                diag.code,
+                diag.message
+            ),
+        }
+    }
+}
+
+fn try_read_runtime_identity(path: &Path) -> Option<(String, String)> {
+    let lib = unsafe { Library::new(path) }.ok()?;
+    let has_runtime = unsafe { lib.get::<PlatformRuntimeRunFnV1>(PLATFORM_RUNTIME_SYMBOL) }.is_ok();
+    if !has_runtime {
+        return None;
+    }
+
+    if let Ok(sym) = unsafe { lib.get::<unsafe extern "C" fn() -> PluginSignatureV1>(PLUGIN_SIGNATURE_SYMBOL) } {
+        let signature = unsafe { sym() };
+        let id = signature.id.to_string();
+        let version = signature.version.to_string();
+        if !id.trim().is_empty() {
+            return Some((id, version));
+        }
+    }
+
+    let root_sym = unsafe { lib.get::<unsafe extern "C" fn() -> PluginRootV1Ref>(PLUGIN_ROOT_SYMBOL) }.ok()?;
+    let root = unsafe { root_sym() };
+
+    if let Some(create_v3) = root.create_v3() {
+        let module = create_v3();
+        let descriptor = module.descriptor_v3();
+        return Some((descriptor.id.to_string(), descriptor.version.to_string()));
+    }
+
+    if let Some(create_v2) = root.create_v2() {
+        let module = create_v2();
+        let descriptor = module.descriptor();
+        return Some((descriptor.id.to_string(), descriptor.version.to_string()));
+    }
+
+    let module = root.create()();
+    let info = module.info();
+    Some((info.id.to_string(), info.version.to_string()))
+}
+
+fn extract_string_field(value: &Value, key: &str) -> Option<String> {
+    value
+        .as_object()
+        .and_then(|obj| obj.get(key))
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|it| !it.is_empty())
+        .map(str::to_owned)
+}
+
+fn strip_host_only_platform_keys(value: &Value) -> Value {
+    let mut value = value.clone();
+    if let Some(obj) = value.as_object_mut() {
+        obj.remove("icon");
+    }
+    value
+}
+
+pub fn resolve_platform_runtime_config(
+    startup: &StartupConfig,
+    runtime_path: &Path,
+) -> EngineResult<ResolvedPlatformRuntimeConfig> {
+    let legacy = legacy_platform_config_from_startup(startup);
+    let lib = unsafe { Library::new(runtime_path) }
+        .map_err(|e| EngineError::other(format!("platform runtime metadata load failed: {e}")))?;
+
+    let root_sym = match unsafe { lib.get::<unsafe extern "C" fn() -> PluginRootV1Ref>(PLUGIN_ROOT_SYMBOL) } {
+        Ok(sym) => sym,
+        Err(_) => {
+            log::info!("platform runtime: plugin metadata not exported; using legacy startup window config");
+            return Ok(ResolvedPlatformRuntimeConfig {
+                plugin_id: PLATFORM_PLUGIN_ID.to_owned(),
+                config: legacy,
+                icon_path: startup.window_icon_path.clone(),
+            });
+        }
+    };
+
+    let root = unsafe { root_sym() };
+    let Some(create_v3) = root.create_v3() else {
+        log::info!("platform runtime: plugin metadata ABI V3 not available; using legacy startup window config");
+        return Ok(ResolvedPlatformRuntimeConfig {
+            plugin_id: PLATFORM_PLUGIN_ID.to_owned(),
+            config: legacy,
+            icon_path: startup.window_icon_path.clone(),
+        });
+    };
+
+    let module = create_v3();
+    let descriptor = module.descriptor_v3();
+    let plugin_id = descriptor.id.to_string();
+
+    let defaults = module
+        .config_defaults_v1()
+        .into_result()
+        .map_err(|e| EngineError::other(format!("platform config defaults failed: {e}")))?;
+
+    let overrides = newengine_core::plugins::get_plugin_overrides_with_env(&plugin_id);
+    let icon_path = extract_string_field(&overrides, "icon");
+    let plugin_patch = strip_host_only_platform_keys(&overrides);
+
+    let mut patches = RVec::<ConfigPatchV1>::new();
+    if is_non_empty_object(&plugin_patch) {
+        patches.push(config_patch_from_json_merge_patch("config+env", 0, &plugin_patch));
+    }
+
+    let applied = module
+        .config_apply_patches_v1(&defaults, patches)
+        .into_result()
+        .map_err(|e| EngineError::other(format!("platform config apply failed: {e}")))?;
+
+    log_platform_config_diags(&plugin_id, applied.diags.as_slice());
+
+    let config = platform_config_from_effective_blob(&applied.effective)
+        .map_err(|e| EngineError::other(format!("platform config decode failed: {e}")))?;
+
+    log::info!(
+        "platform runtime: effective config id='{}' title='{}' size={}x{} placement={:?} icon={} ",
+        plugin_id,
+        config.title,
+        config.width,
+        config.height,
+        config.placement.kind,
+        icon_path.as_deref().unwrap_or("<none>")
+    );
+
+    Ok(ResolvedPlatformRuntimeConfig {
+        plugin_id,
+        config,
+        icon_path,
+    })
+}
+
 pub fn detect_platform_runtime_path(modules_dir: &Path) -> EngineResult<PathBuf> {
     type PlatformRuntimeEntryFn = unsafe extern "C" fn(
-        abi_stable::std_types::RString,
-        newengine_platform_api::PlatformHostApiV1,
-        newengine_platform_api::PlatformAppConfigV1,
+        HostApiV1,
+        PlatformHostApiV1,
+        PlatformAppConfigV1,
     ) -> abi_stable::std_types::RResult<(), abi_stable::std_types::RString>;
 
     #[inline]
@@ -412,7 +712,7 @@ pub fn detect_platform_runtime_path(modules_dir: &Path) -> EngineResult<PathBuf>
         search_dirs.push(exe_dir.clone());
     }
 
-    let mut dedup = std::collections::HashSet::new();
+    let mut dedup = HashSet::new();
     search_dirs.retain(|p| dedup.insert(p.clone()));
 
     let mut candidates: Vec<PathBuf> = Vec::new();
@@ -422,6 +722,14 @@ pub fn detect_platform_runtime_path(modules_dir: &Path) -> EngineResult<PathBuf>
 
     candidates.sort();
     candidates.dedup();
+
+    if let Some(path) = candidates
+        .iter()
+        .find(|path| matches!(try_read_runtime_identity(path), Some((ref id, _)) if id == PLATFORM_PLUGIN_ID))
+        .cloned()
+    {
+        return Ok(path);
+    }
 
     candidates.into_iter().next().ok_or_else(|| {
         EngineError::other(format!(

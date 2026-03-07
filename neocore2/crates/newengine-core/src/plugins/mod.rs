@@ -22,7 +22,9 @@ pub use forward_logger::{install_forward_logger_once, LOGGING_SINK_SERVICE_ID};
 pub use host_api::default_host_api;
 pub use host_context::{describe_service, has_service, init_host_context, list_services};
 pub use manager::{PluginManager, PluginSnapshotEntry};
-pub use plugin_config_service::{init_plugin_config_service, CONFIG_SERVICE_ID};
+pub use plugin_config_service::{
+    get_plugin_overrides_with_env, init_plugin_config_service, CONFIG_SERVICE_ID,
+};
 
 /// Publishes a plugin-host event into all subscribed plugin event sinks.
 ///

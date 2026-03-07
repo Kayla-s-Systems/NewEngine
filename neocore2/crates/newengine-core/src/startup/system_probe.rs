@@ -1,6 +1,8 @@
 #![forbid(unsafe_op_in_unsafe_fn)]
 #![allow(dead_code)]
 
+use crate::log_fmt::emit_boxed_kv;
+
 #[derive(Clone, Debug, Default)]
 pub struct SystemProbe {
     pub os: Option<String>,
@@ -13,8 +15,6 @@ pub struct SystemProbe {
 }
 
 impl SystemProbe {
-    const TABLE_WIDTH: usize = 47;
-
     #[inline]
     pub fn probe() -> Self {
         let mut out = Self::default();
@@ -39,45 +39,43 @@ impl SystemProbe {
 
     pub fn emit_table(&self, stage: &str) {
         let title = format!("SystemProbe :: Host [{}]", stage);
+        let rows = vec![
+            ("run_tag", crate::run_id::run_tag().unwrap_or("<unknown>").to_owned()),
+            ("run_id", crate::run_id::run_id().unwrap_or("<unknown>").to_owned()),
+            ("os", self.value_or_unknown(self.os.as_deref())),
+            ("cpu", self.value_or_unknown(self.cpu.as_deref())),
+            (
+                "cpu_cores_logical",
+                self.cpu_cores_logical
+                    .map(|v| v.to_string())
+                    .unwrap_or_else(|| "<unknown>".to_owned()),
+            ),
+            (
+                "ram_total_mb",
+                self.ram_total_mb
+                    .map(|v| v.to_string())
+                    .unwrap_or_else(|| "<unknown>".to_owned()),
+            ),
+            ("gpu", self.value_or_unknown(self.gpu.as_deref())),
+            (
+                "vram_dedicated_mb",
+                self.vram_dedicated_mb
+                    .map(|v| v.to_string())
+                    .unwrap_or_else(|| "<unknown>".to_owned()),
+            ),
+            ("directx", self.value_or_unknown(self.directx.as_deref())),
+        ];
 
-        log::info!("┌{}", "─".repeat(Self::TABLE_WIDTH));
-        log::info!("│ {}", title);
-        log::info!("├{}", "─".repeat(Self::TABLE_WIDTH));
-
-        self.emit_row("run_tag", crate::run_id::run_tag());
-        self.emit_row("run_id", crate::run_id::run_id());
-
-        self.emit_row("os", self.os.as_deref());
-        self.emit_row("cpu", self.cpu.as_deref());
-        self.emit_row(
-            "cpu_cores_logical",
-            self.cpu_cores_logical
-                .map(|v| v.to_string())
-                .as_deref(),
-        );
-        self.emit_row(
-            "ram_total_mb",
-            self.ram_total_mb.map(|v| v.to_string()).as_deref(),
-        );
-        self.emit_row("gpu", self.gpu.as_deref());
-        self.emit_row(
-            "vram_dedicated_mb",
-            self.vram_dedicated_mb
-                .map(|v| v.to_string())
-                .as_deref(),
-        );
-        self.emit_row("directx", self.directx.as_deref());
-
-        log::info!("└{}", "─".repeat(Self::TABLE_WIDTH));
+        emit_boxed_kv(&title, &rows);
     }
 
-    fn emit_row(&self, key: &str, value: Option<&str>) {
-        let value = value
+    #[inline]
+    fn value_or_unknown(&self, value: Option<&str>) -> String {
+        value
             .map(str::trim)
             .filter(|v| !v.is_empty())
-            .unwrap_or("<unknown>");
-
-        log::info!("│   {:<18} : {}", key, value);
+            .unwrap_or("<unknown>")
+            .to_owned()
     }
 }
 

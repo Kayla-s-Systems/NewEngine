@@ -3,6 +3,7 @@
 use super::{Engine, PluginFaultTolerance};
 
 use crate::error::{EngineError, EngineResult};
+use crate::log_fmt::{ellipsize, emit_boxed_kv, emit_prefixed_table};
 use crate::path_fmt::display_clean;
 use crate::plugins::{
     default_host_api, PluginControlCommand, PluginControlQueue, PluginsSnapshot,
@@ -138,26 +139,40 @@ impl<E: Send + 'static> Engine<E> {
         let list = self.plugins.snapshot();
         let n = list.len();
 
-        log::info!("plugins: diagnostics tag='{}' loaded={}", tag, n);
+        emit_boxed_kv(
+            &format!("Plugins :: Diagnostics [{}]", tag),
+            &[("loaded", n.to_string())],
+        );
 
-        for (i, p) in list.iter().enumerate() {
-            log::info!(
-                "plugins: diag [{:02}/{:02}] id='{}' ver='{}' state='{}'",
-                i.saturating_add(1),
-                n.max(1),
-                p.id,
-                p.version,
-                p.state
-            );
+        if list.is_empty() {
+            return;
         }
+
+        let rows: Vec<Vec<String>> = list
+            .iter()
+            .map(|p| {
+                vec![
+                    ellipsize(&p.id, 32),
+                    ellipsize(&p.version, 12),
+                    ellipsize(&p.state, 16),
+                    format!("{:?}", p.kind),
+                    p.capabilities.len().to_string(),
+                ]
+            })
+            .collect();
+
+        emit_prefixed_table(
+            "",
+            &format!("Plugins :: Registered [{}]", tag),
+            &["id", "ver", "state", "kind", "caps"],
+            &rows,
+        );
 
         if log::log_enabled!(log::Level::Debug) {
             for p in &list {
                 log::debug!(
-                    "plugins: diag.debug id='{}' ver='{}' kind={:?} caps={} path='{}'",
+                    "plugins: path id='{}' caps={} path='{}'",
                     p.id,
-                    p.version,
-                    p.kind,
                     p.capabilities.len(),
                     display_clean(&p.path)
                 );

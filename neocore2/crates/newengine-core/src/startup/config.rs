@@ -4,6 +4,7 @@ use serde_json::Value;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
+use crate::log_fmt::{ellipsize, emit_boxed_kv};
 use crate::path_fmt::{canonicalize_if_exists, display_clean};
 
 #[derive(Debug, Clone)]
@@ -183,22 +184,28 @@ impl StartupLoadReport {
             .map(|p| display_clean(p))
             .unwrap_or_else(|| "<none>".to_owned());
 
-        log::info!(
-            "startup: loaded source={} file={} resolved_from={:?} overrides={} plugin_overrides={}",
-            src,
-            file,
-            self.resolved_from,
-            self.overrides.len(),
-            self.plugin_overrides.len()
+        emit_boxed_kv(
+            "StartupConfig :: Source [config applied]",
+            &[
+                ("source", src),
+                ("file", file),
+                ("resolved_from", format!("{:?}", self.resolved_from)),
+                (
+                    "file_bytes",
+                    self.file_bytes
+                        .map(|v| v.to_string())
+                        .unwrap_or_else(|| "<none>".to_owned()),
+                ),
+                (
+                    "total_ms",
+                    self.total_ms
+                        .map(|v| v.to_string())
+                        .unwrap_or_else(|| "<none>".to_owned()),
+                ),
+                ("overrides", self.overrides.len().to_string()),
+                ("plugin_overrides", self.plugin_overrides.len().to_string()),
+            ],
         );
-
-        if log::log_enabled!(log::Level::Debug) {
-            log::debug!(
-                "startup: metrics file_bytes={:?} total_ms={:?}",
-                self.file_bytes,
-                self.total_ms
-            );
-        }
 
         let base_dir: PathBuf = self
             .file
@@ -210,25 +217,43 @@ impl StartupLoadReport {
             .ok()
             .and_then(|p| p.parent().map(Path::to_path_buf));
 
-        for o in &self.overrides {
-            let to = match o.key {
-                "modules_dir" => exe_dir
-                    .as_ref()
-                    .map(|d| display_clean(&canonicalize_if_exists(&d.join(&o.to))))
-                    .unwrap_or_else(|| o.to.clone()),
-                "window_icon" => display_clean(&canonicalize_if_exists(&base_dir.join(&o.to))),
-                _ => o.to.clone(),
-            };
-            log::info!("startup: override {}: '{}' -> '{}'", o.key, o.from, to);
+        if !self.overrides.is_empty() {
+            let rows: Vec<(&str, String)> = self
+                .overrides
+                .iter()
+                .map(|o| {
+                    let to = match o.key {
+                        "modules_dir" => exe_dir
+                            .as_ref()
+                            .map(|d| display_clean(&canonicalize_if_exists(&d.join(&o.to))))
+                            .unwrap_or_else(|| o.to.clone()),
+                        "window_icon" => {
+                            display_clean(&canonicalize_if_exists(&base_dir.join(&o.to)))
+                        }
+                        _ => o.to.clone(),
+                    };
+                    (o.key, format!("{} -> {}", o.from, to))
+                })
+                .collect();
+            emit_boxed_kv("StartupConfig :: Overrides [applied]", &rows);
         }
 
-        for o in &self.plugin_overrides {
-            log::info!(
-                "startup: plugin override {}: '{}' -> '{}'",
-                o.plugin_id,
-                o.from,
-                o.to
-            );
+        if !self.plugin_overrides.is_empty() {
+            let rows: Vec<(&str, String)> = self
+                .plugin_overrides
+                .iter()
+                .map(|o| {
+                    (
+                        o.plugin_id.as_str(),
+                        format!(
+                            "{} -> {}",
+                            o.from,
+                            summarize_plugin_override_preview(&o.to)
+                        ),
+                    )
+                })
+                .collect();
+            emit_boxed_kv("StartupConfig :: Plugin Overrides [applied]", &rows);
         }
     }
 }
@@ -236,6 +261,12 @@ impl StartupLoadReport {
 #[derive(Debug, Clone)]
 pub struct ConfigPaths {
     startup_path: String,
+}
+
+fn summarize_plugin_override_preview(value: &str) -> String {
+    let compact = value.split_whitespace().collect::<Vec<_>>().join(" ");
+    let preview = ellipsize(&compact, 180);
+    format!("json(len={}, preview='{}')", value.len(), preview)
 }
 
 impl ConfigPaths {

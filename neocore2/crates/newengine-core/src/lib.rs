@@ -11,6 +11,7 @@ pub mod host_events;
 pub mod host_services;
 pub mod module;
 pub mod plugins;
+pub(crate) mod log_fmt;
 pub(crate) mod path_fmt;
 pub mod render;
 pub mod run_id;

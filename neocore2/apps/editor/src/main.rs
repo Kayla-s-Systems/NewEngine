@@ -9,10 +9,7 @@ use newengine_core::{
 };
 
 use newengine_modules_render_vulkan_ash::VulkanAshRenderModule;
-use newengine_platform_api::{
-    PlatformAppConfigV1, PlatformAppIconV1, PlatformWindowPlacementKindV1,
-    PlatformWindowPlacementV1,
-};
+use newengine_platform_api::PlatformAppIconV1;
 
 use newengine_assets::{wait_ready, AssetAccess, AssetService, AssetServiceClient};
 use newengine_ui::{UiBuildFn, UiMarkupDoc, UiProviderKind};
@@ -63,29 +60,6 @@ impl Services for AppServices {
     }
 }
 
-#[inline]
-fn platform_config_from_startup(startup: &StartupConfig) -> PlatformAppConfigV1 {
-    let placement = match startup.window_placement {
-        newengine_core::startup::WindowPlacement::Default => PlatformWindowPlacementV1 {
-            kind: PlatformWindowPlacementKindV1::OsDefault,
-            x: 0,
-            y: 0,
-        },
-        newengine_core::startup::WindowPlacement::Centered { offset } => PlatformWindowPlacementV1 {
-            kind: PlatformWindowPlacementKindV1::Centered,
-            x: offset.0,
-            y: offset.1,
-        },
-    };
-
-    PlatformAppConfigV1 {
-        title: startup.window_title.clone().into(),
-        width: startup.window_size.0,
-        height: startup.window_size.1,
-        placement,
-        icon: ROption::RNone,
-    }
-}
 
 #[inline]
 fn ui_provider_kind_from_startup(startup: &StartupConfig) -> UiProviderKind {
@@ -207,11 +181,11 @@ fn mount_asset_roots_best_effort(assets: &AssetServiceClient, roots: &[PathBuf])
 }
 
 fn try_load_window_icon_best_effort(
-    startup: &StartupConfig,
+    icon_path: Option<&str>,
     assets: Option<&AssetServiceClient>,
     roots: &[PathBuf],
 ) -> Option<PlatformAppIconV1> {
-    let Some(path) = startup.window_icon_path.as_deref() else {
+    let Some(path) = icon_path else {
         return None;
     };
 
@@ -408,13 +382,17 @@ fn main_impl() -> EngineResult<()> {
         );
     }
 
+    let runtime_path = platform_runtime::detect_platform_runtime_path(&startup.modules_dir)?;
+    let resolved_platform =
+        platform_runtime::resolve_platform_runtime_config(&startup, &runtime_path)?;
+
     let icon = try_load_window_icon_best_effort(
-        &startup,
+        resolved_platform.icon_path.as_deref(),
         if assets_available { Some(&assets) } else { None },
         &asset_roots,
     );
 
-    let mut platform_cfg = platform_config_from_startup(&startup);
+    let mut platform_cfg = resolved_platform.config;
     platform_cfg.icon = icon.map_or(ROption::RNone, ROption::RSome);
 
     let shared_doc: Arc<Mutex<Option<Arc<UiMarkupDoc>>>> = Arc::new(Mutex::new(None));
@@ -454,7 +432,6 @@ fn main_impl() -> EngineResult<()> {
         }
     }
 
-    let runtime_path = platform_runtime::detect_platform_runtime_path(&startup.modules_dir)?;
     log::info!("editor: selected platform runtime {}", runtime_path.display());
     let runtime = platform_runtime::EditorPlatformRuntime::new(
         engine,

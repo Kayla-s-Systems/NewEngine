@@ -1,19 +1,4 @@
 {
-  "window": {
-    "title": "NewEngine Editor",
-    "icon": "ui/engine.ico",
-    "size": [
-      1600,
-      900
-    ],
-    "placement": {
-      "type": "centered",
-      "offset": [
-        0,
-        -24
-      ]
-    }
-  },
   "ui": {
     "backend": "egui"
   },
@@ -72,6 +57,17 @@
         "window_ms": null,
         "capacity": 2048
       }
+    },
+    "newengine.platform.winit": {
+      "title": "NewEngine Editor",
+      "width": 1600,
+      "height": 900,
+      "placement": {
+        "mode": "centered",
+        "x": 0,
+        "y": -24
+      },
+      "icon": "ui/engine.ico"
     }
   }
 }

@@ -8,6 +8,7 @@ use newengine_plugin_api::{
     PluginRootV1Ref, PluginSignatureV1,
 };
 
+use crate::log_fmt::{ellipsize, emit_boxed_kv, emit_prefixed_table};
 use crate::path_fmt::{canonicalize_if_exists, display_clean};
 use crate::plugins::install_forward_logger_once;
 use crate::plugins::paths::{default_plugins_dir, is_dynamic_lib, resolve_plugins_dir};
@@ -196,14 +197,21 @@ impl PluginManager {
 
         let loaded_ids_before = self.loaded_ids.clone();
 
-        log::info!(
-            "plugins: phase selection filter='{}' bootstrap={} engine={} platform_runtime={} unknown={} dir='{}'",
-            filter.label(),
-            selection.bootstrap_candidates.len(),
-            selection.engine_candidates.len(),
-            graph.platform_runtime_count,
-            graph.unknown_dynlibs.len(),
-            display_clean(&graph.dir),
+        emit_boxed_kv(
+            &format!("PluginDiscovery :: Phase Selection [{}]", filter.label()),
+            &[
+                ("dir", display_clean(&graph.dir)),
+                (
+                    "bootstrap_queue",
+                    selection.bootstrap_candidates.len().to_string(),
+                ),
+                ("engine_queue", selection.engine_candidates.len().to_string()),
+                (
+                    "platform_runtime",
+                    graph.platform_runtime_count.to_string(),
+                ),
+                ("unknown_dynlibs", graph.unknown_dynlibs.len().to_string()),
+            ],
         );
 
         let mut load_errors: Vec<PluginLoadError> = Vec::new();
@@ -237,7 +245,18 @@ impl PluginManager {
             }
         }
 
-        log::info!("plugins: load complete loaded_count={}", self.loaded.len());
+        let loaded_total = self.loaded.len();
+        let loaded_this_phase = loaded_total.saturating_sub(loaded_ids_before.len());
+
+        emit_boxed_kv(
+            &format!("PluginDiscovery :: Load Result [{}]", filter.label()),
+            &[
+                ("loaded_total", loaded_total.to_string()),
+                ("loaded_this_phase", loaded_this_phase.to_string()),
+                ("load_errors", load_errors.len().to_string()),
+                ("scan_errors", graph.scan_errors.len().to_string()),
+            ],
+        );
 
         self.validate_required_capabilities();
 
@@ -435,36 +454,34 @@ fn scan_plugins_dir(dir: &Path) -> Result<DiscoveryGraph, PluginLoadError> {
 }
 
 fn emit_discovery_logs(graph: &DiscoveryGraph) {
-    log::info!("plugins: scanning directory '{}'", display_clean(&graph.dir));
-
-    if log::log_enabled!(log::Level::Debug) {
-        log::debug!(
-            "plugins: scan summary dir='{}' entries_total={} dynlibs={} skipped_non_dynlib={} platform_runtime_candidates={} unknown_dynlibs={} scan_errors={}",
-            display_clean(&graph.dir),
-            graph.entries_total,
-            graph.items.len(),
-            graph.skipped_non_dynlib,
-            graph.platform_runtime_count,
-            graph.unknown_dynlibs.len(),
-            graph.scan_errors.len(),
-        );
-    }
+    emit_boxed_kv(
+        "PluginDiscovery :: Scan Summary",
+        &[
+            ("dir", display_clean(&graph.dir)),
+            ("entries_total", graph.entries_total.to_string()),
+            ("dynlibs", graph.items.len().to_string()),
+            ("skipped_non_dynlib", graph.skipped_non_dynlib.to_string()),
+            (
+                "platform_runtime_candidates",
+                graph.platform_runtime_count.to_string(),
+            ),
+            ("bootstrap_candidates", graph.bootstrap_total.to_string()),
+            ("engine_candidates", graph.engine_total.to_string()),
+            ("unknown_dynlibs", graph.unknown_dynlibs.len().to_string()),
+            ("scan_errors", graph.scan_errors.len().to_string()),
+        ],
+    );
 
     emit_scan_table(&graph.items);
 
-    log::info!(
-        "plugins: phase discovery bootstrap={} engine={} platform_runtime={} unknown={} dir='{}'",
-        graph.bootstrap_total,
-        graph.engine_total,
-        graph.platform_runtime_count,
-        graph.unknown_dynlibs.len(),
-        display_clean(&graph.dir),
-    );
-
     if !graph.scan_errors.is_empty() {
-        for err in &graph.scan_errors {
-            log::warn!("plugins: scan error {}", err);
-        }
+        let rows: Vec<(&str, String)> = graph
+            .scan_errors
+            .iter()
+            .enumerate()
+            .map(|(index, err)| ("scan_error", format!("#{:02} {}", index + 1, err)))
+            .collect();
+        emit_boxed_kv("PluginDiscovery :: Scan Errors", &rows);
     }
 }
 
@@ -474,8 +491,6 @@ fn emit_selection_table(
     filter: LoadPhaseFilter,
     loaded_ids_before: &newengine_math::collections::prelude::NeHashSet<String>,
 ) {
-    let headers = ["file", "phase", "id", "selected", "reason"];
-
     let mut selected_paths: std::collections::HashSet<&Path> = std::collections::HashSet::new();
     for path in &selection.bootstrap_candidates {
         selected_paths.insert(path.as_path());
@@ -484,82 +499,65 @@ fn emit_selection_table(
         selected_paths.insert(path.as_path());
     }
 
-    let mut rows: Vec<[String; 5]> = Vec::with_capacity(graph.items.len());
+    let mut selected_yes = 0usize;
+    let mut selected_runtime = 0usize;
+    let mut selected_no = 0usize;
+    let mut rows: Vec<Vec<String>> = Vec::with_capacity(graph.items.len());
+
     for item in &graph.items {
         let phase = scanned_phase_label(&item.kind).to_owned();
         let id = scanned_id(&item.kind);
 
         let (selected, reason) = match &item.kind {
             ScannedDynlibKind::PlatformRuntime { .. } => {
+                selected_runtime = selected_runtime.saturating_add(1);
                 ("runtime".to_owned(), "platform runtime".to_owned())
             }
-            ScannedDynlibKind::Unknown => ("no".to_owned(), "unknown dynlib".to_owned()),
+            ScannedDynlibKind::Unknown => {
+                selected_no = selected_no.saturating_add(1);
+                ("no".to_owned(), "unknown dynlib".to_owned())
+            }
             ScannedDynlibKind::Plugin { phase, .. } => {
                 if loaded_ids_before.contains(id.as_str()) {
+                    selected_no = selected_no.saturating_add(1);
                     ("no".to_owned(), "already loaded".to_owned())
                 } else if !filter.allows(*phase) {
+                    selected_no = selected_no.saturating_add(1);
                     ("no".to_owned(), format!("filtered by {}", filter.label()))
                 } else if selected_paths.contains(item.path.as_path()) {
+                    selected_yes = selected_yes.saturating_add(1);
                     ("yes".to_owned(), "phase match".to_owned())
                 } else {
+                    selected_no = selected_no.saturating_add(1);
                     ("no".to_owned(), "not selected".to_owned())
                 }
             }
         };
 
-        rows.push([item.file_name.clone(), phase, id, selected, reason]);
+        rows.push(vec![
+            ellipsize(&item.file_name, 32),
+            phase,
+            ellipsize(&id, 24),
+            selected,
+            ellipsize(&reason, 28),
+        ]);
     }
 
-    let mut widths = [
-        headers[0].chars().count(),
-        headers[1].chars().count(),
-        headers[2].chars().count(),
-        headers[3].chars().count(),
-        headers[4].chars().count(),
-    ];
-
-    for row in &rows {
-        for (i, col) in row.iter().enumerate() {
-            widths[i] = widths[i].max(col.chars().count());
-        }
-    }
-
-    let border = format!(
-        "+-{}-+-{}-+-{}-+-{}-+-{}-+",
-        "-".repeat(widths[0]),
-        "-".repeat(widths[1]),
-        "-".repeat(widths[2]),
-        "-".repeat(widths[3]),
-        "-".repeat(widths[4]),
+    emit_boxed_kv(
+        &format!("PluginDiscovery :: ExecutionPlan [{}]", filter.label()),
+        &[
+            ("selected_yes", selected_yes.to_string()),
+            ("selected_runtime", selected_runtime.to_string()),
+            ("selected_no", selected_no.to_string()),
+        ],
     );
 
-    log::info!(
-        "[bootstrap] PluginDiscovery :: ExecutionPlan [{}]",
-        filter.label()
+    emit_prefixed_table(
+        "[bootstrap]",
+        &format!("PluginDiscovery :: ExecutionPlan [{}]", filter.label()),
+        &["file", "phase", "id", "selected", "reason"],
+        &rows,
     );
-    log::info!("[bootstrap] {}", border);
-    log::info!(
-        "[bootstrap] | {} | {} | {} | {} | {} |",
-        pad_right(headers[0], widths[0]),
-        pad_right(headers[1], widths[1]),
-        pad_right(headers[2], widths[2]),
-        pad_right(headers[3], widths[3]),
-        pad_right(headers[4], widths[4]),
-    );
-    log::info!("[bootstrap] {}", border);
-
-    for row in &rows {
-        log::info!(
-            "[bootstrap] | {} | {} | {} | {} | {} |",
-            pad_right(&row[0], widths[0]),
-            pad_right(&row[1], widths[1]),
-            pad_right(&row[2], widths[2]),
-            pad_right(&row[3], widths[3]),
-            pad_right(&row[4], widths[4]),
-        );
-    }
-
-    log::info!("[bootstrap] {}", border);
 }
 
 fn phase_name(phase: PluginBootstrapPhase) -> &'static str {
@@ -625,84 +623,27 @@ fn scanned_declared_caps(kind: &ScannedDynlibKind) -> String {
     }
 }
 
-fn pad_right(value: &str, width: usize) -> String {
-    let len = value.chars().count();
-    if len >= width {
-        value.to_owned()
-    } else {
-        let mut out = String::with_capacity(width);
-        out.push_str(value);
-        out.push_str(&" ".repeat(width - len));
-        out
-    }
-}
-
 fn emit_scan_table(scanned: &[ScannedDynlib]) {
-    let headers = ["file", "type", "phase", "id", "ver", "declared_caps"];
+    let rows: Vec<Vec<String>> = scanned
+        .iter()
+        .map(|item| {
+            vec![
+                ellipsize(&item.file_name, 32),
+                ellipsize(scanned_kind_label(&item.kind), 18),
+                scanned_phase_label(&item.kind).to_owned(),
+                ellipsize(&scanned_id(&item.kind), 24),
+                ellipsize(&scanned_version(&item.kind), 12),
+                scanned_declared_caps(&item.kind),
+            ]
+        })
+        .collect();
 
-    let mut rows: Vec<[String; 6]> = Vec::with_capacity(scanned.len());
-    for item in scanned {
-        rows.push([
-            item.file_name.clone(),
-            scanned_kind_label(&item.kind).to_owned(),
-            scanned_phase_label(&item.kind).to_owned(),
-            scanned_id(&item.kind),
-            scanned_version(&item.kind),
-            scanned_declared_caps(&item.kind),
-        ]);
-    }
-
-    let mut widths = [
-        headers[0].chars().count(),
-        headers[1].chars().count(),
-        headers[2].chars().count(),
-        headers[3].chars().count(),
-        headers[4].chars().count(),
-        headers[5].chars().count(),
-    ];
-
-    for row in &rows {
-        for (i, col) in row.iter().enumerate() {
-            widths[i] = widths[i].max(col.chars().count());
-        }
-    }
-
-    let border = format!(
-        "+-{}-+-{}-+-{}-+-{}-+-{}-+-{}-+",
-        "-".repeat(widths[0]),
-        "-".repeat(widths[1]),
-        "-".repeat(widths[2]),
-        "-".repeat(widths[3]),
-        "-".repeat(widths[4]),
-        "-".repeat(widths[5]),
+    emit_prefixed_table(
+        "[bootstrap]",
+        "PluginDiscovery :: Graph [scan-table]",
+        &["file", "type", "phase", "id", "ver", "declared_caps"],
+        &rows,
     );
-
-    log::info!("[bootstrap] PluginDiscovery :: Graph [scan-table]");
-    log::info!("[bootstrap] {}", border);
-    log::info!(
-        "[bootstrap] | {} | {} | {} | {} | {} | {} |",
-        pad_right(headers[0], widths[0]),
-        pad_right(headers[1], widths[1]),
-        pad_right(headers[2], widths[2]),
-        pad_right(headers[3], widths[3]),
-        pad_right(headers[4], widths[4]),
-        pad_right(headers[5], widths[5]),
-    );
-    log::info!("[bootstrap] {}", border);
-
-    for row in &rows {
-        log::info!(
-            "[bootstrap] | {} | {} | {} | {} | {} | {} |",
-            pad_right(&row[0], widths[0]),
-            pad_right(&row[1], widths[1]),
-            pad_right(&row[2], widths[2]),
-            pad_right(&row[3], widths[3]),
-            pad_right(&row[4], widths[4]),
-            pad_right(&row[5], widths[5]),
-        );
-    }
-
-    log::info!("[bootstrap] {}", border);
 }
 
 fn file_name_only(path: &Path) -> String {
@@ -715,17 +656,16 @@ fn file_name_only(path: &Path) -> String {
 fn scan_dynamic_lib(path: &Path) -> Result<ScannedDynlib, String> {
     let file_name = file_name_only(path);
     let lib = unsafe { Library::new(path) }.map_err(|e| format!("Library::new failed: {e}"))?;
+    let plugin_probe = probe_plugin_metadata(&lib)?;
 
     if unsafe { lib.get::<unsafe extern "C" fn()>(PLATFORM_RUNTIME_SYMBOL) }.is_ok() {
-        let (id, version) = infer_platform_runtime_identity(path);
+        let (id, version) = platform_runtime_identity_from_probe(path, &plugin_probe);
         return Ok(ScannedDynlib {
             path: path.to_path_buf(),
             file_name,
             kind: ScannedDynlibKind::PlatformRuntime { id, version },
         });
     }
-
-    let plugin_probe = probe_plugin_metadata(&lib)?;
 
     if let Some(kind) = build_scanned_plugin_kind(&plugin_probe) {
         return Ok(ScannedDynlib {
@@ -761,6 +701,50 @@ fn probe_plugin_metadata(lib: &Library) -> Result<ScanPluginProbe, String> {
     }
 
     Ok(out)
+}
+
+fn platform_runtime_identity_from_probe(path: &Path, probe: &ScanPluginProbe) -> (String, String) {
+    let id = probe
+        .signature
+        .as_ref()
+        .map(|s| s.id.to_string())
+        .filter(|v| !v.trim().is_empty())
+        .or_else(|| {
+            probe.descriptor
+                .as_ref()
+                .map(|d| d.id.to_string())
+                .filter(|v| !v.trim().is_empty())
+        })
+        .or_else(|| {
+            probe.info
+                .as_ref()
+                .map(|i| i.id.to_string())
+                .filter(|v| !v.trim().is_empty())
+        });
+
+    let version = probe
+        .signature
+        .as_ref()
+        .map(|s| s.version.to_string())
+        .filter(|v| !v.trim().is_empty())
+        .or_else(|| {
+            probe.descriptor
+                .as_ref()
+                .map(|d| d.version.to_string())
+                .filter(|v| !v.trim().is_empty())
+        })
+        .or_else(|| {
+            probe.info
+                .as_ref()
+                .map(|i| i.version.to_string())
+                .filter(|v| !v.trim().is_empty())
+        });
+
+    match (id, version) {
+        (Some(id), Some(version)) => (id, version),
+        (Some(id), None) => (id, "-".to_owned()),
+        _ => infer_platform_runtime_identity(path),
+    }
 }
 
 fn build_scanned_plugin_kind(probe: &ScanPluginProbe) -> Option<ScannedDynlibKind> {
