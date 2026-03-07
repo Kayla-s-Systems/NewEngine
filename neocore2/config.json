@@ -32,9 +32,9 @@
   },
   "plugins": {
     "newengine.logging": {
-      "level": "debug",
-      "colors": true,
+      "filter": null,
       "timestamp": "millis",
+      "indent": 2,
       "format": {
         "preset": "aaa",
         "time": "time",
@@ -42,12 +42,35 @@
         "sep": " │ ",
         "level_width": 5
       },
-      "file": "cache/logs/editor.log",
-      "tee": true,
+      "sources": {
+        "console": {
+          "enabled": true,
+          "level": "debug",
+          "target": "stderr",
+          "colors": true,
+          "style": "auto"
+        },
+        "file": {
+          "enabled": true,
+          "level": "debug",
+          "path": "cache/logs/log.log",
+          "mode": "truncate"
+        }
+      },
+      "include": {
+        "module_path": false,
+        "target": false,
+        "file": false,
+        "line": false
+      },
       "rolling": {
         "max_bytes": 33554432,
         "max_files": 5,
         "keep_days": 7
+      },
+      "dedup": {
+        "window_ms": null,
+        "capacity": 2048
       }
     }
   }

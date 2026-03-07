@@ -31,7 +31,7 @@ pub(super) enum ScannedDynlibKind {
         version: String,
         phase: PluginBootstrapPhase,
         descriptor_kind: Option<PluginKind>,
-        capabilities: usize,
+        declared_capabilities: Option<usize>,
     },
     Unknown,
 }
@@ -90,6 +90,13 @@ impl LoadPhaseFilter {
             Self::EngineOnly => "engine-only",
         }
     }
+}
+
+#[derive(Debug, Clone, Default)]
+struct ScanPluginProbe {
+    signature: Option<PluginSignatureV1>,
+    info: Option<PluginInfo>,
+    descriptor: Option<PluginDescriptor>,
 }
 
 impl PluginManager {
@@ -187,6 +194,8 @@ impl PluginManager {
         let (graph, graph_is_new) = self.ensure_discovery_graph(dir)?;
         let selection = self.build_load_selection(&graph, filter);
 
+        let loaded_ids_before = self.loaded_ids.clone();
+
         log::info!(
             "plugins: phase selection filter='{}' bootstrap={} engine={} platform_runtime={} unknown={} dir='{}'",
             filter.label(),
@@ -215,7 +224,8 @@ impl PluginManager {
         if graph_is_new {
             emit_discovery_logs(&graph);
         }
-        emit_selection_table(&graph, &selection, filter, &self.loaded_ids);
+
+        emit_selection_table(&graph, &selection, filter, &loaded_ids_before);
 
         if matches!(filter, LoadPhaseFilter::BootstrapOnly) {
             let rid = crate::run_id::run_id().unwrap_or("<unknown>");
@@ -462,7 +472,7 @@ fn emit_selection_table(
     graph: &DiscoveryGraph,
     selection: &LoadSelection,
     filter: LoadPhaseFilter,
-    loaded_ids: &newengine_math::collections::prelude::NeHashSet<String>,
+    loaded_ids_before: &newengine_math::collections::prelude::NeHashSet<String>,
 ) {
     let headers = ["file", "phase", "id", "selected", "reason"];
 
@@ -485,7 +495,7 @@ fn emit_selection_table(
             }
             ScannedDynlibKind::Unknown => ("no".to_owned(), "unknown dynlib".to_owned()),
             ScannedDynlibKind::Plugin { phase, .. } => {
-                if loaded_ids.contains(id.as_str()) {
+                if loaded_ids_before.contains(id.as_str()) {
                     ("no".to_owned(), "already loaded".to_owned())
                 } else if !filter.allows(*phase) {
                     ("no".to_owned(), format!("filtered by {}", filter.label()))
@@ -602,10 +612,15 @@ fn scanned_version(kind: &ScannedDynlibKind) -> String {
     }
 }
 
-fn scanned_caps(kind: &ScannedDynlibKind) -> String {
+fn scanned_declared_caps(kind: &ScannedDynlibKind) -> String {
     match kind {
         ScannedDynlibKind::PlatformRuntime { .. } => "-".to_owned(),
-        ScannedDynlibKind::Plugin { capabilities, .. } => capabilities.to_string(),
+        ScannedDynlibKind::Plugin {
+            declared_capabilities,
+            ..
+        } => declared_capabilities
+            .map(|v| v.to_string())
+            .unwrap_or_else(|| "?".to_owned()),
         ScannedDynlibKind::Unknown => "-".to_owned(),
     }
 }
@@ -623,7 +638,7 @@ fn pad_right(value: &str, width: usize) -> String {
 }
 
 fn emit_scan_table(scanned: &[ScannedDynlib]) {
-    let headers = ["file", "type", "phase", "id", "ver", "caps"];
+    let headers = ["file", "type", "phase", "id", "ver", "declared_caps"];
 
     let mut rows: Vec<[String; 6]> = Vec::with_capacity(scanned.len());
     for item in scanned {
@@ -633,7 +648,7 @@ fn emit_scan_table(scanned: &[ScannedDynlib]) {
             scanned_phase_label(&item.kind).to_owned(),
             scanned_id(&item.kind),
             scanned_version(&item.kind),
-            scanned_caps(&item.kind),
+            scanned_declared_caps(&item.kind),
         ]);
     }
 
@@ -710,43 +725,13 @@ fn scan_dynamic_lib(path: &Path) -> Result<ScannedDynlib, String> {
         });
     }
 
-    if let Ok(sym) =
-        unsafe { lib.get::<unsafe extern "C" fn() -> PluginSignatureV1>(PLUGIN_SIGNATURE_SYMBOL) }
-    {
-        let sig = unsafe { sym() };
+    let plugin_probe = probe_plugin_metadata(&lib)?;
+
+    if let Some(kind) = build_scanned_plugin_kind(&plugin_probe) {
         return Ok(ScannedDynlib {
             path: path.to_path_buf(),
             file_name,
-            kind: ScannedDynlibKind::Plugin {
-                id: sig.id.to_string(),
-                version: sig.version.to_string(),
-                phase: sig.bootstrap_phase,
-                descriptor_kind: Some(sig.kind),
-                capabilities: 0,
-            },
-        });
-    }
-
-    if let Ok(sym) =
-        unsafe { lib.get::<unsafe extern "C" fn() -> PluginRootV1Ref>(PLUGIN_ROOT_SYMBOL) }
-    {
-        let root = unsafe { sym() };
-        let (_module, info, descriptor) = select_abi_for_scan(root);
-        let (phase, descriptor_kind, capabilities) = match descriptor {
-            Some(d) => (PluginBootstrapPhase::Engine, Some(d.kind), d.capabilities.len()),
-            None => (PluginBootstrapPhase::Engine, None, 0),
-        };
-
-        return Ok(ScannedDynlib {
-            path: path.to_path_buf(),
-            file_name,
-            kind: ScannedDynlibKind::Plugin {
-                id: info.id.to_string(),
-                version: info.version.to_string(),
-                phase,
-                descriptor_kind,
-                capabilities,
-            },
+            kind,
         });
     }
 
@@ -754,6 +739,84 @@ fn scan_dynamic_lib(path: &Path) -> Result<ScannedDynlib, String> {
         path: path.to_path_buf(),
         file_name,
         kind: ScannedDynlibKind::Unknown,
+    })
+}
+
+fn probe_plugin_metadata(lib: &Library) -> Result<ScanPluginProbe, String> {
+    let mut out = ScanPluginProbe::default();
+
+    if let Ok(sym) =
+        unsafe { lib.get::<unsafe extern "C" fn() -> PluginSignatureV1>(PLUGIN_SIGNATURE_SYMBOL) }
+    {
+        out.signature = Some(unsafe { sym() });
+    }
+
+    if let Ok(sym) =
+        unsafe { lib.get::<unsafe extern "C" fn() -> PluginRootV1Ref>(PLUGIN_ROOT_SYMBOL) }
+    {
+        let root = unsafe { sym() };
+        let (_module, info, descriptor) = select_abi_for_scan(root);
+        out.info = Some(info);
+        out.descriptor = descriptor;
+    }
+
+    Ok(out)
+}
+
+fn build_scanned_plugin_kind(probe: &ScanPluginProbe) -> Option<ScannedDynlibKind> {
+    if probe.signature.is_none() && probe.info.is_none() && probe.descriptor.is_none() {
+        return None;
+    }
+
+    let id = probe
+        .signature
+        .as_ref()
+        .map(|s| s.id.to_string())
+        .filter(|v| !v.trim().is_empty())
+        .or_else(|| {
+            probe.info
+                .as_ref()
+                .map(|i| i.id.to_string())
+                .filter(|v| !v.trim().is_empty())
+        })
+        .unwrap_or_else(|| "<unknown-plugin>".to_owned());
+
+    let version = probe
+        .signature
+        .as_ref()
+        .map(|s| s.version.to_string())
+        .filter(|v| !v.trim().is_empty())
+        .or_else(|| {
+            probe.info
+                .as_ref()
+                .map(|i| i.version.to_string())
+                .filter(|v| !v.trim().is_empty())
+        })
+        .unwrap_or_else(|| "-".to_owned());
+
+    let phase = probe
+        .signature
+        .as_ref()
+        .map(|s| s.bootstrap_phase)
+        .unwrap_or(PluginBootstrapPhase::Engine);
+
+    let descriptor_kind = probe
+        .descriptor
+        .as_ref()
+        .map(|d| d.kind)
+        .or_else(|| probe.signature.as_ref().map(|s| s.kind));
+
+    let declared_capabilities = probe
+        .descriptor
+        .as_ref()
+        .map(|d| d.capabilities.len());
+
+    Some(ScannedDynlibKind::Plugin {
+        id,
+        version,
+        phase,
+        descriptor_kind,
+        declared_capabilities,
     })
 }
 
