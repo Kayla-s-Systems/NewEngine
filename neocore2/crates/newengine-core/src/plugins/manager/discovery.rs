@@ -4,7 +4,7 @@ use std::path::{Path, PathBuf};
 
 use libloading::Library;
 use newengine_plugin_api::{
-    HostApiV1, PluginBootstrapPhase, PluginDescriptor, PluginInfo, PluginModuleDyn,
+    HostApiV1, PluginBootstrapPhase, PluginDescriptor, PluginInfo, PluginKind, PluginModuleDyn,
     PluginRootV1Ref, PluginSignatureV1,
 };
 
@@ -27,7 +27,7 @@ enum ScannedDynlibKind {
         id: String,
         version: String,
         phase: PluginBootstrapPhase,
-        descriptor_kind: Option<newengine_plugin_api::PluginKind>,
+        descriptor_kind: Option<PluginKind>,
         capabilities: usize,
     },
     Unknown,
@@ -234,7 +234,9 @@ impl PluginManager {
                         }
                     }
                 }
-                ScannedDynlibKind::Unknown => unknown_dynlibs.push(item.file_name.clone()),
+                ScannedDynlibKind::Unknown => {
+                    unknown_dynlibs.push(item.file_name.clone());
+                }
             }
         }
 
@@ -251,40 +253,7 @@ impl PluginManager {
             );
         }
 
-        log::info!("[bootstrap] PluginDiscovery :: Phase 1 [scan]");
-        for item in &scanned {
-            match &item.kind {
-                ScannedDynlibKind::PlatformRuntime => {
-                    log::info!(
-                        "[bootstrap] {} | type=platform-runtime | id=<platform-runtime> | ver=- | priority=platform",
-                        item.file_name
-                    );
-                }
-                ScannedDynlibKind::Plugin {
-                    id,
-                    version,
-                    phase,
-                    descriptor_kind,
-                    capabilities,
-                } => {
-                    log::info!(
-                        "[bootstrap] {} | phase={} | kind={:?} | id={} | ver={} | caps={}",
-                        item.file_name,
-                        phase_name(*phase),
-                        descriptor_kind,
-                        id,
-                        version,
-                        capabilities,
-                    );
-                }
-                ScannedDynlibKind::Unknown => {
-                    log::info!(
-                        "[bootstrap] {} | type=unknown-dynlib | id=<unknown> | ver=- | priority=skip",
-                        item.file_name
-                    );
-                }
-            }
-        }
+        emit_scan_table(&scanned, filter);
 
         if !scan_errors.is_empty() {
             for err in &scan_errors {
@@ -336,7 +305,7 @@ impl PluginManager {
 
         self.validate_required_capabilities();
         if log::log_enabled!(log::Level::Debug) {
-            for p in self.loaded.iter() {
+            for p in &self.loaded {
                 log::debug!(
                     "plugins: loaded '{}' ver='{}' path='{}'",
                     p.info.id,
@@ -349,6 +318,7 @@ impl PluginManager {
         if strict && (!load_errors.is_empty() || !scan_errors.is_empty()) {
             let mut msg = String::new();
             use std::fmt::Write as _;
+
             if !scan_errors.is_empty() {
                 let _ = writeln!(
                     msg,
@@ -359,13 +329,14 @@ impl PluginManager {
                     let _ = writeln!(msg, "- {}", e);
                 }
             }
+
             if !load_errors.is_empty() {
                 let _ = writeln!(
                     msg,
                     "one or more plugins failed to load (count={}):",
                     load_errors.len()
                 );
-                for e in load_errors.iter() {
+                for e in &load_errors {
                     let _ = writeln!(
                         msg,
                         "- path='{}' err='{}'",
@@ -374,6 +345,7 @@ impl PluginManager {
                     );
                 }
             }
+
             return Err(PluginLoadError {
                 path: dir.clone(),
                 message: msg,
@@ -397,6 +369,153 @@ fn phase_name(phase: PluginBootstrapPhase) -> &'static str {
         PluginBootstrapPhase::Platform => "platform",
         PluginBootstrapPhase::Engine => "engine",
     }
+}
+
+fn scanned_kind_label(kind: &ScannedDynlibKind) -> &'static str {
+    match kind {
+        ScannedDynlibKind::PlatformRuntime => "platform-runtime",
+        ScannedDynlibKind::Plugin { descriptor_kind, .. } => match descriptor_kind {
+            Some(PluginKind::Runtime) => "runtime",
+            Some(PluginKind::Importer) => "importer",
+            Some(PluginKind::Tool) => "tool",
+            Some(PluginKind::Editor) => "editor",
+            Some(PluginKind::Other) => "other",
+            Some(_) => "plugin",
+            None => "plugin",
+        },
+        ScannedDynlibKind::Unknown => "unknown",
+    }
+}
+
+fn scanned_phase_label(kind: &ScannedDynlibKind) -> &'static str {
+    match kind {
+        ScannedDynlibKind::PlatformRuntime => "platform",
+        ScannedDynlibKind::Plugin { phase, .. } => phase_name(*phase),
+        ScannedDynlibKind::Unknown => "-",
+    }
+}
+
+fn scanned_id(kind: &ScannedDynlibKind) -> String {
+    match kind {
+        ScannedDynlibKind::PlatformRuntime => "<platform-runtime>".to_string(),
+        ScannedDynlibKind::Plugin { id, .. } => id.clone(),
+        ScannedDynlibKind::Unknown => "<unknown>".to_string(),
+    }
+}
+
+fn scanned_version(kind: &ScannedDynlibKind) -> String {
+    match kind {
+        ScannedDynlibKind::PlatformRuntime => "-".to_string(),
+        ScannedDynlibKind::Plugin { version, .. } => version.clone(),
+        ScannedDynlibKind::Unknown => "-".to_string(),
+    }
+}
+
+fn scanned_caps(kind: &ScannedDynlibKind) -> String {
+    match kind {
+        ScannedDynlibKind::PlatformRuntime => "-".to_string(),
+        ScannedDynlibKind::Plugin { capabilities, .. } => capabilities.to_string(),
+        ScannedDynlibKind::Unknown => "-".to_string(),
+    }
+}
+
+fn scanned_selected(kind: &ScannedDynlibKind, filter: LoadPhaseFilter) -> &'static str {
+    match kind {
+        ScannedDynlibKind::PlatformRuntime => "runtime",
+        ScannedDynlibKind::Plugin { phase, .. } => {
+            if filter.allows(*phase) {
+                "yes"
+            } else {
+                "no"
+            }
+        }
+        ScannedDynlibKind::Unknown => "skip",
+    }
+}
+
+fn pad_right(value: &str, width: usize) -> String {
+    let len = value.chars().count();
+    if len >= width {
+        value.to_string()
+    } else {
+        let mut out = String::with_capacity(width);
+        out.push_str(value);
+        out.push_str(&" ".repeat(width - len));
+        out
+    }
+}
+
+fn emit_scan_table(scanned: &[ScannedDynlib], filter: LoadPhaseFilter) {
+    let headers = ["file", "type", "phase", "id", "ver", "caps", "selected"];
+
+    let mut rows: Vec<[String; 7]> = Vec::with_capacity(scanned.len());
+    for item in scanned {
+        rows.push([
+            item.file_name.clone(),
+            scanned_kind_label(&item.kind).to_string(),
+            scanned_phase_label(&item.kind).to_string(),
+            scanned_id(&item.kind),
+            scanned_version(&item.kind),
+            scanned_caps(&item.kind),
+            scanned_selected(&item.kind, filter).to_string(),
+        ]);
+    }
+
+    let mut widths = [
+        headers[0].chars().count(),
+        headers[1].chars().count(),
+        headers[2].chars().count(),
+        headers[3].chars().count(),
+        headers[4].chars().count(),
+        headers[5].chars().count(),
+        headers[6].chars().count(),
+    ];
+
+    for row in &rows {
+        for (i, col) in row.iter().enumerate() {
+            widths[i] = widths[i].max(col.chars().count());
+        }
+    }
+
+    let border = format!(
+        "+-{}-+-{}-+-{}-+-{}-+-{}-+-{}-+-{}-+",
+        "-".repeat(widths[0]),
+        "-".repeat(widths[1]),
+        "-".repeat(widths[2]),
+        "-".repeat(widths[3]),
+        "-".repeat(widths[4]),
+        "-".repeat(widths[5]),
+        "-".repeat(widths[6]),
+    );
+
+    log::info!("[bootstrap] PluginDiscovery :: Phase 1 [scan-table]");
+    log::info!("[bootstrap] {}", border);
+    log::info!(
+        "[bootstrap] | {} | {} | {} | {} | {} | {} | {} |",
+        pad_right(headers[0], widths[0]),
+        pad_right(headers[1], widths[1]),
+        pad_right(headers[2], widths[2]),
+        pad_right(headers[3], widths[3]),
+        pad_right(headers[4], widths[4]),
+        pad_right(headers[5], widths[5]),
+        pad_right(headers[6], widths[6]),
+    );
+    log::info!("[bootstrap] {}", border);
+
+    for row in &rows {
+        log::info!(
+            "[bootstrap] | {} | {} | {} | {} | {} | {} | {} |",
+            pad_right(&row[0], widths[0]),
+            pad_right(&row[1], widths[1]),
+            pad_right(&row[2], widths[2]),
+            pad_right(&row[3], widths[3]),
+            pad_right(&row[4], widths[4]),
+            pad_right(&row[5], widths[5]),
+            pad_right(&row[6], widths[6]),
+        );
+    }
+
+    log::info!("[bootstrap] {}", border);
 }
 
 fn file_name_only(p: &Path) -> String {
@@ -435,13 +554,16 @@ fn scan_dynamic_lib(path: &Path) -> Result<ScannedDynlib, String> {
         });
     }
 
-    if let Ok(sym) = unsafe { lib.get::<unsafe extern "C" fn() -> PluginRootV1Ref>(PLUGIN_ROOT_SYMBOL) } {
+    if let Ok(sym) =
+        unsafe { lib.get::<unsafe extern "C" fn() -> PluginRootV1Ref>(PLUGIN_ROOT_SYMBOL) }
+    {
         let root = unsafe { sym() };
         let (_module, info, descriptor) = select_abi_for_scan(root);
         let (phase, descriptor_kind, capabilities) = match descriptor {
             Some(d) => (PluginBootstrapPhase::Engine, Some(d.kind), d.capabilities.len()),
             None => (PluginBootstrapPhase::Engine, None, 0),
         };
+
         return Ok(ScannedDynlib {
             path: path.to_path_buf(),
             file_name,
