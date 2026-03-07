@@ -3,6 +3,7 @@
 use egui;
 use newengine_gizmo::egui::GizmoTransform;
 use newengine_gizmo::GizmoMode;
+use newengine_ui::input::keys as ui_keys;
 
 use super::super::camera::FrameCamera;
 use super::super::util;
@@ -30,16 +31,16 @@ pub(crate) fn draw(me: &mut EditorUiBuild, ctx: &egui::Context) {
         me.viewport.set_extent(px_w, px_h);
         me.viewport_bridge.publish_extent(px_w, px_h);
 
-        let (shift, rmb_pressed, rmb_released, raw_scroll_y, dropped_files, esc_pressed) = ctx.input(|i| {
+        let (rmb_pressed, rmb_released, dropped_files) = ctx.input(|i| {
             (
-                i.modifiers.shift,
                 i.pointer.button_pressed(egui::PointerButton::Secondary),
                 i.pointer.button_released(egui::PointerButton::Secondary),
-                i.raw_scroll_delta.y,
                 i.raw.dropped_files.clone(),
-                i.key_pressed(egui::Key::Escape),
             )
         });
+        let shift = me.shift_down();
+        let raw_scroll_y = me.frame_input.mouse_wheel.1;
+        let esc_pressed = me.key_pressed(ui_keys::ESCAPE);
 
         let nav_rotate = resp.dragged_by(egui::PointerButton::Middle) && !shift;
         let nav_pan = resp.dragged_by(egui::PointerButton::Middle) && shift;
@@ -51,33 +52,31 @@ pub(crate) fn draw(me: &mut EditorUiBuild, ctx: &egui::Context) {
         // - Q/W/E/R when RMB free-fly is NOT active
         // - 1/2/3 always available
         if hovered && !ctx.wants_keyboard_input() {
-            ctx.input(|i| {
-                let allow_qwer = !(me.fly_latch.is_captured() || rmb_pressed);
+            let allow_qwer = !(me.fly_latch.is_captured() || rmb_pressed);
 
-                let pressed_q = allow_qwer && i.key_pressed(egui::Key::Q);
-                let pressed_w = (allow_qwer && i.key_pressed(egui::Key::W)) || i.key_pressed(egui::Key::Num1);
-                let pressed_e = (allow_qwer && i.key_pressed(egui::Key::E)) || i.key_pressed(egui::Key::Num2);
-                let pressed_r = (allow_qwer && i.key_pressed(egui::Key::R)) || i.key_pressed(egui::Key::Num3);
+            let pressed_q = allow_qwer && me.key_pressed(ui_keys::KEY_Q);
+            let pressed_w = (allow_qwer && me.key_pressed(ui_keys::KEY_W)) || me.key_pressed(ui_keys::DIGIT1);
+            let pressed_e = (allow_qwer && me.key_pressed(ui_keys::KEY_E)) || me.key_pressed(ui_keys::DIGIT2);
+            let pressed_r = (allow_qwer && me.key_pressed(ui_keys::KEY_R)) || me.key_pressed(ui_keys::DIGIT3);
 
-                if pressed_q {
-                    me.editor.active_tool = newengine_editor_core::ToolId::Select;
-                }
-                if pressed_w {
-                    me.gizmo.set_mode(GizmoMode::Translate);
-                    me.editor.gizmo_mode = newengine_editor_core::GizmoMode::Translate;
-                    me.editor.active_tool = newengine_editor_core::ToolId::Translate;
-                }
-                if pressed_e {
-                    me.gizmo.set_mode(GizmoMode::Rotate);
-                    me.editor.gizmo_mode = newengine_editor_core::GizmoMode::Rotate;
-                    me.editor.active_tool = newengine_editor_core::ToolId::Rotate;
-                }
-                if pressed_r {
-                    me.gizmo.set_mode(GizmoMode::Scale);
-                    me.editor.gizmo_mode = newengine_editor_core::GizmoMode::Scale;
-                    me.editor.active_tool = newengine_editor_core::ToolId::Scale;
-                }
-            });
+            if pressed_q {
+                me.editor.active_tool = newengine_editor_core::ToolId::Select;
+            }
+            if pressed_w {
+                me.gizmo.set_mode(GizmoMode::Translate);
+                me.editor.gizmo_mode = newengine_editor_core::GizmoMode::Translate;
+                me.editor.active_tool = newengine_editor_core::ToolId::Translate;
+            }
+            if pressed_e {
+                me.gizmo.set_mode(GizmoMode::Rotate);
+                me.editor.gizmo_mode = newengine_editor_core::GizmoMode::Rotate;
+                me.editor.active_tool = newengine_editor_core::ToolId::Rotate;
+            }
+            if pressed_r {
+                me.gizmo.set_mode(GizmoMode::Scale);
+                me.editor.gizmo_mode = newengine_editor_core::GizmoMode::Scale;
+                me.editor.active_tool = newengine_editor_core::ToolId::Scale;
+            }
         }
 
         // Sync selection from render-thread picking into editor state.
@@ -148,9 +147,8 @@ pub(crate) fn draw(me: &mut EditorUiBuild, ctx: &egui::Context) {
         // Click-to-select (picking handled on render thread).
         if resp.clicked_by(egui::PointerButton::Primary) && !nav_drag && !gizmo_capture_now {
             if let Some(pos) = resp.interact_pointer_pos() {
-                let mods = ctx.input(|i| i.modifiers);
-                let toggle = mods.command;
-                let additive = mods.shift;
+                let toggle = me.command_down();
+                let additive = me.shift_down();
                 me.pending_pick = Some(super::super::PendingPick { additive, toggle });
 
                 let local = pos - rect.min;
@@ -183,9 +181,8 @@ pub(crate) fn draw(me: &mut EditorUiBuild, ctx: &egui::Context) {
             me.last_nav_drag_pos = None;
 
             if fly_rmb {
-                let d = ctx.input(|i| i.pointer.delta());
-                dx_px = d.x * ppp;
-                dy_px = d.y * ppp;
+                dx_px = me.frame_input.mouse_delta.0;
+                dy_px = me.frame_input.mouse_delta.1;
             }
             me.last_fly_drag_pos = None;
         }
@@ -244,41 +241,37 @@ pub(crate) fn draw(me: &mut EditorUiBuild, ctx: &egui::Context) {
         // - F: frame selection
         // - Shift+F: frame entire scene
         if active && !wants_kb {
-            ctx.input(|i| {
-                let frame_sel = i.key_pressed(egui::Key::F) && !i.modifiers.shift;
-                let frame_all = i.key_pressed(egui::Key::F) && i.modifiers.shift;
-                if frame_sel {
-                    me.viewport_bridge.publish_frame_request(false);
-                } else if frame_all {
-                    me.viewport_bridge.publish_frame_request(true);
-                }
-            });
+            let frame_sel = me.key_pressed(ui_keys::KEY_F) && !me.shift_down();
+            let frame_all = me.key_pressed(ui_keys::KEY_F) && me.shift_down();
+            if frame_sel {
+                me.viewport_bridge.publish_frame_request(false);
+            } else if frame_all {
+                me.viewport_bridge.publish_frame_request(true);
+            }
         }
 
         if fly_rmb {
-            ctx.input(|i| {
-                if i.key_down(egui::Key::W) {
-                    move_mask |= newengine_viewport::input::MOVE_W;
-                }
-                if i.key_down(egui::Key::A) {
-                    move_mask |= newengine_viewport::input::MOVE_A;
-                }
-                if i.key_down(egui::Key::S) {
-                    move_mask |= newengine_viewport::input::MOVE_S;
-                }
-                if i.key_down(egui::Key::D) {
-                    move_mask |= newengine_viewport::input::MOVE_D;
-                }
-                if i.key_down(egui::Key::Q) {
-                    move_mask |= newengine_viewport::input::MOVE_UP;
-                }
-                if i.key_down(egui::Key::E) {
-                    move_mask |= newengine_viewport::input::MOVE_DOWN;
-                }
-                if i.modifiers.shift {
-                    move_mask |= newengine_viewport::input::MOVE_SHIFT;
-                }
-            });
+            if me.key_down(ui_keys::KEY_W) {
+                move_mask |= newengine_viewport::input::MOVE_W;
+            }
+            if me.key_down(ui_keys::KEY_A) {
+                move_mask |= newengine_viewport::input::MOVE_A;
+            }
+            if me.key_down(ui_keys::KEY_S) {
+                move_mask |= newengine_viewport::input::MOVE_S;
+            }
+            if me.key_down(ui_keys::KEY_D) {
+                move_mask |= newengine_viewport::input::MOVE_D;
+            }
+            if me.key_down(ui_keys::KEY_Q) {
+                move_mask |= newengine_viewport::input::MOVE_UP;
+            }
+            if me.key_down(ui_keys::KEY_E) {
+                move_mask |= newengine_viewport::input::MOVE_DOWN;
+            }
+            if me.shift_down() {
+                move_mask |= newengine_viewport::input::MOVE_SHIFT;
+            }
         }
         me.viewport_bridge.publish_camera_input(
             dx_px,

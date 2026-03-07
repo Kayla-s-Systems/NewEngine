@@ -40,7 +40,6 @@ pub(crate) fn draw(me: &mut EditorUiBuild, ctx: &egui::Context) {
             ui.add_space(6.0);
 
             let primary = me.editor.selection.primary();
-            let mods = ctx.input(|i| i.modifiers);
 
             let scene = me.scene_bridge.scene();
             let world = scene.read();
@@ -103,9 +102,9 @@ pub(crate) fn draw(me: &mut EditorUiBuild, ctx: &egui::Context) {
                             .inner;
 
                         if sel.clicked() {
-                            if mods.command {
+                            if me.command_down() {
                                 me.editor.selection.toggle(e);
-                            } else if mods.shift {
+                            } else if me.shift_down() {
                                 me.editor.selection.add(e);
                             } else {
                                 me.editor.selection.set_single(Some(e));

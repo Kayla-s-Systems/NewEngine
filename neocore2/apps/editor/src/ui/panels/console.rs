@@ -9,8 +9,12 @@ pub(crate) fn draw(me: &mut EditorUiBuild, ctx: &egui::Context) {
         return;
     }
 
+    let enter_pressed = me.key_pressed(newengine_ui::input::keys::ENTER);
+    let mut console_open = me.console_open;
+    let mut console_input = std::mem::take(&mut me.console_input);
+
     egui::Window::new("Console")
-        .open(&mut me.console_open)
+        .open(&mut console_open)
         .resizable(true)
         .vscroll(true)
         .show(ctx, |ui| {
@@ -18,13 +22,16 @@ pub(crate) fn draw(me: &mut EditorUiBuild, ctx: &egui::Context) {
             ui.add_space(6.0);
 
             let resp = ui.add(
-                egui::TextEdit::singleline(&mut me.console_input)
+                egui::TextEdit::singleline(&mut console_input)
                     .hint_text("type a command (no-op)")
                     .desired_width(f32::INFINITY),
             );
 
-            if resp.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter)) {
-                me.console_input.clear();
+            if resp.lost_focus() && enter_pressed {
+                console_input.clear();
             }
         });
+
+    me.console_open = console_open;
+    me.console_input = console_input;
 }

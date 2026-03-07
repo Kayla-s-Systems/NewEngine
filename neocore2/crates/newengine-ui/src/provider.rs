@@ -62,6 +62,8 @@ impl UiFrameOutput {
 /// Object-safe UI build callback.
 /// Providers may expose a typed context via `ctx_any`; callers can downcast.
 pub trait UiBuildFn {
+    fn begin_frame(&mut self, _frame: &UiFrameDesc) {}
+
     fn build(&mut self, ctx_any: &mut dyn Any);
 }
 

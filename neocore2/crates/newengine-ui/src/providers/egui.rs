@@ -244,6 +244,7 @@ impl UiProvider for EguiUiProvider {
             Self::inject_input_events(&mut raw_input, input, ppp);
         }
 
+        build.begin_frame(&frame);
         self.ctx.begin_pass(raw_input);
         build.build(&mut self.ctx);
         let full_output = self.ctx.end_pass();

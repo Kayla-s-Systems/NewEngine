@@ -7,7 +7,8 @@ mod util;
 
 use egui;
 use newengine_ui::markup::UiMarkupDoc;
-use newengine_ui::{UiBuildFn, UiHub};
+use newengine_ui::input::keys as ui_keys;
+use newengine_ui::{UiBuildFn, UiHub, UiFrameDesc, UiInputFrame};
 
 use newengine_assets::AssetServiceClient;
 use newengine_core::plugins::{default_host_api, has_service};
@@ -82,7 +83,7 @@ pub struct EditorUiBuild {
 
     pub(crate) outliner_filter: String,
     pub(crate) details_filter: String,
-
+    pub(crate) frame_input: UiInputFrame,
 
     // Viewport navigation interaction (UI-driven, not via global input plugin).
     //
@@ -264,7 +265,7 @@ impl EditorUiBuild {
 
             outliner_filter: String::new(),
             details_filter: String::new(),
-
+            frame_input: UiInputFrame::default(),
 
             last_nav_drag_pos: None,
             last_fly_drag_pos: None,
@@ -346,6 +347,31 @@ impl EditorUiBuild {
     }
 
     #[allow(dead_code)]
+    #[inline]
+    pub(crate) fn key_down(&self, key: u32) -> bool {
+        self.frame_input.is_key_down(key)
+    }
+
+    #[inline]
+    pub(crate) fn key_pressed(&self, key: u32) -> bool {
+        self.frame_input.is_key_pressed(key)
+    }
+
+    #[inline]
+    pub(crate) fn shift_down(&self) -> bool {
+        self.key_down(ui_keys::SHIFT_LEFT) || self.key_down(ui_keys::SHIFT_RIGHT)
+    }
+
+    #[inline]
+    pub(crate) fn command_down(&self) -> bool {
+        self.key_down(ui_keys::CONTROL_LEFT) || self.key_down(ui_keys::CONTROL_RIGHT)
+    }
+
+    #[inline]
+    pub(crate) fn command_pressed(&self, key: u32) -> bool {
+        self.command_down() && self.key_pressed(key)
+    }
+
     fn exec_markup_action(&mut self, action: &str) {
         match action {
             "editor.new_scene" => {
@@ -484,27 +510,27 @@ impl EditorUiBuild {
 
         let wants_kb = ctx.wants_keyboard_input();
 
-        if ctx.input(|i| i.key_pressed(egui::Key::F1)) {
+        if self.key_pressed(ui_keys::F1) {
             self.console_open = !self.console_open;
         }
-        if ctx.input(|i| i.key_pressed(egui::Key::F2)) {
+        if self.key_pressed(ui_keys::F2) {
             if let Ok(mut pm) = self.plugin_manager.lock() {
                 pm.toggle();
             }
         }
         if !wants_kb {
-            if ctx.input(|i| i.modifiers.command && i.key_pressed(egui::Key::N)) {
+            if self.command_pressed(ui_keys::KEY_N) {
                 self.scene_bridge.cmd_new_scene();
                 self.editor.commands.clear();
                 self.editor.selection.clear();
             }
 
-            if ctx.input(|i| i.modifiers.command && i.key_pressed(egui::Key::O)) {
+            if self.command_pressed(ui_keys::KEY_O) {
                 self.scene_io_ui.open = true;
                 self.scene_io_ui.mode = SceneIoMode::Load;
             }
 
-            if ctx.input(|i| i.modifiers.command && i.key_pressed(egui::Key::S)) {
+            if self.command_pressed(ui_keys::KEY_S) {
                 self.scene_io_ui.open = true;
                 self.scene_io_ui.mode = SceneIoMode::Save;
             }
@@ -512,11 +538,9 @@ impl EditorUiBuild {
 
         // Undo/Redo (industry standard).
         if !wants_kb {
-            let undo = ctx.input(|i| i.modifiers.command && i.key_pressed(egui::Key::Z));
-            let redo = ctx.input(|i| {
-                (i.modifiers.command && i.key_pressed(egui::Key::Y))
-                    || (i.modifiers.command && i.modifiers.shift && i.key_pressed(egui::Key::Z))
-            });
+            let undo = self.command_pressed(ui_keys::KEY_Z);
+            let redo = self.command_pressed(ui_keys::KEY_Y)
+                || (self.command_down() && self.shift_down() && self.key_pressed(ui_keys::KEY_Z));
 
             if undo {
                 if let Some(cmd) = self.editor.commands.pop_undo() {
@@ -581,6 +605,11 @@ impl EditorUiBuild {
 }
 
 impl UiBuildFn for EditorUiBuild {
+    #[inline]
+    fn begin_frame(&mut self, frame: &UiFrameDesc) {
+        self.frame_input = frame.input.clone().unwrap_or_default();
+    }
+
     #[inline]
     fn build(&mut self, ctx_any: &mut dyn Any) {
         self.build_ui(ctx_any);
