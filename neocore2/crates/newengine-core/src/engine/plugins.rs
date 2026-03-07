@@ -2,9 +2,7 @@ use super::{Engine, PluginFaultTolerance};
 
 use crate::error::{EngineError, EngineResult};
 use crate::path_fmt::display_clean;
-use crate::plugins::{
-    default_host_api, PluginControlCommand, PluginControlQueue, PluginsSnapshot,
-};
+use crate::plugins::{default_host_api, PluginControlCommand, PluginControlQueue, PluginsSnapshot};
 
 use std::time::Instant;
 
@@ -12,7 +10,6 @@ impl<E: Send + 'static> Engine<E> {
     pub fn preload_bootstrap_plugins(&mut self) -> EngineResult<()> {
         let strict = matches!(self.plugin_fault_tolerance, PluginFaultTolerance::Strict);
         let host = default_host_api();
-
         let res = match self.plugins_dir.as_deref() {
             Some(dir) => self.plugins.load_bootstrap_from_dir(dir, host, strict),
             None => self.plugins.load_bootstrap_default(host, strict),
@@ -20,9 +17,7 @@ impl<E: Send + 'static> Engine<E> {
 
         match res {
             Ok(()) => Ok(()),
-            Err(e) => Err(EngineError::Other(format!(
-                "plugins: bootstrap load failed: {e}"
-            ))),
+            Err(e) => Err(EngineError::Other(format!("plugins: bootstrap load failed: {e}"))),
         }
     }
 
@@ -63,6 +58,7 @@ impl<E: Send + 'static> Engine<E> {
         }
 
         self.engine_plugins_loaded = true;
+        self.plugins_loaded = true;
 
         self.plugins.validate_required_capabilities();
 
@@ -78,6 +74,10 @@ impl<E: Send + 'static> Engine<E> {
         self.log_plugins_diagnostics(tag);
     }
 
+    /// Loads plugins once (idempotent).
+    ///
+    /// The engine core never hardcodes plugin categories (assets, input, render, etc.).
+    /// Any capability registration and secondary loading (e.g. importers) is owned by plugins.
     #[inline]
     pub fn load_plugins_once(&mut self) -> EngineResult<()> {
         self.try_load_plugins_once()
@@ -90,6 +90,7 @@ impl<E: Send + 'static> Engine<E> {
         }
 
         let strict = matches!(self.plugin_fault_tolerance, PluginFaultTolerance::Strict);
+
         let phase = "load";
         let t0 = Instant::now();
 
@@ -130,7 +131,6 @@ impl<E: Send + 'static> Engine<E> {
     pub(super) fn log_plugins_diagnostics(&self, tag: &'static str) {
         let list = self.plugins.snapshot();
         let n = list.len();
-
         log::info!("plugins: diagnostics tag='{}' loaded={}", tag, n);
 
         for (i, p) in list.iter().enumerate() {
@@ -171,6 +171,7 @@ impl<E: Send + 'static> Engine<E> {
 
         for cmd in queue.drain() {
             did_any = true;
+
             let host = default_host_api();
 
             match cmd {

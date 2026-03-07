@@ -186,7 +186,9 @@ impl<E: Send + 'static> Engine<E> {
 
         self.modules = sorted;
 
-        self.try_load_plugins_once()?;
+        if !self.plugins_loaded && !self.engine_plugins_loaded {
+            self.try_load_plugins_once()?;
+        }
         self.log_plugins_diagnostics("after module init");
         self.plugins_start_all()?;
 
@@ -209,18 +211,15 @@ impl<E: Send + 'static> Engine<E> {
             let id = s.id();
             if id_to_index.insert(id, i).is_some() {
                 log::error!("engine: duplicate module id: {}", id);
-                // disable duplicates deterministically by later index.
             }
         }
 
         let mut enabled = vec![true; n];
         let mut reasons: Vec<Option<String>> = vec![None; n];
 
-        // Fixpoint prune: missing deps and missing/too-old API providers.
         loop {
             let mut changed = false;
 
-            // deps
             for (i, s) in self.modules.iter().enumerate() {
                 if !enabled[i] {
                     continue;
@@ -242,7 +241,6 @@ impl<E: Send + 'static> Engine<E> {
                 }
             }
 
-            // provides map from enabled
             use crate::module::ApiVersion;
             let mut provided: HashMap<&'static str, ApiVersion> = HashMap::new();
             let mut provider: HashMap<&'static str, &'static str> = HashMap::new();
@@ -263,7 +261,6 @@ impl<E: Send + 'static> Engine<E> {
                 }
             }
 
-            // requires
             for (i, s) in self.modules.iter().enumerate() {
                 if !enabled[i] {
                     continue;
@@ -305,7 +302,6 @@ impl<E: Send + 'static> Engine<E> {
             }
         }
 
-        // Topo sort enabled subgraph; prune cycles.
         let mut indegree = vec![0usize; n];
         let mut rev_edges: Vec<Vec<usize>> = vec![Vec::new(); n];
 
@@ -344,7 +340,6 @@ impl<E: Send + 'static> Engine<E> {
             }
         }
 
-        // Remaining enabled nodes with indegree>0 are cyclic.
         for i in 0..n {
             if enabled[i] && indegree[i] != 0 {
                 enabled[i] = false;
@@ -352,13 +347,11 @@ impl<E: Send + 'static> Engine<E> {
             }
         }
 
-        // Build sorted module list: running candidates in topo order, then disabled in stable order.
         let mut new_slots: Vec<ModuleSlot<E>> = Vec::with_capacity(n);
 
-        // Rebuild using Option to move safely.
-        let mut opt: Vec<Option<ModuleSlot<E>>> = std::mem::take(&mut self.modules).into_iter().map(Some).collect();
+        let mut opt: Vec<Option<ModuleSlot<E>>> =
+            std::mem::take(&mut self.modules).into_iter().map(Some).collect();
 
-        // Move enabled in topo order.
         let mut moved = vec![false; n];
         for &idx in order.iter() {
             if idx >= opt.len() || !enabled[idx] {
@@ -370,7 +363,6 @@ impl<E: Send + 'static> Engine<E> {
             new_slots.push(s);
         }
 
-        // Append disabled / non-moved in original order.
         for i in 0..opt.len() {
             if moved[i] {
                 continue;
@@ -382,7 +374,6 @@ impl<E: Send + 'static> Engine<E> {
             new_slots.push(s);
         }
 
-        // init/start only for enabled ones in the front (those still Pending).
         for i in 0..new_slots.len() {
             self.sync_shutdown_state();
             if self.is_exit_requested() {
@@ -440,7 +431,9 @@ impl<E: Send + 'static> Engine<E> {
 
         self.modules = new_slots;
 
-        self.try_load_plugins_once()?;
+        if !self.plugins_loaded && !self.engine_plugins_loaded {
+            self.try_load_plugins_once()?;
+        }
         self.log_plugins_diagnostics("after module init");
         self.plugins_start_all()?;
 

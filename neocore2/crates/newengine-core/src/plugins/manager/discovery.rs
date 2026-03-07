@@ -234,9 +234,7 @@ impl PluginManager {
                         }
                     }
                 }
-                ScannedDynlibKind::Unknown => {
-                    unknown_dynlibs.push(item.file_name.clone());
-                }
+                ScannedDynlibKind::Unknown => unknown_dynlibs.push(item.file_name.clone()),
             }
         }
 
@@ -272,14 +270,14 @@ impl PluginManager {
 
         install_forward_logger_once(host.clone());
 
-        {
+        if matches!(filter, LoadPhaseFilter::BootstrapOnly) {
             let rid = crate::run_id::run_id().unwrap_or("<unknown>");
             log::info!("startup: Run ID: {}", rid);
-        }
 
-        crate::startup::SystemProbe::probe().emit_table("startup");
-        if let Some(r) = crate::startup::last_load_report() {
-            r.emit_logs();
+            crate::startup::SystemProbe::probe().emit_table("startup");
+            if let Some(r) = crate::startup::last_load_report() {
+                r.emit_logs();
+            }
         }
 
         log::info!("plugins: scanning directory '{}'", display_clean(&dir));
@@ -305,7 +303,7 @@ impl PluginManager {
 
         self.validate_required_capabilities();
         if log::log_enabled!(log::Level::Debug) {
-            for p in &self.loaded {
+            for p in self.loaded.iter() {
                 log::debug!(
                     "plugins: loaded '{}' ver='{}' path='{}'",
                     p.info.id,
@@ -318,7 +316,6 @@ impl PluginManager {
         if strict && (!load_errors.is_empty() || !scan_errors.is_empty()) {
             let mut msg = String::new();
             use std::fmt::Write as _;
-
             if !scan_errors.is_empty() {
                 let _ = writeln!(
                     msg,
@@ -329,14 +326,13 @@ impl PluginManager {
                     let _ = writeln!(msg, "- {}", e);
                 }
             }
-
             if !load_errors.is_empty() {
                 let _ = writeln!(
                     msg,
                     "one or more plugins failed to load (count={}):",
                     load_errors.len()
                 );
-                for e in &load_errors {
+                for e in load_errors.iter() {
                     let _ = writeln!(
                         msg,
                         "- path='{}' err='{}'",
@@ -345,7 +341,6 @@ impl PluginManager {
                     );
                 }
             }
-
             return Err(PluginLoadError {
                 path: dir.clone(),
                 message: msg,
@@ -374,7 +369,9 @@ fn phase_name(phase: PluginBootstrapPhase) -> &'static str {
 fn scanned_kind_label(kind: &ScannedDynlibKind) -> &'static str {
     match kind {
         ScannedDynlibKind::PlatformRuntime => "platform-runtime",
-        ScannedDynlibKind::Plugin { descriptor_kind, .. } => match descriptor_kind {
+        ScannedDynlibKind::Plugin {
+            descriptor_kind, ..
+        } => match descriptor_kind {
             Some(PluginKind::Runtime) => "runtime",
             Some(PluginKind::Importer) => "importer",
             Some(PluginKind::Tool) => "tool",
@@ -563,7 +560,6 @@ fn scan_dynamic_lib(path: &Path) -> Result<ScannedDynlib, String> {
             Some(d) => (PluginBootstrapPhase::Engine, Some(d.kind), d.capabilities.len()),
             None => (PluginBootstrapPhase::Engine, None, 0),
         };
-
         return Ok(ScannedDynlib {
             path: path.to_path_buf(),
             file_name,
