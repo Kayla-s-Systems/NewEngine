@@ -1,8 +1,12 @@
+#![forbid(unsafe_op_in_unsafe_fn)]
+
 use super::{Engine, PluginFaultTolerance};
 
 use crate::error::{EngineError, EngineResult};
 use crate::path_fmt::display_clean;
-use crate::plugins::{default_host_api, PluginControlCommand, PluginControlQueue, PluginsSnapshot};
+use crate::plugins::{
+    default_host_api, PluginControlCommand, PluginControlQueue, PluginsSnapshot,
+};
 
 use std::time::Instant;
 
@@ -10,6 +14,7 @@ impl<E: Send + 'static> Engine<E> {
     pub fn preload_bootstrap_plugins(&mut self) -> EngineResult<()> {
         let strict = matches!(self.plugin_fault_tolerance, PluginFaultTolerance::Strict);
         let host = default_host_api();
+
         let res = match self.plugins_dir.as_deref() {
             Some(dir) => self.plugins.load_bootstrap_from_dir(dir, host, strict),
             None => self.plugins.load_bootstrap_default(host, strict),
@@ -17,7 +22,9 @@ impl<E: Send + 'static> Engine<E> {
 
         match res {
             Ok(()) => Ok(()),
-            Err(e) => Err(EngineError::Other(format!("plugins: bootstrap load failed: {e}"))),
+            Err(e) => Err(EngineError::Other(format!(
+                "plugins: bootstrap load failed: {e}"
+            ))),
         }
     }
 
@@ -60,8 +67,6 @@ impl<E: Send + 'static> Engine<E> {
         self.engine_plugins_loaded = true;
         self.plugins_loaded = true;
 
-        self.plugins.validate_required_capabilities();
-
         let loaded = self.plugins.snapshot().len();
         Self::log_phase_ok("plugins", phase, Some(loaded), Self::elapsed_since(t0));
         self.log_plugins_diagnostics("after engine plugins init");
@@ -77,24 +82,24 @@ impl<E: Send + 'static> Engine<E> {
     /// Loads plugins once (idempotent).
     ///
     /// The engine core never hardcodes plugin categories (assets, input, render, etc.).
-    /// Any capability registration and secondary loading (e.g. importers) is owned by plugins.
+    /// Any capability registration and secondary loading is owned by plugins.
     #[inline]
     pub fn load_plugins_once(&mut self) -> EngineResult<()> {
         self.try_load_plugins_once()
     }
 
-    pub(super) fn try_load_plugins_once(&mut self) -> EngineResult<()> {
+    #[inline]
+    pub(crate) fn try_load_plugins_once(&mut self) -> EngineResult<()> {
         if self.plugins_loaded {
             log::debug!("plugins: load skipped (already loaded)");
             return Ok(());
         }
 
         let strict = matches!(self.plugin_fault_tolerance, PluginFaultTolerance::Strict);
-
         let phase = "load";
         let t0 = Instant::now();
-
         let host = default_host_api();
+
         let load_result = match self.plugins_dir.as_deref() {
             Some(dir) => self.plugins.load_from_dir_with_policy(dir, host, strict),
             None => self.plugins.load_default_with_policy(host, strict),
@@ -128,9 +133,11 @@ impl<E: Send + 'static> Engine<E> {
         Ok(())
     }
 
-    pub(super) fn log_plugins_diagnostics(&self, tag: &'static str) {
+    #[inline]
+    pub(crate) fn log_plugins_diagnostics(&self, tag: &'static str) {
         let list = self.plugins.snapshot();
         let n = list.len();
+
         log::info!("plugins: diagnostics tag='{}' loaded={}", tag, n);
 
         for (i, p) in list.iter().enumerate() {
@@ -145,7 +152,7 @@ impl<E: Send + 'static> Engine<E> {
         }
 
         if log::log_enabled!(log::Level::Debug) {
-            for p in list.iter() {
+            for p in &list {
                 log::debug!(
                     "plugins: diag.debug id='{}' ver='{}' kind={:?} caps={} path='{}'",
                     p.id,
@@ -158,16 +165,16 @@ impl<E: Send + 'static> Engine<E> {
         }
     }
 
-    pub(super) fn process_plugin_control(&mut self) -> EngineResult<()> {
+    pub(crate) fn process_plugin_control(&mut self) -> EngineResult<()> {
         let Some(queue) = self.resources.get_mut::<PluginControlQueue>() else {
             return Ok(());
         };
 
         let strict = matches!(self.plugin_fault_tolerance, PluginFaultTolerance::Strict);
 
-        let mut did_any = false;
         let mut last_action: Option<String> = None;
         let mut last_error: Option<String> = None;
+        let mut did_any = false;
 
         for cmd in queue.drain() {
             did_any = true;
@@ -179,16 +186,17 @@ impl<E: Send + 'static> Engine<E> {
                     let phase = "rescan";
                     let t0 = Instant::now();
 
-                    let dir = self.plugins_dir.clone();
-                    let res = match dir.as_deref() {
-                        Some(d) => self.plugins.load_from_dir_with_policy(d, host, strict),
+                    self.plugins.invalidate_discovery_cache();
+
+                    let res = match self.plugins_dir.as_deref() {
+                        Some(dir) => self.plugins.load_from_dir_with_policy(dir, host, strict),
                         None => self.plugins.load_default_with_policy(host, strict),
                     };
 
                     match res {
                         Ok(()) => {
+                            last_action = Some("plugins: rescan".to_owned());
                             let loaded = self.plugins.snapshot().len();
-                            last_action = Some("plugins: rescan".to_string());
                             Self::log_phase_ok(
                                 "plugins",
                                 phase,
@@ -201,11 +209,13 @@ impl<E: Send + 'static> Engine<E> {
                                 "plugins: rescan failed ({}): {e}",
                                 Self::elapsed_since(t0)
                             ));
+
                             if strict {
                                 return Err(EngineError::Other(
                                     last_error.clone().unwrap_or_else(|| e.to_string()),
                                 ));
                             }
+
                             log::warn!(
                                 "plugins: non-fatal rescan error (phase={} {}): {}",
                                 phase,
@@ -237,6 +247,7 @@ impl<E: Send + 'static> Engine<E> {
                                 path.display(),
                                 Self::elapsed_since(t0)
                             ));
+
                             if strict {
                                 return Err(EngineError::Other(
                                     last_error.clone().unwrap_or_else(|| e.to_string()),
@@ -271,6 +282,7 @@ impl<E: Send + 'static> Engine<E> {
                                 id,
                                 Self::elapsed_since(t0)
                             ));
+
                             if strict {
                                 return Err(EngineError::Other(
                                     last_error.clone().unwrap_or_else(|| e.to_string()),
@@ -317,20 +329,22 @@ impl<E: Send + 'static> Engine<E> {
         Ok(())
     }
 
-    pub(super) fn expose_plugins_snapshot(&mut self) {
+    #[inline]
+    pub(crate) fn expose_plugins_snapshot(&mut self) {
         self.resources.insert(PluginsSnapshot {
             plugins: self.plugins.snapshot(),
         });
     }
 
-    pub(super) fn plugins_start_all(&mut self) -> EngineResult<()> {
-        if let Err(e) = self.plugins.start_all() {
-            return Err(EngineError::Other(format!("plugins: start failed: {e}")));
-        }
-        Ok(())
+    #[inline]
+    pub(crate) fn plugins_start_all(&mut self) -> EngineResult<()> {
+        self.plugins
+            .start_all()
+            .map_err(|e| EngineError::Other(format!("plugins: start failed: {e}")))
     }
 
-    pub(super) fn plugins_shutdown(&mut self) {
+    #[inline]
+    pub(crate) fn plugins_shutdown(&mut self) {
         self.plugins.shutdown();
     }
 }

@@ -18,6 +18,7 @@ log = "0.4.29"
 raw-window-handle = "0.6.2"
 abi_stable = "0.11"
 newengine-plugin-api = { path = "../newengine-plugin-api" }
+newengine-platform-api = { path = "../newengine-platform-api" }
 newengine-math = { path = "../newengine-math" }
 newengine-service-api = { path = "../newengine-service-api" }
 newengine-ui-draw = { path = "../newengine-ui-draw" }
