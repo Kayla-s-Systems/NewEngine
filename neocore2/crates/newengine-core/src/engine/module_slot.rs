@@ -35,16 +35,6 @@ impl<E: Send + 'static> ModuleSlot<E> {
     }
 
     #[inline]
-    pub fn is_running(&self) -> bool {
-        self.state == ModuleState::Running
-    }
-
-    #[inline]
-    pub fn is_disabled(&self) -> bool {
-        self.state == ModuleState::Disabled
-    }
-
-    #[inline]
     pub fn disable(&mut self, reason: String) {
         self.state = ModuleState::Disabled;
         self.disabled_reason = Some(reason);

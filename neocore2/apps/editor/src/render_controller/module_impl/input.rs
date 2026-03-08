@@ -34,10 +34,4 @@ impl ViewportInputSnap {
         }
     }
 
-    #[inline]
-    pub(super) fn clear_motion(&mut self) {
-        self.dx_px = 0.0;
-        self.dy_px = 0.0;
-        self.wheel_y = 0.0;
-    }
 }

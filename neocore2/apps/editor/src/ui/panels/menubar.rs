@@ -9,13 +9,13 @@ pub(crate) fn draw(me: &mut EditorUiBuild, ctx: &egui::Context) {
         .resizable(false)
         .exact_height(24.0)
         .show(ctx, |ui| {
-            egui::menu::bar(ui, |ui| {
+            egui::MenuBar::new().ui(ui, |ui| {
                 ui.menu_button("File", |ui| {
                     if ui.button("New Scene\tCtrl+N").clicked() {
                         me.scene_bridge.cmd_new_scene();
                         me.editor.commands.clear();
                         me.editor.selection.clear();
-                        ui.close_menu();
+                        ui.close();
                     }
 
                     let has_scene_io = me.scene_io.is_some();
@@ -26,7 +26,7 @@ pub(crate) fn draw(me: &mut EditorUiBuild, ctx: &egui::Context) {
                     {
                         me.scene_io_ui.open = true;
                         me.scene_io_ui.mode = super::super::SceneIoMode::Load;
-                        ui.close_menu();
+                        ui.close();
                     }
 
                     if ui
@@ -35,7 +35,7 @@ pub(crate) fn draw(me: &mut EditorUiBuild, ctx: &egui::Context) {
                     {
                         me.scene_io_ui.open = true;
                         me.scene_io_ui.mode = super::super::SceneIoMode::Save;
-                        ui.close_menu();
+                        ui.close();
                     }
 
                     if !has_scene_io {
@@ -46,7 +46,7 @@ pub(crate) fn draw(me: &mut EditorUiBuild, ctx: &egui::Context) {
 
                     if ui.button("Quit").clicked() {
                         log::warn!("Quit: not implemented yet (need shutdown token in UI)");
-                        ui.close_menu();
+                        ui.close();
                     }
                 });
 
@@ -55,14 +55,14 @@ pub(crate) fn draw(me: &mut EditorUiBuild, ctx: &egui::Context) {
                         if let Some(cmd) = me.editor.commands.pop_undo() {
                             me.apply_editor_command_undo(cmd);
                         }
-                        ui.close_menu();
+                        ui.close();
                     }
 
                     if ui.button("Redo\tCtrl+Y").clicked() {
                         if let Some(cmd) = me.editor.commands.pop_redo() {
                             me.apply_editor_command_redo(cmd);
                         }
-                        ui.close_menu();
+                        ui.close();
                     }
 
                     ui.separator();
@@ -70,7 +70,7 @@ pub(crate) fn draw(me: &mut EditorUiBuild, ctx: &egui::Context) {
                     if ui.button("Deselect\tEsc").clicked() {
                         me.editor.selection.clear();
                         me.scene_bridge.set_selection(None);
-                        ui.close_menu();
+                        ui.close();
                     }
                 });
 
@@ -82,7 +82,7 @@ pub(crate) fn draw(me: &mut EditorUiBuild, ctx: &egui::Context) {
                         .clicked()
                     {
                         me.asset_ui.open = true;
-                        ui.close_menu();
+                        ui.close();
                     }
 
                     if !has_assets {
@@ -93,14 +93,14 @@ pub(crate) fn draw(me: &mut EditorUiBuild, ctx: &egui::Context) {
                 ui.menu_button("View", |ui| {
                     if ui.button("Console\tF1").clicked() {
                         me.console_open = !me.console_open;
-                        ui.close_menu();
+                        ui.close();
                     }
 
                     if ui.button("Plugins\tF2").clicked() {
                         if let Ok(mut pm) = me.plugin_manager.lock() {
                             pm.toggle();
                         }
-                        ui.close_menu();
+                        ui.close();
                     }
                 });
 
@@ -109,21 +109,21 @@ pub(crate) fn draw(me: &mut EditorUiBuild, ctx: &egui::Context) {
                         .checkbox(&mut me.layout.show_outliner, "World Outliner")
                         .clicked()
                     {
-                        ui.close_menu();
+                        ui.close();
                     }
 
                     if ui
                         .checkbox(&mut me.layout.show_details, "Details")
                         .clicked()
                     {
-                        ui.close_menu();
+                        ui.close();
                     }
 
                     if ui
                         .checkbox(&mut me.layout.show_left_toolbar, "Left Tools")
                         .clicked()
                     {
-                        ui.close_menu();
+                        ui.close();
                     }
 
                     let has_assets = me.assets.is_some();
@@ -132,19 +132,19 @@ pub(crate) fn draw(me: &mut EditorUiBuild, ctx: &egui::Context) {
                         .clicked()
                     {
                         me.asset_ui.open = true;
-                        ui.close_menu();
+                        ui.close();
                     }
                 });
 
                 ui.menu_button("Tools", |ui| {
                     if ui.button("Frame Selection\tF").clicked() {
                         me.viewport_bridge.publish_frame_request(false);
-                        ui.close_menu();
+                        ui.close();
                     }
 
                     if ui.button("Frame All\tShift+F").clicked() {
                         me.viewport_bridge.publish_frame_request(true);
-                        ui.close_menu();
+                        ui.close();
                     }
                 });
 

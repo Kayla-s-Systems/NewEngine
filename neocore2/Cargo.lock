@@ -612,7 +612,7 @@ dependencies = [
  "blake3",
  "crossbeam-channel",
  "egui",
-    "embed-resource",
+ "embed-resource",
  "image",
  "libloading 0.9.0",
  "log",
@@ -642,7 +642,7 @@ dependencies = [
  "raw-window-handle",
  "serde_json",
  "shaderc",
-    "toml",
+ "toml",
 ]
 
 [[package]]
@@ -683,9 +683,9 @@ dependencies = [
  "cc",
  "memchr",
  "rustc_version",
-    "toml",
+ "toml",
  "vswhom",
-    "winreg",
+ "winreg",
 ]
 
 [[package]]
@@ -1193,7 +1193,7 @@ dependencies = [
  "libloading 0.9.0",
  "log",
  "newengine-math",
-    "newengine-platform-api",
+ "newengine-platform-api",
  "newengine-plugin-api",
  "newengine-service-api",
  "newengine-ui",
@@ -2370,7 +2370,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "dc1beb996b9d83529a9e75c17a1686767d148d70663143c7854d8b4a09ced362"
 dependencies = [
  "serde",
-    "serde_spanned",
+ "serde_spanned",
  "toml_datetime 0.6.11",
  "toml_edit 0.22.27",
 ]
@@ -2401,7 +2401,7 @@ checksum = "41fe8c660ae4257887cf66394862d21dbca4a6ddd26f04a3560410406a2f819a"
 dependencies = [
  "indexmap",
  "serde",
-    "serde_spanned",
+ "serde_spanned",
  "toml_datetime 0.6.11",
  "toml_write",
  "winnow",

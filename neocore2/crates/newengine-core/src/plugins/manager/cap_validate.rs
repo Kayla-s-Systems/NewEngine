@@ -89,7 +89,6 @@ fn count_caps(d: &PluginDescriptor) -> (usize, usize) {
         match c.role {
             CapabilityRole::Provides => provides = provides.saturating_add(1),
             CapabilityRole::Requires => requires = requires.saturating_add(1),
-            _ => {}
         }
     }
     (provides, requires)

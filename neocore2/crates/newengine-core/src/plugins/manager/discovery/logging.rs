@@ -104,7 +104,6 @@ fn scanned_kind_label(kind: &ScannedDynlibKind) -> &'static str {
             Some(newengine_plugin_api::PluginKind::Tool) => "tool",
             Some(newengine_plugin_api::PluginKind::Editor) => "editor",
             Some(newengine_plugin_api::PluginKind::Other) => "other",
-            Some(_) => "plugin",
             None => "plugin",
         },
         ScannedDynlibKind::Unknown => "unknown",

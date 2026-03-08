@@ -236,6 +236,13 @@ pub struct EditorNavLimits {
     /// Maximum allowed look delta (pixels) per frame.
     /// Prevents cursor-warp / pointer-lock glitches from injecting huge impulses.
     pub max_look_delta_px: f32,
+
+    /// Minimum accumulated look delta quantum (pixels) before it affects yaw/pitch.
+    ///
+    /// Purpose:
+    /// - suppress backend/raw-input micro-jitter while the mouse is idle;
+    /// - preserve very slow motion by accumulating sub-quantum residuals deterministically.
+    pub look_delta_quantum_px: f32,
 }
 
 impl Default for EditorNavLimits {
@@ -246,6 +253,7 @@ impl Default for EditorNavLimits {
             max_pitch_abs: 1.5184364,
             min_camera_y: 0.10,
             max_look_delta_px: 160.0,
+            look_delta_quantum_px: 1.0,
         }
     }
 }
@@ -266,6 +274,7 @@ pub struct EditorNavController {
     pub limits: EditorNavLimits,
 
     was_look_active: bool,
+    look_delta_residual_px: Vec2,
 }
 
 impl Default for EditorNavController {
@@ -287,11 +296,41 @@ impl Default for EditorNavController {
             fly_speed: 2.0,
             limits: EditorNavLimits::default(),
             was_look_active: false,
+            look_delta_residual_px: Vec2::ZERO,
         }
     }
 }
 
 impl EditorNavController {
+    #[inline]
+    fn quantize_axis_with_residual(v: &mut f32, quantum: f32) -> f32 {
+        let q = quantum.max(1.0e-4);
+        if !v.is_finite() {
+            *v = 0.0;
+            return 0.0;
+        }
+
+        if v.abs() < q {
+            return 0.0;
+        }
+
+        let out = (*v / q).trunc() * q;
+        *v -= out;
+        out
+    }
+
+    #[inline]
+    fn quantize_look_delta_with_residual(&mut self, look_delta: Vec2) -> Vec2 {
+        let mut acc = self.look_delta_residual_px + look_delta;
+        let q = self.limits.look_delta_quantum_px.max(1.0e-4);
+        let out = Vec2::new(
+            Self::quantize_axis_with_residual(&mut acc.x, q),
+            Self::quantize_axis_with_residual(&mut acc.y, q),
+        );
+        self.look_delta_residual_px = acc;
+        out
+    }
+
     /// Switches navigation mode and synchronizes internal controller state from the current rig.
     ///
     /// This function does **not** modify the rig.
@@ -316,6 +355,7 @@ impl EditorNavController {
 
         self.mode = next;
         self.was_look_active = false;
+        self.look_delta_residual_px = Vec2::ZERO;
     }
 
     /// Applies input to the rig for the current mode.
@@ -365,7 +405,16 @@ impl EditorNavController {
 
             input.look_delta = Vec2::ZERO;
             input.zoom_delta = 0.0;
+            self.look_delta_residual_px = Vec2::ZERO;
         }
+
+        if input.look_active {
+            input.look_delta = self.quantize_look_delta_with_residual(input.look_delta);
+        } else {
+            self.look_delta_residual_px = Vec2::ZERO;
+            input.look_delta = Vec2::ZERO;
+        }
+
         self.was_look_active = input.look_active;
 
         match self.mode {
@@ -393,6 +442,7 @@ impl EditorNavController {
             .clamp(self.orbit.min_distance, self.orbit.max_distance);
         self.orbit.sync_from_rig(rig);
         self.was_look_active = false;
+        self.look_delta_residual_px = Vec2::ZERO;
     }
 
     /// Synchronizes fly controller state from the current rig pose.
@@ -403,6 +453,7 @@ impl EditorNavController {
     pub fn sync_fly_from_rig(&mut self, rig: &CameraRig) {
         self.fly.sync_from_rig(rig);
         self.was_look_active = false;
+        self.look_delta_residual_px = Vec2::ZERO;
     }
 
     /// Rebuilds the rig from the current orbit state (no input).

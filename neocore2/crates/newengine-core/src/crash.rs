@@ -180,7 +180,7 @@ fn write_report_file(
     dir: &Path,
     pid: u32,
     unix_ms: u64,
-    run_id: &str,
+    _run_id: &str,
     run_tag: &str,
     text: &str,
 ) -> std::io::Result<PathBuf> {

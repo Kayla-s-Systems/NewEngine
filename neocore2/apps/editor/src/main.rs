@@ -386,6 +386,12 @@ fn main_impl() -> EngineResult<()> {
     let resolved_platform =
         platform_runtime::resolve_platform_runtime_config(&startup, &runtime_path)?;
 
+    log::info!(
+        "editor startup: platform runtime plugin id='{}' path='{}'",
+        resolved_platform.plugin_id,
+        runtime_path.display()
+    );
+
     let icon = try_load_window_icon_best_effort(
         resolved_platform.icon_path.as_deref(),
         if assets_available { Some(&assets) } else { None },

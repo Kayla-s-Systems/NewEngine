@@ -16,7 +16,7 @@ pub(super) fn outliner_max_width(
     show_left_toolbar: bool,
     show_details: bool,
 ) -> f32 {
-    let screen_w = ctx.screen_rect().width().max(1.0);
+    let screen_w = ctx.content_rect().width().max(1.0);
     let fixed = if show_left_toolbar { LEFT_TOOLBAR_W } else { 0.0 };
 
     let budget = (screen_w - fixed - VIEWPORT_MIN_W).max(0.0);
@@ -36,7 +36,7 @@ pub(super) fn details_max_width(
     show_left_toolbar: bool,
     show_outliner: bool,
 ) -> f32 {
-    let screen_w = ctx.screen_rect().width().max(1.0);
+    let screen_w = ctx.content_rect().width().max(1.0);
     let fixed = if show_left_toolbar { LEFT_TOOLBAR_W } else { 0.0 };
 
     let budget = (screen_w - fixed - VIEWPORT_MIN_W).max(0.0);

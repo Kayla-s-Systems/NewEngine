@@ -6,9 +6,9 @@ mod panels;
 mod util;
 
 use egui;
-use newengine_ui::markup::UiMarkupDoc;
 use newengine_ui::input::keys as ui_keys;
-use newengine_ui::{UiBuildFn, UiHub, UiFrameDesc, UiInputFrame};
+use newengine_ui::markup::UiMarkupDoc;
+use newengine_ui::{UiBuildFn, UiFrameDesc, UiHub, UiInputFrame};
 
 use newengine_assets::AssetServiceClient;
 use newengine_core::plugins::{default_host_api, has_service};
@@ -498,7 +498,8 @@ impl EditorUiBuild {
         };
 
         // NOTE: asset-driven markup is currently not part of the editor shell.
-        // We keep `shared_doc` for future data-driven UI prototyping.
+        // Keep the shared document hot so the field remains part of the live UI state.
+        let _shared_doc = self.shared_doc.lock().ok().and_then(|g| g.clone());
 
         // Poll asset-driven materials (JSON -> cached .nemat -> registry).
         let mats = self.scene_bridge.materials();
