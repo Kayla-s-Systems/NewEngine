@@ -130,7 +130,7 @@ pub fn install_forward_logger_once(host: HostApiV1) {
         return;
     }
 
-    if !crate::plugins::has_service(LOGGING_SINK_SERVICE_ID) {
+    if !newengine_plugin_host::has_service(LOGGING_SINK_SERVICE_ID) {
         return;
     }
 

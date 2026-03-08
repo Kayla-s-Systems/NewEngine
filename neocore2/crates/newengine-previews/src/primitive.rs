@@ -3,7 +3,6 @@
 use bytemuck::{Pod, Zeroable};
 use newengine_assets::{wait_ready, AssetAccess, AssetServiceClient};
 use newengine_core::error::{EngineError, EngineResult};
-use newengine_core::plugins::default_host_api;
 use newengine_core::render::{
     BeginRenderTargetDesc, BindGroupDesc, BindGroupLayoutDesc, BindingKind, BufferBinding,
     BufferDesc, BufferUsage, DrawIndexedArgs, Extent2D, IndexFormat, PipelineDesc,
@@ -12,6 +11,7 @@ use newengine_core::render::{
 };
 use newengine_math::collections::FxHashMap;
 use newengine_math::{Mat4, Vec3};
+use newengine_plugin_host::default_host_api;
 use newengine_primitives::{PrimitiveId, PrimitiveRegistry, PrimitiveVertex};
 use std::io::Write;
 use std::path::{Path, PathBuf};

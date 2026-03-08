@@ -9,6 +9,7 @@ pub mod root;
 pub mod scan;
 pub mod service;
 pub mod types;
+pub mod ui;
 
 pub mod prelude;
 
@@ -20,3 +21,4 @@ pub use root::*;
 pub use scan::*;
 pub use service::*;
 pub use types::*;
+pub use ui::*;

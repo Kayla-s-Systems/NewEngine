@@ -4,7 +4,7 @@ use super::method::{method, COMMAND_SERVICE_ID};
 use super::runtime::ConsoleRuntime;
 use super::types::SuggestResponse;
 
-use crate::plugins::host_api;
+use newengine_plugin_host::host_register_service_impl;
 
 use abi_stable::std_types::{RResult, RString};
 use newengine_plugin_api::{Blob, CapabilityId, MethodName, ServiceV1, ServiceV1Dyn};
@@ -94,7 +94,7 @@ pub fn init_console_service() {
     let svc = CommandService { rt };
     let dyn_svc = ServiceV1Dyn::from_value(svc, abi_stable::sabi_trait::TD_Opaque);
 
-    let _ = host_api::host_register_service_impl(dyn_svc);
+    let _ = host_register_service_impl(dyn_svc);
 }
 
 pub fn take_exit_requested() -> bool {

@@ -8,6 +8,7 @@ edition = "2021"
 parking_lot = "0.12"
 bytemuck = { version = "1.23", features = ["derive"] }
 newengine-core = { path = "../newengine-core" }
+newengine-plugin-host = { path = "../newengine-plugin-host" }
 newengine-ui = { path = "../newengine-ui" }
 newengine-assets = { path = "../newengine-assets" }
 newengine-primitives = { path = "../newengine-primitives" }

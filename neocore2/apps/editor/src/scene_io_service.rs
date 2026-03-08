@@ -4,8 +4,8 @@ use abi_stable::erased_types::TD_Opaque;
 use abi_stable::std_types::{RResult, RString};
 
 use newengine_assets::{wait_ready, AssetAccess, AssetServiceClient};
-use newengine_core::plugins::{default_host_api, has_service};
 use newengine_plugin_api::{Blob, CapabilityId, MethodName, ServiceV1, ServiceV1_TO};
+use newengine_plugin_host::{default_host_api, has_service};
 use newengine_scene::{SceneAsset, SceneAssetOptions};
 
 use std::path::Path;

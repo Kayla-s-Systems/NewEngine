@@ -1,10 +1,11 @@
 use crate::error::{EngineError, EngineResult};
 use crate::events::EventHub;
 use crate::module::{Bus, Module, Resources, Services};
-use crate::plugins::plugin_config_service::init_plugin_config_service;
-use crate::plugins::{init_host_context, PluginControlQueue, PluginManager};
 use crate::sched::Scheduler;
 use crate::sync::ShutdownToken;
+use newengine_plugin_host::{
+    init_host_context, init_plugin_config_service, PluginControlQueue, PluginManager,
+};
 
 use newengine_math::{register_engine_builtins, MathRegistry};
 

@@ -11,7 +11,7 @@ use newengine_ui::markup::UiMarkupDoc;
 use newengine_ui::{UiBuildFn, UiFrameDesc, UiHub, UiInputFrame};
 
 use newengine_assets::AssetServiceClient;
-use newengine_core::plugins::{default_host_api, has_service};
+use newengine_plugin_host::{default_host_api, has_service};
 use newengine_scene_io::SceneIoClient;
 
 use std::any::Any;

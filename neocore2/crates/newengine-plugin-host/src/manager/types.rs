@@ -5,6 +5,7 @@ use libloading::Library;
 use newengine_plugin_api::{CapabilityDesc, PluginDescriptor, PluginInfo, PluginKind};
 
 use super::adapter::ModuleAdapterAny;
+use super::ui_assets::PluginIconData;
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub(crate) enum PluginState {
@@ -29,6 +30,12 @@ impl std::fmt::Display for PluginLoadError {
 impl std::error::Error for PluginLoadError {}
 
 #[derive(Clone, Debug)]
+pub struct PluginIconSnapshot {
+    pub media_type: String,
+    pub bytes: Vec<u8>,
+}
+
+#[derive(Clone, Debug)]
 pub struct PluginSnapshotEntry {
     pub path: PathBuf,
     pub id: String,
@@ -38,6 +45,7 @@ pub struct PluginSnapshotEntry {
     pub capabilities: Vec<CapabilityDesc>,
     pub state: String,
     pub disabled_reason: Option<String>,
+    pub icon_small: Option<PluginIconSnapshot>,
 }
 
 pub(crate) struct LoadedPlugin {
@@ -48,6 +56,7 @@ pub(crate) struct LoadedPlugin {
     pub descriptor: Option<PluginDescriptor>,
     pub state: PluginState,
     pub disabled_reason: Option<String>,
+    pub icon_small: Option<PluginIconData>,
 }
 
 #[inline]
@@ -82,6 +91,10 @@ pub(crate) fn snapshot_impl(loaded: &[LoadedPlugin]) -> Vec<PluginSnapshotEntry>
             capabilities: caps,
             state,
             disabled_reason: p.disabled_reason.clone(),
+            icon_small: p.icon_small.as_ref().map(|icon| PluginIconSnapshot {
+                media_type: icon.media_type.clone(),
+                bytes: icon.bytes.clone(),
+            }),
         });
     }
 

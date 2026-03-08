@@ -369,9 +369,9 @@ fn main_impl() -> EngineResult<()> {
     engine.emit_plugins_diagnostics("after bootstrap preload");
     scene_io_service::register_scene_io_best_effort(scene.clone());
 
-    let assets = AssetServiceClient::new(newengine_core::plugins::default_host_api());
+    let assets = AssetServiceClient::new(newengine_plugin_host::default_host_api());
     let assets_available =
-        newengine_core::plugins::has_service(newengine_assets::consts::ASSET_SERVICE_ID);
+        newengine_plugin_host::has_service(newengine_assets::consts::ASSET_SERVICE_ID);
 
     if assets_available {
         mount_asset_roots_best_effort(&assets, &asset_roots);

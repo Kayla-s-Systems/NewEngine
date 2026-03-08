@@ -20,6 +20,7 @@ use crate::plugin_config_service::get_plugin_overrides_with_env;
 use super::adapter::{ModuleAdapterAny, V1Adapter, V2Adapter, V3Adapter};
 use super::config_patch::config_patch_from_json_merge_patch;
 use super::types::{LoadedPlugin, PluginLoadError, PluginState};
+use super::ui_assets::{extract_plugin_icon, PluginIconData};
 use super::PluginManager;
 
 fn pretty_abs_path(path: &Path) -> String {
@@ -88,7 +89,7 @@ impl PluginManager {
         );
 
         let t = Instant::now();
-        let (mut module_any, info, descriptor) = select_abi(root);
+        let (mut module_any, info, descriptor, icon_small) = select_abi(root);
         tm.select_abi_ms = t.elapsed().as_millis();
 
         let id_str = info.id.to_string();
@@ -206,13 +207,22 @@ impl PluginManager {
             descriptor,
             state: PluginState::Registered,
             disabled_reason: None,
+            icon_small,
         });
 
         Ok(())
     }
 }
 
-fn select_abi(root: PluginRootV1Ref) -> (ModuleAdapterAny, PluginInfo, Option<PluginDescriptor>) {
+fn select_abi(
+    root: PluginRootV1Ref,
+) -> (
+    ModuleAdapterAny,
+    PluginInfo,
+    Option<PluginDescriptor>,
+    Option<PluginIconData>,
+) {
+    let icon_small = extract_plugin_icon(root.clone());
     if let Some(create_v3) = root.create_v3() {
         let m3 = create_v3();
         let d = m3.descriptor_v3();
@@ -226,6 +236,7 @@ fn select_abi(root: PluginRootV1Ref) -> (ModuleAdapterAny, PluginInfo, Option<Pl
             ModuleAdapterAny::V3(V3Adapter { module: m3 }),
             info,
             Some(d),
+            icon_small,
         )
     } else if let Some(create_v2) = root.create_v2() {
         let m2 = create_v2();
@@ -240,12 +251,13 @@ fn select_abi(root: PluginRootV1Ref) -> (ModuleAdapterAny, PluginInfo, Option<Pl
             ModuleAdapterAny::V2(V2Adapter { module: m2 }),
             info,
             Some(d),
+            icon_small,
         )
     } else {
         let m1: PluginModuleDyn<'static> = root.create()();
         let info = m1.info();
         log::debug!("plugins: abi selected v1 id='{}'", info.id);
-        (ModuleAdapterAny::V1(V1Adapter { module: m1 }), info, None)
+        (ModuleAdapterAny::V1(V1Adapter { module: m1 }), info, None, icon_small)
     }
 }
 

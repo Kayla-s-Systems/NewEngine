@@ -23,7 +23,7 @@ pub use host_api::{call_service_v1, default_host_api, host_register_service_impl
 pub use host_context::{
     describe_service, has_service, init_host_context, list_services, services_generation,
 };
-pub use manager::{PluginLoadError, PluginManager, PluginSnapshotEntry};
+pub use manager::{PluginIconSnapshot, PluginLoadError, PluginManager, PluginSnapshotEntry};
 pub use plugin_config_service::{
     get_plugin_overrides_with_env, init_plugin_config_service, CONFIG_SERVICE_ID,
 };

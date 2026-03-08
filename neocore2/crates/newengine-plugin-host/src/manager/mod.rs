@@ -7,8 +7,9 @@ mod discovery;
 mod lifecycle;
 mod loader;
 mod types;
+mod ui_assets;
 
-pub use types::{PluginLoadError, PluginSnapshotEntry};
+pub use types::{PluginIconSnapshot, PluginLoadError, PluginSnapshotEntry};
 
 use newengine_math::collections::prelude::*;
 

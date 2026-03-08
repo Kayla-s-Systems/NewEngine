@@ -10,7 +10,7 @@ use newengine_math::collections::FxHashMap;
 use newengine_primitives::{PrimitiveId, PrimitiveRegistry, PrimitiveVertex};
 
 use newengine_assets::{wait_ready, AssetAccess, AssetServiceClient};
-use newengine_core::plugins::default_host_api;
+use newengine_plugin_host::default_host_api;
 
 use shaderc::{CompileOptions, Compiler, OptimizationLevel, ShaderKind};
 

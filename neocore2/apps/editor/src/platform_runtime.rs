@@ -96,7 +96,7 @@ impl EditorPlatformRuntime {
             poll_cursor_state_v1: host_poll_cursor_state_v1,
         };
 
-        let plugin_host = newengine_core::plugins::default_host_api();
+        let plugin_host = newengine_plugin_host::default_host_api();
         let result = unsafe { run(plugin_host, host, config) }
             .into_result()
             .map_err(|e| EngineError::other(e.to_string()));
@@ -600,7 +600,7 @@ pub fn resolve_platform_runtime_config(
         .into_result()
         .map_err(|e| EngineError::other(format!("platform config defaults failed: {e}")))?;
 
-    let overrides = newengine_core::plugins::get_plugin_overrides_with_env(&plugin_id);
+    let overrides = newengine_plugin_host::get_plugin_overrides_with_env(&plugin_id);
     let icon_path = extract_string_field(&overrides, "icon");
     let plugin_patch = strip_host_only_platform_keys(&overrides);
 

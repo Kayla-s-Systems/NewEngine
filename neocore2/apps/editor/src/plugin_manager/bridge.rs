@@ -3,8 +3,8 @@
 use std::collections::VecDeque;
 use std::sync::{Mutex, RwLock};
 
-use newengine_core::plugins::PluginControlCommand;
-use newengine_core::plugins::PluginsSnapshot;
+use newengine_plugin_host::PluginControlCommand;
+use newengine_plugin_host::PluginsSnapshot;
 
 /// UI <-> engine bridge for plugin diagnostics.
 ///

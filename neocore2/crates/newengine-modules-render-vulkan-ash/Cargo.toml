@@ -6,6 +6,7 @@ edition = "2021"
 
 [dependencies]
 newengine-core = { path = "../newengine-core" }
+newengine-plugin-host = { path = "../newengine-plugin-host" }
 newengine-ui = { path = "../newengine-ui" }
 newengine-assets = { path = "../newengine-assets" }
 ash = "0.38"

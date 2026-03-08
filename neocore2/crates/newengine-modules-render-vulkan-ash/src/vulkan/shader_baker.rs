@@ -8,7 +8,7 @@ use std::time::Duration;
 use crate::error::{VkRenderError, VkResult};
 use blake3::Hasher;
 use newengine_assets::{wait_ready, AssetAccess, AssetService, AssetServiceClient};
-use newengine_core::plugins::default_host_api;
+use newengine_plugin_host::default_host_api;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ShaderStage {

@@ -1,6 +1,13 @@
 #![forbid(unsafe_op_in_unsafe_fn)]
 
 pub use crate::{
-    capability::*, config::*, export_plugin_root, host::*, module::*, scan::*, service::*,
+    capability::*,
+    config::*,
+    export_plugin_root,
+    host::*,
+    module::*,
+    scan::*,
+    service::*,
     types::*,
+    ui::*,
 };

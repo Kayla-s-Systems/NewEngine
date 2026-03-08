@@ -5,7 +5,8 @@ use super::{Engine, PluginFaultTolerance};
 use crate::error::{EngineError, EngineResult};
 use crate::log_fmt::{ellipsize, emit_boxed_kv, emit_prefixed_table};
 use crate::path_fmt::display_clean;
-use crate::plugins::{
+use crate::plugin_forward_logger::install_forward_logger_once;
+use newengine_plugin_host::{
     default_host_api, PluginControlCommand, PluginControlQueue, PluginsSnapshot,
 };
 
@@ -17,12 +18,22 @@ impl<E: Send + 'static> Engine<E> {
         let host = default_host_api();
 
         let res = match self.plugins_dir.as_deref() {
-            Some(dir) => self.plugins.load_bootstrap_from_dir(dir, host, strict),
-            None => self.plugins.load_bootstrap_default(host, strict),
+            Some(dir) => self.plugins.load_bootstrap_from_dir(dir, host.clone(), strict),
+            None => self.plugins.load_bootstrap_default(host.clone(), strict),
         };
 
+        install_forward_logger_once(host);
+
         match res {
-            Ok(()) => Ok(()),
+            Ok(()) => {
+                let rid = crate::run_id::run_id().unwrap_or("<unknown>");
+                log::info!("startup: Run ID: {}", rid);
+                crate::startup::SystemProbe::probe().emit_table("startup");
+                if let Some(r) = crate::startup::last_load_report() {
+                    r.emit_logs();
+                }
+                Ok(())
+            }
             Err(e) => Err(EngineError::Other(format!(
                 "plugins: bootstrap load failed: {e}"
             ))),
@@ -41,9 +52,11 @@ impl<E: Send + 'static> Engine<E> {
         let host = default_host_api();
 
         let load_result = match self.plugins_dir.as_deref() {
-            Some(dir) => self.plugins.load_engine_from_dir(dir, host, strict),
-            None => self.plugins.load_engine_default(host, strict),
+            Some(dir) => self.plugins.load_engine_from_dir(dir, host.clone(), strict),
+            None => self.plugins.load_engine_default(host.clone(), strict),
         };
+
+        install_forward_logger_once(host);
 
         if let Err(e) = load_result {
             match self.plugin_fault_tolerance {
@@ -102,9 +115,11 @@ impl<E: Send + 'static> Engine<E> {
         let host = default_host_api();
 
         let load_result = match self.plugins_dir.as_deref() {
-            Some(dir) => self.plugins.load_from_dir_with_policy(dir, host, strict),
-            None => self.plugins.load_default_with_policy(host, strict),
+            Some(dir) => self.plugins.load_from_dir_with_policy(dir, host.clone(), strict),
+            None => self.plugins.load_default_with_policy(host.clone(), strict),
         };
+
+        install_forward_logger_once(host);
 
         if let Err(e) = load_result {
             match self.plugin_fault_tolerance {
@@ -204,9 +219,11 @@ impl<E: Send + 'static> Engine<E> {
                     self.plugins.invalidate_discovery_cache();
 
                     let res = match self.plugins_dir.as_deref() {
-                        Some(dir) => self.plugins.load_from_dir_with_policy(dir, host, strict),
-                        None => self.plugins.load_default_with_policy(host, strict),
+                        Some(dir) => self.plugins.load_from_dir_with_policy(dir, host.clone(), strict),
+                        None => self.plugins.load_default_with_policy(host.clone(), strict),
                     };
+
+                    install_forward_logger_once(host);
 
                     match res {
                         Ok(()) => {
@@ -245,8 +262,9 @@ impl<E: Send + 'static> Engine<E> {
                     let phase = "load_path";
                     let t0 = Instant::now();
 
-                    match self.plugins.load_path(&path, host) {
+                    match self.plugins.load_path(&path, host.clone()) {
                         Ok(()) => {
+                            install_forward_logger_once(host);
                             last_action = Some(format!("plugins: load '{}'", path.display()));
                             let loaded = self.plugins.snapshot().len();
                             Self::log_phase_ok(
@@ -276,8 +294,9 @@ impl<E: Send + 'static> Engine<E> {
                     let phase = "reload";
                     let t0 = Instant::now();
 
-                    match self.plugins.reload_by_id(&id, host) {
+                    match self.plugins.reload_by_id(&id, host.clone()) {
                         Ok(true) => {
+                            install_forward_logger_once(host);
                             self.plugins.start_by_id(&id);
                             last_action = Some(format!("plugins: reloaded id='{}'", id));
                             let loaded = self.plugins.snapshot().len();

@@ -2,7 +2,7 @@
 
 use egui;
 use newengine_assets::AssetServiceClient;
-use newengine_core::plugins::default_host_api;
+use newengine_plugin_host::default_host_api;
 use newengine_ui::ui_icons;
 use newengine_ui::{BuiltinUiIcon, UiImageLoader, EDITOR_DEFAULT_ICONS};
 

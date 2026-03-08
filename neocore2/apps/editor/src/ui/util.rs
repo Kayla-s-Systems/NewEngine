@@ -50,7 +50,7 @@ pub(super) fn details_max_width(
     max_by_layout.min(max_cap)
 }
 
-pub(super) fn infer_model_exts(snap: &newengine_core::plugins::PluginsSnapshot) -> Vec<String> {
+pub(super) fn infer_model_exts(snap: &newengine_plugin_host::PluginsSnapshot) -> Vec<String> {
     use std::collections::BTreeSet;
 
     let mut out: BTreeSet<String> = BTreeSet::new();

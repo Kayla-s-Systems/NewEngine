@@ -1,6 +1,7 @@
 #![forbid(unsafe_op_in_unsafe_fn)]
 
-use crate::plugins::host_context;
+use crate::host_services::{call_service_v1, describe_service, list_service_ids};
+use newengine_plugin_host::services_generation;
 
 use super::types::{ConsoleCmdEntry, DynCommand, DynPayload, SuggestItem, SuggestResponse};
 
@@ -45,14 +46,7 @@ impl ConsoleRuntime {
             Cmd {
                 help: "List services",
                 usage: "services",
-                f: |_, _| {
-                    let c = host_context::ctx();
-                    let g = c
-                        .services
-                        .lock()
-                        .map_err(|_| "services mutex poisoned".to_string())?;
-                    Ok(g.keys().cloned().collect::<Vec<_>>().join("\n"))
-                },
+                f: |_, _| Ok(list_service_ids().join("\n")),
             },
         );
 
@@ -336,16 +330,9 @@ impl ConsoleRuntime {
     }
 
     fn complete_service_id(&self, prefix: &str) -> Vec<String> {
-        let c = host_context::ctx();
-        let g = match c.services.lock() {
-            Ok(g) => g,
-            Err(_) => return Vec::new(),
-        };
-
-        let mut v: Vec<String> = g
-            .keys()
+        let mut v: Vec<String> = list_service_ids()
+            .into_iter()
             .filter(|id| id.starts_with(prefix))
-            .cloned()
             .collect();
 
         v.sort();
@@ -376,7 +363,7 @@ impl ConsoleRuntime {
     }
 
     fn refresh_if_services_changed(&self) {
-        let gen = host_context::services_generation();
+        let gen = services_generation();
         let cached = self.cached_services_gen.load(Ordering::Acquire);
         if cached != gen {
             self.refresh_dyn_commands();
@@ -429,24 +416,12 @@ impl ConsoleRuntime {
         let mut out: BTreeMap<String, DynCommand> = BTreeMap::new();
         let mut methods: BTreeMap<String, Vec<String>> = BTreeMap::new();
 
-        let c = host_context::ctx();
-        let services = match c.services.lock() {
-            Ok(g) => g,
-            Err(_) => {
-                if let Ok(mut g) = self.dyn_cmds.lock() {
-                    g.clear();
-                }
-                if let Ok(mut g) = self.method_cache.lock() {
-                    g.clear();
-                }
-                self.cached_services_gen
-                    .store(host_context::services_generation(), Ordering::Release);
-                return;
-            }
-        };
+        let services = list_service_ids();
 
-        for (id, entry) in services.iter() {
-            let describe = entry.describe_json.clone();
+        for id in services {
+            let Some(describe) = describe_service(&id) else {
+                continue;
+            };
 
             let Ok(v) = serde_json::from_str::<serde_json::Value>(&describe) else {
                 continue;
@@ -525,21 +500,11 @@ impl ConsoleRuntime {
         }
 
         self.cached_services_gen
-            .store(host_context::services_generation(), Ordering::Release);
+            .store(services_generation(), Ordering::Release);
     }
 
     fn describe_raw(&self, service_id: &str) -> Result<String, String> {
-        let c = host_context::ctx();
-        let g = c
-            .services
-            .lock()
-            .map_err(|_| "services mutex poisoned".to_string())?;
-
-        let entry = g
-            .get(service_id)
-            .ok_or_else(|| format!("unknown service: {service_id}"))?;
-
-        Ok(entry.describe_json.clone())
+        describe_service(service_id).ok_or_else(|| format!("unknown service: {service_id}"))
     }
 
     fn describe_service(&self, line: &str) -> Result<String, String> {
@@ -579,31 +544,14 @@ impl ConsoleRuntime {
         method: &str,
         payload: &[u8],
     ) -> Result<String, String> {
-        let c = host_context::ctx();
-        let g = c
-            .services
-            .lock()
-            .map_err(|_| "services mutex poisoned".to_string())?;
+        let bytes = call_service_v1(service_id, method, payload)?;
 
-        let entry = g
-            .get(service_id)
-            .ok_or_else(|| format!("unknown service: {service_id}"))?;
-
-        let res = entry.service.call(
-            abi_stable::std_types::RString::from(method),
-            newengine_plugin_api::Blob::from(payload.to_vec()),
-        );
-
-        match res.into_result() {
-            Ok(b) => {
-                let bytes = b.into_vec();
-                if let Ok(v) = serde_json::from_slice::<serde_json::Value>(&bytes) {
-                    return Ok(serde_json::to_string_pretty(&v)
-                        .unwrap_or_else(|_| String::from_utf8_lossy(&bytes).to_string()));
-                }
-                Ok(String::from_utf8_lossy(&bytes).to_string())
+        match serde_json::from_slice::<serde_json::Value>(&bytes) {
+            Ok(v) => {
+                Ok(serde_json::to_string_pretty(&v)
+                    .unwrap_or_else(|_| String::from_utf8_lossy(&bytes).to_string()))
             }
-            Err(e) => Err(e.to_string()),
+            Err(_) => Ok(String::from_utf8_lossy(&bytes).to_string()),
         }
     }
 

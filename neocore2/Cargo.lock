@@ -629,6 +629,7 @@ dependencies = [
  "newengine-modules-render-vulkan-ash",
  "newengine-platform-api",
  "newengine-plugin-api",
+ "newengine-plugin-host",
  "newengine-previews",
  "newengine-primitives",
  "newengine-scene",
@@ -1190,11 +1191,11 @@ version = "0.1.0"
 dependencies = [
  "abi_stable",
  "crossbeam-channel",
- "libloading 0.9.0",
  "log",
  "newengine-math",
  "newengine-platform-api",
  "newengine-plugin-api",
+ "newengine-plugin-host",
  "newengine-service-api",
  "newengine-ui",
  "newengine-ui-draw",
@@ -1278,6 +1279,7 @@ dependencies = [
  "log",
  "newengine-assets",
  "newengine-core",
+ "newengine-plugin-host",
  "newengine-ui",
  "raw-window-handle",
  "shaderc",
@@ -1310,6 +1312,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "newengine-plugin-host"
+version = "0.1.0"
+dependencies = [
+ "abi_stable",
+ "libloading 0.9.0",
+ "log",
+ "newengine-math",
+ "newengine-plugin-api",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "newengine-previews"
 version = "0.1.0"
 dependencies = [
@@ -1318,6 +1333,7 @@ dependencies = [
  "newengine-assets",
  "newengine-core",
  "newengine-math",
+ "newengine-plugin-host",
  "newengine-primitives",
  "newengine-ui",
  "parking_lot",

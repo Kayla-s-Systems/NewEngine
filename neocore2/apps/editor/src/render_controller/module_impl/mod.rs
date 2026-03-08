@@ -94,13 +94,13 @@ impl<E: Send + 'static> Module<E> for EditorRenderController {
 
         if let Some(snap) = ctx
             .resources()
-            .get::<newengine_core::plugins::PluginsSnapshot>()
+            .get::<newengine_plugin_host::PluginsSnapshot>()
         {
             self.plugins_bridge.publish(snap.clone());
         }
         if let Some(q) = ctx
             .resources_mut()
-            .get_mut::<newengine_core::plugins::PluginControlQueue>()
+            .get_mut::<newengine_plugin_host::PluginControlQueue>()
         {
             for cmd in self.plugins_bridge.drain_cmds() {
                 q.push(cmd);

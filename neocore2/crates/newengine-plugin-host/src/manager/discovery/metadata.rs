@@ -10,6 +10,7 @@ use newengine_plugin_api::{
 
 use super::graph::ScannedDynlibKind;
 use crate::manager::adapter::{ModuleAdapterAny, V1Adapter, V2Adapter, V3Adapter};
+use crate::manager::ui_assets::{extract_plugin_icon, PluginIconData};
 
 pub(super) const PLATFORM_RUNTIME_SYMBOL: &[u8] = b"newengine_platform_runtime_run_v1\0";
 pub(super) const PLUGIN_SIGNATURE_SYMBOL: &[u8] = b"newengine_plugin_signature_v1\0";
@@ -20,6 +21,7 @@ pub(super) struct ScanPluginProbe {
     pub(super) signature: Option<PluginSignatureV1>,
     pub(super) info: Option<PluginInfo>,
     pub(super) descriptor: Option<PluginDescriptor>,
+    pub(super) icon_small: Option<PluginIconData>,
 }
 
 pub(super) fn probe_plugin_metadata(lib: &Library) -> Result<ScanPluginProbe, String> {
@@ -35,9 +37,10 @@ pub(super) fn probe_plugin_metadata(lib: &Library) -> Result<ScanPluginProbe, St
         unsafe { lib.get::<unsafe extern "C" fn() -> PluginRootV1Ref>(PLUGIN_ROOT_SYMBOL) }
     {
         let root = unsafe { sym() };
-        let (_module, info, descriptor) = select_abi_for_scan(root);
+        let (_module, info, descriptor, icon_small) = select_abi_for_scan(root);
         out.info = Some(info);
         out.descriptor = descriptor;
+        out.icon_small = icon_small;
     }
 
     Ok(out)
@@ -195,7 +198,13 @@ fn normalize_version_suffix(raw: &str) -> String {
 
 fn select_abi_for_scan(
     root: PluginRootV1Ref,
-) -> (ModuleAdapterAny, PluginInfo, Option<PluginDescriptor>) {
+) -> (
+    ModuleAdapterAny,
+    PluginInfo,
+    Option<PluginDescriptor>,
+    Option<PluginIconData>,
+) {
+    let icon_small = extract_plugin_icon(root.clone());
     if let Some(create_v3) = root.create_v3() {
         let m3 = create_v3();
         let d = m3.descriptor_v3();
@@ -208,6 +217,7 @@ fn select_abi_for_scan(
             ModuleAdapterAny::V3(V3Adapter { module: m3 }),
             info,
             Some(d),
+            icon_small,
         )
     } else if let Some(create_v2) = root.create_v2() {
         let m2 = create_v2();
@@ -221,10 +231,11 @@ fn select_abi_for_scan(
             ModuleAdapterAny::V2(V2Adapter { module: m2 }),
             info,
             Some(d),
+            icon_small,
         )
     } else {
         let m1: PluginModuleDyn<'static> = root.create()();
         let info = m1.info();
-        (ModuleAdapterAny::V1(V1Adapter { module: m1 }), info, None)
+        (ModuleAdapterAny::V1(V1Adapter { module: m1 }), info, None, icon_small)
     }
 }
