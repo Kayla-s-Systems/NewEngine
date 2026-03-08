@@ -67,10 +67,14 @@ pub struct StartupConfig {
 
     pub ui_backend: UiBackend,
 
-    /// Per-plugin override objects (the `plugins` object from config.json).
+    /// Raw plugin override roots from the `plugins` object in `config.json`.
     ///
-    /// Key: plugin id (e.g. "newengine.logging")
-    /// Value: JSON object with overrides.
+    /// Supported forms:
+    /// - flat plugin ids: `plugins["newengine.logging"]`
+    /// - nested domain wrappers: `plugins.newengine.logging`
+    ///
+    /// Resolution is performed by the plugin config service at query time.
+    /// Exact flat ids take precedence, while nested domain wrappers fill missing keys.
     pub plugins: HashMap<String, Value>,
 
     pub extra: HashMap<String, String>,

@@ -16,58 +16,60 @@
     "debug_text": "NewEngine | Vulkan"
   },
   "plugins": {
-    "newengine.logging": {
-      "filter": null,
-      "timestamp": "millis",
-      "indent": 2,
-      "format": {
-        "preset": "aaa",
-        "time": "time",
-        "brackets": true,
-        "sep": " │ ",
-        "level_width": 5
-      },
-      "sources": {
-        "console": {
-          "enabled": true,
-          "level": "debug",
-          "target": "stderr",
-          "colors": true,
-          "style": "auto"
+    "newengine": {
+      "logging": {
+        "filter": null,
+        "timestamp": "millis",
+        "indent": 2,
+        "format": {
+          "preset": "aaa",
+          "time": "time",
+          "brackets": true,
+          "sep": " │ ",
+          "level_width": 5
         },
-        "file": {
-          "enabled": true,
-          "level": "debug",
-          "path": "cache/logs/log.log",
-          "mode": "truncate"
+        "sources": {
+          "console": {
+            "enabled": true,
+            "level": "debug",
+            "target": "stderr",
+            "colors": true,
+            "style": "auto"
+          },
+          "file": {
+            "enabled": true,
+            "level": "debug",
+            "path": "cache/logs/log.log",
+            "mode": "truncate"
+          }
+        },
+        "include": {
+          "module_path": false,
+          "target": false,
+          "file": false,
+          "line": false
+        },
+        "rolling": {
+          "max_bytes": 33554432,
+          "max_files": 5,
+          "keep_days": 7
+        },
+        "dedup": {
+          "window_ms": null,
+          "capacity": 2048
         }
       },
-      "include": {
-        "module_path": false,
-        "target": false,
-        "file": false,
-        "line": false
-      },
-      "rolling": {
-        "max_bytes": 33554432,
-        "max_files": 5,
-        "keep_days": 7
-      },
-      "dedup": {
-        "window_ms": null,
-        "capacity": 2048
+      "platform.winit": {
+        "title": "Editor",
+        "width": 1600,
+        "height": 900,
+        "placement": {
+          "mode": "centered",
+          "x": 0,
+          "y": -24
+        },
+        "icon": "ui/engine.ico"
       }
-    },
-    "newengine.platform.winit": {
-      "title": "NewEngine Editor",
-      "width": 1600,
-      "height": 900,
-      "placement": {
-        "mode": "centered",
-        "x": 0,
-        "y": -24
-      },
-      "icon": "ui/engine.ico"
     }
   }
 }

@@ -13,6 +13,58 @@ pub const CONFIG_SERVICE_ID: &str = "newengine.config.v1";
 
 const METHOD_GET_PLUGIN_JSON: &str = "get_plugin_json";
 
+fn merge_value_missing(dst: &mut Value, src: &Value) {
+    match src {
+        Value::Object(src_map) => {
+            if dst.is_null() {
+                *dst = Value::Object(Map::new());
+            }
+
+            let Some(dst_map) = dst.as_object_mut() else {
+                return;
+            };
+
+            for (key, src_value) in src_map {
+                match dst_map.get_mut(key) {
+                    Some(dst_value) => merge_value_missing(dst_value, src_value),
+                    None => {
+                        dst_map.insert(key.clone(), src_value.clone());
+                    }
+                }
+            }
+        }
+        _ => {
+            if dst.is_null() {
+                *dst = src.clone();
+            }
+        }
+    }
+}
+
+fn collect_override_ids_from_value(prefix: &str, value: &Value, out: &mut Vec<String>) {
+    match value {
+        Value::Object(map) => {
+            let is_explicit_plugin_id = prefix.contains('.');
+            let is_leaf_like = map.is_empty() || map.values().any(|v| !v.is_object());
+
+            if is_explicit_plugin_id || is_leaf_like {
+                out.push(prefix.to_owned());
+                return;
+            }
+
+            let mut keys: Vec<&String> = map.keys().collect();
+            keys.sort();
+            for key in keys {
+                if let Some(child) = map.get(key) {
+                    collect_override_ids_from_value(&format!("{prefix}.{key}"), child, out);
+                }
+            }
+        }
+        _ => out.push(prefix.to_owned()),
+    }
+}
+
+
 #[derive(Debug, Clone)]
 struct PluginConfigStore {
     /// Raw overrides from the engine config file: config.json.plugins[plugin_id].
@@ -21,38 +73,47 @@ struct PluginConfigStore {
 
 impl PluginConfigStore {
     fn plugin_overrides_with_env(&self, plugin_id: &str) -> Value {
-        fn merge_object(dst: &mut Map<String, Value>, src: &Map<String, Value>) {
-            for (k, v) in src.iter() {
-                if !dst.contains_key(k) {
-                    dst.insert(k.clone(), v.clone());
-                }
-            }
-        }
-
         // Back-compat aliasing: older configs may still use "input".
-        // - If new id has no overrides, use the legacy block.
-        // - If both exist, the new id wins per-key.
-        let legacy_id = if plugin_id == "newengine.input" { Some("input") } else { None };
-
-        let mut root = match self.overrides.get(plugin_id) {
-            Some(v) => v.clone(),
-            None => Value::Object(Map::new()),
+        // Merge order (highest priority first):
+        // 1. exact flat id: plugins["newengine.platform.winit"]
+        // 2. nested domain path: plugins.newengine.platform.winit
+        // 3. legacy alias block: plugins["input"]
+        let legacy_id = if plugin_id == "newengine.input" {
+            Some("input")
+        } else {
+            None
         };
+
+        let mut root = self
+            .overrides
+            .get(plugin_id)
+            .cloned()
+            .unwrap_or_else(|| Value::Object(Map::new()));
+
+        if let Some(nested) = self.lookup_nested(plugin_id) {
+            merge_value_missing(&mut root, nested);
+        }
 
         if let Some(legacy_id) = legacy_id {
             if let Some(legacy) = self.overrides.get(legacy_id) {
-                match (legacy, &mut root) {
-                    (Value::Object(src), Value::Object(dst)) => merge_object(dst, src),
-                    (Value::Object(src), other) if other.is_null() => {
-                        *other = Value::Object(src.clone())
-                    }
-                    _ => {}
-                }
+                merge_value_missing(&mut root, legacy);
             }
         }
 
         apply_env_overrides(plugin_id, &mut root);
         root
+    }
+
+    fn lookup_nested(&self, plugin_id: &str) -> Option<&Value> {
+        let mut parts = plugin_id.split('.');
+        let first = parts.next()?;
+        let mut cur = self.overrides.get(first)?;
+
+        for part in parts {
+            cur = cur.as_object()?.get(part)?;
+        }
+
+        Some(cur)
     }
 }
 
@@ -136,8 +197,19 @@ pub fn get_plugin_overrides_with_env(plugin_id: &str) -> Value {
 /// - `NEWENGINE_PLUGIN_NEWENGINE_ASSETS__assets_root="D:/Data/Assets"`
 pub fn init_plugin_config_service(overrides: HashMap<String, Value>) {
     if !overrides.is_empty() {
-        let mut ids: Vec<String> = overrides.keys().cloned().collect();
+        let mut ids: Vec<String> = Vec::new();
+        let mut roots: Vec<String> = overrides.keys().cloned().collect();
+        roots.sort();
+
+        for root in roots {
+            if let Some(value) = overrides.get(&root) {
+                collect_override_ids_from_value(&root, value, &mut ids);
+            }
+        }
+
         ids.sort();
+        ids.dedup();
+
         log::info!(
             "config: plugin overrides loaded (count={}): {}",
             ids.len(),
@@ -154,6 +226,103 @@ pub fn init_plugin_config_service(overrides: HashMap<String, Value>) {
     let svc = ConfigService { store };
     let dyn_svc = ServiceV1Dyn::from_value(svc, abi_stable::sabi_trait::TD_Opaque);
     let _ = host_api::host_register_service_impl(dyn_svc);
+}
+
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    fn make_store(overrides: HashMap<String, Value>) -> PluginConfigStore {
+        PluginConfigStore { overrides }
+    }
+
+    #[test]
+    fn resolves_exact_flat_plugin_override() {
+        let mut overrides = HashMap::new();
+        overrides.insert(
+            "newengine.logging".to_owned(),
+            json!({
+                "timestamp": "millis",
+                "format": { "preset": "aaa" }
+            }),
+        );
+
+        let store = make_store(overrides);
+        let got = store.plugin_overrides_with_env("newengine.logging");
+        assert_eq!(got["timestamp"], json!("millis"));
+        assert_eq!(got["format"]["preset"], json!("aaa"));
+    }
+
+    #[test]
+    fn resolves_nested_domain_wrapped_plugin_override() {
+        let mut overrides = HashMap::new();
+        overrides.insert(
+            "newengine".to_owned(),
+            json!({
+                "platform": {
+                    "winit": {
+                        "title": "NewEngine Editor",
+                        "placement": {
+                            "mode": "centered",
+                            "x": 0,
+                            "y": -24
+                        }
+                    }
+                }
+            }),
+        );
+
+        let store = make_store(overrides);
+        let got = store.plugin_overrides_with_env("newengine.platform.winit");
+        assert_eq!(got["title"], json!("NewEngine Editor"));
+        assert_eq!(got["placement"]["mode"], json!("centered"));
+        assert_eq!(got["placement"]["y"], json!(-24));
+    }
+
+    #[test]
+    fn exact_flat_override_wins_and_nested_fills_missing_keys() {
+        let mut overrides = HashMap::new();
+        overrides.insert(
+            "newengine".to_owned(),
+            json!({
+                "logging": {
+                    "timestamp": "millis",
+                    "sources": {
+                        "console": {
+                            "enabled": true,
+                            "level": "info"
+                        },
+                        "file": {
+                            "enabled": true,
+                            "path": "cache/logs/default.log"
+                        }
+                    }
+                }
+            }),
+        );
+        overrides.insert(
+            "newengine.logging".to_owned(),
+            json!({
+                "sources": {
+                    "file": {
+                        "path": "cache/logs/log.log",
+                        "mode": "truncate"
+                    }
+                }
+            }),
+        );
+
+        let store = make_store(overrides);
+        let got = store.plugin_overrides_with_env("newengine.logging");
+        assert_eq!(got["timestamp"], json!("millis"));
+        assert_eq!(got["sources"]["console"]["enabled"], json!(true));
+        assert_eq!(got["sources"]["console"]["level"], json!("info"));
+        assert_eq!(got["sources"]["file"]["path"], json!("cache/logs/log.log"));
+        assert_eq!(got["sources"]["file"]["mode"], json!("truncate"));
+        assert_eq!(got["sources"]["file"]["enabled"], json!(true));
+    }
 }
 
 fn sanitize_plugin_id_for_env(id: &str) -> String {
