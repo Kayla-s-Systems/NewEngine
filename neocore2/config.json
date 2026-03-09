@@ -6,14 +6,7 @@
     "modules_dir": "../../plugins"
   },
   "render": {
-    "backend": "vulkan_ash",
-    "clear_color": [
-      0.0,
-      0.0,
-      0.0,
-      0.0
-    ],
-    "debug_text": "NewEngine | Vulkan"
+    "backend": "newengine.renderer.vulkan"
   },
   "plugins": {
     "newengine": {
@@ -70,6 +63,15 @@
         },
         "icon": "ui/engine.ico"
       }
+    },
+    "newengine.renderer.vulkan": {
+      "clear_color": [
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "debug_text": "NewEngine | Vulkan"
     }
   }
 }

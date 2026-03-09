@@ -392,7 +392,7 @@ fn main_impl() -> EngineResult<()> {
         &asset_roots,
     );
 
-    let mut platform_cfg = resolved_platform.config;
+    let mut platform_cfg = resolved_platform.config.clone();
     platform_cfg.icon = icon.map_or(ROption::RNone, ROption::RSome);
 
     let shared_doc: Arc<Mutex<Option<Arc<UiMarkupDoc>>>> = Arc::new(Mutex::new(None));
@@ -439,7 +439,10 @@ fn main_impl() -> EngineResult<()> {
         ui_build,
     );
 
-    runtime.run(&runtime_path, platform_cfg)?;
+    // icon is applied to the resolved runtime config clone passed into the platform runtime.
+    let mut resolved_platform = resolved_platform;
+    resolved_platform.config = platform_cfg;
+    runtime.run(&runtime_path, &resolved_platform)?;
 
     log::info!("engine stopped");
     Ok(())

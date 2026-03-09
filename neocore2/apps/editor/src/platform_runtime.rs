@@ -18,7 +18,8 @@ use newengine_platform_api::{
     PlatformWindowPlacementV1, PlatformWindowReadyV1,
 };
 use newengine_plugin_api::{
-    ConfigBlobV1, ConfigDiagLevelV1, ConfigPatchSourceV1, ConfigPatchV1, HostApiV1,
+    CapabilityDesc, CapabilityKind, CapabilityRole, ConfigBlobV1, ConfigDiagLevelV1,
+    ConfigPatchSourceV1, ConfigPatchV1, HostApiV1, PluginDescriptor, PluginInfo, PluginKind,
     PluginRootV1Ref, PluginSignatureV1,
 };
 use newengine_ui::{
@@ -37,6 +38,9 @@ const CT_JSON_MERGE_PATCH: &str = "application/merge-patch+json";
 
 pub struct ResolvedPlatformRuntimeConfig {
     pub plugin_id: String,
+    pub plugin_name: String,
+    pub plugin_version: String,
+    pub descriptor: PluginDescriptor,
     pub config: PlatformAppConfigV1,
     pub icon_path: Option<String>,
 }
@@ -69,7 +73,23 @@ impl EditorPlatformRuntime {
         }
     }
 
-    pub fn run(mut self, runtime_path: &Path, config: PlatformAppConfigV1) -> EngineResult<()> {
+    pub fn run(mut self, runtime_path: &Path, resolved: &ResolvedPlatformRuntimeConfig) -> EngineResult<()> {
+        let config = resolved.config.clone();
+
+        let info = PluginInfo {
+            id: RString::from(resolved.plugin_id.clone()),
+            name: RString::from(resolved.plugin_name.clone()),
+            version: RString::from(resolved.plugin_version.clone()),
+        };
+
+        newengine_plugin_host::register_external_runtime_plugin(
+            runtime_path.to_path_buf(),
+            info,
+            resolved.descriptor.clone(),
+            "running",
+        )
+            .map_err(EngineError::other)?;
+
         log::info!("platform runtime: loading '{}'", runtime_path.display());
 
         let lib = unsafe { Library::new(runtime_path) }
@@ -104,6 +124,8 @@ impl EditorPlatformRuntime {
         if self.started {
             let _ = self.engine.shutdown();
         }
+
+        newengine_plugin_host::host_context::unregister_by_owner(&resolved.plugin_id);
 
         match &result {
             Ok(()) => log::info!("platform runtime: exited cleanly"),
@@ -573,8 +595,12 @@ pub fn resolve_platform_runtime_config(
         Ok(sym) => sym,
         Err(_) => {
             log::info!("platform runtime: plugin metadata not exported; using legacy startup window config");
+            let descriptor = synthesize_platform_descriptor(PLATFORM_PLUGIN_ID, "NewEngine Platform Runtime", "-");
             return Ok(ResolvedPlatformRuntimeConfig {
                 plugin_id: PLATFORM_PLUGIN_ID.to_owned(),
+                plugin_name: "NewEngine Platform Runtime".to_owned(),
+                plugin_version: "-".to_owned(),
+                descriptor,
                 config: legacy,
                 icon_path: startup.window_icon_path.clone(),
             });
@@ -584,16 +610,22 @@ pub fn resolve_platform_runtime_config(
     let root = unsafe { root_sym() };
     let Some(create_v3) = root.create_v3() else {
         log::info!("platform runtime: plugin metadata ABI V3 not available; using legacy startup window config");
+        let descriptor = synthesize_platform_descriptor(PLATFORM_PLUGIN_ID, "NewEngine Platform Runtime", "-");
         return Ok(ResolvedPlatformRuntimeConfig {
             plugin_id: PLATFORM_PLUGIN_ID.to_owned(),
+            plugin_name: "NewEngine Platform Runtime".to_owned(),
+            plugin_version: "-".to_owned(),
+            descriptor,
             config: legacy,
             icon_path: startup.window_icon_path.clone(),
         });
     };
 
     let module = create_v3();
-    let descriptor = module.descriptor_v3();
+    let descriptor = ensure_platform_runtime_capabilities(module.descriptor_v3());
     let plugin_id = descriptor.id.to_string();
+    let plugin_name = descriptor.name.to_string();
+    let plugin_version = descriptor.version.to_string();
 
     let defaults = module
         .config_defaults_v1()
@@ -631,9 +663,108 @@ pub fn resolve_platform_runtime_config(
 
     Ok(ResolvedPlatformRuntimeConfig {
         plugin_id,
+        plugin_name,
+        plugin_version,
+        descriptor,
         config,
         icon_path,
     })
+}
+
+fn ensure_platform_runtime_capabilities(mut descriptor: PluginDescriptor) -> PluginDescriptor {
+    fn has_cap(
+        descriptor: &PluginDescriptor,
+        id: &str,
+        role: CapabilityRole,
+        kind: CapabilityKind,
+        version: u32,
+    ) -> bool {
+        descriptor.capabilities.iter().any(|cap| {
+            cap.id.as_str() == id && cap.role == role && cap.kind == kind && cap.version >= version
+        })
+    }
+
+    let required = [
+        (
+            "platform.runtime.v1",
+            CapabilityRole::Provides,
+            CapabilityKind::Other,
+            1,
+            "{\"role\":\"platform-runtime\"}",
+        ),
+        (
+            "platform.window.v1",
+            CapabilityRole::Provides,
+            CapabilityKind::Other,
+            1,
+            "{\"role\":\"window\"}",
+        ),
+        (
+            "platform.surface.v1",
+            CapabilityRole::Provides,
+            CapabilityKind::Other,
+            1,
+            "{\"role\":\"surface\"}",
+        ),
+        (
+            "platform.input.events.v1",
+            CapabilityRole::Provides,
+            CapabilityKind::EventsV1,
+            1,
+            "{\"role\":\"input-events\"}",
+        ),
+    ];
+
+    for (id, role, kind, version, json) in required {
+        if !has_cap(&descriptor, id, role, kind, version) {
+            descriptor
+                .capabilities
+                .push(CapabilityDesc::new(id, role, kind, version).with_json(json));
+        }
+    }
+
+    descriptor
+}
+
+fn synthesize_platform_descriptor(id: &str, name: &str, version: &str) -> PluginDescriptor {
+    PluginDescriptor::builder(id, name, version, PluginKind::Runtime)
+        .push(
+            CapabilityDesc::new(
+                "platform.runtime.v1",
+                CapabilityRole::Provides,
+                CapabilityKind::Other,
+                1,
+            )
+                .with_json("{\"role\":\"platform-runtime\"}"),
+        )
+        .push(
+            CapabilityDesc::new(
+                "platform.window.v1",
+                CapabilityRole::Provides,
+                CapabilityKind::Other,
+                1,
+            )
+                .with_json("{\"role\":\"window\"}"),
+        )
+        .push(
+            CapabilityDesc::new(
+                "platform.surface.v1",
+                CapabilityRole::Provides,
+                CapabilityKind::Other,
+                1,
+            )
+                .with_json("{\"role\":\"surface\"}"),
+        )
+        .push(
+            CapabilityDesc::new(
+                "platform.input.events.v1",
+                CapabilityRole::Provides,
+                CapabilityKind::EventsV1,
+                1,
+            )
+                .with_json("{\"role\":\"input-events\"}"),
+        )
+        .build()
 }
 
 pub fn detect_platform_runtime_path(modules_dir: &Path) -> EngineResult<PathBuf> {

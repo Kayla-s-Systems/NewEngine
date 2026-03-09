@@ -3,12 +3,14 @@
 use std::ffi::OsStr;
 use std::path::{Path, PathBuf};
 
+use abi_stable::std_types::RString;
 use libloading::Library;
 use newengine_core::host_events::{WindowHandles, WindowInitSize};
 use newengine_core::render::{RenderApi, RenderApiRef, RENDER_API_ID, RENDER_API_PROVIDE};
 use newengine_core::{EngineError, EngineResult, Module, ModuleCtx};
 use newengine_plugin_api::{
-    ConfigBlobV1, HostApiV1, RenderBackendDescriptorV1, RENDER_BACKEND_DESCRIBE_SYMBOL,
+    CapabilityDesc, CapabilityKind, CapabilityRole, ConfigBlobV1, HostApiV1, PluginDescriptor,
+    PluginInfo, PluginKind, RenderBackendDescriptorV1, RENDER_BACKEND_DESCRIBE_SYMBOL,
 };
 use serde_json::{Map, Value};
 
@@ -51,6 +53,7 @@ pub struct RenderBackendRuntimeModule {
     lib: Option<Library>,
     api: Option<RenderApiRef>,
     resolved_path: Option<PathBuf>,
+    registered_backend_id: Option<String>,
 }
 
 impl RenderBackendRuntimeModule {
@@ -62,8 +65,57 @@ impl RenderBackendRuntimeModule {
             lib: None,
             api: None,
             resolved_path: None,
+            registered_backend_id: None,
         }
     }
+}
+
+
+fn synthesize_render_backend_plugin_descriptor(candidate: &RenderBackendCandidate) -> PluginDescriptor {
+    PluginDescriptor::builder(
+        candidate.id.as_str(),
+        candidate.name.as_str(),
+        candidate.version.as_str(),
+        PluginKind::Runtime,
+    )
+        .push(
+            CapabilityDesc::new(
+                "render.backend.v1",
+                CapabilityRole::Provides,
+                CapabilityKind::Other,
+                1,
+            )
+                .with_json("{\"role\":\"render-backend\"}"),
+        )
+        .push(
+            CapabilityDesc::new(
+                "render.frame.v1",
+                CapabilityRole::Provides,
+                CapabilityKind::Other,
+                1,
+            )
+                .with_json("{\"role\":\"frame\"}"),
+        )
+        .push(
+            CapabilityDesc::new(
+                "platform.window.v1",
+                CapabilityRole::Requires,
+                CapabilityKind::Other,
+                1,
+            )
+                .with_json("{\"role\":\"window\"}"),
+        )
+        .push(
+            CapabilityDesc::new(
+                "platform.surface.v1",
+                CapabilityRole::Requires,
+                CapabilityKind::Other,
+                1,
+            )
+                .with_json("{\"role\":\"surface\"}"),
+        )
+        .requires_service("asset.manager", 1, "{\"role\":\"shader-assets\"}")
+        .build()
 }
 
 impl<E: Send + 'static> Module<E> for RenderBackendRuntimeModule {
@@ -150,11 +202,26 @@ impl<E: Send + 'static> Module<E> for RenderBackendRuntimeModule {
                 })?
         };
 
+        let descriptor = synthesize_render_backend_plugin_descriptor(&candidate);
+        let info = PluginInfo {
+            id: RString::from(candidate.id.clone()),
+            name: RString::from(candidate.name.clone()),
+            version: RString::from(candidate.version.clone()),
+        };
+        newengine_plugin_host::register_external_runtime_plugin(
+            candidate.path.clone(),
+            info,
+            descriptor,
+            "running",
+        )
+            .map_err(EngineError::other)?;
+
         let api = RenderApiRef::from_box(api);
         ctx.resources_mut()
             .insert(effective.clone());
         ctx.resources_mut().register_api(RENDER_API_ID, api.clone())?;
 
+        self.registered_backend_id = Some(candidate.id.clone());
         self.resolved_path = Some(candidate.path);
         self.api = Some(api);
         self.lib = Some(lib);
@@ -167,6 +234,9 @@ impl<E: Send + 'static> Module<E> for RenderBackendRuntimeModule {
             .unregister_api::<RenderApiRef>(RENDER_API_ID);
         let _ = ctx.resources_mut().remove::<ResolvedRenderBackendConfig>();
         self.api = None;
+        if let Some(id) = self.registered_backend_id.take() {
+            newengine_plugin_host::host_context::unregister_by_owner(&id);
+        }
         self.resolved_path = None;
         self.lib = None;
         Ok(())
