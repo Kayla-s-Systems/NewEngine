@@ -62,8 +62,6 @@ pub struct StartupConfig {
     pub modules_dir: PathBuf,
 
     pub render_backend: String,
-    pub render_clear_color: [f32; 4],
-    pub render_debug_text: String,
 
     pub ui_backend: UiBackend,
 
@@ -97,9 +95,7 @@ impl Default for StartupConfig {
 
             modules_dir: PathBuf::from("./"),
 
-            render_backend: "vulkan".to_owned(),
-            render_clear_color: [0.02, 0.02, 0.03, 1.0],
-            render_debug_text: "NewEngine".to_owned(),
+            render_backend: "newengine.renderer.vulkan".to_owned(),
 
             ui_backend: UiBackend::default(),
 

@@ -5,7 +5,7 @@ use std::path::Path;
 use libloading::Library;
 use newengine_plugin_api::{
     PluginBootstrapPhase, PluginDescriptor, PluginInfo, PluginModuleDyn, PluginRootV1Ref,
-    PluginSignatureV1,
+    PluginSignatureV1, RenderBackendDescriptorV1, RENDER_BACKEND_DESCRIBE_SYMBOL,
 };
 
 use super::graph::ScannedDynlibKind;
@@ -13,6 +13,7 @@ use crate::manager::adapter::{ModuleAdapterAny, V1Adapter, V2Adapter, V3Adapter}
 use crate::manager::ui_assets::{extract_plugin_icon, PluginIconData};
 
 pub(super) const PLATFORM_RUNTIME_SYMBOL: &[u8] = b"newengine_platform_runtime_run_v1\0";
+pub(super) const RENDER_BACKEND_SYMBOL: &[u8] = b"newengine_render_backend_create_v1\0";
 pub(super) const PLUGIN_SIGNATURE_SYMBOL: &[u8] = b"newengine_plugin_signature_v1\0";
 pub(super) const PLUGIN_ROOT_SYMBOL: &[u8] = b"export_plugin_root\0";
 
@@ -44,6 +45,30 @@ pub(super) fn probe_plugin_metadata(lib: &Library) -> Result<ScanPluginProbe, St
     }
 
     Ok(out)
+}
+
+
+fn read_descriptor_field(ptr: *const u8, len: usize) -> String {
+    if ptr.is_null() || len == 0 {
+        return String::new();
+    }
+
+    let bytes = unsafe { std::slice::from_raw_parts(ptr, len) };
+    String::from_utf8_lossy(bytes).trim().to_owned()
+}
+
+pub(super) fn probe_render_backend_metadata(lib: &Library) -> Option<(String, String)> {
+    let sym = unsafe { lib.get::<unsafe extern "C" fn() -> RenderBackendDescriptorV1>(RENDER_BACKEND_DESCRIBE_SYMBOL) }.ok()?;
+    let meta = unsafe { sym() };
+
+    let id = read_descriptor_field(meta.id_ptr, meta.id_len);
+    let version = read_descriptor_field(meta.version_ptr, meta.version_len);
+
+    if id.is_empty() {
+        return None;
+    }
+
+    Some((id, if version.is_empty() { "-".to_owned() } else { version }))
 }
 
 pub(super) fn platform_runtime_identity_from_probe(
@@ -238,4 +263,17 @@ fn select_abi_for_scan(
         let info = m1.info();
         (ModuleAdapterAny::V1(V1Adapter { module: m1 }), info, None, icon_small)
     }
+}
+
+
+pub(super) fn infer_render_backend_identity(path: &Path) -> (String, String) {
+    let Ok(lib) = (unsafe { Library::new(path) }) else {
+        return infer_platform_runtime_identity(path);
+    };
+
+    if let Some((id, version)) = probe_render_backend_metadata(&lib) {
+        return (id, version);
+    }
+
+    infer_platform_runtime_identity(path)
 }

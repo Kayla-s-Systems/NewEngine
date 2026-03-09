@@ -8,7 +8,7 @@ use std::time::Duration;
 use crate::error::{VkRenderError, VkResult};
 use blake3::Hasher;
 use newengine_assets::{wait_ready, AssetAccess, AssetService, AssetServiceClient};
-use newengine_plugin_host::default_host_api;
+use newengine_plugin_api::HostApiV1;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ShaderStage {
@@ -59,8 +59,8 @@ pub struct ShaderBaker {
 }
 
 impl ShaderBaker {
-    pub fn new() -> VkResult<Self> {
-        let assets = AssetServiceClient::new(default_host_api());
+    pub fn new(host: HostApiV1) -> VkResult<Self> {
+        let assets = AssetServiceClient::new(host);
 
         let cache_dir = shader_cache_dir();
         if let Err(e) = fs::create_dir_all(&cache_dir) {

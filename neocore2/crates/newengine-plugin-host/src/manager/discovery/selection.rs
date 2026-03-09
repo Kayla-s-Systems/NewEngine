@@ -17,7 +17,7 @@ pub(super) struct LoadSelection {
 #[derive(Debug, Clone)]
 pub(super) enum SelectionDecision {
     Selected,
-    Runtime,
+    Runtime { label: &'static str },
     Unknown,
     AlreadyLoaded,
     Filtered { filter_label: &'static str },
@@ -32,7 +32,7 @@ impl SelectionDecision {
 
     #[inline]
     pub(super) fn is_runtime(&self) -> bool {
-        matches!(self, Self::Runtime)
+        matches!(self, Self::Runtime { .. })
     }
 
     #[inline]
@@ -44,7 +44,7 @@ impl SelectionDecision {
     pub(super) fn selected_label(&self) -> &'static str {
         match self {
             Self::Selected => "yes",
-            Self::Runtime => "runtime",
+            Self::Runtime { .. } => "runtime",
             Self::Unknown
             | Self::AlreadyLoaded
             | Self::Filtered { .. }
@@ -56,7 +56,7 @@ impl SelectionDecision {
     pub(super) fn reason_label(&self) -> String {
         match self {
             Self::Selected => "phase match".to_owned(),
-            Self::Runtime => "platform runtime".to_owned(),
+            Self::Runtime { label } => format!("{label} runtime"),
             Self::Unknown => "unknown dynlib".to_owned(),
             Self::AlreadyLoaded => "already loaded".to_owned(),
             Self::Filtered { filter_label } => format!("filtered by {filter_label}"),
@@ -77,7 +77,12 @@ pub(super) fn build_load_selection(
 
     for item in &graph.items {
         let decision = match &item.kind {
-            ScannedDynlibKind::PlatformRuntime { .. } => SelectionDecision::Runtime,
+            ScannedDynlibKind::PlatformRuntime { .. } => SelectionDecision::Runtime {
+                label: "platform",
+            },
+            ScannedDynlibKind::RenderBackend { .. } => SelectionDecision::Runtime {
+                label: "render backend",
+            },
             ScannedDynlibKind::Unknown => SelectionDecision::Unknown,
             ScannedDynlibKind::Plugin { id, phase, .. } => {
                 if loaded_ids.contains(id) {

@@ -149,8 +149,9 @@ struct EngineJson {
 #[derive(Deserialize)]
 struct RenderJson {
     backend: Option<String>,
-    clear_color: Option<[f32; 4]>,
-    debug_text: Option<String>,
+
+    #[serde(flatten)]
+    extra: std::collections::HashMap<String, serde_json::Value>,
 }
 
 #[derive(Deserialize)]
@@ -321,23 +322,25 @@ fn apply_root(cfg: &mut StartupConfig, report: &mut StartupLoadReport, src: Root
 
     if let Some(render) = src.render {
         if let Some(backend) = render.backend {
-            apply_string(report, "render_backend", &mut cfg.render_backend, backend);
-        }
-        if let Some(color) = render.clear_color {
-            apply_color(
-                report,
-                "render_clear_color",
-                &mut cfg.render_clear_color,
-                color,
-            );
-        }
-        if let Some(text) = render.debug_text {
             apply_string(
                 report,
-                "render_debug_text",
-                &mut cfg.render_debug_text,
-                text,
+                "render_backend",
+                &mut cfg.render_backend,
+                normalize_render_backend_id(&backend),
             );
+        }
+
+        if !render.extra.is_empty() {
+            let mut keys: Vec<String> = render.extra.keys().cloned().collect();
+            keys.sort();
+            report.overrides.push(StartupOverride {
+                key: "render.*",
+                from: "provided".to_owned(),
+                to: format!(
+                    "ignored plugin-owned render keys: {} (configure renderer via `plugins.<renderer-id>`)",
+                    keys.join(", ")
+                ),
+            });
         }
     }
 
@@ -354,13 +357,28 @@ fn collect_plugin_override_report_entries(
     value: &serde_json::Value,
     out: &mut Vec<StartupPluginOverride>,
 ) {
-    fn visit(path: String, value: &serde_json::Value, out: &mut Vec<StartupPluginOverride>) {
+    fn visit(
+        path: String,
+        value: &serde_json::Value,
+        out: &mut Vec<StartupPluginOverride>,
+        is_root: bool,
+    ) {
         match value {
             serde_json::Value::Object(map) => {
-                let is_explicit_plugin_id = path.contains('.');
-                let is_leaf_like = map.is_empty() || map.values().any(|v| !v.is_object());
+                let is_leaf_like =
+                    map.is_empty() || map.keys().any(|key| key.contains('.')) || map.values().any(|v| !v.is_object());
 
-                if is_explicit_plugin_id || is_leaf_like {
+                if is_leaf_like {
+                    out.push(StartupPluginOverride {
+                        plugin_id: path,
+                        key: "plugins.*",
+                        from: "<plugin defaults>".to_owned(),
+                        to: summarize_json(value),
+                    });
+                    return;
+                }
+
+                if is_root && map.is_empty() {
                     out.push(StartupPluginOverride {
                         plugin_id: path,
                         key: "plugins.*",
@@ -374,7 +392,7 @@ fn collect_plugin_override_report_entries(
                 keys.sort();
                 for key in keys {
                     if let Some(child) = map.get(key) {
-                        visit(format!("{path}.{key}"), child, out);
+                        visit(format!("{path}.{key}"), child, out, false);
                     }
                 }
             }
@@ -389,7 +407,7 @@ fn collect_plugin_override_report_entries(
         }
     }
 
-    visit(root_key.to_owned(), value, out);
+    visit(root_key.to_owned(), value, out, true);
 }
 
 fn dedup_plugin_override_report_entries(entries: &mut Vec<StartupPluginOverride>) {
@@ -398,6 +416,19 @@ fn dedup_plugin_override_report_entries(entries: &mut Vec<StartupPluginOverride>
         by_id.insert(entry.plugin_id.clone(), entry);
     }
     *entries = by_id.into_values().collect();
+}
+
+
+fn normalize_render_backend_id(raw: &str) -> String {
+    let trimmed = raw.trim();
+    if trimmed.eq_ignore_ascii_case("vulkan")
+        || trimmed.eq_ignore_ascii_case("vulkan_ash")
+        || trimmed.eq_ignore_ascii_case("newengine.renderer.vulkan")
+    {
+        return "newengine.renderer.vulkan".to_owned();
+    }
+
+    trimmed.to_owned()
 }
 
 fn parse_placement(p: WindowPlacementJson) -> Option<WindowPlacement> {
@@ -576,6 +607,7 @@ fn apply_path(report: &mut StartupLoadReport, key: &'static str, dst: &mut PathB
 }
 
 #[inline]
+#[allow(dead_code)]
 fn apply_color(report: &mut StartupLoadReport, key: &'static str, dst: &mut [f32; 4], v: [f32; 4]) {
     let from = format!("{:.3},{:.3},{:.3},{:.3}", dst[0], dst[1], dst[2], dst[3]);
     let to = format!("{:.3},{:.3},{:.3},{:.3}", v[0], v[1], v[2], v[3]);

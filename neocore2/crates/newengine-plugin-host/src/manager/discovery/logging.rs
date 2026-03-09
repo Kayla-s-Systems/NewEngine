@@ -17,6 +17,10 @@ pub(super) fn emit_discovery_logs(graph: &DiscoveryGraph) {
                 "platform_runtime_candidates",
                 graph.platform_runtime_count.to_string(),
             ),
+            (
+                "render_backend_candidates",
+                graph.render_backend_count.to_string(),
+            ),
             ("bootstrap_candidates", graph.bootstrap_total.to_string()),
             ("engine_candidates", graph.engine_total.to_string()),
             ("unknown_dynlibs", graph.unknown_dynlibs.len().to_string()),
@@ -96,6 +100,7 @@ pub(super) fn emit_selection_table(
 fn scanned_kind_label(kind: &ScannedDynlibKind) -> &'static str {
     match kind {
         ScannedDynlibKind::PlatformRuntime { .. } => "platform-runtime",
+        ScannedDynlibKind::RenderBackend { .. } => "render-backend",
         ScannedDynlibKind::Plugin {
             descriptor_kind, ..
         } => match descriptor_kind {
@@ -113,6 +118,7 @@ fn scanned_kind_label(kind: &ScannedDynlibKind) -> &'static str {
 fn scanned_phase_label(kind: &ScannedDynlibKind) -> &'static str {
     match kind {
         ScannedDynlibKind::PlatformRuntime { .. } => "platform",
+        ScannedDynlibKind::RenderBackend { .. } => "runtime",
         ScannedDynlibKind::Plugin { phase, .. } => phase_name(*phase),
         ScannedDynlibKind::Unknown => "-",
     }
@@ -121,6 +127,7 @@ fn scanned_phase_label(kind: &ScannedDynlibKind) -> &'static str {
 fn scanned_id(kind: &ScannedDynlibKind) -> String {
     match kind {
         ScannedDynlibKind::PlatformRuntime { id, .. } => id.clone(),
+        ScannedDynlibKind::RenderBackend { id, .. } => id.clone(),
         ScannedDynlibKind::Plugin { id, .. } => id.clone(),
         ScannedDynlibKind::Unknown => "<unknown>".to_owned(),
     }
@@ -129,6 +136,7 @@ fn scanned_id(kind: &ScannedDynlibKind) -> String {
 fn scanned_version(kind: &ScannedDynlibKind) -> String {
     match kind {
         ScannedDynlibKind::PlatformRuntime { version, .. } => version.clone(),
+        ScannedDynlibKind::RenderBackend { version, .. } => version.clone(),
         ScannedDynlibKind::Plugin { version, .. } => version.clone(),
         ScannedDynlibKind::Unknown => "-".to_owned(),
     }
@@ -137,6 +145,7 @@ fn scanned_version(kind: &ScannedDynlibKind) -> String {
 fn scanned_declared_caps(kind: &ScannedDynlibKind) -> String {
     match kind {
         ScannedDynlibKind::PlatformRuntime { .. } => "-".to_owned(),
+        ScannedDynlibKind::RenderBackend { .. } => "-".to_owned(),
         ScannedDynlibKind::Plugin {
             declared_capabilities,
             ..

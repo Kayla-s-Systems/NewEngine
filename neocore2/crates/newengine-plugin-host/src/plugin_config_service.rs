@@ -51,21 +51,32 @@ fn merge_missing_fields(dst: &mut Value, src: &Value) {
 }
 
 fn collect_override_ids(prefix: &str, value: &Value, out: &mut BTreeSet<String>) {
+    collect_override_ids_inner(prefix, value, out, true);
+}
+
+fn collect_override_ids_inner(prefix: &str, value: &Value, out: &mut BTreeSet<String>, is_root: bool) {
     match value {
         Value::Object(map) => {
-            let is_explicit_plugin_id = prefix.contains('.');
             let is_leaf_override =
                 map.is_empty() || map.keys().any(|key| key.contains('.')) || map.values().any(|v| !v.is_object());
 
-            if is_explicit_plugin_id || is_leaf_override {
+            if is_leaf_override {
                 out.insert(prefix.to_owned());
                 return;
             }
 
-            for key in map.keys() {
+            if is_root && map.is_empty() {
+                out.insert(prefix.to_owned());
+                return;
+            }
+
+            let mut keys: Vec<&String> = map.keys().collect();
+            keys.sort();
+
+            for key in keys {
                 if let Some(child) = map.get(key) {
                     let next = format!("{prefix}.{key}");
-                    collect_override_ids(&next, child, out);
+                    collect_override_ids_inner(&next, child, out, false);
                 }
             }
         }
@@ -104,6 +115,20 @@ impl PluginConfigStore {
 
     fn lookup_nested_override(&self, plugin_id: &str) -> Option<&Value> {
         let parts: Vec<&str> = plugin_id.split('.').collect();
+        if parts.is_empty() {
+            return None;
+        }
+
+        for split_at in (1..parts.len()).rev() {
+            let prefix = parts[..split_at].join(".");
+            let Some(value) = self.overrides.get(&prefix) else {
+                continue;
+            };
+            if let Some(found) = lookup_path_flexible(value, &parts[split_at..]) {
+                return Some(found);
+            }
+        }
+
         let (root, tail) = parts.split_first()?;
         let value = self.overrides.get(*root)?;
         lookup_path_flexible(value, tail)
@@ -469,6 +494,52 @@ mod tests {
         assert_eq!(got["placement"]["x"], json!(0));
         assert_eq!(got["placement"]["y"], json!(-24));
         assert_eq!(got["icon"], json!("ui/engine.ico"));
+    }
+
+    #[test]
+    fn resolves_grouped_exact_prefix_override_for_renderer_backend() {
+        let mut overrides = HashMap::new();
+        overrides.insert(
+            "newengine.renderer".to_owned(),
+            json!({
+                "vulkan": {
+                    "clear_color": [0.0, 0.0, 0.0, 0.0],
+                    "debug_text": "NewEngine | Vulkan"
+                }
+            }),
+        );
+
+        let store = make_store(overrides);
+        let got = store.resolve_plugin_overrides("newengine.renderer.vulkan");
+
+        assert_eq!(got["clear_color"], json!([0.0, 0.0, 0.0, 0.0]));
+        assert_eq!(got["debug_text"], json!("NewEngine | Vulkan"));
+    }
+
+    #[test]
+    fn exact_renderer_backend_override_wins_over_group_prefix() {
+        let mut overrides = HashMap::new();
+        overrides.insert(
+            "newengine.renderer".to_owned(),
+            json!({
+                "vulkan": {
+                    "clear_color": [0.0, 0.0, 0.0, 0.0],
+                    "debug_text": "Grouped"
+                }
+            }),
+        );
+        overrides.insert(
+            "newengine.renderer.vulkan".to_owned(),
+            json!({
+                "debug_text": "Exact"
+            }),
+        );
+
+        let store = make_store(overrides);
+        let got = store.resolve_plugin_overrides("newengine.renderer.vulkan");
+
+        assert_eq!(got["clear_color"], json!([0.0, 0.0, 0.0, 0.0]));
+        assert_eq!(got["debug_text"], json!("Exact"));
     }
 
     #[test]

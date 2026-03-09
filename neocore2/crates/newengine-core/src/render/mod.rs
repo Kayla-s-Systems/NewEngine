@@ -700,7 +700,12 @@ pub struct RenderApiRef(Arc<Mutex<Box<dyn RenderApi + 'static>>>);
 impl RenderApiRef {
     #[inline]
     pub fn new(api: impl RenderApi + 'static) -> Self {
-        Self(Arc::new(Mutex::new(Box::new(api))))
+        Self::from_box(Box::new(api))
+    }
+
+    #[inline]
+    pub fn from_box(api: Box<dyn RenderApi + 'static>) -> Self {
+        Self(Arc::new(Mutex::new(api)))
     }
 
     #[inline]

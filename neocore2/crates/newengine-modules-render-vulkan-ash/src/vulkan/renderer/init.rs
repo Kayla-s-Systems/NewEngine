@@ -2,6 +2,7 @@ use crate::error::{VkRenderError, VkResult};
 
 use ash::vk;
 use ash::{Device, Entry};
+use newengine_plugin_api::HostApiV1;
 use raw_window_handle::{RawDisplayHandle, RawWindowHandle};
 use std::ffi::CString;
 use std::time::Instant;
@@ -22,6 +23,7 @@ use crate::vulkan::{ShaderBaker, ShaderPack};
 
 impl VulkanRenderer {
     pub unsafe fn new(
+        host: HostApiV1,
         display: RawDisplayHandle,
         window: RawWindowHandle,
         width: u32,
@@ -100,7 +102,7 @@ impl VulkanRenderer {
             vk::Format::D32_SFLOAT,
         )?;
 
-        let baker = ShaderBaker::new()?;
+        let baker = ShaderBaker::new(host)?;
         let shader_pack: ShaderPack = baker.bake_pack()?;
 
         let (tri_pipeline_layout, tri_pipeline) =

@@ -10,6 +10,10 @@ pub(super) enum ScannedDynlibKind {
         id: String,
         version: String,
     },
+    RenderBackend {
+        id: String,
+        version: String,
+    },
     Plugin {
         id: String,
         version: String,
@@ -35,6 +39,7 @@ pub(in crate::manager) struct DiscoveryGraph {
     pub(super) items: Vec<ScannedDynlib>,
     pub(super) scan_errors: Vec<String>,
     pub(super) platform_runtime_count: usize,
+    pub(super) render_backend_count: usize,
     pub(super) bootstrap_total: usize,
     pub(super) engine_total: usize,
     pub(super) unknown_dynlibs: Vec<String>,
