@@ -38,7 +38,6 @@ newengine-plugin-host = { path = "../../crates/newengine-plugin-host" }
 newengine-ui = { path = "../../crates/newengine-ui", features = ["images", "assets"] }
 newengine-assets = { path = "../../crates/newengine-assets" }
 newengine-platform-api = { path = "../../crates/newengine-platform-api" }
-newengine-modules-render-vulkan-ash = { path = "../../crates/newengine-modules-render-vulkan-ash" }
 
 newengine-scene = { path = "../../crates/newengine-scene", features = ["runtime"] }
 newengine-transform = { path = "../../crates/newengine-transform", features = ["ecs", "service"], default-features = false }

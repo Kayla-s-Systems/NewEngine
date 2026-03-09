@@ -8,7 +8,6 @@ use newengine_core::{
     PluginFaultTolerance, Services, ShutdownToken, StartupConfig, StartupLoader,
 };
 
-use newengine_modules_render_vulkan_ash::VulkanAshRenderModule;
 use newengine_platform_api::PlatformAppIconV1;
 
 use newengine_assets::{wait_ready, AssetAccess, AssetService, AssetServiceClient};
@@ -24,6 +23,7 @@ mod platform_input;
 mod platform_runtime;
 mod plugin_manager;
 mod render_controller;
+mod render_runtime;
 mod scene_bootstrap;
 mod scene_bridge;
 mod scene_io_service;
@@ -78,25 +78,19 @@ fn register_render_from_startup(
     scene: Arc<scene_bridge::SceneBridge>,
     previews: Arc<parking_lot::Mutex<newengine_previews::PrimitivePreviewService>>,
 ) -> EngineResult<()> {
-    let backend = startup.render_backend.trim();
+    engine.register_module(Box::new(render_runtime::RenderBackendRuntimeModule::new(
+        startup.render_backend.clone(),
+        startup.modules_dir.clone(),
+    )))?;
 
-    if backend.eq_ignore_ascii_case("vulkan_ash") || backend.eq_ignore_ascii_case("vulkan") {
-        engine.register_module(Box::new(VulkanAshRenderModule::new()))?;
+    engine.register_module(Box::new(render_controller::EditorRenderController::new(
+        viewport,
+        plugins,
+        scene,
+        previews,
+    )))?;
 
-        engine.register_module(Box::new(render_controller::EditorRenderController::new(
-            startup.render_clear_color,
-            viewport,
-            plugins,
-            scene,
-            previews,
-        )))?;
-
-        return Ok(());
-    }
-
-    Err(EngineError::other(format!(
-        "unsupported render backend '{backend}'"
-    )))
+    Ok(())
 }
 
 fn build_engine_from_startup(startup: &StartupConfig) -> EngineResult<Engine<()>> {

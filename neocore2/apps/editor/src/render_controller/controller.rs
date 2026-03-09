@@ -70,7 +70,6 @@ pub struct EditorRenderController {
 impl EditorRenderController {
     #[inline]
     pub fn new(
-        clear_color: [f32; 4],
         viewport_bridge: std::sync::Arc<ViewportBridge>,
         plugins_bridge: std::sync::Arc<PluginManagerBridge>,
         scene_bridge: std::sync::Arc<SceneBridge>,
@@ -82,7 +81,7 @@ impl EditorRenderController {
             Projection::Perspective(Perspective::new(60.0f32.to_radians(), 1.0, 0.01, 1000.0));
 
         Self {
-            clear_color,
+            clear_color: [0.0, 0.0, 0.0, 1.0],
             last_w: 0,
             last_h: 0,
 

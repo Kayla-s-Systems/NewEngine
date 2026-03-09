@@ -109,6 +109,10 @@ impl<E: Send + 'static> Module<E> for EditorRenderController {
 
         let (w, h) = Self::read_window_size(ctx);
 
+        if let Some(cfg) = ctx.resources().get::<crate::render_runtime::ResolvedRenderBackendConfig>() {
+            self.clear_color = cfg.clear_color;
+        }
+
         let api = match require_render_api(ctx) {
             Ok(api) => api,
             Err(_) => return Ok(()),
