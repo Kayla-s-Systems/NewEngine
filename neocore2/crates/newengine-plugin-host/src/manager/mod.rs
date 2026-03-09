@@ -45,7 +45,24 @@ impl PluginManager {
 
     #[inline]
     pub fn snapshot(&self) -> Vec<PluginSnapshotEntry> {
-        types::snapshot_impl(&self.loaded)
+        let mut out = types::snapshot_impl(&self.loaded);
+        out.extend(
+            crate::host_context::list_external_runtime_plugins()
+                .into_iter()
+                .map(|p| PluginSnapshotEntry {
+                    path: p.path,
+                    id: p.id,
+                    name: p.name,
+                    version: p.version,
+                    kind: p.kind,
+                    capabilities: p.capabilities,
+                    state: p.state,
+                    disabled_reason: p.disabled_reason,
+                    icon_small: None,
+                }),
+        );
+        out.sort_by(|a, b| a.id.cmp(&b.id));
+        out
     }
 }
 

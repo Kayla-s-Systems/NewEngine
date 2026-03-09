@@ -51,6 +51,21 @@ fn collect_providers(loaded: &[LoadedPlugin]) -> HashMap<CapKey, u32> {
         }
     }
 
+
+    for d in crate::host_context::list_external_runtime_descriptors() {
+        for c in d.capabilities.iter() {
+            if c.role != CapabilityRole::Provides {
+                continue;
+            }
+
+            let key = cap_key(c.id.as_str(), c.kind as u8);
+            let cur = out.get(&key).copied().unwrap_or(0);
+            if c.version > cur {
+                out.insert(key, c.version);
+            }
+        }
+    }
+
     out
 }
 

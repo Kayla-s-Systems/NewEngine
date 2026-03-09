@@ -21,7 +21,9 @@ pub struct PluginsSnapshot {
 pub use control::{PluginControlCommand, PluginControlQueue, PluginControlResult};
 pub use host_api::{call_service_v1, default_host_api, host_register_service_impl};
 pub use host_context::{
-    describe_service, has_service, init_host_context, list_services, services_generation,
+    describe_service, has_service, init_host_context, list_external_runtime_descriptors,
+    list_external_runtime_plugins, list_services, register_external_runtime_plugin,
+    services_generation,
 };
 pub use manager::{PluginIconSnapshot, PluginLoadError, PluginManager, PluginSnapshotEntry};
 pub use plugin_config_service::{

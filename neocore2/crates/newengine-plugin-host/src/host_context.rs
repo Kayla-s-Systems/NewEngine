@@ -2,12 +2,13 @@
 
 use abi_stable::std_types::RString;
 use newengine_plugin_api::{
-    Blob, CapabilityKind, CapabilityRole, EventSinkV1Dyn, PluginDescriptor, ServiceV1Dyn,
+    Blob, CapabilityKind, CapabilityRole, EventSinkV1Dyn, PluginDescriptor, PluginInfo, PluginKind, ServiceV1Dyn,
 };
 
 use newengine_math::collections::prelude::*;
 use std::cell::RefCell;
 use std::panic::{catch_unwind, AssertUnwindSafe};
+use std::path::PathBuf;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, OnceLock};
 
@@ -22,6 +23,26 @@ pub(crate) struct ServiceEntry {
 pub(crate) struct EventSinkEntry {
     pub owner_plugin_id: Option<String>,
     pub sink: Arc<Mutex<EventSinkV1Dyn<'static>>>,
+}
+
+#[derive(Clone)]
+pub(crate) struct ExternalRuntimePluginEntry {
+    pub path: PathBuf,
+    pub info: PluginInfo,
+    pub descriptor: PluginDescriptor,
+    pub state: String,
+}
+
+#[derive(Clone, Debug)]
+pub struct ExternalRuntimePluginSnapshot {
+    pub path: PathBuf,
+    pub id: String,
+    pub name: String,
+    pub version: String,
+    pub kind: Option<PluginKind>,
+    pub capabilities: Vec<newengine_plugin_api::CapabilityDesc>,
+    pub state: String,
+    pub disabled_reason: Option<String>,
 }
 
 thread_local! {
@@ -63,6 +84,10 @@ pub(crate) struct HostContext {
     /// This is host-owned metadata used to validate runtime registrations (services/sinks)
     /// against the plugin's declared capabilities.
     pub(crate) plugin_descriptors: Mutex<NeHashMap<String, PluginDescriptor>>,
+
+    /// Host-registered runtime plugins that live outside the normal ABI loader path
+    /// (for example platform runtime and render backend runtime).
+    pub(crate) external_runtime_plugins: Mutex<NeHashMap<String, ExternalRuntimePluginEntry>>,
 }
 
 static HOST_CTX: OnceLock<Arc<HostContext>> = OnceLock::new();
@@ -77,6 +102,7 @@ fn make_default_ctx() -> Arc<HostContext> {
         services_generation: AtomicU64::new(1),
         event_sinks: Mutex::new(Vec::new()),
         plugin_descriptors: Mutex::new(NeHashMap::default()),
+        external_runtime_plugins: Mutex::new(NeHashMap::default()),
     })
 }
 
@@ -269,6 +295,14 @@ pub fn unregister_by_owner(owner_plugin_id: &str) {
         };
         g.remove(owner_plugin_id);
     }
+
+    {
+        let mut g = match c.external_runtime_plugins.lock() {
+            Ok(v) => v,
+            Err(e) => e.into_inner(),
+        };
+        g.remove(owner_plugin_id);
+    }
 }
 
 /// Registers a plugin descriptor (host-owned metadata) for runtime validation.
@@ -282,6 +316,174 @@ pub(crate) fn register_plugin_descriptor(plugin_id: &str, d: PluginDescriptor) {
         Err(e) => e.into_inner(),
     };
     g.insert(plugin_id.to_owned(), d);
+}
+
+#[derive(Clone, PartialEq, Eq, Hash)]
+struct DeclaredCapKey {
+    id: String,
+    kind: u8,
+}
+
+#[inline]
+fn declared_cap_key(id: &str, kind: u8) -> DeclaredCapKey {
+    DeclaredCapKey {
+        id: id.to_owned(),
+        kind,
+    }
+}
+
+fn collect_declared_providers(
+    descriptors: impl Iterator<Item=PluginDescriptor>,
+) -> std::collections::HashMap<DeclaredCapKey, u32> {
+    let mut out = std::collections::HashMap::new();
+    out.insert(declared_cap_key("host.services.v1", CapabilityKind::ServiceV1 as u8), 1);
+    out.insert(declared_cap_key("host.events.v1", CapabilityKind::EventsV1 as u8), 1);
+
+    for d in descriptors {
+        for c in d.capabilities.iter() {
+            if c.role != CapabilityRole::Provides {
+                continue;
+            }
+            let key = declared_cap_key(c.id.as_str(), c.kind as u8);
+            let cur = out.get(&key).copied().unwrap_or(0);
+            if c.version > cur {
+                out.insert(key, c.version);
+            }
+        }
+    }
+
+    out
+}
+
+fn missing_descriptor_requirements(
+    descriptor: &PluginDescriptor,
+    providers: &std::collections::HashMap<DeclaredCapKey, u32>,
+) -> Vec<String> {
+    let mut out = Vec::new();
+
+    for c in descriptor.capabilities.iter() {
+        if c.role != CapabilityRole::Requires {
+            continue;
+        }
+
+        let key = declared_cap_key(c.id.as_str(), c.kind as u8);
+        let pv = providers.get(&key).copied().unwrap_or(0);
+        if pv < c.version {
+            out.push(format!(
+                "{}(kind={} req_v={} avail_v={})",
+                c.id,
+                c.kind as u8,
+                c.version,
+                pv
+            ));
+        }
+    }
+
+    out.sort();
+    out.dedup();
+    out
+}
+
+pub fn register_external_runtime_plugin(
+    path: PathBuf,
+    info: PluginInfo,
+    descriptor: PluginDescriptor,
+    state: impl Into<String>,
+) -> Result<(), String> {
+    let plugin_id = info.id.to_string();
+    if plugin_id.trim().is_empty() {
+        return Err("external runtime plugin id is empty".to_owned());
+    }
+
+    let c = ctx();
+
+    let providers = {
+        let g = match c.plugin_descriptors.lock() {
+            Ok(v) => v,
+            Err(e) => e.into_inner(),
+        };
+        let mut descriptors: Vec<PluginDescriptor> = g.values().cloned().collect();
+        descriptors.push(descriptor.clone());
+        collect_declared_providers(descriptors.into_iter())
+    };
+
+    let missing = missing_descriptor_requirements(&descriptor, &providers);
+    if !missing.is_empty() {
+        return Err(format!(
+            "missing required capability(s) for external runtime plugin id='{}': [{}]",
+            plugin_id,
+            missing.join(", ")
+        ));
+    }
+
+    {
+        let mut descriptors = match c.plugin_descriptors.lock() {
+            Ok(v) => v,
+            Err(e) => e.into_inner(),
+        };
+        descriptors.insert(plugin_id.clone(), descriptor.clone());
+    }
+
+    {
+        let mut runtimes = match c.external_runtime_plugins.lock() {
+            Ok(v) => v,
+            Err(e) => e.into_inner(),
+        };
+        runtimes.insert(
+            plugin_id.clone(),
+            ExternalRuntimePluginEntry {
+                path: path.clone(),
+                info: info.clone(),
+                descriptor: descriptor.clone(),
+                state: state.into(),
+            },
+        );
+    }
+
+    log::info!(
+        "plugins: external runtime registered id='{}' ver='{}' kind={:?} path='{}'",
+        plugin_id,
+        info.version,
+        descriptor.kind,
+        path.display()
+    );
+
+    Ok(())
+}
+
+pub fn list_external_runtime_plugins() -> Vec<ExternalRuntimePluginSnapshot> {
+    let c = ctx();
+    let g = match c.external_runtime_plugins.lock() {
+        Ok(v) => v,
+        Err(e) => e.into_inner(),
+    };
+
+    let mut out: Vec<ExternalRuntimePluginSnapshot> = g
+        .values()
+        .map(|entry| ExternalRuntimePluginSnapshot {
+            path: entry.path.clone(),
+            id: entry.info.id.to_string(),
+            name: entry.info.name.to_string(),
+            version: entry.info.version.to_string(),
+            kind: Some(entry.descriptor.kind),
+            capabilities: entry.descriptor.capabilities.iter().cloned().collect(),
+            state: entry.state.clone(),
+            disabled_reason: None,
+        })
+        .collect();
+    out.sort_by(|a, b| a.id.cmp(&b.id));
+    out
+}
+
+pub fn list_external_runtime_descriptors() -> Vec<PluginDescriptor> {
+    let c = ctx();
+    let g = match c.external_runtime_plugins.lock() {
+        Ok(v) => v,
+        Err(e) => e.into_inner(),
+    };
+    let mut out: Vec<PluginDescriptor> = g.values().map(|entry| entry.descriptor.clone()).collect();
+    out.sort_by(|a, b| a.id.cmp(&b.id));
+    out
 }
 
 /// Returns:
