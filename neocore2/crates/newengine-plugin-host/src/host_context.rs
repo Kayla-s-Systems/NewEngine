@@ -1,5 +1,6 @@
 #![forbid(unsafe_op_in_unsafe_fn)]
 
+use crate::path_fmt::canonicalize_if_exists;
 use abi_stable::std_types::RString;
 use newengine_plugin_api::{
     Blob, CapabilityKind, CapabilityRole, EventSinkV1Dyn, PluginDescriptor, PluginInfo, PluginKind, ServiceV1Dyn,
@@ -424,6 +425,8 @@ pub fn register_external_runtime_plugin(
         descriptors.insert(plugin_id.clone(), descriptor.clone());
     }
 
+    let normalized_path = canonicalize_if_exists(&path);
+
     {
         let mut runtimes = match c.external_runtime_plugins.lock() {
             Ok(v) => v,
@@ -432,7 +435,7 @@ pub fn register_external_runtime_plugin(
         runtimes.insert(
             plugin_id.clone(),
             ExternalRuntimePluginEntry {
-                path: path.clone(),
+                path: normalized_path.clone(),
                 info: info.clone(),
                 descriptor: descriptor.clone(),
                 state: state.into(),
@@ -445,7 +448,7 @@ pub fn register_external_runtime_plugin(
         plugin_id,
         info.version,
         descriptor.kind,
-        path.display()
+        crate::path_fmt::display_clean(&normalized_path)
     );
 
     Ok(())

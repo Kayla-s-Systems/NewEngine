@@ -177,6 +177,7 @@ impl VulkanRenderer {
         }
 
         let core = CoreContext {
+            entry,
             instance,
             surface_loader,
             surface,

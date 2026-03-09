@@ -36,15 +36,6 @@ const PLUGIN_SIGNATURE_SYMBOL: &[u8] = b"newengine_plugin_signature_v1\0";
 const PLATFORM_PLUGIN_ID: &str = "newengine.platform.winit";
 const CT_JSON_MERGE_PATCH: &str = "application/merge-patch+json";
 
-#[inline]
-fn display_abs_path(path: &Path) -> String {
-    let canonical = std::fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf());
-    let s = canonical.to_string_lossy();
-    let s = s.strip_prefix(r"\\?\").unwrap_or(&s);
-    let s = s.strip_prefix("//?/").unwrap_or(s);
-    s.replace('\\', "/")
-}
-
 pub struct ResolvedPlatformRuntimeConfig {
     pub plugin_id: String,
     pub plugin_name: String,
@@ -54,7 +45,7 @@ pub struct ResolvedPlatformRuntimeConfig {
     pub icon_path: Option<String>,
 }
 
-pub struct EditorPlatformRuntime {
+pub struct HostPlatformRuntime {
     engine: Engine<()>,
     ui: Box<dyn UiProvider>,
     ui_build: Option<Box<dyn UiBuildFn>>,
@@ -62,10 +53,9 @@ pub struct EditorPlatformRuntime {
     surface: PlatformSurfaceMetricsV1,
     minimized: bool,
     started: bool,
-    step_index: u64,
 }
 
-impl EditorPlatformRuntime {
+impl HostPlatformRuntime {
     pub fn new(
         engine: Engine<()>,
         ui_kind: UiProviderKind,
@@ -80,7 +70,6 @@ impl EditorPlatformRuntime {
             surface: PlatformSurfaceMetricsV1::default(),
             minimized: false,
             started: false,
-            step_index: 0,
         }
     }
 
@@ -93,8 +82,6 @@ impl EditorPlatformRuntime {
             version: RString::from(resolved.plugin_version.clone()),
         };
 
-        newengine_core::crash::record_breadcrumb(format!("platform runtime: run begin id='{}' path='{}'", resolved.plugin_id, display_abs_path(&runtime_path)));
-
         newengine_plugin_host::register_external_runtime_plugin(
             runtime_path.to_path_buf(),
             info,
@@ -103,13 +90,11 @@ impl EditorPlatformRuntime {
         )
             .map_err(EngineError::other)?;
 
-        log::info!("platform runtime: loading '{}'", display_abs_path(&runtime_path));
+        log::info!("platform runtime: loading '{}'", runtime_path.display());
 
-        newengine_core::crash::record_breadcrumb("platform runtime: dlopen begin");
         let lib = unsafe { Library::new(runtime_path) }
             .map_err(|e| EngineError::other(format!("platform runtime load failed: {e}")))?;
 
-        newengine_core::crash::record_breadcrumb("platform runtime: resolve entry symbol");
         let run: libloading::Symbol<PlatformRuntimeRunFnV1> = unsafe { lib.get(PLATFORM_RUNTIME_SYMBOL) }
             .map_err(|e| EngineError::other(format!("platform runtime symbol missing: {e}")))?;
 
@@ -132,7 +117,6 @@ impl EditorPlatformRuntime {
         };
 
         let plugin_host = newengine_plugin_host::default_host_api();
-        newengine_core::crash::record_breadcrumb("platform runtime: entering external event loop");
         let result = unsafe { run(plugin_host, host, config) }
             .into_result()
             .map_err(|e| EngineError::other(e.to_string()));
@@ -146,14 +130,8 @@ impl EditorPlatformRuntime {
         newengine_plugin_host::host_context::unregister_by_owner(&resolved.plugin_id);
 
         match &result {
-            Ok(()) => {
-                newengine_core::crash::record_breadcrumb("platform runtime: exited cleanly");
-                log::info!("platform runtime: exited cleanly");
-            }
-            Err(e) => {
-                newengine_core::crash::record_breadcrumb(format!("platform runtime: exited with error='{}'", e));
-                log::error!("platform runtime: exited with error: {e}");
-            }
+            Ok(()) => log::info!("platform runtime: exited cleanly"),
+            Err(e) => log::error!("platform runtime: exited with error: {e}"),
         }
 
         result
@@ -168,7 +146,6 @@ impl EditorPlatformRuntime {
             ready.surface.pixels_per_point
         );
 
-        newengine_core::crash::record_breadcrumb(format!("platform runtime: window ready backend={:?} size={}x{} ppp={:.3}", ready.handles.backend, ready.surface.width, ready.surface.height, ready.surface.pixels_per_point));
         self.surface = ready.surface;
         let (display, window) = native_to_raw_handles(ready.handles)?;
 
@@ -179,45 +156,36 @@ impl EditorPlatformRuntime {
         });
 
         if !self.started {
-            newengine_core::crash::record_breadcrumb("platform runtime: load_engine_plugins_once begin");
             match self.engine.load_engine_plugins_once() {
                 Ok(count) => {
-                    newengine_core::crash::record_breadcrumb(format!("platform runtime: load_engine_plugins_once ok count={}", count));
                     log::info!(
                         "platform runtime: engine plugins init completed loaded_count={}",
                         count
                     );
                 }
                 Err(e) => {
-                    newengine_core::crash::record_breadcrumb(format!("platform runtime: engine plugins init failed='{}'", e));
                     log::error!("platform runtime: engine plugins init failed: {}", e);
                     return Err(e);
                 }
             }
 
-            newengine_core::crash::record_breadcrumb("platform runtime: engine.start begin");
             match self.engine.start() {
                 Ok(()) => {
                     self.started = true;
-                    newengine_core::crash::record_breadcrumb("platform runtime: engine.start completed");
                     log::info!("platform runtime: engine.start completed");
                 }
                 Err(e) => {
-                    newengine_core::crash::record_breadcrumb(format!("platform runtime: engine.start failed='{}'", e));
                     log::error!("platform runtime: engine.start failed: {}", e);
                     return Err(e);
                 }
             }
         }
 
-        newengine_core::crash::record_breadcrumb("platform runtime: emit WindowReady begin");
         match self.engine.emit(HostEvent::Window(WindowHostEvent::Ready {
             width: ready.surface.width,
             height: ready.surface.height,
         })) {
-            Ok(()) => {
-                newengine_core::crash::record_breadcrumb("platform runtime: emit WindowReady completed");
-            }
+            Ok(()) => {}
             Err(e) => {
                 log::error!("platform runtime: emit WindowReady failed: {}", e);
                 return Err(e);
@@ -271,13 +239,6 @@ impl EditorPlatformRuntime {
     }
 
     fn step(&mut self, dt_sec: f32) -> EngineResult<PlatformStepResultV1> {
-        self.step_index = self.step_index.saturating_add(1).max(1);
-        let trace_frame = self.step_index <= 8 || self.step_index % 120 == 0;
-        if trace_frame {
-            log::debug!("platform runtime: step begin frame={} dt_sec={:.6} surface={}x{} minimized={} started={}", self.step_index, dt_sec, self.surface.width, self.surface.height, self.minimized, self.started);
-            newengine_core::crash::record_breadcrumb(format!("platform runtime: step begin frame={} dt={:.6}", self.step_index, dt_sec));
-        }
-
         if let Some(build) = self.ui_build.as_deref_mut() {
             let mut desc = UiFrameDesc::new(dt_sec).with_surface(
                 self.surface.width,
@@ -287,38 +248,18 @@ impl EditorPlatformRuntime {
             if let Some(input) = poll_input_frame() {
                 desc = desc.with_input(input);
             }
-            if trace_frame {
-                newengine_core::crash::record_breadcrumb(format!("platform runtime: ui frame begin frame={}", self.step_index));
-            }
             let out = self.ui.run_frame(&(), desc, build);
             self.engine.resources_mut().insert(out.draw_list);
-            if trace_frame {
-                newengine_core::crash::record_breadcrumb(format!("platform runtime: ui frame completed frame={}", self.step_index));
-            }
         }
 
-        if trace_frame {
-            newengine_core::crash::record_breadcrumb(format!("platform runtime: engine.step begin frame={}", self.step_index));
-        }
         match self.engine.step() {
-            Ok(()) => {
-                if trace_frame {
-                    newengine_core::crash::record_breadcrumb(format!("platform runtime: engine.step ok frame={}", self.step_index));
-                }
-                Ok(PlatformStepResultV1 {
-                    exit_requested: false,
-                })
-            },
-            Err(EngineError::ExitRequested) => {
-                newengine_core::crash::record_breadcrumb(format!("platform runtime: engine.step exit-requested frame={}", self.step_index));
-                Ok(PlatformStepResultV1 {
-                    exit_requested: true,
-                })
-            },
-            Err(e) => {
-                newengine_core::crash::record_breadcrumb(format!("platform runtime: engine.step failed frame={} err='{}'", self.step_index, e));
-                Err(e)
-            },
+            Ok(()) => Ok(PlatformStepResultV1 {
+                exit_requested: false,
+            }),
+            Err(EngineError::ExitRequested) => Ok(PlatformStepResultV1 {
+                exit_requested: true,
+            }),
+            Err(e) => Err(e),
         }
     }
 
@@ -347,8 +288,8 @@ impl EditorPlatformRuntime {
     }
 }
 
-fn runtime_state_mut<'a>(user_data: usize) -> &'a mut EditorPlatformRuntime {
-    unsafe { &mut *(user_data as *mut EditorPlatformRuntime) }
+fn runtime_state_mut<'a>(user_data: usize) -> &'a mut HostPlatformRuntime {
+    unsafe { &mut *(user_data as *mut HostPlatformRuntime) }
 }
 
 extern "C" fn host_on_window_ready_v1(

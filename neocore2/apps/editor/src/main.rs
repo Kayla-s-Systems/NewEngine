@@ -35,6 +35,15 @@ mod viewport_bridge;
 const FIXED_DT_MS: u32 = 16;
 const UI_MARKUP_PATH: &str = "ui/editor.xml";
 
+#[inline]
+fn display_abs_path(path: &std::path::Path) -> String {
+    let canonical = std::fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf());
+    let s = canonical.to_string_lossy();
+    let s = s.strip_prefix(r"\\?\").unwrap_or(&s);
+    let s = s.strip_prefix("//?/").unwrap_or(s);
+    s.replace('\\', "/")
+}
+
 struct AppServices {
     registry: newengine_core::ServiceRegistry,
 }
@@ -294,19 +303,26 @@ fn shard_log_path_by_run_id(original: &str, run_id: &str) -> Option<String> {
 }
 
 fn main() {
+    newengine_core::crash::record_breadcrumb("editor: main entry");
     if let Err(e) = main_impl() {
         if !matches!(e, EngineError::ExitRequested) {
-            let _ = newengine_core::EngineErrorReporter::report_fatal_engine_error(&e);
-            log::error!("editor fatal: {e}");
+            newengine_core::crash::record_breadcrumb(format!("editor: fatal error='{}'", e));
+            let report = newengine_core::EngineErrorReporter::report_fatal_engine_error(&e);
+            match report {
+                Some(path) => log::error!("editor fatal: {} | crash_report='{}'", e, path.display()),
+                None => log::error!("editor fatal: {e}"),
+            }
             eprintln!("Error: {e}");
             std::process::exit(1);
         }
+        newengine_core::crash::record_breadcrumb("editor: exit requested");
         std::process::exit(0);
     }
 }
 
 fn main_impl() -> EngineResult<()> {
     let run_id = newengine_core::init_run_id().to_owned();
+    newengine_core::crash::record_breadcrumb(format!("editor: main_impl start run_id={}", run_id));
     std::env::set_var("NEWENGINE_RUN_ID", &run_id);
 
     newengine_core::EngineErrorReporter::install(newengine_core::EngineErrorReporterConfig {
@@ -321,6 +337,7 @@ fn main_impl() -> EngineResult<()> {
 
     let paths = ConfigPaths::from_startup_str("config.json");
     let (startup, _report) = StartupLoader::load_json(&paths)?;
+    newengine_core::crash::record_breadcrumb("editor: startup config loaded");
     let startup = Arc::new(startup);
 
     if std::env::var_os("NEWENGINE_LOG_FILE").is_none() {
@@ -349,7 +366,9 @@ fn main_impl() -> EngineResult<()> {
     ));
 
     let mut engine = build_engine_from_startup(&startup)?;
+    newengine_core::crash::record_breadcrumb("editor: engine constructed");
 
+    newengine_core::crash::record_breadcrumb("editor: register render modules begin");
     register_render_from_startup(
         &mut engine,
         &startup,
@@ -358,10 +377,13 @@ fn main_impl() -> EngineResult<()> {
         scene.clone(),
         previews.clone(),
     )?;
+    newengine_core::crash::record_breadcrumb("editor: render modules registered");
 
     engine.preload_bootstrap_plugins()?;
+    newengine_core::crash::record_breadcrumb("editor: bootstrap plugins preloaded");
     engine.emit_plugins_diagnostics("after bootstrap preload");
     scene_io_service::register_scene_io_best_effort(scene.clone());
+    newengine_core::crash::record_breadcrumb("editor: scene.io registered");
 
     let assets = AssetServiceClient::new(newengine_plugin_host::default_host_api());
     let assets_available =
@@ -377,15 +399,18 @@ fn main_impl() -> EngineResult<()> {
     }
 
     let runtime_path = platform_runtime::detect_platform_runtime_path(&startup.modules_dir)?;
+    newengine_core::crash::record_breadcrumb(format!("editor: platform runtime detected path='{}'", display_abs_path(&runtime_path)));
     let resolved_platform =
         platform_runtime::resolve_platform_runtime_config(&startup, &runtime_path)?;
+    newengine_core::crash::record_breadcrumb(format!("editor: platform runtime resolved id='{}'", resolved_platform.plugin_id));
 
     log::info!(
         "editor startup: platform runtime plugin id='{}' path='{}'",
         resolved_platform.plugin_id,
-        runtime_path.display()
+        display_abs_path(&runtime_path)
     );
 
+    newengine_core::crash::record_breadcrumb("editor: window icon load begin");
     let icon = try_load_window_icon_best_effort(
         resolved_platform.icon_path.as_deref(),
         if assets_available { Some(&assets) } else { None },
@@ -393,6 +418,7 @@ fn main_impl() -> EngineResult<()> {
     );
 
     let mut platform_cfg = resolved_platform.config.clone();
+    newengine_core::crash::record_breadcrumb(format!("editor: window icon {}", if icon.is_some() { "loaded" } else { "not-loaded" }));
     platform_cfg.icon = icon.map_or(ROption::RNone, ROption::RSome);
 
     let shared_doc: Arc<Mutex<Option<Arc<UiMarkupDoc>>>> = Arc::new(Mutex::new(None));
@@ -432,7 +458,7 @@ fn main_impl() -> EngineResult<()> {
         }
     }
 
-    log::info!("editor: selected platform runtime {}", runtime_path.display());
+    log::info!("editor: selected platform runtime {}", display_abs_path(&runtime_path));
     let runtime = platform_runtime::EditorPlatformRuntime::new(
         engine,
         ui_provider_kind_from_startup(&startup),
@@ -442,6 +468,7 @@ fn main_impl() -> EngineResult<()> {
     // icon is applied to the resolved runtime config clone passed into the platform runtime.
     let mut resolved_platform = resolved_platform;
     resolved_platform.config = platform_cfg;
+    newengine_core::crash::record_breadcrumb("editor: entering platform runtime");
     runtime.run(&runtime_path, &resolved_platform)?;
 
     log::info!("engine stopped");

@@ -113,15 +113,24 @@ impl<E: Send + 'static> Module<E> for EditorRenderController {
             self.clear_color = cfg.clear_color;
         }
 
+        let trace_frame = self.frame_index < 8 || self.frame_index % 120 == 0;
         let api = match require_render_api(ctx) {
             Ok(api) => api,
             Err(_) => return Ok(()),
         };
         let mut r = api.lock();
 
+        if trace_frame {
+            log::debug!("render controller: render begin next_frame={} window={}x{} viewport={}x{}", self.frame_index.saturating_add(1), w, h, self.viewport_bridge.read_extent().0, self.viewport_bridge.read_extent().1);
+            newengine_core::crash::record_breadcrumb(format!("render controller: render begin next_frame={} window={}x{}", self.frame_index.saturating_add(1), w, h));
+        }
+
         self.resize_if_needed(&mut **r, w, h)?;
 
         let (vp_w, vp_h) = self.viewport_bridge.read_extent();
+        if trace_frame {
+            newengine_core::crash::record_breadcrumb(format!("render controller: begin_frame next_frame={} clear={:.3},{:.3},{:.3},{:.3} viewport={}x{}", self.frame_index.saturating_add(1), self.clear_color[0], self.clear_color[1], self.clear_color[2], self.clear_color[3], vp_w, vp_h));
+        }
         r.begin_frame(BeginFrameDesc::new(self.clear_color))?;
 
         self.frame_index = self.frame_index.saturating_add(1).max(1);
@@ -225,6 +234,9 @@ impl<E: Send + 'static> Module<E> for EditorRenderController {
             // Bounds used below are now up-to-date after the scene post-pass.
             let bounds = scene::scene_bounds(&scene).unwrap_or_else(|| scene::default_bounds());
 
+            if trace_frame {
+                newengine_core::crash::record_breadcrumb(format!("render controller: begin_render_target frame={} rt={}x{}", self.frame_index, vp_w, vp_h));
+            }
             r.begin_render_target(
                 BeginRenderTargetDesc::new(rt)
                     .with_clear_depth(1.0)
@@ -273,6 +285,9 @@ impl<E: Send + 'static> Module<E> for EditorRenderController {
 
         self.gc_per_draw_ubos(&mut **r);
         self.gc_deferred_rts(&mut **r);
+        if trace_frame {
+            newengine_core::crash::record_breadcrumb(format!("render controller: end_frame frame={}", self.frame_index));
+        }
         r.end_frame()?;
         Ok(())
     }

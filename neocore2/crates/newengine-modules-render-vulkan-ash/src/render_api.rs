@@ -368,7 +368,11 @@ impl VulkanRenderApi {
 impl Drop for VulkanRenderApi {
     fn drop(&mut self) {
         unsafe {
+            newengine_core::crash::record_breadcrumb("vulkan: render_api drop begin");
             let device = &self.renderer.core.device;
+
+            let _ = device.device_wait_idle();
+            newengine_core::crash::record_breadcrumb("vulkan: render_api drop device_wait_idle completed");
 
             for (_, p) in self.pipelines.drain() {
                 if p.pipeline != vk::Pipeline::null() {
@@ -407,6 +411,8 @@ impl Drop for VulkanRenderApi {
                 }
                 let _ = b.size;
             }
+
+            newengine_core::crash::record_breadcrumb("vulkan: render_api drop completed");
         }
     }
 }

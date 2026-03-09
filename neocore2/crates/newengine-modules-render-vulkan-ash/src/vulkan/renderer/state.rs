@@ -10,6 +10,12 @@ use crate::vulkan::ui::GpuUiTexture;
 pub(crate) const UPLOAD_CONTEXTS: usize = 3;
 
 pub struct CoreContext {
+    /// Must stay alive for the whole renderer lifetime.
+    ///
+    /// `ash::Entry::load()` owns the loaded Vulkan loader library. Dropping it
+    /// invalidates instance/device dispatch tables and can crash on the first
+    /// runtime Vulkan call.
+    pub(crate) entry: ash::Entry,
     pub(crate) instance: ash::Instance,
 
     pub(crate) surface_loader: ash::khr::surface::Instance,

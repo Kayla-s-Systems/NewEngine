@@ -35,6 +35,7 @@ newengine-math = { path = "../../crates/newengine-math" }
 
 newengine-core = { path = "../../crates/newengine-core" }
 newengine-plugin-host = { path = "../../crates/newengine-plugin-host" }
+newengine-runtime-host = { path = "../../crates/newengine-runtime-host" }
 newengine-ui = { path = "../../crates/newengine-ui", features = ["images", "assets"] }
 newengine-assets = { path = "../../crates/newengine-assets" }
 newengine-platform-api = { path = "../../crates/newengine-platform-api" }

@@ -1,9 +1,11 @@
 #![forbid(unsafe_op_in_unsafe_fn)]
 
+use crate::path_fmt::{canonicalize_if_exists, display_clean};
 use crate::system_info::SystemInfo;
+use std::collections::VecDeque;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::OnceLock;
+use std::sync::{Mutex, OnceLock};
 
 /// Crash reporter configuration.
 ///
@@ -43,6 +45,60 @@ impl Default for CrashReporterConfig {
 
 static CFG: OnceLock<CrashReporterConfig> = OnceLock::new();
 static PANIC_FIRED: AtomicBool = AtomicBool::new(false);
+static WINDOWS_EXCEPTION_FIRED: AtomicBool = AtomicBool::new(false);
+static BREADCRUMBS: OnceLock<Mutex<VecDeque<String>>> = OnceLock::new();
+const MAX_BREADCRUMBS: usize = 256;
+
+#[inline]
+fn breadcrumbs() -> &'static Mutex<VecDeque<String>> {
+    BREADCRUMBS.get_or_init(|| Mutex::new(VecDeque::with_capacity(MAX_BREADCRUMBS)))
+}
+
+/// Records a short diagnostic breadcrumb that will be appended to fatal reports.
+///
+/// Keep messages compact and stage-oriented. This is intended for last-known-good
+/// lifecycle tracking around crashes, panics, and access violations.
+#[inline]
+pub fn record_breadcrumb(message: impl AsRef<str>) {
+    let msg = message.as_ref().trim();
+    if msg.is_empty() {
+        return;
+    }
+
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .ok()
+        .map(|d| d.as_millis() as u64)
+        .unwrap_or(0);
+
+    let line = format!("[{now}] {msg}");
+    let mut guard = match breadcrumbs().lock() {
+        Ok(v) => v,
+        Err(e) => e.into_inner(),
+    };
+
+    if guard.len() >= MAX_BREADCRUMBS {
+        let _ = guard.pop_front();
+    }
+    guard.push_back(line);
+}
+
+#[inline]
+pub fn clear_breadcrumbs() {
+    let mut guard = match breadcrumbs().lock() {
+        Ok(v) => v,
+        Err(e) => e.into_inner(),
+    };
+    guard.clear();
+}
+
+fn snapshot_breadcrumbs() -> Vec<String> {
+    let guard = match breadcrumbs().lock() {
+        Ok(v) => v,
+        Err(e) => e.into_inner(),
+    };
+    guard.iter().cloned().collect()
+}
 
 /// Installs a process-wide panic hook that:
 /// - writes a crash report to disk
@@ -56,6 +112,9 @@ pub fn install_panic_hook(cfg: CrashReporterConfig) {
     }
 
     let _ = CFG.set(cfg);
+    clear_breadcrumbs();
+    record_breadcrumb("crash: panic hook installed");
+    install_native_crash_handlers();
 
     let prev = std::panic::take_hook();
     std::panic::set_hook(Box::new(move |info| {
@@ -71,6 +130,8 @@ pub fn install_panic_hook(cfg: CrashReporterConfig) {
             .map(|l| format!("{}:{}:{}", l.file(), l.line(), l.column()))
             .unwrap_or_else(|| "<unknown>".to_owned());
 
+        record_breadcrumb(format!("panic: msg='{msg}' location='{loc}'"));
+
         let title = "Unhandled panic";
         let details = format!("{msg}\n\nLocation:\n{loc}\n\nBacktrace:\n{bt:?}\n");
 
@@ -85,6 +146,7 @@ pub fn install_panic_hook(cfg: CrashReporterConfig) {
 ///
 /// Use this for unrecoverable `EngineError` paths where you want a UE-like crash dialog.
 pub fn report_fatal(title: &str, details: &str) -> Option<PathBuf> {
+    record_breadcrumb(format!("fatal: title='{title}'"));
     let bt = std::backtrace::Backtrace::force_capture();
     report_fatal_impl(title, details, Some(&bt))
 }
@@ -108,6 +170,9 @@ fn report_fatal_impl(
 
     let rid = crate::run_id::run_id().unwrap_or("<unknown>");
     let rtag = crate::run_id::run_tag().unwrap_or("<unknown>");
+    let breadcrumbs = snapshot_breadcrumbs();
+    let services = newengine_plugin_host::list_services();
+    let runtimes = newengine_plugin_host::list_external_runtime_plugins();
 
     let mut text = String::new();
     use std::fmt::Write as _;
@@ -125,14 +190,45 @@ fn report_fatal_impl(
         let _ = writeln!(text, "LogicalCPUs: {n}");
     }
     if let Some(exe) = &sys.exe {
-        let _ = writeln!(text, "Exe: {}", exe.display());
+        let _ = writeln!(text, "Exe: {}", display_clean(&canonicalize_if_exists(exe)));
     }
     if let Some(cwd) = &sys.cwd {
-        let _ = writeln!(text, "Cwd: {}", cwd.display());
+        let _ = writeln!(text, "Cwd: {}", display_clean(&canonicalize_if_exists(cwd)));
     }
+    if let Some(log_file) = std::env::var_os("NEWENGINE_LOG_FILE") {
+        let _ = writeln!(text, "LogFile: {}", display_clean(&canonicalize_if_exists(&PathBuf::from(log_file))));
+    }
+
     let _ = writeln!(text);
     let _ = writeln!(text, "Details:");
     let _ = writeln!(text, "{details}");
+
+    if !breadcrumbs.is_empty() {
+        let _ = writeln!(text);
+        let _ = writeln!(text, "Breadcrumbs:");
+        for line in breadcrumbs {
+            let _ = writeln!(text, "- {line}");
+        }
+    }
+
+    let _ = writeln!(text);
+    let _ = writeln!(text, "PluginHost:");
+    let _ = writeln!(text, "- services_count: {}", services.len());
+    for service in services {
+        let _ = writeln!(text, "  - service: {service}");
+    }
+    let _ = writeln!(text, "- external_runtimes_count: {}", runtimes.len());
+    for runtime in runtimes {
+        let _ = writeln!(
+            text,
+            "  - runtime: id='{}' ver='{}' state='{}' path='{}' caps={}",
+            runtime.id,
+            runtime.version,
+            runtime.state,
+            display_clean(&canonicalize_if_exists(&runtime.path)),
+            runtime.capabilities.len()
+        );
+    }
 
     if let Some(bt) = backtrace {
         let _ = writeln!(text);
@@ -142,6 +238,8 @@ fn report_fatal_impl(
 
     let out_dir = resolve_crash_dir(&cfg, sys.exe.as_deref());
     let out_path = write_report_file(&out_dir, sys.pid, unix_ms, rid, rtag, &text).ok()?;
+
+    eprintln!("[newengine] crash report written: {}", display_clean(&canonicalize_if_exists(&out_path)));
 
     if cfg.spawn_reporter {
         let _ = spawn_reporter(&cfg, &out_path);
@@ -255,4 +353,99 @@ fn resolve_reporter_path(cfg: &CrashReporterConfig) -> PathBuf {
     };
 
     base.join(name)
+}
+
+#[cfg(windows)]
+fn install_native_crash_handlers() {
+    use windows::Win32::System::Diagnostics::Debug::SetUnhandledExceptionFilter;
+
+    unsafe {
+        let _ = SetUnhandledExceptionFilter(Some(unhandled_exception_filter));
+    }
+
+    record_breadcrumb("crash: windows unhandled exception filter installed");
+}
+
+#[cfg(not(windows))]
+fn install_native_crash_handlers() {}
+
+#[cfg(windows)]
+unsafe extern "system" fn unhandled_exception_filter(
+    info: *const windows::Win32::System::Diagnostics::Debug::EXCEPTION_POINTERS,
+) -> i32 {
+    use windows::Win32::Foundation::{
+        EXCEPTION_ACCESS_VIOLATION,
+        EXCEPTION_ARRAY_BOUNDS_EXCEEDED,
+        EXCEPTION_BREAKPOINT,
+        EXCEPTION_DATATYPE_MISALIGNMENT,
+        EXCEPTION_FLT_DIVIDE_BY_ZERO,
+        EXCEPTION_ILLEGAL_INSTRUCTION,
+        EXCEPTION_INT_DIVIDE_BY_ZERO,
+        EXCEPTION_IN_PAGE_ERROR,
+        EXCEPTION_STACK_OVERFLOW,
+        NTSTATUS,
+    };
+    use windows::Win32::System::Diagnostics::Debug::EXCEPTION_EXECUTE_HANDLER;
+
+    if WINDOWS_EXCEPTION_FIRED.swap(true, Ordering::AcqRel) {
+        return EXCEPTION_EXECUTE_HANDLER;
+    }
+
+    let mut code = NTSTATUS(0);
+    let mut address = 0usize;
+    let mut access_kind = None::<usize>;
+    let mut access_addr = None::<usize>;
+
+    if !info.is_null() {
+        let rec = unsafe { (*info).ExceptionRecord };
+        if !rec.is_null() {
+            code = unsafe { (*rec).ExceptionCode };
+            address = unsafe { (*rec).ExceptionAddress as usize };
+
+            if code == EXCEPTION_ACCESS_VIOLATION {
+                let count = unsafe { (*rec).NumberParameters as usize };
+                if count >= 2 {
+                    access_kind = Some(unsafe { (*rec).ExceptionInformation[0] });
+                    access_addr = Some(unsafe { (*rec).ExceptionInformation[1] });
+                }
+            }
+        }
+    }
+
+    let kind = match code {
+        c if c == EXCEPTION_ACCESS_VIOLATION => "EXCEPTION_ACCESS_VIOLATION",
+        c if c == EXCEPTION_IN_PAGE_ERROR => "EXCEPTION_IN_PAGE_ERROR",
+        c if c == EXCEPTION_STACK_OVERFLOW => "EXCEPTION_STACK_OVERFLOW",
+        c if c == EXCEPTION_ILLEGAL_INSTRUCTION => "EXCEPTION_ILLEGAL_INSTRUCTION",
+        c if c == EXCEPTION_INT_DIVIDE_BY_ZERO => "EXCEPTION_INT_DIVIDE_BY_ZERO",
+        c if c == EXCEPTION_FLT_DIVIDE_BY_ZERO => "EXCEPTION_FLT_DIVIDE_BY_ZERO",
+        c if c == EXCEPTION_ARRAY_BOUNDS_EXCEEDED => "EXCEPTION_ARRAY_BOUNDS_EXCEEDED",
+        c if c == EXCEPTION_DATATYPE_MISALIGNMENT => "EXCEPTION_DATATYPE_MISALIGNMENT",
+        c if c == EXCEPTION_BREAKPOINT => "EXCEPTION_BREAKPOINT",
+        _ => "UNKNOWN_EXCEPTION",
+    };
+
+    let extra = match (access_kind, access_addr) {
+        (Some(k), Some(a)) => format!("\nAccessKind: {k}\nAccessAddress: 0x{a:X}"),
+        _ => String::new(),
+    };
+
+    record_breadcrumb(format!(
+        "seh: code=0x{:08X} kind={} address=0x{:X}",
+        code.0 as u32,
+        kind,
+        address
+    ));
+
+    let details = format!(
+        "Unhandled Windows exception\n\nExceptionCode: 0x{:08X}\nExceptionKind: {}\nExceptionAddress: 0x{:X}{}",
+        code.0 as u32,
+        kind,
+        address,
+        extra
+    );
+
+    let _ = report_fatal_impl("Unhandled Windows Exception", &details, None);
+
+    EXCEPTION_EXECUTE_HANDLER
 }
