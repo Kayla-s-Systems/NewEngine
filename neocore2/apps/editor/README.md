@@ -1,21 +1,24 @@
 # editor (NewEngine)
 
-Редактор NewEngine: UI (egui/markup), viewport, управление сценой и симуляцией.
+`apps/editor` больше не является местом, где живут host bootstrap, platform runtime и editor tools одновременно.
 
-## Поток данных (сегодня)
+Теперь это thin launcher editor-profile.
 
-1. UI читает ввод/состояние и генерирует `EditorCommand`.
-2. `EditorSimModule` потребляет команды, мутирует `Scene` и гоняет `SimSchedule`.
-3. Рендер читает мир (read-only) и рисует в viewport RT.
+## Responsibility
 
-## Симуляция
+- Загружает startup config.
+- Поднимает общий `newengine-runtime-host`.
+- Подключает `newengine-editor-runtime` как editor composition layer.
+- Запускает platform runtime.
 
-- `Edit`: мир редактируется, fixed_update не шагает.
-- `Playing`: фиксированный шаг симуляции.
-- `Paused`: step-by-step.
+## Non-responsibility
 
-## Roadmap
+- Не содержит host/platform runtime implementation.
+- Не содержит render runtime implementation.
+- Не дублирует asset bootstrap utilities.
 
-- Undo/Redo транзакции.
-- Prefab/SceneAsset сериализация.
-- Параллельный task graph.
+## Architecture
+
+- `newengine-runtime-host` — общий host foundation.
+- `newengine-editor-runtime` — editor-specific composition.
+- `apps/editor` — thin launcher поверх этих слоёв.

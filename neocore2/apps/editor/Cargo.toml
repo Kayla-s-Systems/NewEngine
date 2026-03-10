@@ -2,7 +2,7 @@
 name = "editor"
 version = "0.1.0"
 edition = "2021"
-description = "NewEngine Editor"
+description = "NewEngine Editor Profile Launcher"
 authors = ["Kayla's Systems"]
 homepage = "https://example.com"
 repository = "https://example.com/repo"
@@ -22,41 +22,13 @@ icon = "assets/editor.ico"
 
 [dependencies]
 abi_stable = { version = "0.11" }
-crossbeam-channel = "0.5"
 log = "0.4"
-shaderc = "0.10.1"
-parking_lot = "0.12"
-blake3 = "1"
-serde_json = "1"
-libloading = "0.9"
-image = { version = "0.25", default-features = false, features = ["png", "ico"] }
-egui = "0.33.3"
-newengine-math = { path = "../../crates/newengine-math" }
 
+newengine-assets = { path = "../../crates/newengine-assets" }
 newengine-core = { path = "../../crates/newengine-core" }
+newengine-editor-runtime = { path = "../../crates/newengine-editor-runtime" }
 newengine-plugin-host = { path = "../../crates/newengine-plugin-host" }
 newengine-runtime-host = { path = "../../crates/newengine-runtime-host" }
-newengine-ui = { path = "../../crates/newengine-ui", features = ["images", "assets"] }
-newengine-assets = { path = "../../crates/newengine-assets" }
-newengine-platform-api = { path = "../../crates/newengine-platform-api" }
-
-newengine-scene = { path = "../../crates/newengine-scene", features = ["runtime"] }
-newengine-transform = { path = "../../crates/newengine-transform", features = ["ecs", "service"], default-features = false }
-newengine-transform-api = { path = "../../crates/newengine-transform-api", features = ["ecs"], default-features = false }
-newengine-ecs = { path = "../../crates/newengine-ecs" }
-newengine-viewport = { path = "../../crates/newengine-viewport" }
-newengine-camera = { path = "../../crates/newengine-camera" }
-newengine-camera-runtime = { path = "../../crates/newengine-camera-runtime" }
-newengine-primitives = { path = "../../crates/newengine-primitives" }
-newengine-gizmo = { path = "../../crates/newengine-gizmo", features = ["egui"] }
-newengine-materials = { path = "../../crates/newengine-materials", features = ["serde"] }
-newengine-lighting = { path = "../../crates/newengine-lighting" }
-newengine-editor-core = { path = "../../crates/newengine-editor-core" }
-newengine-previews = { path = "../../crates/newengine-previews" }
-newengine-sim = { path = "../../crates/newengine-sim" }
-newengine-scene-io = { path = "../../crates/newengine-scene-io" }
-newengine-plugin-api = { path = "../../crates/newengine-plugin-api" }
-raw-window-handle = "0.6.2"
 
 [build-dependencies]
 embed-resource = "2"
