@@ -18,6 +18,7 @@ pub(super) struct LoadSelection {
 pub(super) enum SelectionDecision {
     Selected,
     Runtime { label: &'static str },
+    Unsupported { reason: &'static str },
     Unknown,
     AlreadyLoaded,
     Filtered { filter_label: &'static str },
@@ -45,7 +46,8 @@ impl SelectionDecision {
         match self {
             Self::Selected => "yes",
             Self::Runtime { .. } => "runtime",
-            Self::Unknown
+            Self::Unsupported { .. }
+            | Self::Unknown
             | Self::AlreadyLoaded
             | Self::Filtered { .. }
             | Self::DuplicateId { .. } => "no",
@@ -57,6 +59,7 @@ impl SelectionDecision {
         match self {
             Self::Selected => "phase match".to_owned(),
             Self::Runtime { label } => format!("{label} runtime"),
+            Self::Unsupported { reason } => (*reason).to_owned(),
             Self::Unknown => "unknown dynlib".to_owned(),
             Self::AlreadyLoaded => "already loaded".to_owned(),
             Self::Filtered { filter_label } => format!("filtered by {filter_label}"),
@@ -80,8 +83,8 @@ pub(super) fn build_load_selection(
             ScannedDynlibKind::PlatformRuntime { .. } => SelectionDecision::Runtime {
                 label: "platform",
             },
-            ScannedDynlibKind::RenderBackend { .. } => SelectionDecision::Runtime {
-                label: "render backend",
+            ScannedDynlibKind::LegacyRenderBackend { .. } => SelectionDecision::Unsupported {
+                reason: "legacy render backend ABI without plugin root",
             },
             ScannedDynlibKind::Unknown => SelectionDecision::Unknown,
             ScannedDynlibKind::Plugin { id, phase, .. } => {

@@ -87,7 +87,7 @@ pub(crate) struct HostContext {
     pub(crate) plugin_descriptors: Mutex<NeHashMap<String, PluginDescriptor>>,
 
     /// Host-registered runtime plugins that live outside the normal ABI loader path
-    /// (for example platform runtime and render backend runtime).
+    /// (currently platform runtime units only).
     pub(crate) external_runtime_plugins: Mutex<NeHashMap<String, ExternalRuntimePluginEntry>>,
 }
 

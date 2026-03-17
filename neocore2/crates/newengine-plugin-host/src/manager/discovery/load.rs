@@ -124,6 +124,10 @@ impl PluginManager {
                     "platform_runtime",
                     graph.platform_runtime_count.to_string(),
                 ),
+                (
+                    "legacy_render_backend_only",
+                    graph.legacy_render_backend_count.to_string(),
+                ),
                 ("unknown_dynlibs", graph.unknown_dynlibs.len().to_string()),
             ],
         );
