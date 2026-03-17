@@ -1,6 +1,9 @@
 #![forbid(unsafe_op_in_unsafe_fn)]
 
-pub use newengine_ui_draw::{UiDrawList, UiTexId};
+pub use newengine_ui_draw::{UiDrawCmd, UiDrawList, UiTexId, UiTexture, UiTextureDelta, UiTexturePatch, UiVertex};
+pub mod reserved_textures {
+    pub use newengine_ui_draw::reserved::*;
+}
 use serde::{Deserialize, Serialize};
 use std::num::NonZeroU32;
 

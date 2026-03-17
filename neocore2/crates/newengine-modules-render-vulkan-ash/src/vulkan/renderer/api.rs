@@ -1,6 +1,6 @@
 use crate::error::VkResult;
 use ash::vk;
-use newengine_ui::draw::UiDrawList;
+use newengine_render_api::UiDrawList;
 
 use super::state::VulkanRenderer;
 

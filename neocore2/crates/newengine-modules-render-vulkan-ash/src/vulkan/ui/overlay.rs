@@ -8,7 +8,7 @@ use super::super::device::*;
 use super::super::util::*;
 use super::super::VulkanRenderer;
 
-use newengine_ui::draw::{UiDrawCmd, UiDrawList, UiTexId, UiTextureDelta};
+use newengine_render_api::{UiDrawCmd, UiDrawList, UiTexId, UiTextureDelta, UiVertex};
 
 use super::pipeline::{create_ui_pipeline, ui_pc_bytes};
 
@@ -518,7 +518,7 @@ impl VulkanRenderer {
     ) -> VkResult<()> {
         self.ui_apply_delta(&list.texture_delta)?;
 
-        let vb_bytes = (mem::size_of::<newengine_ui::draw::UiVertex>() * list.mesh.vertices.len())
+        let vb_bytes = (mem::size_of::<UiVertex>() * list.mesh.vertices.len())
             as vk::DeviceSize;
         let ib_bytes = (mem::size_of::<u32>() * list.mesh.indices.len()) as vk::DeviceSize;
 

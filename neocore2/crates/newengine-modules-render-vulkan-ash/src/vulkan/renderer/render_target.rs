@@ -3,7 +3,7 @@ use crate::vulkan::util::immediate_submit;
 
 use ash::vk;
 
-use newengine_ui::texture::reserved as ui_reserved;
+use newengine_render_api::reserved_textures as texture_reserved;
 
 use super::state::{RenderTargetVk, VulkanRenderer};
 
@@ -30,7 +30,7 @@ unsafe fn find_memory_type(
 
 #[inline]
 fn ui_external_id(render_target_id: u32) -> u32 {
-    ui_reserved::external_from_u32(render_target_id).0
+    texture_reserved::external_from_u32(render_target_id).0
 }
 
 impl VulkanRenderer {

@@ -12,7 +12,6 @@ newengine-plugin-api = { path = "../newengine-plugin-api" }
 newengine-platform-api = { path = "../newengine-platform-api" }
 newengine-render-api = { path = "../newengine-render-api" }
 newengine-assets = { path = "../newengine-assets" }
-newengine-ui = { path = "../newengine-ui" }
 ash = "0.38"
 ash-window = "0.13"
 abi_stable = { version = "0.11" }

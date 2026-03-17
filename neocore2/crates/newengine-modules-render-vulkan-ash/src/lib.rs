@@ -3,9 +3,6 @@ mod render_api;
 mod service;
 mod vulkan;
 
-use crate::error::VkRenderError;
-use crate::render_api::VulkanRenderApi;
-use crate::service::VulkanRenderService;
 use abi_stable::erased_types::TD_Opaque;
 use abi_stable::std_types::{RResult, RString, RVec};
 use newengine_platform_api::{
@@ -13,12 +10,15 @@ use newengine_platform_api::{
     PLATFORM_WINDOW_SERVICE_ID, PLATFORM_WINDOW_SERVICE_METHOD_SNAPSHOT_JSON_V1,
 };
 use newengine_plugin_api::prelude::*;
-use newengine_plugin_api::{empty_plugin_ui_assets_v1, PluginRootV1, PluginRootV1Ref};
 use newengine_render_api::{
     decode_json, RenderBackendInfoV1, RENDER_SERVICE_ID,
 };
 use raw_window_handle::{RawDisplayHandle, RawWindowHandle};
 use serde_json::Value;
+
+use crate::error::VkRenderError;
+use crate::render_api::VulkanRenderApi;
+use crate::service::VulkanRenderService;
 
 pub const RENDER_BACKEND_ID: &str = "newengine.renderer.vulkan";
 pub const RENDER_BACKEND_NAME: &str = "NewEngine Renderer Vulkan";
@@ -277,26 +277,7 @@ extern "C" fn create_v3() -> PluginModuleV3Dyn<'static> {
     PluginModuleV3_TO::from_value(VulkanRendererPlugin::default(), TD_Opaque)
 }
 
-#[no_mangle]
-pub extern "C" fn newengine_plugin_signature_v1() -> PluginSignatureV1 {
-    PluginSignatureV1 {
-        id: RENDER_BACKEND_ID.into(),
-        name: RENDER_BACKEND_NAME.into(),
-        version: RENDER_BACKEND_VERSION.into(),
-        kind: PluginKind::Runtime,
-        bootstrap_phase: PluginBootstrapPhase::Engine,
-    }
-}
-
-#[no_mangle]
-pub extern "C" fn export_plugin_root() -> PluginRootV1Ref {
-    <PluginRootV1 as abi_stable::prefix_type::PrefixTypeTrait>::leak_into_prefix(PluginRootV1 {
-        create: create_v1,
-        create_v2,
-        create_v3,
-        ui_assets_v1: empty_plugin_ui_assets_v1,
-    })
-}
+export_plugin_root!(create_v1, create_v2, create_v3);
 
 fn parse_backend_config(blob: &ConfigBlobV1) -> Result<VulkanBackendConfig, String> {
     if blob.bytes.is_empty() {

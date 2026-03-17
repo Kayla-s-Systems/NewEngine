@@ -10,6 +10,31 @@ use newengine_math::collections::FxHashMap;
 #[repr(transparent)]
 pub struct UiTexId(pub u32);
 
+
+pub mod reserved {
+    use super::UiTexId;
+
+    pub const FONT_ATLAS: UiTexId = UiTexId(1);
+    pub const USER_BEGIN: u32 = 16;
+
+    /// Reserved range for external GPU-owned textures.
+    ///
+    /// Contract:
+    /// - user-space ids start at `USER_BEGIN`
+    /// - external textures occupy the high-bit namespace
+    /// - engine-managed ids must never collide with external ids
+    pub const EXTERNAL_BEGIN: u32 = 0x8000_0000;
+
+    #[inline]
+    pub const fn external_from_u32(local: u32) -> UiTexId {
+        UiTexId(EXTERNAL_BEGIN | (local & 0x7FFF_FFFF))
+    }
+
+    #[inline]
+    pub const fn is_external(id: UiTexId) -> bool {
+        (id.0 & EXTERNAL_BEGIN) != 0
+    }
+}
 impl UiTexId {
     #[inline]
     pub const fn new(v: u32) -> Self {

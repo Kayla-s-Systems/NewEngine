@@ -4,8 +4,8 @@ use crate::vulkan::VulkanRenderer;
 
 use ash::vk;
 
+use newengine_render_api::reserved_textures as texture_reserved;
 use newengine_render_api::*;
-use newengine_ui::texture::reserved as ui_reserved;
 
 type VkApiResult<T> = Result<T, String>;
 
@@ -510,7 +510,7 @@ impl VulkanRenderApi {
             ));
         }
 
-        Ok(ui_reserved::external_from_u32(key))
+        Ok(texture_reserved::external_from_u32(key))
     }
 
     pub(crate) fn begin_render_target(&mut self, desc: BeginRenderTargetDesc) -> VkApiResult<()> {

@@ -5,6 +5,7 @@ use std::mem;
 
 use super::super::pipeline::create_shader_module_words;
 use crate::vulkan::ShaderPack;
+use newengine_render_api::UiVertex;
 
 #[repr(C)]
 #[derive(Clone, Copy)]
@@ -37,7 +38,7 @@ pub unsafe fn create_ui_pipeline(
 
     let binding = vk::VertexInputBindingDescription::default()
         .binding(0)
-        .stride(mem::size_of::<newengine_ui::draw::UiVertex>() as u32)
+        .stride(mem::size_of::<UiVertex>() as u32)
         .input_rate(vk::VertexInputRate::VERTEX);
 
     let attrs = [
