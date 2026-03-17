@@ -1,33 +1,25 @@
 #![forbid(unsafe_op_in_unsafe_fn)]
 
-use std::ffi::OsStr;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
 use abi_stable::std_types::RString;
-use libloading::Library;
-use newengine_core::host_events::{WindowHandles, WindowInitSize};
-use newengine_core::render::{RenderApi, RenderApiRef, RENDER_API_ID, RENDER_API_PROVIDE};
-use newengine_core::{EngineError, EngineResult, Module, ModuleCtx};
-use newengine_plugin_api::{
-    CapabilityDesc, CapabilityKind, CapabilityRole, ConfigBlobV1, HostApiV1, PluginDescriptor,
-    PluginInfo, PluginKind, RenderBackendDescriptorV1, RENDER_BACKEND_DESCRIBE_SYMBOL,
+use newengine_core::render::{
+    BeginFrameDesc, BeginRenderTargetDesc, BindGroupDesc, BindGroupId, BindGroupLayoutDesc,
+    BindGroupLayoutId, BufferDesc, BufferId, BufferSlice, DrawArgs, DrawIndexedArgs,
+    IndexFormat, PipelineDesc, PipelineId, RectI32, RenderApi, RenderApiRef, RenderTargetDesc,
+    RenderTargetId, SamplerDesc, SamplerId, ShaderDesc, ShaderId, TextureDesc, TextureId,
+    UiDrawList, UiTexId, Viewport, RENDER_API_ID, RENDER_API_PROVIDE,
 };
-use serde_json::{Map, Value};
-use vulkan_renderer::RENDER_BACKEND_ID as STATIC_VULKAN_BACKEND_ID;
-
-const RENDER_BACKEND_CREATE_SYMBOL: &[u8] = b"newengine_render_backend_create_v1\0";
+use newengine_core::{EngineError, EngineResult, Module, ModuleCtx};
+use newengine_plugin_api::{Blob, HostApiV1, MethodName};
+use newengine_render_api::{
+    decode_json, encode_json, RenderBackendInfoV1, RenderRequestV1, RenderResponseV1,
+    RENDER_SERVICE_ID, RENDER_SERVICE_METHOD_INFO_V1, RENDER_SERVICE_METHOD_INVOKE_V1,
+};
 
 pub const DEFAULT_RENDER_BACKEND_ID: &str = "newengine.renderer.vulkan";
+pub const NULL_RENDER_BACKEND_ID: &str = "newengine.renderer.null";
 pub const DEFAULT_RENDER_BACKEND_CLEAR_COLOR: [f32; 4] = [0.0, 0.0, 0.0, 1.0];
-
-#[inline]
-fn display_abs_path(path: &Path) -> String {
-    let canonical = std::fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf());
-    let s = canonical.to_string_lossy();
-    let s = s.strip_prefix(r"\\?\").unwrap_or(&s);
-    let s = s.strip_prefix("//?/").unwrap_or(s);
-    s.replace('\\', "/")
-}
 
 #[derive(Debug, Clone)]
 pub struct ResolvedRenderBackendConfig {
@@ -36,41 +28,348 @@ pub struct ResolvedRenderBackendConfig {
     pub debug_text: String,
 }
 
-type RenderBackendCreateFn = unsafe fn(
-    HostApiV1,
-    raw_window_handle::RawDisplayHandle,
-    raw_window_handle::RawWindowHandle,
-    u32,
-    u32,
-    ConfigBlobV1,
-) -> Result<Box<dyn RenderApi + 'static>, String>;
+#[derive(Clone)]
+struct RenderServiceClient {
+    host: HostApiV1,
+    service_id: RString,
+    m_invoke: MethodName,
+    m_info: MethodName,
+}
 
-type RenderBackendDescribeFn = unsafe extern "C" fn() -> RenderBackendDescriptorV1;
+impl RenderServiceClient {
+    #[inline]
+    fn new(host: HostApiV1) -> Self {
+        Self {
+            host,
+            service_id: RString::from(RENDER_SERVICE_ID),
+            m_invoke: MethodName::from(RENDER_SERVICE_METHOD_INVOKE_V1),
+            m_info: MethodName::from(RENDER_SERVICE_METHOD_INFO_V1),
+        }
+    }
 
-#[derive(Debug, Clone)]
-struct RenderBackendCandidate {
-    path: PathBuf,
-    id: String,
-    name: String,
-    version: String,
-    aliases: Vec<String>,
-    default_settings_json: String,
+    #[inline]
+    fn call(&self, method_name: MethodName, payload: Vec<u8>) -> Result<Vec<u8>, String> {
+        (self.host.call_service_v1)(self.service_id.clone(), method_name, Blob::from(payload))
+            .into_result()
+            .map(|v| v.into_vec())
+            .map_err(|e| e.to_string())
+    }
+
+    #[inline]
+    fn info(&self) -> Result<RenderBackendInfoV1, String> {
+        let bytes = self.call(self.m_info.clone(), Vec::new())?;
+        decode_json(&bytes)
+    }
+
+    #[inline]
+    fn invoke(&self, req: RenderRequestV1) -> Result<RenderResponseV1, String> {
+        let payload = encode_json(&req)?;
+        let bytes = self.call(self.m_invoke.clone(), payload)?;
+        decode_json(&bytes)
+    }
+}
+
+struct ServiceBackedRenderApi {
+    client: RenderServiceClient,
+}
+
+impl ServiceBackedRenderApi {
+    #[inline]
+    fn new(client: RenderServiceClient) -> Self {
+        Self { client }
+    }
+
+    #[inline]
+    fn unit(&self, req: RenderRequestV1) -> EngineResult<()> {
+        match self.client.invoke(req).map_err(EngineError::other)? {
+            RenderResponseV1::Unit => Ok(()),
+            other => Err(EngineError::other(format!(
+                "render service protocol error: expected unit response, got {:?}",
+                other
+            ))),
+        }
+    }
+}
+
+impl RenderApi for ServiceBackedRenderApi {
+    fn begin_frame(&mut self, desc: BeginFrameDesc) -> EngineResult<()> {
+        self.unit(RenderRequestV1::BeginFrame(desc))
+    }
+
+    fn set_ui_draw_list(&mut self, ui: UiDrawList) {
+        let _ = self.unit(RenderRequestV1::SetUiDrawList(ui));
+    }
+
+    fn end_frame(&mut self) -> EngineResult<()> {
+        self.unit(RenderRequestV1::EndFrame)
+    }
+
+    fn resize(&mut self, width: u32, height: u32) -> EngineResult<()> {
+        self.unit(RenderRequestV1::Resize { width, height })
+    }
+
+    fn create_render_target(&mut self, desc: RenderTargetDesc) -> EngineResult<RenderTargetId> {
+        match self
+            .client
+            .invoke(RenderRequestV1::CreateRenderTarget(desc))
+            .map_err(EngineError::other)?
+        {
+            RenderResponseV1::RenderTargetId(id) => Ok(id),
+            other => Err(EngineError::other(format!(
+                "render service protocol error: expected RenderTargetId, got {:?}",
+                other
+            ))),
+        }
+    }
+
+    fn destroy_render_target(&mut self, id: RenderTargetId) {
+        let _ = self.unit(RenderRequestV1::DestroyRenderTarget { id });
+    }
+
+    fn render_target_ui_tex_id(&self, id: RenderTargetId) -> EngineResult<UiTexId> {
+        match self
+            .client
+            .invoke(RenderRequestV1::RenderTargetUiTexId { id })
+            .map_err(EngineError::other)?
+        {
+            RenderResponseV1::UiTexId(id) => Ok(id),
+            other => Err(EngineError::other(format!(
+                "render service protocol error: expected UiTexId, got {:?}",
+                other
+            ))),
+        }
+    }
+
+    fn begin_render_target(&mut self, desc: BeginRenderTargetDesc) -> EngineResult<()> {
+        self.unit(RenderRequestV1::BeginRenderTarget(desc))
+    }
+
+    fn end_render_target(&mut self) -> EngineResult<()> {
+        self.unit(RenderRequestV1::EndRenderTarget)
+    }
+
+    fn create_buffer(&mut self, desc: BufferDesc) -> EngineResult<BufferId> {
+        match self
+            .client
+            .invoke(RenderRequestV1::CreateBuffer(desc))
+            .map_err(EngineError::other)?
+        {
+            RenderResponseV1::BufferId(id) => Ok(id),
+            other => Err(EngineError::other(format!(
+                "render service protocol error: expected BufferId, got {:?}",
+                other
+            ))),
+        }
+    }
+
+    fn destroy_buffer(&mut self, id: BufferId) {
+        let _ = self.unit(RenderRequestV1::DestroyBuffer { id });
+    }
+
+    fn write_buffer(&mut self, id: BufferId, offset: u64, data: &[u8]) -> EngineResult<()> {
+        self.unit(RenderRequestV1::WriteBuffer {
+            id,
+            offset,
+            data: data.to_vec(),
+        })
+    }
+
+    fn create_texture(&mut self, desc: TextureDesc) -> EngineResult<TextureId> {
+        match self
+            .client
+            .invoke(RenderRequestV1::CreateTexture(desc))
+            .map_err(EngineError::other)?
+        {
+            RenderResponseV1::TextureId(id) => Ok(id),
+            other => Err(EngineError::other(format!(
+                "render service protocol error: expected TextureId, got {:?}",
+                other
+            ))),
+        }
+    }
+
+    fn destroy_texture(&mut self, id: TextureId) {
+        let _ = self.unit(RenderRequestV1::DestroyTexture { id });
+    }
+
+    fn create_sampler(&mut self, desc: SamplerDesc) -> EngineResult<SamplerId> {
+        match self
+            .client
+            .invoke(RenderRequestV1::CreateSampler(desc))
+            .map_err(EngineError::other)?
+        {
+            RenderResponseV1::SamplerId(id) => Ok(id),
+            other => Err(EngineError::other(format!(
+                "render service protocol error: expected SamplerId, got {:?}",
+                other
+            ))),
+        }
+    }
+
+    fn destroy_sampler(&mut self, id: SamplerId) {
+        let _ = self.unit(RenderRequestV1::DestroySampler { id });
+    }
+
+    fn create_shader(&mut self, desc: ShaderDesc) -> EngineResult<ShaderId> {
+        match self
+            .client
+            .invoke(RenderRequestV1::CreateShader(desc))
+            .map_err(EngineError::other)?
+        {
+            RenderResponseV1::ShaderId(id) => Ok(id),
+            other => Err(EngineError::other(format!(
+                "render service protocol error: expected ShaderId, got {:?}",
+                other
+            ))),
+        }
+    }
+
+    fn destroy_shader(&mut self, id: ShaderId) {
+        let _ = self.unit(RenderRequestV1::DestroyShader { id });
+    }
+
+    fn create_pipeline(&mut self, desc: PipelineDesc) -> EngineResult<PipelineId> {
+        match self
+            .client
+            .invoke(RenderRequestV1::CreatePipeline(desc))
+            .map_err(EngineError::other)?
+        {
+            RenderResponseV1::PipelineId(id) => Ok(id),
+            other => Err(EngineError::other(format!(
+                "render service protocol error: expected PipelineId, got {:?}",
+                other
+            ))),
+        }
+    }
+
+    fn destroy_pipeline(&mut self, id: PipelineId) {
+        let _ = self.unit(RenderRequestV1::DestroyPipeline { id });
+    }
+
+    fn create_bind_group_layout(
+        &mut self,
+        desc: BindGroupLayoutDesc,
+    ) -> EngineResult<BindGroupLayoutId> {
+        match self
+            .client
+            .invoke(RenderRequestV1::CreateBindGroupLayout(desc))
+            .map_err(EngineError::other)?
+        {
+            RenderResponseV1::BindGroupLayoutId(id) => Ok(id),
+            other => Err(EngineError::other(format!(
+                "render service protocol error: expected BindGroupLayoutId, got {:?}",
+                other
+            ))),
+        }
+    }
+
+    fn destroy_bind_group_layout(&mut self, id: BindGroupLayoutId) {
+        let _ = self.unit(RenderRequestV1::DestroyBindGroupLayout { id });
+    }
+
+    fn create_bind_group(&mut self, desc: BindGroupDesc) -> EngineResult<BindGroupId> {
+        match self
+            .client
+            .invoke(RenderRequestV1::CreateBindGroup(desc))
+            .map_err(EngineError::other)?
+        {
+            RenderResponseV1::BindGroupId(id) => Ok(id),
+            other => Err(EngineError::other(format!(
+                "render service protocol error: expected BindGroupId, got {:?}",
+                other
+            ))),
+        }
+    }
+
+    fn destroy_bind_group(&mut self, id: BindGroupId) {
+        let _ = self.unit(RenderRequestV1::DestroyBindGroup { id });
+    }
+
+    fn set_viewport(&mut self, vp: Viewport) -> EngineResult<()> {
+        self.unit(RenderRequestV1::SetViewport(vp))
+    }
+
+    fn set_scissor(&mut self, rect: RectI32) -> EngineResult<()> {
+        self.unit(RenderRequestV1::SetScissor(rect))
+    }
+
+    fn set_pipeline(&mut self, pipeline: PipelineId) -> EngineResult<()> {
+        self.unit(RenderRequestV1::SetPipeline { pipeline })
+    }
+
+    fn set_bind_group(&mut self, index: u32, group: BindGroupId) -> EngineResult<()> {
+        self.unit(RenderRequestV1::SetBindGroup { index, group })
+    }
+
+    fn set_vertex_buffer(&mut self, slot: u32, slice: BufferSlice) -> EngineResult<()> {
+        self.unit(RenderRequestV1::SetVertexBuffer { slot, slice })
+    }
+
+    fn set_index_buffer(&mut self, slice: BufferSlice, format: IndexFormat) -> EngineResult<()> {
+        self.unit(RenderRequestV1::SetIndexBuffer { slice, format })
+    }
+
+    fn draw(&mut self, args: DrawArgs) -> EngineResult<()> {
+        self.unit(RenderRequestV1::Draw(args))
+    }
+
+    fn draw_indexed(&mut self, args: DrawIndexedArgs) -> EngineResult<()> {
+        self.unit(RenderRequestV1::DrawIndexed(args))
+    }
+}
+
+#[derive(Debug, Default)]
+struct NullRenderApi {
+    next_id: u32,
+}
+
+impl NullRenderApi {
+    #[inline]
+    fn alloc_id(&mut self) -> u32 {
+        self.next_id = self.next_id.saturating_add(1).max(1);
+        self.next_id
+    }
+}
+
+impl RenderApi for NullRenderApi {
+    fn begin_frame(&mut self, _desc: BeginFrameDesc) -> EngineResult<()> { Ok(()) }
+    fn set_ui_draw_list(&mut self, _ui: UiDrawList) {}
+    fn end_frame(&mut self) -> EngineResult<()> { Ok(()) }
+    fn resize(&mut self, _width: u32, _height: u32) -> EngineResult<()> { Ok(()) }
+    fn create_render_target(&mut self, _desc: RenderTargetDesc) -> EngineResult<RenderTargetId> { Ok(RenderTargetId::new(self.alloc_id())) }
+    fn destroy_render_target(&mut self, _id: RenderTargetId) {}
+    fn render_target_ui_tex_id(&self, _id: RenderTargetId) -> EngineResult<UiTexId> { Ok(UiTexId::new(0)) }
+    fn begin_render_target(&mut self, _desc: BeginRenderTargetDesc) -> EngineResult<()> { Ok(()) }
+    fn end_render_target(&mut self) -> EngineResult<()> { Ok(()) }
+    fn create_buffer(&mut self, _desc: BufferDesc) -> EngineResult<BufferId> { Ok(BufferId::new(self.alloc_id())) }
+    fn destroy_buffer(&mut self, _id: BufferId) {}
+    fn write_buffer(&mut self, _id: BufferId, _offset: u64, _data: &[u8]) -> EngineResult<()> { Ok(()) }
+    fn create_texture(&mut self, _desc: TextureDesc) -> EngineResult<TextureId> { Err(EngineError::other("null render backend: textures are not supported in headless mode")) }
+    fn destroy_texture(&mut self, _id: TextureId) {}
+    fn create_sampler(&mut self, _desc: SamplerDesc) -> EngineResult<SamplerId> { Err(EngineError::other("null render backend: samplers are not supported in headless mode")) }
+    fn destroy_sampler(&mut self, _id: SamplerId) {}
+    fn create_shader(&mut self, _desc: ShaderDesc) -> EngineResult<ShaderId> { Ok(ShaderId::new(self.alloc_id())) }
+    fn destroy_shader(&mut self, _id: ShaderId) {}
+    fn create_pipeline(&mut self, _desc: PipelineDesc) -> EngineResult<PipelineId> { Ok(PipelineId::new(self.alloc_id())) }
+    fn destroy_pipeline(&mut self, _id: PipelineId) {}
+    fn create_bind_group_layout(&mut self, _desc: BindGroupLayoutDesc) -> EngineResult<BindGroupLayoutId> { Ok(BindGroupLayoutId::new(self.alloc_id())) }
+    fn destroy_bind_group_layout(&mut self, _id: BindGroupLayoutId) {}
+    fn create_bind_group(&mut self, _desc: BindGroupDesc) -> EngineResult<BindGroupId> { Ok(BindGroupId::new(self.alloc_id())) }
+    fn destroy_bind_group(&mut self, _id: BindGroupId) {}
+    fn set_viewport(&mut self, _vp: Viewport) -> EngineResult<()> { Ok(()) }
+    fn set_scissor(&mut self, _rect: RectI32) -> EngineResult<()> { Ok(()) }
+    fn set_pipeline(&mut self, _pipeline: PipelineId) -> EngineResult<()> { Ok(()) }
+    fn set_bind_group(&mut self, _index: u32, _group: BindGroupId) -> EngineResult<()> { Ok(()) }
+    fn set_vertex_buffer(&mut self, _slot: u32, _slice: BufferSlice) -> EngineResult<()> { Ok(()) }
+    fn set_index_buffer(&mut self, _slice: BufferSlice, _format: IndexFormat) -> EngineResult<()> { Ok(()) }
+    fn draw(&mut self, _args: DrawArgs) -> EngineResult<()> { Ok(()) }
+    fn draw_indexed(&mut self, _args: DrawIndexedArgs) -> EngineResult<()> { Ok(()) }
 }
 
 pub struct RenderBackendRuntimeModule {
     backend_spec: String,
-    modules_dir: PathBuf,
-    lib: Option<Library>,
+    _modules_dir: PathBuf,
     api: Option<RenderApiRef>,
-    resolved_path: Option<PathBuf>,
-    registered_backend_id: Option<String>,
-    backend_mode: RenderBackendLoadMode,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum RenderBackendLoadMode {
-    DynamicDll,
-    InProcessStatic,
 }
 
 impl RenderBackendRuntimeModule {
@@ -78,62 +377,35 @@ impl RenderBackendRuntimeModule {
     pub fn new(backend_spec: String, modules_dir: PathBuf) -> Self {
         Self {
             backend_spec,
-            modules_dir,
-            lib: None,
+            _modules_dir: modules_dir,
             api: None,
-            resolved_path: None,
-            registered_backend_id: None,
-            backend_mode: RenderBackendLoadMode::DynamicDll,
         }
     }
-}
 
+    fn enable_null_render_backend<E: Send + 'static>(
+        &mut self,
+        ctx: &mut ModuleCtx<'_, E>,
+        reason: impl Into<String>,
+    ) -> EngineResult<()> {
+        let reason = reason.into();
+        log::warn!(
+            "render backend: '{}' is unavailable; enabling headless null backend ({})",
+            self.backend_spec,
+            reason
+        );
 
-fn synthesize_render_backend_plugin_descriptor(candidate: &RenderBackendCandidate) -> PluginDescriptor {
-    PluginDescriptor::builder(
-        candidate.id.as_str(),
-        candidate.name.as_str(),
-        candidate.version.as_str(),
-        PluginKind::Runtime,
-    )
-        .push(
-            CapabilityDesc::new(
-                "render.backend.v1",
-                CapabilityRole::Provides,
-                CapabilityKind::Other,
-                1,
-            )
-                .with_json("{\"role\":\"render-backend\"}"),
-        )
-        .push(
-            CapabilityDesc::new(
-                "render.frame.v1",
-                CapabilityRole::Provides,
-                CapabilityKind::Other,
-                1,
-            )
-                .with_json("{\"role\":\"frame\"}"),
-        )
-        .push(
-            CapabilityDesc::new(
-                "platform.window.v1",
-                CapabilityRole::Requires,
-                CapabilityKind::Other,
-                1,
-            )
-                .with_json("{\"role\":\"window\"}"),
-        )
-        .push(
-            CapabilityDesc::new(
-                "platform.surface.v1",
-                CapabilityRole::Requires,
-                CapabilityKind::Other,
-                1,
-            )
-                .with_json("{\"role\":\"surface\"}"),
-        )
-        .requires_service("asset.manager", 1, "{\"role\":\"shader-assets\"}")
-        .build()
+        let api = RenderApiRef::new(NullRenderApi::default());
+        let resolved = ResolvedRenderBackendConfig {
+            backend_id: NULL_RENDER_BACKEND_ID.to_owned(),
+            clear_color: DEFAULT_RENDER_BACKEND_CLEAR_COLOR,
+            debug_text: "NewEngine | Headless".to_owned(),
+        };
+
+        ctx.resources_mut().insert(resolved);
+        ctx.resources_mut().register_api(RENDER_API_ID, api.clone())?;
+        self.api = Some(api);
+        Ok(())
+    }
 }
 
 impl<E: Send + 'static> Module<E> for RenderBackendRuntimeModule {
@@ -146,526 +418,63 @@ impl<E: Send + 'static> Module<E> for RenderBackendRuntimeModule {
     }
 
     fn init(&mut self, ctx: &mut ModuleCtx<'_, E>) -> EngineResult<()> {
-        let handles = *ctx
-            .resources()
-            .get::<WindowHandles>()
-            .ok_or_else(|| EngineError::other("render backend: missing window handles"))?;
-        let size = *ctx
-            .resources()
-            .get::<WindowInitSize>()
-            .ok_or_else(|| EngineError::other("render backend: missing initial window size"))?;
-
-        newengine_core::crash::record_breadcrumb(format!("render backend: init begin spec='{}'", self.backend_spec));
-        let candidate = detect_render_backend(&self.modules_dir, &self.backend_spec)?;
-        newengine_core::crash::record_breadcrumb(format!("render backend: candidate id='{}' path='{}'", candidate.id, display_abs_path(&candidate.path)));
-        let effective = resolve_render_backend_config(&candidate)?;
-        newengine_core::crash::record_breadcrumb(format!("render backend: effective config id='{}' debug_text='{}'", effective.backend_id, effective.debug_text));
-
-        log::info!(
-            "render backend: loading id='{}' ver='{}' spec='{}' path='{}' size={}x{}",
-            candidate.id,
-            candidate.version,
-            self.backend_spec,
-            candidate.path.display(),
-            size.width,
-            size.height
-        );
-        log::info!(
-            "render backend: effective config id='{}' clear_color={:.3},{:.3},{:.3},{:.3} debug_text='{}'",
-            effective.backend_id,
-            effective.clear_color[0],
-            effective.clear_color[1],
-            effective.clear_color[2],
-            effective.clear_color[3],
-            effective.debug_text
-        );
-
         let host = newengine_plugin_host::default_host_api();
-        let effective_blob = config_blob_from_json_string(render_backend_effective_json(
-            &candidate.default_settings_json,
-            &newengine_plugin_host::get_plugin_overrides_with_env(&candidate.id),
-        )?);
-
-        let (api, lib, backend_mode) = if candidate.id == STATIC_VULKAN_BACKEND_ID {
-            newengine_core::crash::record_breadcrumb("render backend: create api begin [in-process-static]");
-            log::info!(
-                "render backend: using in-process static backend path for id='{}' to avoid Rust ABI across DLL boundary",
-                candidate.id
-            );
-
-            let api = unsafe {
-                vulkan_renderer::newengine_render_backend_create_v1(
-                    host,
-                    handles.display,
-                    handles.window,
-                    size.width,
-                    size.height,
-                    effective_blob,
-                )
-            }
-                .map_err(|e| {
-                    EngineError::other(format!(
-                        "render backend create failed id='{}' mode='in-process-static': {}",
-                        candidate.id,
-                        e
-                    ))
-                })?;
-
-            (api, None, RenderBackendLoadMode::InProcessStatic)
-        } else {
-            log::warn!(
-                "render backend: using legacy dynamic Rust ABI path for id='{}'; this path is unsafe across DLL boundaries and should be migrated to a stable plugin ABI",
-                candidate.id
-            );
-
-            newengine_core::crash::record_breadcrumb("render backend: dlopen begin");
-            let lib = unsafe { Library::new(&candidate.path) }.map_err(|e| {
-                EngineError::other(format!(
-                    "render backend load failed path='{}': {e}",
-                    candidate.path.display()
-                ))
-            })?;
-
-            newengine_core::crash::record_breadcrumb("render backend: resolve create symbol");
-            let create = unsafe { lib.get::<RenderBackendCreateFn>(RENDER_BACKEND_CREATE_SYMBOL) }
-                .map_err(|e| {
-                    EngineError::other(format!(
-                        "render backend symbol '{}' missing in '{}': {e}",
-                        String::from_utf8_lossy(RENDER_BACKEND_CREATE_SYMBOL)
-                            .trim_end_matches('\0'),
-                        candidate.path.display()
-                    ))
-                })?;
-
-            newengine_core::crash::record_breadcrumb("render backend: create api begin [dynamic-dll]");
-            let api = unsafe {
-                create(
-                    host,
-                    handles.display,
-                    handles.window,
-                    size.width,
-                    size.height,
-                    effective_blob,
-                )
-            }
-                .map_err(|e| {
-                    EngineError::other(format!(
-                        "render backend create failed path='{}': {}",
-                        candidate.path.display(),
-                        e
-                    ))
-                })?;
-
-            (api, Some(lib), RenderBackendLoadMode::DynamicDll)
+        let client = RenderServiceClient::new(host);
+        let info = match client.info() {
+            Ok(info) => info,
+            Err(err) => return self.enable_null_render_backend(ctx, err),
         };
 
-        newengine_core::crash::record_breadcrumb(format!("render backend: api created id='{}'", candidate.id));
-        let descriptor = synthesize_render_backend_plugin_descriptor(&candidate);
-        let info = PluginInfo {
-            id: RString::from(candidate.id.clone()),
-            name: RString::from(candidate.name.clone()),
-            version: RString::from(candidate.version.clone()),
-        };
-        newengine_plugin_host::register_external_runtime_plugin(
-            candidate.path.clone(),
-            info,
-            descriptor,
-            "running",
-        )
-            .map_err(EngineError::other)?;
+        if !backend_matches(&self.backend_spec, &info.backend_id) {
+            return self.enable_null_render_backend(
+                ctx,
+                format!(
+                    "selected backend '{}' does not match active plugin '{}'",
+                    self.backend_spec, info.backend_id
+                ),
+            );
+        }
 
-        let api = RenderApiRef::from_box(api);
-        ctx.resources_mut()
-            .insert(effective.clone());
+        log::info!(
+            "render backend: bridge bound id='{}' name='{}' version='{}' debug_text='{}'",
+            info.backend_id,
+            info.backend_name,
+            info.backend_version,
+            info.debug_text
+        );
+
+        let resolved = ResolvedRenderBackendConfig {
+            backend_id: info.backend_id,
+            clear_color: info.clear_color,
+            debug_text: info.debug_text,
+        };
+        let api = RenderApiRef::new(ServiceBackedRenderApi::new(client));
+        ctx.resources_mut().insert(resolved);
         ctx.resources_mut().register_api(RENDER_API_ID, api.clone())?;
-
-        newengine_core::crash::record_breadcrumb(format!("render backend: registered id='{}'", candidate.id));
-        self.registered_backend_id = Some(candidate.id.clone());
-        self.resolved_path = Some(candidate.path);
-        self.backend_mode = backend_mode;
         self.api = Some(api);
-        self.lib = lib;
-        newengine_core::crash::record_breadcrumb("render backend: init completed");
         Ok(())
     }
 
     fn shutdown(&mut self, ctx: &mut ModuleCtx<'_, E>) -> EngineResult<()> {
-        newengine_core::crash::record_breadcrumb("render backend: shutdown begin");
-        let _ = ctx
-            .resources_mut()
-            .unregister_api::<RenderApiRef>(RENDER_API_ID);
+        let _ = ctx.resources_mut().unregister_api::<RenderApiRef>(RENDER_API_ID);
         let _ = ctx.resources_mut().remove::<ResolvedRenderBackendConfig>();
         self.api = None;
-        if let Some(id) = self.registered_backend_id.take() {
-            newengine_plugin_host::host_context::unregister_by_owner(&id);
-        }
-        self.resolved_path = None;
-
-        if matches!(self.backend_mode, RenderBackendLoadMode::DynamicDll) {
-            // Rust ABI render backends are not safe to unload after trait object usage across DLL
-            // boundaries. Keep the library pinned for process lifetime until all backends are moved
-            // to a stable ABI contract.
-            if let Some(lib) = self.lib.take() {
-                std::mem::forget(lib);
-            }
-        } else {
-            self.lib = None;
-        }
-
-        newengine_core::crash::record_breadcrumb("render backend: shutdown completed");
         Ok(())
     }
 }
 
-fn detect_render_backend(modules_dir: &Path, backend_spec: &str) -> EngineResult<RenderBackendCandidate> {
-    let spec = backend_spec.trim();
-    if spec.is_empty() {
-        return Err(EngineError::other(
-            "render backend spec is empty; expected alias, canonical id, or DLL path",
-        ));
-    }
-
-    let direct = PathBuf::from(spec);
-    if direct.is_file() {
-        return inspect_render_backend(&direct)?.ok_or_else(|| {
-            EngineError::other(format!(
-                "render backend file '{}' is missing required symbol '{}'",
-                direct.display(),
-                String::from_utf8_lossy(RENDER_BACKEND_CREATE_SYMBOL).trim_end_matches('\0')
-            ))
-        });
-    }
-
-    let modules_path = resolve_modules_dir(modules_dir)?;
-    let mut candidates: Vec<(i32, RenderBackendCandidate)> = Vec::new();
-
-    let mut dynlibs: Vec<PathBuf> = std::fs::read_dir(&modules_path)
-        .map_err(|e| {
-            EngineError::other(format!(
-                "render backend scan failed dir='{}': {e}",
-                modules_path.display()
-            ))
-        })?
-        .filter_map(|entry| entry.ok().map(|v| v.path()))
-        .filter(|path| is_dynamic_lib(path))
-        .collect();
-
-    dynlibs.sort();
-    for path in dynlibs {
-        let Some(candidate) = inspect_render_backend(&path)? else {
-            continue;
-        };
-
-        let score = score_backend_candidate(&candidate, spec);
-        if score > 0 {
-            candidates.push((score, candidate));
-        }
-    }
-
-    candidates.sort_by(|(sa, a), (sb, b)| {
-        sb.cmp(sa)
-            .then_with(|| a.id.cmp(&b.id))
-            .then_with(|| a.path.cmp(&b.path))
-    });
-
-    if let Some((_, candidate)) = candidates.into_iter().next() {
-        return Ok(candidate);
-    }
-
-    Err(EngineError::other(format!(
-        "render backend '{}' not found in '{}'",
-        spec,
-        modules_path.display()
-    )))
+fn backend_matches(spec: &str, active_id: &str) -> bool {
+    let spec = normalize_backend_token(spec);
+    let active = normalize_backend_token(active_id);
+    spec.is_empty() || active.is_empty() || spec == active || active.contains(&spec) || spec.contains(&active)
 }
 
-fn resolve_render_backend_config(
-    candidate: &RenderBackendCandidate,
-) -> EngineResult<ResolvedRenderBackendConfig> {
-    let effective = render_backend_effective_json(
-        &candidate.default_settings_json,
-        &newengine_plugin_host::get_plugin_overrides_with_env(&candidate.id),
-    )?;
-
-    Ok(ResolvedRenderBackendConfig {
-        backend_id: candidate.id.clone(),
-        clear_color: extract_clear_color(&effective),
-        debug_text: extract_string_field(&effective, "debug_text")
-            .unwrap_or_else(|| candidate.name.clone()),
-    })
-}
-
-fn render_backend_effective_json(default_settings_json: &str, overrides: &Value) -> EngineResult<Value> {
-    let mut effective = parse_json_object(default_settings_json, "render backend defaults")?;
-    merge_json_replace(&mut effective, overrides);
-    Ok(effective)
-}
-
-fn config_blob_from_json_string(value: Value) -> ConfigBlobV1 {
-    let bytes = serde_json::to_vec(&value).unwrap_or_else(|_| b"{}".to_vec());
-    ConfigBlobV1 {
-        content_type: "application/json".into(),
-        bytes: bytes.into(),
-        format_version: 1,
-    }
-}
-
-fn parse_json_object(raw: &str, what: &str) -> EngineResult<Value> {
-    let parsed: Value = serde_json::from_str(raw)
-        .map_err(|e| EngineError::other(format!("{what} parse failed: {e}")))?;
-    if parsed.is_object() {
-        Ok(parsed)
-    } else {
-        Err(EngineError::other(format!("{what} must be a JSON object")))
-    }
-}
-
-fn merge_json_replace(dst: &mut Value, src: &Value) {
-    match (dst, src) {
-        (Value::Object(dst_map), Value::Object(src_map)) => {
-            for (key, src_value) in src_map {
-                match dst_map.get_mut(key) {
-                    Some(dst_value) => merge_json_replace(dst_value, src_value),
-                    None => {
-                        dst_map.insert(key.clone(), src_value.clone());
-                    }
-                }
-            }
-        }
-        (dst_value, src_value) => {
-            *dst_value = src_value.clone();
-        }
-    }
-}
-
-fn extract_clear_color(value: &Value) -> [f32; 4] {
-    let Some(arr) = value.get("clear_color").and_then(Value::as_array) else {
-        return DEFAULT_RENDER_BACKEND_CLEAR_COLOR;
-    };
-
-    if arr.len() != 4 {
-        return DEFAULT_RENDER_BACKEND_CLEAR_COLOR;
-    }
-
-    let mut out = DEFAULT_RENDER_BACKEND_CLEAR_COLOR;
-    for (idx, item) in arr.iter().enumerate().take(4) {
-        out[idx] = item.as_f64().unwrap_or(out[idx] as f64) as f32;
-    }
-    out
-}
-
-fn extract_string_field(value: &Value, key: &str) -> Option<String> {
-    value
-        .get(key)
-        .and_then(Value::as_str)
-        .map(str::trim)
-        .filter(|it| !it.is_empty())
-        .map(str::to_owned)
-}
-
-fn inspect_render_backend(path: &Path) -> EngineResult<Option<RenderBackendCandidate>> {
-    let lib = unsafe { Library::new(path) }.map_err(|e| {
-        EngineError::other(format!(
-            "render backend inspect failed path='{}': {e}",
-            path.display()
-        ))
-    })?;
-
-    if unsafe { lib.get::<RenderBackendCreateFn>(RENDER_BACKEND_CREATE_SYMBOL) }.is_err() {
-        return Ok(None);
-    }
-
-    let descriptor = read_render_backend_descriptor(&lib)?;
-    let fallback_id = path
-        .file_stem()
-        .and_then(OsStr::to_str)
-        .map(str::to_owned)
-        .unwrap_or_else(|| DEFAULT_RENDER_BACKEND_ID.to_owned());
-
-    Ok(Some(RenderBackendCandidate {
-        path: path.to_path_buf(),
-        id: descriptor
-            .get("id")
-            .and_then(Value::as_str)
-            .filter(|it| !it.trim().is_empty())
-            .map(str::to_owned)
-            .unwrap_or(fallback_id.clone()),
-        name: descriptor
-            .get("name")
-            .and_then(Value::as_str)
-            .filter(|it| !it.trim().is_empty())
-            .map(str::to_owned)
-            .unwrap_or_else(|| fallback_id.clone()),
-        version: descriptor
-            .get("version")
-            .and_then(Value::as_str)
-            .filter(|it| !it.trim().is_empty())
-            .map(str::to_owned)
-            .unwrap_or_else(|| "-".to_owned()),
-        aliases: descriptor
-            .get("aliases")
-            .and_then(Value::as_array)
-            .map(|items| {
-                items
-                    .iter()
-                    .filter_map(Value::as_str)
-                    .map(str::trim)
-                    .filter(|it| !it.is_empty())
-                    .map(str::to_owned)
-                    .collect::<Vec<_>>()
-            })
-            .unwrap_or_default(),
-        default_settings_json: descriptor
-            .get("default_settings_json")
-            .and_then(Value::as_str)
-            .unwrap_or("{}")
-            .to_owned(),
-    }))
-}
-
-fn read_render_backend_descriptor(lib: &Library) -> EngineResult<Value> {
-    let describe = unsafe { lib.get::<RenderBackendDescribeFn>(RENDER_BACKEND_DESCRIBE_SYMBOL) }
-        .map_err(|e| {
-            EngineError::other(format!(
-                "render backend describe symbol '{}' missing: {e}",
-                String::from_utf8_lossy(RENDER_BACKEND_DESCRIBE_SYMBOL).trim_end_matches('\0')
-            ))
-        })?;
-
-    let raw = unsafe { describe() };
-    let mut obj = Map::new();
-    obj.insert(
-        "id".to_owned(),
-        Value::String(read_descriptor_field(raw.id_ptr, raw.id_len)),
-    );
-    obj.insert(
-        "name".to_owned(),
-        Value::String(read_descriptor_field(raw.name_ptr, raw.name_len)),
-    );
-    obj.insert(
-        "version".to_owned(),
-        Value::String(read_descriptor_field(raw.version_ptr, raw.version_len)),
-    );
-    obj.insert(
-        "aliases".to_owned(),
-        Value::Array(
-            read_descriptor_field(raw.aliases_ptr, raw.aliases_len)
-                .split(',')
-                .map(str::trim)
-                .filter(|it| !it.is_empty())
-                .map(|it| Value::String(it.to_owned()))
-                .collect(),
-        ),
-    );
-    obj.insert(
-        "default_settings_json".to_owned(),
-        Value::String(read_descriptor_field(
-            raw.default_settings_ptr,
-            raw.default_settings_len,
-        )),
-    );
-    Ok(Value::Object(obj))
-}
-
-fn read_descriptor_field(ptr: *const u8, len: usize) -> String {
-    if ptr.is_null() || len == 0 {
-        return String::new();
-    }
-
-    let bytes = unsafe { std::slice::from_raw_parts(ptr, len) };
-    String::from_utf8_lossy(bytes).trim().to_owned()
-}
-
-fn resolve_modules_dir(modules_dir: &Path) -> EngineResult<PathBuf> {
-    let exe = std::env::current_exe()
-        .map_err(|e| EngineError::other(format!("render backend: current_exe failed: {e}")))?;
-    let exe_dir = exe.parent().ok_or_else(|| {
-        EngineError::other("render backend: executable has no parent directory")
-    })?;
-
-    let path = if modules_dir.as_os_str().is_empty() || modules_dir == Path::new(".") {
-        exe_dir.to_path_buf()
-    } else if modules_dir.is_absolute() {
-        modules_dir.to_path_buf()
-    } else {
-        exe_dir.join(modules_dir)
-    };
-
-    Ok(path)
-}
-
-#[inline]
-fn is_dynamic_lib(path: &Path) -> bool {
-    matches!(
-        path.extension().and_then(OsStr::to_str).map(|v| v.to_ascii_lowercase()),
-        Some(ext) if ext == "dll" || ext == "so" || ext == "dylib"
-    )
-}
-
-fn score_backend_candidate(candidate: &RenderBackendCandidate, backend_spec: &str) -> i32 {
-    let spec_norm = normalize_token_string(backend_spec);
-    if spec_norm.is_empty() {
-        return 0;
-    }
-
-    let id_norm = normalize_token_string(&candidate.id);
-    let name_norm = normalize_token_string(&candidate.name);
-    let path_norm = candidate
-        .path
-        .file_stem()
-        .and_then(OsStr::to_str)
-        .map(normalize_token_string)
-        .unwrap_or_default();
-    let alias_norms: Vec<String> = candidate
-        .aliases
-        .iter()
-        .map(|it| normalize_token_string(it))
-        .collect();
-
-    if spec_norm == id_norm {
-        return 10_000;
-    }
-    if alias_norms.iter().any(|it| *it == spec_norm) {
-        return 9_000;
-    }
-    if spec_norm == path_norm {
-        return 8_000;
-    }
-
-    let spec_tokens = split_tokens(&spec_norm);
-    if spec_tokens.is_empty() {
-        return 0;
-    }
-
-    let mut score = 0;
-    for haystack in std::iter::once(&id_norm)
-        .chain(std::iter::once(&name_norm))
-        .chain(std::iter::once(&path_norm))
-        .chain(alias_norms.iter())
-    {
-        let haystack_tokens = split_tokens(haystack);
-        if spec_tokens
-            .iter()
-            .all(|token| haystack_tokens.iter().any(|it| it == token))
-        {
-            score = score.max(500 + haystack_tokens.len() as i32);
-        }
-    }
-
-    score
-}
-
-fn normalize_token_string(input: &str) -> String {
+fn normalize_backend_token(input: &str) -> String {
     input
         .chars()
         .map(|ch| if ch.is_ascii_alphanumeric() { ch.to_ascii_lowercase() } else { ' ' })
-        .collect()
-}
-
-fn split_tokens(input: &str) -> Vec<String> {
-    input
+        .collect::<String>()
         .split_whitespace()
-        .filter(|it| !it.is_empty())
-        .map(str::to_owned)
-        .collect()
+        .collect::<Vec<_>>()
+        .join(" ")
 }

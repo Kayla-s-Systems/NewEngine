@@ -17,7 +17,9 @@ newengine-assets = { path = "../newengine-assets" }
 newengine-core = { path = "../newengine-core" }
 newengine-platform-api = { path = "../newengine-platform-api" }
 newengine-plugin-api = { path = "../newengine-plugin-api" }
+newengine-render-api = { path = "../newengine-render-api" }
 newengine-plugin-host = { path = "../newengine-plugin-host" }
 newengine-transform = { path = "../newengine-transform", features = ["ecs", "service"], default-features = false }
 newengine-ui = { path = "../newengine-ui" }
-vulkan_renderer = { path = "../newengine-modules-render-vulkan-ash" }
+
+serde = { version = "1.0", features = ["derive"] }

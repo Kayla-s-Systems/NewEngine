@@ -59,7 +59,6 @@ impl Default for EditorCamera {
         state.controller = CameraController::None;
 
         let orbit = OrbitController {
-            // Blender-ish defaults.
             yaw: 0.65,
             pitch: -0.55,
             distance: 6.0,
@@ -123,11 +122,6 @@ impl EditorCamera {
     #[inline]
     pub fn update(&mut self, input: Option<CameraInput>, dt: f32) -> (CameraMatrices, Frustum) {
         if let Some(mut i) = input {
-            // RMB (or any look activation) must not teleport the camera.
-            // If the rig has been modified externally (framing, switching controllers, etc.),
-            // stale orbit state would reconstruct `rig.position` from `(target, distance)`.
-            // Sync exactly on the activation edge and suppress the first-frame delta (cursor grab
-            // frequently produces a synthetic large delta).
             if i.look_active && !self.was_look_active {
                 self.orbit.sync_from_rig(&self.state.rig);
                 i.look_delta = Vec2::ZERO;
@@ -136,7 +130,6 @@ impl EditorCamera {
 
             self.orbit.apply(&mut self.state.rig, i, dt);
         } else {
-            // Still must refresh rig from orbit (for cases when orbit was modified directly).
             self.was_look_active = false;
             self.orbit.apply(
                 &mut self.state.rig,
@@ -151,7 +144,6 @@ impl EditorCamera {
             );
         }
 
-        // Keep near/far stable while orbiting.
         let (near, far) = auto_near_far(self.orbit.distance, self.focus_radius);
         match &mut self.state.projection {
             Projection::Perspective(p) => {
@@ -185,7 +177,6 @@ impl EditorCamera {
             self.margin.max(1.0),
         );
 
-        // Apply immediately.
         self.orbit.apply(
             &mut self.state.rig,
             CameraInput {
@@ -205,14 +196,6 @@ impl EditorCamera {
         self.frame_sphere(aabb.center(), aabb.radius());
     }
 }
-
-// -------------------------------------------------------------------------------------------------
-// Editor navigation controller (Orbit / Fly) intended for apps (e.g. `apps/editor`).
-//
-// Design goals:
-// - app code is a thin adapter: input mapping + parameter tuning
-// - controller guarantees: mode switch / look activation must not teleport the rig
-// - optional ground clamp policy (min camera Y)
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum EditorNavMode {
@@ -243,6 +226,13 @@ pub struct EditorNavLimits {
     /// - suppress backend/raw-input micro-jitter while the mouse is idle;
     /// - preserve very slow motion by accumulating sub-quantum residuals deterministically.
     pub look_delta_quantum_px: f32,
+
+    /// Per-axis raw look noise floor in pixels.
+    ///
+    /// Deltas below this threshold are treated as backend/device noise and do not accumulate
+    /// into residuals. This prevents captured fly/orbit look from slowly drifting in the last
+    /// movement direction after the mouse has already stopped.
+    pub look_noise_floor_px: f32,
 }
 
 impl Default for EditorNavLimits {
@@ -254,6 +244,7 @@ impl Default for EditorNavLimits {
             min_camera_y: 0.10,
             max_look_delta_px: 160.0,
             look_delta_quantum_px: 1.0,
+            look_noise_floor_px: 0.35,
         }
     }
 }
@@ -275,6 +266,7 @@ pub struct EditorNavController {
 
     was_look_active: bool,
     look_delta_residual_px: Vec2,
+    look_activation_guard_frames: u8,
 }
 
 impl Default for EditorNavController {
@@ -297,37 +289,81 @@ impl Default for EditorNavController {
             limits: EditorNavLimits::default(),
             was_look_active: false,
             look_delta_residual_px: Vec2::ZERO,
+            look_activation_guard_frames: 0,
         }
     }
 }
 
 impl EditorNavController {
+    const LOOK_ACTIVATION_GUARD_FRAMES: u8 = 3;
+
     #[inline]
-    fn quantize_axis_with_residual(v: &mut f32, quantum: f32) -> f32 {
+    fn quantize_axis_with_residual(
+        residual: &mut f32,
+        input: f32,
+        quantum: f32,
+        noise_floor: f32,
+    ) -> f32 {
         let q = quantum.max(1.0e-4);
-        if !v.is_finite() {
-            *v = 0.0;
+        let floor = noise_floor.max(0.0).min(q);
+
+        if !input.is_finite() {
+            *residual = 0.0;
             return 0.0;
         }
 
-        if v.abs() < q {
+        if input.abs() < floor {
+            *residual = 0.0;
             return 0.0;
         }
 
-        let out = (*v / q).trunc() * q;
-        *v -= out;
+        if residual.signum() != 0.0 && input.signum() != 0.0 && residual.signum() != input.signum()
+        {
+            *residual = 0.0;
+        }
+
+        *residual += input;
+
+        if !residual.is_finite() {
+            *residual = 0.0;
+            return 0.0;
+        }
+
+        if residual.abs() < q {
+            return 0.0;
+        }
+
+        let out = (*residual / q).trunc() * q;
+        *residual -= out;
+
+        if residual.abs() < floor {
+            *residual = 0.0;
+        }
+
         out
     }
 
     #[inline]
     fn quantize_look_delta_with_residual(&mut self, look_delta: Vec2) -> Vec2 {
-        let mut acc = self.look_delta_residual_px + look_delta;
         let q = self.limits.look_delta_quantum_px.max(1.0e-4);
+        let floor = self.limits.look_noise_floor_px.max(0.0).min(q);
         let out = Vec2::new(
-            Self::quantize_axis_with_residual(&mut acc.x, q),
-            Self::quantize_axis_with_residual(&mut acc.y, q),
+            Self::quantize_axis_with_residual(
+                &mut self.look_delta_residual_px.x,
+                look_delta.x,
+                q,
+                floor,
+            ),
+            Self::quantize_axis_with_residual(
+                &mut self.look_delta_residual_px.y,
+                look_delta.y,
+                q,
+                floor,
+            ),
         );
-        self.look_delta_residual_px = acc;
+        if !self.look_delta_residual_px.is_finite() {
+            self.look_delta_residual_px = Vec2::ZERO;
+        }
         out
     }
 
@@ -356,6 +392,7 @@ impl EditorNavController {
         self.mode = next;
         self.was_look_active = false;
         self.look_delta_residual_px = Vec2::ZERO;
+        self.look_activation_guard_frames = Self::LOOK_ACTIVATION_GUARD_FRAMES;
     }
 
     /// Applies input to the rig for the current mode.
@@ -369,8 +406,6 @@ impl EditorNavController {
             return;
         }
 
-        // Sanitize look delta: cursor warps/pointer-lock can inject large per-frame deltas.
-        // Clamp instead of zeroing to avoid locking movement/rotation on high-DPI devices.
         let max_delta = self.limits.max_look_delta_px.max(1.0);
         if input.look_delta.x.is_finite() {
             input.look_delta.x = input.look_delta.x.clamp(-max_delta, max_delta);
@@ -387,8 +422,6 @@ impl EditorNavController {
             input.zoom_delta = 0.0;
         }
 
-        // Look activation edge: sync internal angles from current rig pose and suppress
-        // synthetic grab delta (cursor warp / pointer-lock transitions).
         if input.look_active && !self.was_look_active {
             match self.mode {
                 EditorNavMode::Orbit => {
@@ -406,11 +439,21 @@ impl EditorNavController {
             input.look_delta = Vec2::ZERO;
             input.zoom_delta = 0.0;
             self.look_delta_residual_px = Vec2::ZERO;
+            self.look_activation_guard_frames = Self::LOOK_ACTIVATION_GUARD_FRAMES;
         }
 
         if input.look_active {
-            input.look_delta = self.quantize_look_delta_with_residual(input.look_delta);
+            if self.look_activation_guard_frames != 0 {
+                self.look_activation_guard_frames =
+                    self.look_activation_guard_frames.saturating_sub(1);
+                self.look_delta_residual_px = Vec2::ZERO;
+                input.look_delta = Vec2::ZERO;
+                input.zoom_delta = 0.0;
+            } else {
+                input.look_delta = self.quantize_look_delta_with_residual(input.look_delta);
+            }
         } else {
+            self.look_activation_guard_frames = 0;
             self.look_delta_residual_px = Vec2::ZERO;
             input.look_delta = Vec2::ZERO;
         }
@@ -443,6 +486,7 @@ impl EditorNavController {
         self.orbit.sync_from_rig(rig);
         self.was_look_active = false;
         self.look_delta_residual_px = Vec2::ZERO;
+        self.look_activation_guard_frames = Self::LOOK_ACTIVATION_GUARD_FRAMES;
     }
 
     /// Synchronizes fly controller state from the current rig pose.
@@ -454,6 +498,7 @@ impl EditorNavController {
         self.fly.sync_from_rig(rig);
         self.was_look_active = false;
         self.look_delta_residual_px = Vec2::ZERO;
+        self.look_activation_guard_frames = Self::LOOK_ACTIVATION_GUARD_FRAMES;
     }
 
     /// Rebuilds the rig from the current orbit state (no input).
@@ -478,7 +523,6 @@ impl EditorNavController {
     fn apply_orbit(&mut self, rig: &mut CameraRig, input: CameraInput, dt: f32) {
         self.orbit.apply(rig, input, dt);
 
-        // Limits + ground clamp are editor policies.
         self.orbit.distance = self.orbit.distance.max(self.limits.min_distance);
         self.orbit.pitch_limit = self.orbit.pitch_limit.min(self.limits.max_pitch_abs);
         self.orbit.pitch = self
@@ -486,8 +530,6 @@ impl EditorNavController {
             .pitch
             .clamp(-self.limits.max_pitch_abs, self.limits.max_pitch_abs);
 
-        // Ground clamp: keep camera above the floor by lifting the pivot.
-        // Iterative adjustment avoids large jumps when the camera is very close to the floor.
         if self.limits.min_camera_y.is_finite() {
             for _ in 0..2 {
                 let rot_yaw = Quat::from_rotation_y(self.orbit.yaw);
@@ -504,7 +546,6 @@ impl EditorNavController {
             }
         }
 
-        // Final write (also covers the case when clamp is disabled).
         let rot_yaw = Quat::from_rotation_y(self.orbit.yaw);
         let rot_pitch = Quat::from_rotation_x(self.orbit.pitch);
         let rot = (rot_yaw * rot_pitch).normalize_or_identity();

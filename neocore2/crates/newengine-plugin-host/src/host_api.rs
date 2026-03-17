@@ -180,11 +180,6 @@ pub extern "C" fn call_service_v1(
 }
 
 extern "C" fn host_emit_event_v1(topic: RString, payload: Blob) -> RResult<(), RString> {
-    debug_no_recurse(format_args!(
-        "events: emit topic='{}' payload_len={}",
-        topic,
-        payload.len()
-    ));
 
     match crate::host_context::emit_plugin_event(topic, payload) {
         Ok(()) => RResult::ROk(()),

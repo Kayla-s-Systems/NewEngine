@@ -3,9 +3,13 @@
 use abi_stable::std_types::{ROption, RResult, RString, RVec};
 use abi_stable::StableAbi;
 use newengine_plugin_api::HostApiV1;
+use serde::{Deserialize, Serialize};
+
+pub const PLATFORM_WINDOW_SERVICE_ID: &str = "platform.window.v1";
+pub const PLATFORM_WINDOW_SERVICE_METHOD_SNAPSHOT_JSON_V1: &str = "snapshot_json_v1";
 
 #[repr(u8)]
-#[derive(Debug, Clone, Copy, PartialEq, Eq, StableAbi)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, StableAbi, Serialize, Deserialize)]
 pub enum PlatformWindowPlacementKindV1 {
     OsDefault = 0,
     Centered = 1,
@@ -13,7 +17,7 @@ pub enum PlatformWindowPlacementKindV1 {
 }
 
 #[repr(C)]
-#[derive(Debug, Clone, Copy, PartialEq, Eq, StableAbi)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, StableAbi, Serialize, Deserialize)]
 pub struct PlatformWindowPlacementV1 {
     pub kind: PlatformWindowPlacementKindV1,
     pub x: i32,
@@ -50,14 +54,14 @@ pub struct PlatformAppConfigV1 {
 }
 
 #[repr(u8)]
-#[derive(Debug, Clone, Copy, PartialEq, Eq, StableAbi)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, StableAbi, Serialize, Deserialize)]
 pub enum NativeWindowBackendV1 {
     Unknown = 0,
     Win32 = 1,
 }
 
 #[repr(C)]
-#[derive(Debug, Clone, Copy, PartialEq, Eq, StableAbi)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, StableAbi, Serialize, Deserialize)]
 pub struct NativeWindowHandlesV1 {
     pub backend: NativeWindowBackendV1,
     pub window: u64,
@@ -80,7 +84,7 @@ impl Default for NativeWindowHandlesV1 {
 }
 
 #[repr(C)]
-#[derive(Debug, Clone, Copy, PartialEq, StableAbi)]
+#[derive(Debug, Clone, Copy, PartialEq, StableAbi, Serialize, Deserialize)]
 pub struct PlatformSurfaceMetricsV1 {
     pub width: u32,
     pub height: u32,
@@ -99,14 +103,14 @@ impl Default for PlatformSurfaceMetricsV1 {
 }
 
 #[repr(C)]
-#[derive(Debug, Clone, Copy, PartialEq, StableAbi)]
+#[derive(Debug, Clone, Copy, PartialEq, StableAbi, Serialize, Deserialize)]
 pub struct PlatformWindowReadyV1 {
     pub handles: NativeWindowHandlesV1,
     pub surface: PlatformSurfaceMetricsV1,
 }
 
 #[repr(u8)]
-#[derive(Debug, Clone, Copy, PartialEq, Eq, StableAbi)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, StableAbi, Serialize, Deserialize)]
 pub enum PlatformCursorGrabModeV1 {
     None = 0,
     Confined = 1,

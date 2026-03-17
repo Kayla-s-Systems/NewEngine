@@ -2,7 +2,6 @@ use crate::error::{VkRenderError, VkResult};
 use crate::vulkan::util::transition_image;
 
 use ash::vk;
-use newengine_core::crash::record_breadcrumb;
 
 use super::state::{ActivePass, VulkanRenderer};
 use super::types::FRAMES_IN_FLIGHT;
@@ -10,7 +9,7 @@ use super::types::FRAMES_IN_FLIGHT;
 impl VulkanRenderer {
     pub fn begin_frame(&mut self, clear_rgba: [f32; 4]) -> VkResult<()> {
         unsafe {
-            record_breadcrumb("vulkan: begin_frame deferred_free pump".to_string());
+            log::debug!("vulkan: begin_frame deferred_free pump");
             self.frames.deferred_free.pump(&self.core.device)?;
         }
 
@@ -26,7 +25,7 @@ impl VulkanRenderer {
         }
 
         if self.debug.swapchain_dirty {
-            record_breadcrumb("vulkan: begin_frame recreate_swapchain".to_string());
+            log::debug!("vulkan: begin_frame recreate_swapchain");
             self.debug.swapchain_dirty = false;
             unsafe { self.recreate_swapchain()? };
         }
@@ -34,19 +33,13 @@ impl VulkanRenderer {
         let frame = self.frames.frames[self.frames.frame_index];
 
         unsafe {
-            record_breadcrumb(format!(
-                "vulkan: begin_frame wait_for_fences frame_index={}",
-                self.frames.frame_index
-            ));
+            log::debug!("vulkan: begin_frame wait_for_fences frame_index={}", self.frames.frame_index);
             self.core
                 .device
                 .wait_for_fences(&[frame.in_flight], true, u64::MAX)?;
         }
 
-        record_breadcrumb(format!(
-            "vulkan: begin_frame acquire_next_image swapchain_images={}",
-            self.swapchain.images.len()
-        ));
+        log::debug!("vulkan: begin_frame acquire_next_image swapchain_images={}", self.swapchain.images.len());
         let (image_index, _suboptimal) = match unsafe {
             self.core.swapchain_loader.acquire_next_image(
                 self.swapchain.swapchain,
@@ -66,10 +59,7 @@ impl VulkanRenderer {
         let idx = image_index as usize;
 
         unsafe {
-            record_breadcrumb(format!(
-                "vulkan: begin_frame image_index={} wait/reset sync",
-                idx
-            ));
+            log::debug!("vulkan: begin_frame image_index={} wait/reset sync", idx);
             let inflight = self.frames.images_in_flight[idx];
             if inflight != vk::Fence::null() {
                 self.core
@@ -84,10 +74,7 @@ impl VulkanRenderer {
         let image = self.swapchain.images[idx];
 
         unsafe {
-            record_breadcrumb(format!(
-                "vulkan: begin_frame reset/begin_command_buffer image_index={}",
-                idx
-            ));
+            log::debug!("vulkan: begin_frame reset/begin_command_buffer image_index={}", idx);
             self.core
                 .device
                 .reset_command_buffer(cmd, vk::CommandBufferResetFlags::empty())?;
@@ -116,10 +103,11 @@ impl VulkanRenderer {
         self.debug.in_frame = true;
         self.debug.current_image_index = image_index;
         self.debug.current_swapchain_idx = idx;
-        record_breadcrumb(format!(
+        log::debug!(
             "vulkan: begin_frame completed image_index={} swapchain_idx={}",
-            image_index, idx
-        ));
+            image_index,
+            idx
+        );
         Ok(())
     }
 

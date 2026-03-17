@@ -1,11 +1,12 @@
 #![forbid(unsafe_op_in_unsafe_fn)]
 
 use bytemuck::{Pod, Zeroable};
+use serde::{Deserialize, Serialize};
 use smallvec::SmallVec;
 
 use newengine_math::collections::FxHashMap;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[repr(transparent)]
 pub struct UiTexId(pub u32);
 
@@ -16,7 +17,7 @@ impl UiTexId {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 #[repr(C)]
 pub struct UiRect {
     pub min_x: f32,
@@ -42,7 +43,7 @@ impl UiRect {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Pod, Zeroable)]
+#[derive(Debug, Clone, Copy, PartialEq, Pod, Zeroable, Serialize, Deserialize)]
 #[repr(C)]
 pub struct UiVertex {
     pub pos: [f32; 2],
@@ -50,14 +51,14 @@ pub struct UiVertex {
     pub color: u32,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct UiDrawCmd {
     pub texture: UiTexId,
     pub clip_rect: UiRect,
     pub index_range: core::ops::Range<u32>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct UiMesh {
     pub vertices: Vec<UiVertex>,
     pub indices: Vec<u32>,
@@ -82,7 +83,7 @@ impl UiMesh {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct UiDrawList {
     pub screen_size_px: [u32; 2],
     pub pixels_per_point: f32,
@@ -108,13 +109,13 @@ impl UiDrawList {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct UiTexture {
     pub size: [u32; 2],
     pub rgba8: Vec<u8>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct UiTextureDelta {
     pub set: FxHashMap<UiTexId, UiTexture>,
     pub patches: Vec<UiTexturePatch>,
@@ -139,7 +140,7 @@ impl UiTextureDelta {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct UiTexturePatch {
     pub id: UiTexId,
     pub origin: [u32; 2],

@@ -3,7 +3,9 @@
 use std::collections::HashSet;
 use std::num::NonZeroIsize;
 use std::path::{Path, PathBuf};
+use std::sync::{Arc, Mutex, OnceLock};
 
+use abi_stable::erased_types::TD_Opaque;
 use abi_stable::std_types::{RResult, RString, RVec};
 use libloading::Library;
 use newengine_core::events::EventSub;
@@ -15,12 +17,14 @@ use newengine_platform_api::{
     NativeWindowBackendV1, NativeWindowHandlesV1, PlatformAppConfigV1, PlatformCursorGrabModeV1,
     PlatformCursorPollV1, PlatformCursorStateV1, PlatformHostApiV1, PlatformRuntimeRunFnV1,
     PlatformStepResultV1, PlatformSurfaceMetricsV1, PlatformWindowPlacementKindV1,
-    PlatformWindowPlacementV1, PlatformWindowReadyV1,
+    PlatformWindowPlacementV1, PlatformWindowReadyV1, PLATFORM_WINDOW_SERVICE_ID,
+    PLATFORM_WINDOW_SERVICE_METHOD_SNAPSHOT_JSON_V1,
 };
 use newengine_plugin_api::{
-    CapabilityDesc, CapabilityKind, CapabilityRole, ConfigBlobV1, ConfigDiagLevelV1,
-    ConfigPatchSourceV1, ConfigPatchV1, HostApiV1, PluginDescriptor, PluginInfo, PluginKind,
-    PluginRootV1Ref, PluginSignatureV1,
+    Blob, CapabilityDesc, CapabilityId, CapabilityKind, CapabilityRole, ConfigBlobV1,
+    ConfigDiagLevelV1, ConfigPatchSourceV1, ConfigPatchV1, HostApiV1, MethodName,
+    PluginDescriptor, PluginInfo, PluginKind, PluginRootV1Ref, PluginSignatureV1, ServiceV1,
+    ServiceV1_TO,
 };
 use newengine_ui::{
     create_provider, UiBuildFn, UiFrameDesc, UiProvider, UiProviderKind, UiProviderOptions,
@@ -35,6 +39,100 @@ const PLUGIN_ROOT_SYMBOL: &[u8] = b"export_plugin_root\0";
 const PLUGIN_SIGNATURE_SYMBOL: &[u8] = b"newengine_plugin_signature_v1\0";
 const PLATFORM_PLUGIN_ID: &str = "newengine.platform.winit";
 const CT_JSON_MERGE_PATCH: &str = "application/merge-patch+json";
+
+static PLATFORM_WINDOW_SNAPSHOT: OnceLock<Arc<Mutex<PlatformWindowReadyV1>>> = OnceLock::new();
+
+#[derive(Clone)]
+struct PlatformWindowSnapshotService {
+    snapshot: Arc<Mutex<PlatformWindowReadyV1>>,
+}
+
+impl PlatformWindowSnapshotService {
+    #[inline]
+    fn new(snapshot: Arc<Mutex<PlatformWindowReadyV1>>) -> Self {
+        Self { snapshot }
+    }
+
+    #[inline]
+    fn ok_json<T: serde::Serialize>(value: &T) -> RResult<Blob, RString> {
+        match serde_json::to_vec(value) {
+            Ok(bytes) => RResult::ROk(Blob::from(bytes)),
+            Err(e) => RResult::RErr(RString::from(e.to_string())),
+        }
+    }
+}
+
+impl ServiceV1 for PlatformWindowSnapshotService {
+    fn id(&self) -> CapabilityId {
+        CapabilityId::from(PLATFORM_WINDOW_SERVICE_ID)
+    }
+
+    fn describe(&self) -> RString {
+        let v = serde_json::json!({
+            "id": PLATFORM_WINDOW_SERVICE_ID,
+            "version": 1,
+            "methods": [PLATFORM_WINDOW_SERVICE_METHOD_SNAPSHOT_JSON_V1],
+            "notes": "Host-provided platform window snapshot service for runtime plugins."
+        });
+        RString::from(serde_json::to_string(&v).unwrap_or_else(|_| "{}".to_string()))
+    }
+
+    fn call(&self, method: MethodName, _payload: Blob) -> RResult<Blob, RString> {
+        match method.as_str() {
+            PLATFORM_WINDOW_SERVICE_METHOD_SNAPSHOT_JSON_V1 => {
+                let snapshot = match self.snapshot.lock() {
+                    Ok(v) => *v,
+                    Err(e) => *e.into_inner(),
+                };
+                Self::ok_json(&snapshot)
+            }
+            m => RResult::RErr(RString::from(format!("platform window: unknown method '{}'", m))),
+        }
+    }
+}
+
+fn register_platform_window_service_best_effort(initial: PlatformWindowReadyV1) {
+    let snapshot = PLATFORM_WINDOW_SNAPSHOT
+        .get_or_init(|| Arc::new(Mutex::new(initial)))
+        .clone();
+
+    match snapshot.lock() {
+        Ok(mut guard) => *guard = initial,
+        Err(e) => *e.into_inner() = initial,
+    }
+
+    if newengine_plugin_host::has_service(PLATFORM_WINDOW_SERVICE_ID) {
+        return;
+    }
+
+    let svc = PlatformWindowSnapshotService::new(snapshot);
+    let dyn_svc = ServiceV1_TO::from_value(svc, TD_Opaque);
+    let host = newengine_plugin_host::default_host_api();
+    match (host.register_service_v1)(dyn_svc) {
+        RResult::ROk(()) => {
+            log::info!(
+                "platform runtime: host snapshot service registered id='{}'",
+                PLATFORM_WINDOW_SERVICE_ID
+            );
+        }
+        RResult::RErr(e) => {
+            log::error!(
+                "platform runtime: host snapshot service registration failed id='{}' err='{}'",
+                PLATFORM_WINDOW_SERVICE_ID,
+                e
+            );
+        }
+    }
+}
+
+fn update_platform_window_snapshot(ready: PlatformWindowReadyV1) {
+    if let Some(snapshot) = PLATFORM_WINDOW_SNAPSHOT.get() {
+        match snapshot.lock() {
+            Ok(mut guard) => *guard = ready,
+            Err(e) => *e.into_inner() = ready,
+        }
+    }
+}
 
 pub struct ResolvedPlatformRuntimeConfig {
     pub plugin_id: String,
@@ -147,6 +245,7 @@ impl HostPlatformRuntime {
         );
 
         self.surface = ready.surface;
+        register_platform_window_service_best_effort(ready);
         let (display, window) = native_to_raw_handles(ready.handles)?;
 
         self.engine.resources_mut().insert(WindowHandles { window, display });
@@ -156,6 +255,10 @@ impl HostPlatformRuntime {
         });
 
         if !self.started {
+            if let Some(startup) = newengine_core::startup::last_startup_config() {
+                std::env::set_var("NEWENGINE_RENDER_BACKEND", startup.render_backend.as_str());
+            }
+
             match self.engine.load_engine_plugins_once() {
                 Ok(count) => {
                     log::info!(
@@ -204,6 +307,12 @@ impl HostPlatformRuntime {
         );
 
         self.surface = metrics;
+        if let Some(handles) = self.engine.resources.get::<WindowHandles>() {
+            update_platform_window_snapshot(PlatformWindowReadyV1 {
+                handles: raw_to_native_handles(handles.window, handles.display)?,
+                surface: metrics,
+            });
+        }
         self.engine.resources_mut().insert(WindowInitSize {
             width: metrics.width,
             height: metrics.height,
@@ -341,6 +450,50 @@ extern "C" fn host_step_v1(
 
 extern "C" fn host_poll_cursor_state_v1(user_data: usize) -> PlatformCursorPollV1 {
     runtime_state_mut(user_data).poll_cursor_state()
+}
+
+#[cfg(target_os = "windows")]
+fn raw_to_native_handles(
+    window: RawWindowHandle,
+    display: RawDisplayHandle,
+) -> EngineResult<NativeWindowHandlesV1> {
+    use raw_window_handle::{RawDisplayHandle::Windows, RawWindowHandle::Win32};
+
+    let window = match window {
+        Win32(win) => win,
+        _ => {
+            return Err(EngineError::other(
+                "platform runtime raw handle conversion is only implemented for Win32",
+            ))
+        }
+    };
+
+    match display {
+        Windows(_) => {}
+        _ => {
+            return Err(EngineError::other(
+                "platform runtime raw display conversion is only implemented for Windows",
+            ))
+        }
+    }
+
+    Ok(NativeWindowHandlesV1 {
+        backend: NativeWindowBackendV1::Win32,
+        window: window.hwnd.get() as u64,
+        display: window.hinstance.map(|v| v.get() as u64).unwrap_or_default(),
+        reserved0: 0,
+        reserved1: 0,
+    })
+}
+
+#[cfg(not(target_os = "windows"))]
+fn raw_to_native_handles(
+    _window: RawWindowHandle,
+    _display: RawDisplayHandle,
+) -> EngineResult<NativeWindowHandlesV1> {
+    Err(EngineError::other(
+        "platform runtime raw handle conversion is only implemented for Windows",
+    ))
 }
 
 #[cfg(target_os = "windows")]
@@ -692,28 +845,35 @@ fn ensure_platform_runtime_capabilities(mut descriptor: PluginDescriptor) -> Plu
             CapabilityRole::Provides,
             CapabilityKind::Other,
             1,
-            "{\"role\":\"platform-runtime\"}",
+            r#"{"role":"platform-runtime"}"#,
         ),
         (
             "platform.window.v1",
             CapabilityRole::Provides,
             CapabilityKind::Other,
             1,
-            "{\"role\":\"window\"}",
+            r#"{"role":"window"}"#,
+        ),
+        (
+            "platform.window.v1",
+            CapabilityRole::Provides,
+            CapabilityKind::ServiceV1,
+            1,
+            r#"{"role":"platform-window-snapshot"}"#,
         ),
         (
             "platform.surface.v1",
             CapabilityRole::Provides,
             CapabilityKind::Other,
             1,
-            "{\"role\":\"surface\"}",
+            r#"{"role":"surface"}"#,
         ),
         (
             "platform.input.events.v1",
             CapabilityRole::Provides,
             CapabilityKind::EventsV1,
             1,
-            "{\"role\":\"input-events\"}",
+            r#"{"role":"input-events"}"#,
         ),
     ];
 
@@ -737,7 +897,7 @@ fn synthesize_platform_descriptor(id: &str, name: &str, version: &str) -> Plugin
                 CapabilityKind::Other,
                 1,
             )
-                .with_json("{\"role\":\"platform-runtime\"}"),
+                .with_json(r#"{"role":"platform-runtime"}"#),
         )
         .push(
             CapabilityDesc::new(
@@ -746,7 +906,12 @@ fn synthesize_platform_descriptor(id: &str, name: &str, version: &str) -> Plugin
                 CapabilityKind::Other,
                 1,
             )
-                .with_json("{\"role\":\"window\"}"),
+                .with_json(r#"{"role":"window"}"#),
+        )
+        .provides_service(
+            "platform.window.v1",
+            1,
+            r#"{"role":"platform-window-snapshot"}"#,
         )
         .push(
             CapabilityDesc::new(
@@ -755,7 +920,7 @@ fn synthesize_platform_descriptor(id: &str, name: &str, version: &str) -> Plugin
                 CapabilityKind::Other,
                 1,
             )
-                .with_json("{\"role\":\"surface\"}"),
+                .with_json(r#"{"role":"surface"}"#),
         )
         .push(
             CapabilityDesc::new(
@@ -764,7 +929,7 @@ fn synthesize_platform_descriptor(id: &str, name: &str, version: &str) -> Plugin
                 CapabilityKind::EventsV1,
                 1,
             )
-                .with_json("{\"role\":\"input-events\"}"),
+                .with_json(r#"{"role":"input-events"}"#),
         )
         .build()
 }

@@ -4,10 +4,15 @@ use crate::vulkan::VulkanRenderer;
 
 use ash::vk;
 
-use newengine_core::render::*;
-use newengine_core::{EngineError, EngineResult};
-use newengine_ui::draw::{UiDrawList, UiTexId};
+use newengine_render_api::*;
 use newengine_ui::texture::reserved as ui_reserved;
+
+type VkApiResult<T> = Result<T, String>;
+
+#[inline]
+fn render_error(msg: impl Into<String>) -> String {
+    msg.into()
+}
 
 use std::collections::HashMap;
 use std::ffi::CString;
@@ -122,19 +127,19 @@ impl VulkanRenderApi {
     }
 
     #[inline]
-    fn alloc_u32(&mut self) -> u32 {
+    pub(crate) fn alloc_u32(&mut self) -> u32 {
         let v = self.next_id;
         self.next_id = self.next_id.wrapping_add(1).max(1);
         v
     }
 
     #[inline]
-    fn err<T>(&self, msg: impl Into<String>) -> EngineResult<T> {
-        Err(EngineError::other(msg.into()))
+    pub(crate) fn err<T>(&self, msg: impl Into<String>) -> VkApiResult<T> {
+        Err(render_error(msg.into()))
     }
 
     #[inline]
-    fn map_stage(stage: ShaderStage) -> vk::ShaderStageFlags {
+    pub(crate) fn map_stage(stage: ShaderStage) -> vk::ShaderStageFlags {
         match stage {
             ShaderStage::Vertex => vk::ShaderStageFlags::VERTEX,
             ShaderStage::Fragment => vk::ShaderStageFlags::FRAGMENT,
@@ -143,7 +148,7 @@ impl VulkanRenderApi {
     }
 
     #[inline]
-    fn map_topology(t: PrimitiveTopology) -> vk::PrimitiveTopology {
+    pub(crate) fn map_topology(t: PrimitiveTopology) -> vk::PrimitiveTopology {
         match t {
             PrimitiveTopology::TriangleList => vk::PrimitiveTopology::TRIANGLE_LIST,
             PrimitiveTopology::TriangleStrip => vk::PrimitiveTopology::TRIANGLE_STRIP,
@@ -153,7 +158,7 @@ impl VulkanRenderApi {
     }
 
     #[inline]
-    fn map_index_format(f: IndexFormat) -> vk::IndexType {
+    pub(crate) fn map_index_format(f: IndexFormat) -> vk::IndexType {
         match f {
             IndexFormat::U16 => vk::IndexType::UINT16,
             IndexFormat::U32 => vk::IndexType::UINT32,
@@ -161,7 +166,7 @@ impl VulkanRenderApi {
     }
 
     #[inline]
-    fn map_vertex_format(f: VertexFormat) -> vk::Format {
+    pub(crate) fn map_vertex_format(f: VertexFormat) -> vk::Format {
         match f {
             VertexFormat::Float32x2 => vk::Format::R32G32_SFLOAT,
             VertexFormat::Float32x3 => vk::Format::R32G32B32_SFLOAT,
@@ -170,7 +175,7 @@ impl VulkanRenderApi {
         }
     }
 
-    fn buffer_usage_flags(u: BufferUsage) -> vk::BufferUsageFlags {
+    pub(crate) fn buffer_usage_flags(u: BufferUsage) -> vk::BufferUsageFlags {
         match u {
             BufferUsage::Vertex => {
                 vk::BufferUsageFlags::VERTEX_BUFFER | vk::BufferUsageFlags::TRANSFER_DST
@@ -188,7 +193,7 @@ impl VulkanRenderApi {
         }
     }
 
-    fn memory_props(h: MemoryHint) -> vk::MemoryPropertyFlags {
+    pub(crate) fn memory_props(h: MemoryHint) -> vk::MemoryPropertyFlags {
         match h {
             MemoryHint::GpuOnly => vk::MemoryPropertyFlags::DEVICE_LOCAL,
             MemoryHint::CpuToGpu => {
@@ -200,7 +205,7 @@ impl VulkanRenderApi {
         }
     }
 
-    unsafe fn find_memory_type(
+    pub(crate) unsafe fn find_memory_type(
         instance: &ash::Instance,
         physical_device: vk::PhysicalDevice,
         type_bits: u32,
@@ -216,12 +221,12 @@ impl VulkanRenderApi {
         None
     }
 
-    unsafe fn create_vk_buffer(
+    pub(crate) unsafe fn create_vk_buffer(
         &self,
         size: vk::DeviceSize,
         usage: vk::BufferUsageFlags,
         props: vk::MemoryPropertyFlags,
-    ) -> EngineResult<VkBuffer> {
+    ) -> VkApiResult<VkBuffer> {
         let device = &self.renderer.core.device;
 
         let info = vk::BufferCreateInfo::default()
@@ -231,7 +236,7 @@ impl VulkanRenderApi {
 
         let buffer = device
             .create_buffer(&info, None)
-            .map_err(|e| EngineError::other(e.to_string()))?;
+            .map_err(|e| render_error(e.to_string()))?;
 
         let req = device.get_buffer_memory_requirements(buffer);
 
@@ -241,7 +246,7 @@ impl VulkanRenderApi {
             req.memory_type_bits,
             props,
         )
-            .ok_or_else(|| EngineError::other("No compatible Vulkan memory type"))?;
+            .ok_or_else(|| render_error("No compatible Vulkan memory type"))?;
 
         let alloc = vk::MemoryAllocateInfo::default()
             .allocation_size(req.size)
@@ -249,11 +254,11 @@ impl VulkanRenderApi {
 
         let memory = device
             .allocate_memory(&alloc, None)
-            .map_err(|e| EngineError::other(e.to_string()))?;
+            .map_err(|e| render_error(e.to_string()))?;
 
         device
             .bind_buffer_memory(buffer, memory, 0)
-            .map_err(|e| EngineError::other(e.to_string()))?;
+            .map_err(|e| render_error(e.to_string()))?;
 
         Ok(VkBuffer {
             buffer,
@@ -264,7 +269,7 @@ impl VulkanRenderApi {
         })
     }
 
-    unsafe fn current_cmd(&self) -> Option<vk::CommandBuffer> {
+    pub(crate) unsafe fn current_cmd(&self) -> Option<vk::CommandBuffer> {
         if !self.renderer.debug.in_frame {
             return None;
         }
@@ -272,7 +277,7 @@ impl VulkanRenderApi {
         Some(self.renderer.frames.command_buffers[idx])
     }
 
-    unsafe fn flush_recorded(&mut self) -> EngineResult<()> {
+    pub(crate) unsafe fn flush_recorded(&mut self) -> VkApiResult<()> {
         let Some(cmd) = self.current_cmd() else {
             self.recorded.clear();
             return Ok(());
@@ -288,11 +293,11 @@ impl VulkanRenderApi {
                     Some([0.1, 0.1, 0.12, 1.0]), // clear color
                     Some(1.0),                   // clear depth
                 )
-                .map_err(|e| EngineError::other(e.to_string()))?;
+                .map_err(|e| render_error(e.to_string()))?;
         } else {
             self.renderer
                 .ensure_swapchain_pass(cmd)
-                .map_err(|e| EngineError::other(e.to_string()))?;
+                .map_err(|e| render_error(e.to_string()))?;
         }
 
         let device = &self.renderer.core.device;
@@ -368,11 +373,11 @@ impl VulkanRenderApi {
 impl Drop for VulkanRenderApi {
     fn drop(&mut self) {
         unsafe {
-            newengine_core::crash::record_breadcrumb("vulkan: render_api drop begin");
+            log::debug!("vulkan: render_api drop begin");
             let device = &self.renderer.core.device;
 
             let _ = device.device_wait_idle();
-            newengine_core::crash::record_breadcrumb("vulkan: render_api drop device_wait_idle completed");
+            log::debug!("vulkan: render_api drop device_wait_idle completed");
 
             for (_, p) in self.pipelines.drain() {
                 if p.pipeline != vk::Pipeline::null() {
@@ -412,13 +417,13 @@ impl Drop for VulkanRenderApi {
                 let _ = b.size;
             }
 
-            newengine_core::crash::record_breadcrumb("vulkan: render_api drop completed");
+            log::debug!("vulkan: render_api drop completed");
         }
     }
 }
 
-impl RenderApi for VulkanRenderApi {
-    fn begin_frame(&mut self, desc: BeginFrameDesc) -> EngineResult<()> {
+impl VulkanRenderApi {
+    pub(crate) fn begin_frame(&mut self, desc: BeginFrameDesc) -> VkApiResult<()> {
         self.recorded.clear();
         self.current_pipeline = None;
         self.current_vertex = [None, None, None, None];
@@ -428,15 +433,10 @@ impl RenderApi for VulkanRenderApi {
 
         self.renderer
             .begin_frame(desc.clear_color)
-            .map_err(|e| EngineError::other(e.to_string()))
+            .map_err(|e| render_error(e.to_string()))
     }
 
-    #[inline]
-    fn set_ui_draw_list(&mut self, ui: UiDrawList) {
-        self.renderer.set_ui_draw_list(ui);
-    }
-
-    fn end_frame(&mut self) -> EngineResult<()> {
+    pub(crate) fn end_frame(&mut self) -> VkApiResult<()> {
         // When the window is minimized (0x0) or the swapchain is out-of-date, VulkanRenderer
         // intentionally suppresses frame begin. In that case we must treat end_frame as a no-op.
         if !self.renderer.debug.in_frame {
@@ -454,19 +454,19 @@ impl RenderApi for VulkanRenderApi {
         }
         self.renderer
             .end_frame()
-            .map_err(|e| EngineError::other(e.to_string()))
+            .map_err(|e| render_error(e.to_string()))
     }
 
-    fn resize(&mut self, width: u32, height: u32) -> EngineResult<()> {
+    pub(crate) fn resize(&mut self, width: u32, height: u32) -> VkApiResult<()> {
         self.target = Extent2D::new(width, height);
         self.renderer
             .resize(width, height)
-            .map_err(|e| EngineError::other(e.to_string()))
+            .map_err(|e| render_error(e.to_string()))
     }
 
-    fn create_render_target(&mut self, desc: RenderTargetDesc) -> EngineResult<RenderTargetId> {
+    pub(crate) fn create_render_target(&mut self, desc: RenderTargetDesc) -> VkApiResult<RenderTargetId> {
         if desc.extent.width == 0 || desc.extent.height == 0 {
-            return Err(EngineError::other("create_render_target: zero extent"));
+            return Err(render_error("create_render_target: zero extent"));
         }
 
         let with_depth = desc.depth.is_some();
@@ -481,12 +481,12 @@ impl RenderApi for VulkanRenderApi {
 
         self.renderer
             .create_render_target(id_u32, extent, with_depth)
-            .map_err(|e| EngineError::other(e.to_string()))?;
+            .map_err(|e| render_error(e.to_string()))?;
 
         Ok(id)
     }
 
-    fn destroy_render_target(&mut self, id: RenderTargetId) {
+    pub(crate) fn destroy_render_target(&mut self, id: RenderTargetId) {
         // If user destroys the active target, force scope reset.
         if self.active_render_target == Some(id.0.get()) {
             self.active_render_target = None;
@@ -502,10 +502,10 @@ impl RenderApi for VulkanRenderApi {
         }
     }
 
-    fn render_target_ui_tex_id(&self, id: RenderTargetId) -> EngineResult<UiTexId> {
+    pub(crate) fn render_target_ui_tex_id(&self, id: RenderTargetId) -> VkApiResult<UiTexId> {
         let key = id.0.get();
         if !self.renderer.render_targets.contains_key(&key) {
-            return Err(EngineError::other(
+            return Err(render_error(
                 "render_target_ui_tex_id: unknown render target",
             ));
         }
@@ -513,7 +513,7 @@ impl RenderApi for VulkanRenderApi {
         Ok(ui_reserved::external_from_u32(key))
     }
 
-    fn begin_render_target(&mut self, desc: BeginRenderTargetDesc) -> EngineResult<()> {
+    pub(crate) fn begin_render_target(&mut self, desc: BeginRenderTargetDesc) -> VkApiResult<()> {
         unsafe {
             // Flush any pending commands recorded for the previous target.
             self.flush_recorded()?;
@@ -529,7 +529,7 @@ impl RenderApi for VulkanRenderApi {
                     desc.clear_color,
                     desc.clear_depth,
                 )
-                .map_err(|e| EngineError::other(e.to_string()))?;
+                .map_err(|e| render_error(e.to_string()))?;
         }
 
         self.active_render_target = Some(desc.target.0.get());
@@ -542,7 +542,7 @@ impl RenderApi for VulkanRenderApi {
         Ok(())
     }
 
-    fn end_render_target(&mut self) -> EngineResult<()> {
+    pub(crate) fn end_render_target(&mut self) -> VkApiResult<()> {
         unsafe {
             self.flush_recorded()?;
 
@@ -554,7 +554,7 @@ impl RenderApi for VulkanRenderApi {
             // Close the currently active pass (render target) and transition for sampling.
             self.renderer
                 .end_active_pass(cmd)
-                .map_err(|e| EngineError::other(e.to_string()))?;
+                .map_err(|e| render_error(e.to_string()))?;
         }
 
         self.active_render_target = None;
@@ -567,7 +567,7 @@ impl RenderApi for VulkanRenderApi {
         Ok(())
     }
 
-    fn create_buffer(&mut self, desc: BufferDesc) -> EngineResult<BufferId> {
+    pub(crate) fn create_buffer(&mut self, desc: BufferDesc) -> VkApiResult<BufferId> {
         let id = BufferId::new(self.alloc_u32());
         unsafe {
             let usage = Self::buffer_usage_flags(desc.usage);
@@ -578,7 +578,7 @@ impl RenderApi for VulkanRenderApi {
         Ok(id)
     }
 
-    fn destroy_buffer(&mut self, id: BufferId) {
+    pub(crate) fn destroy_buffer(&mut self, id: BufferId) {
         if let Some(b) = self.buffers.remove(&id) {
             unsafe {
                 let device = &self.renderer.core.device;
@@ -592,14 +592,14 @@ impl RenderApi for VulkanRenderApi {
         }
     }
 
-    fn write_buffer(&mut self, id: BufferId, offset: u64, data: &[u8]) -> EngineResult<()> {
+    pub(crate) fn write_buffer(&mut self, id: BufferId, offset: u64, data: &[u8]) -> VkApiResult<()> {
         let b = *self
             .buffers
             .get(&id)
-            .ok_or_else(|| EngineError::other("write_buffer: invalid BufferId"))?;
+            .ok_or_else(|| render_error("write_buffer: invalid BufferId"))?;
 
         if (offset as u128) + (data.len() as u128) > (b.size as u128) {
-            return Err(EngineError::other("write_buffer: out of bounds"));
+            return Err(render_error("write_buffer: out of bounds"));
         }
 
         unsafe {
@@ -613,7 +613,7 @@ impl RenderApi for VulkanRenderApi {
                         data.len() as vk::DeviceSize,
                         vk::MemoryMapFlags::empty(),
                     )
-                    .map_err(|e| EngineError::other(e.to_string()))?
+                    .map_err(|e| render_error(e.to_string()))?
                     as *mut u8;
 
                 std::ptr::copy_nonoverlapping(data.as_ptr(), ptr, data.len());
@@ -634,7 +634,7 @@ impl RenderApi for VulkanRenderApi {
                     data.len() as vk::DeviceSize,
                     vk::MemoryMapFlags::empty(),
                 )
-                .map_err(|e| EngineError::other(e.to_string()))? as *mut u8;
+                .map_err(|e| render_error(e.to_string()))? as *mut u8;
 
             std::ptr::copy_nonoverlapping(data.as_ptr(), ptr, data.len());
             device.unmap_memory(staging.memory);
@@ -702,7 +702,7 @@ impl RenderApi for VulkanRenderApi {
                     );
                 },
             )
-                .map_err(|e| EngineError::other(e.to_string()))?;
+                .map_err(|e| render_error(e.to_string()))?;
 
             device.destroy_buffer(staging.buffer, None);
             device.free_memory(staging.memory, None);
@@ -711,31 +711,31 @@ impl RenderApi for VulkanRenderApi {
         Ok(())
     }
 
-    fn create_texture(&mut self, _desc: TextureDesc) -> EngineResult<TextureId> {
+    pub(crate) fn create_texture(&mut self, _desc: TextureDesc) -> VkApiResult<TextureId> {
         self.err("VulkanRenderApi: create_texture not implemented (world textures pending)")
     }
 
-    fn destroy_texture(&mut self, _id: TextureId) {}
+    pub(crate) fn destroy_texture(&mut self, _id: TextureId) {}
 
-    fn create_sampler(&mut self, _desc: SamplerDesc) -> EngineResult<SamplerId> {
+    pub(crate) fn create_sampler(&mut self, _desc: SamplerDesc) -> VkApiResult<SamplerId> {
         self.err("VulkanRenderApi: create_sampler not implemented (world samplers pending)")
     }
 
-    fn destroy_sampler(&mut self, _id: SamplerId) {}
+    pub(crate) fn destroy_sampler(&mut self, _id: SamplerId) {}
 
-    fn create_shader(&mut self, desc: ShaderDesc) -> EngineResult<ShaderId> {
+    pub(crate) fn create_shader(&mut self, desc: ShaderDesc) -> VkApiResult<ShaderId> {
         let id = ShaderId::new(self.alloc_u32());
 
         unsafe {
             let bytes: &[u8] = bytemuck::cast_slice(&desc.spirv);
 
             let module = create_shader_module(&self.renderer.core.device, bytes)
-                .map_err(|e: crate::error::VkRenderError| EngineError::other(e.to_string()))?;
+                .map_err(|e: crate::error::VkRenderError| render_error(e.to_string()))?;
 
             let stage = Self::map_stage(desc.stage);
 
             let entry = CString::new(desc.entry)
-                .map_err(|_| EngineError::other("ShaderDesc.entry must be a valid C string"))?;
+                .map_err(|_| render_error("ShaderDesc.entry must be a valid C string"))?;
 
             self.shaders.insert(
                 id,
@@ -750,7 +750,7 @@ impl RenderApi for VulkanRenderApi {
         Ok(id)
     }
 
-    fn destroy_shader(&mut self, id: ShaderId) {
+    pub(crate) fn destroy_shader(&mut self, id: ShaderId) {
         if let Some(s) = self.shaders.remove(&id) {
             unsafe {
                 self.renderer
@@ -761,18 +761,18 @@ impl RenderApi for VulkanRenderApi {
         }
     }
 
-    fn create_pipeline(&mut self, desc: PipelineDesc) -> EngineResult<PipelineId> {
+    pub(crate) fn create_pipeline(&mut self, desc: PipelineDesc) -> VkApiResult<PipelineId> {
         let id = PipelineId::new(self.alloc_u32());
 
         let vs = self
             .shaders
             .get(&desc.vs)
-            .ok_or_else(|| EngineError::other("create_pipeline: invalid vs"))?
+            .ok_or_else(|| render_error("create_pipeline: invalid vs"))?
             .clone();
         let fs = self
             .shaders
             .get(&desc.fs)
-            .ok_or_else(|| EngineError::other("create_pipeline: invalid fs"))?
+            .ok_or_else(|| render_error("create_pipeline: invalid fs"))?
             .clone();
 
         let mut set_layouts: Vec<vk::DescriptorSetLayout> =
@@ -781,7 +781,7 @@ impl RenderApi for VulkanRenderApi {
             let l = self
                 .bg_layouts
                 .get(l_id)
-                .ok_or_else(|| EngineError::other("create_pipeline: invalid bind group layout"))?;
+                .ok_or_else(|| render_error("create_pipeline: invalid bind group layout"))?;
             set_layouts.push(l.layout);
         }
 
@@ -791,7 +791,7 @@ impl RenderApi for VulkanRenderApi {
             let layout_ci = vk::PipelineLayoutCreateInfo::default().set_layouts(&set_layouts);
             let layout = device
                 .create_pipeline_layout(&layout_ci, None)
-                .map_err(|e| EngineError::other(e.to_string()))?;
+                .map_err(|e| render_error(e.to_string()))?;
 
             let stages = [
                 vk::PipelineShaderStageCreateInfo::default()
@@ -894,7 +894,7 @@ impl RenderApi for VulkanRenderApi {
                 device.create_graphics_pipelines(vk::PipelineCache::null(), &[gp], None);
             let pipeline = match pipelines {
                 Ok(v) => v[0],
-                Err((_, e)) => return Err(EngineError::other(e.to_string())),
+                Err((_, e)) => return Err(render_error(e.to_string())),
             };
 
             self.pipelines.insert(id, VkPipeline { pipeline, layout });
@@ -903,7 +903,7 @@ impl RenderApi for VulkanRenderApi {
         Ok(id)
     }
 
-    fn destroy_pipeline(&mut self, id: PipelineId) {
+    pub(crate) fn destroy_pipeline(&mut self, id: PipelineId) {
         if let Some(p) = self.pipelines.remove(&id) {
             unsafe {
                 let device = &self.renderer.core.device;
@@ -917,10 +917,10 @@ impl RenderApi for VulkanRenderApi {
         }
     }
 
-    fn create_bind_group_layout(
+    pub(crate) fn create_bind_group_layout(
         &mut self,
         desc: BindGroupLayoutDesc,
-    ) -> EngineResult<BindGroupLayoutId> {
+    ) -> VkApiResult<BindGroupLayoutId> {
         let id = BindGroupLayoutId::new(self.alloc_u32());
 
         unsafe {
@@ -948,7 +948,7 @@ impl RenderApi for VulkanRenderApi {
             let ci = vk::DescriptorSetLayoutCreateInfo::default().bindings(&vk_bindings);
             let layout = device
                 .create_descriptor_set_layout(&ci, None)
-                .map_err(|e| EngineError::other(e.to_string()))?;
+                .map_err(|e| render_error(e.to_string()))?;
 
             self.bg_layouts.insert(
                 id,
@@ -962,7 +962,7 @@ impl RenderApi for VulkanRenderApi {
         Ok(id)
     }
 
-    fn destroy_bind_group_layout(&mut self, id: BindGroupLayoutId) {
+    pub(crate) fn destroy_bind_group_layout(&mut self, id: BindGroupLayoutId) {
         if let Some(l) = self.bg_layouts.remove(&id) {
             unsafe {
                 self.renderer
@@ -973,12 +973,12 @@ impl RenderApi for VulkanRenderApi {
         }
     }
 
-    fn create_bind_group(&mut self, desc: BindGroupDesc) -> EngineResult<BindGroupId> {
+    pub(crate) fn create_bind_group(&mut self, desc: BindGroupDesc) -> VkApiResult<BindGroupId> {
         let id = BindGroupId::new(self.alloc_u32());
         let l = self
             .bg_layouts
             .get(&desc.layout)
-            .ok_or_else(|| EngineError::other("create_bind_group: invalid layout"))?
+            .ok_or_else(|| render_error("create_bind_group: invalid layout"))?
             .clone();
 
         unsafe {
@@ -1034,7 +1034,7 @@ impl RenderApi for VulkanRenderApi {
 
             let pool = device
                 .create_descriptor_pool(&pool_ci, None)
-                .map_err(|e| EngineError::other(e.to_string()))?;
+                .map_err(|e| render_error(e.to_string()))?;
 
             let set_layouts = [l.layout];
             let alloc = vk::DescriptorSetAllocateInfo::default()
@@ -1043,7 +1043,7 @@ impl RenderApi for VulkanRenderApi {
 
             let set = device
                 .allocate_descriptor_sets(&alloc)
-                .map_err(|e| EngineError::other(e.to_string()))?[0];
+                .map_err(|e| render_error(e.to_string()))?[0];
 
             let mut writes: Vec<vk::WriteDescriptorSet> = Vec::new();
             let mut buf_infos: Vec<vk::DescriptorBufferInfo> = Vec::new();
@@ -1067,7 +1067,7 @@ impl RenderApi for VulkanRenderApi {
                             continue;
                         };
                         let b = *self.buffers.get(&bb.buffer).ok_or_else(|| {
-                            EngineError::other("create_bind_group: invalid uniform0 buffer")
+                            render_error("create_bind_group: invalid uniform0 buffer")
                         })?;
 
                         buf_infos.push(
@@ -1088,7 +1088,7 @@ impl RenderApi for VulkanRenderApi {
                             continue;
                         };
                         let b = *self.buffers.get(&bb.buffer).ok_or_else(|| {
-                            EngineError::other("create_bind_group: invalid storage0 buffer")
+                            render_error("create_bind_group: invalid storage0 buffer")
                         })?;
 
                         buf_infos.push(
@@ -1105,12 +1105,12 @@ impl RenderApi for VulkanRenderApi {
                         });
                     }
                     BindingKind::Texture2D => {
-                        return Err(EngineError::other(
+                        return Err(render_error(
                             "create_bind_group: Texture2D not implemented (world textures pending)",
                         ));
                     }
                     BindingKind::Sampler => {
-                        return Err(EngineError::other(
+                        return Err(render_error(
                             "create_bind_group: Sampler not implemented (world samplers pending)",
                         ));
                     }
@@ -1146,7 +1146,7 @@ impl RenderApi for VulkanRenderApi {
         Ok(id)
     }
 
-    fn destroy_bind_group(&mut self, id: BindGroupId) {
+    pub(crate) fn destroy_bind_group(&mut self, id: BindGroupId) {
         if let Some(bg) = self.bind_groups.remove(&id) {
             unsafe {
                 if bg.pool != vk::DescriptorPool::null() {
@@ -1159,7 +1159,7 @@ impl RenderApi for VulkanRenderApi {
         }
     }
 
-    fn set_viewport(&mut self, vp: Viewport) -> EngineResult<()> {
+    pub(crate) fn set_viewport(&mut self, vp: Viewport) -> VkApiResult<()> {
         let vk_vp = vk::Viewport {
             x: vp.x,
             y: vp.y,
@@ -1172,7 +1172,7 @@ impl RenderApi for VulkanRenderApi {
         Ok(())
     }
 
-    fn set_scissor(&mut self, rect: RectI32) -> EngineResult<()> {
+    pub(crate) fn set_scissor(&mut self, rect: RectI32) -> VkApiResult<()> {
         let sc = vk::Rect2D {
             offset: vk::Offset2D {
                 x: rect.x,
@@ -1187,17 +1187,17 @@ impl RenderApi for VulkanRenderApi {
         Ok(())
     }
 
-    fn set_pipeline(&mut self, pipeline: PipelineId) -> EngineResult<()> {
+    pub(crate) fn set_pipeline(&mut self, pipeline: PipelineId) -> VkApiResult<()> {
         let p = *self
             .pipelines
             .get(&pipeline)
-            .ok_or_else(|| EngineError::other("set_pipeline: invalid PipelineId"))?;
+            .ok_or_else(|| render_error("set_pipeline: invalid PipelineId"))?;
         self.current_pipeline = Some(pipeline);
         self.recorded.push(RecordedCmd::BindPipeline(p.pipeline));
         Ok(())
     }
 
-    fn set_bind_group(&mut self, index: u32, group: BindGroupId) -> EngineResult<()> {
+    pub(crate) fn set_bind_group(&mut self, index: u32, group: BindGroupId) -> VkApiResult<()> {
         if index as usize >= self.current_bind_groups.len() {
             return self.err("set_bind_group: index out of range (max 4)");
         }
@@ -1205,7 +1205,7 @@ impl RenderApi for VulkanRenderApi {
         Ok(())
     }
 
-    fn set_vertex_buffer(&mut self, slot: u32, slice: BufferSlice) -> EngineResult<()> {
+    pub(crate) fn set_vertex_buffer(&mut self, slot: u32, slice: BufferSlice) -> VkApiResult<()> {
         if slot as usize >= self.current_vertex.len() {
             return self.err("set_vertex_buffer: slot out of range (max 4)");
         }
@@ -1213,19 +1213,19 @@ impl RenderApi for VulkanRenderApi {
         Ok(())
     }
 
-    fn set_index_buffer(&mut self, slice: BufferSlice, format: IndexFormat) -> EngineResult<()> {
+    pub(crate) fn set_index_buffer(&mut self, slice: BufferSlice, format: IndexFormat) -> VkApiResult<()> {
         self.current_index = Some((slice, format));
         Ok(())
     }
 
-    fn draw(&mut self, args: DrawArgs) -> EngineResult<()> {
+    pub(crate) fn draw(&mut self, args: DrawArgs) -> VkApiResult<()> {
         let Some(pipeline_id) = self.current_pipeline else {
             return self.err("draw: no pipeline bound");
         };
         let p = *self
             .pipelines
             .get(&pipeline_id)
-            .ok_or_else(|| EngineError::other("draw: invalid current pipeline"))?;
+            .ok_or_else(|| render_error("draw: invalid current pipeline"))?;
 
         let mut sets = [vk::DescriptorSet::null(); 4];
         let mut set_count = 0u32;
@@ -1234,7 +1234,7 @@ impl RenderApi for VulkanRenderApi {
                 let bg = *self
                     .bind_groups
                     .get(bg_id)
-                    .ok_or_else(|| EngineError::other("draw: invalid bind group"))?;
+                    .ok_or_else(|| render_error("draw: invalid bind group"))?;
                 sets[i] = bg.set;
                 set_count = (i as u32) + 1;
             }
@@ -1256,7 +1256,7 @@ impl RenderApi for VulkanRenderApi {
                 let b = *self
                     .buffers
                     .get(&s.buffer)
-                    .ok_or_else(|| EngineError::other("draw: invalid vertex buffer"))?;
+                    .ok_or_else(|| render_error("draw: invalid vertex buffer"))?;
                 bufs[i] = b.buffer;
                 offs[i] = s.offset as u64;
                 count = (i as u32) + 1;
@@ -1275,14 +1275,14 @@ impl RenderApi for VulkanRenderApi {
         Ok(())
     }
 
-    fn draw_indexed(&mut self, args: DrawIndexedArgs) -> EngineResult<()> {
+    pub(crate) fn draw_indexed(&mut self, args: DrawIndexedArgs) -> VkApiResult<()> {
         let Some(pipeline_id) = self.current_pipeline else {
             return self.err("draw_indexed: no pipeline bound");
         };
         let p = *self
             .pipelines
             .get(&pipeline_id)
-            .ok_or_else(|| EngineError::other("draw_indexed: invalid current pipeline"))?;
+            .ok_or_else(|| render_error("draw_indexed: invalid current pipeline"))?;
 
         let mut sets = [vk::DescriptorSet::null(); 4];
         let mut set_count = 0u32;
@@ -1291,7 +1291,7 @@ impl RenderApi for VulkanRenderApi {
                 let bg = *self
                     .bind_groups
                     .get(bg_id)
-                    .ok_or_else(|| EngineError::other("draw_indexed: invalid bind group"))?;
+                    .ok_or_else(|| render_error("draw_indexed: invalid bind group"))?;
                 sets[i] = bg.set;
                 set_count = (i as u32) + 1;
             }
@@ -1313,7 +1313,7 @@ impl RenderApi for VulkanRenderApi {
                 let b = *self
                     .buffers
                     .get(&s.buffer)
-                    .ok_or_else(|| EngineError::other("draw_indexed: invalid vertex buffer"))?;
+                    .ok_or_else(|| render_error("draw_indexed: invalid vertex buffer"))?;
                 bufs[i] = b.buffer;
                 offs[i] = s.offset as u64;
                 count = (i as u32) + 1;
@@ -1334,7 +1334,7 @@ impl RenderApi for VulkanRenderApi {
         let ib = *self
             .buffers
             .get(&idx_slice.buffer)
-            .ok_or_else(|| EngineError::other("draw_indexed: invalid index buffer"))?;
+            .ok_or_else(|| render_error("draw_indexed: invalid index buffer"))?;
 
         self.recorded.push(RecordedCmd::BindIndexBuffer {
             buffer: ib.buffer,
