@@ -80,6 +80,7 @@ impl<E: Send + 'static> Engine<E> {
 
         self.engine_plugins_loaded = true;
         self.plugins_loaded = true;
+        self.expose_plugins_snapshot();
 
         let loaded = self.plugins.snapshot().len();
         Self::log_phase_ok("plugins", phase, Some(loaded), Self::elapsed_since(t0));
@@ -142,6 +143,7 @@ impl<E: Send + 'static> Engine<E> {
         }
 
         self.plugins_loaded = true;
+        self.expose_plugins_snapshot();
 
         let loaded = self.plugins.snapshot().len();
         Self::log_phase_ok("plugins", phase, Some(loaded), Self::elapsed_since(t0));

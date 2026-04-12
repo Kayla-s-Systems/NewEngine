@@ -1,7 +1,29 @@
 #![forbid(unsafe_op_in_unsafe_fn)]
 
 use newengine_ecs::EntityId;
+use newengine_materials::MaterialId;
 use newengine_math::Vec3;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CommandDisplayMode {
+    Both,
+    EditorOnly,
+    GameOnly,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum CommandCollisionShape {
+    Box { half_extents: [f32; 3] },
+    Sphere { radius: f32 },
+    Capsule { radius: f32, half_height: f32 },
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct CommandCollisionBody {
+    pub shape: CommandCollisionShape,
+    pub dynamic: bool,
+    pub is_trigger: bool,
+}
 
 /// Snapshot of an entity local transform in editor-friendly representation.
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -30,13 +52,37 @@ pub enum EditorCommand {
         before: TransformSnapshot,
         after: TransformSnapshot,
     },
+    SetDisplayMode {
+        entity: EntityId,
+        before: CommandDisplayMode,
+        after: CommandDisplayMode,
+    },
+    SetPrimitiveColor {
+        entity: EntityId,
+        before: [f32; 4],
+        after: [f32; 4],
+    },
+    SetMaterial {
+        entity: EntityId,
+        before: MaterialId,
+        after: MaterialId,
+    },
+    SetCollisionBody {
+        entity: EntityId,
+        before: Option<CommandCollisionBody>,
+        after: Option<CommandCollisionBody>,
+    },
 }
 
 impl EditorCommand {
     #[inline]
     pub fn entity(&self) -> EntityId {
         match *self {
-            EditorCommand::SetTransform { entity, .. } => entity,
+            EditorCommand::SetTransform { entity, .. }
+            | EditorCommand::SetDisplayMode { entity, .. }
+            | EditorCommand::SetPrimitiveColor { entity, .. }
+            | EditorCommand::SetMaterial { entity, .. }
+            | EditorCommand::SetCollisionBody { entity, .. } => entity,
         }
     }
 }

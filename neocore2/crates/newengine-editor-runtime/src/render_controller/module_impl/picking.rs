@@ -4,6 +4,8 @@ use newengine_math::{Mat4, Vec3};
 use newengine_primitives::Primitive;
 use newengine_transform::GlobalTransform;
 
+use crate::gameplay::display_visible_in_mode;
+
 use super::EditorRenderController;
 
 pub(super) fn handle_picking(
@@ -60,6 +62,9 @@ fn pick_entity(
     let mut best_e: Option<newengine_ecs::EntityId> = None;
 
     for (e, _prim, gt) in world.query2::<Primitive, GlobalTransform>() {
+        if !display_visible_in_mode(world, e, false) {
+            continue;
+        }
         let m = gt.0;
         let center = Vec3::new(m.w_axis.x, m.w_axis.y, m.w_axis.z);
 

@@ -30,6 +30,9 @@ pub struct CameraNavInput {
 
     /// Movement key bitmask (`newengine_viewport::input::*`).
     pub move_mask: u64,
+
+    /// Additional user-controlled speed scalar from the editor shell.
+    pub speed_scalar: f32,
 }
 
 impl CameraNavInput {
@@ -60,7 +63,13 @@ pub(crate) fn build_camera_input(input: &CameraNavInput, mode: EditorNavMode) ->
     let up = ((input.move_mask & MOVE_UP) != 0) as i32 - ((input.move_mask & MOVE_DOWN) != 0) as i32;
 
     let mut move_axis = Vec3::ZERO;
-    let speed_mul = if shift { 2.0 } else { 1.0 };
+    let base_speed_mul = if shift { 2.0 } else { 1.0 };
+    let shell_speed_mul = if input.speed_scalar.is_finite() && input.speed_scalar > 0.0 {
+        input.speed_scalar
+    } else {
+        1.0
+    };
+    let speed_mul = base_speed_mul * shell_speed_mul;
 
     if input.pan_drag && mode == EditorNavMode::Orbit {
         move_axis.x = -input.dx_px;

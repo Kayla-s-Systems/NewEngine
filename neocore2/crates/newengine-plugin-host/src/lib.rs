@@ -9,6 +9,7 @@ mod manager;
 mod path_fmt;
 mod paths;
 mod plugin_config_service;
+mod root_observers;
 
 /// A lightweight snapshot of loaded plugins suitable for UI/telemetry.
 ///
@@ -28,6 +29,10 @@ pub use host_context::{
 pub use manager::{PluginIconSnapshot, PluginLoadError, PluginManager, PluginSnapshotEntry};
 pub use plugin_config_service::{
     get_plugin_overrides_with_env, init_plugin_config_service, CONFIG_SERVICE_ID,
+};
+pub use root_observers::{
+    register_plugin_root_observer, LoadedPluginRootSnapshot, PluginEditorExtensionsExport,
+    PluginRootObserver,
 };
 
 /// Publishes a plugin-host event into all subscribed plugin event sinks.

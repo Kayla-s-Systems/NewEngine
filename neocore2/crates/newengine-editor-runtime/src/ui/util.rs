@@ -93,12 +93,23 @@ pub(super) fn world_to_screen(
     if !ndc.x.is_finite() || !ndc.y.is_finite() || !ndc.z.is_finite() {
         return None;
     }
-    let sx_px = (ndc.x * 0.5 + 0.5) * frame.vp_w as f32;
-    let sy_px = (ndc.y * 0.5 + 0.5) * frame.vp_h as f32;
+    if frame.vp_w == 0 || frame.vp_h == 0 {
+        return None;
+    }
+    if ndc.z < -1.0 || ndc.z > 1.0 {
+        return None;
+    }
 
-    let ppp = (rect.width() / frame.vp_w as f32).max(1e-6);
-    let x_pt = rect.min.x + sx_px * ppp;
-    let y_pt = rect.min.y + sy_px * ppp;
+    let sx_px = (ndc.x * 0.5 + 0.5) * frame.vp_w as f32;
+    let sy_px = (-ndc.y * 0.5 + 0.5) * frame.vp_h as f32;
+
+    // Use independent scales for X/Y.
+    // A single width-derived pixels-per-point factor causes visible drift in overlays and
+    // selection outlines when the viewport texture extent is rounded differently on each axis.
+    let sx_pt = (rect.width() / frame.vp_w as f32).max(1e-6);
+    let sy_pt = (rect.height() / frame.vp_h as f32).max(1e-6);
+    let x_pt = rect.min.x + sx_px * sx_pt;
+    let y_pt = rect.min.y + sy_px * sy_pt;
     Some((egui::pos2(x_pt, y_pt), ndc.z))
 }
 
@@ -110,12 +121,17 @@ pub(super) fn screen_to_world_at_ndc_z(
     screen: egui::Pos2,
     ndc_z: f32,
 ) -> newengine_math::Vec3 {
-    let ppp = (rect.width() / frame.vp_w as f32).max(1e-6);
-    let px = ((screen.x - rect.min.x) / ppp).clamp(0.0, frame.vp_w as f32);
-    let py = ((screen.y - rect.min.y) / ppp).clamp(0.0, frame.vp_h as f32);
+    if frame.vp_w == 0 || frame.vp_h == 0 {
+        return newengine_math::Vec3::ZERO;
+    }
+
+    let sx_pt = (rect.width() / frame.vp_w as f32).max(1e-6);
+    let sy_pt = (rect.height() / frame.vp_h as f32).max(1e-6);
+    let px = ((screen.x - rect.min.x) / sx_pt).clamp(0.0, frame.vp_w as f32);
+    let py = ((screen.y - rect.min.y) / sy_pt).clamp(0.0, frame.vp_h as f32);
 
     let x = (px / frame.vp_w as f32) * 2.0 - 1.0;
-    let y = (py / frame.vp_h as f32) * 2.0 - 1.0;
+    let y = 1.0 - (py / frame.vp_h as f32) * 2.0;
 
     let h = frame.inv_viewproj * newengine_math::Vec4::new(x, y, ndc_z, 1.0);
     if h.w.abs() < 1e-6 {

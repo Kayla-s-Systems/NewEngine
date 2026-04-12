@@ -10,9 +10,16 @@ use crate::scene_bridge::SceneBridge;
 use crate::viewport_bridge::ViewportBridge;
 
 use super::gpu::LIT_UBO_SIZE;
-use super::gpu::{GridGpu, LitPipeline, PrimitiveGpu};
+use super::gpu::{DebugLineGpu, GridGpu, LitPipeline, PrimitiveGpu};
 
 type PrimGpuCache = FxHashMap<newengine_primitives::PrimitiveId, PrimitiveGpu>;
+
+#[derive(Clone, Copy, Debug)]
+pub(super) struct PlaySessionSnapshot {
+    pub(super) cam_id: newengine_ecs::EntityId,
+    pub(super) rig: newengine_sim::CameraRigComp,
+    pub(super) transform: Option<newengine_transform::Transform>,
+}
 
 #[derive(Clone, Copy)]
 pub(super) struct PerDrawUbo {
@@ -60,8 +67,14 @@ pub struct EditorRenderController {
 
     pub(super) last_pick_seq: u64,
 
+    pub(super) collision_lines: Option<DebugLineGpu>,
+    pub(super) sim_schedule: newengine_sim::SimSchedule,
+    pub(super) last_play_mode: crate::EditorPlayMode,
+
     /// Engine-owned camera navigation state (opaque for the app).
     pub(super) camera_nav: newengine_camera_runtime::CameraNavState,
+    pub(super) play_session: Option<PlaySessionSnapshot>,
+    pub(super) runtime_session: Option<crate::gameplay::RuntimeWorldSnapshot>,
 
     /// Cached cursor mode last published to the host.
     pub(super) last_cursor_state: CursorState,
@@ -111,7 +124,13 @@ impl EditorRenderController {
 
             last_pick_seq: 0,
 
+            collision_lines: None,
+            sim_schedule: crate::gameplay::default_sim_schedule(),
+            last_play_mode: crate::EditorPlayMode::Edit,
+
             camera_nav: newengine_camera_runtime::CameraNavState::default(),
+            play_session: None,
+            runtime_session: None,
             last_cursor_state: CursorState::released(),
         }
     }

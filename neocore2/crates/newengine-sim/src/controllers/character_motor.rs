@@ -144,9 +144,14 @@ pub fn run_character_motor_controller(
         });
     }
 
+    let mut velocity_ws = step.velocity_ws;
+    if let Some(current_velocity) = ctx.world().get::<Velocity>(entity).copied() {
+        velocity_ws.y = current_velocity.0.y;
+    }
+
     out.emit(Intent::SetVelocity {
         entity,
-        value: Velocity(step.velocity_ws),
+        value: Velocity(velocity_ws),
     });
     out.emit(Intent::SetCharacterMotor {
         entity,

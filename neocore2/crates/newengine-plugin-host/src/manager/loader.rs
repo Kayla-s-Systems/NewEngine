@@ -22,6 +22,7 @@ use super::config_patch::config_patch_from_json_merge_patch;
 use super::types::{LoadedPlugin, PluginLoadError, PluginState};
 use super::ui_assets::{extract_plugin_icon, PluginIconData};
 use super::PluginManager;
+use crate::root_observers::{record_loaded_plugin_root, LoadedPluginRootSnapshot};
 
 fn pretty_abs_path(path: &Path) -> String {
     // Best-effort canonicalization for log output.
@@ -75,6 +76,7 @@ impl PluginManager {
 
         let t = Instant::now();
         let root = unsafe { sym() };
+        let editor_extensions_v1 = root.editor_extensions_v1();
         tm.root_ms = t.elapsed().as_millis();
 
         let t = Instant::now();
@@ -198,7 +200,7 @@ impl PluginManager {
             }
         }
 
-        self.loaded_ids.insert(id_str);
+        self.loaded_ids.insert(id_str.clone());
         self.loaded.push(LoadedPlugin {
             path: path.to_path_buf(),
             _lib: lib,
@@ -208,6 +210,11 @@ impl PluginManager {
             state: PluginState::Registered,
             disabled_reason: None,
             icon_small,
+        });
+
+        record_loaded_plugin_root(LoadedPluginRootSnapshot {
+            plugin_id: id_str,
+            editor_extensions_v1,
         });
 
         Ok(())

@@ -2,6 +2,7 @@
 #![allow(non_local_definitions)]
 
 pub mod capability;
+pub mod editor;
 pub mod config;
 pub mod host;
 pub mod module;
@@ -16,6 +17,7 @@ pub mod prelude;
 
 pub use capability::*;
 pub use config::*;
+pub use editor::*;
 pub use host::*;
 pub use module::*;
 pub use render_backend::*;

@@ -14,7 +14,7 @@ use newengine_plugin_api::{
 use serde_json::Value;
 
 use crate::platform_runtime::constants::{
-    CT_JSON_MERGE_PATCH, PLATFORM_PLUGIN_ID, PLATFORM_RUNTIME_SYMBOL, PLUGIN_ROOT_SYMBOL,
+    CT_JSON_MERGE_PATCH, PLATFORM_PLUGIN_ID, PLUGIN_ROOT_SYMBOL,
 };
 use crate::platform_runtime::types::ResolvedPlatformRuntimeConfig;
 

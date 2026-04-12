@@ -10,12 +10,15 @@ pub(crate) fn draw(me: &mut EditorUiBuild, ctx: &egui::Context) {
         return;
     }
 
+    let mut open = me.asset_ui.open;
+    let assets = me.assets.clone();
+
     egui::Window::new("Asset Manager")
-        .open(&mut me.asset_ui.open)
+        .open(&mut open)
         .resizable(true)
         .default_size(egui::vec2(680.0, 520.0))
         .show(ctx, |ui| {
-            let Some(assets) = me.assets.as_ref() else {
+            let Some(assets) = assets.as_ref() else {
                 ui.label("AssetManager service is not available.\n\nRun the editor with an AssetManager runtime plugin.");
                 return;
             };
@@ -89,7 +92,30 @@ pub(crate) fn draw(me: &mut EditorUiBuild, ctx: &egui::Context) {
                         }
                     }
                 }
+
+
+                ui.separator();
+
+                if ui.button("Stage Spawn").clicked() {
+                    let path = me.asset_ui.path.trim().to_string();
+                    if !path.is_empty() {
+                        me.queue_asset_spawn_from_path(path, "asset_manager");
+                    }
+                }
+
+                if ui.button("Spawn Near Camera").clicked() {
+                    let path = me.asset_ui.path.trim().to_string();
+                    if !path.is_empty() {
+                        me.queue_asset_spawn_from_path(path, "asset_manager");
+                        me.spawn_pending_asset_near_camera();
+                    }
+                }
             });
+
+            if let Some(request) = me.asset_spawn_request.as_ref() {
+                ui.add_space(6.0);
+                ui.label(format!("Pending asset spawn: {} [{}]", request.contract.logical_path, request.contract.import.class.label()));
+            }
 
             if !me.asset_ui.last_error.trim().is_empty() {
                 ui.add_space(6.0);
@@ -168,4 +194,6 @@ pub(crate) fn draw(me: &mut EditorUiBuild, ctx: &egui::Context) {
                 });
             });
         });
+
+    me.asset_ui.open = open;
 }

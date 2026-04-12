@@ -8,3 +8,4 @@ edition = "2021"
 newengine-ecs = { path = "../newengine-ecs" }
 newengine-math = { path = "../newengine-math" }
 
+newengine-materials = { path = "../newengine-materials" }

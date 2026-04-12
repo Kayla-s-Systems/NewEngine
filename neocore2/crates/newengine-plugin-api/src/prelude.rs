@@ -3,6 +3,7 @@
 pub use crate::{
     capability::*,
     config::*,
+    editor::*,
     export_plugin_root,
     host::*,
     module::*,

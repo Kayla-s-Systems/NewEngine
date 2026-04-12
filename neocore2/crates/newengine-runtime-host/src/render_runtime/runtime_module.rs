@@ -2,6 +2,8 @@ use std::path::PathBuf;
 
 use newengine_core::render::{RenderApiRef, RENDER_API_ID, RENDER_API_PROVIDE};
 use newengine_core::{EngineResult, Module, ModuleCtx};
+use newengine_plugin_api::{CapabilityKind, CapabilityRole};
+use newengine_render_api::RENDER_SERVICE_ID;
 
 use crate::render_runtime::backend_match::backend_matches;
 use crate::render_runtime::client::RenderServiceClient;
@@ -29,6 +31,89 @@ impl RenderBackendRuntimeModule {
         }
     }
 
+    #[inline]
+    fn null_debug_text(&self) -> String {
+        format!("NewEngine | Headless ({})", self.backend_spec)
+    }
+
+    #[inline]
+    fn plugin_declares_render_service(plugin: &newengine_plugin_host::PluginSnapshotEntry) -> bool {
+        plugin.capabilities.iter().any(|cap| {
+            cap.role == CapabilityRole::Provides
+                && cap.kind == CapabilityKind::ServiceV1
+                && cap.id.as_str() == RENDER_SERVICE_ID
+        })
+    }
+
+    fn explain_backend_unavailability<E: Send + 'static>(
+        &self,
+        ctx: &ModuleCtx<'_, E>,
+        service_error: &str,
+    ) -> String {
+        let Some(snapshot) = ctx.resources().get::<newengine_plugin_host::PluginsSnapshot>() else {
+            return format!(
+                "render service '{}' is unavailable: {}",
+                RENDER_SERVICE_ID, service_error
+            );
+        };
+
+        let configured = self.backend_spec.as_str();
+
+        if let Some(plugin) = snapshot.plugins.iter().find(|plugin| plugin.id == configured) {
+            let declared = if Self::plugin_declares_render_service(plugin) {
+                "declares render.api.v1"
+            } else {
+                "does not declare render.api.v1"
+            };
+
+            return match plugin.state.as_str() {
+                "disabled" => format!(
+                    "configured render plugin '{}' is loaded but disabled: {}",
+                    configured,
+                    plugin
+                        .disabled_reason
+                        .as_deref()
+                        .unwrap_or("reason was not provided by the plugin host")
+                ),
+                state => format!(
+                    "configured render plugin '{}' is loaded (state='{}', {}) but service '{}' is not registered: {}",
+                    configured,
+                    state,
+                    declared,
+                    RENDER_SERVICE_ID,
+                    service_error
+                ),
+            };
+        }
+
+        let loaded_render_plugins: Vec<String> = snapshot
+            .plugins
+            .iter()
+            .filter(|plugin| {
+                plugin.id.starts_with("newengine.renderer.")
+                    || Self::plugin_declares_render_service(plugin)
+            })
+            .map(|plugin| format!("{}:{}", plugin.id, plugin.state))
+            .collect();
+
+        if loaded_render_plugins.is_empty() {
+            format!(
+                "configured render plugin '{}' is not loaded and no render plugins are active; service '{}' is unavailable: {}",
+                configured,
+                RENDER_SERVICE_ID,
+                service_error
+            )
+        } else {
+            format!(
+                "configured render plugin '{}' is not loaded; loaded render plugins=[{}]; service '{}' is unavailable: {}",
+                configured,
+                loaded_render_plugins.join(", "),
+                RENDER_SERVICE_ID,
+                service_error
+            )
+        }
+    }
+
     fn enable_null_render_backend<E: Send + 'static>(
         &mut self,
         ctx: &mut ModuleCtx<'_, E>,
@@ -46,7 +131,7 @@ impl RenderBackendRuntimeModule {
         let resolved = ResolvedRenderBackendConfig {
             backend_id: NULL_RENDER_BACKEND_ID.to_owned(),
             clear_color: DEFAULT_RENDER_BACKEND_CLEAR_COLOR,
-            debug_text: "NewEngine | Headless".to_owned(),
+            debug_text: self.null_debug_text(),
         };
 
         ctx.resources_mut().insert(resolved);
@@ -72,7 +157,10 @@ impl<E: Send + 'static> Module<E> for RenderBackendRuntimeModule {
 
         let info = match client.info() {
             Ok(info) => info,
-            Err(err) => return self.enable_null_render_backend(ctx, err),
+            Err(err) => {
+                let reason = self.explain_backend_unavailability(ctx, &err);
+                return self.enable_null_render_backend(ctx, reason);
+            }
         };
 
         if !backend_matches(&self.backend_spec, &info.backend_id) {

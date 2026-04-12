@@ -196,6 +196,44 @@ pub(super) struct PrimitiveGpu {
     pub index_count: u32,
 }
 
+#[derive(Clone, Copy)]
+pub(super) struct DebugLineGpu {
+    pub vb: newengine_core::render::BufferId,
+    pub ubo: newengine_core::render::BufferId,
+    pub bg: newengine_core::render::BindGroupId,
+    pub bgl: newengine_core::render::BindGroupLayoutId,
+    #[allow(dead_code)]
+    pub vs: newengine_core::render::ShaderId,
+    #[allow(dead_code)]
+    pub fs: newengine_core::render::ShaderId,
+    pub pipeline: newengine_core::render::PipelineId,
+    pub capacity_vertices: u32,
+}
+
+const DEBUG_LINE_UBO_SIZE: u64 = 16;
+
+const BUILTIN_DEBUG_LINES_VERT: &str = r#"#version 450
+layout(set = 0, binding = 0, std140) uniform DebugLineUbo {
+    vec4 u_pad;
+} ubo;
+
+layout(location = 0) in vec4 a_clip_pos;
+layout(location = 1) in vec4 a_color;
+layout(location = 0) out vec4 v_color;
+void main() {
+    gl_Position = a_clip_pos + vec4(ubo.u_pad.xyz * 0.0, 0.0);
+    v_color = a_color;
+}
+"#;
+
+const BUILTIN_DEBUG_LINES_FRAG: &str = r#"#version 450
+layout(location = 0) in vec4 v_color;
+layout(location = 0) out vec4 o_color;
+void main() {
+    o_color = v_color;
+}
+"#;
+
 pub(super) fn ensure_lit_pipeline(
     cached: &mut Option<LitPipeline>,
     r: &mut dyn newengine_core::render::RenderApi,
@@ -457,6 +495,99 @@ fn build_unit_grid_vb(
     r.write_buffer(vb, 0, &bytes)?;
 
     Ok(vb)
+}
+
+pub(super) fn ensure_debug_line_pipeline(
+    cached: &mut Option<DebugLineGpu>,
+    r: &mut dyn newengine_core::render::RenderApi,
+    min_vertices: u32,
+) -> CoreResult<DebugLineGpu> {
+    if let Some(g) = *cached {
+        if g.capacity_vertices >= min_vertices {
+            return Ok(g);
+        }
+        r.destroy_bind_group(g.bg);
+        r.destroy_bind_group_layout(g.bgl);
+        r.destroy_buffer(g.ubo);
+        r.destroy_buffer(g.vb);
+        r.destroy_pipeline(g.pipeline);
+        r.destroy_shader(g.vs);
+        r.destroy_shader(g.fs);
+        *cached = None;
+    }
+
+    let capacity_vertices = min_vertices.max(256).next_power_of_two();
+    let compiler = shaderc::Compiler::new()
+        .map_err(|e| EngineError::other(format!("shaderc: Compiler: {e}")))?;
+
+    let vs_spv = compile_glsl(&compiler, ShaderKind::Vertex, "editor_debug_lines.vert", BUILTIN_DEBUG_LINES_VERT)?;
+    let fs_spv = compile_glsl(&compiler, ShaderKind::Fragment, "editor_debug_lines.frag", BUILTIN_DEBUG_LINES_FRAG)?;
+
+    let vs = r.create_shader(
+        ShaderDesc::new(ShaderStage::Vertex, "main", vs_spv).with_label("editor_debug_lines_vs"),
+    )?;
+    let fs = r.create_shader(
+        ShaderDesc::new(ShaderStage::Fragment, "main", fs_spv).with_label("editor_debug_lines_fs"),
+    )?;
+
+    let layout = VertexLayout::new(
+        32,
+        vec![
+            VertexAttribute::new(0, 0, VertexFormat::Float32x4),
+            VertexAttribute::new(1, 16, VertexFormat::Float32x4),
+        ],
+    );
+
+    let bgl = r.create_bind_group_layout(
+        BindGroupLayoutDesc::new(vec![BindingKind::UniformBuffer])
+            .with_label("editor_debug_lines_bgl"),
+    )?;
+    let ubo = r.create_buffer(
+        BufferDesc::new(
+            DEBUG_LINE_UBO_SIZE,
+            BufferUsage::Uniform,
+            MemoryHint::CpuToGpu,
+        )
+            .with_label("editor_debug_lines_ubo"),
+    )?;
+    r.write_buffer(ubo, 0, &[0u8; DEBUG_LINE_UBO_SIZE as usize])?;
+    let bg = r.create_bind_group(
+        BindGroupDesc::new(bgl)
+            .with_label("editor_debug_lines_bg")
+            .with_uniform0(BufferBinding::new(ubo, 0, DEBUG_LINE_UBO_SIZE)),
+    )?;
+
+    let pipeline = r.create_pipeline(
+        PipelineDesc::new(vs, fs, TextureFormat::Bgra8Unorm)
+            .with_label("editor_debug_lines_pipeline")
+            .with_topology(PrimitiveTopology::LineList)
+            .with_vertex_layouts(vec![layout])
+            .with_bind_group_layouts(vec![bgl])
+            .with_depth(TextureFormat::Depth32Float),
+    )?;
+
+    let vb = r.create_buffer(
+        BufferDesc::new(
+            capacity_vertices as u64 * 32,
+            BufferUsage::Vertex,
+            MemoryHint::CpuToGpu,
+        )
+            .with_label("editor_debug_lines_vb"),
+    )?;
+
+    let gpu = DebugLineGpu {
+        vb,
+        ubo,
+        bg,
+        bgl,
+        vs,
+        fs,
+        pipeline,
+        capacity_vertices,
+    };
+
+    *cached = Some(gpu);
+    Ok(gpu)
 }
 
 fn compile_glsl(

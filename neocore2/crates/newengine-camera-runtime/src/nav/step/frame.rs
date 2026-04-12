@@ -15,10 +15,17 @@ pub(crate) fn maybe_frame_orbit(
 ) {
     debug_assert_eq!(ctrl.mode, EditorNavMode::Orbit);
 
-    let grew = bounds.radius > state.framed_radius * 1.05;
-    let do_frame = explicit_frame
-        || (!state.framed_once && !user_busy)
-        || (state.framed_once && !user_busy && grew);
+    // Do not auto-reframe after the initial fit.
+    //
+    // Reframing on scene-bounds growth makes the entire world appear to jump whenever
+    // a new actor is spawned or when an existing actor is moved outward. That also
+    // invalidates editor overlays/gizmo perception because the camera changes under
+    // the user during edit operations.
+    //
+    // Policy:
+    // - frame once automatically on first usable scene
+    // - frame again only on an explicit user request (F / Shift+F)
+    let do_frame = explicit_frame || (!state.framed_once && !user_busy);
 
     if !do_frame {
         return;

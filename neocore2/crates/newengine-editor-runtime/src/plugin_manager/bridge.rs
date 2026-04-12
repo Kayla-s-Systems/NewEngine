@@ -1,7 +1,8 @@
 #![forbid(unsafe_op_in_unsafe_fn)]
 
 use std::collections::VecDeque;
-use std::sync::{Mutex, RwLock};
+
+use parking_lot::{Mutex, RwLock};
 
 use newengine_plugin_host::PluginControlCommand;
 use newengine_plugin_host::PluginsSnapshot;
@@ -28,28 +29,21 @@ impl PluginManagerBridge {
 
     #[inline]
     pub fn publish(&self, snap: PluginsSnapshot) {
-        if let Ok(mut g) = self.snapshot.write() {
-            *g = snap;
-        }
+        *self.snapshot.write() = snap;
     }
 
     #[inline]
     pub fn read(&self) -> PluginsSnapshot {
-        self.snapshot.read().map(|g| g.clone()).unwrap_or_default()
+        self.snapshot.read().clone()
     }
 
     #[inline]
     pub fn push_cmd(&self, cmd: PluginControlCommand) {
-        if let Ok(mut q) = self.commands.lock() {
-            q.push_back(cmd);
-        }
+        self.commands.lock().push_back(cmd);
     }
 
     #[inline]
     pub fn drain_cmds(&self) -> Vec<PluginControlCommand> {
-        let Ok(mut q) = self.commands.lock() else {
-            return Vec::new();
-        };
-        q.drain(..).collect()
+        self.commands.lock().drain(..).collect()
     }
 }

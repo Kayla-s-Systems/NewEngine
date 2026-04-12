@@ -2,36 +2,45 @@
 
 use egui;
 
+use super::super::widgets;
 use super::super::EditorUiBuild;
 
 pub(crate) fn draw(me: &mut EditorUiBuild, ctx: &egui::Context) {
-    if !me.console_open {
-        return;
-    }
-
-    let enter_pressed = me.key_pressed(newengine_ui::input::keys::ENTER);
-    let mut console_open = me.console_open;
-    let mut console_input = std::mem::take(&mut me.console_input);
-
-    egui::Window::new("Console")
-        .open(&mut console_open)
+    egui::TopBottomPanel::bottom("ne_output_log")
         .resizable(true)
-        .vscroll(true)
+        .default_height(180.0)
+        .min_height(96.0)
         .show(ctx, |ui| {
-            ui.label("Foundation mode: console is intentionally minimal for now.");
-            ui.add_space(6.0);
-
-            let resp = ui.add(
-                egui::TextEdit::singleline(&mut console_input)
-                    .hint_text("type a command (no-op)")
-                    .desired_width(f32::INFINITY),
-            );
-
-            if resp.lost_focus() && enter_pressed {
-                console_input.clear();
-            }
+            draw_content(me, ui);
         });
+}
 
-    me.console_open = console_open;
-    me.console_input = console_input;
+pub(crate) fn draw_content(me: &mut EditorUiBuild, ui: &mut egui::Ui) {
+    widgets::panel_title(ui, "Console", "Runtime output, quick filter and command scratchpad");
+    widgets::search_field(ui, &mut me.console_filter, "Filter logs, systems, commands...");
+    ui.add(
+        egui::TextEdit::singleline(&mut me.console_input)
+            .hint_text("Type a command or note")
+            .desired_width(f32::INFINITY),
+    );
+    ui.add_space(6.0);
+
+    widgets::section_card(ui, "Editor Runtime", |ui| {
+        widgets::stat_row(ui, "Play Mode", format!("{:?}", me.scene_bridge.play_mode()));
+        widgets::stat_row(ui, "Viewport", me.viewport_mode.label());
+        widgets::stat_row(ui, "Tool", me.active_tool_label());
+        widgets::stat_row(ui, "Camera Speed", me.camera_speed.active_label());
+        widgets::stat_row(ui, "Selection", format!("{} entities", me.editor.selection.len()));
+        widgets::stat_row(ui, "Asset Service", if me.assets.is_some() { "Online" } else { "Offline" });
+    });
+
+    ui.add_space(6.0);
+    widgets::section_card(ui, "Log Stream", |ui| {
+        ui.label(egui::RichText::new("Log routing into this dock panel is still a shell-layer stub.").small().weak());
+        ui.label(egui::RichText::new("The panel is now in the dock graph, so wiring a real sink is isolated to this tab instead of the old bottom drawer.").small().weak());
+        if !me.console_filter.trim().is_empty() {
+            ui.add_space(4.0);
+            ui.label(format!("Active filter: {}", me.console_filter.trim()));
+        }
+    });
 }

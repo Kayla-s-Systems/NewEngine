@@ -10,12 +10,18 @@ use newengine_core::render::{
     require_render_api, BeginFrameDesc, BeginRenderTargetDesc, Extent2D, RectI32, Viewport,
 };
 use newengine_core::{EngineResult, Module, ModuleCtx};
-use newengine_math::{Quat, Vec3};
+use newengine_math::{Quat, Vec2, Vec3};
 use newengine_ui::draw::UiDrawList;
 
 use super::controller::EditorRenderController;
 use super::gpu::ensure_lit_pipeline;
+use crate::gameplay::{
+    apply_player_input, attach_active_camera_to_player, capture_runtime_world_snapshot,
+    clear_player_input, detach_active_camera_from_player, first_player, restore_runtime_world_snapshot,
+    run_schedule,
+};
 
+mod grid;
 mod input;
 mod lights;
 mod passes;
@@ -36,20 +42,6 @@ fn quat_from_forward_z(dir_ws: Vec3) -> Quat {
 }
 
 impl EditorRenderController {
-    pub(super) const GRID_HALF_LINES: i32 = 80;
-    pub(super) const GRID_MAJOR_EVERY: i32 = 10;
-    pub(super) const GRID_MINOR_COLOR: [f32; 4] = [0.32, 0.32, 0.34, 1.0];
-    pub(super) const GRID_MAJOR_COLOR: [f32; 4] = [0.45, 0.45, 0.48, 1.0];
-    pub(super) const GRID_BACKGROUND_COLOR: [f32; 4] = [0.10, 0.10, 0.11, 1.0];
-
-    #[inline]
-    pub(super) fn grid_spacing(camera_distance: f32) -> f32 {
-        let d = camera_distance.max(0.01);
-        let base = (d * 0.08).max(0.05);
-        let pow10 = 10.0f32.powf(base.log10().floor());
-        pow10.clamp(0.05, 1000.0)
-    }
-
     #[inline]
     fn read_window_size<E: Send>(ctx: &ModuleCtx<'_, E>) -> (u32, u32) {
         ctx.resources()
@@ -147,6 +139,8 @@ impl<E: Send + 'static> Module<E> for EditorRenderController {
 
             let input = ViewportInputSnap::read(&self.viewport_bridge);
 
+            self.scene_bridge.apply_commands();
+            let play_mode = self.scene_bridge.play_mode();
             let mut nav_input = CameraNavInput {
                 dx_px: input.dx_px,
                 dy_px: input.dy_px,
@@ -157,14 +151,26 @@ impl<E: Send + 'static> Module<E> for EditorRenderController {
                 ui_busy: input.ui_busy,
                 fly_rmb: input.fly_rmb,
                 move_mask: input.move_mask,
+                speed_scalar: input.speed_scalar,
             };
 
-            // AAA camera policy: when free-fly is active and viewport is active, capture cursor.
-            self.sync_cursor_state(ctx, cursor_state_for_nav(&nav_input));
+            if play_mode.wants_direct_player_control() {
+                nav_input.wheel_y = 0.0;
+                nav_input.pan_drag = false;
+            }
+
+            let desired_cursor_state = if play_mode.wants_direct_player_control() && input.active {
+                CursorState::captured_locked()
+            } else {
+                cursor_state_for_nav(&nav_input)
+            };
+
+            // AAA camera policy: editor fly uses RMB capture, while play mode possesses the
+            // player directly and keeps the cursor locked without an extra mouse chord.
+            self.sync_cursor_state(ctx, desired_cursor_state);
 
             let aspect = (vp_w as f32 / vp_h as f32).max(1e-6);
 
-            self.scene_bridge.apply_commands();
             let scene_lock = self.scene_bridge.scene();
             let mut scene = scene_lock.write();
 
@@ -172,6 +178,77 @@ impl<E: Send + 'static> Module<E> for EditorRenderController {
             // Pre-pass provides bounds/world poses for controller logic.
             // Post-pass commits camera/nav writes into derived outputs for rendering.
             let (rig, viewproj) = scene.run_frame(self.frame_index, |world| {
+                let cam_id = world
+                    .resource::<newengine_scene::SceneState>()
+                    .and_then(|s| s.active_camera.or(s.root))
+                    .unwrap_or_default();
+
+                if self.last_play_mode != play_mode {
+                    if !self.last_play_mode.is_runtime() && play_mode.is_runtime() {
+                        self.runtime_session = Some(capture_runtime_world_snapshot(world));
+                    }
+
+                    if self.last_play_mode.wants_direct_player_control() {
+                        if let Some(player) = first_player(world) {
+                            clear_player_input(world, player);
+                        }
+
+                        detach_active_camera_from_player(world, cam_id);
+
+                        if let Some(snapshot) = self.play_session.take() {
+                            let _ = world.insert(snapshot.cam_id, snapshot.rig);
+                            if let Some(transform) = snapshot.transform {
+                                let _ = world.insert(snapshot.cam_id, transform);
+                            }
+                        }
+                    }
+
+                    if play_mode.wants_direct_player_control() {
+                        let rig = world
+                            .get::<newengine_sim::CameraRigComp>(cam_id)
+                            .copied()
+                            .unwrap_or_default();
+                        let transform = world.get::<newengine_transform::Transform>(cam_id).copied();
+                        self.play_session = Some(super::controller::PlaySessionSnapshot {
+                            cam_id,
+                            rig,
+                            transform,
+                        });
+
+                        if let Some(player) = first_player(world) {
+                            attach_active_camera_to_player(world, cam_id, player);
+                        }
+                    } else {
+                        detach_active_camera_from_player(world, cam_id);
+                    }
+
+                    if self.last_play_mode.is_runtime() && !play_mode.is_runtime() {
+                        if let Some(snapshot) = self.runtime_session.take() {
+                            restore_runtime_world_snapshot(world, snapshot);
+                        }
+                    }
+
+                    self.last_play_mode = play_mode;
+                }
+
+                if let Some(player) = first_player(world) {
+                    if play_mode.wants_direct_player_control() {
+                        apply_player_input(
+                            world,
+                            player,
+                            input.move_mask,
+                            Vec2::new(-input.dx_px, -input.dy_px),
+                            input.active,
+                        );
+                    } else {
+                        clear_player_input(world, player);
+                    }
+                }
+
+                if play_mode.runs_physics() {
+                    run_schedule(&mut self.sim_schedule, world, dt);
+                }
+
                 let bounds = scene::scene_bounds_world(world).unwrap_or_else(|| scene::default_bounds());
                 let sel = self.scene_bridge.selection();
                 let sel_bounds = scene::selection_bounds_world(world, sel);
@@ -194,10 +271,13 @@ impl<E: Send + 'static> Module<E> for EditorRenderController {
                     all: self.viewport_bridge.read_frame_all(),
                 };
 
-                let cam_id = world
-                    .resource::<newengine_scene::SceneState>()
-                    .and_then(|s| s.active_camera.or(s.root))
-                    .unwrap_or_default();
+                if play_mode.wants_direct_player_control() {
+                    nav_input.active = false;
+                    nav_input.look_drag = false;
+                    nav_input.pan_drag = false;
+                    nav_input.fly_rmb = false;
+                    nav_input.move_mask = 0;
+                }
 
                 let out = step_camera_nav(
                     &mut self.camera_nav,
@@ -240,7 +320,7 @@ impl<E: Send + 'static> Module<E> for EditorRenderController {
             r.begin_render_target(
                 BeginRenderTargetDesc::new(rt)
                     .with_clear_depth(1.0)
-                    .with_clear_color(Self::GRID_BACKGROUND_COLOR),
+                    .with_clear_color(grid::BACKGROUND_COLOR),
             )?;
             r.set_viewport(Viewport::full(extent))?;
             r.set_scissor(RectI32::new(0, 0, vp_w as i32, vp_h as i32))?;
@@ -248,26 +328,39 @@ impl<E: Send + 'static> Module<E> for EditorRenderController {
             let lit = ensure_lit_pipeline(&mut self.lit, &mut **r)?;
             let world_lights = lights::collect_lights(scene.world());
 
-            passes::draw_grid(
-                self,
-                &mut **r,
-                lit,
-                viewproj,
-                &rig,
-                bounds.center,
-                bounds.radius,
-                &world_lights,
-            )?;
-            passes::draw_primitives(self, &mut **r, &scene, lit, viewproj, &world_lights)?;
-            passes::draw_light_gizmos(
+            if !play_mode.is_runtime() {
+                passes::draw_grid(
+                    self,
+                    &mut **r,
+                    lit,
+                    viewproj,
+                    &rig,
+                    bounds.radius,
+                    &world_lights,
+                )?;
+            }
+            passes::draw_primitives(
                 self,
                 &mut **r,
                 &scene,
                 lit,
                 viewproj,
                 &world_lights,
-                quat_from_forward_z,
+                play_mode.is_runtime(),
             )?;
+            if !play_mode.is_runtime() {
+                passes::draw_light_gizmos(
+                    self,
+                    &mut **r,
+                    &scene,
+                    lit,
+                    viewproj,
+                    &world_lights,
+                    quat_from_forward_z,
+                    false,
+                )?;
+                passes::draw_collision_wireframe(self, &mut **r, &scene, viewproj)?;
+            }
 
             r.end_render_target()?;
 

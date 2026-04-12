@@ -4,6 +4,7 @@ use abi_stable::library::RootModule;
 use abi_stable::sabi_types::VersionStrings;
 use abi_stable::StableAbi;
 
+use crate::editor::EditorExtensionsV1;
 use crate::module::{PluginModuleDyn, PluginModuleV2Dyn, PluginModuleV3Dyn};
 use crate::ui::PluginUiAssetsV1;
 
@@ -19,6 +20,8 @@ pub struct PluginRootV1 {
     pub create_v3: extern "C" fn() -> PluginModuleV3Dyn<'static>,
 
     pub ui_assets_v1: extern "C" fn() -> PluginUiAssetsV1,
+
+    pub editor_extensions_v1: extern "C" fn() -> EditorExtensionsV1,
 }
 
 impl RootModule for PluginRootV1Ref {
@@ -34,6 +37,11 @@ pub extern "C" fn empty_plugin_ui_assets_v1() -> PluginUiAssetsV1 {
     PluginUiAssetsV1::empty()
 }
 
+#[inline]
+pub extern "C" fn empty_editor_extensions_v1() -> EditorExtensionsV1 {
+    EditorExtensionsV1::empty()
+}
+
 /// Defines the exported root module symbol.
 ///
 /// Usage in a plugin crate:
@@ -44,9 +52,11 @@ pub extern "C" fn empty_plugin_ui_assets_v1() -> PluginUiAssetsV1 {
 /// extern "C" fn create_v2() -> PluginModuleV2Dyn<'static> { /* ... */ }
 /// extern "C" fn create_v3() -> PluginModuleV3Dyn<'static> { /* ... */ }
 /// extern "C" fn ui_assets_v1() -> PluginUiAssetsV1 { PluginUiAssetsV1::empty() }
+/// extern "C" fn editor_extensions_v1() -> EditorExtensionsV1 { EditorExtensionsV1::empty() }
 ///
 /// export_plugin_root!(create_v1, create_v2, create_v3);
 /// export_plugin_root!(create_v1, create_v2, create_v3, ui_assets_v1);
+/// export_plugin_root!(create_v1, create_v2, create_v3, ui_assets_v1, editor_extensions_v1);
 /// ```
 #[macro_export]
 macro_rules! export_plugin_root {
@@ -55,10 +65,20 @@ macro_rules! export_plugin_root {
             $create_v1,
             $create_v2,
             $create_v3,
-            $crate::empty_plugin_ui_assets_v1
+            $crate::empty_plugin_ui_assets_v1,
+            $crate::empty_editor_extensions_v1
         );
     };
     ($create_v1:path, $create_v2:path, $create_v3:path, $ui_assets_v1:path) => {
+        $crate::export_plugin_root!(
+            $create_v1,
+            $create_v2,
+            $create_v3,
+            $ui_assets_v1,
+            $crate::empty_editor_extensions_v1
+        );
+    };
+    ($create_v1:path, $create_v2:path, $create_v3:path, $ui_assets_v1:path, $editor_extensions_v1:path) => {
         #[abi_stable::export_root_module]
         pub fn export_plugin_root() -> $crate::PluginRootV1Ref {
             < $crate::PluginRootV1 as abi_stable::prefix_type::PrefixTypeTrait >::leak_into_prefix(
@@ -67,6 +87,7 @@ macro_rules! export_plugin_root {
                     create_v2: $create_v2,
                     create_v3: $create_v3,
                     ui_assets_v1: $ui_assets_v1,
+                    editor_extensions_v1: $editor_extensions_v1,
                 }
             )
         }

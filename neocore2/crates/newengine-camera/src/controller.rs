@@ -204,18 +204,28 @@ impl OrbitController {
 
         self.pitch = self.pitch.clamp(-self.pitch_limit, self.pitch_limit);
 
-        // Dolly via mouse wheel (zoom_delta) and via move_axis.z (e.g. middle-mouse drag).
-        let mut dolly = 0.0f32;
+        // Wheel zoom must stay predictable across tiny props and huge scenes alike.
+        // The previous implementation multiplied distance by an unclamped scene-scaled step,
+        // which could collapse the orbit radius in a single wheel tick on large levels.
+        //
+        // Policy:
+        // - exponential zoom response (stable near zero, no sign-flip / overshoot);
+        // - bounded per-frame response, independent from raw scene radius spikes;
+        // - optional move_axis.z support remains additive for future orbit drag-dolly flows.
+        let mut zoom_units = 0.0f32;
         if input.zoom_delta.is_finite() {
-            dolly += input.zoom_delta;
+            zoom_units += input.zoom_delta;
         }
         if input.move_axis.z.is_finite() {
-            dolly += input.move_axis.z * dt;
+            zoom_units += input.move_axis.z * dt;
         }
-        if dolly.abs() > 1e-6 {
-            let step = dolly * self.dolly_speed * speed_mul * 0.1;
-            self.distance = (self.distance * (1.0 - step).clamp(0.02, 50.0))
-                .clamp(self.min_distance, self.max_distance);
+        if zoom_units.abs() > 1e-6 {
+            let bounded_speed_mul = speed_mul.clamp(0.25, 2.0);
+            let bounded_zoom = zoom_units.clamp(-4.0, 4.0);
+            let response = (0.12 * self.dolly_speed.max(0.05).sqrt() * bounded_speed_mul.sqrt())
+                .clamp(0.05, 0.20);
+            let zoom_factor = (-bounded_zoom * response).exp();
+            self.distance = (self.distance * zoom_factor).clamp(self.min_distance, self.max_distance);
         }
 
         // Build rotation.

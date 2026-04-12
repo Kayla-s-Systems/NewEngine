@@ -7,10 +7,26 @@ use newengine_ui::input::keys as ui_keys;
 
 use super::super::camera::FrameCamera;
 use super::super::util;
-use super::super::EditorUiBuild;
+use super::super::{providers, EditorUiBuild};
+
+#[inline]
+fn normalize_wheel_delta(raw_points: f32) -> f32 {
+    if !raw_points.is_finite() {
+        return 0.0;
+    }
+
+    let units = raw_points / 240.0;
+    let compressed = units / (1.0 + units.abs());
+    compressed.clamp(-1.0, 1.0)
+}
 
 pub(crate) fn draw(me: &mut EditorUiBuild, ctx: &egui::Context) {
     egui::CentralPanel::default().show(ctx, |ui| {
+        draw_content(me, ctx, ui);
+    });
+}
+
+pub(crate) fn draw_content(me: &mut EditorUiBuild, ctx: &egui::Context, ui: &mut egui::Ui) {
         let avail = ui.available_size();
         let (rect, resp) = ui.allocate_exact_size(avail, egui::Sense::click_and_drag());
 
@@ -28,8 +44,11 @@ pub(crate) fn draw(me: &mut EditorUiBuild, ctx: &egui::Context) {
         let px_w = (rect.width() * ppp).round().max(1.0) as u32;
         let px_h = (rect.height() * ppp).round().max(1.0) as u32;
 
+    if me.last_viewport_extent != Some((px_w, px_h)) {
         me.viewport.set_extent(px_w, px_h);
         me.viewport_bridge.publish_extent(px_w, px_h);
+        me.last_viewport_extent = Some((px_w, px_h));
+    }
 
         let (rmb_pressed, rmb_released, dropped_files) = ctx.input(|i| {
             (
@@ -41,6 +60,8 @@ pub(crate) fn draw(me: &mut EditorUiBuild, ctx: &egui::Context) {
         let shift = me.shift_down();
         let raw_scroll_y = me.frame_input.mouse_wheel.1;
         let esc_pressed = me.key_pressed(ui_keys::ESCAPE);
+    let play_mode = me.scene_bridge.play_mode();
+    let play_active = play_mode.wants_direct_player_control();
 
         let nav_rotate = resp.dragged_by(egui::PointerButton::Middle) && !shift;
         let nav_pan = resp.dragged_by(egui::PointerButton::Middle) && shift;
@@ -51,7 +72,7 @@ pub(crate) fn draw(me: &mut EditorUiBuild, ctx: &egui::Context) {
         // Gizmo hotkeys:
         // - Q/W/E/R when RMB free-fly is NOT active
         // - 1/2/3 always available
-        if hovered && !ctx.wants_keyboard_input() {
+    if hovered && !ctx.wants_keyboard_input() && !play_mode.is_runtime() {
             let allow_qwer = !(me.fly_latch.is_captured() || rmb_pressed);
 
             let pressed_q = allow_qwer && me.key_pressed(ui_keys::KEY_Q);
@@ -108,7 +129,8 @@ pub(crate) fn draw(me: &mut EditorUiBuild, ctx: &egui::Context) {
 
         // Determine whether gizmo wants to capture input this frame.
         let mut gizmo_capture_now = false;
-        let gizmo_enabled = me.editor.active_tool != newengine_editor_core::ToolId::Select;
+    let gizmo_enabled = !play_mode.is_runtime()
+        && me.editor.active_tool != newengine_editor_core::ToolId::Select;
         if gizmo_enabled {
             if let (Some(frame), Some(e)) = (me.viewport_bridge.read_camera_frame(), me.editor.selection.primary()) {
                 if let Some((pos, rot, scale, _)) = me.read_selected_pose(e) {
@@ -128,11 +150,19 @@ pub(crate) fn draw(me: &mut EditorUiBuild, ctx: &egui::Context) {
         // - allow Esc to force-cancel capture
         if esc_pressed {
             me.fly_latch.cancel();
+            if play_active {
+                me.scene_bridge
+                    .cmd_set_play_mode(crate::gameplay::EditorPlayMode::Edit);
+            }
         }
 
-        let (fly_rmb, fly_rmb_changed) = me
-            .fly_latch
-            .update(rmb_pressed, rmb_released, hovered && !gizmo_capture_now);
+    let (fly_rmb, fly_rmb_changed) = if play_active {
+        me.fly_latch.cancel();
+        (false, false)
+    } else {
+        me.fly_latch
+            .update(rmb_pressed, rmb_released, hovered && !gizmo_capture_now)
+    };
 
         if fly_rmb_changed {
             // Cursor lock/unlock can warp the pointer; drop any baseline to avoid a delta spike.
@@ -142,10 +172,14 @@ pub(crate) fn draw(me: &mut EditorUiBuild, ctx: &egui::Context) {
 
         // While RMB capture is active we must treat the viewport as active even if the backend
         // temporarily reports pointer outside of the rect.
-        let active = hovered || fly_rmb;
+    let active = if play_active { true } else { hovered || fly_rmb };
 
         // Click-to-select (picking handled on render thread).
-        if resp.clicked_by(egui::PointerButton::Primary) && !nav_drag && !gizmo_capture_now {
+    if !play_mode.is_runtime()
+        && resp.clicked_by(egui::PointerButton::Primary)
+        && !nav_drag
+        && !gizmo_capture_now
+    {
             if let Some(pos) = resp.interact_pointer_pos() {
                 let toggle = me.command_down();
                 let additive = me.shift_down();
@@ -166,7 +200,7 @@ pub(crate) fn draw(me: &mut EditorUiBuild, ctx: &egui::Context) {
         // Middle-drag uses explicit drag tracking (absolute positions).
         // RMB free-fly uses relative motion (`pointer.delta()`), robust to cursor warp.
         let (mut dx_px, mut dy_px) = (0.0f32, 0.0f32);
-        if nav_drag {
+    if nav_drag && !play_active {
             // Prevent stale baseline if the user switches from RMB free-fly to MMB nav.
             me.last_fly_drag_pos = None;
             if let Some(pos) = resp.interact_pointer_pos() {
@@ -180,7 +214,7 @@ pub(crate) fn draw(me: &mut EditorUiBuild, ctx: &egui::Context) {
         } else {
             me.last_nav_drag_pos = None;
 
-            if fly_rmb {
+        if play_active || fly_rmb {
                 dx_px = me.frame_input.mouse_delta.0;
                 dy_px = me.frame_input.mouse_delta.1;
             }
@@ -199,11 +233,13 @@ pub(crate) fn draw(me: &mut EditorUiBuild, ctx: &egui::Context) {
         }
 
         let wheel_y_points = if active { raw_scroll_y } else { 0.0 };
-        let mut wheel_y = (wheel_y_points / 240.0).clamp(-2.0, 2.0);
+    let mut wheel_y = normalize_wheel_delta(wheel_y_points);
 
         // Suppress synthetic deltas around RMB capture transitions.
+    if !play_active {
         me.fly_latch
             .suppress_motion_if_needed(&mut dx_px, &mut dy_px, &mut wheel_y);
+    }
 
         // Drag & drop models onto the viewport.
         if active {
@@ -221,10 +257,8 @@ pub(crate) fn draw(me: &mut EditorUiBuild, ctx: &egui::Context) {
                     let dot_ext = if ext.is_empty() { String::new() } else { format!(".{ext}") };
 
                     if !dot_ext.is_empty() && (exts.is_empty() || exts.iter().any(|e| e == &dot_ext)) {
-                        log::warn!(
-                            "model drop is currently disabled (no asset->scene contract yet): '{}'",
-                            p
-                        );
+                        me.queue_asset_spawn_from_path(p.clone(), "viewport_drop");
+                        me.spawn_pending_asset_near_camera();
                     } else {
                         log::warn!("dropped file has unsupported extension: '{}'", p);
                     }
@@ -232,15 +266,27 @@ pub(crate) fn draw(me: &mut EditorUiBuild, ctx: &egui::Context) {
             }
         }
 
-        let look_drag = (nav_rotate || fly_rmb) && !gizmo_capture_now;
-        let pan_drag = nav_pan && !gizmo_capture_now;
-        let ui_busy = gizmo_capture_now || me.gizmo.is_dragging();
+    let look_drag = if play_active {
+        active
+    } else {
+        (nav_rotate || fly_rmb) && !gizmo_capture_now
+    };
+    let pan_drag = if play_active {
+        false
+    } else {
+        nav_pan && !gizmo_capture_now
+    };
+    let ui_busy = if play_active {
+        false
+    } else {
+        gizmo_capture_now || me.gizmo.is_dragging()
+    };
         let mut move_mask: u64 = 0;
 
         // Explicit framing:
         // - F: frame selection
         // - Shift+F: frame entire scene
-        if active && !wants_kb {
+    if !play_mode.is_runtime() && active && !wants_kb {
             let frame_sel = me.key_pressed(ui_keys::KEY_F) && !me.shift_down();
             let frame_all = me.key_pressed(ui_keys::KEY_F) && me.shift_down();
             if frame_sel {
@@ -250,7 +296,7 @@ pub(crate) fn draw(me: &mut EditorUiBuild, ctx: &egui::Context) {
             }
         }
 
-        if fly_rmb {
+    if (fly_rmb || play_active) && (!wants_kb || play_active) {
             if me.key_down(ui_keys::KEY_W) {
                 move_mask |= newengine_viewport::input::MOVE_W;
             }
@@ -281,8 +327,9 @@ pub(crate) fn draw(me: &mut EditorUiBuild, ctx: &egui::Context) {
             look_drag,
             pan_drag,
             ui_busy,
-            fly_rmb,
+            if play_active { false } else { fly_rmb },
             move_mask,
+            me.camera_speed.scalar,
         );
 
         let tex_user = me.viewport_bridge.read_tex_user();
@@ -298,28 +345,118 @@ pub(crate) fn draw(me: &mut EditorUiBuild, ctx: &egui::Context) {
                 });
             }
 
-            // Viewport overlay: supported model extensions.
-            if active {
+            let supported_model_exts = if active {
                 let snap = me.plugins_bridge.read();
-                let exts = util::infer_model_exts(&snap);
-                if !exts.is_empty() {
-                    let msg = format!("Drop model: {}", exts.join(", "));
-                    let pos = rect.left_bottom() + egui::vec2(8.0, -8.0);
-                    ui.painter().text(
-                        pos,
-                        egui::Align2::LEFT_BOTTOM,
-                        msg,
-                        egui::FontId::monospace(12.0),
-                        egui::Color32::from_gray(140),
-                    );
+                util::infer_model_exts(&snap)
+            } else {
+                Vec::new()
+            };
+
+            let overlay_frame = egui::Frame::new()
+                .fill(egui::Color32::from_rgba_unmultiplied(18, 20, 24, 220))
+                .stroke(egui::Stroke::new(1.0, egui::Color32::from_rgba_unmultiplied(255, 255, 255, 24)))
+                .corner_radius(egui::CornerRadius::same(6))
+                .inner_margin(egui::Margin::same(6));
+
+            let header_rect = egui::Rect::from_min_size(
+                rect.left_top() + egui::vec2(10.0, 10.0),
+                egui::vec2(620.0_f32.min(rect.width() - 20.0).max(260.0), 32.0),
+            );
+            ui.scope_builder(egui::UiBuilder::new().max_rect(header_rect), |ui| {
+                overlay_frame.clone().show(ui, |ui| {
+                    ui.set_width(ui.available_width());
+                    ui.horizontal_wrapped(|ui| {
+                        ui.label(egui::RichText::new("Perspective").strong());
+                        ui.separator();
+                        for desc in providers::viewport_mode_actions(me) {
+                            if ui
+                                .add_enabled(desc.enabled, egui::Button::selectable(desc.selected, desc.label.as_ref()))
+                                .clicked()
+                            {
+                                me.execute_ui_action(&desc.action);
+                            }
+                        }
+                        ui.separator();
+                        ui.menu_button("Show", |ui| {
+                            let mut collision_wire = me.scene_bridge.collision_wireframe_enabled();
+                            if ui.checkbox(&mut collision_wire, "Collision").changed() {
+                                me.scene_bridge.cmd_set_collision_wireframe(collision_wire);
+                            }
+                        });
+                        ui.menu_button("Snap", |ui| {
+                            ui.checkbox(&mut me.transform_snap.translate_enabled, "Move");
+                            ui.add(
+                                egui::DragValue::new(&mut me.transform_snap.translate_step)
+                                    .speed(0.25)
+                                    .range(0.1..=4096.0)
+                                    .suffix(" uu"),
+                            );
+                            ui.separator();
+                            ui.checkbox(&mut me.transform_snap.rotate_enabled, "Rotate");
+                            ui.add(
+                                egui::DragValue::new(&mut me.transform_snap.rotate_step_deg)
+                                    .speed(0.25)
+                                    .range(1.0..=180.0)
+                                    .suffix(" deg"),
+                            );
+                            ui.separator();
+                            ui.checkbox(&mut me.transform_snap.scale_enabled, "Scale");
+                            ui.add(
+                                egui::DragValue::new(&mut me.transform_snap.scale_step)
+                                    .speed(0.01)
+                                    .range(0.01..=10.0),
+                            );
+                        });
+                        ui.menu_button("Cam", |ui| {
+                            for choice in providers::camera_speed_choices(me) {
+                                if ui.add_enabled(choice.enabled, egui::Button::selectable(choice.selected, choice.label)).clicked() {
+                                    me.execute_ui_action(&providers::UiAction::SetCameraSpeedPreset(choice.value));
+                                    ui.close();
+                                }
+                            }
+                        });
+                        if ui.button("Frame").clicked() {
+                            me.execute_ui_action(&providers::UiAction::FrameSelection);
+                        }
+                    });
+                });
+            });
+
+            resp.context_menu(|ui| {
+                let selection_ctx = me
+                    .editor
+                    .selection
+                    .primary()
+                    .map(|entity| super::super::schema::build_selection_context(me, entity));
+                for action in super::super::schema::selection_context_actions(me, selection_ctx.as_ref()) {
+                    if ui
+                        .add_enabled(action.enabled, egui::Button::selectable(action.selected, action.label))
+                        .clicked()
+                    {
+                        me.execute_context_action(action.id);
+                        ui.close();
+                    }
                 }
+            });
+
+            if !supported_model_exts.is_empty() {
+                let hint_rect = egui::Rect::from_min_size(
+                    rect.left_bottom() + egui::vec2(10.0, -34.0),
+                    egui::vec2((rect.width() - 20.0).max(140.0), 24.0),
+                );
+                ui.scope_builder(egui::UiBuilder::new().max_rect(hint_rect), |ui| {
+                    overlay_frame.show(ui, |ui| {
+                        ui.label(format!("Drop model: {}", supported_model_exts.join(", ")));
+                    });
+                });
             }
 
             // Viewport overlay: selection highlight + gizmo.
             let frame = me.viewport_bridge.read_camera_frame();
             let selected = me.editor.selection.primary();
-            if let (Some(frame), Some(e)) = (frame, selected) {
-                if let Some((pos, rot, scale, _color)) = me.read_selected_pose(e) {
+            if !play_mode.is_runtime() {
+                if let (Some(frame), Some(e)) = (frame, selected) {
+                    if let Some((pos, rot, scale, _color)) = me.read_selected_pose(e) {
                     util::draw_selection_outline(ui.painter(), &frame, rect, pos, rot, scale);
 
                     let mut gizmo_out = None;
@@ -342,11 +479,14 @@ pub(crate) fn draw(me: &mut EditorUiBuild, ctx: &egui::Context) {
                     }
 
                     if let Some(t) = gizmo_out.and_then(|o| o.transform) {
-                        me.insp_pos = [t.pos.x, t.pos.y, t.pos.z];
+                        let pos = me.snapped_position(t.pos);
                         let (y, p, r) = t.rot.to_euler(newengine_math::EulerRot::YXZ);
+                        let (y, p, r) = me.snapped_rotation_ypr(y, p, r);
+                        let scale = me.snapped_scale(t.scale);
+                        me.insp_pos = [pos.x, pos.y, pos.z];
                         me.insp_rot_deg = [y.to_degrees(), p.to_degrees(), r.to_degrees()];
-                        me.insp_scale = [t.scale.x, t.scale.y, t.scale.z];
-                        me.scene_bridge.cmd_set_transform(e, t.pos, (y, p, r), t.scale);
+                        me.insp_scale = [scale.x, scale.y, scale.z];
+                        me.scene_bridge.cmd_set_transform(e, pos, (y, p, r), scale);
                     }
 
                     if !is_dragging && me.gizmo_was_dragging {
@@ -385,8 +525,8 @@ pub(crate) fn draw(me: &mut EditorUiBuild, ctx: &egui::Context) {
                         egui::FontId::monospace(12.0),
                         egui::Color32::from_gray(160),
                     );
+                    }
                 }
             }
         });
-    });
 }

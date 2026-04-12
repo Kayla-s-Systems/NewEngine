@@ -77,6 +77,7 @@ struct UiCameraInputState {
     ui_busy: bool,
     fly_rmb: bool,
     move_keys: u64,
+    speed_scalar: f32,
 }
 
 impl ViewportBridge {
@@ -188,6 +189,7 @@ impl ViewportBridge {
         ui_busy: bool,
         fly_rmb: bool,
         move_keys: u64,
+        speed_scalar: f32,
     ) {
         let mut s = self.ui_input.lock();
         s.dx_px = dx_px;
@@ -199,11 +201,12 @@ impl ViewportBridge {
         s.ui_busy = ui_busy;
         s.fly_rmb = fly_rmb;
         s.move_keys = move_keys;
+        s.speed_scalar = speed_scalar;
     }
 
     /// Read camera input published by UI for this frame.
     #[inline]
-    pub fn read_camera_input(&self) -> (f32, f32, f32, bool, bool, bool, bool, bool, u64) {
+    pub fn read_camera_input(&self) -> (f32, f32, f32, bool, bool, bool, bool, bool, u64, f32) {
         // Read and consume the latest UI packet atomically.
         //
         // This avoids torn snapshots where `(fly_rmb, look_drag, dx/dy)` come from different UI
@@ -220,6 +223,7 @@ impl ViewportBridge {
             s.ui_busy,
             s.fly_rmb,
             s.move_keys,
+            s.speed_scalar,
         );
         s.dx_px = 0.0;
         s.dy_px = 0.0;

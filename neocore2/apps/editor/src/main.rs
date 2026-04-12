@@ -94,6 +94,7 @@ fn main_impl() -> EngineResult<()> {
 
     let asset_roots = collect_app_asset_roots(EDITOR_APP_DIR_NAME, EDITOR_APP_ASSETS_DIR_ENV);
     let profile = EditorRuntimeProfile::new();
+    profile.install_plugin_root_editor_auto_wiring(true);
 
     let mut engine = build_engine_from_startup(&startup, EDITOR_FIXED_DT_MS)?;
     newengine_core::crash::record_breadcrumb("editor launcher: host engine constructed");
