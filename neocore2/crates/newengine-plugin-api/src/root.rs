@@ -79,8 +79,8 @@ macro_rules! export_plugin_root {
         );
     };
     ($create_v1:path, $create_v2:path, $create_v3:path, $ui_assets_v1:path, $editor_extensions_v1:path) => {
-        #[abi_stable::export_root_module]
-        pub fn export_plugin_root() -> $crate::PluginRootV1Ref {
+        #[no_mangle]
+        pub extern "C" fn export_plugin_root() -> $crate::PluginRootV1Ref {
             < $crate::PluginRootV1 as abi_stable::prefix_type::PrefixTypeTrait >::leak_into_prefix(
                 $crate::PluginRootV1 {
                     create: $create_v1,

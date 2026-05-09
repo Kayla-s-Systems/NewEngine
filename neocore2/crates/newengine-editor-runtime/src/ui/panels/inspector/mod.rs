@@ -3,11 +3,8 @@
 mod components;
 mod sections;
 
-use egui;
-
 use super::super::schema;
 use super::super::theme;
-use super::super::util;
 use super::super::EditorUiBuild;
 
 #[inline]
@@ -16,19 +13,6 @@ fn has_section(
     id: schema::PropertySectionId,
 ) -> bool {
     sections.iter().any(|section| section.id == id)
-}
-
-pub(crate) fn draw(me: &mut EditorUiBuild, ctx: &egui::Context) {
-    let max_width = util::details_max_width(ctx, me.layout.show_left_toolbar, me.layout.show_outliner);
-
-    egui::SidePanel::right("inspector")
-        .resizable(true)
-        .default_width(300.0)
-        .min_width(260.0)
-        .max_width(max_width)
-        .show(ctx, |ui| {
-            draw_content(me, ui);
-        });
 }
 
 pub(crate) fn draw_content(me: &mut EditorUiBuild, ui: &mut egui::Ui) {

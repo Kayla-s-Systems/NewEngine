@@ -12,16 +12,24 @@ use newengine_primitives::{PrimitiveId, PrimitiveRegistry, PrimitiveVertex};
 use newengine_assets::{wait_ready, AssetAccess, AssetServiceClient};
 use newengine_plugin_host::default_host_api;
 
-use shaderc::{CompileOptions, Compiler, OptimizationLevel, ShaderKind};
 
 fn load_text_asset(rel: &str) -> CoreResult<String> {
     // Hard rule: assets are loaded only through AssetManager/VFS so `.pak` layering works.
     // This codepath is kept for the legacy editor renderer and must not touch the filesystem.
     let assets = AssetServiceClient::new(default_host_api());
 
-    let id = assets
-        .load(rel)
-        .map_err(|e| EngineError::other(format!("asset.load failed path='{rel}' err='{e}'")))?;
+    let id = match assets.load(rel) {
+        Ok(id) => id,
+        Err(e) => {
+            if let Some(fallback) = builtin_text_asset(rel) {
+                log::warn!("asset.load failed, using builtin fallback path='{rel}' err='{e}'");
+                return Ok(fallback.to_string());
+            }
+            return Err(EngineError::other(format!(
+                "asset.load failed path='{rel}' err='{e}'"
+            )));
+        }
+    };
 
     if let Err(e) = wait_ready(&assets, &id, std::time::Duration::from_secs(2)) {
         if let Some(fallback) = builtin_text_asset(rel) {
@@ -33,9 +41,18 @@ fn load_text_asset(rel: &str) -> CoreResult<String> {
         )));
     }
 
-    let (_meta, payload) = assets.blob_wire_v1(&id).map_err(|e| {
-        EngineError::other(format!("asset.blob_wire_v1 failed path='{rel}' err='{e}'"))
-    })?;
+    let (_meta, payload) = match assets.blob_wire_v1(&id) {
+        Ok(v) => v,
+        Err(e) => {
+            if let Some(fallback) = builtin_text_asset(rel) {
+                log::warn!("asset.blob_wire_v1 failed, using builtin fallback path='{rel}' err='{e}'");
+                return Ok(fallback.to_string());
+            }
+            return Err(EngineError::other(format!(
+                "asset.blob_wire_v1 failed path='{rel}' err='{e}'"
+            )));
+        }
+    };
 
     let s = std::str::from_utf8(&payload)
         .map_err(|_| EngineError::other(format!("asset is not utf8 path='{rel}'")))?
@@ -49,6 +66,8 @@ fn builtin_text_asset(rel: &str) -> Option<&'static str> {
     match rel {
         "shaders/editor_lit_v2.vert" => Some(BUILTIN_EDITOR_LIT_VERT),
         "shaders/editor_lit_v2.frag" => Some(BUILTIN_EDITOR_LIT_FRAG),
+        "shaders/editor_grid.vert" => Some(BUILTIN_EDITOR_GRID_VERT),
+        "shaders/editor_grid.frag" => Some(BUILTIN_EDITOR_GRID_FRAG),
         _ => None,
     }
 }
@@ -140,6 +159,34 @@ void main() {
 
     vec3 out_rgb = base * lit + emissive;
     o_color = vec4(out_rgb, v_base.a);
+}
+"#;
+
+
+const BUILTIN_EDITOR_GRID_VERT: &str = r#"#version 450
+
+layout(location = 0) in vec3 a_pos;
+layout(location = 1) in vec4 a_color;
+
+layout(set = 0, binding = 0, std140) uniform Ubo {
+    mat4 u_mvp;
+} ubo;
+
+layout(location = 0) out vec4 v_color;
+
+void main() {
+    v_color = a_color;
+    gl_Position = ubo.u_mvp * vec4(a_pos, 1.0);
+}
+"#;
+
+const BUILTIN_EDITOR_GRID_FRAG: &str = r#"#version 450
+
+layout(location = 0) in vec4 v_color;
+layout(location = 0) out vec4 o_color;
+
+void main() {
+    o_color = v_color;
 }
 "#;
 
@@ -241,6 +288,15 @@ pub(super) fn ensure_lit_pipeline(
     if let Some(p) = *cached {
         return Ok(p);
     }
+    let vs_src = load_text_asset("shaders/editor_lit_v2.vert")?;
+    let fs_src = load_text_asset("shaders/editor_lit_v2.frag")?;
+
+    let vs_spv = compile_glsl(ShaderStage::Vertex, "editor_lit_v2.vert", &vs_src)?;
+    let fs_spv = compile_glsl(ShaderStage::Fragment, "editor_lit_v2.frag", &fs_src)?;
+
+    // Allocate GPU resources only after shader baking succeeds. Runtime shader
+    // compilation is still optional during startup; a local glslc crash must not
+    // leave half-created backend objects before the controller fails soft.
     let grid_ubo = r.create_buffer(
         BufferDesc::new(LIT_UBO_SIZE, BufferUsage::Uniform, MemoryHint::CpuToGpu)
             .with_label("editor_grid_ubo"),
@@ -254,15 +310,6 @@ pub(super) fn ensure_lit_pipeline(
             .with_label("editor_grid_bg")
             .with_uniform0(BufferBinding::new(grid_ubo, 0, LIT_UBO_SIZE)),
     )?;
-
-    let compiler = shaderc::Compiler::new()
-        .map_err(|e| EngineError::other(format!("shaderc: Compiler: {e}")))?;
-
-    let vs_src = load_text_asset("shaders/editor_lit_v2.vert")?;
-    let fs_src = load_text_asset("shaders/editor_lit_v2.frag")?;
-
-    let vs_spv = compile_glsl(&compiler, ShaderKind::Vertex, "editor_lit_v2.vert", &vs_src)?;
-    let fs_spv = compile_glsl(&compiler, ShaderKind::Fragment, "editor_lit_v2.frag", &fs_src)?;
 
     let vs = r.create_shader(
         ShaderDesc::new(ShaderStage::Vertex, "main", vs_spv).with_label("editor_lit_vs"),
@@ -374,14 +421,11 @@ pub(super) fn ensure_grid(
         }
     }
 
-    let compiler = shaderc::Compiler::new()
-        .map_err(|e| EngineError::other(format!("shaderc: Compiler: {e}")))?;
-
     let vs_src = load_text_asset("shaders/editor_grid.vert")?;
     let fs_src = load_text_asset("shaders/editor_grid.frag")?;
 
-    let vs_spv = compile_glsl(&compiler, ShaderKind::Vertex, "editor_grid.vert", &vs_src)?;
-    let fs_spv = compile_glsl(&compiler, ShaderKind::Fragment, "editor_grid.frag", &fs_src)?;
+    let vs_spv = compile_glsl(ShaderStage::Vertex, "editor_grid.vert", &vs_src)?;
+    let fs_spv = compile_glsl(ShaderStage::Fragment, "editor_grid.frag", &fs_src)?;
 
     let vs = r.create_shader(
         ShaderDesc::new(ShaderStage::Vertex, "main", vs_spv).with_label("editor_grid_vs"),
@@ -517,11 +561,9 @@ pub(super) fn ensure_debug_line_pipeline(
     }
 
     let capacity_vertices = min_vertices.max(256).next_power_of_two();
-    let compiler = shaderc::Compiler::new()
-        .map_err(|e| EngineError::other(format!("shaderc: Compiler: {e}")))?;
 
-    let vs_spv = compile_glsl(&compiler, ShaderKind::Vertex, "editor_debug_lines.vert", BUILTIN_DEBUG_LINES_VERT)?;
-    let fs_spv = compile_glsl(&compiler, ShaderKind::Fragment, "editor_debug_lines.frag", BUILTIN_DEBUG_LINES_FRAG)?;
+    let vs_spv = compile_glsl(ShaderStage::Vertex, "editor_debug_lines.vert", BUILTIN_DEBUG_LINES_VERT)?;
+    let fs_spv = compile_glsl(ShaderStage::Fragment, "editor_debug_lines.frag", BUILTIN_DEBUG_LINES_FRAG)?;
 
     let vs = r.create_shader(
         ShaderDesc::new(ShaderStage::Vertex, "main", vs_spv).with_label("editor_debug_lines_vs"),
@@ -590,21 +632,9 @@ pub(super) fn ensure_debug_line_pipeline(
     Ok(gpu)
 }
 
-fn compile_glsl(
-    compiler: &Compiler,
-    kind: ShaderKind,
-    name: &str,
-    src: &str,
-) -> CoreResult<Vec<u32>> {
-    let mut opts = CompileOptions::new()
-        .map_err(|e| EngineError::other(format!("shaderc: CompileOptions: {e}")))?;
-    opts.set_optimization_level(OptimizationLevel::Performance);
-
-    let bin = compiler
-        .compile_into_spirv(src, kind, name, "main", Some(&opts))
-        .map_err(|e| EngineError::other(format!("shaderc: {name}: {e}")))?;
-
-    Ok(bin.as_binary().to_vec())
+fn compile_glsl(stage: ShaderStage, name: &str, src: &str) -> CoreResult<Vec<u32>> {
+    newengine_shader_compiler::compile_glsl_to_spirv(stage, name, "main", src)
+        .map_err(|e| EngineError::other(format!("shader compile failed: {e}")))
 }
 
 #[allow(dead_code)]

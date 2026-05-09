@@ -270,16 +270,6 @@ fn draw_tree_node(
     }
 }
 
-pub(crate) fn draw(me: &mut EditorUiBuild, ctx: &egui::Context) {
-    egui::SidePanel::left("hierarchy")
-        .resizable(true)
-        .default_width(260.0)
-        .min_width(220.0)
-        .show(ctx, |ui| {
-            draw_content(me, ui);
-        });
-}
-
 pub(crate) fn draw_content(me: &mut EditorUiBuild, ui: &mut egui::Ui) {
     let (items, children, roots) = {
         let scene = me.scene_bridge.scene();

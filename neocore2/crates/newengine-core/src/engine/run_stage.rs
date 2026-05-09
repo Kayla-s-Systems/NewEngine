@@ -105,8 +105,9 @@ impl<E: Send + 'static> Engine<E> {
     pub fn shutdown(&mut self) -> EngineResult<()> {
         self.sync_shutdown_state();
 
-        self.plugins_shutdown();
-
+        // Modules own engine-side handles into plugin services. They must be allowed
+        // to close frames, unregister APIs and release logical resources before the
+        // plugin host tears down the actual service objects/DLL-backed state.
         for s in self.modules.iter_mut().rev() {
             if s.shutdown_called {
                 continue;
@@ -131,6 +132,8 @@ impl<E: Send + 'static> Engine<E> {
             s.shutdown_called = true;
             s.state = ModuleState::Disabled;
         }
+
+        self.plugins_shutdown();
 
         Ok(())
     }

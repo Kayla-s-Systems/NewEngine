@@ -24,17 +24,6 @@ pub(crate) fn draw(me: &mut EditorUiBuild, ctx: &egui::Context) {
                                         ui.close();
                                     }
                                 }
-                                providers::UiMenuEntry::Toggle(toggle) => {
-                                    let mut value = toggle.value;
-                                    let response = ui.add_enabled(
-                                        toggle.enabled,
-                                        egui::Checkbox::new(&mut value, toggle.label),
-                                    );
-                                    if response.clicked() {
-                                        me.set_panel_toggle(toggle.id, value);
-                                        ui.close();
-                                    }
-                                }
                                 providers::UiMenuEntry::Separator => {
                                     ui.separator();
                                 }

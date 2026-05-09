@@ -43,8 +43,17 @@ pub(crate) fn draw_summary(
     selection_ctx: &schema::SelectionContext,
 ) {
     let schema_ctx = schema::build_editor_schema_context(me, Some(selection_ctx));
-    let archetype = schema::archetype_provider(selection_ctx);
     let runtime_provider = schema::runtime_state_provider(me);
+    let runtime_label = if schema_ctx.runtime_active && runtime_provider.runtime_active {
+        "Runtime active"
+    } else {
+        "Runtime idle"
+    };
+    let viewport_mode = if schema_ctx.viewport_mode == runtime_provider.viewport_mode {
+        runtime_provider.viewport_mode
+    } else {
+        schema_ctx.viewport_mode
+    };
     let editor_provider = schema::editor_state_provider(me);
     let selection_count = me.editor.selection.len();
     let entity = selection_ctx.entity;
@@ -54,7 +63,7 @@ pub(crate) fn draw_summary(
         ui.horizontal_wrapped(|ui| {
             ui.label(egui::RichText::new(format!("{:?}", selection_ctx.kind)).small().weak());
             ui.label(
-                egui::RichText::new(format!("Archetype: {:?}", archetype.archetype))
+                egui::RichText::new(format!("Archetype: {:?}", schema_ctx.archetype))
                     .small()
                     .weak(),
             );
@@ -65,6 +74,14 @@ pub(crate) fn draw_summary(
             );
             ui.label(
                 egui::RichText::new(format!("Mode: {:?}", schema_ctx.play_mode))
+                    .small()
+                    .weak(),
+            );
+            ui.label(
+                egui::RichText::new(runtime_label).small().weak(),
+            );
+            ui.label(
+                egui::RichText::new(format!("Viewport: {}", viewport_mode.label()))
                     .small()
                     .weak(),
             );

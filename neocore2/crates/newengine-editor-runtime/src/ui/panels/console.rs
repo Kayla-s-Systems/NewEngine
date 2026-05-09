@@ -5,16 +5,6 @@ use egui;
 use super::super::widgets;
 use super::super::EditorUiBuild;
 
-pub(crate) fn draw(me: &mut EditorUiBuild, ctx: &egui::Context) {
-    egui::TopBottomPanel::bottom("ne_output_log")
-        .resizable(true)
-        .default_height(180.0)
-        .min_height(96.0)
-        .show(ctx, |ui| {
-            draw_content(me, ui);
-        });
-}
-
 pub(crate) fn draw_content(me: &mut EditorUiBuild, ui: &mut egui::Ui) {
     widgets::panel_title(ui, "Console", "Runtime output, quick filter and command scratchpad");
     widgets::search_field(ui, &mut me.console_filter, "Filter logs, systems, commands...");
@@ -26,7 +16,7 @@ pub(crate) fn draw_content(me: &mut EditorUiBuild, ui: &mut egui::Ui) {
     ui.add_space(6.0);
 
     widgets::section_card(ui, "Editor Runtime", |ui| {
-        widgets::stat_row(ui, "Play Mode", format!("{:?}", me.scene_bridge.play_mode()));
+        widgets::stat_row(ui, "Play Mode", me.play_mode_label());
         widgets::stat_row(ui, "Viewport", me.viewport_mode.label());
         widgets::stat_row(ui, "Tool", me.active_tool_label());
         widgets::stat_row(ui, "Camera Speed", me.camera_speed.active_label());

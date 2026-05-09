@@ -1,286 +1,19 @@
 #![forbid(unsafe_op_in_unsafe_fn)]
 
+mod types;
+
+pub use types::*;
+
 use std::path::Path;
 
 use newengine_ecs::EntityId;
 
 use crate::gameplay::{CollisionBody, DisplayMode, PlayerActor};
-use crate::scene_bridge::{SceneImportedAssetAssemblyDescriptor, SceneImportedAssetAssemblyKind, SceneImportedAssetDescriptor, SceneImportedAssetKind, SceneImportedAssetRepresentation};
+use crate::scene_bridge::{
+    SceneImportedAssetAssemblyDescriptor, SceneImportedAssetAssemblyKind,
+    SceneImportedAssetDescriptor, SceneImportedAssetKind, SceneImportedAssetRepresentation,
+};
 use crate::ui::{extension_abi, EditorUiBuild};
-
-pub type PropertyFieldFactoryFn = fn(&EditorUiBuild, &SelectionContext, ComponentSchemaId, PropertySectionId) -> Vec<ComponentFieldFactory>;
-pub type ContextActionProviderFn = fn(&EditorUiBuild, Option<&SelectionContext>) -> Vec<ContextActionSchema>;
-pub type AssetImportProviderFn = fn(&str) -> Option<AssetImportDescriptor>;
-
-#[derive(Debug, Clone)]
-pub struct RegisteredFieldFactory {
-    pub id: &'static str,
-    pub component: Option<ComponentSchemaId>,
-    pub section: Option<PropertySectionId>,
-    pub factory: PropertyFieldFactoryFn,
-}
-
-#[derive(Debug, Clone)]
-pub struct RegisteredContextActionProvider {
-    pub id: &'static str,
-    pub provider: ContextActionProviderFn,
-}
-
-#[derive(Debug, Clone)]
-pub struct RegisteredAssetImportProvider {
-    pub id: &'static str,
-    pub provider: AssetImportProviderFn,
-}
-
-#[derive(Debug, Default)]
-pub struct EditorSchemaRegistry {
-    pub field_factories: Vec<RegisteredFieldFactory>,
-    pub context_action_providers: Vec<RegisteredContextActionProvider>,
-    pub asset_import_providers: Vec<RegisteredAssetImportProvider>,
-}
-
-#[derive(Debug, Clone)]
-pub struct EditorSurfaceContext {
-    pub play_mode: crate::gameplay::EditorPlayMode,
-    pub runtime_active: bool,
-    pub viewport_mode: crate::ui::ViewportMode,
-    pub active_tool: newengine_editor_core::ToolId,
-    pub camera_speed_label: &'static str,
-    pub collision_overlay: bool,
-    pub selection_count: usize,
-    pub entity_count: usize,
-    pub primary_selection: Option<SelectionContext>,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub enum PropertySectionId {
-    Summary,
-    Transform,
-    Display,
-    Gameplay,
-    Collision,
-    Primitive,
-    Lighting,
-    Material,
-}
-
-#[derive(Debug, Clone)]
-pub struct PropertySectionSchema {
-    pub id: PropertySectionId,
-    pub label: &'static str,
-    pub keywords: &'static str,
-    pub visible: bool,
-    pub components: Vec<ComponentSchemaId>,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub enum ComponentSchemaId {
-    Identity,
-    Transform,
-    Display,
-    Gameplay,
-    Collision,
-    Primitive,
-    DirectionalLight,
-    PointLight,
-    Material,
-    ImportedAsset,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum SelectionKind {
-    Actor,
-    Primitive,
-    DirectionalLight,
-    PointLight,
-    Player,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub enum SelectionArchetype {
-    Actor,
-    Primitive,
-    DirectionalLight,
-    PointLight,
-    Player,
-    ImportedAsset,
-}
-
-#[derive(Debug, Clone)]
-pub struct EditorSchemaContext {
-    pub archetype: SelectionArchetype,
-    pub runtime_active: bool,
-    pub viewport_mode: crate::ui::ViewportMode,
-    pub play_mode: crate::gameplay::EditorPlayMode,
-}
-
-#[derive(Debug, Clone)]
-pub struct ComponentFieldFactory {
-    pub component: ComponentSchemaId,
-    pub fields: Vec<PropertyFieldSchema>,
-}
-
-#[derive(Debug, Clone)]
-pub struct ArchetypeSchemaProvider {
-    pub archetype: SelectionArchetype,
-    pub components: Vec<ComponentSchemaId>,
-}
-
-#[derive(Debug, Clone)]
-pub struct RuntimeStateSchemaProvider {
-    pub runtime_active: bool,
-    pub collision_overlay: bool,
-    pub viewport_mode: crate::ui::ViewportMode,
-}
-
-#[derive(Debug, Clone)]
-pub struct EditorStateSchemaProvider {
-    pub active_tool: newengine_editor_core::ToolId,
-    pub has_pending_asset_spawn: bool,
-    pub camera_speed_label: &'static str,
-}
-
-#[derive(Debug, Clone)]
-pub struct SelectionContext {
-    pub entity: EntityId,
-    pub name: String,
-    pub kind: SelectionKind,
-    pub has_collision: bool,
-    pub display_mode: DisplayMode,
-    pub components: Vec<ComponentSchemaId>,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub enum ContextActionId {
-    FrameSelection,
-    Deselect,
-    ToggleCollisionOverlay,
-    EnterPlay,
-    EnterSimulate,
-    StopRuntime,
-    SelectTool,
-    MoveTool,
-    RotateTool,
-    ScaleTool,
-    AddCollision,
-    RemoveCollision,
-    SpawnAssetHere,
-}
-
-#[derive(Debug, Clone)]
-pub struct ContextActionSchema {
-    pub id: ContextActionId,
-    pub label: &'static str,
-    pub keywords: &'static str,
-    pub enabled: bool,
-    pub selected: bool,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub enum PropertyFieldId {
-    Name,
-    Kind,
-    Entity,
-    DisplayMode,
-    Position,
-    RotationDeg,
-    Scale,
-    SnapTranslate,
-    SnapRotate,
-    SnapScale,
-    GameplayRole,
-    CollisionEnabled,
-    CollisionDynamic,
-    CollisionTrigger,
-    CollisionShape,
-    CollisionBoxExtents,
-    CollisionSphereRadius,
-    CollisionCapsuleRadius,
-    CollisionCapsuleHalfHeight,
-    PrimitiveKind,
-    PrimitiveColor,
-    LightAmbientColor,
-    LightAmbientIntensity,
-    LightColor,
-    LightIntensity,
-    LightRange,
-    LightYawDeg,
-    LightPitchDeg,
-    MaterialAsset,
-    MaterialBaseColor,
-    MaterialMetallic,
-    MaterialRoughness,
-    MaterialEmissiveColor,
-    MaterialEmissiveStrength,
-    MaterialNormalScale,
-    MaterialAoStrength,
-    MaterialAlphaCutoff,
-    ImportedAssetPath,
-    ImportedAssetKind,
-    ImportedAssetRepresentation,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub enum FieldEditorKind {
-    ReadOnlyText,
-    Vec3,
-    Toggle,
-    EnumChoice,
-    Color3,
-    Color4,
-    Scalar,
-    MaterialChoice,
-}
-
-#[derive(Debug, Clone)]
-pub struct PropertyFieldSchema {
-    pub id: PropertyFieldId,
-    pub label: &'static str,
-    pub keywords: &'static str,
-    pub editor: FieldEditorKind,
-    pub visible: bool,
-    pub enabled: bool,
-}
-
-#[derive(Debug, Clone)]
-pub struct AssetSpawnContract {
-    pub logical_path: String,
-    pub actor_name: String,
-    pub import: AssetImportDescriptor,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub enum AssetImportClass {
-    Model,
-    Scene,
-    Texture,
-    Material,
-    Unknown,
-}
-
-impl AssetImportClass {
-    #[inline]
-    pub fn label(self) -> &'static str {
-        match self {
-            Self::Model => "Model",
-            Self::Scene => "Scene",
-            Self::Texture => "Texture",
-            Self::Material => "Material",
-            Self::Unknown => "Unknown",
-        }
-    }
-}
-
-#[derive(Debug, Clone)]
-pub struct AssetImportDescriptor {
-    pub class: AssetImportClass,
-    pub representation: SceneImportedAssetRepresentation,
-    pub import_kind: SceneImportedAssetKind,
-    pub assembler_key: &'static str,
-    pub assembly: SceneImportedAssetAssemblyDescriptor,
-    pub default_scale: [f32; 3],
-    pub tint: [f32; 4],
-}
 
 pub fn build_selection_context(me: &EditorUiBuild, entity: EntityId) -> SelectionContext {
     use newengine_lighting::{DirectionalLight, PointLight};
@@ -364,7 +97,7 @@ pub fn selection_archetype(ctx: &SelectionContext) -> SelectionArchetype {
     }
 }
 
-pub fn build_editor_schema_context(me: &EditorUiBuild, selection: Option<&SelectionContext>) -> EditorSchemaContext {
+pub(crate) fn build_editor_schema_context(me: &EditorUiBuild, selection: Option<&SelectionContext>) -> EditorSchemaContext {
     let play_mode = me.scene_bridge.play_mode();
     EditorSchemaContext {
         archetype: selection.map(selection_archetype).unwrap_or(SelectionArchetype::Actor),
@@ -381,7 +114,7 @@ pub fn archetype_provider(ctx: &SelectionContext) -> ArchetypeSchemaProvider {
     }
 }
 
-pub fn runtime_state_provider(me: &EditorUiBuild) -> RuntimeStateSchemaProvider {
+pub(crate) fn runtime_state_provider(me: &EditorUiBuild) -> RuntimeStateSchemaProvider {
     RuntimeStateSchemaProvider {
         runtime_active: me.scene_bridge.play_mode().is_runtime(),
         collision_overlay: me.scene_bridge.collision_wireframe_enabled(),
@@ -397,7 +130,7 @@ pub fn editor_state_provider(me: &EditorUiBuild) -> EditorStateSchemaProvider {
     }
 }
 
-pub fn build_surface_context(me: &EditorUiBuild) -> EditorSurfaceContext {
+pub(crate) fn build_surface_context(me: &EditorUiBuild) -> EditorSurfaceContext {
     let primary_selection = me
         .editor
         .selection
@@ -423,7 +156,9 @@ pub fn property_sections(me: &EditorUiBuild, ctx: &SelectionContext) -> Vec<Prop
             || label.to_ascii_lowercase().contains(&filter)
             || keywords.to_ascii_lowercase().contains(&filter)
     };
-    let has = |id: ComponentSchemaId| ctx.components.contains(&id);
+    let archetype = archetype_provider(ctx);
+    let has = |id: ComponentSchemaId| archetype.components.contains(&id);
+    let is_imported_asset = matches!(archetype.archetype, SelectionArchetype::ImportedAsset);
 
     [
         PropertySectionSchema { id: PropertySectionId::Summary, label: "Summary", keywords: "summary identity type selection", visible: wants("Summary", "summary identity type selection"), components: vec![ComponentSchemaId::Identity] },
@@ -433,7 +168,7 @@ pub fn property_sections(me: &EditorUiBuild, ctx: &SelectionContext) -> Vec<Prop
         PropertySectionSchema { id: PropertySectionId::Collision, label: "Collision", keywords: "collision physics shape body trigger", visible: wants("Collision", "collision physics shape body trigger"), components: vec![ComponentSchemaId::Collision] },
         PropertySectionSchema { id: PropertySectionId::Primitive, label: "Primitive", keywords: "primitive mesh color geometry", visible: has(ComponentSchemaId::Primitive) && wants("Primitive", "primitive mesh color geometry"), components: vec![ComponentSchemaId::Primitive] },
         PropertySectionSchema { id: PropertySectionId::Lighting, label: "Lighting", keywords: "lighting light ambient directional point", visible: (has(ComponentSchemaId::DirectionalLight) || has(ComponentSchemaId::PointLight)) && wants("Lighting", "lighting light ambient directional point"), components: vec![ComponentSchemaId::DirectionalLight, ComponentSchemaId::PointLight] },
-        PropertySectionSchema { id: PropertySectionId::Material, label: "Material", keywords: "material shader surface", visible: has(ComponentSchemaId::Material) && wants("Material", "material shader surface"), components: vec![ComponentSchemaId::Material, ComponentSchemaId::ImportedAsset] },
+        PropertySectionSchema { id: PropertySectionId::Material, label: "Material", keywords: "material shader surface", visible: (has(ComponentSchemaId::Material) || is_imported_asset) && wants("Material", "material shader surface"), components: vec![ComponentSchemaId::Material, ComponentSchemaId::ImportedAsset] },
     ]
         .into_iter()
         .filter(|s| s.visible)

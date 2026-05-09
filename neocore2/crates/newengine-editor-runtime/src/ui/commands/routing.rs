@@ -4,23 +4,15 @@ use super::TypedEditorCommand;
 use crate::ui::extension_abi;
 
 use super::super::schema;
-use super::super::{EditorCommandRoute, EditorUiBuild};
+use super::super::EditorUiBuild;
 
 impl EditorUiBuild {
     #[inline]
-    pub(crate) fn route_command(&mut self, command: EditorCommandRoute) {
-        match command {
-            EditorCommandRoute::Ui(action) => self.command_bus.push(TypedEditorCommand::UiAction(action)),
-            EditorCommandRoute::Context(action) => self.command_bus.push(TypedEditorCommand::ContextAction(action)),
-            EditorCommandRoute::SpawnAsset(contract) => self.command_bus.push(TypedEditorCommand::SpawnAsset {
-                contract,
-                source: "command_router",
-            }),
-        }
-    }
-
-    #[inline]
     pub(crate) fn process_command_bus(&mut self) {
+        if self.command_bus.is_empty() {
+            return;
+        }
+
         let mut guard = 0usize;
         while let Some(command) = self.command_bus.pop() {
             self.dispatch_typed_command(command);

@@ -129,6 +129,73 @@ pub struct PlayerActor;
 
 #[derive(Clone, Copy, Debug, Default)]
 pub struct GameplayActor;
+
+#[derive(Clone, Copy, Debug, Default)]
+pub struct FpsDemoPickup {
+    pub radius: f32,
+}
+
+#[derive(Clone, Copy, Debug, Default)]
+pub struct FpsDemoGoal {
+    pub radius: f32,
+}
+
+#[derive(Clone, Copy, Debug, Default)]
+pub struct FpsDemoHazard {
+    pub radius: f32,
+}
+
+#[derive(Clone, Debug)]
+pub struct FpsDemoState {
+    pub title: String,
+    pub objective: String,
+    pub elapsed_sec: f32,
+    pub pickups_collected: u32,
+    pub pickups_total: u32,
+    pub completed: bool,
+    pub failed: bool,
+    pub status: String,
+}
+
+impl FpsDemoState {
+    #[inline]
+    pub fn new(pickups_total: u32) -> Self {
+        Self {
+            title: "KΛYLΛ FPS: Extraction Yard".to_string(),
+            objective: "Collect 3 cores and reach the red extraction beacon".to_string(),
+            elapsed_sec: 0.0,
+            pickups_collected: 0,
+            pickups_total,
+            completed: false,
+            failed: false,
+            status: "WASD + mouse. Shift = sprint. ESC = editor.".to_string(),
+        }
+    }
+
+    #[inline]
+    pub fn progress_label(&self) -> String {
+        if self.completed {
+            return format!("EXTRACTED in {:.1}s", self.elapsed_sec.max(0.0));
+        }
+        if self.failed {
+            return "FAILED — touch a hazard to retry scene".to_string();
+        }
+        format!(
+            "Cores {}/{} · {:.1}s",
+            self.pickups_collected.min(self.pickups_total),
+            self.pickups_total,
+            self.elapsed_sec.max(0.0)
+        )
+    }
+}
+
+impl Default for FpsDemoState {
+    #[inline]
+    fn default() -> Self {
+        Self::new(0)
+    }
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
 pub enum DisplayMode {
     #[default]
@@ -515,11 +582,117 @@ fn step_runtime_physics(world: &mut World, dt: f32) {
     }
 }
 
+
+#[inline]
+fn distance_sq(a: Vec3, b: Vec3) -> f32 {
+    let d = a - b;
+    d.length_squared()
+}
+
+pub fn step_fps_demo_gameplay(world: &mut World, dt: f32) {
+    if world.resource::<FpsDemoState>().is_none() {
+        return;
+    }
+
+    let terminal = world
+        .resource::<FpsDemoState>()
+        .map(|s| s.completed || s.failed)
+        .unwrap_or(false);
+
+    if !terminal {
+        if let Some(state) = world.resource_mut::<FpsDemoState>() {
+            if dt.is_finite() && dt > 0.0 {
+                state.elapsed_sec += dt.min(0.1);
+            }
+        }
+    }
+
+    let Some(player) = first_player(world) else {
+        return;
+    };
+    let Some(player_pos) = world.get::<Transform>(player).map(|t| t.position) else {
+        return;
+    };
+
+    if terminal {
+        return;
+    }
+
+    let mut picked: Vec<EntityId> = Vec::new();
+    for (entity, pickup) in world.query::<FpsDemoPickup>() {
+        let Some(t) = world.get::<Transform>(entity) else {
+            continue;
+        };
+        let r = pickup.radius.max(0.1);
+        if distance_sq(player_pos, t.position) <= r * r {
+            picked.push(entity);
+        }
+    }
+    picked.sort_by_key(|id| id.stable_u64());
+
+    for entity in &picked {
+        let _ = world.remove::<FpsDemoPickup>(*entity);
+        let _ = world.insert(
+            *entity,
+            DisplayVisibility {
+                mode: DisplayMode::EditorOnly,
+            },
+        );
+    }
+
+    let mut hit_hazard = false;
+    for (_entity, hazard) in world.query::<FpsDemoHazard>() {
+        let Some(t) = world.get::<Transform>(_entity) else {
+            continue;
+        };
+        let r = hazard.radius.max(0.1);
+        if distance_sq(player_pos, t.position) <= r * r {
+            hit_hazard = true;
+            break;
+        }
+    }
+
+    let mut reached_goal = false;
+    for (_entity, goal) in world.query::<FpsDemoGoal>() {
+        let Some(t) = world.get::<Transform>(_entity) else {
+            continue;
+        };
+        let r = goal.radius.max(0.1);
+        if distance_sq(player_pos, t.position) <= r * r {
+            reached_goal = true;
+            break;
+        }
+    }
+
+    let collected_delta = picked.len() as u32;
+    if let Some(state) = world.resource_mut::<FpsDemoState>() {
+        state.pickups_collected = state
+            .pickups_collected
+            .saturating_add(collected_delta)
+            .min(state.pickups_total);
+
+        if hit_hazard {
+            state.failed = true;
+            state.status = "You touched a hazard. Relaunch the demo to retry.".to_string();
+        } else if reached_goal && state.pickups_collected >= state.pickups_total {
+            state.completed = true;
+            state.status = "Extraction complete. This is ugly, hardcoded, and already playable.".to_string();
+        } else if reached_goal {
+            state.status = "Beacon locked: collect all cores first.".to_string();
+        } else if collected_delta > 0 {
+            state.status = "Core acquired.".to_string();
+        } else {
+            state.status = "Find blue cores, avoid purple hazards, reach the red beacon.".to_string();
+        }
+    }
+}
+
 #[inline]
 pub fn run_schedule(schedule: &mut SimSchedule, world: &mut World, dt: f32) {
     let frame = SimFrame::new(dt.max(0.0001), 0);
     schedule.run_default_pipeline(world, frame);
     step_runtime_physics(world, frame.dt);
+    step_fps_demo_gameplay(world, frame.dt);
 }
 
 #[inline]

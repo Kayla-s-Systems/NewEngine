@@ -13,7 +13,7 @@ newengine-ui = { path = "../newengine-ui" }
 newengine-assets = { path = "../newengine-assets" }
 newengine-primitives = { path = "../newengine-primitives" }
 newengine-math = { path = "../newengine-math" }
-shaderc = "0.10.1"
+newengine-shader-compiler = { path = "../newengine-shader-compiler" }
 blake3 = "1.5.5"
 
 

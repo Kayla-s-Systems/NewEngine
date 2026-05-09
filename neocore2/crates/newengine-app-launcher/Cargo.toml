@@ -1,0 +1,16 @@
+[package]
+name = "newengine-app-launcher"
+version = "0.1.0"
+edition = "2021"
+readme = "README.md"
+description = "Shared NewEngine app launcher bootstrap for editor/game vertical slices"
+
+[dependencies]
+abi_stable = { version = "0.11" }
+log = "0.4"
+
+newengine-assets = { path = "../newengine-assets" }
+newengine-core = { path = "../newengine-core" }
+newengine-editor-runtime = { path = "../newengine-editor-runtime" }
+newengine-plugin-host = { path = "../newengine-plugin-host" }
+newengine-runtime-host = { path = "../newengine-runtime-host" }

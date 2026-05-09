@@ -89,7 +89,7 @@ pub fn register_editor_extensions(
 }
 
 #[inline]
-pub fn to_abi_surface_context(me: &EditorUiBuild) -> EditorSurfaceContextV1 {
+pub(crate) fn to_abi_surface_context(me: &EditorUiBuild) -> EditorSurfaceContextV1 {
     let ctx = schema::build_surface_context(me);
     EditorSurfaceContextV1 {
         play_mode: to_abi_play_mode(ctx.play_mode),
@@ -166,7 +166,7 @@ pub fn from_abi_asset_assembler(desc: EditorAssetAssemblerDescriptorV1) -> Scene
 }
 
 #[inline]
-pub fn to_abi_command_invocation(me: &EditorUiBuild, command: &TypedEditorCommand, source: &str) -> EditorCommandInvocationV1 {
+pub(crate) fn to_abi_command_invocation(me: &EditorUiBuild, command: &TypedEditorCommand, source: &str) -> EditorCommandInvocationV1 {
     EditorCommandInvocationV1 {
         source: source.to_string().into(),
         command: to_abi_command_descriptor(command),
@@ -175,7 +175,7 @@ pub fn to_abi_command_invocation(me: &EditorUiBuild, command: &TypedEditorComman
 }
 
 #[inline]
-pub fn apply_command_handler_result(me: &mut EditorUiBuild, result: EditorCommandHandlerResultV1) -> bool {
+pub(crate) fn apply_command_handler_result(me: &mut EditorUiBuild, result: EditorCommandHandlerResultV1) -> bool {
     for emitted in result.emitted.into_iter() {
         if let Some(cmd) = from_abi_command_descriptor(emitted) {
             me.command_bus.push(cmd);
@@ -185,7 +185,7 @@ pub fn apply_command_handler_result(me: &mut EditorUiBuild, result: EditorComman
 }
 
 #[inline]
-pub fn to_abi_command_descriptor(command: &TypedEditorCommand) -> EditorCommandDescriptorV1 {
+fn to_abi_command_descriptor(command: &TypedEditorCommand) -> EditorCommandDescriptorV1 {
     match command {
         TypedEditorCommand::UiAction(action) => EditorCommandDescriptorV1::NamedAction(ui_action_name(action).into()),
         TypedEditorCommand::ContextAction(action) => EditorCommandDescriptorV1::ContextAction(to_abi_context_action_id(*action)),
@@ -201,7 +201,7 @@ pub fn to_abi_command_descriptor(command: &TypedEditorCommand) -> EditorCommandD
 }
 
 #[inline]
-pub fn from_abi_command_descriptor(command: EditorCommandDescriptorV1) -> Option<TypedEditorCommand> {
+fn from_abi_command_descriptor(command: EditorCommandDescriptorV1) -> Option<TypedEditorCommand> {
     Some(match command {
         EditorCommandDescriptorV1::NamedAction(name) => TypedEditorCommand::UiAction(named_ui_action(&name.to_string())?),
         EditorCommandDescriptorV1::ContextAction(action) => TypedEditorCommand::ContextAction(from_abi_context_action_id(action)?),
@@ -315,7 +315,6 @@ fn ui_action_name(action: &providers::UiAction) -> &'static str {
         providers::UiAction::SpawnPrimitive { .. } => "spawn_primitive",
         providers::UiAction::SpawnDirectionalLight => "spawn_directional_light",
         providers::UiAction::SpawnPointLight => "spawn_point_light",
-        providers::UiAction::TogglePanel(_) => "toggle_panel",
         providers::UiAction::AddCollisionToSelection => "add_collision_to_selection",
         providers::UiAction::RemoveCollisionFromSelection => "remove_collision_from_selection",
         providers::UiAction::SpawnPendingAsset => "spawn_pending_asset",
@@ -643,7 +642,7 @@ pub fn from_abi_play_mode(mode: EditorPlayModeV1) -> EditorPlayMode {
 }
 
 #[inline]
-pub fn to_abi_viewport_mode(mode: ViewportMode) -> EditorViewportModeV1 {
+fn to_abi_viewport_mode(mode: ViewportMode) -> EditorViewportModeV1 {
     match mode {
         ViewportMode::Lit => EditorViewportModeV1::Lit,
         ViewportMode::Unlit => EditorViewportModeV1::Unlit,
@@ -653,7 +652,7 @@ pub fn to_abi_viewport_mode(mode: ViewportMode) -> EditorViewportModeV1 {
 }
 
 #[inline]
-pub fn from_abi_viewport_mode(mode: EditorViewportModeV1) -> ViewportMode {
+fn from_abi_viewport_mode(mode: EditorViewportModeV1) -> ViewportMode {
     match mode {
         EditorViewportModeV1::Lit => ViewportMode::Lit,
         EditorViewportModeV1::Unlit => ViewportMode::Unlit,
@@ -663,7 +662,7 @@ pub fn from_abi_viewport_mode(mode: EditorViewportModeV1) -> ViewportMode {
 }
 
 #[inline]
-pub fn to_abi_workspace_preset(preset: WorkspacePreset) -> EditorWorkspacePresetV1 {
+fn to_abi_workspace_preset(preset: WorkspacePreset) -> EditorWorkspacePresetV1 {
     match preset {
         WorkspacePreset::Minimal => EditorWorkspacePresetV1::Minimal,
         WorkspacePreset::Editing => EditorWorkspacePresetV1::Editing,
@@ -672,7 +671,7 @@ pub fn to_abi_workspace_preset(preset: WorkspacePreset) -> EditorWorkspacePreset
 }
 
 #[inline]
-pub fn from_abi_workspace_preset(preset: EditorWorkspacePresetV1) -> WorkspacePreset {
+fn from_abi_workspace_preset(preset: EditorWorkspacePresetV1) -> WorkspacePreset {
     match preset {
         EditorWorkspacePresetV1::Minimal => WorkspacePreset::Minimal,
         EditorWorkspacePresetV1::Editing => WorkspacePreset::Editing,

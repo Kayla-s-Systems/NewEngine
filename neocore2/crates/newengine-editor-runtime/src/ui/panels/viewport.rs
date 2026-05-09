@@ -20,6 +20,58 @@ fn normalize_wheel_delta(raw_points: f32) -> f32 {
     compressed.clamp(-1.0, 1.0)
 }
 
+
+#[inline]
+fn read_fps_demo_state(me: &EditorUiBuild) -> Option<crate::gameplay::FpsDemoState> {
+    let scene = me.scene_bridge.scene();
+    let scene = scene.read();
+    scene.world().resource::<crate::gameplay::FpsDemoState>().cloned()
+}
+
+fn draw_fps_demo_hud(
+    ui: &mut egui::Ui,
+    rect: egui::Rect,
+    overlay_frame: &egui::Frame,
+    state: Option<crate::gameplay::FpsDemoState>,
+) {
+    let hud_rect = egui::Rect::from_min_size(
+        rect.left_top() + egui::vec2(10.0, 10.0),
+        egui::vec2(430.0_f32.min(rect.width() - 20.0).max(260.0), 92.0),
+    );
+
+    ui.scope_builder(egui::UiBuilder::new().max_rect(hud_rect), |ui| {
+        overlay_frame.clone().show(ui, |ui| {
+            ui.set_width(ui.available_width());
+
+            match state.as_ref() {
+                Some(state) => {
+                    ui.label(egui::RichText::new(state.title.as_str()).strong().size(15.0));
+                    ui.label(egui::RichText::new(state.progress_label()).monospace().size(13.0));
+                    ui.label(state.objective.as_str());
+                    ui.label(egui::RichText::new(state.status.as_str()).monospace().size(12.0));
+                }
+                None => {
+                    ui.label(egui::RichText::new("KΛYLΛ FPS").strong().size(15.0));
+                    ui.label("Game state is not initialized yet.");
+                }
+            }
+        });
+    });
+
+    if let Some(state) = state.as_ref() {
+        if state.completed || state.failed {
+            let text = if state.completed { "EXTRACTION COMPLETE" } else { "MISSION FAILED" };
+            ui.painter().text(
+                rect.center(),
+                egui::Align2::CENTER_CENTER,
+                text,
+                egui::FontId::proportional(32.0),
+                egui::Color32::WHITE,
+            );
+        }
+    }
+}
+
 pub(crate) fn draw(me: &mut EditorUiBuild, ctx: &egui::Context) {
     egui::CentralPanel::default().show(ctx, |ui| {
         draw_content(me, ctx, ui);
@@ -358,88 +410,94 @@ pub(crate) fn draw_content(me: &mut EditorUiBuild, ctx: &egui::Context, ui: &mut
                 .corner_radius(egui::CornerRadius::same(6))
                 .inner_margin(egui::Margin::same(6));
 
-            let header_rect = egui::Rect::from_min_size(
-                rect.left_top() + egui::vec2(10.0, 10.0),
-                egui::vec2(620.0_f32.min(rect.width() - 20.0).max(260.0), 32.0),
-            );
-            ui.scope_builder(egui::UiBuilder::new().max_rect(header_rect), |ui| {
-                overlay_frame.clone().show(ui, |ui| {
-                    ui.set_width(ui.available_width());
-                    ui.horizontal_wrapped(|ui| {
-                        ui.label(egui::RichText::new("Perspective").strong());
-                        ui.separator();
-                        for desc in providers::viewport_mode_actions(me) {
-                            if ui
-                                .add_enabled(desc.enabled, egui::Button::selectable(desc.selected, desc.label.as_ref()))
-                                .clicked()
-                            {
-                                me.execute_ui_action(&desc.action);
-                            }
-                        }
-                        ui.separator();
-                        ui.menu_button("Show", |ui| {
-                            let mut collision_wire = me.scene_bridge.collision_wireframe_enabled();
-                            if ui.checkbox(&mut collision_wire, "Collision").changed() {
-                                me.scene_bridge.cmd_set_collision_wireframe(collision_wire);
-                            }
-                        });
-                        ui.menu_button("Snap", |ui| {
-                            ui.checkbox(&mut me.transform_snap.translate_enabled, "Move");
-                            ui.add(
-                                egui::DragValue::new(&mut me.transform_snap.translate_step)
-                                    .speed(0.25)
-                                    .range(0.1..=4096.0)
-                                    .suffix(" uu"),
-                            );
+            if play_mode.is_runtime() {
+                draw_fps_demo_hud(ui, rect, &overlay_frame, read_fps_demo_state(me));
+            } else {
+                let header_rect = egui::Rect::from_min_size(
+                    rect.left_top() + egui::vec2(10.0, 10.0),
+                    egui::vec2(620.0_f32.min(rect.width() - 20.0).max(260.0), 32.0),
+                );
+                ui.scope_builder(egui::UiBuilder::new().max_rect(header_rect), |ui| {
+                    overlay_frame.clone().show(ui, |ui| {
+                        ui.set_width(ui.available_width());
+                        ui.horizontal_wrapped(|ui| {
+                            ui.label(egui::RichText::new("Perspective").strong());
                             ui.separator();
-                            ui.checkbox(&mut me.transform_snap.rotate_enabled, "Rotate");
-                            ui.add(
-                                egui::DragValue::new(&mut me.transform_snap.rotate_step_deg)
-                                    .speed(0.25)
-                                    .range(1.0..=180.0)
-                                    .suffix(" deg"),
-                            );
-                            ui.separator();
-                            ui.checkbox(&mut me.transform_snap.scale_enabled, "Scale");
-                            ui.add(
-                                egui::DragValue::new(&mut me.transform_snap.scale_step)
-                                    .speed(0.01)
-                                    .range(0.01..=10.0),
-                            );
-                        });
-                        ui.menu_button("Cam", |ui| {
-                            for choice in providers::camera_speed_choices(me) {
-                                if ui.add_enabled(choice.enabled, egui::Button::selectable(choice.selected, choice.label)).clicked() {
-                                    me.execute_ui_action(&providers::UiAction::SetCameraSpeedPreset(choice.value));
-                                    ui.close();
+                            for desc in providers::viewport_mode_actions(me) {
+                                if ui
+                                    .add_enabled(desc.enabled, egui::Button::selectable(desc.selected, desc.label.as_ref()))
+                                    .clicked()
+                                {
+                                    me.execute_ui_action(&desc.action);
                                 }
                             }
+                            ui.separator();
+                            ui.menu_button("Show", |ui| {
+                                let mut collision_wire = me.scene_bridge.collision_wireframe_enabled();
+                                if ui.checkbox(&mut collision_wire, "Collision").changed() {
+                                    me.scene_bridge.cmd_set_collision_wireframe(collision_wire);
+                                }
+                            });
+                            ui.menu_button("Snap", |ui| {
+                                ui.checkbox(&mut me.transform_snap.translate_enabled, "Move");
+                                ui.add(
+                                    egui::DragValue::new(&mut me.transform_snap.translate_step)
+                                        .speed(0.25)
+                                        .range(0.1..=4096.0)
+                                        .suffix(" uu"),
+                                );
+                                ui.separator();
+                                ui.checkbox(&mut me.transform_snap.rotate_enabled, "Rotate");
+                                ui.add(
+                                    egui::DragValue::new(&mut me.transform_snap.rotate_step_deg)
+                                        .speed(0.25)
+                                        .range(1.0..=180.0)
+                                        .suffix(" deg"),
+                                );
+                                ui.separator();
+                                ui.checkbox(&mut me.transform_snap.scale_enabled, "Scale");
+                                ui.add(
+                                    egui::DragValue::new(&mut me.transform_snap.scale_step)
+                                        .speed(0.01)
+                                        .range(0.01..=10.0),
+                                );
+                            });
+                            ui.menu_button("Cam", |ui| {
+                                for choice in providers::camera_speed_choices(me) {
+                                    if ui.add_enabled(choice.enabled, egui::Button::selectable(choice.selected, choice.label)).clicked() {
+                                        me.execute_ui_action(&providers::UiAction::SetCameraSpeedPreset(choice.value));
+                                        ui.close();
+                                    }
+                                }
+                            });
+                            if ui.button("Frame").clicked() {
+                                me.execute_ui_action(&providers::UiAction::FrameSelection);
+                            }
                         });
-                        if ui.button("Frame").clicked() {
-                            me.execute_ui_action(&providers::UiAction::FrameSelection);
-                        }
                     });
                 });
-            });
+            }
 
-            resp.context_menu(|ui| {
-                let selection_ctx = me
-                    .editor
-                    .selection
-                    .primary()
-                    .map(|entity| super::super::schema::build_selection_context(me, entity));
-                for action in super::super::schema::selection_context_actions(me, selection_ctx.as_ref()) {
-                    if ui
-                        .add_enabled(action.enabled, egui::Button::selectable(action.selected, action.label))
-                        .clicked()
-                    {
-                        me.execute_context_action(action.id);
-                        ui.close();
+            if !play_mode.is_runtime() {
+                resp.context_menu(|ui| {
+                    let selection_ctx = me
+                        .editor
+                        .selection
+                        .primary()
+                        .map(|entity| super::super::schema::build_selection_context(me, entity));
+                    for action in super::super::schema::selection_context_actions(me, selection_ctx.as_ref()) {
+                        if ui
+                            .add_enabled(action.enabled, egui::Button::selectable(action.selected, action.label))
+                            .clicked()
+                        {
+                            me.execute_context_action(action.id);
+                            ui.close();
+                        }
                     }
-                }
-            });
+                });
+            }
 
-            if !supported_model_exts.is_empty() {
+            if !play_mode.is_runtime() && !supported_model_exts.is_empty() {
                 let hint_rect = egui::Rect::from_min_size(
                     rect.left_bottom() + egui::vec2(10.0, -34.0),
                     egui::vec2((rect.width() - 20.0).max(140.0), 24.0),

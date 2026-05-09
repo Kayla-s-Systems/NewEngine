@@ -1,0 +1,9 @@
+[package]
+name = "newengine-shader-compiler"
+version = "0.1.0"
+edition = "2021"
+readme = "README.md"
+description = "NewEngine GLSL to SPIR-V compiler adapter using external glslc"
+
+[dependencies]
+newengine-render-api = { path = "../newengine-render-api" }

@@ -1,0 +1,50 @@
+{
+  "schema": "newengine.plugins.manifest.v1",
+  "plugins": [
+    {
+      "id": "newengine.logging",
+      "file_pattern": "logging-*.dll",
+      "phase": "bootstrap",
+      "kind": "runtime",
+      "required": true,
+      "provides": ["log.sink.v1"]
+    },
+    {
+      "id": "newengine.input",
+      "file_pattern": "input-*.dll",
+      "phase": "bootstrap",
+      "kind": "runtime",
+      "required": true,
+      "provides": ["input.api.v1"]
+    },
+    {
+      "id": "newengine.platform.winit",
+      "file_pattern": "platform-winit-*.dll",
+      "phase": "platform",
+      "kind": "runtime",
+      "required": true,
+      "provides": ["platform.runtime.v1", "platform.window.v1"]
+    },
+    {
+      "id": "newengine.assets",
+      "file_pattern": "assetManager-*.dll",
+      "phase": "engine",
+      "kind": "runtime",
+      "required": true,
+      "provides": ["asset.manager"]
+    },
+    {
+      "id": "newengine.renderer.vulkan",
+      "file_pattern": "vulkan_renderer-*.dll",
+      "phase": "engine",
+      "kind": "runtime",
+      "required": false,
+      "provides": ["render.api.v1"]
+    }
+  ],
+  "importers": {
+    "directory": "importers",
+    "required": false,
+    "patterns": ["*.dll"]
+  }
+}

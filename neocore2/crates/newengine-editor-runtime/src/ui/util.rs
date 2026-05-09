@@ -2,54 +2,6 @@
 
 use egui;
 
-const OUTLINER_MIN_W: f32 = 200.0;
-const DETAILS_MIN_W: f32 = 260.0;
-const LEFT_TOOLBAR_W: f32 = 56.0;
-
-// Hard guardrail: never allow side panels to eat the viewport completely.
-// This is the single most important UX invariant for an editor.
-const VIEWPORT_MIN_W: f32 = 700.0;
-
-#[inline]
-pub(super) fn outliner_max_width(
-    ctx: &egui::Context,
-    show_left_toolbar: bool,
-    show_details: bool,
-) -> f32 {
-    let screen_w = ctx.content_rect().width().max(1.0);
-    let fixed = if show_left_toolbar { LEFT_TOOLBAR_W } else { 0.0 };
-
-    let budget = (screen_w - fixed - VIEWPORT_MIN_W).max(0.0);
-    let max_by_layout = if show_details {
-        (budget * 0.5).max(OUTLINER_MIN_W)
-    } else {
-        budget.max(OUTLINER_MIN_W)
-    };
-
-    let max_cap = (screen_w * 0.55).clamp(OUTLINER_MIN_W, 720.0);
-    max_by_layout.min(max_cap)
-}
-
-#[inline]
-pub(super) fn details_max_width(
-    ctx: &egui::Context,
-    show_left_toolbar: bool,
-    show_outliner: bool,
-) -> f32 {
-    let screen_w = ctx.content_rect().width().max(1.0);
-    let fixed = if show_left_toolbar { LEFT_TOOLBAR_W } else { 0.0 };
-
-    let budget = (screen_w - fixed - VIEWPORT_MIN_W).max(0.0);
-    let max_by_layout = if show_outliner {
-        (budget * 0.5).max(DETAILS_MIN_W)
-    } else {
-        budget.max(DETAILS_MIN_W)
-    };
-
-    let max_cap = (screen_w * 0.55).clamp(DETAILS_MIN_W, 800.0);
-    max_by_layout.min(max_cap)
-}
-
 pub(super) fn infer_model_exts(snap: &newengine_plugin_host::PluginsSnapshot) -> Vec<String> {
     use std::collections::BTreeSet;
 

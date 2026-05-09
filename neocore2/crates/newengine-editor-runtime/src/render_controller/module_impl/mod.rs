@@ -56,12 +56,106 @@ impl EditorRenderController {
         w: u32,
         h: u32,
     ) -> EngineResult<()> {
-        if w != self.last_w || h != self.last_h {
+        if w == 0 || h == 0 {
             self.last_w = w;
             self.last_h = h;
+            return Ok(());
+        }
+
+        // The render backend is initialized from the platform window snapshot before the
+        // first editor frame is rendered. Calling `resize()` again on frame #0 can force
+        // some Vulkan backends/drivers through a premature swapchain teardown/recreate
+        // path before the first acquire. On older Windows/NVIDIA stacks this manifested
+        // as a native access violation immediately after `render begin`.
+        //
+        // Therefore the first non-zero size is adopted as the backend-owned bootstrap
+        // surface size. Real resize events after the first frame still go through
+        // `RenderApi::resize` below.
+        if self.last_w == 0 || self.last_h == 0 {
+            self.last_w = w;
+            self.last_h = h;
+            log::debug!(
+                "render controller: adopted initial surface size {}x{}; skip first explicit resize",
+                w,
+                h
+            );
+            newengine_core::crash::record_breadcrumb(format!(
+                "render controller: adopted initial surface size {}x{}; skip first resize",
+                w, h
+            ));
+            return Ok(());
+        }
+
+        if w != self.last_w || h != self.last_h {
+            let old_w = self.last_w;
+            let old_h = self.last_h;
+            log::debug!(
+                "render controller: resize requested {}x{} -> {}x{}",
+                old_w,
+                old_h,
+                w,
+                h
+            );
+            newengine_core::crash::record_breadcrumb(format!(
+                "render controller: resize requested {}x{} -> {}x{}",
+                old_w, old_h, w, h
+            ));
+
             r.resize(w, h)?;
+
+            self.last_w = w;
+            self.last_h = h;
+            log::debug!("render controller: resize completed {}x{}", w, h);
+            newengine_core::crash::record_breadcrumb(format!(
+                "render controller: resize completed {}x{}",
+                w, h
+            ));
         }
         Ok(())
+    }
+
+
+    fn pump_previews_fail_soft(
+        &mut self,
+        r: &mut dyn newengine_core::render::RenderApi,
+        dt: f32,
+    ) {
+        if self.previews_disabled {
+            return;
+        }
+
+        let result = {
+            let mut previews = self.previews.lock();
+            previews.pump(r, dt)
+        };
+
+        if let Err(e) = result {
+            self.previews_disabled = true;
+            log::warn!(
+                "render controller: primitive previews disabled for this session: {}",
+                e
+            );
+            newengine_core::crash::record_breadcrumb(format!(
+                "render controller: primitive previews disabled: {}",
+                e
+            ));
+        }
+    }
+
+    fn disable_viewport_pass(&mut self, phase: &'static str, error: impl std::fmt::Display) {
+        if !self.viewport_pass_disabled {
+            log::error!(
+                "render controller: viewport GPU pass disabled at {}: {}",
+                phase,
+                error
+            );
+            newengine_core::crash::record_breadcrumb(format!(
+                "render controller: viewport pass disabled at {}: {}",
+                phase,
+                error
+            ));
+        }
+        self.viewport_pass_disabled = true;
     }
 
     #[inline]
@@ -79,6 +173,18 @@ impl EditorRenderController {
 impl<E: Send + 'static> Module<E> for EditorRenderController {
     fn id(&self) -> &'static str {
         "app.render_controller"
+    }
+
+    fn shutdown(&mut self, ctx: &mut ModuleCtx<'_, E>) -> EngineResult<()> {
+        // Shutdown must not call `end_frame()` unconditionally: on a normal close
+        // there is no active frame, and older Vulkan drivers may crash on a
+        // redundant present/submit path. Every render path is responsible for
+        // closing its own frame before returning.
+        newengine_core::crash::record_breadcrumb("render controller: shutdown begin".to_string());
+        self.sync_cursor_state(ctx, CursorState::released());
+        self.viewport_pass_disabled = true;
+        self.previews_disabled = true;
+        Ok(())
     }
 
     fn render(&mut self, ctx: &mut ModuleCtx<'_, E>) -> EngineResult<()> {
@@ -121,21 +227,56 @@ impl<E: Send + 'static> Module<E> for EditorRenderController {
 
         let (vp_w, vp_h) = self.viewport_bridge.read_extent();
         if trace_frame {
+            log::debug!(
+                "render controller: begin_frame next_frame={} clear={:.3},{:.3},{:.3},{:.3} viewport={}x{}",
+                self.frame_index.saturating_add(1),
+                self.clear_color[0],
+                self.clear_color[1],
+                self.clear_color[2],
+                self.clear_color[3],
+                vp_w,
+                vp_h
+            );
             newengine_core::crash::record_breadcrumb(format!("render controller: begin_frame next_frame={} clear={:.3},{:.3},{:.3},{:.3} viewport={}x{}", self.frame_index.saturating_add(1), self.clear_color[0], self.clear_color[1], self.clear_color[2], self.clear_color[3], vp_w, vp_h));
         }
         r.begin_frame(BeginFrameDesc::new(self.clear_color))?;
+        if trace_frame {
+            log::debug!(
+                "render controller: begin_frame completed frame={}",
+                self.frame_index.saturating_add(1)
+            );
+            newengine_core::crash::record_breadcrumb(format!(
+                "render controller: begin_frame completed frame={}",
+                self.frame_index.saturating_add(1)
+            ));
+        }
 
         self.frame_index = self.frame_index.saturating_add(1).max(1);
 
         let dt = ctx.frame().map(|f| f.dt).unwrap_or(0.016);
-        {
-            let mut p = self.previews.lock();
-            p.pump(&mut **r, dt)?;
-        }
+        self.pump_previews_fail_soft(&mut **r, dt);
 
-        if vp_w > 0 && vp_h > 0 {
+        if vp_w > 0 && vp_h > 0 && !self.viewport_pass_disabled {
             let extent = Extent2D::new(vp_w, vp_h);
-            let rt = self.ensure_viewport_rt(&mut **r, extent)?;
+            let rt = match self.ensure_viewport_rt(&mut **r, extent) {
+                Ok(rt) => rt,
+                Err(e) => {
+                    self.disable_viewport_pass("ensure_viewport_rt", &e);
+                    if let Some(ui) = ui {
+                        r.set_ui_draw_list(ui);
+                    }
+                    self.gc_per_draw_ubos(&mut **r);
+                    self.gc_deferred_rts(&mut **r);
+                    if trace_frame {
+                        newengine_core::crash::record_breadcrumb(format!(
+                            "render controller: end_frame frame={} after viewport RT failure",
+                            self.frame_index
+                        ));
+                    }
+                    r.end_frame()?;
+                    return Ok(());
+                }
+            };
 
             let input = ViewportInputSnap::read(&self.viewport_bridge);
 
@@ -314,55 +455,101 @@ impl<E: Send + 'static> Module<E> for EditorRenderController {
             // Bounds used below are now up-to-date after the scene post-pass.
             let bounds = scene::scene_bounds(&scene).unwrap_or_else(|| scene::default_bounds());
 
-            if trace_frame {
-                newengine_core::crash::record_breadcrumb(format!("render controller: begin_render_target frame={} rt={}x{}", self.frame_index, vp_w, vp_h));
-            }
-            r.begin_render_target(
-                BeginRenderTargetDesc::new(rt)
-                    .with_clear_depth(1.0)
-                    .with_clear_color(grid::BACKGROUND_COLOR),
-            )?;
-            r.set_viewport(Viewport::full(extent))?;
-            r.set_scissor(RectI32::new(0, 0, vp_w as i32, vp_h as i32))?;
-
-            let lit = ensure_lit_pipeline(&mut self.lit, &mut **r)?;
+            let lit = match ensure_lit_pipeline(&mut self.lit, &mut **r) {
+                Ok(lit) => lit,
+                Err(e) => {
+                    self.disable_viewport_pass("ensure_lit_pipeline", &e);
+                    // Keep the swapchain/UI alive. The 3D viewport can recover on next launch
+                    // after shader cache/toolchain issues are fixed.
+                    r.set_viewport(Viewport::full(Extent2D::new(w, h)))?;
+                    r.set_scissor(RectI32::new(0, 0, w as i32, h as i32))?;
+                    if let Some(ui) = ui {
+                        r.set_ui_draw_list(ui);
+                    }
+                    self.gc_per_draw_ubos(&mut **r);
+                    self.gc_deferred_rts(&mut **r);
+                    if trace_frame {
+                        newengine_core::crash::record_breadcrumb(format!(
+                            "render controller: end_frame frame={} after viewport disable",
+                            self.frame_index
+                        ));
+                    }
+                    r.end_frame()?;
+                    return Ok(());
+                }
+            };
             let world_lights = lights::collect_lights(scene.world());
 
-            if !play_mode.is_runtime() {
-                passes::draw_grid(
-                    self,
-                    &mut **r,
-                    lit,
-                    viewproj,
-                    &rig,
-                    bounds.radius,
-                    &world_lights,
+            let viewport_draw = (|| -> EngineResult<()> {
+                if trace_frame {
+                    newengine_core::crash::record_breadcrumb(format!(
+                        "render controller: begin_render_target frame={} rt={}x{}",
+                        self.frame_index, vp_w, vp_h
+                    ));
+                }
+                r.begin_render_target(
+                    BeginRenderTargetDesc::new(rt)
+                        .with_clear_depth(1.0)
+                        .with_clear_color(grid::BACKGROUND_COLOR),
                 )?;
-            }
-            passes::draw_primitives(
-                self,
-                &mut **r,
-                &scene,
-                lit,
-                viewproj,
-                &world_lights,
-                play_mode.is_runtime(),
-            )?;
-            if !play_mode.is_runtime() {
-                passes::draw_light_gizmos(
+                r.set_viewport(Viewport::full(extent))?;
+                r.set_scissor(RectI32::new(0, 0, vp_w as i32, vp_h as i32))?;
+
+                if !play_mode.is_runtime() {
+                    passes::draw_grid(
+                        self,
+                        &mut **r,
+                        lit,
+                        viewproj,
+                        &rig,
+                        bounds.radius,
+                        &world_lights,
+                    )?;
+                }
+                passes::draw_primitives(
                     self,
                     &mut **r,
                     &scene,
                     lit,
                     viewproj,
                     &world_lights,
-                    quat_from_forward_z,
-                    false,
+                    play_mode.is_runtime(),
                 )?;
-                passes::draw_collision_wireframe(self, &mut **r, &scene, viewproj)?;
-            }
+                if !play_mode.is_runtime() {
+                    passes::draw_light_gizmos(
+                        self,
+                        &mut **r,
+                        &scene,
+                        lit,
+                        viewproj,
+                        &world_lights,
+                        quat_from_forward_z,
+                        false,
+                    )?;
+                    passes::draw_collision_wireframe(self, &mut **r, &scene, viewproj)?;
+                }
 
-            r.end_render_target()?;
+                r.end_render_target()?;
+                Ok(())
+            })();
+
+            if let Err(e) = viewport_draw {
+                self.disable_viewport_pass("viewport_draw", &e);
+                // `end_frame()` is intentionally still called: it closes any active
+                // render pass and presents a safe blank/UI frame instead of exiting
+                // with a half-recorded Vulkan command buffer.
+                if let Some(ui) = ui {
+                    r.set_ui_draw_list(ui);
+                }
+                if trace_frame {
+                    newengine_core::crash::record_breadcrumb(format!(
+                        "render controller: end_frame frame={} after viewport draw failure",
+                        self.frame_index
+                    ));
+                }
+                r.end_frame()?;
+                return Ok(());
+            }
 
             let win_extent = Extent2D::new(w, h);
             r.set_viewport(Viewport::full(win_extent))?;

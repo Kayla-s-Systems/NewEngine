@@ -1,0 +1,10 @@
+[package]
+name = "newengine-plugin-kit"
+version = "0.1.0"
+edition = "2021"
+description = "Shared NewEngine plugin authoring kit: central ABI/API reexports and export helpers"
+license = "MIT OR Apache-2.0"
+
+[dependencies]
+abi_stable = "0.11"
+newengine-plugin-api = { path = "../newengine-plugin-api" }

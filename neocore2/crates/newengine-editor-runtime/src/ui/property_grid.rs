@@ -12,12 +12,6 @@ pub(crate) fn grid(ui: &mut egui::Ui, id: impl std::hash::Hash, add: impl FnOnce
         .show(ui, |ui| add(ui));
 }
 
-pub(crate) fn section(ui: &mut egui::Ui, title: &str, add: impl FnOnce(&mut egui::Ui)) {
-    ui.collapsing(title, |ui| {
-        grid(ui, ("property_grid", title), add);
-    });
-}
-
 pub(crate) fn section_card(ui: &mut egui::Ui, title: &str, add: impl FnOnce(&mut egui::Ui)) {
     crate::ui::theme::section_frame(ui).show(ui, |ui| {
         ui.set_width(ui.available_width());

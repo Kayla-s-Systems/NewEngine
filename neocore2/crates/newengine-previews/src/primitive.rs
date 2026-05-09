@@ -159,6 +159,14 @@ impl PrimitivePreviewService {
 
     /// Render dirty previews. Call once per frame (inside an active frame).
     pub fn pump(&mut self, r: &mut dyn RenderApi, dt: f32) -> EngineResult<()> {
+        // Do not bake/compile preview shaders until somebody actually requested a
+        // preview. This keeps the first editor frame independent from optional
+        // thumbnail rendering and prevents local `glslc` failures from aborting
+        // startup before the viewport/UI is visible.
+        if self.slots.is_empty() {
+            return Ok(());
+        }
+
         self.ensure_gpu_state(r)?;
         self.t = (self.t + dt).min(10_000.0);
 
@@ -265,7 +273,17 @@ impl PrimitivePreviewService {
             return Ok(());
         }
 
-        // UBO
+        let vs_words = Self::load_or_compile_spv_words(
+            "shaders/preview/primitive_preview.vert",
+            ShaderStage::Vertex,
+        )?;
+        let fs_words = Self::load_or_compile_spv_words(
+            "shaders/preview/primitive_preview.frag",
+            ShaderStage::Fragment,
+        )?;
+
+        // UBO/resources are allocated only after shader baking succeeds.
+        // This keeps the GPU state clean when a local shader compiler crashes/fails.
         let ubo = r.create_buffer(
             BufferDesc::new(
                 std::mem::size_of::<PreviewUbo>() as u64,
@@ -288,15 +306,6 @@ impl PrimitivePreviewService {
                     0,
                     std::mem::size_of::<PreviewUbo>() as u64,
                 )),
-        )?;
-
-        let vs_words = Self::load_or_compile_spv_words(
-            "shaders/preview/primitive_preview.vert",
-            ShaderStage::Vertex,
-        )?;
-        let fs_words = Self::load_or_compile_spv_words(
-            "shaders/preview/primitive_preview.frag",
-            ShaderStage::Fragment,
         )?;
 
         let vs = r.create_shader(
@@ -394,27 +403,22 @@ impl PrimitivePreviewService {
             }
         }
 
-        let compiler = shaderc::Compiler::new().map_err(|e| {
-            EngineError::other(format!("shaderc: failed to create compiler: {e:?}"))
+        let words = newengine_shader_compiler::compile_glsl_to_spirv(
+            stage,
+            logical_path,
+            "main",
+            src,
+        )
+        .map_err(|e| {
+            EngineError::other(format!(
+                "shader compile failed path='{logical_path}' err='{e}'"
+            ))
         })?;
 
-        let mut opts = shaderc::CompileOptions::new()
-            .map_err(|e| EngineError::other(format!("shaderc: failed to create options: {e:?}")))?;
+        let bytes = spirv_words_to_bytes(&words);
+        let _ = atomic_write(&out_path, &bytes);
 
-        opts.set_optimization_level(shaderc::OptimizationLevel::Performance);
-
-        let artifact = compiler
-            .compile_into_spirv(src, to_shaderc(stage), logical_path, "main", Some(&opts))
-            .map_err(|e| {
-                EngineError::other(format!(
-                    "shaderc: compile failed path='{logical_path}' err='{e}'"
-                ))
-            })?;
-
-        let bytes = artifact.as_binary_u8();
-        let _ = atomic_write(&out_path, bytes);
-
-        Self::spirv_bytes_to_words(bytes)
+        Ok(words)
     }
 }
 
@@ -425,12 +429,12 @@ fn shader_cache_dir() -> PathBuf {
     PathBuf::from("cache").join("shaders")
 }
 
-fn to_shaderc(stage: ShaderStage) -> shaderc::ShaderKind {
-    match stage {
-        ShaderStage::Vertex => shaderc::ShaderKind::Vertex,
-        ShaderStage::Fragment => shaderc::ShaderKind::Fragment,
-        ShaderStage::Compute => shaderc::ShaderKind::Compute,
+fn spirv_words_to_bytes(words: &[u32]) -> Vec<u8> {
+    let mut out = Vec::with_capacity(words.len() * 4);
+    for word in words {
+        out.extend_from_slice(&word.to_le_bytes());
     }
+    out
 }
 
 fn suffix(stage: ShaderStage) -> &'static str {

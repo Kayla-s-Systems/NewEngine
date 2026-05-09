@@ -9,39 +9,6 @@ use crate::EditorPlayMode;
 
 use super::{dock::EditorDockTab, schema, CameraSpeedSettings, EditorUiBuild, SceneIoMode, ViewportMode, WorkspacePreset};
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum UiPanelToggleId {
-    Outliner,
-    Details,
-    LeftToolbar,
-    OutputLog,
-    ContentDrawer,
-}
-
-impl UiPanelToggleId {
-    #[inline]
-    pub(crate) fn label(self) -> &'static str {
-        match self {
-            Self::Outliner => "Outliner",
-            Self::Details => "Details",
-            Self::LeftToolbar => "Left Tools",
-            Self::OutputLog => "Output Log",
-            Self::ContentDrawer => "Content Drawer",
-        }
-    }
-
-    #[inline]
-    pub(crate) fn keywords(self) -> &'static str {
-        match self {
-            Self::Outliner => "panel outliner hierarchy world",
-            Self::Details => "panel details inspector properties",
-            Self::LeftToolbar => "panel toolbar left tools",
-            Self::OutputLog => "panel output log console",
-            Self::ContentDrawer => "panel content drawer browser",
-        }
-    }
-}
-
 #[derive(Debug, Clone)]
 pub(crate) enum UiAction {
     NewScene,
@@ -72,7 +39,6 @@ pub(crate) enum UiAction {
     },
     SpawnDirectionalLight,
     SpawnPointLight,
-    TogglePanel(UiPanelToggleId),
     AddCollisionToSelection,
     RemoveCollisionFromSelection,
     SpawnPendingAsset,
@@ -87,14 +53,6 @@ pub(crate) struct UiActionDescriptor {
     pub(crate) action: UiAction,
     pub(crate) enabled: bool,
     pub(crate) selected: bool,
-}
-
-#[derive(Debug, Clone)]
-pub(crate) struct UiToggleDescriptor {
-    pub(crate) id: UiPanelToggleId,
-    pub(crate) label: &'static str,
-    pub(crate) value: bool,
-    pub(crate) enabled: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -114,7 +72,6 @@ pub(crate) struct UiMenuDescriptor {
 #[derive(Debug, Clone)]
 pub(crate) enum UiMenuEntry {
     Action(UiActionDescriptor),
-    Toggle(UiToggleDescriptor),
     Separator,
     Info(Cow<'static, str>),
 }
@@ -156,7 +113,7 @@ pub(crate) fn workspace_preset_choices(me: &EditorUiBuild) -> Vec<ChoiceDescript
 }
 
 pub(crate) fn viewport_mode_choices(me: &EditorUiBuild) -> Vec<ChoiceDescriptor<ViewportMode>> {
-    [ViewportMode::Lit, ViewportMode::Unlit, ViewportMode::Wireframe]
+    ViewportMode::ALL
         .iter()
         .copied()
         .map(|mode| ChoiceDescriptor {
@@ -179,10 +136,6 @@ pub(crate) fn camera_speed_choices(me: &EditorUiBuild) -> Vec<ChoiceDescriptor<u
             selected: me.camera_speed.preset_index == index,
         })
         .collect()
-}
-
-pub(crate) fn window_panel_toggles(_me: &EditorUiBuild) -> Vec<UiToggleDescriptor> {
-    Vec::new()
 }
 
 #[inline]
@@ -299,16 +252,15 @@ pub(crate) fn tool_actions(me: &EditorUiBuild) -> Vec<UiActionDescriptor> {
 }
 
 pub(crate) fn viewport_mode_actions(me: &EditorUiBuild) -> Vec<UiActionDescriptor> {
-    [ViewportMode::Lit, ViewportMode::Unlit, ViewportMode::Wireframe]
-        .iter()
-        .copied()
-        .map(|mode| {
+    viewport_mode_choices(me)
+        .into_iter()
+        .map(|choice| {
             action(
-                mode.label(),
-                format!("viewport {} mode", mode.label().to_ascii_lowercase()),
-                UiAction::SetViewportMode(mode),
-                true,
-                me.viewport_mode == mode,
+                choice.label,
+                format!("viewport {} mode", choice.label.to_ascii_lowercase()),
+                UiAction::SetViewportMode(choice.value),
+                choice.enabled,
+                choice.selected,
             )
         })
         .collect()
@@ -392,16 +344,6 @@ pub(crate) fn command_palette_actions(me: &EditorUiBuild) -> Vec<UiActionDescrip
         desc.label = Cow::Owned(format!("Tool: {label}"));
         desc
     }));
-
-    for toggle in window_panel_toggles(me) {
-        actions.push(action(
-            format!("Panels: Toggle {}", toggle.label),
-            toggle.id.keywords(),
-            UiAction::TogglePanel(toggle.id),
-            toggle.enabled,
-            toggle.value,
-        ));
-    }
 
     actions.extend(runtime_actions(me).into_iter().map(|mut desc| {
         let label = desc.label.clone();
@@ -544,11 +486,7 @@ pub(crate) fn menubar_descriptors(me: &EditorUiBuild) -> Vec<UiMenuDescriptor> {
         )),
     ];
 
-    let mut window_entries: Vec<UiMenuEntry> = window_panel_toggles(me)
-        .into_iter()
-        .map(UiMenuEntry::Toggle)
-        .collect();
-    window_entries.extend(dock_panel_actions(me));
+    let mut window_entries: Vec<UiMenuEntry> = dock_panel_actions(me);
     window_entries.push(UiMenuEntry::Separator);
     window_entries.push(UiMenuEntry::Action(action(
         "Asset Manager",

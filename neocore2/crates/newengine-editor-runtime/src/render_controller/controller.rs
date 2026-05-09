@@ -45,6 +45,18 @@ pub struct EditorRenderController {
     pub(super) previews:
         std::sync::Arc<parking_lot::Mutex<newengine_previews::PrimitivePreviewService>>,
 
+    /// Session-local fail-soft guard for optional thumbnail/previews GPU baking.
+    ///
+    /// Preview shaders are nice-to-have editor UI content. They must never bring
+    /// down the frame loop if a local shader compiler or old driver stack fails.
+    pub(super) previews_disabled: bool,
+
+    /// Session-local fail-soft guard for the 3D viewport GPU pass.
+    ///
+    /// When runtime shader baking fails, we still keep the platform/window/UI alive
+    /// and present the swapchain instead of exiting with a half-open Vulkan frame.
+    pub(super) viewport_pass_disabled: bool,
+
     pub(super) viewport_rt: Option<newengine_core::render::RenderTargetId>,
     pub(super) viewport_rt_extent: Extent2D,
 
@@ -108,6 +120,9 @@ impl EditorRenderController {
             plugins_bridge,
             scene_bridge,
             previews,
+
+            previews_disabled: false,
+            viewport_pass_disabled: false,
 
             viewport_rt: None,
             viewport_rt_extent: Extent2D::new(0, 0),

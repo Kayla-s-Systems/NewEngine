@@ -4,26 +4,10 @@ use egui;
 use newengine_editor_core::ToolId;
 use newengine_ui::BuiltinUiIcon;
 
-use super::super::{providers, EditorUiBuild};
+use super::super::{providers, theme, EditorUiBuild};
 
 fn compact_button(ui: &mut egui::Ui, selected: bool, text: &str) -> egui::Response {
-    let fill = if selected {
-        ui.visuals().selection.bg_fill
-    } else {
-        ui.visuals().widgets.inactive.bg_fill
-    };
-    let stroke = if selected {
-        ui.visuals().selection.stroke
-    } else {
-        ui.visuals().widgets.inactive.bg_stroke
-    };
-    ui.add(
-        egui::Button::new(text)
-            .fill(fill)
-            .stroke(stroke)
-            .corner_radius(egui::CornerRadius::same(5))
-            .min_size(egui::vec2(0.0, 24.0)),
-    )
+    theme::toolbar_button(ui, selected, text)
 }
 
 fn tool_button(ui: &mut egui::Ui, me: &mut EditorUiBuild, desc: &providers::UiActionDescriptor) {

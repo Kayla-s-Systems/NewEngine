@@ -149,7 +149,6 @@ impl EditorUiBuild {
                     newengine_math::Vec3::new(0.0, 2.0, 0.0),
                 );
             }
-            providers::UiAction::TogglePanel(id) => self.toggle_panel(*id),
             providers::UiAction::AddCollisionToSelection => {
                 self.execute_context_action(schema::ContextActionId::AddCollision);
             }

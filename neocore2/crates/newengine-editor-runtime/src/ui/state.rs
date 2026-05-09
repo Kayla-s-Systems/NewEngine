@@ -20,30 +20,8 @@ use crate::ui::commands::EditorCommandBus;
 use crate::ui::dock::EditorDockTab;
 use crate::ui::extension_abi;
 use crate::ui::icons;
-use crate::ui::providers;
-use crate::ui::schema::{self, AssetSpawnContract, EditorSchemaRegistry};
+use crate::ui::schema::{AssetSpawnContract, EditorSchemaRegistry};
 use crate::viewport_bridge::ViewportBridge;
-
-#[derive(Debug, Clone)]
-pub(crate) enum EditorCommandRoute {
-    Ui(providers::UiAction),
-    Context(schema::ContextActionId),
-    SpawnAsset(AssetSpawnContract),
-}
-
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum LightSpawnKind {
-    Directional,
-    Point,
-}
-
-impl Default for LightSpawnKind {
-    #[inline]
-    fn default() -> Self {
-        Self::Point
-    }
-}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum WorkspacePreset {
@@ -247,7 +225,6 @@ pub struct EditorUiBuild {
 
     pub(crate) viewport_bridge: Arc<ViewportBridge>,
     pub(crate) scene_bridge: Arc<SceneBridge>,
-    pub(crate) previews: Arc<parking_lot::Mutex<newengine_previews::PrimitivePreviewService>>,
     pub(crate) plugins_bridge: Arc<crate::plugin_manager::PluginManagerBridge>,
     pub(crate) plugin_manager: Arc<Mutex<PluginManagerUi>>,
 
@@ -259,7 +236,6 @@ pub struct EditorUiBuild {
 
     pub(crate) material_pipeline: MaterialPipeline,
 
-    pub(crate) layout: EditorUiLayout,
     pub(crate) dock_state: egui_dock::DockState<EditorDockTab>,
     pub(crate) saved_dock_layout: Option<egui_dock::DockState<EditorDockTab>>,
     pub(crate) workspace_preset: WorkspacePreset,
@@ -296,12 +272,6 @@ pub struct EditorUiBuild {
     pub(crate) console_input: String,
     pub(crate) hierarchy_drag_source: Option<EntityId>,
 
-    // Lights UI.
-    pub(crate) selected_light_kind: LightSpawnKind,
-
-    // Primitives UI.
-    pub(crate) selected_primitive: Option<newengine_primitives::PrimitiveId>,
-
     // Selection + inspector cache.
     pub(crate) selected_entity_cached: Option<EntityId>,
     pub(crate) insp_pos: [f32; 3],
@@ -320,29 +290,6 @@ pub struct EditorUiBuild {
     // Viewport picking is processed on render thread, but selection semantics (replace/add/toggle)
     // are decided by UI at click time.
     pub(crate) pending_pick: Option<PendingPick>,
-}
-
-#[derive(Debug, Clone)]
-pub(crate) struct EditorUiLayout {
-    pub(crate) show_left_toolbar: bool,
-    pub(crate) show_outliner: bool,
-    pub(crate) show_details: bool,
-    pub(crate) show_bottom_console: bool,
-    pub(crate) show_bottom_content: bool,
-}
-
-impl Default for EditorUiLayout {
-    #[inline]
-    fn default() -> Self {
-        Self {
-            // UE-style default: tools on the top toolbar.
-            show_left_toolbar: false,
-            show_outliner: true,
-            show_details: true,
-            show_bottom_console: false,
-            show_bottom_content: false,
-        }
-    }
 }
 
 #[derive(Debug, Clone)]

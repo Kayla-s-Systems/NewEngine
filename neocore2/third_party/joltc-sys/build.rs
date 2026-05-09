@@ -6,19 +6,30 @@ use anyhow::Context;
 
 fn main() {
     let flags = build_flags();
+    let target = BuildTarget::from_env();
 
-    build_joltc();
+    build_joltc(&target);
     link();
-    generate_bindings(&flags).unwrap();
+    generate_bindings(&target, &flags).unwrap();
 }
 
-fn build_joltc() {
+fn build_joltc(target: &BuildTarget) {
     let mut config = cmake::Config::new("JoltC");
 
     config.profile("Release");
 
-    if cfg!(windows) {
-        config.cxxflag("/EHsc");
+    match target.toolchain {
+        WindowsToolchain::Msvc => {
+            // MSVC accepts /EHsc. MinGW/GNU treats it as a missing input file and
+            // fails CMake's CXX compiler probe before JoltC is even configured.
+            config.cxxflag("/EHsc");
+        }
+        WindowsToolchain::Gnu => {
+            // Keep the exception model explicit for Jolt while staying valid for
+            // x86_64-pc-windows-gnu / MSYS2 MinGW.
+            config.cxxflag("-fexceptions");
+        }
+        WindowsToolchain::Other => {}
     }
 
     config.configure_arg("-DINTERPROCEDURAL_OPTIMIZATION=OFF");
@@ -59,7 +70,10 @@ fn build_flags() -> Vec<(&'static str, &'static str)> {
     flags
 }
 
-fn generate_bindings(flags: &[(&'static str, &'static str)]) -> anyhow::Result<()> {
+fn generate_bindings(
+    target: &BuildTarget,
+    flags: &[(&'static str, &'static str)],
+) -> anyhow::Result<()> {
     let mut builder = bindgen::Builder::default()
         .parse_callbacks(Box::new(bindgen::CargoCallbacks::new()))
         .header("JoltC/JoltC/JoltC.h")
@@ -72,11 +86,19 @@ fn generate_bindings(flags: &[(&'static str, &'static str)]) -> anyhow::Result<(
         builder = builder.clang_arg(format!("-D{key}={value}"));
     }
 
-    // Critical: on Windows, libclang needs MSVC + Windows SDK include paths explicitly.
-    if cfg!(windows) {
-        for arg in windows_clang_args_for_msvc()? {
-            builder = builder.clang_arg(arg);
+    match target.toolchain {
+        // Critical: MSVC libclang needs MSVC + Windows SDK include paths explicitly.
+        WindowsToolchain::Msvc => {
+            for arg in windows_clang_args_for_msvc(target.clang_triple())? {
+                builder = builder.clang_arg(arg);
+            }
         }
+        // MinGW/GNU must not receive MSVC include-path probing. The toolchain
+        // already provides the Windows headers through GCC/Clang search paths.
+        WindowsToolchain::Gnu => {
+            builder = builder.clang_arg(format!("--target={}", target.clang_triple()));
+        }
+        WindowsToolchain::Other => {}
     }
 
     let bindings = builder
@@ -89,11 +111,54 @@ fn generate_bindings(flags: &[(&'static str, &'static str)]) -> anyhow::Result<(
         .context("Couldn't write bindings!")
 }
 
+// ------------------------- Target/toolchain helpers -------------------------
+
+#[derive(Debug, Clone)]
+struct BuildTarget {
+    rust_triple: String,
+    toolchain: WindowsToolchain,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum WindowsToolchain {
+    Msvc,
+    Gnu,
+    Other,
+}
+
+impl BuildTarget {
+    fn from_env() -> Self {
+        let rust_triple =
+            env::var("TARGET").unwrap_or_else(|_| String::from("x86_64-pc-windows-msvc"));
+
+        let toolchain = if rust_triple.ends_with("windows-msvc") {
+            WindowsToolchain::Msvc
+        } else if rust_triple.ends_with("windows-gnu") || rust_triple.ends_with("windows-gnullvm") {
+            WindowsToolchain::Gnu
+        } else {
+            WindowsToolchain::Other
+        };
+
+        Self {
+            rust_triple,
+            toolchain,
+        }
+    }
+
+    fn clang_triple(&self) -> &str {
+        // Rust's MinGW triple is accepted by many tools, but libclang/clang is
+        // most reliable with the canonical MinGW vendor triple.
+        match self.rust_triple.as_str() {
+            "x86_64-pc-windows-gnu" => "x86_64-w64-windows-gnu",
+            "i686-pc-windows-gnu" => "i686-w64-windows-gnu",
+            other => other,
+        }
+    }
+}
+
 // ------------------------- Windows helpers -------------------------
 
-fn windows_clang_args_for_msvc() -> anyhow::Result<Vec<String>> {
-    let target = env::var("TARGET").unwrap_or_else(|_| "x86_64-pc-windows-msvc".to_string());
-
+fn windows_clang_args_for_msvc(target: &str) -> anyhow::Result<Vec<String>> {
     let mut args = Vec::<String>::new();
     args.push(format!("--target={target}"));
     args.push("-fms-compatibility".to_string());
