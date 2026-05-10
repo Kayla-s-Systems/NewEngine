@@ -54,6 +54,7 @@ impl UiImageLoader {
 mod with_images {
     use super::*;
     use image::GenericImageView;
+    use newengine_assets_api::AssetState;
     use newengine_math::collections::FxHashMap;
 
     type TexHandle = egui::TextureHandle;

@@ -17,6 +17,7 @@ pub(super) struct LitMaterialPlan<'a> {
     pub normal_texture: Option<&'a str>,
     pub roughness_texture: Option<&'a str>,
     pub double_sided: bool,
+    pub cast_shadows: bool,
 }
 
 impl<'a> LitMaterialPlan<'a> {
@@ -48,6 +49,7 @@ impl<'a> LitMaterialPlan<'a> {
             normal_texture: material.textures.normal_texture.as_deref(),
             roughness_texture: material.textures.roughness_texture.as_deref(),
             double_sided: material.desc.flags.contains(MaterialFlags::DOUBLE_SIDED),
+            cast_shadows: material.desc.flags.contains(MaterialFlags::CAST_SHADOWS),
         }
     }
 
@@ -69,6 +71,7 @@ impl<'a> LitMaterialPlan<'a> {
             normal_texture: None,
             roughness_texture: None,
             double_sided: false,
+            cast_shadows: true,
         }
     }
 }

@@ -13,6 +13,9 @@ pub mod core;
 pub mod binary;
 
 #[cfg(feature = "serde")]
+pub mod source;
+
+#[cfg(feature = "serde")]
 pub mod serde;
 
 mod errors;
@@ -29,3 +32,9 @@ pub use crate::binary::{decode_descriptor as decode_material_descriptor, encode_
 pub use crate::binary::{MaterialBinaryAsset, MaterialBinaryError, MaterialBinaryResult};
 pub use crate::core::MaterialRegistry;
 pub use crate::errors::{MaterialError, MaterialResult};
+
+#[cfg(feature = "serde")]
+pub use crate::source::{
+    material_source_from_parts, parse_material_source_json, parse_material_source_slice,
+    MaterialSourceDocument,
+};

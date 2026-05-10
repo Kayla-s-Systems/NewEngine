@@ -45,6 +45,10 @@ impl RenderApi for NullRenderApi {
         Ok(UiTexId::new(0))
     }
 
+    fn render_target_color_texture_id(&self, _id: RenderTargetId) -> EngineResult<TextureId> {
+        Ok(TextureId::new(1))
+    }
+
     fn begin_render_target(&mut self, _desc: BeginRenderTargetDesc) -> EngineResult<()> {
         Ok(())
     }

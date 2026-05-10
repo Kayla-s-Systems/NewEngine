@@ -4,6 +4,7 @@ mod commands;
 mod game_ready;
 mod helpers;
 mod imported_assets;
+mod material_application;
 mod queue;
 
 pub use commands::SceneCommand;

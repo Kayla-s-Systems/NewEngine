@@ -2,7 +2,7 @@
 
 use newengine_camera::{Perspective, Projection};
 use newengine_core::host_events::CursorState;
-use newengine_core::render::{Extent2D, TextureId, SamplerId, TextureDesc, TextureFormat, TextureUsage};
+use newengine_core::render::{Extent2D, RenderTargetId, SamplerId, TextureDesc, TextureFormat, TextureId, TextureUsage};
 use newengine_math::collections::{FxHashMap, FxHashSet};
 
 use crate::plugin_manager::PluginManagerBridge;
@@ -29,6 +29,7 @@ pub(super) struct PerDrawUbo {
     pub base_texture: TextureId,
     pub normal_texture: TextureId,
     pub roughness_texture: TextureId,
+    pub shadow_texture: TextureId,
     pub sampler: SamplerId,
     pub last_seen_frame: u64,
 }
@@ -55,6 +56,8 @@ pub struct EditorRenderController {
 
     pub(super) viewport_rt: Option<newengine_core::render::RenderTargetId>,
     pub(super) viewport_rt_extent: Extent2D,
+    pub(super) shadow_rt: Option<RenderTargetId>,
+    pub(super) shadow_rt_resolution: u32,
     pub(super) deferred_rts: Vec<(newengine_core::render::RenderTargetId, u64)>,
 
     pub(super) grid: Option<GridGpu>,
@@ -104,6 +107,8 @@ impl EditorRenderController {
             viewport_pass_disabled: false,
             viewport_rt: None,
             viewport_rt_extent: Extent2D::new(0, 0),
+            shadow_rt: None,
+            shadow_rt_resolution: 0,
             deferred_rts: Vec::new(),
             grid: None,
             lit: None,
@@ -182,6 +187,7 @@ impl EditorRenderController {
             lit.white_texture,
             lit.flat_normal_texture,
             lit.white_texture,
+            lit.white_texture,
             lit.clamp_sampler,
         )
     }
@@ -194,12 +200,14 @@ impl EditorRenderController {
         base_texture: TextureId,
         normal_texture: TextureId,
         roughness_texture: TextureId,
+        shadow_texture: TextureId,
         sampler: SamplerId,
     ) -> newengine_core::EngineResult<PerDrawUbo> {
         if let Some(mut e) = self.per_draw_ubo.get(&key).copied() {
             if e.base_texture == base_texture
                 && e.normal_texture == normal_texture
                 && e.roughness_texture == roughness_texture
+                && e.shadow_texture == shadow_texture
                 && e.sampler == sampler
             {
                 return Ok(e);
@@ -212,12 +220,14 @@ impl EditorRenderController {
                     .with_texture0(base_texture)
                     .with_texture1(normal_texture)
                     .with_texture2(roughness_texture)
+                    .with_texture3(shadow_texture)
                     .with_sampler0(sampler),
             )?;
             e.bg = bg;
             e.base_texture = base_texture;
             e.normal_texture = normal_texture;
             e.roughness_texture = roughness_texture;
+            e.shadow_texture = shadow_texture;
             e.sampler = sampler;
             self.per_draw_ubo.insert(key, e);
             return Ok(e);
@@ -239,6 +249,7 @@ impl EditorRenderController {
                 .with_texture0(base_texture)
                 .with_texture1(normal_texture)
                 .with_texture2(roughness_texture)
+                .with_texture3(shadow_texture)
                 .with_sampler0(sampler),
         )?;
 
@@ -248,6 +259,7 @@ impl EditorRenderController {
             base_texture,
             normal_texture,
             roughness_texture,
+            shadow_texture,
             sampler,
             last_seen_frame: self.frame_index,
         };

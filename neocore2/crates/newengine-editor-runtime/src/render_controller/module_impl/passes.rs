@@ -1,6 +1,6 @@
 #![forbid(unsafe_op_in_unsafe_fn)]
 
-use newengine_core::render::{BufferSlice, DrawArgs, IndexFormat};
+use newengine_core::render::{BufferSlice, DrawArgs, IndexFormat, TextureId};
 use newengine_math::{Mat4, Quat, Vec3, Vec4};
 
 use newengine_lighting::{DirectionalLight, PointLight};
@@ -81,6 +81,7 @@ pub(super) fn draw_procedural_terrain(
     lit: super::super::gpu::LitPipeline,
     viewproj: Mat4,
     lights: &PackedLights,
+    shadow_texture: TextureId,
     runtime: bool,
 ) -> newengine_core::EngineResult<()> {
     let world = scene.world();
@@ -121,7 +122,7 @@ pub(super) fn draw_procedural_terrain(
         let sampler = if material_plan.has_textures() { lit.repeat_sampler } else { lit.clamp_sampler };
 
         let key = entity_key ^ 0x7e44_1000_0000_0000u64;
-        let mut per = this.ensure_per_draw_ubo_with_binding(r, lit, key, base_tex, normal_tex, roughness_tex, sampler)?;
+        let mut per = this.ensure_per_draw_ubo_with_binding(r, lit, key, base_tex, normal_tex, roughness_tex, shadow_texture, sampler)?;
         per.last_seen_frame = this.frame_index;
         this.per_draw_ubo.insert(key, per);
 
@@ -154,6 +155,7 @@ pub(super) fn draw_primitives(
     lit: super::super::gpu::LitPipeline,
     viewproj: Mat4,
     lights: &PackedLights,
+    shadow_texture: TextureId,
     runtime: bool,
 ) -> newengine_core::EngineResult<()> {
     let world = scene.world();
@@ -181,7 +183,7 @@ pub(super) fn draw_primitives(
         let sampler = if material_plan.has_textures() { lit.repeat_sampler } else { lit.clamp_sampler };
 
         let key = id.stable_u64();
-        let mut per = this.ensure_per_draw_ubo_with_binding(r, lit, key, base_tex, normal_tex, roughness_tex, sampler)?;
+        let mut per = this.ensure_per_draw_ubo_with_binding(r, lit, key, base_tex, normal_tex, roughness_tex, shadow_texture, sampler)?;
         per.last_seen_frame = this.frame_index;
         this.per_draw_ubo.insert(key, per);
 
@@ -204,6 +206,156 @@ pub(super) fn draw_primitives(
         r.draw_indexed(newengine_core::render::DrawIndexedArgs::new(
             gpu.index_count,
         ))?;
+    }
+
+    Ok(())
+}
+
+
+pub(super) fn draw_procedural_terrain_shadow(
+    this: &mut EditorRenderController,
+    r: &mut dyn newengine_core::render::RenderApi,
+    scene: &newengine_scene::Scene,
+    lit: super::super::gpu::LitPipeline,
+    light_viewproj: Mat4,
+    lights: &PackedLights,
+    runtime: bool,
+) -> newengine_core::EngineResult<()> {
+    let world = scene.world();
+    let mats_lock = this.scene_bridge.materials();
+    let mats = mats_lock.read();
+
+    let mut entries: Vec<(u64, ProceduralTerrain, Mat4, Option<newengine_materials::MaterialRef>)> = Vec::new();
+    for (id, terrain, gt) in world.query2::<ProceduralTerrain, GlobalTransform>() {
+        if !display_visible_in_mode(world, id, runtime) {
+            continue;
+        }
+        entries.push((
+            id.stable_u64(),
+            terrain.clone(),
+            gt.0,
+            world.get::<newengine_materials::MaterialRef>(id).copied(),
+        ));
+    }
+    entries.sort_by(|a, b| a.0.cmp(&b.0));
+
+    for (entity_key, terrain, model, material) in entries {
+        let resolved = material.and_then(|mr| mats.resolve(mr.id));
+        let material_plan = LitMaterialPlan::from_resolved(resolved.as_ref(), terrain.base_color);
+        if !material_plan.cast_shadows {
+            continue;
+        }
+
+        let mesh_key = terrain.mesh_key();
+        let gpu = if let Some(gpu) = this.terrain_cache.get(&mesh_key).copied() {
+            gpu
+        } else {
+            let mesh = terrain.heightfield.to_primitive_mesh();
+            let gpu = upload_primitive_mesh(r, &mesh, "editor_proc_terrain")?;
+            this.terrain_cache.insert(mesh_key, gpu);
+            gpu
+        };
+
+        let key = entity_key ^ 0x5a44_1000_0000_0000u64;
+        let mut per = this.ensure_per_draw_ubo_with_binding(
+            r,
+            lit,
+            key,
+            lit.white_texture,
+            lit.flat_normal_texture,
+            lit.white_texture,
+            lit.white_texture,
+            lit.clamp_sampler,
+        )?;
+        per.last_seen_frame = this.frame_index;
+        this.per_draw_ubo.insert(key, per);
+
+        let mvp = light_viewproj * model;
+        super::passes_ubo::write_lit_ubo_ex(
+            r,
+            per.ubo,
+            mvp,
+            model,
+            material_plan.base_color,
+            material_plan.emissive_radiance,
+            material_plan.uv_transform,
+            material_plan.material_params,
+            lights,
+        )?;
+
+        r.set_pipeline(if material_plan.double_sided { lit.shadow_double_sided_pipeline } else { lit.shadow_pipeline })?;
+        r.set_bind_group(0, per.bg)?;
+        r.set_vertex_buffer(0, BufferSlice::new(gpu.vb, 0))?;
+        r.set_index_buffer(BufferSlice::new(gpu.ib, 0), IndexFormat::U32)?;
+        r.draw_indexed(newengine_core::render::DrawIndexedArgs::new(gpu.index_count))?;
+    }
+
+    Ok(())
+}
+
+pub(super) fn draw_primitives_shadow(
+    this: &mut EditorRenderController,
+    r: &mut dyn newengine_core::render::RenderApi,
+    scene: &newengine_scene::Scene,
+    lit: super::super::gpu::LitPipeline,
+    light_viewproj: Mat4,
+    lights: &PackedLights,
+    runtime: bool,
+) -> newengine_core::EngineResult<()> {
+    let world = scene.world();
+    let reg_lock = this.scene_bridge.primitives();
+    let reg = reg_lock.read();
+    let mats_lock = this.scene_bridge.materials();
+    let mats = mats_lock.read();
+
+    for (id, prim, gt) in world.query2::<Primitive, GlobalTransform>() {
+        if !display_visible_in_mode(world, id, runtime) {
+            continue;
+        }
+
+        let resolved = world
+            .get::<newengine_materials::MaterialRef>(id)
+            .and_then(|mr| mats.resolve(mr.id));
+        let material_plan = LitMaterialPlan::from_resolved(resolved.as_ref(), [1.0, 1.0, 1.0, 1.0]);
+        if !material_plan.cast_shadows {
+            continue;
+        }
+
+        let gpu = ensure_primitive_gpu(&reg, prim.id, &mut this.prim_cache, r)?;
+        let model = gt.0;
+        let mvp = light_viewproj * model;
+
+        let key = id.stable_u64() ^ 0x5a50_0000_0000_0000u64;
+        let mut per = this.ensure_per_draw_ubo_with_binding(
+            r,
+            lit,
+            key,
+            lit.white_texture,
+            lit.flat_normal_texture,
+            lit.white_texture,
+            lit.white_texture,
+            lit.clamp_sampler,
+        )?;
+        per.last_seen_frame = this.frame_index;
+        this.per_draw_ubo.insert(key, per);
+
+        super::passes_ubo::write_lit_ubo_ex(
+            r,
+            per.ubo,
+            mvp,
+            model,
+            material_plan.base_color,
+            material_plan.emissive_radiance,
+            material_plan.uv_transform,
+            material_plan.material_params,
+            lights,
+        )?;
+
+        r.set_pipeline(if material_plan.double_sided { lit.shadow_double_sided_pipeline } else { lit.shadow_pipeline })?;
+        r.set_bind_group(0, per.bg)?;
+        r.set_vertex_buffer(0, BufferSlice::new(gpu.vb, 0))?;
+        r.set_index_buffer(BufferSlice::new(gpu.ib, 0), IndexFormat::U32)?;
+        r.draw_indexed(newengine_core::render::DrawIndexedArgs::new(gpu.index_count))?;
     }
 
     Ok(())

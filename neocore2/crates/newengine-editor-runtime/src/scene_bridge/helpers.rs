@@ -2,10 +2,7 @@
 
 use newengine_bounds::Bounds;
 use newengine_ecs::EntityId;
-use newengine_materials::{
-    MaterialDomain, MaterialId, MaterialOverrides, MaterialRef,
-    MaterialRegistry, ShadingModel,
-};
+use newengine_materials::{MaterialId, MaterialRegistry};
 use newengine_math::Vec3;
 use newengine_primitives::{Primitive, PrimitiveId, PrimitiveRegistry};
 use newengine_scene::components::SceneRoot;
@@ -13,7 +10,7 @@ use newengine_scene::{spawn_named, Scene, SceneState};
 
 use crate::scene_bootstrap::bootstrap_editor_scene;
 
-use super::imported_assets::PrimitiveMaterialBase;
+use super::material_application::{apply_material_to_entity, MaterialApplySpec};
 
 #[inline]
 pub(super) fn place_spawn_position(base: Vec3, index: usize) -> Vec3 {
@@ -27,7 +24,7 @@ pub(super) fn place_spawn_position(base: Vec3, index: usize) -> Vec3 {
 
 #[inline]
 pub(super) fn ensure_primitive_base(world: &mut newengine_ecs::World, entity: EntityId, base: MaterialId) {
-    let _ = world.insert(entity, PrimitiveMaterialBase { id: base });
+    let _ = world.insert(entity, super::imported_assets::PrimitiveMaterialBase { id: base });
 }
 
 #[inline]
@@ -38,16 +35,29 @@ pub(super) fn apply_primitive_instance(
     base: MaterialId,
     color: [f32; 4],
 ) {
-    let inst_name = format!("__prim_{:016x}", entity.stable_u64());
-    let overrides = MaterialOverrides {
-        domain: Some(MaterialDomain::Surface),
-        shading_model: Some(ShadingModel::Unlit),
-        base_color: Some(color),
-        ..MaterialOverrides::default()
-    };
+    let _ = apply_material_to_entity(
+        world,
+        mats,
+        entity,
+        MaterialApplySpec::primitive_tint(base, base, color),
+    );
+}
 
-    let inst_id = mats.upsert_instance_named(base, &inst_name, overrides);
-    let _ = world.insert(entity, MaterialRef { id: inst_id });
+#[inline]
+pub(super) fn apply_exact_material(
+    world: &mut newengine_ecs::World,
+    mats: &MaterialRegistry,
+    entity: EntityId,
+    material: MaterialId,
+    fallback: MaterialId,
+    color: [f32; 4],
+) -> MaterialId {
+    apply_material_to_entity(
+        world,
+        mats,
+        entity,
+        MaterialApplySpec::exact(material, fallback, color),
+    )
 }
 
 #[inline]

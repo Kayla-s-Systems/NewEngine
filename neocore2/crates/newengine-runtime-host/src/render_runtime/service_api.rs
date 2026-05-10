@@ -81,6 +81,20 @@ impl RenderApi for ServiceBackedRenderApi {
         }
     }
 
+    fn render_target_color_texture_id(&self, id: RenderTargetId) -> EngineResult<TextureId> {
+        match self
+            .client
+            .invoke(RenderRequestV1::RenderTargetColorTextureId { id })
+            .map_err(EngineError::other)?
+        {
+            RenderResponseV1::TextureId(id) => Ok(id),
+            other => Err(EngineError::other(format!(
+                "render service protocol error: expected TextureId, got {:?}",
+                other
+            ))),
+        }
+    }
+
     fn begin_render_target(&mut self, desc: BeginRenderTargetDesc) -> EngineResult<()> {
         self.unit(RenderRequestV1::BeginRenderTarget(desc))
     }

@@ -1,11 +1,12 @@
 #![forbid(unsafe_op_in_unsafe_fn)]
 
 use newengine_lighting::{AmbientLight, DirectionalLight, PointLight};
+use newengine_math::Mat4;
 use newengine_transform::GlobalTransform;
 
 const MAX_POINT_LIGHTS: usize = 4;
 
-#[derive(Clone, Copy, Debug, Default)]
+#[derive(Clone, Copy, Debug)]
 pub(super) struct PackedLights {
     pub ambient: [f32; 4],
     pub dir_dir_intensity: [f32; 4],
@@ -13,10 +14,28 @@ pub(super) struct PackedLights {
     pub point_pos_range: [[f32; 4]; MAX_POINT_LIGHTS],
     pub point_color_intensity: [[f32; 4]; MAX_POINT_LIGHTS],
     pub point_count_pad: [f32; 4],
+    pub shadow_light_mvp: Mat4,
+    pub shadow_params: [f32; 4],
+}
+
+impl Default for PackedLights {
+    #[inline]
+    fn default() -> Self {
+        Self {
+            ambient: [0.0, 0.0, 0.0, 0.0],
+            dir_dir_intensity: [0.0, -1.0, 0.0, 0.0],
+            dir_color: [1.0, 1.0, 1.0, 0.0],
+            point_pos_range: [[0.0; 4]; MAX_POINT_LIGHTS],
+            point_color_intensity: [[0.0; 4]; MAX_POINT_LIGHTS],
+            point_count_pad: [0.0; 4],
+            shadow_light_mvp: Mat4::IDENTITY,
+            shadow_params: [0.0; 4],
+        }
+    }
 }
 
 impl PackedLights {
-    pub(super) const UBO_SIZE: usize = 384;
+    pub(super) const UBO_SIZE: usize = 464;
 
     #[inline]
     pub(super) fn from_world(world: &newengine_ecs::World) -> Self {
@@ -26,14 +45,7 @@ impl PackedLights {
             .unwrap_or_default();
         let ambient = [amb.color[0], amb.color[1], amb.color[2], amb.intensity];
 
-        let mut best_dir: Option<(u64, DirectionalLight)> = None;
-        for (e, l) in world.query::<DirectionalLight>() {
-            let k = e.stable_u64();
-            if best_dir.map(|(bk, _)| k < bk).unwrap_or(true) {
-                best_dir = Some((k, *l));
-            }
-        }
-        let dir = best_dir.map(|(_, l)| l).unwrap_or_default();
+        let dir = primary_directional_light(world).unwrap_or_default();
         let dir_dir_intensity = [
             dir.direction_ws[0],
             dir.direction_ws[1],
@@ -77,6 +89,13 @@ impl PackedLights {
     }
 
     #[inline]
+    pub(super) fn with_shadow(mut self, light_mvp: Mat4, params: [f32; 4]) -> Self {
+        self.shadow_light_mvp = light_mvp;
+        self.shadow_params = params;
+        self
+    }
+
+    #[inline]
     pub(super) fn write_into(&self, bytes: &mut [u8; Self::UBO_SIZE]) {
         let mut off = 160;
 
@@ -97,6 +116,18 @@ impl PackedLights {
         }
         write_vec4(bytes, &mut off, self.point_count_pad);
     }
+}
+
+#[inline]
+pub(super) fn primary_directional_light(world: &newengine_ecs::World) -> Option<DirectionalLight> {
+    let mut best_dir: Option<(u64, DirectionalLight)> = None;
+    for (e, l) in world.query::<DirectionalLight>() {
+        let k = e.stable_u64();
+        if best_dir.map(|(bk, _)| k < bk).unwrap_or(true) {
+            best_dir = Some((k, *l));
+        }
+    }
+    best_dir.map(|(_, l)| l)
 }
 
 #[inline]

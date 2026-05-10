@@ -735,6 +735,7 @@ pub enum RenderRequestV1 {
     CreateRenderTarget(RenderTargetDesc),
     DestroyRenderTarget { id: RenderTargetId },
     RenderTargetUiTexId { id: RenderTargetId },
+    RenderTargetColorTextureId { id: RenderTargetId },
     BeginRenderTarget(BeginRenderTargetDesc),
     EndRenderTarget,
     CreateBuffer(BufferDesc),

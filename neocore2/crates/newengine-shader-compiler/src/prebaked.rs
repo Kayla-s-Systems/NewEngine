@@ -12,18 +12,119 @@ pub(crate) fn lookup(stage: ShaderStage, logical_name: &str, entry: &str) -> Opt
 
     let normalized_name = logical_name.replace('\\', "/");
     let words: &[u32] = match (stage, normalized_name.as_str()) {
-        (ShaderStage::Vertex, "editor_lit_v2.vert") => PREBAKED_EDITOR_LIT_VERT,
-        (ShaderStage::Fragment, "editor_lit_v2.frag") => PREBAKED_EDITOR_LIT_FRAG,
-        (ShaderStage::Vertex, "editor_grid.vert") => PREBAKED_EDITOR_GRID_VERT,
-        (ShaderStage::Fragment, "editor_grid.frag") => PREBAKED_EDITOR_GRID_FRAG,
-        (ShaderStage::Vertex, "editor_debug_lines.vert") => PREBAKED_EDITOR_DEBUG_LINES_VERT,
-        (ShaderStage::Fragment, "editor_debug_lines.frag") => PREBAKED_EDITOR_DEBUG_LINES_FRAG,
+        // Current editor/runtime lit shader names. These aliases are intentionally
+        // prebaked-first: standalone game runtime must not depend on a local
+        // Vulkan SDK/glslc just to draw the first playable frame. The arrays are
+        // the stable textured material fallback; runtime GLSL baking can still
+        // be forced with NEWENGINE_SHADER_BAKE_MODE=runtime while the full
+        // lit+shadow SPIR-V bake step is added to the build pipeline.
+        (ShaderStage::Vertex, "editor_lit_shadowed_v3.vert")
+        | (ShaderStage::Vertex, "shaders/editor_lit_shadowed_v3.vert")
+        | (ShaderStage::Vertex, "editor_lit_v2.vert")
+        | (ShaderStage::Vertex, "shaders/editor_lit_v2.vert") => PREBAKED_EDITOR_LIT_TEXTURED_VERT,
+        (ShaderStage::Fragment, "editor_lit_shadowed_v3.frag")
+        | (ShaderStage::Fragment, "shaders/editor_lit_shadowed_v3.frag")
+        | (ShaderStage::Fragment, "editor_lit_v2.frag")
+        | (ShaderStage::Fragment, "shaders/editor_lit_v2.frag") => PREBAKED_EDITOR_LIT_TEXTURED_FRAG,
+
+        // Shadow pipelines are allowed to bind the same stable textured fallback
+        // when exact shadow SPIR-V is not prebaked yet. It is depth-incorrect but
+        // safe: the fallback material fragment ignores shadow sampling, so a bad
+        // local glslc cannot drop the whole viewport to clear color.
+        (ShaderStage::Vertex, "editor_shadow_depth_v1.vert")
+        | (ShaderStage::Vertex, "shaders/editor_shadow_depth_v1.vert") => PREBAKED_EDITOR_LIT_TEXTURED_VERT,
+        (ShaderStage::Fragment, "editor_shadow_depth_v1.frag")
+        | (ShaderStage::Fragment, "shaders/editor_shadow_depth_v1.frag") => PREBAKED_EDITOR_LIT_TEXTURED_FRAG,
+
+        (ShaderStage::Vertex, "editor_grid.vert")
+        | (ShaderStage::Vertex, "shaders/editor_grid.vert") => PREBAKED_EDITOR_GRID_VERT,
+        (ShaderStage::Fragment, "editor_grid.frag")
+        | (ShaderStage::Fragment, "shaders/editor_grid.frag") => PREBAKED_EDITOR_GRID_FRAG,
+        (ShaderStage::Vertex, "editor_debug_lines.vert")
+        | (ShaderStage::Vertex, "shaders/editor_debug_lines.vert") => PREBAKED_EDITOR_DEBUG_LINES_VERT,
+        (ShaderStage::Fragment, "editor_debug_lines.frag")
+        | (ShaderStage::Fragment, "shaders/editor_debug_lines.frag") => PREBAKED_EDITOR_DEBUG_LINES_FRAG,
         (ShaderStage::Vertex, "shaders/preview/primitive_preview.vert") => PREBAKED_PRIMITIVE_PREVIEW_VERT,
         (ShaderStage::Fragment, "shaders/preview/primitive_preview.frag") => PREBAKED_PRIMITIVE_PREVIEW_FRAG,
         _ => return None,
     };
     Some(words.to_vec())
 }
+
+
+// Compact prebaked material shader used by standalone runtime as the safe default.
+// Vertex: transforms position with UBO.u_mvp and passes UBO.u_base_color + transformed UV.
+// Fragment: samples set=0/binding=1 and multiplies it by the material base color.
+// This restores material/texture rendering without requiring runtime glslc.
+const PREBAKED_EDITOR_LIT_TEXTURED_VERT: &[u32] = &[
+    119734787, 65536, 0, 55, 0, 131089, 1, 196622,
+    0, 1, 655375, 0, 1, 1852399981, 0, 2,
+    3, 4, 5, 6, 262215, 3, 30, 0,
+    262215, 4, 30, 2, 262215, 5, 30, 0,
+    262215, 6, 30, 1, 196679, 14, 2, 327752,
+    14, 0, 11, 0, 196679, 15, 2, 262216,
+    15, 0, 5, 327752, 15, 0, 7, 16,
+    327752, 15, 0, 35, 0, 262216, 15, 1,
+    5, 327752, 15, 1, 7, 16, 327752, 15,
+    1, 35, 64, 327752, 15, 2, 35, 128,
+    327752, 15, 3, 35, 352, 262215, 7, 34,
+    0, 262215, 7, 33, 0, 131091, 8, 196630,
+    9, 32, 262167, 10, 9, 2, 262167, 11,
+    9, 3, 262167, 12, 9, 4, 262168, 13,
+    12, 4, 196638, 14, 12, 393246, 15, 13,
+    13, 12, 12, 262176, 16, 3, 14, 262176,
+    17, 1, 11, 262176, 18, 1, 10, 262176,
+    19, 3, 12, 262176, 20, 3, 10, 262176,
+    21, 2, 15, 262165, 22, 32, 0, 262187,
+    22, 23, 0, 262187, 22, 24, 1, 262187,
+    22, 25, 2, 262187, 22, 26, 3, 262187,
+    9, 27, 1065353216, 262176, 28, 2, 13, 262176,
+    29, 2, 12, 262176, 30, 3, 12, 196641,
+    31, 8, 262203, 16, 2, 3, 262203, 17,
+    3, 1, 262203, 18, 4, 1, 262203, 19,
+    5, 3, 262203, 20, 6, 3, 262203, 21,
+    7, 2, 327734, 8, 1, 0, 31, 131320,
+    32, 262205, 11, 33, 3, 327761, 9, 34,
+    33, 0, 327761, 9, 35, 33, 1, 327761,
+    9, 36, 33, 2, 458832, 12, 37, 34,
+    35, 36, 27, 327745, 28, 38, 7, 23,
+    262205, 13, 39, 38, 327825, 12, 40, 39,
+    37, 327745, 30, 41, 2, 23, 196670, 41,
+    40, 327745, 29, 42, 7, 25, 262205, 12,
+    43, 42, 196670, 5, 43, 262205, 10, 44,
+    4, 327745, 29, 45, 7, 26, 262205, 12,
+    46, 45, 327761, 9, 47, 46, 0, 327761,
+    9, 48, 46, 1, 327761, 9, 49, 46,
+    2, 327761, 9, 50, 46, 3, 327760, 10,
+    51, 47, 48, 327760, 10, 52, 49, 50,
+    327813, 10, 53, 44, 51, 327809, 10, 54,
+    53, 52, 196670, 6, 54, 65789, 65592,
+];
+
+const PREBAKED_EDITOR_LIT_TEXTURED_FRAG: &[u32] = &[
+    119734787, 65536, 0, 28, 0, 131089, 1, 196622,
+    0, 1, 524303, 4, 1, 1852399981, 0, 2,
+    3, 4, 196624, 1, 7, 262215, 2, 30,
+    0, 262215, 3, 30, 1, 262215, 4, 30,
+    0, 262215, 5, 34, 0, 262215, 5, 33,
+    1, 262215, 6, 34, 0, 262215, 6, 33,
+    5, 131091, 7, 196630, 8, 32, 262167, 9,
+    8, 2, 262167, 10, 8, 4, 589849, 11,
+    8, 1, 0, 0, 0, 1, 0, 131098,
+    12, 196635, 13, 11, 262176, 14, 1, 10,
+    262176, 15, 1, 9, 262176, 16, 3, 10,
+    262176, 17, 0, 11, 262176, 18, 0, 12,
+    196641, 19, 7, 262203, 14, 2, 1, 262203,
+    15, 3, 1, 262203, 16, 4, 3, 262203,
+    17, 5, 0, 262203, 18, 6, 0, 327734,
+    7, 1, 0, 19, 131320, 20, 262205, 10,
+    21, 2, 262205, 9, 22, 3, 262205, 11,
+    23, 5, 262205, 12, 24, 6, 327766, 13,
+    25, 23, 24, 327767, 10, 26, 25, 22,
+    327813, 10, 27, 26, 21, 196670, 4, 27,
+    65789, 65592,
+];
+
 
 const PREBAKED_EDITOR_LIT_VERT: &[u32] = &[
     119734787, 65536, 0, 36, 0, 131089, 1, 196622,

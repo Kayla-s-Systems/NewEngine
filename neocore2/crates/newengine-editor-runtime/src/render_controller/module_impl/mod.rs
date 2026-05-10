@@ -28,6 +28,7 @@ mod passes;
 mod passes_ubo;
 mod picking;
 mod scene;
+mod shadows;
 
 use input::ViewportInputSnap;
 
@@ -498,7 +499,22 @@ impl<E: Send + 'static> Module<E> for EditorRenderController {
                     return Ok(());
                 }
             };
-            let world_lights = lights::collect_lights(scene.world());
+            let base_lights = lights::collect_lights(scene.world());
+            let shadow_frame = match shadows::prepare_shadow_frame(
+                self,
+                &mut **r,
+                &scene,
+                bounds,
+                lit,
+                play_mode.is_runtime(),
+            ) {
+                Ok(frame) => frame,
+                Err(e) => {
+                    log::warn!("render controller: shadow pass disabled for this frame: {}", e);
+                    shadows::ShadowFrame::disabled(lit.white_texture)
+                }
+            };
+            let world_lights = base_lights.with_shadow(shadow_frame.light_mvp, shadow_frame.params);
 
             let viewport_draw = (|| -> EngineResult<()> {
                 if trace_frame {
@@ -535,6 +551,7 @@ impl<E: Send + 'static> Module<E> for EditorRenderController {
                     lit,
                     viewproj,
                     &world_lights,
+                    shadow_frame.texture,
                     play_mode.is_runtime(),
                 )?;
                 passes::draw_primitives(
@@ -544,6 +561,7 @@ impl<E: Send + 'static> Module<E> for EditorRenderController {
                     lit,
                     viewproj,
                     &world_lights,
+                    shadow_frame.texture,
                     play_mode.is_runtime(),
                 )?;
                 if !play_mode.is_runtime() {

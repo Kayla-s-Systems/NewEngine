@@ -83,5 +83,18 @@ pub(super) fn write_lit_ubo_ex(
         bytes[off..off + 4].copy_from_slice(&material_params[i].to_ne_bytes());
     }
 
+    let light_mvp_off = 384;
+    let light_mvp_cols = lights.shadow_light_mvp.to_cols_array();
+    for (i, f) in light_mvp_cols.iter().enumerate() {
+        let off = light_mvp_off + i * 4;
+        bytes[off..off + 4].copy_from_slice(&f.to_ne_bytes());
+    }
+
+    let shadow_off = 448;
+    for i in 0..4 {
+        let off = shadow_off + i * 4;
+        bytes[off..off + 4].copy_from_slice(&lights.shadow_params[i].to_ne_bytes());
+    }
+
     r.write_buffer(ubo, 0, &bytes)
 }

@@ -9,8 +9,8 @@ use newengine_bounds::Bounds;
 use newengine_ecs::EntityId;
 use newengine_lighting::{AmbientLight, DirectionalLight, ShadowSettings};
 use newengine_materials::{
-    MaterialDescriptor, MaterialFlags, MaterialId, MaterialRef, MaterialRegistry,
-    MaterialTextureBindings,
+    material_source_from_parts, parse_material_source_slice, MaterialDescriptor, MaterialFlags,
+    MaterialId, MaterialRegistry, MaterialSourceDocument, MaterialTextureBindings,
 };
 use newengine_math::{EulerRot, Quat, Vec3};
 use newengine_primitives::{fnv1a_64, Primitive, PrimitiveId, PrimitiveMesh, PrimitiveRegistry, PrimitiveVertex};
@@ -33,7 +33,9 @@ use self::content::{
     GameReadyMaterialSetSpec, GameReadyMaterialSpec, GameReadyPaletteSpec, GameReadySkySpec,
     GameReadyTerrainSpec,
 };
-use super::helpers::{apply_primitive_instance, ensure_primitive_base, ensure_root, primitive_bounds};
+use super::helpers::{
+    apply_exact_material, apply_primitive_instance, ensure_primitive_base, ensure_root, primitive_bounds,
+};
 
 #[inline]
 pub(super) fn game_ready_demo_enabled() -> bool {
@@ -88,6 +90,45 @@ fn spawn_game_primitive(
     entity
 }
 
+
+#[inline]
+fn load_material_source_asset(path: &str) -> Option<MaterialSourceDocument> {
+    let assets = AssetServiceClient::new(default_host_api());
+    let id = match assets.load(path) {
+        Ok(id) => id,
+        Err(e) => {
+            log::warn!("game-ready: material asset unavailable path='{}' err='{}'", path, e);
+            return None;
+        }
+    };
+
+    if let Err(e) = wait_ready(&assets, &id, Duration::from_secs(2)) {
+        log::warn!(
+            "game-ready: material asset not ready path='{}' id='{}' err='{:?}'",
+            path,
+            id,
+            e
+        );
+        return None;
+    }
+
+    let payload = match assets.blob_wire_v1(&id) {
+        Ok((_meta, payload)) => payload,
+        Err(e) => {
+            log::warn!("game-ready: material asset read failed path='{}' err='{}'", path, e);
+            return None;
+        }
+    };
+
+    match parse_material_source_slice(&payload) {
+        Ok(source) => Some(source),
+        Err(e) => {
+            log::warn!("game-ready: material asset parse failed path='{}' err='{}'", path, e);
+            None
+        }
+    }
+}
+
 #[inline]
 fn material_textures(spec: &GameReadyMaterialSpec) -> MaterialTextureBindings {
     MaterialTextureBindings {
@@ -109,7 +150,18 @@ fn register_material(
     flags: MaterialFlags,
     spec: &GameReadyMaterialSpec,
 ) -> MaterialId {
-    mats.upsert_named_with_textures(
+    if let Some(asset_path) = spec.asset.as_deref() {
+        if let Some(source) = load_material_source_asset(asset_path) {
+            let source = source.with_fallback_name(name.to_owned());
+            let mut desc = source.desc;
+            desc.flags = desc.flags.union(flags);
+            desc.sanitize_in_place();
+            let material_name = source.name.clone().unwrap_or_else(|| name.to_owned());
+            return mats.upsert_named_with_textures(&material_name, desc, source.textures);
+        }
+    }
+
+    let source = material_source_from_parts(
         name,
         MaterialDescriptor {
             base_color,
@@ -122,7 +174,9 @@ fn register_material(
             ..MaterialDescriptor::default()
         },
         material_textures(spec),
-    )
+    );
+    let material_name = source.name.clone().unwrap_or_else(|| name.to_owned());
+    mats.upsert_named_with_textures(&material_name, source.desc, source.textures)
 }
 
 #[inline]
@@ -197,6 +251,7 @@ fn configure_game_ready_lighting(world: &mut newengine_ecs::World, spec: &GameRe
 
 fn spawn_procedural_terrain(
     world: &mut newengine_ecs::World,
+    mats: &MaterialRegistry,
     root: EntityId,
     material: MaterialId,
     spec: &GameReadyTerrainSpec,
@@ -251,7 +306,7 @@ fn spawn_procedural_terrain(
     let _ = world.insert(entity, Transform::default());
     let _ = world.insert(entity, terrain);
     let _ = world.insert(entity, bounds);
-    let _ = world.insert(entity, MaterialRef { id: material });
+    let _ = apply_exact_material(world, mats, entity, material, material, color);
     entity
 }
 
@@ -514,7 +569,7 @@ fn spawn_skydome(
             color,
         },
     );
-    let _ = world.insert(sky, MaterialRef { id: materials.sky });
+    let _ = apply_exact_material(world, mats, sky, materials.sky, materials.sky, color);
 }
 
 fn to_fps_demo_rules(spec: &GameReadyGameplaySpec) -> FpsDemoRules {
@@ -565,7 +620,7 @@ pub(super) fn bootstrap_fps_game_ready_scene(
 
     configure_game_ready_lighting(world, &map.lighting);
 
-    let terrain = spawn_procedural_terrain(world, root, materials.terrain, &map.terrain, map.palette.terrain);
+    let terrain = spawn_procedural_terrain(world, mats, root, materials.terrain, &map.terrain, map.palette.terrain);
     spawn_terrain_collision_tiles(world, root, terrain, &map.terrain);
     spawn_skydome(world, prims, mats, materials, root, &map.sky, map.palette.sky);
 

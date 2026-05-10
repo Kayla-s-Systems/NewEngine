@@ -56,7 +56,8 @@
       ],
       "roughness": 0.92,
       "normal_scale": 1.15,
-      "occlusion_strength": 0.95
+      "occlusion_strength": 0.95,
+      "asset": "materials/fps/terrain_forest_floor.material.json"
     },
     "sky": {
       "roughness": 1.0,

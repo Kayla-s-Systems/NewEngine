@@ -18,6 +18,7 @@ pub trait RenderApi: Send {
     fn create_render_target(&mut self, desc: RenderTargetDesc) -> EngineResult<RenderTargetId>;
     fn destroy_render_target(&mut self, id: RenderTargetId);
     fn render_target_ui_tex_id(&self, id: RenderTargetId) -> EngineResult<UiTexId>;
+    fn render_target_color_texture_id(&self, id: RenderTargetId) -> EngineResult<TextureId>;
 
     fn begin_render_target(&mut self, desc: BeginRenderTargetDesc) -> EngineResult<()>;
     fn end_render_target(&mut self) -> EngineResult<()>;

@@ -21,18 +21,10 @@ layout(set = 0, binding = 0, std140) uniform Ubo {
     vec4 u_shadow_params;
 } ubo;
 
-layout(location = 0) out vec3 v_wpos;
-layout(location = 1) out vec3 v_wnrm;
-layout(location = 2) out vec4 v_base;
-layout(location = 3) out vec2 v_uv;
-layout(location = 4) out vec4 v_light_clip;
+layout(location = 0) out float v_depth;
 
 void main() {
-    vec4 wpos4 = ubo.u_model * vec4(a_pos, 1.0);
-    v_wpos = wpos4.xyz;
-    v_wnrm = mat3(ubo.u_model) * a_nrm;
-    v_base = ubo.u_base_color;
-    v_uv = a_uv * ubo.u_uv_transform.xy + ubo.u_uv_transform.zw;
-    v_light_clip = ubo.u_light_mvp * wpos4;
-    gl_Position = ubo.u_mvp * vec4(a_pos, 1.0);
+    vec4 clip = ubo.u_mvp * vec4(a_pos, 1.0);
+    gl_Position = clip;
+    v_depth = clamp(clip.z / max(clip.w, 1.0e-6), 0.0, 1.0);
 }

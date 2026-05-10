@@ -88,6 +88,10 @@ pub(super) fn load_rgba_texture_asset(rel: &str) -> CoreResult<(Extent2D, Vec<u8
 #[inline]
 fn builtin_text_asset(rel: &str) -> Option<&'static str> {
     match rel {
+        "shaders/editor_lit_shadowed_v3.vert" => Some(BUILTIN_EDITOR_LIT_VERT),
+        "shaders/editor_lit_shadowed_v3.frag" => Some(BUILTIN_EDITOR_LIT_FRAG),
+        "shaders/editor_shadow_depth_v1.vert" => Some(BUILTIN_EDITOR_SHADOW_DEPTH_VERT),
+        "shaders/editor_shadow_depth_v1.frag" => Some(BUILTIN_EDITOR_SHADOW_DEPTH_FRAG),
         "shaders/editor_lit_v2.vert" => Some(BUILTIN_EDITOR_LIT_VERT),
         "shaders/editor_lit_v2.frag" => Some(BUILTIN_EDITOR_LIT_FRAG),
         "shaders/editor_grid.vert" => Some(BUILTIN_EDITOR_GRID_VERT),
@@ -117,12 +121,15 @@ layout(set = 0, binding = 0, std140) uniform Ubo {
     vec4 u_point_count_pad;
     vec4 u_uv_transform;
     vec4 u_material_params;
+    mat4 u_light_mvp;
+    vec4 u_shadow_params;
 } ubo;
 
 layout(location = 0) out vec3 v_wpos;
 layout(location = 1) out vec3 v_wnrm;
 layout(location = 2) out vec4 v_base;
 layout(location = 3) out vec2 v_uv;
+layout(location = 4) out vec4 v_light_clip;
 
 void main() {
     vec4 wpos4 = ubo.u_model * vec4(a_pos, 1.0);
@@ -130,6 +137,7 @@ void main() {
     v_wnrm = mat3(ubo.u_model) * a_nrm;
     v_base = ubo.u_base_color;
     v_uv = a_uv * ubo.u_uv_transform.xy + ubo.u_uv_transform.zw;
+    v_light_clip = ubo.u_light_mvp * wpos4;
     gl_Position = ubo.u_mvp * vec4(a_pos, 1.0);
 }
 "#;
@@ -140,6 +148,7 @@ layout(location = 0) in vec3 v_wpos;
 layout(location = 1) in vec3 v_wnrm;
 layout(location = 2) in vec4 v_base;
 layout(location = 3) in vec2 v_uv;
+layout(location = 4) in vec4 v_light_clip;
 
 layout(set = 0, binding = 0, std140) uniform Ubo {
     mat4 u_mvp;
@@ -154,11 +163,14 @@ layout(set = 0, binding = 0, std140) uniform Ubo {
     vec4 u_point_count_pad;
     vec4 u_uv_transform;
     vec4 u_material_params;
+    mat4 u_light_mvp;
+    vec4 u_shadow_params;
 } ubo;
 layout(set = 0, binding = 1) uniform texture2D u_base_tex;
 layout(set = 0, binding = 2) uniform texture2D u_normal_tex;
 layout(set = 0, binding = 3) uniform texture2D u_roughness_tex;
-layout(set = 0, binding = 4) uniform sampler u_material_sampler;
+layout(set = 0, binding = 4) uniform texture2D u_shadow_tex;
+layout(set = 0, binding = 5) uniform sampler u_material_sampler;
 
 layout(location = 0) out vec4 o_color;
 
@@ -173,6 +185,39 @@ mat3 cotangent_frame(vec3 n, vec3 p, vec2 uv) {
     vec3 b = dp2perp * duv1.y + dp1perp * duv2.y;
     float invmax = inversesqrt(max(dot(t, t), dot(b, b)) + 1.0e-8);
     return mat3(t * invmax, b * invmax, n);
+}
+
+float sample_shadow(vec4 light_clip, vec3 nrm, vec3 light_dir_to_scene) {
+    if (ubo.u_shadow_params.x < 0.5 || light_clip.w <= 0.0) {
+        return 1.0;
+    }
+
+    vec3 ndc = light_clip.xyz / light_clip.w;
+    vec2 uv = ndc.xy * 0.5 + 0.5;
+    if (uv.x < 0.001 || uv.x > 0.999 || uv.y < 0.001 || uv.y > 0.999) {
+        return 1.0;
+    }
+
+    float current = ndc.z;
+    if (current < 0.0 || current > 1.0) {
+        return 1.0;
+    }
+
+    float slope = 1.0 - max(dot(normalize(nrm), normalize(-light_dir_to_scene)), 0.0);
+    float bias = ubo.u_shadow_params.y + slope * ubo.u_shadow_params.w;
+    float strength = clamp(ubo.u_shadow_params.z, 0.0, 1.0);
+
+    ivec2 sz = textureSize(sampler2D(u_shadow_tex, u_material_sampler), 0);
+    vec2 texel = 1.0 / vec2(max(sz.x, 1), max(sz.y, 1));
+    float lit = 0.0;
+    for (int y = -1; y <= 1; ++y) {
+        for (int x = -1; x <= 1; ++x) {
+            float closest = texture(sampler2D(u_shadow_tex, u_material_sampler), uv + vec2(x, y) * texel).r;
+            lit += (current - bias <= closest) ? 1.0 : 0.0;
+        }
+    }
+    lit /= 9.0;
+    return mix(1.0 - strength, 1.0, lit);
 }
 
 void main() {
@@ -192,7 +237,8 @@ void main() {
     vec3 Ld = normalize(-ubo.u_dir_dir_intensity.xyz);
     float NdL = max(dot(N, Ld), 0.0);
     float rough_diffuse = mix(1.12, 0.82, roughness);
-    lit += NdL * rough_diffuse * ubo.u_dir_color.rgb * ubo.u_dir_dir_intensity.w;
+    float shadow = sample_shadow(v_light_clip, N, ubo.u_dir_dir_intensity.xyz);
+    lit += shadow * NdL * rough_diffuse * ubo.u_dir_color.rgb * ubo.u_dir_dir_intensity.w;
 
     int point_count = int(ubo.u_point_count_pad.x + 0.5);
     for (int i = 0; i < point_count && i < 4; ++i) {
@@ -210,6 +256,45 @@ void main() {
 }
 "#;
 
+const BUILTIN_EDITOR_SHADOW_DEPTH_VERT: &str = r#"#version 450
+
+layout(location = 0) in vec3 a_pos;
+layout(location = 1) in vec3 a_nrm;
+layout(location = 2) in vec2 a_uv;
+
+layout(set = 0, binding = 0, std140) uniform Ubo {
+    mat4 u_mvp;
+    mat4 u_model;
+    vec4 u_base_color;
+    vec4 u_emissive;
+    vec4 u_ambient;
+    vec4 u_dir_dir_intensity;
+    vec4 u_dir_color;
+    vec4 u_point_pos_range[4];
+    vec4 u_point_color_intensity[4];
+    vec4 u_point_count_pad;
+    vec4 u_uv_transform;
+    vec4 u_material_params;
+    mat4 u_light_mvp;
+    vec4 u_shadow_params;
+} ubo;
+
+layout(location = 0) out float v_depth;
+
+void main() {
+    vec4 clip = ubo.u_mvp * vec4(a_pos, 1.0);
+    gl_Position = clip;
+    v_depth = clamp(clip.z / max(clip.w, 1.0e-6), 0.0, 1.0);
+}
+"#;
+
+const BUILTIN_EDITOR_SHADOW_DEPTH_FRAG: &str = r#"#version 450
+layout(location = 0) in float v_depth;
+layout(location = 0) out vec4 o_color;
+void main() {
+    o_color = vec4(v_depth, v_depth, v_depth, 1.0);
+}
+"#;
 
 const BUILTIN_EDITOR_GRID_VERT: &str = r#"#version 450
 
@@ -272,8 +357,14 @@ pub(super) struct LitPipeline {
     pub vs: newengine_core::render::ShaderId,
     #[allow(dead_code)]
     pub fs: newengine_core::render::ShaderId,
+    #[allow(dead_code)]
+    pub shadow_vs: newengine_core::render::ShaderId,
+    #[allow(dead_code)]
+    pub shadow_fs: newengine_core::render::ShaderId,
     pub pipeline: newengine_core::render::PipelineId,
     pub double_sided_pipeline: newengine_core::render::PipelineId,
+    pub shadow_pipeline: newengine_core::render::PipelineId,
+    pub shadow_double_sided_pipeline: newengine_core::render::PipelineId,
 }
 
 // std140 layout (see assets/shaders/editor_lit.*):
@@ -288,8 +379,10 @@ pub(super) struct LitPipeline {
 // vec4 point_count_pad (16)
 // vec4 uv_transform (16)
 // vec4 material_params (16)
-// Total: 384 bytes.
-pub(super) const LIT_UBO_SIZE: u64 = 384;
+// mat4 light_mvp (64)
+// vec4 shadow_params (16)
+// Total: 464 bytes.
+pub(super) const LIT_UBO_SIZE: u64 = 464;
 
 #[derive(Clone, Copy)]
 pub(super) struct PrimitiveGpu {
@@ -343,11 +436,15 @@ pub(super) fn ensure_lit_pipeline(
     if let Some(p) = *cached {
         return Ok(p);
     }
-    let vs_src = load_text_asset("shaders/editor_lit_v2.vert")?;
-    let fs_src = load_text_asset("shaders/editor_lit_v2.frag")?;
+    let vs_src = load_text_asset("shaders/editor_lit_shadowed_v3.vert")?;
+    let fs_src = load_text_asset("shaders/editor_lit_shadowed_v3.frag")?;
+    let shadow_vs_src = load_text_asset("shaders/editor_shadow_depth_v1.vert")?;
+    let shadow_fs_src = load_text_asset("shaders/editor_shadow_depth_v1.frag")?;
 
-    let vs_spv = compile_glsl(ShaderStage::Vertex, "editor_lit_v2.vert", &vs_src)?;
-    let fs_spv = compile_glsl(ShaderStage::Fragment, "editor_lit_v2.frag", &fs_src)?;
+    let vs_spv = compile_glsl(ShaderStage::Vertex, "editor_lit_shadowed_v3.vert", &vs_src)?;
+    let fs_spv = compile_glsl(ShaderStage::Fragment, "editor_lit_shadowed_v3.frag", &fs_src)?;
+    let shadow_vs_spv = compile_glsl(ShaderStage::Vertex, "editor_shadow_depth_v1.vert", &shadow_vs_src)?;
+    let shadow_fs_spv = compile_glsl(ShaderStage::Fragment, "editor_shadow_depth_v1.frag", &shadow_fs_src)?;
 
     // Allocate GPU resources only after shader baking succeeds. Runtime shader
     // compilation is still optional during startup; a local glslc crash must not
@@ -360,6 +457,7 @@ pub(super) fn ensure_lit_pipeline(
     let bgl = r.create_bind_group_layout(
         BindGroupLayoutDesc::new(vec![
             BindingKind::UniformBuffer,
+            BindingKind::Texture2D,
             BindingKind::Texture2D,
             BindingKind::Texture2D,
             BindingKind::Texture2D,
@@ -398,6 +496,7 @@ pub(super) fn ensure_lit_pipeline(
             .with_texture0(white_texture)
             .with_texture1(flat_normal_texture)
             .with_texture2(white_texture)
+            .with_texture3(white_texture)
             .with_sampler0(clamp_sampler),
     )?;
 
@@ -406,6 +505,12 @@ pub(super) fn ensure_lit_pipeline(
     )?;
     let fs = r.create_shader(
         ShaderDesc::new(ShaderStage::Fragment, "main", fs_spv).with_label("editor_lit_fs"),
+    )?;
+    let shadow_vs = r.create_shader(
+        ShaderDesc::new(ShaderStage::Vertex, "main", shadow_vs_spv).with_label("editor_shadow_depth_vs"),
+    )?;
+    let shadow_fs = r.create_shader(
+        ShaderDesc::new(ShaderStage::Fragment, "main", shadow_fs_spv).with_label("editor_shadow_depth_fs"),
     )?;
 
     let stride = std::mem::size_of::<PrimitiveVertex>() as u32;
@@ -431,6 +536,25 @@ pub(super) fn ensure_lit_pipeline(
         PipelineDesc::new(vs, fs, TextureFormat::Bgra8Unorm)
             .with_label("editor_lit_pipeline_double_sided")
             .with_topology(PrimitiveTopology::TriangleList)
+            .with_vertex_layouts(vec![layout.clone()])
+            .with_bind_group_layouts(vec![bgl])
+            .with_depth(TextureFormat::Depth32Float)
+            .with_cull_mode(RasterCullMode::None),
+    )?;
+
+    let shadow_pipeline = r.create_pipeline(
+        PipelineDesc::new(shadow_vs, shadow_fs, TextureFormat::Bgra8Unorm)
+            .with_label("editor_shadow_depth_pipeline")
+            .with_topology(PrimitiveTopology::TriangleList)
+            .with_vertex_layouts(vec![layout.clone()])
+            .with_bind_group_layouts(vec![bgl])
+            .with_depth(TextureFormat::Depth32Float),
+    )?;
+
+    let shadow_double_sided_pipeline = r.create_pipeline(
+        PipelineDesc::new(shadow_vs, shadow_fs, TextureFormat::Bgra8Unorm)
+            .with_label("editor_shadow_depth_pipeline_double_sided")
+            .with_topology(PrimitiveTopology::TriangleList)
             .with_vertex_layouts(vec![layout])
             .with_bind_group_layouts(vec![bgl])
             .with_depth(TextureFormat::Depth32Float)
@@ -447,8 +571,12 @@ pub(super) fn ensure_lit_pipeline(
         clamp_sampler,
         vs,
         fs,
+        shadow_vs,
+        shadow_fs,
         pipeline,
         double_sided_pipeline,
+        shadow_pipeline,
+        shadow_double_sided_pipeline,
     };
 
     *cached = Some(p);

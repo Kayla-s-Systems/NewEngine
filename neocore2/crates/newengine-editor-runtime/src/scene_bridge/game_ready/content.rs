@@ -80,6 +80,7 @@ pub(super) struct GameReadyMaterialSetSpec {
 
 #[derive(Clone, Debug)]
 pub(super) struct GameReadyMaterialSpec {
+    pub(super) asset: Option<String>,
     pub(super) base_color_texture: Option<String>,
     pub(super) normal_texture: Option<String>,
     pub(super) roughness_texture: Option<String>,
@@ -428,6 +429,8 @@ impl Default for RawMaterialSetSpec {
 #[derive(Debug, Clone, Deserialize)]
 struct RawMaterialSpec {
     #[serde(default)]
+    asset: Option<String>,
+    #[serde(default)]
     base_color_texture: Option<String>,
     #[serde(default)]
     normal_texture: Option<String>,
@@ -448,6 +451,7 @@ struct RawMaterialSpec {
 impl Default for RawMaterialSpec {
     fn default() -> Self {
         Self {
+            asset: None,
             base_color_texture: None,
             normal_texture: None,
             roughness_texture: None,
@@ -793,6 +797,7 @@ fn sanitize_vec2(mut v: [f32; 2], fallback: [f32; 2]) -> [f32; 2] {
 #[inline]
 fn sanitize_material_spec(raw: RawMaterialSpec) -> GameReadyMaterialSpec {
     GameReadyMaterialSpec {
+        asset: sanitize_texture_path(raw.asset),
         base_color_texture: sanitize_texture_path(raw.base_color_texture),
         normal_texture: sanitize_texture_path(raw.normal_texture),
         roughness_texture: sanitize_texture_path(raw.roughness_texture),
@@ -913,6 +918,7 @@ fn default_shadow_normal_bias() -> f32 { 0.015 }
 fn default_shadow_contact_strength() -> f32 { 0.35 }
 fn default_terrain_material() -> RawMaterialSpec {
     RawMaterialSpec {
+        asset: Some("materials/fps/terrain_forest_floor.material.json".to_owned()),
         base_color_texture: Some("textures/fps/terrain_forest_floor.jpg".to_owned()),
         normal_texture: Some("textures/fps/terrain_forest_floor_normal.jpg".to_owned()),
         roughness_texture: Some("textures/fps/terrain_forest_floor_roughness.jpg".to_owned()),

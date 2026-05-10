@@ -1,11 +1,11 @@
 #![forbid(unsafe_op_in_unsafe_fn)]
 
-use newengine_materials::api::{MaterialAssetDocument, MaterialRegistryApi, MaterialTextureBindings};
+use newengine_materials::api::{MaterialRegistryApi, MaterialTextureBindings};
 use newengine_materials::binary::{
     decode_asset as decode_material_asset, encode_asset as encode_material_asset, MaterialBinaryAsset,
 };
 use newengine_materials::serde as mat_serde;
-use newengine_materials::{MaterialDescriptor, MaterialRegistry};
+use newengine_materials::{parse_material_source_json, MaterialDescriptor, MaterialRegistry};
 
 use parking_lot::RwLock;
 use std::sync::Arc;
@@ -180,18 +180,20 @@ impl MaterialPipeline {
 
         // Compile from JSON.
         let json = std::str::from_utf8(&bytes).ok()?;
-        let doc = if let Ok(doc) = serde_json::from_str::<MaterialAssetDocument>(json) {
-            doc.sanitized()
+        let source = if let Ok(source) = parse_material_source_json(json) {
+            source.with_fallback_name(name.clone())
         } else {
             let mut desc = mat_serde::from_json(json).ok()?;
             desc.sanitize_in_place();
-            MaterialAssetDocument {
+            newengine_materials::MaterialSourceDocument::new(
+                Some(name.clone()),
                 desc,
-                textures: MaterialTextureBindings::default(),
-            }
+                MaterialTextureBindings::default(),
+            )
         };
-        let desc = doc.desc;
-        let textures = doc.textures.clone();
+        let name = source.name.unwrap_or(name);
+        let desc = source.desc;
+        let textures = source.textures.clone();
 
         // Best-effort cache write.
         let _ = std::fs::create_dir_all(&self.cache_dir);
