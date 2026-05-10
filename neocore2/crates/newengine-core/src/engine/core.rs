@@ -10,11 +10,12 @@ use newengine_plugin_host::{
 use newengine_math::{register_engine_builtins, MathRegistry};
 
 use std::any::Any;
-use std::collections::HashSet;
+use newengine_math::collections_prelude::NeHashSet as HashSet;
 use std::path::PathBuf;
 use std::time::Instant;
 
 use super::module_slot::ModuleSlot;
+use super::startup_graph::StartupReadinessGraph;
 use super::{EngineConfig, ModuleFaultTolerance, PluginFaultTolerance};
 
 pub struct Engine<E: Send + 'static> {
@@ -31,6 +32,7 @@ pub struct Engine<E: Send + 'static> {
 
     pub(super) events: EventHub,
     pub(super) scheduler: Scheduler,
+    pub(super) startup_graph: StartupReadinessGraph,
 
     pub(super) plugins: PluginManager,
     pub(super) plugins_loaded: bool,
@@ -122,12 +124,13 @@ impl<E: Send + 'static> Engine<E> {
             modules: Vec::new(),
             module_fault_tolerance: config.module_fault_tolerance,
             plugin_fault_tolerance: config.plugin_fault_tolerance,
-            module_ids: HashSet::new(),
+            module_ids: HashSet::default(),
 
             resources,
             bus,
             events: EventHub::new(),
             scheduler: Scheduler::new(),
+            startup_graph: StartupReadinessGraph::default(),
 
             plugins: PluginManager::new(),
             plugins_loaded: false,

@@ -5,6 +5,7 @@ use std::path::{Path, PathBuf};
 use libloading::Library;
 
 use super::graph::{DiscoveryGraph, ScannedDynlib, ScannedDynlibKind};
+use super::manifest::PluginManifest;
 use super::metadata::{
     build_scanned_plugin_kind, infer_render_backend_identity, platform_runtime_identity_from_probe,
     probe_plugin_metadata, PLATFORM_RUNTIME_SYMBOL, RENDER_BACKEND_SYMBOL,
@@ -19,9 +20,12 @@ pub(super) fn scan_plugins_dir(dir: &Path) -> Result<DiscoveryGraph, PluginLoadE
         message: format!("read_dir failed: {e}"),
     })?;
 
+    let manifest = PluginManifest::load_from_plugins_dir(dir);
+
     let mut entries_total: usize = 0;
     let mut skipped_non_dynlib: usize = 0;
     let mut dynlib_paths: Vec<PathBuf> = Vec::new();
+    let mut scan_errors: Vec<String> = Vec::new();
 
     for ent in rd {
         entries_total = entries_total.saturating_add(1);
@@ -40,13 +44,21 @@ pub(super) fn scan_plugins_dir(dir: &Path) -> Result<DiscoveryGraph, PluginLoadE
         dynlib_paths.push(path);
     }
 
+    // Importer worker DLLs are private to AssetManager.
+    // The plugin host must not scan plugins/importers as runtime plugins.
+
     dynlib_paths.sort_by(|a, b| sort_key(a).cmp(&sort_key(b)));
 
     let mut items: Vec<ScannedDynlib> = Vec::with_capacity(dynlib_paths.len());
-    let mut scan_errors: Vec<String> = Vec::new();
+
+    if let Some(manifest) = &manifest {
+        for missing in manifest.required_entries_missing_from(&dynlib_paths) {
+            scan_errors.push(format!("manifest missing required plugin: {missing}"));
+        }
+    }
 
     for path in dynlib_paths {
-        match scan_dynamic_lib(&path) {
+        match scan_dynamic_lib(&path, manifest.as_ref()) {
             Ok(v) => items.push(v),
             Err(e) => {
                 log::warn!("plugins: scan failed for '{}': {}", display_clean(&path), e);
@@ -100,8 +112,9 @@ pub(super) fn scan_plugins_dir(dir: &Path) -> Result<DiscoveryGraph, PluginLoadE
     })
 }
 
-fn scan_dynamic_lib(path: &Path) -> Result<ScannedDynlib, String> {
+fn scan_dynamic_lib(path: &Path, manifest: Option<&PluginManifest>) -> Result<ScannedDynlib, String> {
     let file_name = file_name_only(path);
+    let manifest_entry = manifest.and_then(|m| m.match_file_name(&file_name));
     let lib = unsafe { Library::new(path) }.map_err(|e| format!("Library::new failed: {e}"))?;
     let plugin_probe = probe_plugin_metadata(&lib)?;
 
@@ -118,6 +131,7 @@ fn scan_dynamic_lib(path: &Path) -> Result<ScannedDynlib, String> {
         unsafe { lib.get::<unsafe extern "C" fn()>(RENDER_BACKEND_SYMBOL) }.is_ok();
 
     if let Some(kind) = build_scanned_plugin_kind(&plugin_probe) {
+        let kind = apply_manifest_overlay(kind, manifest_entry);
         return Ok(ScannedDynlib {
             path: path.to_path_buf(),
             file_name,
@@ -139,6 +153,61 @@ fn scan_dynamic_lib(path: &Path) -> Result<ScannedDynlib, String> {
         file_name,
         kind: ScannedDynlibKind::Unknown,
     })
+}
+
+fn apply_manifest_overlay(
+    kind: ScannedDynlibKind,
+    manifest_entry: Option<&super::manifest::ManifestPluginEntry>,
+) -> ScannedDynlibKind {
+    let Some(entry) = manifest_entry else {
+        return kind;
+    };
+
+    match kind {
+        ScannedDynlibKind::Plugin {
+            id,
+            version,
+            phase,
+            descriptor_kind,
+            declared_capabilities,
+        } => {
+            let manifest_id = entry.id.trim();
+            let id = if id == "<unknown-plugin>" && !manifest_id.is_empty() {
+                manifest_id.to_owned()
+            } else {
+                if !manifest_id.is_empty() && manifest_id != id {
+                    log::warn!(
+                        "plugins: manifest id '{}' does not match plugin descriptor id '{}'",
+                        manifest_id,
+                        id
+                    );
+                }
+                id
+            };
+
+            // Deployment manifest is allowed to override host load phase and kind.
+            // The descriptor still remains the source of truth for capabilities.
+            let phase = if entry.phase.trim().is_empty() {
+                phase
+            } else {
+                entry.phase_value()
+            };
+            let descriptor_kind = if entry.kind.trim().is_empty() {
+                descriptor_kind
+            } else {
+                Some(entry.kind_value())
+            };
+
+            ScannedDynlibKind::Plugin {
+                id,
+                version,
+                phase,
+                descriptor_kind,
+                declared_capabilities,
+            }
+        }
+        other => other,
+    }
 }
 
 #[inline]

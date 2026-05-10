@@ -1,6 +1,6 @@
 #![forbid(unsafe_op_in_unsafe_fn)]
 
-use std::collections::VecDeque;
+use newengine_math::collections_prelude::NeVecDeque as VecDeque;
 use std::path::PathBuf;
 
 /// Host-side plugin control command.

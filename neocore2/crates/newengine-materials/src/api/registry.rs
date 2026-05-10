@@ -1,4 +1,4 @@
-use crate::api::{MaterialDescriptor, MaterialId};
+use crate::api::{MaterialDescriptor, MaterialId, MaterialResolved, MaterialTextureBindings};
 
 /// A snapshot item for editor UI (stable order).
 #[derive(Clone, Debug, PartialEq)]
@@ -21,5 +21,7 @@ pub trait MaterialProvider: Send + Sync {
 pub trait MaterialRegistryApi: Send + Sync {
     fn snapshot(&self) -> Vec<MaterialSnapshotItem>;
     fn get(&self, id: MaterialId) -> Option<MaterialDescriptor>;
+    fn textures(&self, id: MaterialId) -> Option<MaterialTextureBindings>;
+    fn resolve(&self, id: MaterialId) -> Option<MaterialResolved>;
     fn name(&self, id: MaterialId) -> Option<String>;
 }

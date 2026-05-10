@@ -1,7 +1,7 @@
 use crate::api::{
     bump_id, material_id_from_name, material_instance_id, MaterialDescriptor, MaterialId,
     MaterialInstanceDesc, MaterialOverrides, MaterialProvider, MaterialRegistryApi,
-    MaterialSnapshotItem,
+    MaterialResolved, MaterialSnapshotItem, MaterialTextureBindings,
 };
 use crate::errors::{MaterialError, MaterialResult};
 use parking_lot::RwLock;
@@ -11,6 +11,7 @@ use std::sync::Arc;
 enum EntryKind {
     Asset {
         desc: MaterialDescriptor,
+        textures: MaterialTextureBindings,
     },
     Instance {
         base: MaterialId,
@@ -25,11 +26,6 @@ struct Entry {
     kind: EntryKind,
 }
 
-/// Deterministic material registry.
-///
-/// - Stable ids derived from names (FNV-1a 64) with deterministic collision resolution.
-/// - Stable iteration order: insertion order.
-/// - Thread-safe via `Arc<RwLock<_>>`.
 #[derive(Clone, Default)]
 pub struct MaterialRegistry {
     inner: Arc<RwLock<Vec<Entry>>>,
@@ -41,7 +37,6 @@ impl MaterialRegistry {
         Self::default()
     }
 
-    /// Create a registry pre-populated with built-in materials.
     #[inline]
     pub fn with_builtins() -> Self {
         let reg = Self::new();
@@ -49,17 +44,21 @@ impl MaterialRegistry {
         reg
     }
 
-    /// Returns ids in stable insertion order.
     #[inline]
     pub fn ids(&self) -> Vec<MaterialId> {
         self.inner.read().iter().map(|e| e.id).collect()
     }
 
-    /// Register a material descriptor by name.
-    ///
-    /// If a material with the same name already exists, returns its existing id.
     pub fn register_named(&self, name: &str, desc: MaterialDescriptor) -> MaterialId {
-        // Fast path: already registered by name.
+        self.register_named_with_textures(name, desc, MaterialTextureBindings::default())
+    }
+
+    pub fn register_named_with_textures(
+        &self,
+        name: &str,
+        mut desc: MaterialDescriptor,
+        textures: MaterialTextureBindings,
+    ) -> MaterialId {
         {
             let v = self.inner.read();
             if let Some(e) = v.iter().find(|e| e.name == name) {
@@ -67,6 +66,8 @@ impl MaterialRegistry {
             }
         }
 
+        desc.sanitize_in_place();
+        let textures = textures.sanitized();
         let mut id = material_id_from_name(name);
 
         let mut v = self.inner.write();
@@ -77,27 +78,34 @@ impl MaterialRegistry {
         v.push(Entry {
             id,
             name: name.to_string(),
-            kind: EntryKind::Asset { desc },
+            kind: EntryKind::Asset { desc, textures },
         });
 
         id
     }
 
-    /// Upsert a material descriptor by name.
-    ///
-    /// - If an asset with the same name exists, updates its descriptor and returns its id.
-    /// - If an instance exists with the same name, returns its id unchanged.
     pub fn upsert_named(&self, name: &str, desc: MaterialDescriptor) -> MaterialId {
+        self.upsert_named_with_textures(name, desc, MaterialTextureBindings::default())
+    }
+
+    pub fn upsert_named_with_textures(
+        &self,
+        name: &str,
+        mut desc: MaterialDescriptor,
+        textures: MaterialTextureBindings,
+    ) -> MaterialId {
+        desc.sanitize_in_place();
+        let textures = textures.sanitized();
         {
             let mut v = self.inner.write();
             if let Some(e) = v.iter_mut().find(|e| e.name == name) {
                 match &mut e.kind {
-                    EntryKind::Asset { desc: cur } => {
-                        {
-                            let mut d = desc;
-                            d.sanitize_in_place();
-                            *cur = d;
-                        }
+                    EntryKind::Asset {
+                        desc: cur,
+                        textures: cur_tex,
+                    } => {
+                        *cur = desc;
+                        *cur_tex = textures;
                     }
                     EntryKind::Instance { .. } => {}
                 }
@@ -105,56 +113,64 @@ impl MaterialRegistry {
             }
         }
 
-        self.register_named(name, desc)
+        self.register_named_with_textures(name, desc, textures)
     }
 
-
-    /// Register a provider output.
     #[inline]
     pub fn register_provider(&self, provider: &dyn MaterialProvider) -> MaterialId {
         self.register_named(provider.name(), provider.descriptor())
     }
 
-    /// Update descriptor for a specific id.
-    pub fn set_desc(&self, id: MaterialId, desc: MaterialDescriptor) -> MaterialResult<()> {
-        if !id.is_valid() {
+    pub fn set_desc(&self, id: MaterialId, mut desc: MaterialDescriptor) -> MaterialResult<()> {
+        if !id.is_valid() || id.is_instance() {
             return Err(MaterialError::InvalidId);
         }
 
-        if id.is_instance() {
-            return Err(MaterialError::InvalidId);
-        }
-
+        desc.sanitize_in_place();
         let mut v = self.inner.write();
         let Some(e) = v.iter_mut().find(|e| e.id == id) else {
             return Err(MaterialError::NotFound);
         };
 
         match &mut e.kind {
-            EntryKind::Asset { desc: cur } => {
-                {
-                    let mut d = desc;
-                    d.sanitize_in_place();
-                    *cur = d;
-                }
+            EntryKind::Asset { desc: cur, .. } => {
+                *cur = desc;
+                Ok(())
             }
-            EntryKind::Instance { .. } => {
-                return Err(MaterialError::InvalidId);
-            }
+            EntryKind::Instance { .. } => Err(MaterialError::InvalidId),
         }
-        Ok(())
     }
 
-    /// Register a deterministic instance for an existing base material.
-    ///
-    /// If an instance with the same name already exists, returns its existing id.
+    pub fn set_textures(
+        &self,
+        id: MaterialId,
+        textures: MaterialTextureBindings,
+    ) -> MaterialResult<()> {
+        if !id.is_valid() || id.is_instance() {
+            return Err(MaterialError::InvalidId);
+        }
+
+        let textures = textures.sanitized();
+        let mut v = self.inner.write();
+        let Some(e) = v.iter_mut().find(|e| e.id == id) else {
+            return Err(MaterialError::NotFound);
+        };
+
+        match &mut e.kind {
+            EntryKind::Asset { textures: cur, .. } => {
+                *cur = textures;
+                Ok(())
+            }
+            EntryKind::Instance { .. } => Err(MaterialError::InvalidId),
+        }
+    }
+
     pub fn register_instance_named(
         &self,
         base: MaterialId,
         name: &str,
         overrides: MaterialOverrides,
     ) -> MaterialId {
-        // Fast path by name.
         {
             let v = self.inner.read();
             if let Some(e) = v.iter().find(|e| e.name == name) {
@@ -178,10 +194,6 @@ impl MaterialRegistry {
         id
     }
 
-    /// Upsert a deterministic instance by name.
-    ///
-    /// If an instance with the same name already exists, its base and overrides are updated.
-    /// If an asset exists with the same name, its id is returned unchanged.
     pub fn upsert_instance_named(
         &self,
         base: MaterialId,
@@ -204,14 +216,11 @@ impl MaterialRegistry {
         self.register_instance_named(base, name, overrides)
     }
 
-
-    /// Register an instance by descriptor.
     #[inline]
     pub fn register_instance(&self, name: &str, inst: MaterialInstanceDesc) -> MaterialId {
         self.register_instance_named(inst.base, name, inst.overrides)
     }
 
-    /// Update overrides for a specific instance id.
     pub fn set_instance_overrides(
         &self,
         id: MaterialId,
@@ -235,7 +244,6 @@ impl MaterialRegistry {
         }
     }
 
-    /// Deterministic remove.
     pub fn remove(&self, id: MaterialId) -> MaterialResult<()> {
         if !id.is_valid() {
             return Err(MaterialError::InvalidId);
@@ -269,19 +277,35 @@ impl MaterialRegistryApi for MaterialRegistry {
 
     #[inline]
     fn get(&self, id: MaterialId) -> Option<MaterialDescriptor> {
+        self.resolve(id).map(|v| v.desc)
+    }
+
+    #[inline]
+    fn textures(&self, id: MaterialId) -> Option<MaterialTextureBindings> {
+        self.resolve(id).map(|v| v.textures)
+    }
+
+    #[inline]
+    fn resolve(&self, id: MaterialId) -> Option<MaterialResolved> {
         let v = self.inner.read();
         let e = v.iter().find(|e| e.id == id)?;
         match &e.kind {
-            EntryKind::Asset { desc } => Some(*desc),
+            EntryKind::Asset { desc, textures } => Some(MaterialResolved {
+                id: e.id,
+                desc: *desc,
+                textures: textures.clone(),
+            }),
             EntryKind::Instance { base, overrides } => {
-                let base_desc = v
-                    .iter()
-                    .find(|x| x.id == *base)
-                    .and_then(|x| match &x.kind {
-                        EntryKind::Asset { desc } => Some(*desc),
-                        _ => None,
-                    })?;
-                Some(overrides.apply_to(base_desc))
+                let base_e = v.iter().find(|x| x.id == *base)?;
+                let (base_desc, base_textures) = match &base_e.kind {
+                    EntryKind::Asset { desc, textures } => (*desc, textures.clone()),
+                    _ => return None,
+                };
+                Some(MaterialResolved {
+                    id: e.id,
+                    desc: overrides.apply_to(base_desc),
+                    textures: base_textures,
+                })
             }
         }
     }

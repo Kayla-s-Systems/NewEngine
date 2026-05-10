@@ -2,7 +2,7 @@
 
 use crate::path_fmt::{canonicalize_if_exists, display_clean};
 use crate::system_info::SystemInfo;
-use std::collections::VecDeque;
+use newengine_math::collections_prelude::NeVecDeque as VecDeque;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Mutex, OnceLock};
@@ -45,6 +45,7 @@ impl Default for CrashReporterConfig {
 
 static CFG: OnceLock<CrashReporterConfig> = OnceLock::new();
 static PANIC_FIRED: AtomicBool = AtomicBool::new(false);
+#[cfg(all(windows, feature = "native-crash-handlers"))]
 static WINDOWS_EXCEPTION_FIRED: AtomicBool = AtomicBool::new(false);
 static BREADCRUMBS: OnceLock<Mutex<VecDeque<String>>> = OnceLock::new();
 const MAX_BREADCRUMBS: usize = 256;
@@ -355,7 +356,7 @@ fn resolve_reporter_path(cfg: &CrashReporterConfig) -> PathBuf {
     base.join(name)
 }
 
-#[cfg(windows)]
+#[cfg(all(windows, feature = "native-crash-handlers"))]
 fn install_native_crash_handlers() {
     use windows::Win32::System::Diagnostics::Debug::SetUnhandledExceptionFilter;
 
@@ -366,10 +367,10 @@ fn install_native_crash_handlers() {
     record_breadcrumb("crash: windows unhandled exception filter installed");
 }
 
-#[cfg(not(windows))]
+#[cfg(not(all(windows, feature = "native-crash-handlers")))]
 fn install_native_crash_handlers() {}
 
-#[cfg(windows)]
+#[cfg(all(windows, feature = "native-crash-handlers"))]
 unsafe extern "system" fn unhandled_exception_filter(
     info: *const windows::Win32::System::Diagnostics::Debug::EXCEPTION_POINTERS,
 ) -> i32 {

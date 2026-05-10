@@ -1,6 +1,8 @@
 #![forbid(unsafe_op_in_unsafe_fn)]
 
 use core::fmt;
+use std::sync::Arc;
+
 use newengine_math::collections::prelude::*;
 
 use crate::{PrimitiveId, PrimitiveMesh};
@@ -36,7 +38,7 @@ pub struct PrimitiveParams {
 #[derive(Clone, Debug)]
 pub struct PrimitiveDesc {
     pub id: PrimitiveId,
-    pub name: &'static str,
+    pub name: String,
     pub defaults: PrimitiveParams,
 }
 
@@ -54,16 +56,22 @@ impl fmt::Display for PrimitiveBuildError {
 impl std::error::Error for PrimitiveBuildError {}
 
 #[derive(Clone, Debug)]
+enum PrimitiveSource {
+    Builder(PrimitiveBuildFn),
+    Mesh(Arc<PrimitiveMesh>),
+}
+
+#[derive(Clone, Debug)]
 struct Entry {
-    name: &'static str,
+    name: String,
     defaults: PrimitiveParams,
-    build: PrimitiveBuildFn,
+    source: PrimitiveSource,
 }
 
 /// Deterministic primitive registry.
 ///
 /// - No globals (callers keep it in engine state / services)
-/// - Plugins can register new primitives at runtime
+/// - Plugins/importers can register runtime meshes without hardcoding them as built-ins
 /// - Built-ins are just registrations
 #[derive(Clone, Debug, Default)]
 pub struct PrimitiveRegistry {
@@ -103,9 +111,26 @@ impl PrimitiveRegistry {
         self.entries.insert(
             id,
             Entry {
-                name,
+                name: name.to_owned(),
                 defaults,
-                build,
+                source: PrimitiveSource::Builder(build),
+            },
+        );
+    }
+
+    /// Register an already imported mesh as a runtime primitive.
+    ///
+    /// This is the path used by imported geometry assets: asset decoding stays in
+    /// AssetManager/importer plugins, while render/runtime code only receives a
+    /// deterministic mesh payload.
+    #[inline]
+    pub fn register_mesh(&mut self, id: PrimitiveId, name: impl Into<String>, mesh: PrimitiveMesh) {
+        self.entries.insert(
+            id,
+            Entry {
+                name: name.into(),
+                defaults: PrimitiveParams::default(),
+                source: PrimitiveSource::Mesh(Arc::new(mesh)),
             },
         );
     }
@@ -116,15 +141,15 @@ impl PrimitiveRegistry {
     }
 
     #[inline]
-    pub fn name(&self, id: PrimitiveId) -> Option<&'static str> {
-        self.entries.get(&id).map(|e| e.name)
+    pub fn name(&self, id: PrimitiveId) -> Option<&str> {
+        self.entries.get(&id).map(|e| e.name.as_str())
     }
 
     #[inline]
     pub fn desc(&self, id: PrimitiveId) -> Option<PrimitiveDesc> {
         self.entries.get(&id).map(|e| PrimitiveDesc {
             id,
-            name: e.name,
+            name: e.name.clone(),
             defaults: e.defaults,
         })
     }
@@ -133,7 +158,10 @@ impl PrimitiveRegistry {
     #[inline]
     pub fn build_mesh(&self, id: PrimitiveId) -> Result<PrimitiveMesh, PrimitiveBuildError> {
         let e = self.entries.get(&id).ok_or(PrimitiveBuildError { id })?;
-        Ok((e.build)(&e.defaults))
+        Ok(match &e.source {
+            PrimitiveSource::Builder(build) => build(&e.defaults),
+            PrimitiveSource::Mesh(mesh) => mesh.as_ref().clone(),
+        })
     }
 
     /// Build mesh by id with explicit parameters.
@@ -144,12 +172,15 @@ impl PrimitiveRegistry {
         params: &PrimitiveParams,
     ) -> Result<PrimitiveMesh, PrimitiveBuildError> {
         let e = self.entries.get(&id).ok_or(PrimitiveBuildError { id })?;
-        Ok((e.build)(params))
+        Ok(match &e.source {
+            PrimitiveSource::Builder(build) => build(params),
+            PrimitiveSource::Mesh(mesh) => mesh.as_ref().clone(),
+        })
     }
 
     /// Enumerate IDs (stable ordering can be obtained by sorting externally).
     #[inline]
-    pub fn ids(&self) -> impl Iterator<Item=PrimitiveId> + '_ {
+    pub fn ids(&self) -> impl Iterator<Item = PrimitiveId> + '_ {
         self.entries.keys().copied()
     }
 }

@@ -1,17 +1,23 @@
 #![forbid(unsafe_op_in_unsafe_fn)]
 
-use std::collections::HashSet;
-use std::path::PathBuf;
-use std::sync::{Arc, Mutex};
-use std::time::Duration;
+use std::sync::Arc;
 
+#[cfg(feature = "editor-ui")]
+use newengine_math::collections_prelude::NeHashSet as HashSet;
+#[cfg(feature = "editor-ui")]
+use std::{path::PathBuf, sync::Mutex, time::Duration};
+
+#[cfg(feature = "editor-ui")]
 use newengine_assets::AssetAccess;
 use newengine_core::{Engine, EngineResult, StartupConfig};
 use newengine_runtime_host::render_runtime::RenderBackendRuntimeModule;
-use newengine_ui::{UiBuildFn, UiMarkupDoc};
+use newengine_ui::UiBuildFn;
+#[cfg(feature = "editor-ui")]
+use newengine_ui::UiMarkupDoc;
 
 mod editor_camera;
 mod gameplay;
+#[cfg(feature = "editor-ui")]
 mod material_pipeline;
 pub mod plugin_manager;
 pub mod render_controller;
@@ -20,7 +26,9 @@ mod scene_bootstrap;
 pub mod scene_bridge;
 pub mod scene_io_service;
 mod shared;
+#[cfg(feature = "editor-ui")]
 pub mod ui;
+#[cfg(feature = "editor-ui")]
 pub mod ui_contrib;
 pub mod viewport_bridge;
 pub use gameplay::{CollisionBody, CollisionShape, EditorPlayMode, GameplayActor, PlayerActor};
@@ -32,14 +40,19 @@ pub const EDITOR_APP_DIR_NAME: &str = "editor";
 
 #[derive(Clone)]
 pub struct EditorRuntimeProfile {
+    #[cfg(feature = "editor-ui")]
     shared_doc: Arc<Mutex<Option<Arc<UiMarkupDoc>>>>,
     viewport: Arc<viewport_bridge::ViewportBridge>,
     plugins: Arc<plugin_manager::PluginManagerBridge>,
     scene: Arc<scene_bridge::SceneBridge>,
     previews: Arc<parking_lot::Mutex<newengine_previews::PrimitivePreviewService>>,
+    #[cfg(feature = "editor-ui")]
     schema_registry: Arc<parking_lot::RwLock<ui::schema::EditorSchemaRegistry>>,
+    #[cfg(feature = "editor-ui")]
     extension_registry: Arc<parking_lot::RwLock<ui::extension_abi::EditorExtensionAbiRegistry>>,
+    #[cfg(feature = "editor-ui")]
     auto_wired_extension_plugins: Arc<parking_lot::Mutex<HashSet<String>>>,
+    #[cfg(feature = "editor-ui")]
     plugin_root_auto_wiring_installed: Arc<std::sync::atomic::AtomicBool>,
 }
 
@@ -54,6 +67,7 @@ impl EditorRuntimeProfile {
     #[inline]
     pub fn new() -> Self {
         Self {
+            #[cfg(feature = "editor-ui")]
             shared_doc: Arc::new(Mutex::new(None)),
             viewport: Arc::new(viewport_bridge::ViewportBridge::new()),
             plugins: Arc::new(plugin_manager::PluginManagerBridge::new()),
@@ -61,9 +75,17 @@ impl EditorRuntimeProfile {
             previews: Arc::new(parking_lot::Mutex::new(
                 newengine_previews::PrimitivePreviewService::new(),
             )),
-            schema_registry: Arc::new(parking_lot::RwLock::new(ui::schema::EditorSchemaRegistry::default())),
-            extension_registry: Arc::new(parking_lot::RwLock::new(ui::extension_abi::EditorExtensionAbiRegistry::default())),
-            auto_wired_extension_plugins: Arc::new(parking_lot::Mutex::new(HashSet::new())),
+            #[cfg(feature = "editor-ui")]
+            schema_registry: Arc::new(parking_lot::RwLock::new(
+                ui::schema::EditorSchemaRegistry::default(),
+            )),
+            #[cfg(feature = "editor-ui")]
+            extension_registry: Arc::new(parking_lot::RwLock::new(
+                ui::extension_abi::EditorExtensionAbiRegistry::default(),
+            )),
+            #[cfg(feature = "editor-ui")]
+            auto_wired_extension_plugins: Arc::new(parking_lot::Mutex::new(HashSet::default())),
+            #[cfg(feature = "editor-ui")]
             plugin_root_auto_wiring_installed: Arc::new(std::sync::atomic::AtomicBool::new(false)),
         }
     }
@@ -94,25 +116,37 @@ impl EditorRuntimeProfile {
         scene_io_service::register_scene_io_best_effort(Arc::clone(&self.scene));
     }
 
+    #[cfg(feature = "editor-ui")]
     #[inline]
     pub fn ui_build_from_startup(
         &self,
         startup: &StartupConfig,
     ) -> Option<Box<dyn UiBuildFn>> {
-        match startup.ui_backend {
-            newengine_core::startup::UiBackend::Disabled => None,
-            _ => Some(Box::new(ui::EditorUiBuild::new(
-                Arc::clone(&self.shared_doc),
-                Arc::clone(&self.viewport),
-                Arc::clone(&self.plugins),
-                Arc::clone(&self.scene),
-                Arc::clone(&self.previews),
-                Arc::clone(&self.schema_registry),
-                Arc::clone(&self.extension_registry),
-            ))),
+        if startup.ui_backend.is_none() {
+            return None;
         }
+
+        Some(Box::new(ui::EditorUiBuild::new(
+            Arc::clone(&self.shared_doc),
+            Arc::clone(&self.viewport),
+            Arc::clone(&self.plugins),
+            Arc::clone(&self.scene),
+            Arc::clone(&self.previews),
+            Arc::clone(&self.schema_registry),
+            Arc::clone(&self.extension_registry),
+        )))
     }
 
+    #[cfg(not(feature = "editor-ui"))]
+    #[inline]
+    pub fn ui_build_from_startup(
+        &self,
+        _startup: &StartupConfig,
+    ) -> Option<Box<dyn UiBuildFn>> {
+        None
+    }
+
+    #[cfg(feature = "editor-ui")]
     #[inline]
     pub fn load_markup_best_effort(
         &self,
@@ -137,6 +171,18 @@ impl EditorRuntimeProfile {
         }
     }
 
+    #[cfg(not(feature = "editor-ui"))]
+    #[inline]
+    pub fn load_markup_best_effort(
+        &self,
+        _assets: Option<&dyn newengine_assets::AssetAccess>,
+        _roots: &[std::path::PathBuf],
+        _path: &str,
+        _timeout: std::time::Duration,
+    ) {
+    }
+
+    #[cfg(feature = "editor-ui")]
     #[inline]
     pub fn register_editor_field_factory(
         &self,
@@ -145,6 +191,7 @@ impl EditorRuntimeProfile {
         self.schema_registry.write().field_factories.push(factory);
     }
 
+    #[cfg(feature = "editor-ui")]
     #[inline]
     pub fn register_editor_context_action_provider(
         &self,
@@ -153,6 +200,7 @@ impl EditorRuntimeProfile {
         self.schema_registry.write().context_action_providers.push(provider);
     }
 
+    #[cfg(feature = "editor-ui")]
     #[inline]
     pub fn register_editor_asset_import_provider(
         &self,
@@ -169,6 +217,7 @@ impl EditorRuntimeProfile {
         self.scene.register_imported_asset_assembler(assembler);
     }
 
+    #[cfg(feature = "editor-ui")]
     #[inline]
     pub fn register_editor_extensions_v1(
         &self,
@@ -183,6 +232,16 @@ impl EditorRuntimeProfile {
         )
     }
 
+    #[cfg(not(feature = "editor-ui"))]
+    #[inline]
+    pub fn register_editor_extensions_v1(
+        &self,
+        _plugin_id: &str,
+        _extensions: newengine_plugin_api::EditorExtensionsV1,
+    ) -> usize {
+        0
+    }
+
     #[inline]
     pub fn register_plugin_root_editor_extensions(
         &self,
@@ -195,7 +254,7 @@ impl EditorRuntimeProfile {
         self.register_editor_extensions_v1(plugin_id, export())
     }
 
-
+    #[cfg(feature = "editor-ui")]
     #[inline]
     pub fn install_plugin_root_editor_auto_wiring(&self, replay_existing: bool) {
         use std::sync::atomic::Ordering;
@@ -242,6 +301,10 @@ impl EditorRuntimeProfile {
         );
     }
 
+    #[cfg(not(feature = "editor-ui"))]
+    #[inline]
+    pub fn install_plugin_root_editor_auto_wiring(&self, _replay_existing: bool) {}
+
     #[inline]
     pub fn viewport_bridge(&self) -> &Arc<viewport_bridge::ViewportBridge> {
         &self.viewport
@@ -255,5 +318,10 @@ impl EditorRuntimeProfile {
     #[inline]
     pub fn scene_bridge(&self) -> &Arc<scene_bridge::SceneBridge> {
         &self.scene
+    }
+
+    #[inline]
+    pub fn bootstrap_game_ready_scene_best_effort(&self) {
+        let _ = self.scene.bootstrap_game_ready_scene_now();
     }
 }

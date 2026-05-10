@@ -5,7 +5,7 @@ use crate::host_api;
 use abi_stable::std_types::{RResult, RString};
 use newengine_plugin_api::{Blob, CapabilityId, MethodName, ServiceV1, ServiceV1Dyn};
 use serde_json::{json, Map, Value};
-use std::collections::{BTreeSet, HashMap};
+use newengine_math::collections_prelude::{NeBTreeSet as BTreeSet, NeHashMap as HashMap};
 use std::env;
 use std::sync::OnceLock;
 
@@ -335,29 +335,34 @@ fn apply_env_overrides(plugin_id: &str, root: &mut Value) {
     }
 }
 
-fn summarize_value_for_log(value: &Value) -> String {
-    const MAX_LEN: usize = 160;
+const LOG_VALUE_MAX_BYTES: usize = 160;
+const LOG_TRUNCATION_SUFFIX: &str = "...";
 
+fn truncate_for_log(input: &str) -> String {
+    if input.len() <= LOG_VALUE_MAX_BYTES {
+        return input.to_owned();
+    }
+
+    let target_len = LOG_VALUE_MAX_BYTES.saturating_sub(LOG_TRUNCATION_SUFFIX.len());
+    let mut end = target_len.min(input.len());
+    while end > 0 && !input.is_char_boundary(end) {
+        end -= 1;
+    }
+
+    let mut out = String::with_capacity(end + LOG_TRUNCATION_SUFFIX.len());
+    out.push_str(&input[..end]);
+    out.push_str(LOG_TRUNCATION_SUFFIX);
+    out
+}
+
+fn summarize_value_for_log(value: &Value) -> String {
     match value {
         Value::Null => "null".to_owned(),
         Value::Bool(v) => v.to_string(),
         Value::Number(v) => v.to_string(),
-        Value::String(v) => {
-            if v.len() <= MAX_LEN {
-                v.clone()
-            } else {
-                let mut out = v[..MAX_LEN].to_owned();
-                out.push('…');
-                out
-            }
-        }
+        Value::String(v) => truncate_for_log(v),
         _ => match serde_json::to_string(value) {
-            Ok(serialized) if serialized.len() <= MAX_LEN => serialized,
-            Ok(mut serialized) => {
-                serialized.truncate(MAX_LEN);
-                serialized.push('…');
-                serialized
-            }
+            Ok(serialized) => truncate_for_log(&serialized),
             Err(_) => "<unprintable>".to_owned(),
         },
     }
@@ -373,8 +378,27 @@ mod tests {
     }
 
     #[test]
+    fn log_summary_truncates_string_values_safely() {
+        let long_value = "x".repeat(LOG_VALUE_MAX_BYTES + 32);
+        let summarized = summarize_value_for_log(&json!(long_value));
+
+        assert!(summarized.ends_with(LOG_TRUNCATION_SUFFIX));
+        assert_eq!(summarized.len(), LOG_VALUE_MAX_BYTES);
+    }
+
+    #[test]
+    fn log_summary_truncates_multibyte_values_on_char_boundary() {
+        let long_value = "Ж".repeat(LOG_VALUE_MAX_BYTES);
+        let summarized = summarize_value_for_log(&json!(long_value));
+
+        assert!(summarized.ends_with(LOG_TRUNCATION_SUFFIX));
+        assert!(summarized.len() <= LOG_VALUE_MAX_BYTES);
+        assert!(summarized.is_char_boundary(summarized.len()));
+    }
+
+    #[test]
     fn resolves_exact_flat_plugin_override() {
-        let mut overrides = HashMap::new();
+        let mut overrides = HashMap::default();
         overrides.insert(
             "newengine.logging".to_owned(),
             json!({
@@ -392,7 +416,7 @@ mod tests {
 
     #[test]
     fn resolves_nested_domain_wrapped_plugin_override() {
-        let mut overrides = HashMap::new();
+        let mut overrides = HashMap::default();
         overrides.insert(
             "newengine".to_owned(),
             json!({
@@ -419,7 +443,7 @@ mod tests {
 
     #[test]
     fn exact_flat_override_wins_and_nested_fills_missing_keys() {
-        let mut overrides = HashMap::new();
+        let mut overrides = HashMap::default();
 
         overrides.insert(
             "newengine".to_owned(),
@@ -465,7 +489,7 @@ mod tests {
 
     #[test]
     fn resolves_nested_domain_wrapped_dotted_leaf_key() {
-        let mut overrides = HashMap::new();
+        let mut overrides = HashMap::default();
 
         overrides.insert(
             "newengine".to_owned(),
@@ -498,12 +522,12 @@ mod tests {
 
     #[test]
     fn resolves_grouped_exact_prefix_override_for_renderer_backend() {
-        let mut overrides = HashMap::new();
+        let mut overrides = HashMap::default();
         overrides.insert(
             "newengine.renderer".to_owned(),
             json!({
                 "vulkan": {
-                    "clear_color": [0.0, 0.0, 0.0, 0.0],
+                    "clear_color": [0.02, 0.025, 0.035, 1.0],
                     "debug_text": "NewEngine | Vulkan"
                 }
             }),
@@ -512,18 +536,18 @@ mod tests {
         let store = make_store(overrides);
         let got = store.resolve_plugin_overrides("newengine.renderer.vulkan");
 
-        assert_eq!(got["clear_color"], json!([0.0, 0.0, 0.0, 0.0]));
+        assert_eq!(got["clear_color"], json!([0.02, 0.025, 0.035, 1.0]));
         assert_eq!(got["debug_text"], json!("NewEngine | Vulkan"));
     }
 
     #[test]
     fn exact_renderer_backend_override_wins_over_group_prefix() {
-        let mut overrides = HashMap::new();
+        let mut overrides = HashMap::default();
         overrides.insert(
             "newengine.renderer".to_owned(),
             json!({
                 "vulkan": {
-                    "clear_color": [0.0, 0.0, 0.0, 0.0],
+                    "clear_color": [0.02, 0.025, 0.035, 1.0],
                     "debug_text": "Grouped"
                 }
             }),
@@ -538,13 +562,13 @@ mod tests {
         let store = make_store(overrides);
         let got = store.resolve_plugin_overrides("newengine.renderer.vulkan");
 
-        assert_eq!(got["clear_color"], json!([0.0, 0.0, 0.0, 0.0]));
+        assert_eq!(got["clear_color"], json!([0.02, 0.025, 0.035, 1.0]));
         assert_eq!(got["debug_text"], json!("Exact"));
     }
 
     #[test]
     fn returns_empty_object_when_override_is_missing() {
-        let store = make_store(HashMap::new());
+        let store = make_store(HashMap::default());
         let got = store.resolve_plugin_overrides("newengine.missing");
 
         assert_eq!(got, json!({}));

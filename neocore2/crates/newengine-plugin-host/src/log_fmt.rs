@@ -15,14 +15,14 @@ pub(crate) fn ellipsize(value: &str, max_chars: usize) -> String {
     }
 
     if max_chars == 1 {
-        return "…".to_owned();
+        return ".".to_owned();
     }
 
     let mut out = String::with_capacity(max_chars);
     for ch in chars.into_iter().take(max_chars.saturating_sub(1)) {
         out.push(ch);
     }
-    out.push('…');
+    out.push_str("...");
     out
 }
 
@@ -47,35 +47,35 @@ pub(crate) fn emit_boxed_kv(title: &str, rows: &[(&str, String)]) {
         .saturating_sub(if key_width > 0 { 3 } else { 0 })
         .max(16);
 
-    log::info!("┌{}", "─".repeat(inner_width + 2));
-    log::info!("│ {}", pad_right(title, inner_width));
+    log::info!("+{}", "-".repeat(inner_width + 2));
+    log::info!("| {}", pad_right(title, inner_width));
 
     if rows.is_empty() {
-        log::info!("└{}", "─".repeat(inner_width + 2));
+        log::info!("+{}", "-".repeat(inner_width + 2));
         return;
     }
 
-    log::info!("├{}", "─".repeat(inner_width + 2));
+    log::info!("+{}", "-".repeat(inner_width + 2));
 
     for (key, value) in rows {
         let wrapped = wrap_value(value, value_area_width);
         for (index, line) in wrapped.iter().enumerate() {
             if key_width == 0 {
-                log::info!("│ {}", pad_right(line, inner_width));
+                log::info!("| {}", pad_right(line, inner_width));
                 continue;
             }
 
             if index == 0 {
                 let rendered = format!("{:<key_width$} : {}", key, line, key_width = key_width);
-                log::info!("│ {}", pad_right(&rendered, inner_width));
+                log::info!("| {}", pad_right(&rendered, inner_width));
             } else {
                 let rendered = format!("{:<key_width$}   {}", "", line, key_width = key_width);
-                log::info!("│ {}", pad_right(&rendered, inner_width));
+                log::info!("| {}", pad_right(&rendered, inner_width));
             }
         }
     }
 
-    log::info!("└{}", "─".repeat(inner_width + 2));
+    log::info!("+{}", "-".repeat(inner_width + 2));
 }
 
 pub(crate) fn emit_prefixed_table(

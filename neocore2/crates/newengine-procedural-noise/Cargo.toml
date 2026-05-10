@@ -1,0 +1,16 @@
+[package]
+name = "newengine-procedural-noise"
+version = "0.1.0"
+edition = "2021"
+readme = "README.md"
+description = "Deterministic procedural noise, heightfields, and terrain collision data for NewEngine"
+
+[features]
+default = []
+serde = ["dep:serde", "newengine-math/serde"]
+
+[dependencies]
+serde = { version = "1", features = ["derive"], optional = true }
+newengine-math = { path = "../newengine-math" }
+newengine-bounds = { path = "../newengine-bounds" }
+newengine-primitives = { path = "../newengine-primitives" }

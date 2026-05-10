@@ -68,10 +68,16 @@ pub trait UiBuildFn {
 }
 
 /// Provider kind selection.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum UiProviderKind {
+    /// Built-in no-UI provider. This is the only provider compiled into engine crates.
     Null,
-    Egui,
+
+    /// Runtime UI provider requested by plugin service/capability id.
+    ///
+    /// The concrete implementation must be supplied by a plugin. If that plugin
+    /// is absent or not yet bound, the runtime degrades to `Null`.
+    Plugin { service_id: String },
 }
 
 /// Provider creation options.
@@ -84,7 +90,7 @@ impl Default for UiProviderOptions {
     #[inline]
     fn default() -> Self {
         Self {
-            kind: UiProviderKind::Egui,
+            kind: UiProviderKind::Null,
         }
     }
 }

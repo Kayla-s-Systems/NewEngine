@@ -2,6 +2,7 @@
 
 mod control;
 mod describe;
+pub mod content_manifest;
 pub mod host_api;
 pub mod host_context;
 mod log_fmt;
@@ -19,6 +20,10 @@ pub struct PluginsSnapshot {
     pub plugins: Vec<PluginSnapshotEntry>,
 }
 
+pub use content_manifest::{
+    load_plugin_content_catalog_default, load_plugin_content_catalog_from_dir,
+    PluginContentBlob, PluginContentCatalog, PluginContentLoadReport,
+};
 pub use control::{PluginControlCommand, PluginControlQueue, PluginControlResult};
 pub use host_api::{call_service_v1, default_host_api, host_register_service_impl};
 pub use host_context::{

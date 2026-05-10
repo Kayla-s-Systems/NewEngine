@@ -1,6 +1,6 @@
 {
   "ui": {
-    "backend": "egui"
+    "backend": "none"
   },
   "engine": {
     "modules_dir": "../../plugins"
@@ -18,7 +18,7 @@
           "preset": "aaa",
           "time": "time",
           "brackets": true,
-          "sep": " │ ",
+          "sep": " | ",
           "level_width": 5
         },
         "sources": {
@@ -66,10 +66,10 @@
     },
     "newengine.renderer.vulkan": {
       "clear_color": [
-        0.0,
-        0.0,
-        0.0,
-        0.0
+        0.02,
+        0.025,
+        0.035,
+        1.0
       ],
       "debug_text": "NewEngine | Vulkan"
     }

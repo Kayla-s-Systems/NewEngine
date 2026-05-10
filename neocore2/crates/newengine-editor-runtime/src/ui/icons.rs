@@ -43,7 +43,8 @@ impl EditorIconLoader {
     /// Note: `u64 == 0` is a valid texture id in egui.
     #[inline]
     pub fn tex_id(&self, icon: BuiltinUiIcon) -> Option<egui::TextureId> {
-        ui_icons::tex_id(&self.loader, icon)
+        let id = self.loader.tex_id_u64(icon.key())?;
+        Some(egui::TextureId::User(id))
     }
 
     #[inline]
@@ -53,7 +54,14 @@ impl EditorIconLoader {
         icon: BuiltinUiIcon,
         label: &str,
     ) -> egui::Response {
-        ui_icons::icon_button(ui, self.tex_id(icon), label)
+        let min = egui::vec2(0.0, 28.0);
+        match self.tex_id(icon) {
+            Some(tid) => {
+                let st = egui::load::SizedTexture::new(tid, egui::vec2(16.0, 16.0));
+                ui.add(egui::Button::image_and_text(st, label).min_size(min))
+            }
+            None => ui.add(egui::Button::new(label).min_size(min)),
+        }
     }
 
 

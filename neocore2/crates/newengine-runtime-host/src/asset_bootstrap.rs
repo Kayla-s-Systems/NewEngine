@@ -1,11 +1,15 @@
 #![forbid(unsafe_op_in_unsafe_fn)]
 
-use std::collections::HashSet;
+use newengine_math::collections_prelude::NeHashSet as HashSet;
 use std::path::{Path, PathBuf};
-use std::time::Duration;
 
+#[cfg(feature = "window-icon")]
+use std::time::Duration;
+#[cfg(feature = "window-icon")]
 use abi_stable::std_types::RVec;
-use newengine_assets::{wait_ready, AssetAccess, AssetService, AssetServiceClient};
+#[cfg(feature = "window-icon")]
+use newengine_assets::{wait_ready, AssetAccess};
+use newengine_assets::{AssetService, AssetServiceClient};
 use newengine_platform_api::PlatformAppIconV1;
 
 pub fn collect_app_asset_roots(app_dir_name: &str, env_var: &str) -> Vec<PathBuf> {
@@ -44,7 +48,7 @@ pub fn collect_app_asset_roots(app_dir_name: &str, env_var: &str) -> Vec<PathBuf
     }
 
     let mut out: Vec<PathBuf> = Vec::new();
-    let mut dedup: HashSet<PathBuf> = HashSet::new();
+    let mut dedup: HashSet<PathBuf> = HashSet::default();
     for root in roots {
         if dedup.insert(root.clone()) {
             out.push(root);
@@ -74,6 +78,7 @@ fn try_mount(assets: &AssetServiceClient, path: &Path) {
     }
 }
 
+#[cfg(feature = "window-icon")]
 pub fn try_load_window_icon_best_effort(
     icon_path: Option<&str>,
     assets: Option<&AssetServiceClient>,
@@ -144,6 +149,20 @@ pub fn try_load_window_icon_best_effort(
     None
 }
 
+#[cfg(not(feature = "window-icon"))]
+pub fn try_load_window_icon_best_effort(
+    icon_path: Option<&str>,
+    assets: Option<&AssetServiceClient>,
+    roots: &[PathBuf],
+) -> Option<PlatformAppIconV1> {
+    let _ = icon_path;
+    let _ = assets;
+    let _ = roots;
+    None
+}
+
+
+#[cfg(feature = "window-icon")]
 fn decode_window_icon(bytes: &[u8], label: &str) -> Option<PlatformAppIconV1> {
     match image::load_from_memory(bytes) {
         Ok(img) => {

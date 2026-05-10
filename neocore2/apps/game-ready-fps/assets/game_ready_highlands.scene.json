@@ -1,0 +1,198 @@
+{
+  "schema": "newengine.scene.game_ready.highlands.v1",
+  "title": "KAYLA Terrain Sandbox",
+  "objective": "Procedural terrain with material and imported sky dome only.",
+  "player": {
+    "start": [
+      -17.5,
+      0.0,
+      -17.5
+    ],
+    "yaw": -0.72,
+    "move_speed": 7.3,
+    "look_sens": 0.0022
+  },
+  "terrain": {
+    "seed": 3545538700974983500,
+    "cells_x": 128,
+    "cells_z": 128,
+    "size_x": 72.0,
+    "size_z": 72.0,
+    "base_height": -0.08,
+    "height_scale": 3.15,
+    "collision_tile_cells": 8,
+    "collision_floor_depth": 3.0,
+    "collision_horizontal_skin": 0.08,
+    "generator": {
+      "id": "newengine.generator.heightfield.soft-cells.v1",
+      "ridged_seed_xor": 2116202781,
+      "ridged_frequency": 1.85,
+      "ridged_amplitude": 0.42,
+      "ridged_shape_edge0": -0.35,
+      "ridged_shape_edge1": 1.0,
+      "veins_seed_xor": 1394024449,
+      "veins_frequency": 0.68,
+      "veins_amplitude": 0.18
+    }
+  },
+  "sky": {
+    "radius": 220.0,
+    "ceiling_margin": 18.0,
+    "ceiling_thickness": 0.5,
+    "mesh": "skydome/skydome_high.obj"
+  },
+  "materials": {
+    "terrain": {
+      "base_color_texture": "textures/fps/terrain_forest_floor.jpg",
+      "normal_texture": "textures/fps/terrain_forest_floor_normal.jpg",
+      "roughness_texture": "textures/fps/terrain_forest_floor_roughness.jpg",
+      "uv_scale": [
+        10.0,
+        10.0
+      ],
+      "uv_offset": [
+        0.0,
+        0.0
+      ],
+      "roughness": 0.92,
+      "normal_scale": 1.15,
+      "occlusion_strength": 0.95
+    },
+    "sky": {
+      "roughness": 1.0,
+      "normal_scale": 0.0,
+      "occlusion_strength": 0.0
+    }
+  },
+  "lighting": {
+    "ambient_color": [
+      0.38,
+      0.42,
+      0.5
+    ],
+    "ambient_intensity": 0.28,
+    "sun_direction": [
+      -0.55,
+      -0.82,
+      -0.28
+    ],
+    "sun_color": [
+      1.0,
+      0.94,
+      0.82
+    ],
+    "sun_intensity": 3.2,
+    "shadows": {
+      "enabled": true,
+      "resolution": 2048,
+      "cascade_count": 1,
+      "max_distance": 80.0,
+      "softness": 1.35,
+      "bias": 0.0025,
+      "normal_bias": 0.015,
+      "contact_strength": 0.35
+    }
+  },
+  "boundaries": {
+    "wall_height": 0.0,
+    "wall_thickness": 0.0
+  },
+  "obstacles": {
+    "seed": 0,
+    "grid_min": 0,
+    "grid_max": 0,
+    "spacing": 1.0,
+    "jitter": 0.0,
+    "gate_threshold": 1.0,
+    "max_count": 0
+  },
+  "foliage": {
+    "seed": 0,
+    "grid_min": 0,
+    "grid_max": 0,
+    "spacing": 1.0,
+    "jitter": 0.0,
+    "gate_threshold": 1.0,
+    "max_count": 0
+  },
+  "gameplay": {
+    "default_status": "Terrain sandbox: procedural heightfield + imported sky dome.",
+    "pickup_status": "",
+    "hazard_status": "",
+    "goal_locked_status": "",
+    "goal_complete_status": "",
+    "failed_progress_label": "",
+    "completed_progress_label": "",
+    "player_collision": {
+      "radius": 0.45,
+      "half_height": 0.45
+    },
+    "player_visual": {
+      "radius": 0.45,
+      "half_height": 0.9,
+      "camera_eye_height": 0.85,
+      "sprint_multiplier": 1.75
+    },
+    "physics": {
+      "gravity": 9.81,
+      "contact_skin": 0.035
+    }
+  },
+  "palette": {
+    "default": [
+      0.78,
+      0.8,
+      0.86,
+      1.0
+    ],
+    "terrain": [
+      0.78,
+      0.86,
+      0.68,
+      1.0
+    ],
+    "sky": [
+      0.4,
+      0.58,
+      0.92,
+      1.0
+    ],
+    "sky_emissive": [
+      0.08,
+      0.12,
+      0.22
+    ],
+    "wall": [
+      0.0,
+      0.0,
+      0.0,
+      1.0
+    ],
+    "obstacle": [
+      0.0,
+      0.0,
+      0.0,
+      1.0
+    ],
+    "tree_bark": [
+      0.0,
+      0.0,
+      0.0,
+      1.0
+    ],
+    "tree_leaf": [
+      0.0,
+      0.0,
+      0.0,
+      1.0
+    ],
+    "tree_branch": [
+      0.0,
+      0.0,
+      0.0,
+      1.0
+    ]
+  },
+  "markers": [],
+  "prefabs": []
+}

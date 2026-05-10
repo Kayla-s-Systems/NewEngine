@@ -10,10 +10,6 @@ fn clamp_u32(v: u32, lo: u32, hi: u32) -> u32 {
     v.max(lo).min(hi)
 }
 
-/// Subdivided unit plane (grid) on XZ, centered at origin, normal +Y.
-///
-/// Params:
-/// - `subdivisions` (default 10)
 #[inline]
 pub fn build(params: &PrimitiveParams) -> PrimitiveMesh {
     let n = clamp_u32(params.subdivisions, 1, 2048);
@@ -21,10 +17,7 @@ pub fn build(params: &PrimitiveParams) -> PrimitiveMesh {
     let step = 1.0f32 / (n as f32);
 
     let w = n + 1;
-    let vtx_count = (w * w) as usize;
-    let tri_count = (n * n * 2) as usize;
-
-    let mut vertices = Vec::with_capacity(vtx_count);
+    let mut vertices = Vec::with_capacity((w * w) as usize);
     for z in 0..=n {
         let fz = (z as f32) * step;
         let pz = -h + fz;
@@ -34,11 +27,12 @@ pub fn build(params: &PrimitiveParams) -> PrimitiveMesh {
             vertices.push(PrimitiveVertex {
                 pos: [px, 0.0, pz],
                 nrm: [0.0, 1.0, 0.0],
+                uv: [fx, fz],
             });
         }
     }
 
-    let mut indices = Vec::with_capacity(tri_count * 3);
+    let mut indices = Vec::with_capacity((n * n * 2) as usize * 3);
     for z in 0..n {
         for x in 0..n {
             let i0 = z * w + x;

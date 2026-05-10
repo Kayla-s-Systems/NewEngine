@@ -1,6 +1,6 @@
 #![forbid(unsafe_op_in_unsafe_fn)]
 
-use crate::asset::{AssetAccess, AssetState};
+use crate::asset::AssetAccess;
 // -------------------------------------------------------------------------------------------------
 // Stub (default): no image decoding feature.
 //

@@ -2,6 +2,7 @@
 
 mod controller;
 mod gpu;
+mod material_bindings;
 mod module_impl;
 mod viewport;
 

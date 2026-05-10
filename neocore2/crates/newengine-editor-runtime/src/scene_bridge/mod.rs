@@ -61,13 +61,11 @@ impl SceneBridge {
         let primitives = Arc::new(RwLock::new(PrimitiveRegistry::with_builtins()));
         let materials = Arc::new(RwLock::new(MaterialRegistry::with_builtins()));
 
+        // Game-ready scenes must be assembled only after engine plugins are loaded:
+        // AssetManager discovers geometryImporter during the engine plugin phase.
+        // The standalone game profile owns that late bootstrap module.
         let (initial_selection, initial_mode, initial_wire) = if game_ready_demo_enabled() {
-            let selected = bootstrap_fps_game_ready_scene(
-                &mut initial,
-                &*primitives.read(),
-                &*materials.read(),
-            );
-            (selected, EditorPlayMode::Play, false)
+            (None, EditorPlayMode::Play, false)
         } else {
             (None, EditorPlayMode::Edit, true)
         };
@@ -97,6 +95,24 @@ impl SceneBridge {
     #[inline]
     pub fn materials(&self) -> Arc<RwLock<MaterialRegistry>> {
         Arc::clone(&self.materials)
+    }
+
+    pub fn bootstrap_game_ready_scene_now(&self) -> Option<EntityId> {
+        if !game_ready_demo_enabled() {
+            return None;
+        }
+
+        let selected = {
+            let mut scene = self.scene.write();
+            let mut prims = self.primitives.write();
+            let mats = self.materials.read();
+            bootstrap_fps_game_ready_scene(&mut scene, &mut *prims, &*mats)
+        };
+
+        *self.selection.lock() = selected;
+        *self.play_mode.lock() = EditorPlayMode::Play;
+        *self.collision_wireframe.lock() = false;
+        selected
     }
 
     #[inline]

@@ -1,0 +1,37 @@
+{
+  "domain": "Surface",
+  "shading_model": "PbrMetallicRoughness",
+  "base_color": [
+    0.25,
+    0.54,
+    0.23,
+    1.0
+  ],
+  "emissive": [
+    0.0,
+    0.0,
+    0.0
+  ],
+  "emissive_strength": 1.0,
+  "metallic": 0.0,
+  "roughness": 0.74,
+  "normal_scale": 1.0,
+  "occlusion_strength": 1.0,
+  "alpha_cutoff": 0.42,
+  "flags": 5,
+  "reserved": [
+    0,
+    0
+  ],
+  "base_color_texture": null,
+  "normal_texture": null,
+  "roughness_texture": null,
+  "uv_scale": [
+    1.0,
+    1.0
+  ],
+  "uv_offset": [
+    0.0,
+    0.0
+  ]
+}

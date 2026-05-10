@@ -1,6 +1,6 @@
 #![forbid(unsafe_op_in_unsafe_fn)]
 
-use std::collections::HashMap;
+use newengine_math::collections_prelude::NeHashMap as HashMap;
 use std::path::PathBuf;
 
 use newengine_math::collections::prelude::NeHashSet;
@@ -70,13 +70,26 @@ impl SelectionDecision {
     }
 }
 
+#[inline]
+fn runtime_target_plugins_only() -> bool {
+    std::env::var("NEWENGINE_PLUGIN_TARGET")
+        .map(|v| matches!(v.trim().to_ascii_lowercase().as_str(), "runtime" | "game" | "standalone"))
+        .unwrap_or(false)
+}
+
+#[inline]
+fn is_editor_only_plugin(kind: Option<newengine_plugin_api::PluginKind>) -> bool {
+    matches!(kind, Some(newengine_plugin_api::PluginKind::Editor))
+}
+
 pub(super) fn build_load_selection(
     graph: &DiscoveryGraph,
     filter: LoadPhaseFilter,
     loaded_ids: &NeHashSet<String>,
 ) -> LoadSelection {
     let mut out = LoadSelection::default();
-    let mut winners_by_id: HashMap<&str, &super::graph::ScannedDynlib> = HashMap::new();
+    let runtime_only = runtime_target_plugins_only();
+    let mut winners_by_id: HashMap<&str, &super::graph::ScannedDynlib> = HashMap::default();
 
     // First pass: choose one deterministic winner per plugin id.
     // The scan order is filename-based, so without this pass an older DLL such as
@@ -84,10 +97,18 @@ pub(super) fn build_load_selection(
     // `vulkan_renderer-0.3.3-dev.dll`. Runtime discovery must prefer the newest
     // descriptor version, then the strongest build profile.
     for item in &graph.items {
-        let ScannedDynlibKind::Plugin { id, phase, .. } = &item.kind else {
+        let ScannedDynlibKind::Plugin {
+            id,
+            phase,
+            descriptor_kind,
+            ..
+        } = &item.kind else {
             continue;
         };
-        if loaded_ids.contains(id) || !filter.allows(*phase) {
+        if loaded_ids.contains(id)
+            || !filter.allows(*phase)
+            || (runtime_only && is_editor_only_plugin(*descriptor_kind))
+        {
             continue;
         }
 
@@ -111,9 +132,18 @@ pub(super) fn build_load_selection(
                 reason: "legacy render backend ABI without plugin root",
             },
             ScannedDynlibKind::Unknown => SelectionDecision::Unknown,
-            ScannedDynlibKind::Plugin { id, phase, .. } => {
+            ScannedDynlibKind::Plugin {
+                id,
+                phase,
+                descriptor_kind,
+                ..
+            } => {
                 if loaded_ids.contains(id) {
                     SelectionDecision::AlreadyLoaded
+                } else if runtime_only && is_editor_only_plugin(*descriptor_kind) {
+                    SelectionDecision::Unsupported {
+                        reason: "editor plugin disabled for runtime target",
+                    }
                 } else if !filter.allows(*phase) {
                     SelectionDecision::Filtered {
                         filter_label: filter.label(),

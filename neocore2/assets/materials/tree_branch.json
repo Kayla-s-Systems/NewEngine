@@ -1,0 +1,37 @@
+{
+  "domain": "Surface",
+  "shading_model": "PbrMetallicRoughness",
+  "base_color": [
+    0.41,
+    0.3,
+    0.2,
+    1.0
+  ],
+  "emissive": [
+    0.0,
+    0.0,
+    0.0
+  ],
+  "emissive_strength": 1.0,
+  "metallic": 0.0,
+  "roughness": 0.88,
+  "normal_scale": 1.0,
+  "occlusion_strength": 1.0,
+  "alpha_cutoff": 0.35,
+  "flags": 5,
+  "reserved": [
+    0,
+    0
+  ],
+  "base_color_texture": "assets/textures/fps/ground_sand.jpg",
+  "normal_texture": "assets/textures/fps/ground_sand_normal.jpg",
+  "roughness_texture": "assets/textures/fps/ground_sand_roughness.jpg",
+  "uv_scale": [
+    1.0,
+    1.0
+  ],
+  "uv_offset": [
+    0.0,
+    0.0
+  ]
+}

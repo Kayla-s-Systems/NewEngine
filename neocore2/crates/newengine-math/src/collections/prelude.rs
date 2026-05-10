@@ -7,9 +7,14 @@
 //!
 //! - Internal/fast containers: `NeHashMap`, `NeHashSet`
 //! - Untrusted/secure containers: `NeSecureHashMap`, `NeSecureHashSet`
+//! - Constructors: `ne_hash_map()`, `ne_hash_set()`, `ne_*_with_capacity()`
 //! - SlotMap aliases: `NeSlotMap`, `NeSecondaryMap`, `NeKey`, `ne_new_key_type`
+//!
+//! Do not call `HashMap::new()` / `HashSet::new()` through engine aliases.
+//! Engine aliases use explicit hash policies, and hashbrown exposes `new()` only
+//! for its default hasher. Use the constructors above or `Default::default()`.
 
-use core::hash::Hash;
+use core::hash::{Hash, Hasher};
 
 use super::{FxHashMap, FxHashSet};
 
@@ -28,6 +33,39 @@ pub type NeHashMap<K, V> = FxHashMap<K, V>;
 
 /// Engine hash set for *internal* data (fast, deterministic).
 pub type NeHashSet<T> = FxHashSet<T>;
+
+
+#[inline]
+pub fn ne_hash_map<K, V>() -> NeHashMap<K, V>
+where
+    K: Eq + Hash,
+{
+    NeHashMap::default()
+}
+
+#[inline]
+pub fn ne_hash_set<T>() -> NeHashSet<T>
+where
+    T: Eq + Hash,
+{
+    NeHashSet::default()
+}
+
+#[inline]
+pub fn ne_hash_map_with_capacity<K, V>(capacity: usize) -> NeHashMap<K, V>
+where
+    K: Eq + Hash,
+{
+    super::HashMap::with_capacity_and_hasher(capacity, NeFastBuildHasher::default())
+}
+
+#[inline]
+pub fn ne_hash_set_with_capacity<T>(capacity: usize) -> NeHashSet<T>
+where
+    T: Eq + Hash,
+{
+    super::HashSet::with_capacity_and_hasher(capacity, NeFastBuildHasher::default())
+}
 
 // --------------------------
 // Hash maps / sets (SECURE)
@@ -51,6 +89,20 @@ pub type UntrustedSet<T> = NeSecureHashSet<T>;
 
 pub type NeBTreeMap<K, V> = super::BTreeMap<K, V>;
 pub type NeBTreeSet<K> = super::BTreeSet<K>;
+
+// ------------------------
+// Queue / hash helpers
+// ------------------------
+
+pub type NeVecDeque<T> = super::VecDeque<T>;
+pub type NeDefaultHasher = super::DefaultHasher;
+
+#[inline]
+pub fn ne_hash64<T: Hash + ?Sized>(value: &T) -> u64 {
+    let mut h = NeDefaultHasher::new();
+    value.hash(&mut h);
+    h.finish()
+}
 
 // ------------------------
 // SlotMap family

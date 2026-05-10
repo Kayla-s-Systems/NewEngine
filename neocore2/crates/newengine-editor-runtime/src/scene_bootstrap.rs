@@ -1,6 +1,6 @@
 #![forbid(unsafe_op_in_unsafe_fn)]
 
-use newengine_lighting::{AmbientLight, DirectionalLight};
+use newengine_lighting::{AmbientLight, DirectionalLight, ShadowSettings};
 use newengine_scene::components::{ActiveCamera, SceneRoot};
 use newengine_scene::{spawn_named, Scene, SceneState};
 use newengine_transform::set_parent;
@@ -24,6 +24,9 @@ pub fn bootstrap_editor_scene(scene: &mut Scene) {
         // - Directional light is an entity (future: shadows, cascades, time-of-day).
         if world.resource::<AmbientLight>().is_none() {
             world.insert_resource(AmbientLight::default());
+        }
+        if world.resource::<ShadowSettings>().is_none() {
+            world.insert_resource(ShadowSettings::default());
         }
 
         // Root: reuse when present.

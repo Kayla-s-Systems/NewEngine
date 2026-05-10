@@ -16,7 +16,7 @@ pub(super) struct PackedLights {
 }
 
 impl PackedLights {
-    pub(super) const UBO_SIZE: usize = 352;
+    pub(super) const UBO_SIZE: usize = 384;
 
     #[inline]
     pub(super) fn from_world(world: &newengine_ecs::World) -> Self {

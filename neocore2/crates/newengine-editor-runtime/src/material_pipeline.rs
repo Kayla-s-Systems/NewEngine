@@ -1,6 +1,6 @@
 #![forbid(unsafe_op_in_unsafe_fn)]
 
-use newengine_materials::api::MaterialRegistryApi;
+use newengine_materials::api::{MaterialAssetDocument, MaterialRegistryApi, MaterialTextureBindings};
 use newengine_materials::binary::{
     decode_asset as decode_material_asset, encode_asset as encode_material_asset, MaterialBinaryAsset,
 };
@@ -10,7 +10,7 @@ use newengine_materials::{MaterialDescriptor, MaterialRegistry};
 use parking_lot::RwLock;
 use std::sync::Arc;
 
-use std::collections::{HashMap, HashSet};
+use newengine_math::collections_prelude::{NeHashMap as HashMap, NeHashSet as HashSet};
 use std::path::{Path, PathBuf};
 
 use newengine_runtime_host::asset_bootstrap::collect_app_asset_roots;
@@ -52,7 +52,7 @@ impl MaterialPipeline {
             last_scan: Instant::now() - Duration::from_secs(5),
             roots: collect_app_asset_roots(crate::EDITOR_APP_DIR_NAME, crate::EDITOR_APP_ASSETS_DIR_ENV),
             cache_dir: PathBuf::from("cache").join("materials"),
-            seen: HashMap::new(),
+            seen: HashMap::default(),
         }
     }
 
@@ -67,8 +67,8 @@ impl MaterialPipeline {
             self.roots = collect_app_asset_roots(crate::EDITOR_APP_DIR_NAME, crate::EDITOR_APP_ASSETS_DIR_ENV);
         }
 
-        let mut compiled: Vec<(String, MaterialDescriptor)> = Vec::new();
-        let mut live_names: HashSet<String> = HashSet::new();
+        let mut compiled: Vec<(String, MaterialDescriptor, MaterialTextureBindings)> = Vec::new();
+        let mut live_names: HashSet<String> = HashSet::default();
 
         // Avoid borrowing `self.roots` across the scan loop while we need `&mut self` inside.
         let roots = self.roots.clone();
@@ -89,14 +89,14 @@ impl MaterialPipeline {
                 let Some(ext) = p.extension().and_then(|e| e.to_str()) else { continue };
 
                 if ext.eq_ignore_ascii_case("json") {
-                    if let Some((name, desc)) = self.load_or_compile_json(&p) {
+                    if let Some((name, desc, textures)) = self.load_or_compile_json(&p) {
                         live_names.insert(name.clone());
-                        compiled.push((name, desc));
+                        compiled.push((name, desc, textures));
                     }
                 } else if ext.eq_ignore_ascii_case("nemat") {
-                    if let Some((name, desc)) = self.load_nemat(&p) {
+                    if let Some((name, desc, textures)) = self.load_nemat(&p) {
                         live_names.insert(name.clone());
-                        compiled.push((name, desc));
+                        compiled.push((name, desc, textures));
                     }
                 }
             }
@@ -106,8 +106,8 @@ impl MaterialPipeline {
             // NOTE: `MaterialRegistry` in this project uses interior mutability for edits via API trait.
             let reg = reg.read();
 
-            for (name, desc) in compiled {
-                let _id = reg.upsert_named(&name, desc);
+            for (name, desc, textures) in compiled {
+                let _id = reg.upsert_named_with_textures(&name, desc, textures);
             }
 
             // Remove stale `materials/*` assets that no longer exist on disk.
@@ -144,7 +144,7 @@ impl MaterialPipeline {
         }
     }
 
-    fn load_nemat(&mut self, path: &Path) -> Option<(String, MaterialDescriptor)> {
+    fn load_nemat(&mut self, path: &Path) -> Option<(String, MaterialDescriptor, MaterialTextureBindings)> {
         let stamp = file_stamp(path)?;
         if self.seen.get(path).copied() == Some(stamp) {
             return None;
@@ -157,10 +157,10 @@ impl MaterialPipeline {
         desc.sanitize_in_place();
 
         self.seen.insert(path.to_path_buf(), stamp);
-        Some((name, desc))
+        Some((name, desc, MaterialTextureBindings::default()))
     }
 
-    fn load_or_compile_json(&mut self, path: &Path) -> Option<(String, MaterialDescriptor)> {
+    fn load_or_compile_json(&mut self, path: &Path) -> Option<(String, MaterialDescriptor, MaterialTextureBindings)> {
         let stamp = file_stamp(path)?;
         if self.seen.get(path).copied() == Some(stamp) {
             return None;
@@ -174,22 +174,24 @@ impl MaterialPipeline {
         let cache_nemat = self.cache_dir.join(format!("{stem}.nemat"));
         let cache_meta = self.cache_dir.join(format!("{stem}.src.hash"));
 
-        // Cache hit: use existing compiled `.nemat` when hash matches.
-        if read_small_text(&cache_meta).as_deref() == Some(hash_hex.as_str()) && cache_nemat.is_file() {
-            if let Ok(cached) = std::fs::read(&cache_nemat) {
-                if let Ok(asset) = decode_material_asset(&cached) {
-                    let mut desc = asset.desc;
-                    desc.sanitize_in_place();
-                    self.seen.insert(path.to_path_buf(), stamp);
-                    return Some((name, desc));
-                }
-            }
-        }
+        // JSON is the canonical source because MaterialAssetDocument owns texture bindings.
+        // The `.nemat` cache remains a descriptor-only optimization artifact and must not
+        // be allowed to erase texture/UV fields on cache hits.
 
         // Compile from JSON.
         let json = std::str::from_utf8(&bytes).ok()?;
-        let mut desc = mat_serde::from_json(json).ok()?;
-        desc.sanitize_in_place();
+        let doc = if let Ok(doc) = serde_json::from_str::<MaterialAssetDocument>(json) {
+            doc.sanitized()
+        } else {
+            let mut desc = mat_serde::from_json(json).ok()?;
+            desc.sanitize_in_place();
+            MaterialAssetDocument {
+                desc,
+                textures: MaterialTextureBindings::default(),
+            }
+        };
+        let desc = doc.desc;
+        let textures = doc.textures.clone();
 
         // Best-effort cache write.
         let _ = std::fs::create_dir_all(&self.cache_dir);
@@ -202,7 +204,7 @@ impl MaterialPipeline {
         }
 
         self.seen.insert(path.to_path_buf(), stamp);
-        Some((name, desc))
+        Some((name, desc, textures))
     }
 }
 
@@ -214,17 +216,6 @@ fn normalize_material_name(asset_name: &str, fallback_path: &Path) -> Option<Str
     }
     let stem = fallback_path.file_stem()?.to_string_lossy();
     Some(format!("materials/{stem}"))
-}
-
-#[inline]
-fn read_small_text(path: &Path) -> Option<String> {
-    let s = std::fs::read_to_string(path).ok()?;
-    let s = s.trim();
-    if s.is_empty() {
-        None
-    } else {
-        Some(s.to_string())
-    }
 }
 
 #[inline]

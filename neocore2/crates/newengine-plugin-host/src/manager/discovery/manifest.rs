@@ -24,8 +24,6 @@ pub(super) struct ManifestPluginEntry {
     pub(super) kind: String,
     #[serde(default)]
     pub(super) required: bool,
-    #[serde(default)]
-    pub(super) provides: Vec<String>,
 }
 
 impl PluginManifest {
@@ -39,7 +37,7 @@ impl PluginManifest {
             Ok(mut manifest) => {
                 manifest.plugins.retain(|p| !p.id.trim().is_empty());
                 log::info!(
-                    "plugins: manifest loaded path='{}' schema='{}' entries={}",
+                    "plugins: manifest loaded path='{}' schema='{}' entries={} importer_workers=asset-manager-owned",
                     crate::path_fmt::display_clean(&path),
                     manifest.schema,
                     manifest.plugins.len(),

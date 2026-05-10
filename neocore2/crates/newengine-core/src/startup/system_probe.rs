@@ -25,7 +25,7 @@ impl SystemProbe {
         out.cpu_cores_logical = cores;
         out.ram_total_mb = ram_mb;
 
-        #[cfg(windows)]
+        #[cfg(all(windows, feature = "host-probe"))]
         {
             if let Some(dx) = probe_windows_dxgi_d3d12() {
                 out.gpu = dx.gpu;
@@ -79,6 +79,7 @@ impl SystemProbe {
     }
 }
 
+#[cfg(feature = "host-probe")]
 fn probe_sysinfo() -> (Option<String>, Option<String>, Option<u32>, Option<u64>) {
     use sysinfo::System;
 
@@ -103,7 +104,15 @@ fn probe_sysinfo() -> (Option<String>, Option<String>, Option<u32>, Option<u64>)
     (os, cpu, cores, ram_mb)
 }
 
-#[cfg(windows)]
+
+#[cfg(not(feature = "host-probe"))]
+fn probe_sysinfo() -> (Option<String>, Option<String>, Option<u32>, Option<u64>) {
+    let os = Some(format!("{} {}", std::env::consts::OS, std::env::consts::ARCH));
+    let cores = std::thread::available_parallelism().ok().map(|n| n.get() as u32);
+    (os, None, cores, None)
+}
+
+#[cfg(all(windows, feature = "host-probe"))]
 #[derive(Clone, Debug)]
 struct WinDxInfo {
     gpu: Option<String>,
@@ -111,6 +120,7 @@ struct WinDxInfo {
     directx: Option<String>,
 }
 
+#[cfg(feature = "host-probe")]
 fn normalize_mem_to_mb(raw: u64) -> u64 {
     if raw >= 1_000_000_000 {
         raw / (1024 * 1024)
@@ -119,7 +129,7 @@ fn normalize_mem_to_mb(raw: u64) -> u64 {
     }
 }
 
-#[cfg(windows)]
+#[cfg(all(windows, feature = "host-probe"))]
 fn probe_windows_dxgi_d3d12() -> Option<WinDxInfo> {
     use windows::Win32::Graphics::Dxgi::{CreateDXGIFactory1, IDXGIAdapter1, IDXGIFactory1};
 
@@ -167,7 +177,7 @@ fn probe_windows_dxgi_d3d12() -> Option<WinDxInfo> {
     })
 }
 
-#[cfg(windows)]
+#[cfg(all(windows, feature = "host-probe"))]
 fn probe_d3d12_feature_level(
     adapter: &windows::Win32::Graphics::Dxgi::IDXGIAdapter1,
 ) -> Option<windows::Win32::Graphics::Direct3D::D3D_FEATURE_LEVEL> {
@@ -193,7 +203,7 @@ fn probe_d3d12_feature_level(
     None
 }
 
-#[cfg(windows)]
+#[cfg(all(windows, feature = "host-probe"))]
 fn feature_level_str(fl: windows::Win32::Graphics::Direct3D::D3D_FEATURE_LEVEL) -> &'static str {
     use windows::Win32::Graphics::Direct3D::*;
     match fl {
@@ -206,7 +216,7 @@ fn feature_level_str(fl: windows::Win32::Graphics::Direct3D::D3D_FEATURE_LEVEL) 
     }
 }
 
-#[cfg(windows)]
+#[cfg(all(windows, feature = "host-probe"))]
 fn wide_to_string(wide: &[u16]) -> Option<String> {
     let end = wide.iter().position(|&c| c == 0).unwrap_or(wide.len());
     let s = String::from_utf16_lossy(&wide[..end]).trim().to_owned();

@@ -1,27 +1,25 @@
 #![forbid(unsafe_op_in_unsafe_fn)]
 
-use abi_stable::std_types::ROption;
-use newengine_assets::AssetServiceClient;
+use abi_stable::std_types::{ROption, RString};
 use newengine_core::{
     ConfigPaths, EngineError, EngineResult, StartupLoader,
 };
-use newengine_editor_runtime::{
-    EditorRuntimeProfile, EDITOR_APP_ASSETS_DIR_ENV, EDITOR_APP_DIR_NAME, EDITOR_FIXED_DT_MS,
-    EDITOR_UI_MARKUP_PATH,
+use newengine_game_runtime::{
+    StandaloneGameRuntimeProfile, GAME_APP_ASSETS_DIR_ENV, GAME_FIXED_DT_MS,
+    GAME_READY_APP_DIR_NAME,
 };
 use newengine_runtime_host::{
     asset_bootstrap::{
-        collect_app_asset_roots, mount_asset_roots_best_effort, shard_log_path_by_run_id,
+        collect_app_asset_roots, shard_log_path_by_run_id,
         try_load_window_icon_best_effort,
     },
-    engine_factory::{build_engine_from_startup, ui_provider_kind_from_startup},
+    engine_factory::build_engine_from_startup,
     platform_runtime::{
         detect_platform_runtime_path, resolve_platform_runtime_config, HostPlatformRuntime,
     },
 };
 
 use std::sync::Arc;
-use std::time::Duration;
 
 #[inline]
 fn display_abs_path(path: &std::path::Path) -> String {
@@ -30,6 +28,21 @@ fn display_abs_path(path: &std::path::Path) -> String {
     let s = s.strip_prefix(r"\\?\").unwrap_or(&s);
     let s = s.strip_prefix("//?/").unwrap_or(s);
     s.replace('\\', "/")
+}
+
+
+fn configure_default_game_ready_profile() {
+    if std::env::var_os("NEWENGINE_GAME_READY_PROFILE").is_some() {
+        return;
+    }
+
+    let profile_path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("assets")
+        .join("game_ready_highlands.scene.json");
+
+    if profile_path.is_file() {
+        std::env::set_var("NEWENGINE_GAME_READY_PROFILE", profile_path);
+    }
 }
 
 fn main() {
@@ -65,6 +78,9 @@ fn main_impl() -> EngineResult<()> {
     ));
     std::env::set_var("NEWENGINE_RUN_ID", &run_id);
     std::env::set_var("NEWENGINE_GAME_READY_DEMO", "1");
+    std::env::set_var("NEWENGINE_REQUIRE_RENDER_BACKEND", "1");
+    std::env::set_var("NEWENGINE_PLUGIN_TARGET", "runtime");
+    configure_default_game_ready_profile();
 
     newengine_core::EngineErrorReporter::install(newengine_core::EngineErrorReporterConfig {
         crash: newengine_core::crash::CrashReporterConfig {
@@ -93,32 +109,23 @@ fn main_impl() -> EngineResult<()> {
         }
     }
 
-    let asset_roots = collect_app_asset_roots(EDITOR_APP_DIR_NAME, EDITOR_APP_ASSETS_DIR_ENV);
-    let profile = EditorRuntimeProfile::new();
-    profile.install_plugin_root_editor_auto_wiring(true);
+    let asset_roots = collect_app_asset_roots(GAME_READY_APP_DIR_NAME, GAME_APP_ASSETS_DIR_ENV);
+    let profile = StandaloneGameRuntimeProfile::new();
 
-    let mut engine = build_engine_from_startup(&startup, EDITOR_FIXED_DT_MS)?;
+    let mut engine = build_engine_from_startup(&startup, GAME_FIXED_DT_MS)?;
     newengine_core::crash::record_breadcrumb("game-ready fps launcher: host engine constructed");
 
     profile.register_modules(&mut engine, &startup)?;
-    newengine_core::crash::record_breadcrumb("game-ready fps launcher: editor runtime profile registered");
+    newengine_core::crash::record_breadcrumb("game-ready fps launcher: standalone game runtime profile registered");
 
     engine.preload_bootstrap_plugins()?;
     profile.register_scene_io_best_effort();
     newengine_core::crash::record_breadcrumb("game-ready fps launcher: bootstrap plugins preloaded");
 
-    let assets = AssetServiceClient::new(newengine_plugin_host::default_host_api());
-    let assets_available =
-        newengine_plugin_host::has_service(newengine_assets::consts::ASSET_SERVICE_ID);
-
-    if assets_available {
-        mount_asset_roots_best_effort(&assets, &asset_roots);
-    } else {
-        log::info!(
-            "game-ready fps launcher: AssetManager service '{}' is not available during bootstrap/platform init; using filesystem fallback for early assets",
-            newengine_assets::consts::ASSET_SERVICE_ID
-        );
-    }
+    // The standalone game scene is intentionally not built here.
+    // AssetManager and geometryImporter are engine plugins, so the game-ready scene
+    // is assembled by the runtime profile during engine.start(), after plugins are live.
+    profile.bootstrap_game_ready_scene_best_effort();
 
     let runtime_path = detect_platform_runtime_path(&startup.modules_dir)?;
     newengine_core::crash::record_breadcrumb(format!(
@@ -140,30 +147,21 @@ fn main_impl() -> EngineResult<()> {
 
     let icon = try_load_window_icon_best_effort(
         resolved_platform.icon_path.as_deref(),
-        if assets_available { Some(&assets) } else { None },
+        None,
         &asset_roots,
     );
 
     let mut platform_cfg = resolved_platform.config.clone();
+    platform_cfg.title = RString::from("KAYLA FPS: Procedural Highlands");
     platform_cfg.icon = icon.map_or(ROption::RNone, ROption::RSome);
 
     let ui_build = profile.ui_build_from_startup(&startup);
-    if ui_build.is_some() {
-        let assets_opt: Option<&dyn newengine_assets::AssetAccess> =
-            if assets_available { Some(&assets) } else { None };
-        profile.load_markup_best_effort(
-            assets_opt,
-            &asset_roots,
-            EDITOR_UI_MARKUP_PATH,
-            Duration::from_millis(250),
-        );
-    }
 
     resolved_platform.config = platform_cfg;
 
     let runtime = HostPlatformRuntime::new(
         engine,
-        ui_provider_kind_from_startup(&startup),
+        profile.ui_provider_kind(),
         ui_build,
     );
 

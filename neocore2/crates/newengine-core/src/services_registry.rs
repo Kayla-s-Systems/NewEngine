@@ -4,7 +4,7 @@ use core::fmt;
 use core::ptr::NonNull;
 
 use parking_lot::{Mutex, RwLock};
-use std::collections::HashMap;
+use newengine_math::collections_prelude::NeHashMap as HashMap;
 use std::time::{Duration, Instant};
 
 use newengine_service_api::{InterfaceId, ServiceInterface, ServiceKey};
@@ -106,8 +106,8 @@ impl ServiceRegistry {
     #[inline]
     pub fn new() -> Self {
         Self {
-            services: RwLock::new(HashMap::new()),
-            missing: Mutex::new(HashMap::new()),
+            services: RwLock::new(HashMap::default()),
+            missing: Mutex::new(HashMap::default()),
             missing_log_cooldown: Duration::from_secs(2),
         }
     }

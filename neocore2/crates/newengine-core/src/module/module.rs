@@ -1,5 +1,7 @@
 use crate::error::EngineResult;
+use crate::lifecycle_events::EngineReadinessKey;
 use crate::module::ModuleCtx;
+use std::any::Any;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct ApiVersion {
@@ -62,11 +64,30 @@ pub trait Module<E: Send + 'static>: Send {
         &[]
     }
 
+    /// Declarative startup readiness gates.
+    ///
+    /// If this list is non-empty, the engine will initialize the module but will
+    /// not call `start()` until every listed readiness key has been satisfied by
+    /// lifecycle dispatch. This removes load-order guesses from modules that
+    /// need plugin-owned services, renderer state, imported assets, or future
+    /// platform readiness events.
+    fn startup_requires(&self) -> &'static [EngineReadinessKey] {
+        &[]
+    }
+
     fn init(&mut self, _ctx: &mut ModuleCtx<'_, E>) -> EngineResult<()> {
         Ok(())
     }
 
     fn start(&mut self, _ctx: &mut ModuleCtx<'_, E>) -> EngineResult<()> {
+        Ok(())
+    }
+
+    /// Synchronous typed-event dispatch hook.
+    ///
+    /// The event is also published to `EventHub`; this hook is for startup and
+    /// readiness gates where a module must react before the first frame/render.
+    fn on_event(&mut self, _ctx: &mut ModuleCtx<'_, E>, _event: &dyn Any) -> EngineResult<()> {
         Ok(())
     }
 

@@ -1,7 +1,7 @@
 use std::path::PathBuf;
 
 use newengine_core::render::{RenderApiRef, RENDER_API_ID, RENDER_API_PROVIDE};
-use newengine_core::{EngineResult, Module, ModuleCtx};
+use newengine_core::{EngineError, EngineResult, Module, ModuleCtx};
 use newengine_plugin_api::{CapabilityKind, CapabilityRole};
 use newengine_render_api::RENDER_SERVICE_ID;
 
@@ -120,6 +120,18 @@ impl RenderBackendRuntimeModule {
         reason: impl Into<String>,
     ) -> EngineResult<()> {
         let reason = reason.into();
+
+        if std::env::var("NEWENGINE_REQUIRE_RENDER_BACKEND")
+            .map(|v| v != "0" && !v.eq_ignore_ascii_case("false"))
+            .unwrap_or(false)
+        {
+            return Err(EngineError::Other(format!(
+                "required render backend '{}' is unavailable: {}. Build/copy the renderer DLL or set render.backend to '{}' for explicit headless mode.",
+                self.backend_spec,
+                reason,
+                NULL_RENDER_BACKEND_ID,
+            )));
+        }
 
         log::warn!(
             "render backend: '{}' is unavailable; enabling headless null backend ({})",

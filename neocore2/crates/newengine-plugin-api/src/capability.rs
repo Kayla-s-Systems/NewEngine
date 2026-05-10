@@ -28,6 +28,7 @@ pub enum CapabilityKind {
     ServiceV1 = 1,
     EventsV1 = 2,
     AssetImporterV1 = 3,
+    SceneContributionV1 = 4,
     Other = 255,
 }
 
@@ -175,6 +176,42 @@ impl PluginDescriptorBuilder {
                 id,
                 CapabilityRole::Provides,
                 CapabilityKind::AssetImporterV1,
+                version,
+            )
+                .with_json(describe_json),
+        )
+    }
+
+    #[inline]
+    pub fn provides_scene_contribution(
+        self,
+        id: impl Into<CapabilityId>,
+        version: u32,
+        describe_json: impl Into<RString>,
+    ) -> Self {
+        self.push(
+            CapabilityDesc::new(
+                id,
+                CapabilityRole::Provides,
+                CapabilityKind::SceneContributionV1,
+                version,
+            )
+                .with_json(describe_json),
+        )
+    }
+
+    #[inline]
+    pub fn requires_scene_contribution(
+        self,
+        id: impl Into<CapabilityId>,
+        version: u32,
+        describe_json: impl Into<RString>,
+    ) -> Self {
+        self.push(
+            CapabilityDesc::new(
+                id,
+                CapabilityRole::Requires,
+                CapabilityKind::SceneContributionV1,
                 version,
             )
                 .with_json(describe_json),

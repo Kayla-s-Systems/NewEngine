@@ -1,6 +1,6 @@
 #![forbid(unsafe_op_in_unsafe_fn)]
 
-use std::collections::BTreeSet;
+use newengine_math::collections_prelude::NeBTreeSet as BTreeSet;
 
 /// UI input snapshot coming from INPUT plugin (engine-level canonical input).
 #[derive(Debug, Clone, Default)]

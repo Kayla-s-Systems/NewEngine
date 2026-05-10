@@ -1,6 +1,6 @@
 #![forbid(unsafe_op_in_unsafe_fn)]
 
-use std::collections::BTreeMap;
+use newengine_math::collections_prelude::NeBTreeMap as BTreeMap;
 
 /// Persistent entity identity for serialization, prefabs and cross-world references.
 ///

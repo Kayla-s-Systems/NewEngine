@@ -26,10 +26,9 @@ log = "0.4"
 
 newengine-assets = { path = "../../crates/newengine-assets" }
 newengine-core = { path = "../../crates/newengine-core" }
-newengine-editor-runtime = { path = "../../crates/newengine-editor-runtime" }
+newengine-game-runtime = { path = "../../crates/newengine-game-runtime" }
 newengine-plugin-host = { path = "../../crates/newengine-plugin-host" }
 newengine-runtime-host = { path = "../../crates/newengine-runtime-host" }
 
 [build-dependencies]
 embed-resource = "2"
-toml = "0.8"

@@ -17,7 +17,10 @@ pub mod serde;
 
 mod errors;
 
-pub use crate::api::{MaterialDescriptor, MaterialFlags, MaterialId, MaterialRef};
+pub use crate::api::{
+    MaterialAssetDocument, MaterialDescriptor, MaterialFlags, MaterialId, MaterialRef,
+    MaterialResolved, MaterialTextureBindings,
+};
 pub use crate::api::{
     MaterialDomain, MaterialInstanceDesc, MaterialOverrides, MaterialPermutationKey, ShadingModel,
 };

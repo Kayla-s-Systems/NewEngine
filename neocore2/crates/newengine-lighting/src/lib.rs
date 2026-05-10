@@ -2,4 +2,4 @@
 
 mod lights;
 
-pub use lights::{AmbientLight, DirectionalLight, PointLight};
+pub use lights::{AmbientLight, DirectionalLight, PointLight, ShadowMethod, ShadowSettings};

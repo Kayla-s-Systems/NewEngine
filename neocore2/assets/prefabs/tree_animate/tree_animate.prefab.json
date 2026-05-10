@@ -1,0 +1,36 @@
+{
+  "schema": "newengine.prefab.training.v1",
+  "name": "Tree Animate",
+  "logical_asset": "prefabs/tree_animate/scene.gltf",
+  "purpose": "Material training prefab for bark, leaves and branch studies",
+  "source_materials": [
+    {
+      "slot": "Bark",
+      "recommended_material": "materials/tree_bark",
+      "base_color_texture": "prefabs/tree_animate/textures/Bark_diffuse.png",
+      "normal_texture": "prefabs/tree_animate/textures/Bark_normal.png",
+      "specular_glossiness_texture": "prefabs/tree_animate/textures/Bark_specularGlossiness.png",
+      "double_sided": true,
+      "alpha_mode": "OPAQUE"
+    },
+    {
+      "slot": "Leaf",
+      "recommended_material": "materials/tree_leaf",
+      "base_color_texture": "prefabs/tree_animate/textures/Leaf_diffuse.png",
+      "normal_texture": "prefabs/tree_animate/textures/Leaf_normal.png",
+      "occlusion_texture": "prefabs/tree_animate/textures/Leaf_occlusion.png",
+      "specular_glossiness_texture": "prefabs/tree_animate/textures/Leaf_specularGlossiness.png",
+      "double_sided": true,
+      "alpha_mode": "MASK"
+    },
+    {
+      "slot": "Branch",
+      "recommended_material": "materials/tree_branch",
+      "base_color_texture": "prefabs/tree_animate/textures/Branch_diffuse.png",
+      "normal_texture": "prefabs/tree_animate/textures/Branch_normal.png",
+      "double_sided": true,
+      "alpha_mode": "MASK"
+    }
+  ],
+  "runtime_note": "Current standalone demo uses a declarative proxy/training composition. The original GLTF asset is staged here for future mesh-import/runtime work."
+}

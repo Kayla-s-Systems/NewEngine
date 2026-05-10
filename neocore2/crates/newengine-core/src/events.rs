@@ -2,7 +2,7 @@ use crate::error::EngineResult;
 
 use crossbeam_channel::{Receiver, Sender, TrySendError};
 use std::any::{Any, TypeId};
-use std::collections::{HashMap, HashSet};
+use newengine_math::collections_prelude::{NeHashMap as HashMap, NeHashSet as HashSet};
 use std::sync::{
     atomic::{AtomicU64, Ordering},
     Arc, RwLock, Weak,
@@ -51,7 +51,7 @@ impl EventHub {
         Self {
             inner: Arc::new(Inner {
                 next_id: AtomicU64::new(1),
-                chans: RwLock::new(HashMap::new()),
+                chans: RwLock::new(HashMap::default()),
             }),
         }
     }
@@ -266,7 +266,7 @@ impl Inner {
 
         let Some(subs) = subs else { return Ok(()) };
 
-        let mut failed: HashSet<u64> = HashSet::new();
+        let mut failed: HashSet<u64> = HashSet::default();
 
         for s in subs.iter() {
             if let Some(filter) = &s.filter {

@@ -1,27 +1,33 @@
-# NewEngine runtime plugins
+# NewEngine plugins directory
 
-This directory is the runtime plugin deployment root used by `config.json`.
+This directory is the runtime plugin deployment root.
 
-Required runtime plugins:
+## Dynamic libraries
 
-- `logging-*.dll` — bootstrap logging sink
-- `input-*.dll` — input service
-- `platform-winit-*.dll` — window/platform runtime
-- `assetManager-*.dll` — asset manager service
+Runtime DLLs are discovered from this directory and from `importers/` according
+to `plugins.manifest.json`.
 
-Optional runtime/tooling plugins:
+Naming convention:
 
-- `vulkan_renderer-*.dll` — GPU renderer; the engine must fall back to null/headless if absent or invalid
-- `importers/*.dll` — asset importers for editor/tooling
-
-Diagnostics:
-
-```cmd
-tools\diagnose_plugins.cmd plugins
+```text
+<plugin-id-or-short-name>-<semver>-<profile>.dll
 ```
 
-Copy DLLs from the sibling `Plugins/` source checkout:
+Examples:
 
-```cmd
-tools\sync_runtime_plugins.cmd
+```text
+logging-0.2.10-release.dll
+vulkan_renderer-0.3.4-release.dll
+importers/imageImporter-0.2.4-dev.dll
 ```
+
+## Declarative content
+
+`plugins.manifest.json.content` is the plugin-owned content catalog. The engine
+reads this catalog before falling back to built-in dev defaults.
+
+Current content owners:
+
+- `newengine.game_ready.map` owns `newengine.scene.game_ready.highlands.v1`.
+- `newengine.assets` owns prefab references such as `prefabs/tree_animate/scene.gltf`.
+- importer DLLs own asset decoding; the engine should not duplicate importer logic.

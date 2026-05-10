@@ -1,6 +1,6 @@
 #![forbid(unsafe_op_in_unsafe_fn)]
 
-use std::collections::HashMap;
+use newengine_math::collections_prelude::NeHashMap as HashMap;
 use std::sync::Arc;
 
 use egui;
@@ -49,7 +49,7 @@ impl PluginManagerUi {
             show_disabled: true,
             sort: PluginSort::Name,
             load_path: String::new(),
-            icon_cache: HashMap::new(),
+            icon_cache: HashMap::default(),
         }
     }
 

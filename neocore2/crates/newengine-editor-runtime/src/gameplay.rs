@@ -3,14 +3,15 @@
 use newengine_bounds::{Aabb, Bounds, Sphere};
 use newengine_ecs::{Component, EntityId, World};
 use newengine_math::collections::FxHashSet;
-use newengine_math::{Quat, Vec2, Vec3};
+use newengine_math::{Mat4, Quat, Vec2, Vec3};
 use newengine_primitives::{builtins as prim_builtins, Primitive};
+use newengine_procedural_noise::ProceduralTerrain;
 use newengine_scene::components::Name;
 use newengine_sim::{
     default_schedule, AngularVelocity, CameraRigComp, CharacterMotor, FollowTargetCameraController,
     FollowTargetCameraMotor, MotorInput, SimFrame, SimSchedule, Velocity,
 };
-use newengine_transform::{set_parent, Transform};
+use newengine_transform::{set_parent, GlobalTransform, Transform};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
 pub enum EditorPlayMode {
@@ -130,6 +131,81 @@ pub struct PlayerActor;
 #[derive(Clone, Copy, Debug, Default)]
 pub struct GameplayActor;
 
+/// Declarative FPS runtime tuning.
+///
+/// The scene/profile owns these values; runtime systems only consume the resource.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct FpsPlayerTuning {
+    pub body_radius: f32,
+    pub body_half_height: f32,
+    pub visual_radius: f32,
+    pub visual_half_height: f32,
+    pub camera_eye_height: f32,
+    pub sprint_multiplier: f32,
+    pub gravity: f32,
+    pub contact_skin: f32,
+}
+
+impl Default for FpsPlayerTuning {
+    #[inline]
+    fn default() -> Self {
+        Self {
+            body_radius: 0.45,
+            body_half_height: 0.45,
+            visual_radius: 0.45,
+            visual_half_height: 0.90,
+            camera_eye_height: 0.85,
+            sprint_multiplier: 1.75,
+            gravity: 9.81,
+            contact_skin: 0.035,
+        }
+    }
+}
+
+impl FpsPlayerTuning {
+    #[inline]
+    pub fn sanitized(self) -> Self {
+        Self {
+            body_radius: self.body_radius.clamp(0.05, 5.0),
+            body_half_height: self.body_half_height.clamp(0.05, 8.0),
+            visual_radius: self.visual_radius.clamp(0.05, 8.0),
+            visual_half_height: self.visual_half_height.clamp(0.05, 12.0),
+            camera_eye_height: self.camera_eye_height.clamp(0.05, 12.0),
+            sprint_multiplier: self.sprint_multiplier.clamp(1.0, 8.0),
+            gravity: self.gravity.clamp(0.0, 80.0),
+            contact_skin: self.contact_skin.clamp(0.0, 0.50),
+        }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct FpsDemoRules {
+    pub default_status: String,
+    pub pickup_status: String,
+    pub hazard_status: String,
+    pub goal_locked_status: String,
+    pub goal_complete_status: String,
+    pub failed_progress_label: String,
+    pub completed_progress_label: String,
+    pub player: FpsPlayerTuning,
+}
+
+impl Default for FpsDemoRules {
+    #[inline]
+    fn default() -> Self {
+        Self {
+            default_status: "Find blue cores, avoid hazards, reach extraction.".to_string(),
+            pickup_status: "Core acquired.".to_string(),
+            hazard_status: "You touched a hazard. Relaunch the demo to retry.".to_string(),
+            goal_locked_status: "Beacon locked: collect all cores first.".to_string(),
+            goal_complete_status: "Extraction complete. Stable runtime loop is playable.".to_string(),
+            failed_progress_label: "FAILED — touch a hazard to retry scene".to_string(),
+            completed_progress_label: "EXTRACTED".to_string(),
+            player: FpsPlayerTuning::default(),
+        }
+    }
+}
+
 #[derive(Clone, Copy, Debug, Default)]
 pub struct FpsDemoPickup {
     pub radius: f32,
@@ -145,6 +221,7 @@ pub struct FpsDemoHazard {
     pub radius: f32,
 }
 
+#[cfg_attr(not(feature = "editor-ui"), allow(dead_code))]
 #[derive(Clone, Debug)]
 pub struct FpsDemoState {
     pub title: String,
@@ -155,30 +232,50 @@ pub struct FpsDemoState {
     pub completed: bool,
     pub failed: bool,
     pub status: String,
+    pub failed_progress_label: String,
+    pub completed_progress_label: String,
 }
 
+#[cfg_attr(not(feature = "editor-ui"), allow(dead_code))]
 impl FpsDemoState {
     #[inline]
     pub fn new(pickups_total: u32) -> Self {
+        Self::from_rules(
+            pickups_total,
+            "KAYLA FPS: Extraction Yard",
+            "Collect cores and reach the extraction beacon",
+            &FpsDemoRules::default(),
+        )
+    }
+
+    #[inline]
+    pub fn from_rules(
+        pickups_total: u32,
+        title: impl Into<String>,
+        objective: impl Into<String>,
+        rules: &FpsDemoRules,
+    ) -> Self {
         Self {
-            title: "KΛYLΛ FPS: Extraction Yard".to_string(),
-            objective: "Collect 3 cores and reach the red extraction beacon".to_string(),
+            title: title.into(),
+            objective: objective.into(),
             elapsed_sec: 0.0,
             pickups_collected: 0,
             pickups_total,
             completed: false,
             failed: false,
-            status: "WASD + mouse. Shift = sprint. ESC = editor.".to_string(),
+            status: rules.default_status.clone(),
+            failed_progress_label: rules.failed_progress_label.clone(),
+            completed_progress_label: rules.completed_progress_label.clone(),
         }
     }
 
     #[inline]
     pub fn progress_label(&self) -> String {
         if self.completed {
-            return format!("EXTRACTED in {:.1}s", self.elapsed_sec.max(0.0));
+            return format!("{} in {:.1}s", self.completed_progress_label, self.elapsed_sec.max(0.0));
         }
         if self.failed {
-            return "FAILED — touch a hazard to retry scene".to_string();
+            return self.failed_progress_label.clone();
         }
         format!(
             "Cores {}/{} · {:.1}s",
@@ -260,6 +357,18 @@ pub fn spawn_default_player(
     name: impl Into<String>,
     position: Vec3,
 ) -> EntityId {
+    spawn_default_player_with_tuning(world, root, name, position, FpsPlayerTuning::default())
+}
+
+#[inline]
+pub fn spawn_default_player_with_tuning(
+    world: &mut World,
+    root: Option<EntityId>,
+    name: impl Into<String>,
+    position: Vec3,
+    tuning: FpsPlayerTuning,
+) -> EntityId {
+    let tuning = tuning.sanitized();
     let e = world.spawn();
 
     let _ = world.insert(e, Name(name.into()));
@@ -268,7 +377,7 @@ pub fn spawn_default_player(
         Transform {
             position,
             rotation: Quat::IDENTITY,
-            scale: Vec3::new(0.45, 0.9, 0.45),
+            scale: Vec3::new(tuning.visual_radius, tuning.visual_half_height, tuning.visual_radius),
         },
     );
     let _ = world.insert(e, Primitive {
@@ -286,8 +395,8 @@ pub fn spawn_default_player(
         e,
         CollisionBody {
             shape: CollisionShape::Capsule {
-                radius: 0.45,
-                half_height: 0.45,
+                radius: tuning.body_radius,
+                half_height: tuning.body_half_height,
             },
             dynamic: true,
             is_trigger: false,
@@ -349,12 +458,17 @@ pub fn apply_player_input(
         axis.y -= 1.0;
     }
 
+    let sprint_multiplier = world
+        .resource::<FpsDemoRules>()
+        .map(|rules| rules.player.sprint_multiplier)
+        .unwrap_or_else(|| FpsPlayerTuning::default().sprint_multiplier);
+
     if let Some(input) = world.get_mut::<MotorInput>(player) {
         input.move_axis = axis;
         input.look_delta = look_delta_px;
         input.look_active = look_active;
         input.speed_mul = if move_mask & newengine_viewport::input::MOVE_SHIFT != 0 {
-            1.75
+            sprint_multiplier
         } else {
             1.0
         };
@@ -382,7 +496,11 @@ pub fn attach_active_camera_to_player(world: &mut World, camera: EntityId, playe
 
     let mut next = ctrl;
     next.target = player;
-    next.offset_ls = Vec3::new(0.0, 0.85, 0.0);
+    let eye_height = world
+        .resource::<FpsDemoRules>()
+        .map(|rules| rules.player.camera_eye_height)
+        .unwrap_or_else(|| FpsPlayerTuning::default().camera_eye_height);
+    next.offset_ls = Vec3::new(0.0, eye_height, 0.0);
     next.rot_offset = Quat::IDENTITY;
     next.follow_rotation = true;
     next.smooth_time = 0.0;
@@ -513,10 +631,75 @@ pub fn restore_runtime_world_snapshot(world: &mut World, snapshot: RuntimeWorldS
     }
 }
 
+#[derive(Clone)]
+struct RuntimeTerrainSurface {
+    key: u64,
+    terrain: ProceduralTerrain,
+    world_from_local: Mat4,
+    local_from_world: Mat4,
+}
+
+#[inline]
+fn collect_runtime_terrain_surfaces(world: &World) -> Vec<RuntimeTerrainSurface> {
+    let mut terrains: Vec<RuntimeTerrainSurface> = world
+        .query2::<ProceduralTerrain, GlobalTransform>()
+        .map(|(entity, terrain, gt)| RuntimeTerrainSurface {
+            key: entity.stable_u64(),
+            terrain: terrain.clone(),
+            world_from_local: gt.0,
+            local_from_world: gt.0.inverse(),
+        })
+        .collect();
+    terrains.sort_by_key(|it| it.key);
+    terrains
+}
+
+#[inline]
+fn resolve_heightfield_contact(
+    terrains: &[RuntimeTerrainSurface],
+    body: CollisionBody,
+    next_pos: &mut Vec3,
+    velocity: &mut Velocity,
+    contact_skin: f32,
+) {
+    let local_aabb = body.shape.local_aabb();
+    let contact_skin = contact_skin.clamp(0.0, 0.50);
+
+    for surface in terrains {
+        let local_pos = surface.local_from_world.transform_point3(*next_pos);
+        let Some(local_ground_y) = surface
+            .terrain
+            .heightfield
+            .sample_height_local_checked(local_pos.x, local_pos.z, 0.08)
+        else {
+            continue;
+        };
+
+        let world_ground = surface
+            .world_from_local
+            .transform_point3(Vec3::new(local_pos.x, local_ground_y, local_pos.z));
+        let bottom_y = next_pos.y + local_aabb.min.y;
+        let penetration = world_ground.y + contact_skin - bottom_y;
+        if penetration <= 0.0 || !penetration.is_finite() {
+            continue;
+        }
+
+        next_pos.y += penetration;
+        if velocity.0.y < 0.0 {
+            velocity.0.y = 0.0;
+        }
+    }
+}
+
 #[inline]
 fn step_runtime_physics(world: &mut World, dt: f32) {
     let dt = dt.clamp(0.0001, 0.05);
-    let gravity = 9.81_f32;
+    let player_tuning = world
+        .resource::<FpsDemoRules>()
+        .map(|rules| rules.player.sanitized())
+        .unwrap_or_default();
+    let gravity = player_tuning.gravity;
+    let contact_skin = player_tuning.contact_skin;
 
     let mut static_colliders: Vec<(EntityId, Aabb)> = world
         .query2::<CollisionBody, Bounds>()
@@ -529,6 +712,11 @@ fn step_runtime_physics(world: &mut World, dt: f32) {
         })
         .collect();
     static_colliders.sort_by_key(|it| it.0.stable_u64());
+
+    // Exact heightfield contact is engine-side now. The coarse terrain AABB tiles remain
+    // useful as editor debug proxies, but runtime locomotion resolves against the actual
+    // generated surface so the player does not float on tile maxima or fall through seams.
+    let terrain_surfaces = collect_runtime_terrain_surfaces(world);
 
     let mut dynamic_ids: Vec<EntityId> = world
         .query::<CollisionBody>()
@@ -574,6 +762,8 @@ fn step_runtime_physics(world: &mut World, dt: f32) {
                 velocity.0.z = 0.0;
             }
         }
+
+        resolve_heightfield_contact(&terrain_surfaces, body, &mut next_pos, &mut velocity, contact_skin);
 
         if let Some(t) = world.get_mut::<Transform>(entity) {
             t.position = next_pos;
@@ -664,6 +854,7 @@ pub fn step_fps_demo_gameplay(world: &mut World, dt: f32) {
         }
     }
 
+    let rules = world.resource::<FpsDemoRules>().cloned().unwrap_or_default();
     let collected_delta = picked.len() as u32;
     if let Some(state) = world.resource_mut::<FpsDemoState>() {
         state.pickups_collected = state
@@ -673,16 +864,16 @@ pub fn step_fps_demo_gameplay(world: &mut World, dt: f32) {
 
         if hit_hazard {
             state.failed = true;
-            state.status = "You touched a hazard. Relaunch the demo to retry.".to_string();
+            state.status = rules.hazard_status.clone();
         } else if reached_goal && state.pickups_collected >= state.pickups_total {
             state.completed = true;
-            state.status = "Extraction complete. This is ugly, hardcoded, and already playable.".to_string();
+            state.status = rules.goal_complete_status.clone();
         } else if reached_goal {
-            state.status = "Beacon locked: collect all cores first.".to_string();
+            state.status = rules.goal_locked_status.clone();
         } else if collected_delta > 0 {
-            state.status = "Core acquired.".to_string();
+            state.status = rules.pickup_status.clone();
         } else {
-            state.status = "Find blue cores, avoid purple hazards, reach the red beacon.".to_string();
+            state.status = rules.default_status.clone();
         }
     }
 }

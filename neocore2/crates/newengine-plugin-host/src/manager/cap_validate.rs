@@ -1,6 +1,6 @@
 #![forbid(unsafe_op_in_unsafe_fn)]
 
-use std::collections::HashMap;
+use newengine_math::collections_prelude::NeHashMap as HashMap;
 
 use newengine_plugin_api::{CapabilityKind, CapabilityRole, PluginDescriptor};
 
@@ -23,7 +23,7 @@ fn cap_key(id: &str, kind: u8) -> CapKey {
 
 #[inline]
 fn collect_providers(loaded: &[LoadedPlugin]) -> HashMap<CapKey, u32> {
-    let mut out: HashMap<CapKey, u32> = HashMap::new();
+    let mut out: HashMap<CapKey, u32> = HashMap::default();
 
     // Engine/Host baseline capabilities.
     out.insert(cap_key("host.services.v1", CapabilityKind::ServiceV1 as u8), 1);

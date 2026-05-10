@@ -5,16 +5,19 @@ readme = "README.md"
 edition = "2021"
 
 [features]
-# The default build provides a "batteries included" runtime facade (assets, console service, render API).
-# The kernel/orchestrator-only build is obtained by disabling default features.
-default = ["runtime"]
+# Default core is intentionally kernel-light. Heavy/runtime capabilities are plugin-owned.
+default = []
 
-# Runtime facade: asset manager wiring, importer auto-registration, console service.
-runtime = ["dep:newengine-ui"]
+# Compatibility feature kept as an empty marker. Runtime capabilities must live in plugins/crates above core.
+runtime = []
+
+# Optional host diagnostics. Keep disabled by default: core must remain a thin kernel.
+host-probe = ["dep:sysinfo", "dep:windows"]
+native-crash-handlers = ["dep:windows"]
 
 [dependencies]
 crossbeam-channel = "0.5"
-log = "0.4.29"
+log = { version = "0.4.29", features = ["std"] }
 raw-window-handle = "0.6.2"
 abi_stable = "0.11"
 newengine-plugin-api = { path = "../newengine-plugin-api" }
@@ -25,17 +28,15 @@ newengine-service-api = { path = "../newengine-service-api" }
 newengine-render-api = { path = "../newengine-render-api" }
 newengine-ui-draw = { path = "../newengine-ui-draw" }
 
-# Optional runtime dependencies. Kernel/orchestrator builds should disable default features.
-newengine-ui = { path = "../newengine-ui", optional = true }
 
 serde = { version = "1.0.228", features = ["derive"] }
 serde_json = "1.0.149"
 parking_lot = "0.12.5"
-sysinfo = { version = "0.38.3", default-features = true }
+sysinfo = { version = "0.38.3", default-features = true, optional = true }
 
 # Windows-only GPU/DX probe
 [target.'cfg(windows)'.dependencies]
-windows = { version = "0.62.2", features = [
+windows = { version = "0.62.2", optional = true, features = [
     "Win32_Foundation",
     "Win32_Graphics_Dxgi",
     "Win32_Graphics_Dxgi_Common",

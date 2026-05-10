@@ -34,9 +34,11 @@ impl Services for DefaultHostServices {
 
 #[inline]
 pub fn ui_provider_kind_from_startup(startup: &StartupConfig) -> UiProviderKind {
-    match startup.ui_backend {
-        newengine_core::startup::UiBackend::Disabled => UiProviderKind::Null,
-        _ => UiProviderKind::Egui,
+    match startup.ui_backend.plugin_id() {
+        Some(service_id) => UiProviderKind::Plugin {
+            service_id: service_id.to_owned(),
+        },
+        None => UiProviderKind::Null,
     }
 }
 

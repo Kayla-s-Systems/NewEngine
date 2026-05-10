@@ -335,8 +335,8 @@ fn declared_cap_key(id: &str, kind: u8) -> DeclaredCapKey {
 
 fn collect_declared_providers(
     descriptors: impl Iterator<Item=PluginDescriptor>,
-) -> std::collections::HashMap<DeclaredCapKey, u32> {
-    let mut out = std::collections::HashMap::new();
+) -> newengine_math::collections_prelude::NeHashMap<DeclaredCapKey, u32> {
+    let mut out = newengine_math::collections_prelude::NeHashMap::default();
     out.insert(declared_cap_key("host.services.v1", CapabilityKind::ServiceV1 as u8), 1);
     out.insert(declared_cap_key("host.events.v1", CapabilityKind::EventsV1 as u8), 1);
 
@@ -358,7 +358,7 @@ fn collect_declared_providers(
 
 fn missing_descriptor_requirements(
     descriptor: &PluginDescriptor,
-    providers: &std::collections::HashMap<DeclaredCapKey, u32>,
+    providers: &newengine_math::collections_prelude::NeHashMap<DeclaredCapKey, u32>,
 ) -> Vec<String> {
     let mut out = Vec::new();
 

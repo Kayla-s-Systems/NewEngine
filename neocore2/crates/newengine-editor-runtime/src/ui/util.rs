@@ -3,7 +3,7 @@
 use egui;
 
 pub(super) fn infer_model_exts(snap: &newengine_plugin_host::PluginsSnapshot) -> Vec<String> {
-    use std::collections::BTreeSet;
+    use newengine_math::collections_prelude::NeBTreeSet as BTreeSet;
 
     let mut out: BTreeSet<String> = BTreeSet::new();
     let tokens: [(&str, &[&str]); 8] = [

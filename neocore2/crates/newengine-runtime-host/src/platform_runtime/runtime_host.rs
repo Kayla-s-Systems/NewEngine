@@ -8,13 +8,14 @@ use newengine_core::host_events::{
 };
 use newengine_core::{Engine, EngineError, EngineResult};
 use newengine_platform_api::{
-    PlatformCursorGrabModeV1, PlatformCursorPollV1, PlatformCursorStateV1, PlatformHostApiV1,
-    PlatformRuntimeRunFnV1, PlatformStepResultV1, PlatformSurfaceMetricsV1,
-    PlatformWindowReadyV1,
+    PlatformCursorGrabModeV1, PlatformCursorPollV1, PlatformCursorStateV1,
+    PlatformHostApiV1, PlatformLoadingOverlayV1, PlatformRuntimeRunFnV1,
+    PlatformStepResultV1, PlatformSurfaceMetricsV1, PlatformWindowReadyV1,
 };
 use newengine_plugin_api::PluginInfo;
 use newengine_ui::{
-    create_provider, UiBuildFn, UiFrameDesc, UiProvider, UiProviderKind, UiProviderOptions,
+    create_provider, UiBuildFn, UiFrameDesc, UiInputFrame, UiProvider, UiProviderKind,
+    UiProviderOptions,
 };
 
 use crate::platform_input::poll_input_frame;
@@ -29,6 +30,39 @@ use crate::platform_runtime::snapshot_service::{
 };
 use crate::platform_runtime::types::ResolvedPlatformRuntimeConfig;
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum RuntimeBootstrapStage {
+    AwaitingWindow,
+    AnnounceLoadEnginePlugins,
+    LoadEnginePlugins,
+    AnnounceStartEngine,
+    StartEngine,
+    AnnounceEnterRuntime,
+    EmitWindowReady,
+    ReadyOverlay,
+    Running,
+}
+
+#[derive(Debug, Clone)]
+struct RuntimeBootstrapOverlayState {
+    title: String,
+    status: String,
+    detail: String,
+    progress_01: f32,
+}
+
+impl Default for RuntimeBootstrapOverlayState {
+    #[inline]
+    fn default() -> Self {
+        Self {
+            title: "NEWENGINE // BOOTSTRAP".to_owned(),
+            status: "Waiting for platform window...".to_owned(),
+            detail: "The runtime shell is preparing the first visible frame.".to_owned(),
+            progress_01: 0.0,
+        }
+    }
+}
+
 pub struct HostPlatformRuntime {
     engine: Engine<()>,
     ui: Box<dyn UiProvider>,
@@ -37,6 +71,11 @@ pub struct HostPlatformRuntime {
     surface: PlatformSurfaceMetricsV1,
     minimized: bool,
     started: bool,
+    window_ready_emitted: bool,
+    bootstrap_stage: RuntimeBootstrapStage,
+    bootstrap_overlay: RuntimeBootstrapOverlayState,
+    bootstrap_spinner_phase: u32,
+    ready_overlay_frames_left: u32,
 }
 
 impl HostPlatformRuntime {
@@ -46,6 +85,26 @@ impl HostPlatformRuntime {
         ui_build: Option<Box<dyn UiBuildFn>>,
     ) -> Self {
         let host_events = engine.events().subscribe::<HostEvent>();
+
+        match &ui_kind {
+            UiProviderKind::Null => {
+                log::info!("ui provider: none");
+            }
+            UiProviderKind::Plugin { service_id } => {
+                if newengine_plugin_host::has_service(service_id) {
+                    log::info!(
+                        "ui provider: requested plugin service='{}' is present; using plugin-backed UI when provider bridge is bound",
+                        service_id
+                    );
+                } else {
+                    log::warn!(
+                        "ui provider: requested plugin service='{}' is missing; continuing without UI",
+                        service_id
+                    );
+                }
+            }
+        }
+
         Self {
             engine,
             ui: create_provider(UiProviderOptions { kind: ui_kind }),
@@ -54,6 +113,11 @@ impl HostPlatformRuntime {
             surface: PlatformSurfaceMetricsV1::default(),
             minimized: false,
             started: false,
+            window_ready_emitted: false,
+            bootstrap_stage: RuntimeBootstrapStage::AwaitingWindow,
+            bootstrap_overlay: RuntimeBootstrapOverlayState::default(),
+            bootstrap_spinner_phase: 0,
+            ready_overlay_frames_left: 45,
         }
     }
 
@@ -76,7 +140,7 @@ impl HostPlatformRuntime {
             resolved.descriptor.clone(),
             "running",
         )
-            .map_err(EngineError::other)?;
+        .map_err(EngineError::other)?;
 
         log::info!("platform runtime: loading '{}'", runtime_path.display());
 
@@ -128,10 +192,7 @@ impl HostPlatformRuntime {
         result
     }
 
-    pub(crate) fn on_window_ready(
-        &mut self,
-        ready: PlatformWindowReadyV1,
-    ) -> EngineResult<()> {
+    pub(crate) fn on_window_ready(&mut self, ready: PlatformWindowReadyV1) -> EngineResult<()> {
         log::info!(
             "platform runtime: window ready backend={:?} size={}x{} ppp={:.3}",
             ready.handles.backend,
@@ -150,46 +211,22 @@ impl HostPlatformRuntime {
             height: ready.surface.height,
         });
 
-        if !self.started {
-            if let Some(startup) = newengine_core::startup::last_startup_config() {
-                std::env::set_var("NEWENGINE_RENDER_BACKEND", startup.render_backend.as_str());
-            }
-
-            match self.engine.load_engine_plugins_once() {
-                Ok(count) => {
-                    log::info!(
-                        "platform runtime: engine plugins init completed loaded_count={}",
-                        count
-                    );
-                }
-                Err(e) => {
-                    log::error!("platform runtime: engine plugins init failed: {}", e);
-                    return Err(e);
-                }
-            }
-
-            match self.engine.start() {
-                Ok(()) => {
-                    self.started = true;
-                    log::info!("platform runtime: engine.start completed");
-                }
-                Err(e) => {
-                    log::error!("platform runtime: engine.start failed: {}", e);
-                    return Err(e);
-                }
-            }
+        if let Some(startup) = newengine_core::startup::last_startup_config() {
+            std::env::set_var("NEWENGINE_RENDER_BACKEND", startup.render_backend.as_str());
         }
 
-        match self.engine.emit(HostEvent::Window(WindowHostEvent::Ready {
-            width: ready.surface.width,
-            height: ready.surface.height,
-        })) {
-            Ok(()) => {}
-            Err(e) => {
-                log::error!("platform runtime: emit WindowReady failed: {}", e);
-                return Err(e);
-            }
-        }
+        self.window_ready_emitted = false;
+        self.bootstrap_stage = RuntimeBootstrapStage::AnnounceLoadEnginePlugins;
+        self.set_bootstrap_overlay(
+            "Platform window ready.",
+            "Preparing staged engine bootstrap and loading screen.",
+            0.10,
+        );
+        log::info!(
+            "platform runtime bootstrap: staged startup armed size={}x{}",
+            ready.surface.width,
+            ready.surface.height
+        );
 
         Ok(())
     }
@@ -248,6 +285,123 @@ impl HostPlatformRuntime {
     }
 
     pub(crate) fn step(&mut self, dt_sec: f32) -> EngineResult<PlatformStepResultV1> {
+        if self.bootstrap_stage != RuntimeBootstrapStage::Running || !self.window_ready_emitted {
+            return self.step_bootstrap();
+        }
+
+        self.step_running(dt_sec)
+    }
+
+    fn step_bootstrap(&mut self) -> EngineResult<PlatformStepResultV1> {
+        self.bootstrap_spinner_phase = self.bootstrap_spinner_phase.wrapping_add(1);
+
+        match self.bootstrap_stage {
+            RuntimeBootstrapStage::AwaitingWindow => {
+                self.set_bootstrap_overlay(
+                    "Waiting for platform window...",
+                    "The runtime shell is preparing the first visible frame.",
+                    0.0,
+                );
+                Ok(self.loading_step_result())
+            }
+            RuntimeBootstrapStage::AnnounceLoadEnginePlugins => {
+                self.set_bootstrap_overlay(
+                    "Loading engine plugins...",
+                    "Discovering runtime providers, services and renderer bridge.",
+                    0.22,
+                );
+                self.bootstrap_stage = RuntimeBootstrapStage::LoadEnginePlugins;
+                Ok(self.loading_step_result())
+            }
+            RuntimeBootstrapStage::LoadEnginePlugins => {
+                match self.engine.load_engine_plugins_once() {
+                    Ok(count) => {
+                        log::info!(
+                            "platform runtime: engine plugins init completed loaded_count={}",
+                            count
+                        );
+                        self.set_bootstrap_overlay(
+                            format!("Engine plugins loaded ({count})."),
+                            "Runtime services are registered. Preparing startup graph.",
+                            0.56,
+                        );
+                        self.bootstrap_stage = RuntimeBootstrapStage::AnnounceStartEngine;
+                        Ok(self.loading_step_result())
+                    }
+                    Err(e) => {
+                        log::error!("platform runtime: engine plugins init failed: {}", e);
+                        Err(e)
+                    }
+                }
+            }
+            RuntimeBootstrapStage::AnnounceStartEngine => {
+                self.set_bootstrap_overlay(
+                    "Starting engine modules...",
+                    "Dispatching startup graph, readiness gates and scene bootstrap.",
+                    0.74,
+                );
+                self.bootstrap_stage = RuntimeBootstrapStage::StartEngine;
+                Ok(self.loading_step_result())
+            }
+            RuntimeBootstrapStage::StartEngine => match self.engine.start() {
+                Ok(()) => {
+                    self.started = true;
+                    log::info!("platform runtime: engine.start completed");
+                    self.set_bootstrap_overlay(
+                        "Engine runtime started.",
+                        "Finalizing the first playable frame and host window events.",
+                        0.90,
+                    );
+                    self.bootstrap_stage = RuntimeBootstrapStage::AnnounceEnterRuntime;
+                    Ok(self.loading_step_result())
+                }
+                Err(e) => {
+                    log::error!("platform runtime: engine.start failed: {}", e);
+                    Err(e)
+                }
+            },
+            RuntimeBootstrapStage::AnnounceEnterRuntime => {
+                self.set_bootstrap_overlay(
+                    "Entering runtime...",
+                    "The loading screen will hand off to the renderer on the next frame.",
+                    0.98,
+                );
+                self.bootstrap_stage = RuntimeBootstrapStage::EmitWindowReady;
+                Ok(self.loading_step_result())
+            }
+            RuntimeBootstrapStage::EmitWindowReady => {
+                self.emit_window_ready_event()?;
+                self.window_ready_emitted = true;
+                self.set_bootstrap_overlay(
+                    "Runtime ready.",
+                    "Window services are live. Handing control to the game loop.",
+                    1.0,
+                );
+                self.ready_overlay_frames_left = 45;
+                self.bootstrap_stage = RuntimeBootstrapStage::ReadyOverlay;
+                Ok(self.loading_step_result())
+            }
+            RuntimeBootstrapStage::ReadyOverlay => {
+                let result = self.loading_step_result();
+                if self.ready_overlay_frames_left == 0 {
+                    self.bootstrap_stage = RuntimeBootstrapStage::Running;
+                } else {
+                    self.ready_overlay_frames_left = self.ready_overlay_frames_left.saturating_sub(1);
+                }
+                Ok(result)
+            }
+            RuntimeBootstrapStage::Running => self.step_running(0.0),
+        }
+    }
+
+    fn step_running(&mut self, dt_sec: f32) -> EngineResult<PlatformStepResultV1> {
+        let input_frame = poll_input_frame();
+        if let Some(input) = input_frame.clone() {
+            self.engine.resources_mut().insert::<UiInputFrame>(input);
+        } else {
+            let _ = self.engine.resources_mut().remove::<UiInputFrame>();
+        }
+
         if let Some(build) = self.ui_build.as_deref_mut() {
             let mut desc = UiFrameDesc::new(dt_sec).with_surface(
                 self.surface.width,
@@ -255,7 +409,7 @@ impl HostPlatformRuntime {
                 self.surface.pixels_per_point,
             );
 
-            if let Some(input) = poll_input_frame() {
+            if let Some(input) = input_frame {
                 desc = desc.with_input(input);
             }
 
@@ -264,13 +418,66 @@ impl HostPlatformRuntime {
         }
 
         match self.engine.step() {
-            Ok(()) => Ok(PlatformStepResultV1 {
-                exit_requested: false,
-            }),
+            Ok(()) => Ok(PlatformStepResultV1::default()),
             Err(EngineError::ExitRequested) => Ok(PlatformStepResultV1 {
                 exit_requested: true,
+                ..PlatformStepResultV1::default()
             }),
             Err(e) => Err(e),
+        }
+    }
+
+    fn emit_window_ready_event(&mut self) -> EngineResult<()> {
+        log::info!(
+            "platform runtime bootstrap: emitting WindowReady width={} height={}",
+            self.surface.width,
+            self.surface.height
+        );
+        self.engine.emit(HostEvent::Window(WindowHostEvent::Ready {
+            width: self.surface.width,
+            height: self.surface.height,
+        }))
+    }
+
+    fn set_bootstrap_overlay(
+        &mut self,
+        status: impl Into<String>,
+        detail: impl Into<String>,
+        progress_01: f32,
+    ) {
+        let next_status = status.into();
+        let next_detail = detail.into();
+        let next_progress = progress_01.clamp(0.0, 1.0);
+
+        let changed = self.bootstrap_overlay.status != next_status
+            || self.bootstrap_overlay.detail != next_detail
+            || (self.bootstrap_overlay.progress_01 - next_progress).abs() > f32::EPSILON;
+
+        self.bootstrap_overlay.status = next_status;
+        self.bootstrap_overlay.detail = next_detail;
+        self.bootstrap_overlay.progress_01 = next_progress;
+
+        if changed {
+            log::info!(
+                "platform runtime bootstrap: overlay status='{}' detail='{}' progress={:.0}%",
+                self.bootstrap_overlay.status,
+                self.bootstrap_overlay.detail,
+                self.bootstrap_overlay.progress_01 * 100.0
+            );
+        }
+    }
+
+    fn loading_step_result(&self) -> PlatformStepResultV1 {
+        PlatformStepResultV1 {
+            exit_requested: false,
+            loading_overlay: PlatformLoadingOverlayV1 {
+                active: true,
+                progress_01: self.bootstrap_overlay.progress_01,
+                spinner_phase: self.bootstrap_spinner_phase,
+                title: RString::from(self.bootstrap_overlay.title.as_str()),
+                status: RString::from(self.bootstrap_overlay.status.as_str()),
+                detail: RString::from(self.bootstrap_overlay.detail.as_str()),
+            },
         }
     }
 

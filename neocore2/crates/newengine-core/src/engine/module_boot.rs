@@ -2,9 +2,10 @@ use super::module_slot::{ModuleSlot, ModuleState};
 use super::{Engine, ModuleFaultTolerance};
 
 use crate::error::{EngineError, EngineResult, ModuleStage};
+use crate::lifecycle_events::EngineLifecycleEvent;
 use crate::module::ModuleCtx;
 
-use std::collections::{HashMap, VecDeque};
+use newengine_math::collections_prelude::{ne_hash_map_with_capacity, NeHashMap as HashMap, NeVecDeque as VecDeque};
 
 impl<E: Send + 'static> Engine<E> {
     pub fn start(&mut self) -> EngineResult<()> {
@@ -27,7 +28,7 @@ impl<E: Send + 'static> Engine<E> {
 
         let n = self.modules.len();
 
-        let mut id_to_index: HashMap<&'static str, usize> = HashMap::with_capacity(n);
+        let mut id_to_index = ne_hash_map_with_capacity::<&'static str, usize>(n);
         for (i, s) in self.modules.iter().enumerate() {
             let id = s.id();
             if id_to_index.insert(id, i).is_some() {
@@ -148,49 +149,17 @@ impl<E: Send + 'static> Engine<E> {
             }
         }
 
-        for i in 0..sorted.len() {
-            self.sync_shutdown_state();
-
-            let start_result = {
-                let s = &mut sorted[i];
-                let mut ctx = ModuleCtx::new(
-                    self.services.as_ref(),
-                    &mut self.resources,
-                    &self.bus,
-                    &self.events,
-                    &mut self.scheduler,
-                    &mut self.exit_requested,
-                );
-                s.module.start(&mut ctx)
-            };
-
-            if let Err(err) = start_result {
-                shutdown_modules(self, &mut sorted[..initialized]);
-                return Err(EngineError::with_module_stage(
-                    sorted[i].id(),
-                    ModuleStage::Start,
-                    err,
-                ));
-            }
-
-            self.sync_shutdown_state();
-            if self.is_exit_requested() {
-                shutdown_modules(self, &mut sorted[..initialized]);
-                return Err(EngineError::ExitRequested);
-            }
-        }
-
-        for s in sorted.iter_mut() {
-            s.state = ModuleState::Running;
-        }
-
         self.modules = sorted;
+        self.refresh_readiness_snapshot();
+        self.log_startup_graph_snapshot("after-init");
+        self.start_modules_ready_by_graph("initial")?;
 
         if !self.plugins_loaded && !self.engine_plugins_loaded {
             self.try_load_plugins_once()?;
         }
         self.log_plugins_diagnostics("after module init");
         self.plugins_start_all()?;
+        self.dispatch_startup_readiness_events("engine.start.strict")?;
 
         Ok(())
     }
@@ -206,7 +175,7 @@ impl<E: Send + 'static> Engine<E> {
 
         let n = self.modules.len();
 
-        let mut id_to_index: HashMap<&'static str, usize> = HashMap::with_capacity(n);
+        let mut id_to_index = ne_hash_map_with_capacity::<&'static str, usize>(n);
         for (i, s) in self.modules.iter().enumerate() {
             let id = s.id();
             if id_to_index.insert(id, i).is_some() {
@@ -242,8 +211,8 @@ impl<E: Send + 'static> Engine<E> {
             }
 
             use crate::module::ApiVersion;
-            let mut provided: HashMap<&'static str, ApiVersion> = HashMap::new();
-            let mut provider: HashMap<&'static str, &'static str> = HashMap::new();
+            let mut provided: HashMap<&'static str, ApiVersion> = HashMap::default();
+            let mut provider: HashMap<&'static str, &'static str> = HashMap::default();
 
             for (i, s) in self.modules.iter().enumerate() {
                 if !enabled[i] {
@@ -405,6 +374,87 @@ impl<E: Send + 'static> Engine<E> {
                 self.shutdown_slot(&mut new_slots[i]);
                 continue;
             }
+        }
+
+        self.modules = new_slots;
+        self.refresh_readiness_snapshot();
+        self.log_startup_graph_snapshot("after-init");
+        self.start_modules_ready_by_graph("initial")?;
+
+        if !self.plugins_loaded && !self.engine_plugins_loaded {
+            self.try_load_plugins_once()?;
+        }
+        self.log_plugins_diagnostics("after module init");
+        self.plugins_start_all()?;
+        self.dispatch_startup_readiness_events("engine.start.resilient")?;
+
+        Ok(())
+    }
+
+
+    #[inline]
+    fn dispatch_startup_readiness_events(&mut self, origin: &'static str) -> EngineResult<()> {
+        let plugin_count = self.plugins.snapshot().len();
+
+        if self.plugins_loaded || self.engine_plugins_loaded {
+            self.dispatch(EngineLifecycleEvent::EnginePluginsReady {
+                loaded_count: plugin_count,
+                origin,
+            })?;
+        }
+
+        let module_count = self
+            .modules
+            .iter()
+            .filter(|s| s.state == ModuleState::Running)
+            .count();
+        self.dispatch(EngineLifecycleEvent::EngineStartCompleted {
+            module_count,
+            plugin_count,
+        })?;
+
+        self.refresh_readiness_snapshot();
+        self.log_startup_graph_snapshot("after-startup-dispatch");
+        Ok(())
+    }
+
+    pub(crate) fn start_modules_ready_by_graph(&mut self, origin: &'static str) -> EngineResult<usize> {
+        let mut started = 0usize;
+
+        for i in 0..self.modules.len() {
+            self.sync_shutdown_state();
+            if self.is_exit_requested() {
+                return Err(EngineError::ExitRequested);
+            }
+
+            if self.modules[i].state != ModuleState::Pending {
+                continue;
+            }
+
+            let module_id = self.modules[i].id();
+            let requirements = self.modules[i].module.startup_requires();
+            if !self.startup_graph.all_satisfied(requirements) {
+                let missing = self
+                    .startup_graph
+                    .missing(requirements)
+                    .map(|key| key.as_str())
+                    .collect::<Vec<_>>()
+                    .join(",");
+                log::info!(
+                    "startup graph: module gated module='{}' origin='{}' missing='{}'",
+                    module_id,
+                    origin,
+                    if missing.is_empty() { "-" } else { missing.as_str() },
+                );
+                continue;
+            }
+
+            log::info!(
+                "startup graph: starting module module='{}' origin='{}' requires='{}'",
+                module_id,
+                origin,
+                super::startup_graph::readiness_csv(requirements),
+            );
 
             let start_res = {
                 let mut ctx = ModuleCtx::new(
@@ -415,29 +465,64 @@ impl<E: Send + 'static> Engine<E> {
                     &mut self.scheduler,
                     &mut self.exit_requested,
                 );
-                new_slots[i].module.start(&mut ctx)
+                self.modules[i].module.start(&mut ctx)
             };
 
             if let Err(err) = start_res {
-                let reason = format!("start failed: {err}");
-                log::error!("engine: module start failed: {} ({})", module_id, reason);
-                new_slots[i].disable(reason);
-                self.shutdown_slot(&mut new_slots[i]);
-                continue;
+                match self.module_fault_tolerance {
+                    ModuleFaultTolerance::Strict => {
+                        self.exit_requested = true;
+                        self.shutdown.request();
+                        return Err(EngineError::with_module_stage(
+                            module_id,
+                            ModuleStage::Start,
+                            err,
+                        ));
+                    }
+                    ModuleFaultTolerance::Resilient => {
+                        let reason = format!("start failed: {err}");
+                        log::error!("engine: module start failed: {} ({})", module_id, reason);
+                        self.modules[i].disable(reason);
+                        self.shutdown_slot_by_index(i);
+                        continue;
+                    }
+                }
             }
 
-            new_slots[i].state = ModuleState::Running;
+            self.modules[i].state = ModuleState::Running;
+            started += 1;
         }
 
-        self.modules = new_slots;
-
-        if !self.plugins_loaded && !self.engine_plugins_loaded {
-            self.try_load_plugins_once()?;
+        if started > 0 {
+            log::info!(
+                "startup graph: started modules origin='{}' count={} satisfied='{}'",
+                origin,
+                started,
+                self.startup_graph.satisfied_csv(),
+            );
         }
-        self.log_plugins_diagnostics("after module init");
-        self.plugins_start_all()?;
 
-        Ok(())
+        self.refresh_readiness_snapshot();
+        self.log_startup_graph_snapshot(origin);
+        Ok(started)
+    }
+
+    #[inline]
+    fn shutdown_slot_by_index(&mut self, index: usize) {
+        if self.modules[index].shutdown_called {
+            return;
+        }
+        let mut ctx = ModuleCtx::new(
+            self.services.as_ref(),
+            &mut self.resources,
+            &self.bus,
+            &self.events,
+            &mut self.scheduler,
+            &mut self.exit_requested,
+        );
+        let _ = self.modules[index].module.shutdown(&mut ctx);
+        self.modules[index].shutdown_called = true;
+        self.modules[index].state = ModuleState::Disabled;
     }
 
     #[inline]

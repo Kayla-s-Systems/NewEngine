@@ -9,11 +9,15 @@ use newengine_primitives::builtins as prim_builtins;
 use newengine_primitives::Primitive;
 use newengine_transform::GlobalTransform;
 
-use super::super::gpu::{ensure_debug_line_pipeline, ensure_grid, ensure_primitive_gpu, GridMeshParams};
+use super::super::gpu::{
+    ensure_debug_line_pipeline, ensure_grid, ensure_primitive_gpu, upload_primitive_mesh, GridMeshParams,
+};
+use super::super::material_bindings::LitMaterialPlan;
 use super::grid;
 use super::lights::PackedLights;
 use super::EditorRenderController;
 use crate::gameplay::{display_visible_in_mode, CollisionBody, CollisionShape};
+use newengine_procedural_noise::ProceduralTerrain;
 
 pub(super) fn publish_camera_spawn(
     bridge: &crate::viewport_bridge::ViewportBridge,
@@ -70,6 +74,79 @@ pub(super) fn draw_grid(
     Ok(())
 }
 
+pub(super) fn draw_procedural_terrain(
+    this: &mut EditorRenderController,
+    r: &mut dyn newengine_core::render::RenderApi,
+    scene: &newengine_scene::Scene,
+    lit: super::super::gpu::LitPipeline,
+    viewproj: Mat4,
+    lights: &PackedLights,
+    runtime: bool,
+) -> newengine_core::EngineResult<()> {
+    let world = scene.world();
+    let mats_lock = this.scene_bridge.materials();
+    let mats = mats_lock.read();
+
+    let mut entries: Vec<(u64, ProceduralTerrain, Mat4, Option<newengine_materials::MaterialRef>)> = Vec::new();
+    for (id, terrain, gt) in world.query2::<ProceduralTerrain, GlobalTransform>() {
+        if !display_visible_in_mode(world, id, runtime) {
+            continue;
+        }
+        entries.push((
+            id.stable_u64(),
+            terrain.clone(),
+            gt.0,
+            world.get::<newengine_materials::MaterialRef>(id).copied(),
+        ));
+    }
+    entries.sort_by(|a, b| a.0.cmp(&b.0));
+
+    for (entity_key, terrain, model, material) in entries {
+        let mesh_key = terrain.mesh_key();
+        let gpu = if let Some(gpu) = this.terrain_cache.get(&mesh_key).copied() {
+            gpu
+        } else {
+            let mesh = terrain.heightfield.to_primitive_mesh();
+            let gpu = upload_primitive_mesh(r, &mesh, "editor_proc_terrain")?;
+            this.terrain_cache.insert(mesh_key, gpu);
+            gpu
+        };
+
+        let mvp = viewproj * model;
+        let resolved = material.and_then(|mr| mats.resolve(mr.id));
+        let material_plan = LitMaterialPlan::from_resolved(resolved.as_ref(), terrain.base_color);
+        let base_tex = this.material_texture_or_default(r, material_plan.base_color_texture, lit.white_texture);
+        let normal_tex = this.material_texture_or_default(r, material_plan.normal_texture, lit.flat_normal_texture);
+        let roughness_tex = this.material_texture_or_default(r, material_plan.roughness_texture, lit.white_texture);
+        let sampler = if material_plan.has_textures() { lit.repeat_sampler } else { lit.clamp_sampler };
+
+        let key = entity_key ^ 0x7e44_1000_0000_0000u64;
+        let mut per = this.ensure_per_draw_ubo_with_binding(r, lit, key, base_tex, normal_tex, roughness_tex, sampler)?;
+        per.last_seen_frame = this.frame_index;
+        this.per_draw_ubo.insert(key, per);
+
+        super::passes_ubo::write_lit_ubo_ex(
+            r,
+            per.ubo,
+            mvp,
+            model,
+            material_plan.base_color,
+            material_plan.emissive_radiance,
+            material_plan.uv_transform,
+            material_plan.material_params,
+            lights,
+        )?;
+
+        r.set_pipeline(if material_plan.double_sided { lit.double_sided_pipeline } else { lit.pipeline })?;
+        r.set_bind_group(0, per.bg)?;
+        r.set_vertex_buffer(0, BufferSlice::new(gpu.vb, 0))?;
+        r.set_index_buffer(BufferSlice::new(gpu.ib, 0), IndexFormat::U32)?;
+        r.draw_indexed(newengine_core::render::DrawIndexedArgs::new(gpu.index_count))?;
+    }
+
+    Ok(())
+}
+
 pub(super) fn draw_primitives(
     this: &mut EditorRenderController,
     r: &mut dyn newengine_core::render::RenderApi,
@@ -94,20 +171,33 @@ pub(super) fn draw_primitives(
         let model = gt.0;
         let mvp = viewproj * model;
 
-        let (base_color, emissive_radiance) = world
+        let resolved = world
             .get::<newengine_materials::MaterialRef>(id)
-            .and_then(|mr| mats.get(mr.id))
-            .map(|d| (d.base_color, d.emissive_radiance()))
-            .unwrap_or(([1.0, 0.0, 1.0, 1.0], [0.0, 0.0, 0.0]));
+            .and_then(|mr| mats.resolve(mr.id));
+        let material_plan = LitMaterialPlan::from_resolved(resolved.as_ref(), [1.0, 0.0, 1.0, 1.0]);
+        let base_tex = this.material_texture_or_default(r, material_plan.base_color_texture, lit.white_texture);
+        let normal_tex = this.material_texture_or_default(r, material_plan.normal_texture, lit.flat_normal_texture);
+        let roughness_tex = this.material_texture_or_default(r, material_plan.roughness_texture, lit.white_texture);
+        let sampler = if material_plan.has_textures() { lit.repeat_sampler } else { lit.clamp_sampler };
 
         let key = id.stable_u64();
-        let mut per = this.ensure_per_draw_ubo(r, lit, key)?;
+        let mut per = this.ensure_per_draw_ubo_with_binding(r, lit, key, base_tex, normal_tex, roughness_tex, sampler)?;
         per.last_seen_frame = this.frame_index;
         this.per_draw_ubo.insert(key, per);
 
-        super::passes_ubo::write_lit_ubo(r, per.ubo, mvp, model, base_color, emissive_radiance, lights)?;
+        super::passes_ubo::write_lit_ubo_ex(
+            r,
+            per.ubo,
+            mvp,
+            model,
+            material_plan.base_color,
+            material_plan.emissive_radiance,
+            material_plan.uv_transform,
+            material_plan.material_params,
+            lights,
+        )?;
 
-        r.set_pipeline(lit.pipeline)?;
+        r.set_pipeline(if material_plan.double_sided { lit.double_sided_pipeline } else { lit.pipeline })?;
         r.set_bind_group(0, per.bg)?;
         r.set_vertex_buffer(0, BufferSlice::new(gpu.vb, 0))?;
         r.set_index_buffer(BufferSlice::new(gpu.ib, 0), IndexFormat::U32)?;

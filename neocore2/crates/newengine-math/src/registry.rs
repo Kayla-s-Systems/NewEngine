@@ -3,7 +3,7 @@
 
 use std::sync::Arc;
 
-use ahash::AHashMap;
+use crate::collections::prelude::NeHashMap;
 use log::debug;
 use once_cell::sync::Lazy;
 use parking_lot::RwLock;
@@ -47,9 +47,9 @@ impl RegisterMathFn for MathRegistry {
 #[derive(Default)]
 struct RegistryState {
     /// `id -> providers` in priority order (latest wins unless priority is introduced).
-    providers: AHashMap<MathFnId, Vec<ProviderEntry>>,
+    providers: NeHashMap<MathFnId, Vec<ProviderEntry>>,
     /// `provider -> ids` for fast bulk removal.
-    by_provider: AHashMap<ProviderId, Vec<MathFnId>>,
+    by_provider: NeHashMap<ProviderId, Vec<MathFnId>>,
 }
 
 #[derive(Clone)]

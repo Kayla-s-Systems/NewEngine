@@ -334,7 +334,7 @@ fn init_with_overrides(
                     let mut preview = s.to_string();
                     if preview.len() > PREVIEW_MAX {
                         preview.truncate(PREVIEW_MAX);
-                        preview.push_str("…");
+                        preview.push_str("...");
                     }
 
                     let changed_keys = json_diff_keys_shallow_or_paths(

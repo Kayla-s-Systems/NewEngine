@@ -189,7 +189,7 @@ pub fn property_fields(me: &EditorUiBuild, ctx: &SelectionContext, section: Prop
         out.insert(2, field(PropertyFieldId::Entity, "Entity", "entity id", FieldEditorKind::ReadOnlyText));
     }
 
-    let mut dedup = std::collections::HashSet::new();
+    let mut dedup = newengine_math::collections_prelude::NeHashSet::default();
     out.into_iter().filter(|f| dedup.insert(f.id)).collect()
 }
 
@@ -375,7 +375,7 @@ pub fn selection_context_actions(me: &EditorUiBuild, selection: Option<&Selectio
             out.extend(actions.into_iter().filter_map(|action| extension_abi::from_abi_context_action_schema(action)));
         }
     }
-    let mut dedup = std::collections::HashSet::new();
+    let mut dedup = newengine_math::collections_prelude::NeHashSet::default();
     out.into_iter().filter(|it| dedup.insert(it.id)).collect()
 }
 

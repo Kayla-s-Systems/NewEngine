@@ -3,11 +3,15 @@
 
 use std::fmt;
 
+#[cfg(feature = "serde")]
+use serde::{Deserialize, Serialize};
+
 use crate::{Mat4, Quat, Vec2, Vec3, Vec4};
 
 pub type MathResult<T> = Result<T, MathError>;
 
 #[derive(Debug, Clone)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub enum MathError {
     NotFound {
         id: String,
@@ -71,6 +75,7 @@ impl std::error::Error for MathError {}
 
 #[repr(u8)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub enum MathValueType {
     Unit = 0,
     Bool,
@@ -88,12 +93,14 @@ pub enum MathValueType {
 }
 
 #[derive(Debug, Clone, PartialEq)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct Signature {
     pub inputs: Vec<MathValueType>,
     pub output: MathValueType,
 }
 
 #[derive(Debug, Clone)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub enum MathValue {
     Unit,
     Bool(bool),

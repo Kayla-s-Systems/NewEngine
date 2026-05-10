@@ -175,6 +175,7 @@ pub struct TextureDesc {
     pub format: TextureFormat,
     pub usage: TextureUsage,
     pub mip_levels: NonZeroU32,
+    pub data: Option<Vec<u8>>,
 }
 
 impl TextureDesc {
@@ -186,6 +187,7 @@ impl TextureDesc {
             format,
             usage,
             mip_levels: NonZeroU32::new(1).expect("mip_levels must be non-zero"),
+            data: None,
         }
     }
 
@@ -198,6 +200,12 @@ impl TextureDesc {
     #[inline]
     pub fn with_mips(mut self, mip_levels: NonZeroU32) -> Self {
         self.mip_levels = mip_levels;
+        self
+    }
+
+    #[inline]
+    pub fn with_data(mut self, data: Vec<u8>) -> Self {
+        self.data = Some(data);
         self
     }
 }
@@ -247,6 +255,19 @@ impl SamplerDesc {
         self.label = Some(label.into());
         self
     }
+
+    #[inline]
+    pub fn with_min_filter(mut self, v: FilterMode) -> Self { self.min_filter = v; self }
+    #[inline]
+    pub fn with_mag_filter(mut self, v: FilterMode) -> Self { self.mag_filter = v; self }
+    #[inline]
+    pub fn with_mip_filter(mut self, v: FilterMode) -> Self { self.mip_filter = v; self }
+    #[inline]
+    pub fn with_address_u(mut self, v: AddressMode) -> Self { self.address_u = v; self }
+    #[inline]
+    pub fn with_address_v(mut self, v: AddressMode) -> Self { self.address_v = v; self }
+    #[inline]
+    pub fn with_address_w(mut self, v: AddressMode) -> Self { self.address_w = v; self }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -288,6 +309,20 @@ pub enum PrimitiveTopology {
     TriangleStrip,
     LineList,
     LineStrip,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum RasterCullMode {
+    None,
+    Front,
+    Back,
+}
+
+impl Default for RasterCullMode {
+    #[inline]
+    fn default() -> Self {
+        Self::Back
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -345,6 +380,8 @@ pub struct PipelineDesc {
     pub bind_group_layouts: Vec<BindGroupLayoutId>,
     pub color_format: TextureFormat,
     pub depth_format: Option<TextureFormat>,
+    #[serde(default)]
+    pub cull_mode: RasterCullMode,
 }
 
 impl PipelineDesc {
@@ -359,6 +396,7 @@ impl PipelineDesc {
             bind_group_layouts: Vec::new(),
             color_format,
             depth_format: None,
+            cull_mode: RasterCullMode::Back,
         }
     }
 
@@ -395,6 +433,12 @@ impl PipelineDesc {
     #[inline]
     pub fn with_depth(mut self, depth_format: TextureFormat) -> Self {
         self.depth_format = Some(depth_format);
+        self
+    }
+
+    #[inline]
+    pub fn with_cull_mode(mut self, cull_mode: RasterCullMode) -> Self {
+        self.cull_mode = cull_mode;
         self
     }
 }
@@ -589,6 +633,9 @@ pub struct BindGroupDesc {
     pub label: Option<String>,
     pub layout: BindGroupLayoutId,
     pub texture0: Option<TextureId>,
+    pub texture1: Option<TextureId>,
+    pub texture2: Option<TextureId>,
+    pub texture3: Option<TextureId>,
     pub sampler0: Option<SamplerId>,
     pub uniform0: Option<BufferBinding>,
     pub storage0: Option<BufferBinding>,
@@ -601,6 +648,9 @@ impl BindGroupDesc {
             label: None,
             layout,
             texture0: None,
+            texture1: None,
+            texture2: None,
+            texture3: None,
             sampler0: None,
             uniform0: None,
             storage0: None,
@@ -617,6 +667,35 @@ impl BindGroupDesc {
     pub fn with_texture0(mut self, tex: TextureId) -> Self {
         self.texture0 = Some(tex);
         self
+    }
+
+    #[inline]
+    pub fn with_texture1(mut self, tex: TextureId) -> Self {
+        self.texture1 = Some(tex);
+        self
+    }
+
+    #[inline]
+    pub fn with_texture2(mut self, tex: TextureId) -> Self {
+        self.texture2 = Some(tex);
+        self
+    }
+
+    #[inline]
+    pub fn with_texture3(mut self, tex: TextureId) -> Self {
+        self.texture3 = Some(tex);
+        self
+    }
+
+    #[inline]
+    pub fn texture_at(&self, index: usize) -> Option<TextureId> {
+        match index {
+            0 => self.texture0,
+            1 => self.texture1,
+            2 => self.texture2,
+            3 => self.texture3,
+            _ => None,
+        }
     }
 
     #[inline]

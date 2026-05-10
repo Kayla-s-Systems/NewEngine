@@ -1,7 +1,7 @@
 #![forbid(unsafe_op_in_unsafe_fn)]
 
 use serde_json::Value;
-use std::collections::HashMap;
+use newengine_math::collections_prelude::NeHashMap as HashMap;
 use std::path::{Path, PathBuf};
 
 use crate::log_fmt::{ellipsize, emit_boxed_kv};
@@ -22,15 +22,35 @@ impl Default for StartupConfigSource {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum UiBackend {
-    Disabled,
-    Egui,
-    Custom(String),
+    /// No UI provider. This is the engine default for standalone/runtime builds.
+    None,
+
+    /// UI provider resolved from a runtime plugin capability/service id.
+    ///
+    /// The engine must never compile a concrete UI backend such as egui into
+    /// the core/runtime host. Concrete UI implementations live in plugins.
+    Plugin(String),
+}
+
+impl UiBackend {
+    #[inline]
+    pub fn is_none(&self) -> bool {
+        matches!(self, Self::None)
+    }
+
+    #[inline]
+    pub fn plugin_id(&self) -> Option<&str> {
+        match self {
+            Self::Plugin(id) => Some(id.as_str()),
+            Self::None => None,
+        }
+    }
 }
 
 impl Default for UiBackend {
     #[inline]
     fn default() -> Self {
-        Self::Egui
+        Self::None
     }
 }
 
@@ -99,9 +119,9 @@ impl Default for StartupConfig {
 
             ui_backend: UiBackend::default(),
 
-            plugins: HashMap::new(),
+            plugins: HashMap::default(),
 
-            extra: HashMap::new(),
+            extra: HashMap::default(),
 
             window_icon_png: None,
         }

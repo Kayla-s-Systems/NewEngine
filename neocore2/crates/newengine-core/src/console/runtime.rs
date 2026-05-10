@@ -5,7 +5,7 @@ use newengine_plugin_host::services_generation;
 
 use super::types::{ConsoleCmdEntry, DynCommand, DynPayload, SuggestItem, SuggestResponse};
 
-use std::collections::BTreeMap;
+use newengine_math::collections_prelude::NeBTreeMap as BTreeMap;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 

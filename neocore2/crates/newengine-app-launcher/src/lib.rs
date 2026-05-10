@@ -55,10 +55,20 @@ impl LauncherConfig {
             log_prefix: "game-ready fps launcher",
             app_version,
             stopped_message: "game-ready fps stopped",
-            env: vec![LauncherEnv {
-                key: "NEWENGINE_GAME_READY_DEMO",
-                value: "1",
-            }],
+            env: vec![
+                LauncherEnv {
+                    key: "NEWENGINE_GAME_READY_DEMO",
+                    value: "1",
+                },
+                LauncherEnv {
+                    key: "NEWENGINE_REQUIRE_RENDER_BACKEND",
+                    value: "1",
+                },
+                LauncherEnv {
+                    key: "NEWENGINE_PLUGIN_TARGET",
+                    value: "runtime",
+                },
+            ],
         }
     }
 }

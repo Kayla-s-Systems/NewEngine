@@ -15,6 +15,31 @@ pub(super) fn write_lit_ubo(
     emissive_radiance: [f32; 3],
     lights: &PackedLights,
 ) -> EngineResult<()> {
+    write_lit_ubo_ex(
+        r,
+        ubo,
+        mvp,
+        model,
+        base_color,
+        emissive_radiance,
+        [1.0, 1.0, 0.0, 0.0],
+        [1.0, 0.75, 0.0, 1.0],
+        lights,
+    )
+}
+
+#[inline]
+pub(super) fn write_lit_ubo_ex(
+    r: &mut dyn newengine_core::render::RenderApi,
+    ubo: newengine_core::render::BufferId,
+    mvp: Mat4,
+    model: Mat4,
+    base_color: [f32; 4],
+    emissive_radiance: [f32; 3],
+    uv_transform: [f32; 4],
+    material_params: [f32; 4],
+    lights: &PackedLights,
+) -> EngineResult<()> {
     let mut bytes: [u8; PackedLights::UBO_SIZE] = [0u8; PackedLights::UBO_SIZE];
 
     let mvp_cols = mvp.to_cols_array();
@@ -45,6 +70,18 @@ pub(super) fn write_lit_ubo(
     bytes[em_off + 12..em_off + 16].copy_from_slice(&0.0_f32.to_ne_bytes());
 
     lights.write_into(&mut bytes);
+
+    let uv_off = 352;
+    for i in 0..4 {
+        let off = uv_off + i * 4;
+        bytes[off..off + 4].copy_from_slice(&uv_transform[i].to_ne_bytes());
+    }
+
+    let mat_off = 368;
+    for i in 0..4 {
+        let off = mat_off + i * 4;
+        bytes[off..off + 4].copy_from_slice(&material_params[i].to_ne_bytes());
+    }
 
     r.write_buffer(ubo, 0, &bytes)
 }

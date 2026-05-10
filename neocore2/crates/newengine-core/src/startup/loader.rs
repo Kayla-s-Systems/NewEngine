@@ -73,7 +73,7 @@ struct RootJson {
     engine: Option<EngineJson>,
     render: Option<RenderJson>,
     ui: Option<UiJson>,
-    plugins: Option<std::collections::HashMap<String, serde_json::Value>>,
+    plugins: Option<newengine_math::collections_prelude::NeHashMap<String, serde_json::Value>>,
 }
 
 #[derive(Deserialize)]
@@ -143,7 +143,7 @@ struct EngineJson {
     /// Engine-side asset settings are intentionally NOT supported anymore:
     /// assets must be configured via the AssetManager plugin (`plugins.newengine.assets`).
     #[serde(flatten)]
-    extra: std::collections::HashMap<String, serde_json::Value>,
+    extra: newengine_math::collections_prelude::NeHashMap<String, serde_json::Value>,
 }
 
 #[derive(Deserialize)]
@@ -151,7 +151,7 @@ struct RenderJson {
     backend: Option<String>,
 
     #[serde(flatten)]
-    extra: std::collections::HashMap<String, serde_json::Value>,
+    extra: newengine_math::collections_prelude::NeHashMap<String, serde_json::Value>,
 }
 
 #[derive(Deserialize)]
@@ -411,7 +411,7 @@ fn collect_plugin_override_report_entries(
 }
 
 fn dedup_plugin_override_report_entries(entries: &mut Vec<StartupPluginOverride>) {
-    let mut by_id = std::collections::BTreeMap::<String, StartupPluginOverride>::new();
+    let mut by_id = newengine_math::collections_prelude::NeBTreeMap::<String, StartupPluginOverride>::new();
     for entry in entries.drain(..) {
         by_id.insert(entry.plugin_id.clone(), entry);
     }
@@ -449,12 +449,17 @@ fn parse_placement(p: WindowPlacementJson) -> Option<WindowPlacement> {
     }
 }
 
+const EGUI_UI_PROVIDER_ID: &str = "newengine.ui.provider.egui";
+
 fn parse_ui_backend(s: &str) -> UiBackend {
-    let v = s.trim().to_ascii_lowercase();
+    let trimmed = s.trim();
+    let v = trimmed.to_ascii_lowercase();
     match v.as_str() {
-        "egui" => UiBackend::Egui,
-        "none" | "null" | "off" | "disabled" => UiBackend::Disabled,
-        _ => UiBackend::Custom(s.trim().to_owned()),
+        "" | "none" | "null" | "off" | "disabled" => UiBackend::None,
+        // Back-compat config spelling. The engine resolves it as a plugin id,
+        // never as a built-in compile-time provider.
+        "egui" => UiBackend::Plugin(EGUI_UI_PROVIDER_ID.to_owned()),
+        _ => UiBackend::Plugin(trimmed.to_owned()),
     }
 }
 
@@ -655,7 +660,7 @@ fn summarize_json(v: &serde_json::Value) -> String {
         Ok(s) => {
             let mut out = s;
             out.truncate(MAX);
-            out.push_str("…");
+            out.push_str("...");
             out
         }
         Err(_) => "<invalid json>".to_owned(),

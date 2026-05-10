@@ -14,8 +14,6 @@
 //! - Normal usage: `use newengine_math::collections::prelude::*;`
 //! - Escape hatch: `use newengine_math::collections::raw::...;` (implementation-specific APIs)
 
-#[cfg(feature = "collections")]
-use core::hash::BuildHasherDefault;
 
 #[cfg(feature = "collections")]
 pub mod policy;
@@ -30,7 +28,7 @@ pub mod raw;
 pub use fxhash::FxHasher;
 
 #[cfg(feature = "collections")]
-pub type FxBuildHasher = BuildHasherDefault<FxHasher>;
+pub type FxBuildHasher = policy::FastBuildHasher;
 
 #[cfg(feature = "collections")]
 pub use hashbrown::{HashMap, HashSet};
@@ -67,6 +65,18 @@ pub type BTreeMap<K, V> = std::collections::BTreeMap<K, V>;
 
 #[cfg(feature = "collections")]
 pub type BTreeSet<K> = std::collections::BTreeSet<K>;
+
+/// FIFO / LRU queue container routed through the engine foundation.
+#[cfg(feature = "collections")]
+pub type VecDeque<T> = std::collections::VecDeque<T>;
+
+/// Stable construction point for one-shot hashing.
+///
+/// This is intentionally exposed through `newengine-math` so plugins do not
+/// reach into `std::collections::hash_map` directly. Do not serialize or persist
+/// values produced by this hasher as long-term stable content IDs.
+#[cfg(feature = "collections")]
+pub type DefaultHasher = std::collections::hash_map::DefaultHasher;
 
 /// Slotmap types (stable generational keys).
 ///

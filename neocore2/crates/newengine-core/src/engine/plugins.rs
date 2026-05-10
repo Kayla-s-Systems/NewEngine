@@ -3,6 +3,7 @@
 use super::{Engine, PluginFaultTolerance};
 
 use crate::error::{EngineError, EngineResult};
+use crate::lifecycle_events::EngineLifecycleEvent;
 use crate::log_fmt::{ellipsize, emit_boxed_kv, emit_prefixed_table};
 use crate::path_fmt::display_clean;
 use crate::plugin_forward_logger::install_forward_logger_once;
@@ -83,6 +84,12 @@ impl<E: Send + 'static> Engine<E> {
         self.expose_plugins_snapshot();
 
         let loaded = self.plugins.snapshot().len();
+        let event = EngineLifecycleEvent::EnginePluginsReady {
+            loaded_count: loaded,
+            origin: "load_engine_plugins_once",
+        };
+        self.mark_readiness_observed(&event);
+        self.events.publish(event)?;
         Self::log_phase_ok("plugins", phase, Some(loaded), Self::elapsed_since(t0));
         self.log_plugins_diagnostics("after engine plugins init");
 
@@ -146,6 +153,12 @@ impl<E: Send + 'static> Engine<E> {
         self.expose_plugins_snapshot();
 
         let loaded = self.plugins.snapshot().len();
+        let event = EngineLifecycleEvent::EnginePluginsReady {
+            loaded_count: loaded,
+            origin: "load_plugins_once",
+        };
+        self.mark_readiness_observed(&event);
+        self.events.publish(event)?;
         Self::log_phase_ok("plugins", phase, Some(loaded), Self::elapsed_since(t0));
 
         Ok(())

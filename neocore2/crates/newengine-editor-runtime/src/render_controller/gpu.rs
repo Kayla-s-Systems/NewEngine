@@ -1,13 +1,14 @@
 #![forbid(unsafe_op_in_unsafe_fn)]
 
 use newengine_core::render::{
-    BindGroupDesc, BindGroupLayoutDesc, BindingKind, BufferBinding, BufferDesc, BufferSlice,
-    BufferUsage, DrawIndexedArgs, IndexFormat, MemoryHint, PipelineDesc, PrimitiveTopology,
-    ShaderDesc, ShaderStage, TextureFormat, VertexAttribute, VertexFormat, VertexLayout,
+    AddressMode, BindGroupDesc, BindGroupLayoutDesc, BindingKind, BufferBinding, BufferDesc,
+    BufferSlice, BufferUsage, DrawIndexedArgs, Extent2D, IndexFormat, MemoryHint, PipelineDesc,
+    PrimitiveTopology, RasterCullMode, SamplerDesc, ShaderDesc, ShaderStage, TextureDesc,
+    TextureFormat, TextureUsage, VertexAttribute, VertexFormat, VertexLayout,
 };
 use newengine_core::{EngineError, EngineResult as CoreResult};
 use newengine_math::collections::FxHashMap;
-use newengine_primitives::{PrimitiveId, PrimitiveRegistry, PrimitiveVertex};
+use newengine_primitives::{PrimitiveId, PrimitiveMesh, PrimitiveRegistry, PrimitiveVertex};
 
 use newengine_assets::{wait_ready, AssetAccess, AssetServiceClient};
 use newengine_plugin_host::default_host_api;
@@ -61,6 +62,29 @@ fn load_text_asset(rel: &str) -> CoreResult<String> {
     Ok(s)
 }
 
+
+#[cfg(feature = "texture-decode")]
+pub(super) fn load_rgba_texture_asset(rel: &str) -> CoreResult<(Extent2D, Vec<u8>)> {
+    let assets = AssetServiceClient::new(default_host_api());
+    let id = assets.load(rel).map_err(|e| EngineError::other(format!("asset.load failed path='{rel}' err='{e}'")))?;
+    wait_ready(&assets, &id, std::time::Duration::from_secs(3))
+        .map_err(|e| EngineError::other(format!("asset not ready path='{rel}' err='{e:?}'")))?;
+    let (_meta, payload) = assets
+        .blob_wire_v1(&id)
+        .map_err(|e| EngineError::other(format!("asset.blob_wire_v1 failed path='{rel}' err='{e}'")))?;
+    let dyn_img = image::load_from_memory(&payload)
+        .map_err(|e| EngineError::other(format!("image decode failed path='{rel}' err='{e}'")))?;
+    let rgba = dyn_img.to_rgba8();
+    let (w, h) = rgba.dimensions();
+    Ok((Extent2D::new(w, h), rgba.into_raw()))
+}
+
+#[cfg(not(feature = "texture-decode"))]
+pub(super) fn load_rgba_texture_asset(rel: &str) -> CoreResult<(Extent2D, Vec<u8>)> {
+    Err(EngineError::other(format!(
+        "texture decode requested in runtime-core for '{rel}', but image decoding must go through AssetManager/imageImporter"
+    )))
+}
 #[inline]
 fn builtin_text_asset(rel: &str) -> Option<&'static str> {
     match rel {
@@ -78,6 +102,7 @@ const BUILTIN_EDITOR_LIT_VERT: &str = r#"#version 450
 
 layout(location = 0) in vec3 a_pos;
 layout(location = 1) in vec3 a_nrm;
+layout(location = 2) in vec2 a_uv;
 
 layout(set = 0, binding = 0, std140) uniform Ubo {
     mat4 u_mvp;
@@ -90,17 +115,21 @@ layout(set = 0, binding = 0, std140) uniform Ubo {
     vec4 u_point_pos_range[4];
     vec4 u_point_color_intensity[4];
     vec4 u_point_count_pad;
+    vec4 u_uv_transform;
+    vec4 u_material_params;
 } ubo;
 
 layout(location = 0) out vec3 v_wpos;
 layout(location = 1) out vec3 v_wnrm;
 layout(location = 2) out vec4 v_base;
+layout(location = 3) out vec2 v_uv;
 
 void main() {
     vec4 wpos4 = ubo.u_model * vec4(a_pos, 1.0);
     v_wpos = wpos4.xyz;
     v_wnrm = mat3(ubo.u_model) * a_nrm;
     v_base = ubo.u_base_color;
+    v_uv = a_uv * ubo.u_uv_transform.xy + ubo.u_uv_transform.zw;
     gl_Position = ubo.u_mvp * vec4(a_pos, 1.0);
 }
 "#;
@@ -110,6 +139,7 @@ const BUILTIN_EDITOR_LIT_FRAG: &str = r#"#version 450
 layout(location = 0) in vec3 v_wpos;
 layout(location = 1) in vec3 v_wnrm;
 layout(location = 2) in vec4 v_base;
+layout(location = 3) in vec2 v_uv;
 
 layout(set = 0, binding = 0, std140) uniform Ubo {
     mat4 u_mvp;
@@ -122,43 +152,61 @@ layout(set = 0, binding = 0, std140) uniform Ubo {
     vec4 u_point_pos_range[4];
     vec4 u_point_color_intensity[4];
     vec4 u_point_count_pad;
+    vec4 u_uv_transform;
+    vec4 u_material_params;
 } ubo;
+layout(set = 0, binding = 1) uniform texture2D u_base_tex;
+layout(set = 0, binding = 2) uniform texture2D u_normal_tex;
+layout(set = 0, binding = 3) uniform texture2D u_roughness_tex;
+layout(set = 0, binding = 4) uniform sampler u_material_sampler;
 
 layout(location = 0) out vec4 o_color;
 
-float saturate(float x) { return clamp(x, 0.0, 1.0); }
+mat3 cotangent_frame(vec3 n, vec3 p, vec2 uv) {
+    vec3 dp1 = dFdx(p);
+    vec3 dp2 = dFdy(p);
+    vec2 duv1 = dFdx(uv);
+    vec2 duv2 = dFdy(uv);
+    vec3 dp2perp = cross(dp2, n);
+    vec3 dp1perp = cross(n, dp1);
+    vec3 t = dp2perp * duv1.x + dp1perp * duv2.x;
+    vec3 b = dp2perp * duv1.y + dp1perp * duv2.y;
+    float invmax = inversesqrt(max(dot(t, t), dot(b, b)) + 1.0e-8);
+    return mat3(t * invmax, b * invmax, n);
+}
 
 void main() {
     vec3 N = normalize(v_wnrm);
-    vec3 base = v_base.rgb;
+    vec3 map_n = texture(sampler2D(u_normal_tex, u_material_sampler), v_uv).xyz * 2.0 - 1.0;
+    mat3 tbn = cotangent_frame(N, v_wpos, v_uv);
+    float normal_scale = max(ubo.u_material_params.x, 0.0);
+    N = normalize(tbn * vec3(map_n.xy * normal_scale, map_n.z));
+
+    vec4 texel = texture(sampler2D(u_base_tex, u_material_sampler), v_uv);
+    float roughness_sample = texture(sampler2D(u_roughness_tex, u_material_sampler), v_uv).r;
+    float roughness = clamp(ubo.u_material_params.y * roughness_sample, 0.02, 1.0);
+    vec3 base = (v_base * texel).rgb;
     vec3 emissive = ubo.u_emissive.rgb;
 
     vec3 lit = ubo.u_ambient.rgb * ubo.u_ambient.a;
-
-    // Directional (points from light to scene).
     vec3 Ld = normalize(-ubo.u_dir_dir_intensity.xyz);
     float NdL = max(dot(N, Ld), 0.0);
-    lit += ubo.u_dir_color.rgb * (ubo.u_dir_dir_intensity.a * NdL);
+    float rough_diffuse = mix(1.12, 0.82, roughness);
+    lit += NdL * rough_diffuse * ubo.u_dir_color.rgb * ubo.u_dir_dir_intensity.w;
 
-    int n = int(ubo.u_point_count_pad.x + 0.5);
-    n = clamp(n, 0, 4);
-    for (int i = 0; i < n; i++) {
-        vec3 P = ubo.u_point_pos_range[i].xyz;
-        float range = max(ubo.u_point_pos_range[i].w, 0.001);
-        vec3 toL = P - v_wpos;
-        float d2 = dot(toL, toL);
-        float d = sqrt(max(d2, 1e-6));
-        vec3 L = toL / d;
-        float att = 1.0 / max(d2, 1e-4);
-        float fade = 1.0 - saturate(d / range);
-        float NdLp = max(dot(N, L), 0.0);
-        vec3 col = ubo.u_point_color_intensity[i].rgb;
-        float inten = ubo.u_point_color_intensity[i].a;
-        lit += col * (inten * NdLp * att * fade * fade);
+    int point_count = int(ubo.u_point_count_pad.x + 0.5);
+    for (int i = 0; i < point_count && i < 4; ++i) {
+        vec3 toL = ubo.u_point_pos_range[i].xyz - v_wpos;
+        float dist = length(toL);
+        float range = max(ubo.u_point_pos_range[i].w, 0.0001);
+        vec3 L = toL / max(dist, 0.0001);
+        float atten = clamp(1.0 - (dist / range), 0.0, 1.0);
+        float ndl = max(dot(N, L), 0.0);
+        lit += ndl * atten * rough_diffuse * ubo.u_point_color_intensity[i].rgb * ubo.u_point_color_intensity[i].w;
     }
 
-    vec3 out_rgb = base * lit + emissive;
-    o_color = vec4(out_rgb, v_base.a);
+    vec3 color = base * lit + emissive;
+    o_color = vec4(color, v_base.a * texel.a);
 }
 "#;
 
@@ -216,11 +264,16 @@ pub(super) struct LitPipeline {
     pub grid_ubo: newengine_core::render::BufferId,
     pub grid_bg: newengine_core::render::BindGroupId,
     pub bgl: newengine_core::render::BindGroupLayoutId,
+    pub white_texture: newengine_core::render::TextureId,
+    pub flat_normal_texture: newengine_core::render::TextureId,
+    pub repeat_sampler: newengine_core::render::SamplerId,
+    pub clamp_sampler: newengine_core::render::SamplerId,
     #[allow(dead_code)]
     pub vs: newengine_core::render::ShaderId,
     #[allow(dead_code)]
     pub fs: newengine_core::render::ShaderId,
     pub pipeline: newengine_core::render::PipelineId,
+    pub double_sided_pipeline: newengine_core::render::PipelineId,
 }
 
 // std140 layout (see assets/shaders/editor_lit.*):
@@ -233,8 +286,10 @@ pub(super) struct LitPipeline {
 // vec4 dir_color (16)
 // point lights: 4 * (vec4 pos_range + vec4 color_intensity) = 4 * 32 = 128
 // vec4 point_count_pad (16)
-// Total: 352 bytes.
-pub(super) const LIT_UBO_SIZE: u64 = 352;
+// vec4 uv_transform (16)
+// vec4 material_params (16)
+// Total: 384 bytes.
+pub(super) const LIT_UBO_SIZE: u64 = 384;
 
 #[derive(Clone, Copy)]
 pub(super) struct PrimitiveGpu {
@@ -303,12 +358,47 @@ pub(super) fn ensure_lit_pipeline(
     )?;
 
     let bgl = r.create_bind_group_layout(
-        BindGroupLayoutDesc::new(vec![BindingKind::UniformBuffer]).with_label("editor_lit_bgl"),
+        BindGroupLayoutDesc::new(vec![
+            BindingKind::UniformBuffer,
+            BindingKind::Texture2D,
+            BindingKind::Texture2D,
+            BindingKind::Texture2D,
+            BindingKind::Sampler,
+        ])
+        .with_label("editor_lit_bgl"),
+    )?;
+    let white_texture = r.create_texture(
+        TextureDesc::new(Extent2D::new(1, 1), TextureFormat::Rgba8Unorm, TextureUsage::Sampled)
+            .with_label("editor_white_tex")
+            .with_data(vec![255, 255, 255, 255]),
+    )?;
+    let flat_normal_texture = r.create_texture(
+        TextureDesc::new(Extent2D::new(1, 1), TextureFormat::Rgba8Unorm, TextureUsage::Sampled)
+            .with_label("editor_flat_normal_tex")
+            .with_data(vec![128, 128, 255, 255]),
+    )?;
+    let repeat_sampler = r.create_sampler(
+        SamplerDesc::default()
+            .with_label("editor_repeat_sampler")
+            .with_address_u(AddressMode::Repeat)
+            .with_address_v(AddressMode::Repeat)
+            .with_address_w(AddressMode::Repeat),
+    )?;
+    let clamp_sampler = r.create_sampler(
+        SamplerDesc::default()
+            .with_label("editor_clamp_sampler")
+            .with_address_u(AddressMode::ClampToEdge)
+            .with_address_v(AddressMode::ClampToEdge)
+            .with_address_w(AddressMode::ClampToEdge),
     )?;
     let grid_bg = r.create_bind_group(
         BindGroupDesc::new(bgl)
             .with_label("editor_grid_bg")
-            .with_uniform0(BufferBinding::new(grid_ubo, 0, LIT_UBO_SIZE)),
+            .with_uniform0(BufferBinding::new(grid_ubo, 0, LIT_UBO_SIZE))
+            .with_texture0(white_texture)
+            .with_texture1(flat_normal_texture)
+            .with_texture2(white_texture)
+            .with_sampler0(clamp_sampler),
     )?;
 
     let vs = r.create_shader(
@@ -324,6 +414,7 @@ pub(super) fn ensure_lit_pipeline(
         vec![
             VertexAttribute::new(0, 0, VertexFormat::Float32x3),
             VertexAttribute::new(1, 12, VertexFormat::Float32x3),
+            VertexAttribute::new(2, 24, VertexFormat::Float32x2),
         ],
     );
 
@@ -331,22 +422,100 @@ pub(super) fn ensure_lit_pipeline(
         PipelineDesc::new(vs, fs, TextureFormat::Bgra8Unorm)
             .with_label("editor_lit_pipeline")
             .with_topology(PrimitiveTopology::TriangleList)
-            .with_vertex_layouts(vec![layout])
+            .with_vertex_layouts(vec![layout.clone()])
             .with_bind_group_layouts(vec![bgl])
             .with_depth(TextureFormat::Depth32Float),
+    )?;
+
+    let double_sided_pipeline = r.create_pipeline(
+        PipelineDesc::new(vs, fs, TextureFormat::Bgra8Unorm)
+            .with_label("editor_lit_pipeline_double_sided")
+            .with_topology(PrimitiveTopology::TriangleList)
+            .with_vertex_layouts(vec![layout])
+            .with_bind_group_layouts(vec![bgl])
+            .with_depth(TextureFormat::Depth32Float)
+            .with_cull_mode(RasterCullMode::None),
     )?;
 
     let p = LitPipeline {
         grid_ubo,
         grid_bg,
         bgl,
+        white_texture,
+        flat_normal_texture,
+        repeat_sampler,
+        clamp_sampler,
         vs,
         fs,
         pipeline,
+        double_sided_pipeline,
     };
 
     *cached = Some(p);
     Ok(p)
+}
+
+pub(super) fn upload_primitive_mesh(
+    r: &mut dyn newengine_core::render::RenderApi,
+    mesh: &PrimitiveMesh,
+    label: &str,
+) -> CoreResult<PrimitiveGpu> {
+    if mesh.vertices.is_empty() || mesh.indices.is_empty() {
+        return Err(EngineError::other(format!(
+            "{label}: cannot upload empty primitive mesh"
+        )));
+    }
+
+    let vertex_stride = std::mem::size_of::<PrimitiveVertex>();
+    let mut vbytes: Vec<u8> = Vec::with_capacity(mesh.vertices.len() * vertex_stride);
+    for v in &mesh.vertices {
+        for f in &v.pos {
+            vbytes.extend_from_slice(&f.to_ne_bytes());
+        }
+        for f in &v.nrm {
+            vbytes.extend_from_slice(&f.to_ne_bytes());
+        }
+        for f in &v.uv {
+            vbytes.extend_from_slice(&f.to_ne_bytes());
+        }
+    }
+
+    debug_assert_eq!(
+        vbytes.len(),
+        mesh.vertices.len() * vertex_stride,
+        "PrimitiveVertex upload size mismatch"
+    );
+
+    let mut ibytes: Vec<u8> = Vec::with_capacity(mesh.indices.len() * 4);
+    for i in &mesh.indices {
+        ibytes.extend_from_slice(&i.to_ne_bytes());
+    }
+
+    let vb = r.create_buffer(
+        BufferDesc::new(
+            vbytes.len() as u64,
+            BufferUsage::Vertex,
+            MemoryHint::CpuToGpu,
+        )
+            .with_label(format!("{label}_vb")),
+    )?;
+    r.write_buffer(vb, 0, &vbytes)?;
+
+    let ib = r.create_buffer(
+        BufferDesc::new(
+            ibytes.len() as u64,
+            BufferUsage::Index,
+            MemoryHint::CpuToGpu,
+        )
+            .with_label(format!("{label}_ib")),
+    )?;
+    r.write_buffer(ib, 0, &ibytes)?;
+
+    Ok(PrimitiveGpu {
+        vb,
+        ib,
+        index_count: mesh.indices.len() as u32,
+    })
 }
 
 pub(super) fn ensure_primitive_gpu(
@@ -362,48 +531,7 @@ pub(super) fn ensure_primitive_gpu(
     let mesh = reg
         .build_mesh(id)
         .map_err(|e| EngineError::other(format!("{e}")))?;
-
-    let mut vbytes: Vec<u8> =
-        Vec::with_capacity(mesh.vertices.len() * std::mem::size_of::<PrimitiveVertex>());
-    for v in &mesh.vertices {
-        vbytes.extend_from_slice(&v.pos[0].to_ne_bytes());
-        vbytes.extend_from_slice(&v.pos[1].to_ne_bytes());
-        vbytes.extend_from_slice(&v.pos[2].to_ne_bytes());
-        vbytes.extend_from_slice(&v.nrm[0].to_ne_bytes());
-        vbytes.extend_from_slice(&v.nrm[1].to_ne_bytes());
-        vbytes.extend_from_slice(&v.nrm[2].to_ne_bytes());
-    }
-
-    let mut ibytes: Vec<u8> = Vec::with_capacity(mesh.indices.len() * 4);
-    for i in &mesh.indices {
-        ibytes.extend_from_slice(&i.to_ne_bytes());
-    }
-
-    let vb = r.create_buffer(
-        BufferDesc::new(
-            vbytes.len() as u64,
-            BufferUsage::Vertex,
-            MemoryHint::CpuToGpu,
-        )
-            .with_label("editor_prim_vb"),
-    )?;
-    r.write_buffer(vb, 0, &vbytes)?;
-
-    let ib = r.create_buffer(
-        BufferDesc::new(
-            ibytes.len() as u64,
-            BufferUsage::Index,
-            MemoryHint::CpuToGpu,
-        )
-            .with_label("editor_prim_ib"),
-    )?;
-    r.write_buffer(ib, 0, &ibytes)?;
-
-    let gpu = PrimitiveGpu {
-        vb,
-        ib,
-        index_count: mesh.indices.len() as u32,
-    };
+    let gpu = upload_primitive_mesh(r, &mesh, "editor_prim")?;
 
     cache.insert(id, gpu);
     Ok(gpu)

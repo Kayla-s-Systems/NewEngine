@@ -15,7 +15,6 @@ runtime = [
     "dep:newengine-transform",
     "newengine-transform-api/ecs",
     "dep:newengine-bounds",
-    "dep:newengine-math",
 ]
 
 [dependencies]
@@ -23,5 +22,5 @@ newengine-ecs = { path = "../newengine-ecs", optional = true }
 newengine-transform = { path = "../newengine-transform", optional = true, features = ["ecs"], default-features = false }
 newengine-transform-api = { path = "../newengine-transform-api", default-features = false }
 newengine-bounds = { path = "../newengine-bounds", optional = true }
-newengine-math = { path = "../newengine-math", optional = true }
+newengine-math = { path = "../newengine-math" }
 serde = { version = "1.0", features = ["derive"] }

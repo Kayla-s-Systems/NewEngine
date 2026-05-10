@@ -1,4 +1,4 @@
-use std::collections::HashSet;
+use newengine_math::collections_prelude::NeHashSet as HashSet;
 use std::path::{Path, PathBuf};
 
 use abi_stable::std_types::RString;
@@ -115,26 +115,34 @@ pub fn detect_platform_runtime_path(modules_dir: &Path) -> EngineResult<PathBuf>
         .ok_or_else(|| EngineError::other("current_exe has no parent"))?
         .to_path_buf();
 
-    let modules_path =
-        if modules_dir.as_os_str().is_empty() || modules_dir == Path::new(".") {
-            exe_dir.clone()
-        } else if modules_dir.is_absolute() {
-            modules_dir.to_path_buf()
-        } else {
-            exe_dir.join(modules_dir)
-        };
+    let mut search_dirs: Vec<PathBuf> = Vec::new();
 
-    let mut search_dirs: Vec<PathBuf> = vec![
-        exe_dir.join("platforms"),
-        modules_path.join("platforms"),
-        modules_path.clone(),
-    ];
-
-    if modules_path != exe_dir {
-        search_dirs.push(exe_dir.clone());
+    if let Some(dir) = env_dir("NEWENGINE_PLATFORM_RUNTIME_DIR") {
+        push_runtime_dirs(&mut search_dirs, &dir);
+    }
+    for key in ["NEWENGINE_PLUGIN_DIR", "NEWENGINE_PLUGINS_DIR"] {
+        if let Some(dir) = env_dir(key) {
+            push_runtime_dirs(&mut search_dirs, &dir);
+        }
     }
 
-    let mut dedup = HashSet::new();
+    push_runtime_dirs(&mut search_dirs, &exe_dir.join("platforms"));
+    push_runtime_dirs(&mut search_dirs, &exe_dir.join("plugins"));
+
+    for dir in resolve_module_dir_candidates(modules_dir, &exe_dir) {
+        push_runtime_dirs(&mut search_dirs, &dir);
+    }
+
+    push_ancestor_plugin_dirs(&mut search_dirs, &exe_dir);
+    if let Ok(cwd) = std::env::current_dir() {
+        push_runtime_dirs(&mut search_dirs, &cwd.join("platforms"));
+        push_runtime_dirs(&mut search_dirs, &cwd.join("plugins"));
+        push_ancestor_plugin_dirs(&mut search_dirs, &cwd);
+    }
+
+    push_unique(&mut search_dirs, exe_dir.clone());
+
+    let mut dedup = HashSet::default();
     search_dirs.retain(|p| dedup.insert(p.clone()));
 
     let mut candidates: Vec<PathBuf> = Vec::new();
@@ -157,7 +165,7 @@ pub fn detect_platform_runtime_path(modules_dir: &Path) -> EngineResult<PathBuf>
 
     candidates.into_iter().next().ok_or_else(|| {
         EngineError::other(format!(
-            "platform runtime DLL not found; searched [{}] and expected exported symbol 'newengine_platform_runtime_run_v1'",
+            "platform runtime DLL not found; searched [{}] and expected exported symbol 'newengine_platform_runtime_run_v1'. Build/copy the platform runtime into NEWENGINE_PLUGIN_DIR, NEWENGINE_PLATFORM_RUNTIME_DIR, <engine-root>/plugins, or set NEWENGINE_PLATFORM_RUNTIME to the exact DLL path.",
             search_dirs
                 .iter()
                 .map(|p| p.display().to_string())
@@ -165,4 +173,64 @@ pub fn detect_platform_runtime_path(modules_dir: &Path) -> EngineResult<PathBuf>
                 .join(", ")
         ))
     })
+}
+
+fn is_current_dir_path(path: &Path) -> bool {
+    path.as_os_str().is_empty()
+        || path == Path::new(".")
+        || path == Path::new("./")
+        || path == Path::new(".\\")
+}
+
+fn env_dir(name: &str) -> Option<PathBuf> {
+    let raw = std::env::var_os(name)?;
+    let path = PathBuf::from(raw);
+    if path.as_os_str().is_empty() {
+        None
+    } else {
+        Some(path)
+    }
+}
+
+fn push_unique(out: &mut Vec<PathBuf>, path: PathBuf) {
+    if !out.iter().any(|p| p == &path) {
+        out.push(path);
+    }
+}
+
+fn push_runtime_dirs(out: &mut Vec<PathBuf>, dir: &Path) {
+    push_unique(out, dir.join("platforms"));
+    push_unique(out, dir.to_path_buf());
+}
+
+fn push_ancestor_plugin_dirs(out: &mut Vec<PathBuf>, start: &Path) {
+    for ancestor in start.ancestors() {
+        push_runtime_dirs(out, &ancestor.join("plugins"));
+    }
+}
+
+fn resolve_module_dir_candidates(modules_dir: &Path, exe_dir: &Path) -> Vec<PathBuf> {
+    if is_current_dir_path(modules_dir) {
+        return vec![exe_dir.to_path_buf()];
+    }
+
+    if modules_dir.is_absolute() {
+        return vec![modules_dir.to_path_buf()];
+    }
+
+    let mut out = Vec::new();
+    push_unique(&mut out, exe_dir.join(modules_dir));
+
+    if let Ok(cwd) = std::env::current_dir() {
+        push_unique(&mut out, cwd.join(modules_dir));
+        for ancestor in cwd.ancestors() {
+            push_unique(&mut out, ancestor.join(modules_dir));
+        }
+    }
+
+    for ancestor in exe_dir.ancestors() {
+        push_unique(&mut out, ancestor.join(modules_dir));
+    }
+
+    out
 }

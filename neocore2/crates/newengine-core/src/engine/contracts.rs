@@ -3,12 +3,12 @@ use super::Engine;
 use crate::error::{EngineError, EngineResult};
 use crate::module::ApiVersion;
 
-use std::collections::HashMap;
+use newengine_math::collections_prelude::NeHashMap as HashMap;
 
 impl<E: Send + 'static> Engine<E> {
     pub(super) fn validate_api_contracts_strict(&self) -> EngineResult<()> {
-        let mut provided: HashMap<&'static str, ApiVersion> = HashMap::new();
-        let mut provider: HashMap<&'static str, &'static str> = HashMap::new();
+        let mut provided: HashMap<&'static str, ApiVersion> = HashMap::default();
+        let mut provider: HashMap<&'static str, &'static str> = HashMap::default();
 
         for s in self.modules.iter() {
             let m = s.module.as_ref();

@@ -1,6 +1,6 @@
 use serde_json::Value;
 
-use std::collections::HashMap;
+use newengine_math::collections_prelude::NeHashMap as HashMap;
 use std::path::PathBuf;
 
 use crate::startup::StartupConfig;
@@ -68,7 +68,7 @@ impl Default for EngineConfig {
         Self {
             fixed_dt_ms: 16,
             plugins_dir: None,
-            plugin_overrides: HashMap::new(),
+            plugin_overrides: HashMap::default(),
             module_fault_tolerance: ModuleFaultTolerance::Resilient,
             plugin_fault_tolerance: PluginFaultTolerance::Resilient,
             catch_panics: true,
@@ -82,7 +82,7 @@ impl EngineConfig {
         Self {
             fixed_dt_ms,
             plugins_dir: None,
-            plugin_overrides: HashMap::new(),
+            plugin_overrides: HashMap::default(),
             module_fault_tolerance: ModuleFaultTolerance::Resilient,
             plugin_fault_tolerance: PluginFaultTolerance::Resilient,
             catch_panics: true,

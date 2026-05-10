@@ -225,7 +225,17 @@ impl<E: Send + 'static> Module<E> for EditorRenderController {
 
         self.resize_if_needed(&mut **r, w, h)?;
 
-        let (vp_w, vp_h) = self.viewport_bridge.read_extent();
+        let (requested_vp_w, requested_vp_h) = self.viewport_bridge.read_extent();
+        let direct_surface_viewport = ui.is_none()
+            && requested_vp_w == 0
+            && requested_vp_h == 0
+            && w > 0
+            && h > 0;
+        let (vp_w, vp_h) = if direct_surface_viewport {
+            (w, h)
+        } else {
+            (requested_vp_w, requested_vp_h)
+        };
         if trace_frame {
             log::debug!(
                 "render controller: begin_frame next_frame={} clear={:.3},{:.3},{:.3},{:.3} viewport={}x{}",
@@ -258,27 +268,37 @@ impl<E: Send + 'static> Module<E> for EditorRenderController {
 
         if vp_w > 0 && vp_h > 0 && !self.viewport_pass_disabled {
             let extent = Extent2D::new(vp_w, vp_h);
-            let rt = match self.ensure_viewport_rt(&mut **r, extent) {
-                Ok(rt) => rt,
-                Err(e) => {
-                    self.disable_viewport_pass("ensure_viewport_rt", &e);
-                    if let Some(ui) = ui {
-                        r.set_ui_draw_list(ui);
+            let rt = if direct_surface_viewport {
+                None
+            } else {
+                match self.ensure_viewport_rt(&mut **r, extent) {
+                    Ok(rt) => Some(rt),
+                    Err(e) => {
+                        self.disable_viewport_pass("ensure_viewport_rt", &e);
+                        if let Some(ui) = ui {
+                            r.set_ui_draw_list(ui);
+                        }
+                        self.gc_per_draw_ubos(&mut **r);
+                        self.gc_deferred_rts(&mut **r);
+                        if trace_frame {
+                            newengine_core::crash::record_breadcrumb(format!(
+                                "render controller: end_frame frame={} after viewport RT failure",
+                                self.frame_index
+                            ));
+                        }
+                        r.end_frame()?;
+                        return Ok(());
                     }
-                    self.gc_per_draw_ubos(&mut **r);
-                    self.gc_deferred_rts(&mut **r);
-                    if trace_frame {
-                        newengine_core::crash::record_breadcrumb(format!(
-                            "render controller: end_frame frame={} after viewport RT failure",
-                            self.frame_index
-                        ));
-                    }
-                    r.end_frame()?;
-                    return Ok(());
                 }
             };
 
-            let input = ViewportInputSnap::read(&self.viewport_bridge);
+            let input = if direct_surface_viewport {
+                ViewportInputSnap::read_direct_surface(
+                    ctx.resources().get::<newengine_ui::UiInputFrame>(),
+                )
+            } else {
+                ViewportInputSnap::read(&self.viewport_bridge)
+            };
 
             self.scene_bridge.apply_commands();
             let play_mode = self.scene_bridge.play_mode();
@@ -487,11 +507,13 @@ impl<E: Send + 'static> Module<E> for EditorRenderController {
                         self.frame_index, vp_w, vp_h
                     ));
                 }
-                r.begin_render_target(
-                    BeginRenderTargetDesc::new(rt)
-                        .with_clear_depth(1.0)
-                        .with_clear_color(grid::BACKGROUND_COLOR),
-                )?;
+                if let Some(rt) = rt {
+                    r.begin_render_target(
+                        BeginRenderTargetDesc::new(rt)
+                            .with_clear_depth(1.0)
+                            .with_clear_color(grid::BACKGROUND_COLOR),
+                    )?;
+                }
                 r.set_viewport(Viewport::full(extent))?;
                 r.set_scissor(RectI32::new(0, 0, vp_w as i32, vp_h as i32))?;
 
@@ -506,6 +528,15 @@ impl<E: Send + 'static> Module<E> for EditorRenderController {
                         &world_lights,
                     )?;
                 }
+                passes::draw_procedural_terrain(
+                    self,
+                    &mut **r,
+                    &scene,
+                    lit,
+                    viewproj,
+                    &world_lights,
+                    play_mode.is_runtime(),
+                )?;
                 passes::draw_primitives(
                     self,
                     &mut **r,
@@ -529,7 +560,9 @@ impl<E: Send + 'static> Module<E> for EditorRenderController {
                     passes::draw_collision_wireframe(self, &mut **r, &scene, viewproj)?;
                 }
 
-                r.end_render_target()?;
+                if rt.is_some() {
+                    r.end_render_target()?;
+                }
                 Ok(())
             })();
 

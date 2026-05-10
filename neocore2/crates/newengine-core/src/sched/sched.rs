@@ -1,4 +1,4 @@
-use std::collections::VecDeque;
+use newengine_math::collections_prelude::NeVecDeque as VecDeque;
 use std::time::Duration;
 
 /// Scheduler phase within a frame.

@@ -70,7 +70,7 @@ pub(crate) fn dock_state_for_preset(preset: WorkspacePreset) -> DockState<Editor
 
 #[inline]
 fn closed_tabs(dock_state: &DockState<EditorDockTab>) -> Vec<EditorDockTab> {
-    let open: std::collections::HashSet<_> = dock_state
+    let open: newengine_math::collections_prelude::NeHashSet<_> = dock_state
         .iter_all_tabs()
         .map(|(_, tab)| *tab)
         .collect();

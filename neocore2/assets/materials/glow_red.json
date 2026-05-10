@@ -22,5 +22,16 @@
   "reserved": [
     0,
     0
+  ],
+  "base_color_texture": null,
+  "normal_texture": null,
+  "roughness_texture": null,
+  "uv_scale": [
+    1.0,
+    1.0
+  ],
+  "uv_offset": [
+    0.0,
+    0.0
   ]
 }

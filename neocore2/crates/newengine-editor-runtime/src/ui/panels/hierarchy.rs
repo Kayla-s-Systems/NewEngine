@@ -1,6 +1,6 @@
 #![forbid(unsafe_op_in_unsafe_fn)]
 
-use std::collections::HashMap;
+use newengine_math::collections_prelude::{ne_hash_map, NeHashMap as HashMap};
 
 use egui;
 use newengine_ecs::EntityId;
@@ -276,7 +276,7 @@ pub(crate) fn draw_content(me: &mut EditorUiBuild, ui: &mut egui::Ui) {
         let guard = scene.read();
         let world = guard.world();
 
-        let mut items = HashMap::<EntityId, HierarchyItem>::new();
+        let mut items: HashMap<EntityId, HierarchyItem> = ne_hash_map();
         for (id, name) in world.query::<Name>() {
             let item = HierarchyItem {
                 id,
@@ -295,7 +295,7 @@ pub(crate) fn draw_content(me: &mut EditorUiBuild, ui: &mut egui::Ui) {
             items.insert(id, item);
         }
 
-        let mut children = HashMap::<EntityId, Vec<EntityId>>::new();
+        let mut children: HashMap<EntityId, Vec<EntityId>> = ne_hash_map();
         let mut roots = Vec::new();
         for (id, item) in &items {
             if let Some(parent) = item.parent.filter(|parent| items.contains_key(&*parent)) {
