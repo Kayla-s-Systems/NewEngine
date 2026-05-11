@@ -1,5 +1,96 @@
 use crate::api::MaterialId;
 
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+pub enum MaterialTextureSlot {
+    BaseColor,
+    Normal,
+    Roughness,
+    Occlusion,
+    Emissive,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+pub enum MaterialTextureResidencyState {
+    Missing,
+    Loading,
+    Ready,
+    Failed,
+}
+
+impl Default for MaterialTextureResidencyState {
+    #[inline]
+    fn default() -> Self {
+        Self::Missing
+    }
+}
+
+#[derive(Clone, Debug, PartialEq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde", serde(default))]
+pub struct MaterialTextureResidency {
+    pub slot: MaterialTextureSlot,
+    pub path: Option<String>,
+    pub state: MaterialTextureResidencyState,
+    pub message: Option<String>,
+}
+
+impl Default for MaterialTextureResidency {
+    #[inline]
+    fn default() -> Self {
+        Self {
+            slot: MaterialTextureSlot::BaseColor,
+            path: None,
+            state: MaterialTextureResidencyState::Missing,
+            message: None,
+        }
+    }
+}
+
+impl MaterialTextureResidency {
+    #[inline]
+    pub fn missing(slot: MaterialTextureSlot) -> Self {
+        Self {
+            slot,
+            path: None,
+            state: MaterialTextureResidencyState::Missing,
+            message: None,
+        }
+    }
+
+    #[inline]
+    pub fn loading(slot: MaterialTextureSlot, path: impl Into<String>) -> Self {
+        Self {
+            slot,
+            path: Some(path.into()),
+            state: MaterialTextureResidencyState::Loading,
+            message: None,
+        }
+    }
+
+    #[inline]
+    pub fn ready(slot: MaterialTextureSlot, path: impl Into<String>) -> Self {
+        Self {
+            slot,
+            path: Some(path.into()),
+            state: MaterialTextureResidencyState::Ready,
+            message: None,
+        }
+    }
+
+    #[inline]
+    pub fn failed(slot: MaterialTextureSlot, path: impl Into<String>, message: impl Into<String>) -> Self {
+        Self {
+            slot,
+            path: Some(path.into()),
+            state: MaterialTextureResidencyState::Failed,
+            message: Some(message.into()),
+        }
+    }
+}
+
 /// Minimal texture bindings layered on top of renderer-agnostic material descriptors.
 ///
 /// The descriptor itself remains compact and copy-friendly, while texture paths live

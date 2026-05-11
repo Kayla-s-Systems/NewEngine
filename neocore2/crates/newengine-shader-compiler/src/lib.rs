@@ -57,6 +57,22 @@ pub fn compile_glsl_to_spirv(
         }
     }
 
+    let cache_key = shader_cache_key(stage, logical_name, entry, source);
+    let cache_path = shader_cache_path(stage, logical_name, entry, cache_key);
+    if shader_runtime_cache_enabled() {
+        match read_cached_spirv(&cache_path) {
+            Ok(Some(words)) => return Ok(words),
+            Ok(None) => {}
+            Err(e) => {
+                eprintln!(
+                    "newengine-shader-compiler: ignoring corrupt shader cache path='{}' err='{e}'",
+                    cache_path.display()
+                );
+                let _ = std::fs::remove_file(&cache_path);
+            }
+        }
+    }
+
     let glslc = resolve_glslc();
     let temp_dir = std::env::temp_dir().join("newengine-shaders");
     std::fs::create_dir_all(&temp_dir).map_err(|e| {
@@ -129,9 +145,20 @@ pub fn compile_glsl_to_spirv(
     let _ = std::fs::remove_file(&source_path);
     let _ = std::fs::remove_file(&spv_path);
 
-    spirv_bytes_to_words(&bytes).map_err(|e| {
+    let words = spirv_bytes_to_words(&bytes).map_err(|e| {
         ShaderCompileError::new(format!("shader='{logical_name}' invalid SPIR-V: {e}"))
-    })
+    })?;
+
+    if shader_runtime_cache_enabled() {
+        if let Err(e) = write_cached_spirv(&cache_path, &words) {
+            eprintln!(
+                "newengine-shader-compiler: shader cache write failed path='{}' err='{e}'",
+                cache_path.display()
+            );
+        }
+    }
+
+    Ok(words)
 }
 
 #[inline]
@@ -146,6 +173,96 @@ fn shader_bake_mode_allows_error_fallback() -> bool {
     match std::env::var("NEWENGINE_SHADER_BAKE_MODE") {
         Ok(v) if v.eq_ignore_ascii_case("strict-runtime") || v.eq_ignore_ascii_case("strict-glslc") => false,
         _ => true,
+    }
+}
+
+fn shader_runtime_cache_enabled() -> bool {
+    !matches!(
+        std::env::var("NEWENGINE_SHADER_RUNTIME_CACHE"),
+        Ok(v) if v.eq_ignore_ascii_case("0")
+            || v.eq_ignore_ascii_case("false")
+            || v.eq_ignore_ascii_case("off")
+            || v.eq_ignore_ascii_case("disabled")
+    )
+}
+
+fn shader_cache_dir() -> PathBuf {
+    std::env::var_os("NEWENGINE_SHADER_CACHE_DIR")
+        .map(PathBuf::from)
+        .unwrap_or_else(|| PathBuf::from("cache").join("shaders").join("runtime"))
+}
+
+fn shader_cache_path(stage: ShaderStage, logical_name: &str, entry: &str, key: u64) -> PathBuf {
+    let filename = format!(
+        "{}_{}_{}_{}.spv",
+        sanitize_cache_component(logical_name, 80),
+        stage_extension(stage),
+        sanitize_cache_component(entry, 32),
+        key
+    );
+    shader_cache_dir().join(filename)
+}
+
+fn sanitize_cache_component(value: &str, limit: usize) -> String {
+    let mut clean = String::with_capacity(value.len().min(limit));
+    for ch in value.chars().take(limit) {
+        if ch.is_ascii_alphanumeric() || ch == '-' || ch == '_' || ch == '.' {
+            clean.push(ch);
+        } else {
+            clean.push('_');
+        }
+    }
+    if clean.is_empty() {
+        clean.push_str("shader");
+    }
+    clean
+}
+
+fn shader_cache_key(stage: ShaderStage, logical_name: &str, entry: &str, source: &str) -> u64 {
+    let mut hash = 0xcbf2_9ce4_8422_2325_u64;
+    fn feed(hash: &mut u64, bytes: &[u8]) {
+        for byte in bytes {
+            *hash ^= u64::from(*byte);
+            *hash = hash.wrapping_mul(0x0000_0100_0000_01b3);
+        }
+        *hash ^= 0xff;
+        *hash = hash.wrapping_mul(0x0000_0100_0000_01b3);
+    }
+
+    feed(&mut hash, stage_extension(stage).as_bytes());
+    feed(&mut hash, logical_name.as_bytes());
+    feed(&mut hash, entry.as_bytes());
+    feed(&mut hash, source.as_bytes());
+    hash
+}
+
+fn read_cached_spirv(path: &std::path::Path) -> std::io::Result<Option<Vec<u32>>> {
+    if !path.exists() {
+        return Ok(None);
+    }
+    let bytes = std::fs::read(path)?;
+    match spirv_bytes_to_words(&bytes) {
+        Ok(words) => Ok(Some(words)),
+        Err(e) => Err(std::io::Error::new(std::io::ErrorKind::InvalidData, e)),
+    }
+}
+
+fn write_cached_spirv(path: &std::path::Path, words: &[u32]) -> std::io::Result<()> {
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent)?;
+    }
+    let tmp = path.with_extension("spv.tmp");
+    let mut bytes = Vec::with_capacity(words.len() * 4);
+    for word in words {
+        bytes.extend_from_slice(&word.to_le_bytes());
+    }
+    std::fs::write(&tmp, bytes)?;
+    match std::fs::rename(&tmp, path) {
+        Ok(()) => Ok(()),
+        Err(e) => {
+            let _ = std::fs::remove_file(path);
+            std::fs::rename(&tmp, path).map_err(|_| e)
+        }
     }
 }
 
@@ -209,10 +326,14 @@ fn spirv_bytes_to_words(bytes: &[u8]) -> Result<Vec<u32>, &'static str> {
         return Err("byte length is not divisible by 4");
     }
 
-    Ok(bytes
+    let words: Vec<u32> = bytes
         .chunks_exact(4)
         .map(|c| u32::from_le_bytes([c[0], c[1], c[2], c[3]]))
-        .collect())
+        .collect();
+    if words.first().copied() != Some(0x0723_0203) {
+        return Err("SPIR-V magic mismatch");
+    }
+    Ok(words)
 }
 
 fn display_command(cmd: &OsString) -> String {

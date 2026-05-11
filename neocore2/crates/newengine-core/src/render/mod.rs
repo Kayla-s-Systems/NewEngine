@@ -59,6 +59,61 @@ pub trait RenderApi: Send {
 
     fn draw(&mut self, args: DrawArgs) -> EngineResult<()>;
     fn draw_indexed(&mut self, args: DrawIndexedArgs) -> EngineResult<()>;
+
+    /// Applies a backend-neutral frame work budget. Backends may use it to avoid
+    /// long blocking uploads/pipeline builds inside interactive frames.
+    #[inline]
+    fn set_work_budget(&mut self, _budget: RenderWorkBudget) -> EngineResult<()> {
+        Ok(())
+    }
+
+
+    /// Pumps queued GPU upload jobs using a backend-neutral budget. Backends that
+    /// support staged uploads should do bounded work here instead of blocking
+    /// arbitrary draw-call paths.
+    #[inline]
+    fn pump_uploads(&mut self, _desc: UploadPumpDesc) -> EngineResult<UploadPumpReport> {
+        Ok(UploadPumpReport::default())
+    }
+
+    /// Returns the residency state of a texture. This lets material systems bind
+    /// fallbacks while the real texture is still being staged/uploaded.
+    #[inline]
+    fn texture_residency(&self, id: TextureId) -> EngineResult<TextureResidencySnapshot> {
+        Ok(TextureResidencySnapshot::ready(id, None))
+    }
+
+    /// Warms up render pipelines before the first playable frame. The default
+    /// path creates them synchronously; backend implementations may use native
+    /// pipeline caches and stricter loading-screen budgets.
+    fn warmup_pipelines(&mut self, desc: PipelineWarmupDesc) -> EngineResult<PipelineWarmupReport> {
+        let started = std::time::Instant::now();
+        let requested = desc.pipelines.len() as u32;
+        let mut report = PipelineWarmupReport {
+            requested,
+            ..PipelineWarmupReport::default()
+        };
+        for pipeline in desc.pipelines {
+            match self.create_pipeline(pipeline) {
+                Ok(id) => report.created.push(id),
+                Err(_) => report.failed = report.failed.saturating_add(1),
+            }
+        }
+        report.elapsed_ms = started.elapsed().as_secs_f32() * 1000.0;
+        Ok(report)
+    }
+
+    #[inline]
+    fn shader_cache_stats(&self) -> EngineResult<ShaderRuntimeCacheStats> {
+        Ok(ShaderRuntimeCacheStats::default())
+    }
+
+    /// Returns a backend-neutral diagnostics snapshot for frame pacing, upload
+    /// queues and live GPU resource counts.
+    #[inline]
+    fn diagnostics_snapshot(&self) -> EngineResult<RenderDiagnosticsSnapshot> {
+        Ok(RenderDiagnosticsSnapshot::default())
+    }
 }
 
 #[derive(Clone)]

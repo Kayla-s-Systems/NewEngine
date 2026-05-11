@@ -126,7 +126,7 @@ fn ensure_shadow_rt(
 
     if recreate {
         if let Some(old) = this.shadow_rt.take() {
-            this.deferred_rts.push((old, this.frame_index));
+            this.retire_render_target(old);
         }
         this.shadow_rt_resolution = 0;
         let rt = r.create_render_target(
@@ -148,7 +148,7 @@ fn ensure_shadow_rt(
 #[inline]
 fn retire_shadow_rt(this: &mut EditorRenderController) {
     if let Some(old) = this.shadow_rt.take() {
-        this.deferred_rts.push((old, this.frame_index));
+        this.retire_render_target(old);
     }
     this.shadow_rt_resolution = 0;
 }

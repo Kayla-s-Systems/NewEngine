@@ -176,6 +176,21 @@ impl<E: Send + 'static> Module<E> for EditorRenderController {
         "app.render_controller"
     }
 
+    fn start(&mut self, ctx: &mut ModuleCtx<'_, E>) -> EngineResult<()> {
+        // Loading-screen warmup: bake/load editor shaders and create the core lit pipelines
+        // before the first playable frame reaches the draw loop. If the renderer is not
+        // bound yet, render() still has the same recovery path as before.
+        if let Ok(api) = require_render_api(ctx) {
+            let mut r = api.lock();
+            if let Err(e) = ensure_lit_pipeline(&mut self.lit, &mut **r) {
+                log::warn!("render controller: loading-screen pipeline warmup skipped: {}", e);
+            } else {
+                let _ = r.pump_uploads(newengine_core::render::UploadPumpDesc::loading_screen_warmup());
+            }
+        }
+        Ok(())
+    }
+
     fn shutdown(&mut self, ctx: &mut ModuleCtx<'_, E>) -> EngineResult<()> {
         // Shutdown must not call `end_frame()` unconditionally: on a normal close
         // there is no active frame, and older Vulkan drivers may crash on a
@@ -208,9 +223,12 @@ impl<E: Send + 'static> Module<E> for EditorRenderController {
 
         let (w, h) = Self::read_window_size(ctx);
 
-        if let Some(cfg) = ctx.resources().get::<crate::render_runtime::ResolvedRenderBackendConfig>() {
+        let backend_work_budget = if let Some(cfg) = ctx.resources().get::<crate::render_runtime::ResolvedRenderBackendConfig>() {
             self.clear_color = cfg.clear_color;
-        }
+            Some(cfg.work_budget)
+        } else {
+            None
+        };
 
         let trace_frame = self.frame_index < 8 || self.frame_index % 120 == 0;
         let api = match require_render_api(ctx) {
@@ -218,6 +236,13 @@ impl<E: Send + 'static> Module<E> for EditorRenderController {
             Err(_) => return Ok(()),
         };
         let mut r = api.lock();
+        if let Some(budget) = backend_work_budget {
+            let _ = r.set_work_budget(budget);
+        }
+        let material_upload_jobs = backend_work_budget
+            .map(|b| b.max_upload_jobs_per_frame.max(1))
+            .unwrap_or(1);
+        self.pump_material_texture_requests(&mut **r, material_upload_jobs);
 
         if trace_frame {
             log::debug!("render controller: render begin next_frame={} window={}x{} viewport={}x{}", self.frame_index.saturating_add(1), w, h, self.viewport_bridge.read_extent().0, self.viewport_bridge.read_extent().1);
@@ -620,6 +645,25 @@ impl<E: Send + 'static> Module<E> for EditorRenderController {
             newengine_core::crash::record_breadcrumb(format!("render controller: end_frame frame={}", self.frame_index));
         }
         r.end_frame()?;
+        if trace_frame {
+            if let Ok(diag) = r.diagnostics_snapshot() {
+                log::debug!(
+                    "render diagnostics: frame={} begin_ms={:.3} end_ms={:.3} upload_ms={:.3} pipeline_ms={:.3} buffers={} textures={} pipelines={} upload_jobs={} upload_mb={:.2} queued_uploads={} queued_mb={:.2}",
+                    diag.frame.frame_index,
+                    diag.frame.last_begin_frame_ms,
+                    diag.frame.last_end_frame_ms,
+                    diag.frame.last_blocking_upload_ms,
+                    diag.frame.last_pipeline_build_ms,
+                    diag.resources.buffers,
+                    diag.resources.textures,
+                    diag.resources.pipelines,
+                    diag.queue.blocking_upload_jobs,
+                    diag.queue.blocking_upload_bytes as f32 / (1024.0 * 1024.0),
+                    diag.queue.queued_upload_jobs,
+                    diag.queue.queued_upload_bytes as f32 / (1024.0 * 1024.0),
+                );
+            }
+        }
         Ok(())
     }
 }

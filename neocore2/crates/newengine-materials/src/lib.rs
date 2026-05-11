@@ -22,7 +22,8 @@ mod errors;
 
 pub use crate::api::{
     MaterialAssetDocument, MaterialDescriptor, MaterialFlags, MaterialId, MaterialRef,
-    MaterialResolved, MaterialTextureBindings,
+    MaterialResolved, MaterialTextureBindings, MaterialTextureResidency,
+    MaterialTextureResidencyState, MaterialTextureSlot,
 };
 pub use crate::api::{
     MaterialDomain, MaterialInstanceDesc, MaterialOverrides, MaterialPermutationKey, ShadingModel,

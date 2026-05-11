@@ -1,9 +1,10 @@
 use newengine_core::render::{
     BeginFrameDesc, BeginRenderTargetDesc, BindGroupDesc, BindGroupId, BindGroupLayoutDesc,
     BindGroupLayoutId, BufferDesc, BufferId, BufferSlice, DrawArgs, DrawIndexedArgs,
-    IndexFormat, PipelineDesc, PipelineId, RectI32, RenderApi, RenderTargetDesc,
-    RenderTargetId, SamplerDesc, SamplerId, ShaderDesc, ShaderId, TextureDesc, TextureId,
-    UiDrawList, UiTexId, Viewport,
+    IndexFormat, PipelineDesc, PipelineId, PipelineWarmupDesc, PipelineWarmupReport, RectI32, RenderApi,
+    RenderTargetDesc, RenderDiagnosticsSnapshot, RenderTargetId, RenderWorkBudget, SamplerDesc,
+    SamplerId, ShaderDesc, ShaderId, ShaderRuntimeCacheStats, TextureDesc, TextureId,
+    TextureResidencySnapshot, UiDrawList, UiTexId, UploadPumpDesc, UploadPumpReport, Viewport,
 };
 use newengine_core::{EngineError, EngineResult};
 use newengine_render_api::{RenderRequestV1, RenderResponseV1};
@@ -270,5 +271,80 @@ impl RenderApi for ServiceBackedRenderApi {
 
     fn draw_indexed(&mut self, args: DrawIndexedArgs) -> EngineResult<()> {
         self.unit(RenderRequestV1::DrawIndexed(args))
+    }
+
+    fn set_work_budget(&mut self, budget: RenderWorkBudget) -> EngineResult<()> {
+        self.unit(RenderRequestV1::SetWorkBudget(budget))
+    }
+
+
+    fn pump_uploads(&mut self, desc: UploadPumpDesc) -> EngineResult<UploadPumpReport> {
+        match self
+            .client
+            .invoke(RenderRequestV1::PumpUploads(desc))
+            .map_err(EngineError::other)?
+        {
+            RenderResponseV1::UploadPumpReport(report) => Ok(report),
+            other => Err(EngineError::other(format!(
+                "render service protocol error: expected UploadPumpReport, got {:?}",
+                other
+            ))),
+        }
+    }
+
+    fn texture_residency(&self, id: TextureId) -> EngineResult<TextureResidencySnapshot> {
+        match self
+            .client
+            .invoke(RenderRequestV1::TextureResidency { id })
+            .map_err(EngineError::other)?
+        {
+            RenderResponseV1::TextureResidency(snapshot) => Ok(snapshot),
+            other => Err(EngineError::other(format!(
+                "render service protocol error: expected TextureResidency, got {:?}",
+                other
+            ))),
+        }
+    }
+
+    fn warmup_pipelines(&mut self, desc: PipelineWarmupDesc) -> EngineResult<PipelineWarmupReport> {
+        match self
+            .client
+            .invoke(RenderRequestV1::WarmupPipelines(desc))
+            .map_err(EngineError::other)?
+        {
+            RenderResponseV1::PipelineWarmupReport(report) => Ok(report),
+            other => Err(EngineError::other(format!(
+                "render service protocol error: expected PipelineWarmupReport, got {:?}",
+                other
+            ))),
+        }
+    }
+
+    fn shader_cache_stats(&self) -> EngineResult<ShaderRuntimeCacheStats> {
+        match self
+            .client
+            .invoke(RenderRequestV1::ShaderCacheStats)
+            .map_err(EngineError::other)?
+        {
+            RenderResponseV1::ShaderCacheStats(stats) => Ok(stats),
+            other => Err(EngineError::other(format!(
+                "render service protocol error: expected ShaderCacheStats, got {:?}",
+                other
+            ))),
+        }
+    }
+
+    fn diagnostics_snapshot(&self) -> EngineResult<RenderDiagnosticsSnapshot> {
+        match self
+            .client
+            .invoke(RenderRequestV1::DiagnosticsSnapshot)
+            .map_err(EngineError::other)?
+        {
+            RenderResponseV1::DiagnosticsSnapshot(snapshot) => Ok(snapshot),
+            other => Err(EngineError::other(format!(
+                "render service protocol error: expected DiagnosticsSnapshot, got {:?}",
+                other
+            ))),
+        }
     }
 }

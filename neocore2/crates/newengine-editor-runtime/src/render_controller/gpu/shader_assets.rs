@@ -53,7 +53,7 @@ pub(super) fn load_text_asset(rel: &str) -> CoreResult<String> {
 
 
 #[cfg(feature = "texture-decode")]
-pub(super) fn load_rgba_texture_asset(rel: &str) -> CoreResult<(Extent2D, Vec<u8>)> {
+pub fn load_rgba_texture_asset(rel: &str) -> CoreResult<(Extent2D, Vec<u8>)> {
     let assets = AssetServiceClient::new(default_host_api());
     let id = assets.load(rel).map_err(|e| EngineError::other(format!("asset.load failed path='{rel}' err='{e}'")))?;
     wait_ready(&assets, &id, std::time::Duration::from_secs(3))

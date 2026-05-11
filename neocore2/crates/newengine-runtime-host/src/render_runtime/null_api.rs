@@ -2,8 +2,8 @@ use newengine_core::render::{
     BeginFrameDesc, BeginRenderTargetDesc, BindGroupDesc, BindGroupId, BindGroupLayoutDesc,
     BindGroupLayoutId, BufferDesc, BufferId, BufferSlice, DrawArgs, DrawIndexedArgs,
     IndexFormat, PipelineDesc, PipelineId, RectI32, RenderApi, RenderTargetDesc,
-    RenderTargetId, SamplerDesc, SamplerId, ShaderDesc, ShaderId, TextureDesc, TextureId,
-    UiDrawList, UiTexId, Viewport,
+    RenderDiagnosticsSnapshot, RenderTargetId, RenderWorkBudget, SamplerDesc, SamplerId,
+    ShaderDesc, ShaderId, TextureDesc, TextureId, UiDrawList, UiTexId, Viewport,
 };
 use newengine_core::{EngineError, EngineResult};
 
@@ -144,5 +144,15 @@ impl RenderApi for NullRenderApi {
 
     fn draw_indexed(&mut self, _args: DrawIndexedArgs) -> EngineResult<()> {
         Ok(())
+    }
+
+    fn set_work_budget(&mut self, _budget: RenderWorkBudget) -> EngineResult<()> {
+        Ok(())
+    }
+
+    fn diagnostics_snapshot(&self) -> EngineResult<RenderDiagnosticsSnapshot> {
+        let mut snapshot = RenderDiagnosticsSnapshot::default();
+        snapshot.notes.push("null render backend: no GPU work is executed".to_string());
+        Ok(snapshot)
     }
 }

@@ -22,7 +22,7 @@ impl EditorRenderController {
             }
 
             // Do not destroy immediately: GPU may still reference the old framebuffer.
-            self.deferred_rts.push((rt, self.frame_index));
+            self.retire_render_target(rt);
             self.viewport_rt = None;
         }
 

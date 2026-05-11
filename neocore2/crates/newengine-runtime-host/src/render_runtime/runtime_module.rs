@@ -144,6 +144,8 @@ impl RenderBackendRuntimeModule {
             backend_id: NULL_RENDER_BACKEND_ID.to_owned(),
             clear_color: DEFAULT_RENDER_BACKEND_CLEAR_COLOR,
             debug_text: self.null_debug_text(),
+            capabilities: newengine_core::render::RenderBackendCapabilities::headless_default(),
+            work_budget: newengine_core::render::RenderWorkBudget::default(),
         };
 
         ctx.resources_mut().insert(resolved);
@@ -186,17 +188,21 @@ impl<E: Send + 'static> Module<E> for RenderBackendRuntimeModule {
         }
 
         log::info!(
-            "render backend: bridge bound id='{}' name='{}' version='{}' debug_text='{}'",
+            "render backend: bridge bound id='{}' name='{}' version='{}' debug_text='{}' features={} upload_budget={}MB/frame",
             info.backend_id,
             info.backend_name,
             info.backend_version,
-            info.debug_text
+            info.debug_text,
+            info.capabilities.features.len(),
+            info.work_budget.max_upload_bytes_per_frame / (1024 * 1024)
         );
 
         let resolved = ResolvedRenderBackendConfig {
             backend_id: info.backend_id,
             clear_color: info.clear_color,
             debug_text: info.debug_text,
+            capabilities: info.capabilities,
+            work_budget: info.work_budget,
         };
 
         let api = RenderApiRef::new(ServiceBackedRenderApi::new(client));

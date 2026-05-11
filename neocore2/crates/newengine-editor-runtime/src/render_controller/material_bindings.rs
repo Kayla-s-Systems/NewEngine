@@ -1,6 +1,24 @@
 #![forbid(unsafe_op_in_unsafe_fn)]
 
 use newengine_materials::api::{MaterialFlags, MaterialResolved};
+use newengine_core::render::TextureId;
+
+
+#[derive(Clone, Debug)]
+pub(super) enum MaterialTextureGpuResidency {
+    Requested,
+    Loading {
+        texture: TextureId,
+        requested_frame: u64,
+    },
+    Ready {
+        texture: TextureId,
+    },
+    Failed {
+        message: String,
+    },
+}
+
 
 /// CPU-side material plan consumed by the lit render pass.
 ///

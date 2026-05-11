@@ -2,8 +2,12 @@
 
 use newengine_camera::{Perspective, Projection};
 use newengine_core::host_events::CursorState;
-use newengine_core::render::{Extent2D, RenderTargetId, SamplerId, TextureDesc, TextureFormat, TextureId, TextureUsage};
-use newengine_math::collections::{FxHashMap, FxHashSet};
+use newengine_core::render::{
+    Extent2D, GpuResourceResidencyState, RenderTargetId, SamplerId, TextureDesc, TextureFormat,
+    TextureId, TextureUsage,
+};
+use newengine_math::collections::FxHashMap;
+use std::collections::VecDeque;
 
 use crate::plugin_manager::PluginManagerBridge;
 use crate::scene_bridge::SceneBridge;
@@ -11,6 +15,8 @@ use crate::viewport_bridge::ViewportBridge;
 
 use super::gpu::LIT_UBO_SIZE;
 use super::gpu::{load_rgba_texture_asset, DebugLineGpu, GridGpu, LitPipeline, PrimitiveGpu};
+use super::material_bindings::MaterialTextureGpuResidency;
+use super::resource_lifetime::RenderTargetLifetimeQueue;
 
 type PrimGpuCache = FxHashMap<newengine_primitives::PrimitiveId, PrimitiveGpu>;
 type TerrainGpuCache = FxHashMap<u64, PrimitiveGpu>;
@@ -58,14 +64,14 @@ pub struct EditorRenderController {
     pub(super) viewport_rt_extent: Extent2D,
     pub(super) shadow_rt: Option<RenderTargetId>,
     pub(super) shadow_rt_resolution: u32,
-    pub(super) deferred_rts: Vec<(newengine_core::render::RenderTargetId, u64)>,
+    pub(super) render_target_lifetimes: RenderTargetLifetimeQueue,
 
     pub(super) grid: Option<GridGpu>,
     pub(super) lit: Option<LitPipeline>,
     pub(super) prim_cache: PrimGpuCache,
     pub(super) terrain_cache: TerrainGpuCache,
-    pub(super) material_texture_cache: FxHashMap<String, TextureId>,
-    pub(super) material_texture_failures: FxHashSet<String>,
+    pub(super) material_textures: FxHashMap<String, MaterialTextureGpuResidency>,
+    pub(super) material_texture_queue: VecDeque<String>,
     pub(super) per_draw_ubo: FxHashMap<u64, PerDrawUbo>,
 
     pub(super) frame_index: u64,
@@ -109,13 +115,13 @@ impl EditorRenderController {
             viewport_rt_extent: Extent2D::new(0, 0),
             shadow_rt: None,
             shadow_rt_resolution: 0,
-            deferred_rts: Vec::new(),
+            render_target_lifetimes: RenderTargetLifetimeQueue::new(),
             grid: None,
             lit: None,
             prim_cache: PrimGpuCache::default(),
             terrain_cache: TerrainGpuCache::default(),
-            material_texture_cache: FxHashMap::default(),
-            material_texture_failures: FxHashSet::default(),
+            material_textures: FxHashMap::default(),
+            material_texture_queue: VecDeque::new(),
             per_draw_ubo: FxHashMap::default(),
             frame_index: 0,
             last_pick_seq: 0,
@@ -129,24 +135,81 @@ impl EditorRenderController {
         }
     }
 
-    pub(super) fn ensure_material_texture(
-        &mut self,
-        r: &mut dyn newengine_core::render::RenderApi,
-        path: &str,
-    ) -> newengine_core::EngineResult<TextureId> {
-        if let Some(id) = self.material_texture_cache.get(path).copied() {
-            return Ok(id);
+    pub(super) fn request_material_texture(&mut self, path: &str) {
+        if self.material_textures.contains_key(path) {
+            return;
         }
-        let (extent, rgba) = load_rgba_texture_asset(path)?;
-        let tex = r.create_texture(
-            TextureDesc::new(extent, TextureFormat::Rgba8Unorm, TextureUsage::Sampled)
-                .with_label(format!("material_tex:{path}"))
-                .with_data(rgba),
-        )?;
-        self.material_texture_cache.insert(path.to_string(), tex);
-        Ok(tex)
+        self.material_textures
+            .insert(path.to_string(), MaterialTextureGpuResidency::Requested);
+        self.material_texture_queue.push_back(path.to_string());
     }
 
+    pub(super) fn pump_material_texture_requests(
+        &mut self,
+        r: &mut dyn newengine_core::render::RenderApi,
+        max_jobs: u32,
+    ) {
+        let max_jobs = max_jobs.max(1);
+        let mut jobs = 0_u32;
+
+        while jobs < max_jobs {
+            let Some(path) = self.material_texture_queue.pop_front() else {
+                break;
+            };
+
+            if !matches!(
+                self.material_textures.get(&path),
+                Some(MaterialTextureGpuResidency::Requested)
+            ) {
+                continue;
+            }
+
+            match load_rgba_texture_asset(&path) {
+                Ok((extent, rgba)) => match r.create_texture(
+                    TextureDesc::new(extent, TextureFormat::Rgba8Unorm, TextureUsage::Sampled)
+                        .with_label(format!("material_tex:{path}"))
+                        .with_deferred_data(rgba),
+                ) {
+                    Ok(texture) => {
+                        self.material_textures.insert(
+                            path,
+                            MaterialTextureGpuResidency::Loading {
+                                texture,
+                                requested_frame: self.frame_index,
+                            },
+                        );
+                        jobs = jobs.saturating_add(1);
+                    }
+                    Err(e) => {
+                        log::warn!(
+                            "render controller: material texture create failed path='{}' err='{}'",
+                            path,
+                            e
+                        );
+                        self.material_textures.insert(
+                            path,
+                            MaterialTextureGpuResidency::Failed {
+                                message: e.to_string(),
+                            },
+                        );
+                    }
+                },
+                Err(e) => {
+                    log::warn!(
+                        "render controller: material texture load failed path='{}' err='{}'",
+                        path,
+                        e
+                    );
+                    self.material_textures.insert(
+                        path,
+                        MaterialTextureGpuResidency::Failed {
+                            message: e.to_string(),
+                        },
+                    );
+                }
+            }
+        }
+    }
 
     #[inline]
     pub(super) fn material_texture_or_default(
@@ -159,20 +222,53 @@ impl EditorRenderController {
             return fallback;
         };
 
-        match self.ensure_material_texture(r, path) {
-            Ok(texture) => texture,
-            Err(e) => {
-                if self.material_texture_failures.insert(path.to_string()) {
-                    log::warn!(
-                        "render controller: material texture disabled path='{}' err='{}'",
-                        path,
-                        e
+        self.request_material_texture(path);
+
+        let Some(entry) = self.material_textures.get(path).cloned() else {
+            return fallback;
+        };
+
+        match entry {
+            MaterialTextureGpuResidency::Ready { texture } => texture,
+            MaterialTextureGpuResidency::Loading {
+                texture,
+                requested_frame,
+            } => match r.texture_residency(texture) {
+                Ok(snapshot) if snapshot.state == GpuResourceResidencyState::Ready => {
+                    self.material_textures.insert(
+                        path.to_string(),
+                        MaterialTextureGpuResidency::Ready { texture },
                     );
+                    texture
                 }
+                Ok(snapshot) if snapshot.state == GpuResourceResidencyState::Failed => {
+                    let message = snapshot
+                        .message
+                        .unwrap_or_else(|| "gpu upload failed".to_string());
+                    log::warn!(
+                        "render controller: material texture upload failed path='{}' err='{}'",
+                        path,
+                        message
+                    );
+                    self.material_textures.insert(
+                        path.to_string(),
+                        MaterialTextureGpuResidency::Failed { message },
+                    );
+                    fallback
+                }
+                _ => {
+                    let _ = requested_frame;
+                    fallback
+                }
+            },
+            MaterialTextureGpuResidency::Requested => fallback,
+            MaterialTextureGpuResidency::Failed { message } => {
+                let _ = message;
                 fallback
             }
         }
     }
+
 
     pub(super) fn ensure_per_draw_ubo(
         &mut self,
@@ -285,19 +381,12 @@ impl EditorRenderController {
         }
     }
 
-    pub(super) fn gc_deferred_rts(&mut self, r: &mut dyn newengine_core::render::RenderApi) {
-        let now = self.frame_index;
-        let grace = 4_u64;
+    pub(super) fn retire_render_target(&mut self, rt: RenderTargetId) {
+        self.render_target_lifetimes
+            .retire_after_frames(rt, self.frame_index, 4);
+    }
 
-        let mut i = 0;
-        while i < self.deferred_rts.len() {
-            let (rt, born) = self.deferred_rts[i];
-            if now.saturating_sub(born) > grace {
-                r.destroy_render_target(rt);
-                self.deferred_rts.swap_remove(i);
-            } else {
-                i += 1;
-            }
-        }
+    pub(super) fn gc_deferred_rts(&mut self, r: &mut dyn newengine_core::render::RenderApi) {
+        self.render_target_lifetimes.collect(r, self.frame_index);
     }
 }
