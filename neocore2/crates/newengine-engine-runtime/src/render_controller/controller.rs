@@ -40,7 +40,7 @@ pub(super) struct PerDrawUbo {
     pub last_seen_frame: u64,
 }
 
-pub struct EditorRenderController {
+pub struct RuntimeRenderController {
     pub(super) clear_color: [f32; 4],
     pub(super) last_w: u32,
     pub(super) last_h: u32,
@@ -86,7 +86,7 @@ pub struct EditorRenderController {
     pub(super) last_cursor_state: CursorState,
 }
 
-impl EditorRenderController {
+impl RuntimeRenderController {
     #[inline]
     pub fn new(
         viewport_bridge: std::sync::Arc<ViewportBridge>,

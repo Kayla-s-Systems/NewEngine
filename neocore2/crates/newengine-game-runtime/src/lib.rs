@@ -1,26 +1,30 @@
 #![forbid(unsafe_op_in_unsafe_fn)]
 
-//! Standalone game runtime profile.
+//! Standalone game/runtime composition profile.
 //!
-//! This crate is the app-facing boundary for game binaries. It intentionally
-//! exposes no editor UI contract. Internally it still reuses the current shared
-//! render/scene controller while those systems are being physically extracted
-//! from `newengine-editor-runtime` into neutral runtime crates.
+//! This crate is the app-facing runtime boundary for playable builds. Game code
+//! registers a profile and scene bootstrap; rendering remains owned by the
+//! engine render controller and the selected render plugin. No editor UI, panels,
+//! docking, hierarchy, property grid, or Vulkan-specific resource work is pulled
+//! into the game binary.
 
 use newengine_assets::{AssetAccess, AssetServiceClient};
 use newengine_core::{
     Engine, EngineLifecycleEvent, EngineReadinessKey, EngineReadinessSnapshot, EngineResult, Module, ModuleCtx,
     StartupConfig,
 };
-use newengine_editor_runtime::{scene_bridge::SceneBridge, EditorRuntimeProfile};
+use newengine_runtime_host::render_runtime::RenderBackendRuntimeModule;
 use newengine_ui::{UiBuildFn, UiProviderKind};
 use std::any::Any;
 use std::path::PathBuf;
+use std::sync::Arc;
 use std::time::Duration;
 
 use newengine_runtime_host::asset_bootstrap::{
     collect_app_asset_roots, mount_asset_roots_best_effort,
 };
+
+pub use newengine_engine_runtime::{CollisionBody, CollisionShape, EditorPlayMode, GameplayActor, PlayerActor};
 
 pub const GAME_FIXED_DT_MS: u32 = 16;
 pub const GAME_APP_ASSETS_DIR_ENV: &str = "NEWENGINE_GAME_ASSETS_DIR";
@@ -31,23 +35,21 @@ const GAME_READY_SCENE_BOOTSTRAP_REQUIRES: &[EngineReadinessKey] = &[
 ];
 
 struct GameReadySceneBootstrapModule {
-    scene: std::sync::Arc<SceneBridge>,
+    scene: Arc<newengine_engine_runtime::SceneBridge>,
     bootstrapped: bool,
     waiting_logged: bool,
 }
 
 impl GameReadySceneBootstrapModule {
     #[inline]
-    fn new(scene: std::sync::Arc<SceneBridge>) -> Self {
+    fn new(scene: Arc<newengine_engine_runtime::SceneBridge>) -> Self {
         Self {
             scene,
             bootstrapped: false,
             waiting_logged: false,
         }
     }
-}
 
-impl GameReadySceneBootstrapModule {
     #[inline]
     fn log_waiting_once(&mut self, origin: &'static str) {
         if self.waiting_logged {
@@ -145,9 +147,6 @@ impl<E: Send + 'static> Module<E> for GameReadySceneBootstrapModule {
 
     #[inline]
     fn update(&mut self, _ctx: &mut ModuleCtx<'_, E>) -> EngineResult<()> {
-        // Safety net for external hosts that publish readiness before modules are
-        // running but do not use synchronous dispatch. This still obeys the gate:
-        // it only runs after the AssetManager service exists.
         if !self.bootstrapped
             && newengine_plugin_host::has_service(newengine_assets::consts::ASSET_SERVICE_ID)
         {
@@ -159,7 +158,10 @@ impl<E: Send + 'static> Module<E> for GameReadySceneBootstrapModule {
 
 #[derive(Clone)]
 pub struct StandaloneGameRuntimeProfile {
-    inner: EditorRuntimeProfile,
+    viewport: Arc<newengine_engine_runtime::ViewportBridge>,
+    plugins: Arc<newengine_engine_runtime::PluginManagerBridge>,
+    scene: Arc<newengine_engine_runtime::SceneBridge>,
+    previews: Arc<parking_lot::Mutex<newengine_previews::PrimitivePreviewService>>,
 }
 
 impl Default for StandaloneGameRuntimeProfile {
@@ -173,7 +175,12 @@ impl StandaloneGameRuntimeProfile {
     #[inline]
     pub fn new() -> Self {
         Self {
-            inner: EditorRuntimeProfile::new(),
+            viewport: Arc::new(newengine_engine_runtime::ViewportBridge::new()),
+            plugins: Arc::new(newengine_engine_runtime::PluginManagerBridge::new()),
+            scene: Arc::new(newengine_engine_runtime::SceneBridge::new(newengine_scene::Scene::new())),
+            previews: Arc::new(parking_lot::Mutex::new(
+                newengine_previews::PrimitivePreviewService::new(),
+            )),
         }
     }
 
@@ -183,16 +190,28 @@ impl StandaloneGameRuntimeProfile {
         engine: &mut Engine<()>,
         startup: &StartupConfig,
     ) -> EngineResult<()> {
-        self.inner.register_modules(engine, startup)?;
-        engine.register_module(Box::new(GameReadySceneBootstrapModule::new(std::sync::Arc::clone(
-            self.inner.scene_bridge(),
+        engine.register_module(Box::new(RenderBackendRuntimeModule::new(
+            startup.render_backend.clone(),
+            startup.modules_dir.clone(),
+        )))?;
+
+        engine.register_module(Box::new(newengine_engine_runtime::RuntimeRenderController::new(
+            Arc::clone(&self.viewport),
+            Arc::clone(&self.plugins),
+            Arc::clone(&self.scene),
+            Arc::clone(&self.previews),
+        )))?;
+
+        engine.register_module(Box::new(GameReadySceneBootstrapModule::new(Arc::clone(
+            &self.scene,
         ))))?;
         Ok(())
     }
 
     #[inline]
     pub fn register_scene_io_best_effort(&self) {
-        self.inner.register_scene_io_best_effort();
+        // Standalone games are game-first runtime consumers. They do not register
+        // editor scene save/load host services by default.
     }
 
     #[inline]

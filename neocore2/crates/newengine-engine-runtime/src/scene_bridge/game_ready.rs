@@ -26,7 +26,7 @@ use crate::gameplay::{
     ensure_collision_body, spawn_default_player_with_tuning, CollisionBody, CollisionShape,
     DisplayMode, DisplayVisibility, FpsDemoRules, FpsDemoState, FpsPlayerTuning,
 };
-use crate::scene_bootstrap::bootstrap_editor_scene;
+use crate::scene_bootstrap::bootstrap_runtime_scene;
 
 use self::content::{
     load_game_ready_map_profile, GameReadyGameplaySpec, GameReadyLightingSpec,
@@ -601,7 +601,7 @@ pub(super) fn bootstrap_fps_game_ready_scene(
     mats: &MaterialRegistry,
 ) -> Option<EntityId> {
     *scene = Scene::new();
-    bootstrap_editor_scene(scene);
+    bootstrap_runtime_scene(scene);
 
     let root = ensure_root(scene);
     let active_camera = scene.active_camera();

@@ -3,9 +3,9 @@
 use newengine_core::render::{Extent2D, RenderTargetDesc, TextureFormat};
 use newengine_core::{EngineError, EngineResult};
 
-use super::controller::EditorRenderController;
+use super::controller::RuntimeRenderController;
 
-impl EditorRenderController {
+impl RuntimeRenderController {
     #[inline]
     fn extent_eq(a: Extent2D, b: Extent2D) -> bool {
         a.width == b.width && a.height == b.height

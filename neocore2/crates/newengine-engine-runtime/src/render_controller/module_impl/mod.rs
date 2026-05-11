@@ -13,7 +13,7 @@ use newengine_core::{EngineResult, Module, ModuleCtx};
 use newengine_math::{Quat, Vec2, Vec3};
 use newengine_ui::draw::UiDrawList;
 
-use super::controller::EditorRenderController;
+use super::controller::RuntimeRenderController;
 use super::gpu::ensure_lit_pipeline;
 use crate::gameplay::{
     apply_player_input, attach_active_camera_to_player, capture_runtime_world_snapshot,
@@ -42,7 +42,7 @@ fn quat_from_forward_z(dir_ws: Vec3) -> Quat {
     Quat::from_rotation_arc(fwd, d)
 }
 
-impl EditorRenderController {
+impl RuntimeRenderController {
     #[inline]
     fn read_window_size<E: Send>(ctx: &ModuleCtx<'_, E>) -> (u32, u32) {
         ctx.resources()
@@ -171,9 +171,9 @@ impl EditorRenderController {
     }
 }
 
-impl<E: Send + 'static> Module<E> for EditorRenderController {
+impl<E: Send + 'static> Module<E> for RuntimeRenderController {
     fn id(&self) -> &'static str {
-        "app.render_controller"
+        "engine.render_controller"
     }
 
     fn start(&mut self, ctx: &mut ModuleCtx<'_, E>) -> EngineResult<()> {

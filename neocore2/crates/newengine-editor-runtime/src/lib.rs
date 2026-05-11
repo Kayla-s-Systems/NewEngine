@@ -15,22 +15,20 @@ use newengine_ui::UiBuildFn;
 #[cfg(feature = "editor-ui")]
 use newengine_ui::UiMarkupDoc;
 
-mod editor_camera;
-mod gameplay;
+pub mod gameplay { pub use newengine_engine_runtime::gameplay::*; }
 #[cfg(feature = "editor-ui")]
 mod material_pipeline;
 pub mod plugin_manager;
-pub mod render_controller;
-pub mod render_runtime;
-mod scene_bootstrap;
-pub mod scene_bridge;
+pub mod render_controller { pub use newengine_engine_runtime::render_controller::*; }
+pub mod render_runtime { pub use newengine_engine_runtime::render_runtime::*; }
+pub mod scene_bridge { pub use newengine_engine_runtime::scene_bridge::*; }
 pub mod scene_io_service;
 mod shared;
 #[cfg(feature = "editor-ui")]
 pub mod ui;
 #[cfg(feature = "editor-ui")]
 pub mod ui_contrib;
-pub mod viewport_bridge;
+pub mod viewport_bridge { pub use newengine_engine_runtime::viewport_bridge::*; }
 pub use gameplay::{CollisionBody, CollisionShape, EditorPlayMode, GameplayActor, PlayerActor};
 
 pub const EDITOR_FIXED_DT_MS: u32 = 16;

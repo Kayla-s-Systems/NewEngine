@@ -5,21 +5,21 @@ use newengine_scene::components::{ActiveCamera, SceneRoot};
 use newengine_scene::{spawn_named, Scene, SceneState};
 use newengine_transform::set_parent;
 
-use crate::editor_camera::EditorCameraController;
+use crate::editor_camera::RuntimeCameraController;
 use newengine_sim::CameraRigComp;
 
-/// Editor bootstrap for a fresh scene.
+/// Runtime bootstrap for a fresh scene.
 ///
-/// `newengine-scene` must remain foundation-first; editor defaults live here.
+/// `newengine-scene` remains foundation-first; app/runtime defaults live here.
 #[inline]
-pub fn bootstrap_editor_scene(scene: &mut Scene) {
+pub fn bootstrap_runtime_scene(scene: &mut Scene) {
     let root_hint = scene.root();
     let cam_hint = scene.active_camera();
 
     {
         let world = scene.world_mut();
 
-        // Lighting defaults (editor-side): deterministic and minimal.
+        // Lighting defaults (runtime-side): deterministic and minimal.
         // - Ambient is a world resource.
         // - Directional light is an entity (future: shadows, cascades, time-of-day).
         if world.resource::<AmbientLight>().is_none() {
@@ -81,12 +81,12 @@ pub fn bootstrap_editor_scene(scene: &mut Scene) {
             let _ = world.insert(cam, ActiveCamera);
         }
 
-        // Editor camera controller composition (no renderer coupling).
+        // Runtime camera controller composition (no renderer coupling).
         if world.get::<CameraRigComp>(cam).is_none() {
             let _ = world.insert(cam, CameraRigComp::default());
         }
-        if world.get::<EditorCameraController>(cam).is_none() {
-            let _ = world.insert(cam, EditorCameraController::default());
+        if world.get::<RuntimeCameraController>(cam).is_none() {
+            let _ = world.insert(cam, RuntimeCameraController::default());
         }
 
         // Ensure camera is rooted for deterministic editor navigation.

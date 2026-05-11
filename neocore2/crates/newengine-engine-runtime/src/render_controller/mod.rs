@@ -7,4 +7,5 @@ mod module_impl;
 mod resource_lifetime;
 mod viewport;
 
-pub use controller::EditorRenderController;
+pub use controller::RuntimeRenderController;
+pub type EditorRenderController = RuntimeRenderController;

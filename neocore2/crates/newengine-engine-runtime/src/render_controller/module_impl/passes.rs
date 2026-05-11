@@ -15,7 +15,7 @@ use super::super::gpu::{
 use super::super::material_bindings::LitMaterialPlan;
 use super::grid;
 use super::lights::PackedLights;
-use super::EditorRenderController;
+use super::RuntimeRenderController;
 use crate::gameplay::{display_visible_in_mode, CollisionBody, CollisionShape};
 use newengine_procedural_noise::ProceduralTerrain;
 
@@ -31,7 +31,7 @@ pub(super) fn publish_camera_spawn(
 }
 
 pub(super) fn draw_grid(
-    this: &mut EditorRenderController,
+    this: &mut RuntimeRenderController,
     r: &mut dyn newengine_core::render::RenderApi,
     lit: super::super::gpu::LitPipeline,
     viewproj: Mat4,
@@ -75,7 +75,7 @@ pub(super) fn draw_grid(
 }
 
 pub(super) fn draw_procedural_terrain(
-    this: &mut EditorRenderController,
+    this: &mut RuntimeRenderController,
     r: &mut dyn newengine_core::render::RenderApi,
     scene: &newengine_scene::Scene,
     lit: super::super::gpu::LitPipeline,
@@ -149,7 +149,7 @@ pub(super) fn draw_procedural_terrain(
 }
 
 pub(super) fn draw_primitives(
-    this: &mut EditorRenderController,
+    this: &mut RuntimeRenderController,
     r: &mut dyn newengine_core::render::RenderApi,
     scene: &newengine_scene::Scene,
     lit: super::super::gpu::LitPipeline,
@@ -213,7 +213,7 @@ pub(super) fn draw_primitives(
 
 
 pub(super) fn draw_procedural_terrain_shadow(
-    this: &mut EditorRenderController,
+    this: &mut RuntimeRenderController,
     r: &mut dyn newengine_core::render::RenderApi,
     scene: &newengine_scene::Scene,
     lit: super::super::gpu::LitPipeline,
@@ -294,7 +294,7 @@ pub(super) fn draw_procedural_terrain_shadow(
 }
 
 pub(super) fn draw_primitives_shadow(
-    this: &mut EditorRenderController,
+    this: &mut RuntimeRenderController,
     r: &mut dyn newengine_core::render::RenderApi,
     scene: &newengine_scene::Scene,
     lit: super::super::gpu::LitPipeline,
@@ -362,7 +362,7 @@ pub(super) fn draw_primitives_shadow(
 }
 
 pub(super) fn draw_light_gizmos(
-    this: &mut EditorRenderController,
+    this: &mut RuntimeRenderController,
     r: &mut dyn newengine_core::render::RenderApi,
     scene: &newengine_scene::Scene,
     lit: super::super::gpu::LitPipeline,
@@ -591,7 +591,7 @@ fn push_capsule_wire(
 }
 
 pub(super) fn draw_collision_wireframe(
-    this: &mut EditorRenderController,
+    this: &mut RuntimeRenderController,
     r: &mut dyn newengine_core::render::RenderApi,
     scene: &newengine_scene::Scene,
     viewproj: Mat4,

@@ -8,7 +8,7 @@ use newengine_primitives::{Primitive, PrimitiveId, PrimitiveRegistry};
 use newengine_scene::components::SceneRoot;
 use newengine_scene::{spawn_named, Scene, SceneState};
 
-use crate::scene_bootstrap::bootstrap_editor_scene;
+use crate::scene_bootstrap::bootstrap_runtime_scene;
 
 use super::material_application::{apply_material_to_entity, MaterialApplySpec};
 
@@ -120,7 +120,7 @@ pub(super) fn effective_material_base(material: MaterialId, fallback: MaterialId
 
 #[inline]
 pub(super) fn reset_editor_runtime_state(scene: &mut Scene) -> Option<EntityId> {
-    bootstrap_editor_scene(scene);
+    bootstrap_runtime_scene(scene);
     scene.active_camera()
 }
 

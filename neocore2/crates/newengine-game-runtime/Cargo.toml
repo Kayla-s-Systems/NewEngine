@@ -7,9 +7,13 @@ description = "Standalone game composition profile for NewEngine runtime host"
 
 [dependencies]
 log = "0.4"
+parking_lot = "0.12"
+
 newengine-assets = { path = "../newengine-assets" }
 newengine-core = { path = "../newengine-core" }
+newengine-engine-runtime = { path = "../newengine-engine-runtime" }
 newengine-plugin-host = { path = "../newengine-plugin-host" }
+newengine-previews = { path = "../newengine-previews" }
 newengine-runtime-host = { path = "../newengine-runtime-host" }
-newengine-editor-runtime = { path = "../newengine-editor-runtime", default-features = false, features = ["runtime-core"] }
+newengine-scene = { path = "../newengine-scene", features = ["runtime"] }
 newengine-ui = { path = "../newengine-ui", default-features = false }

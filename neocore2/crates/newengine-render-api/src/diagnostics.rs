@@ -1,3 +1,5 @@
+use crate::postfx::PostFxPassStats;
+use crate::shadows::ShadowPassStats;
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -102,6 +104,8 @@ pub struct RenderDiagnosticsSnapshot {
     pub frame: RenderFrameTiming,
     pub queue: RenderQueueStats,
     pub resources: RenderResourceStats,
+    pub shadows: ShadowPassStats,
+    pub postfx: PostFxPassStats,
     pub budget: RenderWorkBudget,
     pub pacing: RenderFramePacingConfig,
     pub notes: Vec<String>,
@@ -114,6 +118,8 @@ impl Default for RenderDiagnosticsSnapshot {
             frame: RenderFrameTiming::default(),
             queue: RenderQueueStats::default(),
             resources: RenderResourceStats::default(),
+            shadows: ShadowPassStats::default(),
+            postfx: PostFxPassStats::default(),
             budget: RenderWorkBudget::default(),
             pacing: RenderFramePacingConfig::default(),
             notes: Vec::new(),

@@ -1,6 +1,18 @@
 # newengine-game-runtime
 
-Standalone game-facing runtime profile for NewEngine.
+Thin standalone game profile crate.
 
-The crate is the boundary that game binaries should depend on instead of the editor profile.
-It disables editor UI markup/panels and allows the render controller to render directly to the platform surface.
+Responsibilities:
+
+- register engine runtime modules;
+- mount game asset roots;
+- bootstrap the selected playable scene after engine plugins are ready;
+- disable editor UI by returning `UiProviderKind::Null`.
+
+Non-responsibilities:
+
+- renderer implementation;
+- Vulkan resource creation;
+- shader/pipeline decisions;
+- shadows and post effects;
+- editor scene IO fallback services.

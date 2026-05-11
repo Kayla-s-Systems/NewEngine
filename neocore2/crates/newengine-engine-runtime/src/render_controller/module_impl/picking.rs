@@ -6,10 +6,10 @@ use newengine_transform::GlobalTransform;
 
 use crate::gameplay::display_visible_in_mode;
 
-use super::EditorRenderController;
+use super::RuntimeRenderController;
 
 pub(super) fn handle_picking(
-    this: &mut EditorRenderController,
+    this: &mut RuntimeRenderController,
     scene: &newengine_scene::Scene,
     viewproj: Mat4,
     vp_w: u32,

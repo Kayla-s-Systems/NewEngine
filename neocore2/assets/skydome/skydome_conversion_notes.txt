@@ -1,0 +1,8 @@
+skydome_high.mesh -> skydome_high.obj
+Parsed vertices: 469
+Parsed indices: 2784
+Parsed triangles: 928
+Source vertex format appeared to be: position / uv0 / uv1.
+OBJ stores one UV channel, so uv0 was written as vt. uv1 was preserved as # uv2 comments.
+Normals were generated from triangle winding because explicit normals were not present in the text mesh.
+If the skydome appears invisible from inside in a viewer, disable backface culling or flip normals/faces in the importer.

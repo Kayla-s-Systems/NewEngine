@@ -11,7 +11,7 @@ use newengine_math::{Mat4, Vec3};
 use super::lights;
 use super::passes;
 use super::scene::BoundsSnap;
-use super::EditorRenderController;
+use super::RuntimeRenderController;
 
 #[derive(Clone, Copy, Debug)]
 pub(super) struct ShadowFrame {
@@ -33,7 +33,7 @@ impl ShadowFrame {
 
 #[inline]
 pub(super) fn prepare_shadow_frame(
-    this: &mut EditorRenderController,
+    this: &mut RuntimeRenderController,
     r: &mut dyn RenderApi,
     scene: &newengine_scene::Scene,
     bounds: BoundsSnap,
@@ -117,7 +117,7 @@ pub(super) fn prepare_shadow_frame(
 
 #[inline]
 fn ensure_shadow_rt(
-    this: &mut EditorRenderController,
+    this: &mut RuntimeRenderController,
     r: &mut dyn RenderApi,
     requested_resolution: u32,
 ) -> EngineResult<Option<(RenderTargetId, TextureId)>> {
@@ -146,7 +146,7 @@ fn ensure_shadow_rt(
 }
 
 #[inline]
-fn retire_shadow_rt(this: &mut EditorRenderController) {
+fn retire_shadow_rt(this: &mut RuntimeRenderController) {
     if let Some(old) = this.shadow_rt.take() {
         this.retire_render_target(old);
     }

@@ -30,7 +30,7 @@ use crate::gameplay::{
     ensure_collision_body, remove_collision_body, spawn_default_player, CollisionBody, DisplayMode,
     DisplayVisibility, EditorPlayMode,
 };
-use crate::scene_bootstrap::bootstrap_editor_scene;
+use crate::scene_bootstrap::bootstrap_runtime_scene;
 
 use game_ready::{bootstrap_fps_game_ready_scene, game_ready_demo_enabled};
 use helpers::{
@@ -57,7 +57,7 @@ pub struct SceneBridge {
 impl SceneBridge {
     #[inline]
     pub fn new(mut initial: Scene) -> Self {
-        bootstrap_editor_scene(&mut initial);
+        bootstrap_runtime_scene(&mut initial);
 
         let primitives = Arc::new(RwLock::new(PrimitiveRegistry::with_builtins()));
         let materials = Arc::new(RwLock::new(MaterialRegistry::with_builtins()));

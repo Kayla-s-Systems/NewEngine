@@ -20,6 +20,8 @@ mod render_graph;
 mod residency;
 mod resources;
 mod shader_cache;
+mod shadows;
+mod postfx;
 mod uploads;
 
 pub use bindings::*;
@@ -34,4 +36,6 @@ pub use render_graph::*;
 pub use residency::*;
 pub use resources::*;
 pub use shader_cache::*;
+pub use shadows::*;
+pub use postfx::*;
 pub use uploads::*;

@@ -37,6 +37,7 @@ newengine-math = { path = "../newengine-math" }
 newengine-core = { path = "../newengine-core" }
 newengine-plugin-host = { path = "../newengine-plugin-host" }
 newengine-runtime-host = { path = "../newengine-runtime-host" }
+newengine-engine-runtime = { path = "../newengine-engine-runtime" }
 newengine-ui = { path = "../newengine-ui", default-features = false }
 newengine-assets = { path = "../newengine-assets" }
 newengine-platform-api = { path = "../newengine-platform-api" }
