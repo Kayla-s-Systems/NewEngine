@@ -40,6 +40,7 @@ impl RenderBackendInfoV1 {
 pub enum RenderRequestV1 {
     BeginFrame(BeginFrameDesc),
     SetUiDrawList(UiDrawList),
+    SetDebugText(String),
     EndFrame,
     Resize { width: u32, height: u32 },
     CreateRenderTarget(RenderTargetDesc),

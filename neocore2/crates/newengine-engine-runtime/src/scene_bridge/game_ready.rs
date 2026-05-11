@@ -24,7 +24,7 @@ use newengine_transform::Transform;
 
 use crate::gameplay::{
     ensure_collision_body, spawn_default_player_with_tuning, CollisionBody, CollisionShape,
-    DisplayMode, DisplayVisibility, FpsDemoRules, FpsDemoState, FpsPlayerTuning,
+    DisplayMode, DisplayVisibility, FpsDemoRules, FpsDemoState, FpsPlayerTuning, HeightfieldCollider,
 };
 use crate::scene_bootstrap::bootstrap_runtime_scene;
 
@@ -134,7 +134,10 @@ fn material_textures(spec: &GameReadyMaterialSpec) -> MaterialTextureBindings {
     MaterialTextureBindings {
         base_color_texture: spec.base_color_texture.clone(),
         normal_texture: spec.normal_texture.clone(),
+        metallic_texture: None,
         roughness_texture: spec.roughness_texture.clone(),
+        occlusion_texture: None,
+        emissive_texture: None,
         uv_scale: spec.uv_scale,
         uv_offset: spec.uv_offset,
     }
@@ -300,11 +303,14 @@ fn spawn_procedural_terrain(
         color,
     );
 
-    let bounds = Bounds::from_local_aabb(terrain.heightfield.local_bounds());
+    let heightfield = terrain.heightfield.clone();
+    let collider = HeightfieldCollider::new(heightfield).with_contact_skin(0.08);
+    let bounds = collider.local_bounds();
     let entity = spawn_named(world, "Terrain/HeightField-Procedural");
     let _ = newengine_transform::set_parent(world, entity, Some(root));
     let _ = world.insert(entity, Transform::default());
     let _ = world.insert(entity, terrain);
+    let _ = world.insert(entity, collider);
     let _ = world.insert(entity, bounds);
     let _ = apply_exact_material(world, mats, entity, material, material, color);
     entity

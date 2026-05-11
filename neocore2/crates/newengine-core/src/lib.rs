@@ -8,6 +8,8 @@ pub mod error_reporter;
 pub mod events;
 pub mod frame;
 pub mod host_events;
+pub mod jobs;
+pub mod memory;
 pub mod lifecycle_events;
 pub mod host_services;
 pub mod module;
@@ -23,6 +25,8 @@ pub mod sync;
 mod system_info;
 
 pub use host_services::{call_service_v1, call_service_v1_optional, describe_service, list_service_ids};
+pub use jobs::{JobPriority, JobRequest, JobSystem, JobSystemConfig, JobSystemHandle, JobSystemSnapshot, JobTicket};
+pub use memory::{FrameArena, FrameArenaStats, PoolAllocator, PoolHandle};
 
 pub use newengine_service_api::{InterfaceId, ServiceInterface, ServiceKey};
 pub use services_registry::{ErasedService, MissingServicePolicy, ServiceRegistry};

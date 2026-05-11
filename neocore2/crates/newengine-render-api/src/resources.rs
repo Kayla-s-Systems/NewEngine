@@ -47,7 +47,9 @@ impl BufferDesc {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum TextureFormat {
     Rgba8Unorm,
+    Rgba8Srgb,
     Bgra8Unorm,
+    Bgra8Srgb,
     Rgba16Float,
     Depth24Stencil8,
     Depth32Float,

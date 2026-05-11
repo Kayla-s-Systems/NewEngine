@@ -527,8 +527,7 @@ mod tests {
             "newengine.renderer".to_owned(),
             json!({
                 "vulkan": {
-                    "clear_color": [0.02, 0.025, 0.035, 1.0],
-                    "debug_text": "NewEngine | Vulkan"
+                    "clear_color": [0.02, 0.025, 0.035, 1.0]
                 }
             }),
         );
@@ -537,7 +536,6 @@ mod tests {
         let got = store.resolve_plugin_overrides("newengine.renderer.vulkan");
 
         assert_eq!(got["clear_color"], json!([0.02, 0.025, 0.035, 1.0]));
-        assert_eq!(got["debug_text"], json!("NewEngine | Vulkan"));
     }
 
     #[test]
@@ -547,23 +545,21 @@ mod tests {
             "newengine.renderer".to_owned(),
             json!({
                 "vulkan": {
-                    "clear_color": [0.02, 0.025, 0.035, 1.0],
-                    "debug_text": "Grouped"
+                    "clear_color": [0.02, 0.025, 0.035, 1.0]
                 }
             }),
         );
         overrides.insert(
             "newengine.renderer.vulkan".to_owned(),
             json!({
-                "debug_text": "Exact"
+                "clear_color": [0.05, 0.06, 0.07, 1.0]
             }),
         );
 
         let store = make_store(overrides);
         let got = store.resolve_plugin_overrides("newengine.renderer.vulkan");
 
-        assert_eq!(got["clear_color"], json!([0.02, 0.025, 0.035, 1.0]));
-        assert_eq!(got["debug_text"], json!("Exact"));
+        assert_eq!(got["clear_color"], json!([0.05, 0.06, 0.07, 1.0]));
     }
 
     #[test]

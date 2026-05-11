@@ -6,6 +6,7 @@ use crate::api::MaterialId;
 pub enum MaterialTextureSlot {
     BaseColor,
     Normal,
+    Metallic,
     Roughness,
     Occlusion,
     Emissive,
@@ -101,7 +102,10 @@ impl MaterialTextureResidency {
 pub struct MaterialTextureBindings {
     pub base_color_texture: Option<String>,
     pub normal_texture: Option<String>,
+    pub metallic_texture: Option<String>,
     pub roughness_texture: Option<String>,
+    pub occlusion_texture: Option<String>,
+    pub emissive_texture: Option<String>,
     pub uv_scale: [f32; 2],
     pub uv_offset: [f32; 2],
 }
@@ -113,7 +117,10 @@ impl Default for MaterialTextureBindings {
         Self {
             base_color_texture: None,
             normal_texture: None,
+            metallic_texture: None,
             roughness_texture: None,
+            occlusion_texture: None,
+            emissive_texture: None,
             uv_scale: [1.0, 1.0],
             uv_offset: [0.0, 0.0],
         }
@@ -141,7 +148,10 @@ impl MaterialTextureBindings {
         }
         sanitize_path(&mut self.base_color_texture);
         sanitize_path(&mut self.normal_texture);
+        sanitize_path(&mut self.metallic_texture);
         sanitize_path(&mut self.roughness_texture);
+        sanitize_path(&mut self.occlusion_texture);
+        sanitize_path(&mut self.emissive_texture);
         self
     }
 }

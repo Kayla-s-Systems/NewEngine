@@ -42,6 +42,11 @@ impl RenderApi for ServiceBackedRenderApi {
         let _ = self.unit(RenderRequestV1::SetUiDrawList(ui));
     }
 
+    fn set_debug_text(&mut self, _text: String) {
+        // Compatibility no-op. Runtime UI must go through UI providers; renderer
+        // text is renderer-owned dev mark only.
+    }
+
     fn end_frame(&mut self) -> EngineResult<()> {
         self.unit(RenderRequestV1::EndFrame)
     }

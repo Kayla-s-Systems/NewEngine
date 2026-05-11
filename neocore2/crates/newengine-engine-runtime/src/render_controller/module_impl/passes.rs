@@ -71,6 +71,7 @@ pub(super) fn draw_grid(
     r.set_bind_group(0, lit.grid_bg)?;
     r.set_vertex_buffer(0, BufferSlice::new(g.vb, 0))?;
     r.draw(newengine_core::render::DrawArgs::new(g.vertex_count))?;
+    this.overlay_metrics.record_vertices_as_triangles(g.vertex_count);
     Ok(())
 }
 
@@ -143,6 +144,7 @@ pub(super) fn draw_procedural_terrain(
         r.set_vertex_buffer(0, BufferSlice::new(gpu.vb, 0))?;
         r.set_index_buffer(BufferSlice::new(gpu.ib, 0), IndexFormat::U32)?;
         r.draw_indexed(newengine_core::render::DrawIndexedArgs::new(gpu.index_count))?;
+        this.overlay_metrics.record_indexed_triangles(gpu.index_count);
     }
 
     Ok(())
@@ -206,6 +208,7 @@ pub(super) fn draw_primitives(
         r.draw_indexed(newengine_core::render::DrawIndexedArgs::new(
             gpu.index_count,
         ))?;
+        this.overlay_metrics.record_indexed_triangles(gpu.index_count);
     }
 
     Ok(())

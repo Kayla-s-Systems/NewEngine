@@ -3,6 +3,7 @@ use std::path::Path;
 use abi_stable::std_types::RString;
 use libloading::Library;
 use newengine_core::events::EventSub;
+use newengine_core::render::RenderBackendStatus;
 use newengine_core::host_events::{
     CursorGrabMode, CursorState, HostEvent, WindowHandles, WindowHostEvent, WindowInitSize,
 };
@@ -418,12 +419,41 @@ impl HostPlatformRuntime {
         }
 
         match self.engine.step() {
-            Ok(()) => Ok(PlatformStepResultV1::default()),
+            Ok(()) => {
+                if let Some(status) = self.engine.resources().get::<RenderBackendStatus>() {
+                    if status.degraded {
+                        return Ok(self.degraded_backend_step_result(status));
+                    }
+                }
+                Ok(PlatformStepResultV1::default())
+            }
             Err(EngineError::ExitRequested) => Ok(PlatformStepResultV1 {
                 exit_requested: true,
                 ..PlatformStepResultV1::default()
             }),
             Err(e) => Err(e),
+        }
+    }
+
+
+    fn degraded_backend_step_result(&self, status: &RenderBackendStatus) -> PlatformStepResultV1 {
+        let phase = status.phase.unwrap_or("unknown");
+        let detail = status
+            .message
+            .as_deref()
+            .unwrap_or("GPU backend entered degraded mode. Event loop is alive; renderer must be recreated.");
+
+        let status_text = format!("Renderer backend disabled at {phase}");
+        PlatformStepResultV1 {
+            exit_requested: false,
+            loading_overlay: PlatformLoadingOverlayV1 {
+                active: true,
+                progress_01: 1.0,
+                spinner_phase: self.bootstrap_spinner_phase,
+                title: RString::from("NEWENGINE DEGRADED MODE"),
+                status: RString::from(status_text.as_str()),
+                detail: RString::from(detail),
+            },
         }
     }
 

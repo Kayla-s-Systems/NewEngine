@@ -1,5 +1,7 @@
 use newengine_bounds::{Aabb, Bounds, Sphere};
 use newengine_math::Vec3;
+use newengine_procedural_noise::HeightField;
+use std::sync::Arc;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
 pub enum EditorPlayMode {
@@ -110,6 +112,42 @@ impl CollisionBody {
     #[inline]
     pub fn to_bounds(self) -> Bounds {
         self.shape.to_bounds()
+    }
+}
+
+/// Stable physics component for terrain heightfield collision.
+///
+/// Render terrain may be streamed, rebuilt, or split into passes; physics consumes
+/// this collider contract and samples the exact height surface. Coarse AABB tiles
+/// remain editor/debug proxies, not the runtime source of truth.
+#[derive(Clone, Debug)]
+pub struct HeightfieldCollider {
+    pub heightfield: Arc<HeightField>,
+    pub contact_skin: f32,
+}
+
+impl HeightfieldCollider {
+    #[inline]
+    pub fn new(heightfield: Arc<HeightField>) -> Self {
+        Self {
+            heightfield,
+            contact_skin: 0.08,
+        }
+    }
+
+    #[inline]
+    pub fn with_contact_skin(mut self, contact_skin: f32) -> Self {
+        self.contact_skin = if contact_skin.is_finite() {
+            contact_skin.clamp(0.0, 0.50)
+        } else {
+            0.08
+        };
+        self
+    }
+
+    #[inline]
+    pub fn local_bounds(&self) -> Bounds {
+        Bounds::from_local_aabb(self.heightfield.local_bounds())
     }
 }
 

@@ -27,6 +27,8 @@ impl RenderApi for NullRenderApi {
 
     fn set_ui_draw_list(&mut self, _ui: UiDrawList) {}
 
+    fn set_debug_text(&mut self, _text: String) {}
+
     fn end_frame(&mut self) -> EngineResult<()> {
         Ok(())
     }

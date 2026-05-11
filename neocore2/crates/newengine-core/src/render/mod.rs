@@ -9,9 +9,42 @@ pub const RENDER_API_ID: &str = "render.api";
 pub const RENDER_API_VERSION: ApiVersion = ApiVersion::new(0, 4, 0);
 pub const RENDER_API_PROVIDE: ApiProvide = ApiProvide::new(RENDER_API_ID, RENDER_API_VERSION);
 
+/// Renderer/backend health snapshot exported as an engine resource.
+///
+/// This is consumed by platform shells and UI providers. It is not renderer UI
+/// and must not be transported through debug text.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct RenderBackendStatus {
+    pub degraded: bool,
+    pub phase: Option<&'static str>,
+    pub message: Option<String>,
+}
+
+impl RenderBackendStatus {
+    #[inline]
+    pub fn healthy() -> Self {
+        Self::default()
+    }
+
+    #[inline]
+    pub fn degraded(phase: &'static str, message: impl Into<String>) -> Self {
+        Self {
+            degraded: true,
+            phase: Some(phase),
+            message: Some(message.into()),
+        }
+    }
+}
+
 pub trait RenderApi: Send {
     fn begin_frame(&mut self, desc: BeginFrameDesc) -> EngineResult<()>;
     fn set_ui_draw_list(&mut self, ui: UiDrawList);
+
+    /// Compatibility no-op. Renderer text is renderer-owned dev mark only;
+    /// runtime UI must be published through UI providers/read-models.
+    #[inline]
+    fn set_debug_text(&mut self, _text: String) {}
+
     fn end_frame(&mut self) -> EngineResult<()>;
     fn resize(&mut self, width: u32, height: u32) -> EngineResult<()>;
 

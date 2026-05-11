@@ -13,9 +13,11 @@ use crate::plugin_manager::PluginManagerBridge;
 use crate::scene_bridge::SceneBridge;
 use crate::viewport_bridge::ViewportBridge;
 
+use super::error_policy::RenderBackendFailureState;
 use super::gpu::LIT_UBO_SIZE;
 use super::gpu::{load_rgba_texture_asset, DebugLineGpu, GridGpu, LitPipeline, PrimitiveGpu};
 use super::material_bindings::MaterialTextureGpuResidency;
+use super::metrics::RuntimeOverlayMetrics;
 use super::resource_lifetime::RenderTargetLifetimeQueue;
 
 type PrimGpuCache = FxHashMap<newengine_primitives::PrimitiveId, PrimitiveGpu>;
@@ -73,6 +75,8 @@ pub struct RuntimeRenderController {
     pub(super) material_textures: FxHashMap<String, MaterialTextureGpuResidency>,
     pub(super) material_texture_queue: VecDeque<String>,
     pub(super) per_draw_ubo: FxHashMap<u64, PerDrawUbo>,
+    pub(super) overlay_metrics: RuntimeOverlayMetrics,
+    pub(super) backend_failure: RenderBackendFailureState,
 
     pub(super) frame_index: u64,
     pub(super) last_pick_seq: u64,
@@ -84,6 +88,22 @@ pub struct RuntimeRenderController {
     pub(super) play_session: Option<PlaySessionSnapshot>,
     pub(super) runtime_session: Option<crate::gameplay::RuntimeWorldSnapshot>,
     pub(super) last_cursor_state: CursorState,
+}
+
+
+#[inline]
+fn material_texture_format(path: &str) -> TextureFormat {
+    let lower = path.to_ascii_lowercase();
+    if lower.contains("normal")
+        || lower.contains("roughness")
+        || lower.contains("metallic")
+        || lower.contains("occlusion")
+        || lower.contains("_ao")
+    {
+        TextureFormat::Rgba8Unorm
+    } else {
+        TextureFormat::Rgba8Srgb
+    }
 }
 
 impl RuntimeRenderController {
@@ -123,6 +143,8 @@ impl RuntimeRenderController {
             material_textures: FxHashMap::default(),
             material_texture_queue: VecDeque::new(),
             per_draw_ubo: FxHashMap::default(),
+            overlay_metrics: RuntimeOverlayMetrics::new(),
+            backend_failure: RenderBackendFailureState::new(),
             frame_index: 0,
             last_pick_seq: 0,
             collision_lines: None,
@@ -166,7 +188,7 @@ impl RuntimeRenderController {
 
             match load_rgba_texture_asset(&path) {
                 Ok((extent, rgba)) => match r.create_texture(
-                    TextureDesc::new(extent, TextureFormat::Rgba8Unorm, TextureUsage::Sampled)
+                    TextureDesc::new(extent, material_texture_format(&path), TextureUsage::Sampled)
                         .with_label(format!("material_tex:{path}"))
                         .with_deferred_data(rgba),
                 ) {

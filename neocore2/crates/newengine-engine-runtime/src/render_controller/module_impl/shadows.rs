@@ -81,7 +81,7 @@ pub(super) fn prepare_shadow_frame(
         1.0,
         settings.bias,
         settings.contact_strength,
-        settings.normal_bias,
+        settings.softness,
     ];
 
     r.begin_render_target(

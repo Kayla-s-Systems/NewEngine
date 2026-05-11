@@ -4,10 +4,9 @@ use newengine_camera_runtime::{
     cursor_state_for_nav, step_camera_nav, BoundsSphere as CamBoundsSphere, CameraNavFrameRequest,
     CameraNavInput, CameraNavParams,
 };
-use newengine_core::host_events::WindowInitSize;
-use newengine_core::host_events::{CursorState, HostEvent, WindowHostEvent};
+use newengine_core::host_events::CursorState;
 use newengine_core::render::{
-    require_render_api, BeginFrameDesc, BeginRenderTargetDesc, Extent2D, RectI32, Viewport,
+    require_render_api, BeginFrameDesc, BeginRenderTargetDesc, Extent2D, RectI32, RenderBackendStatus, Viewport,
 };
 use newengine_core::{EngineResult, Module, ModuleCtx};
 use newengine_math::{Quat, Vec2, Vec3};
@@ -27,8 +26,10 @@ mod lights;
 mod passes;
 mod passes_ubo;
 mod picking;
+mod previews;
 mod scene;
 mod shadows;
+mod windowing;
 
 use input::ViewportInputSnap;
 
@@ -42,134 +43,6 @@ fn quat_from_forward_z(dir_ws: Vec3) -> Quat {
     Quat::from_rotation_arc(fwd, d)
 }
 
-impl RuntimeRenderController {
-    #[inline]
-    fn read_window_size<E: Send>(ctx: &ModuleCtx<'_, E>) -> (u32, u32) {
-        ctx.resources()
-            .get::<WindowInitSize>()
-            .map(|s| (s.width, s.height))
-            .unwrap_or((0, 0))
-    }
-
-    fn resize_if_needed(
-        &mut self,
-        r: &mut dyn newengine_core::render::RenderApi,
-        w: u32,
-        h: u32,
-    ) -> EngineResult<()> {
-        if w == 0 || h == 0 {
-            self.last_w = w;
-            self.last_h = h;
-            return Ok(());
-        }
-
-        // The render backend is initialized from the platform window snapshot before the
-        // first editor frame is rendered. Calling `resize()` again on frame #0 can force
-        // some Vulkan backends/drivers through a premature swapchain teardown/recreate
-        // path before the first acquire. On older Windows/NVIDIA stacks this manifested
-        // as a native access violation immediately after `render begin`.
-        //
-        // Therefore the first non-zero size is adopted as the backend-owned bootstrap
-        // surface size. Real resize events after the first frame still go through
-        // `RenderApi::resize` below.
-        if self.last_w == 0 || self.last_h == 0 {
-            self.last_w = w;
-            self.last_h = h;
-            log::debug!(
-                "render controller: adopted initial surface size {}x{}; skip first explicit resize",
-                w,
-                h
-            );
-            newengine_core::crash::record_breadcrumb(format!(
-                "render controller: adopted initial surface size {}x{}; skip first resize",
-                w, h
-            ));
-            return Ok(());
-        }
-
-        if w != self.last_w || h != self.last_h {
-            let old_w = self.last_w;
-            let old_h = self.last_h;
-            log::debug!(
-                "render controller: resize requested {}x{} -> {}x{}",
-                old_w,
-                old_h,
-                w,
-                h
-            );
-            newengine_core::crash::record_breadcrumb(format!(
-                "render controller: resize requested {}x{} -> {}x{}",
-                old_w, old_h, w, h
-            ));
-
-            r.resize(w, h)?;
-
-            self.last_w = w;
-            self.last_h = h;
-            log::debug!("render controller: resize completed {}x{}", w, h);
-            newengine_core::crash::record_breadcrumb(format!(
-                "render controller: resize completed {}x{}",
-                w, h
-            ));
-        }
-        Ok(())
-    }
-
-
-    fn pump_previews_fail_soft(
-        &mut self,
-        r: &mut dyn newengine_core::render::RenderApi,
-        dt: f32,
-    ) {
-        if self.previews_disabled {
-            return;
-        }
-
-        let result = {
-            let mut previews = self.previews.lock();
-            previews.pump(r, dt)
-        };
-
-        if let Err(e) = result {
-            self.previews_disabled = true;
-            log::warn!(
-                "render controller: primitive previews disabled for this session: {}",
-                e
-            );
-            newengine_core::crash::record_breadcrumb(format!(
-                "render controller: primitive previews disabled: {}",
-                e
-            ));
-        }
-    }
-
-    fn disable_viewport_pass(&mut self, phase: &'static str, error: impl std::fmt::Display) {
-        if !self.viewport_pass_disabled {
-            log::error!(
-                "render controller: viewport GPU pass disabled at {}: {}",
-                phase,
-                error
-            );
-            newengine_core::crash::record_breadcrumb(format!(
-                "render controller: viewport pass disabled at {}: {}",
-                phase,
-                error
-            ));
-        }
-        self.viewport_pass_disabled = true;
-    }
-
-    #[inline]
-    fn sync_cursor_state<E: Send>(&mut self, ctx: &ModuleCtx<'_, E>, desired: CursorState) {
-        if desired == self.last_cursor_state {
-            return;
-        }
-        self.last_cursor_state = desired;
-        let _ = ctx
-            .events()
-            .publish(HostEvent::Window(WindowHostEvent::Cursor(desired)));
-    }
-}
 
 impl<E: Send + 'static> Module<E> for RuntimeRenderController {
     fn id(&self) -> &'static str {
@@ -206,6 +79,12 @@ impl<E: Send + 'static> Module<E> for RuntimeRenderController {
     fn render(&mut self, ctx: &mut ModuleCtx<'_, E>) -> EngineResult<()> {
         let ui: Option<UiDrawList> = ctx.resources_mut().remove::<UiDrawList>();
 
+        if self.backend_render_disabled() {
+            ctx.resources_mut().insert::<RenderBackendStatus>(self.backend_failure.snapshot());
+            self.sync_cursor_state(ctx, CursorState::released());
+            return Ok(());
+        }
+
         if let Some(snap) = ctx
             .resources()
             .get::<newengine_plugin_host::PluginsSnapshot>()
@@ -232,7 +111,7 @@ impl<E: Send + 'static> Module<E> for RuntimeRenderController {
 
         let trace_frame = self.frame_index < 8 || self.frame_index % 120 == 0;
         let api = match require_render_api(ctx) {
-            Ok(api) => api,
+            Ok(api) => api.clone(),
             Err(_) => return Ok(()),
         };
         let mut r = api.lock();
@@ -249,7 +128,9 @@ impl<E: Send + 'static> Module<E> for RuntimeRenderController {
             newengine_core::crash::record_breadcrumb(format!("render controller: render begin next_frame={} window={}x{}", self.frame_index.saturating_add(1), w, h));
         }
 
-        self.resize_if_needed(&mut **r, w, h)?;
+        if let Err(error) = self.resize_if_needed(&mut **r, w, h) {
+            return self.record_render_backend_error("resize", error);
+        }
 
         let (requested_vp_w, requested_vp_h) = self.viewport_bridge.read_extent();
         let direct_surface_viewport = ui.is_none()
@@ -275,7 +156,9 @@ impl<E: Send + 'static> Module<E> for RuntimeRenderController {
             );
             newengine_core::crash::record_breadcrumb(format!("render controller: begin_frame next_frame={} clear={:.3},{:.3},{:.3},{:.3} viewport={}x{}", self.frame_index.saturating_add(1), self.clear_color[0], self.clear_color[1], self.clear_color[2], self.clear_color[3], vp_w, vp_h));
         }
-        r.begin_frame(BeginFrameDesc::new(self.clear_color))?;
+        if let Err(error) = r.begin_frame(BeginFrameDesc::new(self.clear_color)) {
+            return self.record_render_backend_error("begin_frame", error);
+        }
         if trace_frame {
             log::debug!(
                 "render controller: begin_frame completed frame={}",
@@ -290,6 +173,7 @@ impl<E: Send + 'static> Module<E> for RuntimeRenderController {
         self.frame_index = self.frame_index.saturating_add(1).max(1);
 
         let dt = ctx.frame().map(|f| f.dt).unwrap_or(0.016);
+        self.overlay_metrics.begin_frame(dt);
         self.pump_previews_fail_soft(&mut **r, dt);
 
         if vp_w > 0 && vp_h > 0 && !self.viewport_pass_disabled {
@@ -312,7 +196,7 @@ impl<E: Send + 'static> Module<E> for RuntimeRenderController {
                                 self.frame_index
                             ));
                         }
-                        r.end_frame()?;
+                        self.record_render_backend_result("end_frame_after_viewport_rt_failure", r.end_frame())?;
                         return Ok(());
                     }
                 }
@@ -520,7 +404,7 @@ impl<E: Send + 'static> Module<E> for RuntimeRenderController {
                             self.frame_index
                         ));
                     }
-                    r.end_frame()?;
+                    self.record_render_backend_result("end_frame_after_viewport_disable", r.end_frame())?;
                     return Ok(());
                 }
             };
@@ -623,7 +507,7 @@ impl<E: Send + 'static> Module<E> for RuntimeRenderController {
                         self.frame_index
                     ));
                 }
-                r.end_frame()?;
+                self.record_render_backend_result("end_frame_after_viewport_draw_failure", r.end_frame())?;
                 return Ok(());
             }
 
@@ -639,12 +523,17 @@ impl<E: Send + 'static> Module<E> for RuntimeRenderController {
             r.set_ui_draw_list(ui);
         }
 
+        ctx.resources_mut().insert(self.overlay_metrics.snapshot(self.frame_index));
+        ctx.resources_mut().insert::<RenderBackendStatus>(RenderBackendStatus::healthy());
+
         self.gc_per_draw_ubos(&mut **r);
         self.gc_deferred_rts(&mut **r);
         if trace_frame {
             newengine_core::crash::record_breadcrumb(format!("render controller: end_frame frame={}", self.frame_index));
         }
-        r.end_frame()?;
+        if let Err(error) = r.end_frame() {
+            return self.record_render_backend_error("end_frame", error);
+        }
         if trace_frame {
             if let Ok(diag) = r.diagnostics_snapshot() {
                 log::debug!(
