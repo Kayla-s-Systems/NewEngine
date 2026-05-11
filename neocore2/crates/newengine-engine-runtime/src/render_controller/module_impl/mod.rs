@@ -27,6 +27,7 @@ mod passes;
 mod passes_ubo;
 mod picking;
 mod previews;
+mod readiness;
 mod scene;
 mod shadows;
 mod windowing;
@@ -244,6 +245,22 @@ impl<E: Send + 'static> Module<E> for RuntimeRenderController {
 
             let scene_lock = self.scene_bridge.scene();
             let mut scene = scene_lock.write();
+            let requested_play_mode = play_mode;
+            let world_ready = readiness::update_game_ready_launch_gate(
+                self,
+                &mut **r,
+                scene.world_mut(),
+                requested_play_mode,
+                self.frame_index,
+            );
+            let play_mode = if world_ready {
+                requested_play_mode
+            } else {
+                // Keep the runtime deterministic and alive while critical GPU resources
+                // are warming up: no player possession, no physics, no terrain draw.
+                self.sync_cursor_state(ctx, CursorState::released());
+                crate::EditorPlayMode::Edit
+            };
 
             // Single source of truth: scene drives tick phasing + derived updates.
             // Pre-pass provides bounds/world poses for controller logic.
@@ -409,19 +426,23 @@ impl<E: Send + 'static> Module<E> for RuntimeRenderController {
                 }
             };
             let base_lights = lights::collect_lights(scene.world());
-            let shadow_frame = match shadows::prepare_shadow_frame(
-                self,
-                &mut **r,
-                &scene,
-                bounds,
-                lit,
-                play_mode.is_runtime(),
-            ) {
-                Ok(frame) => frame,
-                Err(e) => {
-                    log::warn!("render controller: shadow pass disabled for this frame: {}", e);
-                    shadows::ShadowFrame::disabled(lit.white_texture)
+            let shadow_frame = if world_ready {
+                match shadows::prepare_shadow_frame(
+                    self,
+                    &mut **r,
+                    &scene,
+                    bounds,
+                    lit,
+                    play_mode.is_runtime(),
+                ) {
+                    Ok(frame) => frame,
+                    Err(e) => {
+                        log::warn!("render controller: shadow pass disabled for this frame: {}", e);
+                        shadows::ShadowFrame::disabled(lit.white_texture)
+                    }
                 }
+            } else {
+                shadows::ShadowFrame::disabled(lit.white_texture)
             };
             let world_lights = base_lights.with_shadow(shadow_frame.light_mvp, shadow_frame.params);
 
@@ -442,49 +463,51 @@ impl<E: Send + 'static> Module<E> for RuntimeRenderController {
                 r.set_viewport(Viewport::full(extent))?;
                 r.set_scissor(RectI32::new(0, 0, vp_w as i32, vp_h as i32))?;
 
-                if !play_mode.is_runtime() {
-                    passes::draw_grid(
-                        self,
-                        &mut **r,
-                        lit,
-                        viewproj,
-                        &rig,
-                        bounds.radius,
-                        &world_lights,
-                    )?;
-                }
-                passes::draw_procedural_terrain(
-                    self,
-                    &mut **r,
-                    &scene,
-                    lit,
-                    viewproj,
-                    &world_lights,
-                    shadow_frame.texture,
-                    play_mode.is_runtime(),
-                )?;
-                passes::draw_primitives(
-                    self,
-                    &mut **r,
-                    &scene,
-                    lit,
-                    viewproj,
-                    &world_lights,
-                    shadow_frame.texture,
-                    play_mode.is_runtime(),
-                )?;
-                if !play_mode.is_runtime() {
-                    passes::draw_light_gizmos(
+                if world_ready {
+                    if !play_mode.is_runtime() {
+                        passes::draw_grid(
+                            self,
+                            &mut **r,
+                            lit,
+                            viewproj,
+                            &rig,
+                            bounds.radius,
+                            &world_lights,
+                        )?;
+                    }
+                    passes::draw_procedural_terrain(
                         self,
                         &mut **r,
                         &scene,
                         lit,
                         viewproj,
                         &world_lights,
-                        quat_from_forward_z,
-                        false,
+                        shadow_frame.texture,
+                        play_mode.is_runtime(),
                     )?;
-                    passes::draw_collision_wireframe(self, &mut **r, &scene, viewproj)?;
+                    passes::draw_primitives(
+                        self,
+                        &mut **r,
+                        &scene,
+                        lit,
+                        viewproj,
+                        &world_lights,
+                        shadow_frame.texture,
+                        play_mode.is_runtime(),
+                    )?;
+                    if !play_mode.is_runtime() {
+                        passes::draw_light_gizmos(
+                            self,
+                            &mut **r,
+                            &scene,
+                            lit,
+                            viewproj,
+                            &world_lights,
+                            quat_from_forward_z,
+                            false,
+                        )?;
+                        passes::draw_collision_wireframe(self, &mut **r, &scene, viewproj)?;
+                    }
                 }
 
                 if rt.is_some() {

@@ -1,15 +1,13 @@
 use newengine_core::render::{
     BeginFrameDesc, BeginRenderTargetDesc, BindGroupDesc, BindGroupId, BindGroupLayoutDesc,
     BindGroupLayoutId, BufferDesc, BufferId, BufferSlice, DrawArgs, DrawIndexedArgs,
-    IndexFormat, PipelineDesc, PipelineId, PipelineWarmupDesc, PipelineWarmupReport, RectI32,
-    RenderApi, RenderCapabilityNegotiationRequest, RenderCapabilityNegotiationResponse,
-    RenderDiagnosticsSnapshot, RenderGraphCompileReport, RenderGraphDesc, RenderGraphSubmitReport,
-    RenderGraphValidationReport, RenderTargetDesc, RenderTargetId, RenderWorkBudget, SamplerDesc,
+    IndexFormat, PipelineDesc, PipelineId, PipelineWarmupDesc, PipelineWarmupReport, RectI32, RenderApi,
+    RenderTargetDesc, RenderDiagnosticsSnapshot, RenderTargetId, RenderWorkBudget, SamplerDesc,
     SamplerId, ShaderDesc, ShaderId, ShaderRuntimeCacheStats, TextureDesc, TextureId,
     TextureResidencySnapshot, UiDrawList, UiTexId, UploadPumpDesc, UploadPumpReport, Viewport,
 };
 use newengine_core::{EngineError, EngineResult};
-use newengine_render_api::{RenderRequestV1, RenderRequestV2, RenderResponseV1, RenderResponseV2};
+use newengine_render_api::{RenderRequestV1, RenderResponseV1};
 
 use crate::render_runtime::client::RenderServiceClient;
 
@@ -32,20 +30,6 @@ impl ServiceBackedRenderApi {
                 other
             ))),
         }
-    }
-
-    fn local_graph_submit_report(graph: RenderGraphDesc) -> EngineResult<RenderGraphSubmitReport> {
-        let compile = newengine_render_api::compile_render_graph(&graph).map_err(|errors| {
-            EngineError::other(format!(
-                "render graph validation failed: {:?}",
-                errors
-            ))
-        })?;
-        Ok(RenderGraphSubmitReport {
-            skipped_passes: compile.pass_count,
-            compile,
-            ..RenderGraphSubmitReport::default()
-        })
     }
 }
 
@@ -298,96 +282,6 @@ impl RenderApi for ServiceBackedRenderApi {
         self.unit(RenderRequestV1::SetWorkBudget(budget))
     }
 
-    fn negotiate_capabilities(
-        &self,
-        request: RenderCapabilityNegotiationRequest,
-    ) -> EngineResult<RenderCapabilityNegotiationResponse> {
-        match self.client.invoke_v2(RenderRequestV2::Negotiate(request.clone())) {
-            Ok(RenderResponseV2::Negotiation(response)) => Ok(response),
-            Ok(RenderResponseV2::Problem(problem)) => Err(EngineError::other(problem.detail)),
-            Ok(other) => Err(EngineError::other(format!(
-                "render service protocol error: expected Negotiation, got {:?}",
-                other
-            ))),
-            Err(_) => {
-                let caps = self
-                    .client
-                    .info()
-                    .map(|info| info.capabilities)
-                    .unwrap_or_default();
-                let enabled_features = request
-                    .optional_features
-                    .iter()
-                    .chain(request.required_features.iter())
-                    .copied()
-                    .filter(|feature| caps.supports(*feature))
-                    .collect::<Vec<_>>();
-                let missing_required_features = request
-                    .required_features
-                    .iter()
-                    .copied()
-                    .filter(|feature| !caps.supports(*feature))
-                    .collect::<Vec<_>>();
-                Ok(RenderCapabilityNegotiationResponse {
-                    accepted_version: newengine_render_api::RenderApiVersion::new(1, 0, 0),
-                    backend_version: newengine_render_api::RenderApiVersion::new(1, 0, 0),
-                    ok: missing_required_features.is_empty(),
-                    enabled_features,
-                    missing_required_features,
-                })
-            }
-        }
-    }
-
-    fn compile_render_graph(
-        &mut self,
-        graph: RenderGraphDesc,
-    ) -> EngineResult<RenderGraphCompileReport> {
-        match self.client.invoke_v2(RenderRequestV2::CompileRenderGraph(graph.clone())) {
-            Ok(RenderResponseV2::GraphCompileReport(report)) => Ok(report),
-            Ok(RenderResponseV2::Problem(problem)) => Err(EngineError::other(problem.detail)),
-            Ok(other) => Err(EngineError::other(format!(
-                "render service protocol error: expected GraphCompileReport, got {:?}",
-                other
-            ))),
-            Err(_) => newengine_render_api::compile_render_graph(&graph).map_err(|errors| {
-                EngineError::other(format!(
-                    "render graph validation failed: {:?}",
-                    errors
-                ))
-            }),
-        }
-    }
-
-    fn validate_render_graph(
-        &mut self,
-        graph: RenderGraphDesc,
-    ) -> EngineResult<RenderGraphValidationReport> {
-        match self.client.invoke_v2(RenderRequestV2::ValidateRenderGraph(graph.clone())) {
-            Ok(RenderResponseV2::GraphValidationReport(report)) => Ok(report),
-            Ok(RenderResponseV2::Problem(problem)) => Err(EngineError::other(problem.detail)),
-            Ok(other) => Err(EngineError::other(format!(
-                "render service protocol error: expected GraphValidationReport, got {:?}",
-                other
-            ))),
-            Err(_) => Ok(newengine_render_api::validate_and_compile_render_graph(&graph)),
-        }
-    }
-
-    fn submit_render_graph(
-        &mut self,
-        graph: RenderGraphDesc,
-    ) -> EngineResult<RenderGraphSubmitReport> {
-        match self.client.invoke_v2(RenderRequestV2::SubmitRenderGraph(graph.clone())) {
-            Ok(RenderResponseV2::GraphSubmitReport(report)) => Ok(report),
-            Ok(RenderResponseV2::Problem(problem)) => Err(EngineError::other(problem.detail)),
-            Ok(other) => Err(EngineError::other(format!(
-                "render service protocol error: expected GraphSubmitReport, got {:?}",
-                other
-            ))),
-            Err(_) => Self::local_graph_submit_report(graph),
-        }
-    }
 
     fn pump_uploads(&mut self, desc: UploadPumpDesc) -> EngineResult<UploadPumpReport> {
         match self

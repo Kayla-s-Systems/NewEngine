@@ -437,7 +437,7 @@ impl HostPlatformRuntime {
 
 
     fn degraded_backend_step_result(&self, status: &RenderBackendStatus) -> PlatformStepResultV1 {
-        let phase = status.phase.unwrap_or("unknown");
+        let phase = status.phase.unwrap_or("startup");
         let detail = status
             .message
             .as_deref()
@@ -449,7 +449,7 @@ impl HostPlatformRuntime {
             loading_overlay: PlatformLoadingOverlayV1 {
                 active: true,
                 progress_01: 1.0,
-                spinner_phase: self.bootstrap_spinner_phase,
+                spinner_phase: 0,
                 title: RString::from("NEWENGINE DEGRADED MODE"),
                 status: RString::from(status_text.as_str()),
                 detail: RString::from(detail),

@@ -24,7 +24,7 @@ use newengine_transform::Transform;
 
 use crate::gameplay::{
     ensure_collision_body, spawn_default_player_with_tuning, CollisionBody, CollisionShape,
-    DisplayMode, DisplayVisibility, FpsDemoRules, FpsDemoState, FpsPlayerTuning, HeightfieldCollider,
+    DisplayMode, DisplayVisibility, FpsDemoRules, FpsDemoState, FpsPlayerTuning, GameReadyWorldLaunchGate, HeightfieldCollider,
 };
 use crate::scene_bootstrap::bootstrap_runtime_scene;
 
@@ -623,6 +623,7 @@ pub(super) fn bootstrap_fps_game_ready_scene(
         map.objective.clone(),
         &rules,
     ));
+    world.insert_resource(GameReadyWorldLaunchGate::new(0));
 
     configure_game_ready_lighting(world, &map.lighting);
 

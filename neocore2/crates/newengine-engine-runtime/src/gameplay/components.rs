@@ -151,6 +151,47 @@ impl HeightfieldCollider {
     }
 }
 
+
+/// Startup/playability gate for standalone game-ready worlds.
+///
+/// CPU scene bootstrap may finish before material textures become resident on the
+/// GPU. The render controller keeps this gate closed until critical terrain
+/// materials are ready or permanently failed, so the standalone runtime does not
+/// possess the player or draw a naked fallback terrain plane.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct GameReadyWorldLaunchGate {
+    pub requested_frame: u64,
+    pub released: bool,
+    pub released_frame: Option<u64>,
+    pub reason: String,
+}
+
+impl Default for GameReadyWorldLaunchGate {
+    #[inline]
+    fn default() -> Self {
+        Self::new(0)
+    }
+}
+
+impl GameReadyWorldLaunchGate {
+    #[inline]
+    pub fn new(requested_frame: u64) -> Self {
+        Self {
+            requested_frame,
+            released: false,
+            released_frame: None,
+            reason: "waiting for critical runtime assets".to_string(),
+        }
+    }
+
+    #[inline]
+    pub fn release(&mut self, frame_index: u64, reason: impl Into<String>) {
+        self.released = true;
+        self.released_frame = Some(frame_index);
+        self.reason = reason.into();
+    }
+}
+
 #[derive(Clone, Copy, Debug, Default)]
 pub struct PlayerActor;
 

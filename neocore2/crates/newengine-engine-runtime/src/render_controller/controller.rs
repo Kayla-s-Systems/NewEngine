@@ -190,7 +190,7 @@ impl RuntimeRenderController {
                 Ok((extent, rgba)) => match r.create_texture(
                     TextureDesc::new(extent, material_texture_format(&path), TextureUsage::Sampled)
                         .with_label(format!("material_tex:{path}"))
-                        .with_deferred_data(rgba),
+                        .with_data(rgba),
                 ) {
                     Ok(texture) => {
                         self.material_textures.insert(
@@ -230,6 +230,50 @@ impl RuntimeRenderController {
                     );
                 }
             }
+        }
+    }
+
+
+    #[inline]
+    pub(super) fn material_texture_ready_or_failed(
+        &mut self,
+        r: &mut dyn newengine_core::render::RenderApi,
+        path: &str,
+    ) -> bool {
+        self.request_material_texture(path);
+
+        let Some(entry) = self.material_textures.get(path).cloned() else {
+            return false;
+        };
+
+        match entry {
+            MaterialTextureGpuResidency::Ready { .. } | MaterialTextureGpuResidency::Failed { .. } => true,
+            MaterialTextureGpuResidency::Requested => false,
+            MaterialTextureGpuResidency::Loading { texture, .. } => match r.texture_residency(texture) {
+                Ok(snapshot) if snapshot.state == GpuResourceResidencyState::Ready => {
+                    self.material_textures.insert(
+                        path.to_string(),
+                        MaterialTextureGpuResidency::Ready { texture },
+                    );
+                    true
+                }
+                Ok(snapshot) if snapshot.state == GpuResourceResidencyState::Failed => {
+                    let message = snapshot
+                        .message
+                        .unwrap_or_else(|| "gpu upload failed".to_string());
+                    log::warn!(
+                        "render controller: material texture upload failed path='{}' err='{}'",
+                        path,
+                        message
+                    );
+                    self.material_textures.insert(
+                        path.to_string(),
+                        MaterialTextureGpuResidency::Failed { message },
+                    );
+                    true
+                }
+                _ => false,
+            },
         }
     }
 

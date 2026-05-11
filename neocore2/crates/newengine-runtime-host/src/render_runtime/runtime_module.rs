@@ -187,19 +187,6 @@ impl<E: Send + 'static> Module<E> for RenderBackendRuntimeModule {
             );
         }
 
-        let protocol_v2 = client.info_v2().ok();
-        if let Some(v2) = protocol_v2.as_ref() {
-            log::info!(
-                "render backend: protocol v{}.{}.{} methods={} problem_details={} features={}",
-                v2.protocol_version.major,
-                v2.protocol_version.minor,
-                v2.protocol_version.patch,
-                v2.methods.len(),
-                v2.problem_details,
-                v2.supported_features.len()
-            );
-        }
-
         log::info!(
             "render backend: bridge bound id='{}' name='{}' version='{}' debug_text='{}' features={} upload_budget={}MB/frame",
             info.backend_id,
