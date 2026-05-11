@@ -46,8 +46,9 @@ pub use sync::ShutdownToken;
 pub use run_id::{init_run_id, run_id};
 
 pub use render::{
-    BeginFrameDesc, BeginRenderTargetDesc, Color4, RenderApi, RenderApiRef, RenderTargetDesc,
-    RenderTargetId, RENDER_API_ID, RENDER_API_PROVIDE, RENDER_API_VERSION,
+    BeginFrameDesc, BeginRenderTargetDesc, Color4, RenderApi, RenderApiRef, RenderGraphDesc,
+    RenderGraphSubmitReport, RenderTargetDesc, RenderTargetId, RENDER_API_ID, RENDER_API_PROVIDE,
+    RENDER_API_VERSION,
 };
 
 pub use startup::{

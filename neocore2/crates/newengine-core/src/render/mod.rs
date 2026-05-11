@@ -100,6 +100,74 @@ pub trait RenderApi: Send {
         Ok(())
     }
 
+    /// Negotiates optional render protocol features without changing the v1 API.
+    #[inline]
+    fn negotiate_capabilities(
+        &self,
+        request: RenderCapabilityNegotiationRequest,
+    ) -> EngineResult<RenderCapabilityNegotiationResponse> {
+        let caps = RenderBackendCapabilities::headless_default();
+        let enabled_features = request
+            .optional_features
+            .iter()
+            .copied()
+            .filter(|feature| caps.supports(*feature))
+            .collect::<Vec<_>>();
+        let missing_required_features = request
+            .required_features
+            .iter()
+            .copied()
+            .filter(|feature| !caps.supports(*feature))
+            .collect::<Vec<_>>();
+        Ok(RenderCapabilityNegotiationResponse {
+            accepted_version: RenderApiVersion::new(1, 0, 0),
+            backend_version: RenderApiVersion::new(1, 0, 0),
+            enabled_features,
+            ok: missing_required_features.is_empty(),
+            missing_required_features,
+        })
+    }
+
+    /// Validates and compiles a declarative render graph without executing it.
+    #[inline]
+    fn compile_render_graph(
+        &mut self,
+        graph: RenderGraphDesc,
+    ) -> EngineResult<RenderGraphCompileReport> {
+        newengine_render_api::compile_render_graph(&graph).map_err(|errors| {
+            EngineError::other(format!(
+                "render graph validation failed: {:?}",
+                errors
+            ))
+        })
+    }
+
+    /// Returns a full validation report suitable for editor tooling and tests.
+    #[inline]
+    fn validate_render_graph(
+        &mut self,
+        graph: RenderGraphDesc,
+    ) -> EngineResult<RenderGraphValidationReport> {
+        Ok(newengine_render_api::validate_and_compile_render_graph(&graph))
+    }
+
+    /// Submits a declarative render graph. Backends should override this with
+    /// native barrier/semaphore/resource-aliasing execution. The default path is
+    /// compile-only and reports that no backend passes were executed.
+    #[inline]
+    fn submit_render_graph(
+        &mut self,
+        graph: RenderGraphDesc,
+    ) -> EngineResult<RenderGraphSubmitReport> {
+        let compile = self.compile_render_graph(graph)?;
+        Ok(RenderGraphSubmitReport {
+            executed_passes: 0,
+            skipped_passes: compile.pass_count,
+            compile,
+            ..RenderGraphSubmitReport::default()
+        })
+    }
+
 
     /// Pumps queued GPU upload jobs using a backend-neutral budget. Backends that
     /// support staged uploads should do bounded work here instead of blocking

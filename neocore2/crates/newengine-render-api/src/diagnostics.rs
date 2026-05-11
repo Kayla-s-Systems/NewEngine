@@ -1,4 +1,5 @@
 use crate::postfx::PostFxPassStats;
+use crate::render_graph::{RenderGraphBarrierStats, RenderGraphLifetimeStats};
 use crate::shadows::ShadowPassStats;
 use serde::{Deserialize, Serialize};
 
@@ -99,11 +100,24 @@ pub struct RenderResourceStats {
     pub render_targets: u32,
 }
 
+
+#[derive(Debug, Clone, Copy, Default, Serialize, Deserialize)]
+pub struct RenderGraphRuntimeStats {
+    pub submitted_graphs: u64,
+    pub compiled_graphs: u64,
+    pub executed_passes: u64,
+    pub skipped_passes: u64,
+    pub lifetime: RenderGraphLifetimeStats,
+    pub barriers: RenderGraphBarrierStats,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RenderDiagnosticsSnapshot {
     pub frame: RenderFrameTiming,
     pub queue: RenderQueueStats,
     pub resources: RenderResourceStats,
+    #[serde(default)]
+    pub graph: RenderGraphRuntimeStats,
     pub shadows: ShadowPassStats,
     pub postfx: PostFxPassStats,
     pub budget: RenderWorkBudget,
@@ -118,6 +132,7 @@ impl Default for RenderDiagnosticsSnapshot {
             frame: RenderFrameTiming::default(),
             queue: RenderQueueStats::default(),
             resources: RenderResourceStats::default(),
+            graph: RenderGraphRuntimeStats::default(),
             shadows: ShadowPassStats::default(),
             postfx: PostFxPassStats::default(),
             budget: RenderWorkBudget::default(),
