@@ -70,7 +70,8 @@
         0.025,
         0.035,
         1.0
-      ]
+      ],
+      "debug_text": "NewEngine | Vulkan"
     }
   }
 }

@@ -1,6 +1,5 @@
 use crate::events::EventHub;
 use crate::frame::Frame;
-use crate::jobs::{JobSystemHandle, JobTicket};
 use crate::module::{Bus, Resources, Services};
 use crate::sched::Scheduler;
 
@@ -112,19 +111,6 @@ impl<'a, E: Send + 'static> ModuleCtx<'a, E> {
     #[inline]
     pub fn scheduler(&mut self) -> &mut Scheduler {
         self.scheduler
-    }
-
-    #[inline]
-    pub fn job_system(&self) -> Option<&JobSystemHandle> {
-        self.scheduler.job_system()
-    }
-
-    #[inline]
-    pub fn submit_job<F>(&self, label: &'static str, f: F) -> Option<JobTicket>
-    where
-        F: FnOnce() + Send + 'static,
-    {
-        self.scheduler.submit_now(label, f)
     }
 
     #[inline]

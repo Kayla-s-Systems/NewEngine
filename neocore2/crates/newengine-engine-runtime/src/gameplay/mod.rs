@@ -9,7 +9,6 @@ mod snapshot;
 
 pub use components::{
     CollisionBody, CollisionShape, DisplayMode, DisplayVisibility, EditorPlayMode, FpsDemoGoal,
-    GameReadyWorldLaunchGate, HeightfieldCollider,
     FpsDemoHazard, FpsDemoPickup, FpsDemoRules, FpsDemoState, FpsPlayerTuning, GameplayActor,
     PlayerActor,
 };

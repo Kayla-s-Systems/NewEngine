@@ -9,11 +9,8 @@ pub const RENDER_API_ID: &str = "render.api";
 pub const RENDER_API_VERSION: ApiVersion = ApiVersion::new(0, 4, 0);
 pub const RENDER_API_PROVIDE: ApiProvide = ApiProvide::new(RENDER_API_ID, RENDER_API_VERSION);
 
-/// Renderer/backend health snapshot exported as an engine resource.
-///
-/// This is consumed by platform shells and UI providers. It is not renderer UI
-/// and must not be transported through debug text.
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
+
+#[derive(Debug, Clone, Default)]
 pub struct RenderBackendStatus {
     pub degraded: bool,
     pub phase: Option<&'static str>,
@@ -40,8 +37,8 @@ pub trait RenderApi: Send {
     fn begin_frame(&mut self, desc: BeginFrameDesc) -> EngineResult<()>;
     fn set_ui_draw_list(&mut self, ui: UiDrawList);
 
-    /// Compatibility no-op. Renderer text is renderer-owned dev mark only;
-    /// runtime UI must be published through UI providers/read-models.
+    /// Sets a tiny engine-owned debug overlay string. This is deliberately not
+    /// game-side UI: applications publish metrics, the renderer owns drawing.
     #[inline]
     fn set_debug_text(&mut self, _text: String) {}
 

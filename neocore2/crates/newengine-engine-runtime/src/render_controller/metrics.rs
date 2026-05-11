@@ -1,16 +1,5 @@
 #![forbid(unsafe_op_in_unsafe_fn)]
 
-/// Render statistics exported for UI providers and profilers.
-///
-/// This is data, not renderer text. UI layers decide how to present it.
-#[derive(Clone, Copy, Debug, Default, PartialEq)]
-pub struct RenderFrameMetricsSnapshot {
-    pub frame_index: u64,
-    pub fps_ema: f32,
-    pub triangles: u64,
-    pub draws: u32,
-}
-
 #[derive(Clone, Copy, Debug)]
 pub(super) struct RuntimeOverlayMetrics {
     pub(super) frame_triangles: u64,
@@ -57,12 +46,12 @@ impl RuntimeOverlayMetrics {
     }
 
     #[inline]
-    pub(super) fn snapshot(&self, frame_index: u64) -> RenderFrameMetricsSnapshot {
-        RenderFrameMetricsSnapshot {
-            frame_index,
-            fps_ema: self.fps_ema,
-            triangles: self.frame_triangles,
-            draws: self.frame_draws,
-        }
+    pub(super) fn overlay_text(&self) -> String {
+        format!(
+            "FPS {:>5.1} | TRI {:>8} | DRAWS {:>4}",
+            self.fps_ema,
+            self.frame_triangles,
+            self.frame_draws
+        )
     }
 }

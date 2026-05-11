@@ -1,7 +1,6 @@
 #![forbid(unsafe_op_in_unsafe_fn)]
 
 mod controller;
-mod error_policy;
 mod gpu;
 mod material_bindings;
 mod metrics;
@@ -10,5 +9,4 @@ mod resource_lifetime;
 mod viewport;
 
 pub use controller::RuntimeRenderController;
-pub use metrics::RenderFrameMetricsSnapshot;
 pub type EditorRenderController = RuntimeRenderController;

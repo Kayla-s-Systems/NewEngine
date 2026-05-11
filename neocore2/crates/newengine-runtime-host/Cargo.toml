@@ -23,6 +23,7 @@ newengine-math = { path = "../newengine-math" }
 newengine-platform-api = { path = "../newengine-platform-api" }
 newengine-plugin-api = { path = "../newengine-plugin-api" }
 newengine-render-api = { path = "../newengine-render-api" }
+newengine-system-runtime = { path = "../newengine-system-runtime" }
 newengine-plugin-host = { path = "../newengine-plugin-host" }
 newengine-transform = { path = "../newengine-transform", features = ["ecs", "service"], default-features = false }
 newengine-ui = { path = "../newengine-ui", default-features = false }

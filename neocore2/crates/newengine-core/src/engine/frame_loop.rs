@@ -26,17 +26,6 @@ impl<E: Send + 'static> Engine<E> {
 
         self.acc = (self.acc + dt).min(1.0);
 
-        if let Some(frame_arena) = self.resources.get_mut::<crate::memory::FrameArena>() {
-            frame_arena.reset();
-        }
-        let job_snapshot = self
-            .resources
-            .get::<crate::jobs::JobSystem>()
-            .map(|jobs| jobs.snapshot());
-        if let Some(snapshot) = job_snapshot {
-            self.resources.insert(snapshot);
-        }
-
         self.scheduler.begin_frame(Duration::from_secs_f32(dt));
 
         self.process_plugin_control()?;

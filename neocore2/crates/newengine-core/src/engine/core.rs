@@ -1,7 +1,5 @@
 use crate::error::{EngineError, EngineResult};
 use crate::events::EventHub;
-use crate::jobs::JobSystem;
-use crate::memory::FrameArena;
 use crate::module::{Bus, Module, Resources, Services};
 use crate::sched::Scheduler;
 use crate::sync::ShutdownToken;
@@ -112,10 +110,6 @@ impl<E: Send + 'static> Engine<E> {
 
         let mut resources = Resources::default();
         resources.insert(PluginControlQueue::default());
-        let job_system = JobSystem::new_auto();
-        let job_handle = job_system.handle();
-        resources.insert(job_system);
-        resources.insert(FrameArena::default());
 
         init_host_context();
         init_plugin_config_service(config.plugin_overrides.clone());
@@ -135,7 +129,7 @@ impl<E: Send + 'static> Engine<E> {
             resources,
             bus,
             events: EventHub::new(),
-            scheduler: Scheduler::with_job_system(job_handle),
+            scheduler: Scheduler::new(),
             startup_graph: StartupReadinessGraph::default(),
 
             plugins: PluginManager::new(),
@@ -157,11 +151,6 @@ impl<E: Send + 'static> Engine<E> {
     #[inline]
     pub fn resources_mut(&mut self) -> &mut Resources {
         &mut self.resources
-    }
-
-    #[inline]
-    pub fn resources(&self) -> &Resources {
-        &self.resources
     }
 
     #[inline]

@@ -1038,6 +1038,7 @@ dependencies = [
  "newengine-plugin-api",
  "newengine-plugin-host",
  "newengine-render-api",
+ "newengine-system-runtime",
  "newengine-transform",
  "newengine-ui",
  "raw-window-handle",
@@ -1086,6 +1087,24 @@ dependencies = [
  "newengine-math",
  "newengine-transform-api",
  "rayon",
+]
+
+[[package]]
+name = "newengine-system-contracts"
+version = "0.1.0"
+dependencies = [
+ "serde",
+]
+
+[[package]]
+name = "newengine-system-runtime"
+version = "0.1.0"
+dependencies = [
+ "abi_stable",
+ "newengine-core",
+ "newengine-platform-api",
+ "newengine-system-contracts",
+ "parking_lot",
 ]
 
 [[package]]

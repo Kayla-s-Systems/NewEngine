@@ -1,7 +1,5 @@
 use newengine_bounds::{Aabb, Bounds, Sphere};
 use newengine_math::Vec3;
-use newengine_procedural_noise::HeightField;
-use std::sync::Arc;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
 pub enum EditorPlayMode {
@@ -112,83 +110,6 @@ impl CollisionBody {
     #[inline]
     pub fn to_bounds(self) -> Bounds {
         self.shape.to_bounds()
-    }
-}
-
-/// Stable physics component for terrain heightfield collision.
-///
-/// Render terrain may be streamed, rebuilt, or split into passes; physics consumes
-/// this collider contract and samples the exact height surface. Coarse AABB tiles
-/// remain editor/debug proxies, not the runtime source of truth.
-#[derive(Clone, Debug)]
-pub struct HeightfieldCollider {
-    pub heightfield: Arc<HeightField>,
-    pub contact_skin: f32,
-}
-
-impl HeightfieldCollider {
-    #[inline]
-    pub fn new(heightfield: Arc<HeightField>) -> Self {
-        Self {
-            heightfield,
-            contact_skin: 0.08,
-        }
-    }
-
-    #[inline]
-    pub fn with_contact_skin(mut self, contact_skin: f32) -> Self {
-        self.contact_skin = if contact_skin.is_finite() {
-            contact_skin.clamp(0.0, 0.50)
-        } else {
-            0.08
-        };
-        self
-    }
-
-    #[inline]
-    pub fn local_bounds(&self) -> Bounds {
-        Bounds::from_local_aabb(self.heightfield.local_bounds())
-    }
-}
-
-
-/// Startup/playability gate for standalone game-ready worlds.
-///
-/// CPU scene bootstrap may finish before material textures become resident on the
-/// GPU. The render controller keeps this gate closed until critical terrain
-/// materials are ready or permanently failed, so the standalone runtime does not
-/// possess the player or draw a naked fallback terrain plane.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct GameReadyWorldLaunchGate {
-    pub requested_frame: u64,
-    pub released: bool,
-    pub released_frame: Option<u64>,
-    pub reason: String,
-}
-
-impl Default for GameReadyWorldLaunchGate {
-    #[inline]
-    fn default() -> Self {
-        Self::new(0)
-    }
-}
-
-impl GameReadyWorldLaunchGate {
-    #[inline]
-    pub fn new(requested_frame: u64) -> Self {
-        Self {
-            requested_frame,
-            released: false,
-            released_frame: None,
-            reason: "waiting for critical runtime assets".to_string(),
-        }
-    }
-
-    #[inline]
-    pub fn release(&mut self, frame_index: u64, reason: impl Into<String>) {
-        self.released = true;
-        self.released_frame = Some(frame_index);
-        self.reason = reason.into();
     }
 }
 

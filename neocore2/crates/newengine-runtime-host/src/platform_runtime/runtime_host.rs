@@ -10,10 +10,14 @@ use newengine_core::host_events::{
 use newengine_core::{Engine, EngineError, EngineResult};
 use newengine_platform_api::{
     PlatformCursorGrabModeV1, PlatformCursorPollV1, PlatformCursorStateV1,
-    PlatformHostApiV1, PlatformLoadingOverlayV1, PlatformRuntimeRunFnV1,
+    PlatformHostApiV1, PlatformRuntimeRunFnV1,
     PlatformStepResultV1, PlatformSurfaceMetricsV1, PlatformWindowReadyV1,
 };
 use newengine_plugin_api::PluginInfo;
+use newengine_system_runtime::{
+    overlay_from_render_backend_status, overlay_to_step_result,
+    startup_status_mapper::{bootstrap_loading, runtime_ready},
+};
 use newengine_ui::{
     create_provider, UiBuildFn, UiFrameDesc, UiInputFrame, UiProvider, UiProviderKind,
     UiProviderOptions,
@@ -420,7 +424,7 @@ impl HostPlatformRuntime {
 
         match self.engine.step() {
             Ok(()) => {
-                if let Some(status) = self.engine.resources().get::<RenderBackendStatus>() {
+                if let Some(status) = self.engine.resources.get::<RenderBackendStatus>() {
                     if status.degraded {
                         return Ok(self.degraded_backend_step_result(status));
                     }
@@ -437,23 +441,9 @@ impl HostPlatformRuntime {
 
 
     fn degraded_backend_step_result(&self, status: &RenderBackendStatus) -> PlatformStepResultV1 {
-        let phase = status.phase.unwrap_or("startup");
-        let detail = status
-            .message
-            .as_deref()
-            .unwrap_or("GPU backend entered degraded mode. Event loop is alive; renderer must be recreated.");
-
-        let status_text = format!("Renderer backend disabled at {phase}");
-        PlatformStepResultV1 {
-            exit_requested: false,
-            loading_overlay: PlatformLoadingOverlayV1 {
-                active: true,
-                progress_01: 1.0,
-                spinner_phase: 0,
-                title: RString::from("NEWENGINE DEGRADED MODE"),
-                status: RString::from(status_text.as_str()),
-                detail: RString::from(detail),
-            },
+        match overlay_from_render_backend_status(status) {
+            Some(overlay) => overlay_to_step_result(&overlay, 0),
+            None => PlatformStepResultV1::default(),
         }
     }
 
@@ -498,17 +488,21 @@ impl HostPlatformRuntime {
     }
 
     fn loading_step_result(&self) -> PlatformStepResultV1 {
-        PlatformStepResultV1 {
-            exit_requested: false,
-            loading_overlay: PlatformLoadingOverlayV1 {
-                active: true,
-                progress_01: self.bootstrap_overlay.progress_01,
-                spinner_phase: self.bootstrap_spinner_phase,
-                title: RString::from(self.bootstrap_overlay.title.as_str()),
-                status: RString::from(self.bootstrap_overlay.status.as_str()),
-                detail: RString::from(self.bootstrap_overlay.detail.as_str()),
-            },
-        }
+        let status = self.bootstrap_overlay.status.as_str();
+        let detail = self.bootstrap_overlay.detail.as_str();
+
+        let overlay = if self.bootstrap_overlay.progress_01 >= 0.999 {
+            runtime_ready(status, detail)
+        } else {
+            bootstrap_loading(
+                self.bootstrap_overlay.title.as_str(),
+                status,
+                detail,
+                self.bootstrap_overlay.progress_01,
+            )
+        };
+
+        overlay_to_step_result(&overlay, self.bootstrap_spinner_phase)
     }
 
     pub(crate) fn poll_cursor_state(&mut self) -> PlatformCursorPollV1 {

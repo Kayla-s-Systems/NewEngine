@@ -41,7 +41,6 @@ pub enum RenderFeature {
     TransientResourceLifetime,
     Shadows,
     CascadedShadowMaps,
-    PercentageCloserSoftShadows,
     PostEffects,
     UiComposite,
 }
@@ -100,7 +99,6 @@ impl RenderBackendCapabilities {
                 RenderFeature::TransientResourceLifetime,
                 RenderFeature::Shadows,
                 RenderFeature::CascadedShadowMaps,
-                RenderFeature::PercentageCloserSoftShadows,
                 RenderFeature::PostEffects,
                 RenderFeature::UiComposite,
             ],

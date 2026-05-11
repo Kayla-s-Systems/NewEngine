@@ -4,9 +4,10 @@ use newengine_camera_runtime::{
     cursor_state_for_nav, step_camera_nav, BoundsSphere as CamBoundsSphere, CameraNavFrameRequest,
     CameraNavInput, CameraNavParams,
 };
-use newengine_core::host_events::CursorState;
+use newengine_core::host_events::WindowInitSize;
+use newengine_core::host_events::{CursorState, HostEvent, WindowHostEvent};
 use newengine_core::render::{
-    require_render_api, BeginFrameDesc, BeginRenderTargetDesc, Extent2D, RectI32, RenderBackendStatus, Viewport,
+    require_render_api, BeginFrameDesc, BeginRenderTargetDesc, Extent2D, RectI32, Viewport,
 };
 use newengine_core::{EngineResult, Module, ModuleCtx};
 use newengine_math::{Quat, Vec2, Vec3};
@@ -26,11 +27,8 @@ mod lights;
 mod passes;
 mod passes_ubo;
 mod picking;
-mod previews;
-mod readiness;
 mod scene;
 mod shadows;
-mod windowing;
 
 use input::ViewportInputSnap;
 
@@ -44,6 +42,134 @@ fn quat_from_forward_z(dir_ws: Vec3) -> Quat {
     Quat::from_rotation_arc(fwd, d)
 }
 
+impl RuntimeRenderController {
+    #[inline]
+    fn read_window_size<E: Send>(ctx: &ModuleCtx<'_, E>) -> (u32, u32) {
+        ctx.resources()
+            .get::<WindowInitSize>()
+            .map(|s| (s.width, s.height))
+            .unwrap_or((0, 0))
+    }
+
+    fn resize_if_needed(
+        &mut self,
+        r: &mut dyn newengine_core::render::RenderApi,
+        w: u32,
+        h: u32,
+    ) -> EngineResult<()> {
+        if w == 0 || h == 0 {
+            self.last_w = w;
+            self.last_h = h;
+            return Ok(());
+        }
+
+        // The render backend is initialized from the platform window snapshot before the
+        // first editor frame is rendered. Calling `resize()` again on frame #0 can force
+        // some Vulkan backends/drivers through a premature swapchain teardown/recreate
+        // path before the first acquire. On older Windows/NVIDIA stacks this manifested
+        // as a native access violation immediately after `render begin`.
+        //
+        // Therefore the first non-zero size is adopted as the backend-owned bootstrap
+        // surface size. Real resize events after the first frame still go through
+        // `RenderApi::resize` below.
+        if self.last_w == 0 || self.last_h == 0 {
+            self.last_w = w;
+            self.last_h = h;
+            log::debug!(
+                "render controller: adopted initial surface size {}x{}; skip first explicit resize",
+                w,
+                h
+            );
+            newengine_core::crash::record_breadcrumb(format!(
+                "render controller: adopted initial surface size {}x{}; skip first resize",
+                w, h
+            ));
+            return Ok(());
+        }
+
+        if w != self.last_w || h != self.last_h {
+            let old_w = self.last_w;
+            let old_h = self.last_h;
+            log::debug!(
+                "render controller: resize requested {}x{} -> {}x{}",
+                old_w,
+                old_h,
+                w,
+                h
+            );
+            newengine_core::crash::record_breadcrumb(format!(
+                "render controller: resize requested {}x{} -> {}x{}",
+                old_w, old_h, w, h
+            ));
+
+            r.resize(w, h)?;
+
+            self.last_w = w;
+            self.last_h = h;
+            log::debug!("render controller: resize completed {}x{}", w, h);
+            newengine_core::crash::record_breadcrumb(format!(
+                "render controller: resize completed {}x{}",
+                w, h
+            ));
+        }
+        Ok(())
+    }
+
+
+    fn pump_previews_fail_soft(
+        &mut self,
+        r: &mut dyn newengine_core::render::RenderApi,
+        dt: f32,
+    ) {
+        if self.previews_disabled {
+            return;
+        }
+
+        let result = {
+            let mut previews = self.previews.lock();
+            previews.pump(r, dt)
+        };
+
+        if let Err(e) = result {
+            self.previews_disabled = true;
+            log::warn!(
+                "render controller: primitive previews disabled for this session: {}",
+                e
+            );
+            newengine_core::crash::record_breadcrumb(format!(
+                "render controller: primitive previews disabled: {}",
+                e
+            ));
+        }
+    }
+
+    fn disable_viewport_pass(&mut self, phase: &'static str, error: impl std::fmt::Display) {
+        if !self.viewport_pass_disabled {
+            log::error!(
+                "render controller: viewport GPU pass disabled at {}: {}",
+                phase,
+                error
+            );
+            newengine_core::crash::record_breadcrumb(format!(
+                "render controller: viewport pass disabled at {}: {}",
+                phase,
+                error
+            ));
+        }
+        self.viewport_pass_disabled = true;
+    }
+
+    #[inline]
+    fn sync_cursor_state<E: Send>(&mut self, ctx: &ModuleCtx<'_, E>, desired: CursorState) {
+        if desired == self.last_cursor_state {
+            return;
+        }
+        self.last_cursor_state = desired;
+        let _ = ctx
+            .events()
+            .publish(HostEvent::Window(WindowHostEvent::Cursor(desired)));
+    }
+}
 
 impl<E: Send + 'static> Module<E> for RuntimeRenderController {
     fn id(&self) -> &'static str {
@@ -80,12 +206,6 @@ impl<E: Send + 'static> Module<E> for RuntimeRenderController {
     fn render(&mut self, ctx: &mut ModuleCtx<'_, E>) -> EngineResult<()> {
         let ui: Option<UiDrawList> = ctx.resources_mut().remove::<UiDrawList>();
 
-        if self.backend_render_disabled() {
-            ctx.resources_mut().insert::<RenderBackendStatus>(self.backend_failure.snapshot());
-            self.sync_cursor_state(ctx, CursorState::released());
-            return Ok(());
-        }
-
         if let Some(snap) = ctx
             .resources()
             .get::<newengine_plugin_host::PluginsSnapshot>()
@@ -112,7 +232,7 @@ impl<E: Send + 'static> Module<E> for RuntimeRenderController {
 
         let trace_frame = self.frame_index < 8 || self.frame_index % 120 == 0;
         let api = match require_render_api(ctx) {
-            Ok(api) => api.clone(),
+            Ok(api) => api,
             Err(_) => return Ok(()),
         };
         let mut r = api.lock();
@@ -129,9 +249,7 @@ impl<E: Send + 'static> Module<E> for RuntimeRenderController {
             newengine_core::crash::record_breadcrumb(format!("render controller: render begin next_frame={} window={}x{}", self.frame_index.saturating_add(1), w, h));
         }
 
-        if let Err(error) = self.resize_if_needed(&mut **r, w, h) {
-            return self.record_render_backend_error("resize", error);
-        }
+        self.resize_if_needed(&mut **r, w, h)?;
 
         let (requested_vp_w, requested_vp_h) = self.viewport_bridge.read_extent();
         let direct_surface_viewport = ui.is_none()
@@ -157,9 +275,7 @@ impl<E: Send + 'static> Module<E> for RuntimeRenderController {
             );
             newengine_core::crash::record_breadcrumb(format!("render controller: begin_frame next_frame={} clear={:.3},{:.3},{:.3},{:.3} viewport={}x{}", self.frame_index.saturating_add(1), self.clear_color[0], self.clear_color[1], self.clear_color[2], self.clear_color[3], vp_w, vp_h));
         }
-        if let Err(error) = r.begin_frame(BeginFrameDesc::new(self.clear_color)) {
-            return self.record_render_backend_error("begin_frame", error);
-        }
+        r.begin_frame(BeginFrameDesc::new(self.clear_color))?;
         if trace_frame {
             log::debug!(
                 "render controller: begin_frame completed frame={}",
@@ -197,7 +313,7 @@ impl<E: Send + 'static> Module<E> for RuntimeRenderController {
                                 self.frame_index
                             ));
                         }
-                        self.record_render_backend_result("end_frame_after_viewport_rt_failure", r.end_frame())?;
+                        r.end_frame()?;
                         return Ok(());
                     }
                 }
@@ -245,22 +361,6 @@ impl<E: Send + 'static> Module<E> for RuntimeRenderController {
 
             let scene_lock = self.scene_bridge.scene();
             let mut scene = scene_lock.write();
-            let requested_play_mode = play_mode;
-            let world_ready = readiness::update_game_ready_launch_gate(
-                self,
-                &mut **r,
-                scene.world_mut(),
-                requested_play_mode,
-                self.frame_index,
-            );
-            let play_mode = if world_ready {
-                requested_play_mode
-            } else {
-                // Keep the runtime deterministic and alive while critical GPU resources
-                // are warming up: no player possession, no physics, no terrain draw.
-                self.sync_cursor_state(ctx, CursorState::released());
-                crate::EditorPlayMode::Edit
-            };
 
             // Single source of truth: scene drives tick phasing + derived updates.
             // Pre-pass provides bounds/world poses for controller logic.
@@ -421,28 +521,24 @@ impl<E: Send + 'static> Module<E> for RuntimeRenderController {
                             self.frame_index
                         ));
                     }
-                    self.record_render_backend_result("end_frame_after_viewport_disable", r.end_frame())?;
+                    r.end_frame()?;
                     return Ok(());
                 }
             };
             let base_lights = lights::collect_lights(scene.world());
-            let shadow_frame = if world_ready {
-                match shadows::prepare_shadow_frame(
-                    self,
-                    &mut **r,
-                    &scene,
-                    bounds,
-                    lit,
-                    play_mode.is_runtime(),
-                ) {
-                    Ok(frame) => frame,
-                    Err(e) => {
-                        log::warn!("render controller: shadow pass disabled for this frame: {}", e);
-                        shadows::ShadowFrame::disabled(lit.white_texture)
-                    }
+            let shadow_frame = match shadows::prepare_shadow_frame(
+                self,
+                &mut **r,
+                &scene,
+                bounds,
+                lit,
+                play_mode.is_runtime(),
+            ) {
+                Ok(frame) => frame,
+                Err(e) => {
+                    log::warn!("render controller: shadow pass disabled for this frame: {}", e);
+                    shadows::ShadowFrame::disabled(lit.white_texture)
                 }
-            } else {
-                shadows::ShadowFrame::disabled(lit.white_texture)
             };
             let world_lights = base_lights.with_shadow(shadow_frame.light_mvp, shadow_frame.params);
 
@@ -463,51 +559,49 @@ impl<E: Send + 'static> Module<E> for RuntimeRenderController {
                 r.set_viewport(Viewport::full(extent))?;
                 r.set_scissor(RectI32::new(0, 0, vp_w as i32, vp_h as i32))?;
 
-                if world_ready {
-                    if !play_mode.is_runtime() {
-                        passes::draw_grid(
-                            self,
-                            &mut **r,
-                            lit,
-                            viewproj,
-                            &rig,
-                            bounds.radius,
-                            &world_lights,
-                        )?;
-                    }
-                    passes::draw_procedural_terrain(
+                if !play_mode.is_runtime() {
+                    passes::draw_grid(
+                        self,
+                        &mut **r,
+                        lit,
+                        viewproj,
+                        &rig,
+                        bounds.radius,
+                        &world_lights,
+                    )?;
+                }
+                passes::draw_procedural_terrain(
+                    self,
+                    &mut **r,
+                    &scene,
+                    lit,
+                    viewproj,
+                    &world_lights,
+                    shadow_frame.texture,
+                    play_mode.is_runtime(),
+                )?;
+                passes::draw_primitives(
+                    self,
+                    &mut **r,
+                    &scene,
+                    lit,
+                    viewproj,
+                    &world_lights,
+                    shadow_frame.texture,
+                    play_mode.is_runtime(),
+                )?;
+                if !play_mode.is_runtime() {
+                    passes::draw_light_gizmos(
                         self,
                         &mut **r,
                         &scene,
                         lit,
                         viewproj,
                         &world_lights,
-                        shadow_frame.texture,
-                        play_mode.is_runtime(),
+                        quat_from_forward_z,
+                        false,
                     )?;
-                    passes::draw_primitives(
-                        self,
-                        &mut **r,
-                        &scene,
-                        lit,
-                        viewproj,
-                        &world_lights,
-                        shadow_frame.texture,
-                        play_mode.is_runtime(),
-                    )?;
-                    if !play_mode.is_runtime() {
-                        passes::draw_light_gizmos(
-                            self,
-                            &mut **r,
-                            &scene,
-                            lit,
-                            viewproj,
-                            &world_lights,
-                            quat_from_forward_z,
-                            false,
-                        )?;
-                        passes::draw_collision_wireframe(self, &mut **r, &scene, viewproj)?;
-                    }
+                    passes::draw_collision_wireframe(self, &mut **r, &scene, viewproj)?;
                 }
 
                 if rt.is_some() {
@@ -530,7 +624,7 @@ impl<E: Send + 'static> Module<E> for RuntimeRenderController {
                         self.frame_index
                     ));
                 }
-                self.record_render_backend_result("end_frame_after_viewport_draw_failure", r.end_frame())?;
+                r.end_frame()?;
                 return Ok(());
             }
 
@@ -546,17 +640,14 @@ impl<E: Send + 'static> Module<E> for RuntimeRenderController {
             r.set_ui_draw_list(ui);
         }
 
-        ctx.resources_mut().insert(self.overlay_metrics.snapshot(self.frame_index));
-        ctx.resources_mut().insert::<RenderBackendStatus>(RenderBackendStatus::healthy());
+        r.set_debug_text(self.overlay_metrics.overlay_text());
 
         self.gc_per_draw_ubos(&mut **r);
         self.gc_deferred_rts(&mut **r);
         if trace_frame {
             newengine_core::crash::record_breadcrumb(format!("render controller: end_frame frame={}", self.frame_index));
         }
-        if let Err(error) = r.end_frame() {
-            return self.record_render_backend_error("end_frame", error);
-        }
+        r.end_frame()?;
         if trace_frame {
             if let Ok(diag) = r.diagnostics_snapshot() {
                 log::debug!(

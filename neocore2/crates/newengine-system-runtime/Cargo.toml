@@ -1,0 +1,14 @@
+[package]
+name = "newengine-system-runtime"
+version = "0.1.0"
+readme = "README.md"
+edition = "2021"
+description = "Runtime helpers for mapping subsystem state into NewEngine system-layer contracts."
+license = "MIT OR Apache-2.0"
+
+[dependencies]
+abi_stable = "0.11"
+newengine-core = { path = "../newengine-core" }
+newengine-platform-api = { path = "../newengine-platform-api" }
+newengine-system-contracts = { path = "../newengine-system-contracts" }
+parking_lot = "0.12.5"

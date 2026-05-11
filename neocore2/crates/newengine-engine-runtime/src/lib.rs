@@ -18,7 +18,7 @@ mod scene_bootstrap;
 pub mod scene_bridge;
 pub mod viewport_bridge;
 
-pub use gameplay::{CollisionBody, CollisionShape, EditorPlayMode, GameReadyWorldLaunchGate, GameplayActor, HeightfieldCollider, PlayerActor};
+pub use gameplay::{CollisionBody, CollisionShape, EditorPlayMode, GameplayActor, PlayerActor};
 pub use plugin_manager::PluginManagerBridge;
 pub use render_controller::RuntimeRenderController;
 pub use scene_bridge::SceneBridge;

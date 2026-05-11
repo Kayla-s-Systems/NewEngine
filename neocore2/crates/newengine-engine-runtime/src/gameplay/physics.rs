@@ -1,10 +1,11 @@
 use newengine_bounds::{Aabb, Bounds};
 use newengine_ecs::{EntityId, World};
 use newengine_math::{Mat4, Vec3};
+use newengine_procedural_noise::ProceduralTerrain;
 use newengine_sim::Velocity;
 use newengine_transform::{GlobalTransform, Transform};
 
-use super::{CollisionBody, FpsDemoRules, HeightfieldCollider};
+use super::{CollisionBody, FpsDemoRules};
 
 #[inline]
 fn translate_aabb(aabb: Aabb, delta: Vec3) -> Aabb {
@@ -39,7 +40,7 @@ fn minimal_separation(a: &Aabb, b: &Aabb) -> Option<Vec3> {
 #[derive(Clone)]
 struct RuntimeTerrainSurface {
     key: u64,
-    collider: HeightfieldCollider,
+    terrain: ProceduralTerrain,
     world_from_local: Mat4,
     local_from_world: Mat4,
 }
@@ -47,10 +48,10 @@ struct RuntimeTerrainSurface {
 #[inline]
 fn collect_runtime_terrain_surfaces(world: &World) -> Vec<RuntimeTerrainSurface> {
     let mut terrains: Vec<RuntimeTerrainSurface> = world
-        .query2::<HeightfieldCollider, GlobalTransform>()
-        .map(|(entity, collider, gt)| RuntimeTerrainSurface {
+        .query2::<ProceduralTerrain, GlobalTransform>()
+        .map(|(entity, terrain, gt)| RuntimeTerrainSurface {
             key: entity.stable_u64(),
-            collider: collider.clone(),
+            terrain: terrain.clone(),
             world_from_local: gt.0,
             local_from_world: gt.0.inverse(),
         })
@@ -72,11 +73,10 @@ fn resolve_heightfield_contact(
 
     for surface in terrains {
         let local_pos = surface.local_from_world.transform_point3(*next_pos);
-        let sample_skin = surface.collider.contact_skin.max(contact_skin).clamp(0.0, 0.50);
         let Some(local_ground_y) = surface
-            .collider
+            .terrain
             .heightfield
-            .sample_height_local_checked(local_pos.x, local_pos.z, sample_skin)
+            .sample_height_local_checked(local_pos.x, local_pos.z, 0.08)
         else {
             continue;
         };

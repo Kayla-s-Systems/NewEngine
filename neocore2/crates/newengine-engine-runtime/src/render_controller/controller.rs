@@ -13,7 +13,6 @@ use crate::plugin_manager::PluginManagerBridge;
 use crate::scene_bridge::SceneBridge;
 use crate::viewport_bridge::ViewportBridge;
 
-use super::error_policy::RenderBackendFailureState;
 use super::gpu::LIT_UBO_SIZE;
 use super::gpu::{load_rgba_texture_asset, DebugLineGpu, GridGpu, LitPipeline, PrimitiveGpu};
 use super::material_bindings::MaterialTextureGpuResidency;
@@ -76,7 +75,6 @@ pub struct RuntimeRenderController {
     pub(super) material_texture_queue: VecDeque<String>,
     pub(super) per_draw_ubo: FxHashMap<u64, PerDrawUbo>,
     pub(super) overlay_metrics: RuntimeOverlayMetrics,
-    pub(super) backend_failure: RenderBackendFailureState,
 
     pub(super) frame_index: u64,
     pub(super) last_pick_seq: u64,
@@ -144,7 +142,6 @@ impl RuntimeRenderController {
             material_texture_queue: VecDeque::new(),
             per_draw_ubo: FxHashMap::default(),
             overlay_metrics: RuntimeOverlayMetrics::new(),
-            backend_failure: RenderBackendFailureState::new(),
             frame_index: 0,
             last_pick_seq: 0,
             collision_lines: None,
@@ -190,7 +187,7 @@ impl RuntimeRenderController {
                 Ok((extent, rgba)) => match r.create_texture(
                     TextureDesc::new(extent, material_texture_format(&path), TextureUsage::Sampled)
                         .with_label(format!("material_tex:{path}"))
-                        .with_data(rgba),
+                        .with_deferred_data(rgba),
                 ) {
                     Ok(texture) => {
                         self.material_textures.insert(
@@ -230,50 +227,6 @@ impl RuntimeRenderController {
                     );
                 }
             }
-        }
-    }
-
-
-    #[inline]
-    pub(super) fn material_texture_ready_or_failed(
-        &mut self,
-        r: &mut dyn newengine_core::render::RenderApi,
-        path: &str,
-    ) -> bool {
-        self.request_material_texture(path);
-
-        let Some(entry) = self.material_textures.get(path).cloned() else {
-            return false;
-        };
-
-        match entry {
-            MaterialTextureGpuResidency::Ready { .. } | MaterialTextureGpuResidency::Failed { .. } => true,
-            MaterialTextureGpuResidency::Requested => false,
-            MaterialTextureGpuResidency::Loading { texture, .. } => match r.texture_residency(texture) {
-                Ok(snapshot) if snapshot.state == GpuResourceResidencyState::Ready => {
-                    self.material_textures.insert(
-                        path.to_string(),
-                        MaterialTextureGpuResidency::Ready { texture },
-                    );
-                    true
-                }
-                Ok(snapshot) if snapshot.state == GpuResourceResidencyState::Failed => {
-                    let message = snapshot
-                        .message
-                        .unwrap_or_else(|| "gpu upload failed".to_string());
-                    log::warn!(
-                        "render controller: material texture upload failed path='{}' err='{}'",
-                        path,
-                        message
-                    );
-                    self.material_textures.insert(
-                        path.to_string(),
-                        MaterialTextureGpuResidency::Failed { message },
-                    );
-                    true
-                }
-                _ => false,
-            },
         }
     }
 
