@@ -2,7 +2,7 @@
 
 use newengine_materials::api::{MaterialFlags, MaterialResolved};
 
-/// CPU-side material plan consumed by the current legacy lit pass.
+/// CPU-side material plan consumed by the lit render pass.
 ///
 /// This keeps material semantics outside draw-loop plumbing and makes the
 /// renderer consume a small, stable DTO instead of reaching into registry
