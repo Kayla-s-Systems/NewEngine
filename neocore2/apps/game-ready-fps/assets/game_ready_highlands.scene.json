@@ -1,7 +1,7 @@
 {
   "schema": "newengine.scene.game_ready.highlands.v1",
   "title": "KAYLA Terrain Sandbox",
-  "objective": "Procedural terrain with material and imported sky dome only.",
+  "objective": "Procedural highlands with deterministic tree prefab placement, material training proxies and imported sky dome.",
   "player": {
     "start": [
       -17.5,
@@ -26,13 +26,15 @@
     "generator": {
       "id": "newengine.generator.heightfield.soft-cells.v1",
       "ridged_seed_xor": 2116202781,
-      "ridged_frequency": 1.85,
-      "ridged_amplitude": 0.42,
+      "ridged_frequency": 1.18,
+      "ridged_amplitude": 0.3,
       "ridged_shape_edge0": -0.35,
       "ridged_shape_edge1": 1.0,
       "veins_seed_xor": 1394024449,
-      "veins_frequency": 0.68,
-      "veins_amplitude": 0.18
+      "veins_frequency": 0.42,
+      "veins_amplitude": 0.1,
+      "smoothing_passes": 2,
+      "smoothing_strength": 0.42
     }
   },
   "sky": {
@@ -63,6 +65,27 @@
       "roughness": 1.0,
       "normal_scale": 0.0,
       "occlusion_strength": 0.0
+    },
+    "tree_bark": {
+      "base_color_texture": "prefabs/tree_animate/textures/Bark_diffuse.png",
+      "normal_texture": "prefabs/tree_animate/textures/Bark_normal.png",
+      "roughness": 0.88,
+      "normal_scale": 1.0,
+      "occlusion_strength": 1.0
+    },
+    "tree_leaf": {
+      "base_color_texture": "prefabs/tree_animate/textures/Leaf_diffuse.png",
+      "normal_texture": "prefabs/tree_animate/textures/Leaf_normal.png",
+      "roughness": 0.72,
+      "normal_scale": 0.75,
+      "occlusion_strength": 1.0
+    },
+    "tree_branch": {
+      "base_color_texture": "prefabs/tree_animate/textures/Branch_diffuse.png",
+      "normal_texture": "prefabs/tree_animate/textures/Branch_normal.png",
+      "roughness": 0.86,
+      "normal_scale": 0.9,
+      "occlusion_strength": 1.0
     }
   },
   "lighting": {
@@ -71,11 +94,11 @@
       0.42,
       0.5
     ],
-    "ambient_intensity": 0.28,
+    "ambient_intensity": 0.22,
     "sun_direction": [
-      -0.55,
-      -0.82,
-      -0.28
+      -0.62,
+      -0.74,
+      -0.25
     ],
     "sun_color": [
       1.0,
@@ -89,9 +112,9 @@
       "cascade_count": 1,
       "max_distance": 80.0,
       "softness": 1.35,
-      "bias": 0.0025,
-      "normal_bias": 0.015,
-      "contact_strength": 0.35
+      "bias": 0.0018,
+      "normal_bias": 0.012,
+      "contact_strength": 0.55
     }
   },
   "boundaries": {
@@ -108,13 +131,20 @@
     "max_count": 0
   },
   "foliage": {
-    "seed": 0,
-    "grid_min": 0,
-    "grid_max": 0,
-    "spacing": 1.0,
-    "jitter": 0.0,
-    "gate_threshold": 1.0,
-    "max_count": 0
+    "enabled": true,
+    "prefab": "tree_animate",
+    "seed": 983422762451,
+    "grid_min": -6,
+    "grid_max": 6,
+    "spacing": 5.85,
+    "jitter": 0.42,
+    "gate_threshold": 0.68,
+    "max_count": 54,
+    "min_scale": 0.82,
+    "max_scale": 1.34,
+    "min_player_distance": 7.0,
+    "edge_margin": 4.25,
+    "surface_offset": 0.035
   },
   "gameplay": {
     "default_status": "Terrain sandbox: procedural heightfield + imported sky dome.",
@@ -176,24 +206,31 @@
       1.0
     ],
     "tree_bark": [
-      0.0,
-      0.0,
-      0.0,
+      0.39,
+      0.23,
+      0.12,
       1.0
     ],
     "tree_leaf": [
-      0.0,
-      0.0,
-      0.0,
+      0.16,
+      0.39,
+      0.14,
       1.0
     ],
     "tree_branch": [
-      0.0,
-      0.0,
-      0.0,
+      0.31,
+      0.2,
+      0.12,
       1.0
     ]
   },
   "markers": [],
-  "prefabs": []
+  "prefabs": [
+    {
+      "id": "tree_animate",
+      "source": "prefabs/tree_animate/tree_animate.prefab.json",
+      "proxy": "primitive_tree_cluster",
+      "enabled": true
+    }
+  ]
 }

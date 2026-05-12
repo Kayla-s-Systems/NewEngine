@@ -90,6 +90,90 @@ pub trait RenderApi: Send {
     fn draw(&mut self, args: DrawArgs) -> EngineResult<()>;
     fn draw_indexed(&mut self, args: DrawIndexedArgs) -> EngineResult<()>;
 
+    /// Selects the V3 render graph phase that subsequent immediate compatibility
+    /// commands belong to. Backends without native V3 phase routing may ignore it.
+    #[inline]
+    fn set_render_phase(&mut self, _phase: Option<RenderGraphPassKind>) -> EngineResult<()> {
+        Ok(())
+    }
+
+    #[inline]
+    fn begin_render_phase(&mut self, phase: RenderGraphPassKind) -> EngineResult<()> {
+        self.set_render_phase(Some(phase))
+    }
+
+    #[inline]
+    fn end_render_phase(&mut self) -> EngineResult<()> {
+        self.set_render_phase(None)
+    }
+
+    /// Selects a typed V3 draw-list route. This is the preferred runtime/plugin
+    /// contract: callers describe what they are recording, while the backend maps
+    /// the list to the current graph pass.
+    #[inline]
+    fn set_draw_list_kind(&mut self, kind: Option<RenderDrawListKind>) -> EngineResult<()> {
+        self.set_render_phase(kind.map(RenderDrawListKind::default_pass_kind))
+    }
+
+    #[inline]
+    fn begin_draw_list(&mut self, kind: RenderDrawListKind) -> EngineResult<()> {
+        self.set_draw_list_kind(Some(kind))
+    }
+
+    #[inline]
+    fn end_draw_list(&mut self) -> EngineResult<()> {
+        self.set_draw_list_kind(None)
+    }
+
+    /// Drops V3 phase-recorded compatibility commands for the current frame.
+    /// This is a safety valve for graph-submit failure paths; normal V3 frames
+    /// execute recorded phase buckets through submit_render_graph().
+    #[inline]
+    fn discard_recorded_commands(&mut self) -> EngineResult<()> {
+        Ok(())
+    }
+
+    /// Compiles a declarative Render API V3 frame graph without executing it.
+    #[inline]
+    fn compile_render_graph(
+        &mut self,
+        graph: RenderGraphDesc,
+    ) -> EngineResult<RenderGraphCompileReport> {
+        newengine_render_api::compile_render_graph(&graph).map_err(|errors| {
+            EngineError::other(format!("render graph validation failed: {:?}", errors))
+        })
+    }
+
+    /// Validates a declarative Render API V3 frame graph and returns detailed diagnostics.
+    #[inline]
+    fn validate_render_graph(
+        &mut self,
+        graph: RenderGraphDesc,
+    ) -> EngineResult<RenderGraphValidationReport> {
+        Ok(newengine_render_api::validate_and_compile_render_graph(&graph))
+    }
+
+    /// Submits a declarative Render API V3 frame graph. Backends that do not yet
+    /// have native graph execution may validate/compile it and report skipped
+    /// native passes while the runtime executes immediate compatibility callbacks.
+    #[inline]
+    fn submit_render_graph(
+        &mut self,
+        graph: RenderGraphDesc,
+    ) -> EngineResult<RenderGraphSubmitReport> {
+        let started = std::time::Instant::now();
+        let compile = self.compile_render_graph(graph)?;
+        Ok(RenderGraphSubmitReport {
+            cpu_record_ms: started.elapsed().as_secs_f32() * 1000.0,
+            gpu_submit_ms: 0.0,
+            executed_passes: 0,
+            skipped_passes: compile.pass_count,
+            uploads: UploadPumpReport::default(),
+            compile,
+            draw_list_stats: Vec::new(),
+        })
+    }
+
     /// Applies a backend-neutral frame work budget. Backends may use it to avoid
     /// long blocking uploads/pipeline builds inside interactive frames.
     #[inline]

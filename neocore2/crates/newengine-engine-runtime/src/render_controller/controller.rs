@@ -65,6 +65,8 @@ pub struct RuntimeRenderController {
     pub(super) viewport_rt_extent: Extent2D,
     pub(super) shadow_rt: Option<RenderTargetId>,
     pub(super) shadow_rt_resolution: u32,
+    pub(super) unsupported_point_shadow_warning_emitted: bool,
+    pub(super) unsupported_spot_shadow_warning_emitted: bool,
     pub(super) render_target_lifetimes: RenderTargetLifetimeQueue,
 
     pub(super) grid: Option<GridGpu>,
@@ -133,6 +135,8 @@ impl RuntimeRenderController {
             viewport_rt_extent: Extent2D::new(0, 0),
             shadow_rt: None,
             shadow_rt_resolution: 0,
+            unsupported_point_shadow_warning_emitted: false,
+            unsupported_spot_shadow_warning_emitted: false,
             render_target_lifetimes: RenderTargetLifetimeQueue::new(),
             grid: None,
             lit: None,

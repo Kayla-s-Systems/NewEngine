@@ -281,6 +281,40 @@ impl Default for FpsDemoState {
     }
 }
 
+/// Runtime launch gate for standalone game-ready scenes.
+///
+/// Scene bootstrap may finish on the CPU before renderer-owned resources
+/// become resident on the GPU. The render controller owns the final release
+/// decision and keeps direct player control/physics closed until this gate is
+/// released.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct GameReadyWorldLaunchGate {
+    pub requested_frame: u64,
+    pub released_frame: Option<u64>,
+    pub released: bool,
+    pub reason: String,
+}
+
+impl GameReadyWorldLaunchGate {
+    #[inline]
+    pub fn new(reason: impl Into<String>) -> Self {
+        Self {
+            requested_frame: u64::MAX,
+            released_frame: None,
+            released: false,
+            reason: reason.into(),
+        }
+    }
+
+    #[inline]
+    pub fn release(&mut self, frame: u64, reason: impl Into<String>) {
+        self.requested_frame = self.requested_frame.min(frame);
+        self.released_frame = Some(frame);
+        self.released = true;
+        self.reason = reason.into();
+    }
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
 pub enum DisplayMode {
     #[default]

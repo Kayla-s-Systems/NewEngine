@@ -1,4 +1,5 @@
 use crate::postfx::PostFxPassStats;
+use crate::render_graph::{RecordedDrawListStats, RenderGraphDiagnosticsStats, RenderGraphSubmitReport};
 use crate::shadows::ShadowPassStats;
 use serde::{Deserialize, Serialize};
 
@@ -99,6 +100,101 @@ pub struct RenderResourceStats {
     pub render_targets: u32,
 }
 
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RenderFrameDebugSnapshot {
+    pub frame_index: u64,
+    pub surface_extent: [u32; 2],
+    pub viewport_extent: [u32; 2],
+    pub direct_surface_viewport: bool,
+    pub graph_label: String,
+    #[serde(default)]
+    pub phase_order: Vec<String>,
+    #[serde(default)]
+    pub draw_list_stats: Vec<RecordedDrawListStats>,
+    pub executed_passes: u32,
+    pub skipped_passes: u32,
+    pub cpu_record_ms: f32,
+    pub gpu_submit_ms: f32,
+    pub queued_upload_jobs: u32,
+    pub queued_upload_bytes: u64,
+    pub resource_buffers: u32,
+    pub resource_textures: u32,
+    pub resource_pipelines: u32,
+    #[serde(default)]
+    pub notes: Vec<String>,
+}
+
+impl Default for RenderFrameDebugSnapshot {
+    #[inline]
+    fn default() -> Self {
+        Self {
+            frame_index: 0,
+            surface_extent: [0, 0],
+            viewport_extent: [0, 0],
+            direct_surface_viewport: false,
+            graph_label: String::new(),
+            phase_order: Vec::new(),
+            draw_list_stats: Vec::new(),
+            executed_passes: 0,
+            skipped_passes: 0,
+            cpu_record_ms: 0.0,
+            gpu_submit_ms: 0.0,
+            queued_upload_jobs: 0,
+            queued_upload_bytes: 0,
+            resource_buffers: 0,
+            resource_textures: 0,
+            resource_pipelines: 0,
+            notes: Vec::new(),
+        }
+    }
+}
+
+impl RenderFrameDebugSnapshot {
+    #[inline]
+    pub fn draw_calls(&self) -> u32 {
+        self.draw_list_stats
+            .iter()
+            .map(|stats| stats.draw_calls.saturating_add(stats.indexed_draw_calls))
+            .sum()
+    }
+
+    #[inline]
+    pub fn recorded_commands(&self) -> u32 {
+        self.draw_list_stats
+            .iter()
+            .map(|stats| stats.recorded_commands)
+            .sum()
+    }
+
+    #[inline]
+    pub fn skipped_commands(&self) -> u32 {
+        self.draw_list_stats
+            .iter()
+            .map(|stats| stats.skipped_commands)
+            .sum()
+    }
+}
+
+#[derive(Debug, Clone, Copy, Default, Serialize, Deserialize)]
+pub struct RenderDebugChartSample {
+    pub frame_index: u64,
+    pub fps: f32,
+    pub cpu_record_ms: f32,
+    pub gpu_submit_ms: f32,
+    pub draw_calls: u32,
+    pub indexed_draw_calls: u32,
+    pub triangle_count: u64,
+    pub queued_upload_mb: f32,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct RenderDebugTelemetry {
+    pub latest: Option<RenderFrameDebugSnapshot>,
+    #[serde(default)]
+    pub history: Vec<RenderDebugChartSample>,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RenderDiagnosticsSnapshot {
     pub frame: RenderFrameTiming,
@@ -106,6 +202,10 @@ pub struct RenderDiagnosticsSnapshot {
     pub resources: RenderResourceStats,
     pub shadows: ShadowPassStats,
     pub postfx: PostFxPassStats,
+    #[serde(default)]
+    pub graph: RenderGraphDiagnosticsStats,
+    #[serde(default)]
+    pub last_submit: Option<RenderGraphSubmitReport>,
     pub budget: RenderWorkBudget,
     pub pacing: RenderFramePacingConfig,
     pub notes: Vec<String>,
@@ -120,6 +220,8 @@ impl Default for RenderDiagnosticsSnapshot {
             resources: RenderResourceStats::default(),
             shadows: ShadowPassStats::default(),
             postfx: PostFxPassStats::default(),
+            graph: RenderGraphDiagnosticsStats::default(),
+            last_submit: None,
             budget: RenderWorkBudget::default(),
             pacing: RenderFramePacingConfig::default(),
             notes: Vec::new(),

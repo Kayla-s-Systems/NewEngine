@@ -8,6 +8,7 @@ description = "Reusable game/editor-neutral runtime scene and render controller 
 [features]
 default = ["texture-decode"]
 texture-decode = []
+editor-ui = []
 
 [dependencies]
 abi_stable = { version = "0.11" }
@@ -37,6 +38,7 @@ newengine-previews = { path = "../newengine-previews" }
 newengine-primitives = { path = "../newengine-primitives" }
 newengine-procedural-noise = { path = "../newengine-procedural-noise" }
 newengine-runtime-host = { path = "../newengine-runtime-host" }
+newengine-render-frame-graph = { path = "../newengine-render-frame-graph" }
 newengine-scene = { path = "../newengine-scene", features = ["runtime"] }
 newengine-scene-io = { path = "../newengine-scene-io" }
 newengine-shader-compiler = { path = "../newengine-shader-compiler" }

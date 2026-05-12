@@ -13,7 +13,7 @@ use newengine_runtime_host::{
         collect_app_asset_roots, shard_log_path_by_run_id,
         try_load_window_icon_best_effort,
     },
-    engine_factory::build_engine_from_startup,
+    engine_factory::{build_engine_from_startup, ui_provider_kind_from_startup},
     platform_runtime::{
         detect_platform_runtime_path, resolve_platform_runtime_config, HostPlatformRuntime,
     },
@@ -161,7 +161,7 @@ fn main_impl() -> EngineResult<()> {
 
     let runtime = HostPlatformRuntime::new(
         engine,
-        profile.ui_provider_kind(),
+        ui_provider_kind_from_startup(&startup),
         ui_build,
     );
 

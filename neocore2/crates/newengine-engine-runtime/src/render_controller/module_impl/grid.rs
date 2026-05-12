@@ -7,7 +7,6 @@ pub(super) const HALF_LINES: i32 = 512;
 pub(super) const MAJOR_EVERY: i32 = 10;
 pub(super) const MINOR_COLOR: [f32; 4] = [0.32, 0.32, 0.34, 1.0];
 pub(super) const MAJOR_COLOR: [f32; 4] = [0.45, 0.45, 0.48, 1.0];
-pub(super) const BACKGROUND_COLOR: [f32; 4] = [0.10, 0.10, 0.11, 1.0];
 pub(super) const WORLD_SPACING: f32 = 1.0;
 
 #[inline]

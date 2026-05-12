@@ -130,6 +130,21 @@ pub(super) fn primary_directional_light(world: &newengine_ecs::World) -> Option<
     best_dir.map(|(_, l)| l)
 }
 
+
+#[inline]
+pub(super) fn primary_point_light(world: &newengine_ecs::World) -> Option<(PointLight, newengine_math::Vec3)> {
+    let mut best: Option<(u64, PointLight, newengine_math::Vec3)> = None;
+    for (e, l, gt) in world.query2::<PointLight, GlobalTransform>() {
+        let k = e.stable_u64();
+        let m = gt.0;
+        let pos = newengine_math::Vec3::new(m.w_axis.x, m.w_axis.y, m.w_axis.z);
+        if best.map(|(bk, _, _)| k < bk).unwrap_or(true) {
+            best = Some((k, *l, pos));
+        }
+    }
+    best.map(|(_, l, pos)| (l, pos))
+}
+
 #[inline]
 pub(super) fn collect_lights(world: &newengine_ecs::World) -> PackedLights {
     PackedLights::from_world(world)

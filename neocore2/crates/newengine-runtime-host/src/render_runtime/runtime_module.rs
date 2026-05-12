@@ -169,13 +169,22 @@ impl<E: Send + 'static> Module<E> for RenderBackendRuntimeModule {
         let host = newengine_plugin_host::default_host_api();
         let client = RenderServiceClient::new(host);
 
-        let info = match client.info() {
+        let info_v3 = match client.info_v3() {
             Ok(info) => info,
             Err(err) => {
                 let reason = self.explain_backend_unavailability(ctx, &err);
                 return self.enable_null_render_backend(ctx, reason);
             }
         };
+        for warning in &info_v3.legacy_warnings {
+            log::debug!(
+                "render backend: compatibility endpoint available code='{}' message='{}'",
+                warning.code,
+                warning.message
+            );
+        }
+        let protocol_version = info_v3.protocol_version;
+        let info = info_v3.backend;
 
         if !backend_matches(&self.backend_spec, &info.backend_id) {
             return self.enable_null_render_backend(
@@ -188,11 +197,14 @@ impl<E: Send + 'static> Module<E> for RenderBackendRuntimeModule {
         }
 
         log::info!(
-            "render backend: bridge bound id='{}' name='{}' version='{}' debug_text='{}' features={} upload_budget={}MB/frame",
+            "render backend: v3 bridge bound id='{}' name='{}' version='{}' debug_text='{}' protocol=v{}.{}.{} features={} upload_budget={}MB/frame",
             info.backend_id,
             info.backend_name,
             info.backend_version,
             info.debug_text,
+            protocol_version.major,
+            protocol_version.minor,
+            protocol_version.patch,
             info.capabilities.features.len(),
             info.work_budget.max_upload_bytes_per_frame / (1024 * 1024)
         );

@@ -31,3 +31,13 @@ This lets us test the engine, the standalone game path, material descriptors and
 1. Add true static-mesh / GLTF runtime rendering.
 2. Add texture-bound material descriptors.
 3. Replace the proxy composition with the real imported prefab while preserving the same prefab manifest + material-slot contract.
+
+## Current standalone placement contract
+
+The tree proxy is driven from `apps/game-ready-fps/assets/game_ready_highlands.scene.json`:
+
+- `prefabs[]` declares the prefab id, source manifest and proxy strategy.
+- `foliage` owns deterministic placement seed, grid, jitter, count and scale range.
+- `materials.tree_bark`, `materials.tree_leaf` and `materials.tree_branch` bind the staged texture paths.
+
+Object placement remains in the scene/runtime layer. The renderer only receives the resulting ECS render components through the normal draw-list providers.

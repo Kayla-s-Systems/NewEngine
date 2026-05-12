@@ -1,0 +1,11 @@
+[package]
+name = "newengine-render-frame-graph"
+version = "0.1.0"
+edition = "2021"
+readme = "README.md"
+description = "Declarative Render API V3 frame-graph planning layer for NewEngine runtime rendering"
+license = "MIT OR Apache-2.0"
+
+[dependencies]
+newengine-render-api = { path = "../newengine-render-api" }
+serde = { version = "1", features = ["derive"] }

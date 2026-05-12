@@ -1,11 +1,17 @@
 #![forbid(unsafe_op_in_unsafe_fn)]
 
+use std::sync::atomic::{AtomicBool, Ordering};
+
 use newengine_math::collections_prelude::NeHashMap as HashMap;
 
-use newengine_plugin_api::{CapabilityKind, CapabilityRole, PluginDescriptor};
+use newengine_plugin_api::{
+    capability_has_tag, CapabilityKind, CapabilityRole, PluginDescriptor, CAPABILITY_TAG_LEGACY,
+};
 
 use super::types::{LoadedPlugin, PluginState};
 use super::PluginManager;
+
+static WARNED_LEGACY_CAPABILITIES: AtomicBool = AtomicBool::new(false);
 
 #[derive(Clone, PartialEq, Eq, Hash)]
 struct CapKey {
@@ -96,6 +102,41 @@ fn missing_requirements(d: &PluginDescriptor, providers: &HashMap<CapKey, u32>) 
     out
 }
 
+
+#[inline]
+fn warn_descriptor_legacy_capabilities(plugin_id: &str, descriptor: &PluginDescriptor) {
+    for capability in descriptor.capabilities.iter() {
+        if capability_has_tag(capability, CAPABILITY_TAG_LEGACY) {
+            log::warn!(
+                "plugins: capability id='{}' plugin='{}' tag='legacy' kind={} role={:?} version={} -- migrate consumers/providers to a current tagged capability",
+                capability.id,
+                plugin_id,
+                capability.kind as u8,
+                capability.role,
+                capability.version,
+            );
+        }
+    }
+}
+
+fn warn_legacy_capabilities_once(loaded: &[LoadedPlugin]) {
+    if WARNED_LEGACY_CAPABILITIES.swap(true, Ordering::Relaxed) {
+        return;
+    }
+
+    for plugin in loaded.iter() {
+        let Some(descriptor) = &plugin.descriptor else {
+            continue;
+        };
+        warn_descriptor_legacy_capabilities(plugin.info.id.as_str(), descriptor);
+    }
+
+    for descriptor in crate::host_context::list_external_runtime_descriptors() {
+        let plugin_id = descriptor.id.to_string();
+        warn_descriptor_legacy_capabilities(&plugin_id, &descriptor);
+    }
+}
+
 #[inline]
 fn count_caps(d: &PluginDescriptor) -> (usize, usize) {
     let mut provides = 0usize;
@@ -116,6 +157,8 @@ impl PluginManager {
     /// - Plugins with unmet requirements are disabled (soft-fail) before `start_all()`.
     /// - Validation is iterated to a fixpoint to handle cascading disables.
     pub(crate) fn validate_required_capabilities(&mut self) {
+        warn_legacy_capabilities_once(&self.loaded);
+
         let mut iteration: u32 = 0;
 
         loop {

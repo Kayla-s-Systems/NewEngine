@@ -79,6 +79,12 @@ pub struct TerrainHeightfieldDescriptor {
     pub base_height: f32,
     pub height_scale: f32,
     pub graph: NoiseGraph2D,
+    /// Number of deterministic post-filter smoothing passes applied to generated heights.
+    #[cfg_attr(feature = "serde", serde(default))]
+    pub smoothing_passes: u32,
+    /// Blend factor per smoothing pass. 0 keeps raw noise, 1 fully averages neighbours.
+    #[cfg_attr(feature = "serde", serde(default))]
+    pub smoothing_strength: f32,
 }
 
 impl Default for TerrainHeightfieldDescriptor {
@@ -100,6 +106,8 @@ impl From<TerrainHeightfieldSettings> for TerrainHeightfieldDescriptor {
             base_height: settings.base_height,
             height_scale: settings.height_scale,
             graph: NoiseGraph2D::from_fractal(settings.noise),
+            smoothing_passes: 0,
+            smoothing_strength: 0.0,
         }
     }
 }
@@ -113,6 +121,8 @@ impl TerrainHeightfieldDescriptor {
         self.size_z = finite_or(self.size_z, 44.0).abs().max(1.0);
         self.base_height = finite_or(self.base_height, 0.0);
         self.height_scale = finite_or(self.height_scale, 3.4).abs();
+        self.smoothing_passes = self.smoothing_passes.min(16);
+        self.smoothing_strength = finite_or(self.smoothing_strength, 0.0).clamp(0.0, 1.0);
         self
     }
 
@@ -144,7 +154,7 @@ impl HeightField {
     pub fn generate(settings: TerrainHeightfieldSettings) -> Self {
         let settings = settings.sanitized();
         let noise = ValueNoise2D::new(settings.noise);
-        Self::generate_impl(settings, settings.noise.seed, |local_x, local_z| {
+        Self::generate_impl(settings, settings.noise.seed, 0, 0.0, |local_x, local_z| {
             noise.sample(local_x, local_z)
         })
     }
@@ -154,9 +164,13 @@ impl HeightField {
         let settings = descriptor.compact_settings();
         let graph = descriptor.graph.clone();
         let graph_key = graph.revision_key();
-        Self::generate_impl(settings, graph_key, move |local_x, local_z| {
-            graph.sample(local_x, local_z)
-        })
+        Self::generate_impl(
+            settings,
+            graph_key,
+            descriptor.smoothing_passes,
+            descriptor.smoothing_strength,
+            move |local_x, local_z| graph.sample(local_x, local_z),
+        )
     }
 
     pub fn generate_with_graph(settings: TerrainHeightfieldSettings, graph: NoiseGraph2D) -> Self {
@@ -169,6 +183,8 @@ impl HeightField {
     fn generate_impl(
         settings: TerrainHeightfieldSettings,
         source_key: u64,
+        smoothing_passes: u32,
+        smoothing_strength: f32,
         mut sample: impl FnMut(f32, f32) -> f32,
     ) -> Self {
         let settings = settings.sanitized();
@@ -191,7 +207,29 @@ impl HeightField {
             }
         }
 
-        let revision_key = hash_settings_and_heights(settings, source_key, min_height, max_height);
+        apply_height_smoothing(
+            &mut heights,
+            vx,
+            vz,
+            smoothing_passes.min(16),
+            finite_or(smoothing_strength, 0.0).clamp(0.0, 1.0),
+        );
+
+        min_height = f32::INFINITY;
+        max_height = f32::NEG_INFINITY;
+        for h in &heights {
+            min_height = min_height.min(*h);
+            max_height = max_height.max(*h);
+        }
+
+        let revision_key = hash_settings_and_heights(
+            settings,
+            source_key,
+            min_height,
+            max_height,
+            smoothing_passes.min(16),
+            finite_or(smoothing_strength, 0.0).clamp(0.0, 1.0),
+        );
 
         Self {
             settings,
@@ -321,6 +359,8 @@ fn hash_settings_and_heights(
     source_key: u64,
     min_height: f32,
     max_height: f32,
+    smoothing_passes: u32,
+    smoothing_strength: f32,
 ) -> u64 {
     let mut h = 0xcbf2_9ce4_8422_2325_u64;
     h = mix_u64(h, settings.cells_x as u64);
@@ -332,7 +372,40 @@ fn hash_settings_and_heights(
     h = mix_u64(h, source_key);
     h = mix_u64(h, min_height.to_bits() as u64);
     h = mix_u64(h, max_height.to_bits() as u64);
+    h = mix_u64(h, smoothing_passes as u64);
+    h = mix_u64(h, smoothing_strength.to_bits() as u64);
     h
+}
+
+fn apply_height_smoothing(
+    heights: &mut [f32],
+    width: usize,
+    height: usize,
+    passes: u32,
+    strength: f32,
+) {
+    if passes == 0 || strength <= 0.0 || width < 3 || height < 3 {
+        return;
+    }
+
+    let mut scratch = heights.to_vec();
+    for _ in 0..passes {
+        scratch.copy_from_slice(heights);
+        for z in 1..height - 1 {
+            for x in 1..width - 1 {
+                let i = z * width + x;
+                let center = scratch[i];
+                let avg = (
+                    scratch[i - 1]
+                    + scratch[i + 1]
+                    + scratch[i - width]
+                    + scratch[i + width]
+                    + center * 2.0
+                ) / 6.0;
+                heights[i] = center + (avg - center) * strength;
+            }
+        }
+    }
 }
 
 #[cfg(test)]

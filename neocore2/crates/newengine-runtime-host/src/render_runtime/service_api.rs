@@ -2,12 +2,13 @@ use newengine_core::render::{
     BeginFrameDesc, BeginRenderTargetDesc, BindGroupDesc, BindGroupId, BindGroupLayoutDesc,
     BindGroupLayoutId, BufferDesc, BufferId, BufferSlice, DrawArgs, DrawIndexedArgs,
     IndexFormat, PipelineDesc, PipelineId, PipelineWarmupDesc, PipelineWarmupReport, RectI32, RenderApi,
-    RenderTargetDesc, RenderDiagnosticsSnapshot, RenderTargetId, RenderWorkBudget, SamplerDesc,
+    RenderDrawListKind, RenderGraphCompileReport, RenderGraphDesc, RenderGraphPassKind, RenderGraphSubmitReport,
+    RenderGraphValidationReport, RenderTargetDesc, RenderDiagnosticsSnapshot, RenderTargetId, RenderWorkBudget, SamplerDesc,
     SamplerId, ShaderDesc, ShaderId, ShaderRuntimeCacheStats, TextureDesc, TextureId,
     TextureResidencySnapshot, UiDrawList, UiTexId, UploadPumpDesc, UploadPumpReport, Viewport,
 };
 use newengine_core::{EngineError, EngineResult};
-use newengine_render_api::{RenderRequestV1, RenderResponseV1};
+use newengine_render_api::{RenderRequestV1, RenderRequestV3, RenderResponseV1, RenderResponseV3};
 
 use crate::render_runtime::client::RenderServiceClient;
 
@@ -29,6 +30,17 @@ impl ServiceBackedRenderApi {
                 "render service protocol error: expected unit response, got {:?}",
                 other
             ))),
+        }
+    }
+
+    #[inline]
+    fn invoke_v3(&self, req: RenderRequestV3) -> EngineResult<RenderResponseV3> {
+        match self.client.invoke_v3(req).map_err(EngineError::other)? {
+            RenderResponseV3::Problem(problem) => Err(EngineError::other(format!(
+                "render service problem {} at {:?}: {}",
+                problem.code, problem.phase, problem.detail
+            ))),
+            response => Ok(response),
         }
     }
 }
@@ -277,18 +289,90 @@ impl RenderApi for ServiceBackedRenderApi {
         self.unit(RenderRequestV1::DrawIndexed(args))
     }
 
+    fn set_render_phase(&mut self, phase: Option<RenderGraphPassKind>) -> EngineResult<()> {
+        match self.invoke_v3(RenderRequestV3::SetRenderPhase { phase })? {
+            RenderResponseV3::Unit => Ok(()),
+            other => Err(EngineError::other(format!(
+                "render service protocol error: expected Unit, got {:?}",
+                other
+            ))),
+        }
+    }
+
+
+    fn set_draw_list_kind(&mut self, kind: Option<RenderDrawListKind>) -> EngineResult<()> {
+        match self.invoke_v3(RenderRequestV3::SetDrawListKind { kind })? {
+            RenderResponseV3::Unit => Ok(()),
+            other => Err(EngineError::other(format!(
+                "render service protocol error: expected Unit, got {:?}",
+                other
+            ))),
+        }
+    }
+
+    fn discard_recorded_commands(&mut self) -> EngineResult<()> {
+        match self.invoke_v3(RenderRequestV3::DiscardRecordedCommands)? {
+            RenderResponseV3::Unit => Ok(()),
+            other => Err(EngineError::other(format!(
+                "render service protocol error: expected Unit, got {:?}",
+                other
+            ))),
+        }
+    }
+
+    fn compile_render_graph(
+        &mut self,
+        graph: RenderGraphDesc,
+    ) -> EngineResult<RenderGraphCompileReport> {
+        match self.invoke_v3(RenderRequestV3::CompileRenderGraph(graph))? {
+            RenderResponseV3::GraphCompileReport(report) => Ok(report),
+            other => Err(EngineError::other(format!(
+                "render service protocol error: expected GraphCompileReport, got {:?}",
+                other
+            ))),
+        }
+    }
+
+    fn validate_render_graph(
+        &mut self,
+        graph: RenderGraphDesc,
+    ) -> EngineResult<RenderGraphValidationReport> {
+        match self.invoke_v3(RenderRequestV3::ValidateRenderGraph(graph))? {
+            RenderResponseV3::GraphValidationReport(report) => Ok(report),
+            other => Err(EngineError::other(format!(
+                "render service protocol error: expected GraphValidationReport, got {:?}",
+                other
+            ))),
+        }
+    }
+
+    fn submit_render_graph(
+        &mut self,
+        graph: RenderGraphDesc,
+    ) -> EngineResult<RenderGraphSubmitReport> {
+        match self.invoke_v3(RenderRequestV3::SubmitRenderGraph(graph))? {
+            RenderResponseV3::GraphSubmitReport(report) => Ok(report),
+            other => Err(EngineError::other(format!(
+                "render service protocol error: expected GraphSubmitReport, got {:?}",
+                other
+            ))),
+        }
+    }
+
     fn set_work_budget(&mut self, budget: RenderWorkBudget) -> EngineResult<()> {
-        self.unit(RenderRequestV1::SetWorkBudget(budget))
+        match self.invoke_v3(RenderRequestV3::SetWorkBudget(budget))? {
+            RenderResponseV3::Unit => Ok(()),
+            other => Err(EngineError::other(format!(
+                "render service protocol error: expected Unit, got {:?}",
+                other
+            ))),
+        }
     }
 
 
     fn pump_uploads(&mut self, desc: UploadPumpDesc) -> EngineResult<UploadPumpReport> {
-        match self
-            .client
-            .invoke(RenderRequestV1::PumpUploads(desc))
-            .map_err(EngineError::other)?
-        {
-            RenderResponseV1::UploadPumpReport(report) => Ok(report),
+        match self.invoke_v3(RenderRequestV3::PumpUploads(desc))? {
+            RenderResponseV3::UploadPumpReport(report) => Ok(report),
             other => Err(EngineError::other(format!(
                 "render service protocol error: expected UploadPumpReport, got {:?}",
                 other
@@ -339,12 +423,8 @@ impl RenderApi for ServiceBackedRenderApi {
     }
 
     fn diagnostics_snapshot(&self) -> EngineResult<RenderDiagnosticsSnapshot> {
-        match self
-            .client
-            .invoke(RenderRequestV1::DiagnosticsSnapshot)
-            .map_err(EngineError::other)?
-        {
-            RenderResponseV1::DiagnosticsSnapshot(snapshot) => Ok(snapshot),
+        match self.invoke_v3(RenderRequestV3::DiagnosticsSnapshot)? {
+            RenderResponseV3::DiagnosticsSnapshot(snapshot) => Ok(snapshot),
             other => Err(EngineError::other(format!(
                 "render service protocol error: expected DiagnosticsSnapshot, got {:?}",
                 other

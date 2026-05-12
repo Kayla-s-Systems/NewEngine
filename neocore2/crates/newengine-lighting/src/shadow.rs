@@ -4,7 +4,14 @@
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ShadowMethod {
     None,
+    /// Select the best supported shadow method for the first shadow-capable light.
+    Auto,
+    /// Single orthographic/depth shadow map for a directional light.
     DirectionalDepthMap,
+    /// Six-face cube shadow map for an omnidirectional point light. Planned backend path.
+    PointCubeMap,
+    /// Single perspective depth map for a cone/spot light. Planned backend path.
+    SpotDepthMap,
 }
 
 impl Default for ShadowMethod {

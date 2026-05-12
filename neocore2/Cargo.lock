@@ -857,6 +857,7 @@ dependencies = [
  "newengine-previews",
  "newengine-primitives",
  "newengine-procedural-noise",
+ "newengine-render-frame-graph",
  "newengine-runtime-host",
  "newengine-scene",
  "newengine-scene-io",
@@ -1020,6 +1021,14 @@ dependencies = [
  "newengine-ui-draw",
  "serde",
  "serde_json",
+]
+
+[[package]]
+name = "newengine-render-frame-graph"
+version = "0.1.0"
+dependencies = [
+ "newengine-render-api",
+ "serde",
 ]
 
 [[package]]

@@ -12,6 +12,8 @@ pub(in crate::scene_bridge::game_ready) struct GameReadyMapProfile {
     pub(in crate::scene_bridge::game_ready) sky: GameReadySkySpec,
     pub(in crate::scene_bridge::game_ready) materials: GameReadyMaterialSetSpec,
     pub(in crate::scene_bridge::game_ready) lighting: GameReadyLightingSpec,
+    pub(in crate::scene_bridge::game_ready) foliage: GameReadyFoliageSpec,
+    pub(in crate::scene_bridge::game_ready) prefabs: Vec<GameReadyPrefabSpec>,
     pub(in crate::scene_bridge::game_ready) gameplay: GameReadyGameplaySpec,
     pub(in crate::scene_bridge::game_ready) palette: GameReadyPaletteSpec,
 }
@@ -50,6 +52,8 @@ pub(in crate::scene_bridge::game_ready) struct GameReadyTerrainGeneratorSpec {
     pub(in crate::scene_bridge::game_ready) veins_seed_xor: u64,
     pub(in crate::scene_bridge::game_ready) veins_frequency: f32,
     pub(in crate::scene_bridge::game_ready) veins_amplitude: f32,
+    pub(in crate::scene_bridge::game_ready) smoothing_passes: u32,
+    pub(in crate::scene_bridge::game_ready) smoothing_strength: f32,
 }
 
 #[derive(Clone, Debug)]
@@ -63,12 +67,18 @@ pub(in crate::scene_bridge::game_ready) struct GameReadyPaletteSpec {
     pub(in crate::scene_bridge::game_ready) terrain: ColorRgba,
     pub(in crate::scene_bridge::game_ready) sky: ColorRgba,
     pub(in crate::scene_bridge::game_ready) sky_emissive: ColorRgb,
+    pub(in crate::scene_bridge::game_ready) tree_bark: ColorRgba,
+    pub(in crate::scene_bridge::game_ready) tree_leaf: ColorRgba,
+    pub(in crate::scene_bridge::game_ready) tree_branch: ColorRgba,
 }
 
 #[derive(Clone, Debug)]
 pub(in crate::scene_bridge::game_ready) struct GameReadyMaterialSetSpec {
     pub(in crate::scene_bridge::game_ready) terrain: GameReadyMaterialSpec,
     pub(in crate::scene_bridge::game_ready) sky: GameReadyMaterialSpec,
+    pub(in crate::scene_bridge::game_ready) tree_bark: GameReadyMaterialSpec,
+    pub(in crate::scene_bridge::game_ready) tree_leaf: GameReadyMaterialSpec,
+    pub(in crate::scene_bridge::game_ready) tree_branch: GameReadyMaterialSpec,
 }
 
 #[derive(Clone, Debug)]
@@ -104,6 +114,33 @@ pub(in crate::scene_bridge::game_ready) struct GameReadyShadowSpec {
     pub(in crate::scene_bridge::game_ready) bias: f32,
     pub(in crate::scene_bridge::game_ready) normal_bias: f32,
     pub(in crate::scene_bridge::game_ready) contact_strength: f32,
+}
+
+
+#[derive(Clone, Debug)]
+pub(in crate::scene_bridge::game_ready) struct GameReadyFoliageSpec {
+    pub(in crate::scene_bridge::game_ready) enabled: bool,
+    pub(in crate::scene_bridge::game_ready) prefab: String,
+    pub(in crate::scene_bridge::game_ready) seed: u64,
+    pub(in crate::scene_bridge::game_ready) grid_min: i32,
+    pub(in crate::scene_bridge::game_ready) grid_max: i32,
+    pub(in crate::scene_bridge::game_ready) spacing: f32,
+    pub(in crate::scene_bridge::game_ready) jitter: f32,
+    pub(in crate::scene_bridge::game_ready) gate_threshold: f32,
+    pub(in crate::scene_bridge::game_ready) max_count: u32,
+    pub(in crate::scene_bridge::game_ready) min_scale: f32,
+    pub(in crate::scene_bridge::game_ready) max_scale: f32,
+    pub(in crate::scene_bridge::game_ready) min_player_distance: f32,
+    pub(in crate::scene_bridge::game_ready) edge_margin: f32,
+    pub(in crate::scene_bridge::game_ready) surface_offset: f32,
+}
+
+#[derive(Clone, Debug)]
+pub(in crate::scene_bridge::game_ready) struct GameReadyPrefabSpec {
+    pub(in crate::scene_bridge::game_ready) id: String,
+    pub(in crate::scene_bridge::game_ready) source: String,
+    pub(in crate::scene_bridge::game_ready) proxy: String,
+    pub(in crate::scene_bridge::game_ready) enabled: bool,
 }
 
 #[derive(Clone, Debug)]

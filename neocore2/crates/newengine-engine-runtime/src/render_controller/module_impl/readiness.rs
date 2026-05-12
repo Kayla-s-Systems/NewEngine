@@ -2,21 +2,21 @@
 
 use newengine_core::render::{GpuResourceResidencyState, RenderApi};
 use newengine_materials::api::MaterialRegistryApi;
-use newengine_procedural_noise::ProceduralTerrain;
+use newengine_math::collections::FxHashSet;
 
 use crate::gameplay::{clear_player_input, first_player, EditorPlayMode, GameReadyWorldLaunchGate};
 
-use super::super::material_bindings::LitMaterialPlan;
+use super::super::material_bindings::{LitMaterialPlan, MaterialTextureGpuResidency};
 use super::RuntimeRenderController;
 
 /// Updates the standalone game launch gate and returns whether the playable world
-/// may be simulated/rendered this frame.
+/// may be simulated or possessed this frame.
 ///
 /// CPU scene bootstrap can finish before GPU texture residency. We keep direct
-/// player control, simulation and terrain drawing closed until critical terrain
-/// material textures are resident or permanently failed. Failed textures release
-/// the gate intentionally: at that point the runtime may use explicit fallbacks
-/// instead of waiting forever.
+/// player control and simulation closed until all declared scene material
+/// textures are either resident or explicitly failed. Failed textures release the
+/// gate intentionally: at that point the runtime uses renderer fallbacks instead
+/// of waiting forever.
 pub(super) fn update_game_ready_launch_gate(
     this: &mut RuntimeRenderController,
     r: &mut dyn RenderApi,
@@ -32,7 +32,7 @@ pub(super) fn update_game_ready_launch_gate(
         return true;
     }
 
-    let readiness = critical_terrain_materials_ready(this, r, world);
+    let readiness = critical_scene_materials_ready(this, r, world);
     if readiness.ready {
         let (waited_frames, reason) = {
             let Some(gate) = world.resource_mut::<GameReadyWorldLaunchGate>() else {
@@ -40,7 +40,10 @@ pub(super) fn update_game_ready_launch_gate(
             };
             gate.requested_frame = gate.requested_frame.min(frame_index);
             gate.release(frame_index, readiness.reason);
-            (frame_index.saturating_sub(gate.requested_frame), gate.reason.clone())
+            (
+                frame_index.saturating_sub(gate.requested_frame),
+                gate.reason.clone(),
+            )
         };
         log::info!(
             "game-ready launch gate: released frame={} waited_frames={} reason='{}'",
@@ -67,21 +70,18 @@ struct LaunchReadiness {
     reason: String,
 }
 
-fn critical_terrain_materials_ready(
+fn critical_scene_materials_ready(
     this: &mut RuntimeRenderController,
     r: &mut dyn RenderApi,
     world: &newengine_ecs::World,
 ) -> LaunchReadiness {
     let mats_lock = this.scene_bridge.materials();
     let mats = mats_lock.read();
-    let mut total = 0u32;
-    let mut waiting = 0u32;
+    let mut unique_paths = FxHashSet::<String>::default();
 
-    for (entity, terrain) in world.query::<ProceduralTerrain>() {
-        let resolved = world
-            .get::<newengine_materials::MaterialRef>(entity)
-            .and_then(|mr| mats.resolve(mr.id));
-        let plan = LitMaterialPlan::from_resolved(resolved.as_ref(), terrain.base_color);
+    for (_entity, material_ref) in world.query::<newengine_materials::MaterialRef>() {
+        let resolved = mats.resolve(material_ref.id);
+        let plan = LitMaterialPlan::from_resolved(resolved.as_ref(), [1.0, 1.0, 1.0, 1.0]);
         for path in [
             plan.base_color_texture,
             plan.normal_texture,
@@ -90,30 +90,108 @@ fn critical_terrain_materials_ready(
         .into_iter()
         .flatten()
         {
-            total = total.saturating_add(1);
-            this.request_material_texture(path);
-            if !this.material_texture_ready_or_failed(r, path) {
-                waiting = waiting.saturating_add(1);
-            }
+            unique_paths.insert(path.to_owned());
         }
     }
 
+    let total = unique_paths.len() as u32;
     if total == 0 {
         return LaunchReadiness {
             ready: true,
-            reason: "no critical terrain textures declared".to_owned(),
+            reason: "no critical scene textures declared".to_owned(),
         };
     }
 
+    let mut waiting = 0_u32;
+    let mut failed = 0_u32;
+    for path in unique_paths.iter() {
+        this.request_material_texture(path);
+        match material_texture_ready_state(this, r, path) {
+            TextureReadyState::Ready => {}
+            TextureReadyState::Failed => failed = failed.saturating_add(1),
+            TextureReadyState::Waiting => waiting = waiting.saturating_add(1),
+        }
+    }
+
     if waiting == 0 {
+        let suffix = if failed == 0 {
+            format!("scene material textures ready total={total}")
+        } else {
+            format!(
+                "scene material textures ready with fallbacks total={total} failed={failed}"
+            )
+        };
         LaunchReadiness {
             ready: true,
-            reason: format!("critical terrain textures ready total={total}"),
+            reason: suffix,
         }
     } else {
         LaunchReadiness {
             ready: false,
-            reason: format!("waiting for terrain texture residency waiting={waiting} total={total}"),
+            reason: format!(
+                "waiting for scene texture residency waiting={waiting} total={total} failed={failed}"
+            ),
         }
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum TextureReadyState {
+    Ready,
+    Waiting,
+    Failed,
+}
+
+fn material_texture_ready_state(
+    this: &mut RuntimeRenderController,
+    r: &mut dyn RenderApi,
+    path: &str,
+) -> TextureReadyState {
+    let Some(entry) = this.material_textures.get(path).cloned() else {
+        return TextureReadyState::Waiting;
+    };
+
+    match entry {
+        MaterialTextureGpuResidency::Ready { .. } => TextureReadyState::Ready,
+        MaterialTextureGpuResidency::Failed { .. } => TextureReadyState::Failed,
+        MaterialTextureGpuResidency::Requested => TextureReadyState::Waiting,
+        MaterialTextureGpuResidency::Loading { texture, .. } => match r.texture_residency(texture) {
+            Ok(snapshot) if snapshot.state == GpuResourceResidencyState::Ready => {
+                this.material_textures.insert(
+                    path.to_owned(),
+                    MaterialTextureGpuResidency::Ready { texture },
+                );
+                TextureReadyState::Ready
+            }
+            Ok(snapshot) if snapshot.state == GpuResourceResidencyState::Failed => {
+                let message = snapshot
+                    .message
+                    .unwrap_or_else(|| "gpu upload failed".to_owned());
+                log::warn!(
+                    "game-ready launch gate: material texture failed path='{}' err='{}'",
+                    path,
+                    message
+                );
+                this.material_textures.insert(
+                    path.to_owned(),
+                    MaterialTextureGpuResidency::Failed { message },
+                );
+                TextureReadyState::Failed
+            }
+            Err(e) => {
+                let message = e.to_string();
+                log::warn!(
+                    "game-ready launch gate: material texture residency query failed path='{}' err='{}'",
+                    path,
+                    message
+                );
+                this.material_textures.insert(
+                    path.to_owned(),
+                    MaterialTextureGpuResidency::Failed { message },
+                );
+                TextureReadyState::Failed
+            }
+            _ => TextureReadyState::Waiting,
+        },
     }
 }

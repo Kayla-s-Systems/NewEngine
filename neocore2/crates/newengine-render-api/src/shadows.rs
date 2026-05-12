@@ -5,6 +5,8 @@ pub enum ShadowTechnique {
     None,
     DirectionalDepthMap,
     CascadedShadowMaps,
+    PointCubeMap,
+    SpotDepthMap,
 }
 
 impl Default for ShadowTechnique {

@@ -126,6 +126,7 @@ const PREBAKED_EDITOR_LIT_TEXTURED_FRAG: &[u32] = &[
 ];
 
 
+#[allow(dead_code)]
 const PREBAKED_EDITOR_LIT_VERT: &[u32] = &[
     119734787, 65536, 0, 36, 0, 131089, 1, 196622,
     0, 1, 589839, 0, 1, 1852399981, 0, 2,
@@ -158,6 +159,7 @@ const PREBAKED_EDITOR_LIT_VERT: &[u32] = &[
     12, 35, 34, 196670, 5, 35, 65789, 65592,
 ];
 
+#[allow(dead_code)]
 const PREBAKED_EDITOR_LIT_FRAG: &[u32] = &[
     119734787, 65536, 0, 20, 0, 131089, 1, 196622,
     0, 1, 458767, 4, 1, 1852399981, 0, 2,

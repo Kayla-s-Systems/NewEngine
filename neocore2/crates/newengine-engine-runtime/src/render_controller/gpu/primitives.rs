@@ -87,6 +87,7 @@ pub fn ensure_primitive_gpu(
     Ok(gpu)
 }
 
+#[allow(dead_code)]
 pub fn draw_primitive_indexed(
     r: &mut dyn newengine_core::render::RenderApi,
     gpu: PrimitiveGpu,

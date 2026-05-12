@@ -232,6 +232,16 @@ impl StandaloneGameRuntimeProfile {
     }
 
     #[inline]
+    pub fn ui_provider_kind_from_startup(&self, startup: &StartupConfig) -> UiProviderKind {
+        match startup.ui_backend.plugin_id() {
+            Some(service_id) => UiProviderKind::Plugin {
+                service_id: service_id.to_owned(),
+            },
+            None => UiProviderKind::Null,
+        }
+    }
+
+    #[inline]
     pub fn ui_provider_kind(&self) -> UiProviderKind {
         UiProviderKind::Null
     }

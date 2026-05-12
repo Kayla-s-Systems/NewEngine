@@ -5,6 +5,40 @@ use abi_stable::StableAbi;
 
 use crate::types::CapabilityId;
 
+pub const CAPABILITY_TAG_LEGACY: &str = "legacy";
+pub const CAPABILITY_TAG_RENDER: &str = "render";
+pub const CAPABILITY_TAG_RUNTIME: &str = "runtime";
+pub const CAPABILITY_ID_RENDER_DRAW_LIST_PROVIDER_V1: &str = "render.draw_list_provider.v1";
+pub const CAPABILITY_ID_RENDER_LIGHT_EXTRACTION_PROVIDER_V1: &str = "render.light_extraction_provider.v1";
+
+#[inline]
+pub fn capability_json_has_tag(describe_json: &str, tag: &str) -> bool {
+    let tag = tag.trim();
+    if tag.is_empty() {
+        return false;
+    }
+
+    let compact = describe_json
+        .chars()
+        .filter(|ch| !ch.is_ascii_whitespace())
+        .collect::<String>();
+    if !compact.contains("\"tags\":[") {
+        return false;
+    }
+
+    let quoted = format!("\"{}\"", tag);
+    compact
+        .split("\"tags\":[")
+        .skip(1)
+        .filter_map(|tail| tail.split(']').next())
+        .any(|array| array.split(',').any(|entry| entry == quoted))
+}
+
+#[inline]
+pub fn capability_has_tag(capability: &CapabilityDesc, tag: &str) -> bool {
+    capability_json_has_tag(capability.describe_json.as_str(), tag)
+}
+
 #[repr(u8)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, StableAbi)]
 pub enum PluginKind {
@@ -64,7 +98,13 @@ impl CapabilityDesc {
         self.describe_json = json.into();
         self
     }
+
+    #[inline]
+    pub fn has_tag(&self, tag: &str) -> bool {
+        capability_has_tag(self, tag)
+    }
 }
+
 
 #[repr(C)]
 #[derive(Debug, Clone, StableAbi)]
