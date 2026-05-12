@@ -3,7 +3,10 @@ use newengine_render_api::{
     RenderGraphResourceId, RenderGraphResourceUsage, RenderTargetId, TextureFormat,
 };
 
-use crate::{DrawListDesc, DrawListKind, FramePlanExecutionMode, RenderFramePlan, RenderPhaseDesc, StandardRenderPhase};
+use crate::{
+    DrawListDesc, DrawListKind, FramePlanExecutionMode, RenderFramePlan, RenderFrameRecipe,
+    RenderPhaseDesc, RuntimeRecipeBuildParams, StandardRenderPhase,
+};
 
 pub const RG_SURFACE_COLOR: RenderGraphResourceId = RenderGraphResourceId(1);
 pub const RG_VIEWPORT_COLOR: RenderGraphResourceId = RenderGraphResourceId(2);
@@ -106,6 +109,30 @@ impl FrameGraphBuilder {
         self
     }
 
+
+    pub fn apply_runtime_recipe(
+        mut self,
+        recipe: &RenderFrameRecipe,
+        params: RuntimeRecipeBuildParams,
+    ) -> Self {
+        for phase in recipe.enabled_phases() {
+            self = match phase {
+                StandardRenderPhase::BeginFrame | StandardRenderPhase::EndFrame => self,
+                StandardRenderPhase::ShadowMap => self.shadow_map(true, params.shadow_resolution),
+                StandardRenderPhase::DepthPrepass => self.depth_prepass(),
+                StandardRenderPhase::ViewportGBuffer => self.gbuffer(),
+                StandardRenderPhase::DeferredLighting => self.deferred_lighting(),
+                StandardRenderPhase::ViewportForward => self.forward_opaque(),
+                StandardRenderPhase::Transparent => self.transparent(),
+                StandardRenderPhase::Water => self.water(),
+                StandardRenderPhase::PostFx => self.postfx(true),
+                StandardRenderPhase::UiComposite => self.ui_composite(true),
+                StandardRenderPhase::DebugOverlay => self.debug_overlay(true),
+            };
+        }
+        self
+    }
+
     #[inline]
     pub fn shadow_map(mut self, enabled: bool, resolution: u32) -> Self {
         if !enabled {
@@ -153,21 +180,48 @@ impl FrameGraphBuilder {
     #[inline]
     pub fn lighting(mut self, deferred: bool) -> Self {
         if deferred {
-            self.graph.resources.push(RenderGraphResourceDesc::transient_texture(
-                RG_LIT_COLOR,
-                "lit_color",
-                RenderGraphResourceUsage::ColorAttachment,
-                self.target.viewport_extent,
-                self.target.color_format,
-            ));
-            self.add_phase_pass(StandardRenderPhase::DeferredLighting, |pass| {
-                pass.reads(RG_GBUFFER_ALBEDO, RenderGraphResourceUsage::SampledTexture)
-                    .reads(RG_GBUFFER_NORMAL, RenderGraphResourceUsage::SampledTexture)
-                    .reads(RG_GBUFFER_MATERIAL, RenderGraphResourceUsage::SampledTexture)
-                    .reads(RG_GBUFFER_DEPTH, RenderGraphResourceUsage::SampledTexture)
-                    .writes(RG_LIT_COLOR, RenderGraphResourceUsage::ColorAttachment)
-            });
+            self = self.deferred_lighting();
         }
+        self
+    }
+
+    #[inline]
+    pub fn deferred_lighting(mut self) -> Self {
+        self.graph.resources.push(RenderGraphResourceDesc::transient_texture(
+            RG_LIT_COLOR,
+            "lit_color",
+            RenderGraphResourceUsage::ColorAttachment,
+            self.target.viewport_extent,
+            self.target.color_format,
+        ));
+        self.add_phase_pass(StandardRenderPhase::DeferredLighting, |pass| {
+            pass.reads(RG_GBUFFER_ALBEDO, RenderGraphResourceUsage::SampledTexture)
+                .reads(RG_GBUFFER_NORMAL, RenderGraphResourceUsage::SampledTexture)
+                .reads(RG_GBUFFER_MATERIAL, RenderGraphResourceUsage::SampledTexture)
+                .reads(RG_GBUFFER_DEPTH, RenderGraphResourceUsage::SampledTexture)
+                .writes(RG_LIT_COLOR, RenderGraphResourceUsage::ColorAttachment)
+        });
+        self
+    }
+
+    #[inline]
+    pub fn transparent(mut self) -> Self {
+        let viewport_color = self.viewport_color_resource();
+        self.add_phase_pass(StandardRenderPhase::Transparent, |pass| {
+            pass.reads(RG_VIEWPORT_DEPTH, RenderGraphResourceUsage::DepthAttachment)
+                .writes(viewport_color, RenderGraphResourceUsage::ColorAttachment)
+                .draw_list(DrawListKind::Transparent)
+        });
+        self
+    }
+
+    #[inline]
+    pub fn water(mut self) -> Self {
+        let viewport_color = self.viewport_color_resource();
+        self.add_phase_pass(StandardRenderPhase::Water, |pass| {
+            pass.reads(RG_VIEWPORT_DEPTH, RenderGraphResourceUsage::DepthAttachment)
+                .writes(viewport_color, RenderGraphResourceUsage::ColorAttachment)
+        });
         self
     }
 
@@ -292,7 +346,7 @@ impl FrameGraphBuilder {
         }
     }
 
-    fn depth_prepass(mut self) -> Self {
+    pub fn depth_prepass(mut self) -> Self {
         self.graph.resources.push(RenderGraphResourceDesc::transient_texture(
             RG_GBUFFER_DEPTH,
             "gbuffer_depth",
@@ -306,7 +360,7 @@ impl FrameGraphBuilder {
         self
     }
 
-    fn gbuffer(mut self) -> Self {
+    pub fn gbuffer(mut self) -> Self {
         self.graph.resources.push(RenderGraphResourceDesc::transient_texture(
             RG_GBUFFER_ALBEDO,
             "gbuffer_albedo",
@@ -338,7 +392,7 @@ impl FrameGraphBuilder {
         self
     }
 
-    fn forward_opaque(mut self) -> Self {
+    pub fn forward_opaque(mut self) -> Self {
         let has_shadow = self.has_resource(RG_SHADOW_MAP);
         let viewport_color = self.viewport_color_resource();
         self.add_phase_pass(StandardRenderPhase::ViewportForward, |pass| {

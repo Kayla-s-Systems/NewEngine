@@ -2,6 +2,8 @@ use newengine_core::render::*;
 use newengine_core::EngineResult as CoreResult;
 use newengine_primitives::PrimitiveVertex;
 
+use super::super::module_impl::instancing::RenderInstanceRaw;
+
 use super::shader_assets::{compile_glsl, load_text_asset};
 use super::types::{LitPipeline, LIT_UBO_SIZE};
 
@@ -16,11 +18,17 @@ pub fn ensure_lit_pipeline(
     let fs_src = load_text_asset("shaders/editor_lit_shadowed_v3.frag")?;
     let shadow_vs_src = load_text_asset("shaders/editor_shadow_depth_v1.vert")?;
     let shadow_fs_src = load_text_asset("shaders/editor_shadow_depth_v1.frag")?;
+    let instanced_vs_src = load_text_asset("shaders/editor_lit_instanced_v1.vert")?;
+    let instanced_fs_src = load_text_asset("shaders/editor_lit_instanced_v1.frag")?;
+    let shadow_instanced_vs_src = load_text_asset("shaders/editor_shadow_depth_instanced_v1.vert")?;
 
     let vs_spv = compile_glsl(ShaderStage::Vertex, "editor_lit_shadowed_v3.vert", &vs_src)?;
     let fs_spv = compile_glsl(ShaderStage::Fragment, "editor_lit_shadowed_v3.frag", &fs_src)?;
     let shadow_vs_spv = compile_glsl(ShaderStage::Vertex, "editor_shadow_depth_v1.vert", &shadow_vs_src)?;
     let shadow_fs_spv = compile_glsl(ShaderStage::Fragment, "editor_shadow_depth_v1.frag", &shadow_fs_src)?;
+    let instanced_vs_spv = compile_glsl(ShaderStage::Vertex, "editor_lit_instanced_v1.vert", &instanced_vs_src)?;
+    let instanced_fs_spv = compile_glsl(ShaderStage::Fragment, "editor_lit_instanced_v1.frag", &instanced_fs_src)?;
+    let shadow_instanced_vs_spv = compile_glsl(ShaderStage::Vertex, "editor_shadow_depth_instanced_v1.vert", &shadow_instanced_vs_src)?;
 
     // Allocate GPU resources only after shader baking succeeds. Runtime shader
     // compilation is still optional during startup; a local glslc crash must not
@@ -86,6 +94,15 @@ pub fn ensure_lit_pipeline(
     let shadow_fs = r.create_shader(
         ShaderDesc::new(ShaderStage::Fragment, "main", shadow_fs_spv).with_label("editor_shadow_depth_fs"),
     )?;
+    let instanced_vs = r.create_shader(
+        ShaderDesc::new(ShaderStage::Vertex, "main", instanced_vs_spv).with_label("editor_lit_instanced_vs"),
+    )?;
+    let instanced_fs = r.create_shader(
+        ShaderDesc::new(ShaderStage::Fragment, "main", instanced_fs_spv).with_label("editor_lit_instanced_fs"),
+    )?;
+    let shadow_instanced_vs = r.create_shader(
+        ShaderDesc::new(ShaderStage::Vertex, "main", shadow_instanced_vs_spv).with_label("editor_shadow_instanced_vs"),
+    )?;
 
     let stride = std::mem::size_of::<PrimitiveVertex>() as u32;
     let layout = VertexLayout::new(
@@ -96,6 +113,25 @@ pub fn ensure_lit_pipeline(
             VertexAttribute::new(2, 24, VertexFormat::Float32x2),
         ],
     );
+
+    let instance_layout = VertexLayout::new(
+        RenderInstanceRaw::stride(),
+        vec![
+            VertexAttribute::new(5, 0, VertexFormat::Float32x4),
+            VertexAttribute::new(6, 16, VertexFormat::Float32x4),
+            VertexAttribute::new(7, 32, VertexFormat::Float32x4),
+            VertexAttribute::new(8, 48, VertexFormat::Float32x4),
+            VertexAttribute::new(9, 64, VertexFormat::Float32x4),
+            VertexAttribute::new(10, 80, VertexFormat::Float32x4),
+            VertexAttribute::new(11, 96, VertexFormat::Float32x4),
+            VertexAttribute::new(12, 112, VertexFormat::Float32x4),
+            VertexAttribute::new(13, 128, VertexFormat::Float32x4),
+            VertexAttribute::new(14, 144, VertexFormat::Float32x4),
+            VertexAttribute::new(15, 160, VertexFormat::Float32x4),
+            VertexAttribute::new(16, 176, VertexFormat::Float32x4),
+        ],
+    )
+    .per_instance();
 
     let pipeline = r.create_pipeline(
         PipelineDesc::new(vs, fs, TextureFormat::Bgra8Unorm)
@@ -137,10 +173,57 @@ pub fn ensure_lit_pipeline(
         )
         .with_label("editor_shadow_depth_pipeline_double_sided")
             .with_topology(PrimitiveTopology::TriangleList)
-            .with_vertex_layouts(vec![layout])
+            .with_vertex_layouts(vec![layout.clone()])
             .with_bind_group_layouts(vec![bgl])
             .with_depth(TextureFormat::Depth32Float)
             .with_cull_mode(RasterCullMode::None),
+    )?;
+
+    let instanced_layouts = vec![layout.clone(), instance_layout.clone()];
+    let instanced_pipeline = r.create_pipeline(
+        PipelineDesc::new(instanced_vs, instanced_fs, TextureFormat::Bgra8Unorm)
+            .with_label("editor_lit_pipeline_instanced")
+            .with_topology(PrimitiveTopology::TriangleList)
+            .with_vertex_layouts(instanced_layouts.clone())
+            .with_bind_group_layouts(vec![bgl])
+            .with_depth(TextureFormat::Depth32Float),
+    )?;
+
+    let instanced_double_sided_pipeline = r.create_pipeline(
+        PipelineDesc::new(instanced_vs, instanced_fs, TextureFormat::Bgra8Unorm)
+            .with_label("editor_lit_pipeline_instanced_double_sided")
+            .with_topology(PrimitiveTopology::TriangleList)
+            .with_vertex_layouts(instanced_layouts.clone())
+            .with_bind_group_layouts(vec![bgl])
+            .with_depth(TextureFormat::Depth32Float)
+            .with_cull_mode(RasterCullMode::None),
+    )?;
+
+    let shadow_instanced_pipeline = r.create_pipeline(
+        PipelineDesc::new(
+            shadow_instanced_vs,
+            shadow_fs,
+            super::super::render_quality::SHADOW_MAP_COLOR_FORMAT,
+        )
+        .with_label("editor_shadow_depth_pipeline_instanced")
+        .with_topology(PrimitiveTopology::TriangleList)
+        .with_vertex_layouts(instanced_layouts.clone())
+        .with_bind_group_layouts(vec![bgl])
+        .with_depth(TextureFormat::Depth32Float),
+    )?;
+
+    let shadow_instanced_double_sided_pipeline = r.create_pipeline(
+        PipelineDesc::new(
+            shadow_instanced_vs,
+            shadow_fs,
+            super::super::render_quality::SHADOW_MAP_COLOR_FORMAT,
+        )
+        .with_label("editor_shadow_depth_pipeline_instanced_double_sided")
+        .with_topology(PrimitiveTopology::TriangleList)
+        .with_vertex_layouts(instanced_layouts)
+        .with_bind_group_layouts(vec![bgl])
+        .with_depth(TextureFormat::Depth32Float)
+        .with_cull_mode(RasterCullMode::None),
     )?;
 
     let p = LitPipeline {
@@ -159,6 +242,13 @@ pub fn ensure_lit_pipeline(
         double_sided_pipeline,
         shadow_pipeline,
         shadow_double_sided_pipeline,
+        instanced_vs,
+        instanced_fs,
+        shadow_instanced_vs,
+        instanced_pipeline,
+        instanced_double_sided_pipeline,
+        shadow_instanced_pipeline,
+        shadow_instanced_double_sided_pipeline,
     };
 
     *cached = Some(p);

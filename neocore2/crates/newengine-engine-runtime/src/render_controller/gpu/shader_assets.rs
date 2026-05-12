@@ -53,6 +53,7 @@ pub(super) fn load_text_asset(rel: &str) -> CoreResult<String> {
 
 
 #[cfg(feature = "texture-decode")]
+#[allow(dead_code)]
 pub fn load_rgba_texture_asset(rel: &str) -> CoreResult<(Extent2D, Vec<u8>)> {
     let assets = AssetServiceClient::new(default_host_api());
     let id = assets.load(rel).map_err(|e| EngineError::other(format!("asset.load failed path='{rel}' err='{e}'")))?;
@@ -69,6 +70,7 @@ pub fn load_rgba_texture_asset(rel: &str) -> CoreResult<(Extent2D, Vec<u8>)> {
 }
 
 #[cfg(not(feature = "texture-decode"))]
+#[allow(dead_code)]
 pub(super) fn load_rgba_texture_asset(rel: &str) -> CoreResult<(Extent2D, Vec<u8>)> {
     Err(EngineError::other(format!(
         "texture decode requested in runtime-core for '{rel}', but image decoding must go through AssetManager/imageImporter"

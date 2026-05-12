@@ -40,6 +40,16 @@ pub struct LitPipeline {
     pub double_sided_pipeline: newengine_core::render::PipelineId,
     pub shadow_pipeline: newengine_core::render::PipelineId,
     pub shadow_double_sided_pipeline: newengine_core::render::PipelineId,
+    #[allow(dead_code)]
+    pub instanced_vs: newengine_core::render::ShaderId,
+    #[allow(dead_code)]
+    pub instanced_fs: newengine_core::render::ShaderId,
+    #[allow(dead_code)]
+    pub shadow_instanced_vs: newengine_core::render::ShaderId,
+    pub instanced_pipeline: newengine_core::render::PipelineId,
+    pub instanced_double_sided_pipeline: newengine_core::render::PipelineId,
+    pub shadow_instanced_pipeline: newengine_core::render::PipelineId,
+    pub shadow_instanced_double_sided_pipeline: newengine_core::render::PipelineId,
 }
 
 // std140 layout (see assets/shaders/editor_lit.*):

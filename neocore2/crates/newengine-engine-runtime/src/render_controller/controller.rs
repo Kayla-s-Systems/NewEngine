@@ -15,6 +15,7 @@ use crate::viewport_bridge::ViewportBridge;
 use super::gpu::{DebugLineGpu, GridGpu, LitPipeline, PrimitiveGpu};
 use super::material_bindings::MaterialTextureGpuResidency;
 use super::metrics::RuntimeOverlayMetrics;
+use super::module_impl::instancing::InstanceBufferUploader;
 use super::resource_lifetime::RenderTargetLifetimeQueue;
 
 type PrimGpuCache = FxHashMap<newengine_primitives::PrimitiveId, PrimitiveGpu>;
@@ -77,6 +78,7 @@ pub struct RuntimeRenderController {
     pub(super) material_textures: FxHashMap<String, MaterialTextureGpuResidency>,
     pub(super) material_texture_queue: VecDeque<String>,
     pub(super) per_draw_ubo: FxHashMap<u64, PerDrawUbo>,
+    pub(super) instance_uploader: InstanceBufferUploader,
     pub(super) overlay_metrics: RuntimeOverlayMetrics,
 
     pub(super) frame_index: u64,
@@ -133,6 +135,7 @@ impl RuntimeRenderController {
             material_textures: FxHashMap::default(),
             material_texture_queue: VecDeque::new(),
             per_draw_ubo: FxHashMap::default(),
+            instance_uploader: InstanceBufferUploader::default(),
             overlay_metrics: RuntimeOverlayMetrics::new(),
             frame_index: 0,
             last_pick_seq: 0,

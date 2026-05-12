@@ -4,6 +4,7 @@ use crate::module::{Bus, Module, Resources, Services};
 use crate::jobs::{JobSystem, JobSystemHandle, JobSystemSnapshot};
 use crate::sched::Scheduler;
 use crate::sync::ShutdownToken;
+use crate::startup_status::{EngineIncrementalStartupState, EngineStartupSnapshot};
 use newengine_plugin_host::{
     init_host_context, init_plugin_config_service, PluginControlQueue, PluginManager,
 };
@@ -36,6 +37,8 @@ pub struct Engine<E: Send + 'static> {
     pub(super) scheduler: Scheduler,
     pub(super) job_system: JobSystem,
     pub(super) startup_graph: StartupReadinessGraph,
+    pub(super) startup_snapshot: EngineStartupSnapshot,
+    pub(super) incremental_startup: Option<EngineIncrementalStartupState>,
 
     pub(super) plugins: PluginManager,
     pub(super) plugins_loaded: bool,
@@ -63,6 +66,11 @@ impl<E: Send + 'static> Engine<E> {
     #[inline]
     pub fn run_state(&self) -> EngineRunState {
         self.fsm.state()
+    }
+
+    #[inline]
+    pub fn startup_status(&self) -> EngineStartupSnapshot {
+        self.startup_snapshot.clone()
     }
 
     #[inline]
@@ -181,6 +189,8 @@ impl<E: Send + 'static> Engine<E> {
             scheduler: Scheduler::new(),
             job_system,
             startup_graph: StartupReadinessGraph::default(),
+            startup_snapshot: EngineStartupSnapshot::idle(EngineRunState::Created.as_str()),
+            incremental_startup: None,
 
             plugins: PluginManager::new(),
             plugins_loaded: false,

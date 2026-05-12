@@ -20,6 +20,7 @@ pub mod run_id;
 pub mod sched;
 pub mod services_registry;
 pub mod startup;
+pub mod startup_status;
 pub mod sync;
 mod system_info;
 
@@ -36,6 +37,11 @@ pub use events::{EventHub, EventSub};
 pub use frame::Frame;
 pub use host_events::WindowHostEvent;
 pub use lifecycle_events::{EngineLifecycleEvent, EngineReadinessKey, EngineReadinessSnapshot};
+pub use startup_status::{
+    EngineIncrementalStartupState, EngineStartupPhase, EngineStartupSnapshot,
+    EngineStartupStepOutcome, EngineStartupStepPhase, EngineStartupSystemPhase,
+    EngineStartupSystemStatus,
+};
 pub use module::{ApiProvide, ApiRequire, ApiVersion, Module, ModuleCtx, Resources, Services};
 pub use sched::{
     ScheduleBudgetClass, SchedulePhase, SchedulePhaseStats, ScheduleRunReport, ScheduleTaskDesc,

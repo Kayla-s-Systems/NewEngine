@@ -65,6 +65,7 @@ impl RuntimeRenderController {
         };
 
         self.frame_index = self.frame_index.saturating_add(1).max(1);
+        self.instance_uploader.begin_frame();
         self.overlay_metrics.begin_frame(scope.dt);
         self.pump_previews_fail_soft(&mut **r, scope.dt);
 
@@ -200,20 +201,29 @@ impl RuntimeRenderController {
         if !trace_frame {
             return;
         }
-        let (vp_w, vp_h) = self.viewport_bridge.read_extent();
+        let (requested_vp_w, requested_vp_h) = self.viewport_bridge.read_extent();
+        let direct_surface_viewport = requested_vp_w == 0 && requested_vp_h == 0 && w > 0 && h > 0;
+        let (vp_w, vp_h) = if direct_surface_viewport {
+            (w, h)
+        } else {
+            (requested_vp_w, requested_vp_h)
+        };
         log::debug!(
+            "render controller: render begin next_frame={} window={}x{} viewport={}x{} direct_surface={}",
+            self.frame_index.saturating_add(1),
+            w,
+            h,
+            vp_w,
+            vp_h,
+            direct_surface_viewport
+        );
+        newengine_core::crash::record_breadcrumb(format!(
             "render controller: render begin next_frame={} window={}x{} viewport={}x{}",
             self.frame_index.saturating_add(1),
             w,
             h,
             vp_w,
             vp_h
-        );
-        newengine_core::crash::record_breadcrumb(format!(
-            "render controller: render begin next_frame={} window={}x{}",
-            self.frame_index.saturating_add(1),
-            w,
-            h
         ));
     }
 

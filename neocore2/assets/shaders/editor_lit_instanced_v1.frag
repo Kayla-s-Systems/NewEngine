@@ -1,77 +1,12 @@
-use newengine_core::render::ShaderStage;
-use newengine_core::{EngineError, EngineResult as CoreResult};
-
-#[inline]
-pub(super) fn builtin_text_asset(rel: &str) -> Option<&'static str> {
-    match rel {
-        "shaders/editor_lit_shadowed_v3.vert" => Some(BUILTIN_EDITOR_LIT_VERT),
-        "shaders/editor_lit_shadowed_v3.frag" => Some(BUILTIN_EDITOR_LIT_FRAG),
-        "shaders/editor_shadow_depth_v1.vert" => Some(BUILTIN_EDITOR_SHADOW_DEPTH_VERT),
-        "shaders/editor_shadow_depth_v1.frag" => Some(BUILTIN_EDITOR_SHADOW_DEPTH_FRAG),
-        "shaders/editor_lit_instanced_v1.vert" => Some(BUILTIN_EDITOR_LIT_INSTANCED_VERT),
-        "shaders/editor_lit_instanced_v1.frag" => Some(BUILTIN_EDITOR_LIT_INSTANCED_FRAG),
-        "shaders/editor_shadow_depth_instanced_v1.vert" => Some(BUILTIN_EDITOR_SHADOW_DEPTH_INSTANCED_VERT),
-        "shaders/editor_lit_v2.vert" => Some(BUILTIN_EDITOR_LIT_VERT),
-        "shaders/editor_lit_v2.frag" => Some(BUILTIN_EDITOR_LIT_FRAG),
-        "shaders/editor_grid.vert" => Some(BUILTIN_EDITOR_GRID_VERT),
-        "shaders/editor_grid.frag" => Some(BUILTIN_EDITOR_GRID_FRAG),
-        _ => None,
-    }
-}
-
-// Minimal, robust Vulkan GLSL fallbacks (no shadows).
-// Layout matches the std140 comment above and LIT_UBO_SIZE.
-const BUILTIN_EDITOR_LIT_INSTANCED_VERT: &str = include_str!("../../../../../../assets/shaders/editor_lit_instanced_v1.vert");
-const BUILTIN_EDITOR_LIT_INSTANCED_FRAG: &str = include_str!("../../../../../../assets/shaders/editor_lit_instanced_v1.frag");
-const BUILTIN_EDITOR_SHADOW_DEPTH_INSTANCED_VERT: &str = include_str!("../../../../../../assets/shaders/editor_shadow_depth_instanced_v1.vert");
-
-const BUILTIN_EDITOR_LIT_VERT: &str = r#"#version 450
-
-layout(location = 0) in vec3 a_pos;
-layout(location = 1) in vec3 a_nrm;
-layout(location = 2) in vec2 a_uv;
-
-layout(set = 0, binding = 0, std140) uniform Ubo {
-    mat4 u_mvp;
-    mat4 u_model;
-    vec4 u_base_color;
-    vec4 u_emissive;
-    vec4 u_ambient;
-    vec4 u_dir_dir_intensity;
-    vec4 u_dir_color;
-    vec4 u_point_pos_range[4];
-    vec4 u_point_color_intensity[4];
-    vec4 u_point_count_pad;
-    vec4 u_uv_transform;
-    vec4 u_material_params;
-    mat4 u_light_mvp;
-    vec4 u_shadow_params;
-} ubo;
-
-layout(location = 0) out vec3 v_wpos;
-layout(location = 1) out vec3 v_wnrm;
-layout(location = 2) out vec4 v_base;
-layout(location = 3) out vec2 v_uv;
-layout(location = 4) out vec4 v_light_clip;
-
-void main() {
-    vec4 wpos4 = ubo.u_model * vec4(a_pos, 1.0);
-    v_wpos = wpos4.xyz;
-    v_wnrm = mat3(ubo.u_model) * a_nrm;
-    v_base = ubo.u_base_color;
-    v_uv = a_uv * ubo.u_uv_transform.xy + ubo.u_uv_transform.zw;
-    v_light_clip = ubo.u_light_mvp * wpos4;
-    gl_Position = ubo.u_mvp * vec4(a_pos, 1.0);
-}
-"#;
-
-const BUILTIN_EDITOR_LIT_FRAG: &str = r###"#version 450
+#version 450
 
 layout(location = 0) in vec3 v_wpos;
 layout(location = 1) in vec3 v_wnrm;
 layout(location = 2) in vec4 v_base;
 layout(location = 3) in vec2 v_uv;
 layout(location = 4) in vec4 v_light_clip;
+layout(location = 5) in vec4 v_material_params;
+layout(location = 6) in vec4 v_emissive;
 
 layout(set = 0, binding = 0, std140) uniform Ubo {
     mat4 u_mvp;
@@ -209,7 +144,7 @@ void main() {
     vec2 stable_material_uv_dx = dFdx(v_uv);
     vec2 stable_material_uv_dy = dFdy(v_uv);
     vec3 N = normalize(v_wnrm);
-    float normal_scale = clamp(ubo.u_material_params.x, 0.0, 1.0);
+    float normal_scale = clamp(v_material_params.x, 0.0, 1.0);
     if (normal_scale > 0.001) {
         vec3 map_n = textureGrad(sampler2D(u_normal_tex, u_material_sampler), v_uv, stable_material_uv_dx, stable_material_uv_dy).xyz * 2.0 - 1.0;
         mat3 tbn = cotangent_frame(N, v_wpos, v_uv);
@@ -219,9 +154,9 @@ void main() {
     vec4 texel = textureGrad(sampler2D(u_base_tex, u_material_sampler), v_uv, stable_material_uv_dx, stable_material_uv_dy);
     vec3 base = clamp((v_base * texel).rgb, vec3(0.0), vec3(1.0));
     float roughness_sample = textureGrad(sampler2D(u_roughness_tex, u_material_sampler), v_uv, stable_material_uv_dx, stable_material_uv_dy).r;
-    float roughness = clamp(ubo.u_material_params.y * roughness_sample, 0.02, 1.0);
-    float metallic = clamp(ubo.u_material_params.z, 0.0, 1.0);
-    float occlusion = clamp(ubo.u_material_params.w, 0.0, 1.0);
+    float roughness = clamp(v_material_params.y * roughness_sample, 0.02, 1.0);
+    float metallic = clamp(v_material_params.z, 0.0, 1.0);
+    float occlusion = clamp(v_material_params.w, 0.0, 1.0);
 
     // Until camera position is part of the lit UBO, use a stable approximate view vector.
     vec3 V = normalize(-v_wpos);
@@ -264,103 +199,6 @@ void main() {
         );
     }
 
-    color += ubo.u_emissive.rgb;
+    color += v_emissive.rgb;
     o_color = vec4(color, v_base.a * texel.a);
 }
-"###;
-
-const BUILTIN_EDITOR_SHADOW_DEPTH_VERT: &str = r#"#version 450
-
-layout(location = 0) in vec3 a_pos;
-layout(location = 1) in vec3 a_nrm;
-layout(location = 2) in vec2 a_uv;
-
-layout(set = 0, binding = 0, std140) uniform Ubo {
-    mat4 u_mvp;
-    mat4 u_model;
-    vec4 u_base_color;
-    vec4 u_emissive;
-    vec4 u_ambient;
-    vec4 u_dir_dir_intensity;
-    vec4 u_dir_color;
-    vec4 u_point_pos_range[4];
-    vec4 u_point_color_intensity[4];
-    vec4 u_point_count_pad;
-    vec4 u_uv_transform;
-    vec4 u_material_params;
-    mat4 u_light_mvp;
-    vec4 u_shadow_params;
-} ubo;
-
-layout(location = 0) out float v_depth;
-
-void main() {
-    vec4 clip = ubo.u_mvp * vec4(a_pos, 1.0);
-    gl_Position = clip;
-    float ndc_z = clip.z / max(clip.w, 1.0e-6);
-    v_depth = clamp(ndc_z, 0.0, 1.0);
-}
-"#;
-
-const BUILTIN_EDITOR_SHADOW_DEPTH_FRAG: &str = r#"#version 450
-layout(location = 0) in float v_depth;
-layout(location = 0) out vec4 o_color;
-void main() {
-    o_color = vec4(v_depth, v_depth, v_depth, 1.0);
-}
-"#;
-
-const BUILTIN_EDITOR_GRID_VERT: &str = r#"#version 450
-
-layout(location = 0) in vec3 a_pos;
-layout(location = 1) in vec4 a_color;
-
-layout(set = 0, binding = 0, std140) uniform Ubo {
-    mat4 u_mvp;
-} ubo;
-
-layout(location = 0) out vec4 v_color;
-
-void main() {
-    v_color = a_color;
-    gl_Position = ubo.u_mvp * vec4(a_pos, 1.0);
-}
-"#;
-
-const BUILTIN_EDITOR_GRID_FRAG: &str = r#"#version 450
-
-layout(location = 0) in vec4 v_color;
-layout(location = 0) out vec4 o_color;
-
-void main() {
-    o_color = v_color;
-}
-"#;
-
-pub const BUILTIN_DEBUG_LINES_VERT: &str = r#"#version 450
-layout(set = 0, binding = 0, std140) uniform DebugLineUbo {
-    vec4 u_pad;
-} ubo;
-
-layout(location = 0) in vec4 a_clip_pos;
-layout(location = 1) in vec4 a_color;
-layout(location = 0) out vec4 v_color;
-void main() {
-    gl_Position = a_clip_pos + vec4(ubo.u_pad.xyz * 0.0, 0.0);
-    v_color = a_color;
-}
-"#;
-
-pub const BUILTIN_DEBUG_LINES_FRAG: &str = r#"#version 450
-layout(location = 0) in vec4 v_color;
-layout(location = 0) out vec4 o_color;
-void main() {
-    o_color = v_color;
-}
-"#;
-
-pub fn compile_glsl(stage: ShaderStage, name: &str, src: &str) -> CoreResult<Vec<u32>> {
-    newengine_shader_compiler::compile_glsl_to_spirv(stage, name, "main", src)
-        .map_err(|e| EngineError::other(format!("shader compile failed: {e}")))
-}
-

@@ -1,13 +1,16 @@
 #![forbid(unsafe_op_in_unsafe_fn)]
 
+use newengine_assets::{AssetAccess, AssetServiceClient, AssetState};
 use newengine_core::render::{
     Extent2D, GpuResourceResidencyState, RenderTargetId, SamplerId, TextureDesc, TextureFormat,
     TextureId, TextureUsage,
 };
+use newengine_core::{EngineError, EngineResult};
+use newengine_plugin_host::default_host_api;
 use std::num::NonZeroU32;
 
 use super::controller::{PerDrawUbo, RuntimeRenderController};
-use super::gpu::{load_rgba_texture_asset, LitPipeline, LIT_UBO_SIZE};
+use super::gpu::{LitPipeline, LIT_UBO_SIZE};
 use super::material_bindings::MaterialTextureGpuResidency;
 
 #[inline]
@@ -17,7 +20,10 @@ fn material_texture_mip_count(extent: Extent2D) -> NonZeroU32 {
     // Without them, distant repeated albedo/roughness textures shimmer into the
     // grain pattern visible in runtime captures. Cap the chain to keep memory
     // bounded until the renderer grows streaming texture LOD residency.
-    let levels = (32 - max_dim.leading_zeros()).clamp(1, super::render_quality::MATERIAL_TEXTURE_MAX_MIP_LEVELS);
+    let levels = (32 - max_dim.leading_zeros()).clamp(
+        1,
+        super::render_quality::MATERIAL_TEXTURE_MAX_MIP_LEVELS,
+    );
     NonZeroU32::new(levels).expect("clamped mip level count is non-zero")
 }
 
@@ -33,6 +39,28 @@ fn material_texture_format(path: &str) -> TextureFormat {
     } else {
         TextureFormat::Rgba8Srgb
     }
+}
+
+#[cfg(feature = "texture-decode")]
+fn decode_material_texture_payload(
+    path: &str,
+    payload: &[u8],
+) -> EngineResult<(Extent2D, Vec<u8>)> {
+    let dyn_img = image::load_from_memory(payload)
+        .map_err(|e| EngineError::other(format!("image decode failed path='{path}' err='{e}'")))?;
+    let rgba = dyn_img.to_rgba8();
+    let (w, h) = rgba.dimensions();
+    Ok((Extent2D::new(w, h), rgba.into_raw()))
+}
+
+#[cfg(not(feature = "texture-decode"))]
+fn decode_material_texture_payload(
+    path: &str,
+    _payload: &[u8],
+) -> EngineResult<(Extent2D, Vec<u8>)> {
+    Err(EngineError::other(format!(
+        "texture decode requested in runtime-core for '{path}', but image decoding must go through AssetManager/imageImporter"
+    )))
 }
 
 impl RuntimeRenderController {
@@ -51,9 +79,11 @@ impl RuntimeRenderController {
         max_jobs: u32,
     ) {
         let max_jobs = max_jobs.max(1);
-        let mut jobs = 0_u32;
+        let assets = AssetServiceClient::new(default_host_api());
+        assets.pump();
 
-        while jobs < max_jobs {
+        let mut started_jobs = 0_u32;
+        while started_jobs < max_jobs {
             let Some(path) = self.material_texture_queue.pop_front() else {
                 break;
             };
@@ -65,40 +95,20 @@ impl RuntimeRenderController {
                 continue;
             }
 
-            match load_rgba_texture_asset(&path) {
-                Ok((extent, rgba)) => match r.create_texture(
-                    TextureDesc::new(extent, material_texture_format(&path), TextureUsage::Sampled)
-                        .with_label(format!("material_tex:{path}"))
-                        .with_mips(material_texture_mip_count(extent))
-                        .with_deferred_data(rgba),
-                ) {
-                    Ok(texture) => {
-                        self.material_textures.insert(
-                            path,
-                            MaterialTextureGpuResidency::Loading {
-                                texture,
-                                requested_frame: self.frame_index,
-                            },
-                        );
-                        jobs = jobs.saturating_add(1);
-                    }
-                    Err(e) => {
-                        log::warn!(
-                            "render controller: material texture create failed path='{}' err='{}'",
-                            path,
-                            e
-                        );
-                        self.material_textures.insert(
-                            path,
-                            MaterialTextureGpuResidency::Failed {
-                                message: e.to_string(),
-                            },
-                        );
-                    }
-                },
+            match assets.load(&path) {
+                Ok(id_hex32) => {
+                    self.material_textures.insert(
+                        path,
+                        MaterialTextureGpuResidency::AssetLoading {
+                            id_hex32,
+                            requested_frame: self.frame_index,
+                        },
+                    );
+                    started_jobs = started_jobs.saturating_add(1);
+                }
                 Err(e) => {
                     log::warn!(
-                        "render controller: material texture load failed path='{}' err='{}'",
+                        "render controller: material texture asset request failed path='{}' err='{}'",
                         path,
                         e
                     );
@@ -107,6 +117,114 @@ impl RuntimeRenderController {
                         MaterialTextureGpuResidency::Failed {
                             message: e.to_string(),
                         },
+                    );
+                }
+            }
+        }
+
+        let decode_candidates = self
+            .material_textures
+            .iter()
+            .filter_map(|(path, entry)| match entry {
+                MaterialTextureGpuResidency::AssetLoading { id_hex32, .. } => {
+                    Some((path.clone(), id_hex32.clone()))
+                }
+                _ => None,
+            })
+            .take(max_jobs as usize)
+            .collect::<Vec<_>>();
+
+        let mut decoded_jobs = 0_u32;
+        for (path, id_hex32) in decode_candidates {
+            if decoded_jobs >= max_jobs {
+                break;
+            }
+
+            match assets.state(&id_hex32) {
+                Ok(AssetState::Ready) => {
+                    decoded_jobs = decoded_jobs.saturating_add(1);
+                    let decoded = assets
+                        .blob_wire_v1(&id_hex32)
+                        .map_err(|e| EngineError::other(format!(
+                            "asset.blob_wire_v1 failed path='{path}' id='{id_hex32}' err='{e}'"
+                        )))
+                        .and_then(|(_meta, payload)| {
+                            decode_material_texture_payload(&path, &payload)
+                        });
+
+                    match decoded {
+                        Ok((extent, rgba)) => match r.create_texture(
+                            TextureDesc::new(
+                                extent,
+                                material_texture_format(&path),
+                                TextureUsage::Sampled,
+                            )
+                            .with_label(format!("material_tex:{path}"))
+                            .with_mips(material_texture_mip_count(extent))
+                            .with_deferred_data(rgba),
+                        ) {
+                            Ok(texture) => {
+                                self.material_textures.insert(
+                                    path,
+                                    MaterialTextureGpuResidency::GpuLoading {
+                                        texture,
+                                        requested_frame: self.frame_index,
+                                    },
+                                );
+                            }
+                            Err(e) => {
+                                log::warn!(
+                                    "render controller: material texture create failed path='{}' err='{}'",
+                                    path,
+                                    e
+                                );
+                                self.material_textures.insert(
+                                    path,
+                                    MaterialTextureGpuResidency::Failed {
+                                        message: e.to_string(),
+                                    },
+                                );
+                            }
+                        },
+                        Err(e) => {
+                            log::warn!(
+                                "render controller: material texture decode failed path='{}' err='{}'",
+                                path,
+                                e
+                            );
+                            self.material_textures.insert(
+                                path,
+                                MaterialTextureGpuResidency::Failed {
+                                    message: e.to_string(),
+                                },
+                            );
+                        }
+                    }
+                }
+                Ok(AssetState::Failed) => {
+                    decoded_jobs = decoded_jobs.saturating_add(1);
+                    let message = format!("AssetManager reported failed state for id='{id_hex32}'");
+                    log::warn!(
+                        "render controller: material texture asset failed path='{}' err='{}'",
+                        path,
+                        message
+                    );
+                    self.material_textures.insert(
+                        path,
+                        MaterialTextureGpuResidency::Failed { message },
+                    );
+                }
+                Ok(AssetState::Loading | AssetState::Unloaded | AssetState::Unknown) => {}
+                Err(e) => {
+                    let message = format!("asset state query failed id='{id_hex32}' err='{e}'");
+                    log::warn!(
+                        "render controller: material texture asset state failed path='{}' err='{}'",
+                        path,
+                        message
+                    );
+                    self.material_textures.insert(
+                        path,
+                        MaterialTextureGpuResidency::Failed { message },
                     );
                 }
             }
@@ -132,7 +250,7 @@ impl RuntimeRenderController {
 
         match entry {
             MaterialTextureGpuResidency::Ready { texture } => texture,
-            MaterialTextureGpuResidency::Loading {
+            MaterialTextureGpuResidency::GpuLoading {
                 texture,
                 requested_frame,
             } => match r.texture_residency(texture) {
@@ -163,7 +281,8 @@ impl RuntimeRenderController {
                     fallback
                 }
             },
-            MaterialTextureGpuResidency::Requested => fallback,
+            MaterialTextureGpuResidency::Requested
+            | MaterialTextureGpuResidency::AssetLoading { .. } => fallback,
             MaterialTextureGpuResidency::Failed { message } => {
                 let _ = message;
                 fallback

@@ -1,11 +1,13 @@
 #![forbid(unsafe_op_in_unsafe_fn)]
 
+mod draw_bucket;
 mod draw_lists;
 mod external_contribution_lowering;
 mod frame_submit;
 mod frame_types;
 mod grid;
 mod input;
+pub(super) mod instancing;
 mod launch_loading;
 mod lifecycle;
 mod light_extraction;

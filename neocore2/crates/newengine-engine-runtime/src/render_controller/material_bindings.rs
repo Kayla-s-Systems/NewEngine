@@ -6,8 +6,17 @@ use newengine_core::render::TextureId;
 
 #[derive(Clone, Debug)]
 pub(super) enum MaterialTextureGpuResidency {
+    /// Path has been declared by scene/material extraction but no AssetManager
+    /// request has been sent yet.
     Requested,
-    Loading {
+    /// AssetManager owns IO/import readiness. This state is deliberately
+    /// non-blocking; the render loop polls it instead of calling wait_ready().
+    AssetLoading {
+        id_hex32: String,
+        requested_frame: u64,
+    },
+    /// CPU payload was decoded and a GPU upload has been enqueued.
+    GpuLoading {
         texture: TextureId,
         requested_frame: u64,
     },

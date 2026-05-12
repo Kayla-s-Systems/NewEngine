@@ -37,6 +37,17 @@ pub enum VertexFormat {
     Unorm8x4,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum VertexStepMode {
+    Vertex,
+    Instance,
+}
+
+#[inline]
+fn default_vertex_step_mode() -> VertexStepMode {
+    VertexStepMode::Vertex
+}
+
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 pub struct VertexAttribute {
     pub location: u32,
@@ -59,12 +70,24 @@ impl VertexAttribute {
 pub struct VertexLayout {
     pub stride: u32,
     pub attributes: Vec<VertexAttribute>,
+    #[serde(default = "default_vertex_step_mode")]
+    pub step_mode: VertexStepMode,
 }
 
 impl VertexLayout {
     #[inline]
     pub fn new(stride: u32, attributes: Vec<VertexAttribute>) -> Self {
-        Self { stride, attributes }
+        Self {
+            stride,
+            attributes,
+            step_mode: VertexStepMode::Vertex,
+        }
+    }
+
+    #[inline]
+    pub fn per_instance(mut self) -> Self {
+        self.step_mode = VertexStepMode::Instance;
+        self
     }
 }
 

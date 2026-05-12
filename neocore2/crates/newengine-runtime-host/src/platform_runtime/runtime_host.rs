@@ -4,6 +4,7 @@ use abi_stable::std_types::RString;
 use libloading::Library;
 use newengine_core::events::EventSub;
 use newengine_core::render::{RenderBackendStatus, SceneLaunchStatus};
+use newengine_core::EngineStartupPhase;
 use newengine_core::host_events::{
     CursorGrabMode, CursorState, HostEvent, WindowHandles, WindowHostEvent, WindowInitSize,
 };
@@ -15,11 +16,11 @@ use newengine_platform_api::{
 };
 use newengine_plugin_api::PluginInfo;
 use newengine_system_contracts::{
-    ScreenOverlayProgress, ScreenOverlaySubsystem, ScreenOverlaySubsystemId,
-    ScreenOverlaySubsystemPhase,
+    ScreenOverlayProgress, ScreenOverlayReason, ScreenOverlayStatus, ScreenOverlaySubsystem,
+    ScreenOverlaySubsystemId, ScreenOverlaySubsystemPhase,
 };
 use newengine_system_runtime::{
-    overlay_from_render_backend_status, overlay_to_step_result,
+    overlay_from_engine_startup_snapshot, overlay_from_render_backend_status, overlay_to_step_result,
     startup_status_mapper::{bootstrap_loading_with_subsystems, runtime_ready_with_subsystems},
 };
 use newengine_ui::{
@@ -38,6 +39,10 @@ use crate::platform_runtime::snapshot_service::{
     register_platform_window_service_best_effort, update_platform_window_snapshot,
 };
 use crate::platform_runtime::types::ResolvedPlatformRuntimeConfig;
+
+const START_ENGINE_BOOTSTRAP_BASE_PROGRESS: f32 = 0.74;
+const START_ENGINE_BOOTSTRAP_SPAN_PROGRESS: f32 = 0.18;
+const OVERLAY_LOG_PROGRESS_EPSILON: f32 = 0.01;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum RuntimeBootstrapStage {
@@ -87,6 +92,7 @@ pub struct HostPlatformRuntime {
     bootstrap_spinner_phase: u32,
     ready_overlay_frames_left: u32,
     loaded_engine_plugins: Option<usize>,
+    fatal_bootstrap_error: Option<String>,
 }
 
 impl HostPlatformRuntime {
@@ -131,6 +137,7 @@ impl HostPlatformRuntime {
             bootstrap_spinner_phase: 0,
             ready_overlay_frames_left: 45,
             loaded_engine_plugins: None,
+            fatal_bootstrap_error: None,
         }
     }
 
@@ -324,11 +331,27 @@ impl HostPlatformRuntime {
     }
 
     pub(crate) fn step(&mut self, dt_sec: f32) -> EngineResult<PlatformStepResultV1> {
-        if self.bootstrap_stage != RuntimeBootstrapStage::Running || !self.window_ready_emitted {
-            return self.step_bootstrap();
+        if self.fatal_bootstrap_error.is_some() {
+            return Ok(self.fatal_bootstrap_step_result());
         }
 
-        self.step_running(dt_sec)
+        let bootstrap_active = self.bootstrap_stage != RuntimeBootstrapStage::Running || !self.window_ready_emitted;
+        let result = if bootstrap_active {
+            self.step_bootstrap()
+        } else {
+            self.step_running(dt_sec)
+        };
+
+        match result {
+            Ok(step) => Ok(step),
+            Err(e) if bootstrap_active => {
+                let message = e.to_string();
+                log::error!("platform runtime bootstrap: fatal startup error: {message}");
+                self.fatal_bootstrap_error = Some(message);
+                Ok(self.fatal_bootstrap_step_result())
+            }
+            Err(e) => Err(e),
+        }
     }
 
     fn step_bootstrap(&mut self) -> EngineResult<PlatformStepResultV1> {
@@ -383,28 +406,40 @@ impl HostPlatformRuntime {
                 self.bootstrap_stage = RuntimeBootstrapStage::StartEngine;
                 Ok(self.loading_step_result())
             }
-            RuntimeBootstrapStage::StartEngine => match self.engine.start() {
-                Ok(()) => {
-                    self.started = true;
-                    log::info!("platform runtime: engine.start completed");
-                    self.set_bootstrap_overlay(
-                        "Engine runtime started.",
-                        "Finalizing gated scene readiness and host window events.",
-                        0.90,
-                    );
-                    self.bootstrap_stage = RuntimeBootstrapStage::AnnounceEnterRuntime;
-                    Ok(self.loading_step_result())
-                }
-                Err(e) => {
-                    log::error!("platform runtime: engine.start failed: {}", e);
-                    Err(e)
+            RuntimeBootstrapStage::StartEngine => {
+                match self.engine.start_incremental_step() {
+                    Ok(outcome) => {
+                        let snapshot = outcome.snapshot;
+                        self.set_bootstrap_overlay(
+                            snapshot.status.clone(),
+                            snapshot.detail.clone(),
+                            snapshot.progress_01.clamp(0.0, 0.94),
+                        );
+
+                        if outcome.finished {
+                            self.started = true;
+                            log::info!("platform runtime: engine.start incremental pump completed");
+                            self.set_bootstrap_overlay(
+                                "Engine runtime started.",
+                                "Finalizing gated scene readiness and host window events.",
+                                0.90,
+                            );
+                            self.bootstrap_stage = RuntimeBootstrapStage::AnnounceEnterRuntime;
+                        }
+
+                        Ok(self.loading_step_result())
+                    }
+                    Err(e) => {
+                        log::error!("platform runtime: engine.start incremental pump failed: {}", e);
+                        Err(e)
+                    }
                 }
             },
             RuntimeBootstrapStage::AnnounceEnterRuntime => {
                 self.set_bootstrap_overlay(
                     "Preparing playable world...",
                     "Native loading remains active while scene resources become resident.",
-                    0.88,
+                    0.95,
                 );
                 self.bootstrap_stage = RuntimeBootstrapStage::EmitWindowReady;
                 Ok(self.loading_step_result())
@@ -415,7 +450,7 @@ impl HostPlatformRuntime {
                 self.set_bootstrap_overlay(
                     "Loading world resources...",
                     "Player control and world presentation are locked behind the scene launch gate.",
-                    0.90,
+                    0.96,
                 );
                 self.ready_overlay_frames_left = 1;
                 self.bootstrap_stage = RuntimeBootstrapStage::ReadyOverlay;
@@ -521,17 +556,19 @@ impl HostPlatformRuntime {
     ) {
         let next_status = status.into();
         let next_detail = detail.into();
-        let next_progress = progress_01.clamp(0.0, 1.0);
+        let requested_progress = progress_01.clamp(0.0, 1.0);
+        let next_progress = requested_progress.max(self.bootstrap_overlay.progress_01);
 
-        let changed = self.bootstrap_overlay.status != next_status
-            || self.bootstrap_overlay.detail != next_detail
-            || (self.bootstrap_overlay.progress_01 - next_progress).abs() > f32::EPSILON;
+        let text_changed = self.bootstrap_overlay.status != next_status
+            || self.bootstrap_overlay.detail != next_detail;
+        let progress_changed = (self.bootstrap_overlay.progress_01 - next_progress).abs()
+            >= OVERLAY_LOG_PROGRESS_EPSILON;
 
         self.bootstrap_overlay.status = next_status;
         self.bootstrap_overlay.detail = next_detail;
         self.bootstrap_overlay.progress_01 = next_progress;
 
-        if changed {
+        if text_changed || progress_changed {
             log::info!(
                 "platform runtime bootstrap: overlay status='{}' detail='{}' progress={:.0}%",
                 self.bootstrap_overlay.status,
@@ -542,6 +579,18 @@ impl HostPlatformRuntime {
     }
 
     fn loading_step_result(&self) -> PlatformStepResultV1 {
+        let mut startup = self.engine.startup_status();
+        if matches!(self.bootstrap_stage, RuntimeBootstrapStage::StartEngine) && startup.active {
+            startup.progress_01 = map_engine_startup_progress_to_bootstrap(startup.progress_01);
+            let overlay = overlay_from_engine_startup_snapshot(
+                &startup,
+                self.platform_window_ready(),
+                self.render_backend_label(),
+                self.loaded_engine_plugins,
+            );
+            return overlay_to_step_result(&overlay, self.bootstrap_spinner_phase);
+        }
+
         let status = self.bootstrap_overlay.status.as_str();
         let detail = self.bootstrap_overlay.detail.as_str();
         let subsystems = self.bootstrap_subsystems();
@@ -561,8 +610,52 @@ impl HostPlatformRuntime {
         overlay_to_step_result(&overlay, self.bootstrap_spinner_phase)
     }
 
+    fn fatal_bootstrap_step_result(&mut self) -> PlatformStepResultV1 {
+        self.bootstrap_spinner_phase = self.bootstrap_spinner_phase.wrapping_add(1);
+        let message = self
+            .fatal_bootstrap_error
+            .as_deref()
+            .unwrap_or("Startup failed before a diagnostic message was published.")
+            .to_owned();
+        let startup = self.engine.startup_status();
+
+        let overlay = if startup.error.is_some() || startup.phase == EngineStartupPhase::Faulted {
+            overlay_from_engine_startup_snapshot(
+                &startup,
+                self.platform_window_ready(),
+                self.render_backend_label(),
+                self.loaded_engine_plugins,
+            )
+        } else {
+            ScreenOverlayStatus::error(
+                ScreenOverlayReason::Recovery,
+                "Startup failed before playable handoff.",
+                message.as_str(),
+            )
+            .with_subsystems(self.bootstrap_subsystems())
+        };
+
+        overlay_to_step_result(&overlay, self.bootstrap_spinner_phase)
+    }
+
+    #[inline]
+    fn platform_window_ready(&self) -> bool {
+        self.surface.width > 0 && self.surface.height > 0 && self.bootstrap_stage != RuntimeBootstrapStage::AwaitingWindow
+    }
+
 
     fn bootstrap_subsystems(&self) -> Vec<ScreenOverlaySubsystem> {
+        if let Some(error) = self.fatal_bootstrap_error.as_deref() {
+            let render_backend = self.render_backend_label();
+            return vec![
+                subsystem_ready(ScreenOverlaySubsystemId::Platform, "READY", "Native window remained alive for safe-stop diagnostics."),
+                subsystem_ready(ScreenOverlaySubsystemId::Assets, "READY", "Asset service state was already published before the failure, or is not the failing gate."),
+                subsystem_run(ScreenOverlaySubsystemId::Renderer, render_backend, "Renderer state is preserved while the loading screen reports the failure.", None),
+                subsystem_failed(ScreenOverlaySubsystemId::Simulation, "ERR", "Engine startup FSM did not reach playable runtime."),
+                subsystem_failed(ScreenOverlaySubsystemId::Diagnostics, "ERR", error),
+            ];
+        }
+
         let render_backend = self.render_backend_label();
         let plugin_detail = self
             .loaded_engine_plugins
@@ -675,6 +768,11 @@ impl HostPlatformRuntime {
     }
 }
 
+fn map_engine_startup_progress_to_bootstrap(engine_progress_01: f32) -> f32 {
+    START_ENGINE_BOOTSTRAP_BASE_PROGRESS
+        + engine_progress_01.clamp(0.0, 1.0) * START_ENGINE_BOOTSTRAP_SPAN_PROGRESS
+}
+
 fn subsystem_wait(
     id: ScreenOverlaySubsystemId,
     state_label: impl Into<String>,
@@ -718,6 +816,21 @@ fn subsystem_ready(
         state_label,
         detail,
         Some(ScreenOverlayProgress::percent(1.0)),
+    )
+}
+
+fn subsystem_failed(
+    id: ScreenOverlaySubsystemId,
+    state_label: impl Into<String>,
+    detail: impl Into<String>,
+) -> ScreenOverlaySubsystem {
+    ScreenOverlaySubsystem::new(
+        id,
+        subsystem_label(id),
+        ScreenOverlaySubsystemPhase::Failed,
+        state_label,
+        detail,
+        None,
     )
 }
 

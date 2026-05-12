@@ -1,56 +1,362 @@
 mod planner;
 
-use super::module_slot::{ModuleSlot, ModuleState};
+use super::module_slot::ModuleState;
 use super::{Engine, EngineRunState, ModuleFaultTolerance};
 
 use crate::error::{EngineError, EngineResult, ModuleStage};
 use crate::lifecycle_events::EngineLifecycleEvent;
 use crate::module::ModuleCtx;
+use crate::startup_status::{
+    EngineIncrementalStartupState, EngineStartupPhase, EngineStartupSnapshot,
+    EngineStartupStepOutcome, EngineStartupStepPhase, EngineStartupSystemPhase,
+    EngineStartupSystemStatus,
+};
 
 
 impl<E: Send + 'static> Engine<E> {
+    /// Compatibility entry point: drives the real incremental startup pump to
+    /// completion in the current thread. Platform hosts should prefer
+    /// `start_incremental_step()` so the native loading surface can repaint
+    /// between expensive systems/modules.
     pub fn start(&mut self) -> EngineResult<()> {
-        match self.module_fault_tolerance {
-            ModuleFaultTolerance::Strict => self.start_strict(),
-            ModuleFaultTolerance::Resilient => self.start_resilient(),
+        loop {
+            let outcome = self.start_incremental_step()?;
+            if outcome.finished {
+                return Ok(());
+            }
         }
     }
 
-    fn start_strict(&mut self) -> EngineResult<()> {
-        self.enter_system_init()?;
-        self.validate_api_contracts_strict()?;
-        self.enter_game_init();
-
-        let order = planner::build_strict_module_order(&self.modules)?;
-        let mut sorted = planner::reorder_slots_by_order(std::mem::take(&mut self.modules), &order);
-
-        #[inline]
-        fn shutdown_modules<E: Send + 'static>(engine: &mut Engine<E>, slots: &mut [ModuleSlot<E>]) {
-            for s in slots.iter_mut().rev() {
-                if s.shutdown_called {
-                    continue;
-                }
-                let mut ctx = ModuleCtx::new(
-                    engine.services.as_ref(),
-                    &mut engine.resources,
-                    &engine.bus,
-                    &engine.events,
-                    &mut engine.scheduler,
-                    engine.shutdown.clone(),
-                );
-                let _ = s.module.shutdown(&mut ctx);
-                s.shutdown_called = true;
-                s.state = ModuleState::Disabled;
-            }
+    /// Advances engine startup by one deterministic FSM/pipeline step.
+    ///
+    /// This is the source for real loading-screen status: the snapshot contains
+    /// the core FSM state, current startup phase, current module, plugin count
+    /// and exact failure context.
+    pub fn start_incremental_step(&mut self) -> EngineResult<EngineStartupStepOutcome> {
+        if self.run_state().is_running() {
+            let snapshot = EngineStartupSnapshot::complete(
+                self.run_state().as_str(),
+                self.modules.len(),
+                self.plugins.snapshot().len(),
+            );
+            self.publish_startup_snapshot(snapshot.clone());
+            return Ok(EngineStartupStepOutcome::complete(snapshot));
         }
 
-        let mut initialized = 0usize;
+        if self.incremental_startup.is_none() {
+            self.incremental_startup = Some(EngineIncrementalStartupState {
+                phase: EngineStartupStepPhase::EnterSystemInit,
+                ..EngineIncrementalStartupState::default()
+            });
+            let snapshot = self.make_startup_snapshot(
+                EngineStartupPhase::SystemInit,
+                "Initializing core systems...",
+                "Core FSM is entering init-system and preparing startup services.",
+                0.02,
+                None,
+                0,
+                self.modules.len(),
+            );
+            self.publish_startup_snapshot(snapshot.clone());
+            return Ok(EngineStartupStepOutcome::running(snapshot));
+        }
 
-        for i in 0..sorted.len() {
+        let phase = self.incremental_startup.as_ref().map(|s| s.phase).unwrap_or(EngineStartupStepPhase::Idle);
+        match phase {
+            EngineStartupStepPhase::Idle => {
+                self.set_incremental_phase(EngineStartupStepPhase::EnterSystemInit);
+                let snapshot = self.make_startup_snapshot(
+                    EngineStartupPhase::SystemInit,
+                    "Initializing core systems...",
+                    "Core FSM is entering init-system and preparing startup services.",
+                    0.02,
+                    None,
+                    0,
+                    self.modules.len(),
+                );
+                self.publish_startup_snapshot(snapshot.clone());
+                Ok(EngineStartupStepOutcome::running(snapshot))
+            }
+            EngineStartupStepPhase::EnterSystemInit => {
+                if let Err(e) = self.enter_system_init() {
+                    return self.fail_incremental_startup(
+                        EngineStartupPhase::SystemInit,
+                        "Core system initialization failed.",
+                        "The FSM could not enter init-system cleanly.",
+                        0.04,
+                        None,
+                        e,
+                    );
+                }
+                self.set_incremental_phase(if matches!(self.module_fault_tolerance, ModuleFaultTolerance::Strict) {
+                    EngineStartupStepPhase::ValidateApiContracts
+                } else {
+                    EngineStartupStepPhase::EnterGameInit
+                });
+                let snapshot = self.make_startup_snapshot(
+                    EngineStartupPhase::SystemInit,
+                    "Core FSM entered init-system.",
+                    "Shutdown token, scheduler, resources and service registries are ready for module bootstrap.",
+                    0.08,
+                    None,
+                    0,
+                    self.modules.len(),
+                );
+                self.publish_startup_snapshot(snapshot.clone());
+                Ok(EngineStartupStepOutcome::running(snapshot))
+            }
+            EngineStartupStepPhase::ValidateApiContracts => {
+                if let Err(e) = self.validate_api_contracts_strict() {
+                    return self.fail_incremental_startup(
+                        EngineStartupPhase::ApiContracts,
+                        "API contract validation failed.",
+                        "A module requires a service/API version that the host cannot provide.",
+                        0.13,
+                        None,
+                        e,
+                    );
+                }
+                self.set_incremental_phase(EngineStartupStepPhase::EnterGameInit);
+                let snapshot = self.make_startup_snapshot(
+                    EngineStartupPhase::ApiContracts,
+                    "API contracts validated.",
+                    "Strict API/service requirements passed before module initialization.",
+                    0.16,
+                    None,
+                    0,
+                    self.modules.len(),
+                );
+                self.publish_startup_snapshot(snapshot.clone());
+                Ok(EngineStartupStepOutcome::running(snapshot))
+            }
+            EngineStartupStepPhase::EnterGameInit => {
+                self.enter_game_init();
+                self.set_incremental_phase(EngineStartupStepPhase::PrepareModuleOrder);
+                let snapshot = self.make_startup_snapshot(
+                    EngineStartupPhase::GameInit,
+                    "Core FSM entered init-game.",
+                    "Runtime modules can now be ordered and initialized through the startup graph.",
+                    0.22,
+                    None,
+                    0,
+                    self.modules.len(),
+                );
+                self.publish_startup_snapshot(snapshot.clone());
+                Ok(EngineStartupStepOutcome::running(snapshot))
+            }
+            EngineStartupStepPhase::PrepareModuleOrder => {
+                let result = match self.module_fault_tolerance {
+                    ModuleFaultTolerance::Strict => {
+                        planner::build_strict_module_order(&self.modules).map(|order| {
+                            planner::reorder_slots_by_order(std::mem::take(&mut self.modules), &order)
+                        })
+                    }
+                    ModuleFaultTolerance::Resilient => {
+                        let plan = planner::build_resilient_module_plan(&self.modules);
+                        Ok(planner::partition_slots_by_resilient_plan(std::mem::take(&mut self.modules), plan))
+                    }
+                };
+
+                match result {
+                    Ok(slots) => {
+                        self.modules = slots;
+                        if let Some(state) = &mut self.incremental_startup {
+                            state.phase = EngineStartupStepPhase::InitModules;
+                            state.index = 0;
+                            state.initialized = 0;
+                            state.module_total = self.modules.len();
+                        }
+                        let snapshot = self.make_startup_snapshot(
+                            EngineStartupPhase::ModuleOrder,
+                            "Startup module order resolved.",
+                            format!(
+                                "{} module(s) scheduled with {:?} fault tolerance.",
+                                self.modules.len(),
+                                self.module_fault_tolerance
+                            ),
+                            0.28,
+                            None,
+                            0,
+                            self.modules.len(),
+                        );
+                        self.publish_startup_snapshot(snapshot.clone());
+                        Ok(EngineStartupStepOutcome::running(snapshot))
+                    }
+                    Err(e) => self.fail_incremental_startup(
+                        EngineStartupPhase::ModuleOrder,
+                        "Module order resolution failed.",
+                        "The dependency planner could not produce a safe startup order.",
+                        0.26,
+                        None,
+                        e,
+                    ),
+                }
+            }
+            EngineStartupStepPhase::InitModules => self.start_incremental_init_module(),
+            EngineStartupStepPhase::StartupGraphInitial => {
+                self.refresh_readiness_snapshot();
+                self.log_startup_graph_snapshot("after-init");
+                if let Err(e) = self.start_modules_ready_by_graph("initial") {
+                    return self.fail_incremental_startup(
+                        EngineStartupPhase::StartupGraph,
+                        "Startup graph activation failed.",
+                        "A module failed while processing startup graph readiness gates.",
+                        0.70,
+                        None,
+                        e,
+                    );
+                }
+                self.set_incremental_phase(EngineStartupStepPhase::LoadRuntimePlugins);
+                let snapshot = self.make_startup_snapshot(
+                    EngineStartupPhase::StartupGraph,
+                    "Startup graph evaluated.",
+                    "Modules whose readiness requirements are satisfied have been activated.",
+                    0.74,
+                    None,
+                    self.modules.len(),
+                    self.modules.len(),
+                );
+                self.publish_startup_snapshot(snapshot.clone());
+                Ok(EngineStartupStepOutcome::running(snapshot))
+            }
+            EngineStartupStepPhase::LoadRuntimePlugins => {
+                if !self.plugins_loaded && !self.engine_plugins_loaded {
+                    if let Err(e) = self.try_load_plugins_once() {
+                        return self.fail_incremental_startup(
+                            EngineStartupPhase::RuntimePlugins,
+                            "Runtime plugin load failed.",
+                            "Plugin discovery or dynamic loading failed before plugin start.",
+                            0.79,
+                            None,
+                            e,
+                        );
+                    }
+                }
+                self.set_incremental_phase(EngineStartupStepPhase::StartPlugins);
+                let snapshot = self.make_startup_snapshot(
+                    EngineStartupPhase::RuntimePlugins,
+                    "Runtime plugins loaded.",
+                    format!("{} plugin descriptor(s) are visible to the host.", self.plugins.snapshot().len()),
+                    0.82,
+                    None,
+                    self.modules.len(),
+                    self.modules.len(),
+                );
+                self.publish_startup_snapshot(snapshot.clone());
+                Ok(EngineStartupStepOutcome::running(snapshot))
+            }
+            EngineStartupStepPhase::StartPlugins => {
+                self.log_plugins_diagnostics("after module init");
+                if let Err(e) = self.plugins_start_all() {
+                    return self.fail_incremental_startup(
+                        EngineStartupPhase::PluginStart,
+                        "Plugin startup failed.",
+                        "One or more plugin-owned services failed to enter running state.",
+                        0.86,
+                        None,
+                        e,
+                    );
+                }
+                self.set_incremental_phase(EngineStartupStepPhase::DispatchReadiness);
+                let snapshot = self.make_startup_snapshot(
+                    EngineStartupPhase::PluginStart,
+                    "Plugin services started.",
+                    "Plugin-owned services have completed their startup hooks.",
+                    0.88,
+                    None,
+                    self.modules.len(),
+                    self.modules.len(),
+                );
+                self.publish_startup_snapshot(snapshot.clone());
+                Ok(EngineStartupStepOutcome::running(snapshot))
+            }
+            EngineStartupStepPhase::DispatchReadiness => {
+                if let Err(e) = self.dispatch_startup_readiness_events("engine.start.incremental") {
+                    return self.fail_incremental_startup(
+                        EngineStartupPhase::ReadinessEvents,
+                        "Readiness event dispatch failed.",
+                        "Startup readiness events could not be delivered to running modules.",
+                        0.92,
+                        None,
+                        e,
+                    );
+                }
+                self.set_incremental_phase(EngineStartupStepPhase::EnterRunning);
+                let snapshot = self.make_startup_snapshot(
+                    EngineStartupPhase::ReadinessEvents,
+                    "Readiness events dispatched.",
+                    "EnginePluginsReady and EngineStartCompleted readiness gates have been published.",
+                    0.94,
+                    None,
+                    self.modules.len(),
+                    self.modules.len(),
+                );
+                self.publish_startup_snapshot(snapshot.clone());
+                Ok(EngineStartupStepOutcome::running(snapshot))
+            }
+            EngineStartupStepPhase::EnterRunning => {
+                self.set_run_state(EngineRunState::Running);
+                self.set_incremental_phase(EngineStartupStepPhase::Complete);
+                let snapshot = EngineStartupSnapshot::complete(
+                    self.run_state().as_str(),
+                    self.modules.len(),
+                    self.plugins.snapshot().len(),
+                );
+                self.publish_startup_snapshot(snapshot.clone());
+                Ok(EngineStartupStepOutcome::complete(snapshot))
+            }
+            EngineStartupStepPhase::Complete => {
+                let snapshot = EngineStartupSnapshot::complete(
+                    self.run_state().as_str(),
+                    self.modules.len(),
+                    self.plugins.snapshot().len(),
+                );
+                self.publish_startup_snapshot(snapshot.clone());
+                Ok(EngineStartupStepOutcome::complete(snapshot))
+            }
+        }
+    }
+
+    fn start_incremental_init_module(&mut self) -> EngineResult<EngineStartupStepOutcome> {
+        let total = self.modules.len();
+        let mut index = self.incremental_startup.as_ref().map(|s| s.index).unwrap_or(0);
+
+        while index < total {
             self.sync_shutdown_state();
+            if self.is_shutdown_requested() {
+                let err = EngineError::ExitRequested;
+                return self.fail_incremental_startup(
+                    EngineStartupPhase::ModuleInit,
+                    "Startup interrupted by shutdown request.",
+                    "The shutdown token was requested while initializing modules.",
+                    self.module_init_progress(index, total),
+                    self.modules.get(index).map(|s| s.id().to_owned()),
+                    err,
+                );
+            }
+
+            if self.modules[index].state != ModuleState::Pending {
+                index += 1;
+                if let Some(state) = &mut self.incremental_startup {
+                    state.index = index;
+                }
+                continue;
+            }
+
+            let module_id = self.modules[index].id();
+            let progress_before = self.module_init_progress(index, total);
+            let before = self.make_startup_snapshot(
+                EngineStartupPhase::ModuleInit,
+                format!("Initializing module {} of {}...", index + 1, total),
+                format!("Calling init() for module '{module_id}'."),
+                progress_before,
+                Some(module_id.to_owned()),
+                index,
+                total,
+            );
+            self.publish_startup_snapshot(before);
 
             let init_result = {
-                let s = &mut sorted[i];
                 let mut ctx = ModuleCtx::new(
                     self.services.as_ref(),
                     &mut self.resources,
@@ -59,76 +365,214 @@ impl<E: Send + 'static> Engine<E> {
                     &mut self.scheduler,
                     self.shutdown.clone(),
                 );
-                s.module.init(&mut ctx)
+                self.modules[index].module.init(&mut ctx)
             };
 
-            if let Err(err) = init_result {
-                shutdown_modules(self, &mut sorted[..initialized]);
-                return Err(EngineError::with_module_stage(
-                    sorted[i].id(),
-                    ModuleStage::Init,
-                    err,
-                ));
-            }
-
-            initialized += 1;
-
-            self.sync_shutdown_state();
-            if self.is_shutdown_requested() {
-                shutdown_modules(self, &mut sorted[..initialized]);
-                return Err(EngineError::ExitRequested);
+            match init_result {
+                Ok(()) => {
+                    if let Some(state) = &mut self.incremental_startup {
+                        state.initialized = state.initialized.saturating_add(1);
+                        state.index = index + 1;
+                    }
+                    let done = index + 1;
+                    let snapshot = self.make_startup_snapshot(
+                        EngineStartupPhase::ModuleInit,
+                        format!("Module initialized ({done}/{total})."),
+                        format!("Module '{module_id}' completed init()."),
+                        self.module_init_progress(done, total),
+                        Some(module_id.to_owned()),
+                        done,
+                        total,
+                    );
+                    self.publish_startup_snapshot(snapshot.clone());
+                    if done >= total {
+                        self.set_incremental_phase(EngineStartupStepPhase::StartupGraphInitial);
+                    }
+                    return Ok(EngineStartupStepOutcome::running(snapshot));
+                }
+                Err(err) => match self.module_fault_tolerance {
+                    ModuleFaultTolerance::Strict => {
+                        let initialized = self
+                            .incremental_startup
+                            .as_ref()
+                            .map(|s| s.initialized)
+                            .unwrap_or(index);
+                        self.shutdown_initialized_modules(initialized);
+                        return self.fail_incremental_startup(
+                            EngineStartupPhase::ModuleInit,
+                            format!("Module init failed: {module_id}"),
+                            format!("Strict startup stopped while initializing module '{module_id}'."),
+                            progress_before,
+                            Some(module_id.to_owned()),
+                            EngineError::with_module_stage(module_id, ModuleStage::Init, err),
+                        );
+                    }
+                    ModuleFaultTolerance::Resilient => {
+                        let reason = format!("init failed: {err}");
+                        log::error!("engine: module init failed: {} ({})", module_id, reason);
+                        self.modules[index].disable(reason.clone());
+                        self.shutdown_slot_by_index(index);
+                        index += 1;
+                        if let Some(state) = &mut self.incremental_startup {
+                            state.index = index;
+                        }
+                        let snapshot = self.make_startup_snapshot(
+                            EngineStartupPhase::ModuleInit,
+                            format!("Module disabled: {module_id}"),
+                            format!("Resilient startup disabled '{module_id}': {reason}"),
+                            self.module_init_progress(index, total),
+                            Some(module_id.to_owned()),
+                            index,
+                            total,
+                        );
+                        self.publish_startup_snapshot(snapshot.clone());
+                        return Ok(EngineStartupStepOutcome::running(snapshot));
+                    }
+                },
             }
         }
 
-        self.modules = sorted;
-        self.complete_startup("engine.start.strict")
+        self.set_incremental_phase(EngineStartupStepPhase::StartupGraphInitial);
+        let snapshot = self.make_startup_snapshot(
+            EngineStartupPhase::ModuleInit,
+            "Module initialization complete.",
+            format!("{} module slot(s) processed.", total),
+            0.66,
+            None,
+            total,
+            total,
+        );
+        self.publish_startup_snapshot(snapshot.clone());
+        Ok(EngineStartupStepOutcome::running(snapshot))
     }
 
-    fn start_resilient(&mut self) -> EngineResult<()> {
-        self.enter_system_init()?;
-        self.enter_game_init();
-
-        let plan = planner::build_resilient_module_plan(&self.modules);
-        let mut new_slots = planner::partition_slots_by_resilient_plan(
-            std::mem::take(&mut self.modules),
-            plan,
-        );
-
-        for i in 0..new_slots.len() {
-            self.sync_shutdown_state();
-            if self.is_shutdown_requested() {
-                break;
-            }
-
-            if new_slots[i].state != ModuleState::Pending {
-                continue;
-            }
-
-            let module_id = new_slots[i].id();
-
-            let init_res = {
-                let mut ctx = ModuleCtx::new(
-                    self.services.as_ref(),
-                    &mut self.resources,
-                    &self.bus,
-                    &self.events,
-                    &mut self.scheduler,
-                    self.shutdown.clone(),
-                );
-                new_slots[i].module.init(&mut ctx)
-            };
-
-            if let Err(err) = init_res {
-                let reason = format!("init failed: {err}");
-                log::error!("engine: module init failed: {} ({})", module_id, reason);
-                new_slots[i].disable(reason);
-                self.shutdown_slot(&mut new_slots[i]);
-                continue;
-            }
+    #[inline]
+    fn module_init_progress(&self, done: usize, total: usize) -> f32 {
+        if total == 0 {
+            0.66
+        } else {
+            0.32 + (done as f32 / total as f32).clamp(0.0, 1.0) * 0.34
         }
+    }
 
-        self.modules = new_slots;
-        self.complete_startup("engine.start.resilient")
+    fn make_startup_snapshot(
+        &self,
+        phase: EngineStartupPhase,
+        status: impl Into<String>,
+        detail: impl Into<String>,
+        progress_01: f32,
+        current_module: Option<String>,
+        module_index: usize,
+        module_total: usize,
+    ) -> EngineStartupSnapshot {
+        let systems = vec![
+            EngineStartupSystemStatus::new(
+                "fsm",
+                "CORE FSM",
+                if self.run_state().is_booting() { EngineStartupSystemPhase::Running } else { EngineStartupSystemPhase::Ready },
+                self.run_state().as_str().to_ascii_uppercase(),
+                format!("Core lifecycle state is '{}'.", self.run_state().as_str()),
+                Some(progress_01),
+            ),
+            EngineStartupSystemStatus::new(
+                "modules",
+                "MODULES",
+                if phase == EngineStartupPhase::ModuleInit { EngineStartupSystemPhase::Running } else if progress_01 >= 0.70 { EngineStartupSystemPhase::Ready } else { EngineStartupSystemPhase::Waiting },
+                if phase == EngineStartupPhase::ModuleInit { "INIT" } else if progress_01 >= 0.70 { "READY" } else { "WAIT" },
+                current_module
+                    .as_ref()
+                    .map(|m| format!("Processing module '{m}' ({module_index}/{module_total})."))
+                    .unwrap_or_else(|| format!("{} module slot(s) registered.", self.modules.len())),
+                (module_total > 0).then_some((module_index as f32 / module_total as f32).clamp(0.0, 1.0)),
+            ),
+            EngineStartupSystemStatus::new(
+                "plugins",
+                "PLUGINS",
+                if matches!(phase, EngineStartupPhase::RuntimePlugins | EngineStartupPhase::PluginStart) { EngineStartupSystemPhase::Running } else if progress_01 >= 0.88 { EngineStartupSystemPhase::Ready } else { EngineStartupSystemPhase::Waiting },
+                if matches!(phase, EngineStartupPhase::RuntimePlugins | EngineStartupPhase::PluginStart) { "LOAD" } else if progress_01 >= 0.88 { "READY" } else { "WAIT" },
+                format!("{} plugin descriptor(s) known to the host.", self.plugins.snapshot().len()),
+                Some(if progress_01 >= 0.88 { 1.0 } else { progress_01 }),
+            ),
+            EngineStartupSystemStatus::new(
+                "readiness",
+                "READINESS",
+                if phase == EngineStartupPhase::ReadinessEvents { EngineStartupSystemPhase::Running } else if progress_01 >= 0.94 { EngineStartupSystemPhase::Ready } else { EngineStartupSystemPhase::Waiting },
+                if phase == EngineStartupPhase::ReadinessEvents { "EVENTS" } else if progress_01 >= 0.94 { "READY" } else { "WAIT" },
+                "Startup graph readiness facts are being collected and dispatched.",
+                Some(if progress_01 >= 0.94 { 1.0 } else { progress_01 }),
+            ),
+            EngineStartupSystemStatus::new(
+                "diagnostics",
+                "DIAGNOSTICS",
+                EngineStartupSystemPhase::Running,
+                phase.human_label(),
+                format!("phase='{}' run_state='{}'", phase.as_str(), self.run_state().as_str()),
+                Some(progress_01),
+            ),
+        ];
+
+        EngineStartupSnapshot::running(
+            phase,
+            self.run_state().as_str(),
+            status,
+            detail,
+            progress_01,
+            current_module,
+            module_index,
+            module_total,
+            self.plugins.snapshot().len(),
+            systems,
+        )
+    }
+
+    fn publish_startup_snapshot(&mut self, snapshot: EngineStartupSnapshot) {
+        self.resources.insert(snapshot.clone());
+        self.startup_snapshot = snapshot;
+    }
+
+    fn fail_incremental_startup(
+        &mut self,
+        phase: EngineStartupPhase,
+        status: impl Into<String>,
+        detail: impl Into<String>,
+        progress_01: f32,
+        current_module: Option<String>,
+        err: EngineError,
+    ) -> EngineResult<EngineStartupStepOutcome> {
+        if !self.run_state().is_terminal() {
+            self.set_run_state(EngineRunState::Faulted);
+        }
+        let error = err.to_string();
+        let module_index = self.incremental_startup.as_ref().map(|s| s.index).unwrap_or(0);
+        let module_total = self.modules.len();
+        let snapshot = EngineStartupSnapshot::failed(
+            phase,
+            self.run_state().as_str(),
+            status,
+            detail,
+            progress_01,
+            current_module,
+            module_index,
+            module_total,
+            self.plugins.snapshot().len(),
+            error,
+        );
+        self.publish_startup_snapshot(snapshot);
+        Err(err)
+    }
+
+    #[inline]
+    fn set_incremental_phase(&mut self, phase: EngineStartupStepPhase) {
+        if let Some(state) = &mut self.incremental_startup {
+            state.phase = phase;
+        }
+    }
+
+    fn shutdown_initialized_modules(&mut self, initialized: usize) {
+        let end = initialized.min(self.modules.len());
+        for i in (0..end).rev() {
+            self.shutdown_slot_by_index(i);
+        }
     }
 
     #[inline]
@@ -147,22 +591,6 @@ impl<E: Send + 'static> Engine<E> {
     #[inline]
     fn enter_game_init(&mut self) {
         self.set_run_state(EngineRunState::InitGame);
-    }
-
-    fn complete_startup(&mut self, origin: &'static str) -> EngineResult<()> {
-        self.refresh_readiness_snapshot();
-        self.log_startup_graph_snapshot("after-init");
-        self.start_modules_ready_by_graph("initial")?;
-
-        if !self.plugins_loaded && !self.engine_plugins_loaded {
-            self.try_load_plugins_once()?;
-        }
-        self.log_plugins_diagnostics("after module init");
-        self.plugins_start_all()?;
-        self.dispatch_startup_readiness_events(origin)?;
-        self.set_run_state(EngineRunState::Running);
-
-        Ok(())
     }
 
     #[inline]
@@ -191,7 +619,10 @@ impl<E: Send + 'static> Engine<E> {
         Ok(())
     }
 
-    pub(crate) fn start_modules_ready_by_graph(&mut self, origin: &'static str) -> EngineResult<usize> {
+    pub(crate) fn start_modules_ready_by_graph(
+        &mut self,
+        origin: &'static str,
+    ) -> EngineResult<usize> {
         let mut activated_count = 0usize;
 
         for i in 0..self.modules.len() {
@@ -297,21 +728,4 @@ impl<E: Send + 'static> Engine<E> {
         self.modules[index].state = ModuleState::Disabled;
     }
 
-    #[inline]
-    fn shutdown_slot(&mut self, s: &mut ModuleSlot<E>) {
-        if s.shutdown_called {
-            return;
-        }
-        let mut ctx = ModuleCtx::new(
-            self.services.as_ref(),
-            &mut self.resources,
-            &self.bus,
-            &self.events,
-            &mut self.scheduler,
-            self.shutdown.clone(),
-        );
-        let _ = s.module.shutdown(&mut ctx);
-        s.shutdown_called = true;
-        s.state = ModuleState::Disabled;
-    }
 }

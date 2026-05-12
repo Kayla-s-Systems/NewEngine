@@ -1,6 +1,9 @@
 use newengine_render_api::{Extent2D, RenderTargetId, TextureFormat};
 
-use crate::{DrawListDesc, FrameGraphBuilder, FrameGraphTargetDesc, FramePlanExecutionMode, RenderFramePlan};
+use crate::{
+    DrawListDesc, FrameGraphBuilder, FrameGraphTargetDesc, FramePlanExecutionMode,
+    RenderFramePlan, RenderFrameRecipe, RuntimeFrameFeatureSet, RuntimeRecipeBuildParams,
+};
 
 #[derive(Debug, Clone)]
 pub struct StandardRuntimePipelineDesc {
@@ -110,14 +113,27 @@ pub fn standard_runtime_frame(desc: StandardRuntimePipelineDesc) -> RenderFrameP
     target.viewport_render_target = desc.viewport_render_target;
     target.shadow_render_target = desc.shadow_render_target;
 
-    FrameGraphBuilder::new("runtime.standard_frame", desc.frame_index, target)
+    let features = if desc.deferred {
+        RuntimeFrameFeatureSet::deferred(
+            desc.shadow_enabled,
+            desc.postfx_enabled,
+            desc.ui_enabled,
+            desc.debug_overlay_enabled,
+        )
+    } else {
+        RuntimeFrameFeatureSet::forward(
+            desc.shadow_enabled,
+            desc.postfx_enabled,
+            desc.ui_enabled,
+            desc.debug_overlay_enabled,
+        )
+    };
+    let recipe = RenderFrameRecipe::standard_runtime(features);
+    let label = recipe.label.clone();
+
+    FrameGraphBuilder::new(label, desc.frame_index, target)
         .execution_mode(desc.execution_mode)
         .draw_lists(desc.draw_lists)
-        .shadow_map(desc.shadow_enabled, desc.shadow_resolution)
-        .viewport_gbuffer_or_forward(desc.deferred)
-        .lighting(desc.deferred)
-        .postfx(desc.postfx_enabled)
-        .ui_composite(desc.ui_enabled)
-        .debug_overlay(desc.debug_overlay_enabled)
+        .apply_runtime_recipe(&recipe, RuntimeRecipeBuildParams::new(desc.shadow_resolution))
         .submit()
 }

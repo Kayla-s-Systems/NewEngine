@@ -12,5 +12,6 @@ pub(super) use grid::ensure_grid;
 pub(super) use lit::ensure_lit_pipeline;
 pub(super) use types::LIT_UBO_SIZE;
 pub(super) use primitives::{ensure_primitive_gpu, upload_primitive_mesh};
+#[allow(unused_imports)]
 pub(super) use shader_assets::load_rgba_texture_asset;
 pub(super) use types::{DebugLineGpu, GridGpu, GridMeshParams, LitPipeline, PrimitiveGpu};

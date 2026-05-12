@@ -178,44 +178,47 @@ fn material_texture_ready_state(
     match entry {
         MaterialTextureGpuResidency::Ready { .. } => TextureReadyState::Ready,
         MaterialTextureGpuResidency::Failed { .. } => TextureReadyState::Failed,
-        MaterialTextureGpuResidency::Requested => TextureReadyState::Waiting,
-        MaterialTextureGpuResidency::Loading { texture, .. } => match r.texture_residency(texture) {
-            Ok(snapshot) if snapshot.state == GpuResourceResidencyState::Ready => {
-                this.material_textures.insert(
-                    path.to_owned(),
-                    MaterialTextureGpuResidency::Ready { texture },
-                );
-                TextureReadyState::Ready
+        MaterialTextureGpuResidency::Requested
+        | MaterialTextureGpuResidency::AssetLoading { .. } => TextureReadyState::Waiting,
+        MaterialTextureGpuResidency::GpuLoading { texture, .. } => {
+            match r.texture_residency(texture) {
+                Ok(snapshot) if snapshot.state == GpuResourceResidencyState::Ready => {
+                    this.material_textures.insert(
+                        path.to_owned(),
+                        MaterialTextureGpuResidency::Ready { texture },
+                    );
+                    TextureReadyState::Ready
+                }
+                Ok(snapshot) if snapshot.state == GpuResourceResidencyState::Failed => {
+                    let message = snapshot
+                        .message
+                        .unwrap_or_else(|| "gpu upload failed".to_owned());
+                    log::warn!(
+                        "game-ready launch gate: material texture failed path='{}' err='{}'",
+                        path,
+                        message
+                    );
+                    this.material_textures.insert(
+                        path.to_owned(),
+                        MaterialTextureGpuResidency::Failed { message },
+                    );
+                    TextureReadyState::Failed
+                }
+                Err(e) => {
+                    let message = e.to_string();
+                    log::warn!(
+                        "game-ready launch gate: material texture residency query failed path='{}' err='{}'",
+                        path,
+                        message
+                    );
+                    this.material_textures.insert(
+                        path.to_owned(),
+                        MaterialTextureGpuResidency::Failed { message },
+                    );
+                    TextureReadyState::Failed
+                }
+                _ => TextureReadyState::Waiting,
             }
-            Ok(snapshot) if snapshot.state == GpuResourceResidencyState::Failed => {
-                let message = snapshot
-                    .message
-                    .unwrap_or_else(|| "gpu upload failed".to_owned());
-                log::warn!(
-                    "game-ready launch gate: material texture failed path='{}' err='{}'",
-                    path,
-                    message
-                );
-                this.material_textures.insert(
-                    path.to_owned(),
-                    MaterialTextureGpuResidency::Failed { message },
-                );
-                TextureReadyState::Failed
-            }
-            Err(e) => {
-                let message = e.to_string();
-                log::warn!(
-                    "game-ready launch gate: material texture residency query failed path='{}' err='{}'",
-                    path,
-                    message
-                );
-                this.material_textures.insert(
-                    path.to_owned(),
-                    MaterialTextureGpuResidency::Failed { message },
-                );
-                TextureReadyState::Failed
-            }
-            _ => TextureReadyState::Waiting,
-        },
+        }
     }
 }
