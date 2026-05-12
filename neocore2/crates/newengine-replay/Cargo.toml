@@ -1,0 +1,8 @@
+[package]
+name = "newengine-replay"
+version = "0.1.0"
+edition = "2021"
+description = "FSM-backed deterministic replay coordination contracts for NewEngine"
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }

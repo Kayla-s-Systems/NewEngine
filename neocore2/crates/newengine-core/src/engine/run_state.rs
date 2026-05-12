@@ -68,7 +68,6 @@ pub struct EngineFsmTransition {
 #[derive(Debug, Clone)]
 pub struct EngineFsm {
     state: EngineRunState,
-    shutdown_requested: bool,
 }
 
 impl Default for EngineFsm {
@@ -83,7 +82,6 @@ impl EngineFsm {
     pub const fn new() -> Self {
         Self {
             state: EngineRunState::Created,
-            shutdown_requested: false,
         }
     }
 
@@ -94,17 +92,16 @@ impl EngineFsm {
 
     #[inline]
     pub const fn is_shutdown_requested(&self) -> bool {
-        self.shutdown_requested
+        self.state.is_shutting_down() || self.state.is_terminal()
     }
 
     #[inline]
     pub const fn can_run_frame(&self) -> bool {
-        matches!(self.state, EngineRunState::Running) && !self.shutdown_requested
+        matches!(self.state, EngineRunState::Running)
     }
 
     #[inline]
     pub fn request_shutdown(&mut self) -> EngineFsmTransition {
-        self.shutdown_requested = true;
         if self.state.is_shutting_down() || self.state.is_terminal() {
             return EngineFsmTransition {
                 previous: self.state,
@@ -144,9 +141,6 @@ impl EngineFsm {
 
         let valid = is_valid_transition(previous, next);
         self.state = if valid { next } else { EngineRunState::Faulted };
-        if matches!(self.state, EngineRunState::ShutdownGame | EngineRunState::ShutdownSystem | EngineRunState::Stopped) {
-            self.shutdown_requested = true;
-        }
 
         EngineFsmTransition {
             previous,

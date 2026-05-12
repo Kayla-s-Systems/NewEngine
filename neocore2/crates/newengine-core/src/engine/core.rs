@@ -69,6 +69,7 @@ impl<E: Send + 'static> Engine<E> {
     pub(super) fn set_run_state(&mut self, next: EngineRunState) {
         let transition = self.fsm.transition(next);
         self.log_fsm_transition(transition);
+        self.propagate_shutdown_request();
     }
 
     #[inline]

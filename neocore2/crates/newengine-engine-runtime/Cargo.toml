@@ -35,6 +35,7 @@ newengine-platform-api = { path = "../newengine-platform-api" }
 newengine-plugin-api = { path = "../newengine-plugin-api" }
 newengine-plugin-host = { path = "../newengine-plugin-host" }
 newengine-previews = { path = "../newengine-previews" }
+newengine-replay = { path = "../newengine-replay" }
 newengine-primitives = { path = "../newengine-primitives" }
 newengine-procedural-noise = { path = "../newengine-procedural-noise" }
 newengine-runtime-host = { path = "../newengine-runtime-host" }

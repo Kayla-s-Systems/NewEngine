@@ -13,6 +13,9 @@ pub mod render_controller;
 pub mod render_runtime {
     pub use newengine_runtime_host::render_runtime::*;
 }
+pub mod replay {
+    pub use newengine_replay::*;
+}
 mod scene_bootstrap;
 pub mod scene_bridge;
 pub mod viewport_bridge;
