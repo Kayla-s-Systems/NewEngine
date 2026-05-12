@@ -60,13 +60,13 @@ Disable runtime shader cache with:
 NEWENGINE_SHADER_RUNTIME_CACHE=off
 ```
 
-Force runtime glslc compilation instead of prebaked lookup with:
+Force runtime glslc compilation instead of legacy embedded lookup with:
 
 ```text
 NEWENGINE_SHADER_BAKE_MODE=runtime
 ```
 
-Use strict runtime mode to fail instead of falling back to prebaked shaders:
+Use strict runtime mode to fail instead of falling back to legacy embedded shaders:
 
 ```text
 NEWENGINE_SHADER_BAKE_MODE=strict-runtime

@@ -281,8 +281,18 @@ impl RuntimeRenderController {
                     fallback
                 }
             },
-            MaterialTextureGpuResidency::Requested
-            | MaterialTextureGpuResidency::AssetLoading { .. } => fallback,
+            MaterialTextureGpuResidency::Requested => fallback,
+            MaterialTextureGpuResidency::AssetLoading { requested_frame, .. } => {
+                let waited = self.frame_index.saturating_sub(requested_frame);
+                if waited > 180 && waited % 120 == 0 {
+                    log::debug!(
+                        "render controller: material texture still asset-loading path='{}' waited_frames={}",
+                        path,
+                        waited,
+                    );
+                }
+                fallback
+            }
             MaterialTextureGpuResidency::Failed { message } => {
                 let _ = message;
                 fallback

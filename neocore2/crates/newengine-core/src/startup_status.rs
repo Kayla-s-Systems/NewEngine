@@ -263,6 +263,26 @@ pub enum EngineStartupStepPhase {
     Complete,
 }
 
+impl EngineStartupStepPhase {
+    #[inline]
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Idle => "idle",
+            Self::EnterSystemInit => "enter-system-init",
+            Self::ValidateApiContracts => "validate-api-contracts",
+            Self::EnterGameInit => "enter-game-init",
+            Self::PrepareModuleOrder => "prepare-module-order",
+            Self::InitModules => "init-modules",
+            Self::StartupGraphInitial => "startup-graph-initial",
+            Self::LoadRuntimePlugins => "load-runtime-plugins",
+            Self::StartPlugins => "start-plugins",
+            Self::DispatchReadiness => "dispatch-readiness",
+            Self::EnterRunning => "enter-running",
+            Self::Complete => "complete",
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct EngineIncrementalStartupState {
     pub phase: EngineStartupStepPhase,

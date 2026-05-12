@@ -229,7 +229,7 @@
     {
       "id": "tree_animate",
       "source": "prefabs/tree_animate/tree_animate.prefab.json",
-      "proxy": "primitive_tree_cluster",
+      "proxy": "runtime_gltf_mesh",
       "enabled": true
     }
   ]

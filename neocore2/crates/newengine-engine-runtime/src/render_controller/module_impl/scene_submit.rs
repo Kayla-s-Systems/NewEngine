@@ -49,7 +49,8 @@ impl RuntimeRenderController {
             }
         };
 
-        let base_lights = lights::collect_lights(scene.world());
+        let camera_position = [rig.position.x, rig.position.y, rig.position.z];
+        let base_lights = lights::collect_lights(scene.world()).with_camera_position(camera_position);
         let extent = Extent2D::new(scope.vp_w, scope.vp_h);
         let shadow_plan = match shadows::build_light_shadow_plan(
             self,
@@ -58,11 +59,7 @@ impl RuntimeRenderController {
             bounds,
             lit,
             viewproj,
-            [
-                rig.position.x,
-                rig.position.y,
-                rig.position.z,
-            ],
+            camera_position,
             extent,
             Extent2D::new(scope.w, scope.h),
             plugin_snapshot,

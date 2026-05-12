@@ -1,7 +1,7 @@
 use newengine_core::render::*;
 use newengine_core::EngineResult as CoreResult;
 
-use super::shader_assets::{compile_glsl, BUILTIN_DEBUG_LINES_FRAG, BUILTIN_DEBUG_LINES_VERT};
+use super::shader_assets::{compile_glsl, load_text_asset};
 use super::types::{DebugLineGpu, DEBUG_LINE_UBO_SIZE};
 
 pub fn ensure_debug_line_pipeline(
@@ -25,8 +25,10 @@ pub fn ensure_debug_line_pipeline(
 
     let capacity_vertices = min_vertices.max(256).next_power_of_two();
 
-    let vs_spv = compile_glsl(ShaderStage::Vertex, "editor_debug_lines.vert", BUILTIN_DEBUG_LINES_VERT)?;
-    let fs_spv = compile_glsl(ShaderStage::Fragment, "editor_debug_lines.frag", BUILTIN_DEBUG_LINES_FRAG)?;
+    let vs_src = load_text_asset("shaders/editor_debug_lines.vert")?;
+    let fs_src = load_text_asset("shaders/editor_debug_lines.frag")?;
+    let vs_spv = compile_glsl(ShaderStage::Vertex, "editor_debug_lines.vert", &vs_src)?;
+    let fs_spv = compile_glsl(ShaderStage::Fragment, "editor_debug_lines.frag", &fs_src)?;
 
     let vs = r.create_shader(
         ShaderDesc::new(ShaderStage::Vertex, "main", vs_spv).with_label("editor_debug_lines_vs"),

@@ -6,16 +6,16 @@ Runtime logs reported an active directional shadow plan and a valid shadow rende
 
 ## Root cause
 
-The shader compiler prebaked table aliased the current shadowed runtime shaders to the old compact textured fallback:
+The shader compiler legacy embedded table aliased the current shadowed runtime shaders to the old compact textured fallback:
 
-- `editor_lit_shadowed_v3.vert/frag` -> `PREBAKED_EDITOR_LIT_TEXTURED_*`
-- `editor_shadow_depth_v1.vert/frag` -> `PREBAKED_EDITOR_LIT_TEXTURED_*`
+- `editor_lit_shadowed_v3.vert/frag` -> `REMOVED_EMBEDDED_EDITOR_LIT_TEXTURED_*`
+- `editor_shadow_depth_v1.vert/frag` -> `REMOVED_EMBEDDED_EDITOR_LIT_TEXTURED_*`
 
 That fallback is safe for legacy textured rendering, but it ignores runtime shadow sampling and is depth-incorrect for the shadow pass. The engine therefore showed `shadow_map` in diagnostics while the actual SPIR-V path was effectively unshadowed.
 
 ## Fix
 
-The current shadowed runtime shaders are no longer allowed to silently use the legacy prebaked fallback. They now compile from GLSL/runtime cache. If `glslc`/Vulkan SDK is unavailable, the renderer must fail loudly instead of pretending that shadows are active.
+The current shadowed runtime shaders are no longer allowed to silently use the legacy legacy embedded fallback. They now compile from GLSL/runtime cache. If `glslc`/Vulkan SDK is unavailable, the renderer must fail loudly instead of pretending that shadows are active.
 
 The GLSL shadow sampling path was also hardened:
 

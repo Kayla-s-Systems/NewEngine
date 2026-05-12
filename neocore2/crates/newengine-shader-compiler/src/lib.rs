@@ -8,7 +8,6 @@ use std::path::PathBuf;
 use std::process::Command;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-mod prebaked;
 
 #[derive(Debug)]
 pub struct ShaderCompileError {
@@ -49,12 +48,6 @@ pub fn compile_glsl_to_spirv(
         return Err(ShaderCompileError::new(format!(
             "glslc adapter currently supports only entry='main', got entry='{entry}' shader='{logical_name}'"
         )));
-    }
-
-    if shader_bake_mode_allows_prebaked() {
-        if let Some(words) = prebaked::lookup(stage, logical_name, entry) {
-            return Ok(words);
-        }
     }
 
     let cache_key = shader_cache_key(stage, logical_name, entry, source);
@@ -103,13 +96,6 @@ pub fn compile_glsl_to_spirv(
     {
         Ok(output) => output,
         Err(e) => {
-            if shader_bake_mode_allows_error_fallback() {
-                if let Some(words) = prebaked::lookup(stage, logical_name, entry) {
-                    let _ = std::fs::remove_file(&source_path);
-                    let _ = std::fs::remove_file(&spv_path);
-                    return Ok(words);
-                }
-            }
             return Err(ShaderCompileError::new(format!(
                 "failed to execute glslc='{}' shader='{logical_name}' err='{e}'. Set NEWENGINE_GLSLC to a valid glslc executable or install Vulkan SDK.",
                 display_command(&glslc)
@@ -122,11 +108,6 @@ pub fn compile_glsl_to_spirv(
         let stderr = String::from_utf8_lossy(&output.stderr);
         let _ = std::fs::remove_file(&source_path);
         let _ = std::fs::remove_file(&spv_path);
-        if shader_bake_mode_allows_error_fallback() {
-            if let Some(words) = prebaked::lookup(stage, logical_name, entry) {
-                return Ok(words);
-            }
-        }
         return Err(ShaderCompileError::new(format!(
             "glslc failed shader='{logical_name}' status='{}' stdout='{}' stderr='{}'",
             output.status,
@@ -159,21 +140,6 @@ pub fn compile_glsl_to_spirv(
     }
 
     Ok(words)
-}
-
-#[inline]
-fn shader_bake_mode_allows_prebaked() -> bool {
-    match std::env::var("NEWENGINE_SHADER_BAKE_MODE") {
-        Ok(v) if v.eq_ignore_ascii_case("runtime") || v.eq_ignore_ascii_case("glslc") => false,
-        _ => true,
-    }
-}
-
-fn shader_bake_mode_allows_error_fallback() -> bool {
-    match std::env::var("NEWENGINE_SHADER_BAKE_MODE") {
-        Ok(v) if v.eq_ignore_ascii_case("strict-runtime") || v.eq_ignore_ascii_case("strict-glslc") => false,
-        _ => true,
-    }
 }
 
 fn shader_runtime_cache_enabled() -> bool {

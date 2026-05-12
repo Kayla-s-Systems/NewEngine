@@ -228,7 +228,7 @@ fn default_foliage_max_scale() -> f32 { 1.35 }
 fn default_foliage_min_player_distance() -> f32 { 5.0 }
 fn default_foliage_edge_margin() -> f32 { 4.0 }
 fn default_foliage_surface_offset() -> f32 { 0.03 }
-fn default_prefab_proxy() -> String { "primitive_tree_cluster".to_owned() }
+fn default_prefab_proxy() -> String { "runtime_gltf_mesh".to_owned() }
 fn default_prefab_enabled() -> bool { true }
 fn default_terrain_material() -> RawMaterialSpec {
     RawMaterialSpec {

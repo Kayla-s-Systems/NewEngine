@@ -100,21 +100,8 @@ struct RawPrefabSpec {
 }
 
 pub(super) fn load_game_ready_map_profile() -> GameReadyMapProfile {
-    for path in profile_file_candidates() {
-        match load_profile_file(&path) {
-            Ok(profile) => {
-                log::info!(
-                    "game-ready: loaded standalone scene profile path='{}'",
-                    path.display(),
-                );
-                return profile;
-            }
-            Err(e) => log::debug!(
-                "game-ready: standalone scene profile unavailable path='{}' err='{}'",
-                path.display(),
-                e,
-            ),
-        }
+    if let Some(profile) = load_profile_from_asset_manager() {
+        return profile;
     }
 
     for dir in plugin_dir_candidates() {
@@ -149,13 +136,71 @@ pub(super) fn load_game_ready_map_profile() -> GameReadyMapProfile {
         }
     }
 
-    log::warn!("game-ready: using built-in fallback scene profile; plugin content catalog not found");
+    log::warn!("game-ready: using code default scene profile; AssetManager profile and plugin content catalog not found");
     fallback_game_ready_map_profile()
 }
 
-fn load_profile_file(path: &std::path::Path) -> Result<GameReadyMapProfile, String> {
-    let bytes = std::fs::read(path).map_err(|e| format!("read failed: {e}"))?;
-    let value: serde_json::Value = serde_json::from_slice(&bytes)
+fn load_profile_from_asset_manager() -> Option<GameReadyMapProfile> {
+    use newengine_assets::AssetService;
+
+    if !newengine_plugin_host::has_service(newengine_assets::consts::ASSET_SERVICE_ID) {
+        log::debug!(
+            "game-ready: AssetManager service '{}' unavailable while resolving scene profile",
+            newengine_assets::consts::ASSET_SERVICE_ID
+        );
+        return None;
+    }
+
+    let assets = newengine_assets::AssetServiceClient::new(newengine_plugin_host::default_host_api());
+    let roots = newengine_runtime_host::asset_bootstrap::collect_app_asset_roots(
+        GAME_READY_APP_DIR,
+        "NEWENGINE_GAME_ASSETS_DIR",
+    );
+    newengine_runtime_host::asset_bootstrap::mount_asset_roots_best_effort(&assets, &roots);
+
+    for logical_path in profile_asset_candidates() {
+        match load_profile_asset(&assets, &logical_path) {
+            Ok(profile) => {
+                log::info!(
+                    "game-ready: loaded standalone scene profile asset='{}'",
+                    logical_path,
+                );
+                return Some(profile);
+            }
+            Err(e) => {
+                let trace = assets
+                    .resolve_trace_json(&logical_path)
+                    .map(|v| v.to_string())
+                    .unwrap_or_else(|te| format!("{{\"trace_error\":\"{te}\"}}"));
+                log::debug!(
+                    "game-ready: scene profile asset unavailable path='{}' err='{}' trace={}",
+                    logical_path,
+                    e,
+                    trace
+                );
+            }
+        }
+    }
+
+    None
+}
+
+fn load_profile_asset(
+    assets: &newengine_assets::AssetServiceClient,
+    logical_path: &str,
+) -> Result<GameReadyMapProfile, String> {
+    use newengine_assets::{wait_ready, AssetAccess};
+
+    let id = assets
+        .load(logical_path)
+        .map_err(|e| format!("asset.load failed: {e}"))?;
+    wait_ready(assets, &id, std::time::Duration::from_secs(2))
+        .map_err(|e| format!("asset wait failed id='{id}' err='{e:?}'"))?;
+    let (_meta, payload) = assets
+        .blob_wire_v1(&id)
+        .map_err(|e| format!("asset.blob_wire_v1 failed id='{id}' err='{e}'"))?;
+
+    let value: serde_json::Value = serde_json::from_slice(&payload)
         .map_err(|e| format!("json parse failed: {e}"))?;
 
     if let Some(scene) = value.get("scene").cloned() {

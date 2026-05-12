@@ -15,6 +15,8 @@ pub mod method {
     pub const INFO_JSON: &str = "asset.info_json";
     pub const STATE_JSON: &str = "asset.state_json";
     pub const BLOB_WIRE_V1: &str = "asset.blob_wire_v1";
+    /// Raw VFS bytes by logical path. This bypasses importers but still resolves exclusively through AssetManager mounts.
+    pub const RAW_BYTES_V1: &str = "asset.raw_bytes_v1";
 
     // Fast-path / batch APIs.
     pub const PRELOAD_MANY_V1: &str = "asset.preload_many_v1";

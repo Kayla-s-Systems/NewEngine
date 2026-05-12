@@ -88,6 +88,18 @@ impl PackedLights {
         out
     }
 
+    /// Store the active camera world position in std140 padding already reserved
+    /// by `u_point_count_pad.yzw`. This avoids expanding the stable lit UBO ABI
+    /// while giving PBR shaders the real view vector instead of the old
+    /// origin-based approximation.
+    #[inline]
+    pub(super) fn with_camera_position(mut self, camera_position: [f32; 3]) -> Self {
+        self.point_count_pad[1] = camera_position[0];
+        self.point_count_pad[2] = camera_position[1];
+        self.point_count_pad[3] = camera_position[2];
+        self
+    }
+
     #[inline]
     pub(super) fn with_shadow(mut self, light_mvp: Mat4, params: [f32; 4]) -> Self {
         self.shadow_light_mvp = light_mvp;

@@ -260,7 +260,7 @@ pub(super) fn bootstrap_fps_game_ready_scene(
     spawn_terrain_collision_tiles(world, root, terrain, &map.terrain);
     spawn_foliage_prefabs(
         world,
-        &*prims,
+        prims,
         mats,
         root,
         terrain,

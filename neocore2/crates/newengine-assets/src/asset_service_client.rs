@@ -185,6 +185,18 @@ impl AssetServiceClient {
         }
         Ok(())
     }
+
+    /// Read raw bytes from the AssetManager VFS by logical path.
+    ///
+    /// This intentionally bypasses importers, but it does not bypass AssetManager: resolution
+    /// still goes through the mounted VFS layers (.pak, filesystem, future remote sources).
+    #[inline]
+    pub fn raw_bytes_v1(&self, logical_path: &str) -> Result<Vec<u8>, String> {
+        self.call_raw(
+            MethodName::from(method::RAW_BYTES_V1),
+            logical_path.as_bytes().to_vec(),
+        )
+    }
 }
 
 impl AssetAccess for AssetServiceClient {

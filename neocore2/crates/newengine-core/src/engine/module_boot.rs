@@ -356,6 +356,7 @@ impl<E: Send + 'static> Engine<E> {
             );
             self.publish_startup_snapshot(before);
 
+            let init_started = std::time::Instant::now();
             let init_result = {
                 let mut ctx = ModuleCtx::new(
                     self.services.as_ref(),
@@ -367,9 +368,17 @@ impl<E: Send + 'static> Engine<E> {
                 );
                 self.modules[index].module.init(&mut ctx)
             };
+            let init_ms = init_started.elapsed().as_millis();
 
             match init_result {
                 Ok(()) => {
+                    log::info!(
+                        "startup fsm: module init complete module='{}' index={} total={} elapsed_ms={}",
+                        module_id,
+                        index + 1,
+                        total,
+                        init_ms
+                    );
                     if let Some(state) = &mut self.incremental_startup {
                         state.initialized = state.initialized.saturating_add(1);
                         state.index = index + 1;
@@ -392,6 +401,14 @@ impl<E: Send + 'static> Engine<E> {
                 }
                 Err(err) => match self.module_fault_tolerance {
                     ModuleFaultTolerance::Strict => {
+                        log::error!(
+                            "startup fsm: module init failed module='{}' index={} total={} elapsed_ms={} tolerance=strict err='{}'",
+                            module_id,
+                            index + 1,
+                            total,
+                            init_ms,
+                            err
+                        );
                         let initialized = self
                             .incremental_startup
                             .as_ref()
@@ -409,7 +426,14 @@ impl<E: Send + 'static> Engine<E> {
                     }
                     ModuleFaultTolerance::Resilient => {
                         let reason = format!("init failed: {err}");
-                        log::error!("engine: module init failed: {} ({})", module_id, reason);
+                        log::error!(
+                            "startup fsm: module init failed module='{}' index={} total={} elapsed_ms={} tolerance=resilient err='{}'",
+                            module_id,
+                            index + 1,
+                            total,
+                            init_ms,
+                            err
+                        );
                         self.modules[index].disable(reason.clone());
                         self.shutdown_slot_by_index(index);
                         index += 1;
@@ -543,6 +567,15 @@ impl<E: Send + 'static> Engine<E> {
             self.set_run_state(EngineRunState::Faulted);
         }
         let error = err.to_string();
+        let current_module_for_log = current_module.as_deref().unwrap_or("-");
+        log::error!(
+            "startup fsm: failed phase='{}' run_state='{}' module='{}' progress={:.2} err='{}'",
+            phase.as_str(),
+            self.run_state().as_str(),
+            current_module_for_log,
+            progress_01,
+            error
+        );
         let module_index = self.incremental_startup.as_ref().map(|s| s.index).unwrap_or(0);
         let module_total = self.modules.len();
         let snapshot = EngineStartupSnapshot::failed(
@@ -563,6 +596,22 @@ impl<E: Send + 'static> Engine<E> {
 
     #[inline]
     fn set_incremental_phase(&mut self, phase: EngineStartupStepPhase) {
+        let Some(previous_state) = self.incremental_startup.as_ref() else {
+            return;
+        };
+        let previous = previous_state.phase;
+        let initialized = previous_state.initialized;
+        if previous != phase {
+            log::debug!(
+                "startup fsm: phase {} -> {} run_state='{}' modules={}/{} plugins={}",
+                previous.as_str(),
+                phase.as_str(),
+                self.run_state().as_str(),
+                initialized,
+                self.modules.len(),
+                self.plugins.snapshot().len()
+            );
+        }
         if let Some(state) = &mut self.incremental_startup {
             state.phase = phase;
         }

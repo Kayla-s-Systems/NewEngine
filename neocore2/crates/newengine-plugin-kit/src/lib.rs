@@ -44,7 +44,7 @@ macro_rules! export_newengine_plugin_root {
 /// ```ignore
 /// use newengine_plugin_kit::prelude::*;
 /// use crate::module::AssetsPlugin;
-/// static PLUGIN_ICON_PNG: &[u8] = include_bytes!("../assets/plugin_icon.png");
+/// // Icons should be exposed as AssetManager logical paths, not embedded binary payloads.
 /// export_newengine_plugin!(module = AssetsPlugin::default(), icon_png = PLUGIN_ICON_PNG);
 /// ```
 #[macro_export]
@@ -84,7 +84,7 @@ macro_rules! export_newengine_plugin {
     };
 
     (@ui_assets $icon:path) => {
-        $crate::plugin_api::PluginUiAssetsV1::icon_png($icon)
+        $crate::plugin_api::PluginUiAssetsV1::empty()
     };
 
     (@ui_assets) => {

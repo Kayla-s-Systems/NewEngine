@@ -114,7 +114,7 @@ fn main_impl() -> EngineResult<()> {
         mount_asset_roots_best_effort(&assets, &asset_roots);
     } else {
         log::info!(
-            "editor launcher: AssetManager service '{}' is not available during bootstrap/platform init; using filesystem fallback for early assets",
+            "editor launcher: AssetManager service '{}' is not available during bootstrap/platform init; early visual assets are skipped and will be requested through AssetManager after services are live",
             newengine_assets::consts::ASSET_SERVICE_ID
         );
     }

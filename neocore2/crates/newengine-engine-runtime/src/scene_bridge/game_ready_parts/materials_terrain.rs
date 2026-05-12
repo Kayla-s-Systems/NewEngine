@@ -9,9 +9,9 @@ use newengine_materials::{
     material_source_from_parts, parse_material_source_slice, MaterialDescriptor, MaterialFlags,
     MaterialId, MaterialRegistry, MaterialSourceDocument, MaterialTextureBindings,
 };
-use newengine_math::{EulerRot, Quat, Vec3};
+use newengine_math::{EulerRot, Mat4, Quat, Vec3};
 use newengine_primitives::{
-    builtins, fnv1a_64, Primitive, PrimitiveId, PrimitiveMesh, PrimitiveRegistry, PrimitiveVertex,
+    fnv1a_64, Primitive, PrimitiveId, PrimitiveMesh, PrimitiveRegistry, PrimitiveVertex,
 };
 use newengine_procedural_noise::{
     NoiseAlgorithm, NoiseCombineMode, NoiseGraph2D, NoiseLayer2D, NoiseShape, ProceduralTerrain,
@@ -269,7 +269,21 @@ fn configure_game_ready_lighting(world: &mut newengine_ecs::World, spec: &GameRe
         if let Some(light) = world.get_mut_tracked::<DirectionalLight>(sun_entity) {
             *light = sun;
         }
+    } else {
+        let sun_entity = spawn_named(world, "Sun");
+        let _ = world.insert(sun_entity, sun);
     }
+
+    log::info!(
+        "game-ready lighting: ambient={:?} ambient_intensity={:.3} sun_dir={:?} sun_color={:?} sun_intensity={:.3} shadows={} shadow_strength={:.3}",
+        ambient.color,
+        ambient.intensity,
+        sun.direction_ws,
+        sun.color,
+        sun.intensity,
+        spec.shadows.enabled,
+        spec.shadows.contact_strength,
+    );
 
     world.insert_resource(ShadowSettings {
         enabled: spec.shadows.enabled,

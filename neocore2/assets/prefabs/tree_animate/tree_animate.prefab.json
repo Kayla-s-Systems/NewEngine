@@ -32,5 +32,5 @@
       "alpha_mode": "MASK"
     }
   ],
-  "runtime_note": "Current standalone demo uses a declarative proxy/training composition. The original GLTF asset is staged here for future mesh-import/runtime work."
+  "runtime_note": "Runtime foliage must instantiate logical_asset through AssetManager raw VFS + GLTF mesh decoder. Primitive proxy fallback is not used."
 }

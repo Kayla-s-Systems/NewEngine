@@ -156,11 +156,12 @@ void main() {
     float metallic = clamp(ubo.u_material_params.z, 0.0, 1.0);
     float occlusion = clamp(ubo.u_material_params.w, 0.0, 1.0);
 
-    // Until camera position is part of the lit UBO, use a stable approximate view vector.
-    vec3 V = normalize(-v_wpos);
-    if (dot(V, V) <= 1.0e-6) {
-        V = vec3(0.0, 0.0, 1.0);
-    }
+    // `u_point_count_pad.yzw` carries the active camera world position.
+    // It reuses std140 padding so the lit UBO size stays ABI-stable.
+    vec3 camera_pos = ubo.u_point_count_pad.yzw;
+    vec3 view_vec = camera_pos - v_wpos;
+    float view_len2 = dot(view_vec, view_vec);
+    vec3 V = view_len2 > 1.0e-6 ? view_vec * inversesqrt(view_len2) : vec3(0.0, 0.0, 1.0);
 
     vec3 color = ubo.u_ambient.rgb * ubo.u_ambient.a * base * occlusion;
 

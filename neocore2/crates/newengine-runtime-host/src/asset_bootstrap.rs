@@ -84,69 +84,41 @@ pub fn try_load_window_icon_best_effort(
     assets: Option<&AssetServiceClient>,
     roots: &[PathBuf],
 ) -> Option<PlatformAppIconV1> {
+    let _ = roots;
     let Some(path) = icon_path else {
         return None;
     };
 
-    if let Some(assets) = assets {
-        let id_hex32 = match assets.load(path) {
-            Ok(v) => v,
-            Err(e) => {
-                log::warn!("window icon: asset.load failed path='{path}' err='{e}'");
-                return None;
-            }
-        };
+    let Some(assets) = assets else {
+        log::info!(
+            "window icon: AssetManager unavailable; skipping icon path='{}' because runtime assets must not be read directly from filesystem",
+            path
+        );
+        return None;
+    };
 
-        if let Err(e) = wait_ready(assets, &id_hex32, Duration::from_millis(500)) {
-            log::warn!("window icon: wait_ready failed path='{path}' err='{e:?}'");
+    let id_hex32 = match assets.load(path) {
+        Ok(v) => v,
+        Err(e) => {
+            log::warn!("window icon: asset.load failed path='{path}' err='{e}'");
             return None;
         }
+    };
 
-        let (_meta_json, payload) = match assets.blob_wire_v1(&id_hex32) {
-            Ok(v) => v,
-            Err(e) => {
-                log::warn!("window icon: blob_wire_v1 failed path='{path}' err='{e}'");
-                return None;
-            }
-        };
-
-        return decode_window_icon(&payload, path);
+    if let Err(e) = wait_ready(assets, &id_hex32, Duration::from_millis(500)) {
+        log::warn!("window icon: wait_ready failed path='{path}' id='{id_hex32}' err='{e:?}'");
+        return None;
     }
 
-    let mut candidates: Vec<PathBuf> = Vec::new();
-    let icon_path = PathBuf::from(path);
-
-    if icon_path.is_absolute() {
-        candidates.push(icon_path);
-    } else {
-        candidates.push(PathBuf::from(path));
-        for root in roots {
-            candidates.push(root.join(path));
+    let (_meta_json, payload) = match assets.blob_wire_v1(&id_hex32) {
+        Ok(v) => v,
+        Err(e) => {
+            log::warn!("window icon: blob_wire_v1 failed path='{path}' id='{id_hex32}' err='{e}'");
+            return None;
         }
-    }
+    };
 
-    for candidate in candidates {
-        if !candidate.is_file() {
-            continue;
-        }
-
-        match std::fs::read(&candidate) {
-            Ok(bytes) => {
-                if let Some(icon) = decode_window_icon(&bytes, &candidate.to_string_lossy()) {
-                    return Some(icon);
-                }
-            }
-            Err(e) => {
-                log::warn!(
-                    "window icon: read failed file='{}' err='{}'",
-                    candidate.display(),
-                    e
-                );
-            }
-        }
-    }
-
-    None
+    decode_window_icon(&payload, path)
 }
 
 #[cfg(not(feature = "window-icon"))]

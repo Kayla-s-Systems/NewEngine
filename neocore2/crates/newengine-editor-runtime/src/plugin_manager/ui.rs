@@ -4,11 +4,12 @@ use newengine_math::collections_prelude::NeHashMap as HashMap;
 use std::sync::Arc;
 
 use egui;
+use newengine_assets::{AssetAccess, AssetServiceClient, AssetState};
 use newengine_plugin_host::{PluginControlCommand, PluginSnapshotEntry};
 
 use super::bridge::PluginManagerBridge;
 
-static DEFAULT_PLUGIN_ICON_PNG: &[u8] = include_bytes!("../../../../apps/editor/assets/plugin_icons/default_plugin_icon.png");
+const DEFAULT_PLUGIN_ICON_PATH: &str = "ui/plugin_icons/default_plugin_icon.png";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum PluginSort {
@@ -17,10 +18,161 @@ enum PluginSort {
     State,
 }
 
-#[derive(Clone)]
-struct CachedPluginIcon {
-    digest_hex: String,
-    texture: egui::TextureHandle,
+enum AssetIconSlot {
+    Loading {
+        path: String,
+        id_hex32: String,
+    },
+    Ready {
+        texture: egui::TextureHandle,
+    },
+    Failed {
+        path: String,
+        error: String,
+    },
+}
+
+struct AssetPluginIconCache {
+    assets: AssetServiceClient,
+    slots: HashMap<String, AssetIconSlot>,
+}
+
+impl AssetPluginIconCache {
+    #[inline]
+    fn new() -> Self {
+        Self {
+            assets: AssetServiceClient::new(newengine_plugin_host::default_host_api()),
+            slots: HashMap::default(),
+        }
+    }
+
+    fn texture_id(
+        &mut self,
+        ctx: &egui::Context,
+        key: impl Into<String>,
+        path: impl Into<String>,
+    ) -> Option<egui::TextureId> {
+        let key = key.into();
+        let path = path.into();
+        self.assets.pump();
+
+        if !self.slots.contains_key(&key) {
+            match self.assets.load(&path) {
+                Ok(id_hex32) => {
+                    log::debug!(
+                        "plugin icon asset: requested key='{}' path='{}' id='{}'",
+                        key,
+                        path,
+                        id_hex32
+                    );
+                    self.slots.insert(key.clone(), AssetIconSlot::Loading { path, id_hex32 });
+                }
+                Err(e) => {
+                    log::warn!(
+                        "plugin icon asset: request failed key='{}' path='{}' err='{}'",
+                        key,
+                        path,
+                        e
+                    );
+                    self.slots.insert(key.clone(), AssetIconSlot::Failed { path, error: e });
+                }
+            }
+        }
+
+        let mut replacement = None;
+        if let Some(slot) = self.slots.get_mut(&key) {
+            match slot {
+                AssetIconSlot::Ready { texture } => return Some(texture.id()),
+                AssetIconSlot::Failed { path, error } => {
+                    let _ = (path, error);
+                    return None;
+                }
+                AssetIconSlot::Loading { path, id_hex32 } => match self.assets.state(id_hex32) {
+                    Ok(AssetState::Ready) => match self.assets.blob_wire_v1(id_hex32) {
+                        Ok((_meta, bytes)) => match decode_icon_image(&bytes) {
+                            Ok((img, w, h)) => {
+                                let digest_hex = blake3::hash(&bytes).to_hex().to_string();
+                                let texture = ctx.load_texture(
+                                    format!("plugin_icon_asset:{}:{}", key, digest_hex),
+                                    img,
+                                    egui::TextureOptions::LINEAR,
+                                );
+                                log::debug!(
+                                    "plugin icon asset: ready key='{}' path='{}' size={}x{} bytes={}",
+                                    key,
+                                    path,
+                                    w,
+                                    h,
+                                    bytes.len()
+                                );
+                                replacement = Some(AssetIconSlot::Ready { texture });
+                            }
+                            Err(e) => {
+                                log::warn!(
+                                    "plugin icon asset: decode failed key='{}' path='{}' err='{}'",
+                                    key,
+                                    path,
+                                    e
+                                );
+                                replacement = Some(AssetIconSlot::Failed {
+                                    path: path.clone(),
+                                    error: e,
+                                });
+                            }
+                        },
+                        Err(e) => {
+                            log::warn!(
+                                "plugin icon asset: blob failed key='{}' path='{}' id='{}' err='{}'",
+                                key,
+                                path,
+                                id_hex32,
+                                e
+                            );
+                            replacement = Some(AssetIconSlot::Failed {
+                                path: path.clone(),
+                                error: e,
+                            });
+                        }
+                    },
+                    Ok(AssetState::Failed) => {
+                        log::debug!(
+                            "plugin icon asset: asset failed key='{}' path='{}' id='{}'",
+                            key,
+                            path,
+                            id_hex32
+                        );
+                        replacement = Some(AssetIconSlot::Failed {
+                            path: path.clone(),
+                            error: "asset failed".to_owned(),
+                        });
+                    }
+                    Ok(AssetState::Loading | AssetState::Unloaded | AssetState::Unknown) => {}
+                    Err(e) => {
+                        log::warn!(
+                            "plugin icon asset: state failed key='{}' path='{}' id='{}' err='{}'",
+                            key,
+                            path,
+                            id_hex32,
+                            e
+                        );
+                        replacement = Some(AssetIconSlot::Failed {
+                            path: path.clone(),
+                            error: e,
+                        });
+                    }
+                },
+            }
+        }
+
+        if let Some(new_slot) = replacement {
+            self.slots.insert(key.clone(), new_slot);
+            if let Some(AssetIconSlot::Ready { texture }) = self.slots.get(&key) {
+                return Some(texture.id());
+            }
+        }
+
+        None
+    }
 }
 
 /// Plugin Manager UI state + renderer.
@@ -35,7 +187,7 @@ pub struct PluginManagerUi {
     sort: PluginSort,
 
     load_path: String,
-    icon_cache: HashMap<String, CachedPluginIcon>,
+    icon_cache: AssetPluginIconCache,
 }
 
 impl PluginManagerUi {
@@ -49,7 +201,7 @@ impl PluginManagerUi {
             show_disabled: true,
             sort: PluginSort::Name,
             load_path: String::new(),
-            icon_cache: HashMap::default(),
+            icon_cache: AssetPluginIconCache::new(),
         }
     }
 
@@ -385,7 +537,7 @@ impl PluginManagerUi {
 
         ui.horizontal(|ui| {
             ui.label("Icon source:");
-            ui.label(if p.icon_small.is_some() { "embedded" } else { "default" });
+            ui.label(plugin_icon_asset_path(&p.id));
         });
 
         if let Some(reason) = p.disabled_reason.as_deref() {
@@ -482,75 +634,30 @@ impl PluginManagerUi {
         ctx: &egui::Context,
         p: &PluginSnapshotEntry,
     ) -> Option<egui::TextureId> {
-        let bytes = p
-            .icon_small
-            .as_ref()
-            .filter(|icon| icon.media_type.eq_ignore_ascii_case("image/png") && !icon.bytes.is_empty())
-            .map(|icon| icon.bytes.as_slice())
-            .unwrap_or(DEFAULT_PLUGIN_ICON_PNG);
-
-        let digest_hex = blake3::hash(bytes).to_hex().to_string();
-
-        if let Some(cached) = self.icon_cache.get(&p.id) {
-            if cached.digest_hex == digest_hex {
-                return Some(cached.texture.id());
-            }
-        }
-
-        let (img, _, _) = match decode_icon_image(bytes) {
-            Ok(v) => v,
-            Err(_) => {
-                if bytes != DEFAULT_PLUGIN_ICON_PNG {
-                    return self.ensure_default_icon(ctx, &p.id);
-                }
-                return None;
-            }
-        };
-
-        let texture = ctx.load_texture(
-            format!("plugin_icon:{}:{}", p.id, digest_hex),
-            img,
-            egui::TextureOptions::LINEAR,
-        );
-        let tex_id = texture.id();
-        self.icon_cache.insert(
-            p.id.clone(),
-            CachedPluginIcon {
-                digest_hex,
-                texture,
-            },
-        );
-        Some(tex_id)
+        let plugin_path = plugin_icon_asset_path(&p.id);
+        self.icon_cache
+            .texture_id(ctx, format!("plugin:{}", p.id), plugin_path)
+            .or_else(|| {
+                self.icon_cache
+                    .texture_id(ctx, "plugin:default", DEFAULT_PLUGIN_ICON_PATH)
+            })
     }
 
-    fn ensure_default_icon(
-        &mut self,
-        ctx: &egui::Context,
-        cache_key: &str,
-    ) -> Option<egui::TextureId> {
-        let digest_hex = blake3::hash(DEFAULT_PLUGIN_ICON_PNG).to_hex().to_string();
-        if let Some(cached) = self.icon_cache.get(cache_key) {
-            if cached.digest_hex == digest_hex {
-                return Some(cached.texture.id());
-            }
-        }
 
-        let (img, _, _) = decode_icon_image(DEFAULT_PLUGIN_ICON_PNG).ok()?;
-        let texture = ctx.load_texture(
-            format!("plugin_icon:{}:{}", cache_key, digest_hex),
-            img,
-            egui::TextureOptions::LINEAR,
-        );
-        let tex_id = texture.id();
-        self.icon_cache.insert(
-            cache_key.to_owned(),
-            CachedPluginIcon {
-                digest_hex,
-                texture,
-            },
-        );
-        Some(tex_id)
-    }
+}
+
+fn plugin_icon_asset_path(plugin_id: &str) -> String {
+    let sanitized = plugin_id
+        .chars()
+        .map(|ch| {
+            if ch.is_ascii_alphanumeric() || ch == '.' || ch == '-' || ch == '_' {
+                ch
+            } else {
+                '_'
+            }
+        })
+        .collect::<String>();
+    format!("ui/plugin_icons/{sanitized}.png")
 }
 
 fn decode_icon_image(bytes: &[u8]) -> Result<(egui::ColorImage, u32, u32), String> {

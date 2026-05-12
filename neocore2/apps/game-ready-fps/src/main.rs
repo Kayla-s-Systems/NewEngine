@@ -36,13 +36,10 @@ fn configure_default_game_ready_profile() {
         return;
     }
 
-    let profile_path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("assets")
-        .join("game_ready_highlands.scene.json");
-
-    if profile_path.is_file() {
-        std::env::set_var("NEWENGINE_GAME_READY_PROFILE", profile_path);
-    }
+    // Logical AssetManager/VFS path. Do not publish absolute filesystem paths here:
+    // runtime scene text must be resolved through AssetManager after the engine
+    // plugin phase has registered `asset.manager`.
+    std::env::set_var("NEWENGINE_GAME_READY_PROFILE", "game_ready_highlands.scene.json");
 }
 
 fn main() {
