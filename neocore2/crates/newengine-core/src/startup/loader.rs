@@ -68,49 +68,13 @@ impl StartupLoader {
 #[derive(Deserialize)]
 struct RootJson {
     window: Option<WindowJson>,
-    /// Legacy (pre-plugin). Mapped to plugins["newengine.logging"] for backward compatibility.
-    logging: Option<LoggingJson>,
     engine: Option<EngineJson>,
     render: Option<RenderJson>,
     ui: Option<UiJson>,
     plugins: Option<newengine_math::collections_prelude::NeHashMap<String, serde_json::Value>>,
-}
 
-#[derive(Deserialize)]
-struct LoggingJson {
-    // Legacy:
-    level: Option<String>,
-    #[allow(dead_code)]
-    colors: Option<bool>,
-    #[allow(dead_code)]
-    include_module: Option<bool>,
-
-    // Extended:
-    filter: Option<String>,
-    style: Option<String>,
-    target: Option<String>,
-    file: Option<String>,
-    tee: Option<bool>,
-
-    include: Option<LoggingIncludeJson>,
-    rolling: Option<LoggingRollingJson>,
-    timestamp: Option<String>,
-    indent: Option<usize>,
-}
-
-#[derive(Deserialize)]
-struct LoggingIncludeJson {
-    module_path: Option<bool>,
-    target: Option<bool>,
-    file: Option<bool>,
-    line: Option<bool>,
-}
-
-#[derive(Deserialize)]
-struct LoggingRollingJson {
-    max_bytes: Option<u64>,
-    max_files: Option<usize>,
-    keep_days: Option<usize>,
+    #[serde(flatten)]
+    extra: newengine_math::collections_prelude::NeHashMap<String, serde_json::Value>,
 }
 
 #[derive(Deserialize)]
@@ -160,94 +124,13 @@ struct UiJson {
 }
 
 fn apply_root(cfg: &mut StartupConfig, report: &mut StartupLoadReport, src: RootJson) {
-    if let Some(logging) = src.logging {
-        // Backward compatibility: old top-level `logging` maps to plugins["newengine.logging"].
-        let mut o = serde_json::Map::new();
-
-        if let Some(level) = logging.level {
-            o.insert("level".to_owned(), serde_json::Value::String(level));
-        }
-        if let Some(filter) = logging.filter {
-            o.insert("filter".to_owned(), serde_json::Value::String(filter));
-        }
-        if let Some(style) = logging.style {
-            o.insert("style".to_owned(), serde_json::Value::String(style));
-        }
-        if let Some(t) = logging.target {
-            o.insert("console_target".to_owned(), serde_json::Value::String(t));
-        }
-        if let Some(fp) = logging.file {
-            o.insert("file_path".to_owned(), serde_json::Value::String(fp));
-        }
-        if let Some(tee) = logging.tee {
-            o.insert("tee".to_owned(), serde_json::Value::Bool(tee));
-        }
-        if let Some(colors) = logging.colors {
-            o.insert("colors".to_owned(), serde_json::Value::Bool(colors));
-        }
-
-        // Legacy include_module -> include_module_path
-        if let Some(inc_mod) = logging.include_module {
-            o.insert(
-                "include_module_path".to_owned(),
-                serde_json::Value::Bool(inc_mod),
-            );
-        }
-        if let Some(inc) = logging.include {
-            if let Some(v) = inc.module_path {
-                o.insert("include_module_path".to_owned(), serde_json::Value::Bool(v));
-            }
-            if let Some(v) = inc.target {
-                o.insert("include_target".to_owned(), serde_json::Value::Bool(v));
-            }
-            if let Some(v) = inc.file {
-                o.insert("include_file".to_owned(), serde_json::Value::Bool(v));
-            }
-            if let Some(v) = inc.line {
-                o.insert("include_line_number".to_owned(), serde_json::Value::Bool(v));
-            }
-        }
-
-        if let Some(ts) = logging.timestamp {
-            o.insert("timestamp".to_owned(), serde_json::Value::String(ts));
-        }
-        if let Some(indent) = logging.indent {
-            o.insert(
-                "indent".to_owned(),
-                serde_json::Value::Number(serde_json::Number::from(indent as u64)),
-            );
-        }
-        if let Some(rolling) = logging.rolling {
-            if let Some(v) = rolling.max_bytes {
-                o.insert(
-                    "roll_max_bytes".to_owned(),
-                    serde_json::Value::Number(serde_json::Number::from(v)),
-                );
-            }
-            if let Some(v) = rolling.max_files {
-                o.insert(
-                    "roll_max_files".to_owned(),
-                    serde_json::Value::Number(serde_json::Number::from(v as u64)),
-                );
-            }
-            if let Some(v) = rolling.keep_days {
-                o.insert(
-                    "roll_keep_days".to_owned(),
-                    serde_json::Value::Number(serde_json::Number::from(v as u64)),
-                );
-            }
-        }
-
-        cfg.plugins
-            .entry("newengine.logging".to_owned())
-            .or_insert_with(|| serde_json::Value::Object(serde_json::Map::new()))
-            .as_object_mut()
-            .map(|dst| dst.extend(o));
-
+    if !src.extra.is_empty() {
+        let mut keys: Vec<String> = src.extra.keys().cloned().collect();
+        keys.sort();
         report.overrides.push(StartupOverride {
-            key: "logging",
-            from: "legacy".to_owned(),
-            to: "plugins.newengine.logging".to_owned(),
+            key: "root.*",
+            from: "provided".to_owned(),
+            to: format!("ignored unknown startup keys: {}", keys.join(", ")),
         });
     }
 
@@ -449,16 +332,12 @@ fn parse_placement(p: WindowPlacementJson) -> Option<WindowPlacement> {
     }
 }
 
-const EGUI_UI_PROVIDER_ID: &str = "newengine.ui.provider.egui";
 
 fn parse_ui_backend(s: &str) -> UiBackend {
     let trimmed = s.trim();
     let v = trimmed.to_ascii_lowercase();
     match v.as_str() {
         "" | "none" | "null" | "off" | "disabled" => UiBackend::None,
-        // Back-compat config spelling. The engine resolves it as a plugin id,
-        // never as a built-in compile-time provider.
-        "egui" => UiBackend::Plugin(EGUI_UI_PROVIDER_ID.to_owned()),
         _ => UiBackend::Plugin(trimmed.to_owned()),
     }
 }
@@ -489,68 +368,6 @@ fn apply_opt_string(
 
     if changed {
         *dst = Some(v);
-        report.overrides.push(StartupOverride { key, from, to });
-    }
-}
-
-#[inline]
-#[allow(dead_code)]
-fn apply_u32(report: &mut StartupLoadReport, key: &'static str, dst: &mut u32, v: u32) {
-    let from = dst.to_string();
-    let to = v.to_string();
-    if *dst != v {
-        *dst = v;
-        report.overrides.push(StartupOverride { key, from, to });
-    }
-}
-
-#[inline]
-#[allow(dead_code)]
-fn apply_usize(report: &mut StartupLoadReport, key: &'static str, dst: &mut usize, v: usize) {
-    let from = dst.to_string();
-    let to = v.to_string();
-    if *dst != v {
-        *dst = v;
-        report.overrides.push(StartupOverride { key, from, to });
-    }
-}
-
-#[inline]
-#[allow(dead_code)]
-fn apply_opt_u64(report: &mut StartupLoadReport, key: &'static str, dst: &mut Option<u64>, v: u64) {
-    let from = dst
-        .map(|x| x.to_string())
-        .unwrap_or_else(|| "null".to_owned());
-    let to = v.to_string();
-    if *dst != Some(v) {
-        *dst = Some(v);
-        report.overrides.push(StartupOverride { key, from, to });
-    }
-}
-
-#[inline]
-#[allow(dead_code)]
-fn apply_opt_usize(
-    report: &mut StartupLoadReport,
-    key: &'static str,
-    dst: &mut Option<usize>,
-    v: usize,
-) {
-    let from = dst
-        .map(|x| x.to_string())
-        .unwrap_or_else(|| "null".to_owned());
-    let to = v.to_string();
-    if *dst != Some(v) {
-        *dst = Some(v);
-        report.overrides.push(StartupOverride { key, from, to });
-    }
-}
-#[allow(dead_code)]
-fn apply_bool(report: &mut StartupLoadReport, key: &'static str, dst: &mut bool, v: bool) {
-    let from = dst.to_string();
-    let to = v.to_string();
-    if *dst != v {
-        *dst = v;
         report.overrides.push(StartupOverride { key, from, to });
     }
 }
@@ -607,17 +424,6 @@ fn apply_path(report: &mut StartupLoadReport, key: &'static str, dst: &mut PathB
     let to = pb.display().to_string();
     if *dst != pb {
         *dst = pb;
-        report.overrides.push(StartupOverride { key, from, to });
-    }
-}
-
-#[inline]
-#[allow(dead_code)]
-fn apply_color(report: &mut StartupLoadReport, key: &'static str, dst: &mut [f32; 4], v: [f32; 4]) {
-    let from = format!("{:.3},{:.3},{:.3},{:.3}", dst[0], dst[1], dst[2], dst[3]);
-    let to = format!("{:.3},{:.3},{:.3},{:.3}", v[0], v[1], v[2], v[3]);
-    if *dst != v {
-        *dst = v;
         report.overrides.push(StartupOverride { key, from, to });
     }
 }

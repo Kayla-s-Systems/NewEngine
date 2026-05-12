@@ -1,5 +1,6 @@
 #![forbid(unsafe_op_in_unsafe_fn)]
 
+use newengine_camera_runtime::{CameraRuntimeReport, CameraTransitionPhase};
 use newengine_core::render::{
     RecordedDrawListStats, RenderDebugChartSample, RenderDebugTelemetry,
     RenderDiagnosticsSnapshot, RenderFrameDebugSnapshot, RenderGraphSubmitReport,
@@ -21,6 +22,7 @@ pub(super) struct RuntimeOverlayMetrics {
     resource_pipelines: u32,
     queued_upload_jobs: u32,
     queued_upload_bytes: u64,
+    camera_report: Option<CameraRuntimeReport>,
 }
 
 impl RuntimeOverlayMetrics {
@@ -39,6 +41,7 @@ impl RuntimeOverlayMetrics {
             resource_pipelines: 0,
             queued_upload_jobs: 0,
             queued_upload_bytes: 0,
+            camera_report: None,
         }
     }
 
@@ -78,6 +81,11 @@ impl RuntimeOverlayMetrics {
     #[inline]
     pub(super) fn record_graph_submit(&mut self, report: RenderGraphSubmitReport) {
         self.last_submit = Some(report);
+    }
+
+    #[inline]
+    pub(super) fn record_camera_report(&mut self, report: CameraRuntimeReport) {
+        self.camera_report = Some(report);
     }
 
     #[inline]
@@ -132,6 +140,26 @@ impl RuntimeOverlayMetrics {
             self.frame_triangles,
             self.frame_draws
         ));
+
+        if let Some(camera) = self.camera_report.as_ref() {
+            lines.push(format!(
+                "CAM {:?}/{:?} {:?} gate={} blend={}{:.0}%",
+                camera.active_director,
+                camera.active_mode,
+                camera.input_context,
+                camera.gate_blocked,
+                if camera.frame_blend_active { "on " } else { "off " },
+                camera.frame_blend_alpha * 100.0,
+            ));
+            if camera.transition.phase != CameraTransitionPhase::Idle {
+                lines.push(format!(
+                    "CAM transition {:?} {:.2}s target={:?}",
+                    camera.transition.phase,
+                    camera.transition.elapsed_sec,
+                    camera.target_entity,
+                ));
+            }
+        }
 
         if let Some(report) = self.last_submit.as_ref() {
             lines.push(format!(

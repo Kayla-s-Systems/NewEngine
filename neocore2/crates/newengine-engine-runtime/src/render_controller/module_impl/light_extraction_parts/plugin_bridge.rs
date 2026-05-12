@@ -103,7 +103,7 @@ fn parse_plugin_light_provider(
     let method = parsed
         .method
         .filter(|it| !it.trim().is_empty())
-        .unwrap_or_else(|| newengine_core::render::RENDER_LIGHT_EXTRACTION_PROVIDER_METHOD_EXTRACT_V1.to_string());
+        .unwrap_or_else(|| newengine_core::render::RENDER_LIGHT_EXTRACTION_PROVIDER_METHOD_EXTRACT.to_string());
 
     Some(ExternalLightExtractionProviderDesc {
         id,

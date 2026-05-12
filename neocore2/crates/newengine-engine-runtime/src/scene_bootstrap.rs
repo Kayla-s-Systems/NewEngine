@@ -6,6 +6,7 @@ use newengine_scene::{spawn_named, Scene, SceneState};
 use newengine_transform::set_parent;
 
 use newengine_camera::EditorNavController;
+use newengine_camera_runtime::CameraManagerResource;
 use newengine_sim::CameraRigComp;
 
 /// Runtime bootstrap for a fresh scene.
@@ -87,6 +88,9 @@ pub fn bootstrap_runtime_scene(scene: &mut Scene) {
         }
         if world.get::<EditorNavController>(cam).is_none() {
             let _ = world.insert(cam, EditorNavController::default());
+        }
+        if world.resource::<CameraManagerResource>().is_none() {
+            world.insert_resource(CameraManagerResource::default());
         }
 
         // Ensure camera is rooted for deterministic editor navigation.

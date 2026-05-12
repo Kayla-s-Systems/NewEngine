@@ -12,7 +12,7 @@ use newengine_core::EngineResult;
 use newengine_lighting::{ShadowMethod, ShadowSettings};
 use newengine_plugin_api::{
     Blob, CapabilityId, CapabilityKind, CapabilityRole, MethodName,
-    CAPABILITY_ID_RENDER_LIGHT_EXTRACTION_PROVIDER_V1, CAPABILITY_TAG_LEGACY,
+    CAPABILITY_ID_RENDER_LIGHT_EXTRACTION_PROVIDER,
 };
 use newengine_plugin_host::{call_service_v1, has_service, PluginsSnapshot};
 use newengine_math::Mat4;
@@ -25,10 +25,8 @@ use super::RuntimeRenderController;
 pub(super) const LIGHT_PROVIDER_TAG_RUNTIME: &str = "runtime";
 pub(super) const LIGHT_PROVIDER_TAG_BUILTIN: &str = "builtin";
 pub(super) const LIGHT_PROVIDER_TAG_PLUGIN: &str = "plugin";
-pub(super) const LIGHT_PROVIDER_TAG_LEGACY: &str = CAPABILITY_TAG_LEGACY;
-pub(super) const LIGHT_PROVIDER_CAP_EXTRACTION: &str = CAPABILITY_ID_RENDER_LIGHT_EXTRACTION_PROVIDER_V1;
+pub(super) const LIGHT_PROVIDER_CAP_EXTRACTION: &str = CAPABILITY_ID_RENDER_LIGHT_EXTRACTION_PROVIDER;
 
-static WARNED_LEGACY_LIGHT_PROVIDER: AtomicBool = AtomicBool::new(false);
 static WARNED_PLUGIN_LIGHT_PROVIDER_BRIDGE: AtomicBool = AtomicBool::new(false);
 
 #[derive(Clone, Copy, Debug)]
@@ -48,11 +46,6 @@ impl LightExtractionProviderMetadata {
             tags: &[LIGHT_PROVIDER_TAG_RUNTIME, LIGHT_PROVIDER_TAG_BUILTIN],
             capabilities: &[LIGHT_PROVIDER_CAP_EXTRACTION],
         }
-    }
-
-    #[inline]
-    pub(super) fn has_tag(self, tag: &str) -> bool {
-        self.tags.iter().any(|it| *it == tag)
     }
 }
 
@@ -125,12 +118,6 @@ pub(super) struct ExternalLightExtractionProviderDesc {
     pub(super) method: String,
 }
 
-impl ExternalLightExtractionProviderDesc {
-    #[inline]
-    fn has_tag(&self, tag: &str) -> bool {
-        self.tags.iter().any(|it| it == tag)
-    }
-}
 
 #[derive(Clone, Debug, Deserialize)]
 struct PluginLightProviderJson {
@@ -167,16 +154,6 @@ impl LightExtractionProviderRegistry {
             return;
         }
 
-        let metadata = provider.metadata();
-        if metadata.has_tag(LIGHT_PROVIDER_TAG_LEGACY)
-            && !WARNED_LEGACY_LIGHT_PROVIDER.swap(true, Ordering::Relaxed)
-        {
-            log::warn!(
-                "render light extraction registry: provider id='{}' tag='legacy' -- migrate to Render API V3 light extraction contracts",
-                metadata.id
-            );
-        }
-
         self.providers.push(provider);
     }
 
@@ -187,16 +164,6 @@ impl LightExtractionProviderRegistry {
             .any(|existing| existing.plugin_id == provider.plugin_id && existing.id == provider.id)
         {
             return;
-        }
-
-        if provider.has_tag(LIGHT_PROVIDER_TAG_LEGACY)
-            && !WARNED_LEGACY_LIGHT_PROVIDER.swap(true, Ordering::Relaxed)
-        {
-            log::warn!(
-                "render light extraction registry: plugin provider id='{}' plugin='{}' tag='legacy' -- migrate to current Render API V3 light extraction capability",
-                provider.id,
-                provider.plugin_id
-            );
         }
 
         if provider.service_id.as_deref().is_none()
@@ -223,7 +190,7 @@ impl LightExtractionProviderRegistry {
                 {
                     continue;
                 }
-                if capability.id.as_str() != CAPABILITY_ID_RENDER_LIGHT_EXTRACTION_PROVIDER_V1 {
+                if capability.id.as_str() != CAPABILITY_ID_RENDER_LIGHT_EXTRACTION_PROVIDER {
                     continue;
                 }
 

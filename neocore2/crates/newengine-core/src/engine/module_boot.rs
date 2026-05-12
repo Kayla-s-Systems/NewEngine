@@ -1,5 +1,5 @@
 use super::module_slot::{ModuleSlot, ModuleState};
-use super::{Engine, ModuleFaultTolerance};
+use super::{Engine, EngineRunState, ModuleFaultTolerance};
 
 use crate::error::{EngineError, EngineResult, ModuleStage};
 use crate::lifecycle_events::EngineLifecycleEvent;
@@ -16,15 +16,16 @@ impl<E: Send + 'static> Engine<E> {
     }
 
     fn start_strict(&mut self) -> EngineResult<()> {
-        self.started = true;
+        self.set_run_state(EngineRunState::InitSystem);
         self.last = std::time::Instant::now();
         self.sync_shutdown_state();
 
-        if self.is_exit_requested() {
+        if self.is_shutdown_requested() {
             return Err(EngineError::ExitRequested);
         }
 
         self.validate_api_contracts_strict()?;
+        self.set_run_state(EngineRunState::InitGame);
 
         let n = self.modules.len();
 
@@ -105,7 +106,7 @@ impl<E: Send + 'static> Engine<E> {
                     &engine.bus,
                     &engine.events,
                     &mut engine.scheduler,
-                    &mut engine.exit_requested,
+                    engine.shutdown.clone(),
                 );
                 let _ = s.module.shutdown(&mut ctx);
                 s.shutdown_called = true;
@@ -126,7 +127,7 @@ impl<E: Send + 'static> Engine<E> {
                     &self.bus,
                     &self.events,
                     &mut self.scheduler,
-                    &mut self.exit_requested,
+                    self.shutdown.clone(),
                 );
                 s.module.init(&mut ctx)
             };
@@ -143,7 +144,7 @@ impl<E: Send + 'static> Engine<E> {
             initialized += 1;
 
             self.sync_shutdown_state();
-            if self.is_exit_requested() {
+            if self.is_shutdown_requested() {
                 shutdown_modules(self, &mut sorted[..initialized]);
                 return Err(EngineError::ExitRequested);
             }
@@ -160,18 +161,21 @@ impl<E: Send + 'static> Engine<E> {
         self.log_plugins_diagnostics("after module init");
         self.plugins_start_all()?;
         self.dispatch_startup_readiness_events("engine.start.strict")?;
+        self.set_run_state(EngineRunState::Running);
 
         Ok(())
     }
 
     fn start_resilient(&mut self) -> EngineResult<()> {
-        self.started = true;
+        self.set_run_state(EngineRunState::InitSystem);
         self.last = std::time::Instant::now();
         self.sync_shutdown_state();
 
-        if self.is_exit_requested() {
+        if self.is_shutdown_requested() {
             return Err(EngineError::ExitRequested);
         }
+
+        self.set_run_state(EngineRunState::InitGame);
 
         let n = self.modules.len();
 
@@ -345,7 +349,7 @@ impl<E: Send + 'static> Engine<E> {
 
         for i in 0..new_slots.len() {
             self.sync_shutdown_state();
-            if self.is_exit_requested() {
+            if self.is_shutdown_requested() {
                 break;
             }
 
@@ -362,7 +366,7 @@ impl<E: Send + 'static> Engine<E> {
                     &self.bus,
                     &self.events,
                     &mut self.scheduler,
-                    &mut self.exit_requested,
+                    self.shutdown.clone(),
                 );
                 new_slots[i].module.init(&mut ctx)
             };
@@ -387,6 +391,7 @@ impl<E: Send + 'static> Engine<E> {
         self.log_plugins_diagnostics("after module init");
         self.plugins_start_all()?;
         self.dispatch_startup_readiness_events("engine.start.resilient")?;
+        self.set_run_state(EngineRunState::Running);
 
         Ok(())
     }
@@ -419,11 +424,11 @@ impl<E: Send + 'static> Engine<E> {
     }
 
     pub(crate) fn start_modules_ready_by_graph(&mut self, origin: &'static str) -> EngineResult<usize> {
-        let mut started = 0usize;
+        let mut activated_count = 0usize;
 
         for i in 0..self.modules.len() {
             self.sync_shutdown_state();
-            if self.is_exit_requested() {
+            if self.is_shutdown_requested() {
                 return Err(EngineError::ExitRequested);
             }
 
@@ -463,7 +468,7 @@ impl<E: Send + 'static> Engine<E> {
                     &self.bus,
                     &self.events,
                     &mut self.scheduler,
-                    &mut self.exit_requested,
+                    self.shutdown.clone(),
                 );
                 self.modules[i].module.start(&mut ctx)
             };
@@ -471,8 +476,7 @@ impl<E: Send + 'static> Engine<E> {
             if let Err(err) = start_res {
                 match self.module_fault_tolerance {
                     ModuleFaultTolerance::Strict => {
-                        self.exit_requested = true;
-                        self.shutdown.request();
+                        self.request_exit()?;
                         return Err(EngineError::with_module_stage(
                             module_id,
                             ModuleStage::Start,
@@ -490,21 +494,21 @@ impl<E: Send + 'static> Engine<E> {
             }
 
             self.modules[i].state = ModuleState::Running;
-            started += 1;
+            activated_count += 1;
         }
 
-        if started > 0 {
+        if activated_count > 0 {
             log::info!(
-                "startup graph: started modules origin='{}' count={} satisfied='{}'",
+                "startup graph: activated modules origin='{}' count={} satisfied='{}'",
                 origin,
-                started,
+                activated_count,
                 self.startup_graph.satisfied_csv(),
             );
         }
 
         self.refresh_readiness_snapshot();
         self.log_startup_graph_snapshot(origin);
-        Ok(started)
+        Ok(activated_count)
     }
 
     #[inline]
@@ -518,7 +522,7 @@ impl<E: Send + 'static> Engine<E> {
             &self.bus,
             &self.events,
             &mut self.scheduler,
-            &mut self.exit_requested,
+            self.shutdown.clone(),
         );
         let _ = self.modules[index].module.shutdown(&mut ctx);
         self.modules[index].shutdown_called = true;
@@ -536,7 +540,7 @@ impl<E: Send + 'static> Engine<E> {
             &self.bus,
             &self.events,
             &mut self.scheduler,
-            &mut self.exit_requested,
+            self.shutdown.clone(),
         );
         let _ = s.module.shutdown(&mut ctx);
         s.shutdown_called = true;

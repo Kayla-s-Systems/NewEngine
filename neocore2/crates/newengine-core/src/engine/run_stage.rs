@@ -1,7 +1,7 @@
 #![forbid(unsafe_op_in_unsafe_fn)]
 
 use super::module_slot::ModuleState;
-use super::{Engine, ModuleFaultTolerance};
+use super::{Engine, EngineRunState, ModuleFaultTolerance};
 
 use crate::error::{EngineError, EngineResult, ModuleStage};
 use crate::module::{Module, ModuleCtx};
@@ -20,7 +20,7 @@ impl<E: Send + 'static> Engine<E> {
         F: FnMut(&mut dyn Module<E>, &mut ModuleCtx<'_, E>) -> EngineResult<()>,
     {
         self.sync_shutdown_state();
-        if self.is_exit_requested() {
+        if self.is_shutdown_requested() {
             return Err(EngineError::ExitRequested);
         }
 
@@ -31,7 +31,6 @@ impl<E: Send + 'static> Engine<E> {
 
         let resources = &mut self.resources;
         let scheduler = &mut self.scheduler;
-        let exit_requested = &mut self.exit_requested;
 
         for s in self.modules.iter_mut() {
             if s.state != ModuleState::Running {
@@ -39,17 +38,13 @@ impl<E: Send + 'static> Engine<E> {
             }
 
             if shutdown.is_requested() {
-                *exit_requested = true;
-            }
-            if *exit_requested {
-                shutdown.request();
                 return Err(EngineError::ExitRequested);
             }
 
             let module_id = s.id();
 
             let result: EngineResult<()> = {
-                let mut ctx = ModuleCtx::new(services, resources, bus, events, scheduler, exit_requested);
+                let mut ctx = ModuleCtx::new(services, resources, bus, events, scheduler, shutdown.clone());
                 ctx.set_frame(frame);
 
                 if self.catch_panics {
@@ -68,7 +63,6 @@ impl<E: Send + 'static> Engine<E> {
             if let Err(e) = result {
                 match self.module_fault_tolerance {
                     ModuleFaultTolerance::Strict => {
-                        *exit_requested = true;
                         shutdown.request();
                         return Err(EngineError::with_module_stage(module_id, stage, e));
                     }
@@ -80,7 +74,7 @@ impl<E: Send + 'static> Engine<E> {
 
                         if !s.shutdown_called {
                             let mut ctx =
-                                ModuleCtx::new(services, resources, bus, events, scheduler, exit_requested);
+                                ModuleCtx::new(services, resources, bus, events, scheduler, shutdown.clone());
                             ctx.set_frame(frame);
 
                             let _ = s.module.shutdown(&mut ctx);
@@ -93,8 +87,7 @@ impl<E: Send + 'static> Engine<E> {
                 }
             }
 
-            if *exit_requested {
-                shutdown.request();
+            if shutdown.is_requested() {
                 return Err(EngineError::ExitRequested);
             }
         }
@@ -104,6 +97,7 @@ impl<E: Send + 'static> Engine<E> {
 
     pub fn shutdown(&mut self) -> EngineResult<()> {
         self.sync_shutdown_state();
+        self.set_run_state(EngineRunState::ShutdownGame);
 
         // Modules own engine-side handles into plugin services. They must be allowed
         // to close frames, unregister APIs and release logical resources before the
@@ -121,7 +115,7 @@ impl<E: Send + 'static> Engine<E> {
                 &self.bus,
                 &self.events,
                 &mut self.scheduler,
-                &mut self.exit_requested,
+                self.shutdown.clone(),
             );
 
             log::debug!("engine shutdown: module shutdown begin id='{}'", module_id);
@@ -141,7 +135,10 @@ impl<E: Send + 'static> Engine<E> {
             s.state = ModuleState::Disabled;
         }
 
+        self.set_run_state(EngineRunState::ShutdownSystem);
+        self.job_system.shutdown_and_join();
         self.plugins_shutdown();
+        self.set_run_state(EngineRunState::Stopped);
 
         Ok(())
     }

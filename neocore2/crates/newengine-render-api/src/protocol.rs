@@ -1,32 +1,32 @@
 use crate::{
     BeginFrameDesc, BeginRenderTargetDesc, BindGroupDesc, BindGroupId, BindGroupLayoutDesc,
-    BindGroupLayoutId, BufferDesc, BufferId, BufferSlice, DrawArgs, DrawIndexedArgs,
-    IndexFormat, PipelineDesc, PipelineId, PipelineWarmupDesc, PipelineWarmupReport, RectI32,
-    RenderBackendCapabilities, RenderDiagnosticsSnapshot, RenderFeature, RenderTargetDesc,
-    RenderTargetId, RenderWorkBudget, SamplerDesc, SamplerId, ShaderDesc, ShaderId,
-    ShaderRuntimeCacheStats, TextureDesc, TextureId, TextureResidencySnapshot, UiDrawList,
-    UiTexId, UploadPumpDesc, UploadPumpReport, Viewport,
-};
-use crate::render_graph::{
-    RenderDrawListKind, RenderGraphCompileReport, RenderGraphDesc, RenderGraphPassKind, RenderGraphSubmitReport,
-    RenderGraphValidationReport,
+    BindGroupLayoutId, BufferDesc, BufferId, BufferSlice, Color4, DrawArgs, DrawIndexedArgs,
+    Extent2D, IndexFormat, PipelineDesc, PipelineId, PipelineWarmupDesc, PipelineWarmupReport,
+    RectI32, RenderBackendCapabilities, RenderDiagnosticsSnapshot, RenderDrawListKind,
+    RenderFeature, RenderGraphCompileReport, RenderGraphDesc, RenderGraphPassKind,
+    RenderGraphSubmitReport, RenderGraphValidationReport, RenderTargetDesc, RenderTargetId,
+    RenderWorkBudget, SamplerDesc, SamplerId, ShaderDesc, ShaderId, ShaderRuntimeCacheStats,
+    TextureDesc, TextureId, TextureResidencySnapshot, UiDrawList, UiTexId, UploadPumpDesc,
+    UploadPumpReport, Viewport,
 };
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct RenderBackendInfoV1 {
+pub struct RenderBackendInfo {
     pub backend_id: String,
     pub backend_name: String,
     pub backend_version: String,
     pub debug_text: String,
-    pub clear_color: [f32; 4],
+    pub clear_color: Color4,
     #[serde(default)]
     pub capabilities: RenderBackendCapabilities,
     #[serde(default)]
     pub work_budget: RenderWorkBudget,
+    #[serde(default)]
+    pub protocol_version: RenderApiVersion,
 }
 
-impl RenderBackendInfoV1 {
+impl RenderBackendInfo {
     #[inline]
     pub fn with_capabilities(mut self, capabilities: RenderBackendCapabilities) -> Self {
         self.capabilities = capabilities;
@@ -40,8 +40,11 @@ impl RenderBackendInfoV1 {
     }
 }
 
+/// Imperative render device command used inside the stable service protocol.
+/// This is the resource/draw command vocabulary shared by runtime, render graph
+/// replay and backends.
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub enum RenderRequestV1 {
+pub enum RenderCommand {
     BeginFrame(BeginFrameDesc),
     SetUiDrawList(UiDrawList),
     SetDebugText(String),
@@ -85,7 +88,7 @@ pub enum RenderRequestV1 {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub enum RenderResponseV1 {
+pub enum RenderCommandResponse {
     Unit,
     RenderTargetId(RenderTargetId),
     UiTexId(UiTexId),
@@ -103,13 +106,6 @@ pub enum RenderResponseV1 {
     DiagnosticsSnapshot(RenderDiagnosticsSnapshot),
 }
 
-/// Current V3 immediate-command compatibility payload. It intentionally has a
-/// separate semantic name from the legacy V1 wire endpoint: V3 clients should
-/// send this through `invoke_json_v3`, while direct `invoke_json_v1` remains
-/// legacy-only.
-pub type RenderImmediateRequest = RenderRequestV1;
-pub type RenderImmediateResponse = RenderResponseV1;
-
 #[inline]
 pub fn encode_json<T: Serialize>(value: &T) -> Result<Vec<u8>, String> {
     serde_json::to_vec(value).map_err(|e| e.to_string())
@@ -119,7 +115,6 @@ pub fn encode_json<T: Serialize>(value: &T) -> Result<Vec<u8>, String> {
 pub fn decode_json<T: for<'de> Deserialize<'de>>(bytes: &[u8]) -> Result<T, String> {
     serde_json::from_slice(bytes).map_err(|e| e.to_string())
 }
-
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 pub struct RenderApiVersion {
@@ -138,79 +133,9 @@ impl RenderApiVersion {
 impl Default for RenderApiVersion {
     #[inline]
     fn default() -> Self {
-        Self::new(3, 0, 0)
+        Self::new(1, 0, 0)
     }
 }
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-pub enum RenderProtocolStatus {
-    Current,
-    Legacy,
-}
-
-impl Default for RenderProtocolStatus {
-    #[inline]
-    fn default() -> Self {
-        Self::Current
-    }
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct RenderLegacyWarning {
-    pub protocol: RenderApiVersion,
-    pub status: RenderProtocolStatus,
-    pub code: String,
-    pub message: String,
-    pub migration_target: RenderApiVersion,
-}
-
-impl RenderLegacyWarning {
-    #[inline]
-    pub fn new(protocol: RenderApiVersion) -> Self {
-        Self {
-            protocol,
-            status: RenderProtocolStatus::Legacy,
-            code: format!("render.protocol.v{}.legacy", protocol.major),
-            message: format!(
-                "Render API V{} is a legacy compatibility protocol; migrate runtime/backend calls to Render API V3.",
-                protocol.major
-            ),
-            migration_target: RenderApiVersion::new(3, 0, 0),
-        }
-    }
-}
-
-#[inline]
-pub fn render_legacy_protocol_warning(version: RenderApiVersion) -> RenderLegacyWarning {
-    RenderLegacyWarning::new(version)
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct RenderBackendInfoV3 {
-    pub protocol_version: RenderApiVersion,
-    pub backend: RenderBackendInfoV1,
-    #[serde(default)]
-    pub protocol_status: RenderProtocolStatus,
-    #[serde(default)]
-    pub legacy_warnings: Vec<RenderLegacyWarning>,
-}
-
-impl RenderBackendInfoV3 {
-    #[inline]
-    pub fn from_v1(backend: RenderBackendInfoV1) -> Self {
-        Self {
-            protocol_version: RenderApiVersion::new(3, 0, 0),
-            backend,
-            protocol_status: RenderProtocolStatus::Current,
-            legacy_warnings: vec![
-                RenderLegacyWarning::new(RenderApiVersion::new(1, 0, 0)),
-                RenderLegacyWarning::new(RenderApiVersion::new(2, 0, 0)),
-            ],
-        }
-    }
-}
-
-pub type RenderBackendInfoV2 = RenderBackendInfoV3;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RenderCapabilityNegotiationRequest {
@@ -233,6 +158,22 @@ impl Default for RenderCapabilityNegotiationRequest {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RenderProtocolNotice {
+    pub code: String,
+    pub message: String,
+}
+
+impl RenderProtocolNotice {
+    #[inline]
+    pub fn new(code: impl Into<String>, message: impl Into<String>) -> Self {
+        Self {
+            code: code.into(),
+            message: message.into(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RenderCapabilityNegotiationResponse {
     pub accepted_version: RenderApiVersion,
     pub backend_version: RenderApiVersion,
@@ -240,7 +181,7 @@ pub struct RenderCapabilityNegotiationResponse {
     pub enabled_features: Vec<RenderFeature>,
     pub missing_required_features: Vec<RenderFeature>,
     #[serde(default)]
-    pub warnings: Vec<RenderLegacyWarning>,
+    pub notices: Vec<RenderProtocolNotice>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -290,36 +231,86 @@ impl RenderProblemDetails {
     }
 }
 
+/// One renderer-facing frame package inspired by mature phase/draw-list
+/// renderers: the runtime submits a single envelope containing the graph,
+/// declared draw-list routes and frame extents instead of negotiating scattered
+/// per-version service calls.
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub enum RenderRequestV3 {
+pub struct RenderFrameEnvelope {
+    pub frame_index: u64,
+    pub label: Option<String>,
+    pub clear_color: Color4,
+    pub surface_extent: Extent2D,
+    pub viewport_extent: Extent2D,
+    pub viewport_is_surface: bool,
+    pub graph: RenderGraphDesc,
+    #[serde(default)]
+    pub draw_lists: Vec<RenderDrawListKind>,
+    #[serde(default)]
+    pub work_budget: Option<RenderWorkBudget>,
+}
+
+impl RenderFrameEnvelope {
+    #[inline]
+    pub fn new(
+        frame_index: u64,
+        clear_color: Color4,
+        surface_extent: Extent2D,
+        viewport_extent: Extent2D,
+        viewport_is_surface: bool,
+        graph: RenderGraphDesc,
+    ) -> Self {
+        Self {
+            frame_index,
+            label: graph.label.clone(),
+            clear_color,
+            surface_extent,
+            viewport_extent,
+            viewport_is_surface,
+            graph,
+            draw_lists: Vec::new(),
+            work_budget: None,
+        }
+    }
+
+    #[inline]
+    pub fn with_draw_lists(mut self, draw_lists: impl IntoIterator<Item = RenderDrawListKind>) -> Self {
+        self.draw_lists = draw_lists.into_iter().collect();
+        self
+    }
+
+    #[inline]
+    pub fn with_work_budget(mut self, budget: RenderWorkBudget) -> Self {
+        self.work_budget = Some(budget);
+        self
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum RenderServiceRequest {
     Negotiate(RenderCapabilityNegotiationRequest),
+    Command(RenderCommand),
     CompileRenderGraph(RenderGraphDesc),
     ValidateRenderGraph(RenderGraphDesc),
     SetRenderPhase { phase: Option<RenderGraphPassKind> },
     SetDrawListKind { kind: Option<RenderDrawListKind> },
     DiscardRecordedCommands,
     SubmitRenderGraph(RenderGraphDesc),
+    SubmitFrame(RenderFrameEnvelope),
     SetWorkBudget(RenderWorkBudget),
     PumpUploads(UploadPumpDesc),
     DiagnosticsSnapshot,
-    Immediate(RenderImmediateRequest),
-    V1(RenderRequestV1),
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub enum RenderResponseV3 {
+pub enum RenderServiceResponse {
     Unit,
     Negotiation(RenderCapabilityNegotiationResponse),
+    Command(RenderCommandResponse),
     GraphCompileReport(RenderGraphCompileReport),
     GraphValidationReport(RenderGraphValidationReport),
     GraphSubmitReport(RenderGraphSubmitReport),
     UploadPumpReport(UploadPumpReport),
     DiagnosticsSnapshot(RenderDiagnosticsSnapshot),
     Problem(RenderProblemDetails),
-    LegacyWarning(RenderLegacyWarning),
-    Immediate(RenderImmediateResponse),
-    V1(RenderResponseV1),
 }
-
-pub type RenderRequestV2 = RenderRequestV3;
-pub type RenderResponseV2 = RenderResponseV3;

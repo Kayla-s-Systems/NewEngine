@@ -2,7 +2,6 @@ use std::path::PathBuf;
 
 use newengine_core::render::{RenderApiRef, RENDER_API_ID, RENDER_API_PROVIDE};
 use newengine_core::{EngineError, EngineResult, Module, ModuleCtx};
-use newengine_plugin_api::{CapabilityKind, CapabilityRole};
 use newengine_render_api::RENDER_SERVICE_ID;
 
 use crate::render_runtime::backend_match::backend_matches;
@@ -14,6 +13,16 @@ use crate::render_runtime::types::{
     DEFAULT_RENDER_BACKEND_CLEAR_COLOR,
     NULL_RENDER_BACKEND_ID,
 };
+
+
+#[inline]
+fn plugin_declares_render_service(plugin: &newengine_plugin_host::PluginSnapshotEntry) -> bool {
+    plugin.capabilities.iter().any(|cap| {
+        cap.role == newengine_plugin_api::CapabilityRole::Provides
+            && cap.kind == newengine_plugin_api::CapabilityKind::ServiceV1
+            && cap.id.as_str() == RENDER_SERVICE_ID
+    })
+}
 
 pub struct RenderBackendRuntimeModule {
     backend_spec: String,
@@ -37,14 +46,6 @@ impl RenderBackendRuntimeModule {
     }
 
     #[inline]
-    fn plugin_declares_render_service(plugin: &newengine_plugin_host::PluginSnapshotEntry) -> bool {
-        plugin.capabilities.iter().any(|cap| {
-            cap.role == CapabilityRole::Provides
-                && cap.kind == CapabilityKind::ServiceV1
-                && cap.id.as_str() == RENDER_SERVICE_ID
-        })
-    }
-
     fn explain_backend_unavailability<E: Send + 'static>(
         &self,
         ctx: &ModuleCtx<'_, E>,
@@ -60,10 +61,10 @@ impl RenderBackendRuntimeModule {
         let configured = self.backend_spec.as_str();
 
         if let Some(plugin) = snapshot.plugins.iter().find(|plugin| plugin.id == configured) {
-            let declared = if Self::plugin_declares_render_service(plugin) {
-                "declares render.api.v1"
+            let declared = if plugin_declares_render_service(plugin) {
+                "declares render.api"
             } else {
-                "does not declare render.api.v1"
+                "does not declare render.api"
             };
 
             return match plugin.state.as_str() {
@@ -91,7 +92,7 @@ impl RenderBackendRuntimeModule {
             .iter()
             .filter(|plugin| {
                 plugin.id.starts_with("newengine.renderer.")
-                    || Self::plugin_declares_render_service(plugin)
+                    || plugin_declares_render_service(plugin)
             })
             .map(|plugin| format!("{}:{}", plugin.id, plugin.state))
             .collect();
@@ -169,22 +170,14 @@ impl<E: Send + 'static> Module<E> for RenderBackendRuntimeModule {
         let host = newengine_plugin_host::default_host_api();
         let client = RenderServiceClient::new(host);
 
-        let info_v3 = match client.info_v3() {
+        let info = match client.info() {
             Ok(info) => info,
             Err(err) => {
                 let reason = self.explain_backend_unavailability(ctx, &err);
                 return self.enable_null_render_backend(ctx, reason);
             }
         };
-        for warning in &info_v3.legacy_warnings {
-            log::debug!(
-                "render backend: compatibility endpoint available code='{}' message='{}'",
-                warning.code,
-                warning.message
-            );
-        }
-        let protocol_version = info_v3.protocol_version;
-        let info = info_v3.backend;
+        let protocol_version = info.protocol_version;
 
         if !backend_matches(&self.backend_spec, &info.backend_id) {
             return self.enable_null_render_backend(
@@ -197,7 +190,7 @@ impl<E: Send + 'static> Module<E> for RenderBackendRuntimeModule {
         }
 
         log::info!(
-            "render backend: v3 bridge bound id='{}' name='{}' version='{}' debug_text='{}' protocol=v{}.{}.{} features={} upload_budget={}MB/frame",
+            "render backend: stable bridge bound id='{}' name='{}' version='{}' debug_text='{}' protocol=v{}.{}.{} features={} upload_budget={}MB/frame",
             info.backend_id,
             info.backend_name,
             info.backend_version,

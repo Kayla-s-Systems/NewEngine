@@ -28,7 +28,7 @@ pub(super) fn update_game_ready_launch_gate(
         return true;
     };
 
-    if gate_snapshot.released {
+    if gate_snapshot.is_released() {
         return true;
     }
 

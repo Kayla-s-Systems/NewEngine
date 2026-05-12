@@ -1,6 +1,6 @@
 use newengine_math::{Mat4, Vec3};
 
-/// Runtime draw budgets keep the current non-instanced Vulkan V3 path stable.
+/// Runtime draw budgets keep the current non-instanced Vulkan path stable.
 /// They are intentionally deterministic: nearest objects win, ties are stable-key ordered.
 pub(super) const RUNTIME_OPAQUE_PRIMITIVE_BUDGET: usize = 128;
 pub(super) const RUNTIME_SHADOW_PRIMITIVE_BUDGET: usize = 96;

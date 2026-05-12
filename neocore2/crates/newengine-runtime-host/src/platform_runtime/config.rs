@@ -19,7 +19,7 @@ use crate::platform_runtime::constants::{
 use crate::platform_runtime::types::ResolvedPlatformRuntimeConfig;
 
 #[inline]
-pub fn legacy_platform_config_from_startup(startup: &StartupConfig) -> PlatformAppConfigV1 {
+pub fn platform_config_from_startup_defaults(startup: &StartupConfig) -> PlatformAppConfigV1 {
     let placement = match startup.window_placement {
         newengine_core::startup::WindowPlacement::Default => PlatformWindowPlacementV1 {
             kind: PlatformWindowPlacementKindV1::OsDefault,
@@ -199,7 +199,7 @@ pub fn resolve_platform_runtime_config(
     startup: &StartupConfig,
     runtime_path: &Path,
 ) -> EngineResult<ResolvedPlatformRuntimeConfig> {
-    let legacy = legacy_platform_config_from_startup(startup);
+    let startup_defaults = platform_config_from_startup_defaults(startup);
 
     let lib = unsafe { Library::new(runtime_path) }
         .map_err(|e| EngineError::other(format!(
@@ -212,7 +212,7 @@ pub fn resolve_platform_runtime_config(
         Ok(sym) => sym,
         Err(_) => {
             log::info!(
-                "platform runtime: plugin metadata not exported; using legacy startup window config"
+                "platform runtime: plugin metadata not exported; using startup window config defaults"
             );
             let descriptor = synthesize_platform_descriptor(
                 PLATFORM_PLUGIN_ID,
@@ -224,7 +224,7 @@ pub fn resolve_platform_runtime_config(
                 plugin_name: "NewEngine Platform Runtime".to_owned(),
                 plugin_version: "-".to_owned(),
                 descriptor,
-                config: legacy,
+                config: startup_defaults,
                 icon_path: startup.window_icon_path.clone(),
             });
         }
@@ -233,7 +233,7 @@ pub fn resolve_platform_runtime_config(
     let root = unsafe { root_sym() };
     let Some(create_v3) = root.create_v3() else {
         log::info!(
-            "platform runtime: plugin metadata ABI V3 not available; using legacy startup window config"
+            "platform runtime: plugin metadata ABI V3 not available; using startup window config defaults"
         );
         let descriptor = synthesize_platform_descriptor(
             PLATFORM_PLUGIN_ID,
@@ -245,7 +245,7 @@ pub fn resolve_platform_runtime_config(
             plugin_name: "NewEngine Platform Runtime".to_owned(),
             plugin_version: "-".to_owned(),
             descriptor,
-            config: legacy,
+            config: startup_defaults,
             icon_path: startup.window_icon_path.clone(),
         });
     };

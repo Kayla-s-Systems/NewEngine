@@ -128,9 +128,6 @@ pub(super) fn build_load_selection(
             ScannedDynlibKind::PlatformRuntime { .. } => SelectionDecision::Runtime {
                 label: "platform",
             },
-            ScannedDynlibKind::LegacyRenderBackend { .. } => SelectionDecision::Unsupported {
-                reason: "legacy render backend ABI without plugin root",
-            },
             ScannedDynlibKind::Unknown => SelectionDecision::Unknown,
             ScannedDynlibKind::Plugin {
                 id,

@@ -7,8 +7,8 @@ use libloading::Library;
 use super::graph::{DiscoveryGraph, ScannedDynlib, ScannedDynlibKind};
 use super::manifest::PluginManifest;
 use super::metadata::{
-    build_scanned_plugin_kind, infer_render_backend_identity, platform_runtime_identity_from_probe,
-    probe_plugin_metadata, PLATFORM_RUNTIME_SYMBOL, RENDER_BACKEND_SYMBOL,
+    build_scanned_plugin_kind, platform_runtime_identity_from_probe, probe_plugin_metadata,
+    PLATFORM_RUNTIME_SYMBOL,
 };
 use crate::manager::types::PluginLoadError;
 use crate::path_fmt::display_clean;
@@ -70,7 +70,6 @@ pub(super) fn scan_plugins_dir(dir: &Path) -> Result<DiscoveryGraph, PluginLoadE
     items.sort_by(|a, b| sort_key(&a.path).cmp(&sort_key(&b.path)));
 
     let mut platform_runtime_count = 0usize;
-    let mut legacy_render_backend_count = 0usize;
     let mut bootstrap_total = 0usize;
     let mut engine_total = 0usize;
     let mut unknown_dynlibs: Vec<String> = Vec::new();
@@ -79,9 +78,6 @@ pub(super) fn scan_plugins_dir(dir: &Path) -> Result<DiscoveryGraph, PluginLoadE
         match &item.kind {
             ScannedDynlibKind::PlatformRuntime { .. } => {
                 platform_runtime_count = platform_runtime_count.saturating_add(1);
-            }
-            ScannedDynlibKind::LegacyRenderBackend { .. } => {
-                legacy_render_backend_count = legacy_render_backend_count.saturating_add(1);
             }
             ScannedDynlibKind::Plugin { phase, .. } => match phase {
                 newengine_plugin_api::PluginBootstrapPhase::Bootstrap => {
@@ -105,7 +101,6 @@ pub(super) fn scan_plugins_dir(dir: &Path) -> Result<DiscoveryGraph, PluginLoadE
         items,
         scan_errors,
         platform_runtime_count,
-        legacy_render_backend_count,
         bootstrap_total,
         engine_total,
         unknown_dynlibs,
@@ -127,9 +122,6 @@ fn scan_dynamic_lib(path: &Path, manifest: Option<&PluginManifest>) -> Result<Sc
         });
     }
 
-    let has_legacy_render_backend_abi =
-        unsafe { lib.get::<unsafe extern "C" fn()>(RENDER_BACKEND_SYMBOL) }.is_ok();
-
     if let Some(kind) = build_scanned_plugin_kind(&plugin_probe) {
         let kind = apply_manifest_overlay(kind, manifest_entry);
         return Ok(ScannedDynlib {
@@ -139,14 +131,6 @@ fn scan_dynamic_lib(path: &Path, manifest: Option<&PluginManifest>) -> Result<Sc
         });
     }
 
-    if has_legacy_render_backend_abi {
-        let (id, version) = infer_render_backend_identity(path);
-        return Ok(ScannedDynlib {
-            path: path.to_path_buf(),
-            file_name,
-            kind: ScannedDynlibKind::LegacyRenderBackend { id, version },
-        });
-    }
 
     Ok(ScannedDynlib {
         path: path.to_path_buf(),

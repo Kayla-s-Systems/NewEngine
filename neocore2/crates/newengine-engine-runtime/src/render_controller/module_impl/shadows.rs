@@ -275,7 +275,7 @@ pub(super) fn warn_unsupported_point_shadow_once(this: &mut RuntimeRenderControl
     }
     this.unsupported_point_shadow_warning_emitted = true;
     log::warn!(
-        "render shadows: PointLight is shadow-capable, but point cube-map shadows are not implemented by this Vulkan V3 path yet; falling back to unshadowed point lighting"
+        "render shadows: PointLight is shadow-capable, but point cube-map shadows are not implemented by this Vulkan path yet; falling back to unshadowed point lighting"
     );
 }
 

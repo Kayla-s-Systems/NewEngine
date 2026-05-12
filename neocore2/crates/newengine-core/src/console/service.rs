@@ -97,6 +97,3 @@ pub fn init_console_service() {
     let _ = host_register_service_impl(dyn_svc);
 }
 
-pub fn take_exit_requested() -> bool {
-    RT.get().map(|r| r.take_exit_requested()).unwrap_or(false)
-}

@@ -1,6 +1,7 @@
 use crate::error::{EngineError, EngineResult};
 use crate::events::EventHub;
 use crate::module::{Bus, Module, Resources, Services};
+use crate::jobs::{JobSystem, JobSystemHandle, JobSystemSnapshot};
 use crate::sched::Scheduler;
 use crate::sync::ShutdownToken;
 use newengine_plugin_host::{
@@ -15,6 +16,7 @@ use std::path::PathBuf;
 use std::time::Instant;
 
 use super::module_slot::ModuleSlot;
+use super::run_state::{EngineFsm, EngineRunState};
 use super::startup_graph::StartupReadinessGraph;
 use super::{EngineConfig, ModuleFaultTolerance, PluginFaultTolerance};
 
@@ -32,6 +34,7 @@ pub struct Engine<E: Send + 'static> {
 
     pub(super) events: EventHub,
     pub(super) scheduler: Scheduler,
+    pub(super) job_system: JobSystem,
     pub(super) startup_graph: StartupReadinessGraph,
 
     pub(super) plugins: PluginManager,
@@ -40,11 +43,10 @@ pub struct Engine<E: Send + 'static> {
     pub(super) plugins_dir: Option<PathBuf>,
 
     pub(super) shutdown: ShutdownToken,
-    pub(super) exit_requested: bool,
+    pub(super) fsm: EngineFsm,
 
     pub(super) frame_index: u64,
     pub(super) fixed_tick: u64,
-    pub(super) started: bool,
     pub(super) last: Instant,
     pub(super) acc: f32,
 }
@@ -52,9 +54,42 @@ pub struct Engine<E: Send + 'static> {
 impl<E: Send + 'static> Engine<E> {
     #[inline]
     pub fn request_exit(&mut self) -> EngineResult<()> {
-        self.exit_requested = true;
+        let transition = self.fsm.request_shutdown();
+        self.log_fsm_transition(transition);
         self.shutdown.request();
         Ok(())
+    }
+
+    #[inline]
+    pub fn run_state(&self) -> EngineRunState {
+        self.fsm.state()
+    }
+
+    #[inline]
+    pub(super) fn set_run_state(&mut self, next: EngineRunState) {
+        let transition = self.fsm.transition(next);
+        self.log_fsm_transition(transition);
+    }
+
+    #[inline]
+    pub(super) fn log_fsm_transition(&self, transition: super::run_state::EngineFsmTransition) {
+        if !transition.changed {
+            return;
+        }
+        if transition.valid {
+            log::info!(
+                "engine state: {} -> {}",
+                transition.previous.as_str(),
+                transition.next.as_str()
+            );
+        } else {
+            log::error!(
+                "engine state: invalid transition {} -> {}; forced {}",
+                transition.previous.as_str(),
+                transition.next.as_str(),
+                EngineRunState::Faulted.as_str()
+            );
+        }
     }
 
     #[inline]
@@ -65,6 +100,16 @@ impl<E: Send + 'static> Engine<E> {
     #[inline]
     pub fn events(&self) -> &EventHub {
         &self.events
+    }
+
+    #[inline]
+    pub fn job_system(&self) -> JobSystemHandle {
+        self.job_system.handle()
+    }
+
+    #[inline]
+    pub fn job_system_snapshot(&self) -> JobSystemSnapshot {
+        self.job_system.snapshot()
     }
 
     pub fn emit<T>(&self, event: T) -> EngineResult<()>
@@ -111,6 +156,9 @@ impl<E: Send + 'static> Engine<E> {
         let mut resources = Resources::default();
         resources.insert(PluginControlQueue::default());
 
+        let job_system = JobSystem::new(config.job_system);
+        resources.insert(job_system.handle());
+
         init_host_context();
         init_plugin_config_service(config.plugin_overrides.clone());
 
@@ -130,6 +178,7 @@ impl<E: Send + 'static> Engine<E> {
             bus,
             events: EventHub::new(),
             scheduler: Scheduler::new(),
+            job_system,
             startup_graph: StartupReadinessGraph::default(),
 
             plugins: PluginManager::new(),
@@ -138,11 +187,10 @@ impl<E: Send + 'static> Engine<E> {
             plugins_dir: config.plugins_dir,
 
             shutdown,
-            exit_requested: false,
+            fsm: EngineFsm::new(),
 
             frame_index: 0,
             fixed_tick: 0,
-            started: false,
             last: Instant::now(),
             acc: 0.0,
         })
@@ -174,20 +222,19 @@ impl<E: Send + 'static> Engine<E> {
     }
 
     #[inline]
-    pub(super) fn is_exit_requested(&self) -> bool {
-        self.exit_requested || self.shutdown.is_requested()
+    pub(super) fn is_shutdown_requested(&self) -> bool {
+        self.fsm.is_shutdown_requested() || self.shutdown.is_requested()
     }
 
     #[inline]
     pub(super) fn sync_shutdown_state(&mut self) {
-        if self.shutdown.is_requested() {
-            self.exit_requested = true;
-        }
+        let transition = self.fsm.sync_external_shutdown(self.shutdown.is_requested());
+        self.log_fsm_transition(transition);
     }
 
     #[inline]
     pub(super) fn propagate_shutdown_request(&mut self) {
-        if self.exit_requested {
+        if self.fsm.is_shutdown_requested() {
             self.shutdown.request();
         }
     }

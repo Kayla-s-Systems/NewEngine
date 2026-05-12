@@ -1,7 +1,10 @@
-use newengine_camera::{CameraChannel, CameraChannelState, CameraViewport};
+use newengine_camera::{
+    CameraChannel, CameraChannelState, CameraViewport, EditorNavController, EditorNavMode,
+};
 use newengine_camera_runtime::{
-    step_camera_nav, BoundsSphere as CamBoundsSphere, CameraNavFrameRequest, CameraNavInput,
-    CameraNavParams,
+    step_camera_nav, BoundsSphere as CamBoundsSphere, CameraManagerResource,
+    CameraNavFrameRequest, CameraNavInput, CameraNavParams, CameraRuntimeService,
+    CameraRuntimeServiceConfig, CameraRuntimeWorldState,
 };
 use newengine_core::render::RenderApi;
 use newengine_math::Vec2;
@@ -9,12 +12,11 @@ use newengine_scene::Scene;
 
 use super::frame_types::WorldFrameState;
 use super::input::ViewportInputSnap;
-use super::{readiness, scene};
 use super::super::controller::RuntimeRenderController;
+use super::{readiness, scene};
 use crate::gameplay::{
-    apply_player_input, attach_active_camera_to_player, capture_runtime_world_snapshot,
-    clear_player_input, detach_active_camera_from_player, first_player, restore_runtime_world_snapshot,
-    run_schedule, EditorPlayMode,
+    capture_runtime_world_snapshot, first_player, restore_runtime_world_snapshot, run_schedule,
+    EditorPlayMode, FpsDemoRules,
 };
 
 impl RuntimeRenderController {
@@ -39,6 +41,8 @@ impl RuntimeRenderController {
                     .and_then(|s| s.active_camera.or(s.root))
                     .unwrap_or_default();
 
+                CameraRuntimeService::ensure_manager_resource(world);
+
                 let world_playable = readiness::update_game_ready_launch_gate(
                     self,
                     r,
@@ -48,7 +52,7 @@ impl RuntimeRenderController {
                 );
                 let gate_released_waiting_activation = world
                     .resource::<crate::gameplay::GameReadyWorldLaunchGate>()
-                    .map(|gate| gate.released && !gate.play_activated)
+                    .map(|gate| gate.is_released() && !gate.is_play_activated())
                     .unwrap_or(false);
 
                 let effective_play_mode = if gate_released_waiting_activation {
@@ -65,8 +69,38 @@ impl RuntimeRenderController {
                     EditorPlayMode::Edit
                 };
 
+                let existing_nav_mode = world
+                    .get::<EditorNavController>(cam_id)
+                    .map(|ctrl| ctrl.mode)
+                    .unwrap_or(EditorNavMode::Orbit);
+                let player = first_player(world);
+                let gate_blocked = play_mode.is_runtime() && !world_playable;
+
+                let suppress_editor_nav = {
+                    let manager = world
+                        .resource_mut::<CameraManagerResource>()
+                        .expect("camera manager resource inserted");
+                    manager.advance(dt);
+                    manager.sync_world_state(CameraRuntimeWorldState {
+                        editor_nav_mode: existing_nav_mode,
+                        runtime_requested: play_mode.is_runtime(),
+                        public_runtime_active: effective_play_mode.is_runtime(),
+                        wants_direct_player_control: effective_play_mode
+                            .wants_direct_player_control(),
+                        gate_blocked,
+                        player,
+                    });
+                    !manager.wants_navigation_input()
+                };
+
                 self.sync_play_mode_transition(world, cam_id, effective_play_mode);
-                self.apply_runtime_input(world, input, effective_play_mode);
+                let service_config = camera_runtime_service_config(world);
+                CameraRuntimeService::apply_pending_director_requests(
+                    world,
+                    cam_id,
+                    service_config,
+                );
+                self.apply_runtime_input(world, input, effective_play_mode, service_config);
 
                 if effective_play_mode.runs_physics() {
                     run_schedule(&mut self.sim_schedule, world, dt);
@@ -97,12 +131,13 @@ impl RuntimeRenderController {
                     all: self.viewport_bridge.read_frame_all(),
                 };
 
-                if effective_play_mode.wants_direct_player_control() {
+                if suppress_editor_nav || effective_play_mode.wants_direct_player_control() {
                     nav_input.active = false;
                     nav_input.look_drag = false;
                     nav_input.pan_drag = false;
                     nav_input.fly_rmb = false;
                     nav_input.move_mask = 0;
+                    nav_input.wheel_y = 0.0;
                 }
 
                 let out = step_camera_nav(
@@ -114,7 +149,15 @@ impl RuntimeRenderController {
                     frame_req,
                 );
 
-                let camera_frame = out.frame;
+                let camera_frame = if let Some(manager) = world.resource_mut::<CameraManagerResource>() {
+                    manager.sync_editor_mode_from_controller(out.controller.mode);
+                    manager.set_last_cursor(out.cursor);
+                    let frame = manager.resolve_camera_frame(out.frame, dt);
+                    self.overlay_metrics.record_camera_report(manager.report());
+                    frame
+                } else {
+                    out.frame
+                };
                 self.projection = camera_frame.projection;
                 self.last_aspect = camera_frame.viewport.aspect();
                 self.last_vp_w = vp_w;
@@ -151,9 +194,8 @@ impl RuntimeRenderController {
 
         if self.last_play_mode.wants_direct_player_control() {
             if let Some(player) = first_player(world) {
-                clear_player_input(world, player);
+                CameraRuntimeService::clear_player_input(world, player);
             }
-            detach_active_camera_from_player(world, cam_id);
             if let Some(snapshot) = self.play_session.take() {
                 let _ = world.insert(snapshot.cam_id, snapshot.rig);
                 if let Some(transform) = snapshot.transform {
@@ -173,11 +215,6 @@ impl RuntimeRenderController {
                 rig,
                 transform,
             });
-            if let Some(player) = first_player(world) {
-                attach_active_camera_to_player(world, cam_id, player);
-            }
-        } else {
-            detach_active_camera_from_player(world, cam_id);
         }
 
         if self.last_play_mode.is_runtime() && !effective_play_mode.is_runtime() {
@@ -193,22 +230,33 @@ impl RuntimeRenderController {
         world: &mut newengine_ecs::World,
         input: &ViewportInputSnap,
         effective_play_mode: EditorPlayMode,
+        service_config: CameraRuntimeServiceConfig,
     ) {
         let Some(player) = first_player(world) else {
             return;
         };
         if effective_play_mode.wants_direct_player_control() {
-            apply_player_input(
+            CameraRuntimeService::apply_player_input(
                 world,
                 player,
                 input.move_mask,
                 Vec2::new(-input.dx_px, -input.dy_px),
                 input.active,
+                service_config.sprint_multiplier,
             );
         } else {
-            clear_player_input(world, player);
+            CameraRuntimeService::clear_player_input(world, player);
         }
     }
+}
+
+fn camera_runtime_service_config(world: &newengine_ecs::World) -> CameraRuntimeServiceConfig {
+    let mut config = CameraRuntimeServiceConfig::default();
+    if let Some(rules) = world.resource::<FpsDemoRules>() {
+        config.first_person_eye_height = rules.player.camera_eye_height;
+        config.sprint_multiplier = rules.player.sprint_multiplier;
+    }
+    config
 }
 
 fn camera_nav_input(input: &ViewportInputSnap, play_mode: EditorPlayMode) -> CameraNavInput {

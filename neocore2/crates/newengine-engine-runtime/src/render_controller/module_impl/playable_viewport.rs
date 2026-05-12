@@ -18,7 +18,7 @@ impl RuntimeRenderController {
         scope: RenderFrameScope,
     ) -> EngineResult<PlayableFrameOutcome> {
         if scope.vp_w == 0 || scope.vp_h == 0 || self.viewport_pass_disabled {
-            self.render_legacy_ui_only_frame(ctx, r, ui, scope)?;
+            self.render_ui_only_frame(ctx, r, ui, scope)?;
             return Ok(PlayableFrameOutcome::Continue {
                 frame_debug_snapshot: None,
             });

@@ -1,14 +1,15 @@
 use newengine_core::render::{
-    Extent2D, RectI32, RenderApi, RenderFrameDebugSnapshot, RenderTargetId, Viewport,
+    Extent2D, RectI32, RenderApi, RenderFrameDebugSnapshot, RenderFrameEnvelope, RenderTargetId, Viewport,
 };
 use crate::gameplay::EditorPlayMode;
+use newengine_camera_runtime::CameraManagerResource;
 use newengine_core::EngineResult;
 use newengine_render_frame_graph::{standard_runtime_frame, StandardRuntimePipelineDesc};
 use newengine_scene::Scene;
 use newengine_ui::draw::UiDrawList;
 
 use super::draw_lists::{DrawListBuildCtx, RuntimeDrawListSet, SceneExtractionCtx};
-use super::frame_submit::submit_frame_plan_v3;
+use super::frame_submit::submit_frame_envelope;
 use super::frame_types::{PlayableFrameOutcome, RenderFrameScope, WorldFrameState};
 use super::providers::standard_runtime_draw_list_provider_registry;
 use super::{lights, passes, picking, scene, shadows};
@@ -133,6 +134,7 @@ impl RuntimeRenderController {
         } else {
             None
         };
+        let draw_list_descs = draw_lists.descriptors();
         let frame_plan = standard_runtime_frame(
             StandardRuntimePipelineDesc::new(self.frame_index, Extent2D::new(scope.w, scope.h), extent)
                 .viewport_is_surface(scope.direct_surface_viewport)
@@ -143,7 +145,7 @@ impl RuntimeRenderController {
                 .postfx(false)
                 .ui(scope.ui_enabled)
                 .debug_overlay(true)
-                .draw_lists(draw_lists.descriptors()),
+                .draw_lists(draw_list_descs.clone()),
         );
 
         provider_registry.validate_routes(&frame_plan.validate_draw_list_routes())?;
@@ -163,9 +165,19 @@ impl RuntimeRenderController {
                 .map(|phase| phase.label())
                 .collect::<Vec<_>>()
                 .join(" -> ");
-            log::debug!("render frame graph v3: frame={} phases={}", self.frame_index, phases);
+            log::debug!("render frame envelope: frame={} phases={}", self.frame_index, phases);
         }
-        let submit_report = match submit_frame_plan_v3(r, &frame_plan, scope.trace_frame) {
+        let frame_envelope = RenderFrameEnvelope::new(
+            self.frame_index,
+            self.clear_color,
+            Extent2D::new(scope.w, scope.h),
+            extent,
+            scope.direct_surface_viewport,
+            frame_plan.graph.clone(),
+        )
+        .with_draw_lists(draw_list_descs.iter().map(|desc| desc.kind));
+
+        let submit_report = match submit_frame_envelope(r, frame_envelope, scope.trace_frame) {
             Ok(report) => report,
             Err(e) => {
                 let _ = r.discard_recorded_commands();
@@ -177,6 +189,24 @@ impl RuntimeRenderController {
             self.mark_shadow_map_rendered();
         }
         self.overlay_metrics.record_graph_submit(submit_report.clone());
+
+        let mut debug_notes = Vec::new();
+        if let Some(report) = scene
+            .world()
+            .resource::<CameraManagerResource>()
+            .map(|manager| manager.report())
+        {
+            self.overlay_metrics.record_camera_report(report);
+            debug_notes.push(format!(
+                "camera director={:?} mode={:?} input={:?} gate_blocked={} blend_active={} blend_alpha={:.3}",
+                report.active_director,
+                report.active_mode,
+                report.input_context,
+                report.gate_blocked,
+                report.frame_blend_active,
+                report.frame_blend_alpha,
+            ));
+        }
 
         Ok(PlayableFrameOutcome::Continue {
             frame_debug_snapshot: Some(RenderFrameDebugSnapshot {
@@ -203,7 +233,7 @@ impl RuntimeRenderController {
                 resource_buffers: 0,
                 resource_textures: 0,
                 resource_pipelines: 0,
-                notes: Vec::new(),
+                notes: debug_notes,
             }),
         })
     }

@@ -1,20 +1,20 @@
 #![forbid(unsafe_op_in_unsafe_fn)]
 
-use newengine_core::render::{RenderApi, RenderDrawListKind, RenderGraphSubmitReport};
+use newengine_core::render::{RenderApi, RenderDrawListKind, RenderFrameEnvelope, RenderGraphSubmitReport};
 use newengine_core::EngineResult;
-use newengine_render_frame_graph::RenderFramePlan;
 
 #[inline]
-pub(super) fn submit_frame_plan_v3(
+pub(super) fn submit_frame_envelope(
     r: &mut dyn RenderApi,
-    plan: &RenderFramePlan,
+    frame: RenderFrameEnvelope,
     trace_frame: bool,
 ) -> EngineResult<RenderGraphSubmitReport> {
-    let report = r.submit_render_graph(plan.graph.clone())?;
+    let graph_label = frame.label.clone().unwrap_or_else(|| "<unnamed>".to_owned());
+    let report = r.submit_frame(frame)?;
     if trace_frame {
         log::debug!(
-            "render frame graph v3: submitted graph='{}' passes={} executed_native={} skipped_native={} barriers(raw={}, war={}, waw={})",
-            plan.graph.label.as_deref().unwrap_or("<unnamed>"),
+            "render frame envelope: submitted graph='{}' passes={} executed_native={} skipped_native={} barriers(raw={}, war={}, waw={})",
+            graph_label,
             report.compile.pass_count,
             report.executed_passes,
             report.skipped_passes,
@@ -45,7 +45,7 @@ pub(super) fn submit_frame_plan_v3(
                 })
                 .collect::<Vec<_>>()
                 .join(", ");
-            log::debug!("render frame graph v3: draw-list replay stats [{}]", draw_lists);
+            log::debug!("render frame envelope: draw-list replay stats [{}]", draw_lists);
         }
     }
     Ok(report)

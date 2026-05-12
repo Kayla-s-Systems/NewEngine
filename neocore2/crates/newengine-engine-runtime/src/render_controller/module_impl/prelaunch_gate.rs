@@ -26,7 +26,7 @@ impl RuntimeRenderController {
             let has_pending_gate = scene
                 .world()
                 .resource::<crate::gameplay::GameReadyWorldLaunchGate>()
-                .map(|gate| !gate.play_activated)
+                .map(|gate| !gate.is_play_activated())
                 .unwrap_or(false);
 
             if has_pending_gate {
@@ -51,7 +51,7 @@ impl RuntimeRenderController {
                     .world_mut()
                     .resource_mut::<crate::gameplay::GameReadyWorldLaunchGate>()
                 {
-                    if world_playable && !gate.play_activated {
+                    if world_playable && !gate.is_play_activated() {
                         gate.mark_play_activated();
                         prelaunch_released = true;
                     }

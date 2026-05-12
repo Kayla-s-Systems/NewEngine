@@ -8,6 +8,7 @@ pub mod error_reporter;
 pub mod events;
 pub mod frame;
 pub mod host_events;
+pub mod jobs;
 pub mod lifecycle_events;
 pub mod host_services;
 pub mod module;
@@ -28,7 +29,7 @@ pub use newengine_service_api::{InterfaceId, ServiceInterface, ServiceKey};
 pub use services_registry::{ErasedService, MissingServicePolicy, ServiceRegistry};
 
 pub use bus::Bus;
-pub use engine::{Engine, EngineConfig, ModuleFaultTolerance, PluginFaultTolerance};
+pub use engine::{Engine, EngineConfig, EngineFsm, EngineFsmTransition, EngineRunState, ModuleFaultTolerance, PluginFaultTolerance};
 pub use error::{EngineError, EngineResult, ModuleStage};
 pub use error_reporter::{EngineErrorReporter, EngineErrorReporterConfig};
 pub use events::{EventHub, EventSub};
@@ -36,8 +37,16 @@ pub use frame::Frame;
 pub use host_events::WindowHostEvent;
 pub use lifecycle_events::{EngineLifecycleEvent, EngineReadinessKey, EngineReadinessSnapshot};
 pub use module::{ApiProvide, ApiRequire, ApiVersion, Module, ModuleCtx, Resources, Services};
-pub use sched::Scheduler;
+pub use sched::{
+    ScheduleBudgetClass, SchedulePhase, SchedulePhaseStats, ScheduleRunReport, ScheduleTaskDesc,
+    Scheduler, SchedulerSnapshot,
+};
 pub use sync::ShutdownToken;
+
+pub use jobs::{
+    JobLane, JobPriority, JobRequest, JobSystem, JobSystemConfig, JobSystemHandle,
+    JobSystemSnapshot, JobTicket, JOB_LANE_COUNT, JOB_PRIORITY_COUNT,
+};
 
 pub use run_id::{init_run_id, run_id};
 

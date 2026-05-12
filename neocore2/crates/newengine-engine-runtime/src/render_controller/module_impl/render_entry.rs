@@ -179,7 +179,7 @@ impl RuntimeRenderController {
         }))
     }
 
-    pub(super) fn render_legacy_ui_only_frame<E: Send + 'static>(
+    pub(super) fn render_ui_only_frame<E: Send + 'static>(
         &mut self,
         ctx: &ModuleCtx<'_, E>,
         r: &mut dyn newengine_core::render::RenderApi,

@@ -42,4 +42,4 @@ The game layer must not:
 
 ## ABI policy
 
-Render service protocol mismatch is a build/deploy error. Do not add silent legacy fallbacks for missing `RenderRequestV1` variants. Rebuild and resync the renderer plugin when the render API changes.
+Render service protocol mismatch is a build/deploy error. Do not add fallback branches for missing `RenderServiceRequest` or `RenderCommand` variants. Rebuild and resync the renderer plugin when the render API changes.

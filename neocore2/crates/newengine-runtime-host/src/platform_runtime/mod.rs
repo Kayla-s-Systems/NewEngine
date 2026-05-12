@@ -10,7 +10,7 @@ mod snapshot_service;
 mod types;
 
 pub use config::{
-    legacy_platform_config_from_startup,
+    platform_config_from_startup_defaults,
     resolve_platform_runtime_config,
 };
 pub use discovery::detect_platform_runtime_path;

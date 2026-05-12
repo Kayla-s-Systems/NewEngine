@@ -3,11 +3,11 @@
 use crate::{BufferSlice, Extent2D, IndexFormat, RenderDrawListKind, RenderGraphPassKind};
 use serde::{Deserialize, Serialize};
 
-pub const RENDER_DRAW_LIST_PROVIDER_CAPABILITY_V1: &str = "render.draw_list_provider.v1";
-pub const RENDER_LIGHT_EXTRACTION_PROVIDER_CAPABILITY_V1: &str = "render.light_extraction_provider.v1";
+pub const RENDER_DRAW_LIST_PROVIDER_CAPABILITY: &str = "render.draw_list_provider";
+pub const RENDER_LIGHT_EXTRACTION_PROVIDER_CAPABILITY: &str = "render.light_extraction_provider";
 
-pub const RENDER_DRAW_LIST_PROVIDER_METHOD_EXTRACT_V1: &str = "extract_draw_lists_v1";
-pub const RENDER_LIGHT_EXTRACTION_PROVIDER_METHOD_EXTRACT_V1: &str = "extract_light_plan_v1";
+pub const RENDER_DRAW_LIST_PROVIDER_METHOD_EXTRACT: &str = "extract_draw_lists";
+pub const RENDER_LIGHT_EXTRACTION_PROVIDER_METHOD_EXTRACT: &str = "extract_light_plan";
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 pub struct RenderBoundsSnapshot {
@@ -239,15 +239,7 @@ impl Default for RenderInstanceSource {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum DrawListContributionCommand {
-    /// Legacy descriptor-only contribution. It is still decoded for compatibility,
-    /// but it cannot be lowered into backend commands without stable GPU bindings.
-    ExternalGeometry {
-        provider_id: String,
-        mesh: String,
-        material: Option<String>,
-        transform_cols: [[f32; 4]; 4],
-    },
-    /// Executable V1 geometry contribution. The mesh/material/instance handles are
+    /// Executable geometry contribution. The mesh/material/instance handles are
     /// stable provider-owned identities; the GPU binding is a frame/session-resident
     /// binding that the host can lower into RenderApi draw calls immediately.
     GpuMesh {

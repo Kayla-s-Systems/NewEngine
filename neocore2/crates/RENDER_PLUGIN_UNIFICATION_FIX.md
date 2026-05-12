@@ -1,26 +1,12 @@
-# Render plugin unification fix
+# Render Plugin Contract Cleanup
 
-## Problem
+The render backend is now discovered as a normal plugin service provider.
+Standalone render-backend ABI probing has been removed from plugin discovery; renderer modules must export plugin metadata and provide the `render.api` service capability.
 
-Render backends exporting the legacy `newengine_render_backend_create_v1` symbol were classified as a special runtime
-kind before normal plugin metadata was considered. That kept Vulkan on a hybrid path instead of the standard
-`PluginModuleV3` discovery/load path.
+Current boundary:
 
-## Fix
-
-- plugin metadata now wins over the legacy render backend ABI marker
-- legacy render-backend-only DLLs are reported explicitly as unsupported legacy units instead of being treated as
-  runtime selections
-- duplicated probe identity extraction was collapsed into one helper
-- discovery diagnostics now distinguish:
-    - platform runtime candidates
-    - legacy render-backend-only dynlibs
-    - normal bootstrap/engine plugin candidates
-- host context comment updated to reflect that only platform runtime remains external
-
-## Result
-
-- Vulkan-like backends that export both plugin metadata and the old render symbol are loaded as normal runtime plugins
-- the runtime bridge can keep consuming `render.api.v1` without a special discovery path
-- hybrid branching in discovery/selection is reduced
-- failure mode for stale legacy-only backends is deterministic and visible in logs
+- service id: `render.api`
+- methods: `info_json`, `invoke_json`
+- request envelope: `RenderServiceRequest`
+- response envelope: `RenderServiceResponse`
+- frame packet: `RenderFrameEnvelope`

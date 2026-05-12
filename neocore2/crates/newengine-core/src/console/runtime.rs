@@ -6,7 +6,7 @@ use newengine_plugin_host::services_generation;
 use super::types::{ConsoleCmdEntry, DynCommand, DynPayload, SuggestItem, SuggestResponse};
 
 use newengine_math::collections_prelude::NeBTreeMap as BTreeMap;
-use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 
 type CmdFn = fn(&ConsoleRuntime, &str) -> Result<String, String>;
@@ -25,7 +25,6 @@ pub struct ConsoleRuntime {
 
     cached_services_gen: AtomicU64,
 
-    exit_requested: AtomicBool,
 }
 
 impl ConsoleRuntime {
@@ -85,9 +84,9 @@ impl ConsoleRuntime {
             Cmd {
                 help: "Exit engine",
                 usage: "quit",
-                f: |rt, _| {
-                    rt.exit_requested.store(true, Ordering::Release);
-                    Ok("exit requested".into())
+                f: |_, _| {
+                    crate::sync::ShutdownToken::global_request();
+                    Ok("shutdown requested".into())
                 },
             },
         );
@@ -97,12 +96,7 @@ impl ConsoleRuntime {
             dyn_cmds: Mutex::new(BTreeMap::new()),
             method_cache: Mutex::new(BTreeMap::new()),
             cached_services_gen: AtomicU64::new(0),
-            exit_requested: AtomicBool::new(false),
         }
-    }
-
-    pub fn take_exit_requested(&self) -> bool {
-        self.exit_requested.swap(false, Ordering::AcqRel)
     }
 
     pub fn exec(&self, line: &str) -> Result<String, String> {

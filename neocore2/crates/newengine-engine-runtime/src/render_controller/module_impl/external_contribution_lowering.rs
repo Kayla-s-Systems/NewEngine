@@ -86,22 +86,6 @@ pub(super) fn lower_external_draw_list_contribution(
                     report.skipped_commands = report.skipped_commands.saturating_add(1);
                 }
             }
-            DrawListContributionCommand::ExternalGeometry {
-                provider_id,
-                mesh,
-                material,
-                transform_cols: _,
-            } => {
-                report.skipped_commands = report.skipped_commands.saturating_add(1);
-                log::warn!(
-                    "render draw-list provider '{}' contribution '{}' uses legacy ExternalGeometry provider_id='{}' mesh='{}' material='{}'; skipped because no stable GPU binding was supplied",
-                    provider.id,
-                    contribution.label,
-                    provider_id,
-                    mesh,
-                    material.as_deref().unwrap_or("<none>")
-                );
-            }
             DrawListContributionCommand::DebugLineList { vertices, color } => {
                 let lowered = lower_debug_line_list_contribution(
                     provider,

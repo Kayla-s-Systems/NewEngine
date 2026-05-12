@@ -12,7 +12,7 @@ use newengine_core::EngineResult;
 use newengine_math::Mat4;
 use newengine_plugin_api::{
     Blob, CapabilityId, CapabilityKind, CapabilityRole, MethodName,
-    CAPABILITY_ID_RENDER_DRAW_LIST_PROVIDER_V1, CAPABILITY_TAG_LEGACY,
+    CAPABILITY_ID_RENDER_DRAW_LIST_PROVIDER,
 };
 use newengine_plugin_host::{call_service_v1, has_service, PluginsSnapshot};
 use newengine_render_frame_graph::{DrawListDesc, DrawListRouteValidationReport};
@@ -28,8 +28,7 @@ use super::RuntimeRenderController;
 pub(super) const PROVIDER_TAG_RUNTIME: &str = "runtime";
 pub(super) const PROVIDER_TAG_BUILTIN: &str = "builtin";
 pub(super) const PROVIDER_TAG_PLUGIN: &str = "plugin";
-pub(super) const PROVIDER_TAG_LEGACY: &str = CAPABILITY_TAG_LEGACY;
-pub(super) const PROVIDER_CAP_DRAW_LISTS: &str = CAPABILITY_ID_RENDER_DRAW_LIST_PROVIDER_V1;
+pub(super) const PROVIDER_CAP_DRAW_LISTS: &str = CAPABILITY_ID_RENDER_DRAW_LIST_PROVIDER;
 
 const EMPTY_LISTS: &[RenderDrawListKind] = &[];
 const OPAQUE_FORWARD: &[RenderDrawListKind] = &[RenderDrawListKind::OpaqueForward];
@@ -39,7 +38,6 @@ const SHADOW_AND_OPAQUE: &[RenderDrawListKind] = &[
 ];
 const UI_LIST: &[RenderDrawListKind] = &[RenderDrawListKind::Ui];
 
-static WARNED_LEGACY_DRAW_LIST_PROVIDER: AtomicBool = AtomicBool::new(false);
 static WARNED_PLUGIN_PROVIDER_BRIDGE: AtomicBool = AtomicBool::new(false);
 
 #[derive(Clone, Copy, Debug)]
@@ -60,11 +58,6 @@ impl RenderDrawListProviderMetadata {
             capabilities: &[PROVIDER_CAP_DRAW_LISTS],
         }
     }
-
-    #[inline]
-    pub(super) fn has_tag(self, tag: &str) -> bool {
-        self.tags.iter().any(|it| *it == tag)
-    }
 }
 
 #[derive(Clone, Debug)]
@@ -79,12 +72,6 @@ pub(super) struct ExternalRenderDrawListProviderDesc {
     pub(super) method: String,
 }
 
-impl ExternalRenderDrawListProviderDesc {
-    #[inline]
-    fn has_tag(&self, tag: &str) -> bool {
-        self.tags.iter().any(|it| it == tag)
-    }
-}
 
 #[derive(Clone, Debug, Deserialize)]
 struct PluginDrawListProviderJson {
@@ -121,14 +108,6 @@ impl RenderDrawListProviderRegistry {
             return;
         }
 
-        let metadata = provider.metadata();
-        if metadata.has_tag(PROVIDER_TAG_LEGACY) && !WARNED_LEGACY_DRAW_LIST_PROVIDER.swap(true, Ordering::Relaxed) {
-            log::warn!(
-                "render draw-list provider registry: provider id='{}' tag='legacy' -- migrate to Render API V3 provider contracts",
-                metadata.id
-            );
-        }
-
         self.providers.push(provider);
     }
 
@@ -139,14 +118,6 @@ impl RenderDrawListProviderRegistry {
             .any(|existing| existing.plugin_id == provider.plugin_id && existing.id == provider.id)
         {
             return;
-        }
-
-        if provider.has_tag(PROVIDER_TAG_LEGACY) && !WARNED_LEGACY_DRAW_LIST_PROVIDER.swap(true, Ordering::Relaxed) {
-            log::warn!(
-                "render draw-list provider registry: plugin provider id='{}' plugin='{}' tag='legacy' -- migrate to current Render API V3 provider capability",
-                provider.id,
-                provider.plugin_id
-            );
         }
 
         if provider.service_id.as_deref().is_none()
@@ -173,7 +144,7 @@ impl RenderDrawListProviderRegistry {
                 {
                     continue;
                 }
-                if capability.id.as_str() != CAPABILITY_ID_RENDER_DRAW_LIST_PROVIDER_V1 {
+                if capability.id.as_str() != CAPABILITY_ID_RENDER_DRAW_LIST_PROVIDER {
                     continue;
                 }
 

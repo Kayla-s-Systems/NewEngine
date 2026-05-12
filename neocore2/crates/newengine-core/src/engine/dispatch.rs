@@ -45,7 +45,7 @@ impl<E: Send + 'static> Engine<E> {
         T: Any + Send + Sync + 'static,
     {
         self.sync_shutdown_state();
-        if self.is_exit_requested() {
+        if self.is_shutdown_requested() {
             return Err(EngineError::ExitRequested);
         }
 
@@ -59,7 +59,6 @@ impl<E: Send + 'static> Engine<E> {
 
         let resources = &mut self.resources;
         let scheduler = &mut self.scheduler;
-        let exit_requested = &mut self.exit_requested;
         let event_any = event as &dyn Any;
         let event_type = std::any::type_name::<T>();
         let mut delivered = 0usize;
@@ -83,16 +82,12 @@ impl<E: Send + 'static> Engine<E> {
                 event_type,
             );
             if shutdown.is_requested() {
-                *exit_requested = true;
-            }
-            if *exit_requested {
-                shutdown.request();
                 return Err(EngineError::ExitRequested);
             }
 
             let module_id = s.id();
             let result: EngineResult<()> = {
-                let mut ctx = ModuleCtx::new(services, resources, bus, events, scheduler, exit_requested);
+                let mut ctx = ModuleCtx::new(services, resources, bus, events, scheduler, shutdown.clone());
 
                 if catch_panics {
                     match panic::catch_unwind(AssertUnwindSafe(|| {
@@ -113,7 +108,6 @@ impl<E: Send + 'static> Engine<E> {
             if let Err(e) = result {
                 match module_fault_tolerance {
                     ModuleFaultTolerance::Strict => {
-                        *exit_requested = true;
                         shutdown.request();
                         return Err(EngineError::with_module_stage(
                             module_id,
@@ -128,7 +122,7 @@ impl<E: Send + 'static> Engine<E> {
 
                         if !s.shutdown_called {
                             let mut ctx =
-                                ModuleCtx::new(services, resources, bus, events, scheduler, exit_requested);
+                                ModuleCtx::new(services, resources, bus, events, scheduler, shutdown.clone());
                             let _ = s.module.shutdown(&mut ctx);
                             s.shutdown_called = true;
                             s.state = ModuleState::Disabled;
@@ -139,8 +133,7 @@ impl<E: Send + 'static> Engine<E> {
                 }
             }
 
-            if *exit_requested {
-                shutdown.request();
+            if shutdown.is_requested() {
                 return Err(EngineError::ExitRequested);
             }
 

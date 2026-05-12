@@ -8,8 +8,6 @@ edition = "2021"
 # Default core is intentionally kernel-light. Heavy/runtime capabilities are plugin-owned.
 default = []
 
-# Compatibility feature kept as an empty marker. Runtime capabilities must live in plugins/crates above core.
-runtime = []
 
 # Optional host diagnostics. Keep disabled by default: core must remain a thin kernel.
 host-probe = ["dep:sysinfo", "dep:windows"]

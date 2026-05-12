@@ -6,4 +6,4 @@ mod service;
 mod types;
 
 pub use method::COMMAND_SERVICE_ID;
-pub use service::{init_console_service, take_exit_requested};
+pub use service::init_console_service;

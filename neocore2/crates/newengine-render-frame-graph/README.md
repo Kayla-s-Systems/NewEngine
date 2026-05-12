@@ -1,6 +1,6 @@
 # newengine-render-frame-graph
 
-Declarative Render API V3 frame planning layer.
+Declarative stable Render API frame planning layer.
 
 This crate owns the runtime-facing frame graph contract:
 
@@ -15,5 +15,5 @@ FrameGraphBuilder
 ```
 
 It does not own backend resources and does not execute Vulkan/DirectX commands directly.
-Backends receive `RenderGraphDesc` through Render API V3 and may either compile/execute it natively
+Backends receive `RenderGraphDesc` through stable Render API and may either compile/execute it natively
 or validate it while the runtime still uses immediate callbacks during the transition period.

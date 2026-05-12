@@ -8,8 +8,8 @@ use crate::types::CapabilityId;
 pub const CAPABILITY_TAG_LEGACY: &str = "legacy";
 pub const CAPABILITY_TAG_RENDER: &str = "render";
 pub const CAPABILITY_TAG_RUNTIME: &str = "runtime";
-pub const CAPABILITY_ID_RENDER_DRAW_LIST_PROVIDER_V1: &str = "render.draw_list_provider.v1";
-pub const CAPABILITY_ID_RENDER_LIGHT_EXTRACTION_PROVIDER_V1: &str = "render.light_extraction_provider.v1";
+pub const CAPABILITY_ID_RENDER_DRAW_LIST_PROVIDER: &str = "render.draw_list_provider";
+pub const CAPABILITY_ID_RENDER_LIGHT_EXTRACTION_PROVIDER: &str = "render.light_extraction_provider";
 
 #[inline]
 pub fn capability_json_has_tag(describe_json: &str, tag: &str) -> bool {

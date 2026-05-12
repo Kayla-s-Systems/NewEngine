@@ -96,9 +96,6 @@ pub struct StartupConfig {
     pub plugins: HashMap<String, Value>,
 
     pub extra: HashMap<String, String>,
-
-    /// Legacy (kept for backward compat). Prefer `window_icon_path`.
-    pub window_icon_png: Option<Vec<u8>>,
 }
 
 impl Default for StartupConfig {
@@ -122,8 +119,6 @@ impl Default for StartupConfig {
             plugins: HashMap::default(),
 
             extra: HashMap::default(),
-
-            window_icon_png: None,
         }
     }
 }

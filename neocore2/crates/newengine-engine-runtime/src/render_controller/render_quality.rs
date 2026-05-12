@@ -2,7 +2,7 @@
 
 use newengine_core::render::TextureFormat;
 
-/// Runtime renderer quality constants for the current Vulkan V3 forward path.
+/// Runtime renderer quality constants for the current Vulkan forward path.
 ///
 /// This is deliberately a small declarative profile instead of scattering magic
 /// values through shadow planning, shader setup and scene tuning. The target

@@ -1,60 +1,53 @@
 # NewEngine Core Invariants
 
-Core is a **deterministic orchestrator** and **ABI firewall**.
+Core is a **deterministic orchestrator**, **thread provider** and **ABI firewall**.
 
-Core does not implement subsystems.
-Core guarantees:
+Core does not implement subsystems. Core guarantees:
 
-- Lifecycle ordering
-- ABI compatibility validation
-- Isolation (panic containment + disablement)
-- Deterministic time model (ticks/frame-index/delta)
+- Lifecycle ordering through `EngineFsm`
+- ABI version validation
+- Module/plugin isolation
+- Deterministic time model (`frame_index`, fixed tick, delta)
 - Shutdown ownership
+- CPU work delegation through one `JobSystem`
+- Engine-thread work delegation through one `Scheduler`
 
-If an invariant cannot be enforced in code, the corresponding API **must not exist**.
-If an invariant is violated at runtime, the core **must panic**.
+If an invariant cannot be enforced in code, the corresponding API must not exist.
 
 ## Invariants
 
-### I1. No direct calls into implementations
+### I1. One lifecycle source
 
-The core never calls subsystem implementations.
-Subsystems are loaded and executed only through the plugin lifecycle contract.
+`EngineFsm` is the only lifecycle source of truth. Runtime-host, editor, gameplay runtime and modules must not mirror it with local lifecycle flags.
 
-### I2. Core does not own plugin state
+### I2. Core owns shutdown
 
-Core does not store subsystem state.
-Only minimal lifecycle state is allowed (FSM stage + id + error reason).
+Shutdown is initiated/coordinated by core. Modules can request shutdown through `ModuleCtx::request_exit()`, but they never mutate core lifecycle state directly.
 
-### I3. Core does not allocate on behalf of plugins
+### I3. Core owns thread delegation
 
-Memory ownership across ABI is explicit. Core never "creates" plugin-owned objects.
+CPU-heavy work goes through `JobSystemHandle`. Engine-thread commits go through `Scheduler`. Subsystems must not create hidden worker pools for asset IO, streaming, render-prep, simulation or plugin tasks.
 
-### I4. Core owns time
+### I4. Core does not own subsystem state
 
-Plugins are driven by `frame_index`, `tick` and `dt` (delta).
-Plugins must not rely on wall-clock time.
+Core stores only minimal lifecycle/module state: FSM state, module slot state, readiness state and error reason. Subsystem domain state belongs to modules/plugins.
 
-### I5. Core owns shutdown
+### I5. No direct calls into implementations
 
-Shutdown is initiated and coordinated by the core.
-Plugins are not allowed to keep the host alive indefinitely.
+Subsystems are loaded and executed through explicit module/plugin/service contracts. Core does not call backend implementation internals directly.
 
-### I6. No infinite waits
+### I6. Core owns time
 
-Core must not block forever waiting for plugin code.
-Plugin entrypoints are panic-contained; failures disable the plugin.
+Plugins and modules are driven by `frame_index`, fixed tick and `dt`. They must not use wall-clock time as simulation authority.
 
-### I7. ABI is strict
+### I7. No infinite waits
 
-ABI version mismatch == load refusal.
-No "best effort" fallback.
+Core must not block forever waiting for module/plugin code. Callback failures are contained and routed through strict/resilient fault policy.
 
-### I8. Core is not a message bus between plugins
+### I8. ABI is strict
 
-Core is not a service locator and not an RPC router.
-Plugins must not depend on core-mediated inter-plugin calls.
+ABI version mismatch is load refusal. No fallback protocol path is allowed in core.
 
-> Note: legacy bridging APIs may exist temporarily, but must be marked as legacy
-> and scheduled for removal once plugin-to-plugin coupling is moved to explicit
-> contracts.
+### I9. Core is not an inter-plugin bus
+
+Core exposes service boundaries and events, but must not become a hidden plugin-to-plugin coupling layer.

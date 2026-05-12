@@ -287,12 +287,18 @@ impl Default for FpsDemoState {
 /// become resident on the GPU. The render controller owns the final release
 /// decision and keeps direct player control/physics closed until this gate is
 /// released.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum GameReadyWorldLaunchGatePhase {
+    WaitingForResidency,
+    Released,
+    PlayActivated,
+}
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct GameReadyWorldLaunchGate {
     pub requested_frame: u64,
     pub released_frame: Option<u64>,
-    pub released: bool,
-    pub play_activated: bool,
+    pub phase: GameReadyWorldLaunchGatePhase,
     pub reason: String,
     pub waiting_textures: u32,
     pub total_textures: u32,
@@ -305,8 +311,7 @@ impl GameReadyWorldLaunchGate {
         Self {
             requested_frame: u64::MAX,
             released_frame: None,
-            released: false,
-            play_activated: false,
+            phase: GameReadyWorldLaunchGatePhase::WaitingForResidency,
             reason: reason.into(),
             waiting_textures: 0,
             total_textures: 0,
@@ -315,10 +320,23 @@ impl GameReadyWorldLaunchGate {
     }
 
     #[inline]
+    pub const fn is_released(&self) -> bool {
+        matches!(
+            self.phase,
+            GameReadyWorldLaunchGatePhase::Released | GameReadyWorldLaunchGatePhase::PlayActivated
+        )
+    }
+
+    #[inline]
+    pub const fn is_play_activated(&self) -> bool {
+        matches!(self.phase, GameReadyWorldLaunchGatePhase::PlayActivated)
+    }
+
+    #[inline]
     pub fn release(&mut self, frame: u64, reason: impl Into<String>) {
         self.requested_frame = self.requested_frame.min(frame);
         self.released_frame = Some(frame);
-        self.released = true;
+        self.phase = GameReadyWorldLaunchGatePhase::Released;
         self.reason = reason.into();
         self.waiting_textures = 0;
     }
@@ -332,7 +350,7 @@ impl GameReadyWorldLaunchGate {
 
     #[inline]
     pub fn mark_play_activated(&mut self) {
-        self.play_activated = true;
+        self.phase = GameReadyWorldLaunchGatePhase::PlayActivated;
     }
 }
 

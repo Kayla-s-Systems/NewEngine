@@ -1,5 +1,7 @@
 use serde_json::Value;
 
+use crate::jobs::JobSystemConfig;
+
 use newengine_math::collections_prelude::NeHashMap as HashMap;
 use std::path::PathBuf;
 
@@ -55,6 +57,9 @@ pub struct EngineConfig {
     /// Note: "plugin absent" (not present on disk) is not an error; it's just a degraded capability set.
     pub plugin_fault_tolerance: PluginFaultTolerance,
 
+    /// Engine-wide CPU worker pool configuration.
+    pub job_system: JobSystemConfig,
+
     /// Controls how the engine reacts to panics inside module callbacks.
     ///
     /// - When `true` (default), the engine converts panics to `EngineError` and requests shutdown.
@@ -71,6 +76,7 @@ impl Default for EngineConfig {
             plugin_overrides: HashMap::default(),
             module_fault_tolerance: ModuleFaultTolerance::Resilient,
             plugin_fault_tolerance: PluginFaultTolerance::Resilient,
+            job_system: JobSystemConfig::auto(),
             catch_panics: true,
         }
     }
@@ -85,6 +91,7 @@ impl EngineConfig {
             plugin_overrides: HashMap::default(),
             module_fault_tolerance: ModuleFaultTolerance::Resilient,
             plugin_fault_tolerance: PluginFaultTolerance::Resilient,
+            job_system: JobSystemConfig::auto(),
             catch_panics: true,
         }
     }
@@ -122,6 +129,12 @@ impl EngineConfig {
     #[inline]
     pub fn with_plugin_fault_tolerance(mut self, mode: PluginFaultTolerance) -> Self {
         self.plugin_fault_tolerance = mode;
+        self
+    }
+
+    #[inline]
+    pub fn with_job_system(mut self, config: JobSystemConfig) -> Self {
+        self.job_system = config;
         self
     }
 

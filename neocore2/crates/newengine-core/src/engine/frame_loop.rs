@@ -8,14 +8,15 @@ use std::time::{Duration, Instant};
 impl<E: Send + 'static> Engine<E> {
     pub fn begin_frame(&mut self) -> EngineResult<Frame> {
         self.sync_shutdown_state();
-        if self.is_exit_requested() {
+        if self.is_shutdown_requested() {
             return Err(EngineError::ExitRequested);
         }
 
-        if !self.started {
-            return Err(EngineError::Other(
-                "engine.begin_frame called before engine.start".to_string(),
-            ));
+        if !self.fsm.can_run_frame() {
+            return Err(EngineError::Other(format!(
+                "engine.begin_frame requires running core FSM state; current={}",
+                self.run_state().as_str()
+            )));
         }
 
         let now = Instant::now();
@@ -26,7 +27,8 @@ impl<E: Send + 'static> Engine<E> {
 
         self.acc = (self.acc + dt).min(1.0);
 
-        self.scheduler.begin_frame(Duration::from_secs_f32(dt));
+        let frame_dt = Duration::from_secs_f32(dt);
+        self.scheduler.begin_frame(frame_dt);
 
         self.process_plugin_control()?;
         self.expose_plugins_snapshot();
@@ -36,7 +38,7 @@ impl<E: Send + 'static> Engine<E> {
 
         for step_index in 0..steps_to_run {
             self.sync_shutdown_state();
-            if self.is_exit_requested() {
+            if self.is_shutdown_requested() {
                 return Err(EngineError::ExitRequested);
             }
 
@@ -52,6 +54,8 @@ impl<E: Send + 'static> Engine<E> {
                 fixed_step_index: step_index,
                 fixed_tick: self.fixed_tick,
             };
+
+            self.scheduler.run_fixed_update(Duration::from_secs_f32(self.fixed_dt));
 
             if let Err(e) = self.plugins.fixed_update_all(self.fixed_dt) {
                 return Err(EngineError::Other(format!(
@@ -74,25 +78,29 @@ impl<E: Send + 'static> Engine<E> {
             fixed_tick: self.fixed_tick,
         };
 
+        self.scheduler.run_update(frame_dt);
+
         if let Err(e) = self.plugins.update_all(dt) {
             return Err(EngineError::Other(format!("plugins: update failed: {e}")));
         }
         self.run_stage(&frame, ModuleStage::Update, |m, ctx| m.update(ctx))?;
+
+        self.scheduler.run_render(frame_dt);
 
         if let Err(e) = self.plugins.render_all(dt) {
             return Err(EngineError::Other(format!("plugins: render failed: {e}")));
         }
         self.run_stage(&frame, ModuleStage::Render, |m, ctx| m.render(ctx))?;
 
-        self.scheduler.end_frame(Duration::from_secs_f32(dt));
+        self.scheduler.end_frame(frame_dt);
         self.frame_index = self.frame_index.wrapping_add(1);
 
         Ok(frame)
     }
 
-    /// Single engine tick (compat facade).
+    /// Single engine tick.
     ///
-    /// Keeps external runners stable. Internally delegates to `begin_frame()`.
+    /// Delegates to `begin_frame()` and propagates shutdown state.
     #[inline]
     pub fn step(&mut self) -> EngineResult<()> {
         let _ = self.begin_frame()?;

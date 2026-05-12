@@ -1,7 +1,9 @@
 use crate::events::EventHub;
 use crate::frame::Frame;
+use crate::jobs::JobSystemHandle;
 use crate::module::{Bus, Resources, Services};
 use crate::sched::Scheduler;
+use crate::sync::ShutdownToken;
 
 /// Context passed to modules.
 ///
@@ -12,7 +14,7 @@ pub struct ModuleCtx<'a, E: Send + 'static> {
     bus: &'a Bus<E>,
     events: &'a EventHub,
     scheduler: &'a mut Scheduler,
-    exit: &'a mut bool,
+    shutdown: ShutdownToken,
     pub frame: Option<Frame>,
 }
 
@@ -24,7 +26,7 @@ impl<'a, E: Send + 'static> ModuleCtx<'a, E> {
         bus: &'a Bus<E>,
         events: &'a EventHub,
         scheduler: &'a mut Scheduler,
-        exit: &'a mut bool,
+        shutdown: ShutdownToken,
     ) -> Self {
         Self {
             services,
@@ -32,7 +34,7 @@ impl<'a, E: Send + 'static> ModuleCtx<'a, E> {
             bus,
             events,
             scheduler,
-            exit,
+            shutdown,
             frame: None,
         }
     }
@@ -114,12 +116,22 @@ impl<'a, E: Send + 'static> ModuleCtx<'a, E> {
     }
 
     #[inline]
-    pub fn request_exit(&mut self) {
-        *self.exit = true;
+    pub fn job_system(&self) -> Option<&JobSystemHandle> {
+        self.resources.get::<JobSystemHandle>()
     }
 
     #[inline]
-    pub fn is_exit_requested(&self) -> bool {
-        *self.exit
+    pub fn job_system_required(&self) -> crate::error::EngineResult<&JobSystemHandle> {
+        self.resources.get_required::<JobSystemHandle>("JobSystemHandle")
+    }
+
+    #[inline]
+    pub fn request_exit(&self) {
+        self.shutdown.request();
+    }
+
+    #[inline]
+    pub fn is_shutdown_requested(&self) -> bool {
+        self.shutdown.is_requested()
     }
 }

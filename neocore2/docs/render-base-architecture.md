@@ -33,7 +33,7 @@ Interactive frames must avoid unbounded synchronous GPU work. Blocking work is s
 asset bytes -> decode/cook -> upload queue -> per-frame budget -> GPU resource ready event
 ```
 
-The backend now exposes diagnostics through `RenderRequestV1::DiagnosticsSnapshot`. Use it to locate:
+The backend now exposes diagnostics through `RenderServiceRequest::DiagnosticsSnapshot`. Use it to locate:
 
 - long blocking texture uploads;
 - pipeline compilation spikes;
@@ -41,7 +41,7 @@ The backend now exposes diagnostics through `RenderRequestV1::DiagnosticsSnapsho
 - upload queue backlog;
 - slow `begin_frame` / `end_frame` phases.
 
-## No legacy shortcuts
+## One render contract
 
 - Renderer code does not read loose files directly.
 - Pak and loose assets remain interchangeable behind AssetManager/VFS.
