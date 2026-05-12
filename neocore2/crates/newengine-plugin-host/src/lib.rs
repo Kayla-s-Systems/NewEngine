@@ -1,7 +1,6 @@
 #![forbid(unsafe_op_in_unsafe_fn)]
 
 mod control;
-mod describe;
 pub mod content_manifest;
 pub mod host_api;
 pub mod host_context;

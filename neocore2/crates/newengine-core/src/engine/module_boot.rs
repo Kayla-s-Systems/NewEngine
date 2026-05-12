@@ -1,3 +1,5 @@
+mod planner;
+
 use super::module_slot::{ModuleSlot, ModuleState};
 use super::{Engine, EngineRunState, ModuleFaultTolerance};
 
@@ -5,7 +7,6 @@ use crate::error::{EngineError, EngineResult, ModuleStage};
 use crate::lifecycle_events::EngineLifecycleEvent;
 use crate::module::ModuleCtx;
 
-use newengine_math::collections_prelude::{ne_hash_map_with_capacity, NeHashMap as HashMap, NeVecDeque as VecDeque};
 
 impl<E: Send + 'static> Engine<E> {
     pub fn start(&mut self) -> EngineResult<()> {
@@ -16,83 +17,12 @@ impl<E: Send + 'static> Engine<E> {
     }
 
     fn start_strict(&mut self) -> EngineResult<()> {
-        self.set_run_state(EngineRunState::InitSystem);
-        self.last = std::time::Instant::now();
-        self.sync_shutdown_state();
-
-        if self.is_shutdown_requested() {
-            return Err(EngineError::ExitRequested);
-        }
-
+        self.enter_system_init()?;
         self.validate_api_contracts_strict()?;
-        self.set_run_state(EngineRunState::InitGame);
+        self.enter_game_init();
 
-        let n = self.modules.len();
-
-        let mut id_to_index = ne_hash_map_with_capacity::<&'static str, usize>(n);
-        for (i, s) in self.modules.iter().enumerate() {
-            let id = s.id();
-            if id_to_index.insert(id, i).is_some() {
-                return Err(EngineError::Other(format!("duplicate module id: {id}")));
-            }
-        }
-
-        let mut indegree = vec![0usize; n];
-        let mut rev_edges: Vec<Vec<usize>> = vec![Vec::new(); n];
-
-        for (i, s) in self.modules.iter().enumerate() {
-            let m = s.module.as_ref();
-            for &dep in m.dependencies() {
-                let Some(&dep_i) = id_to_index.get(dep) else {
-                    return Err(EngineError::Other(format!(
-                        "module dependency missing: {} -> {dep}",
-                        m.id()
-                    )));
-                };
-                indegree[i] += 1;
-                rev_edges[dep_i].push(i);
-            }
-        }
-
-        let mut q: VecDeque<usize> = VecDeque::new();
-        for i in 0..n {
-            if indegree[i] == 0 {
-                q.push_back(i);
-            }
-        }
-
-        let mut order: Vec<usize> = Vec::with_capacity(n);
-        while let Some(i) = q.pop_front() {
-            order.push(i);
-            for &to in rev_edges[i].iter() {
-                indegree[to] = indegree[to].saturating_sub(1);
-                if indegree[to] == 0 {
-                    q.push_back(to);
-                }
-            }
-        }
-
-        if order.len() != n {
-            let mut cyclic = Vec::new();
-            for (i, deg) in indegree.iter().enumerate() {
-                if *deg != 0 {
-                    cyclic.push(self.modules[i].id());
-                }
-            }
-            return Err(EngineError::Other(format!(
-                "module dependency cycle detected among: {:?}",
-                cyclic
-            )));
-        }
-
-        let mut sorted: Vec<ModuleSlot<E>> = Vec::with_capacity(n);
-        let mut old = std::mem::take(&mut self.modules);
-        let mut slots: Vec<Option<ModuleSlot<E>>> = old.drain(..).map(Some).collect();
-
-        for idx in order {
-            let s = slots[idx].take().expect("module slot already moved");
-            sorted.push(s);
-        }
+        let order = planner::build_strict_module_order(&self.modules)?;
+        let mut sorted = planner::reorder_slots_by_order(std::mem::take(&mut self.modules), &order);
 
         #[inline]
         fn shutdown_modules<E: Send + 'static>(engine: &mut Engine<E>, slots: &mut [ModuleSlot<E>]) {
@@ -151,201 +81,18 @@ impl<E: Send + 'static> Engine<E> {
         }
 
         self.modules = sorted;
-        self.refresh_readiness_snapshot();
-        self.log_startup_graph_snapshot("after-init");
-        self.start_modules_ready_by_graph("initial")?;
-
-        if !self.plugins_loaded && !self.engine_plugins_loaded {
-            self.try_load_plugins_once()?;
-        }
-        self.log_plugins_diagnostics("after module init");
-        self.plugins_start_all()?;
-        self.dispatch_startup_readiness_events("engine.start.strict")?;
-        self.set_run_state(EngineRunState::Running);
-
-        Ok(())
+        self.complete_startup("engine.start.strict")
     }
 
     fn start_resilient(&mut self) -> EngineResult<()> {
-        self.set_run_state(EngineRunState::InitSystem);
-        self.last = std::time::Instant::now();
-        self.sync_shutdown_state();
+        self.enter_system_init()?;
+        self.enter_game_init();
 
-        if self.is_shutdown_requested() {
-            return Err(EngineError::ExitRequested);
-        }
-
-        self.set_run_state(EngineRunState::InitGame);
-
-        let n = self.modules.len();
-
-        let mut id_to_index = ne_hash_map_with_capacity::<&'static str, usize>(n);
-        for (i, s) in self.modules.iter().enumerate() {
-            let id = s.id();
-            if id_to_index.insert(id, i).is_some() {
-                log::error!("engine: duplicate module id: {}", id);
-            }
-        }
-
-        let mut enabled = vec![true; n];
-        let mut reasons: Vec<Option<String>> = vec![None; n];
-
-        loop {
-            let mut changed = false;
-
-            for (i, s) in self.modules.iter().enumerate() {
-                if !enabled[i] {
-                    continue;
-                }
-                let m = s.module.as_ref();
-                for &dep in m.dependencies() {
-                    let Some(&dep_i) = id_to_index.get(dep) else {
-                        enabled[i] = false;
-                        reasons[i] = Some(format!("missing dependency: {} -> {}", m.id(), dep));
-                        changed = true;
-                        break;
-                    };
-                    if !enabled[dep_i] {
-                        enabled[i] = false;
-                        reasons[i] = Some(format!("dependency disabled: {} -> {}", m.id(), dep));
-                        changed = true;
-                        break;
-                    }
-                }
-            }
-
-            use crate::module::ApiVersion;
-            let mut provided: HashMap<&'static str, ApiVersion> = HashMap::default();
-            let mut provider: HashMap<&'static str, &'static str> = HashMap::default();
-
-            for (i, s) in self.modules.iter().enumerate() {
-                if !enabled[i] {
-                    continue;
-                }
-                let m = s.module.as_ref();
-                for p in m.provides().iter() {
-                    match provided.get(p.id) {
-                        Some(v) if *v >= p.version => {}
-                        _ => {
-                            provided.insert(p.id, p.version);
-                            provider.insert(p.id, m.id());
-                        }
-                    }
-                }
-            }
-
-            for (i, s) in self.modules.iter().enumerate() {
-                if !enabled[i] {
-                    continue;
-                }
-                let m = s.module.as_ref();
-                for r in m.requires().iter() {
-                    let Some(have) = provided.get(r.id) else {
-                        enabled[i] = false;
-                        reasons[i] = Some(format!(
-                            "requires API '{}' >= {}.{}.{} but it is not provided",
-                            r.id, r.min_version.major, r.min_version.minor, r.min_version.patch
-                        ));
-                        changed = true;
-                        break;
-                    };
-
-                    if *have < r.min_version {
-                        let prov = provider.get(r.id).copied().unwrap_or("<unknown>");
-                        enabled[i] = false;
-                        reasons[i] = Some(format!(
-                            "requires API '{}' >= {}.{}.{} but provider '{}' offers {}.{}.{}",
-                            r.id,
-                            r.min_version.major,
-                            r.min_version.minor,
-                            r.min_version.patch,
-                            prov,
-                            have.major,
-                            have.minor,
-                            have.patch,
-                        ));
-                        changed = true;
-                        break;
-                    }
-                }
-            }
-
-            if !changed {
-                break;
-            }
-        }
-
-        let mut indegree = vec![0usize; n];
-        let mut rev_edges: Vec<Vec<usize>> = vec![Vec::new(); n];
-
-        for (i, s) in self.modules.iter().enumerate() {
-            if !enabled[i] {
-                continue;
-            }
-            let m = s.module.as_ref();
-            for &dep in m.dependencies() {
-                let Some(&dep_i) = id_to_index.get(dep) else {
-                    continue;
-                };
-                if !enabled[dep_i] {
-                    continue;
-                }
-                indegree[i] += 1;
-                rev_edges[dep_i].push(i);
-            }
-        }
-
-        let mut q: VecDeque<usize> = VecDeque::new();
-        for i in 0..n {
-            if enabled[i] && indegree[i] == 0 {
-                q.push_back(i);
-            }
-        }
-
-        let mut order: Vec<usize> = Vec::with_capacity(n);
-        while let Some(i) = q.pop_front() {
-            order.push(i);
-            for &to in rev_edges[i].iter() {
-                indegree[to] = indegree[to].saturating_sub(1);
-                if enabled[to] && indegree[to] == 0 {
-                    q.push_back(to);
-                }
-            }
-        }
-
-        for i in 0..n {
-            if enabled[i] && indegree[i] != 0 {
-                enabled[i] = false;
-                reasons[i] = Some("dependency cycle detected".to_string());
-            }
-        }
-
-        let mut new_slots: Vec<ModuleSlot<E>> = Vec::with_capacity(n);
-
-        let mut opt: Vec<Option<ModuleSlot<E>>> =
-            std::mem::take(&mut self.modules).into_iter().map(Some).collect();
-
-        let mut moved = vec![false; n];
-        for &idx in order.iter() {
-            if idx >= opt.len() || !enabled[idx] {
-                continue;
-            }
-            moved[idx] = true;
-            let mut s = opt[idx].take().expect("slot already moved");
-            s.state = ModuleState::Pending;
-            new_slots.push(s);
-        }
-
-        for i in 0..opt.len() {
-            if moved[i] {
-                continue;
-            }
-            let mut s = opt[i].take().expect("slot already moved");
-            let reason = reasons[i].take().unwrap_or_else(|| "disabled".to_string());
-            s.disable(reason.clone());
-            log::warn!("engine: module disabled: {} ({})", s.id(), reason);
-            new_slots.push(s);
-        }
+        let plan = planner::build_resilient_module_plan(&self.modules);
+        let mut new_slots = planner::partition_slots_by_resilient_plan(
+            std::mem::take(&mut self.modules),
+            plan,
+        );
 
         for i in 0..new_slots.len() {
             self.sync_shutdown_state();
@@ -381,6 +128,28 @@ impl<E: Send + 'static> Engine<E> {
         }
 
         self.modules = new_slots;
+        self.complete_startup("engine.start.resilient")
+    }
+
+    #[inline]
+    fn enter_system_init(&mut self) -> EngineResult<()> {
+        self.set_run_state(EngineRunState::InitSystem);
+        self.last = std::time::Instant::now();
+        self.sync_shutdown_state();
+
+        if self.is_shutdown_requested() {
+            return Err(EngineError::ExitRequested);
+        }
+
+        Ok(())
+    }
+
+    #[inline]
+    fn enter_game_init(&mut self) {
+        self.set_run_state(EngineRunState::InitGame);
+    }
+
+    fn complete_startup(&mut self, origin: &'static str) -> EngineResult<()> {
         self.refresh_readiness_snapshot();
         self.log_startup_graph_snapshot("after-init");
         self.start_modules_ready_by_graph("initial")?;
@@ -390,12 +159,11 @@ impl<E: Send + 'static> Engine<E> {
         }
         self.log_plugins_diagnostics("after module init");
         self.plugins_start_all()?;
-        self.dispatch_startup_readiness_events("engine.start.resilient")?;
+        self.dispatch_startup_readiness_events(origin)?;
         self.set_run_state(EngineRunState::Running);
 
         Ok(())
     }
-
 
     #[inline]
     fn dispatch_startup_readiness_events(&mut self, origin: &'static str) -> EngineResult<()> {
