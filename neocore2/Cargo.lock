@@ -1055,6 +1055,7 @@ dependencies = [
  "newengine-plugin-api",
  "newengine-plugin-host",
  "newengine-render-api",
+ "newengine-system-contracts",
  "newengine-system-runtime",
  "newengine-transform",
  "newengine-ui",
@@ -1118,10 +1119,12 @@ name = "newengine-system-runtime"
 version = "0.1.0"
 dependencies = [
  "abi_stable",
+ "log",
  "newengine-core",
  "newengine-platform-api",
  "newengine-system-contracts",
  "parking_lot",
+ "serde_json",
 ]
 
 [[package]]

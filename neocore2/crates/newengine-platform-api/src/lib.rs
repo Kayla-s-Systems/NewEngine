@@ -160,6 +160,12 @@ pub struct PlatformLoadingOverlayV1 {
     pub title: RString,
     pub status: RString,
     pub detail: RString,
+    /// Structured system-layer overlay model serialized as JSON.
+    ///
+    /// The native platform loading surface uses this to render real stage cards
+    /// from the runtime-host/provider model instead of inventing labels from a
+    /// percentage value. Legacy shells may ignore it and keep using title/status/detail.
+    pub view_json: RString,
 }
 
 impl Default for PlatformLoadingOverlayV1 {
@@ -172,6 +178,7 @@ impl Default for PlatformLoadingOverlayV1 {
             title: RString::from(""),
             status: RString::from(""),
             detail: RString::from(""),
+            view_json: RString::from(""),
         }
     }
 }

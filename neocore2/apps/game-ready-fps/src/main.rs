@@ -10,7 +10,7 @@ use newengine_game_runtime::{
 };
 use newengine_runtime_host::{
     asset_bootstrap::{
-        collect_app_asset_roots, shard_log_path_by_run_id,
+        collect_app_asset_roots, mount_asset_roots_best_effort, shard_log_path_by_run_id,
         try_load_window_icon_best_effort,
     },
     engine_factory::{build_engine_from_startup, ui_provider_kind_from_startup},
@@ -127,6 +127,19 @@ fn main_impl() -> EngineResult<()> {
     // is assembled by the runtime profile during engine.start(), after plugins are live.
     profile.bootstrap_game_ready_scene_best_effort();
 
+    let assets = newengine_assets::AssetServiceClient::new(newengine_plugin_host::default_host_api());
+    let assets_available =
+        newengine_plugin_host::has_service(newengine_assets::consts::ASSET_SERVICE_ID);
+
+    if assets_available {
+        mount_asset_roots_best_effort(&assets, &asset_roots);
+    } else {
+        log::info!(
+            "game-ready fps launcher: AssetManager service '{}' is not available during platform init; loading screen assets will retry through AssetManager after services are live",
+            newengine_assets::consts::ASSET_SERVICE_ID
+        );
+    }
+
     let runtime_path = detect_platform_runtime_path(&startup.modules_dir)?;
     newengine_core::crash::record_breadcrumb(format!(
         "game-ready fps launcher: platform runtime detected path='{}'",
@@ -147,7 +160,7 @@ fn main_impl() -> EngineResult<()> {
 
     let icon = try_load_window_icon_best_effort(
         resolved_platform.icon_path.as_deref(),
-        None,
+        if assets_available { Some(&assets) } else { None },
         &asset_roots,
     );
 

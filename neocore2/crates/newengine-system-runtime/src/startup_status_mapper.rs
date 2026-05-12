@@ -2,6 +2,7 @@
 
 use newengine_system_contracts::{
     ScreenOverlayProgress, ScreenOverlayReason, ScreenOverlayStatus, ScreenOverlayStatusKind,
+    ScreenOverlaySubsystem,
 };
 
 pub fn bootstrap_loading(
@@ -9,6 +10,16 @@ pub fn bootstrap_loading(
     status: impl Into<String>,
     detail: impl Into<String>,
     progress_01: f32,
+) -> ScreenOverlayStatus {
+    bootstrap_loading_with_subsystems(title, status, detail, progress_01, Vec::new())
+}
+
+pub fn bootstrap_loading_with_subsystems(
+    title: impl Into<String>,
+    status: impl Into<String>,
+    detail: impl Into<String>,
+    progress_01: f32,
+    subsystems: Vec<ScreenOverlaySubsystem>,
 ) -> ScreenOverlayStatus {
     ScreenOverlayStatus::new(
         ScreenOverlayStatusKind::Loading,
@@ -19,9 +30,18 @@ pub fn bootstrap_loading(
         Some(ScreenOverlayProgress::percent(progress_01)),
         false,
     )
+    .with_subsystems(subsystems)
 }
 
 pub fn runtime_ready(status: impl Into<String>, detail: impl Into<String>) -> ScreenOverlayStatus {
+    runtime_ready_with_subsystems(status, detail, Vec::new())
+}
+
+pub fn runtime_ready_with_subsystems(
+    status: impl Into<String>,
+    detail: impl Into<String>,
+    subsystems: Vec<ScreenOverlaySubsystem>,
+) -> ScreenOverlayStatus {
     ScreenOverlayStatus::new(
         ScreenOverlayStatusKind::Ready,
         ScreenOverlayReason::PlatformWindow,
@@ -31,6 +51,7 @@ pub fn runtime_ready(status: impl Into<String>, detail: impl Into<String>) -> Sc
         Some(ScreenOverlayProgress::percent(1.0)),
         true,
     )
+    .with_subsystems(subsystems)
 }
 
 pub fn applying(

@@ -36,6 +36,120 @@ pub enum ScreenOverlayReason {
     Recovery,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum ScreenOverlaySubsystemId {
+    Platform,
+    Assets,
+    Renderer,
+    Simulation,
+    Diagnostics,
+    Other,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum ScreenOverlaySubsystemPhase {
+    Waiting,
+    Running,
+    Ready,
+    Degraded,
+    Failed,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct ScreenOverlaySubsystem {
+    pub id: ScreenOverlaySubsystemId,
+    pub label: String,
+    pub phase: ScreenOverlaySubsystemPhase,
+    pub state_label: String,
+    pub detail: String,
+    pub progress: Option<ScreenOverlayProgress>,
+}
+
+impl ScreenOverlaySubsystem {
+    pub fn new(
+        id: ScreenOverlaySubsystemId,
+        label: impl Into<String>,
+        phase: ScreenOverlaySubsystemPhase,
+        state_label: impl Into<String>,
+        detail: impl Into<String>,
+        progress: Option<ScreenOverlayProgress>,
+    ) -> Self {
+        Self {
+            id,
+            label: normalize(label.into(), default_subsystem_label(id)),
+            phase,
+            state_label: normalize(state_label.into(), default_phase_label(phase)),
+            detail: detail.into(),
+            progress,
+        }
+    }
+
+    #[inline]
+    pub fn waiting(id: ScreenOverlaySubsystemId, detail: impl Into<String>) -> Self {
+        Self::new(
+            id,
+            default_subsystem_label(id),
+            ScreenOverlaySubsystemPhase::Waiting,
+            "WAIT",
+            detail,
+            None,
+        )
+    }
+
+    #[inline]
+    pub fn running(
+        id: ScreenOverlaySubsystemId,
+        state_label: impl Into<String>,
+        detail: impl Into<String>,
+        progress_01: Option<f32>,
+    ) -> Self {
+        Self::new(
+            id,
+            default_subsystem_label(id),
+            ScreenOverlaySubsystemPhase::Running,
+            state_label,
+            detail,
+            progress_01.map(ScreenOverlayProgress::percent),
+        )
+    }
+
+    #[inline]
+    pub fn ready(id: ScreenOverlaySubsystemId, state_label: impl Into<String>, detail: impl Into<String>) -> Self {
+        Self::new(
+            id,
+            default_subsystem_label(id),
+            ScreenOverlaySubsystemPhase::Ready,
+            state_label,
+            detail,
+            Some(ScreenOverlayProgress::percent(1.0)),
+        )
+    }
+
+    #[inline]
+    pub fn degraded(id: ScreenOverlaySubsystemId, state_label: impl Into<String>, detail: impl Into<String>) -> Self {
+        Self::new(
+            id,
+            default_subsystem_label(id),
+            ScreenOverlaySubsystemPhase::Degraded,
+            state_label,
+            detail,
+            None,
+        )
+    }
+
+    #[inline]
+    pub fn failed(id: ScreenOverlaySubsystemId, state_label: impl Into<String>, detail: impl Into<String>) -> Self {
+        Self::new(
+            id,
+            default_subsystem_label(id),
+            ScreenOverlaySubsystemPhase::Failed,
+            state_label,
+            detail,
+            None,
+        )
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub struct ScreenOverlayProgress {
     pub current: u64,
@@ -87,6 +201,7 @@ pub struct ScreenOverlayStatus {
     pub detail: String,
     pub progress: Option<ScreenOverlayProgress>,
     pub terminal: bool,
+    pub subsystems: Vec<ScreenOverlaySubsystem>,
 }
 
 impl ScreenOverlayStatus {
@@ -107,7 +222,14 @@ impl ScreenOverlayStatus {
             detail: normalize(detail.into(), "Runtime shell is alive."),
             progress,
             terminal,
+            subsystems: Vec::new(),
         }
+    }
+
+    #[inline]
+    pub fn with_subsystems(mut self, subsystems: Vec<ScreenOverlaySubsystem>) -> Self {
+        self.subsystems = subsystems;
+        self
     }
 
     pub fn loading(
@@ -199,5 +321,26 @@ fn default_title(kind: ScreenOverlayStatusKind) -> &'static str {
         ScreenOverlayStatusKind::Degraded => "NEWENGINE // DEGRADED MODE",
         ScreenOverlayStatusKind::Recovering => "NEWENGINE // RECOVERY",
         ScreenOverlayStatusKind::Error => "NEWENGINE // ERROR",
+    }
+}
+
+fn default_subsystem_label(id: ScreenOverlaySubsystemId) -> &'static str {
+    match id {
+        ScreenOverlaySubsystemId::Platform => "PLATFORM",
+        ScreenOverlaySubsystemId::Assets => "ASSETS",
+        ScreenOverlaySubsystemId::Renderer => "RENDERER",
+        ScreenOverlaySubsystemId::Simulation => "SIMULATION",
+        ScreenOverlaySubsystemId::Diagnostics => "DIAGNOSTICS",
+        ScreenOverlaySubsystemId::Other => "SYSTEM",
+    }
+}
+
+fn default_phase_label(phase: ScreenOverlaySubsystemPhase) -> &'static str {
+    match phase {
+        ScreenOverlaySubsystemPhase::Waiting => "WAIT",
+        ScreenOverlaySubsystemPhase::Running => "RUNNING",
+        ScreenOverlaySubsystemPhase::Ready => "READY",
+        ScreenOverlaySubsystemPhase::Degraded => "DEGRADED",
+        ScreenOverlaySubsystemPhase::Failed => "ERR",
     }
 }

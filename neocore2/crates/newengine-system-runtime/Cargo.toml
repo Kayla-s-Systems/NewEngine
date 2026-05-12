@@ -7,8 +7,11 @@ description = "Runtime helpers for mapping subsystem state into NewEngine system
 license = "MIT OR Apache-2.0"
 
 [dependencies]
+log = "0.4.29"
 abi_stable = "0.11"
 newengine-core = { path = "../newengine-core" }
 newengine-platform-api = { path = "../newengine-platform-api" }
 newengine-system-contracts = { path = "../newengine-system-contracts" }
 parking_lot = "0.12.5"
+
+serde_json = "1.0.149"

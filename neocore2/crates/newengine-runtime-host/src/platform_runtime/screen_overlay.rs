@@ -99,6 +99,7 @@ impl ScreenOverlayStatus {
             title: RString::from(self.title.as_str()),
             status: RString::from(self.status.as_str()),
             detail: RString::from(self.detail.as_str()),
+            view_json: RString::from(""),
         }
     }
 

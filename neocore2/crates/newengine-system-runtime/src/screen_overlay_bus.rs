@@ -32,6 +32,11 @@ pub fn overlay_to_platform_overlay(
     status: &ScreenOverlayStatus,
     spinner_phase: u32,
 ) -> PlatformLoadingOverlayV1 {
+    let view_json = serde_json::to_string(status).unwrap_or_else(|e| {
+        log::warn!("screen overlay serialization failed: {e}");
+        String::new()
+    });
+
     PlatformLoadingOverlayV1 {
         active: true,
         progress_01: status.progress_01(),
@@ -39,6 +44,7 @@ pub fn overlay_to_platform_overlay(
         title: RString::from(status.title.as_str()),
         status: RString::from(status.status.as_str()),
         detail: RString::from(status.detail.as_str()),
+        view_json: RString::from(view_json.as_str()),
     }
 }
 
