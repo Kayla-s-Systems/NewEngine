@@ -1,34 +1,31 @@
 #![forbid(unsafe_op_in_unsafe_fn)]
 
+pub mod channel;
 pub mod controller;
-pub mod frustum;
-pub mod projection;
-pub mod rig;
-pub mod state;
-pub mod types;
-
-// ADD:
 pub mod editor;
 pub mod frame;
+pub mod frustum;
 pub mod game;
-pub mod util;
-
-// Universal gameplay/editor camera stack with deterministic modifiers.
-pub mod modifiers;
+pub mod projection;
+pub mod rig;
 pub mod stack;
+pub mod types;
+pub mod util;
+pub mod viewport;
 
+// Deterministic gameplay/editor camera modifiers.
+pub mod modifiers;
+
+pub use channel::*;
 pub use controller::*;
+pub use editor::*;
+pub use frame::*;
 pub use frustum::*;
+pub use game::*;
+pub use modifiers::*;
 pub use projection::*;
 pub use rig::*;
-pub use state::*;
-pub use types::*;
-
-pub use editor::*;
-// ADD:
-pub use frame::*;
-pub use game::*;
-pub use util::*;
-
-pub use modifiers::*;
 pub use stack::*;
+pub use types::*;
+pub use util::*;
+pub use viewport::*;

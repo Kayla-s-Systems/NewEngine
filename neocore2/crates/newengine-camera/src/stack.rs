@@ -1,12 +1,12 @@
 #![forbid(unsafe_op_in_unsafe_fn)]
 
-use newengine_math::{Mat4, Quat, Vec2, Vec3};
+use newengine_math::{Quat, Vec2, Vec3};
 
-use crate::{CameraMatrices, CameraRig, Frustum, Projection};
+use crate::{CameraChannel, CameraChannelState, CameraFrame, CameraRig, CameraViewport, Projection};
 
 /// Input for the universal camera stack.
 ///
-/// This is intentionally game-leaning and does not overlap with `CameraInput` (editor controllers).
+/// This is intentionally game-leaning and does not overlap with `CameraControlInput` (editor controllers).
 #[derive(Clone, Copy, Debug, Default)]
 pub struct CameraStackInput {
     /// Delta time for the current tick/frame.
@@ -91,8 +91,8 @@ pub trait CameraModifier: Send + Sync {
 pub struct CameraStack {
     pub rig: CameraRig,
     pub projection: Projection,
-
-    pub viewport_wh: Vec2,
+    pub viewport: CameraViewport,
+    pub channel: CameraChannelState,
 
     modifiers: Vec<Box<dyn CameraModifier>>,
 }
@@ -107,7 +107,8 @@ impl Default for CameraStack {
                 0.01,
                 10_000.0,
             )),
-            viewport_wh: Vec2::new(1920.0, 1080.0),
+            viewport: CameraViewport::default(),
+            channel: CameraChannelState::dominant(CameraChannel::Gameplay),
             modifiers: Vec::new(),
         }
     }
@@ -119,16 +120,15 @@ impl CameraStack {
         Self {
             rig,
             projection,
-            viewport_wh: Vec2::new(1920.0, 1080.0),
+            viewport: CameraViewport::default(),
+            channel: CameraChannelState::dominant(CameraChannel::Gameplay),
             modifiers: Vec::new(),
         }
     }
 
     #[inline]
     pub fn set_viewport(&mut self, width: u32, height: u32) {
-        let w = width.max(1) as f32;
-        let h = height.max(1) as f32;
-        self.viewport_wh = Vec2::new(w, h);
+        self.viewport = CameraViewport::from_size(width, height);
         self.projection.set_viewport(width, height);
     }
 
@@ -142,9 +142,9 @@ impl CameraStack {
         self.modifiers.clear();
     }
 
-    /// Runs the camera stack and returns matrices + frustum.
+    /// Runs the camera stack and returns the resolved renderer-facing frame.
     #[inline]
-    pub fn update(&mut self, input: CameraStackInput) -> (CameraMatrices, Frustum) {
+    pub fn update(&mut self, input: CameraStackInput) -> CameraFrame {
         let mut rig = self.rig;
         let mut proj = self.projection;
 
@@ -168,18 +168,11 @@ impl CameraStack {
             proj = apply_fovy_add(proj, fovy_add);
         }
 
-        let view = rig.view_matrix();
-        let mut proj_m = proj.matrix();
-        proj_m = apply_jitter(proj_m, jitter_px, self.viewport_wh);
-
-        let mats = CameraMatrices::new(view, proj_m, rig.position, self.viewport_wh, jitter_px);
-        let frustum = Frustum::from_view_proj(mats.view_proj);
-
         // Persist base state for the next tick.
         self.rig = rig;
         self.projection = proj;
 
-        (mats, frustum)
+        CameraFrame::build(self.channel, rig, proj, self.viewport, jitter_px)
     }
 }
 
@@ -194,18 +187,4 @@ fn apply_fovy_add(proj: Projection, fovy_add: f32) -> Projection {
         }
         x => x,
     }
-}
-
-#[inline]
-fn apply_jitter(mut proj: Mat4, jitter_px: Vec2, viewport_wh: Vec2) -> Mat4 {
-    let w = viewport_wh.x.max(1.0);
-    let h = viewport_wh.y.max(1.0);
-
-    let dx = (2.0 * jitter_px.x) / w;
-    let dy = (2.0 * jitter_px.y) / h;
-
-    // Jitter is defined in clip space. Therefore we must pre-multiply:
-    // clip' = T * (P * V * world)
-    proj = Mat4::from_translation(Vec3::new(dx, dy, 0.0)) * proj;
-    proj
 }

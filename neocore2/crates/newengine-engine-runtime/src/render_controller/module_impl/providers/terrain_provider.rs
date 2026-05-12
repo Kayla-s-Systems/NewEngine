@@ -19,7 +19,7 @@ impl RenderDrawListProvider for TerrainProvider {
 
     #[inline]
     fn provided_draw_lists(&self, ctx: &SceneExtractionCtx<'_>) -> &'static [RenderDrawListKind] {
-        shadow_and_opaque_list(ctx.shadow_plan.is_active())
+        shadow_and_opaque_list(ctx.render_shadow_map)
     }
 
     fn extract(
@@ -27,7 +27,7 @@ impl RenderDrawListProvider for TerrainProvider {
         ctx: &SceneExtractionCtx<'_>,
         out: &mut DrawListBuildCtx<'_>,
     ) -> EngineResult<()> {
-        if ctx.shadow_plan.is_active() {
+        if ctx.render_shadow_map {
             let _ = out.record(RenderDrawListKind::ShadowCasters, |this, r| {
                 passes::draw_procedural_terrain_shadow(
                     this,

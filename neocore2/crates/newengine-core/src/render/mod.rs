@@ -33,6 +33,51 @@ impl RenderBackendStatus {
     }
 }
 
+
+/// Engine-owned launch/loading status for scenes that must warm resources
+/// before the platform hands visual ownership to the playable world.
+///
+/// This resource is intentionally hosted in `newengine-core`, not in the game
+/// runtime crate, so the platform host can keep the native loading surface alive
+/// without depending on a concrete scene/game module.
+#[derive(Debug, Clone)]
+pub struct SceneLaunchStatus {
+    pub active: bool,
+    pub title: String,
+    pub status: String,
+    pub detail: String,
+    pub progress_01: f32,
+}
+
+impl SceneLaunchStatus {
+    #[inline]
+    pub fn loading(
+        title: impl Into<String>,
+        status: impl Into<String>,
+        detail: impl Into<String>,
+        progress_01: f32,
+    ) -> Self {
+        Self {
+            active: true,
+            title: title.into(),
+            status: status.into(),
+            detail: detail.into(),
+            progress_01: progress_01.clamp(0.0, 0.995),
+        }
+    }
+
+    #[inline]
+    pub fn inactive() -> Self {
+        Self {
+            active: false,
+            title: String::new(),
+            status: String::new(),
+            detail: String::new(),
+            progress_01: 1.0,
+        }
+    }
+}
+
 pub trait RenderApi: Send {
     fn begin_frame(&mut self, desc: BeginFrameDesc) -> EngineResult<()>;
     fn set_ui_draw_list(&mut self, ui: UiDrawList);

@@ -8,7 +8,7 @@ use newengine_transform_api::{read_entity_world_pose_local_chain, Transform};
 
 use crate::{
     run_character_motor_controller, run_follow_camera_controller, run_orbit_camera_controller,
-    AngularVelocity, CameraInputComp, CameraRigComp, CharacterMotor, CommandBuffer,
+    AngularVelocity, CameraControlInputComp, CameraRigComp, CharacterMotor, CommandBuffer,
     ControllerCtx, ControllerIntentQueue, FollowTargetCameraController,
     FollowTargetCameraMotor, IntentBuffer, IntentCommandBufferExt, MotorInput, OrbitCameraMotor,
     SimFrame, TransformCommandBufferExt, Velocity,
@@ -69,7 +69,7 @@ pub fn sys_orbit_camera(world: &World, frame: SimFrame, cmd: &mut CommandBuffer)
         };
 
         let input = world
-            .get::<CameraInputComp>(id)
+            .get::<CameraControlInputComp>(id)
             .map(|c| c.0)
             .unwrap_or_default();
 

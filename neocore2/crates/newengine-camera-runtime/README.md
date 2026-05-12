@@ -4,14 +4,14 @@ Runtime-обвязка, которая подключает `newengine-camera` �
 
 ## Ответственность
 
-- ECS-системы и helpers для навигации камеры (Orbit/Fly) в контексте viewport.
-- Интеграция с `newengine-sim` (stages/commands) без привязки к конкретному render backend.
+- Перевод viewport input snapshot в `CameraControlInput`.
+- Управление editor/gameplay camera navigation state (`Orbit`/`Fly`) через ECS.
+- Выбор `CameraChannelState` для runtime/editor режима.
+- Возврат `CameraNavResult { frame, controller, cursor }`, где `frame` — готовый `CameraFrame` для render/runtime слоёв.
+- Синхронизация `CameraRigComp` и `Transform` без renderer coupling.
 
 ## Не ответственность
 
-- Не содержит чистую математику камеры (это `newengine-camera`).
-- Не реализует UI (это `newengine-ui`/editor).
-
-## Ссылки
-
-- `../../ARCHITECTURE.md`
+- Не содержит чистую математику камеры — это `newengine-camera`.
+- Не реализует UI и не знает про конкретный backend.
+- Не возвращает loose `rig + projection` как публичный результат навигации: renderer-facing контракт — только `CameraFrame`.

@@ -142,7 +142,7 @@ pub(super) fn build_light_shadow_plan(
         registry.sync_plugin_capabilities(snapshot);
     }
 
-    let trace_frame = this.frame_index < 8 || this.frame_index % 120 == 0;
+    let trace_frame = super::trace_policy::should_trace_frame(this.frame_index);
     if trace_frame && log::log_enabled!(log::Level::Debug) {
         log::debug!(
             "render light extraction providers: {}",
@@ -209,8 +209,8 @@ pub(super) fn try_build_directional_shadow_plan(
     let params = [
         1.0,
         settings.bias,
-        settings.contact_strength,
-        settings.softness,
+        settings.contact_strength.clamp(0.0, super::super::render_quality::SHADOW_STRENGTH_MAX),
+        settings.softness.clamp(0.0, super::super::render_quality::SHADOW_SOFTNESS_MAX),
     ];
 
     Ok(Some(LightShadowPlan::directional(
@@ -228,7 +228,10 @@ fn ensure_shadow_rt(
     r: &mut dyn RenderApi,
     requested_resolution: u32,
 ) -> EngineResult<Option<(RenderTargetId, TextureId)>> {
-    let resolution = requested_resolution.clamp(256, 8192);
+    let resolution = requested_resolution.clamp(
+        super::super::render_quality::SHADOW_RESOLUTION_MIN,
+        super::super::render_quality::SHADOW_RESOLUTION_MAX,
+    );
     let recreate = this.shadow_rt.is_none() || this.shadow_rt_resolution != resolution;
 
     if recreate {
@@ -236,8 +239,12 @@ fn ensure_shadow_rt(
             this.retire_render_target(old);
         }
         this.shadow_rt_resolution = 0;
+        this.invalidate_shadow_cache();
         let rt = r.create_render_target(
-            RenderTargetDesc::new(Extent2D::new(resolution, resolution), TextureFormat::Bgra8Unorm)
+            RenderTargetDesc::new(
+                Extent2D::new(resolution, resolution),
+                super::super::render_quality::SHADOW_MAP_COLOR_FORMAT,
+            )
                 .with_depth(TextureFormat::Depth32Float)
                 .with_label(format!("editor_shadow_map_{resolution}")),
         )?;
@@ -258,6 +265,7 @@ pub(super) fn retire_shadow_rt(this: &mut RuntimeRenderController) {
         this.retire_render_target(old);
     }
     this.shadow_rt_resolution = 0;
+    this.invalidate_shadow_cache();
 }
 
 #[inline]

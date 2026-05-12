@@ -47,7 +47,7 @@ pub fn step_camera_nav(
         world,
         cam_id,
         input,
-        params.aspect,
+        params,
         bounds,
         &mut ctrl,
         &mut rig,
@@ -75,14 +75,13 @@ pub fn step_camera_nav(
         world,
         cam_id,
         input,
-        params.aspect,
         bounds,
         desired_mode,
         &mut ctrl,
         &mut rig,
         state,
     ) {
-        return finish_now(input, params.aspect, bounds, &ctrl, &rig);
+        return finish_now(input, params, bounds, &ctrl, &rig);
     }
 
     if desired_mode == EditorNavMode::Orbit {
@@ -127,5 +126,5 @@ pub fn step_camera_nav(
         );
     }
 
-    commit_and_finish(world, cam_id, params.aspect, bounds, &ctrl, &rig, state, input)
+    commit_and_finish(world, cam_id, params, bounds, &ctrl, &rig, state, input)
 }

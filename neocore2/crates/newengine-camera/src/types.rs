@@ -3,7 +3,9 @@
 use bytemuck::{Pod, Zeroable};
 use newengine_math::{Mat4, Vec2, Vec3, Vec4};
 
-/// CPU-side camera matrices (ergonomic).
+use crate::{CameraChannelState, CameraRig, CameraViewport, Frustum, Projection};
+
+/// CPU-side camera matrices.
 #[derive(Clone, Copy, Debug)]
 pub struct CameraMatrices {
     pub view: Mat4,
@@ -36,14 +38,17 @@ impl Default for CameraMatrices {
 
 impl CameraMatrices {
     #[inline]
-    pub fn new(view: Mat4, proj: Mat4, world_pos: Vec3, viewport_wh: Vec2, jitter: Vec2) -> Self {
+    pub fn from_view_proj(
+        view: Mat4,
+        proj: Mat4,
+        world_pos: Vec3,
+        viewport: CameraViewport,
+        jitter: Vec2,
+    ) -> Self {
         let view_proj = proj * view;
         let inv_view = view.inverse();
         let inv_proj = proj.inverse();
         let inv_view_proj = view_proj.inverse();
-
-        let w = viewport_wh.x.max(1.0);
-        let h = viewport_wh.y.max(1.0);
 
         Self {
             view,
@@ -53,25 +58,99 @@ impl CameraMatrices {
             inv_proj,
             inv_view_proj,
             world_pos,
-            viewport: Vec4::new(w, h, 1.0 / w, 1.0 / h),
+            viewport: viewport.uniform(),
             jitter,
         }
     }
 
-    /// Strict POD layout for GPU uploads (full matrices).
     #[inline]
     pub fn to_gpu(&self) -> GpuCameraMatrices {
         GpuCameraMatrices::from_cpu(*self)
     }
 
-    /// Compact POD layout for world shading (recommended default).
     #[inline]
-    pub fn to_uniform(&self) -> CameraUniform {
-        CameraUniform::from_cpu(*self)
+    pub fn to_uniform(&self, near_plane: f32, far_plane: f32) -> CameraUniform {
+        CameraUniform::from_cpu(*self, near_plane, far_plane)
     }
 }
 
-/// GPU-friendly full camera constants (rarely needed every pass).
+/// Fully resolved renderer-facing camera frame.
+///
+/// Render backends and editor overlays should consume this value, not reassemble camera state
+/// from loosely related pose/projection globals.
+#[derive(Clone, Copy, Debug)]
+pub struct CameraFrame {
+    pub channel: CameraChannelState,
+    pub rig: CameraRig,
+    pub projection: Projection,
+    pub viewport: CameraViewport,
+    pub jitter_px: Vec2,
+    pub matrices: CameraMatrices,
+    pub frustum: Frustum,
+    pub diagnostics: CameraFrameDiagnostics,
+}
+
+impl CameraFrame {
+    #[inline]
+    pub fn build(
+        channel: CameraChannelState,
+        rig: CameraRig,
+        mut projection: Projection,
+        viewport: CameraViewport,
+        jitter_px: Vec2,
+    ) -> Self {
+        let viewport = viewport.sanitized();
+        projection.set_viewport(viewport.width, viewport.height);
+
+        let view = rig.view_matrix();
+        let proj = apply_jitter(projection.matrix(), jitter_px, viewport);
+        let matrices = CameraMatrices::from_view_proj(view, proj, rig.position, viewport, jitter_px);
+        let frustum = Frustum::from_view_proj(matrices.view_proj);
+        let (near_plane, far_plane) = projection.near_far();
+
+        Self {
+            channel,
+            rig,
+            projection,
+            viewport,
+            jitter_px,
+            matrices,
+            frustum,
+            diagnostics: CameraFrameDiagnostics {
+                near_plane,
+                far_plane,
+                finite: camera_frame_is_finite(&rig, jitter_px, near_plane, far_plane),
+            },
+        }
+    }
+
+    #[inline]
+    pub fn view_proj(&self) -> Mat4 {
+        self.matrices.view_proj
+    }
+
+    #[inline]
+    pub fn uniform(&self) -> CameraUniform {
+        let (near_plane, far_plane) = self.projection.near_far();
+        self.matrices.to_uniform(near_plane, far_plane)
+    }
+}
+
+#[derive(Clone, Copy, Debug)]
+pub struct CameraFrameDiagnostics {
+    pub near_plane: f32,
+    pub far_plane: f32,
+    pub finite: bool,
+}
+
+impl Default for CameraFrameDiagnostics {
+    #[inline]
+    fn default() -> Self {
+        Self { near_plane: 0.01, far_plane: 1000.0, finite: true }
+    }
+}
+
+/// GPU-friendly full camera constants.
 #[repr(C)]
 #[derive(Clone, Copy, Debug, Default, Pod, Zeroable)]
 pub struct GpuCameraMatrices {
@@ -110,8 +189,7 @@ impl GpuCameraMatrices {
     }
 }
 
-/// Compact GPU uniform for the world pass.
-/// This is the baseline for rendering worlds at scale.
+/// Compact GPU uniform for world passes.
 #[repr(C)]
 #[derive(Clone, Copy, Debug, Default, Pod, Zeroable)]
 pub struct CameraUniform {
@@ -126,26 +204,40 @@ pub struct CameraUniform {
 
 impl CameraUniform {
     #[inline]
-    pub fn from_cpu(c: CameraMatrices) -> Self {
-        // Near/Far will be filled by CameraState (projection knows it).
-        // Here keep zeros; caller can patch near/far if needed.
+    pub fn from_cpu(c: CameraMatrices, near_plane: f32, far_plane: f32) -> Self {
         Self {
             view_proj: mat4_to_cols(c.view_proj),
             world_pos: [c.world_pos.x, c.world_pos.y, c.world_pos.z],
-            near_plane: 0.0,
+            near_plane,
             viewport: [c.viewport.x, c.viewport.y, c.viewport.z, c.viewport.w],
             jitter: [c.jitter.x, c.jitter.y],
-            far_plane: 0.0,
+            far_plane,
             _pad0: 0.0,
         }
     }
+}
 
-    #[inline]
-    pub fn with_near_far(mut self, near_plane: f32, far_plane: f32) -> Self {
-        self.near_plane = near_plane;
-        self.far_plane = far_plane;
-        self
-    }
+#[inline]
+pub fn apply_jitter(proj: Mat4, jitter_px: Vec2, viewport: CameraViewport) -> Mat4 {
+    let viewport = viewport.sanitized();
+    let w = viewport.width as f32;
+    let h = viewport.height as f32;
+
+    let dx = (2.0 * jitter_px.x) / w;
+    let dy = (2.0 * jitter_px.y) / h;
+
+    Mat4::from_translation(Vec3::new(dx, dy, 0.0)) * proj
+}
+
+#[inline]
+fn camera_frame_is_finite(rig: &CameraRig, jitter_px: Vec2, near_plane: f32, far_plane: f32) -> bool {
+    rig.position.is_finite()
+        && rig.rotation.is_finite()
+        && jitter_px.is_finite()
+        && near_plane.is_finite()
+        && far_plane.is_finite()
+        && near_plane > 0.0
+        && far_plane > near_plane
 }
 
 #[inline]

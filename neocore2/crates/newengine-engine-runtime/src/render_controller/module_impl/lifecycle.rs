@@ -1,0 +1,56 @@
+use newengine_core::host_events::CursorState;
+use newengine_core::render::require_render_api;
+use newengine_core::{EngineResult, Module, ModuleCtx};
+
+use super::super::controller::RuntimeRenderController;
+use super::super::gpu::ensure_lit_pipeline;
+
+impl RuntimeRenderController {
+    pub(super) fn start_runtime_module<E: Send + 'static>(
+        &mut self,
+        ctx: &mut ModuleCtx<'_, E>,
+    ) -> EngineResult<()> {
+        if let Ok(api) = require_render_api(ctx) {
+            let mut r = api.lock();
+            if let Err(e) = ensure_lit_pipeline(&mut self.lit, &mut **r) {
+                log::warn!("render controller: loading-screen pipeline warmup skipped: {}", e);
+            } else {
+                let _ = r.pump_uploads(
+                    newengine_core::render::UploadPumpDesc::loading_screen_warmup(),
+                );
+            }
+        }
+        Ok(())
+    }
+
+    pub(super) fn shutdown_runtime_module<E: Send + 'static>(
+        &mut self,
+        ctx: &mut ModuleCtx<'_, E>,
+    ) -> EngineResult<()> {
+        newengine_core::crash::record_breadcrumb(
+            "render controller: shutdown begin".to_string(),
+        );
+        self.sync_cursor_state(ctx, CursorState::released());
+        self.viewport_pass_disabled = true;
+        self.previews_disabled = true;
+        Ok(())
+    }
+}
+
+impl<E: Send + 'static> Module<E> for RuntimeRenderController {
+    fn id(&self) -> &'static str {
+        "engine.render_controller"
+    }
+
+    fn start(&mut self, ctx: &mut ModuleCtx<'_, E>) -> EngineResult<()> {
+        self.start_runtime_module(ctx)
+    }
+
+    fn shutdown(&mut self, ctx: &mut ModuleCtx<'_, E>) -> EngineResult<()> {
+        self.shutdown_runtime_module(ctx)
+    }
+
+    fn render(&mut self, ctx: &mut ModuleCtx<'_, E>) -> EngineResult<()> {
+        self.render_runtime_module(ctx)
+    }
+}

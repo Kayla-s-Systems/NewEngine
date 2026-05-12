@@ -1,6 +1,6 @@
 #![forbid(unsafe_op_in_unsafe_fn)]
 
-use newengine_camera::{CameraInput, CameraRig, OrbitController};
+use newengine_camera::{CameraControlInput, CameraRig, OrbitController};
 use newengine_math::{Vec2, Vec3};
 use newengine_ecs::EntityId;
 
@@ -91,7 +91,7 @@ pub struct CameraRigComp(pub CameraRig);
 
 /// Camera input stored as a component (written by input/editor).
 #[derive(Clone, Copy, Debug, Default)]
-pub struct CameraInputComp(pub CameraInput);
+pub struct CameraControlInputComp(pub CameraControlInput);
 
 /// Follow target controller for camera entities.
 ///

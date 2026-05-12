@@ -34,7 +34,7 @@ pub struct ViewportBridge {
     ///
     /// Stored under a mutex as a single packet to avoid torn reads across threads.
     /// We intentionally keep deltas (`dx/dy/wheel`) one-shot and consume them on read.
-    ui_input: Mutex<UiCameraInputState>,
+    ui_input: Mutex<UiCameraControlInputState>,
 
     /// Selection pick request.
     ///
@@ -67,7 +67,7 @@ struct CameraSpawnState {
 }
 
 #[derive(Clone, Copy, Debug, Default)]
-struct UiCameraInputState {
+struct UiCameraControlInputState {
     dx_px: f32,
     dy_px: f32,
     wheel_y: f32,
@@ -87,7 +87,7 @@ impl ViewportBridge {
             extent_wh: AtomicU64::new(0),
             tex_user: AtomicU64::new(0),
 
-            ui_input: Mutex::new(UiCameraInputState::default()),
+            ui_input: Mutex::new(UiCameraControlInputState::default()),
 
             pick_seq: AtomicU64::new(0),
             pick_xy: AtomicU64::new(0),

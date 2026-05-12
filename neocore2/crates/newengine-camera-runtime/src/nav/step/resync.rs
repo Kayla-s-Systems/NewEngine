@@ -10,7 +10,6 @@ pub(crate) fn ensure_mode_without_impulse(
     world: &mut World,
     cam_id: EntityId,
     input: &mut CameraNavInput,
-    _aspect: f32,
     bounds: BoundsSphere,
     desired_mode: EditorNavMode,
     ctrl: &mut EditorNavController,

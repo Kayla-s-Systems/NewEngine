@@ -3,7 +3,7 @@ use std::path::Path;
 use abi_stable::std_types::RString;
 use libloading::Library;
 use newengine_core::events::EventSub;
-use newengine_core::render::RenderBackendStatus;
+use newengine_core::render::{RenderBackendStatus, SceneLaunchStatus};
 use newengine_core::host_events::{
     CursorGrabMode, CursorState, HostEvent, WindowHandles, WindowHostEvent, WindowInitSize,
 };
@@ -76,6 +76,7 @@ pub struct HostPlatformRuntime {
     surface: PlatformSurfaceMetricsV1,
     minimized: bool,
     started: bool,
+    shutting_down: bool,
     window_ready_emitted: bool,
     bootstrap_stage: RuntimeBootstrapStage,
     bootstrap_overlay: RuntimeBootstrapOverlayState,
@@ -118,6 +119,7 @@ impl HostPlatformRuntime {
             surface: PlatformSurfaceMetricsV1::default(),
             minimized: false,
             started: false,
+            shutting_down: false,
             window_ready_emitted: false,
             bootstrap_stage: RuntimeBootstrapStage::AwaitingWindow,
             bootstrap_overlay: RuntimeBootstrapOverlayState::default(),
@@ -181,11 +183,7 @@ impl HostPlatformRuntime {
             .into_result()
             .map_err(|e| EngineError::other(e.to_string()));
 
-        if self.started {
-            newengine_core::crash::record_breadcrumb("platform runtime: engine.shutdown begin");
-            let _ = self.engine.shutdown();
-            newengine_core::crash::record_breadcrumb("platform runtime: engine.shutdown completed");
-        }
+        self.shutdown_engine_once("platform runtime returned");
 
         newengine_plugin_host::host_context::unregister_by_owner(&resolved.plugin_id);
 
@@ -195,6 +193,30 @@ impl HostPlatformRuntime {
         }
 
         result
+    }
+
+    fn shutdown_engine_once(&mut self, origin: &'static str) {
+        if !self.started || self.shutting_down {
+            return;
+        }
+        self.shutting_down = true;
+        log::info!("platform runtime: engine.shutdown begin origin={origin}");
+        newengine_core::crash::record_breadcrumb(format!(
+            "platform runtime: engine.shutdown begin origin={origin}"
+        ));
+        match self.engine.shutdown() {
+            Ok(()) => {
+                log::info!("platform runtime: engine.shutdown completed origin={origin}");
+            }
+            Err(e) => {
+                log::error!("platform runtime: engine.shutdown failed origin={origin}: {e}");
+            }
+        }
+        newengine_core::crash::record_breadcrumb(format!(
+            "platform runtime: engine.shutdown completed origin={origin}"
+        ));
+        self.started = false;
+        self.shutting_down = false;
     }
 
     pub(crate) fn on_window_ready(&mut self, ready: PlatformWindowReadyV1) -> EngineResult<()> {
@@ -286,6 +308,12 @@ impl HostPlatformRuntime {
         self.engine
             .emit(HostEvent::Window(WindowHostEvent::CloseRequested))?;
         self.engine.request_exit()?;
+
+        // Tear down engine modules and Vulkan-backed services while the native
+        // platform window is still alive. Deferring teardown until after the
+        // winit app returns can leave swapchain/surface destruction racing the
+        // OS window teardown and has produced STATUS_ACCESS_VIOLATION on close.
+        self.shutdown_engine_once("close requested");
         Ok(())
     }
 
@@ -354,7 +382,7 @@ impl HostPlatformRuntime {
                     log::info!("platform runtime: engine.start completed");
                     self.set_bootstrap_overlay(
                         "Engine runtime started.",
-                        "Finalizing the first playable frame and host window events.",
+                        "Finalizing gated scene readiness and host window events.",
                         0.90,
                     );
                     self.bootstrap_stage = RuntimeBootstrapStage::AnnounceEnterRuntime;
@@ -367,9 +395,9 @@ impl HostPlatformRuntime {
             },
             RuntimeBootstrapStage::AnnounceEnterRuntime => {
                 self.set_bootstrap_overlay(
-                    "Entering runtime...",
-                    "The loading screen will hand off to the renderer on the next frame.",
-                    0.98,
+                    "Preparing playable world...",
+                    "Native loading remains active while scene resources become resident.",
+                    0.88,
                 );
                 self.bootstrap_stage = RuntimeBootstrapStage::EmitWindowReady;
                 Ok(self.loading_step_result())
@@ -378,11 +406,11 @@ impl HostPlatformRuntime {
                 self.emit_window_ready_event()?;
                 self.window_ready_emitted = true;
                 self.set_bootstrap_overlay(
-                    "Runtime ready.",
-                    "Window services are live. Handing control to the game loop.",
-                    1.0,
+                    "Loading world resources...",
+                    "Player control and world presentation are locked behind the scene launch gate.",
+                    0.90,
                 );
-                self.ready_overlay_frames_left = 45;
+                self.ready_overlay_frames_left = 1;
                 self.bootstrap_stage = RuntimeBootstrapStage::ReadyOverlay;
                 Ok(self.loading_step_result())
             }
@@ -424,6 +452,12 @@ impl HostPlatformRuntime {
 
         match self.engine.step() {
             Ok(()) => {
+                if let Some(status) = self.engine.resources.get::<SceneLaunchStatus>().cloned() {
+                    if status.active {
+                        return Ok(self.scene_launch_step_result(&status));
+                    }
+                }
+
                 if let Some(status) = self.engine.resources.get::<RenderBackendStatus>() {
                     if status.degraded {
                         return Ok(self.degraded_backend_step_result(status));
@@ -437,6 +471,18 @@ impl HostPlatformRuntime {
             }),
             Err(e) => Err(e),
         }
+    }
+
+
+    fn scene_launch_step_result(&mut self, status: &SceneLaunchStatus) -> PlatformStepResultV1 {
+        self.bootstrap_spinner_phase = self.bootstrap_spinner_phase.wrapping_add(1);
+        let overlay = bootstrap_loading(
+            status.title.as_str(),
+            status.status.as_str(),
+            status.detail.as_str(),
+            status.progress_01,
+        );
+        overlay_to_step_result(&overlay, self.bootstrap_spinner_phase)
     }
 
 

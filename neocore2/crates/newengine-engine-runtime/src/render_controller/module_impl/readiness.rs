@@ -21,16 +21,17 @@ pub(super) fn update_game_ready_launch_gate(
     this: &mut RuntimeRenderController,
     r: &mut dyn RenderApi,
     world: &mut newengine_ecs::World,
-    requested_play_mode: EditorPlayMode,
+    _requested_play_mode: EditorPlayMode,
     frame_index: u64,
 ) -> bool {
     let Some(gate_snapshot) = world.resource::<GameReadyWorldLaunchGate>().cloned() else {
         return true;
     };
 
-    if gate_snapshot.released || !requested_play_mode.wants_direct_player_control() {
+    if gate_snapshot.released {
         return true;
     }
+
 
     let readiness = critical_scene_materials_ready(this, r, world);
     if readiness.ready {
@@ -39,6 +40,7 @@ pub(super) fn update_game_ready_launch_gate(
                 return true;
             };
             gate.requested_frame = gate.requested_frame.min(frame_index);
+            gate.update_texture_counts(readiness.waiting, readiness.total, readiness.failed);
             gate.release(frame_index, readiness.reason);
             (
                 frame_index.saturating_sub(gate.requested_frame),
@@ -54,8 +56,18 @@ pub(super) fn update_game_ready_launch_gate(
         true
     } else {
         if let Some(gate) = world.resource_mut::<GameReadyWorldLaunchGate>() {
+            let first_wait = gate.requested_frame == u64::MAX;
             gate.requested_frame = gate.requested_frame.min(frame_index);
+            gate.update_texture_counts(readiness.waiting, readiness.total, readiness.failed);
             gate.reason = readiness.reason;
+            let early_wait_frame = frame_index.saturating_sub(gate.requested_frame) <= 8;
+            if first_wait || early_wait_frame || frame_index % 60 == 0 {
+                log::info!(
+                    "game-ready launch gate: blocked frame={} reason='{}'",
+                    frame_index,
+                    gate.reason
+                );
+            }
         }
         if let Some(player) = first_player(world) {
             clear_player_input(world, player);
@@ -68,6 +80,9 @@ pub(super) fn update_game_ready_launch_gate(
 struct LaunchReadiness {
     ready: bool,
     reason: String,
+    waiting: u32,
+    total: u32,
+    failed: u32,
 }
 
 fn critical_scene_materials_ready(
@@ -99,6 +114,9 @@ fn critical_scene_materials_ready(
         return LaunchReadiness {
             ready: true,
             reason: "no critical scene textures declared".to_owned(),
+            waiting: 0,
+            total,
+            failed: 0,
         };
     }
 
@@ -124,6 +142,9 @@ fn critical_scene_materials_ready(
         LaunchReadiness {
             ready: true,
             reason: suffix,
+            waiting,
+            total,
+            failed,
         }
     } else {
         LaunchReadiness {
@@ -131,6 +152,9 @@ fn critical_scene_materials_ready(
             reason: format!(
                 "waiting for scene texture residency waiting={waiting} total={total} failed={failed}"
             ),
+            waiting,
+            total,
+            failed,
         }
     }
 }

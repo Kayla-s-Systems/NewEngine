@@ -1,10 +1,10 @@
-use newengine_camera::{CameraRig, EditorNavController, EditorNavMode};
+use newengine_camera::{CameraFrame, CameraRig, EditorNavController, EditorNavMode};
 use newengine_ecs::{EntityId, World};
 use newengine_sim::FollowTargetCameraController;
 
 use crate::nav::helpers::{compute_projection, persist_camera_pose, retarget_follow_to_rig};
 use crate::nav::input::cursor_state_for_nav;
-use crate::nav::{BoundsSphere, CameraNavInput, CameraNavResult, CameraNavState};
+use crate::nav::{BoundsSphere, CameraNavInput, CameraNavParams, CameraNavResult, CameraNavState};
 use newengine_sim::CameraRigComp;
 
 #[inline]
@@ -13,7 +13,7 @@ pub(crate) fn handle_capture_edge(
     world: &mut World,
     cam_id: EntityId,
     input: &mut CameraNavInput,
-    aspect: f32,
+    params: CameraNavParams,
     bounds: BoundsSphere,
     ctrl: &mut EditorNavController,
     rig: &mut CameraRig,
@@ -80,13 +80,9 @@ pub(crate) fn handle_capture_edge(
     state.last_bounds_center = bounds.center;
     state.last_bounds_radius = bounds.radius;
 
-    let projection = compute_projection(rig, bounds, aspect);
+    let projection = compute_projection(rig, bounds, params.aspect());
+    let frame = CameraFrame::build(params.channel, *rig, projection, params.viewport, newengine_math::Vec2::ZERO);
     let cursor = cursor_state_for_nav(input);
 
-    Some(CameraNavResult {
-        rig: *rig,
-        controller: *ctrl,
-        projection,
-        cursor,
-    })
+    Some(CameraNavResult { frame, controller: *ctrl, cursor })
 }

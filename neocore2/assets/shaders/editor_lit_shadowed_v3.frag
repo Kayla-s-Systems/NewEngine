@@ -47,6 +47,30 @@ mat3 cotangent_frame(vec3 n, vec3 p, vec2 uv) {
     return mat3(t * invmax, b * invmax, n);
 }
 
+float shadow_tap(vec2 uv, float current, float bias) {
+    float closest = texture(sampler2D(u_shadow_tex, u_material_sampler), clamp(uv, vec2(0.001), vec2(0.999))).r;
+    if (closest >= 0.9995) {
+        return 1.0;
+    }
+    return (current - bias <= closest) ? 1.0 : 0.0;
+}
+
+float shadow_compare_stable(vec2 uv, float current, float bias) {
+    ivec2 sz = textureSize(sampler2D(u_shadow_tex, u_material_sampler), 0);
+    vec2 texel = clamp(ubo.u_shadow_params.w, 0.0, 1.25) / vec2(max(sz.x, 1), max(sz.y, 1));
+
+    // Stable 3-tap PCF. The previous dual-origin min() comparison made shadows
+    // visible, but it also shadowed unrelated mirrored texels and produced the
+    // noisy black speckle pattern seen on large terrain surfaces. We now use the
+    // Vulkan render-target origin convention explicitly and keep the filter small
+    // until the renderer grows a true depth-comparison sampler/CSM chain.
+    float lit = 0.0;
+    lit += shadow_tap(uv, current, bias) * 0.50;
+    lit += shadow_tap(uv + vec2(texel.x, 0.0), current, bias) * 0.25;
+    lit += shadow_tap(uv + vec2(0.0, texel.y), current, bias) * 0.25;
+    return lit;
+}
+
 float sample_shadow(vec4 light_clip, vec3 nrm, vec3 light_dir_to_scene) {
     if (ubo.u_shadow_params.x < 0.5 || light_clip.w <= 0.0) {
         return 1.0;
@@ -54,31 +78,19 @@ float sample_shadow(vec4 light_clip, vec3 nrm, vec3 light_dir_to_scene) {
 
     vec3 ndc = light_clip.xyz / light_clip.w;
     vec2 uv = ndc.xy * 0.5 + 0.5;
+    uv.y = 1.0 - uv.y;
     if (uv.x < 0.001 || uv.x > 0.999 || uv.y < 0.001 || uv.y > 0.999) {
         return 1.0;
     }
 
-    float current = ndc.z;
-    if (current < 0.0 || current > 1.0) {
-        return 1.0;
-    }
+    float current = clamp(ndc.z, 0.0, 1.0);
 
     float ndotl = max(dot(normalize(nrm), normalize(-light_dir_to_scene)), 0.0);
     float slope = 1.0 - ndotl;
-    float bias = ubo.u_shadow_params.y * (1.0 + slope * 3.0);
-    float strength = clamp(ubo.u_shadow_params.z, 0.0, 1.0);
-    float pcf_radius = max(1.0, ubo.u_shadow_params.w);
+    float bias = ubo.u_shadow_params.y * (1.0 + slope * 2.25);
+    float strength = clamp(ubo.u_shadow_params.z, 0.0, 0.70);
 
-    ivec2 sz = textureSize(sampler2D(u_shadow_tex, u_material_sampler), 0);
-    vec2 texel = pcf_radius / vec2(max(sz.x, 1), max(sz.y, 1));
-    float lit = 0.0;
-    for (int y = -1; y <= 1; ++y) {
-        for (int x = -1; x <= 1; ++x) {
-            float closest = texture(sampler2D(u_shadow_tex, u_material_sampler), uv + vec2(x, y) * texel).r;
-            lit += (current - bias <= closest) ? 1.0 : 0.0;
-        }
-    }
-    lit /= 9.0;
+    float lit = shadow_compare_stable(uv, current, bias);
     return mix(1.0 - strength, 1.0, lit);
 }
 
@@ -127,15 +139,19 @@ vec3 pbr_direct(vec3 base, vec3 N, vec3 V, vec3 L, vec3 light_color, float inten
 }
 
 void main() {
+    vec2 stable_material_uv_dx = dFdx(v_uv);
+    vec2 stable_material_uv_dy = dFdy(v_uv);
     vec3 N = normalize(v_wnrm);
-    vec3 map_n = texture(sampler2D(u_normal_tex, u_material_sampler), v_uv).xyz * 2.0 - 1.0;
-    mat3 tbn = cotangent_frame(N, v_wpos, v_uv);
-    float normal_scale = max(ubo.u_material_params.x, 0.0);
-    N = normalize(tbn * vec3(map_n.xy * normal_scale, map_n.z));
+    float normal_scale = clamp(ubo.u_material_params.x, 0.0, 1.0);
+    if (normal_scale > 0.001) {
+        vec3 map_n = textureGrad(sampler2D(u_normal_tex, u_material_sampler), v_uv, stable_material_uv_dx, stable_material_uv_dy).xyz * 2.0 - 1.0;
+        mat3 tbn = cotangent_frame(N, v_wpos, v_uv);
+        N = normalize(tbn * vec3(map_n.xy * normal_scale, map_n.z));
+    }
 
-    vec4 texel = texture(sampler2D(u_base_tex, u_material_sampler), v_uv);
+    vec4 texel = textureGrad(sampler2D(u_base_tex, u_material_sampler), v_uv, stable_material_uv_dx, stable_material_uv_dy);
     vec3 base = clamp((v_base * texel).rgb, vec3(0.0), vec3(1.0));
-    float roughness_sample = texture(sampler2D(u_roughness_tex, u_material_sampler), v_uv).r;
+    float roughness_sample = textureGrad(sampler2D(u_roughness_tex, u_material_sampler), v_uv, stable_material_uv_dx, stable_material_uv_dy).r;
     float roughness = clamp(ubo.u_material_params.y * roughness_sample, 0.02, 1.0);
     float metallic = clamp(ubo.u_material_params.z, 0.0, 1.0);
     float occlusion = clamp(ubo.u_material_params.w, 0.0, 1.0);

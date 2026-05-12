@@ -124,11 +124,19 @@ impl<E: Send + 'static> Engine<E> {
                 &mut self.exit_requested,
             );
 
+            log::debug!("engine shutdown: module shutdown begin id='{}'", module_id);
+            crate::crash::record_breadcrumb(format!(
+                "engine shutdown: module shutdown begin id={module_id}"
+            ));
             let _ = s
                 .module
                 .shutdown(&mut ctx)
                 .map_err(|e| EngineError::with_module_stage(module_id, ModuleStage::Shutdown, e));
 
+            log::debug!("engine shutdown: module shutdown completed id='{}'", module_id);
+            crate::crash::record_breadcrumb(format!(
+                "engine shutdown: module shutdown completed id={module_id}"
+            ));
             s.shutdown_called = true;
             s.state = ModuleState::Disabled;
         }

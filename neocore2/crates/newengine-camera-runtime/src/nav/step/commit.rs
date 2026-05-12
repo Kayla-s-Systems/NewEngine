@@ -1,16 +1,16 @@
-use newengine_camera::{CameraRig, EditorNavController};
+use newengine_camera::{CameraFrame, CameraRig, EditorNavController};
 use newengine_ecs::{EntityId, World};
 use newengine_sim::CameraRigComp;
 
 use crate::nav::helpers::{compute_projection, persist_camera_pose};
 use crate::nav::input::cursor_state_for_nav;
-use crate::nav::{BoundsSphere, CameraNavInput, CameraNavResult, CameraNavState};
+use crate::nav::{BoundsSphere, CameraNavInput, CameraNavParams, CameraNavResult, CameraNavState};
 
 #[inline]
 pub(crate) fn commit_and_finish(
     world: &mut World,
     cam_id: EntityId,
-    aspect: f32,
+    params: CameraNavParams,
     bounds: BoundsSphere,
     ctrl: &EditorNavController,
     rig: &CameraRig,
@@ -24,24 +24,20 @@ pub(crate) fn commit_and_finish(
     state.last_bounds_center = bounds.center;
     state.last_bounds_radius = bounds.radius;
 
-    finish_now(input, aspect, bounds, ctrl, rig)
+    finish_now(input, params, bounds, ctrl, rig)
 }
 
 #[inline]
 pub(crate) fn finish_now(
     input: &CameraNavInput,
-    aspect: f32,
+    params: CameraNavParams,
     bounds: BoundsSphere,
     ctrl: &EditorNavController,
     rig: &CameraRig,
 ) -> CameraNavResult {
-    let projection = compute_projection(rig, bounds, aspect);
+    let projection = compute_projection(rig, bounds, params.aspect());
+    let frame = CameraFrame::build(params.channel, *rig, projection, params.viewport, newengine_math::Vec2::ZERO);
     let cursor = cursor_state_for_nav(input);
 
-    CameraNavResult {
-        rig: *rig,
-        controller: *ctrl,
-        projection,
-        cursor,
-    }
+    CameraNavResult { frame, controller: *ctrl, cursor }
 }

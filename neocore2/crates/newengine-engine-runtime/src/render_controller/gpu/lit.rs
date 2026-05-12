@@ -117,8 +117,12 @@ pub fn ensure_lit_pipeline(
     )?;
 
     let shadow_pipeline = r.create_pipeline(
-        PipelineDesc::new(shadow_vs, shadow_fs, TextureFormat::Bgra8Unorm)
-            .with_label("editor_shadow_depth_pipeline")
+        PipelineDesc::new(
+            shadow_vs,
+            shadow_fs,
+            super::super::render_quality::SHADOW_MAP_COLOR_FORMAT,
+        )
+        .with_label("editor_shadow_depth_pipeline")
             .with_topology(PrimitiveTopology::TriangleList)
             .with_vertex_layouts(vec![layout.clone()])
             .with_bind_group_layouts(vec![bgl])
@@ -126,8 +130,12 @@ pub fn ensure_lit_pipeline(
     )?;
 
     let shadow_double_sided_pipeline = r.create_pipeline(
-        PipelineDesc::new(shadow_vs, shadow_fs, TextureFormat::Bgra8Unorm)
-            .with_label("editor_shadow_depth_pipeline_double_sided")
+        PipelineDesc::new(
+            shadow_vs,
+            shadow_fs,
+            super::super::render_quality::SHADOW_MAP_COLOR_FORMAT,
+        )
+        .with_label("editor_shadow_depth_pipeline_double_sided")
             .with_topology(PrimitiveTopology::TriangleList)
             .with_vertex_layouts(vec![layout])
             .with_bind_group_layouts(vec![bgl])

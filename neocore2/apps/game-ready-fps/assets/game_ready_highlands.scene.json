@@ -49,16 +49,16 @@
       "normal_texture": "textures/fps/terrain_forest_floor_normal.jpg",
       "roughness_texture": "textures/fps/terrain_forest_floor_roughness.jpg",
       "uv_scale": [
-        10.0,
-        10.0
+        4.0,
+        4.0
       ],
       "uv_offset": [
         0.0,
         0.0
       ],
-      "roughness": 0.92,
-      "normal_scale": 1.15,
-      "occlusion_strength": 0.95,
+      "roughness": 0.96,
+      "normal_scale": 0.0,
+      "occlusion_strength": 0.88,
       "asset": "materials/fps/terrain_forest_floor.material.json"
     },
     "sky": {
@@ -70,21 +70,21 @@
       "base_color_texture": "prefabs/tree_animate/textures/Bark_diffuse.png",
       "normal_texture": "prefabs/tree_animate/textures/Bark_normal.png",
       "roughness": 0.88,
-      "normal_scale": 1.0,
+      "normal_scale": 0.35,
       "occlusion_strength": 1.0
     },
     "tree_leaf": {
       "base_color_texture": "prefabs/tree_animate/textures/Leaf_diffuse.png",
       "normal_texture": "prefabs/tree_animate/textures/Leaf_normal.png",
       "roughness": 0.72,
-      "normal_scale": 0.75,
+      "normal_scale": 0.25,
       "occlusion_strength": 1.0
     },
     "tree_branch": {
       "base_color_texture": "prefabs/tree_animate/textures/Branch_diffuse.png",
       "normal_texture": "prefabs/tree_animate/textures/Branch_normal.png",
       "roughness": 0.86,
-      "normal_scale": 0.9,
+      "normal_scale": 0.3,
       "occlusion_strength": 1.0
     }
   },
@@ -111,10 +111,10 @@
       "resolution": 2048,
       "cascade_count": 1,
       "max_distance": 80.0,
-      "softness": 1.35,
-      "bias": 0.0018,
-      "normal_bias": 0.012,
-      "contact_strength": 0.55
+      "softness": 0.75,
+      "bias": 0.0032,
+      "normal_bias": 0.018,
+      "contact_strength": 0.42
     }
   },
   "boundaries": {

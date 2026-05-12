@@ -26,5 +26,6 @@ layout(location = 0) out float v_depth;
 void main() {
     vec4 clip = ubo.u_mvp * vec4(a_pos, 1.0);
     gl_Position = clip;
-    v_depth = clamp(clip.z / max(clip.w, 1.0e-6), 0.0, 1.0);
+    float ndc_z = clip.z / max(clip.w, 1.0e-6);
+    v_depth = clamp(ndc_z, 0.0, 1.0);
 }

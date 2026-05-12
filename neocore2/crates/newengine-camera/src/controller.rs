@@ -5,7 +5,7 @@ use newengine_math::{wrap_pi, Quat, Vec2, Vec3};
 use crate::rig::CameraRig;
 
 #[derive(Clone, Copy, Debug, Default)]
-pub struct CameraInput {
+pub struct CameraControlInput {
     /// Whether look input should be applied (e.g. RMB held).
     pub look_active: bool,
     pub look_delta: Vec2,
@@ -19,6 +19,19 @@ pub struct CameraInput {
 
     /// Mouse wheel delta (positive -> zoom in).
     pub zoom_delta: f32,
+}
+
+impl CameraControlInput {
+    #[inline]
+    pub const fn idle() -> Self {
+        Self {
+            look_active: false,
+            look_delta: Vec2::ZERO,
+            move_axis: Vec3::ZERO,
+            speed_mul: 1.0,
+            zoom_delta: 0.0,
+        }
+    }
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -69,7 +82,7 @@ impl FreeFlyController {
     }
 
     #[inline]
-    pub fn apply(&mut self, rig: &mut CameraRig, input: CameraInput, dt: f32) {
+    pub fn apply(&mut self, rig: &mut CameraRig, input: CameraControlInput, dt: f32) {
         let speed_mul = if input.speed_mul.is_finite() && input.speed_mul > 0.0 {
             input.speed_mul
         } else {
@@ -180,7 +193,7 @@ impl OrbitController {
     }
 
     #[inline]
-    pub fn apply(&mut self, rig: &mut CameraRig, input: CameraInput, dt: f32) {
+    pub fn apply(&mut self, rig: &mut CameraRig, input: CameraControlInput, dt: f32) {
         let speed_mul = if input.speed_mul.is_finite() && input.speed_mul > 0.0 {
             input.speed_mul
         } else {
@@ -247,32 +260,5 @@ impl OrbitController {
         let back = rot * Vec3::Z; // +Z points backward in our convention.
         rig.position = self.target + back * self.distance;
         rig.rotation = rot;
-    }
-}
-
-/// Universal controller selection.
-/// Game can run with `None` and drive `CameraRig` directly.
-#[derive(Clone, Copy, Debug)]
-pub enum CameraController {
-    None,
-    FreeFly(FreeFlyController),
-    Orbit(OrbitController),
-}
-
-impl Default for CameraController {
-    #[inline]
-    fn default() -> Self {
-        CameraController::FreeFly(FreeFlyController::default())
-    }
-}
-
-impl CameraController {
-    #[inline]
-    pub fn apply(&mut self, rig: &mut CameraRig, input: CameraInput, dt: f32) {
-        match self {
-            CameraController::None => {}
-            CameraController::FreeFly(c) => c.apply(rig, input, dt),
-            CameraController::Orbit(c) => c.apply(rig, input, dt),
-        }
     }
 }

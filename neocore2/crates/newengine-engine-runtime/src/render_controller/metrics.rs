@@ -43,6 +43,13 @@ impl RuntimeOverlayMetrics {
     }
 
     #[inline]
+    pub(super) fn reset_interactive_timing(&mut self) {
+        self.fps_ema = 0.0;
+        self.initialized = false;
+        self.history.clear();
+    }
+
+    #[inline]
     pub(super) fn begin_frame(&mut self, dt: f32) {
         self.frame_triangles = 0;
         self.frame_draws = 0;

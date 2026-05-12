@@ -12,29 +12,25 @@ pub(crate) fn lookup(stage: ShaderStage, logical_name: &str, entry: &str) -> Opt
 
     let normalized_name = logical_name.replace('\\', "/");
     let words: &[u32] = match (stage, normalized_name.as_str()) {
-        // Current editor/runtime lit shader names. These aliases are intentionally
-        // prebaked-first: standalone game runtime must not depend on a local
-        // Vulkan SDK/glslc just to draw the first playable frame. The arrays are
-        // the stable textured material fallback; runtime GLSL baking can still
-        // be forced with NEWENGINE_SHADER_BAKE_MODE=runtime while the full
-        // lit+shadow SPIR-V bake step is added to the build pipeline.
-        (ShaderStage::Vertex, "editor_lit_shadowed_v3.vert")
-        | (ShaderStage::Vertex, "shaders/editor_lit_shadowed_v3.vert")
-        | (ShaderStage::Vertex, "editor_lit_v2.vert")
+        // Legacy non-shadowed material shaders may use the compact prebaked
+        // fallback. The current shadowed runtime shaders deliberately do NOT
+        // alias to this fallback: doing so makes the engine report an active
+        // shadow pass while the forward fragment shader ignores shadow sampling.
+        // If glslc/Vulkan SDK is missing, fail loudly instead of silently
+        // rendering an unshadowed world.
+        (ShaderStage::Vertex, "editor_lit_v2.vert")
         | (ShaderStage::Vertex, "shaders/editor_lit_v2.vert") => PREBAKED_EDITOR_LIT_TEXTURED_VERT,
-        (ShaderStage::Fragment, "editor_lit_shadowed_v3.frag")
-        | (ShaderStage::Fragment, "shaders/editor_lit_shadowed_v3.frag")
-        | (ShaderStage::Fragment, "editor_lit_v2.frag")
+        (ShaderStage::Fragment, "editor_lit_v2.frag")
         | (ShaderStage::Fragment, "shaders/editor_lit_v2.frag") => PREBAKED_EDITOR_LIT_TEXTURED_FRAG,
 
-        // Shadow pipelines are allowed to bind the same stable textured fallback
-        // when exact shadow SPIR-V is not prebaked yet. It is depth-incorrect but
-        // safe: the fallback material fragment ignores shadow sampling, so a bad
-        // local glslc cannot drop the whole viewport to clear color.
-        (ShaderStage::Vertex, "editor_shadow_depth_v1.vert")
-        | (ShaderStage::Vertex, "shaders/editor_shadow_depth_v1.vert") => PREBAKED_EDITOR_LIT_TEXTURED_VERT,
-        (ShaderStage::Fragment, "editor_shadow_depth_v1.frag")
-        | (ShaderStage::Fragment, "shaders/editor_shadow_depth_v1.frag") => PREBAKED_EDITOR_LIT_TEXTURED_FRAG,
+        (ShaderStage::Vertex, "editor_lit_shadowed_v3.vert")
+        | (ShaderStage::Vertex, "shaders/editor_lit_shadowed_v3.vert")
+        | (ShaderStage::Fragment, "editor_lit_shadowed_v3.frag")
+        | (ShaderStage::Fragment, "shaders/editor_lit_shadowed_v3.frag")
+        | (ShaderStage::Vertex, "editor_shadow_depth_v1.vert")
+        | (ShaderStage::Vertex, "shaders/editor_shadow_depth_v1.vert")
+        | (ShaderStage::Fragment, "editor_shadow_depth_v1.frag")
+        | (ShaderStage::Fragment, "shaders/editor_shadow_depth_v1.frag") => return None,
 
         (ShaderStage::Vertex, "editor_grid.vert")
         | (ShaderStage::Vertex, "shaders/editor_grid.vert") => PREBAKED_EDITOR_GRID_VERT,

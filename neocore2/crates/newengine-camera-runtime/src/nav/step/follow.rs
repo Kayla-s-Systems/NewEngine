@@ -1,4 +1,4 @@
-use newengine_camera::{CameraRig, EditorNavController};
+use newengine_camera::{CameraFrame, CameraRig, EditorNavController};
 use newengine_ecs::{EntityId, World};
 use newengine_sim::{step_follow_camera, FollowTargetCameraController, FollowTargetCameraMotor};
 use newengine_transform_api::read_entity_world_pose_local_chain;
@@ -75,13 +75,9 @@ pub(crate) fn try_step_follow_orbit(
     state.last_bounds_center = bounds.center;
     state.last_bounds_radius = bounds.radius;
 
-    let projection = compute_projection(rig, bounds, params.aspect);
+    let projection = compute_projection(rig, bounds, params.aspect());
+    let frame = CameraFrame::build(params.channel, *rig, projection, params.viewport, newengine_math::Vec2::ZERO);
     let cursor = cursor_state_for_nav(input);
 
-    Some(CameraNavResult {
-        rig: *rig,
-        controller: *ctrl,
-        projection,
-        cursor,
-    })
+    Some(CameraNavResult { frame, controller: *ctrl, cursor })
 }

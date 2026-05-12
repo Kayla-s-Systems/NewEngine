@@ -4,7 +4,7 @@ use newengine_viewport::input::{
     MOVE_A, MOVE_D, MOVE_DOWN, MOVE_S, MOVE_SHIFT, MOVE_UP, MOVE_W,
 };
 
-use newengine_camera::{CameraInput, EditorNavMode};
+use newengine_camera::{CameraControlInput, EditorNavMode};
 
 /// Minimal, renderer-agnostic viewport navigation input snapshot.
 ///
@@ -54,7 +54,7 @@ pub fn cursor_state_for_nav(input: &CameraNavInput) -> CursorState {
 }
 
 #[inline]
-pub(crate) fn build_camera_input(input: &CameraNavInput, mode: EditorNavMode) -> CameraInput {
+pub(crate) fn build_camera_input(input: &CameraNavInput, mode: EditorNavMode) -> CameraControlInput {
     let shift = (input.move_mask & MOVE_SHIFT) != 0;
 
     let fwd = ((input.move_mask & MOVE_W) != 0) as i32 - ((input.move_mask & MOVE_S) != 0) as i32;
@@ -82,7 +82,7 @@ pub(crate) fn build_camera_input(input: &CameraNavInput, mode: EditorNavMode) ->
         move_axis.z = fwd as f32;
     }
 
-    CameraInput {
+    CameraControlInput {
         look_active: input.look_drag,
         look_delta: Vec2::new(-input.dx_px, -input.dy_px),
         move_axis,

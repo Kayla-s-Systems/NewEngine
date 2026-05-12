@@ -42,7 +42,7 @@ pub(crate) fn maybe_frame_orbit(
     };
 
     let fovy = 60.0f32.to_radians();
-    orbit_frame_sphere(&mut ctrl.orbit, center, radius, fovy, params.aspect, 1.15);
+    orbit_frame_sphere(&mut ctrl.orbit, center, radius, fovy, params.aspect(), 1.15);
 
     state.framed_radius = radius;
     state.framed_once = true;

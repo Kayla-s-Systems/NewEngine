@@ -292,7 +292,11 @@ pub struct GameReadyWorldLaunchGate {
     pub requested_frame: u64,
     pub released_frame: Option<u64>,
     pub released: bool,
+    pub play_activated: bool,
     pub reason: String,
+    pub waiting_textures: u32,
+    pub total_textures: u32,
+    pub failed_textures: u32,
 }
 
 impl GameReadyWorldLaunchGate {
@@ -302,7 +306,11 @@ impl GameReadyWorldLaunchGate {
             requested_frame: u64::MAX,
             released_frame: None,
             released: false,
+            play_activated: false,
             reason: reason.into(),
+            waiting_textures: 0,
+            total_textures: 0,
+            failed_textures: 0,
         }
     }
 
@@ -312,6 +320,19 @@ impl GameReadyWorldLaunchGate {
         self.released_frame = Some(frame);
         self.released = true;
         self.reason = reason.into();
+        self.waiting_textures = 0;
+    }
+
+    #[inline]
+    pub fn update_texture_counts(&mut self, waiting: u32, total: u32, failed: u32) {
+        self.waiting_textures = waiting;
+        self.total_textures = total;
+        self.failed_textures = failed;
+    }
+
+    #[inline]
+    pub fn mark_play_activated(&mut self) {
+        self.play_activated = true;
     }
 }
 

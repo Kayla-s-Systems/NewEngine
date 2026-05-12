@@ -3,11 +3,12 @@
 use newengine_math::{Quat, Vec2, Vec3};
 
 use crate::{
-    auto_near_far, default_perspective, frame_orbit_to_sphere, CameraController, CameraInput,
-    CameraMatrices, CameraRig, CameraState, Frustum, OrbitController, Projection,
+    auto_near_far, default_perspective, frame_orbit_to_sphere, CameraChannel,
+    CameraChannelState, CameraControlInput, CameraFrame, CameraRig, CameraViewport,
+    OrbitController, Projection,
 };
 
-/// Axis-aligned bounding box.
+/// Axis-aligned bounding box used by editor framing.
 #[derive(Clone, Copy, Debug, Default)]
 pub struct Aabb {
     pub min: Vec3,
@@ -30,23 +31,23 @@ impl Aabb {
         (self.max - self.min) * 0.5
     }
 
-    /// Bounding sphere radius around the AABB center.
     #[inline]
     pub fn radius(&self) -> f32 {
-        self.extents().length().max(1e-6)
+        self.extents().length().max(1.0e-6)
     }
 }
 
-/// Editor-grade camera wrapper around `CameraState`.
+/// Editor camera built directly on the stable camera frame contract.
 ///
-/// Goals:
-/// - deterministic orbit navigation
-/// - reliable framing (`frame_all`, `focus`) without clipping
-/// - robust near/far handling (good depth precision)
+/// It owns pose, lens and viewport explicitly and emits a `CameraFrame` every update.
 #[derive(Clone, Debug)]
 pub struct EditorCamera {
-    pub state: CameraState,
+    pub rig: CameraRig,
+    pub projection: Projection,
     pub orbit: OrbitController,
+    pub viewport: CameraViewport,
+    pub channel: CameraChannelState,
+    pub jitter_px: Vec2,
     pub margin: f32,
     pub focus_radius: f32,
     was_look_active: bool,
@@ -55,9 +56,6 @@ pub struct EditorCamera {
 impl Default for EditorCamera {
     #[inline]
     fn default() -> Self {
-        let mut state = CameraState::default();
-        state.controller = CameraController::None;
-
         let orbit = OrbitController {
             yaw: 0.65,
             pitch: -0.55,
@@ -66,8 +64,12 @@ impl Default for EditorCamera {
         };
 
         Self {
-            state,
+            rig: CameraRig::default(),
+            projection: default_perspective(16.0 / 9.0),
             orbit,
+            viewport: CameraViewport::default(),
+            channel: CameraChannelState::dominant(CameraChannel::Editor),
+            jitter_px: Vec2::ZERO,
             margin: 1.08,
             focus_radius: 1.0,
             was_look_active: false,
@@ -76,76 +78,40 @@ impl Default for EditorCamera {
 }
 
 impl EditorCamera {
-    /// Creates a camera configured for editor usage.
-    ///
-    /// `viewport_aspect` must be `width / height` in **physical pixels**.
     #[inline]
-    pub fn new(viewport_aspect: f32) -> Self {
+    pub fn new(viewport: CameraViewport) -> Self {
         let mut this = Self::default();
-        this.state.projection = default_perspective(viewport_aspect.max(1e-6));
-        this.set_viewport_aspect(viewport_aspect);
+        this.set_viewport(viewport.width, viewport.height);
         this
     }
 
     #[inline]
-    pub fn rig(&self) -> &CameraRig {
-        &self.state.rig
-    }
-
-    #[inline]
-    pub fn rig_mut(&mut self) -> &mut CameraRig {
-        &mut self.state.rig
-    }
-
-    #[inline]
-    pub fn projection(&self) -> Projection {
-        self.state.projection
+    pub fn from_size(width: u32, height: u32) -> Self {
+        Self::new(CameraViewport::from_size(width, height))
     }
 
     #[inline]
     pub fn set_viewport(&mut self, width: u32, height: u32) {
-        self.state.set_viewport(width, height);
-        let w = width.max(1) as f32;
-        let h = height.max(1) as f32;
-        self.set_viewport_aspect(w / h);
+        self.viewport = CameraViewport::from_size(width, height);
+        self.projection.set_viewport(width, height);
     }
 
     #[inline]
-    pub fn set_viewport_aspect(&mut self, aspect: f32) {
-        match &mut self.state.projection {
-            Projection::Perspective(p) => p.aspect = aspect.max(1e-6),
-            Projection::Orthographic(o) => o.aspect = aspect.max(1e-6),
-        }
-    }
-
-    /// Updates orbit controller, writes rig, computes matrices + frustum.
-    #[inline]
-    pub fn update(&mut self, input: Option<CameraInput>, dt: f32) -> (CameraMatrices, Frustum) {
+    pub fn update(&mut self, input: Option<CameraControlInput>, dt: f32) -> CameraFrame {
         if let Some(mut i) = input {
             if i.look_active && !self.was_look_active {
-                self.orbit.sync_from_rig(&self.state.rig);
+                self.orbit.sync_from_rig(&self.rig);
                 i.look_delta = Vec2::ZERO;
             }
             self.was_look_active = i.look_active;
-
-            self.orbit.apply(&mut self.state.rig, i, dt);
+            self.orbit.apply(&mut self.rig, i, dt);
         } else {
             self.was_look_active = false;
-            self.orbit.apply(
-                &mut self.state.rig,
-                CameraInput {
-                    look_active: false,
-                    look_delta: Vec2::ZERO,
-                    move_axis: Vec3::ZERO,
-                    speed_mul: 1.0,
-                    zoom_delta: 0.0,
-                },
-                0.0,
-            );
+            self.orbit.apply(&mut self.rig, CameraControlInput::idle(), 0.0);
         }
 
         let (near, far) = auto_near_far(self.orbit.distance, self.focus_radius);
-        match &mut self.state.projection {
+        match &mut self.projection {
             Projection::Perspective(p) => {
                 p.near = near;
                 p.far = far.max(p.near + 0.1);
@@ -156,41 +122,23 @@ impl EditorCamera {
             }
         }
 
-        self.state.update(None, dt)
+        CameraFrame::build(self.channel, self.rig, self.projection, self.viewport, self.jitter_px)
     }
 
-    /// Frames the camera to a world-space sphere.
     #[inline]
     pub fn frame_sphere(&mut self, center: Vec3, radius: f32) {
-        self.focus_radius = radius.abs().max(1e-6);
-        let aspect = match self.state.projection {
-            Projection::Perspective(p) => p.aspect,
-            Projection::Orthographic(o) => o.aspect,
-        };
-
+        self.focus_radius = radius.abs().max(1.0e-6);
         frame_orbit_to_sphere(
             &mut self.orbit,
-            &mut self.state.projection,
-            aspect,
+            &mut self.projection,
+            self.viewport.aspect(),
             center,
             self.focus_radius,
             self.margin.max(1.0),
         );
-
-        self.orbit.apply(
-            &mut self.state.rig,
-            CameraInput {
-                look_active: false,
-                look_delta: Vec2::ZERO,
-                move_axis: Vec3::ZERO,
-                speed_mul: 1.0,
-                zoom_delta: 0.0,
-            },
-            0.0,
-        );
+        self.orbit.apply(&mut self.rig, CameraControlInput::idle(), 0.0);
     }
 
-    /// Frames the camera to an AABB.
     #[inline]
     pub fn frame_aabb(&mut self, aabb: Aabb) {
         self.frame_sphere(aabb.center(), aabb.radius());
@@ -259,7 +207,7 @@ pub struct EditorNavController {
     pub orbit: OrbitController,
     pub fly: crate::FreeFlyController,
 
-    /// Base fly speed (units/sec). `CameraInput.speed_mul` can still multiply it.
+    /// Base fly speed (units/sec). `CameraControlInput.speed_mul` can still multiply it.
     pub fly_speed: f32,
 
     pub limits: EditorNavLimits,
@@ -401,7 +349,7 @@ impl EditorNavController {
     /// - look activation edge (e.g. RMB grab) never teleports the camera
     /// - first-frame synthetic deltas (pointer lock) are suppressed
     #[inline]
-    pub fn step(&mut self, rig: &mut CameraRig, mut input: CameraInput, dt: f32) {
+    pub fn step(&mut self, rig: &mut CameraRig, mut input: CameraControlInput, dt: f32) {
         if !(dt.is_finite() && dt > 0.0) {
             return;
         }
@@ -508,19 +456,13 @@ impl EditorNavController {
     pub fn rebuild_orbit_rig(&mut self, rig: &mut CameraRig) {
         self.apply_orbit(
             rig,
-            CameraInput {
-                look_active: false,
-                look_delta: Vec2::ZERO,
-                move_axis: Vec3::ZERO,
-                speed_mul: 1.0,
-                zoom_delta: 0.0,
-            },
+            CameraControlInput::idle(),
             0.0,
         );
     }
 
     #[inline]
-    fn apply_orbit(&mut self, rig: &mut CameraRig, input: CameraInput, dt: f32) {
+    fn apply_orbit(&mut self, rig: &mut CameraRig, input: CameraControlInput, dt: f32) {
         self.orbit.apply(rig, input, dt);
 
         self.orbit.distance = self.orbit.distance.max(self.limits.min_distance);

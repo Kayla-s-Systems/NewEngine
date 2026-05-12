@@ -1,6 +1,6 @@
 #![forbid(unsafe_op_in_unsafe_fn)]
 
-use newengine_camera::{CameraInput, CameraRig};
+use newengine_camera::{CameraControlInput, CameraRig};
 
 use crate::{CameraRigComp, Intent, IntentSink, OrbitCameraMotor};
 
@@ -21,7 +21,7 @@ pub fn run_orbit_camera_controller(
     entity: newengine_ecs::EntityId,
     mut motor: OrbitCameraMotor,
     mut rig: CameraRig,
-    input: CameraInput,
+    input: CameraControlInput,
     dt: f32,
     out: &mut impl IntentSink,
 ) {
