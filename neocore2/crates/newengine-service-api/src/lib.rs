@@ -2,6 +2,17 @@
 
 use core::fmt;
 
+/// Generic service lifecycle method names shared by host and providers.
+///
+/// Domain API crates may re-export these names, but the literal is owned here
+/// so teardown hooks do not drift between plugin host and services.
+pub mod lifecycle_method {
+    /// Optional explicit shutdown hook called before service unregister/drop.
+    pub const SHUTDOWN_V1: &str = "shutdown_v1";
+}
+
+pub const SERVICE_METHOD_SHUTDOWN_V1: &str = lifecycle_method::SHUTDOWN_V1;
+
 /// Stable identifier of a service provided through `newengine-core`'s service registry.
 #[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 #[repr(transparent)]

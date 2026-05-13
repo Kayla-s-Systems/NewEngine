@@ -1,0 +1,214 @@
+#![forbid(unsafe_op_in_unsafe_fn)]
+
+use crate::error::{EngineError, EngineResult};
+use newengine_plugin_host::PluginSnapshotEntry;
+
+#[derive(Debug, Clone, Copy)]
+struct RequiredRuntimeServiceContract {
+    service_id: &'static str,
+    expected_contract: &'static str,
+    required_methods: &'static [&'static str],
+    required_env: &'static str,
+}
+
+impl RequiredRuntimeServiceContract {
+    #[inline]
+    fn is_required(self) -> bool {
+        env_flag(self.required_env)
+    }
+}
+
+const RENDER_REQUIRED_METHODS: &[&str] = &[
+    newengine_render_api::RENDER_SERVICE_METHOD_INFO,
+    newengine_render_api::RENDER_SERVICE_METHOD_INVOKE,
+    newengine_render_api::RENDER_SERVICE_METHOD_SHUTDOWN_V1,
+];
+
+const PLATFORM_REQUIRED_METHODS: &[&str] = &[
+    newengine_platform_api::PLATFORM_WINDOW_SERVICE_METHOD_SNAPSHOT_JSON_V1,
+];
+
+const CONTRACTS: &[RequiredRuntimeServiceContract] = &[
+    RequiredRuntimeServiceContract {
+        service_id: newengine_assets_api::ASSET_SERVICE_ID,
+        expected_contract: "newengine.assets-api >= 0.6.x",
+        required_methods: newengine_assets_api::REQUIRED_RUNTIME_METHODS_V1,
+        required_env: "NEWENGINE_REQUIRE_ASSET_MANAGER",
+    },
+    RequiredRuntimeServiceContract {
+        service_id: newengine_render_api::RENDER_SERVICE_ID,
+        expected_contract: "newengine.render-api >= 0.3.x",
+        required_methods: RENDER_REQUIRED_METHODS,
+        required_env: "NEWENGINE_REQUIRE_RENDER_BACKEND",
+    },
+    RequiredRuntimeServiceContract {
+        service_id: newengine_platform_api::PLATFORM_WINDOW_SERVICE_ID,
+        expected_contract: "newengine.platform-api >= 0.1.x",
+        required_methods: PLATFORM_REQUIRED_METHODS,
+        required_env: "NEWENGINE_REQUIRE_PLATFORM_WINDOW_SERVICE",
+    },
+];
+
+pub(crate) fn validate_runtime_service_contracts(
+    plugins: &[PluginSnapshotEntry],
+) -> EngineResult<()> {
+    for contract in CONTRACTS {
+        validate_one(*contract, plugins)?;
+    }
+    Ok(())
+}
+
+fn validate_one(
+    contract: RequiredRuntimeServiceContract,
+    plugins: &[PluginSnapshotEntry],
+) -> EngineResult<()> {
+    let present = newengine_plugin_host::has_service(contract.service_id);
+    let required = contract.is_required();
+
+    if !present {
+        if required {
+            return Err(contract_error(
+                contract,
+                plugins,
+                format!("service '{}' is not registered", contract.service_id),
+            ));
+        }
+        log::debug!(
+            "runtime contract: service '{}' absent; validation skipped expected='{}'",
+            contract.service_id,
+            contract.expected_contract
+        );
+        return Ok(());
+    }
+
+    let Some(description) = newengine_plugin_host::describe_service(contract.service_id) else {
+        return Err(contract_error(
+            contract,
+            plugins,
+            format!("service '{}' has no describe() contract", contract.service_id),
+        ));
+    };
+
+    let methods = parse_methods_from_description(&description).map_err(|e| {
+        contract_error(
+            contract,
+            plugins,
+            format!(
+                "service '{}' returned invalid describe() JSON: {e}",
+                contract.service_id
+            ),
+        )
+    })?;
+
+    let mut missing = Vec::new();
+    for required_method in contract.required_methods {
+        if !methods.iter().any(|m| m == required_method) {
+            missing.push(*required_method);
+        }
+    }
+
+    if !missing.is_empty() {
+        return Err(contract_error(
+            contract,
+            plugins,
+            format!(
+                "missing method(s): {}",
+                missing.join(", ")
+            ),
+        ));
+    }
+
+    log::info!(
+        "runtime contract ok: service='{}' expected='{}' required=[{}]",
+        contract.service_id,
+        contract.expected_contract,
+        method_statuses(contract.required_methods).join(" ")
+    );
+    Ok(())
+}
+
+
+fn method_statuses(methods: &[&str]) -> Vec<String> {
+    methods
+        .iter()
+        .map(|method| {
+            let label = method
+                .rsplit_once('.')
+                .map(|(_, tail)| tail)
+                .unwrap_or(method);
+            format!("{label}=yes")
+        })
+        .collect()
+}
+
+fn parse_methods_from_description(description: &str) -> Result<Vec<String>, String> {
+    let v: serde_json::Value = serde_json::from_str(description).map_err(|e| e.to_string())?;
+    let Some(methods) = v.get("methods").and_then(|x| x.as_array()) else {
+        return Err("missing methods[]".to_owned());
+    };
+
+    let mut out = Vec::with_capacity(methods.len());
+    for item in methods {
+        if let Some(name) = item.as_str() {
+            out.push(name.to_owned());
+            continue;
+        }
+        if let Some(name) = item.get("name").and_then(|x| x.as_str()) {
+            out.push(name.to_owned());
+        }
+    }
+    out.sort();
+    out.dedup();
+    Ok(out)
+}
+
+fn contract_error(
+    contract: RequiredRuntimeServiceContract,
+    plugins: &[PluginSnapshotEntry],
+    reason: String,
+) -> EngineError {
+    let provider = provider_for(plugins, contract.service_id);
+    EngineError::Other(format!(
+        "FATAL: runtime service contract mismatch. service='{}' provider='{}' expected='{}' {}; rebuild/copy the matching plugin DLL before scene bootstrap.",
+        contract.service_id,
+        provider,
+        contract.expected_contract,
+        reason,
+    ))
+}
+
+fn provider_for(plugins: &[PluginSnapshotEntry], service_id: &str) -> String {
+    let mut providers = plugins
+        .iter()
+        .filter(|plugin| {
+            plugin.capabilities.iter().any(|cap| {
+                cap.role == newengine_plugin_api::CapabilityRole::Provides
+                    && cap.kind == newengine_plugin_api::CapabilityKind::ServiceV1
+                    && cap.id.as_str() == service_id
+            })
+        })
+        .map(|plugin| {
+            format!(
+                "{}@{} state={} path={}",
+                plugin.id,
+                plugin.version,
+                plugin.state,
+                plugin.path.display()
+            )
+        })
+        .collect::<Vec<_>>();
+
+    providers.sort();
+    if providers.is_empty() {
+        "<unknown>".to_owned()
+    } else {
+        providers.join("; ")
+    }
+}
+
+fn env_flag(name: &str) -> bool {
+    matches!(
+        std::env::var(name).ok().as_deref(),
+        Some("1") | Some("true") | Some("TRUE") | Some("yes") | Some("YES")
+    )
+}

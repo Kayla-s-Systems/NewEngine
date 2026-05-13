@@ -1,3 +1,4 @@
+pub(crate) mod api_contracts;
 mod config;
 mod loader;
 mod report_store;

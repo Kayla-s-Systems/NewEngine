@@ -43,9 +43,9 @@ impl AssetServiceClient {
             host,
             service_id: RString::from(service_id),
 
-            m_load: MethodName::from(method::LOAD),
+            m_load: MethodName::from(method::IMPORT_V1),
             m_reload: MethodName::from(method::RELOAD),
-            m_pump: MethodName::from(method::PUMP),
+            m_pump: MethodName::from(method::PUMP_V1),
             m_info_json: MethodName::from(method::INFO_JSON),
             m_state_json: MethodName::from(method::STATE_JSON),
             m_blob_wire_v1: MethodName::from(method::BLOB_WIRE_V1),

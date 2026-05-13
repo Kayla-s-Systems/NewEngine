@@ -76,6 +76,8 @@ fn main_impl() -> EngineResult<()> {
     std::env::set_var("NEWENGINE_RUN_ID", &run_id);
     std::env::set_var("NEWENGINE_GAME_READY_DEMO", "1");
     std::env::set_var("NEWENGINE_REQUIRE_RENDER_BACKEND", "1");
+    std::env::set_var("NEWENGINE_REQUIRE_ASSET_MANAGER", "1");
+    std::env::set_var("NEWENGINE_REQUIRE_PLATFORM_WINDOW_SERVICE", "1");
     std::env::set_var("NEWENGINE_PLUGIN_TARGET", "runtime");
     configure_default_game_ready_profile();
 

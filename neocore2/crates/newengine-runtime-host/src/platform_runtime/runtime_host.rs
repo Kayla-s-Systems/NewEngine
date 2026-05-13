@@ -410,10 +410,14 @@ impl HostPlatformRuntime {
                 match self.engine.start_incremental_step() {
                     Ok(outcome) => {
                         let snapshot = outcome.snapshot;
+                        let overlay_progress = map_engine_startup_progress_to_bootstrap(
+                            snapshot.progress_01,
+                        )
+                        .clamp(START_ENGINE_BOOTSTRAP_BASE_PROGRESS, 0.94);
                         self.set_bootstrap_overlay(
                             snapshot.status.clone(),
                             snapshot.detail.clone(),
-                            snapshot.progress_01.clamp(0.0, 0.94),
+                            overlay_progress,
                         );
 
                         if outcome.finished {

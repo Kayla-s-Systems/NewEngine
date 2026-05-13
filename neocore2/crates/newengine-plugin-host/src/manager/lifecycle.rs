@@ -1,9 +1,16 @@
 use newengine_plugin_api::HostApiV1;
 
-use crate::host_context::{unregister_by_owner, with_current_plugin_id};
+use crate::host_context::{shutdown_services_by_owner, unregister_by_owner, with_current_plugin_id};
 
 use super::types::{rresult_unit_to_string, PluginState};
 use super::{PluginLoadError, PluginManager};
+
+fn runtime_dll_unload_enabled() -> bool {
+    matches!(
+        std::env::var("NEWENGINE_UNLOAD_RUNTIME_DLLS").ok().as_deref(),
+        Some("1") | Some("true") | Some("TRUE") | Some("yes") | Some("YES")
+    )
+}
 
 impl PluginManager {
     #[inline]
@@ -54,14 +61,33 @@ impl PluginManager {
     }
 
     pub fn shutdown(&mut self) {
+        let retain_libraries = !runtime_dll_unload_enabled();
+        log::info!(
+            "plugins shutdown: begin count={} dll_policy='{}'",
+            self.loaded.len(),
+            if retain_libraries { "process_lifetime" } else { "unload" }
+        );
+
         for i in (0..self.loaded.len()).rev() {
             let id = self.loaded[i].info.id.to_string();
+            log::info!("plugins shutdown: plugin begin id='{}'", id);
+            shutdown_services_by_owner(&id, "plugin-manager.shutdown");
             self.safe_shutdown_one(i);
             self.loaded[i].state = PluginState::Stopped;
             unregister_by_owner(&id);
+            log::info!("plugins shutdown: plugin complete id='{}'", id);
         }
-        self.loaded.clear();
+
+        let loaded = std::mem::take(&mut self.loaded);
+        for plugin in loaded {
+            plugin.drop_with_library_policy(retain_libraries);
+        }
         self.loaded_ids.clear();
+
+        log::info!(
+            "plugins shutdown: complete dll_policy='{}'",
+            if retain_libraries { "process_lifetime" } else { "unload" }
+        );
     }
 
     pub fn stop_by_id(&mut self, id: &str) -> bool {
@@ -73,6 +99,7 @@ impl PluginManager {
             return true;
         }
 
+        shutdown_services_by_owner(id, "plugin-manager.stop_by_id");
         self.safe_shutdown_one(idx);
         self.loaded[idx].state = PluginState::Stopped;
         unregister_by_owner(id);
@@ -126,6 +153,7 @@ impl PluginManager {
         }
 
         let id = self.loaded[idx].info.id.to_string();
+        shutdown_services_by_owner(&id, "plugin-manager.unload_at");
         self.safe_shutdown_one(idx);
         unregister_by_owner(&id);
         self.loaded_ids.remove(&id);
@@ -183,6 +211,7 @@ impl PluginManager {
         self.loaded[idx].state = PluginState::Disabled;
         self.loaded[idx].disabled_reason = Some(reason);
 
+        shutdown_services_by_owner(id, "plugin-manager.disable_plugin");
         self.safe_shutdown_one(idx);
         unregister_by_owner(id);
     }

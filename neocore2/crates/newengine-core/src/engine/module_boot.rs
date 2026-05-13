@@ -257,12 +257,39 @@ impl<E: Send + 'static> Engine<E> {
                         e,
                     );
                 }
-                self.set_incremental_phase(EngineStartupStepPhase::DispatchReadiness);
+                self.set_incremental_phase(EngineStartupStepPhase::ValidateRuntimeServiceContracts);
                 let snapshot = self.make_startup_snapshot(
                     EngineStartupPhase::PluginStart,
                     "Plugin services started.",
                     "Plugin-owned services have completed their startup hooks.",
                     0.88,
+                    None,
+                    self.modules.len(),
+                    self.modules.len(),
+                );
+                self.publish_startup_snapshot(snapshot.clone());
+                Ok(EngineStartupStepOutcome::running(snapshot))
+            }
+            EngineStartupStepPhase::ValidateRuntimeServiceContracts => {
+                let plugins = self.plugins.snapshot();
+                if let Err(e) =
+                    crate::startup::api_contracts::validate_runtime_service_contracts(&plugins)
+                {
+                    return self.fail_incremental_startup(
+                        EngineStartupPhase::ServiceContracts,
+                        "Runtime service contract validation failed.",
+                        "A required runtime service is missing or exposes an incompatible method set.",
+                        0.90,
+                        None,
+                        e,
+                    );
+                }
+                self.set_incremental_phase(EngineStartupStepPhase::DispatchReadiness);
+                let snapshot = self.make_startup_snapshot(
+                    EngineStartupPhase::ServiceContracts,
+                    "Runtime service contracts validated.",
+                    "AssetManager, renderer and platform service contracts match the expected ABI surface.",
+                    0.91,
                     None,
                     self.modules.len(),
                     self.modules.len(),
@@ -516,6 +543,26 @@ impl<E: Send + 'static> Engine<E> {
                 if matches!(phase, EngineStartupPhase::RuntimePlugins | EngineStartupPhase::PluginStart) { "LOAD" } else if progress_01 >= 0.88 { "READY" } else { "WAIT" },
                 format!("{} plugin descriptor(s) known to the host.", self.plugins.snapshot().len()),
                 Some(if progress_01 >= 0.88 { 1.0 } else { progress_01 }),
+            ),
+            EngineStartupSystemStatus::new(
+                "contracts",
+                "CONTRACTS",
+                if phase == EngineStartupPhase::ServiceContracts {
+                    EngineStartupSystemPhase::Running
+                } else if progress_01 >= 0.91 {
+                    EngineStartupSystemPhase::Ready
+                } else {
+                    EngineStartupSystemPhase::Waiting
+                },
+                if phase == EngineStartupPhase::ServiceContracts {
+                    "CHECK"
+                } else if progress_01 >= 0.91 {
+                    "READY"
+                } else {
+                    "WAIT"
+                },
+                "Runtime service contracts are validated before readiness events reach gameplay modules.",
+                Some(if progress_01 >= 0.91 { 1.0 } else { progress_01 }),
             ),
             EngineStartupSystemStatus::new(
                 "readiness",

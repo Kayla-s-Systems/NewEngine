@@ -105,3 +105,27 @@ pub(crate) fn snapshot_impl(loaded: &[LoadedPlugin]) -> Vec<PluginSnapshotEntry>
     out.sort_by(|a, b| a.id.cmp(&b.id));
     out
 }
+
+
+impl LoadedPlugin {
+    /// Drops plugin ABI objects first and optionally keeps the dynamic library
+    /// mapped until process exit. This avoids shutdown-time vtable/destructor
+    /// races on Windows while preserving explicit unload for hot-reload paths.
+    pub(crate) fn drop_with_library_policy(self, retain_library: bool) {
+        let LoadedPlugin {
+            path: _,
+            module,
+            info: _,
+            descriptor: _,
+            state: _,
+            disabled_reason: _,
+            icon_small: _,
+            _lib,
+        } = self;
+
+        drop(module);
+        if retain_library {
+            std::mem::forget(_lib);
+        }
+    }
+}
