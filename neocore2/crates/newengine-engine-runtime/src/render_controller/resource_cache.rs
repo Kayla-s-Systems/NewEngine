@@ -75,6 +75,16 @@ impl RuntimeRenderController {
 
             match assets.import_v1(&path) {
                 Ok(id_hex32) => {
+                    if let Ok(status) = assets.status_json_v1(&id_hex32) {
+                        log::debug!(
+                            "render controller: asset status after import request path='{}' id='{}' stage='{}' state='{}' detail='{}'",
+                            path,
+                            id_hex32,
+                            status.get("stage").and_then(|v| v.as_str()).unwrap_or("unknown"),
+                            status.get("state").and_then(|v| v.as_str()).unwrap_or("unknown"),
+                            status.get("detail").and_then(|v| v.as_str()).unwrap_or("")
+                        );
+                    }
                     self.material_textures.insert(
                         path,
                         MaterialTextureGpuResidency::AssetLoading {
@@ -121,6 +131,15 @@ impl RuntimeRenderController {
             match assets.state(&id_hex32) {
                 Ok(AssetState::Ready) => {
                     decoded_jobs = decoded_jobs.saturating_add(1);
+                    if let Ok(status) = assets.status_json_v1(&id_hex32) {
+                        log::debug!(
+                            "render controller: asset ready for texture packet path='{}' id='{}' stage='{}' bytes={}",
+                            path,
+                            id_hex32,
+                            status.get("stage").and_then(|v| v.as_str()).unwrap_or("unknown"),
+                            status.get("bytes").and_then(|v| v.as_u64()).unwrap_or(0)
+                        );
+                    }
                     let decoded = assets.texture_rgba8_v1(&id_hex32).map_err(|e| {
                         EngineError::other(format!(
                             "asset.texture_rgba8_v1 failed path='{path}' id='{id_hex32}' err='{e}'"
@@ -141,6 +160,21 @@ impl RuntimeRenderController {
                                 .with_deferred_data(texture_asset.rgba),
                             ) {
                                 Ok(texture) => {
+                                    let _ = assets.mark_status_json_v1(serde_json::json!({
+                                        "id_u128": id_hex32.as_str(),
+                                        "logical_path": path.as_str(),
+                                        "stage": "upload_queued",
+                                        "state": "loading",
+                                        "source": "render.controller",
+                                        "detail": "GPU texture upload queued by render controller"
+                                    }));
+                                    log::debug!(
+                                        "render controller: asset status gpu upload queued path='{}' id='{}' texture={:?} frame={}",
+                                        path,
+                                        id_hex32,
+                                        texture,
+                                        self.frame_index
+                                    );
                                     self.material_textures.insert(
                                         path,
                                         MaterialTextureGpuResidency::GpuLoading {
@@ -236,6 +270,20 @@ impl RuntimeRenderController {
                     self.material_textures.insert(
                         path.to_string(),
                         MaterialTextureGpuResidency::Ready { texture },
+                    );
+                    let assets = AssetServiceClient::new(default_host_api());
+                    let _ = assets.mark_status_json_v1(serde_json::json!({
+                        "logical_path": path,
+                        "stage": "resident",
+                        "state": "ready",
+                        "source": "render.controller",
+                        "detail": "GPU texture residency confirmed by render controller"
+                    }));
+                    log::debug!(
+                        "render controller: asset status gpu resident path='{}' texture={:?} frame={}",
+                        path,
+                        texture,
+                        self.frame_index
                     );
                     texture
                 }

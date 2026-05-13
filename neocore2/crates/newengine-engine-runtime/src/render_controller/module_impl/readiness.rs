@@ -1,8 +1,10 @@
 #![forbid(unsafe_op_in_unsafe_fn)]
 
+use newengine_assets::AssetServiceClient;
 use newengine_core::render::{GpuResourceResidencyState, RenderApi};
 use newengine_materials::api::MaterialRegistryApi;
 use newengine_math::collections::FxHashSet;
+use newengine_plugin_host::default_host_api;
 
 use crate::gameplay::{clear_player_input, first_player, EditorPlayMode, GameReadyWorldLaunchGate};
 
@@ -208,6 +210,14 @@ fn material_texture_ready_state(
                         path.to_owned(),
                         MaterialTextureGpuResidency::Ready { texture },
                     );
+                    let assets = AssetServiceClient::new(default_host_api());
+                    let _ = assets.mark_status_json_v1(serde_json::json!({
+                        "logical_path": path,
+                        "stage": "resident",
+                        "state": "ready",
+                        "source": "render.launch_gate",
+                        "detail": "GPU texture residency confirmed by scene launch gate"
+                    }));
                     TextureReadyState::Ready
                 }
                 Ok(snapshot) if snapshot.state == GpuResourceResidencyState::Failed => {

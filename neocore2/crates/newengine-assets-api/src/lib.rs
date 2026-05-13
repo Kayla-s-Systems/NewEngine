@@ -19,6 +19,10 @@ pub mod method {
     pub const RELOAD_V1: &str = "asset.reload_v1";
     pub const INFO_JSON: &str = "asset.info_json";
     pub const STATE_JSON: &str = "asset.state_json";
+    /// Full AssetStatus graph snapshot by id or logical path. Payload accepts utf8 id_hex32 or logical path.
+    pub const STATUS_JSON_V1: &str = "asset.status_json_v1";
+    /// Internal lifecycle projection hook. Payload is JSON with id_u128 or logical_path plus stage/detail.
+    pub const MARK_STATUS_JSON_V1: &str = "asset.mark_status_json_v1";
     pub const BLOB_WIRE_V1: &str = "asset.blob_wire_v1";
     /// Runtime-ready RGBA8 texture packet by asset id. AssetManager validates/parses importer metadata.
     pub const TEXTURE_RGBA8_V1: &str = "asset.texture_rgba8_v1";
@@ -64,6 +68,7 @@ pub const REQUIRED_RUNTIME_METHODS_V1: &[&str] = &[
     method::IMPORT_V1,
     method::TEXTURE_RGBA8_V1,
     method::PUMP_V1,
+    method::STATUS_JSON_V1,
     method::FORMATS_JSON,
 ];
 
@@ -121,6 +126,94 @@ pub enum AssetState {
     Unknown,
 }
 
+
+/// Stable, high-resolution asset lifecycle stage used by tooling, loading screens and render gates.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum AssetStatusStage {
+    Declared,
+    Requested,
+    Resolving,
+    Queued,
+    Reading,
+    Importing,
+    Imported,
+    UploadQueued,
+    Uploading,
+    Resident,
+    Failed,
+    Stale,
+    Unknown,
+}
+
+impl AssetStatusStage {
+    #[inline]
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Declared => "declared",
+            Self::Requested => "requested",
+            Self::Resolving => "resolving",
+            Self::Queued => "queued",
+            Self::Reading => "reading",
+            Self::Importing => "importing",
+            Self::Imported => "imported",
+            Self::UploadQueued => "upload_queued",
+            Self::Uploading => "uploading",
+            Self::Resident => "resident",
+            Self::Failed => "failed",
+            Self::Stale => "stale",
+            Self::Unknown => "unknown",
+        }
+    }
+}
+
+impl core::fmt::Display for AssetStatusStage {
+    #[inline]
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.write_str(self.as_str())
+    }
+}
+
+/// AssetStatus is the canonical read-model row for one asset graph node.
+///
+/// The service serializes the same shape as JSON via `asset.status_json_v1`.
+/// Runtime systems may keep richer local states, but they should be projected
+/// from this model instead of inventing incompatible lifecycle enums.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AssetStatus {
+    pub id_hex32: String,
+    pub logical_path: Option<String>,
+    pub state: AssetState,
+    pub stage: AssetStatusStage,
+    pub source: Option<String>,
+    pub importer_id: Option<String>,
+    pub type_id: Option<String>,
+    pub format: Option<String>,
+    pub bytes: Option<u64>,
+    pub error: Option<String>,
+    pub detail: Option<String>,
+    pub updated_unix_ms: u64,
+}
+
+impl AssetStatus {
+    #[inline]
+    pub fn unknown(id_hex32: impl Into<String>) -> Self {
+        Self {
+            id_hex32: id_hex32.into(),
+            logical_path: None,
+            state: AssetState::Unknown,
+            stage: AssetStatusStage::Unknown,
+            source: None,
+            importer_id: None,
+            type_id: None,
+            format: None,
+            bytes: None,
+            error: None,
+            detail: Some("AssetManager has no status row for this asset".to_string()),
+            updated_unix_ms: 0,
+        }
+    }
+}
+
 /// Minimal engine-facing Asset access surface.
 ///
 /// Implementations may be plugin-backed, filesystem-backed, HTTP-backed, etc.
@@ -133,6 +226,9 @@ pub trait AssetAccess {
 
     /// Query current state for an enqueued asset.
     fn state(&self, id_hex32: &str) -> Result<AssetState, String>;
+
+    /// Query the canonical AssetStatus read-model row for an asset id or logical path.
+    fn status_json_v1(&self, id_or_logical_path: &str) -> Result<serde_json::Value, String>;
 
     /// Read UTF-8/text asset bytes by logical path through AssetManager/VFS.
     fn text_v1(&self, logical_path: &str) -> Result<Vec<u8>, String>;

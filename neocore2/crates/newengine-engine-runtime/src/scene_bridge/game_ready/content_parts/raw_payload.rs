@@ -4,9 +4,8 @@ use serde::Deserialize;
 
 
 pub(super) use self::profile::*;
-use self::paths::{plugin_dir_candidates, profile_asset_candidates, GAME_READY_APP_DIR};
+use self::paths::{profile_asset_candidates, GAME_READY_APP_DIR};
 
-const GAME_READY_SCENE_ID: &str = "newengine.scene.game_ready.highlands.v1";
 
 #[derive(Debug, Deserialize)]
 struct RawGameReadyPayload {

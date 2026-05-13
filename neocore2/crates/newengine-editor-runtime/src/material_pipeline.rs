@@ -6,6 +6,7 @@ use newengine_materials::binary::{
 };
 use newengine_materials::serde as mat_serde;
 use newengine_materials::{parse_material_source_json, MaterialDescriptor, MaterialRegistry};
+use newengine_assets::{AssetAccess, AssetServiceClient};
 
 use parking_lot::RwLock;
 use std::sync::Arc;
@@ -13,6 +14,7 @@ use std::sync::Arc;
 use newengine_math::collections_prelude::{NeHashMap as HashMap, NeHashSet as HashSet};
 use std::path::{Path, PathBuf};
 
+use newengine_plugin_host::default_host_api;
 use newengine_runtime_host::asset_bootstrap::collect_app_asset_roots;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
@@ -89,12 +91,12 @@ impl MaterialPipeline {
                 let Some(ext) = p.extension().and_then(|e| e.to_str()) else { continue };
 
                 if ext.eq_ignore_ascii_case("json") {
-                    if let Some((name, desc, textures)) = self.load_or_compile_json(&p) {
+                    if let Some((name, desc, textures)) = self.load_or_compile_json(&root, &p) {
                         live_names.insert(name.clone());
                         compiled.push((name, desc, textures));
                     }
                 } else if ext.eq_ignore_ascii_case("nemat") {
-                    if let Some((name, desc, textures)) = self.load_nemat(&p) {
+                    if let Some((name, desc, textures)) = self.load_nemat(&root, &p) {
                         live_names.insert(name.clone());
                         compiled.push((name, desc, textures));
                     }
@@ -144,13 +146,14 @@ impl MaterialPipeline {
         }
     }
 
-    fn load_nemat(&mut self, path: &Path) -> Option<(String, MaterialDescriptor, MaterialTextureBindings)> {
+    fn load_nemat(&mut self, root: &Path, path: &Path) -> Option<(String, MaterialDescriptor, MaterialTextureBindings)> {
         let stamp = file_stamp(path)?;
         if self.seen.get(path).copied() == Some(stamp) {
             return None;
         }
 
-        let bytes = std::fs::read(path).ok()?;
+        let logical_path = logical_asset_path(root, path)?;
+        let bytes = read_runtime_asset_bytes(&logical_path)?;
         let asset = decode_material_asset(&bytes).ok()?;
         let name = normalize_material_name(&asset.name, path)?;
         let mut desc = asset.desc;
@@ -160,13 +163,14 @@ impl MaterialPipeline {
         Some((name, desc, MaterialTextureBindings::default()))
     }
 
-    fn load_or_compile_json(&mut self, path: &Path) -> Option<(String, MaterialDescriptor, MaterialTextureBindings)> {
+    fn load_or_compile_json(&mut self, root: &Path, path: &Path) -> Option<(String, MaterialDescriptor, MaterialTextureBindings)> {
         let stamp = file_stamp(path)?;
         if self.seen.get(path).copied() == Some(stamp) {
             return None;
         }
 
-        let bytes = std::fs::read(path).ok()?;
+        let logical_path = logical_asset_path(root, path)?;
+        let bytes = read_runtime_asset_bytes(&logical_path)?;
         let hash_hex = blake3::hash(&bytes).to_hex().to_string();
         let stem = path.file_stem()?.to_string_lossy().to_string();
         let name = format!("materials/{stem}");
@@ -207,6 +211,36 @@ impl MaterialPipeline {
 
         self.seen.insert(path.to_path_buf(), stamp);
         Some((name, desc, textures))
+    }
+}
+
+#[inline]
+fn logical_asset_path(root: &Path, path: &Path) -> Option<String> {
+    let rel = path.strip_prefix(root).ok()?;
+    let s = rel.to_string_lossy().replace('\\', "/");
+    Some(s.trim_start_matches('/').to_owned())
+}
+
+#[inline]
+fn read_runtime_asset_bytes(logical_path: &str) -> Option<Vec<u8>> {
+    let assets = AssetServiceClient::new(default_host_api());
+    match assets.raw_bytes_v1(logical_path) {
+        Ok(bytes) => {
+            log::debug!(
+                "editor material pipeline: loaded material asset via AssetManager path='{}' bytes={}",
+                logical_path,
+                bytes.len()
+            );
+            Some(bytes)
+        }
+        Err(err) => {
+            log::warn!(
+                "editor material pipeline: AssetManager read failed path='{}' err='{}'",
+                logical_path,
+                err
+            );
+            None
+        }
     }
 }
 

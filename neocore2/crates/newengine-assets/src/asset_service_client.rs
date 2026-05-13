@@ -25,6 +25,8 @@ pub struct AssetServiceClient {
     m_text_v1: MethodName,
     m_raw_bytes_v1: MethodName,
     m_texture_rgba8_v1: MethodName,
+    m_status_json_v1: MethodName,
+    m_mark_status_json_v1: MethodName,
     m_resolve_trace_json: MethodName,
     m_get_state_v1: MethodName,
 }
@@ -53,6 +55,8 @@ impl AssetServiceClient {
             m_text_v1: MethodName::from(method::TEXT_V1),
             m_raw_bytes_v1: MethodName::from(method::RAW_BYTES_V1),
             m_texture_rgba8_v1: MethodName::from(method::TEXTURE_RGBA8_V1),
+            m_status_json_v1: MethodName::from(method::STATUS_JSON_V1),
+            m_mark_status_json_v1: MethodName::from(method::MARK_STATUS_JSON_V1),
             m_resolve_trace_json: MethodName::from(method::RESOLVE_TRACE_JSON),
             m_get_state_v1: MethodName::from(method::GET_STATE_V1),
         }
@@ -61,6 +65,24 @@ impl AssetServiceClient {
     #[inline]
     pub fn service_id(&self) -> &RString {
         &self.service_id
+    }
+
+    #[inline]
+    fn normalize_logical_path(logical_path: &str) -> String {
+        let mut s = logical_path.trim().replace('\\', "/");
+        while let Some(rest) = s.strip_prefix("./") {
+            s = rest.to_owned();
+        }
+        s = s.trim_start_matches('/').to_owned();
+        while s.contains("//") {
+            s = s.replace("//", "/");
+        }
+        s
+    }
+
+    #[inline]
+    fn logical_payload(logical_path: &str) -> Vec<u8> {
+        Self::normalize_logical_path(logical_path).into_bytes()
     }
 
     #[inline]
@@ -190,7 +212,7 @@ impl AssetServiceClient {
     /// Enqueue importer-owned asset import by logical path.
     #[inline]
     pub fn import_v1(&self, logical_path: &str) -> Result<String, String> {
-        let bytes = self.call_raw(self.m_import_v1.clone(), logical_path.as_bytes().to_vec())?;
+        let bytes = self.call_raw(self.m_import_v1.clone(), Self::logical_payload(logical_path))?;
         Self::decode_load_like(bytes, "import_v1")
     }
 
@@ -200,13 +222,21 @@ impl AssetServiceClient {
     /// still goes through the mounted VFS layers (.pak, filesystem, future remote sources).
     #[inline]
     pub fn raw_bytes_v1(&self, logical_path: &str) -> Result<Vec<u8>, String> {
-        self.call_raw(self.m_raw_bytes_v1.clone(), logical_path.as_bytes().to_vec())
+        self.call_raw(self.m_raw_bytes_v1.clone(), Self::logical_payload(logical_path))
     }
 
     /// Read UTF-8/text asset bytes directly through the AssetManager v1 text method.
     #[inline]
     pub fn text_v1(&self, logical_path: &str) -> Result<Vec<u8>, String> {
-        self.call_raw(self.m_text_v1.clone(), logical_path.as_bytes().to_vec())
+        self.call_raw(self.m_text_v1.clone(), Self::logical_payload(logical_path))
+    }
+
+    /// Best-effort lifecycle projection for systems that own non-CPU residency,
+    /// for example the render controller marking GPU upload/residency stages.
+    #[inline]
+    pub fn mark_status_json_v1(&self, payload: serde_json::Value) -> Result<serde_json::Value, String> {
+        let bytes = serde_json::to_vec(&payload).map_err(|e| e.to_string())?;
+        Self::decode_ok_json(self.call_raw(self.m_mark_status_json_v1.clone(), bytes)?)
     }
 }
 
@@ -235,6 +265,18 @@ impl AssetAccess for AssetServiceClient {
         })
     }
 
+    fn status_json_v1(&self, id_or_logical_path: &str) -> Result<serde_json::Value, String> {
+        let payload = if id_or_logical_path.trim().len() == 32
+            && id_or_logical_path.trim().chars().all(|c| c.is_ascii_hexdigit())
+        {
+            id_or_logical_path.trim().as_bytes().to_vec()
+        } else {
+            Self::logical_payload(id_or_logical_path)
+        };
+        let bytes = self.call_raw(self.m_status_json_v1.clone(), payload)?;
+        Self::decode_ok_json(bytes)
+    }
+
     #[inline]
     fn text_v1(&self, logical_path: &str) -> Result<Vec<u8>, String> {
         AssetServiceClient::text_v1(self, logical_path)
@@ -260,12 +302,12 @@ impl AssetAccess for AssetServiceClient {
 
 impl AssetService for AssetServiceClient {
     fn reload(&self, logical_path: &str) -> Result<String, String> {
-        let bytes = self.call_raw(self.m_reload.clone(), logical_path.as_bytes().to_vec())?;
+        let bytes = self.call_raw(self.m_reload.clone(), Self::logical_payload(logical_path))?;
         Self::decode_load_like(bytes, "reload_v1")
     }
 
     fn info_json(&self, logical_path: &str) -> Result<serde_json::Value, String> {
-        let bytes = self.call_raw(self.m_info_json.clone(), logical_path.as_bytes().to_vec())?;
+        let bytes = self.call_raw(self.m_info_json.clone(), Self::logical_payload(logical_path))?;
         Self::decode_ok_json(bytes)
     }
 
@@ -324,7 +366,7 @@ impl AssetService for AssetServiceClient {
     fn resolve_trace_json(&self, logical_path: &str) -> Result<serde_json::Value, String> {
         let bytes = self.call_raw(
             self.m_resolve_trace_json.clone(),
-            logical_path.as_bytes().to_vec(),
+            Self::logical_payload(logical_path),
         )?;
         Self::decode_ok_json(bytes)
     }
