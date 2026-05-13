@@ -157,6 +157,8 @@ pub struct RenderMaterialBinding {
     pub double_sided: bool,
     #[serde(default = "default_true")]
     pub cast_shadows: bool,
+    #[serde(default = "default_true")]
+    pub receive_shadows: bool,
 }
 
 impl Default for RenderMaterialBinding {
@@ -172,6 +174,7 @@ impl Default for RenderMaterialBinding {
             roughness_texture: None,
             double_sided: false,
             cast_shadows: true,
+            receive_shadows: true,
         }
     }
 }

@@ -6,15 +6,13 @@ readme = "README.md"
 description = "Reusable game/editor-neutral runtime scene and render controller layer for NewEngine"
 
 [features]
-default = ["texture-decode"]
-texture-decode = []
+default = []
 editor-ui = []
 
 [dependencies]
 abi_stable = { version = "0.11" }
 blake3 = "1"
 crossbeam-channel = "0.5"
-image = { version = "0.25", default-features = false, features = ["png", "jpeg", "ico"] }
 libloading = "0.9"
 log = "0.4"
 parking_lot = "0.12"

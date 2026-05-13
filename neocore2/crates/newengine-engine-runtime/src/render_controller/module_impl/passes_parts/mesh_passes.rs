@@ -232,6 +232,11 @@ pub(super) fn draw_primitives(
         let normal_tex = this.material_texture_or_default(r, material_plan.normal_texture, lit.flat_normal_texture);
         let roughness_tex = this.material_texture_or_default(r, material_plan.roughness_texture, lit.white_texture);
         let sampler = if material_plan.has_textures() { lit.repeat_sampler } else { lit.clamp_sampler };
+        let material_shadow_texture = if material_plan.receive_shadows {
+            shadow_texture
+        } else {
+            lit.white_texture
+        };
         let pipeline = if material_plan.double_sided {
             lit.instanced_double_sided_pipeline
         } else {
@@ -245,7 +250,7 @@ pub(super) fn draw_primitives(
             base_tex,
             normal_tex,
             roughness_tex,
-            shadow_texture,
+            material_shadow_texture,
             sampler,
         );
 
@@ -256,7 +261,7 @@ pub(super) fn draw_primitives(
             base_tex,
             normal_tex,
             roughness_tex,
-            shadow_texture,
+            material_shadow_texture,
             sampler,
         )?;
         per.last_seen_frame = this.frame_index;
@@ -292,7 +297,7 @@ pub(super) fn draw_primitives(
             base_tex,
             normal_tex,
             roughness_tex,
-            shadow_texture,
+            material_shadow_texture,
             sampler,
             mesh_key,
         );

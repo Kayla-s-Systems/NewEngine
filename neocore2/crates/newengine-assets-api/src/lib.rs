@@ -9,30 +9,28 @@ use std::time::Instant;
 /// by clients and providers instead of being duplicated in plugin crates.
 pub const ASSET_SERVICE_ID: &str = "asset.manager";
 
-/// Canonical AssetManager method names.
+/// Canonical AssetManager v1 method names.
 ///
-/// Keep compatibility aliases here as the single source of truth. Runtime code
-/// should validate against the `*_V1` aliases, while older call sites may keep
-/// using the legacy names during migration.
+/// There is one supported runtime contract: explicit `*_v1` entry points for
+/// import/pump/state/text/texture access. Older alias pairs such as
+/// `asset.load`, `asset.pump`, and `asset.load_text_v1` are intentionally not
+/// part of this surface.
 pub mod method {
-    pub const LOAD: &str = "asset.load";
-    pub const RELOAD: &str = "asset.reload";
-    pub const PUMP: &str = "asset.pump";
+    pub const RELOAD_V1: &str = "asset.reload_v1";
     pub const INFO_JSON: &str = "asset.info_json";
     pub const STATE_JSON: &str = "asset.state_json";
     pub const BLOB_WIRE_V1: &str = "asset.blob_wire_v1";
+    /// Runtime-ready RGBA8 texture packet by asset id. AssetManager validates/parses importer metadata.
+    pub const TEXTURE_RGBA8_V1: &str = "asset.texture_rgba8_v1";
 
-    /// Stable v1 import entry point. Alias-compatible with `asset.load`.
+    /// Stable v1 import entry point.
     pub const IMPORT_V1: &str = "asset.import_v1";
-    /// Stable v1 pump entry point. Alias-compatible with `asset.pump`.
+    /// Stable v1 pump entry point.
     pub const PUMP_V1: &str = "asset.pump_v1";
     /// Raw VFS bytes by logical path. This bypasses importers but still resolves exclusively through AssetManager mounts.
     pub const RAW_BYTES_V1: &str = "asset.raw_bytes_v1";
     /// Raw UTF-8 text by logical path resolved through AssetManager mounts.
     pub const TEXT_V1: &str = "asset.text_v1";
-    /// Compatibility text-load alias used by older runtime/editor call sites.
-    pub const LOAD_TEXT_V1: &str = "asset.load_text_v1";
-
     // Fast-path / batch APIs.
     pub const PRELOAD_MANY_V1: &str = "asset.preload_many_v1";
     pub const GET_STATE_V1: &str = "asset.get_state_v1";
@@ -63,11 +61,55 @@ pub mod method {
 pub const REQUIRED_RUNTIME_METHODS_V1: &[&str] = &[
     method::RAW_BYTES_V1,
     method::TEXT_V1,
-    method::LOAD_TEXT_V1,
     method::IMPORT_V1,
+    method::TEXTURE_RGBA8_V1,
     method::PUMP_V1,
     method::FORMATS_JSON,
 ];
+
+
+/// Runtime-ready texture packet returned by AssetManager.
+///
+/// Important: this is not a decoder contract. The importer pipeline must already
+/// have converted the source container (DDS/PNG/JPEG/etc.) into RGBA8 or an
+/// explicit renderer-native payload. Runtime code only consumes this normalized
+/// packet.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Rgba8TextureAsset {
+    pub width: u32,
+    pub height: u32,
+    pub rgba: Vec<u8>,
+}
+
+impl Rgba8TextureAsset {
+    #[inline]
+    pub fn expected_len(width: u32, height: u32) -> usize {
+        (width as usize)
+            .saturating_mul(height as usize)
+            .saturating_mul(4)
+    }
+
+    #[inline]
+    pub fn new(width: u32, height: u32, rgba: Vec<u8>) -> Result<Self, String> {
+        if width == 0 || height == 0 {
+            return Err(format!("rgba8 texture has zero extent {width}x{height}"));
+        }
+        let expected = Self::expected_len(width, height);
+        if rgba.len() != expected {
+            return Err(format!(
+                "rgba8 texture payload size mismatch bytes={} expected={} extent={}x{}",
+                rgba.len(), expected, width, height
+            ));
+        }
+        Ok(Self { width, height, rgba })
+    }
+}
+
+pub mod texture_wire {
+    pub const MAGIC: [u8; 4] = *b"NTRT";
+    pub const VERSION_RGBA8_V1: u16 = 1;
+    pub const HEADER_LEN: usize = 20;
+}
 
 /// Asset lifecycle state as observed through an AssetManager-like service.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -83,19 +125,34 @@ pub enum AssetState {
 ///
 /// Implementations may be plugin-backed, filesystem-backed, HTTP-backed, etc.
 pub trait AssetAccess {
-    /// Enqueue asset load by logical path. Returns an opaque stable id (hex32 string).
-    fn load(&self, logical_path: &str) -> Result<String, String>;
+    /// Enqueue importer-owned asset import by logical path. Returns an opaque stable id (hex32 string).
+    fn import_v1(&self, logical_path: &str) -> Result<String, String>;
 
-    /// Progress background work.
+    /// Progress background AssetManager work through the stable v1 pump method.
     fn pump(&self);
 
     /// Query current state for an enqueued asset.
     fn state(&self, id_hex32: &str) -> Result<AssetState, String>;
 
+    /// Read UTF-8/text asset bytes by logical path through AssetManager/VFS.
+    fn text_v1(&self, logical_path: &str) -> Result<Vec<u8>, String>;
+
+    /// Read raw binary asset bytes by logical path through AssetManager/VFS.
+    ///
+    /// This is still AssetManager-owned VFS access; callers must not use
+    /// filesystem paths or bypass mounts.
+    fn raw_bytes_v1(&self, logical_path: &str) -> Result<Vec<u8>, String>;
+
     /// Read asset payload using a stable wire format.
     ///
     /// Returns `(meta_json, payload_bytes)`.
     fn blob_wire_v1(&self, id_hex32: &str) -> Result<(String, Vec<u8>), String>;
+
+    /// Read a runtime-ready RGBA8 texture packet.
+    ///
+    /// The implementation must parse/validate importer metadata inside AssetManager.
+    /// Runtime callers must not parse image containers or importer metadata.
+    fn texture_rgba8_v1(&self, id_hex32: &str) -> Result<Rgba8TextureAsset, String>;
 }
 
 /// Extended contract surface.
@@ -103,7 +160,7 @@ pub trait AssetAccess {
 /// Keep this trait small and data-oriented; higher-level systems can build their own
 /// caches and decoders above these primitives.
 pub trait AssetService: AssetAccess {
-    /// Reload asset by logical path (implementation-defined cache invalidation).
+    /// Reload/reimport asset by logical path through the stable v1 reload method.
     fn reload(&self, logical_path: &str) -> Result<String, String>;
 
     /// Query extended info by logical path.

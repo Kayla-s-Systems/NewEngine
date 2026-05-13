@@ -279,7 +279,7 @@ fn lower_single_gpu_mesh_instance(
         lit.clamp_sampler
     };
 
-    let shadow_texture = if matches!(draw_list, RenderDrawListKind::ShadowCasters) {
+    let shadow_texture = if matches!(draw_list, RenderDrawListKind::ShadowCasters) || !material.receive_shadows {
         lit.white_texture
     } else {
         ctx.shadow_frame.texture

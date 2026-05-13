@@ -1,3 +1,6 @@
+use std::time::Duration;
+use newengine_assets::AssetAccess;
+
 fn read_u32_le(payload: &[u8], offset: &mut usize) -> Result<u32, String> {
     let end = offset.saturating_add(4);
     let bytes = payload
@@ -121,8 +124,8 @@ fn decode_ne3d_mesh(payload: &[u8]) -> Result<PrimitiveMesh, String> {
 fn load_ne3d_mesh_asset(logical_path: &str) -> Result<PrimitiveMesh, String> {
     let assets = AssetServiceClient::new(default_host_api());
     let id = assets
-        .load(logical_path)
-        .map_err(|e| format!("asset.load failed path='{logical_path}' err='{e}'"))?;
+        .import_v1(logical_path)
+        .map_err(|e| format!("asset.import_v1 failed path='{logical_path}' err='{e}'"))?;
 
     wait_ready(&assets, &id, Duration::from_secs(3))
         .map_err(|e| format!("asset not ready path='{logical_path}' id='{id}' err='{e:?}'"))?;
@@ -202,6 +205,10 @@ fn spawn_skydome(
             color,
         },
     );
+    // Sky is a background primitive, not world geometry. Keeping its massive
+    // bounds in the scene union makes directional shadow fitting unstable and
+    // lets shadow-map UVs appear as dark projection bands on the dome.
+    let _ = world.remove::<newengine_bounds::Bounds>(sky);
     let _ = apply_exact_material(world, mats, sky, materials.sky, materials.sky, color);
 }
 

@@ -49,8 +49,8 @@ pub(crate) fn draw_content(me: &mut EditorUiBuild, ui: &mut egui::Ui) {
                 Err(e) => me.asset_ui.last_error = e,
             }
         }
-        if ui.button("Load").clicked() {
-            match assets.load(me.asset_ui.path.trim()) {
+        if ui.button("Import v1").clicked() {
+            match assets.import_v1(me.asset_ui.path.trim()) {
                 Ok(id) => {
                     me.asset_ui.last_id = Some(id);
                     me.asset_ui.last_error.clear();
@@ -58,7 +58,7 @@ pub(crate) fn draw_content(me: &mut EditorUiBuild, ui: &mut egui::Ui) {
                 Err(e) => me.asset_ui.last_error = e,
             }
         }
-        if ui.button("Reload").clicked() {
+        if ui.button("Reload v1").clicked() {
             match assets.reload(me.asset_ui.path.trim()) {
                 Ok(id) => {
                     me.asset_ui.last_id = Some(id);

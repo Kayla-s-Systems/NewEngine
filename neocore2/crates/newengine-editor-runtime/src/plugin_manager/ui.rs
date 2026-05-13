@@ -57,7 +57,7 @@ impl AssetPluginIconCache {
         self.assets.pump();
 
         if !self.slots.contains_key(&key) {
-            match self.assets.load(&path) {
+            match self.assets.import_v1(&path) {
                 Ok(id_hex32) => {
                     log::debug!(
                         "plugin icon asset: requested key='{}' path='{}' id='{}'",
@@ -88,28 +88,34 @@ impl AssetPluginIconCache {
                     return None;
                 }
                 AssetIconSlot::Loading { path, id_hex32 } => match self.assets.state(id_hex32) {
-                    Ok(AssetState::Ready) => match self.assets.blob_wire_v1(id_hex32) {
-                        Ok((_meta, bytes)) => match decode_icon_image(&bytes) {
+                    Ok(AssetState::Ready) => match self.assets.texture_rgba8_v1(id_hex32) {
+                        Ok(texture_asset) => match rgba8_icon_image(
+                            texture_asset.width,
+                            texture_asset.height,
+                            &texture_asset.rgba,
+                        ) {
                             Ok((img, w, h)) => {
-                                let digest_hex = blake3::hash(&bytes).to_hex().to_string();
+                                let digest_hex = blake3::hash(&texture_asset.rgba)
+                                    .to_hex()
+                                    .to_string();
                                 let texture = ctx.load_texture(
                                     format!("plugin_icon_asset:{}:{}", key, digest_hex),
                                     img,
                                     egui::TextureOptions::LINEAR,
                                 );
                                 log::debug!(
-                                    "plugin icon asset: ready key='{}' path='{}' size={}x{} bytes={}",
+                                    "plugin icon asset: ready key='{}' path='{}' size={}x{} rgba8_bytes={} source='AssetManager.texture_rgba8_v1'",
                                     key,
                                     path,
                                     w,
                                     h,
-                                    bytes.len()
+                                    texture_asset.rgba.len()
                                 );
                                 replacement = Some(AssetIconSlot::Ready { texture });
                             }
                             Err(e) => {
                                 log::warn!(
-                                    "plugin icon asset: decode failed key='{}' path='{}' err='{}'",
+                                    "plugin icon asset: rgba8 convert failed key='{}' path='{}' err='{}'",
                                     key,
                                     path,
                                     e
@@ -122,7 +128,7 @@ impl AssetPluginIconCache {
                         },
                         Err(e) => {
                             log::warn!(
-                                "plugin icon asset: blob failed key='{}' path='{}' id='{}' err='{}'",
+                                "plugin icon asset: texture_rgba8_v1 failed key='{}' path='{}' id='{}' err='{}'",
                                 key,
                                 path,
                                 id_hex32,
@@ -660,25 +666,43 @@ fn plugin_icon_asset_path(plugin_id: &str) -> String {
     format!("ui/plugin_icons/{sanitized}.png")
 }
 
-fn decode_icon_image(bytes: &[u8]) -> Result<(egui::ColorImage, u32, u32), String> {
-    let dyn_img = image::load_from_memory(bytes).map_err(|e| e.to_string())?;
-    let rgba = dyn_img.to_rgba8();
-    let (w, h) = rgba.dimensions();
+fn rgba8_icon_image(
+    width: u32,
+    height: u32,
+    rgba: &[u8],
+) -> Result<(egui::ColorImage, u32, u32), String> {
+    if width == 0 || height == 0 {
+        return Err(format!("rgba8 texture has zero extent {width}x{height}"));
+    }
+    let expected = (width as usize)
+        .checked_mul(height as usize)
+        .and_then(|px| px.checked_mul(4))
+        .ok_or_else(|| "rgba8 texture dimensions overflow".to_string())?;
+    if rgba.len() != expected {
+        return Err(format!(
+            "rgba8 payload size mismatch bytes={} expected={} extent={}x{}",
+            rgba.len(),
+            expected,
+            width,
+            height
+        ));
+    }
 
-    let mut pixels = Vec::with_capacity((w as usize).saturating_mul(h as usize));
-    for p in rgba.pixels() {
-        let [r, g, b, a] = p.0;
-        pixels.push(egui::Color32::from_rgba_unmultiplied(r, g, b, a));
+    let mut pixels = Vec::with_capacity((width as usize).saturating_mul(height as usize));
+    for px in rgba.chunks_exact(4) {
+        pixels.push(egui::Color32::from_rgba_unmultiplied(
+            px[0], px[1], px[2], px[3],
+        ));
     }
 
     Ok((
         egui::ColorImage {
-            size: [w as usize, h as usize],
+            size: [width as usize, height as usize],
             source_size: Default::default(),
             pixels,
         },
-        w,
-        h,
+        width,
+        height,
     ))
 }
 

@@ -9,6 +9,8 @@ use crate::gameplay::{clear_player_input, first_player, EditorPlayMode, GameRead
 use super::super::material_bindings::{LitMaterialPlan, MaterialTextureGpuResidency};
 use super::RuntimeRenderController;
 
+const SCENE_TEXTURE_GATE_SOFT_TIMEOUT_FRAMES: u64 = 360;
+
 /// Updates the standalone game launch gate and returns whether the playable world
 /// may be simulated or possessed this frame.
 ///
@@ -59,8 +61,27 @@ pub(super) fn update_game_ready_launch_gate(
             let first_wait = gate.requested_frame == u64::MAX;
             gate.requested_frame = gate.requested_frame.min(frame_index);
             gate.update_texture_counts(readiness.waiting, readiness.total, readiness.failed);
+            let waited_frames = frame_index.saturating_sub(gate.requested_frame);
+
+            if waited_frames >= SCENE_TEXTURE_GATE_SOFT_TIMEOUT_FRAMES {
+                let reason = format!(
+                    "scene texture residency soft timeout after {waited_frames} frames; continuing with renderer fallbacks waiting={} total={} failed={}",
+                    readiness.waiting,
+                    readiness.total,
+                    readiness.failed
+                );
+                gate.release(frame_index, reason.clone());
+                log::warn!(
+                    "game-ready launch gate: soft-released frame={} waited_frames={} reason='{}'",
+                    frame_index,
+                    waited_frames,
+                    reason
+                );
+                return true;
+            }
+
             gate.reason = readiness.reason;
-            let early_wait_frame = frame_index.saturating_sub(gate.requested_frame) <= 8;
+            let early_wait_frame = waited_frames <= 8;
             if first_wait || early_wait_frame || frame_index % 60 == 0 {
                 log::info!(
                     "game-ready launch gate: blocked frame={} reason='{}'",

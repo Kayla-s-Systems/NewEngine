@@ -5,7 +5,7 @@ use newengine_core::render::{
     Extent2D, GpuResourceResidencyState, RenderTargetId, SamplerId, TextureDesc, TextureFormat,
     TextureId, TextureUsage,
 };
-use newengine_core::{EngineError, EngineResult};
+use newengine_core::EngineError;
 use newengine_plugin_host::default_host_api;
 use std::num::NonZeroU32;
 
@@ -41,28 +41,6 @@ fn material_texture_format(path: &str) -> TextureFormat {
     }
 }
 
-#[cfg(feature = "texture-decode")]
-fn decode_material_texture_payload(
-    path: &str,
-    payload: &[u8],
-) -> EngineResult<(Extent2D, Vec<u8>)> {
-    let dyn_img = image::load_from_memory(payload)
-        .map_err(|e| EngineError::other(format!("image decode failed path='{path}' err='{e}'")))?;
-    let rgba = dyn_img.to_rgba8();
-    let (w, h) = rgba.dimensions();
-    Ok((Extent2D::new(w, h), rgba.into_raw()))
-}
-
-#[cfg(not(feature = "texture-decode"))]
-fn decode_material_texture_payload(
-    path: &str,
-    _payload: &[u8],
-) -> EngineResult<(Extent2D, Vec<u8>)> {
-    Err(EngineError::other(format!(
-        "texture decode requested in runtime-core for '{path}', but image decoding must go through AssetManager/imageImporter"
-    )))
-}
-
 impl RuntimeRenderController {
     pub(super) fn request_material_texture(&mut self, path: &str) {
         if self.material_textures.contains_key(path) {
@@ -95,7 +73,7 @@ impl RuntimeRenderController {
                 continue;
             }
 
-            match assets.load(&path) {
+            match assets.import_v1(&path) {
                 Ok(id_hex32) => {
                     self.material_textures.insert(
                         path,
@@ -143,52 +121,52 @@ impl RuntimeRenderController {
             match assets.state(&id_hex32) {
                 Ok(AssetState::Ready) => {
                     decoded_jobs = decoded_jobs.saturating_add(1);
-                    let decoded = assets
-                        .blob_wire_v1(&id_hex32)
-                        .map_err(|e| EngineError::other(format!(
-                            "asset.blob_wire_v1 failed path='{path}' id='{id_hex32}' err='{e}'"
-                        )))
-                        .and_then(|(_meta, payload)| {
-                            decode_material_texture_payload(&path, &payload)
-                        });
+                    let decoded = assets.texture_rgba8_v1(&id_hex32).map_err(|e| {
+                        EngineError::other(format!(
+                            "asset.texture_rgba8_v1 failed path='{path}' id='{id_hex32}' err='{e}'"
+                        ))
+                    });
 
                     match decoded {
-                        Ok((extent, rgba)) => match r.create_texture(
-                            TextureDesc::new(
-                                extent,
-                                material_texture_format(&path),
-                                TextureUsage::Sampled,
-                            )
-                            .with_label(format!("material_tex:{path}"))
-                            .with_mips(material_texture_mip_count(extent))
-                            .with_deferred_data(rgba),
-                        ) {
-                            Ok(texture) => {
-                                self.material_textures.insert(
-                                    path,
-                                    MaterialTextureGpuResidency::GpuLoading {
-                                        texture,
-                                        requested_frame: self.frame_index,
-                                    },
-                                );
+                        Ok(texture_asset) => {
+                            let extent = Extent2D::new(texture_asset.width, texture_asset.height);
+                            match r.create_texture(
+                                TextureDesc::new(
+                                    extent,
+                                    material_texture_format(&path),
+                                    TextureUsage::Sampled,
+                                )
+                                .with_label(format!("material_tex:{path}"))
+                                .with_mips(material_texture_mip_count(extent))
+                                .with_deferred_data(texture_asset.rgba),
+                            ) {
+                                Ok(texture) => {
+                                    self.material_textures.insert(
+                                        path,
+                                        MaterialTextureGpuResidency::GpuLoading {
+                                            texture,
+                                            requested_frame: self.frame_index,
+                                        },
+                                    );
+                                }
+                                Err(e) => {
+                                    log::warn!(
+                                        "render controller: material texture create failed path='{}' err='{}'",
+                                        path,
+                                        e
+                                    );
+                                    self.material_textures.insert(
+                                        path,
+                                        MaterialTextureGpuResidency::Failed {
+                                            message: e.to_string(),
+                                        },
+                                    );
+                                }
                             }
-                            Err(e) => {
-                                log::warn!(
-                                    "render controller: material texture create failed path='{}' err='{}'",
-                                    path,
-                                    e
-                                );
-                                self.material_textures.insert(
-                                    path,
-                                    MaterialTextureGpuResidency::Failed {
-                                        message: e.to_string(),
-                                    },
-                                );
-                            }
-                        },
+                        }
                         Err(e) => {
                             log::warn!(
-                                "render controller: material texture decode failed path='{}' err='{}'",
+                                "render controller: material texture import failed path='{}' err='{}'",
                                 path,
                                 e
                             );

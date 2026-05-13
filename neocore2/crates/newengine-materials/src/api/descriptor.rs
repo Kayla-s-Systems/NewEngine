@@ -16,6 +16,7 @@ impl MaterialFlags {
     pub const ALPHA_BLEND: Self = Self(1 << 1);
     pub const ALPHA_TEST: Self = Self(1 << 2);
     pub const CAST_SHADOWS: Self = Self(1 << 3);
+    pub const RECEIVE_SHADOWS: Self = Self(1 << 4);
 
     #[inline]
     pub const fn contains(self, other: Self) -> bool {

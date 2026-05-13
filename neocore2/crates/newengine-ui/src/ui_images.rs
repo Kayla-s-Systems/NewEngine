@@ -53,7 +53,6 @@ impl UiImageLoader {
 #[cfg(all(feature = "egui", feature = "images"))]
 mod with_images {
     use super::*;
-    use image::GenericImageView;
     use newengine_assets_api::AssetState;
     use newengine_math::collections::FxHashMap;
 
@@ -154,7 +153,7 @@ mod with_images {
                     continue;
                 };
                 match slot {
-                    Slot::Empty { path } => match assets.load(path) {
+                    Slot::Empty { path } => match assets.import_v1(path) {
                         Ok(id_hex32) => {
                             *slot = Slot::Loading {
                                 path: path.clone(),
@@ -177,8 +176,12 @@ mod with_images {
                     },
                     Slot::Loading { path, id_hex32 } => {
                         match assets.state(id_hex32) {
-                            Ok(crate::AssetState::Ready) => match assets.blob_wire_v1(id_hex32) {
-                                Ok((_meta, bytes)) => match decode_to_color_image(&bytes) {
+                            Ok(crate::AssetState::Ready) => match assets.texture_rgba8_v1(id_hex32) {
+                                Ok(texture) => match rgba8_to_color_image(
+                                    texture.width,
+                                    texture.height,
+                                    &texture.rgba,
+                                ) {
                                     Ok((img, w, h)) => {
                                         let handle = ctx.load_texture(
                                             format!("ui:{k}"),
@@ -266,26 +269,44 @@ mod with_images {
         }
     }
 
-    fn decode_to_color_image(bytes: &[u8]) -> Result<(egui::ColorImage, u32, u32), String> {
-        let dyn_img = image::load_from_memory(bytes).map_err(|e| e.to_string())?;
-        let rgba = dyn_img.to_rgba8();
-        let (w, h) = dyn_img.dimensions();
+    fn rgba8_to_color_image(
+        width: u32,
+        height: u32,
+        rgba: &[u8],
+    ) -> Result<(egui::ColorImage, u32, u32), String> {
+        if width == 0 || height == 0 {
+            return Err(format!("rgba8 texture has zero extent {width}x{height}"));
+        }
+        let expected = (width as usize)
+            .checked_mul(height as usize)
+            .and_then(|px| px.checked_mul(4))
+            .ok_or_else(|| "rgba8 texture dimensions overflow".to_string())?;
+        if rgba.len() != expected {
+            return Err(format!(
+                "rgba8 payload size mismatch bytes={} expected={} extent={}x{}",
+                rgba.len(),
+                expected,
+                width,
+                height
+            ));
+        }
 
         let mut pixels: Vec<egui::Color32> =
-            Vec::with_capacity((w as usize).saturating_mul(h as usize));
-        for p in rgba.pixels() {
-            let [r, g, b, a] = p.0;
-            pixels.push(egui::Color32::from_rgba_unmultiplied(r, g, b, a));
+            Vec::with_capacity((width as usize).saturating_mul(height as usize));
+        for px in rgba.chunks_exact(4) {
+            pixels.push(egui::Color32::from_rgba_unmultiplied(
+                px[0], px[1], px[2], px[3],
+            ));
         }
 
         Ok((
             egui::ColorImage {
-                size: [w as usize, h as usize],
+                size: [width as usize, height as usize],
                 source_size: Default::default(),
                 pixels,
             },
-            w,
-            h,
+            width,
+            height,
         ))
     }
 }

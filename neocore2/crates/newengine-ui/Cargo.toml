@@ -19,8 +19,8 @@ provider-egui = []
 # or minimal hosts without pulling the whole asset pipeline.
 assets = ["dep:newengine-assets"]
 
-# Image decoding for UI textures (icons, textured widgets).
-images = ["dep:image"]
+# Runtime UI texture bridge. Decoding happens inside AssetManager importers; UI consumes RGBA8 packets only.
+images = []
 
 [dependencies]
 newengine-plugin-api = { path = "../newengine-plugin-api" }
@@ -38,4 +38,3 @@ serde = { version = "1.0.228", features = ["derive"] }
 serde_json = "1.0.149"
 base64 = "0.22"
 
-image = { version = "0.25.8", default-features = false, features = ["png", "jpeg"], optional = true }

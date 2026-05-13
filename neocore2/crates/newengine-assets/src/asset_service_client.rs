@@ -3,7 +3,7 @@
 use abi_stable::std_types::RString;
 use newengine_plugin_api::{Blob, HostApiV1, MethodName};
 
-use crate::asset_access::{AssetAccess, AssetService, AssetState};
+use crate::asset_access::{AssetAccess, AssetService, AssetState, Rgba8TextureAsset};
 use crate::consts::{method, ASSET_SERVICE_ID};
 
 /// Thin client over the engine AssetManager service.
@@ -17,12 +17,14 @@ pub struct AssetServiceClient {
     service_id: RString,
 
     // Cache MethodName allocations; clones are cheap.
-    m_load: MethodName,
+    m_import_v1: MethodName,
     m_reload: MethodName,
     m_pump: MethodName,
     m_info_json: MethodName,
-    m_state_json: MethodName,
     m_blob_wire_v1: MethodName,
+    m_text_v1: MethodName,
+    m_raw_bytes_v1: MethodName,
+    m_texture_rgba8_v1: MethodName,
     m_resolve_trace_json: MethodName,
     m_get_state_v1: MethodName,
 }
@@ -43,12 +45,14 @@ impl AssetServiceClient {
             host,
             service_id: RString::from(service_id),
 
-            m_load: MethodName::from(method::IMPORT_V1),
-            m_reload: MethodName::from(method::RELOAD),
+            m_import_v1: MethodName::from(method::IMPORT_V1),
+            m_reload: MethodName::from(method::RELOAD_V1),
             m_pump: MethodName::from(method::PUMP_V1),
             m_info_json: MethodName::from(method::INFO_JSON),
-            m_state_json: MethodName::from(method::STATE_JSON),
             m_blob_wire_v1: MethodName::from(method::BLOB_WIRE_V1),
+            m_text_v1: MethodName::from(method::TEXT_V1),
+            m_raw_bytes_v1: MethodName::from(method::RAW_BYTES_V1),
+            m_texture_rgba8_v1: MethodName::from(method::TEXTURE_RGBA8_V1),
             m_resolve_trace_json: MethodName::from(method::RESOLVE_TRACE_JSON),
             m_get_state_v1: MethodName::from(method::GET_STATE_V1),
         }
@@ -77,16 +81,6 @@ impl AssetServiceClient {
     #[inline]
     fn decode_utf8(bytes: Vec<u8>) -> Result<String, String> {
         String::from_utf8(bytes).map_err(|_| "asset service returned non-utf8".to_string())
-    }
-
-    #[inline]
-    fn decode_state_str(s: &str) -> AssetState {
-        match s.trim().to_ascii_lowercase().as_str() {
-            "ready" => AssetState::Ready,
-            "failed" => AssetState::Failed,
-            "unloaded" => AssetState::Unloaded,
-            _ => AssetState::Loading,
-        }
     }
 
     #[inline]
@@ -127,26 +121,6 @@ impl AssetServiceClient {
         Ok(id.to_string())
     }
 
-    fn decode_state_json_response(bytes: Vec<u8>) -> Result<AssetState, String> {
-        // Contract: json { ok, state, error }
-        // Fallback: plain string state
-        let s = Self::decode_utf8(bytes)?;
-        if let Ok(v) = Self::parse_json(&s) {
-            let ok = v.get("ok").and_then(|x| x.as_bool()).unwrap_or(false);
-            if !ok {
-                let err = v
-                    .get("error")
-                    .and_then(|x| x.as_str())
-                    .unwrap_or("state failed");
-                return Err(err.to_string());
-            }
-            let st = v.get("state").and_then(|x| x.as_str()).unwrap_or("invalid");
-            return Ok(Self::decode_state_str(st));
-        }
-
-        Ok(Self::decode_state_str(&s))
-    }
-
     fn decode_blob_wire_v1(bytes: Vec<u8>) -> Result<(String, Vec<u8>), String> {
         // Contract: wire_v1 = u32(le) meta_len + meta_json_bytes + payload_bytes
         if bytes.len() < 4 {
@@ -165,6 +139,33 @@ impl AssetServiceClient {
             .to_string();
 
         Ok((meta_json, payload))
+    }
+
+    fn decode_texture_rgba8_wire_v1(bytes: Vec<u8>) -> Result<Rgba8TextureAsset, String> {
+        let min_len = newengine_assets_api::texture_wire::HEADER_LEN;
+        if bytes.len() < min_len {
+            return Err(format!("texture_rgba8_v1: short frame bytes={} expected_at_least={min_len}", bytes.len()));
+        }
+        if &bytes[0..4] != &newengine_assets_api::texture_wire::MAGIC[..] {
+            return Err("texture_rgba8_v1: bad magic".to_string());
+        }
+        let version = u16::from_le_bytes([bytes[4], bytes[5]]);
+        if version != newengine_assets_api::texture_wire::VERSION_RGBA8_V1 {
+            return Err(format!("texture_rgba8_v1: unsupported version {version}"));
+        }
+        let _flags = u16::from_le_bytes([bytes[6], bytes[7]]);
+        let width = u32::from_le_bytes([bytes[8], bytes[9], bytes[10], bytes[11]]);
+        let height = u32::from_le_bytes([bytes[12], bytes[13], bytes[14], bytes[15]]);
+        let payload_len = u32::from_le_bytes([bytes[16], bytes[17], bytes[18], bytes[19]]) as usize;
+        let expected_frame_len = min_len.saturating_add(payload_len);
+        if bytes.len() != expected_frame_len {
+            return Err(format!(
+                "texture_rgba8_v1: payload frame size mismatch bytes={} expected={expected_frame_len}",
+                bytes.len()
+            ));
+        }
+        let rgba = bytes[min_len..].to_vec();
+        Rgba8TextureAsset::new(width, height, rgba)
     }
 
     fn decode_ok_unit(bytes: Vec<u8>) -> Result<(), String> {
@@ -186,24 +187,33 @@ impl AssetServiceClient {
         Ok(())
     }
 
+    /// Enqueue importer-owned asset import by logical path.
+    #[inline]
+    pub fn import_v1(&self, logical_path: &str) -> Result<String, String> {
+        let bytes = self.call_raw(self.m_import_v1.clone(), logical_path.as_bytes().to_vec())?;
+        Self::decode_load_like(bytes, "import_v1")
+    }
+
     /// Read raw bytes from the AssetManager VFS by logical path.
     ///
     /// This intentionally bypasses importers, but it does not bypass AssetManager: resolution
     /// still goes through the mounted VFS layers (.pak, filesystem, future remote sources).
     #[inline]
     pub fn raw_bytes_v1(&self, logical_path: &str) -> Result<Vec<u8>, String> {
-        self.call_raw(
-            MethodName::from(method::RAW_BYTES_V1),
-            logical_path.as_bytes().to_vec(),
-        )
+        self.call_raw(self.m_raw_bytes_v1.clone(), logical_path.as_bytes().to_vec())
+    }
+
+    /// Read UTF-8/text asset bytes directly through the AssetManager v1 text method.
+    #[inline]
+    pub fn text_v1(&self, logical_path: &str) -> Result<Vec<u8>, String> {
+        self.call_raw(self.m_text_v1.clone(), logical_path.as_bytes().to_vec())
     }
 }
 
 impl AssetAccess for AssetServiceClient {
-    fn load(&self, logical_path: &str) -> Result<String, String> {
-        // Contract payload: utf8 logical_path
-        let bytes = self.call_raw(self.m_load.clone(), logical_path.as_bytes().to_vec())?;
-        Self::decode_load_like(bytes, "load")
+    #[inline]
+    fn import_v1(&self, logical_path: &str) -> Result<String, String> {
+        AssetServiceClient::import_v1(self, logical_path)
     }
 
     fn pump(&self) {
@@ -212,25 +222,27 @@ impl AssetAccess for AssetServiceClient {
     }
 
     fn state(&self, id_hex32: &str) -> Result<AssetState, String> {
-        // Fast-path: binary state (16 bytes LE id -> 1 byte state).
-        if let Ok(id_u128) = u128::from_str_radix(id_hex32.trim(), 16) {
-            if let Ok(bytes) =
-                self.call_raw(self.m_get_state_v1.clone(), id_u128.to_le_bytes().to_vec())
-            {
-                let code = bytes.first().copied().unwrap_or(0);
-                return Ok(match code {
-                    2 => AssetState::Ready,
-                    1 => AssetState::Loading,
-                    3 => AssetState::Failed,
-                    0 => AssetState::Unloaded,
-                    _ => AssetState::Unknown,
-                });
-            }
-        }
+        let id_u128 = u128::from_str_radix(id_hex32.trim(), 16)
+            .map_err(|_| format!("asset.get_state_v1: bad id '{id_hex32}'"))?;
+        let bytes = self.call_raw(self.m_get_state_v1.clone(), id_u128.to_le_bytes().to_vec())?;
+        let code = bytes.first().copied().unwrap_or(0);
+        Ok(match code {
+            2 => AssetState::Ready,
+            1 => AssetState::Loading,
+            3 => AssetState::Failed,
+            0 => AssetState::Unloaded,
+            _ => AssetState::Unknown,
+        })
+    }
 
-        // Fallback JSON (compat / diagnostics).
-        let bytes = self.call_raw(self.m_state_json.clone(), id_hex32.as_bytes().to_vec())?;
-        Self::decode_state_json_response(bytes)
+    #[inline]
+    fn text_v1(&self, logical_path: &str) -> Result<Vec<u8>, String> {
+        AssetServiceClient::text_v1(self, logical_path)
+    }
+
+    #[inline]
+    fn raw_bytes_v1(&self, logical_path: &str) -> Result<Vec<u8>, String> {
+        AssetServiceClient::raw_bytes_v1(self, logical_path)
     }
 
     fn blob_wire_v1(&self, id_hex32: &str) -> Result<(String, Vec<u8>), String> {
@@ -238,12 +250,18 @@ impl AssetAccess for AssetServiceClient {
         let bytes = self.call_raw(self.m_blob_wire_v1.clone(), id_hex32.as_bytes().to_vec())?;
         Self::decode_blob_wire_v1(bytes)
     }
+
+    fn texture_rgba8_v1(&self, id_hex32: &str) -> Result<Rgba8TextureAsset, String> {
+        // Contract payload: utf8 id_u128_hex32. AssetManager owns texture meta parsing.
+        let bytes = self.call_raw(self.m_texture_rgba8_v1.clone(), id_hex32.as_bytes().to_vec())?;
+        Self::decode_texture_rgba8_wire_v1(bytes)
+    }
 }
 
 impl AssetService for AssetServiceClient {
     fn reload(&self, logical_path: &str) -> Result<String, String> {
         let bytes = self.call_raw(self.m_reload.clone(), logical_path.as_bytes().to_vec())?;
-        Self::decode_load_like(bytes, "reload")
+        Self::decode_load_like(bytes, "reload_v1")
     }
 
     fn info_json(&self, logical_path: &str) -> Result<serde_json::Value, String> {

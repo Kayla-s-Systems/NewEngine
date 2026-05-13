@@ -97,10 +97,10 @@ pub fn try_load_window_icon_best_effort(
         return None;
     };
 
-    let id_hex32 = match assets.load(path) {
+    let id_hex32 = match assets.import_v1(path) {
         Ok(v) => v,
         Err(e) => {
-            log::warn!("window icon: asset.load failed path='{path}' err='{e}'");
+            log::warn!("window icon: asset.import_v1 failed path='{path}' err='{e}'");
             return None;
         }
     };
@@ -110,15 +110,19 @@ pub fn try_load_window_icon_best_effort(
         return None;
     }
 
-    let (_meta_json, payload) = match assets.blob_wire_v1(&id_hex32) {
+    let texture = match assets.texture_rgba8_v1(&id_hex32) {
         Ok(v) => v,
         Err(e) => {
-            log::warn!("window icon: blob_wire_v1 failed path='{path}' id='{id_hex32}' err='{e}'");
+            log::warn!("window icon: texture_rgba8_v1 failed path='{path}' id='{id_hex32}' err='{e}'");
             return None;
         }
     };
 
-    decode_window_icon(&payload, path)
+    Some(PlatformAppIconV1 {
+        rgba: RVec::from(texture.rgba),
+        width: texture.width,
+        height: texture.height,
+    })
 }
 
 #[cfg(not(feature = "window-icon"))]
@@ -133,25 +137,6 @@ pub fn try_load_window_icon_best_effort(
     None
 }
 
-
-#[cfg(feature = "window-icon")]
-fn decode_window_icon(bytes: &[u8], label: &str) -> Option<PlatformAppIconV1> {
-    match image::load_from_memory(bytes) {
-        Ok(img) => {
-            let rgba = img.to_rgba8();
-            let (width, height) = rgba.dimensions();
-            Some(PlatformAppIconV1 {
-                rgba: RVec::from(rgba.into_raw()),
-                width,
-                height,
-            })
-        }
-        Err(e) => {
-            log::warn!("window icon: decode failed path='{}' err='{}'", label, e);
-            None
-        }
-    }
-}
 
 #[inline]
 pub fn shard_log_path_by_run_id(original: &str, run_id: &str) -> Option<String> {

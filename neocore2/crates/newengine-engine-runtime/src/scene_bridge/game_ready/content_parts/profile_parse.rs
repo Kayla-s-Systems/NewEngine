@@ -104,39 +104,9 @@ pub(super) fn load_game_ready_map_profile() -> GameReadyMapProfile {
         return profile;
     }
 
-    for dir in plugin_dir_candidates() {
-        match newengine_plugin_host::load_plugin_content_catalog_from_dir(&dir) {
-            Ok(report) => {
-                let Some(blob) = report.catalog.find_scene(GAME_READY_SCENE_ID) else {
-                    continue;
-                };
-                match parse_payload(blob.payload.clone()) {
-                    Ok(profile) => {
-                        log::info!(
-                            "game-ready: loaded scene profile id='{}' provider='{}' path='{}'",
-                            blob.id,
-                            blob.provider_plugin,
-                            report.path.display(),
-                        );
-                        return profile;
-                    }
-                    Err(e) => log::warn!(
-                        "game-ready: plugin scene profile ignored id='{}' path='{}' err='{}'",
-                        blob.id,
-                        report.path.display(),
-                        e,
-                    ),
-                }
-            }
-            Err(e) => log::debug!(
-                "game-ready: plugin content catalog unavailable dir='{}' err='{}'",
-                dir.display(),
-                e,
-            ),
-        }
-    }
-
-    log::warn!("game-ready: using code default scene profile; AssetManager profile and plugin content catalog not found");
+    log::warn!(
+        "game-ready: using code default scene profile; AssetManager profile not found and direct plugin-content filesystem fallback is disabled"
+    );
     fallback_game_ready_map_profile()
 }
 
@@ -189,19 +159,12 @@ fn load_profile_asset(
     assets: &newengine_assets::AssetServiceClient,
     logical_path: &str,
 ) -> Result<GameReadyMapProfile, String> {
-    use newengine_assets::{wait_ready, AssetAccess};
-
-    let id = assets
-        .load(logical_path)
-        .map_err(|e| format!("asset.load failed: {e}"))?;
-    wait_ready(assets, &id, std::time::Duration::from_secs(2))
-        .map_err(|e| format!("asset wait failed id='{id}' err='{e:?}'"))?;
-    let (_meta, payload) = assets
-        .blob_wire_v1(&id)
-        .map_err(|e| format!("asset.blob_wire_v1 failed id='{id}' err='{e}'"))?;
+    let payload = assets
+        .text_v1(logical_path)
+        .map_err(|e| format!("asset.text_v1 failed path='{logical_path}' err='{e}'"))?;
 
     let value: serde_json::Value = serde_json::from_slice(&payload)
-        .map_err(|e| format!("json parse failed: {e}"))?;
+        .map_err(|e| format!("json parse failed path='{logical_path}' err='{e}'"))?;
 
     if let Some(scene) = value.get("scene").cloned() {
         parse_payload(scene)

@@ -1,7 +1,6 @@
 
-use std::time::Duration;
-
-use newengine_assets::{wait_ready, AssetAccess, AssetServiceClient};
+use newengine_assets::wait_ready;
+use newengine_assets::AssetServiceClient;
 use newengine_bounds::Bounds;
 use newengine_ecs::EntityId;
 use newengine_lighting::{AmbientLight, DirectionalLight, ShadowSettings};
@@ -97,28 +96,14 @@ fn spawn_game_primitive(
 #[inline]
 fn load_material_source_asset(path: &str) -> Option<MaterialSourceDocument> {
     let assets = AssetServiceClient::new(default_host_api());
-    let id = match assets.load(path) {
-        Ok(id) => id,
+    let payload = match assets.text_v1(path) {
+        Ok(payload) => payload,
         Err(e) => {
-            log::warn!("game-ready: material asset unavailable path='{}' err='{}'", path, e);
-            return None;
-        }
-    };
-
-    if let Err(e) = wait_ready(&assets, &id, Duration::from_secs(2)) {
-        log::warn!(
-            "game-ready: material asset not ready path='{}' id='{}' err='{:?}'",
-            path,
-            id,
-            e
-        );
-        return None;
-    }
-
-    let payload = match assets.blob_wire_v1(&id) {
-        Ok((_meta, payload)) => payload,
-        Err(e) => {
-            log::warn!("game-ready: material asset read failed path='{}' err='{}'", path, e);
+            log::warn!(
+                "game-ready: material asset unavailable path='{}' method='asset.text_v1' err='{}'",
+                path,
+                e
+            );
             return None;
         }
     };
@@ -198,7 +183,7 @@ fn register_demo_materials(
             palette.terrain,
             [0.0, 0.0, 0.0],
             1.0,
-            MaterialFlags::CAST_SHADOWS,
+            MaterialFlags::CAST_SHADOWS.union(MaterialFlags::RECEIVE_SHADOWS),
             &materials.terrain,
         ),
         sky: register_material(
@@ -216,7 +201,7 @@ fn register_demo_materials(
             palette.tree_bark,
             [0.0, 0.0, 0.0],
             1.0,
-            MaterialFlags::CAST_SHADOWS,
+            MaterialFlags::CAST_SHADOWS.union(MaterialFlags::RECEIVE_SHADOWS),
             &materials.tree_bark,
         ),
         tree_leaf: register_material(
@@ -227,7 +212,8 @@ fn register_demo_materials(
             1.0,
             MaterialFlags::DOUBLE_SIDED
                 .union(MaterialFlags::ALPHA_TEST)
-                .union(MaterialFlags::CAST_SHADOWS),
+                .union(MaterialFlags::CAST_SHADOWS)
+                .union(MaterialFlags::RECEIVE_SHADOWS),
             &materials.tree_leaf,
         ),
         tree_branch: register_material(
@@ -236,7 +222,9 @@ fn register_demo_materials(
             palette.tree_branch,
             [0.0, 0.0, 0.0],
             1.0,
-            MaterialFlags::DOUBLE_SIDED.union(MaterialFlags::CAST_SHADOWS),
+            MaterialFlags::DOUBLE_SIDED
+                .union(MaterialFlags::CAST_SHADOWS)
+                .union(MaterialFlags::RECEIVE_SHADOWS),
             &materials.tree_branch,
         ),
     }

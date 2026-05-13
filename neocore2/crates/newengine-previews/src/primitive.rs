@@ -366,8 +366,8 @@ impl PrimitivePreviewService {
     fn load_or_compile_spv_words(logical_path: &str, stage: ShaderStage) -> EngineResult<Vec<u32>> {
         let assets = AssetServiceClient::new(default_host_api());
 
-        let id = assets.load(logical_path).map_err(|e| {
-            EngineError::other(format!("asset.load failed path='{logical_path}' err='{e}'"))
+        let id = assets.import_v1(logical_path).map_err(|e| {
+            EngineError::other(format!("asset.import_v1 failed path='{logical_path}' err='{e}'"))
         })?;
 
         wait_ready(&assets, &id, Duration::from_millis(500)).map_err(|e| {

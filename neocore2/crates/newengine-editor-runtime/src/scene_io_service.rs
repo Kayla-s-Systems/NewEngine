@@ -3,14 +3,13 @@
 use abi_stable::erased_types::TD_Opaque;
 use abi_stable::std_types::{RResult, RString};
 
-use newengine_assets::{wait_ready, AssetAccess, AssetServiceClient};
+use newengine_assets::AssetServiceClient;
 use newengine_plugin_api::{Blob, CapabilityId, MethodName, ServiceV1, ServiceV1_TO};
 use newengine_plugin_host::{default_host_api, has_service};
 use newengine_scene::{SceneAsset, SceneAssetOptions};
 
 use std::path::Path;
 use std::sync::Arc;
-use std::time::Duration;
 
 use crate::scene_bridge::SceneBridge;
 
@@ -45,22 +44,17 @@ impl SceneIoHostService {
             return Err("scene.load: empty path".to_string());
         }
 
-        // Prefer AssetManager service when available.
-        if has_service(newengine_assets::consts::ASSET_SERVICE_ID) {
-            let assets = AssetServiceClient::new(default_host_api());
-
-            if let Ok(id) = assets.load(p) {
-                let _ = wait_ready(&assets, &id, Duration::from_millis(350));
-                if let Ok((_meta, payload)) = assets.blob_wire_v1(&id) {
-                    if !payload.is_empty() {
-                        return Ok(payload);
-                    }
-                }
-            }
+        if !has_service(newengine_assets::consts::ASSET_SERVICE_ID) {
+            return Err(format!(
+                "scene.load: AssetManager service '{}' is not available; direct filesystem reads are disabled",
+                newengine_assets::consts::ASSET_SERVICE_ID
+            ));
         }
 
-        // Fallback: direct filesystem read.
-        std::fs::read(p).map_err(|e| format!("scene.load: read failed path='{p}' err='{e}'"))
+        let assets = AssetServiceClient::new(default_host_api());
+        assets
+            .raw_bytes_v1(p)
+            .map_err(|e| format!("scene.load: asset.raw_bytes_v1 failed path='{p}' err='{e}'"))
     }
 
     #[inline]

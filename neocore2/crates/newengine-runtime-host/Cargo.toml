@@ -6,12 +6,11 @@ edition = "2021"
 
 [features]
 default = []
-window-icon = ["dep:image"]
+window-icon = []
 
 [dependencies]
 abi_stable = "0.11"
 crossbeam-channel = "0.5"
-image = { version = "0.25", default-features = false, features = ["png", "ico"], optional = true }
 libloading = "0.9.0"
 log = "0.4.29"
 raw-window-handle = "0.6.2"

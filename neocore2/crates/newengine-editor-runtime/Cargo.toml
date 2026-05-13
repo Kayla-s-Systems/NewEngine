@@ -17,7 +17,8 @@ editor-ui = [
     "newengine-ui/assets",
 ]
 runtime-core = ["texture-decode"]
-texture-decode = ["dep:image"]
+# Compatibility feature name; image/container decoding lives in AssetManager importers.
+texture-decode = []
 
 [dependencies]
 abi_stable = { version = "0.11" }
@@ -28,7 +29,6 @@ blake3 = "1"
 serde_json = "1"
 serde = { version = "1", features = ["derive"] }
 libloading = "0.9"
-image = { version = "0.25", default-features = false, features = ["png", "jpeg", "ico"], optional = true }
 egui = { version = "0.33.3", optional = true }
 egui_dock = { version = "0.18", optional = true }
 raw-window-handle = "0.6.2"

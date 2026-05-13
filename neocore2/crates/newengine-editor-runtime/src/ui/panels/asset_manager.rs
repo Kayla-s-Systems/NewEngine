@@ -57,8 +57,8 @@ pub(crate) fn draw(me: &mut EditorUiBuild, ctx: &egui::Context) {
                         .desired_width(320.0),
                 );
 
-                if ui.button("Load").clicked() {
-                    match assets.load(me.asset_ui.path.trim()) {
+                if ui.button("Import v1").clicked() {
+                    match assets.import_v1(me.asset_ui.path.trim()) {
                         Ok(id) => {
                             me.asset_ui.last_id = Some(id);
                             me.asset_ui.last_error.clear();
@@ -69,7 +69,7 @@ pub(crate) fn draw(me: &mut EditorUiBuild, ctx: &egui::Context) {
                     }
                 }
 
-                if ui.button("Reload").clicked() {
+                if ui.button("Reload v1").clicked() {
                     match assets.reload(me.asset_ui.path.trim()) {
                         Ok(id) => {
                             me.asset_ui.last_id = Some(id);
