@@ -66,6 +66,7 @@ pub const REQUIRED_RUNTIME_METHODS_V1: &[&str] = &[
     method::LOAD_TEXT_V1,
     method::IMPORT_V1,
     method::PUMP_V1,
+    method::FORMATS_JSON,
 ];
 
 /// Asset lifecycle state as observed through an AssetManager-like service.

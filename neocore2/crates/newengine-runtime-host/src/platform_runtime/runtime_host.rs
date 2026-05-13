@@ -16,8 +16,7 @@ use newengine_platform_api::{
 };
 use newengine_plugin_api::PluginInfo;
 use newengine_system_contracts::{
-    ScreenOverlayProgress, ScreenOverlayReason, ScreenOverlayStatus, ScreenOverlaySubsystem,
-    ScreenOverlaySubsystemId, ScreenOverlaySubsystemPhase,
+    ScreenOverlayReason, ScreenOverlayStatus, ScreenOverlaySubsystem, ScreenOverlaySubsystemId,
 };
 use newengine_system_runtime::{
     overlay_from_engine_startup_snapshot, overlay_from_render_backend_status, overlay_to_step_result,
@@ -33,49 +32,17 @@ use crate::platform_runtime::callbacks::{
     host_on_close_requested_v1, host_on_window_focused_v1, host_on_window_ready_v1,
     host_on_window_resized_v1, host_poll_cursor_state_v1, host_step_v1,
 };
+use crate::platform_runtime::bootstrap_overlay::{
+    map_engine_startup_progress_to_bootstrap, subsystem_failed, subsystem_ready, subsystem_run,
+    subsystem_wait, RuntimeBootstrapOverlayState, RuntimeBootstrapStage,
+    OVERLAY_LOG_PROGRESS_EPSILON, START_ENGINE_BOOTSTRAP_BASE_PROGRESS,
+};
 use crate::platform_runtime::constants::PLATFORM_RUNTIME_SYMBOL;
 use crate::platform_runtime::handles::{native_to_raw_handles, raw_to_native_handles};
 use crate::platform_runtime::snapshot_service::{
     register_platform_window_service_best_effort, update_platform_window_snapshot,
 };
 use crate::platform_runtime::types::ResolvedPlatformRuntimeConfig;
-
-const START_ENGINE_BOOTSTRAP_BASE_PROGRESS: f32 = 0.74;
-const START_ENGINE_BOOTSTRAP_SPAN_PROGRESS: f32 = 0.18;
-const OVERLAY_LOG_PROGRESS_EPSILON: f32 = 0.01;
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum RuntimeBootstrapStage {
-    AwaitingWindow,
-    AnnounceLoadEnginePlugins,
-    LoadEnginePlugins,
-    AnnounceStartEngine,
-    StartEngine,
-    AnnounceEnterRuntime,
-    EmitWindowReady,
-    ReadyOverlay,
-    Running,
-}
-
-#[derive(Debug, Clone)]
-struct RuntimeBootstrapOverlayState {
-    title: String,
-    status: String,
-    detail: String,
-    progress_01: f32,
-}
-
-impl Default for RuntimeBootstrapOverlayState {
-    #[inline]
-    fn default() -> Self {
-        Self {
-            title: "NEWENGINE // BOOTSTRAP".to_owned(),
-            status: "Waiting for platform window...".to_owned(),
-            detail: "The runtime shell is preparing the first visible frame.".to_owned(),
-            progress_01: 0.0,
-        }
-    }
-}
 
 pub struct HostPlatformRuntime {
     engine: Engine<()>,
@@ -769,82 +736,5 @@ impl HostPlatformRuntime {
             },
             None => PlatformCursorPollV1::default(),
         }
-    }
-}
-
-fn map_engine_startup_progress_to_bootstrap(engine_progress_01: f32) -> f32 {
-    START_ENGINE_BOOTSTRAP_BASE_PROGRESS
-        + engine_progress_01.clamp(0.0, 1.0) * START_ENGINE_BOOTSTRAP_SPAN_PROGRESS
-}
-
-fn subsystem_wait(
-    id: ScreenOverlaySubsystemId,
-    state_label: impl Into<String>,
-    detail: impl Into<String>,
-) -> ScreenOverlaySubsystem {
-    ScreenOverlaySubsystem::new(
-        id,
-        subsystem_label(id),
-        ScreenOverlaySubsystemPhase::Waiting,
-        state_label,
-        detail,
-        None,
-    )
-}
-
-fn subsystem_run(
-    id: ScreenOverlaySubsystemId,
-    state_label: impl Into<String>,
-    detail: impl Into<String>,
-    progress_01: Option<f32>,
-) -> ScreenOverlaySubsystem {
-    ScreenOverlaySubsystem::new(
-        id,
-        subsystem_label(id),
-        ScreenOverlaySubsystemPhase::Running,
-        state_label,
-        detail,
-        progress_01.map(ScreenOverlayProgress::percent),
-    )
-}
-
-fn subsystem_ready(
-    id: ScreenOverlaySubsystemId,
-    state_label: impl Into<String>,
-    detail: impl Into<String>,
-) -> ScreenOverlaySubsystem {
-    ScreenOverlaySubsystem::new(
-        id,
-        subsystem_label(id),
-        ScreenOverlaySubsystemPhase::Ready,
-        state_label,
-        detail,
-        Some(ScreenOverlayProgress::percent(1.0)),
-    )
-}
-
-fn subsystem_failed(
-    id: ScreenOverlaySubsystemId,
-    state_label: impl Into<String>,
-    detail: impl Into<String>,
-) -> ScreenOverlaySubsystem {
-    ScreenOverlaySubsystem::new(
-        id,
-        subsystem_label(id),
-        ScreenOverlaySubsystemPhase::Failed,
-        state_label,
-        detail,
-        None,
-    )
-}
-
-fn subsystem_label(id: ScreenOverlaySubsystemId) -> &'static str {
-    match id {
-        ScreenOverlaySubsystemId::Platform => "PLATFORM",
-        ScreenOverlaySubsystemId::Assets => "ASSETS",
-        ScreenOverlaySubsystemId::Renderer => "RENDERER",
-        ScreenOverlaySubsystemId::Simulation => "SIMULATION",
-        ScreenOverlaySubsystemId::Diagnostics => "DIAGNOSTICS",
-        ScreenOverlaySubsystemId::Other => "SYSTEM",
     }
 }
