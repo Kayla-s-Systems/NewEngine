@@ -195,11 +195,138 @@ fn strip_host_only_platform_keys(value: &Value) -> Value {
     value
 }
 
+
+#[inline]
+fn platform_metadata_probe_enabled() -> bool {
+    std::env::var("NEWENGINE_PLATFORM_CONFIG_METADATA_PROBE")
+        .ok()
+        .map(|v| matches!(v.trim().to_ascii_lowercase().as_str(), "1" | "true" | "yes" | "on"))
+        .unwrap_or(false)
+}
+
+fn apply_startup_platform_overrides(
+    mut config: PlatformAppConfigV1,
+    overrides: &Value,
+) -> PlatformAppConfigV1 {
+    let Some(obj) = overrides.as_object() else {
+        return config;
+    };
+
+    if let Some(title) = obj
+        .get("title")
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|v| !v.is_empty())
+    {
+        config.title = RString::from(title);
+    }
+
+    if let Some(width) = obj.get("width").and_then(Value::as_u64) {
+        config.width = (width as u32).clamp(64, 16384);
+    }
+
+    if let Some(height) = obj.get("height").and_then(Value::as_u64) {
+        config.height = (height as u32).clamp(64, 16384);
+    }
+
+    if let Some(placement_obj) = obj.get("placement").and_then(Value::as_object) {
+        let mode = placement_obj
+            .get("mode")
+            .and_then(Value::as_str)
+            .unwrap_or("os_default");
+        config.placement = match mode {
+            "centered" | "center" | "centre" => PlatformWindowPlacementV1 {
+                kind: PlatformWindowPlacementKindV1::Centered,
+                x: placement_obj
+                    .get("x")
+                    .and_then(Value::as_i64)
+                    .map(|v| v.clamp(i32::MIN as i64, i32::MAX as i64) as i32)
+                    .unwrap_or(0),
+                y: placement_obj
+                    .get("y")
+                    .and_then(Value::as_i64)
+                    .map(|v| v.clamp(i32::MIN as i64, i32::MAX as i64) as i32)
+                    .unwrap_or(0),
+            },
+            "absolute" => PlatformWindowPlacementV1 {
+                kind: PlatformWindowPlacementKindV1::Absolute,
+                x: placement_obj
+                    .get("x")
+                    .and_then(Value::as_i64)
+                    .map(|v| v.clamp(i32::MIN as i64, i32::MAX as i64) as i32)
+                    .unwrap_or(0),
+                y: placement_obj
+                    .get("y")
+                    .and_then(Value::as_i64)
+                    .map(|v| v.clamp(i32::MIN as i64, i32::MAX as i64) as i32)
+                    .unwrap_or(0),
+            },
+            _ => PlatformWindowPlacementV1 {
+                kind: PlatformWindowPlacementKindV1::OsDefault,
+                x: 0,
+                y: 0,
+            },
+        };
+    }
+
+    config
+}
+
+fn resolve_platform_runtime_config_without_metadata_probe(
+    startup: &StartupConfig,
+    startup_defaults: PlatformAppConfigV1,
+) -> ResolvedPlatformRuntimeConfig {
+    let overrides = newengine_plugin_host::get_plugin_overrides_with_env(PLATFORM_PLUGIN_ID);
+    let icon_path = extract_string_field(&overrides, "icon")
+        .or_else(|| startup.window_icon_path.clone());
+    let config = apply_startup_platform_overrides(startup_defaults, &overrides);
+    let descriptor = synthesize_platform_descriptor(
+        PLATFORM_PLUGIN_ID,
+        "NewEngine Platform Runtime",
+        "-",
+    );
+
+    log::info!(
+        "platform runtime: metadata probe disabled; using host-side config id='{}' title='{}' size={}x{} placement={:?} icon={}",
+        PLATFORM_PLUGIN_ID,
+        config.title,
+        config.width,
+        config.height,
+        config.placement.kind,
+        icon_path.as_deref().unwrap_or("<none>")
+    );
+
+    ResolvedPlatformRuntimeConfig {
+        plugin_id: PLATFORM_PLUGIN_ID.to_owned(),
+        plugin_name: "NewEngine Platform Runtime".to_owned(),
+        plugin_version: "-".to_owned(),
+        descriptor,
+        config,
+        icon_path,
+    }
+}
+
 pub fn resolve_platform_runtime_config(
     startup: &StartupConfig,
     runtime_path: &Path,
 ) -> EngineResult<ResolvedPlatformRuntimeConfig> {
     let startup_defaults = platform_config_from_startup_defaults(startup);
+
+    if !platform_metadata_probe_enabled() {
+        crate::platform_early_log!(
+            "host.config.metadata_probe.disabled runtime_path='{}'",
+            runtime_path.display()
+        );
+        return Ok(resolve_platform_runtime_config_without_metadata_probe(
+            startup,
+            startup_defaults,
+        ));
+    }
+
+    crate::platform_early_log!(
+        "host.config.metadata_probe.enabled runtime_path='{}'",
+        runtime_path.display()
+    );
 
     let lib = unsafe { Library::new(runtime_path) }
         .map_err(|e| EngineError::other(format!(

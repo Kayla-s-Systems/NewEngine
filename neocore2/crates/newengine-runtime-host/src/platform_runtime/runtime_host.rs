@@ -20,7 +20,7 @@ use newengine_system_contracts::{
 };
 use newengine_system_runtime::{
     overlay_from_engine_startup_snapshot, overlay_from_render_backend_status, overlay_to_step_result,
-    startup_status_mapper::{bootstrap_loading_with_subsystems, runtime_ready_with_subsystems},
+    startup_status_mapper::bootstrap_loading_with_subsystems,
 };
 use newengine_ui::{
     create_provider, UiBuildFn, UiFrameDesc, UiInputFrame, UiProvider, UiProviderKind,
@@ -129,16 +129,27 @@ impl HostPlatformRuntime {
         )
         .map_err(EngineError::other)?;
 
+        crate::platform_early_log!("host.run.enter runtime_path='{}'", runtime_path.display());
         log::info!("platform runtime: loading '{}'", runtime_path.display());
 
+        crate::platform_early_log!("host.dll.load.begin path='{}'", runtime_path.display());
         let lib = unsafe { Library::new(runtime_path) }
-            .map_err(|e| EngineError::other(format!("platform runtime load failed: {e}")))?;
+            .map_err(|e| {
+                crate::platform_early_log!("host.dll.load.err error='{}'", e);
+                EngineError::other(format!("platform runtime load failed: {e}"))
+            })?;
+        crate::platform_early_log!("host.dll.load.ok path='{}'", runtime_path.display());
 
+        crate::platform_early_log!("host.symbol.resolve.begin symbol='{}'", "newengine_platform_runtime_run_v1");
         let run: libloading::Symbol<PlatformRuntimeRunFnV1> =
             unsafe { lib.get(PLATFORM_RUNTIME_SYMBOL) }
-                .map_err(|e| EngineError::other(format!(
-                    "platform runtime symbol missing: {e}"
-                )))?;
+                .map_err(|e| {
+                    crate::platform_early_log!("host.symbol.resolve.err error='{}'", e);
+                    EngineError::other(format!(
+                        "platform runtime symbol missing: {e}"
+                    ))
+                })?;
+        crate::platform_early_log!("host.symbol.resolve.ok symbol='{}'", "newengine_platform_runtime_run_v1");
 
         log::info!(
             "platform runtime: entry resolved symbol='{}' title='{}' size={}x{}",
@@ -159,9 +170,20 @@ impl HostPlatformRuntime {
         };
 
         let plugin_host = newengine_plugin_host::default_host_api();
+        crate::platform_early_log!(
+            "host.ffi.call.begin user_data=0x{:x} title='{}' size={}x{}",
+            host.user_data,
+            config.title,
+            config.width,
+            config.height
+        );
         let result = unsafe { run(plugin_host, host, config) }
             .into_result()
             .map_err(|e| EngineError::other(e.to_string()));
+        match &result {
+            Ok(()) => crate::platform_early_log!("host.ffi.call.returned ok"),
+            Err(e) => crate::platform_early_log!("host.ffi.call.returned err='{}'", e),
+        }
 
         self.shutdown_engine_once("platform runtime returned");
 
@@ -172,6 +194,7 @@ impl HostPlatformRuntime {
             Err(e) => log::error!("platform runtime: exited with error: {e}"),
         }
 
+        crate::platform_early_log!("host.run.exit");
         result
     }
 
@@ -419,9 +442,9 @@ impl HostPlatformRuntime {
                 self.emit_window_ready_event()?;
                 self.window_ready_emitted = true;
                 self.set_bootstrap_overlay(
-                    "Loading world resources...",
-                    "Player control and world presentation are locked behind the scene launch gate.",
-                    0.96,
+                    "Finalizing runtime handoff...",
+                    "Player control and world presentation remain locked until the scene launch gate opens.",
+                    0.97,
                 );
                 self.ready_overlay_frames_left = 1;
                 self.bootstrap_stage = RuntimeBootstrapStage::ReadyOverlay;
@@ -566,17 +589,13 @@ impl HostPlatformRuntime {
         let detail = self.bootstrap_overlay.detail.as_str();
         let subsystems = self.bootstrap_subsystems();
 
-        let overlay = if self.bootstrap_overlay.progress_01 >= 0.999 {
-            runtime_ready_with_subsystems(status, detail, subsystems)
-        } else {
-            bootstrap_loading_with_subsystems(
-                self.bootstrap_overlay.title.as_str(),
-                status,
-                detail,
-                self.bootstrap_overlay.progress_01,
-                subsystems,
-            )
-        };
+        let overlay = bootstrap_loading_with_subsystems(
+            self.bootstrap_overlay.title.as_str(),
+            status,
+            detail,
+            self.bootstrap_overlay.progress_01,
+            subsystems,
+        );
 
         overlay_to_step_result(&overlay, self.bootstrap_spinner_phase)
     }

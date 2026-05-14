@@ -160,12 +160,19 @@ impl RuntimeRenderController {
                                 .with_deferred_data(texture_asset.rgba),
                             ) {
                                 Ok(texture) => {
-                                    let _ = assets.mark_status_json_v1(serde_json::json!({
+                                    let _ = assets.project_status_json_v1(serde_json::json!({
+                                        "owner": "render.controller",
+                                        "domain": "gpu",
                                         "id_u128": id_hex32.as_str(),
                                         "logical_path": path.as_str(),
                                         "stage": "upload_queued",
                                         "state": "loading",
-                                        "source": "render.controller",
+                                        "resource_id": format!("{:?}", texture),
+                                        "proof": {
+                                            "texture": format!("{:?}", texture),
+                                            "frame": self.frame_index,
+                                            "residency": "queued"
+                                        },
                                         "detail": "GPU texture upload queued by render controller"
                                     }));
                                     log::debug!(
@@ -272,11 +279,18 @@ impl RuntimeRenderController {
                         MaterialTextureGpuResidency::Ready { texture },
                     );
                     let assets = AssetServiceClient::new(default_host_api());
-                    let _ = assets.mark_status_json_v1(serde_json::json!({
+                    let _ = assets.project_status_json_v1(serde_json::json!({
+                        "owner": "render.controller",
+                        "domain": "gpu",
                         "logical_path": path,
                         "stage": "resident",
                         "state": "ready",
-                        "source": "render.controller",
+                        "resource_id": format!("{:?}", texture),
+                        "proof": {
+                            "texture": format!("{:?}", texture),
+                            "frame": self.frame_index,
+                            "residency": "ready"
+                        },
                         "detail": "GPU texture residency confirmed by render controller"
                     }));
                     log::debug!(

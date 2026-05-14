@@ -20,14 +20,18 @@ pub struct AssetServiceClient {
     m_import_v1: MethodName,
     m_reload: MethodName,
     m_pump: MethodName,
-    m_info_json: MethodName,
+    m_info_json_v1: MethodName,
     m_blob_wire_v1: MethodName,
     m_text_v1: MethodName,
     m_raw_bytes_v1: MethodName,
     m_texture_rgba8_v1: MethodName,
     m_status_json_v1: MethodName,
-    m_mark_status_json_v1: MethodName,
-    m_resolve_trace_json: MethodName,
+    m_status_graph_json_v1: MethodName,
+    m_project_status_json_v1: MethodName,
+    m_resolve_trace_json_v1: MethodName,
+    m_formats_json_v1: MethodName,
+    m_sources_json_v1: MethodName,
+    m_mount_source_json_v1: MethodName,
     m_get_state_v1: MethodName,
 }
 
@@ -50,14 +54,18 @@ impl AssetServiceClient {
             m_import_v1: MethodName::from(method::IMPORT_V1),
             m_reload: MethodName::from(method::RELOAD_V1),
             m_pump: MethodName::from(method::PUMP_V1),
-            m_info_json: MethodName::from(method::INFO_JSON),
+            m_info_json_v1: MethodName::from(method::INFO_JSON_V1),
             m_blob_wire_v1: MethodName::from(method::BLOB_WIRE_V1),
             m_text_v1: MethodName::from(method::TEXT_V1),
             m_raw_bytes_v1: MethodName::from(method::RAW_BYTES_V1),
             m_texture_rgba8_v1: MethodName::from(method::TEXTURE_RGBA8_V1),
             m_status_json_v1: MethodName::from(method::STATUS_JSON_V1),
-            m_mark_status_json_v1: MethodName::from(method::MARK_STATUS_JSON_V1),
-            m_resolve_trace_json: MethodName::from(method::RESOLVE_TRACE_JSON),
+            m_status_graph_json_v1: MethodName::from(method::STATUS_GRAPH_JSON_V1),
+            m_project_status_json_v1: MethodName::from(method::PROJECT_STATUS_JSON_V1),
+            m_resolve_trace_json_v1: MethodName::from(method::RESOLVE_TRACE_JSON_V1),
+            m_formats_json_v1: MethodName::from(method::FORMATS_JSON_V1),
+            m_sources_json_v1: MethodName::from(method::SOURCES_JSON_V1),
+            m_mount_source_json_v1: MethodName::from(method::MOUNT_SOURCE_JSON_V1),
             m_get_state_v1: MethodName::from(method::GET_STATE_V1),
         }
     }
@@ -231,12 +239,12 @@ impl AssetServiceClient {
         self.call_raw(self.m_text_v1.clone(), Self::logical_payload(logical_path))
     }
 
-    /// Best-effort lifecycle projection for systems that own non-CPU residency,
+    /// Validated lifecycle projection for systems that own non-CPU residency,
     /// for example the render controller marking GPU upload/residency stages.
     #[inline]
-    pub fn mark_status_json_v1(&self, payload: serde_json::Value) -> Result<serde_json::Value, String> {
+    pub fn project_status_json_v1(&self, payload: serde_json::Value) -> Result<serde_json::Value, String> {
         let bytes = serde_json::to_vec(&payload).map_err(|e| e.to_string())?;
-        Self::decode_ok_json(self.call_raw(self.m_mark_status_json_v1.clone(), bytes)?)
+        Self::decode_ok_json(self.call_raw(self.m_project_status_json_v1.clone(), bytes)?)
     }
 }
 
@@ -277,6 +285,22 @@ impl AssetAccess for AssetServiceClient {
         Self::decode_ok_json(bytes)
     }
 
+    fn status_graph_json_v1(&self, id_or_logical_path: &str) -> Result<serde_json::Value, String> {
+        let payload = if id_or_logical_path.trim().len() == 32
+            && id_or_logical_path.trim().chars().all(|c| c.is_ascii_hexdigit())
+        {
+            id_or_logical_path.trim().as_bytes().to_vec()
+        } else {
+            Self::logical_payload(id_or_logical_path)
+        };
+        let bytes = self.call_raw(self.m_status_graph_json_v1.clone(), payload)?;
+        Self::decode_ok_json(bytes)
+    }
+
+    fn project_status_json_v1(&self, payload: serde_json::Value) -> Result<serde_json::Value, String> {
+        AssetServiceClient::project_status_json_v1(self, payload)
+    }
+
     #[inline]
     fn text_v1(&self, logical_path: &str) -> Result<Vec<u8>, String> {
         AssetServiceClient::text_v1(self, logical_path)
@@ -306,66 +330,30 @@ impl AssetService for AssetServiceClient {
         Self::decode_load_like(bytes, "reload_v1")
     }
 
-    fn info_json(&self, logical_path: &str) -> Result<serde_json::Value, String> {
-        let bytes = self.call_raw(self.m_info_json.clone(), Self::logical_payload(logical_path))?;
+    fn info_json_v1(&self, logical_path: &str) -> Result<serde_json::Value, String> {
+        let bytes = self.call_raw(self.m_info_json_v1.clone(), Self::logical_payload(logical_path))?;
         Self::decode_ok_json(bytes)
     }
 
-    fn formats_json(&self) -> Result<serde_json::Value, String> {
-        let bytes = self.call_raw(MethodName::from(method::FORMATS_JSON), Vec::new())?;
+    fn formats_json_v1(&self) -> Result<serde_json::Value, String> {
+        let bytes = self.call_raw(self.m_formats_json_v1.clone(), Vec::new())?;
         Self::decode_ok_json(bytes)
     }
 
-    fn sources_json(&self) -> Result<serde_json::Value, String> {
-        let bytes = self.call_raw(MethodName::from(method::SOURCES_JSON), Vec::new())?;
+    fn sources_json_v1(&self) -> Result<serde_json::Value, String> {
+        let bytes = self.call_raw(self.m_sources_json_v1.clone(), Vec::new())?;
         Self::decode_ok_json(bytes)
     }
 
-    fn mount_pak(&self, path_to_pak: &str) -> Result<(), String> {
+    fn mount_source_json_v1(&self, payload: serde_json::Value) -> Result<(), String> {
+        let bytes = serde_json::to_vec(&payload).map_err(|e| e.to_string())?;
+        let bytes = self.call_raw(self.m_mount_source_json_v1.clone(), bytes)?;
+        Self::decode_ok_unit(bytes)
+    }
+
+    fn resolve_trace_json_v1(&self, logical_path: &str) -> Result<serde_json::Value, String> {
         let bytes = self.call_raw(
-            MethodName::from(method::MOUNT_PAK),
-            path_to_pak.as_bytes().to_vec(),
-        )?;
-        Self::decode_ok_unit(bytes)
-    }
-
-    fn mount_dir(&self, path_to_dir: &str) -> Result<(), String> {
-        let bytes = self.call_raw(
-            MethodName::from(method::MOUNT_DIR),
-            path_to_dir.as_bytes().to_vec(),
-        )?;
-        Self::decode_ok_unit(bytes)
-    }
-
-    fn mount_pak_prio(&self, path_to_pak: &str, priority: i32) -> Result<(), String> {
-        // Contract payload: json { path, priority }
-        let method_name = MethodName::from(method::MOUNT_PAK_PRIO);
-        let payload = serde_json::json!({
-            "path": path_to_pak,
-            "priority": priority
-        })
-            .to_string()
-            .into_bytes();
-        let bytes = self.call_raw(method_name, payload)?;
-        Self::decode_ok_unit(bytes)
-    }
-
-    fn mount_dir_prio(&self, path_to_dir: &str, priority: i32) -> Result<(), String> {
-        // Contract payload: json { path, priority }
-        let method_name = MethodName::from(method::MOUNT_DIR_PRIO);
-        let payload = serde_json::json!({
-            "path": path_to_dir,
-            "priority": priority
-        })
-            .to_string()
-            .into_bytes();
-        let bytes = self.call_raw(method_name, payload)?;
-        Self::decode_ok_unit(bytes)
-    }
-
-    fn resolve_trace_json(&self, logical_path: &str) -> Result<serde_json::Value, String> {
-        let bytes = self.call_raw(
-            self.m_resolve_trace_json.clone(),
+            self.m_resolve_trace_json_v1.clone(),
             Self::logical_payload(logical_path),
         )?;
         Self::decode_ok_json(bytes)

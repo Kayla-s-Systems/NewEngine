@@ -139,7 +139,7 @@ fn load_profile_from_asset_manager() -> Option<GameReadyMapProfile> {
             }
             Err(e) => {
                 let trace = assets
-                    .resolve_trace_json(&logical_path)
+                    .resolve_trace_json_v1(&logical_path)
                     .map(|v| v.to_string())
                     .unwrap_or_else(|te| format!("{{\"trace_error\":\"{te}\"}}"));
                 log::debug!(

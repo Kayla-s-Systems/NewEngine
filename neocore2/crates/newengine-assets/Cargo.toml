@@ -11,3 +11,7 @@ serde_json = "1.0.149"
 
 newengine-plugin-api = { path = "../newengine-plugin-api" }
 newengine-assets-api = { path = "../newengine-assets-api" }
+
+[features]
+default = []
+legacy_asset_api_compat = ["newengine-assets-api/legacy_asset_api_compat"]

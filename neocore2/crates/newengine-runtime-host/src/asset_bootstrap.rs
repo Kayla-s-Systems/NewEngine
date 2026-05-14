@@ -69,9 +69,14 @@ fn try_mount(assets: &AssetServiceClient, path: &Path) {
     }
 
     let path_string = path.to_string_lossy().to_string();
-    if let Err(e) = assets.mount_dir(&path_string) {
+    if let Err(e) = assets.mount_source_json_v1(serde_json::json!({
+        "kind": "filesystem",
+        "priority": 200,
+        "mount": "",
+        "config": { "root": path_string }
+    })) {
         log::warn!(
-            "runtime host: asset.mount_dir failed path='{}' err='{}'",
+            "runtime host: asset.mount_source_json_v1(dir) failed path='{}' err='{}'",
             path.display(),
             e
         );

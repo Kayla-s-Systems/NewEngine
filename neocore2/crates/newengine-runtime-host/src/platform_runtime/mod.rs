@@ -5,6 +5,7 @@ mod callbacks;
 mod config;
 mod constants;
 mod discovery;
+mod early_log;
 mod handles;
 mod runtime_host;
 mod snapshot_service;

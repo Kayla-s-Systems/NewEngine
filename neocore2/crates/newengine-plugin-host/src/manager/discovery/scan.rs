@@ -14,6 +14,61 @@ use crate::manager::types::PluginLoadError;
 use crate::path_fmt::display_clean;
 use crate::paths::is_dynamic_lib;
 
+
+#[inline]
+fn desired_scan_profile() -> &'static str {
+    if cfg!(debug_assertions) { "dev" } else { "release" }
+}
+
+#[inline]
+fn mixed_scan_profile_allowed() -> bool {
+    std::env::var("NEWENGINE_ALLOW_MIXED_PLUGIN_PROFILE")
+        .ok()
+        .map(|v| matches!(v.trim().to_ascii_lowercase().as_str(), "1" | "true" | "yes" | "on"))
+        .unwrap_or(false)
+}
+
+#[inline]
+fn plugin_file_profile_for_scan(path: &Path) -> &'static str {
+    let lower = path
+        .file_name()
+        .and_then(|s| s.to_str())
+        .unwrap_or("")
+        .to_ascii_lowercase();
+    if lower.contains("-release.") || lower.contains("-release-") {
+        "release"
+    } else if lower.contains("-dev.") || lower.contains("-dev-") {
+        "dev"
+    } else if lower.contains("-debug.") || lower.contains("-debug-") {
+        "dev"
+    } else if lower.contains("-test.") || lower.contains("-test-") {
+        "test"
+    } else if lower.contains("-bench.") || lower.contains("-bench-") {
+        "bench"
+    } else {
+        "unknown"
+    }
+}
+
+#[inline]
+fn plugin_scan_profile_matches(path: &Path, desired: &'static str, allow_mixed: bool) -> bool {
+    if allow_mixed {
+        return true;
+    }
+
+    match plugin_file_profile_for_scan(path) {
+        "unknown" => true,
+        actual => actual == desired,
+    }
+}
+
+
+#[inline]
+fn is_platform_runtime_filename(file_name: &str) -> bool {
+    let lower = file_name.to_ascii_lowercase();
+    lower.contains("platform-winit") || lower.contains("winit-platform")
+}
+
 pub(super) fn scan_plugins_dir(dir: &Path) -> Result<DiscoveryGraph, PluginLoadError> {
     let rd = std::fs::read_dir(dir).map_err(|e| PluginLoadError {
         path: dir.to_path_buf(),
@@ -26,6 +81,9 @@ pub(super) fn scan_plugins_dir(dir: &Path) -> Result<DiscoveryGraph, PluginLoadE
     let mut skipped_non_dynlib: usize = 0;
     let mut dynlib_paths: Vec<PathBuf> = Vec::new();
     let mut scan_errors: Vec<String> = Vec::new();
+    let desired_profile = desired_scan_profile();
+    let allow_mixed_profiles = mixed_scan_profile_allowed();
+    let mut skipped_profile_mismatch: usize = 0;
 
     for ent in rd {
         entries_total = entries_total.saturating_add(1);
@@ -41,11 +99,31 @@ pub(super) fn scan_plugins_dir(dir: &Path) -> Result<DiscoveryGraph, PluginLoadE
             continue;
         }
 
+        if !plugin_scan_profile_matches(&path, desired_profile, allow_mixed_profiles) {
+            skipped_profile_mismatch = skipped_profile_mismatch.saturating_add(1);
+            log::info!(
+                "plugins: scan skipped profile mismatch path='{}' desired='{}' actual='{}' mixed_allowed={}",
+                display_clean(&path),
+                desired_profile,
+                plugin_file_profile_for_scan(&path),
+                allow_mixed_profiles
+            );
+            continue;
+        }
+
         dynlib_paths.push(path);
     }
 
     // Importer worker DLLs are private to AssetManager.
     // The plugin host must not scan plugins/importers as runtime plugins.
+    if skipped_profile_mismatch > 0 {
+        log::warn!(
+            "plugins: scan skipped {} dynamic libraries with mismatched build profile desired='{}' mixed_allowed={}",
+            skipped_profile_mismatch,
+            desired_profile,
+            allow_mixed_profiles
+        );
+    }
 
     dynlib_paths.sort_by(|a, b| sort_key(a).cmp(&sort_key(b)));
 
@@ -109,6 +187,22 @@ pub(super) fn scan_plugins_dir(dir: &Path) -> Result<DiscoveryGraph, PluginLoadE
 
 fn scan_dynamic_lib(path: &Path, manifest: Option<&PluginManifest>) -> Result<ScannedDynlib, String> {
     let file_name = file_name_only(path);
+
+    // Platform runtimes are invoked by `newengine-runtime-host`, not loaded as
+    // normal engine plugins. Do not dlopen/probe them during bootstrap scan:
+    // stale or profile-mismatched runtime DLLs can otherwise crash the process
+    // before platform-runtime diagnostics even start.
+    if is_platform_runtime_filename(&file_name) {
+        return Ok(ScannedDynlib {
+            path: path.to_path_buf(),
+            file_name,
+            kind: ScannedDynlibKind::PlatformRuntime {
+                id: "newengine.platform.winit".to_owned(),
+                version: "-".to_owned(),
+            },
+        });
+    }
+
     let manifest_entry = manifest.and_then(|m| m.match_file_name(&file_name));
     let lib = unsafe { Library::new(path) }.map_err(|e| format!("Library::new failed: {e}"))?;
     let plugin_probe = probe_plugin_metadata(&lib)?;

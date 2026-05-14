@@ -1,16 +1,102 @@
 use newengine_math::collections_prelude::NeHashSet as HashSet;
 use std::path::{Path, PathBuf};
 
-use abi_stable::std_types::RString;
 use libloading::Library;
 use newengine_core::{EngineError, EngineResult};
-use newengine_platform_api::{PlatformAppConfigV1, PlatformHostApiV1, PlatformRuntimeRunFnV1};
-use newengine_plugin_api::{HostApiV1, PluginRootV1Ref, PluginSignatureV1};
+use newengine_platform_api::PlatformRuntimeRunFnV1;
+use newengine_plugin_api::{PluginRootV1Ref, PluginSignatureV1};
 
 use crate::platform_runtime::constants::{
     PLATFORM_PLUGIN_ID, PLATFORM_RUNTIME_SYMBOL, PLUGIN_ROOT_SYMBOL,
     PLUGIN_SIGNATURE_SYMBOL,
 };
+
+
+#[inline]
+fn desired_runtime_profile() -> &'static str {
+    if cfg!(debug_assertions) { "dev" } else { "release" }
+}
+
+#[inline]
+fn mixed_plugin_profile_allowed() -> bool {
+    std::env::var("NEWENGINE_ALLOW_MIXED_PLUGIN_PROFILE")
+        .ok()
+        .map(|v| matches!(v.trim().to_ascii_lowercase().as_str(), "1" | "true" | "yes" | "on"))
+        .unwrap_or(false)
+}
+
+#[inline]
+fn runtime_file_profile(path: &Path) -> &'static str {
+    let lower = path
+        .file_name()
+        .and_then(|s| s.to_str())
+        .unwrap_or("")
+        .to_ascii_lowercase();
+    if lower.contains("-release.") || lower.contains("-release-") {
+        "release"
+    } else if lower.contains("-dev.") || lower.contains("-dev-") {
+        "dev"
+    } else if lower.contains("-debug.") || lower.contains("-debug-") {
+        "dev"
+    } else if lower.contains("-test.") || lower.contains("-test-") {
+        "test"
+    } else if lower.contains("-bench.") || lower.contains("-bench-") {
+        "bench"
+    } else {
+        "unknown"
+    }
+}
+
+#[inline]
+fn runtime_profile_matches(path: &Path, desired: &'static str, allow_mixed: bool) -> bool {
+    if allow_mixed {
+        return true;
+    }
+
+    match runtime_file_profile(path) {
+        "unknown" => true,
+        actual => actual == desired,
+    }
+}
+
+#[inline]
+fn runtime_metadata_probe_enabled() -> bool {
+    std::env::var("NEWENGINE_PLATFORM_RUNTIME_METADATA_PROBE")
+        .ok()
+        .map(|v| matches!(v.trim().to_ascii_lowercase().as_str(), "1" | "true" | "yes" | "on"))
+        .unwrap_or(false)
+}
+
+#[inline]
+fn runtime_symbol_validation_enabled() -> bool {
+    std::env::var("NEWENGINE_PLATFORM_RUNTIME_VALIDATE_SYMBOL")
+        .ok()
+        .map(|v| matches!(v.trim().to_ascii_lowercase().as_str(), "1" | "true" | "yes" | "on"))
+        .unwrap_or(false)
+}
+
+#[inline]
+fn is_platform_runtime_filename_candidate(path: &Path) -> bool {
+    if !path.is_file() {
+        return false;
+    }
+
+    let Some(name) = path.file_name().and_then(|s| s.to_str()) else {
+        return false;
+    };
+
+    let lower = name.to_ascii_lowercase();
+    (lower.ends_with(".dll") || lower.ends_with(".so") || lower.ends_with(".dylib"))
+        && (lower.contains("platform-winit") || lower.contains("winit-platform"))
+}
+
+fn runtime_symbol_present(path: &Path) -> bool {
+    let Ok(lib) = (unsafe { libloading::Library::new(path) }) else {
+        return false;
+    };
+
+    unsafe { lib.get::<PlatformRuntimeRunFnV1>(PLATFORM_RUNTIME_SYMBOL) }.is_ok()
+}
 
 fn try_read_runtime_identity(path: &Path) -> Option<(String, String)> {
     let lib = unsafe { Library::new(path) }.ok()?;
@@ -55,50 +141,40 @@ fn try_read_runtime_identity(path: &Path) -> Option<(String, String)> {
 }
 
 pub fn detect_platform_runtime_path(modules_dir: &Path) -> EngineResult<PathBuf> {
-    type PlatformRuntimeEntryFn = unsafe extern "C" fn(
-        HostApiV1,
-        PlatformHostApiV1,
-        PlatformAppConfigV1,
-    ) -> abi_stable::std_types::RResult<(), RString>;
-
-    #[inline]
-    fn is_runtime_candidate(path: &Path) -> bool {
-        if !path.is_file() {
-            return false;
-        }
-
-        let Some(name) = path.file_name().and_then(|s| s.to_str()) else {
-            return false;
-        };
-
-        let lower = name.to_ascii_lowercase();
-        if !(lower.ends_with(".dll") || lower.ends_with(".so") || lower.ends_with(".dylib")) {
-            return false;
-        }
-
-        let Ok(lib) = (unsafe { libloading::Library::new(path) }) else {
-            return false;
-        };
-
-        unsafe { lib.get::<PlatformRuntimeEntryFn>(PLATFORM_RUNTIME_SYMBOL) }.is_ok()
-    }
-
+    crate::platform_early_log!(
+        "host.discovery.begin modules_dir='{}' desired_profile='{}' allow_mixed={}",
+        modules_dir.display(),
+        desired_runtime_profile(),
+        mixed_plugin_profile_allowed()
+    );
     #[inline]
     fn collect_candidates(dir: &Path, out: &mut Vec<PathBuf>) {
         let Ok(rd) = std::fs::read_dir(dir) else {
             return;
         };
 
+        let validate_symbol = runtime_symbol_validation_enabled();
         for ent in rd.flatten() {
             let path = ent.path();
-            if is_runtime_candidate(&path) {
-                out.push(path);
+            if !is_platform_runtime_filename_candidate(&path) {
+                continue;
             }
+
+            if validate_symbol && !runtime_symbol_present(&path) {
+                crate::platform_early_log!(
+                    "host.discovery.skip_symbol_absent path='{}'",
+                    path.display()
+                );
+                continue;
+            }
+
+            out.push(path);
         }
     }
 
     if let Some(explicit) = std::env::var_os("NEWENGINE_PLATFORM_RUNTIME") {
         let explicit = PathBuf::from(explicit);
+        crate::platform_early_log!("host.discovery.explicit path='{}' exists={}", explicit.display(), explicit.is_file());
         if explicit.is_file() {
             return Ok(explicit);
         }
@@ -152,18 +228,74 @@ pub fn detect_platform_runtime_path(modules_dir: &Path) -> EngineResult<PathBuf>
 
     candidates.sort();
     candidates.dedup();
+    crate::platform_early_log!("host.discovery.candidates.total={}", candidates.len());
+    for path in candidates.iter().take(16) {
+        crate::platform_early_log!(
+            "host.discovery.candidate path='{}' profile='{}'",
+            path.display(),
+            runtime_file_profile(path)
+        );
+    }
+
+    let desired_profile = desired_runtime_profile();
+    let allow_mixed_profiles = mixed_plugin_profile_allowed();
+    let skipped_profile_mismatch = candidates
+        .iter()
+        .filter(|path| !runtime_profile_matches(path, desired_profile, allow_mixed_profiles))
+        .count();
+    candidates.retain(|path| runtime_profile_matches(path, desired_profile, allow_mixed_profiles));
+    if skipped_profile_mismatch > 0 {
+        crate::platform_early_log!(
+            "host.discovery.skipped_profile_mismatch={} desired='{}' mixed_allowed={}",
+            skipped_profile_mismatch,
+            desired_profile,
+            allow_mixed_profiles
+        );
+        log::warn!(
+            "platform runtime discovery: skipped_profile_mismatch={} desired='{}' mixed_allowed={}",
+            skipped_profile_mismatch,
+            desired_profile,
+            allow_mixed_profiles
+        );
+    }
+    crate::platform_early_log!("host.discovery.candidates.after_profile_filter={}", candidates.len());
+
+    if runtime_metadata_probe_enabled() {
+        if let Some(path) = candidates
+            .iter()
+            .find(|path| {
+                matches!(try_read_runtime_identity(path), Some((ref id, _)) if id == PLATFORM_PLUGIN_ID)
+            })
+            .cloned()
+        {
+            crate::platform_early_log!("host.discovery.selected.identity path='{}'", path.display());
+            return Ok(path);
+        }
+    } else {
+        crate::platform_early_log!("host.discovery.metadata_probe.disabled");
+    }
 
     if let Some(path) = candidates
         .iter()
         .find(|path| {
-            matches!(try_read_runtime_identity(path), Some((ref id, _)) if id == PLATFORM_PLUGIN_ID)
+            path.file_name()
+                .and_then(|s| s.to_str())
+                .map(|name| name.to_ascii_lowercase().contains("platform-winit"))
+                .unwrap_or(false)
         })
         .cloned()
     {
+        crate::platform_early_log!("host.discovery.selected.filename path='{}'", path.display());
         return Ok(path);
     }
 
-    candidates.into_iter().next().ok_or_else(|| {
+    if let Some(path) = candidates.into_iter().next() {
+        crate::platform_early_log!("host.discovery.selected.fallback path='{}'", path.display());
+        return Ok(path);
+    }
+
+    crate::platform_early_log!("host.discovery.failed.no_candidate");
+    Err({
         EngineError::other(format!(
             "platform runtime DLL not found; searched [{}] and expected exported symbol 'newengine_platform_runtime_run_v1'. Build/copy the platform runtime into NEWENGINE_PLUGIN_DIR, NEWENGINE_PLATFORM_RUNTIME_DIR, <engine-root>/plugins, or set NEWENGINE_PLATFORM_RUNTIME to the exact DLL path.",
             search_dirs

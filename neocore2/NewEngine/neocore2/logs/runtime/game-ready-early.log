@@ -1,0 +1,21 @@
+[1778762391180] [000001] main.entry exe=Some("C:\\Users\\Aiden\\Documents\\Kayla's Systems\\NewEngineRockstar\\NewEngine\\neocore2\\target\\debug\\game-ready-fps.exe") cwd=Some("C:\\Users\\Aiden\\Documents\\Kayla's Systems\\NewEngineRockstar\\NewEngine\\neocore2")
+[1778762391182] [000002] main_impl.begin
+[1778762391183] [000003] run_id.init.ok run_id=0000019e26801e8f0000328400000000
+[1778762391183] [000004] error_reporter.install.begin
+[1778762391183] [000005] error_reporter.install.ok
+[1778762391184] [000006] startup.load.begin path=config.json
+[1778762391185] [000007] startup.load.ok modules_dir=../../plugins
+[1778762391185] [000008] asset_roots.collected count=3
+[1778762391187] [000009] engine.build.begin
+[1778762391188] [000010] engine.build.ok
+[1778762391188] [000011] profile.register_modules.begin
+[1778762391188] [000012] profile.register_modules.ok
+[1778762391188] [000013] engine.preload_bootstrap_plugins.begin
+[1778762391228] [000014] engine.preload_bootstrap_plugins.ok
+[1778762391229] [000015] platform.detect.begin modules_dir=../../plugins
+[1778762391234] [000016] platform.detect.ok path=C:/Users/Aiden/Documents/Kayla's Systems/NewEngineRockstar/NewEngine/neocore2/plugins/platform-winit-0.1.8-dev.dll
+[1778762391234] [000017] platform.config.resolve.begin
+[1778762391235] [000018] platform.config.resolve.ok id=newengine.platform.winit name=NewEngine Platform Runtime version=-
+[1778762391235] [000019] host_runtime.new.begin
+[1778762391236] [000020] host_runtime.new.ok
+[1778762391236] [000021] runtime.run.begin path=C:/Users/Aiden/Documents/Kayla's Systems/NewEngineRockstar/NewEngine/neocore2/plugins/platform-winit-0.1.8-dev.dll id=newengine.platform.winit

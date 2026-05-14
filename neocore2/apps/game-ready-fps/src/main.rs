@@ -19,7 +19,53 @@ use newengine_runtime_host::{
     },
 };
 
-use std::sync::Arc;
+use std::{fmt, io::Write, path::PathBuf, sync::{Arc, atomic::{AtomicU64, Ordering}}, time::{SystemTime, UNIX_EPOCH}};
+
+
+static GAME_READY_EARLY_SEQ: AtomicU64 = AtomicU64::new(1);
+
+fn game_ready_early_log_path_candidates() -> Vec<PathBuf> {
+    let mut out = Vec::new();
+    if let Some(path) = std::env::var_os("NEWENGINE_GAME_READY_EARLY_LOG") {
+        out.push(PathBuf::from(path));
+    }
+    if let Ok(cwd) = std::env::current_dir() {
+        out.push(cwd.join("NewEngine/neocore2/logs/runtime/game-ready-early.log"));
+        out.push(cwd.join("logs/runtime/game-ready-early.log"));
+        out.push(cwd.join("game-ready-early.log"));
+    }
+    out
+}
+
+fn game_ready_early_log(args: fmt::Arguments<'_>) {
+    let seq = GAME_READY_EARLY_SEQ.fetch_add(1, Ordering::Relaxed);
+    let now_ms = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_millis())
+        .unwrap_or(0);
+
+    for path in game_ready_early_log_path_candidates() {
+        if let Some(parent) = path.parent() {
+            let _ = std::fs::create_dir_all(parent);
+        }
+        let Ok(mut file) = std::fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(&path)
+        else {
+            continue;
+        };
+        let _ = writeln!(file, "[{now_ms}] [{seq:06}] {args}");
+        let _ = file.flush();
+        return;
+    }
+}
+
+macro_rules! game_ready_early_log {
+    ($($arg:tt)*) => {{
+        game_ready_early_log(format_args!($($arg)*));
+    }};
+}
 
 #[inline]
 fn display_abs_path(path: &std::path::Path) -> String {
@@ -43,6 +89,7 @@ fn configure_default_game_ready_profile() {
 }
 
 fn main() {
+    game_ready_early_log!("main.entry exe={:?} cwd={:?}", std::env::current_exe().ok(), std::env::current_dir().ok());
     newengine_core::crash::record_breadcrumb("game-ready fps launcher: main entry");
     if let Err(e) = main_impl() {
         if !matches!(e, EngineError::ExitRequested) {
@@ -68,7 +115,9 @@ fn main() {
 }
 
 fn main_impl() -> EngineResult<()> {
+    game_ready_early_log!("main_impl.begin");
     let run_id = newengine_core::init_run_id().to_owned();
+    game_ready_early_log!("run_id.init.ok run_id={}", run_id);
     newengine_core::crash::record_breadcrumb(format!(
         "game-ready fps launcher: main_impl start run_id={}",
         run_id
@@ -81,6 +130,7 @@ fn main_impl() -> EngineResult<()> {
     std::env::set_var("NEWENGINE_PLUGIN_TARGET", "runtime");
     configure_default_game_ready_profile();
 
+    game_ready_early_log!("error_reporter.install.begin");
     newengine_core::EngineErrorReporter::install(newengine_core::EngineErrorReporterConfig {
         crash: newengine_core::crash::CrashReporterConfig {
             product_name: "NewEngine".to_owned(),
@@ -90,9 +140,12 @@ fn main_impl() -> EngineResult<()> {
         },
         ..Default::default()
     });
+    game_ready_early_log!("error_reporter.install.ok");
 
     let paths = ConfigPaths::from_startup_str("config.json");
+    game_ready_early_log!("startup.load.begin path=config.json");
     let (startup, _report) = StartupLoader::load_json(&paths)?;
+    game_ready_early_log!("startup.load.ok modules_dir={}", startup.modules_dir.display());
     let startup = Arc::new(startup);
     newengine_core::crash::record_breadcrumb("game-ready fps launcher: startup config loaded");
 
@@ -109,15 +162,22 @@ fn main_impl() -> EngineResult<()> {
     }
 
     let asset_roots = collect_app_asset_roots(GAME_READY_APP_DIR_NAME, GAME_APP_ASSETS_DIR_ENV);
+    game_ready_early_log!("asset_roots.collected count={}", asset_roots.len());
     let profile = StandaloneGameRuntimeProfile::new();
 
+    game_ready_early_log!("engine.build.begin");
     let mut engine = build_engine_from_startup(&startup, GAME_FIXED_DT_MS)?;
+    game_ready_early_log!("engine.build.ok");
     newengine_core::crash::record_breadcrumb("game-ready fps launcher: host engine constructed");
 
+    game_ready_early_log!("profile.register_modules.begin");
     profile.register_modules(&mut engine, &startup)?;
+    game_ready_early_log!("profile.register_modules.ok");
     newengine_core::crash::record_breadcrumb("game-ready fps launcher: standalone game runtime profile registered");
 
+    game_ready_early_log!("engine.preload_bootstrap_plugins.begin");
     engine.preload_bootstrap_plugins()?;
+    game_ready_early_log!("engine.preload_bootstrap_plugins.ok");
     profile.register_scene_io_best_effort();
     newengine_core::crash::record_breadcrumb("game-ready fps launcher: bootstrap plugins preloaded");
 
@@ -139,13 +199,17 @@ fn main_impl() -> EngineResult<()> {
         );
     }
 
+    game_ready_early_log!("platform.detect.begin modules_dir={}", startup.modules_dir.display());
     let runtime_path = detect_platform_runtime_path(&startup.modules_dir)?;
+    game_ready_early_log!("platform.detect.ok path={}", display_abs_path(&runtime_path));
     newengine_core::crash::record_breadcrumb(format!(
         "game-ready fps launcher: platform runtime detected path='{}'",
         display_abs_path(&runtime_path)
     ));
 
+    game_ready_early_log!("platform.config.resolve.begin");
     let mut resolved_platform = resolve_platform_runtime_config(&startup, &runtime_path)?;
+    game_ready_early_log!("platform.config.resolve.ok id={} name={} version={}", resolved_platform.plugin_id, resolved_platform.plugin_name, resolved_platform.plugin_version);
     newengine_core::crash::record_breadcrumb(format!(
         "game-ready fps launcher: platform runtime resolved id='{}'",
         resolved_platform.plugin_id
@@ -171,14 +235,18 @@ fn main_impl() -> EngineResult<()> {
 
     resolved_platform.config = platform_cfg;
 
+    game_ready_early_log!("host_runtime.new.begin");
     let runtime = HostPlatformRuntime::new(
         engine,
         ui_provider_kind_from_startup(&startup),
         ui_build,
     );
 
+    game_ready_early_log!("host_runtime.new.ok");
     newengine_core::crash::record_breadcrumb("game-ready fps launcher: entering host platform runtime");
+    game_ready_early_log!("runtime.run.begin path={} id={}", display_abs_path(&runtime_path), resolved_platform.plugin_id);
     runtime.run(&runtime_path, &resolved_platform)?;
+    game_ready_early_log!("runtime.run.returned");
 
     log::info!("game-ready fps stopped");
     Ok(())

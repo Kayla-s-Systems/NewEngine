@@ -46,6 +46,20 @@ pub enum ScreenOverlaySubsystemId {
     Other,
 }
 
+impl ScreenOverlaySubsystemId {
+    #[inline]
+    pub const fn default_label(self) -> &'static str {
+        match self {
+            Self::Platform => "PLATFORM",
+            Self::Assets => "ASSETS",
+            Self::Renderer => "RENDERER",
+            Self::Simulation => "SIMULATION",
+            Self::Diagnostics => "DIAGNOSTICS",
+            Self::Other => "SYSTEM",
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum ScreenOverlaySubsystemPhase {
     Waiting,
@@ -53,6 +67,19 @@ pub enum ScreenOverlaySubsystemPhase {
     Ready,
     Degraded,
     Failed,
+}
+
+impl ScreenOverlaySubsystemPhase {
+    #[inline]
+    pub const fn default_label(self) -> &'static str {
+        match self {
+            Self::Waiting => "WAIT",
+            Self::Running => "RUNNING",
+            Self::Ready => "READY",
+            Self::Degraded => "DEGRADED",
+            Self::Failed => "ERR",
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -324,23 +351,12 @@ fn default_title(kind: ScreenOverlayStatusKind) -> &'static str {
     }
 }
 
+#[inline]
 fn default_subsystem_label(id: ScreenOverlaySubsystemId) -> &'static str {
-    match id {
-        ScreenOverlaySubsystemId::Platform => "PLATFORM",
-        ScreenOverlaySubsystemId::Assets => "ASSETS",
-        ScreenOverlaySubsystemId::Renderer => "RENDERER",
-        ScreenOverlaySubsystemId::Simulation => "SIMULATION",
-        ScreenOverlaySubsystemId::Diagnostics => "DIAGNOSTICS",
-        ScreenOverlaySubsystemId::Other => "SYSTEM",
-    }
+    id.default_label()
 }
 
+#[inline]
 fn default_phase_label(phase: ScreenOverlaySubsystemPhase) -> &'static str {
-    match phase {
-        ScreenOverlaySubsystemPhase::Waiting => "WAIT",
-        ScreenOverlaySubsystemPhase::Running => "RUNNING",
-        ScreenOverlaySubsystemPhase::Ready => "READY",
-        ScreenOverlaySubsystemPhase::Degraded => "DEGRADED",
-        ScreenOverlaySubsystemPhase::Failed => "ERR",
-    }
+    phase.default_label()
 }

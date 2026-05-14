@@ -8,3 +8,7 @@ readme = "README.md"
 serde_json = "1.0.149"
 log = "0.4.29"
 newengine-service-api = { path = "../newengine-service-api" }
+
+[features]
+default = []
+legacy_asset_api_compat = []

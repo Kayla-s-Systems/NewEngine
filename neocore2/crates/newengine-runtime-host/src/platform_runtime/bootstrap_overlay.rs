@@ -55,7 +55,7 @@ pub(crate) fn subsystem_wait(
 ) -> ScreenOverlaySubsystem {
     ScreenOverlaySubsystem::new(
         id,
-        subsystem_label(id),
+        id.default_label(),
         ScreenOverlaySubsystemPhase::Waiting,
         state_label,
         detail,
@@ -71,7 +71,7 @@ pub(crate) fn subsystem_run(
 ) -> ScreenOverlaySubsystem {
     ScreenOverlaySubsystem::new(
         id,
-        subsystem_label(id),
+        id.default_label(),
         ScreenOverlaySubsystemPhase::Running,
         state_label,
         detail,
@@ -86,7 +86,7 @@ pub(crate) fn subsystem_ready(
 ) -> ScreenOverlaySubsystem {
     ScreenOverlaySubsystem::new(
         id,
-        subsystem_label(id),
+        id.default_label(),
         ScreenOverlaySubsystemPhase::Ready,
         state_label,
         detail,
@@ -101,21 +101,10 @@ pub(crate) fn subsystem_failed(
 ) -> ScreenOverlaySubsystem {
     ScreenOverlaySubsystem::new(
         id,
-        subsystem_label(id),
+        id.default_label(),
         ScreenOverlaySubsystemPhase::Failed,
         state_label,
         detail,
         None,
     )
-}
-
-fn subsystem_label(id: ScreenOverlaySubsystemId) -> &'static str {
-    match id {
-        ScreenOverlaySubsystemId::Platform => "PLATFORM",
-        ScreenOverlaySubsystemId::Assets => "ASSETS",
-        ScreenOverlaySubsystemId::Renderer => "RENDERER",
-        ScreenOverlaySubsystemId::Simulation => "SIMULATION",
-        ScreenOverlaySubsystemId::Diagnostics => "DIAGNOSTICS",
-        ScreenOverlaySubsystemId::Other => "SYSTEM",
-    }
 }

@@ -41,7 +41,7 @@ pub(crate) fn draw_content(me: &mut EditorUiBuild, ui: &mut egui::Ui) {
 
     ui.horizontal_wrapped(|ui| {
         if ui.button("Info").clicked() {
-            match assets.info_json(me.asset_ui.path.trim()) {
+            match assets.info_json_v1(me.asset_ui.path.trim()) {
                 Ok(v) => {
                     me.asset_ui.last_meta_json = serde_json::to_string_pretty(&v).unwrap_or_else(|_| v.to_string());
                     me.asset_ui.last_error.clear();
@@ -68,7 +68,7 @@ pub(crate) fn draw_content(me: &mut EditorUiBuild, ui: &mut egui::Ui) {
             }
         }
         if ui.button("Sources").clicked() {
-            match assets.sources_json() {
+            match assets.sources_json_v1() {
                 Ok(v) => {
                     me.asset_ui.sources_json = serde_json::to_string_pretty(&v).unwrap_or_else(|_| v.to_string());
                     me.asset_ui.last_error.clear();
@@ -77,7 +77,7 @@ pub(crate) fn draw_content(me: &mut EditorUiBuild, ui: &mut egui::Ui) {
             }
         }
         if ui.button("Formats").clicked() {
-            match assets.formats_json() {
+            match assets.formats_json_v1() {
                 Ok(v) => {
                     me.asset_ui.formats_json = serde_json::to_string_pretty(&v).unwrap_or_else(|_| v.to_string());
                     me.asset_ui.last_error.clear();
@@ -86,9 +86,18 @@ pub(crate) fn draw_content(me: &mut EditorUiBuild, ui: &mut egui::Ui) {
             }
         }
         if ui.button("Resolve Trace").clicked() {
-            match assets.resolve_trace_json(me.asset_ui.path.trim()) {
+            match assets.resolve_trace_json_v1(me.asset_ui.path.trim()) {
                 Ok(v) => {
                     me.asset_ui.last_trace_json = serde_json::to_string_pretty(&v).unwrap_or_else(|_| v.to_string());
+                    me.asset_ui.last_error.clear();
+                }
+                Err(e) => me.asset_ui.last_error = e,
+            }
+        }
+        if ui.button("Status Graph v1").clicked() {
+            match assets.status_graph_json_v1(me.asset_ui.path.trim()) {
+                Ok(v) => {
+                    me.asset_ui.last_status_graph_json = serde_json::to_string_pretty(&v).unwrap_or_else(|_| v.to_string());
                     me.asset_ui.last_error.clear();
                 }
                 Err(e) => me.asset_ui.last_error = e,
@@ -137,6 +146,15 @@ pub(crate) fn draw_content(me: &mut EditorUiBuild, ui: &mut egui::Ui) {
                     egui::TextEdit::multiline(&mut me.asset_ui.last_trace_json)
                         .desired_width(f32::INFINITY)
                         .desired_rows(10),
+                );
+            });
+        }
+        if show("status graph", &filter) {
+            widgets::section_card(ui, "Asset Status Graph", |ui| {
+                ui.add(
+                    egui::TextEdit::multiline(&mut me.asset_ui.last_status_graph_json)
+                        .desired_width(f32::INFINITY)
+                        .desired_rows(12),
                 );
             });
         }

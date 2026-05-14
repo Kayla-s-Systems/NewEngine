@@ -211,11 +211,17 @@ fn material_texture_ready_state(
                         MaterialTextureGpuResidency::Ready { texture },
                     );
                     let assets = AssetServiceClient::new(default_host_api());
-                    let _ = assets.mark_status_json_v1(serde_json::json!({
+                    let _ = assets.project_status_json_v1(serde_json::json!({
+                        "owner": "render.launch_gate",
+                        "domain": "gpu",
                         "logical_path": path,
                         "stage": "resident",
                         "state": "ready",
-                        "source": "render.launch_gate",
+                        "resource_id": format!("{:?}", texture),
+                        "proof": {
+                            "texture": format!("{:?}", texture),
+                            "residency": "ready"
+                        },
                         "detail": "GPU texture residency confirmed by scene launch gate"
                     }));
                     TextureReadyState::Ready

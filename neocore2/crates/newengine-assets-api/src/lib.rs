@@ -17,12 +17,14 @@ pub const ASSET_SERVICE_ID: &str = "asset.manager";
 /// part of this surface.
 pub mod method {
     pub const RELOAD_V1: &str = "asset.reload_v1";
-    pub const INFO_JSON: &str = "asset.info_json";
-    pub const STATE_JSON: &str = "asset.state_json";
-    /// Full AssetStatus graph snapshot by id or logical path. Payload accepts utf8 id_hex32 or logical path.
+    pub const INFO_JSON_V1: &str = "asset.info_json_v1";
+    pub const STATE_JSON_V1: &str = "asset.state_json_v1";
+    /// Current AssetStatus row by id or logical path. Payload accepts utf8 id_hex32 or logical path.
     pub const STATUS_JSON_V1: &str = "asset.status_json_v1";
-    /// Internal lifecycle projection hook. Payload is JSON with id_u128 or logical_path plus stage/detail.
-    pub const MARK_STATUS_JSON_V1: &str = "asset.mark_status_json_v1";
+    /// Full AssetStatus graph by id or logical path. Payload accepts utf8 id_hex32 or logical path.
+    pub const STATUS_GRAPH_JSON_V1: &str = "asset.status_graph_json_v1";
+    /// Validated lifecycle projection hook. Payload is JSON with owner/domain/logical_path/stage/proof.
+    pub const PROJECT_STATUS_JSON_V1: &str = "asset.project_status_json_v1";
     pub const BLOB_WIRE_V1: &str = "asset.blob_wire_v1";
     /// Runtime-ready RGBA8 texture packet by asset id. AssetManager validates/parses importer metadata.
     pub const TEXTURE_RGBA8_V1: &str = "asset.texture_rgba8_v1";
@@ -39,23 +41,34 @@ pub mod method {
     pub const PRELOAD_MANY_V1: &str = "asset.preload_many_v1";
     pub const GET_STATE_V1: &str = "asset.get_state_v1";
 
-    pub const FORMATS_JSON: &str = "asset.formats_json";
-    pub const SOURCES_JSON: &str = "asset.sources_json";
-    pub const VERIFY_ASSETS_JSON: &str = "asset.verify_assets_json";
-    pub const SOURCE_KINDS_JSON: &str = "asset.source_kinds_json";
-    pub const MOUNT_PAK: &str = "asset.mount_pak";
-    pub const MOUNT_DIR: &str = "asset.mount_dir";
-
-    pub const MOUNT_PAK_PRIO: &str = "asset.mount_pak_prio";
-    pub const MOUNT_DIR_PRIO: &str = "asset.mount_dir_prio";
-    pub const MOUNT_HTTP_PRIO: &str = "asset.mount_http_prio";
-    pub const MOUNT_SOURCE_V1: &str = "asset.mount_source_v1";
+    pub const FORMATS_JSON_V1: &str = "asset.formats_json_v1";
+    pub const SOURCES_JSON_V1: &str = "asset.sources_json_v1";
+    pub const VERIFY_ASSETS_JSON_V1: &str = "asset.verify_assets_json_v1";
+    pub const SOURCE_KINDS_JSON_V1: &str = "asset.source_kinds_json_v1";
+    pub const MOUNT_SOURCE_JSON_V1: &str = "asset.mount_source_json_v1";
 
     // Debug/diagnostics.
-    pub const RESOLVE_TRACE_JSON: &str = "asset.resolve_trace_json";
+    pub const RESOLVE_TRACE_JSON_V1: &str = "asset.resolve_trace_json_v1";
 
     // Generic lifecycle hook understood by the plugin host.
     pub const SHUTDOWN_V1: &str = newengine_service_api::SERVICE_METHOD_SHUTDOWN_V1;
+
+    #[cfg(feature = "legacy_asset_api_compat")]
+    pub mod legacy {
+        pub const INFO_JSON: &str = "asset.info_json";
+        pub const STATE_JSON: &str = "asset.state_json";
+        pub const MARK_STATUS_JSON_V1: &str = "asset.mark_status_json_v1";
+        pub const FORMATS_JSON: &str = "asset.formats_json";
+        pub const SOURCES_JSON: &str = "asset.sources_json";
+        pub const VERIFY_ASSETS_JSON: &str = "asset.verify_assets_json";
+        pub const SOURCE_KINDS_JSON: &str = "asset.source_kinds_json";
+        pub const MOUNT_PAK: &str = "asset.mount_pak";
+        pub const MOUNT_DIR: &str = "asset.mount_dir";
+        pub const MOUNT_PAK_PRIO: &str = "asset.mount_pak_prio";
+        pub const MOUNT_DIR_PRIO: &str = "asset.mount_dir_prio";
+        pub const MOUNT_HTTP_PRIO: &str = "asset.mount_http_prio";
+        pub const RESOLVE_TRACE_JSON: &str = "asset.resolve_trace_json";
+    }
 }
 
 /// Required runtime methods for AssetManager 0.6+ deployments.
@@ -69,7 +82,9 @@ pub const REQUIRED_RUNTIME_METHODS_V1: &[&str] = &[
     method::TEXTURE_RGBA8_V1,
     method::PUMP_V1,
     method::STATUS_JSON_V1,
-    method::FORMATS_JSON,
+    method::STATUS_GRAPH_JSON_V1,
+    method::PROJECT_STATUS_JSON_V1,
+    method::FORMATS_JSON_V1,
 ];
 
 
@@ -124,6 +139,34 @@ pub enum AssetState {
     Ready,
     Failed,
     Unknown,
+}
+
+/// Residency domain. Stages are meaningful only inside a domain: VFS bytes, CPU-imported payloads, and GPU resources are not interchangeable.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum AssetResidencyDomain {
+    Vfs,
+    Cpu,
+    Gpu,
+    Unknown,
+}
+
+impl AssetResidencyDomain {
+    #[inline]
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Vfs => "vfs",
+            Self::Cpu => "cpu",
+            Self::Gpu => "gpu",
+            Self::Unknown => "unknown",
+        }
+    }
+}
+
+impl core::fmt::Display for AssetResidencyDomain {
+    #[inline]
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.write_str(self.as_str())
+    }
 }
 
 
@@ -183,6 +226,7 @@ pub struct AssetStatus {
     pub id_hex32: String,
     pub logical_path: Option<String>,
     pub state: AssetState,
+    pub domain: AssetResidencyDomain,
     pub stage: AssetStatusStage,
     pub source: Option<String>,
     pub importer_id: Option<String>,
@@ -201,6 +245,7 @@ impl AssetStatus {
             id_hex32: id_hex32.into(),
             logical_path: None,
             state: AssetState::Unknown,
+            domain: AssetResidencyDomain::Unknown,
             stage: AssetStatusStage::Unknown,
             source: None,
             importer_id: None,
@@ -229,6 +274,12 @@ pub trait AssetAccess {
 
     /// Query the canonical AssetStatus read-model row for an asset id or logical path.
     fn status_json_v1(&self, id_or_logical_path: &str) -> Result<serde_json::Value, String>;
+
+    /// Query the full AssetStatus graph node for an asset id or logical path.
+    fn status_graph_json_v1(&self, id_or_logical_path: &str) -> Result<serde_json::Value, String>;
+
+    /// Project a validated lifecycle transition from an owning subsystem, e.g. render GPU residency.
+    fn project_status_json_v1(&self, payload: serde_json::Value) -> Result<serde_json::Value, String>;
 
     /// Read UTF-8/text asset bytes by logical path through AssetManager/VFS.
     fn text_v1(&self, logical_path: &str) -> Result<Vec<u8>, String>;
@@ -260,28 +311,101 @@ pub trait AssetService: AssetAccess {
     fn reload(&self, logical_path: &str) -> Result<String, String>;
 
     /// Query extended info by logical path.
-    fn info_json(&self, logical_path: &str) -> Result<serde_json::Value, String>;
+    fn info_json_v1(&self, logical_path: &str) -> Result<serde_json::Value, String>;
 
     /// List known formats.
-    fn formats_json(&self) -> Result<serde_json::Value, String>;
+    fn formats_json_v1(&self) -> Result<serde_json::Value, String>;
 
     /// List mounted sources.
-    fn sources_json(&self) -> Result<serde_json::Value, String>;
+    fn sources_json_v1(&self) -> Result<serde_json::Value, String>;
 
-    /// Mount a `.pak` at runtime (if supported by the service).
-    fn mount_pak(&self, path_to_pak: &str) -> Result<(), String>;
-
-    /// Mount a directory at runtime (if supported by the service).
-    fn mount_dir(&self, path_to_dir: &str) -> Result<(), String>;
-
-    /// Mount a `.pak` layer with an explicit priority.
-    fn mount_pak_prio(&self, path_to_pak: &str, priority: i32) -> Result<(), String>;
-
-    /// Mount a directory layer with an explicit priority.
-    fn mount_dir_prio(&self, path_to_dir: &str, priority: i32) -> Result<(), String>;
+    /// Mount one source through the strict v1 JSON source model.
+    fn mount_source_json_v1(&self, payload: serde_json::Value) -> Result<(), String>;
 
     /// Returns a deterministic trace describing which sources contain the asset.
-    fn resolve_trace_json(&self, logical_path: &str) -> Result<serde_json::Value, String>;
+    fn resolve_trace_json_v1(&self, logical_path: &str) -> Result<serde_json::Value, String>;
+
+    /// Backward-compatible Rust wrappers for legacy Rust callers.
+    ///
+    /// These wrappers are compiled only when `legacy_asset_api_compat` is enabled.
+    /// Strict builds must use explicit `*_v1` methods so the Rust surface mirrors
+    /// the wire-level ABI and cannot hide deprecated entry points.
+    #[cfg(feature = "legacy_asset_api_compat")]
+    #[deprecated(note = "use info_json_v1")]
+    #[inline]
+    fn info_json(&self, logical_path: &str) -> Result<serde_json::Value, String> {
+        self.info_json_v1(logical_path)
+    }
+
+    #[cfg(feature = "legacy_asset_api_compat")]
+    #[deprecated(note = "use formats_json_v1")]
+    #[inline]
+    fn formats_json(&self) -> Result<serde_json::Value, String> {
+        self.formats_json_v1()
+    }
+
+    #[cfg(feature = "legacy_asset_api_compat")]
+    #[deprecated(note = "use sources_json_v1")]
+    #[inline]
+    fn sources_json(&self) -> Result<serde_json::Value, String> {
+        self.sources_json_v1()
+    }
+
+    #[cfg(feature = "legacy_asset_api_compat")]
+    #[deprecated(note = "use mount_source_json_v1")]
+    #[inline]
+    fn mount_pak(&self, path_to_pak: &str) -> Result<(), String> {
+        self.mount_source_json_v1(serde_json::json!({
+            "kind": "nepak",
+            "priority": 100,
+            "mount": "",
+            "config": { "path": path_to_pak }
+        }))
+    }
+
+    #[cfg(feature = "legacy_asset_api_compat")]
+    #[deprecated(note = "use mount_source_json_v1")]
+    #[inline]
+    fn mount_dir(&self, path_to_dir: &str) -> Result<(), String> {
+        self.mount_source_json_v1(serde_json::json!({
+            "kind": "filesystem",
+            "priority": 200,
+            "mount": "",
+            "config": { "root": path_to_dir }
+        }))
+    }
+
+    #[cfg(feature = "legacy_asset_api_compat")]
+    #[deprecated(note = "use mount_source_json_v1")]
+    #[inline]
+    fn mount_pak_prio(&self, path_to_pak: &str, priority: i32) -> Result<(), String> {
+        self.mount_source_json_v1(serde_json::json!({
+            "kind": "nepak",
+            "priority": priority,
+            "mount": "",
+            "config": { "path": path_to_pak }
+        }))
+    }
+
+    #[cfg(feature = "legacy_asset_api_compat")]
+    #[deprecated(note = "use mount_source_json_v1")]
+    #[inline]
+    fn mount_dir_prio(&self, path_to_dir: &str, priority: i32) -> Result<(), String> {
+        self.mount_source_json_v1(serde_json::json!({
+            "kind": "filesystem",
+            "priority": priority,
+            "mount": "",
+            "config": { "root": path_to_dir }
+        }))
+    }
+
+    #[cfg(feature = "legacy_asset_api_compat")]
+    #[deprecated(note = "use resolve_trace_json_v1")]
+    #[inline]
+    fn resolve_trace_json(&self, logical_path: &str) -> Result<serde_json::Value, String> {
+        self.resolve_trace_json_v1(logical_path)
+    }
+
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
