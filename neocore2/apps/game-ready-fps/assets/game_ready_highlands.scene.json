@@ -65,7 +65,7 @@
       "roughness": 1.0,
       "normal_scale": 0.0,
       "occlusion_strength": 1.0,
-      "base_color_texture": "textures/fps/sky_0.dds",
+      "base_color_texture": "textures/fps/sky_0_runtime.jpg",
       "uv_scale": [
         1.0,
         1.0

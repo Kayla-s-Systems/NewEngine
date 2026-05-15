@@ -198,12 +198,34 @@ fn scan_dynamic_lib(path: &Path, manifest: Option<&PluginManifest>) -> Result<Sc
             file_name,
             kind: ScannedDynlibKind::PlatformRuntime {
                 id: "newengine.platform.winit".to_owned(),
-                version: "-".to_owned(),
+                version: infer_version_from_file_name(path),
             },
         });
     }
 
     let manifest_entry = manifest.and_then(|m| m.match_file_name(&file_name));
+    if let Some(entry) = manifest_entry {
+        return Ok(ScannedDynlib {
+            path: path.to_path_buf(),
+            file_name,
+            kind: ScannedDynlibKind::Plugin {
+                id: entry.id.clone(),
+                version: infer_version_from_file_name(path),
+                phase: entry.phase_value(),
+                descriptor_kind: Some(entry.kind_value()),
+                declared_capabilities: None,
+            },
+        });
+    }
+
+    if !metadata_probe_enabled() {
+        return Ok(ScannedDynlib {
+            path: path.to_path_buf(),
+            file_name: file_name.clone(),
+            kind: infer_kind_from_file_name(path, &file_name),
+        });
+    }
+
     let lib = unsafe { Library::new(path) }.map_err(|e| format!("Library::new failed: {e}"))?;
     let plugin_probe = probe_plugin_metadata(&lib)?;
 
@@ -217,14 +239,12 @@ fn scan_dynamic_lib(path: &Path, manifest: Option<&PluginManifest>) -> Result<Sc
     }
 
     if let Some(kind) = build_scanned_plugin_kind(&plugin_probe) {
-        let kind = apply_manifest_overlay(kind, manifest_entry);
         return Ok(ScannedDynlib {
             path: path.to_path_buf(),
             file_name,
             kind,
         });
     }
-
 
     Ok(ScannedDynlib {
         path: path.to_path_buf(),
@@ -233,60 +253,90 @@ fn scan_dynamic_lib(path: &Path, manifest: Option<&PluginManifest>) -> Result<Sc
     })
 }
 
-fn apply_manifest_overlay(
-    kind: ScannedDynlibKind,
-    manifest_entry: Option<&super::manifest::ManifestPluginEntry>,
-) -> ScannedDynlibKind {
-    let Some(entry) = manifest_entry else {
-        return kind;
+#[inline]
+fn metadata_probe_enabled() -> bool {
+    std::env::var("NEWENGINE_PLUGIN_DISCOVERY_ABI_PROBE")
+        .ok()
+        .map(|v| matches!(v.trim().to_ascii_lowercase().as_str(), "1" | "true" | "yes" | "on"))
+        .unwrap_or(false)
+}
+
+fn infer_kind_from_file_name(path: &Path, file_name: &str) -> ScannedDynlibKind {
+    let lower = file_name.to_ascii_lowercase();
+    let version = infer_version_from_file_name(path);
+    let plugin = |id: &str, phase, descriptor_kind| ScannedDynlibKind::Plugin {
+        id: id.to_owned(),
+        version: version.clone(),
+        phase,
+        descriptor_kind: Some(descriptor_kind),
+        declared_capabilities: None,
     };
 
-    match kind {
-        ScannedDynlibKind::Plugin {
-            id,
-            version,
-            phase,
-            descriptor_kind,
-            declared_capabilities,
-        } => {
-            let manifest_id = entry.id.trim();
-            let id = if id == "<unknown-plugin>" && !manifest_id.is_empty() {
-                manifest_id.to_owned()
-            } else {
-                if !manifest_id.is_empty() && manifest_id != id {
-                    log::warn!(
-                        "plugins: manifest id '{}' does not match plugin descriptor id '{}'",
-                        manifest_id,
-                        id
-                    );
-                }
-                id
-            };
-
-            // Deployment manifest is allowed to override host load phase and kind.
-            // The descriptor still remains the source of truth for capabilities.
-            let phase = if entry.phase.trim().is_empty() {
-                phase
-            } else {
-                entry.phase_value()
-            };
-            let descriptor_kind = if entry.kind.trim().is_empty() {
-                descriptor_kind
-            } else {
-                Some(entry.kind_value())
-            };
-
-            ScannedDynlibKind::Plugin {
-                id,
-                version,
-                phase,
-                descriptor_kind,
-                declared_capabilities,
-            }
-        }
-        other => other,
+    if lower.starts_with("logging-") {
+        return plugin(
+            "newengine.logging",
+            newengine_plugin_api::PluginBootstrapPhase::Bootstrap,
+            newengine_plugin_api::PluginKind::Runtime,
+        );
     }
+    if lower.starts_with("input-") {
+        return plugin(
+            "newengine.input",
+            newengine_plugin_api::PluginBootstrapPhase::Bootstrap,
+            newengine_plugin_api::PluginKind::Runtime,
+        );
+    }
+    if lower.starts_with("assetmanager-") {
+        return plugin(
+            "newengine.assets",
+            newengine_plugin_api::PluginBootstrapPhase::Engine,
+            newengine_plugin_api::PluginKind::Runtime,
+        );
+    }
+    if lower.starts_with("vulkan_renderer-") {
+        return plugin(
+            "newengine.renderer.vulkan",
+            newengine_plugin_api::PluginBootstrapPhase::Engine,
+            newengine_plugin_api::PluginKind::Runtime,
+        );
+    }
+    if lower.starts_with("egui_ui_provider-") {
+        return plugin(
+            "newengine.ui.provider.egui",
+            newengine_plugin_api::PluginBootstrapPhase::Engine,
+            newengine_plugin_api::PluginKind::Runtime,
+        );
+    }
+    if lower.starts_with("newengine_modules_math-") {
+        return plugin(
+            "newengine.math",
+            newengine_plugin_api::PluginBootstrapPhase::Bootstrap,
+            newengine_plugin_api::PluginKind::Runtime,
+        );
+    }
+
+    ScannedDynlibKind::Unknown
 }
+
+fn infer_version_from_file_name(path: &Path) -> String {
+    let stem = path
+        .file_stem()
+        .and_then(|s| s.to_str())
+        .unwrap_or_default();
+    let parts: Vec<&str> = stem.split('-').collect();
+    let Some(idx) = parts.iter().position(|p| p.chars().next().map(|c| c.is_ascii_digit()).unwrap_or(false)) else {
+        return "-".to_owned();
+    };
+    let raw = parts[idx..].join("-");
+    raw.strip_suffix("-dev")
+        .or_else(|| raw.strip_suffix("-debug"))
+        .or_else(|| raw.strip_suffix("-release"))
+        .or_else(|| raw.strip_suffix("-test"))
+        .or_else(|| raw.strip_suffix("-bench"))
+        .unwrap_or(raw.as_str())
+        .to_owned()
+}
+
 
 #[inline]
 fn file_name_only(path: &Path) -> String {

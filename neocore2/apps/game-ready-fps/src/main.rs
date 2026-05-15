@@ -24,16 +24,50 @@ use std::{fmt, io::Write, path::PathBuf, sync::{Arc, atomic::{AtomicU64, Orderin
 
 static GAME_READY_EARLY_SEQ: AtomicU64 = AtomicU64::new(1);
 
+fn find_neocore2_root() -> PathBuf {
+    if let Ok(cwd) = std::env::current_dir() {
+        if cwd.file_name().and_then(|s| s.to_str()).is_some_and(|s| s.eq_ignore_ascii_case("neocore2")) {
+            return cwd;
+        }
+        let nested = cwd.join("NewEngine").join("neocore2");
+        if nested.exists() {
+            return nested;
+        }
+        for ancestor in cwd.ancestors() {
+            if ancestor.file_name().and_then(|s| s.to_str()).is_some_and(|s| s.eq_ignore_ascii_case("neocore2")) {
+                return ancestor.to_path_buf();
+            }
+        }
+    }
+
+    if let Ok(exe) = std::env::current_exe() {
+        for ancestor in exe.ancestors() {
+            if ancestor.file_name().and_then(|s| s.to_str()).is_some_and(|s| s.eq_ignore_ascii_case("neocore2")) {
+                return ancestor.to_path_buf();
+            }
+        }
+    }
+
+    std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."))
+}
+
+fn cache_root_from_env_or_neocore2() -> PathBuf {
+    if std::env::var_os(newengine_core::CACHE_FILES_READY_ENV).is_some() {
+        if let Some(path) = std::env::var_os(newengine_core::CACHE_FILES_ENV)
+            .or_else(|| std::env::var_os(newengine_core::CACHE_FILES_ENV_LEGACY))
+            .filter(|v| !v.as_os_str().is_empty())
+        {
+            return PathBuf::from(path);
+        }
+    }
+
+    find_neocore2_root().join("cache")
+}
+
 fn game_ready_early_log_path_candidates() -> Vec<PathBuf> {
     let mut out = Vec::new();
-    if let Some(path) = std::env::var_os("NEWENGINE_GAME_READY_EARLY_LOG") {
-        out.push(PathBuf::from(path));
-    }
-    if let Ok(cwd) = std::env::current_dir() {
-        out.push(cwd.join("NewEngine/neocore2/logs/runtime/game-ready-early.log"));
-        out.push(cwd.join("logs/runtime/game-ready-early.log"));
-        out.push(cwd.join("game-ready-early.log"));
-    }
+    out.push(cache_root_from_env_or_neocore2().join("logs").join("game-ready-early.log"));
+
     out
 }
 
@@ -128,6 +162,11 @@ fn main_impl() -> EngineResult<()> {
     std::env::set_var("NEWENGINE_REQUIRE_ASSET_MANAGER", "1");
     std::env::set_var("NEWENGINE_REQUIRE_PLATFORM_WINDOW_SERVICE", "1");
     std::env::set_var("NEWENGINE_PLUGIN_TARGET", "runtime");
+    // Game-ready launch must not dlopen bootstrap DLLs before platform/runtime
+    // diagnostics are visible. Bootstrap plugins are loaded together with the
+    // engine phase; stale DLLs can otherwise terminate the process with SEH
+    // STATUS_ACCESS_VIOLATION before Rust can report an error.
+    std::env::set_var("NEWENGINE_BOOTSTRAP_PLUGIN_PRELOAD", "deferred");
     configure_default_game_ready_profile();
 
     game_ready_early_log!("error_reporter.install.begin");
@@ -136,6 +175,10 @@ fn main_impl() -> EngineResult<()> {
             product_name: "NewEngine".to_owned(),
             app_name: "game-ready-fps".to_owned(),
             app_version: env!("CARGO_PKG_VERSION").to_owned(),
+            // Standalone game launches should write a deterministic crash report
+            // but not emit noisy "reporter not found" diagnostics unless a real
+            // reporter binary is shipped/configured.
+            spawn_reporter: std::env::var_os("NEWENGINE_CRASH_REPORTER_PATH").is_some(),
             ..Default::default()
         },
         ..Default::default()
@@ -145,7 +188,11 @@ fn main_impl() -> EngineResult<()> {
     let paths = ConfigPaths::from_startup_str("config.json");
     game_ready_early_log!("startup.load.begin path=config.json");
     let (startup, _report) = StartupLoader::load_json(&paths)?;
-    game_ready_early_log!("startup.load.ok modules_dir={}", startup.modules_dir.display());
+    game_ready_early_log!(
+        "startup.load.ok modules_dir={} cache_files={}",
+        startup.modules_dir.display(),
+        startup.resolved_cache_files_dir().display()
+    );
     let startup = Arc::new(startup);
     newengine_core::crash::record_breadcrumb("game-ready fps launcher: startup config loaded");
 

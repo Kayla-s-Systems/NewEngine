@@ -1,0 +1,29 @@
+{
+  "version": 1,
+  "id": "engine.loading.subsystem_card.rockstar.v1",
+  "surface_id": "engine.loading",
+  "theme": "newengine.dark.gold-magenta",
+  "role": "startup-subsystem-card-style",
+  "style": "rockstar-industrial-telemetry-card",
+  "geometry": {
+    "height_px": 126,
+    "icon_y_px": 34,
+    "title_y_px": 64,
+    "state_y_px": 87,
+    "detail_y_px": 105,
+    "progress_bottom_px": 16,
+    "progress_height_px": 4
+  },
+  "text_policy": {
+    "title_max_chars": 18,
+    "state_max_chars": 12,
+    "detail_max_chars": 24,
+    "uppercase_state": true,
+    "line_model": "title + state + compact detail"
+  },
+  "visibility": {
+    "show_detail": true,
+    "show_progress": true
+  },
+  "rule": "Subsystem cards are provider-owned presentation specs. Runtime supplies state only; native fallback consumes this spec without owning card design policy."
+}

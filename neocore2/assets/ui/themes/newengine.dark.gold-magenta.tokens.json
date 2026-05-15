@@ -1,0 +1,11 @@
+{
+  "id": "newengine.dark.gold-magenta",
+  "display_name": "NewEngine Dark / Gold-Magenta",
+  "modal": {
+    "backdrop": "#090b10",
+    "text": "#d4e1ee",
+    "title": "#ffecd6",
+    "diagnostic": "#ffaa48",
+    "pill_radius": 999
+  }
+}

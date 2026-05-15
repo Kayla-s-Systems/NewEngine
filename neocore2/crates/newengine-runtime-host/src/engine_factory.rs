@@ -33,13 +33,11 @@ impl Services for DefaultHostServices {
 }
 
 #[inline]
-pub fn ui_provider_kind_from_startup(startup: &StartupConfig) -> UiProviderKind {
-    match startup.ui_backend.plugin_id() {
-        Some(service_id) => UiProviderKind::Plugin {
-            service_id: service_id.to_owned(),
-        },
-        None => UiProviderKind::Null,
-    }
+pub fn ui_provider_kind_from_startup(_startup: &StartupConfig) -> UiProviderKind {
+    // UI provider selection is discovery-driven. Startup config must not bind
+    // a concrete UI backend; the runtime host will bind the first registered
+    // UI-provider service, or `none` when no provider exists.
+    UiProviderKind::Null
 }
 
 pub fn build_engine_from_startup(

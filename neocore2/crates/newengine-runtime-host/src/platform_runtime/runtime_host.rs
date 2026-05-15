@@ -19,12 +19,13 @@ use newengine_system_contracts::{
     ScreenOverlayReason, ScreenOverlayStatus, ScreenOverlaySubsystem, ScreenOverlaySubsystemId,
 };
 use newengine_system_runtime::{
-    overlay_from_engine_startup_snapshot, overlay_from_render_backend_status, overlay_to_step_result,
+    overlay_from_engine_startup_snapshot, overlay_from_render_backend_status,
+    overlay_to_step_result_with_provider,
     startup_status_mapper::bootstrap_loading_with_subsystems,
 };
 use newengine_ui::{
     create_provider, UiBuildFn, UiFrameDesc, UiInputFrame, UiProvider, UiProviderKind,
-    UiProviderOptions,
+    UiProviderOptions, UiProviderBinding,
 };
 
 use crate::platform_input::poll_input_frame;
@@ -43,11 +44,15 @@ use crate::platform_runtime::snapshot_service::{
     register_platform_window_service_best_effort, update_platform_window_snapshot,
 };
 use crate::platform_runtime::types::ResolvedPlatformRuntimeConfig;
+use crate::platform_runtime::ui_provider_selection::{
+    log_ui_provider_selection, UiProviderSelection,
+};
 
 pub struct HostPlatformRuntime {
     engine: Engine<()>,
     ui: Box<dyn UiProvider>,
     ui_build: Option<Box<dyn UiBuildFn>>,
+    ui_selection: UiProviderSelection,
     host_events: EventSub<HostEvent>,
     surface: PlatformSurfaceMetricsV1,
     minimized: bool,
@@ -62,6 +67,7 @@ pub struct HostPlatformRuntime {
     fatal_bootstrap_error: Option<String>,
 }
 
+
 impl HostPlatformRuntime {
     pub fn new(
         engine: Engine<()>,
@@ -69,30 +75,15 @@ impl HostPlatformRuntime {
         ui_build: Option<Box<dyn UiBuildFn>>,
     ) -> Self {
         let host_events = engine.events().subscribe::<HostEvent>();
-
-        match &ui_kind {
-            UiProviderKind::Null => {
-                log::info!("ui provider: none");
-            }
-            UiProviderKind::Plugin { service_id } => {
-                if newengine_plugin_host::has_service(service_id) {
-                    log::info!(
-                        "ui provider: requested plugin service='{}' is present; using plugin-backed UI when provider bridge is bound",
-                        service_id
-                    );
-                } else {
-                    log::warn!(
-                        "ui provider: requested plugin service='{}' is missing; continuing without UI",
-                        service_id
-                    );
-                }
-            }
-        }
+        let ui_selection = UiProviderSelection::new(ui_kind);
+        log_ui_provider_selection("initial", ui_selection.active());
+        let active_ui_kind = ui_selection.active().clone();
 
         Self {
             engine,
-            ui: create_provider(UiProviderOptions { kind: ui_kind }),
+            ui: create_provider(UiProviderOptions { kind: active_ui_kind }),
             ui_build,
+            ui_selection,
             host_events,
             surface: PlatformSurfaceMetricsV1::default(),
             minimized: false,
@@ -373,6 +364,7 @@ impl HostPlatformRuntime {
                             count
                         );
                         self.loaded_engine_plugins = Some(count);
+                        self.refresh_ui_provider_binding("engine-plugins-loaded");
                         self.set_bootstrap_overlay(
                             format!("Engine plugins loaded ({count})."),
                             "Runtime services are registered. Preparing startup graph.",
@@ -519,15 +511,31 @@ impl HostPlatformRuntime {
             status.progress_01,
             self.scene_launch_subsystems(status),
         );
-        overlay_to_step_result(&overlay, self.bootstrap_spinner_phase)
+        self.overlay_step_result(&overlay, self.bootstrap_spinner_phase)
     }
 
 
     fn degraded_backend_step_result(&self, status: &RenderBackendStatus) -> PlatformStepResultV1 {
         match overlay_from_render_backend_status(status) {
-            Some(overlay) => overlay_to_step_result(&overlay, 0),
+            Some(overlay) => self.overlay_step_result(&overlay, 0),
             None => PlatformStepResultV1::default(),
         }
+    }
+
+    fn overlay_step_result(&self, overlay: &ScreenOverlayStatus, spinner_phase: u32) -> PlatformStepResultV1 {
+        overlay_to_step_result_with_provider(overlay, spinner_phase, self.ui_provider_binding())
+    }
+
+    fn ui_provider_binding(&self) -> UiProviderBinding {
+        self.ui_selection.binding()
+    }
+
+    fn refresh_ui_provider_binding(&mut self, origin: &'static str) {
+        let Some(next) = self.ui_selection.refresh(origin) else {
+            return;
+        };
+
+        self.ui = create_provider(UiProviderOptions { kind: next });
     }
 
     fn emit_window_ready_event(&mut self) -> EngineResult<()> {
@@ -582,7 +590,7 @@ impl HostPlatformRuntime {
                 self.render_backend_label(),
                 self.loaded_engine_plugins,
             );
-            return overlay_to_step_result(&overlay, self.bootstrap_spinner_phase);
+            return self.overlay_step_result(&overlay, self.bootstrap_spinner_phase);
         }
 
         let status = self.bootstrap_overlay.status.as_str();
@@ -597,7 +605,7 @@ impl HostPlatformRuntime {
             subsystems,
         );
 
-        overlay_to_step_result(&overlay, self.bootstrap_spinner_phase)
+        self.overlay_step_result(&overlay, self.bootstrap_spinner_phase)
     }
 
     fn fatal_bootstrap_step_result(&mut self) -> PlatformStepResultV1 {
@@ -625,7 +633,7 @@ impl HostPlatformRuntime {
             .with_subsystems(self.bootstrap_subsystems())
         };
 
-        overlay_to_step_result(&overlay, self.bootstrap_spinner_phase)
+        self.overlay_step_result(&overlay, self.bootstrap_spinner_phase)
     }
 
     #[inline]

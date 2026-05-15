@@ -53,7 +53,11 @@ impl MaterialPipeline {
             scan_every: Duration::from_millis(750),
             last_scan: Instant::now() - Duration::from_secs(5),
             roots: collect_app_asset_roots(crate::EDITOR_APP_DIR_NAME, crate::EDITOR_APP_ASSETS_DIR_ENV),
-            cache_dir: PathBuf::from("cache").join("materials"),
+            cache_dir: std::env::var_os("NEWENGINE_CACHE_FILES")
+                .or_else(|| std::env::var_os("CACHE_FILES"))
+                .map(PathBuf::from)
+                .unwrap_or_else(|| PathBuf::from("cache"))
+                .join("materials"),
             seen: HashMap::default(),
         }
     }

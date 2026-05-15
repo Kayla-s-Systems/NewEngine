@@ -1,7 +1,7 @@
 #![forbid(unsafe_op_in_unsafe_fn)]
 
 use crate::error::{EngineError, EngineResult};
-use crate::startup::config::{StartupPluginOverride, UiBackend};
+use crate::startup::config::StartupPluginOverride;
 use crate::startup::{
     ConfigPaths, StartupConfig, StartupConfigSource, StartupLoadReport, StartupOverride,
     StartupResolvedFrom, WindowPlacement,
@@ -58,6 +58,16 @@ impl StartupLoader {
             Err(e) => return Err(e),
         }
 
+        // Publish the engine-level CACHE_FILES root as soon as the config is resolved.
+        // Runtime plugins, shader bakers, early logs and any future cache writers
+        // consume this environment value as the single source of truth.
+        let cache_root = cfg.publish_cache_files_env();
+        report.overrides.push(StartupOverride {
+            key: "cache_files",
+            from: "<resolved>".to_owned(),
+            to: crate::cache_files::display_cache_path(&cache_root),
+        });
+
         report.total_ms = Some(t0.elapsed().as_millis().min(u128::from(u32::MAX)) as u32);
         crate::startup::set_last_load_report(report.clone());
         crate::startup::set_last_startup_config(cfg.clone());
@@ -70,8 +80,13 @@ struct RootJson {
     window: Option<WindowJson>,
     engine: Option<EngineJson>,
     render: Option<RenderJson>,
-    ui: Option<UiJson>,
     plugins: Option<newengine_math::collections_prelude::NeHashMap<String, serde_json::Value>>,
+
+    /// Legacy removed field. UI provider selection is service-discovery driven:
+    /// first registered `newengine.ui.provider.*` wins, otherwise provider=None.
+    /// The key is accepted here only so old config files do not produce noisy
+    /// unknown-root diagnostics. It is intentionally ignored.
+    ui: Option<serde_json::Value>,
 
     #[serde(flatten)]
     extra: newengine_math::collections_prelude::NeHashMap<String, serde_json::Value>,
@@ -101,6 +116,9 @@ struct WindowPlacementJson {
 #[derive(Deserialize)]
 struct EngineJson {
     modules_dir: Option<String>,
+    cache_files: Option<String>,
+    #[serde(rename = "CACHE_FILES")]
+    cache_files_upper: Option<String>,
 
     /// Unknown keys are preserved to produce deterministic diagnostics.
     ///
@@ -118,12 +136,17 @@ struct RenderJson {
     extra: newengine_math::collections_prelude::NeHashMap<String, serde_json::Value>,
 }
 
-#[derive(Deserialize)]
-struct UiJson {
-    backend: Option<String>,
-}
 
-fn apply_root(cfg: &mut StartupConfig, report: &mut StartupLoadReport, src: RootJson) {
+fn apply_root(cfg: &mut StartupConfig, report: &mut StartupLoadReport, mut src: RootJson) {
+    let _legacy_ui_backend_config = src.ui.take();
+    for key in ["CACHE_FILES", "cache_files"] {
+        if let Some(v) = src.extra.remove(key) {
+            if let Some(path) = v.as_str().map(str::trim).filter(|s| !s.is_empty()) {
+                apply_path(report, "cache_files", &mut cfg.cache_files, path.to_owned());
+            }
+        }
+    }
+
     if !src.extra.is_empty() {
         let mut keys: Vec<String> = src.extra.keys().cloned().collect();
         keys.sort();
@@ -189,6 +212,10 @@ fn apply_root(cfg: &mut StartupConfig, report: &mut StartupLoadReport, src: Root
             apply_path(report, "modules_dir", &mut cfg.modules_dir, dir);
         }
 
+        if let Some(cache_files) = engine.cache_files.or(engine.cache_files_upper) {
+            apply_path(report, "cache_files", &mut cfg.cache_files, cache_files);
+        }
+
         if !engine.extra.is_empty() {
             let mut keys: Vec<String> = engine.extra.keys().cloned().collect();
             keys.sort();
@@ -227,12 +254,6 @@ fn apply_root(cfg: &mut StartupConfig, report: &mut StartupLoadReport, src: Root
         }
     }
 
-    if let Some(ui) = src.ui {
-        if let Some(backend) = ui.backend {
-            let parsed = parse_ui_backend(&backend);
-            apply_ui_backend(report, "ui_backend", &mut cfg.ui_backend, parsed);
-        }
-    }
 }
 
 fn collect_plugin_override_report_entries(
@@ -333,15 +354,6 @@ fn parse_placement(p: WindowPlacementJson) -> Option<WindowPlacement> {
 }
 
 
-fn parse_ui_backend(s: &str) -> UiBackend {
-    let trimmed = s.trim();
-    let v = trimmed.to_ascii_lowercase();
-    match v.as_str() {
-        "" | "none" | "null" | "off" | "disabled" => UiBackend::None,
-        _ => UiBackend::Plugin(trimmed.to_owned()),
-    }
-}
-
 #[inline]
 fn apply_string(report: &mut StartupLoadReport, key: &'static str, dst: &mut String, v: String) {
     let from = dst.clone();
@@ -393,21 +405,6 @@ fn apply_placement(
     key: &'static str,
     dst: &mut WindowPlacement,
     v: WindowPlacement,
-) {
-    let from = format!("{:?}", dst);
-    let to = format!("{:?}", v);
-    if *dst != v {
-        *dst = v;
-        report.overrides.push(StartupOverride { key, from, to });
-    }
-}
-
-#[inline]
-fn apply_ui_backend(
-    report: &mut StartupLoadReport,
-    key: &'static str,
-    dst: &mut UiBackend,
-    v: UiBackend,
 ) {
     let from = format!("{:?}", dst);
     let to = format!("{:?}", v);

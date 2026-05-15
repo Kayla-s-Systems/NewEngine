@@ -67,7 +67,7 @@ pub fn compile_glsl_to_spirv(
     }
 
     let glslc = resolve_glslc();
-    let temp_dir = std::env::temp_dir().join("newengine-shaders");
+    let temp_dir = cache_files_root().join("tmp").join("shaders");
     std::fs::create_dir_all(&temp_dir).map_err(|e| {
         ShaderCompileError::new(format!(
             "shader temp dir create failed dir='{}' err='{e}'",
@@ -153,9 +153,17 @@ fn shader_runtime_cache_enabled() -> bool {
 }
 
 fn shader_cache_dir() -> PathBuf {
-    std::env::var_os("NEWENGINE_SHADER_CACHE_DIR")
+    if let Some(path) = std::env::var_os("NEWENGINE_SHADER_CACHE_DIR") {
+        return PathBuf::from(path);
+    }
+    cache_files_root().join("shaders").join("runtime")
+}
+
+fn cache_files_root() -> PathBuf {
+    std::env::var_os("NEWENGINE_CACHE_FILES")
+        .or_else(|| std::env::var_os("CACHE_FILES"))
         .map(PathBuf::from)
-        .unwrap_or_else(|| PathBuf::from("cache").join("shaders").join("runtime"))
+        .unwrap_or_else(|| PathBuf::from("cache"))
 }
 
 fn shader_cache_path(stage: ShaderStage, logical_name: &str, entry: &str, key: u64) -> PathBuf {

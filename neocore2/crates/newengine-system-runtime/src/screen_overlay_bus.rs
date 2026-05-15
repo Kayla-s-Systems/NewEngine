@@ -2,7 +2,8 @@
 
 use abi_stable::std_types::RString;
 use newengine_platform_api::{PlatformLoadingOverlayV1, PlatformStepResultV1};
-use newengine_system_contracts::ScreenOverlayStatus;
+use newengine_system_contracts::{ScreenOverlayStatus, ScreenOverlayStatusKind};
+use newengine_ui::{UiProviderBinding, UiShellSpec, UiSurfaceProjection};
 use parking_lot::RwLock;
 use std::sync::Arc;
 
@@ -32,10 +33,23 @@ pub fn overlay_to_platform_overlay(
     status: &ScreenOverlayStatus,
     spinner_phase: u32,
 ) -> PlatformLoadingOverlayV1 {
-    let view_json = serde_json::to_string(status).unwrap_or_else(|e| {
-        log::warn!("screen overlay serialization failed: {e}");
-        String::new()
-    });
+    overlay_to_platform_overlay_with_provider(status, spinner_phase, UiProviderBinding::NativeFallback)
+}
+
+pub fn overlay_to_platform_overlay_with_provider(
+    status: &ScreenOverlayStatus,
+    spinner_phase: u32,
+    provider: UiProviderBinding,
+) -> PlatformLoadingOverlayV1 {
+    let view_json = serde_json::to_string(&loading_surface_projection(status, provider))
+        .or_else(|projection_err| {
+            log::warn!("loading UI surface projection serialization failed: {projection_err}; falling back to raw screen overlay status");
+            serde_json::to_string(status)
+        })
+        .unwrap_or_else(|e| {
+            log::warn!("screen overlay serialization failed: {e}");
+            String::new()
+        });
 
     PlatformLoadingOverlayV1 {
         active: true,
@@ -52,8 +66,28 @@ pub fn overlay_to_step_result(
     status: &ScreenOverlayStatus,
     spinner_phase: u32,
 ) -> PlatformStepResultV1 {
+    overlay_to_step_result_with_provider(status, spinner_phase, UiProviderBinding::NativeFallback)
+}
+
+pub fn overlay_to_step_result_with_provider(
+    status: &ScreenOverlayStatus,
+    spinner_phase: u32,
+    provider: UiProviderBinding,
+) -> PlatformStepResultV1 {
     PlatformStepResultV1 {
         exit_requested: false,
-        loading_overlay: overlay_to_platform_overlay(status, spinner_phase),
+        loading_overlay: overlay_to_platform_overlay_with_provider(status, spinner_phase, provider),
+    }
+}
+
+pub fn loading_surface_projection(
+    status: &ScreenOverlayStatus,
+    provider: UiProviderBinding,
+) -> UiSurfaceProjection<ScreenOverlayStatus> {
+    let shell = UiShellSpec::rockstar_loading();
+    if status.kind == ScreenOverlayStatusKind::Error {
+        UiSurfaceProjection::error_modal(provider, shell, status.clone())
+    } else {
+        UiSurfaceProjection::loading(provider, shell, status.clone())
     }
 }

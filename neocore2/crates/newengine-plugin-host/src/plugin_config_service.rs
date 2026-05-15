@@ -457,7 +457,7 @@ mod tests {
                         },
                         "file": {
                             "enabled": true,
-                            "path": "cache/logs/default.log"
+                            "path": "logs/default.log"
                         }
                     }
                 }
@@ -469,7 +469,7 @@ mod tests {
             json!({
                 "sources": {
                     "file": {
-                        "path": "cache/logs/log.log",
+                        "path": "logs/log.log",
                         "mode": "truncate"
                     }
                 }
@@ -482,7 +482,7 @@ mod tests {
         assert_eq!(got["timestamp"], json!("millis"));
         assert_eq!(got["sources"]["console"]["enabled"], json!(true));
         assert_eq!(got["sources"]["console"]["level"], json!("info"));
-        assert_eq!(got["sources"]["file"]["path"], json!("cache/logs/log.log"));
+        assert_eq!(got["sources"]["file"]["path"], json!("logs/log.log"));
         assert_eq!(got["sources"]["file"]["mode"], json!("truncate"));
         assert_eq!(got["sources"]["file"]["enabled"], json!(true));
     }

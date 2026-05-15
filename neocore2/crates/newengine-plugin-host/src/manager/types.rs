@@ -49,18 +49,18 @@ pub struct PluginSnapshotEntry {
 }
 
 pub(crate) struct LoadedPlugin {
-    pub path: PathBuf,
-    pub module: ModuleAdapterAny,
-    pub info: PluginInfo,
-    pub descriptor: Option<PluginDescriptor>,
-    pub state: PluginState,
-    pub disabled_reason: Option<String>,
-    pub icon_small: Option<PluginIconData>,
+    pub(crate) path: PathBuf,
+    pub(crate) module: ModuleAdapterAny,
+    pub(crate) info: PluginInfo,
+    pub(crate) descriptor: Option<PluginDescriptor>,
+    pub(crate) state: PluginState,
+    pub(crate) disabled_reason: Option<String>,
+    pub(crate) icon_small: Option<PluginIconData>,
 
     /// Must be dropped last. `module` contains ABI trait objects whose vtables and
     /// destructors live in this library; unloading the DLL before dropping the
     /// module is a classic shutdown-time access violation on Windows.
-    pub _lib: Library,
+    pub(crate) _lib: Library,
 }
 
 #[inline]

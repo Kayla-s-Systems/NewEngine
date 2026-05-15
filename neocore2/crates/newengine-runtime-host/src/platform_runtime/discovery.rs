@@ -239,6 +239,7 @@ pub fn detect_platform_runtime_path(modules_dir: &Path) -> EngineResult<PathBuf>
 
     let desired_profile = desired_runtime_profile();
     let allow_mixed_profiles = mixed_plugin_profile_allowed();
+    let all_profile_candidates = candidates.clone();
     let skipped_profile_mismatch = candidates
         .iter()
         .filter(|path| !runtime_profile_matches(path, desired_profile, allow_mixed_profiles))
@@ -258,6 +259,23 @@ pub fn detect_platform_runtime_path(modules_dir: &Path) -> EngineResult<PathBuf>
             allow_mixed_profiles
         );
     }
+
+    if candidates.is_empty() && !all_profile_candidates.is_empty() {
+        candidates = all_profile_candidates;
+        sort_runtime_candidates(&mut candidates, desired_profile);
+        crate::platform_early_log!(
+            "host.discovery.profile_fallback.enabled desired='{}' candidates={}",
+            desired_profile,
+            candidates.len()
+        );
+        log::warn!(
+            "platform runtime discovery: no '{}' platform DLL found; falling back to available platform runtime profile. Rebuild winit-platform-plugin with matching profile to remove this warning.",
+            desired_profile
+        );
+    } else {
+        sort_runtime_candidates(&mut candidates, desired_profile);
+    }
+
     crate::platform_early_log!("host.discovery.candidates.after_profile_filter={}", candidates.len());
 
     if runtime_metadata_probe_enabled() {
@@ -331,8 +349,41 @@ fn push_unique(out: &mut Vec<PathBuf>, path: PathBuf) {
 }
 
 fn push_runtime_dirs(out: &mut Vec<PathBuf>, dir: &Path) {
-    push_unique(out, dir.join("platforms"));
+    let is_platforms_dir = dir
+        .file_name()
+        .and_then(|s| s.to_str())
+        .map(|s| s.eq_ignore_ascii_case("platforms"))
+        .unwrap_or(false);
+
+    if !is_platforms_dir {
+        push_unique(out, dir.join("platforms"));
+    }
     push_unique(out, dir.to_path_buf());
+}
+
+fn sort_runtime_candidates(candidates: &mut [PathBuf], desired_profile: &'static str) {
+    candidates.sort_by(|a, b| {
+        runtime_candidate_rank(a, desired_profile).cmp(&runtime_candidate_rank(b, desired_profile))
+    });
+}
+
+fn runtime_candidate_rank(path: &Path, desired_profile: &'static str) -> (u8, u8, String) {
+    let name = path
+        .file_name()
+        .and_then(|s| s.to_str())
+        .unwrap_or("")
+        .to_ascii_lowercase();
+    let profile_rank = match runtime_file_profile(path) {
+        p if p == desired_profile => 0,
+        "unknown" => 1,
+        "dev" => 2,
+        "release" => 3,
+        "test" => 4,
+        "bench" => 5,
+        _ => 9,
+    };
+    let name_rank = if name.contains("platform-winit") { 0 } else { 1 };
+    (profile_rank, name_rank, name)
 }
 
 fn push_ancestor_plugin_dirs(out: &mut Vec<PathBuf>, start: &Path) {

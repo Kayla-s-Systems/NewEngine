@@ -1,3 +1,4 @@
+use core::f32::consts::PI;
 use std::time::Duration;
 use newengine_assets::AssetAccess;
 
@@ -145,6 +146,53 @@ fn load_ne3d_mesh_asset(logical_path: &str) -> Result<PrimitiveMesh, String> {
     decode_ne3d_mesh(&payload)
 }
 
+
+fn build_procedural_skydome_mesh() -> PrimitiveMesh {
+    const SLICES: u32 = 64;
+    const STACKS: u32 = 32;
+    let radius = 0.5_f32;
+    let vert_w = SLICES + 1;
+    let mut vertices = Vec::with_capacity(((SLICES + 1) * (STACKS + 1)) as usize);
+
+    for y in 0..=STACKS {
+        let v = y as f32 / STACKS as f32;
+        let phi = v * PI;
+        let (sp, cp) = phi.sin_cos();
+        for x in 0..=SLICES {
+            let u = x as f32 / SLICES as f32;
+            let theta = u * 2.0 * PI;
+            let (st, ct) = theta.sin_cos();
+            let outward = Vec3::new(ct * sp, cp, st * sp);
+            let p = outward * radius;
+            let inward = -outward;
+            vertices.push(PrimitiveVertex {
+                pos: [p.x, p.y, p.z],
+                nrm: [inward.x, inward.y, inward.z],
+                uv: [u, 1.0 - v],
+            });
+        }
+    }
+
+    let mut indices = Vec::with_capacity((SLICES * STACKS * 6) as usize);
+    for y in 0..STACKS {
+        for x in 0..SLICES {
+            let i0 = y * vert_w + x;
+            let i1 = i0 + 1;
+            let i2 = i0 + vert_w;
+            let i3 = i2 + 1;
+            // Reversed winding: the dome is viewed from inside.
+            indices.extend_from_slice(&[i0, i1, i2, i1, i3, i2]);
+        }
+    }
+
+    PrimitiveMesh {
+        vertices,
+        indices,
+        bounds_center: Vec3::ZERO,
+        bounds_radius: radius,
+    }
+}
+
 fn ensure_skydome_primitive(prims: &mut PrimitiveRegistry, logical_path: &str) -> Option<PrimitiveId> {
     if prims.is_registered(SKYDOME_PRIMITIVE_ID) {
         return Some(SKYDOME_PRIMITIVE_ID);
@@ -168,12 +216,22 @@ fn ensure_skydome_primitive(prims: &mut PrimitiveRegistry, logical_path: &str) -
             Some(SKYDOME_PRIMITIVE_ID)
         }
         Err(e) => {
-            log::error!(
-                "game-ready: skydome import failed through required AssetManager/geometryImporter path='{}' err='{}'",
-                logical_path,
-                e
+            let mesh = build_procedural_skydome_mesh();
+            let vertex_count = mesh.vertices.len();
+            let index_count = mesh.indices.len();
+            prims.register_mesh(
+                SKYDOME_PRIMITIVE_ID,
+                format!("Procedural/SkyDome fallback ({logical_path})"),
+                mesh,
             );
-            None
+            log::warn!(
+                "game-ready: skydome mesh import failed path='{}' err='{}'; using procedural UV dome fallback vertices={} indices={}",
+                logical_path,
+                e,
+                vertex_count,
+                index_count
+            );
+            Some(SKYDOME_PRIMITIVE_ID)
         }
     }
 }

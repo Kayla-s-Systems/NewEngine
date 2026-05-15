@@ -41,11 +41,24 @@ impl RuntimeRenderController {
                     )
                 });
 
-                self.pump_material_texture_requests(r, material_upload_jobs);
+                self.pump_material_texture_requests(
+                    r,
+                    super::super::render_quality::MATERIAL_TEXTURE_IMPORT_START_BURST,
+                    material_upload_jobs,
+                );
                 let upload_desc = backend_work_budget
                     .map(|budget| UploadPumpDesc::loading_screen_warmup().with_budget(budget))
                     .unwrap_or_else(UploadPumpDesc::loading_screen_warmup);
                 let _ = r.pump_uploads(upload_desc);
+
+                if world_playable {
+                    if let Err(e) = self.prewarm_scene_gpu_resources(r, &scene) {
+                        log::warn!(
+                            "render prewarm: failed during launch gate handoff err='{}'",
+                            e
+                        );
+                    }
+                }
 
                 if let Some(gate) = scene
                     .world_mut()

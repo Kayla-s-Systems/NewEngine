@@ -44,6 +44,9 @@ pub(in crate::manager) struct DiscoveryGraph {
 pub(super) enum LoadPhaseFilter {
     All,
     BootstrapOnly,
+    /// Runtime/engine load stage. Includes bootstrap plugins when early
+    /// bootstrap preloading is deferred, but still excludes platform runtimes.
+    BootstrapAndEngine,
     EngineOnly,
 }
 
@@ -53,10 +56,11 @@ impl LoadPhaseFilter {
         match self {
             Self::All => true,
             Self::BootstrapOnly => matches!(phase, PluginBootstrapPhase::Bootstrap),
-            Self::EngineOnly => matches!(
+            Self::BootstrapAndEngine => matches!(
                 phase,
-                PluginBootstrapPhase::Platform | PluginBootstrapPhase::Engine
+                PluginBootstrapPhase::Bootstrap | PluginBootstrapPhase::Engine
             ),
+            Self::EngineOnly => matches!(phase, PluginBootstrapPhase::Engine),
         }
     }
 
@@ -65,6 +69,7 @@ impl LoadPhaseFilter {
         match self {
             Self::All => "all",
             Self::BootstrapOnly => "bootstrap-only",
+            Self::BootstrapAndEngine => "bootstrap+engine",
             Self::EngineOnly => "engine-only",
         }
     }

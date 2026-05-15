@@ -20,40 +20,6 @@ impl Default for StartupConfigSource {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum UiBackend {
-    /// No UI provider. This is the engine default for standalone/runtime builds.
-    None,
-
-    /// UI provider resolved from a runtime plugin capability/service id.
-    ///
-    /// The engine must never compile a concrete UI backend such as egui into
-    /// the core/runtime host. Concrete UI implementations live in plugins.
-    Plugin(String),
-}
-
-impl UiBackend {
-    #[inline]
-    pub fn is_none(&self) -> bool {
-        matches!(self, Self::None)
-    }
-
-    #[inline]
-    pub fn plugin_id(&self) -> Option<&str> {
-        match self {
-            Self::Plugin(id) => Some(id.as_str()),
-            Self::None => None,
-        }
-    }
-}
-
-impl Default for UiBackend {
-    #[inline]
-    fn default() -> Self {
-        Self::None
-    }
-}
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum WindowPlacement {
     Default,
@@ -81,9 +47,11 @@ pub struct StartupConfig {
 
     pub modules_dir: PathBuf,
 
-    pub render_backend: String,
+    /// Engine-wide cache root. All loggers, shader bakers and cache writers
+    /// must resolve their cache files through this path.
+    pub cache_files: PathBuf,
 
-    pub ui_backend: UiBackend,
+    pub render_backend: String,
 
     /// Raw plugin override roots from the `plugins` object in `config.json`.
     ///
@@ -110,16 +78,45 @@ impl Default for StartupConfig {
 
             window_icon_path: None,
 
-            modules_dir: PathBuf::from("./"),
+            modules_dir: PathBuf::from("plugins"),
+            cache_files: PathBuf::from(crate::cache_files::DEFAULT_CACHE_FILES_DIR),
 
             render_backend: "newengine.renderer.vulkan".to_owned(),
-
-            ui_backend: UiBackend::default(),
 
             plugins: HashMap::default(),
 
             extra: HashMap::default(),
         }
+    }
+}
+
+impl StartupConfig {
+    #[inline]
+    pub fn config_base_dir(&self) -> Option<PathBuf> {
+        match &self.source {
+            StartupConfigSource::File { path } => path.parent().map(Path::to_path_buf),
+            StartupConfigSource::Defaults => None,
+        }
+    }
+
+    #[inline]
+    pub fn resolved_cache_files_dir(&self) -> PathBuf {
+        crate::cache_files::normalize_cache_path(
+            self.cache_files.clone(),
+            self.config_base_dir().as_deref(),
+        )
+    }
+
+    #[inline]
+    pub fn publish_cache_files_env(&self) -> PathBuf {
+        let root = self.resolved_cache_files_dir();
+        crate::cache_files::publish_cache_files_env(&root);
+        root
+    }
+
+    #[inline]
+    pub fn cache_child(&self, path: impl AsRef<Path>) -> PathBuf {
+        crate::cache_files::resolve_under_cache_root(&self.resolved_cache_files_dir(), path.as_ref())
     }
 }
 

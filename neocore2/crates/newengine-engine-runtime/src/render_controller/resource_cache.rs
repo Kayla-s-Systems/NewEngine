@@ -14,7 +14,11 @@ use super::gpu::{LitPipeline, LIT_UBO_SIZE};
 use super::material_bindings::MaterialTextureGpuResidency;
 
 #[inline]
-fn material_texture_mip_count(extent: Extent2D) -> NonZeroU32 {
+fn material_texture_mip_count(path: &str, extent: Extent2D) -> NonZeroU32 {
+    if is_sky_texture(path) {
+        return NonZeroU32::new(1).expect("sky texture mip count is non-zero");
+    }
+
     let max_dim = extent.width.max(extent.height).max(1);
     // Full mip chains are the first anti-aliasing primitive for textured terrain.
     // Without them, distant repeated albedo/roughness textures shimmer into the
@@ -25,6 +29,52 @@ fn material_texture_mip_count(extent: Extent2D) -> NonZeroU32 {
         super::render_quality::MATERIAL_TEXTURE_MAX_MIP_LEVELS,
     );
     NonZeroU32::new(levels).expect("clamped mip level count is non-zero")
+}
+
+#[inline]
+fn is_sky_texture(path: &str) -> bool {
+    let lower = path.to_ascii_lowercase();
+    lower.contains("sky") || lower.contains("skydome") || lower.contains("cloud")
+}
+
+#[inline]
+fn material_texture_max_dimension(path: &str) -> u32 {
+    if is_sky_texture(path) {
+        super::render_quality::SKY_TEXTURE_MAX_DIMENSION
+    } else {
+        super::render_quality::MATERIAL_TEXTURE_MAX_DIMENSION
+    }
+    .max(1)
+}
+
+fn downscale_rgba8_nearest(
+    width: u32,
+    height: u32,
+    rgba: Vec<u8>,
+    max_dimension: u32,
+) -> (u32, u32, Vec<u8>) {
+    let max_dimension = max_dimension.max(1);
+    let source_max = width.max(height);
+    if source_max <= max_dimension || width == 0 || height == 0 {
+        return (width, height, rgba);
+    }
+
+    let scale = max_dimension as f32 / source_max as f32;
+    let dst_w = ((width as f32 * scale).round() as u32).max(1);
+    let dst_h = ((height as f32 * scale).round() as u32).max(1);
+    let mut out = vec![0_u8; dst_w as usize * dst_h as usize * 4];
+
+    for y in 0..dst_h {
+        let sy = ((y as u64 * height as u64) / dst_h as u64).min(height.saturating_sub(1) as u64) as u32;
+        for x in 0..dst_w {
+            let sx = ((x as u64 * width as u64) / dst_w as u64).min(width.saturating_sub(1) as u64) as u32;
+            let src = ((sy as usize * width as usize) + sx as usize) * 4;
+            let dst = ((y as usize * dst_w as usize) + x as usize) * 4;
+            out[dst..dst + 4].copy_from_slice(&rgba[src..src + 4]);
+        }
+    }
+
+    (dst_w, dst_h, out)
 }
 
 fn material_texture_format(path: &str) -> TextureFormat {
@@ -54,14 +104,16 @@ impl RuntimeRenderController {
     pub(super) fn pump_material_texture_requests(
         &mut self,
         r: &mut dyn newengine_core::render::RenderApi,
-        max_jobs: u32,
+        max_start_jobs: u32,
+        max_decode_jobs: u32,
     ) {
-        let max_jobs = max_jobs.max(1);
+        let max_start_jobs = max_start_jobs.max(1);
+        let max_decode_jobs = max_decode_jobs.max(1);
         let assets = AssetServiceClient::new(default_host_api());
         assets.pump();
 
         let mut started_jobs = 0_u32;
-        while started_jobs < max_jobs {
+        while started_jobs < max_start_jobs {
             let Some(path) = self.material_texture_queue.pop_front() else {
                 break;
             };
@@ -119,12 +171,12 @@ impl RuntimeRenderController {
                 }
                 _ => None,
             })
-            .take(max_jobs as usize)
+            .take(max_decode_jobs as usize)
             .collect::<Vec<_>>();
 
         let mut decoded_jobs = 0_u32;
         for (path, id_hex32) in decode_candidates {
-            if decoded_jobs >= max_jobs {
+            if decoded_jobs >= max_decode_jobs {
                 break;
             }
 
@@ -148,7 +200,27 @@ impl RuntimeRenderController {
 
                     match decoded {
                         Ok(texture_asset) => {
-                            let extent = Extent2D::new(texture_asset.width, texture_asset.height);
+                            let source_width = texture_asset.width;
+                            let source_height = texture_asset.height;
+                            let max_dimension = material_texture_max_dimension(&path);
+                            let (width, height, rgba) = downscale_rgba8_nearest(
+                                texture_asset.width,
+                                texture_asset.height,
+                                texture_asset.rgba,
+                                max_dimension,
+                            );
+                            if width != source_width || height != source_height {
+                                log::info!(
+                                    "render controller: material texture downscaled path='{}' source={}x{} runtime={}x{} max_dim={}",
+                                    path,
+                                    source_width,
+                                    source_height,
+                                    width,
+                                    height,
+                                    max_dimension
+                                );
+                            }
+                            let extent = Extent2D::new(width, height);
                             match r.create_texture(
                                 TextureDesc::new(
                                     extent,
@@ -156,8 +228,8 @@ impl RuntimeRenderController {
                                     TextureUsage::Sampled,
                                 )
                                 .with_label(format!("material_tex:{path}"))
-                                .with_mips(material_texture_mip_count(extent))
-                                .with_deferred_data(texture_asset.rgba),
+                                .with_mips(material_texture_mip_count(&path, extent))
+                                .with_deferred_data(rgba),
                             ) {
                                 Ok(texture) => {
                                     let _ = assets.project_status_json_v1(serde_json::json!({

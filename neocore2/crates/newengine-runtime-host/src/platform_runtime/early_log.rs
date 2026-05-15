@@ -37,17 +37,46 @@ pub(crate) fn write(args: fmt::Arguments<'_>) {
 
 fn candidate_paths() -> Vec<PathBuf> {
     let mut paths = Vec::new();
-    if let Some(path) = std::env::var_os("NEWENGINE_PLATFORM_EARLY_LOG") {
-        paths.push(PathBuf::from(path));
+
+    if std::env::var_os("NEWENGINE_CACHE_FILES_READY").is_some() {
+        if let Some(cache) = std::env::var_os("NEWENGINE_CACHE_FILES")
+            .or_else(|| std::env::var_os("CACHE_FILES"))
+            .filter(|v| !v.as_os_str().is_empty())
+        {
+            paths.push(PathBuf::from(cache).join("logs").join("platform-host-early.log"));
+        }
     }
-    if let Ok(cwd) = std::env::current_dir() {
-        paths.push(cwd.join("NewEngine").join("neocore2").join("logs").join("runtime").join("platform-host-early.log"));
-        paths.push(cwd.join("logs").join("runtime").join("platform-host-early.log"));
-        paths.push(cwd.join("platform-host-early.log"));
-    }
+
+    paths.push(find_neocore2_root().join("cache").join("logs").join("platform-host-early.log"));
     paths
 }
 
+fn find_neocore2_root() -> PathBuf {
+    if let Ok(cwd) = std::env::current_dir() {
+        if cwd.file_name().and_then(|s| s.to_str()).is_some_and(|s| s.eq_ignore_ascii_case("neocore2")) {
+            return cwd;
+        }
+        let nested = cwd.join("NewEngine").join("neocore2");
+        if nested.exists() {
+            return nested;
+        }
+        for ancestor in cwd.ancestors() {
+            if ancestor.file_name().and_then(|s| s.to_str()).is_some_and(|s| s.eq_ignore_ascii_case("neocore2")) {
+                return ancestor.to_path_buf();
+            }
+        }
+    }
+
+    if let Ok(exe) = std::env::current_exe() {
+        for ancestor in exe.ancestors() {
+            if ancestor.file_name().and_then(|s| s.to_str()).is_some_and(|s| s.eq_ignore_ascii_case("neocore2")) {
+                return ancestor.to_path_buf();
+            }
+        }
+    }
+
+    std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."))
+}
 #[macro_export]
 macro_rules! platform_early_log {
     ($($arg:tt)*) => {{

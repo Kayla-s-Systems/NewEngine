@@ -6,6 +6,7 @@ mod external_contribution_lowering;
 mod frame_submit;
 mod frame_types;
 mod grid;
+mod gpu_prewarm;
 mod input;
 pub(super) mod instancing;
 mod launch_loading;

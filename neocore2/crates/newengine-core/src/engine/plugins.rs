@@ -13,8 +13,31 @@ use newengine_plugin_host::{
 
 use std::time::Instant;
 
+fn bootstrap_preload_deferred() -> bool {
+    std::env::var("NEWENGINE_BOOTSTRAP_PLUGIN_PRELOAD")
+        .ok()
+        .map(|v| matches!(v.trim().to_ascii_lowercase().as_str(), "0" | "false" | "off" | "defer" | "deferred" | "safe"))
+        .unwrap_or(false)
+}
+
+fn emit_startup_logs_after_logger_ready() {
+    let rid = crate::run_id::run_id().unwrap_or("<unknown>");
+    log::info!("startup: Run ID: {}", rid);
+    crate::startup::SystemProbe::probe().emit_table("startup");
+    if let Some(r) = crate::startup::last_load_report() {
+        r.emit_logs();
+    }
+}
+
 impl<E: Send + 'static> Engine<E> {
     pub fn preload_bootstrap_plugins(&mut self) -> EngineResult<()> {
+        if bootstrap_preload_deferred() {
+            // Crash-safe standalone path: do not dlopen bootstrap DLLs before
+            // platform/runtime diagnostics are visible. The engine plugin phase
+            // loads bootstrap+engine plugins together.
+            return Ok(());
+        }
+
         let strict = matches!(self.plugin_fault_tolerance, PluginFaultTolerance::Strict);
         let host = default_host_api();
 
@@ -27,12 +50,7 @@ impl<E: Send + 'static> Engine<E> {
 
         match res {
             Ok(()) => {
-                let rid = crate::run_id::run_id().unwrap_or("<unknown>");
-                log::info!("startup: Run ID: {}", rid);
-                crate::startup::SystemProbe::probe().emit_table("startup");
-                if let Some(r) = crate::startup::last_load_report() {
-                    r.emit_logs();
-                }
+                emit_startup_logs_after_logger_ready();
                 Ok(())
             }
             Err(e) => Err(EngineError::Other(format!(
@@ -58,6 +76,9 @@ impl<E: Send + 'static> Engine<E> {
         };
 
         install_forward_logger_once(host);
+        if bootstrap_preload_deferred() {
+            emit_startup_logs_after_logger_ready();
+        }
 
         if let Err(e) = load_result {
             match self.plugin_fault_tolerance {

@@ -264,14 +264,21 @@ fn resolve_crash_dir(cfg: &CrashReporterConfig, exe: Option<&Path>) -> PathBuf {
         return PathBuf::from(p);
     }
 
+    if let Some(cache) = std::env::var_os(crate::cache_files::CACHE_FILES_ENV)
+        .or_else(|| std::env::var_os(crate::cache_files::CACHE_FILES_ENV_LEGACY))
+    {
+        return PathBuf::from(cache).join(&cfg.crash_dir_name);
+    }
+
     if let Some(exe) = exe {
         if let Some(dir) = exe.parent() {
-            return dir.join(&cfg.crash_dir_name);
+            return dir.join("cache").join(&cfg.crash_dir_name);
         }
     }
 
     std::env::current_dir()
         .unwrap_or_else(|_| std::env::temp_dir())
+        .join("cache")
         .join(&cfg.crash_dir_name)
 }
 

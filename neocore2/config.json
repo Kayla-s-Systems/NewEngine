@@ -1,9 +1,7 @@
 {
-  "ui": {
-    "backend": "none"
-  },
   "engine": {
-    "modules_dir": "../../plugins"
+    "modules_dir": "plugins",
+    "cache_files": "cache"
   },
   "render": {
     "backend": "newengine.renderer.vulkan"
@@ -32,7 +30,7 @@
           "file": {
             "enabled": true,
             "level": "debug",
-            "path": "cache/logs/log.log",
+            "path": "logs/log.log",
             "mode": "truncate"
           }
         },

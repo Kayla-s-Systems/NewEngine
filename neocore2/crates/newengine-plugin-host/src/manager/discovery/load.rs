@@ -67,7 +67,7 @@ impl PluginManager {
         strict: bool,
     ) -> Result<(), PluginLoadError> {
         let dir = default_plugins_dir()?;
-        self.load_from_dir_with_policy_and_filter(&dir, host, strict, LoadPhaseFilter::EngineOnly)
+        self.load_from_dir_with_policy_and_filter(&dir, host, strict, LoadPhaseFilter::BootstrapAndEngine)
     }
 
     #[inline]
@@ -77,7 +77,7 @@ impl PluginManager {
         host: HostApiV1,
         strict: bool,
     ) -> Result<(), PluginLoadError> {
-        self.load_from_dir_with_policy_and_filter(dir, host, strict, LoadPhaseFilter::EngineOnly)
+        self.load_from_dir_with_policy_and_filter(dir, host, strict, LoadPhaseFilter::BootstrapAndEngine)
     }
 
     #[inline]

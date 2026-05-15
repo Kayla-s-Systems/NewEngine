@@ -1,6 +1,7 @@
 #![forbid(unsafe_op_in_unsafe_fn)]
 
 use crate::provider::{UiBuildFn, UiFrameDesc, UiFrameOutput, UiProvider, UiProviderKind};
+use crate::surface::UiProviderManifest;
 use std::any::Any;
 
 pub struct NullUiProvider;
@@ -16,6 +17,11 @@ impl UiProvider for NullUiProvider {
     #[inline]
     fn kind(&self) -> UiProviderKind {
         UiProviderKind::Null
+    }
+
+    #[inline]
+    fn manifest(&self) -> UiProviderManifest {
+        UiProviderManifest::none()
     }
 
     #[inline]

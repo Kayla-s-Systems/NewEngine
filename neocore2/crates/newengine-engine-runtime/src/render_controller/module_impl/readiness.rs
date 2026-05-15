@@ -132,26 +132,36 @@ fn critical_scene_materials_ready(
         }
     }
 
-    let total = unique_paths.len() as u32;
-    if total == 0 {
-        return LaunchReadiness {
-            ready: true,
-            reason: "no critical scene textures declared".to_owned(),
-            waiting: 0,
-            total,
-            failed: 0,
-        };
-    }
-
+    let mut total = 0_u32;
     let mut waiting = 0_u32;
     let mut failed = 0_u32;
+    let mut optional = 0_u32;
     for path in unique_paths.iter() {
         this.request_material_texture(path);
+        if is_launch_gate_optional_texture(path) {
+            optional = optional.saturating_add(1);
+            continue;
+        }
+        total = total.saturating_add(1);
         match material_texture_ready_state(this, r, path) {
             TextureReadyState::Ready => {}
             TextureReadyState::Failed => failed = failed.saturating_add(1),
             TextureReadyState::Waiting => waiting = waiting.saturating_add(1),
         }
+    }
+
+    if total == 0 {
+        return LaunchReadiness {
+            ready: true,
+            reason: if optional == 0 {
+                "no critical scene textures declared".to_owned()
+            } else {
+                format!("only optional environment textures declared optional={optional}")
+            },
+            waiting: 0,
+            total,
+            failed: 0,
+        };
     }
 
     if waiting == 0 {
@@ -187,6 +197,12 @@ enum TextureReadyState {
     Ready,
     Waiting,
     Failed,
+}
+
+#[inline]
+fn is_launch_gate_optional_texture(path: &str) -> bool {
+    let lower = path.to_ascii_lowercase();
+    lower.contains("sky") || lower.contains("skydome") || lower.contains("cloud")
 }
 
 fn material_texture_ready_state(

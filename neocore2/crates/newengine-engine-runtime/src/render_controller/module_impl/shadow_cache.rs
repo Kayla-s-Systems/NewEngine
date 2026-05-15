@@ -13,6 +13,16 @@ impl RuntimeRenderController {
         }
 
         if !self.shadow_cache_valid {
+            if self.shadow_warmup_defer_frames_remaining > 0 {
+                self.shadow_warmup_defer_frames_remaining =
+                    self.shadow_warmup_defer_frames_remaining.saturating_sub(1);
+                log::debug!(
+                    "render shadow cache: deferred cold shadow pass remaining={} frame={}",
+                    self.shadow_warmup_defer_frames_remaining,
+                    self.frame_index
+                );
+                return false;
+            }
             return true;
         }
 
@@ -30,5 +40,7 @@ impl RuntimeRenderController {
     pub(super) fn invalidate_shadow_cache(&mut self) {
         self.shadow_cache_valid = false;
         self.shadow_last_refresh_frame = 0;
+        self.shadow_warmup_defer_frames_remaining =
+            super::super::render_quality::SHADOW_WARMUP_DEFER_FRAMES;
     }
 }

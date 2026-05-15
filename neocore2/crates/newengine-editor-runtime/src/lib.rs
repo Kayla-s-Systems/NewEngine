@@ -118,12 +118,8 @@ impl EditorRuntimeProfile {
     #[inline]
     pub fn ui_build_from_startup(
         &self,
-        startup: &StartupConfig,
+        _startup: &StartupConfig,
     ) -> Option<Box<dyn UiBuildFn>> {
-        if startup.ui_backend.is_none() {
-            return None;
-        }
-
         Some(Box::new(ui::EditorUiBuild::new(
             Arc::clone(&self.shared_doc),
             Arc::clone(&self.viewport),

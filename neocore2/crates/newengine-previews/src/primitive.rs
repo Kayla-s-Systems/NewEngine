@@ -426,7 +426,12 @@ fn shader_cache_dir() -> PathBuf {
     if let Some(v) = std::env::var_os("NEWENGINE_SHADER_CACHE_DIR") {
         return PathBuf::from(v);
     }
-    PathBuf::from("cache").join("shaders")
+    std::env::var_os("NEWENGINE_CACHE_FILES")
+        .or_else(|| std::env::var_os("CACHE_FILES"))
+        .map(PathBuf::from)
+        .unwrap_or_else(|| PathBuf::from("cache"))
+        .join("shaders")
+        .join("previews")
 }
 
 fn spirv_words_to_bytes(words: &[u32]) -> Vec<u8> {

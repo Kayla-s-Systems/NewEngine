@@ -1043,6 +1043,7 @@ dependencies = [
  "newengine-core",
  "newengine-platform-api",
  "newengine-system-contracts",
+ "newengine-ui",
  "parking_lot",
  "serde_json",
 ]
