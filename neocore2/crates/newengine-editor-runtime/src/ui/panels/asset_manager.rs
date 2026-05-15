@@ -53,7 +53,7 @@ pub(crate) fn draw(me: &mut EditorUiBuild, ctx: &egui::Context) {
                 ui.label("Logical path:");
                 ui.add(
                     egui::TextEdit::singleline(&mut me.asset_ui.path)
-                        .hint_text("e.g. ui/icons/app_logo.png")
+                        .hint_text("e.g. ui/icons/builtin_icons.neytd@app_logo")
                         .desired_width(320.0),
                 );
 

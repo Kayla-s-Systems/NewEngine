@@ -45,9 +45,9 @@
   },
   "materials": {
     "terrain": {
-      "base_color_texture": "textures/fps/terrain_forest_floor.jpg",
-      "normal_texture": "textures/fps/terrain_forest_floor_normal.jpg",
-      "roughness_texture": "textures/fps/terrain_forest_floor_roughness.jpg",
+      "base_color_texture": "textures/fps/world_surfaces.neytd@terrain_forest_floor",
+      "normal_texture": "textures/fps/world_surfaces.neytd@terrain_forest_floor_normal",
+      "roughness_texture": "textures/fps/world_surfaces.neytd@terrain_forest_floor_roughness",
       "uv_scale": [
         4.0,
         4.0
@@ -65,7 +65,7 @@
       "roughness": 1.0,
       "normal_scale": 0.0,
       "occlusion_strength": 1.0,
-      "base_color_texture": "textures/fps/sky_0_runtime.jpg",
+      "base_color_texture": "textures/fps/sky_0_runtime.neytd@sky_0_runtime",
       "uv_scale": [
         1.0,
         1.0
@@ -76,22 +76,22 @@
       ]
     },
     "tree_bark": {
-      "base_color_texture": "prefabs/tree_animate/textures/Bark_diffuse.png",
-      "normal_texture": "prefabs/tree_animate/textures/Bark_normal.png",
+      "base_color_texture": "prefabs/tree_animate/textures/tree_animate.neytd@bark_diffuse",
+      "normal_texture": "prefabs/tree_animate/textures/tree_animate.neytd@bark_normal",
       "roughness": 0.88,
       "normal_scale": 0.35,
       "occlusion_strength": 1.0
     },
     "tree_leaf": {
-      "base_color_texture": "prefabs/tree_animate/textures/Leaf_diffuse.png",
-      "normal_texture": "prefabs/tree_animate/textures/Leaf_normal.png",
+      "base_color_texture": "prefabs/tree_animate/textures/tree_animate.neytd@leaf_diffuse",
+      "normal_texture": "prefabs/tree_animate/textures/tree_animate.neytd@leaf_normal",
       "roughness": 0.72,
       "normal_scale": 0.25,
       "occlusion_strength": 1.0
     },
     "tree_branch": {
-      "base_color_texture": "prefabs/tree_animate/textures/Branch_diffuse.png",
-      "normal_texture": "prefabs/tree_animate/textures/Branch_normal.png",
+      "base_color_texture": "prefabs/tree_animate/textures/tree_animate.neytd@branch_diffuse",
+      "normal_texture": "prefabs/tree_animate/textures/tree_animate.neytd@branch_normal",
       "roughness": 0.86,
       "normal_scale": 0.3,
       "occlusion_strength": 1.0

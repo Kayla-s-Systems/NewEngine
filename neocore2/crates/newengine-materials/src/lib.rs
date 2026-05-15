@@ -11,6 +11,7 @@ pub mod api;
 pub mod builtin;
 pub mod core;
 pub mod binary;
+pub mod texture_refs;
 
 #[cfg(feature = "serde")]
 pub mod source;
@@ -32,6 +33,7 @@ pub use crate::binary::{decode_asset as decode_material_asset, encode_asset as e
 pub use crate::binary::{decode_descriptor as decode_material_descriptor, encode_descriptor as encode_material_descriptor};
 pub use crate::binary::{MaterialBinaryAsset, MaterialBinaryError, MaterialBinaryResult};
 pub use crate::core::MaterialRegistry;
+pub use crate::texture_refs::{is_material_texture_reference, normalize_material_texture_reference, MaterialTextureReference};
 pub use crate::errors::{MaterialError, MaterialResult};
 
 #[cfg(feature = "serde")]

@@ -12,8 +12,8 @@
     "footer": "BUILD WORLDS. ROUTE REALITY."
   },
   "assets": {
-    "background": "loading/loadBg.png",
-    "logo": "loading/newengine_logo.png"
+    "background": "loading/loading_ui.neytd@loadbg",
+    "logo": "loading/loading_ui.neytd@newengine_logo"
   },
   "stages": [
     { "id": "platform", "label": "PLATFORM", "icon": "diamond" },

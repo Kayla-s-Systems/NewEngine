@@ -18,7 +18,7 @@ Examples:
 ```text
 logging-0.2.10-release.dll
 vulkan_renderer-0.3.4-release.dll
-importers/imageImporter-0.2.4-dev.dll
+importers/textureImporter-0.2.4-dev.dll
 ```
 
 ## Declarative content

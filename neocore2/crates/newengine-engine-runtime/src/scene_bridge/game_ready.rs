@@ -2,6 +2,7 @@
 
 mod content;
 
+include!("game_ready_parts/material_source.rs");
 include!("game_ready_parts/materials_terrain.rs");
 include!("game_ready_parts/foliage/types.rs");
 include!("game_ready_parts/foliage/placement.rs");

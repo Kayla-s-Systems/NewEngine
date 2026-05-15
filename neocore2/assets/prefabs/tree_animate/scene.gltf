@@ -127,7 +127,7 @@
         43.0389289855957
       ],
       "min": [
-        -187.43496704101563,
+        -187.43496704101562,
         14.577973365783691,
         -43.62837219238281
       ],
@@ -287,7 +287,7 @@
       "count": 20650,
       "max": [
         11.219482421875,
-        1.5930557250976563,
+        1.5930557250976562,
         4.839733123779297
       ],
       "min": [
@@ -497,7 +497,7 @@
       "componentType": 5126,
       "count": 3094,
       "max": [
-        24.461074829101563,
+        24.461074829101562,
         69.481201171875,
         38.789669036865234
       ],
@@ -618,7 +618,7 @@
       ],
       "min": [
         -1.4344898462295532,
-        -1.6341323852539063,
+        -1.6341323852539062,
         -1.41694974899292
       ],
       "type": "VEC3"
@@ -646,7 +646,7 @@
       "componentType": 5126,
       "count": 3094,
       "max": [
-        8.384292602539063,
+        8.384292602539062,
         0.6500205993652344,
         0.0
       ],
@@ -998,31 +998,31 @@
   ],
   "images": [
     {
-      "uri": "textures/Bark_diffuse.png"
+      "uri": "textures/tree_animate.neytd@bark_diffuse"
     },
     {
-      "uri": "textures/Bark_specularGlossiness.png"
+      "uri": "textures/tree_animate.neytd@bark_specularglossiness"
     },
     {
-      "uri": "textures/Bark_normal.png"
+      "uri": "textures/tree_animate.neytd@bark_normal"
     },
     {
-      "uri": "textures/Leaf_diffuse.png"
+      "uri": "textures/tree_animate.neytd@leaf_diffuse"
     },
     {
-      "uri": "textures/Leaf_specularGlossiness.png"
+      "uri": "textures/tree_animate.neytd@leaf_specularglossiness"
     },
     {
-      "uri": "textures/Leaf_normal.png"
+      "uri": "textures/tree_animate.neytd@leaf_normal"
     },
     {
-      "uri": "textures/Leaf_occlusion.png"
+      "uri": "textures/tree_animate.neytd@leaf_occlusion"
     },
     {
-      "uri": "textures/Branch_diffuse.png"
+      "uri": "textures/tree_animate.neytd@branch_diffuse"
     },
     {
-      "uri": "textures/Branch_normal.png"
+      "uri": "textures/tree_animate.neytd@branch_normal"
     }
   ],
   "materials": [

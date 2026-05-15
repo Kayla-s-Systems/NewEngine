@@ -1,4 +1,5 @@
 use crate::api::MaterialId;
+use crate::texture_refs::normalize_material_texture_reference;
 
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -141,10 +142,10 @@ impl MaterialTextureBindings {
             }
         }
         fn sanitize_path(path: &mut Option<String>) {
-            if let Some(value) = path {
-                let trimmed = value.trim();
-                *path = if trimmed.is_empty() { None } else { Some(trimmed.to_string()) };
-            }
+            let Some(value) = path.take() else {
+                return;
+            };
+            *path = normalize_material_texture_reference(&value);
         }
         sanitize_path(&mut self.base_color_texture);
         sanitize_path(&mut self.normal_texture);

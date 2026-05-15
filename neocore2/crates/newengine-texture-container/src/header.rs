@@ -1,5 +1,6 @@
 use crate::error::{Result, TextureContainerError};
 use crate::{HEADER_LEN, MAGIC, VERSION_V1};
+use crate::storage::validate_raw_header_flags;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct HeaderV1 {
@@ -10,6 +11,8 @@ pub struct HeaderV1 {
     pub directory_len: u64,
     pub data_offset: u64,
     pub data_len: u64,
+    /// Reserved in strict raw-runtime V1. Writers set this to zero.
+    pub data_uncompressed_len: u64,
 }
 
 impl HeaderV1 {
@@ -23,6 +26,7 @@ impl HeaderV1 {
             directory_len: 0,
             data_offset: HEADER_LEN as u64,
             data_len: 0,
+            data_uncompressed_len: 0,
         }
     }
 
@@ -43,7 +47,8 @@ impl HeaderV1 {
         let directory_len = read_u64(bytes, 24);
         let data_offset = read_u64(bytes, 32);
         let data_len = read_u64(bytes, 40);
-        Ok(Self { version, flags, entry_count, directory_offset, directory_len, data_offset, data_len })
+        let data_uncompressed_len = read_u64(bytes, 48);
+        Ok(Self { version, flags, entry_count, directory_offset, directory_len, data_offset, data_len, data_uncompressed_len })
     }
 
     pub fn write(self, out: &mut [u8]) {
@@ -57,6 +62,12 @@ impl HeaderV1 {
         out[24..32].copy_from_slice(&self.directory_len.to_le_bytes());
         out[32..40].copy_from_slice(&self.data_offset.to_le_bytes());
         out[40..48].copy_from_slice(&self.data_len.to_le_bytes());
+        out[48..56].copy_from_slice(&self.data_uncompressed_len.to_le_bytes());
+    }
+
+    #[inline]
+    pub fn validate_runtime_flags(self) -> Result<()> {
+        validate_raw_header_flags(self.flags)
     }
 }
 

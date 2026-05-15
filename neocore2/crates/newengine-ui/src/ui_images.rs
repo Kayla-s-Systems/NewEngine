@@ -66,7 +66,7 @@ mod with_images {
     /// - Stable handles: once loaded, returns a persistent `egui::TextureId::User(u64)`.
     ///
     /// Usage pattern (per-frame):
-    /// 1) `loader.request(assets, "pm.refresh", "ui/icons/refresh.png")`
+    /// 1) `loader.request(assets, "pm.refresh", "ui/icons/builtin_icons.neytd@refresh")`
     /// 2) `loader.pump(ctx, assets, state)`
     /// 3) Markup refers to `$tex.pm.refresh` (a u64).
     #[derive(Default)]

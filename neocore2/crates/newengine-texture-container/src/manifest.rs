@@ -11,7 +11,9 @@ pub struct TextureDictionaryManifest {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TextureEntryMeta {
     pub name: String,
-    #[serde(default)]
+    /// V1 readers tolerate legacy debug origin data, but writers must not serialize it.
+    /// A .neytd is a canonical runtime texture dictionary, not an archive of source-file provenance.
+    #[serde(default, skip_serializing)]
     pub source_path: Option<String>,
     pub name_hash: u64,
     pub width: u32,

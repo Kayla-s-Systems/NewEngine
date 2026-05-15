@@ -245,7 +245,7 @@ fn default_terrain_material() -> RawMaterialSpec {
 }
 fn default_sky_material() -> RawMaterialSpec {
     RawMaterialSpec {
-        base_color_texture: Some("textures/fps/sky_0_runtime.neytd".to_owned()),
+        base_color_texture: Some("textures/fps/sky_0_runtime.neytd@sky_0_runtime".to_owned()),
         roughness: 1.0,
         normal_scale: 0.0,
         occlusion_strength: 1.0,

@@ -42,7 +42,7 @@ pub struct StartupConfig {
     pub window_placement: WindowPlacement,
 
     /// Logical path resolved via the AssetManager plugin VFS.
-    /// Example: "ui/icon.png".
+    /// Example: "ui/icons/builtin_icons.neytd@app_logo".
     pub window_icon_path: Option<String>,
 
     pub modules_dir: PathBuf,

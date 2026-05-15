@@ -1,3 +1,4 @@
+use crate::storage::{store_raw_data, TextureBuildOptions};
 use crate::error::{Result, TextureContainerError};
 use crate::header::HeaderV1;
 use crate::manifest::{TextureDictionaryManifest, TextureEntryMeta, TextureMipMeta};
@@ -17,6 +18,11 @@ pub struct TextureBuildEntry {
 }
 
 pub fn pack(entries: Vec<TextureBuildEntry>) -> Result<Vec<u8>> {
+    pack_with_options(entries, TextureBuildOptions::default())
+}
+
+
+pub fn pack_with_options(entries: Vec<TextureBuildEntry>, options: TextureBuildOptions) -> Result<Vec<u8>> {
     if entries.is_empty() {
         return Err(TextureContainerError::EmptyDictionary);
     }
@@ -63,9 +69,12 @@ pub fn pack(entries: Vec<TextureBuildEntry>) -> Result<Vec<u8>> {
         let entry_end = data.len() as u64;
         let color_space = normalize_color_space(&entry.color_space);
         let format = if color_space == COLOR_SPACE_SRGB { PIXEL_FORMAT_RGBA8_SRGB } else { PIXEL_FORMAT_RGBA8_UNORM };
+        // Source paths are authoring/tool state. They are intentionally not persisted
+        // into .neytd because runtime texture dictionaries must be self-contained.
+        let _ = entry.source_path;
         metas.push(TextureEntryMeta {
             name: name.clone(),
-            source_path: entry.source_path,
+            source_path: None,
             name_hash: stable_name_hash64(&name),
             width: entry.width,
             height: entry.height,
@@ -86,12 +95,15 @@ pub fn pack(entries: Vec<TextureBuildEntry>) -> Result<Vec<u8>> {
     };
     let dir = serde_json::to_vec_pretty(&manifest).expect("manifest serialization is infallible for owned data");
 
+    let _ = options;
+    let stored_data = store_raw_data(&data);
+
     let directory_offset = HEADER_LEN as u64;
     let directory_len = dir.len() as u64;
     let data_offset = align_u64(directory_offset + directory_len, 16);
     let mut out = vec![0u8; data_offset as usize];
     out[HEADER_LEN..HEADER_LEN + dir.len()].copy_from_slice(&dir);
-    out.extend_from_slice(&data);
+    out.extend_from_slice(&stored_data);
 
     let header = HeaderV1 {
         version: VERSION_V1,
@@ -100,7 +112,8 @@ pub fn pack(entries: Vec<TextureBuildEntry>) -> Result<Vec<u8>> {
         directory_offset,
         directory_len,
         data_offset,
-        data_len: data.len() as u64,
+        data_len: stored_data.len() as u64,
+        data_uncompressed_len: 0,
     };
     header.write(&mut out[..HEADER_LEN]);
     Ok(out)

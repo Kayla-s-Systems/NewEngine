@@ -23,9 +23,9 @@
     0,
     0
   ],
-  "base_color_texture": "assets/textures/fps/ground_sand.jpg",
-  "normal_texture": "assets/textures/fps/ground_sand_normal.jpg",
-  "roughness_texture": "assets/textures/fps/ground_sand_roughness.jpg",
+  "base_color_texture": "prefabs/tree_animate/textures/tree_animate.neytd@branch_diffuse",
+  "normal_texture": "prefabs/tree_animate/textures/tree_animate.neytd@branch_normal",
+  "roughness_texture": "prefabs/tree_animate/textures/tree_animate.neytd@bark_specularglossiness",
   "uv_scale": [
     1.0,
     1.0

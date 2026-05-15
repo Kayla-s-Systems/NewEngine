@@ -7,6 +7,7 @@
 //! not parse source image containers directly.
 
 pub mod builder;
+pub mod storage;
 pub mod dds;
 pub mod dictionary;
 pub mod error;
@@ -16,7 +17,8 @@ pub mod mips;
 pub mod names;
 pub mod selector;
 
-pub use builder::{pack, TextureBuildEntry};
+pub use builder::{pack, pack_with_options, TextureBuildEntry};
+pub use storage::TextureBuildOptions;
 pub use dds::{write_dds_rgba8, write_dds_rgba8_mip_chain, DdsExportError};
 pub use dictionary::{parse, TextureDictionary, TextureEntryView};
 pub use error::{Result, TextureContainerError};

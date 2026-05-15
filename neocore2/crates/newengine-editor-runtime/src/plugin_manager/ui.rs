@@ -9,7 +9,7 @@ use newengine_plugin_host::{PluginControlCommand, PluginSnapshotEntry};
 
 use super::bridge::PluginManagerBridge;
 
-const DEFAULT_PLUGIN_ICON_PATH: &str = "ui/plugin_icons/default_plugin_icon.png";
+const DEFAULT_PLUGIN_ICON_PATH: &str = "ui/plugin_icons/plugin_icons.neytd@default_plugin_icon";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum PluginSort {
@@ -662,8 +662,9 @@ fn plugin_icon_asset_path(plugin_id: &str) -> String {
                 '_'
             }
         })
-        .collect::<String>();
-    format!("ui/plugin_icons/{sanitized}.png")
+        .collect::<String>()
+        .to_ascii_lowercase();
+    format!("ui/plugin_icons/plugin_icons.neytd@{sanitized}")
 }
 
 fn rgba8_icon_image(

@@ -1,13 +1,9 @@
 
 use newengine_assets::wait_ready;
-use newengine_assets::AssetServiceClient;
 use newengine_bounds::Bounds;
 use newengine_ecs::EntityId;
 use newengine_lighting::{AmbientLight, DirectionalLight, ShadowSettings};
-use newengine_materials::{
-    material_source_from_parts, parse_material_source_slice, MaterialDescriptor, MaterialFlags,
-    MaterialId, MaterialRegistry, MaterialSourceDocument, MaterialTextureBindings,
-};
+use newengine_materials::{MaterialFlags, MaterialId, MaterialRegistry};
 use newengine_math::{EulerRot, Mat4, Quat, Vec3};
 use newengine_primitives::{
     fnv1a_64, Primitive, PrimitiveId, PrimitiveMesh, PrimitiveRegistry, PrimitiveVertex,
@@ -16,7 +12,6 @@ use newengine_procedural_noise::{
     NoiseAlgorithm, NoiseCombineMode, NoiseGraph2D, NoiseLayer2D, NoiseShape, ProceduralTerrain,
     TerrainCollisionTileSettings, TerrainHeightfieldDescriptor,
 };
-use newengine_plugin_host::default_host_api;
 use newengine_scene::{spawn_named, Scene};
 use newengine_transform::Transform;
 
@@ -29,7 +24,7 @@ use crate::scene_bootstrap::bootstrap_runtime_scene;
 
 use self::content::{
     load_game_ready_map_profile, GameReadyFoliageSpec, GameReadyGameplaySpec,
-    GameReadyLightingSpec, GameReadyMaterialSetSpec, GameReadyMaterialSpec,
+    GameReadyLightingSpec, GameReadyMaterialSetSpec,
     GameReadyPaletteSpec, GameReadyPrefabSpec, GameReadySkySpec, GameReadyTerrainSpec,
 };
 use super::helpers::{
@@ -92,83 +87,6 @@ fn spawn_game_primitive(
     entity
 }
 
-
-#[inline]
-fn load_material_source_asset(path: &str) -> Option<MaterialSourceDocument> {
-    let assets = AssetServiceClient::new(default_host_api());
-    let payload = match assets.text_v1(path) {
-        Ok(payload) => payload,
-        Err(e) => {
-            log::warn!(
-                "game-ready: material asset unavailable path='{}' method='asset.text_v1' err='{}'",
-                path,
-                e
-            );
-            return None;
-        }
-    };
-
-    match parse_material_source_slice(&payload) {
-        Ok(source) => Some(source),
-        Err(e) => {
-            log::warn!("game-ready: material asset parse failed path='{}' err='{}'", path, e);
-            None
-        }
-    }
-}
-
-#[inline]
-fn material_textures(spec: &GameReadyMaterialSpec) -> MaterialTextureBindings {
-    MaterialTextureBindings {
-        base_color_texture: spec.base_color_texture.clone(),
-        normal_texture: spec.normal_texture.clone(),
-        metallic_texture: None,
-        roughness_texture: spec.roughness_texture.clone(),
-        occlusion_texture: None,
-        emissive_texture: None,
-        uv_scale: spec.uv_scale,
-        uv_offset: spec.uv_offset,
-    }
-}
-
-#[inline]
-fn register_material(
-    mats: &MaterialRegistry,
-    name: &str,
-    base_color: [f32; 4],
-    emissive: [f32; 3],
-    emissive_strength: f32,
-    flags: MaterialFlags,
-    spec: &GameReadyMaterialSpec,
-) -> MaterialId {
-    if let Some(asset_path) = spec.asset.as_deref() {
-        if let Some(source) = load_material_source_asset(asset_path) {
-            let source = source.with_fallback_name(name.to_owned());
-            let mut desc = source.desc;
-            desc.flags = desc.flags.union(flags);
-            desc.sanitize_in_place();
-            let material_name = source.name.clone().unwrap_or_else(|| name.to_owned());
-            return mats.upsert_named_with_textures(&material_name, desc, source.textures);
-        }
-    }
-
-    let source = material_source_from_parts(
-        name,
-        MaterialDescriptor {
-            base_color,
-            emissive,
-            emissive_strength,
-            roughness: spec.roughness,
-            normal_scale: spec.normal_scale,
-            occlusion_strength: spec.occlusion_strength,
-            flags,
-            ..MaterialDescriptor::default()
-        },
-        material_textures(spec),
-    );
-    let material_name = source.name.clone().unwrap_or_else(|| name.to_owned());
-    mats.upsert_named_with_textures(&material_name, source.desc, source.textures)
-}
 
 #[inline]
 fn register_demo_materials(
