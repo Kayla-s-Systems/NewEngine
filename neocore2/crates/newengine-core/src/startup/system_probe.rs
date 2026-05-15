@@ -86,30 +86,51 @@ fn probe_sysinfo() -> (Option<String>, Option<String>, Option<u32>, Option<u64>)
     let mut sys = System::new_all();
     sys.refresh_all();
 
-    let os = System::long_os_version()
-        .or_else(System::name)
-        .map(|s| s.trim().to_owned())
-        .filter(|s| !s.is_empty());
+    let os = first_non_empty([
+        System::long_os_version(),
+        System::name(),
+        Some(format!("{} {}", std::env::consts::OS, std::env::consts::ARCH)),
+    ]);
 
-    let cpu = sys
-        .cpus()
-        .first()
-        .map(|c| c.brand().trim().to_owned())
-        .filter(|s| !s.is_empty());
+    let cpu = first_non_empty([
+        sys.cpus().first().map(|c| c.brand().to_owned()),
+        std::env::var("PROCESSOR_IDENTIFIER").ok(),
+        std::env::var("PROCESSOR_ARCHITECTURE").ok(),
+    ]);
 
-    let cores = Some(sys.cpus().len() as u32);
+    let cores = match sys.cpus().len() {
+        0 => std::thread::available_parallelism()
+            .ok()
+            .map(|n| n.get() as u32),
+        n => Some(n as u32),
+    };
 
-    let ram_mb = Some(normalize_mem_to_mb(sys.total_memory() as u64));
+    let ram_mb = match sys.total_memory() as u64 {
+        0 => probe_memory_mb_fallback(),
+        raw => Some(normalize_mem_to_mb(raw)),
+    };
 
     (os, cpu, cores, ram_mb)
 }
 
-
 #[cfg(not(feature = "host-probe"))]
 fn probe_sysinfo() -> (Option<String>, Option<String>, Option<u32>, Option<u64>) {
     let os = Some(format!("{} {}", std::env::consts::OS, std::env::consts::ARCH));
+    let cpu = first_non_empty([
+        std::env::var("PROCESSOR_IDENTIFIER").ok(),
+        std::env::var("PROCESSOR_ARCHITECTURE").ok(),
+    ]);
     let cores = std::thread::available_parallelism().ok().map(|n| n.get() as u32);
-    (os, None, cores, None)
+    let ram_mb = probe_memory_mb_fallback();
+    (os, cpu, cores, ram_mb)
+}
+
+fn first_non_empty<const N: usize>(values: [Option<String>; N]) -> Option<String> {
+    values
+        .into_iter()
+        .flatten()
+        .map(|value| value.trim().to_owned())
+        .find(|value| !value.is_empty())
 }
 
 #[cfg(all(windows, feature = "host-probe"))]
@@ -122,11 +143,33 @@ struct WinDxInfo {
 
 #[cfg(feature = "host-probe")]
 fn normalize_mem_to_mb(raw: u64) -> u64 {
+    // sysinfo has used different memory units across major versions. Current
+    // versions report bytes; older builds reported KiB. Normalize both shapes
+    // so startup diagnostics stay stable across plugin/runtime toolchains.
     if raw >= 1_000_000_000 {
         raw / (1024 * 1024)
     } else {
         raw / 1024
     }
+}
+
+fn probe_memory_mb_fallback() -> Option<u64> {
+    #[cfg(target_os = "linux")]
+    {
+        let text = std::fs::read_to_string("/proc/meminfo").ok()?;
+        for line in text.lines() {
+            let Some(rest) = line.strip_prefix("MemTotal:") else {
+                continue;
+            };
+            let kb = rest
+                .split_whitespace()
+                .next()
+                .and_then(|v| v.parse::<u64>().ok())?;
+            return Some(kb / 1024);
+        }
+    }
+
+    None
 }
 
 #[cfg(all(windows, feature = "host-probe"))]
@@ -146,19 +189,31 @@ fn probe_windows_dxgi_d3d12() -> Option<WinDxInfo> {
             Err(_) => break,
         };
 
-        let desc = unsafe { adapter.GetDesc1().ok()? };
+        let desc = match unsafe { adapter.GetDesc1() } {
+            Ok(desc) => desc,
+            Err(err) => {
+                log::debug!(
+                    "system probe: dxgi adapter desc failed index={} err='{}'",
+                    index,
+                    err
+                );
+                index = index.wrapping_add(1);
+                continue;
+            }
+        };
 
         let dedicated = desc.DedicatedVideoMemory as u64;
-        if dedicated > best_vram {
+        let name = wide_to_string(&desc.Description);
+
+        if best_name.is_none() || dedicated > best_vram {
             best_vram = dedicated;
-            best_name = wide_to_string(&desc.Description);
+            best_name = name;
             best_adapter = Some(adapter);
         }
 
         index = index.wrapping_add(1);
     }
 
-    let gpu = best_name;
     let vram_dedicated_mb = if best_vram > 0 {
         Some(best_vram / (1024 * 1024))
     } else {
@@ -171,7 +226,7 @@ fn probe_windows_dxgi_d3d12() -> Option<WinDxInfo> {
         .map(|fl| format!("D3D12 feature_level={}", feature_level_str(fl)));
 
     Some(WinDxInfo {
-        gpu,
+        gpu: best_name,
         vram_dedicated_mb,
         directx,
     })

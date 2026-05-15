@@ -47,7 +47,6 @@ pub(super) enum LoadPhaseFilter {
     /// Runtime/engine load stage. Includes bootstrap plugins when early
     /// bootstrap preloading is deferred, but still excludes platform runtimes.
     BootstrapAndEngine,
-    EngineOnly,
 }
 
 impl LoadPhaseFilter {
@@ -60,7 +59,6 @@ impl LoadPhaseFilter {
                 phase,
                 PluginBootstrapPhase::Bootstrap | PluginBootstrapPhase::Engine
             ),
-            Self::EngineOnly => matches!(phase, PluginBootstrapPhase::Engine),
         }
     }
 
@@ -70,7 +68,6 @@ impl LoadPhaseFilter {
             Self::All => "all",
             Self::BootstrapOnly => "bootstrap-only",
             Self::BootstrapAndEngine => "bootstrap+engine",
-            Self::EngineOnly => "engine-only",
         }
     }
 }

@@ -10,7 +10,7 @@ abi_stable = { version = "0.11" }
 log = "0.4"
 
 newengine-assets = { path = "../newengine-assets" }
-newengine-core = { path = "../newengine-core" }
+newengine-core = { path = "../newengine-core", features = ["host-probe"] }
 newengine-editor-runtime = { path = "../newengine-editor-runtime", features = ["editor-ui"] }
 newengine-plugin-host = { path = "../newengine-plugin-host" }
 newengine-runtime-host = { path = "../newengine-runtime-host" }

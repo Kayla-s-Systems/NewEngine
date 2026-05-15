@@ -8,7 +8,7 @@ use newengine_core::EngineStartupPhase;
 use newengine_core::host_events::{
     CursorGrabMode, CursorState, HostEvent, WindowHandles, WindowHostEvent, WindowInitSize,
 };
-use newengine_core::{Engine, EngineError, EngineResult};
+use newengine_core::{Engine, EngineError, EngineResult, EngineRunState};
 use newengine_platform_api::{
     PlatformCursorGrabModeV1, PlatformCursorPollV1, PlatformCursorStateV1,
     PlatformHostApiV1, PlatformRuntimeRunFnV1,
@@ -58,6 +58,7 @@ pub struct HostPlatformRuntime {
     minimized: bool,
     started: bool,
     shutting_down: bool,
+    close_requested: bool,
     window_ready_emitted: bool,
     bootstrap_stage: RuntimeBootstrapStage,
     bootstrap_overlay: RuntimeBootstrapOverlayState,
@@ -89,6 +90,7 @@ impl HostPlatformRuntime {
             minimized: false,
             started: false,
             shutting_down: false,
+            close_requested: false,
             window_ready_emitted: false,
             bootstrap_stage: RuntimeBootstrapStage::AwaitingWindow,
             bootstrap_overlay: RuntimeBootstrapOverlayState::default(),
@@ -190,7 +192,7 @@ impl HostPlatformRuntime {
     }
 
     fn shutdown_engine_once(&mut self, origin: &'static str) {
-        if !self.started || self.shutting_down {
+        if self.shutting_down || matches!(self.engine.run_state(), EngineRunState::Stopped | EngineRunState::Faulted) {
             return;
         }
         self.shutting_down = true;
@@ -298,20 +300,27 @@ impl HostPlatformRuntime {
     }
 
     pub(crate) fn on_close_requested(&mut self) -> EngineResult<()> {
-        log::info!("platform runtime: close requested");
+        if self.close_requested {
+            log::debug!("platform runtime: close requested ignored; shutdown already requested");
+            return Ok(());
+        }
+
+        self.close_requested = true;
+        log::info!("platform runtime: close requested; native window exit will be performed before engine teardown");
         self.engine
             .emit(HostEvent::Window(WindowHostEvent::CloseRequested))?;
         self.engine.request_exit()?;
-
-        // Tear down engine modules and Vulkan-backed services while the native
-        // platform window is still alive. Deferring teardown until after the
-        // winit app returns can leave swapchain/surface destruction racing the
-        // OS window teardown and has produced STATUS_ACCESS_VIOLATION on close.
-        self.shutdown_engine_once("close requested");
         Ok(())
     }
 
     pub(crate) fn step(&mut self, dt_sec: f32) -> EngineResult<PlatformStepResultV1> {
+        if self.close_requested {
+            return Ok(PlatformStepResultV1 {
+                exit_requested: true,
+                ..PlatformStepResultV1::default()
+            });
+        }
+
         if self.fatal_bootstrap_error.is_some() {
             return Ok(self.fatal_bootstrap_step_result());
         }

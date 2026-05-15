@@ -15,6 +15,7 @@ use newengine_runtime_host::{
         try_load_window_icon_best_effort,
     },
     engine_factory::{build_engine_from_startup, ui_provider_kind_from_startup},
+    path_display::display_abs_path,
     platform_runtime::{
         detect_platform_runtime_path, resolve_platform_runtime_config, HostPlatformRuntime,
     },
@@ -23,14 +24,6 @@ use newengine_runtime_host::{
 use std::sync::Arc;
 use std::time::Duration;
 
-#[inline]
-fn display_abs_path(path: &std::path::Path) -> String {
-    let canonical = std::fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf());
-    let s = canonical.to_string_lossy();
-    let s = s.strip_prefix(r"\\?\").unwrap_or(&s);
-    let s = s.strip_prefix("//?/").unwrap_or(s);
-    s.replace('\\', "/")
-}
 
 fn main() {
     newengine_core::crash::record_breadcrumb("editor launcher: main entry");

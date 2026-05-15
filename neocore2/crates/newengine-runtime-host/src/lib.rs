@@ -2,6 +2,7 @@
 
 pub mod asset_bootstrap;
 pub mod engine_factory;
+pub mod path_display;
 pub mod platform_input;
 pub mod platform_runtime;
 pub mod render_runtime;

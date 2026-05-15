@@ -246,7 +246,13 @@ impl<E: Send + 'static> Engine<E> {
                 Ok(EngineStartupStepOutcome::running(snapshot))
             }
             EngineStartupStepPhase::StartPlugins => {
-                self.log_plugins_diagnostics("after module init");
+                // Engine plugin diagnostics are already emitted immediately after
+                // engine plugin discovery. Do not print the same descriptor table
+                // again during the later startup-FSM step unless plugins were
+                // actually loaded by this phase.
+                if !self.engine_plugins_loaded {
+                    self.log_plugins_diagnostics("after runtime plugin load");
+                }
                 if let Err(e) = self.plugins_start_all() {
                     return self.fail_incremental_startup(
                         EngineStartupPhase::PluginStart,
@@ -749,7 +755,11 @@ impl<E: Send + 'static> Engine<E> {
         })?;
 
         self.refresh_readiness_snapshot();
-        self.log_startup_graph_snapshot("after-startup-dispatch");
+        log::debug!(
+            "startup graph: after-startup-dispatch satisfied='{}' modules={}",
+            self.startup_graph.satisfied_csv(),
+            self.modules.len()
+        );
         Ok(())
     }
 
@@ -840,7 +850,16 @@ impl<E: Send + 'static> Engine<E> {
         }
 
         self.refresh_readiness_snapshot();
-        self.log_startup_graph_snapshot(origin);
+        if activated_count > 0 {
+            self.log_startup_graph_snapshot(origin);
+        } else {
+            log::debug!(
+                "startup graph: no modules activated origin='{}' satisfied='{}' modules={}",
+                origin,
+                self.startup_graph.satisfied_csv(),
+                self.modules.len()
+            );
+        }
         Ok(activated_count)
     }
 
