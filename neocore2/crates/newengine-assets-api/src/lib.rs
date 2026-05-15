@@ -28,6 +28,8 @@ pub mod method {
     pub const BLOB_WIRE_V1: &str = "asset.blob_wire_v1";
     /// Runtime-ready RGBA8 texture packet by asset id. AssetManager validates/parses importer metadata.
     pub const TEXTURE_RGBA8_V1: &str = "asset.texture_rgba8_v1";
+    /// Runtime-ready RGBA8 texture selected from a .neytd dictionary. Payload: JSON { dictionary_path, texture_name | texture_hash }.
+    pub const TEXTURE_DICTIONARY_RGBA8_V1: &str = "asset.texture_dictionary_rgba8_v1";
 
     /// Stable v1 import entry point.
     pub const IMPORT_V1: &str = "asset.import_v1";
@@ -80,6 +82,7 @@ pub const REQUIRED_RUNTIME_METHODS_V1: &[&str] = &[
     method::TEXT_V1,
     method::IMPORT_V1,
     method::TEXTURE_RGBA8_V1,
+    method::TEXTURE_DICTIONARY_RGBA8_V1,
     method::PUMP_V1,
     method::STATUS_JSON_V1,
     method::STATUS_GRAPH_JSON_V1,
@@ -300,6 +303,9 @@ pub trait AssetAccess {
     /// The implementation must parse/validate importer metadata inside AssetManager.
     /// Runtime callers must not parse image containers or importer metadata.
     fn texture_rgba8_v1(&self, id_hex32: &str) -> Result<Rgba8TextureAsset, String>;
+
+    /// Select and read a runtime-ready RGBA8 texture from a .neytd dictionary.
+    fn texture_dictionary_rgba8_v1(&self, dictionary_path: &str, texture_name: Option<&str>, texture_hash: Option<u64>) -> Result<Rgba8TextureAsset, String>;
 }
 
 /// Extended contract surface.

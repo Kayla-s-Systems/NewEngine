@@ -233,9 +233,9 @@ fn default_prefab_enabled() -> bool { true }
 fn default_terrain_material() -> RawMaterialSpec {
     RawMaterialSpec {
         asset: Some("materials/fps/terrain_forest_floor.material.json".to_owned()),
-        base_color_texture: Some("textures/fps/terrain_forest_floor.jpg".to_owned()),
-        normal_texture: Some("textures/fps/terrain_forest_floor_normal.jpg".to_owned()),
-        roughness_texture: Some("textures/fps/terrain_forest_floor_roughness.jpg".to_owned()),
+        base_color_texture: Some("textures/fps/world_surfaces.neytd@terrain_forest_floor".to_owned()),
+        normal_texture: Some("textures/fps/world_surfaces.neytd@terrain_forest_floor_normal".to_owned()),
+        roughness_texture: Some("textures/fps/world_surfaces.neytd@terrain_forest_floor_roughness".to_owned()),
         uv_scale: [4.0, 4.0],
         uv_offset: [0.0, 0.0],
         roughness: 0.92,
@@ -245,7 +245,7 @@ fn default_terrain_material() -> RawMaterialSpec {
 }
 fn default_sky_material() -> RawMaterialSpec {
     RawMaterialSpec {
-        base_color_texture: Some("textures/fps/sky_0_runtime.jpg".to_owned()),
+        base_color_texture: Some("textures/fps/sky_0_runtime.neytd".to_owned()),
         roughness: 1.0,
         normal_scale: 0.0,
         occlusion_strength: 1.0,
@@ -255,8 +255,8 @@ fn default_sky_material() -> RawMaterialSpec {
 
 fn default_tree_bark_material() -> RawMaterialSpec {
     RawMaterialSpec {
-        base_color_texture: Some("prefabs/tree_animate/textures/Bark_diffuse.png".to_owned()),
-        normal_texture: Some("prefabs/tree_animate/textures/Bark_normal.png".to_owned()),
+        base_color_texture: Some("prefabs/tree_animate/textures/tree_animate.neytd@bark_diffuse".to_owned()),
+        normal_texture: Some("prefabs/tree_animate/textures/tree_animate.neytd@bark_normal".to_owned()),
         roughness: 0.88,
         normal_scale: 0.35,
         occlusion_strength: 1.0,
@@ -266,8 +266,8 @@ fn default_tree_bark_material() -> RawMaterialSpec {
 
 fn default_tree_leaf_material() -> RawMaterialSpec {
     RawMaterialSpec {
-        base_color_texture: Some("prefabs/tree_animate/textures/Leaf_diffuse.png".to_owned()),
-        normal_texture: Some("prefabs/tree_animate/textures/Leaf_normal.png".to_owned()),
+        base_color_texture: Some("prefabs/tree_animate/textures/tree_animate.neytd@leaf_diffuse".to_owned()),
+        normal_texture: Some("prefabs/tree_animate/textures/tree_animate.neytd@leaf_normal".to_owned()),
         roughness: 0.72,
         normal_scale: 0.25,
         occlusion_strength: 1.0,
@@ -277,8 +277,8 @@ fn default_tree_leaf_material() -> RawMaterialSpec {
 
 fn default_tree_branch_material() -> RawMaterialSpec {
     RawMaterialSpec {
-        base_color_texture: Some("prefabs/tree_animate/textures/Branch_diffuse.png".to_owned()),
-        normal_texture: Some("prefabs/tree_animate/textures/Branch_normal.png".to_owned()),
+        base_color_texture: Some("prefabs/tree_animate/textures/tree_animate.neytd@branch_diffuse".to_owned()),
+        normal_texture: Some("prefabs/tree_animate/textures/tree_animate.neytd@branch_normal".to_owned()),
         roughness: 0.86,
         normal_scale: 0.30,
         occlusion_strength: 1.0,

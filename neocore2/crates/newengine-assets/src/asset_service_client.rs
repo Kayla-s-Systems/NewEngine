@@ -25,6 +25,7 @@ pub struct AssetServiceClient {
     m_text_v1: MethodName,
     m_raw_bytes_v1: MethodName,
     m_texture_rgba8_v1: MethodName,
+    m_texture_dictionary_rgba8_v1: MethodName,
     m_status_json_v1: MethodName,
     m_status_graph_json_v1: MethodName,
     m_project_status_json_v1: MethodName,
@@ -59,6 +60,7 @@ impl AssetServiceClient {
             m_text_v1: MethodName::from(method::TEXT_V1),
             m_raw_bytes_v1: MethodName::from(method::RAW_BYTES_V1),
             m_texture_rgba8_v1: MethodName::from(method::TEXTURE_RGBA8_V1),
+            m_texture_dictionary_rgba8_v1: MethodName::from(method::TEXTURE_DICTIONARY_RGBA8_V1),
             m_status_json_v1: MethodName::from(method::STATUS_JSON_V1),
             m_status_graph_json_v1: MethodName::from(method::STATUS_GRAPH_JSON_V1),
             m_project_status_json_v1: MethodName::from(method::PROJECT_STATUS_JSON_V1),
@@ -246,6 +248,24 @@ impl AssetServiceClient {
         let bytes = serde_json::to_vec(&payload).map_err(|e| e.to_string())?;
         Self::decode_ok_json(self.call_raw(self.m_project_status_json_v1.clone(), bytes)?)
     }
+
+    /// Select and read one texture from a .neytd dictionary.
+    ///
+    /// The service accepts either texture_name or texture_hash. When both are omitted,
+    /// the first dictionary entry is selected.
+    #[inline]
+    pub fn texture_dictionary_rgba8_v1(&self, dictionary_path: &str, texture_name: Option<&str>, texture_hash: Option<u64>) -> Result<Rgba8TextureAsset, String> {
+        let mut req = serde_json::json!({ "dictionary_path": dictionary_path });
+        if let Some(name) = texture_name {
+            req["texture_name"] = serde_json::Value::String(name.to_owned());
+        }
+        if let Some(hash) = texture_hash {
+            req["texture_hash"] = serde_json::Value::Number(serde_json::Number::from(hash));
+        }
+        let payload = serde_json::to_vec(&req).map_err(|e| e.to_string())?;
+        let bytes = self.call_raw(self.m_texture_dictionary_rgba8_v1.clone(), payload)?;
+        Self::decode_texture_rgba8_wire_v1(bytes)
+    }
 }
 
 impl AssetAccess for AssetServiceClient {
@@ -321,6 +341,10 @@ impl AssetAccess for AssetServiceClient {
         // Contract payload: utf8 id_u128_hex32. AssetManager owns texture meta parsing.
         let bytes = self.call_raw(self.m_texture_rgba8_v1.clone(), id_hex32.as_bytes().to_vec())?;
         Self::decode_texture_rgba8_wire_v1(bytes)
+    }
+
+    fn texture_dictionary_rgba8_v1(&self, dictionary_path: &str, texture_name: Option<&str>, texture_hash: Option<u64>) -> Result<Rgba8TextureAsset, String> {
+        AssetServiceClient::texture_dictionary_rgba8_v1(self, dictionary_path, texture_name, texture_hash)
     }
 }
 
