@@ -16,7 +16,6 @@ The uploaded `plugin-sync-latest.log` completed successfully but reported warnin
 - `geometryImporter`
   - unused provider `name()` method;
   - non-snake-case library crate target name.
-- `imageImporter`
   - unused ICO helper;
   - ignored `embed_resource::CompilationResult` in build script;
   - non-snake-case library crate target name.
@@ -54,7 +53,7 @@ The importer build helper no longer emits `cargo:warning` for normal DLL output 
 `record_cmd` and `enqueue_texture_upload` now use render-api-scoped visibility that matches their private argument types. The unused recorded-phase replay helper was removed.
 
 ### Importer cleanup
-`geometryImporter` no longer exposes an unused provider `name()` method. `fontImporter`, `geometryImporter`, and `imageImporter` keep their package names for DLL identity, but use snake-case `[lib] name` values to avoid Rust crate-name warnings.
+`geometryImporter` no longer exposes an unused provider `name()` method. `fontImporter` and `geometryImporter` keep their package names for DLL identity, but use snake-case `[lib] name` values to avoid Rust crate-name warnings. `imageImporter` was removed from the runtime pipeline; texture runtime input is NEYTD-only.
 
 ## Expected result
 The next plugin sync build should have fewer warnings and cleaner plugin logs without changing runtime plugin IDs or installed DLL names.

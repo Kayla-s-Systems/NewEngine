@@ -1,9 +1,9 @@
 use crate::error::{Result, TextureContainerError};
-use crate::{HEADER_LEN, MAGIC, VERSION_V1};
-use crate::storage::validate_raw_header_flags;
+use crate::storage::validate_header_flags;
+use crate::{HEADER_LEN, MAGIC, VERSION_V2};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct HeaderV1 {
+pub struct HeaderV2 {
     pub version: u16,
     pub flags: u16,
     pub entry_count: u32,
@@ -11,15 +11,15 @@ pub struct HeaderV1 {
     pub directory_len: u64,
     pub data_offset: u64,
     pub data_len: u64,
-    /// Reserved in strict raw-runtime V1. Writers set this to zero.
+    /// For compressed payloads, original raw RGBA8 mip-data length. Raw payloads set this to zero.
     pub data_uncompressed_len: u64,
 }
 
-impl HeaderV1 {
+impl HeaderV2 {
     #[inline]
     pub const fn empty() -> Self {
         Self {
-            version: VERSION_V1,
+            version: VERSION_V2,
             flags: 0,
             entry_count: 0,
             directory_offset: HEADER_LEN as u64,
@@ -38,7 +38,7 @@ impl HeaderV1 {
             return Err(TextureContainerError::BadMagic);
         }
         let version = u16::from_le_bytes([bytes[4], bytes[5]]);
-        if version != VERSION_V1 {
+        if version != VERSION_V2 {
             return Err(TextureContainerError::UnsupportedVersion(version));
         }
         let flags = u16::from_le_bytes([bytes[6], bytes[7]]);
@@ -67,7 +67,7 @@ impl HeaderV1 {
 
     #[inline]
     pub fn validate_runtime_flags(self) -> Result<()> {
-        validate_raw_header_flags(self.flags)
+        validate_header_flags(self.flags)
     }
 }
 

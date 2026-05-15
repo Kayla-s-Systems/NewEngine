@@ -1,20 +1,13 @@
-use serde::{Deserialize, Serialize};
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone)]
 pub struct TextureDictionaryManifest {
-    pub schema: String,
     pub version: u16,
     pub default_format: String,
     pub entries: Vec<TextureEntryMeta>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone)]
 pub struct TextureEntryMeta {
     pub name: String,
-    /// V1 readers tolerate legacy debug origin data, but writers must not serialize it.
-    /// A .neytd is a canonical runtime texture dictionary, not an archive of source-file provenance.
-    #[serde(default, skip_serializing)]
-    pub source_path: Option<String>,
     pub name_hash: u64,
     pub width: u32,
     pub height: u32,
@@ -26,7 +19,7 @@ pub struct TextureEntryMeta {
     pub mips: Vec<TextureMipMeta>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone)]
 pub struct TextureMipMeta {
     pub level: u32,
     pub width: u32,

@@ -1,245 +1,138 @@
 {
-  "schema": "newengine.scene.game_ready.highlands.v1",
-  "title": "KAYLA Terrain Sandbox",
-  "objective": "Procedural highlands with deterministic tree prefab placement, material training proxies and imported sky dome.",
-  "player": {
-    "start": [
-      -17.5,
-      0.0,
-      -17.5
-    ],
-    "yaw": -0.72,
-    "move_speed": 7.3,
-    "look_sens": 0.0022
-  },
-  "terrain": {
-    "seed": 3545538700974983500,
-    "cells_x": 128,
-    "cells_z": 128,
-    "size_x": 72.0,
-    "size_z": 72.0,
-    "base_height": -0.08,
-    "height_scale": 3.15,
-    "collision_tile_cells": 8,
-    "collision_floor_depth": 3.0,
-    "collision_horizontal_skin": 0.08,
-    "generator": {
-      "id": "newengine.generator.heightfield.soft-cells.v1",
-      "ridged_seed_xor": 2116202781,
-      "ridged_frequency": 1.18,
-      "ridged_amplitude": 0.3,
-      "ridged_shape_edge0": -0.35,
-      "ridged_shape_edge1": 1.0,
-      "veins_seed_xor": 1394024449,
-      "veins_frequency": 0.42,
-      "veins_amplitude": 0.1,
-      "smoothing_passes": 2,
-      "smoothing_strength": 0.42
-    }
-  },
-  "sky": {
-    "radius": 220.0,
-    "ceiling_margin": 18.0,
-    "ceiling_thickness": 0.5,
-    "mesh": "skydome/skydome_high.obj"
-  },
-  "materials": {
+  "scene": {
+    "title": "KAYLA FPS: Procedural Highlands",
+    "objective": "Walk a deterministic terrain sandbox with procedural sky, resident materials and stable startup gates.",
+    "player": {
+      "start": [-17.5, 0.0, -17.5],
+      "yaw": -0.72,
+      "move_speed": 7.3,
+      "look_sens": 0.0022
+    },
     "terrain": {
-      "base_color_texture": "textures/fps/world_surfaces.neytd@terrain_forest_floor",
-      "normal_texture": "textures/fps/world_surfaces.neytd@terrain_forest_floor_normal",
-      "roughness_texture": "textures/fps/world_surfaces.neytd@terrain_forest_floor_roughness",
-      "uv_scale": [
-        4.0,
-        4.0
-      ],
-      "uv_offset": [
-        0.0,
-        0.0
-      ],
-      "roughness": 0.96,
-      "normal_scale": 0.0,
-      "occlusion_strength": 0.88,
-      "asset": "materials/fps/terrain_forest_floor.material.json"
+      "seed": 2316544595804117324,
+      "cells_x": 128,
+      "cells_z": 128,
+      "size_x": 52.0,
+      "size_z": 52.0,
+      "base_height": -0.08,
+      "height_scale": 3.15,
+      "collision_tile_cells": 8,
+      "collision_floor_depth": 3.0,
+      "collision_horizontal_skin": 0.08,
+      "generator": {
+        "id": "newengine.generator.heightfield.soft-cells.v1",
+        "ridged_seed_xor": 2116190493,
+        "ridged_frequency": 1.85,
+        "ridged_amplitude": 0.42,
+        "ridged_shape_edge0": -0.35,
+        "ridged_shape_edge1": 1.0,
+        "veins_seed_xor": 1394024449,
+        "veins_frequency": 0.68,
+        "veins_amplitude": 0.18,
+        "smoothing_passes": 0,
+        "smoothing_strength": 0.0
+      }
     },
     "sky": {
-      "roughness": 1.0,
-      "normal_scale": 0.0,
-      "occlusion_strength": 1.0,
-      "base_color_texture": "textures/fps/sky_0_runtime.neytd@sky_0_runtime",
-      "uv_scale": [
-        1.0,
-        1.0
-      ],
-      "uv_offset": [
-        0.0,
-        0.0
-      ]
+      "radius": 220.0,
+      "mesh": "procedural:skydome"
     },
-    "tree_bark": {
-      "base_color_texture": "prefabs/tree_animate/textures/tree_animate.neytd@bark_diffuse",
-      "normal_texture": "prefabs/tree_animate/textures/tree_animate.neytd@bark_normal",
-      "roughness": 0.88,
-      "normal_scale": 0.35,
-      "occlusion_strength": 1.0
+    "materials": {
+      "terrain": {
+        "asset": "materials/fps/terrain_forest_floor.material.json",
+        "base_color_texture": "textures/fps/world_surfaces.neytd@terrain_forest_floor",
+        "normal_texture": "textures/fps/world_surfaces.neytd@terrain_forest_floor_normal",
+        "roughness_texture": "textures/fps/world_surfaces.neytd@terrain_forest_floor_roughness",
+        "uv_scale": [4.0, 4.0],
+        "roughness": 0.92,
+        "normal_scale": 0.0,
+        "occlusion_strength": 0.88
+      },
+      "sky": {
+        "base_color_texture": "textures/fps/sky_0_runtime.neytd@sky_0_runtime",
+        "roughness": 1.0,
+        "normal_scale": 0.0,
+        "occlusion_strength": 1.0
+      },
+      "tree_bark": {
+        "base_color_texture": "prefabs/tree_animate/textures/tree_animate.neytd@bark_diffuse",
+        "normal_texture": "prefabs/tree_animate/textures/tree_animate.neytd@bark_normal",
+        "roughness": 0.88,
+        "normal_scale": 0.35
+      },
+      "tree_leaf": {
+        "base_color_texture": "prefabs/tree_animate/textures/tree_animate.neytd@leaf_diffuse",
+        "normal_texture": "prefabs/tree_animate/textures/tree_animate.neytd@leaf_normal",
+        "roughness": 0.72,
+        "normal_scale": 0.25
+      },
+      "tree_branch": {
+        "base_color_texture": "prefabs/tree_animate/textures/tree_animate.neytd@branch_diffuse",
+        "normal_texture": "prefabs/tree_animate/textures/tree_animate.neytd@branch_normal",
+        "roughness": 0.86,
+        "normal_scale": 0.30
+      }
     },
-    "tree_leaf": {
-      "base_color_texture": "prefabs/tree_animate/textures/tree_animate.neytd@leaf_diffuse",
-      "normal_texture": "prefabs/tree_animate/textures/tree_animate.neytd@leaf_normal",
-      "roughness": 0.72,
-      "normal_scale": 0.25,
-      "occlusion_strength": 1.0
+    "lighting": {
+      "ambient_color": [0.38, 0.42, 0.50],
+      "ambient_intensity": 0.28,
+      "sun_direction": [-0.55, -0.82, -0.28],
+      "sun_color": [1.0, 0.94, 0.82],
+      "sun_intensity": 3.2,
+      "shadows": {
+        "enabled": true,
+        "resolution": 2048,
+        "cascade_count": 1,
+        "max_distance": 80.0,
+        "softness": 0.75,
+        "bias": 0.0025,
+        "normal_bias": 0.015,
+        "contact_strength": 0.35
+      }
     },
-    "tree_branch": {
-      "base_color_texture": "prefabs/tree_animate/textures/tree_animate.neytd@branch_diffuse",
-      "normal_texture": "prefabs/tree_animate/textures/tree_animate.neytd@branch_normal",
-      "roughness": 0.86,
-      "normal_scale": 0.3,
-      "occlusion_strength": 1.0
-    }
-  },
-  "lighting": {
-    "ambient_color": [
-      0.38,
-      0.42,
-      0.5
-    ],
-    "ambient_intensity": 0.22,
-    "sun_direction": [
-      -0.62,
-      -0.74,
-      -0.25
-    ],
-    "sun_color": [
-      1.0,
-      0.94,
-      0.82
-    ],
-    "sun_intensity": 3.2,
-    "shadows": {
+    "foliage": {
       "enabled": true,
-      "resolution": 2048,
-      "cascade_count": 1,
-      "max_distance": 80.0,
-      "softness": 0.75,
-      "bias": 0.0032,
-      "normal_bias": 0.018,
-      "contact_strength": 0.42
-    }
-  },
-  "boundaries": {
-    "wall_height": 0.0,
-    "wall_thickness": 0.0
-  },
-  "obstacles": {
-    "seed": 0,
-    "grid_min": 0,
-    "grid_max": 0,
-    "spacing": 1.0,
-    "jitter": 0.0,
-    "gate_threshold": 1.0,
-    "max_count": 0
-  },
-  "foliage": {
-    "enabled": true,
-    "prefab": "tree_animate",
-    "seed": 983422762451,
-    "grid_min": -6,
-    "grid_max": 6,
-    "spacing": 5.85,
-    "jitter": 0.42,
-    "gate_threshold": 0.68,
-    "max_count": 54,
-    "min_scale": 0.82,
-    "max_scale": 1.34,
-    "min_player_distance": 7.0,
-    "edge_margin": 4.25,
-    "surface_offset": 0.035
-  },
-  "gameplay": {
-    "default_status": "Terrain sandbox: procedural heightfield + imported sky dome.",
-    "pickup_status": "",
-    "hazard_status": "",
-    "goal_locked_status": "",
-    "goal_complete_status": "",
-    "failed_progress_label": "",
-    "completed_progress_label": "",
-    "player_collision": {
-      "radius": 0.45,
-      "half_height": 0.45
+      "prefab": "tree_animate",
+      "seed": 6075166572582,
+      "grid_min": -5,
+      "grid_max": 5,
+      "spacing": 6.0,
+      "jitter": 0.45,
+      "gate_threshold": 0.62,
+      "max_count": 8192,
+      "min_scale": 0.85,
+      "max_scale": 1.35,
+      "min_player_distance": 5.0,
+      "edge_margin": 4.0,
+      "surface_offset": 0.03
     },
-    "player_visual": {
-      "radius": 0.45,
-      "half_height": 0.9,
-      "camera_eye_height": 0.85,
-      "sprint_multiplier": 1.75
+    "prefabs": [
+      {
+        "id": "tree_animate",
+        "source": "prefabs/tree_animate/tree_animate.prefab.json",
+        "proxy": "runtime_gltf_mesh",
+        "enabled": true
+      }
+    ],
+    "gameplay": {
+      "default_status": "Terrain sandbox: procedural heightfield + resident texture dictionaries.",
+      "pickup_status": "Core acquired.",
+      "hazard_status": "Hazard touched.",
+      "goal_locked_status": "Beacon locked.",
+      "goal_complete_status": "Extraction complete. Runtime loop is stable and playable.",
+      "failed_progress_label": "FAILED",
+      "completed_progress_label": "EXTRACTED",
+      "player_collision": { "radius": 0.45, "half_height": 0.45 },
+      "player_visual": { "radius": 0.45, "half_height": 0.9, "camera_eye_height": 0.85, "sprint_multiplier": 1.75 },
+      "physics": { "gravity": 9.81, "contact_skin": 0.035 }
     },
-    "physics": {
-      "gravity": 9.81,
-      "contact_skin": 0.035
+    "palette": {
+      "terrain": [0.78, 0.86, 0.68, 1.0],
+      "sky": [0.08, 0.16, 0.34, 1.0],
+      "sky_emissive": [0.07, 0.14, 0.34],
+      "tree_bark": [0.38, 0.23, 0.12, 1.0],
+      "tree_leaf": [0.18, 0.42, 0.16, 1.0],
+      "tree_branch": [0.32, 0.20, 0.12, 1.0]
     }
-  },
-  "palette": {
-    "default": [
-      0.78,
-      0.8,
-      0.86,
-      1.0
-    ],
-    "terrain": [
-      0.78,
-      0.86,
-      0.68,
-      1.0
-    ],
-    "sky": [
-      0.4,
-      0.58,
-      0.92,
-      1.0
-    ],
-    "sky_emissive": [
-      0.08,
-      0.12,
-      0.22
-    ],
-    "wall": [
-      0.0,
-      0.0,
-      0.0,
-      1.0
-    ],
-    "obstacle": [
-      0.0,
-      0.0,
-      0.0,
-      1.0
-    ],
-    "tree_bark": [
-      0.39,
-      0.23,
-      0.12,
-      1.0
-    ],
-    "tree_leaf": [
-      0.16,
-      0.39,
-      0.14,
-      1.0
-    ],
-    "tree_branch": [
-      0.31,
-      0.2,
-      0.12,
-      1.0
-    ]
-  },
-  "markers": [],
-  "prefabs": [
-    {
-      "id": "tree_animate",
-      "source": "prefabs/tree_animate/tree_animate.prefab.json",
-      "proxy": "runtime_gltf_mesh",
-      "enabled": true
-    }
-  ]
+  }
 }

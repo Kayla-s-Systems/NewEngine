@@ -2,10 +2,12 @@
 
 //! NewEngine Texture Dictionary container (`.neytd`).
 //!
-//! This crate owns the stable, engine-native texture dictionary format used by
-//! tools, AssetManager importers and runtime upload paths. Runtime systems must
-//! not parse source image containers directly.
+//! The runtime format is a binary texture dictionary: fixed header, binary
+//! directory and runtime-ready RGBA8 mip payload. Payload may be raw or zstd-packed;
+//! AssetManager exposes selected entries as normalized RGBA8 to the renderer. `.neytd`
+//! never stores source-image paths, authoring provenance or JSON directory data.
 
+pub mod binary_directory;
 pub mod builder;
 pub mod storage;
 pub mod dds;
@@ -18,21 +20,20 @@ pub mod names;
 pub mod selector;
 
 pub use builder::{pack, pack_with_options, TextureBuildEntry};
-pub use storage::TextureBuildOptions;
+pub use storage::{TextureBuildOptions, TextureDataCompression, FLAG_DATA_RAW, FLAG_DATA_ZSTD};
 pub use dds::{write_dds_rgba8, write_dds_rgba8_mip_chain, DdsExportError};
 pub use dictionary::{parse, TextureDictionary, TextureEntryView};
 pub use error::{Result, TextureContainerError};
-pub use header::HeaderV1;
+pub use header::HeaderV2;
 pub use manifest::{TextureDictionaryManifest, TextureEntryMeta, TextureMipMeta};
 pub use mips::{generate_rgba8_mips, rgba8_len, TextureMipData};
 pub use names::{infer_color_space_from_name, normalize_color_space, normalize_texture_name, stable_name_hash64};
 pub use selector::{TextureDictionarySelector, TextureSelectorError};
 
 pub const MAGIC: [u8; 4] = *b"NETD";
-pub const VERSION_V1: u16 = 1;
+pub const VERSION_V2: u16 = 2;
 pub const HEADER_LEN: usize = 64;
 pub const EXTENSION: &str = "neytd";
-pub const SCHEMA_V1: &str = "newengine.texture_dictionary.v1";
 pub const PIXEL_FORMAT_RGBA8_UNORM: &str = "RGBA8_UNORM";
 pub const PIXEL_FORMAT_RGBA8_SRGB: &str = "RGBA8_SRGB";
 pub const COLOR_SPACE_LINEAR: &str = "linear";

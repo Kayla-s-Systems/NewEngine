@@ -1,8 +1,10 @@
+use crate::binary_directory;
 use crate::error::{Result, TextureContainerError};
-use crate::header::HeaderV1;
+use crate::header::HeaderV2;
 use crate::manifest::{TextureDictionaryManifest, TextureEntryMeta};
 use crate::mips::rgba8_len;
-use crate::{slice_checked, slice_checked_len, PIXEL_FORMAT_RGBA8_SRGB, PIXEL_FORMAT_RGBA8_UNORM, SCHEMA_V1};
+use crate::storage::{decode_stored_data, FLAG_DATA_RAW};
+use crate::{slice_checked, slice_checked_len, PIXEL_FORMAT_RGBA8_SRGB, PIXEL_FORMAT_RGBA8_UNORM};
 use std::collections::BTreeSet;
 
 #[derive(Debug, Clone, Copy)]
@@ -10,6 +12,7 @@ pub struct TextureEntryView<'a> {
     pub meta: &'a TextureEntryMeta,
     data_region: &'a [u8],
 }
+
 
 impl<'a> TextureEntryView<'a> {
     #[inline]
@@ -26,14 +29,31 @@ impl<'a> TextureEntryView<'a> {
 
 #[derive(Debug, Clone)]
 pub struct TextureDictionary<'a> {
-    header: HeaderV1,
+    header: HeaderV2,
     manifest: TextureDictionaryManifest,
-    data_region: &'a [u8],
+    data_region: TextureDataRegion<'a>,
 }
+
+#[derive(Debug, Clone)]
+enum TextureDataRegion<'a> {
+    Borrowed(&'a [u8]),
+    Owned(Vec<u8>),
+}
+
+impl<'a> TextureDataRegion<'a> {
+    #[inline]
+    fn as_slice(&self) -> &[u8] {
+        match self {
+            Self::Borrowed(v) => v,
+            Self::Owned(v) => v.as_slice(),
+        }
+    }
+}
+
 
 impl<'a> TextureDictionary<'a> {
     #[inline]
-    pub fn header(&self) -> HeaderV1 { self.header }
+    pub fn header(&self) -> HeaderV2 { self.header }
     #[inline]
     pub fn manifest(&self) -> &TextureDictionaryManifest { &self.manifest }
     #[inline]
@@ -41,7 +61,7 @@ impl<'a> TextureDictionary<'a> {
     #[inline]
     pub fn first_entry(&self) -> Result<TextureEntryView<'_>> {
         let meta = self.manifest.entries.first().ok_or(TextureContainerError::EmptyDictionary)?;
-        Ok(TextureEntryView { meta, data_region: self.data_region })
+        Ok(TextureEntryView { meta, data_region: self.data_region.as_slice() })
     }
 
     pub fn entry(&self, name: &str) -> Result<TextureEntryView<'_>> {
@@ -51,7 +71,7 @@ impl<'a> TextureDictionary<'a> {
             .iter()
             .find(|e| e.name.eq_ignore_ascii_case(name))
             .ok_or_else(|| TextureContainerError::MissingEntry(name.to_owned()))?;
-        Ok(TextureEntryView { meta, data_region: self.data_region })
+        Ok(TextureEntryView { meta, data_region: self.data_region.as_slice() })
     }
 
     pub fn entry_by_hash(&self, hash: u64) -> Result<TextureEntryView<'_>> {
@@ -61,12 +81,12 @@ impl<'a> TextureDictionary<'a> {
             .iter()
             .find(|e| e.name_hash == hash)
             .ok_or_else(|| TextureContainerError::MissingEntry(format!("hash:{hash}")))?;
-        Ok(TextureEntryView { meta, data_region: self.data_region })
+        Ok(TextureEntryView { meta, data_region: self.data_region.as_slice() })
     }
 }
 
 pub fn parse(bytes: &[u8]) -> Result<TextureDictionary<'_>> {
-    let header = HeaderV1::parse(bytes)?;
+    let header = HeaderV2::parse(bytes)?;
     header.validate_runtime_flags()?;
 
     let dir = slice_checked(bytes, header.directory_offset, header.directory_len).map_err(|_| TextureContainerError::InvalidRange {
@@ -75,34 +95,42 @@ pub fn parse(bytes: &[u8]) -> Result<TextureDictionary<'_>> {
         len: header.directory_len,
         total: bytes.len(),
     })?;
-    let manifest: TextureDictionaryManifest = serde_json::from_slice(dir)?;
+    if !binary_directory::sniff(dir) {
+        return Err(TextureContainerError::InvalidDirectory(".neytd V2 requires binary directory NTDX; JSON directories are not accepted"));
+    }
+    let manifest = binary_directory::decode(dir)?;
 
-    let data_region = slice_checked(bytes, header.data_offset, header.data_len).map_err(|_| TextureContainerError::InvalidRange {
+    let stored_data_region = slice_checked(bytes, header.data_offset, header.data_len).map_err(|_| TextureContainerError::InvalidRange {
         what: "data",
         offset: header.data_offset,
         len: header.data_len,
         total: bytes.len(),
     })?;
 
-    validate_manifest(header, &manifest, data_region.len(), bytes.len())?;
+    let data_region = if header.flags == FLAG_DATA_RAW {
+        TextureDataRegion::Borrowed(stored_data_region)
+    } else {
+        TextureDataRegion::Owned(decode_stored_data(header.flags, stored_data_region, header.data_uncompressed_len)?)
+    };
+
+    validate_manifest(header, &manifest, data_region.as_slice().len(), bytes.len())?;
     Ok(TextureDictionary { header, manifest, data_region })
 }
 
-fn validate_manifest(header: HeaderV1, manifest: &TextureDictionaryManifest, data_region_len: usize, file_total_len: usize) -> Result<()> {
-    if manifest.schema != SCHEMA_V1 {
-        return Err(TextureContainerError::BadSchema(manifest.schema.clone()));
-    }
+fn validate_manifest(header: HeaderV2, manifest: &TextureDictionaryManifest, data_region_len: usize, file_total_len: usize) -> Result<()> {
     if header.entry_count as usize != manifest.entries.len() {
         return Err(TextureContainerError::EntryCountMismatch { header: header.entry_count, directory: manifest.entries.len() });
     }
-    if header.flags != 0 {
-        return Err(TextureContainerError::CompressedPayloadUnsupported(header.flags));
-    }
-    if header.data_len as usize != data_region_len {
+    let expected_data_region_len = if header.flags == FLAG_DATA_RAW {
+        header.data_len
+    } else {
+        header.data_uncompressed_len
+    } as usize;
+    if expected_data_region_len != data_region_len {
         return Err(TextureContainerError::InvalidRange {
             what: "data-region",
             offset: header.data_offset,
-            len: header.data_len,
+            len: expected_data_region_len as u64,
             total: file_total_len,
         });
     }

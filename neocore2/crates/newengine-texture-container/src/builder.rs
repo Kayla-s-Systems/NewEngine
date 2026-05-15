@@ -1,16 +1,16 @@
-use crate::storage::{store_raw_data, TextureBuildOptions};
+use crate::binary_directory;
+use crate::storage::{store_data, TextureBuildOptions};
 use crate::error::{Result, TextureContainerError};
-use crate::header::HeaderV1;
+use crate::header::HeaderV2;
 use crate::manifest::{TextureDictionaryManifest, TextureEntryMeta, TextureMipMeta};
 use crate::mips::{rgba8_len, TextureMipData};
 use crate::names::{normalize_color_space, normalize_texture_name, stable_name_hash64};
-use crate::{align_u64, align_vec, COLOR_SPACE_SRGB, HEADER_LEN, PIXEL_FORMAT_RGBA8_SRGB, PIXEL_FORMAT_RGBA8_UNORM, SCHEMA_V1, VERSION_V1};
+use crate::{align_u64, align_vec, COLOR_SPACE_SRGB, HEADER_LEN, PIXEL_FORMAT_RGBA8_SRGB, PIXEL_FORMAT_RGBA8_UNORM, VERSION_V2};
 use std::collections::BTreeSet;
 
 #[derive(Debug, Clone)]
 pub struct TextureBuildEntry {
     pub name: String,
-    pub source_path: Option<String>,
     pub width: u32,
     pub height: u32,
     pub color_space: String,
@@ -20,7 +20,6 @@ pub struct TextureBuildEntry {
 pub fn pack(entries: Vec<TextureBuildEntry>) -> Result<Vec<u8>> {
     pack_with_options(entries, TextureBuildOptions::default())
 }
-
 
 pub fn pack_with_options(entries: Vec<TextureBuildEntry>, options: TextureBuildOptions) -> Result<Vec<u8>> {
     if entries.is_empty() {
@@ -69,12 +68,8 @@ pub fn pack_with_options(entries: Vec<TextureBuildEntry>, options: TextureBuildO
         let entry_end = data.len() as u64;
         let color_space = normalize_color_space(&entry.color_space);
         let format = if color_space == COLOR_SPACE_SRGB { PIXEL_FORMAT_RGBA8_SRGB } else { PIXEL_FORMAT_RGBA8_UNORM };
-        // Source paths are authoring/tool state. They are intentionally not persisted
-        // into .neytd because runtime texture dictionaries must be self-contained.
-        let _ = entry.source_path;
         metas.push(TextureEntryMeta {
             name: name.clone(),
-            source_path: None,
             name_hash: stable_name_hash64(&name),
             width: entry.width,
             height: entry.height,
@@ -88,32 +83,30 @@ pub fn pack_with_options(entries: Vec<TextureBuildEntry>, options: TextureBuildO
     }
 
     let manifest = TextureDictionaryManifest {
-        schema: SCHEMA_V1.to_owned(),
-        version: VERSION_V1,
+        version: VERSION_V2,
         default_format: PIXEL_FORMAT_RGBA8_UNORM.to_owned(),
         entries: metas,
     };
-    let dir = serde_json::to_vec_pretty(&manifest).expect("manifest serialization is infallible for owned data");
+    let dir = binary_directory::encode(&manifest)?;
 
-    let _ = options;
-    let stored_data = store_raw_data(&data);
+    let stored_data = store_data(&data, options)?;
 
     let directory_offset = HEADER_LEN as u64;
     let directory_len = dir.len() as u64;
     let data_offset = align_u64(directory_offset + directory_len, 16);
     let mut out = vec![0u8; data_offset as usize];
     out[HEADER_LEN..HEADER_LEN + dir.len()].copy_from_slice(&dir);
-    out.extend_from_slice(&stored_data);
+    out.extend_from_slice(&stored_data.bytes);
 
-    let header = HeaderV1 {
-        version: VERSION_V1,
-        flags: 0,
+    let header = HeaderV2 {
+        version: VERSION_V2,
+        flags: stored_data.flags,
         entry_count: manifest.entries.len() as u32,
         directory_offset,
         directory_len,
         data_offset,
-        data_len: stored_data.len() as u64,
-        data_uncompressed_len: 0,
+        data_len: stored_data.bytes.len() as u64,
+        data_uncompressed_len: stored_data.uncompressed_len,
     };
     header.write(&mut out[..HEADER_LEN]);
     Ok(out)

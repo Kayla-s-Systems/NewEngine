@@ -2,13 +2,20 @@ use crate::{COLOR_SPACE_LINEAR, COLOR_SPACE_SRGB};
 
 pub fn normalize_texture_name(name: &str) -> String {
     let trimmed = name.trim().replace('\\', "/");
-    let without_ext = trimmed.rsplit_once('.').map(|(stem, _)| stem).unwrap_or(trimmed.as_str());
-    without_ext
-        .split('/')
-        .last()
-        .unwrap_or(without_ext)
-        .trim()
-        .to_ascii_lowercase()
+    let file_name = trimmed.split('/').last().unwrap_or(trimmed.as_str()).trim();
+    let lower = file_name.to_ascii_lowercase();
+    let Some((stem, ext)) = lower.rsplit_once('.') else {
+        return lower;
+    };
+
+    // Strip only real source/runtime texture extensions. Plugin ids and logical
+    // entry names such as `newengine.renderer.vulkan` must remain intact; the
+    // old split-on-any-dot rule collapsed them all to `newengine` and produced
+    // duplicate dictionary hashes.
+    match ext {
+        "png" | "jpg" | "jpeg" | "bmp" | "tga" | "webp" | "dds" | "ktx" | "ktx2" | "neytd" | "ytd" => stem.to_owned(),
+        _ => lower,
+    }
 }
 
 pub fn normalize_color_space(value: &str) -> String {

@@ -198,6 +198,23 @@ fn ensure_skydome_primitive(prims: &mut PrimitiveRegistry, logical_path: &str) -
         return Some(SKYDOME_PRIMITIVE_ID);
     }
 
+    if logical_path.eq_ignore_ascii_case("procedural:skydome") {
+        let mesh = build_procedural_skydome_mesh();
+        let vertex_count = mesh.vertices.len();
+        let index_count = mesh.indices.len();
+        prims.register_mesh(
+            SKYDOME_PRIMITIVE_ID,
+            "Procedural/SkyDome".to_owned(),
+            mesh,
+        );
+        log::info!(
+            "game-ready: procedural skydome selected vertices={} indices={}",
+            vertex_count,
+            index_count
+        );
+        return Some(SKYDOME_PRIMITIVE_ID);
+    }
+
     match load_ne3d_mesh_asset(logical_path) {
         Ok(mesh) => {
             let vertex_count = mesh.vertices.len();

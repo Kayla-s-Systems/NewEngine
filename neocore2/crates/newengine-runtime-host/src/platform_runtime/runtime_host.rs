@@ -60,6 +60,8 @@ pub struct HostPlatformRuntime {
     shutting_down: bool,
     close_requested: bool,
     window_ready_emitted: bool,
+    last_platform_cursor: CursorState,
+    force_cursor_reapply: bool,
     bootstrap_stage: RuntimeBootstrapStage,
     bootstrap_overlay: RuntimeBootstrapOverlayState,
     bootstrap_spinner_phase: u32,
@@ -92,6 +94,8 @@ impl HostPlatformRuntime {
             shutting_down: false,
             close_requested: false,
             window_ready_emitted: false,
+            last_platform_cursor: CursorState::released(),
+            force_cursor_reapply: false,
             bootstrap_stage: RuntimeBootstrapStage::AwaitingWindow,
             bootstrap_overlay: RuntimeBootstrapOverlayState::default(),
             bootstrap_spinner_phase: 0,
@@ -296,6 +300,14 @@ impl HostPlatformRuntime {
         log::debug!("platform runtime: focused={focused}");
         self.engine
             .emit(HostEvent::Window(WindowHostEvent::Focused(focused)))?;
+
+        if focused {
+            // Focus regain is a platform edge: winit/OS may have dropped the grab while
+            // the engine-side render controller still believes the cursor is captured.
+            // Re-apply the last canonical cursor state even when no module publishes a
+            // new Cursor event on this exact frame.
+            self.force_cursor_reapply = true;
+        }
         Ok(())
     }
 
@@ -758,19 +770,32 @@ impl HostPlatformRuntime {
             }
         });
 
-        match last {
-            Some(state) => PlatformCursorPollV1 {
-                has_value: true,
-                state: PlatformCursorStateV1 {
-                    visible: state.visible,
-                    grab: match state.grab {
-                        CursorGrabMode::None => PlatformCursorGrabModeV1::None,
-                        CursorGrabMode::Confined => PlatformCursorGrabModeV1::Confined,
-                        CursorGrabMode::Locked => PlatformCursorGrabModeV1::Locked,
-                    },
-                },
-            },
-            None => PlatformCursorPollV1::default(),
+        if let Some(state) = last {
+            self.last_platform_cursor = state;
+            self.force_cursor_reapply = false;
+            return cursor_poll_from_state(state);
         }
+
+        if self.force_cursor_reapply {
+            self.force_cursor_reapply = false;
+            return cursor_poll_from_state(self.last_platform_cursor);
+        }
+
+        PlatformCursorPollV1::default()
+    }
+}
+
+#[inline]
+fn cursor_poll_from_state(state: CursorState) -> PlatformCursorPollV1 {
+    PlatformCursorPollV1 {
+        has_value: true,
+        state: PlatformCursorStateV1 {
+            visible: state.visible,
+            grab: match state.grab {
+                CursorGrabMode::None => PlatformCursorGrabModeV1::None,
+                CursorGrabMode::Confined => PlatformCursorGrabModeV1::Confined,
+                CursorGrabMode::Locked => PlatformCursorGrabModeV1::Locked,
+            },
+        },
     }
 }

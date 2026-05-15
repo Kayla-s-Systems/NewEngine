@@ -12,9 +12,9 @@ fn runtime_dll_unload_enabled() -> bool {
     )
 }
 
-fn strict_plugin_module_shutdown_enabled() -> bool {
-    matches!(
-        std::env::var("NEWENGINE_STRICT_PLUGIN_MODULE_SHUTDOWN").ok().as_deref(),
+fn plugin_module_shutdown_enabled() -> bool {
+    !matches!(
+        std::env::var("NEWENGINE_DISABLE_PLUGIN_MODULE_SHUTDOWN").ok().as_deref(),
         Some("1") | Some("true") | Some("TRUE") | Some("yes") | Some("YES")
     )
 }
@@ -75,19 +75,19 @@ impl PluginManager {
             if retain_libraries { "process_lifetime" } else { "unload" }
         );
 
-        let call_legacy_module_shutdown = strict_plugin_module_shutdown_enabled();
+        let call_module_shutdown = plugin_module_shutdown_enabled();
 
         for i in (0..self.loaded.len()).rev() {
             let id = self.loaded[i].info.id.to_string();
             log::info!("plugins shutdown: plugin begin id='{}'", id);
             shutdown_services_by_owner(&id, "plugin-manager.shutdown");
-            if call_legacy_module_shutdown {
-                log::debug!("plugins shutdown: legacy module.shutdown begin id='{}'", id);
+            if call_module_shutdown {
+                log::debug!("plugins shutdown: module.shutdown begin id='{}'", id);
                 self.safe_shutdown_one(i);
-                log::debug!("plugins shutdown: legacy module.shutdown complete id='{}'", id);
+                log::debug!("plugins shutdown: module.shutdown complete id='{}'", id);
             } else {
                 log::debug!(
-                    "plugins shutdown: legacy module.shutdown skipped id='{}' reason='service shutdown_v1 is canonical; set NEWENGINE_STRICT_PLUGIN_MODULE_SHUTDOWN=1 for strict compatibility'",
+                    "plugins shutdown: module.shutdown disabled id='{}' reason='NEWENGINE_DISABLE_PLUGIN_MODULE_SHUTDOWN is set'",
                     id
                 );
             }
