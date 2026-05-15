@@ -22,7 +22,6 @@ pub(super) enum SelectionDecision {
     Unknown,
     AlreadyLoaded,
     Filtered { filter_label: &'static str },
-    ProfileMismatch { desired: &'static str, actual: String },
     DuplicateId { winner_file: String },
 }
 
@@ -51,7 +50,6 @@ impl SelectionDecision {
             | Self::Unknown
             | Self::AlreadyLoaded
             | Self::Filtered { .. }
-            | Self::ProfileMismatch { .. }
             | Self::DuplicateId { .. } => "no",
         }
     }
@@ -65,9 +63,6 @@ impl SelectionDecision {
             Self::Unknown => "unknown dynlib".to_owned(),
             Self::AlreadyLoaded => "already loaded".to_owned(),
             Self::Filtered { filter_label } => format!("filtered by {filter_label}"),
-            Self::ProfileMismatch { desired, actual } => {
-                format!("profile mismatch desired='{desired}' actual='{actual}'")
-            }
             Self::DuplicateId { winner_file } => {
                 format!("duplicate plugin id, winner='{winner_file}'")
             }
@@ -87,45 +82,6 @@ fn is_editor_only_plugin(kind: Option<newengine_plugin_api::PluginKind>) -> bool
     matches!(kind, Some(newengine_plugin_api::PluginKind::Editor))
 }
 
-#[inline]
-fn desired_plugin_profile() -> &'static str {
-    if cfg!(debug_assertions) { "dev" } else { "release" }
-}
-
-#[inline]
-fn mixed_plugin_profile_allowed() -> bool {
-    std::env::var("NEWENGINE_ALLOW_MIXED_PLUGIN_PROFILE")
-        .ok()
-        .map(|v| matches!(v.trim().to_ascii_lowercase().as_str(), "1" | "true" | "yes" | "on"))
-        .unwrap_or(false)
-}
-
-#[inline]
-fn plugin_file_profile(file_name: &str) -> &'static str {
-    let lower = file_name.to_ascii_lowercase();
-    if lower.contains("-release.") || lower.contains("-release-") {
-        "release"
-    } else if lower.contains("-dev.") || lower.contains("-dev-") {
-        "dev"
-    } else if lower.contains("-debug.") || lower.contains("-debug-") {
-        "dev"
-    } else if lower.contains("-test.") || lower.contains("-test-") {
-        "test"
-    } else if lower.contains("-bench.") || lower.contains("-bench-") {
-        "bench"
-    } else {
-        "unknown"
-    }
-}
-
-#[inline]
-fn plugin_profile_matches(file_name: &str, desired: &'static str, allow_mixed: bool) -> bool {
-    if allow_mixed {
-        return true;
-    }
-    plugin_file_profile(file_name) == desired
-}
-
 pub(super) fn build_load_selection(
     graph: &DiscoveryGraph,
     filter: LoadPhaseFilter,
@@ -133,8 +89,6 @@ pub(super) fn build_load_selection(
 ) -> LoadSelection {
     let mut out = LoadSelection::default();
     let runtime_only = runtime_target_plugins_only();
-    let desired_profile = desired_plugin_profile();
-    let allow_mixed_profiles = mixed_plugin_profile_allowed();
     let mut winners_by_id: HashMap<&str, &super::graph::ScannedDynlib> = HashMap::default();
 
     // First pass: choose one deterministic winner per plugin id.
@@ -154,7 +108,6 @@ pub(super) fn build_load_selection(
         if loaded_ids.contains(id)
             || !filter.allows(*phase)
             || (runtime_only && is_editor_only_plugin(*descriptor_kind))
-            || !plugin_profile_matches(&item.file_name, desired_profile, allow_mixed_profiles)
         {
             continue;
         }
@@ -191,11 +144,6 @@ pub(super) fn build_load_selection(
                 } else if !filter.allows(*phase) {
                     SelectionDecision::Filtered {
                         filter_label: filter.label(),
-                    }
-                } else if !plugin_profile_matches(&item.file_name, desired_profile, allow_mixed_profiles) {
-                    SelectionDecision::ProfileMismatch {
-                        desired: desired_profile,
-                        actual: plugin_file_profile(&item.file_name).to_owned(),
                     }
                 } else if let Some(winner) = winners_by_id.get(id.as_str()).copied() {
                     if winner.path == item.path {
@@ -264,13 +212,31 @@ fn semver_rank(version: &str) -> (u64, u64, u64, u64) {
 
 fn build_profile_rank(file_name: &str) -> u8 {
     let lower = file_name.to_ascii_lowercase();
-    if lower.contains("-release.") || lower.contains("-release-") {
-        3
+    let actual = if lower.contains("-release.") || lower.contains("-release-") {
+        "release"
     } else if lower.contains("-dev.") || lower.contains("-dev-") {
-        2
+        "dev"
     } else if lower.contains("-debug.") || lower.contains("-debug-") {
-        1
+        "debug"
+    } else if lower.contains("-test.") || lower.contains("-test-") {
+        "test"
+    } else if lower.contains("-bench.") || lower.contains("-bench-") {
+        "bench"
     } else {
-        0
+        "unknown"
+    };
+
+    let desired = if cfg!(debug_assertions) { "dev" } else { "release" };
+    if actual == desired {
+        5
+    } else {
+        match actual {
+            "dev" => 4,
+            "debug" => 3,
+            "release" => 2,
+            "test" => 1,
+            "bench" | "unknown" => 0,
+            _ => 0,
+        }
     }
 }

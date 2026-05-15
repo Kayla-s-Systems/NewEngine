@@ -79,6 +79,7 @@ pub(super) fn scan_plugins_dir(dir: &Path) -> Result<DiscoveryGraph, PluginLoadE
 
     let mut entries_total: usize = 0;
     let mut skipped_non_dynlib: usize = 0;
+    let mut dynlib_paths_all: Vec<PathBuf> = Vec::new();
     let mut dynlib_paths: Vec<PathBuf> = Vec::new();
     let mut scan_errors: Vec<String> = Vec::new();
     let desired_profile = desired_scan_profile();
@@ -99,33 +100,61 @@ pub(super) fn scan_plugins_dir(dir: &Path) -> Result<DiscoveryGraph, PluginLoadE
             continue;
         }
 
-        if !plugin_scan_profile_matches(&path, desired_profile, allow_mixed_profiles) {
+        dynlib_paths_all.push(path.clone());
+        if plugin_scan_profile_matches(&path, desired_profile, allow_mixed_profiles) {
+            dynlib_paths.push(path);
+        } else {
             skipped_profile_mismatch = skipped_profile_mismatch.saturating_add(1);
             log::info!(
-                "plugins: scan skipped profile mismatch path='{}' desired='{}' actual='{}' mixed_allowed={}",
+                "plugins: scan observed profile mismatch path='{}' desired='{}' actual='{}' mixed_allowed={}",
                 display_clean(&path),
                 desired_profile,
                 plugin_file_profile_for_scan(&path),
                 allow_mixed_profiles
             );
-            continue;
         }
-
-        dynlib_paths.push(path);
     }
 
-    // Importer worker DLLs are private to AssetManager.
-    // The plugin host must not scan plugins/importers as runtime plugins.
-    if skipped_profile_mismatch > 0 {
-        log::warn!(
-            "plugins: scan skipped {} dynamic libraries with mismatched build profile desired='{}' mixed_allowed={}",
-            skipped_profile_mismatch,
-            desired_profile,
-            allow_mixed_profiles
-        );
-    }
-
+    dynlib_paths_all.sort_by(|a, b| sort_key(a).cmp(&sort_key(b)));
     dynlib_paths.sort_by(|a, b| sort_key(a).cmp(&sort_key(b)));
+
+    // Standalone game/editor binaries are often launched from a dev cargo profile
+    // while the runtime plugins were built through the release plugin profile.
+    // Strictly filtering those DLLs out makes the engine fail with misleading
+    // "manifest missing required plugin" errors even though valid ABI-stable
+    // plugin DLLs are present. Match the platform runtime resolver policy:
+    // prefer the requested profile, but fall back to available plugin profiles
+    // when the requested profile cannot satisfy the required manifest entries.
+    if !allow_mixed_profiles && skipped_profile_mismatch > 0 {
+        let matching_missing = manifest
+            .as_ref()
+            .map(|m| m.required_entries_missing_from(&dynlib_paths))
+            .unwrap_or_default();
+        let fallback_missing = manifest
+            .as_ref()
+            .map(|m| m.required_entries_missing_from(&dynlib_paths_all))
+            .unwrap_or_default();
+        let should_fallback = dynlib_paths.is_empty()
+            || (!matching_missing.is_empty() && fallback_missing.len() < matching_missing.len());
+
+        if should_fallback && !dynlib_paths_all.is_empty() {
+            log::warn!(
+                "plugins: desired '{}' profile did not satisfy runtime plugin manifest; falling back to available plugin DLL profiles mismatched={} missing_before={} missing_after={}",
+                desired_profile,
+                skipped_profile_mismatch,
+                matching_missing.len(),
+                fallback_missing.len(),
+            );
+            dynlib_paths = dynlib_paths_all.clone();
+        } else {
+            log::warn!(
+                "plugins: scan skipped {} dynamic libraries with mismatched build profile desired='{}' mixed_allowed={}",
+                skipped_profile_mismatch,
+                desired_profile,
+                allow_mixed_profiles
+            );
+        }
+    }
 
     let mut items: Vec<ScannedDynlib> = Vec::with_capacity(dynlib_paths.len());
 
