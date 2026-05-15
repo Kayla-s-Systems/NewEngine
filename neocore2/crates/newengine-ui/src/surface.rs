@@ -14,12 +14,12 @@ pub const UI_SURFACE_ENGINE_LOADING: &str = "engine.loading";
 pub const UI_SURFACE_ENGINE_ERROR_MODAL: &str = "engine.error_modal";
 pub const UI_SURFACE_RUNTIME_OVERLAY: &str = "runtime.overlay";
 pub const UI_FEATURE_NATIVE_SAFE_STARTUP: &str = "native-safe-startup";
-pub const UI_FEATURE_ROCKSTAR_ERROR_MODAL: &str = "rockstar-error-modal";
+pub const UI_FEATURE_KSYSTEMS_ERROR_MODAL: &str = "ksystems-error-modal";
 pub const UI_FEATURE_EXTERNAL_PLUGIN_PROVIDER: &str = "external-plugin-provider";
-pub const UI_SHELL_ROCKSTAR_LOADING_ID: &str = "newengine.shell.rockstar.loading.v1";
+pub const UI_SHELL_KSYSTEMS_LOADING_ID: &str = "newengine.shell.ksystems.loading.v1";
 pub const UI_THEME_DARK_GOLD_MAGENTA: &str = "newengine.dark.gold-magenta";
-pub const UI_STYLE_ROCKSTAR_INDUSTRIAL: &str = "rockstar-industrial";
-pub const UI_ERROR_MODAL_ROCKSTAR_ID: &str = "engine.error_modal.rockstar.v1";
+pub const UI_STYLE_KSYSTEMS_INDUSTRIAL: &str = "ksystems-industrial";
+pub const UI_ERROR_MODAL_KSYSTEMS_ID: &str = "engine.error_modal.ksystems.v1";
 
 /// Stable identity for the UI provider selected by startup config/plugin discovery.
 ///
@@ -132,7 +132,7 @@ impl UiProviderManifest {
             ],
             features: vec![
                 UI_FEATURE_NATIVE_SAFE_STARTUP.to_owned(),
-                UI_FEATURE_ROCKSTAR_ERROR_MODAL.to_owned(),
+                UI_FEATURE_KSYSTEMS_ERROR_MODAL.to_owned(),
                 UI_FEATURE_STANDARD_MODAL_SYSTEM.to_owned(),
             ],
         }
@@ -173,11 +173,11 @@ pub struct UiShellSpec {
 
 impl UiShellSpec {
     #[inline]
-    pub fn rockstar_loading() -> Self {
+    pub fn ksystems_loading() -> Self {
         Self {
-            id: UI_SHELL_ROCKSTAR_LOADING_ID.to_owned(),
+            id: UI_SHELL_KSYSTEMS_LOADING_ID.to_owned(),
             theme: UI_THEME_DARK_GOLD_MAGENTA.to_owned(),
-            style: UI_STYLE_ROCKSTAR_INDUSTRIAL.to_owned(),
+            style: UI_STYLE_KSYSTEMS_INDUSTRIAL.to_owned(),
             animation: UiAnimationSpec::default(),
             loading: UiLoadingShellSpec::default(),
             subsystem_cards: UiSubsystemCardSpec::default(),
@@ -189,7 +189,7 @@ impl UiShellSpec {
 impl Default for UiShellSpec {
     #[inline]
     fn default() -> Self {
-        Self::rockstar_loading()
+        Self::ksystems_loading()
     }
 }
 
@@ -247,32 +247,74 @@ pub struct UiSubsystemCardSpec {
     pub detail_y_px: i32,
     pub progress_bottom_px: i32,
     pub progress_height_px: i32,
+    pub progress_segments: i32,
+    pub progress_segment_gap_px: i32,
+    pub pulse_glow: bool,
+    pub glow_radius_px: i32,
+    pub glow_strength_pct: u8,
     pub title_max_chars: usize,
     pub state_max_chars: usize,
     pub detail_max_chars: usize,
     pub show_detail: bool,
     pub show_progress: bool,
     pub uppercase_state: bool,
+    pub palette_token_set: String,
+    pub palette: UiSubsystemCardPaletteSpec,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct UiSubsystemCardPaletteSpec {
+    pub success: String,
+    pub active: String,
+    pub warning: String,
+    pub error: String,
+    pub waiting: String,
+    pub track: String,
+    pub segment_empty: String,
+    pub glow: String,
+}
+
+impl Default for UiSubsystemCardPaletteSpec {
+    #[inline]
+    fn default() -> Self {
+        Self {
+            success: "#46d682".to_owned(),
+            active: "#ffcb48".to_owned(),
+            warning: "#ff9256".to_owned(),
+            error: "#ff485a".to_owned(),
+            waiting: "#594b3f".to_owned(),
+            track: "#0a0c12".to_owned(),
+            segment_empty: "#181c24".to_owned(),
+            glow: "#de23a7".to_owned(),
+        }
+    }
 }
 
 impl Default for UiSubsystemCardSpec {
     #[inline]
     fn default() -> Self {
         Self {
-            id: "engine.loading.subsystem_card.rockstar.v1".to_owned(),
-            height_px: 126,
+            id: "engine.loading.subsystem_card.ksystems.v1".to_owned(),
+            height_px: 136,
             icon_y_px: 34,
-            title_y_px: 64,
-            state_y_px: 87,
-            detail_y_px: 105,
-            progress_bottom_px: 16,
-            progress_height_px: 4,
+            title_y_px: 70,
+            state_y_px: 94,
+            detail_y_px: 111,
+            progress_bottom_px: 12,
+            progress_height_px: 6,
+            progress_segments: 18,
+            progress_segment_gap_px: 3,
+            pulse_glow: true,
+            glow_radius_px: 5,
+            glow_strength_pct: 38,
             title_max_chars: 18,
             state_max_chars: 12,
             detail_max_chars: 24,
             show_detail: true,
             show_progress: true,
             uppercase_state: true,
+            palette_token_set: "newengine.dark.gold-magenta.subsystem-cards".to_owned(),
+            palette: UiSubsystemCardPaletteSpec::default(),
         }
     }
 }
@@ -292,7 +334,7 @@ impl Default for UiErrorModalSpec {
     #[inline]
     fn default() -> Self {
         Self {
-            id: UI_ERROR_MODAL_ROCKSTAR_ID.to_owned(),
+            id: UI_ERROR_MODAL_KSYSTEMS_ID.to_owned(),
             title: "STARTUP FAILURE".to_owned(),
             subtitle: "NewEngine stopped before playable handoff.".to_owned(),
             severity: "fatal".to_owned(),

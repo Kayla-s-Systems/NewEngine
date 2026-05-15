@@ -84,7 +84,7 @@ pub fn loading_surface_projection(
     status: &ScreenOverlayStatus,
     provider: UiProviderBinding,
 ) -> UiSurfaceProjection<ScreenOverlayStatus> {
-    let shell = UiShellSpec::rockstar_loading();
+    let shell = UiShellSpec::ksystems_loading();
     if status.kind == ScreenOverlayStatusKind::Error {
         UiSurfaceProjection::error_modal(provider, shell, status.clone())
     } else {

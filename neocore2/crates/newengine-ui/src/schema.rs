@@ -287,8 +287,8 @@ fn state_contract_for_id(id: &str) -> &'static str {
 
 fn default_layout_for_id(id: &str) -> &'static str {
     match id {
-        UI_SURFACE_ENGINE_LOADING => "ui/layouts/engine.loading.rockstar.json",
-        UI_SURFACE_ENGINE_ERROR_MODAL => "ui/layouts/engine.error_modal.rockstar.json",
+        UI_SURFACE_ENGINE_LOADING => "ui/layouts/engine.loading.ksystems.json",
+        UI_SURFACE_ENGINE_ERROR_MODAL => "ui/layouts/engine.error_modal.ksystems.json",
         UI_SURFACE_RUNTIME_OVERLAY => "ui/layouts/runtime.overlay.default.json",
         UI_SURFACE_GAME_HUD => "ui/layouts/game.hud.open_world.json",
         UI_SURFACE_MAIN_MENU => "ui/layouts/engine.main_menu.open_world.json",

@@ -7,5 +7,28 @@
     "title": "#ffecd6",
     "diagnostic": "#ffaa48",
     "pill_radius": 999
+  },
+  "subsystem_card": {
+    "palette": {
+      "success": "#46d682",
+      "active": "#ffcb48",
+      "warning": "#ff9256",
+      "error": "#ff485a",
+      "waiting": "#594b3f",
+      "track": "#0a0c12",
+      "segment_empty": "#181c24",
+      "glow": "#de23a7"
+    },
+    "progress": {
+      "kind": "segmented-telemetry",
+      "segments": 18,
+      "segment_gap_px": 3,
+      "height_px": 6
+    },
+    "animation": {
+      "active_pulse_glow": true,
+      "glow_radius_px": 5,
+      "glow_strength_pct": 38
+    }
   }
 }

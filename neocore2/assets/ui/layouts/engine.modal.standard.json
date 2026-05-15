@@ -2,7 +2,7 @@
   "version": 1,
   "id": "engine.modal.standard",
   "description": "Canonical NewEngine modal system for success, warning, error, info and debug surfaces.",
-  "style": "rockstar-launcher",
+  "style": "ksystems-launcher",
   "variants": {
     "success": { "header": "#68c037", "button_secondary": "#f1f9ec" },
     "warning": { "header": "#eab121", "button_secondary": "#fff5e1" },

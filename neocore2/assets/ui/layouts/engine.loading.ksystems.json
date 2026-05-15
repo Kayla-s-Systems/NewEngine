@@ -1,0 +1,11 @@
+{
+  "version": 1,
+  "id": "engine.loading.ksystems",
+  "surface_id": "engine.loading",
+  "theme": "newengine.dark.gold-magenta",
+  "style": "ksystems-industrial-loading-shell",
+  "children": [
+    "engine.loading.subsystem_card.ksystems.v1"
+  ],
+  "rule": "Loading shell is provider-owned; runtime supplies ScreenOverlayStatus projection only."
+}

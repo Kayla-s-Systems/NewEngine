@@ -78,9 +78,9 @@ impl UiProvider for PluginUiProvider {
         let manifest = self.manifest();
         let mut catalog = UiProviderCatalog::from_manifest(manifest);
         catalog.layouts = vec![
-            UiLayoutDeclaration { id: "engine.loading.rockstar".to_owned(), surface_id: UI_SURFACE_ENGINE_LOADING.to_owned(), document: "ui/layouts/engine.loading.rockstar.json".to_owned(), hot_reload: true, fallback_document: None },
-            UiLayoutDeclaration { id: "engine.loading.subsystem_card.rockstar".to_owned(), surface_id: UI_SURFACE_ENGINE_LOADING.to_owned(), document: "ui/layouts/engine.loading.subsystem_cards.rockstar.json".to_owned(), hot_reload: true, fallback_document: None },
-            UiLayoutDeclaration { id: "engine.error_modal.rockstar".to_owned(), surface_id: UI_SURFACE_ENGINE_ERROR_MODAL.to_owned(), document: "ui/layouts/engine.error_modal.rockstar.json".to_owned(), hot_reload: true, fallback_document: None },
+            UiLayoutDeclaration { id: "engine.loading.ksystems".to_owned(), surface_id: UI_SURFACE_ENGINE_LOADING.to_owned(), document: "ui/layouts/engine.loading.ksystems.json".to_owned(), hot_reload: true, fallback_document: None },
+            UiLayoutDeclaration { id: "engine.loading.subsystem_card.ksystems".to_owned(), surface_id: UI_SURFACE_ENGINE_LOADING.to_owned(), document: "ui/layouts/engine.loading.subsystem_cards.ksystems.json".to_owned(), hot_reload: true, fallback_document: None },
+            UiLayoutDeclaration { id: "engine.error_modal.ksystems".to_owned(), surface_id: UI_SURFACE_ENGINE_ERROR_MODAL.to_owned(), document: "ui/layouts/engine.error_modal.ksystems.json".to_owned(), hot_reload: true, fallback_document: None },
             UiLayoutDeclaration { id: "game.hud.open_world".to_owned(), surface_id: UI_SURFACE_GAME_HUD.to_owned(), document: "ui/layouts/game.hud.open_world.json".to_owned(), hot_reload: true, fallback_document: None },
             UiLayoutDeclaration { id: "engine.pause_menu.open_world".to_owned(), surface_id: UI_SURFACE_PAUSE_MENU.to_owned(), document: "ui/layouts/engine.pause_menu.open_world.json".to_owned(), hot_reload: true, fallback_document: None },
         ];
