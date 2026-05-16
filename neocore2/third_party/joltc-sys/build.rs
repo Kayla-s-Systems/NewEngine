@@ -16,6 +16,13 @@ fn main() {
 fn build_joltc(target: &BuildTarget) {
     let mut config = cmake::Config::new("JoltC");
 
+    if let Some(generator) = cmake_generator_for_target(target) {
+        // Set the generator on cmake::Config directly. Setting only the
+        // CMAKE_GENERATOR environment variable from the build script is too
+        // late for cmake crate generator inference on some hosts.
+        config.generator(generator);
+    }
+
     config.profile("Release");
 
     match target.toolchain {
@@ -109,6 +116,44 @@ fn generate_bindings(
     bindings
         .write_to_file(out_path)
         .context("Couldn't write bindings!")
+}
+
+
+fn cmake_generator_for_target(target: &BuildTarget) -> Option<String> {
+    if target.toolchain != WindowsToolchain::Msvc {
+        return None;
+    }
+
+    // `cmake` crate 0.1.58 can infer the future VS generator
+    // `Visual Studio 18 2026` on modern Windows hosts. That generator is not
+    // available on current developer machines where CMake exposes
+    // `Visual Studio 17 2022`. Keep this vendored third_party build
+    // deterministic, while still allowing explicit user/CI overrides.
+    if let Ok(generator) = env::var("NEWENGINE_JOLTC_CMAKE_GENERATOR") {
+        let generator = generator.trim();
+        if !generator.is_empty() {
+            return Some(generator.to_owned());
+        }
+    }
+
+    if generator_env_is_set(target) {
+        return None;
+    }
+
+    Some("Visual Studio 17 2022".to_owned())
+}
+
+fn generator_env_is_set(target: &BuildTarget) -> bool {
+    let triple_hyphen = target.rust_triple.as_str();
+    let triple_underscore = triple_hyphen.replace('-', "_");
+    [
+        format!("CMAKE_GENERATOR_{triple_hyphen}"),
+        format!("CMAKE_GENERATOR_{triple_underscore}"),
+        "HOST_CMAKE_GENERATOR".to_owned(),
+        "CMAKE_GENERATOR".to_owned(),
+    ]
+    .iter()
+    .any(|key| env::var_os(key).is_some())
 }
 
 // ------------------------- Target/toolchain helpers -------------------------

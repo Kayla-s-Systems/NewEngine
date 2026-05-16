@@ -17,6 +17,7 @@ pub(crate) mod plugin_forward_logger;
 pub(crate) mod log_fmt;
 pub(crate) mod path_fmt;
 pub mod render;
+pub mod physics;
 pub mod run_id;
 pub mod sched;
 pub mod services_registry;
@@ -61,6 +62,10 @@ pub use run_id::{init_run_id, run_id};
 pub use render::{
     BeginFrameDesc, BeginRenderTargetDesc, Color4, RenderApi, RenderApiRef, RenderTargetDesc,
     RenderTargetId, RENDER_API_ID, RENDER_API_PROVIDE, RENDER_API_VERSION,
+};
+
+pub use physics::{
+    PhysicsApi, PhysicsApiRef, PHYSICS_API_ID, PHYSICS_API_PROVIDE, PHYSICS_API_VERSION,
 };
 
 pub use startup::{

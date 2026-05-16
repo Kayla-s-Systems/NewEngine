@@ -14,6 +14,7 @@ use newengine_core::{
     StartupConfig,
 };
 use newengine_render_feature_gameready::GameReadyRenderFeaturePack;
+use newengine_runtime_host::physics_runtime::PhysicsBackendRuntimeModule;
 use newengine_runtime_host::render_runtime::RenderBackendRuntimeModule;
 use newengine_ui::{UiBuildFn, UiProviderKind};
 use std::any::Any;
@@ -187,6 +188,10 @@ impl StandaloneGameRuntimeProfile {
         engine: &mut Engine<()>,
         startup: &StartupConfig,
     ) -> EngineResult<()> {
+        engine.register_module(Box::new(PhysicsBackendRuntimeModule::new(
+            startup.modules_dir.clone(),
+        )))?;
+
         engine.register_module(Box::new(RenderBackendRuntimeModule::new(
             startup.modules_dir.clone(),
         )))?;

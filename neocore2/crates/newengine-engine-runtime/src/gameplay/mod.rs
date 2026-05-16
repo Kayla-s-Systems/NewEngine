@@ -13,6 +13,7 @@ pub use components::{
     GameReadyWorldLaunchGate, GameplayActor, PlayerActor,
 };
 pub use fps_demo::step_fps_demo_gameplay;
+pub use physics::{PhysicsRuntimeFrameIndex, PhysicsSyncModule};
 pub use player::{
     apply_player_input, attach_active_camera_to_player, clear_player_input,
     detach_active_camera_from_player, display_visible_in_mode, ensure_physics_body, first_player,

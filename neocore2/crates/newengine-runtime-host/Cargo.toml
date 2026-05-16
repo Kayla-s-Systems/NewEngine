@@ -22,6 +22,7 @@ newengine-math = { path = "../newengine-math" }
 newengine-platform-api = { path = "../newengine-platform-api" }
 newengine-plugin-api = { path = "../newengine-plugin-api" }
 newengine-render-api = { path = "../newengine-render-api" }
+newengine-physics-api = { path = "../newengine-physics-api" }
 newengine-system-runtime = { path = "../newengine-system-runtime" }
 newengine-system-contracts = { path = "../newengine-system-contracts" }
 newengine-plugin-host = { path = "../newengine-plugin-host" }

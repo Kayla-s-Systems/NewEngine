@@ -37,3 +37,13 @@ Generator constants such as ridge/vein frequency, amplitudes, seed xor values an
 
 This is intentionally a bridge layer: the plugin manifest owns the content, the
 engine owns only the minimal adapter from declared schema to ECS components.
+
+## 2026-05-16 — Physics backend service adapter boundary
+
+Physics now follows the provider/adapter direction used by render. Runtime systems must use `PhysicsApiRef` and `newengine-physics-api` packets; backend plugins provide `physics.api` plus `physics.backend`. The deterministic, Jolt and null physics providers live under `Plugins/` and are selected as service backends. Engine/runtime code must not depend on Jolt or `newengine-physics-runtime` directly.
+
+Target frame boundary:
+
+```text
+ECS -> PhysicsFrameInput -> physics.api -> PhysicsFrameOutput -> ECS
+```

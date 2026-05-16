@@ -15,6 +15,7 @@ object-layer-u32 = ["rolt/object-layer-u32", "joltc-sys/object-layer-u32"]
 newengine-ecs = { path = "../newengine-ecs" }
 newengine-math = { path = "../newengine-math" }
 newengine-physics-contracts = { path = "../newengine-physics-contracts" }
+newengine-physics-api = { path = "../newengine-physics-api" }
 thiserror = "2"
 
 # Safe wrapper

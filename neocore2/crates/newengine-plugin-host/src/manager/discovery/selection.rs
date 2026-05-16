@@ -124,6 +124,7 @@ pub(super) fn build_load_selection(
     }
 
     let selected_render_backend_path = select_render_backend_provider(&winners_by_id);
+    let selected_physics_backend_path = select_physics_backend_provider(&winners_by_id);
 
     for item in &graph.items {
         let decision = match &item.kind {
@@ -137,6 +138,8 @@ pub(super) fn build_load_selection(
                 descriptor_kind,
                 provides_render_backend,
                 provides_render_service,
+                provides_physics_backend,
+                provides_physics_service,
                 ..
             } => {
                 if loaded_ids.contains(id) {
@@ -154,6 +157,12 @@ pub(super) fn build_load_selection(
                 {
                     SelectionDecision::Filtered {
                         filter_label: "render-provider-selection",
+                    }
+                } else if *provides_physics_backend && *provides_physics_service
+                    && selected_physics_backend_path.as_ref() != Some(&item.path)
+                {
+                    SelectionDecision::Filtered {
+                        filter_label: "physics-provider-selection",
                     }
                 } else if let Some(winner) = winners_by_id.get(id.as_str()).copied() {
                     if winner.path == item.path {
@@ -212,6 +221,41 @@ fn select_render_backend_provider(
 fn render_provider_priority(item: &super::graph::ScannedDynlib) -> u8 {
     match &item.kind {
         ScannedDynlibKind::Plugin { id, .. } if id == "newengine.renderer.null" => 0,
+        ScannedDynlibKind::Plugin { .. } => 1,
+        _ => 0,
+    }
+}
+
+fn select_physics_backend_provider(
+    winners_by_id: &HashMap<&str, &super::graph::ScannedDynlib>,
+) -> Option<std::path::PathBuf> {
+    let mut candidates: Vec<&super::graph::ScannedDynlib> = winners_by_id
+        .values()
+        .copied()
+        .filter(|item| match &item.kind {
+            ScannedDynlibKind::Plugin {
+                provides_physics_backend,
+                provides_physics_service,
+                ..
+            } => *provides_physics_backend && *provides_physics_service,
+            _ => false,
+        })
+        .collect();
+
+    candidates.sort_by(|a, b| {
+        physics_provider_priority(a)
+            .cmp(&physics_provider_priority(b))
+            .then_with(|| plugin_candidate_rank(a).cmp(&plugin_candidate_rank(b)))
+    });
+
+    candidates.last().map(|item| item.path.clone())
+}
+
+fn physics_provider_priority(item: &super::graph::ScannedDynlib) -> u8 {
+    match &item.kind {
+        ScannedDynlibKind::Plugin { id, .. } if id == "newengine.physics.null" => 0,
+        ScannedDynlibKind::Plugin { id, .. } if id == "newengine.physics.deterministic" => 1,
+        ScannedDynlibKind::Plugin { id, .. } if id == "newengine.physics.jolt" => 2,
         ScannedDynlibKind::Plugin { .. } => 1,
         _ => 0,
     }

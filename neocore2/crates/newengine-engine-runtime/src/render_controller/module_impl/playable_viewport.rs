@@ -1,5 +1,6 @@
 use newengine_camera_runtime::cursor_state_for_nav;
 use newengine_core::host_events::CursorState;
+use newengine_core::physics::PhysicsApiRef;
 use newengine_core::render::{Extent2D, RenderApi};
 use newengine_core::{EngineResult, ModuleCtx};
 use newengine_ui::draw::UiDrawList;
@@ -41,8 +42,10 @@ impl RuntimeRenderController {
         self.bridges.scene.apply_commands();
         let scene_lock = self.bridges.scene.scene();
         let mut scene = scene_lock.write();
+        let physics_api = ctx.api::<PhysicsApiRef>(newengine_core::physics::PHYSICS_API_ID).cloned();
         let world_frame = self.tick_world_for_render(
             r,
+            physics_api.as_ref(),
             &mut scene,
             &frame_input.input,
             frame_input.play_mode,

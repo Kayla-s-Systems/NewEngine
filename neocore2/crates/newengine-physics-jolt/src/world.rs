@@ -81,7 +81,7 @@ static JOLT_WORLD_REFS: AtomicUsize = AtomicUsize::new(0);
 
 #[inline]
 fn jolt_global_acquire() -> Result<(), PhysicsError> {
-    let mut ok = true;
+    let ok = true;
 
     JOLT_INIT_ONCE.call_once(|| unsafe {
         sys::JPC_RegisterDefaultAllocator();
@@ -277,11 +277,7 @@ impl Drop for PhysicsWorld {
         unsafe {
             sys::JPC_JobSystemThreadPool_delete(self.job_system);
             sys::JPC_TempAllocatorImpl_delete(self.temp_allocator);
-
-            // Global shutdown:
-            // `JPC_FactoryDestroy` is not present in current joltc_sys bindings.
-            // Keep only what exists; factory teardown can be left to process lifetime.
-            sys::JPC_UnregisterTypes();
         }
+        jolt_global_release();
     }
 }

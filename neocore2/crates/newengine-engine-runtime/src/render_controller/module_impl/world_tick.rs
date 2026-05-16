@@ -6,6 +6,7 @@ use newengine_camera_runtime::{
     CameraNavFrameRequest, CameraNavInput, CameraNavParams, CameraRuntimeService,
     CameraRuntimeServiceConfig, CameraRuntimeWorldState,
 };
+use newengine_core::physics::PhysicsApiRef;
 use newengine_core::render::RenderApi;
 use newengine_math::Vec2;
 use newengine_scene::Scene;
@@ -23,6 +24,7 @@ impl RuntimeRenderController {
     pub(super) fn tick_world_for_render(
         &mut self,
         r: &mut dyn RenderApi,
+        physics_api: Option<&PhysicsApiRef>,
         scene: &mut Scene,
         input: &ViewportInputSnap,
         play_mode: GameRunMode,
@@ -109,7 +111,8 @@ impl RuntimeRenderController {
                 }
 
                 if effective_play_mode.runs_physics() {
-                    run_schedule(&mut self.frame.sim_schedule, world, dt);
+                    world.insert_resource(crate::gameplay::PhysicsRuntimeFrameIndex(self.frame.frame_index));
+                    run_schedule(&mut self.frame.sim_schedule, world, dt, physics_api);
                 }
 
                 let bounds = scene::scene_bounds_world(world).unwrap_or_else(scene::default_bounds);

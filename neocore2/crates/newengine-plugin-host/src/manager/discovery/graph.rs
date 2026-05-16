@@ -18,6 +18,8 @@ pub(super) enum ScannedDynlibKind {
         declared_capabilities: Option<usize>,
         provides_render_backend: bool,
         provides_render_service: bool,
+        provides_physics_backend: bool,
+        provides_physics_service: bool,
     },
     Unknown,
 }

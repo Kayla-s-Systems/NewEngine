@@ -245,6 +245,8 @@ fn scan_dynamic_lib(path: &Path, manifest: Option<&PluginManifest>) -> Result<Sc
                 declared_capabilities: None,
                 provides_render_backend: is_render_backend_plugin_id(&entry.id),
                 provides_render_service: is_render_backend_plugin_id(&entry.id),
+                provides_physics_backend: is_physics_backend_plugin_id(&entry.id),
+                provides_physics_service: is_physics_backend_plugin_id(&entry.id),
             },
         });
     }
@@ -303,6 +305,8 @@ fn infer_kind_from_file_name(path: &Path, file_name: &str) -> ScannedDynlibKind 
         declared_capabilities: None,
         provides_render_backend: is_render_backend_plugin_id(id),
         provides_render_service: is_render_backend_plugin_id(id),
+        provides_physics_backend: is_physics_backend_plugin_id(id),
+        provides_physics_service: is_physics_backend_plugin_id(id),
     };
 
     if lower.starts_with("logging-") {
@@ -341,6 +345,27 @@ fn infer_kind_from_file_name(path: &Path, file_name: &str) -> ScannedDynlibKind 
             newengine_plugin_api::PluginKind::Runtime,
         );
     }
+    if lower.starts_with("newengine-physics-jolt-adapter-") || lower.starts_with("jolt_physics-") {
+        return plugin(
+            "newengine.physics.jolt",
+            newengine_plugin_api::PluginBootstrapPhase::Engine,
+            newengine_plugin_api::PluginKind::Runtime,
+        );
+    }
+    if lower.starts_with("newengine-physics-deterministic-") || lower.starts_with("physics_deterministic-") {
+        return plugin(
+            "newengine.physics.deterministic",
+            newengine_plugin_api::PluginBootstrapPhase::Engine,
+            newengine_plugin_api::PluginKind::Runtime,
+        );
+    }
+    if lower.starts_with("newengine-physics-null-") || lower.starts_with("null_physics-") {
+        return plugin(
+            "newengine.physics.null",
+            newengine_plugin_api::PluginBootstrapPhase::Engine,
+            newengine_plugin_api::PluginKind::Runtime,
+        );
+    }
     if lower.starts_with("egui_ui_provider-") {
         return plugin(
             "newengine.ui.provider.egui",
@@ -362,6 +387,11 @@ fn infer_kind_from_file_name(path: &Path, file_name: &str) -> ScannedDynlibKind 
 #[inline]
 fn is_render_backend_plugin_id(id: &str) -> bool {
     id == "newengine.renderer.null" || id.starts_with("newengine.renderer.")
+}
+
+#[inline]
+fn is_physics_backend_plugin_id(id: &str) -> bool {
+    id == "newengine.physics.null" || id.starts_with("newengine.physics.")
 }
 
 fn infer_version_from_file_name(path: &Path) -> String {
@@ -400,4 +430,32 @@ fn sort_key(path: &Path) -> (String, String) {
         .map(str::to_owned)
         .unwrap_or_else(|| "<unnamed>".to_owned());
     (file_name, display_clean(path))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn inferred_plugin_id(file_name: &str) -> Option<String> {
+        match infer_kind_from_file_name(Path::new(file_name), file_name) {
+            ScannedDynlibKind::Plugin { id, .. } => Some(id),
+            _ => None,
+        }
+    }
+
+    #[test]
+    fn infer_kind_recognizes_canonical_physics_plugin_filenames() {
+        assert_eq!(
+            inferred_plugin_id("newengine-physics-jolt-adapter-0.1.0-release.dll").as_deref(),
+            Some("newengine.physics.jolt")
+        );
+        assert_eq!(
+            inferred_plugin_id("newengine-physics-deterministic-0.1.0-release.dll").as_deref(),
+            Some("newengine.physics.deterministic")
+        );
+        assert_eq!(
+            inferred_plugin_id("newengine-physics-null-0.1.0-release.dll").as_deref(),
+            Some("newengine.physics.null")
+        );
+    }
 }

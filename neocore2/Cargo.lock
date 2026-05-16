@@ -646,6 +646,7 @@ dependencies = [
  "log",
  "newengine-assets-api",
  "newengine-math",
+ "newengine-physics-api",
  "newengine-platform-api",
  "newengine-plugin-api",
  "newengine-plugin-host",
@@ -687,8 +688,8 @@ dependencies = [
  "newengine-material-domain-api",
  "newengine-materials",
  "newengine-math",
+ "newengine-physics-api",
  "newengine-physics-contracts",
- "newengine-physics-runtime",
  "newengine-platform-api",
  "newengine-plugin-api",
  "newengine-plugin-host",
@@ -785,6 +786,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "newengine-physics-api"
+version = "0.1.0"
+dependencies = [
+ "newengine-service-api",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "newengine-physics-contracts"
 version = "0.1.0"
 dependencies = [
@@ -800,6 +810,7 @@ dependencies = [
  "joltc-sys",
  "newengine-ecs",
  "newengine-math",
+ "newengine-physics-api",
  "newengine-physics-contracts",
  "rolt",
  "thiserror 2.0.18",
@@ -920,6 +931,7 @@ dependencies = [
  "newengine-assets",
  "newengine-core",
  "newengine-math",
+ "newengine-physics-api",
  "newengine-platform-api",
  "newengine-plugin-api",
  "newengine-plugin-host",

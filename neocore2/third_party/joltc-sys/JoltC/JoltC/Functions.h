@@ -476,6 +476,47 @@ JPC_API void JPC_ConvexHullShapeSettings_default(JPC_ConvexHullShapeSettings* ob
 JPC_API bool JPC_ConvexHullShapeSettings_Create(const JPC_ConvexHullShapeSettings* self, JPC_Shape** outShape, JPC_String** outError);
 
 ////////////////////////////////////////////////////////////////////////////////
+// MeshShapeSettings -> ShapeSettings
+
+typedef struct JPC_MeshShapeSettings {
+    // ShapeSettings
+    uint64_t UserData;
+
+    // MeshShapeSettings
+    const JPC_Float3* Vertices;
+    size_t VerticesLen;
+    const JPC_IndexedTriangle* Triangles;
+    size_t TrianglesLen;
+    uint MaxTrianglesPerLeaf;
+    float ActiveEdgeCosThresholdAngle;
+} JPC_MeshShapeSettings;
+
+JPC_API void JPC_MeshShapeSettings_default(JPC_MeshShapeSettings* object);
+JPC_API bool JPC_MeshShapeSettings_Create(const JPC_MeshShapeSettings* self, JPC_Shape** outShape, JPC_String** outError);
+
+////////////////////////////////////////////////////////////////////////////////
+// HeightFieldShapeSettings -> ShapeSettings
+
+typedef struct JPC_HeightFieldShapeSettings {
+    // ShapeSettings
+    uint64_t UserData;
+
+    // HeightFieldShapeSettings
+    const float* Samples;
+    uint32_t SampleCount;
+    JPC_Vec3 Offset;
+    JPC_Vec3 Scale;
+    float MinHeightValue;
+    float MaxHeightValue;
+    uint32_t BlockSize;
+    uint32_t BitsPerSample;
+    float ActiveEdgeCosThresholdAngle;
+} JPC_HeightFieldShapeSettings;
+
+JPC_API void JPC_HeightFieldShapeSettings_default(JPC_HeightFieldShapeSettings* object);
+JPC_API bool JPC_HeightFieldShapeSettings_Create(const JPC_HeightFieldShapeSettings* self, JPC_Shape** outShape, JPC_String** outError);
+
+////////////////////////////////////////////////////////////////////////////////
 // CompoundShape::SubShapeSettings
 
 typedef struct JPC_SubShapeSettings {

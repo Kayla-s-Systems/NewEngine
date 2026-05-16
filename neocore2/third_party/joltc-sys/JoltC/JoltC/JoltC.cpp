@@ -11,6 +11,8 @@
 #include <Jolt/Physics/Collision/Shape/CapsuleShape.h>
 #include <Jolt/Physics/Collision/Shape/CompoundShape.h>
 #include <Jolt/Physics/Collision/Shape/ConvexHullShape.h>
+#include <Jolt/Physics/Collision/Shape/HeightFieldShape.h>
+#include <Jolt/Physics/Collision/Shape/MeshShape.h>
 #include <Jolt/Physics/Collision/Shape/CylinderShape.h>
 #include <Jolt/Physics/Collision/Shape/MutableCompoundShape.h>
 #include <Jolt/Physics/Collision/Shape/SphereShape.h>
@@ -23,6 +25,8 @@
 #include <Jolt/Renderer/DebugRendererSimple.h>
 
 #include <JoltC/JoltC.h>
+
+#include <cfloat>
 
 #define OPAQUE_WRAPPER(c_type, cpp_type) \
 	static c_type* to_jpc(cpp_type *in) { return reinterpret_cast<c_type*>(in); } \
@@ -687,6 +691,90 @@ JPC_API bool JPC_ConvexHullShapeSettings_Create(const JPC_ConvexHullShapeSetting
 	JPH::ConvexHullShapeSettings settings;
 	to_jph(self, &settings);
 
+	return HandleShapeResult(settings.Create(), outShape, outError);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// MeshShapeSettings
+
+static void to_jph(const JPC_MeshShapeSettings* input, JPH::MeshShapeSettings* output) {
+	output->mUserData = input->UserData;
+	output->mTriangleVertices.clear();
+	output->mIndexedTriangles.clear();
+
+	if (input->Vertices != nullptr && input->VerticesLen > 0) {
+		output->mTriangleVertices.reserve(input->VerticesLen);
+		for (size_t i = 0; i < input->VerticesLen; ++i) {
+			output->mTriangleVertices.push_back(JPH::Float3(input->Vertices[i].x, input->Vertices[i].y, input->Vertices[i].z));
+		}
+	}
+
+	if (input->Triangles != nullptr && input->TrianglesLen > 0) {
+		output->mIndexedTriangles.reserve(input->TrianglesLen);
+		for (size_t i = 0; i < input->TrianglesLen; ++i) {
+			const JPC_IndexedTriangle& t = input->Triangles[i];
+			output->mIndexedTriangles.push_back(JPH::IndexedTriangle(t.idx[0], t.idx[1], t.idx[2], t.materialIndex));
+		}
+	}
+
+	output->mMaxTrianglesPerLeaf = input->MaxTrianglesPerLeaf;
+	output->mActiveEdgeCosThresholdAngle = input->ActiveEdgeCosThresholdAngle;
+}
+
+JPC_API void JPC_MeshShapeSettings_default(JPC_MeshShapeSettings* object) {
+	object->UserData = 0;
+	object->Vertices = nullptr;
+	object->VerticesLen = 0;
+	object->Triangles = nullptr;
+	object->TrianglesLen = 0;
+	object->MaxTrianglesPerLeaf = 8;
+	object->ActiveEdgeCosThresholdAngle = 0.996195f;
+}
+
+JPC_API bool JPC_MeshShapeSettings_Create(const JPC_MeshShapeSettings* self, JPC_Shape** outShape, JPC_String** outError) {
+	JPH::MeshShapeSettings settings;
+	to_jph(self, &settings);
+	settings.Sanitize();
+	return HandleShapeResult(settings.Create(), outShape, outError);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// HeightFieldShapeSettings
+
+static void to_jph(const JPC_HeightFieldShapeSettings* input, JPH::HeightFieldShapeSettings* output) {
+	output->mUserData = input->UserData;
+	output->mOffset = to_jph(input->Offset);
+	output->mScale = to_jph(input->Scale);
+	output->mSampleCount = input->SampleCount;
+	output->mMinHeightValue = input->MinHeightValue;
+	output->mMaxHeightValue = input->MaxHeightValue;
+	output->mBlockSize = input->BlockSize;
+	output->mBitsPerSample = input->BitsPerSample;
+	output->mActiveEdgeCosThresholdAngle = input->ActiveEdgeCosThresholdAngle;
+	output->mHeightSamples.clear();
+	if (input->Samples != nullptr && input->SampleCount > 0) {
+		size_t sample_len = size_t(input->SampleCount) * size_t(input->SampleCount);
+		output->mHeightSamples.resize(sample_len);
+		memcpy(output->mHeightSamples.data(), input->Samples, sample_len * sizeof(float));
+	}
+}
+
+JPC_API void JPC_HeightFieldShapeSettings_default(JPC_HeightFieldShapeSettings* object) {
+	object->UserData = 0;
+	object->Samples = nullptr;
+	object->SampleCount = 0;
+	object->Offset = JPC_Vec3{0, 0, 0, 0};
+	object->Scale = JPC_Vec3{1, 1, 1, 0};
+	object->MinHeightValue = FLT_MAX;
+	object->MaxHeightValue = -FLT_MAX;
+	object->BlockSize = 2;
+	object->BitsPerSample = 8;
+	object->ActiveEdgeCosThresholdAngle = 0.996195f;
+}
+
+JPC_API bool JPC_HeightFieldShapeSettings_Create(const JPC_HeightFieldShapeSettings* self, JPC_Shape** outShape, JPC_String** outError) {
+	JPH::HeightFieldShapeSettings settings;
+	to_jph(self, &settings);
 	return HandleShapeResult(settings.Create(), outShape, outError);
 }
 

@@ -29,7 +29,7 @@ newengine-lighting = { path = "../newengine-lighting" }
 newengine-materials = { path = "../newengine-materials", features = ["serde"] }
 newengine-material-domain-api = { path = "../newengine-material-domain-api" }
 newengine-physics-contracts = { path = "../newengine-physics-contracts" }
-newengine-physics-runtime = { path = "../newengine-physics-runtime" }
+newengine-physics-api = { path = "../newengine-physics-api" }
 newengine-math = { path = "../newengine-math" }
 newengine-platform-api = { path = "../newengine-platform-api" }
 newengine-plugin-api = { path = "../newengine-plugin-api" }

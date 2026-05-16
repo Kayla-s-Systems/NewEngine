@@ -24,6 +24,7 @@ newengine-platform-api = { path = "../newengine-platform-api" }
 newengine-math = { path = "../newengine-math" }
 newengine-service-api = { path = "../newengine-service-api" }
 newengine-render-api = { path = "../newengine-render-api" }
+newengine-physics-api = { path = "../newengine-physics-api" }
 newengine-assets-api = { path = "../newengine-assets-api" }
 newengine-ui-draw = { path = "../newengine-ui-draw" }
 
