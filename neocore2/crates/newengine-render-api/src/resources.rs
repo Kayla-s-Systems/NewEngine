@@ -51,8 +51,38 @@ pub enum TextureFormat {
     Bgra8Unorm,
     Bgra8Srgb,
     Rgba16Float,
+    Bc1RgbaUnorm,
+    Bc1RgbaSrgb,
+    Bc3RgbaUnorm,
+    Bc3RgbaSrgb,
+    Bc5RgUnorm,
+    Bc7RgbaUnorm,
+    Bc7RgbaSrgb,
     Depth24Stencil8,
     Depth32Float,
+}
+
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct TextureMipDataDesc {
+    pub level: u32,
+    pub width: u32,
+    pub height: u32,
+    pub offset: u64,
+    pub byte_len: u64,
+}
+
+impl TextureMipDataDesc {
+    #[inline]
+    pub fn new(level: u32, width: u32, height: u32, offset: u64, byte_len: u64) -> Self {
+        Self {
+            level,
+            width,
+            height,
+            offset,
+            byte_len,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -88,6 +118,10 @@ pub struct TextureDesc {
     pub usage: TextureUsage,
     pub mip_levels: NonZeroU32,
     pub data: Option<Vec<u8>>,
+    /// Optional byte layout for payloads that already contain a complete runtime mip chain.
+    /// Empty layout means legacy base-level upload followed by backend mip generation.
+    #[serde(default)]
+    pub mip_data: Vec<TextureMipDataDesc>,
     #[serde(default)]
     pub data_policy: TextureDataPolicy,
 }
@@ -102,6 +136,7 @@ impl TextureDesc {
             usage,
             mip_levels: NonZeroU32::new(1).expect("mip_levels must be non-zero"),
             data: None,
+            mip_data: Vec::new(),
             data_policy: TextureDataPolicy::Immediate,
         }
     }
@@ -128,6 +163,14 @@ impl TextureDesc {
     #[inline]
     pub fn with_deferred_data(mut self, data: Vec<u8>) -> Self {
         self.data = Some(data);
+        self.data_policy = TextureDataPolicy::Deferred;
+        self
+    }
+
+    #[inline]
+    pub fn with_deferred_mip_data(mut self, mip_data: Vec<TextureMipDataDesc>, data: Vec<u8>) -> Self {
+        self.data = Some(data);
+        self.mip_data = mip_data;
         self.data_policy = TextureDataPolicy::Deferred;
         self
     }

@@ -16,6 +16,7 @@ pub struct StandardRuntimePipelineDesc {
     pub shadow_enabled: bool,
     pub shadow_resolution: u32,
     pub deferred: bool,
+    pub hdr_scene_enabled: bool,
     pub postfx_enabled: bool,
     pub ui_enabled: bool,
     pub debug_overlay_enabled: bool,
@@ -36,7 +37,8 @@ impl StandardRuntimePipelineDesc {
             shadow_enabled: true,
             shadow_resolution: 2048,
             deferred: false,
-            postfx_enabled: false,
+            hdr_scene_enabled: true,
+            postfx_enabled: true,
             ui_enabled: true,
             debug_overlay_enabled: true,
             execution_mode: FramePlanExecutionMode::ImmediateCallbacks,
@@ -76,6 +78,12 @@ impl StandardRuntimePipelineDesc {
     }
 
     #[inline]
+    pub fn hdr_scene(mut self, enabled: bool) -> Self {
+        self.hdr_scene_enabled = enabled;
+        self
+    }
+
+    #[inline]
     pub fn postfx(mut self, enabled: bool) -> Self {
         self.postfx_enabled = enabled;
         self
@@ -109,7 +117,9 @@ pub fn standard_runtime_frame(desc: StandardRuntimePipelineDesc) -> RenderFrameP
         desc.viewport_is_surface,
     );
     target.color_format = TextureFormat::Bgra8Unorm;
+    target.scene_color_format = TextureFormat::Rgba16Float;
     target.depth_format = TextureFormat::Depth32Float;
+    target.hdr_scene_enabled = desc.hdr_scene_enabled;
     target.viewport_render_target = desc.viewport_render_target;
     target.shadow_render_target = desc.shadow_render_target;
 

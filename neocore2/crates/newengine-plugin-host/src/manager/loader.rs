@@ -203,13 +203,13 @@ impl PluginManager {
         self.loaded_ids.insert(id_str.clone());
         self.loaded.push(LoadedPlugin {
             path: path.to_path_buf(),
-            _lib: lib,
             module: module_any,
             info,
             descriptor,
             state: PluginState::Registered,
             disabled_reason: None,
             icon_small,
+            _lib: lib,
         });
 
         record_loaded_plugin_root(LoadedPluginRootSnapshot {

@@ -119,6 +119,22 @@ vec3 fresnel_schlick(float cosTheta, vec3 F0) {
     return F0 + (1.0 - F0) * pow(clamp(1.0 - cosTheta, 0.0, 1.0), 5.0);
 }
 
+vec3 decode_normal_sample(vec3 packed) {
+    vec2 xy = packed.xy * 2.0 - 1.0;
+
+    // BC5 normal maps only store X/Y. Vulkan returns missing B as 0,
+    // so the old `packed.xyz * 2 - 1` path produced z=-1 and pushed
+    // lighting into a visibly over-dark state. RGBA8 normals still keep
+    // their authored Z channel; BC5 reconstructs positive hemisphere Z.
+    float z = packed.z > 0.0039
+        ? packed.z * 2.0 - 1.0
+        : sqrt(max(1.0 - dot(xy, xy), 0.0));
+
+    return normalize(vec3(xy, z));
+}
+
+
+
 vec3 pbr_direct(vec3 base, vec3 N, vec3 V, vec3 L, vec3 light_color, float intensity, float roughness, float metallic) {
     vec3 H = normalize(V + L);
     float NdotL = max(dot(N, L), 0.0);
@@ -144,7 +160,8 @@ void main() {
     vec3 N = normalize(v_wnrm);
     float normal_scale = clamp(ubo.u_material_params.x, 0.0, 1.0);
     if (normal_scale > 0.001) {
-        vec3 map_n = textureGrad(sampler2D(u_normal_tex, u_material_sampler), v_uv, stable_material_uv_dx, stable_material_uv_dy).xyz * 2.0 - 1.0;
+        vec3 packed_n = textureGrad(sampler2D(u_normal_tex, u_material_sampler), v_uv, stable_material_uv_dx, stable_material_uv_dy).xyz;
+        vec3 map_n = decode_normal_sample(packed_n);
         mat3 tbn = cotangent_frame(N, v_wpos, v_uv);
         N = normalize(tbn * vec3(map_n.xy * normal_scale, map_n.z));
     }
@@ -199,5 +216,6 @@ void main() {
     }
 
     color += ubo.u_emissive.rgb;
+
     o_color = vec4(color, v_base.a * texel.a);
 }

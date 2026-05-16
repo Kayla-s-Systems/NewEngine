@@ -11,13 +11,14 @@ use crate::{
 pub const RG_SURFACE_COLOR: RenderGraphResourceId = RenderGraphResourceId(1);
 pub const RG_VIEWPORT_COLOR: RenderGraphResourceId = RenderGraphResourceId(2);
 pub const RG_VIEWPORT_DEPTH: RenderGraphResourceId = RenderGraphResourceId(3);
+/// Linear scene color target. World shaders write lighting here without display encoding.
+pub const RG_SCENE_HDR_COLOR: RenderGraphResourceId = RenderGraphResourceId(4);
 pub const RG_SHADOW_MAP: RenderGraphResourceId = RenderGraphResourceId(10);
 pub const RG_GBUFFER_ALBEDO: RenderGraphResourceId = RenderGraphResourceId(20);
 pub const RG_GBUFFER_NORMAL: RenderGraphResourceId = RenderGraphResourceId(21);
 pub const RG_GBUFFER_MATERIAL: RenderGraphResourceId = RenderGraphResourceId(22);
 pub const RG_GBUFFER_DEPTH: RenderGraphResourceId = RenderGraphResourceId(23);
 pub const RG_LIT_COLOR: RenderGraphResourceId = RenderGraphResourceId(30);
-pub const RG_POSTFX_COLOR: RenderGraphResourceId = RenderGraphResourceId(40);
 
 #[derive(Debug, Clone, Copy)]
 pub struct FrameGraphTargetDesc {
@@ -26,8 +27,12 @@ pub struct FrameGraphTargetDesc {
     pub viewport_is_surface: bool,
     pub viewport_render_target: Option<RenderTargetId>,
     pub shadow_render_target: Option<RenderTargetId>,
+    /// Final display/swapchain format. Keep LDR unless the platform exposes HDR swapchains.
     pub color_format: TextureFormat,
+    /// Linear scene color format used by HDR-capable world/material shaders.
+    pub scene_color_format: TextureFormat,
     pub depth_format: TextureFormat,
+    pub hdr_scene_enabled: bool,
 }
 
 impl FrameGraphTargetDesc {
@@ -40,7 +45,9 @@ impl FrameGraphTargetDesc {
             viewport_render_target: None,
             shadow_render_target: None,
             color_format: TextureFormat::Bgra8Unorm,
+            scene_color_format: TextureFormat::Rgba16Float,
             depth_format: TextureFormat::Depth32Float,
+            hdr_scene_enabled: true,
         }
     }
 
@@ -53,6 +60,18 @@ impl FrameGraphTargetDesc {
     #[inline]
     pub fn with_shadow_render_target(mut self, target: Option<RenderTargetId>) -> Self {
         self.shadow_render_target = target;
+        self
+    }
+
+    #[inline]
+    pub fn with_hdr_scene(mut self, enabled: bool) -> Self {
+        self.hdr_scene_enabled = enabled;
+        self
+    }
+
+    #[inline]
+    pub fn with_scene_color_format(mut self, format: TextureFormat) -> Self {
+        self.scene_color_format = format;
         self
     }
 }
@@ -192,7 +211,7 @@ impl FrameGraphBuilder {
             "lit_color",
             RenderGraphResourceUsage::ColorAttachment,
             self.target.viewport_extent,
-            self.target.color_format,
+            self.target.scene_color_format,
         ));
         self.add_phase_pass(StandardRenderPhase::DeferredLighting, |pass| {
             pass.reads(RG_GBUFFER_ALBEDO, RenderGraphResourceUsage::SampledTexture)
@@ -230,21 +249,15 @@ impl FrameGraphBuilder {
         if !enabled {
             return self;
         }
-        self.graph.resources.push(RenderGraphResourceDesc::transient_texture(
-            RG_POSTFX_COLOR,
-            "postfx_color",
-            RenderGraphResourceUsage::ColorAttachment,
-            self.target.viewport_extent,
-            self.target.color_format,
-        ));
+
         let input = if self.has_resource(RG_LIT_COLOR) {
             RG_LIT_COLOR
         } else {
-            self.viewport_color_resource()
+            RG_SCENE_HDR_COLOR
         };
         self.add_phase_pass(StandardRenderPhase::PostFx, |pass| {
             pass.reads(input, RenderGraphResourceUsage::SampledTexture)
-                .writes(RG_POSTFX_COLOR, RenderGraphResourceUsage::ColorAttachment)
+                .writes(RG_SURFACE_COLOR, RenderGraphResourceUsage::ColorAttachment)
         });
         self
     }
@@ -254,16 +267,8 @@ impl FrameGraphBuilder {
         if !enabled {
             return self;
         }
-        let input = if self.has_resource(RG_POSTFX_COLOR) {
-            RG_POSTFX_COLOR
-        } else if self.has_resource(RG_LIT_COLOR) {
-            RG_LIT_COLOR
-        } else {
-            self.viewport_color_resource()
-        };
         self.add_phase_pass(StandardRenderPhase::UiComposite, |pass| {
-            pass.reads(input, RenderGraphResourceUsage::SampledTexture)
-                .writes(RG_SURFACE_COLOR, RenderGraphResourceUsage::ColorAttachment)
+            pass.writes(RG_SURFACE_COLOR, RenderGraphResourceUsage::ColorAttachment)
                 .draw_list(DrawListKind::Ui)
         });
         self
@@ -299,6 +304,16 @@ impl FrameGraphBuilder {
             self.target.surface_extent,
             self.target.color_format,
         ));
+
+        if self.target.hdr_scene_enabled {
+            self.graph.resources.push(RenderGraphResourceDesc::transient_texture(
+                RG_SCENE_HDR_COLOR,
+                "scene_hdr_color",
+                RenderGraphResourceUsage::ColorAttachment,
+                self.target.viewport_extent,
+                self.target.scene_color_format,
+            ));
+        }
 
         if self.target.viewport_is_surface {
             self.graph.resources.push(RenderGraphResourceDesc::external_swapchain(
@@ -410,7 +425,10 @@ impl FrameGraphBuilder {
     }
 
     #[inline]
-    fn viewport_color_resource(&self) -> RenderGraphResourceId {
+    fn viewport_color_resource(&mut self) -> RenderGraphResourceId {
+        if self.target.hdr_scene_enabled {
+            return RG_SCENE_HDR_COLOR;
+        }
         if self.target.viewport_is_surface {
             RG_SURFACE_COLOR
         } else {

@@ -3,14 +3,18 @@
 //! NewEngine Texture Dictionary container (`.neytd`).
 //!
 //! The runtime format is a binary texture dictionary: fixed header, binary
-//! directory and runtime-ready RGBA8 mip payload. Payload may be raw or zstd-packed;
-//! AssetManager exposes selected entries as normalized RGBA8 to the renderer. `.neytd`
-//! never stores source-image paths, authoring provenance or JSON directory data.
+//! directory and runtime-ready mip payloads. Runtime material dictionaries are GPU-native:
+//! BC1/BC3/BC5/BC7 entries store complete mip chains directly in the data region so the
+//! renderer can upload compressed blocks without CPU-side image decompression. RGBA8 remains
+//! supported for UI/editor and backward compatibility. `.neytd` never stores source-image
+//! paths, authoring provenance or JSON directory data.
 
 pub mod binary_directory;
 pub mod builder;
 pub mod storage;
+pub mod bcn;
 pub mod dds;
+pub mod format;
 pub mod dictionary;
 pub mod error;
 pub mod header;
@@ -19,14 +23,16 @@ pub mod mips;
 pub mod names;
 pub mod selector;
 
-pub use builder::{pack, pack_with_options, TextureBuildEntry};
+pub use builder::{pack, pack_encoded, pack_encoded_with_options, pack_with_options, TextureBuildEntry, TextureEncodedBuildEntry};
 pub use storage::{TextureBuildOptions, TextureDataCompression, FLAG_DATA_RAW, FLAG_DATA_ZSTD};
-pub use dds::{write_dds_rgba8, write_dds_rgba8_mip_chain, DdsExportError};
+pub use bcn::{decode_bcn_to_rgba8, encode_rgba8_mips_to_bcn, infer_bcn_format, BcnEncodeError};
+pub use dds::{write_dds_rgba8, write_dds_rgba8_mip_chain, write_dds_runtime_mip_chain, DdsExportError};
+pub use format::{is_block_compressed_format, is_rgba8_format, parse_pixel_format, texture_payload_len, TexturePixelFormat};
 pub use dictionary::{parse, TextureDictionary, TextureEntryView};
 pub use error::{Result, TextureContainerError};
 pub use header::HeaderV2;
 pub use manifest::{TextureDictionaryManifest, TextureEntryMeta, TextureMipMeta};
-pub use mips::{generate_rgba8_mips, rgba8_len, TextureMipData};
+pub use mips::{generate_rgba8_mips, rgba8_len, TextureEncodedMipData, TextureMipData};
 pub use names::{infer_color_space_from_name, normalize_color_space, normalize_texture_name, stable_name_hash64};
 pub use selector::{TextureDictionarySelector, TextureSelectorError};
 
@@ -34,8 +40,13 @@ pub const MAGIC: [u8; 4] = *b"NETD";
 pub const VERSION_V2: u16 = 2;
 pub const HEADER_LEN: usize = 64;
 pub const EXTENSION: &str = "neytd";
-pub const PIXEL_FORMAT_RGBA8_UNORM: &str = "RGBA8_UNORM";
-pub const PIXEL_FORMAT_RGBA8_SRGB: &str = "RGBA8_SRGB";
+pub use format::{
+    PIXEL_FORMAT_BC1_RGBA_SRGB, PIXEL_FORMAT_BC1_RGBA_UNORM,
+    PIXEL_FORMAT_BC3_RGBA_SRGB, PIXEL_FORMAT_BC3_RGBA_UNORM,
+    PIXEL_FORMAT_BC5_RG_UNORM, PIXEL_FORMAT_BC7_RGBA_SRGB,
+    PIXEL_FORMAT_BC7_RGBA_UNORM, PIXEL_FORMAT_RGBA8_SRGB,
+    PIXEL_FORMAT_RGBA8_UNORM,
+};
 pub const COLOR_SPACE_LINEAR: &str = "linear";
 pub const COLOR_SPACE_SRGB: &str = "srgb";
 

@@ -1,9 +1,9 @@
 #![forbid(unsafe_op_in_unsafe_fn)]
 
-use newengine_assets::{AssetAccess, AssetServiceClient};
+use newengine_assets::{AssetAccess, AssetServiceClient, RuntimeTextureFormat};
 use newengine_core::render::{
     Extent2D, GpuResourceResidencyState, RenderTargetId, SamplerId, TextureDesc, TextureFormat,
-    TextureId, TextureUsage,
+    TextureId, TextureMipDataDesc, TextureUsage,
 };
 use newengine_plugin_host::default_host_api;
 use newengine_texture_container::TextureDictionarySelector;
@@ -13,81 +13,17 @@ use super::controller::{PerDrawUbo, RuntimeRenderController};
 use super::gpu::{LitPipeline, LIT_UBO_SIZE};
 use super::material_bindings::MaterialTextureGpuResidency;
 
-#[inline]
-fn material_texture_mip_count(path: &str, extent: Extent2D) -> NonZeroU32 {
-    if is_sky_texture(path) {
-        return NonZeroU32::new(1).expect("sky texture mip count is non-zero");
-    }
-
-    let max_dim = extent.width.max(extent.height).max(1);
-    // Full mip chains are the first anti-aliasing primitive for textured terrain.
-    // Without them, distant repeated albedo/roughness textures shimmer into the
-    // grain pattern visible in runtime captures. Cap the chain to keep memory
-    // bounded until the renderer grows streaming texture LOD residency.
-    let levels = (32 - max_dim.leading_zeros()).clamp(
-        1,
-        super::render_quality::MATERIAL_TEXTURE_MAX_MIP_LEVELS,
-    );
-    NonZeroU32::new(levels).expect("clamped mip level count is non-zero")
-}
-
-#[inline]
-fn is_sky_texture(path: &str) -> bool {
-    let lower = path.to_ascii_lowercase();
-    lower.contains("sky") || lower.contains("skydome") || lower.contains("cloud")
-}
-
-#[inline]
-fn material_texture_max_dimension(path: &str) -> u32 {
-    if is_sky_texture(path) {
-        super::render_quality::SKY_TEXTURE_MAX_DIMENSION
-    } else {
-        super::render_quality::MATERIAL_TEXTURE_MAX_DIMENSION
-    }
-    .max(1)
-}
-
-fn downscale_rgba8_nearest(
-    width: u32,
-    height: u32,
-    rgba: Vec<u8>,
-    max_dimension: u32,
-) -> (u32, u32, Vec<u8>) {
-    let max_dimension = max_dimension.max(1);
-    let source_max = width.max(height);
-    if source_max <= max_dimension || width == 0 || height == 0 {
-        return (width, height, rgba);
-    }
-
-    let scale = max_dimension as f32 / source_max as f32;
-    let dst_w = ((width as f32 * scale).round() as u32).max(1);
-    let dst_h = ((height as f32 * scale).round() as u32).max(1);
-    let mut out = vec![0_u8; dst_w as usize * dst_h as usize * 4];
-
-    for y in 0..dst_h {
-        let sy = ((y as u64 * height as u64) / dst_h as u64).min(height.saturating_sub(1) as u64) as u32;
-        for x in 0..dst_w {
-            let sx = ((x as u64 * width as u64) / dst_w as u64).min(width.saturating_sub(1) as u64) as u32;
-            let src = ((sy as usize * width as usize) + sx as usize) * 4;
-            let dst = ((y as usize * dst_w as usize) + x as usize) * 4;
-            out[dst..dst + 4].copy_from_slice(&rgba[src..src + 4]);
-        }
-    }
-
-    (dst_w, dst_h, out)
-}
-
-fn material_texture_format(path: &str) -> TextureFormat {
-    let lower = path.to_ascii_lowercase();
-    if lower.contains("normal")
-        || lower.contains("roughness")
-        || lower.contains("metallic")
-        || lower.contains("occlusion")
-        || lower.contains("_ao")
-    {
-        TextureFormat::Rgba8Unorm
-    } else {
-        TextureFormat::Rgba8Srgb
+fn render_texture_format_from_runtime(format: RuntimeTextureFormat) -> TextureFormat {
+    match format {
+        RuntimeTextureFormat::Rgba8Unorm => TextureFormat::Rgba8Unorm,
+        RuntimeTextureFormat::Rgba8Srgb => TextureFormat::Rgba8Srgb,
+        RuntimeTextureFormat::Bc1RgbaUnorm => TextureFormat::Bc1RgbaUnorm,
+        RuntimeTextureFormat::Bc1RgbaSrgb => TextureFormat::Bc1RgbaSrgb,
+        RuntimeTextureFormat::Bc3RgbaUnorm => TextureFormat::Bc3RgbaUnorm,
+        RuntimeTextureFormat::Bc3RgbaSrgb => TextureFormat::Bc3RgbaSrgb,
+        RuntimeTextureFormat::Bc5RgUnorm => TextureFormat::Bc5RgUnorm,
+        RuntimeTextureFormat::Bc7RgbaUnorm => TextureFormat::Bc7RgbaUnorm,
+        RuntimeTextureFormat::Bc7RgbaSrgb => TextureFormat::Bc7RgbaSrgb,
     }
 }
 
@@ -140,7 +76,7 @@ impl RuntimeRenderController {
             }
         };
 
-        let texture_asset = match assets.texture_dictionary_rgba8_v1(
+        let texture_asset = match assets.texture_dictionary_runtime_v1(
             &selector.dictionary_path,
             selector.texture_name.as_deref(),
             selector.texture_hash,
@@ -166,7 +102,7 @@ impl RuntimeRenderController {
                 return;
             }
             Err(e) => {
-                let message = format!("asset.texture_dictionary_rgba8_v1 failed err='{e}'");
+                let message = format!("asset.texture_dictionary_runtime_v1 failed err='{e}'");
                 log::warn!(
                     "render controller: material texture dictionary lookup failed path='{}' dictionary='{}' name='{:?}' hash='{:?}' err='{}'",
                     path,
@@ -180,37 +116,24 @@ impl RuntimeRenderController {
             }
         };
 
-        let source_width = texture_asset.width;
-        let source_height = texture_asset.height;
-        let max_dimension = material_texture_max_dimension(&path);
-        let (width, height, rgba) = downscale_rgba8_nearest(
-            texture_asset.width,
-            texture_asset.height,
-            texture_asset.rgba,
-            max_dimension,
-        );
-        if width != source_width || height != source_height {
-            log::info!(
-                "render controller: material texture downscaled path='{}' source={}x{} runtime={}x{} max_dim={}",
-                path,
-                source_width,
-                source_height,
-                width,
-                height,
-                max_dimension
-            );
-        }
+        let extent = Extent2D::new(texture_asset.width, texture_asset.height);
+        let mip_levels = NonZeroU32::new(texture_asset.mips.len().max(1) as u32)
+            .expect("runtime texture mip count is non-zero");
+        let (payload, layout) = texture_asset.concatenated_payload_and_layout();
+        let mip_data: Vec<TextureMipDataDesc> = layout
+            .into_iter()
+            .map(|mip| TextureMipDataDesc::new(mip.level, mip.width, mip.height, mip.offset, mip.byte_len))
+            .collect();
 
-        let extent = Extent2D::new(width, height);
         match r.create_texture(
             TextureDesc::new(
                 extent,
-                material_texture_format(&path),
+                render_texture_format_from_runtime(texture_asset.format),
                 TextureUsage::Sampled,
             )
             .with_label(format!("material_tex:{path}"))
-            .with_mips(material_texture_mip_count(&path, extent))
-            .with_deferred_data(rgba),
+            .with_mips(mip_levels)
+            .with_deferred_mip_data(mip_data, payload),
         ) {
             Ok(texture) => {
                 log::debug!(

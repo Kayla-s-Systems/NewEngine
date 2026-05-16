@@ -139,7 +139,8 @@ impl RuntimeRenderController {
                 .shadow(render_shadow_map && shadow_rt_for_graph.is_some(), shadow_plan.resolution)
                 .shadow_render_target(shadow_rt_for_graph)
                 .deferred(false)
-                .postfx(false)
+                .hdr_scene(true)
+                .postfx(true)
                 .ui(scope.ui_enabled)
                 .debug_overlay(true)
                 .draw_lists(draw_list_descs.clone()),

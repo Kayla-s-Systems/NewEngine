@@ -30,6 +30,14 @@ pub mod method {
     pub const TEXTURE_RGBA8_V1: &str = "asset.texture_rgba8_v1";
     /// Runtime-ready RGBA8 texture selected from a .neytd dictionary. Payload: JSON { dictionary_path, texture_name | texture_hash }.
     pub const TEXTURE_DICTIONARY_RGBA8_V1: &str = "asset.texture_dictionary_rgba8_v1";
+    /// Runtime-ready GPU-native texture selected from a .neytd dictionary.
+    /// Returns NTRT v2 with format + complete mip chain. BC1/BC3/BC5/BC7 stay compressed.
+    pub const TEXTURE_DICTIONARY_RUNTIME_V1: &str = "asset.texture_dictionary_runtime_v1";
+    /// Explicit BCn aliases for callers that want to assert a compressed format class.
+    pub const TEXTURE_BC1_V1: &str = "asset.texture_bc1_v1";
+    pub const TEXTURE_BC3_V1: &str = "asset.texture_bc3_v1";
+    pub const TEXTURE_BC5_V1: &str = "asset.texture_bc5_v1";
+    pub const TEXTURE_BC7_V1: &str = "asset.texture_bc7_v1";
 
     /// Stable v1 import entry point.
     pub const IMPORT_V1: &str = "asset.import_v1";
@@ -83,6 +91,7 @@ pub const REQUIRED_RUNTIME_METHODS_V1: &[&str] = &[
     method::IMPORT_V1,
     method::TEXTURE_RGBA8_V1,
     method::TEXTURE_DICTIONARY_RGBA8_V1,
+    method::TEXTURE_DICTIONARY_RUNTIME_V1,
     method::PUMP_V1,
     method::STATUS_JSON_V1,
     method::STATUS_GRAPH_JSON_V1,
@@ -128,10 +137,136 @@ impl Rgba8TextureAsset {
     }
 }
 
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RuntimeTextureFormat {
+    Rgba8Unorm,
+    Rgba8Srgb,
+    Bc1RgbaUnorm,
+    Bc1RgbaSrgb,
+    Bc3RgbaUnorm,
+    Bc3RgbaSrgb,
+    Bc5RgUnorm,
+    Bc7RgbaUnorm,
+    Bc7RgbaSrgb,
+}
+
+impl RuntimeTextureFormat {
+    #[inline]
+    pub const fn as_wire_id(self) -> u16 {
+        match self {
+            Self::Rgba8Unorm => 1,
+            Self::Rgba8Srgb => 2,
+            Self::Bc1RgbaUnorm => 101,
+            Self::Bc1RgbaSrgb => 102,
+            Self::Bc3RgbaUnorm => 103,
+            Self::Bc3RgbaSrgb => 104,
+            Self::Bc5RgUnorm => 105,
+            Self::Bc7RgbaUnorm => 106,
+            Self::Bc7RgbaSrgb => 107,
+        }
+    }
+
+    #[inline]
+    pub const fn from_wire_id(id: u16) -> Option<Self> {
+        match id {
+            1 => Some(Self::Rgba8Unorm),
+            2 => Some(Self::Rgba8Srgb),
+            101 => Some(Self::Bc1RgbaUnorm),
+            102 => Some(Self::Bc1RgbaSrgb),
+            103 => Some(Self::Bc3RgbaUnorm),
+            104 => Some(Self::Bc3RgbaSrgb),
+            105 => Some(Self::Bc5RgUnorm),
+            106 => Some(Self::Bc7RgbaUnorm),
+            107 => Some(Self::Bc7RgbaSrgb),
+            _ => None,
+        }
+    }
+
+    #[inline]
+    pub fn from_name(value: &str) -> Option<Self> {
+        match value.trim().to_ascii_uppercase().as_str() {
+            "RGBA8_UNORM" | "RGBA8" => Some(Self::Rgba8Unorm),
+            "RGBA8_SRGB" => Some(Self::Rgba8Srgb),
+            "BC1_RGBA_UNORM" | "BC1_UNORM" | "BC1" => Some(Self::Bc1RgbaUnorm),
+            "BC1_RGBA_SRGB" | "BC1_SRGB" => Some(Self::Bc1RgbaSrgb),
+            "BC3_RGBA_UNORM" | "BC3_UNORM" | "BC3" => Some(Self::Bc3RgbaUnorm),
+            "BC3_RGBA_SRGB" | "BC3_SRGB" => Some(Self::Bc3RgbaSrgb),
+            "BC5_RG_UNORM" | "BC5_UNORM" | "BC5" => Some(Self::Bc5RgUnorm),
+            "BC7_RGBA_UNORM" | "BC7_UNORM" | "BC7" => Some(Self::Bc7RgbaUnorm),
+            "BC7_RGBA_SRGB" | "BC7_SRGB" => Some(Self::Bc7RgbaSrgb),
+            _ => None,
+        }
+    }
+
+    #[inline]
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Rgba8Unorm => "RGBA8_UNORM",
+            Self::Rgba8Srgb => "RGBA8_SRGB",
+            Self::Bc1RgbaUnorm => "BC1_RGBA_UNORM",
+            Self::Bc1RgbaSrgb => "BC1_RGBA_SRGB",
+            Self::Bc3RgbaUnorm => "BC3_RGBA_UNORM",
+            Self::Bc3RgbaSrgb => "BC3_RGBA_SRGB",
+            Self::Bc5RgUnorm => "BC5_RG_UNORM",
+            Self::Bc7RgbaUnorm => "BC7_RGBA_UNORM",
+            Self::Bc7RgbaSrgb => "BC7_RGBA_SRGB",
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RuntimeTextureMip {
+    pub level: u32,
+    pub width: u32,
+    pub height: u32,
+    pub bytes: Vec<u8>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RuntimeTextureAsset {
+    pub width: u32,
+    pub height: u32,
+    pub format: RuntimeTextureFormat,
+    pub mips: Vec<RuntimeTextureMip>,
+}
+
+impl RuntimeTextureAsset {
+    #[inline]
+    pub fn concatenated_payload_and_layout(&self) -> (Vec<u8>, Vec<RuntimeTextureMipLayout>) {
+        let mut data = Vec::new();
+        let mut layout = Vec::with_capacity(self.mips.len());
+        for mip in &self.mips {
+            let offset = data.len() as u64;
+            data.extend_from_slice(&mip.bytes);
+            layout.push(RuntimeTextureMipLayout {
+                level: mip.level,
+                width: mip.width,
+                height: mip.height,
+                offset,
+                byte_len: mip.bytes.len() as u64,
+            });
+        }
+        (data, layout)
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct RuntimeTextureMipLayout {
+    pub level: u32,
+    pub width: u32,
+    pub height: u32,
+    pub offset: u64,
+    pub byte_len: u64,
+}
+
 pub mod texture_wire {
     pub const MAGIC: [u8; 4] = *b"NTRT";
     pub const VERSION_RGBA8_V1: u16 = 1;
+    pub const VERSION_RUNTIME_V2: u16 = 2;
     pub const HEADER_LEN: usize = 20;
+    pub const RUNTIME_HEADER_LEN: usize = 32;
+    pub const RUNTIME_MIP_RECORD_LEN: usize = 20;
 }
 
 /// Asset lifecycle state as observed through an AssetManager-like service.
@@ -306,6 +441,9 @@ pub trait AssetAccess {
 
     /// Select and read a runtime-ready RGBA8 texture from a .neytd dictionary.
     fn texture_dictionary_rgba8_v1(&self, dictionary_path: &str, texture_name: Option<&str>, texture_hash: Option<u64>) -> Result<Rgba8TextureAsset, String>;
+
+    /// Select and read a runtime-ready GPU-native texture from a .neytd dictionary.
+    fn texture_dictionary_runtime_v1(&self, dictionary_path: &str, texture_name: Option<&str>, texture_hash: Option<u64>) -> Result<RuntimeTextureAsset, String>;
 }
 
 /// Extended contract surface.

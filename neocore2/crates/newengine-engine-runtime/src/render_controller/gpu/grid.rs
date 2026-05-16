@@ -1,3 +1,4 @@
+use crate::render_controller::render_quality::SCENE_HDR_COLOR_FORMAT;
 use newengine_core::render::*;
 use newengine_core::EngineResult as CoreResult;
 
@@ -45,7 +46,7 @@ pub fn ensure_grid(
     );
 
     let pipeline = r.create_pipeline(
-        PipelineDesc::new(vs, fs, TextureFormat::Bgra8Unorm)
+        PipelineDesc::new(vs, fs, SCENE_HDR_COLOR_FORMAT)
             .with_label("editor_grid_pipeline")
             .with_topology(PrimitiveTopology::LineList)
             .with_vertex_layouts(vec![layout])

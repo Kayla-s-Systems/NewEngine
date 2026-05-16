@@ -2,9 +2,9 @@ use crate::binary_directory;
 use crate::error::{Result, TextureContainerError};
 use crate::header::HeaderV2;
 use crate::manifest::{TextureDictionaryManifest, TextureEntryMeta};
-use crate::mips::rgba8_len;
+use crate::format::{is_rgba8_format, texture_payload_len};
 use crate::storage::{decode_stored_data, FLAG_DATA_RAW};
-use crate::{slice_checked, slice_checked_len, PIXEL_FORMAT_RGBA8_SRGB, PIXEL_FORMAT_RGBA8_UNORM};
+use crate::{slice_checked, slice_checked_len};
 use std::collections::BTreeSet;
 
 #[derive(Debug, Clone, Copy)]
@@ -22,8 +22,13 @@ impl<'a> TextureEntryView<'a> {
     }
 
     #[inline]
-    pub fn base_mip_rgba8(&self) -> Option<&'a [u8]> {
+    pub fn base_mip_bytes(&self) -> Option<&'a [u8]> {
         self.mip_bytes(0)
+    }
+
+    #[inline]
+    pub fn base_mip_rgba8(&self) -> Option<&'a [u8]> {
+        is_rgba8_format(&self.meta.format).then(|| self.mip_bytes(0)).flatten()
     }
 }
 
@@ -143,9 +148,7 @@ fn validate_manifest(header: HeaderV2, manifest: &TextureDictionaryManifest, dat
         if entry.width == 0 || entry.height == 0 {
             return Err(TextureContainerError::InvalidExtent { name: entry.name.clone(), width: entry.width, height: entry.height });
         }
-        if entry.format != PIXEL_FORMAT_RGBA8_UNORM && entry.format != PIXEL_FORMAT_RGBA8_SRGB {
-            return Err(TextureContainerError::InvalidFormat { name: entry.name.clone(), format: entry.format.clone() });
-        }
+        let _ = crate::format::parse_pixel_format(&entry.format, &entry.name)?;
         if entry.mip_count as usize != entry.mips.len() || entry.mips.is_empty() {
             return Err(TextureContainerError::InvalidMipChain(entry.name.clone()));
         }
@@ -162,7 +165,7 @@ fn validate_manifest(header: HeaderV2, manifest: &TextureDictionaryManifest, dat
                 len: mip.byte_len,
                 total: file_total_len,
             })?;
-            let expected = rgba8_len(mip.width, mip.height);
+            let expected = texture_payload_len(&entry.format, mip.width, mip.height)?;
             if mip_bytes != expected {
                 return Err(TextureContainerError::PayloadSizeMismatch { name: entry.name.clone(), mip: mip.level, bytes: mip_bytes, expected });
             }

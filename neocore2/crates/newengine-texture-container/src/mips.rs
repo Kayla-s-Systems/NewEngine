@@ -8,6 +8,15 @@ pub struct TextureMipData {
     pub rgba: Vec<u8>,
 }
 
+
+#[derive(Debug, Clone)]
+pub struct TextureEncodedMipData {
+    pub level: u32,
+    pub width: u32,
+    pub height: u32,
+    pub bytes: Vec<u8>,
+}
+
 pub fn generate_rgba8_mips(width: u32, height: u32, base_rgba: Vec<u8>) -> Result<Vec<TextureMipData>> {
     if width == 0 || height == 0 {
         return Err(TextureContainerError::InvalidExtent { name: "<generated>".to_owned(), width, height });

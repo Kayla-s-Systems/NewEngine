@@ -3,7 +3,7 @@
 use abi_stable::std_types::RString;
 use newengine_plugin_api::{Blob, HostApiV1, MethodName};
 
-use crate::asset_access::{AssetAccess, AssetService, AssetState, Rgba8TextureAsset};
+use crate::asset_access::{AssetAccess, AssetService, AssetState, Rgba8TextureAsset, RuntimeTextureAsset, RuntimeTextureFormat, RuntimeTextureMip};
 use crate::consts::{method, ASSET_SERVICE_ID};
 
 /// Thin client over the engine AssetManager service.
@@ -26,6 +26,7 @@ pub struct AssetServiceClient {
     m_raw_bytes_v1: MethodName,
     m_texture_rgba8_v1: MethodName,
     m_texture_dictionary_rgba8_v1: MethodName,
+    m_texture_dictionary_runtime_v1: MethodName,
     m_status_json_v1: MethodName,
     m_status_graph_json_v1: MethodName,
     m_project_status_json_v1: MethodName,
@@ -61,6 +62,7 @@ impl AssetServiceClient {
             m_raw_bytes_v1: MethodName::from(method::RAW_BYTES_V1),
             m_texture_rgba8_v1: MethodName::from(method::TEXTURE_RGBA8_V1),
             m_texture_dictionary_rgba8_v1: MethodName::from(method::TEXTURE_DICTIONARY_RGBA8_V1),
+            m_texture_dictionary_runtime_v1: MethodName::from(method::TEXTURE_DICTIONARY_RUNTIME_V1),
             m_status_json_v1: MethodName::from(method::STATUS_JSON_V1),
             m_status_graph_json_v1: MethodName::from(method::STATUS_GRAPH_JSON_V1),
             m_project_status_json_v1: MethodName::from(method::PROJECT_STATUS_JSON_V1),
@@ -200,6 +202,53 @@ impl AssetServiceClient {
         Rgba8TextureAsset::new(width, height, rgba)
     }
 
+    fn decode_texture_runtime_wire_v2(bytes: Vec<u8>) -> Result<RuntimeTextureAsset, String> {
+        let header_len = newengine_assets_api::texture_wire::RUNTIME_HEADER_LEN;
+        let mip_record_len = newengine_assets_api::texture_wire::RUNTIME_MIP_RECORD_LEN;
+        if bytes.len() < header_len {
+            return Err(format!("texture_runtime_v1: short frame bytes={} expected_at_least={header_len}", bytes.len()));
+        }
+        if &bytes[0..4] != &newengine_assets_api::texture_wire::MAGIC[..] {
+            return Err("texture_runtime_v1: bad magic".to_string());
+        }
+        let version = u16::from_le_bytes([bytes[4], bytes[5]]);
+        if version != newengine_assets_api::texture_wire::VERSION_RUNTIME_V2 {
+            return Err(format!("texture_runtime_v1: unsupported version {version}"));
+        }
+        let format_id = u16::from_le_bytes([bytes[8], bytes[9]]);
+        let mip_count = u16::from_le_bytes([bytes[10], bytes[11]]) as usize;
+        if mip_count == 0 {
+            return Err("texture_runtime_v1: empty mip chain".to_string());
+        }
+        let width = u32::from_le_bytes([bytes[12], bytes[13], bytes[14], bytes[15]]);
+        let height = u32::from_le_bytes([bytes[16], bytes[17], bytes[18], bytes[19]]);
+        let payload_len = u32::from_le_bytes([bytes[20], bytes[21], bytes[22], bytes[23]]) as usize;
+        let format = RuntimeTextureFormat::from_wire_id(format_id)
+            .ok_or_else(|| format!("texture_runtime_v1: unsupported format id {format_id}"))?;
+        let records_offset = header_len;
+        let payload_offset = records_offset.saturating_add(mip_count.saturating_mul(mip_record_len));
+        let expected_len = payload_offset.saturating_add(payload_len);
+        if bytes.len() != expected_len {
+            return Err(format!("texture_runtime_v1: frame size mismatch bytes={} expected={expected_len}", bytes.len()));
+        }
+        let mut mips = Vec::with_capacity(mip_count);
+        for i in 0..mip_count {
+            let o = records_offset + i * mip_record_len;
+            let level = u16::from_le_bytes([bytes[o], bytes[o + 1]]) as u32;
+            let mip_width = u32::from_le_bytes([bytes[o + 4], bytes[o + 5], bytes[o + 6], bytes[o + 7]]);
+            let mip_height = u32::from_le_bytes([bytes[o + 8], bytes[o + 9], bytes[o + 10], bytes[o + 11]]);
+            let byte_offset = u32::from_le_bytes([bytes[o + 12], bytes[o + 13], bytes[o + 14], bytes[o + 15]]) as usize;
+            let byte_len = u32::from_le_bytes([bytes[o + 16], bytes[o + 17], bytes[o + 18], bytes[o + 19]]) as usize;
+            let start = payload_offset.saturating_add(byte_offset);
+            let end = start.saturating_add(byte_len);
+            if byte_offset > payload_len || end > bytes.len() {
+                return Err(format!("texture_runtime_v1: mip range out of bounds level={level} offset={byte_offset} len={byte_len}"));
+            }
+            mips.push(RuntimeTextureMip { level, width: mip_width, height: mip_height, bytes: bytes[start..end].to_vec() });
+        }
+        Ok(RuntimeTextureAsset { width, height, format, mips })
+    }
+
     fn decode_ok_unit(bytes: Vec<u8>) -> Result<(), String> {
         if bytes.is_empty() {
             return Ok(());
@@ -265,6 +314,19 @@ impl AssetServiceClient {
         let payload = serde_json::to_vec(&req).map_err(|e| e.to_string())?;
         let bytes = self.call_raw(self.m_texture_dictionary_rgba8_v1.clone(), payload)?;
         Self::decode_texture_rgba8_wire_v1(bytes)
+    }
+
+    pub fn texture_dictionary_runtime_v1(&self, dictionary_path: &str, texture_name: Option<&str>, texture_hash: Option<u64>) -> Result<RuntimeTextureAsset, String> {
+        let mut req = serde_json::json!({ "dictionary_path": dictionary_path });
+        if let Some(name) = texture_name {
+            req["texture_name"] = serde_json::Value::String(name.to_owned());
+        }
+        if let Some(hash) = texture_hash {
+            req["texture_hash"] = serde_json::Value::Number(serde_json::Number::from(hash));
+        }
+        let payload = serde_json::to_vec(&req).map_err(|e| e.to_string())?;
+        let bytes = self.call_raw(self.m_texture_dictionary_runtime_v1.clone(), payload)?;
+        Self::decode_texture_runtime_wire_v2(bytes)
     }
 }
 
@@ -345,6 +407,10 @@ impl AssetAccess for AssetServiceClient {
 
     fn texture_dictionary_rgba8_v1(&self, dictionary_path: &str, texture_name: Option<&str>, texture_hash: Option<u64>) -> Result<Rgba8TextureAsset, String> {
         AssetServiceClient::texture_dictionary_rgba8_v1(self, dictionary_path, texture_name, texture_hash)
+    }
+
+    fn texture_dictionary_runtime_v1(&self, dictionary_path: &str, texture_name: Option<&str>, texture_hash: Option<u64>) -> Result<RuntimeTextureAsset, String> {
+        AssetServiceClient::texture_dictionary_runtime_v1(self, dictionary_path, texture_name, texture_hash)
     }
 }
 

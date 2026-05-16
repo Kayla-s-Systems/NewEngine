@@ -1,3 +1,4 @@
+use crate::render_controller::render_quality::{SCENE_HDR_COLOR_FORMAT, SHADOW_MAP_COLOR_FORMAT};
 use newengine_core::render::*;
 use newengine_core::EngineResult as CoreResult;
 use newengine_primitives::PrimitiveVertex;
@@ -134,7 +135,7 @@ pub fn ensure_lit_pipeline(
     .per_instance();
 
     let pipeline = r.create_pipeline(
-        PipelineDesc::new(vs, fs, TextureFormat::Bgra8Unorm)
+        PipelineDesc::new(vs, fs, SCENE_HDR_COLOR_FORMAT)
             .with_label("editor_lit_pipeline")
             .with_topology(PrimitiveTopology::TriangleList)
             .with_vertex_layouts(vec![layout.clone()])
@@ -143,7 +144,7 @@ pub fn ensure_lit_pipeline(
     )?;
 
     let double_sided_pipeline = r.create_pipeline(
-        PipelineDesc::new(vs, fs, TextureFormat::Bgra8Unorm)
+        PipelineDesc::new(vs, fs, SCENE_HDR_COLOR_FORMAT)
             .with_label("editor_lit_pipeline_double_sided")
             .with_topology(PrimitiveTopology::TriangleList)
             .with_vertex_layouts(vec![layout.clone()])
@@ -156,7 +157,7 @@ pub fn ensure_lit_pipeline(
         PipelineDesc::new(
             shadow_vs,
             shadow_fs,
-            super::super::render_quality::SHADOW_MAP_COLOR_FORMAT,
+            SHADOW_MAP_COLOR_FORMAT,
         )
         .with_label("editor_shadow_depth_pipeline")
             .with_topology(PrimitiveTopology::TriangleList)
@@ -169,7 +170,7 @@ pub fn ensure_lit_pipeline(
         PipelineDesc::new(
             shadow_vs,
             shadow_fs,
-            super::super::render_quality::SHADOW_MAP_COLOR_FORMAT,
+            SHADOW_MAP_COLOR_FORMAT,
         )
         .with_label("editor_shadow_depth_pipeline_double_sided")
             .with_topology(PrimitiveTopology::TriangleList)
@@ -181,7 +182,7 @@ pub fn ensure_lit_pipeline(
 
     let instanced_layouts = vec![layout.clone(), instance_layout.clone()];
     let instanced_pipeline = r.create_pipeline(
-        PipelineDesc::new(instanced_vs, instanced_fs, TextureFormat::Bgra8Unorm)
+        PipelineDesc::new(instanced_vs, instanced_fs, SCENE_HDR_COLOR_FORMAT)
             .with_label("editor_lit_pipeline_instanced")
             .with_topology(PrimitiveTopology::TriangleList)
             .with_vertex_layouts(instanced_layouts.clone())
@@ -190,7 +191,7 @@ pub fn ensure_lit_pipeline(
     )?;
 
     let instanced_double_sided_pipeline = r.create_pipeline(
-        PipelineDesc::new(instanced_vs, instanced_fs, TextureFormat::Bgra8Unorm)
+        PipelineDesc::new(instanced_vs, instanced_fs, SCENE_HDR_COLOR_FORMAT)
             .with_label("editor_lit_pipeline_instanced_double_sided")
             .with_topology(PrimitiveTopology::TriangleList)
             .with_vertex_layouts(instanced_layouts.clone())
@@ -203,7 +204,7 @@ pub fn ensure_lit_pipeline(
         PipelineDesc::new(
             shadow_instanced_vs,
             shadow_fs,
-            super::super::render_quality::SHADOW_MAP_COLOR_FORMAT,
+            SHADOW_MAP_COLOR_FORMAT,
         )
         .with_label("editor_shadow_depth_pipeline_instanced")
         .with_topology(PrimitiveTopology::TriangleList)
@@ -216,7 +217,7 @@ pub fn ensure_lit_pipeline(
         PipelineDesc::new(
             shadow_instanced_vs,
             shadow_fs,
-            super::super::render_quality::SHADOW_MAP_COLOR_FORMAT,
+            SHADOW_MAP_COLOR_FORMAT,
         )
         .with_label("editor_shadow_depth_pipeline_instanced_double_sided")
         .with_topology(PrimitiveTopology::TriangleList)

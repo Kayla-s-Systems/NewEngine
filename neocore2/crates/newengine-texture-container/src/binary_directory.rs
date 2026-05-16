@@ -1,8 +1,11 @@
 use crate::error::{Result, TextureContainerError};
 use crate::manifest::{TextureDictionaryManifest, TextureEntryMeta, TextureMipMeta};
 use crate::{
-    COLOR_SPACE_LINEAR, COLOR_SPACE_SRGB, PIXEL_FORMAT_RGBA8_SRGB,
-    PIXEL_FORMAT_RGBA8_UNORM, VERSION_V2,
+    COLOR_SPACE_LINEAR, COLOR_SPACE_SRGB, PIXEL_FORMAT_BC1_RGBA_SRGB,
+    PIXEL_FORMAT_BC1_RGBA_UNORM, PIXEL_FORMAT_BC3_RGBA_SRGB,
+    PIXEL_FORMAT_BC3_RGBA_UNORM, PIXEL_FORMAT_BC5_RG_UNORM,
+    PIXEL_FORMAT_BC7_RGBA_SRGB, PIXEL_FORMAT_BC7_RGBA_UNORM,
+    PIXEL_FORMAT_RGBA8_SRGB, PIXEL_FORMAT_RGBA8_UNORM, VERSION_V2,
 };
 
 pub const DIRECTORY_MAGIC: [u8; 4] = *b"NTDX";
@@ -13,6 +16,13 @@ pub const MIP_RECORD_LEN: usize = 32;
 
 const FORMAT_RGBA8_UNORM: u16 = 1;
 const FORMAT_RGBA8_SRGB: u16 = 2;
+const FORMAT_BC1_RGBA_UNORM: u16 = 101;
+const FORMAT_BC1_RGBA_SRGB: u16 = 102;
+const FORMAT_BC3_RGBA_UNORM: u16 = 103;
+const FORMAT_BC3_RGBA_SRGB: u16 = 104;
+const FORMAT_BC5_RG_UNORM: u16 = 105;
+const FORMAT_BC7_RGBA_UNORM: u16 = 106;
+const FORMAT_BC7_RGBA_SRGB: u16 = 107;
 const COLOR_LINEAR: u16 = 1;
 const COLOR_SRGB: u16 = 2;
 
@@ -229,6 +239,13 @@ fn format_to_id(format: &str, name: &str) -> Result<u16> {
     match format {
         PIXEL_FORMAT_RGBA8_UNORM => Ok(FORMAT_RGBA8_UNORM),
         PIXEL_FORMAT_RGBA8_SRGB => Ok(FORMAT_RGBA8_SRGB),
+        PIXEL_FORMAT_BC1_RGBA_UNORM => Ok(FORMAT_BC1_RGBA_UNORM),
+        PIXEL_FORMAT_BC1_RGBA_SRGB => Ok(FORMAT_BC1_RGBA_SRGB),
+        PIXEL_FORMAT_BC3_RGBA_UNORM => Ok(FORMAT_BC3_RGBA_UNORM),
+        PIXEL_FORMAT_BC3_RGBA_SRGB => Ok(FORMAT_BC3_RGBA_SRGB),
+        PIXEL_FORMAT_BC5_RG_UNORM => Ok(FORMAT_BC5_RG_UNORM),
+        PIXEL_FORMAT_BC7_RGBA_UNORM => Ok(FORMAT_BC7_RGBA_UNORM),
+        PIXEL_FORMAT_BC7_RGBA_SRGB => Ok(FORMAT_BC7_RGBA_SRGB),
         other => Err(TextureContainerError::InvalidFormat { name: name.to_owned(), format: other.to_owned() }),
     }
 }
@@ -237,6 +254,13 @@ fn format_from_id(id: u16, name: &str) -> Result<&'static str> {
     match id {
         FORMAT_RGBA8_UNORM => Ok(PIXEL_FORMAT_RGBA8_UNORM),
         FORMAT_RGBA8_SRGB => Ok(PIXEL_FORMAT_RGBA8_SRGB),
+        FORMAT_BC1_RGBA_UNORM => Ok(PIXEL_FORMAT_BC1_RGBA_UNORM),
+        FORMAT_BC1_RGBA_SRGB => Ok(PIXEL_FORMAT_BC1_RGBA_SRGB),
+        FORMAT_BC3_RGBA_UNORM => Ok(PIXEL_FORMAT_BC3_RGBA_UNORM),
+        FORMAT_BC3_RGBA_SRGB => Ok(PIXEL_FORMAT_BC3_RGBA_SRGB),
+        FORMAT_BC5_RG_UNORM => Ok(PIXEL_FORMAT_BC5_RG_UNORM),
+        FORMAT_BC7_RGBA_UNORM => Ok(PIXEL_FORMAT_BC7_RGBA_UNORM),
+        FORMAT_BC7_RGBA_SRGB => Ok(PIXEL_FORMAT_BC7_RGBA_SRGB),
         _ => Err(TextureContainerError::InvalidFormat { name: name.to_owned(), format: format!("id:{id}") }),
     }
 }
