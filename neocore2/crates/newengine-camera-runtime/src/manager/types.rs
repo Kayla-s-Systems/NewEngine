@@ -1,11 +1,11 @@
-use newengine_camera::EditorNavMode;
+use newengine_camera::RuntimeNavMode;
 
 use crate::blend::CameraFrameBlendPlan;
 use newengine_ecs::EntityId;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum CameraDirectorKind {
-    Editor,
+    Runtime,
     Gameplay,
     Cinematic,
     Scripted,
@@ -16,14 +16,14 @@ pub enum CameraDirectorKind {
 impl Default for CameraDirectorKind {
     #[inline]
     fn default() -> Self {
-        Self::Editor
+        Self::Runtime
     }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum CameraRuntimeMode {
-    EditorOrbit,
-    EditorFly,
+    RuntimeOrbit,
+    RuntimeFly,
     GameplayPreview,
     GameplayFirstPerson,
     GameplayThirdPersonFollow,
@@ -35,13 +35,13 @@ pub enum CameraRuntimeMode {
 impl Default for CameraRuntimeMode {
     #[inline]
     fn default() -> Self {
-        Self::EditorOrbit
+        Self::RuntimeOrbit
     }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum CameraInputContext {
-    EditorNav,
+    RuntimeNav,
     GameplayLook,
     TransitionLocked,
     CinematicLocked,
@@ -51,7 +51,7 @@ pub enum CameraInputContext {
 impl Default for CameraInputContext {
     #[inline]
     fn default() -> Self {
-        Self::EditorNav
+        Self::RuntimeNav
     }
 }
 
@@ -85,10 +85,10 @@ impl Default for CameraTransitionPlan {
     #[inline]
     fn default() -> Self {
         Self {
-            from_director: CameraDirectorKind::Editor,
-            to_director: CameraDirectorKind::Editor,
-            from_mode: CameraRuntimeMode::EditorOrbit,
-            to_mode: CameraRuntimeMode::EditorOrbit,
+            from_director: CameraDirectorKind::Runtime,
+            to_director: CameraDirectorKind::Runtime,
+            from_mode: CameraRuntimeMode::RuntimeOrbit,
+            to_mode: CameraRuntimeMode::RuntimeOrbit,
             duration_sec: 0.0,
             lock_input: false,
             preserve_pose: true,
@@ -123,7 +123,7 @@ pub enum CameraDirectorRequest {
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct CameraRuntimeWorldState {
-    pub editor_nav_mode: EditorNavMode,
+    pub game_nav_mode: RuntimeNavMode,
     pub runtime_requested: bool,
     pub public_runtime_active: bool,
     pub wants_direct_player_control: bool,
@@ -135,7 +135,7 @@ impl Default for CameraRuntimeWorldState {
     #[inline]
     fn default() -> Self {
         Self {
-            editor_nav_mode: EditorNavMode::Orbit,
+            game_nav_mode: RuntimeNavMode::Orbit,
             runtime_requested: false,
             public_runtime_active: false,
             wants_direct_player_control: false,
@@ -161,11 +161,11 @@ impl Default for CameraRuntimeReport {
     #[inline]
     fn default() -> Self {
         Self {
-            active_director: CameraDirectorKind::Editor,
-            active_mode: CameraRuntimeMode::EditorOrbit,
+            active_director: CameraDirectorKind::Runtime,
+            active_mode: CameraRuntimeMode::RuntimeOrbit,
             target_entity: None,
             transition: CameraTransitionState::default(),
-            input_context: CameraInputContext::EditorNav,
+            input_context: CameraInputContext::RuntimeNav,
             gate_blocked: false,
             frame_blend_active: false,
             frame_blend_alpha: 1.0,

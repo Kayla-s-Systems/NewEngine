@@ -3,7 +3,10 @@
 use abi_stable::std_types::RString;
 use newengine_plugin_api::{Blob, HostApiV1, MethodName};
 
-use crate::asset_access::{AssetAccess, AssetService, AssetState, Rgba8TextureAsset, RuntimeTextureAsset, RuntimeTextureFormat, RuntimeTextureMip};
+use crate::asset_access::{
+    AssetAccess, AssetError, AssetResult, AssetService, AssetState,
+    Rgba8TextureAsset, RuntimeTextureAsset, RuntimeTextureFormat, RuntimeTextureMip,
+};
 use crate::consts::{method, ASSET_SERVICE_ID};
 
 /// Thin client over the engine AssetManager service.
@@ -99,17 +102,27 @@ impl AssetServiceClient {
 
     #[inline]
     fn call(&self, method_name: MethodName, payload: Vec<u8>) -> Result<Vec<u8>, String> {
+        self.call_typed(method_name, payload).map_err(|e| e.to_string())
+    }
+
+    #[inline]
+    fn call_typed(&self, method_name: MethodName, payload: Vec<u8>) -> AssetResult<Vec<u8>> {
         let res =
             (self.host.call_service_v1)(self.service_id.clone(), method_name, Blob::from(payload));
 
         res.into_result()
             .map(|v| v.into_vec())
-            .map_err(|e| e.to_string())
+            .map_err(|e| AssetError::from_wire_or_message(e.to_string()))
     }
 
     #[inline]
     fn call_raw(&self, method_name: MethodName, payload: Vec<u8>) -> Result<Vec<u8>, String> {
         self.call(method_name, payload)
+    }
+
+    #[inline]
+    fn call_raw_typed(&self, method_name: MethodName, payload: Vec<u8>) -> AssetResult<Vec<u8>> {
+        self.call_typed(method_name, payload)
     }
 
     #[inline]
@@ -249,6 +262,28 @@ impl AssetServiceClient {
         Ok(RuntimeTextureAsset { width, height, format, mips })
     }
 
+    #[inline]
+    fn decode_texture_rgba8_wire_v1_typed(bytes: Vec<u8>) -> AssetResult<Rgba8TextureAsset> {
+        Self::decode_texture_rgba8_wire_v1(bytes).map_err(AssetError::decode_failed)
+    }
+
+    #[inline]
+    fn decode_texture_runtime_wire_v2_typed(bytes: Vec<u8>) -> AssetResult<RuntimeTextureAsset> {
+        Self::decode_texture_runtime_wire_v2(bytes).map_err(|message| {
+            let lower = message.to_ascii_lowercase();
+            if lower.contains("unsupported") || lower.contains("bad magic") || lower.contains("format") {
+                AssetError::unsupported_format(message)
+            } else {
+                AssetError::decode_failed(message)
+            }
+        })
+    }
+
+    #[inline]
+    fn json_payload_typed(value: &serde_json::Value) -> AssetResult<Vec<u8>> {
+        serde_json::to_vec(value).map_err(|e| AssetError::invalid_request(e.to_string()))
+    }
+
     fn decode_ok_unit(bytes: Vec<u8>) -> Result<(), String> {
         if bytes.is_empty() {
             return Ok(());
@@ -303,7 +338,7 @@ impl AssetServiceClient {
     /// The service accepts either texture_name or texture_hash. When both are omitted,
     /// the first dictionary entry is selected.
     #[inline]
-    pub fn texture_dictionary_rgba8_v1(&self, dictionary_path: &str, texture_name: Option<&str>, texture_hash: Option<u64>) -> Result<Rgba8TextureAsset, String> {
+    pub fn texture_dictionary_rgba8_v1_typed(&self, dictionary_path: &str, texture_name: Option<&str>, texture_hash: Option<u64>) -> AssetResult<Rgba8TextureAsset> {
         let mut req = serde_json::json!({ "dictionary_path": dictionary_path });
         if let Some(name) = texture_name {
             req["texture_name"] = serde_json::Value::String(name.to_owned());
@@ -311,22 +346,34 @@ impl AssetServiceClient {
         if let Some(hash) = texture_hash {
             req["texture_hash"] = serde_json::Value::Number(serde_json::Number::from(hash));
         }
-        let payload = serde_json::to_vec(&req).map_err(|e| e.to_string())?;
-        let bytes = self.call_raw(self.m_texture_dictionary_rgba8_v1.clone(), payload)?;
-        Self::decode_texture_rgba8_wire_v1(bytes)
+        let payload = Self::json_payload_typed(&req)?;
+        let bytes = self.call_raw_typed(self.m_texture_dictionary_rgba8_v1.clone(), payload)?;
+        Self::decode_texture_rgba8_wire_v1_typed(bytes).map_err(|e| e.with_logical_path(dictionary_path))
+    }
+
+    #[inline]
+    pub fn texture_dictionary_rgba8_v1(&self, dictionary_path: &str, texture_name: Option<&str>, texture_hash: Option<u64>) -> Result<Rgba8TextureAsset, String> {
+        self.texture_dictionary_rgba8_v1_typed(dictionary_path, texture_name, texture_hash)
+            .map_err(|e| e.to_string())
+    }
+
+    #[inline]
+    pub fn texture_dictionary_runtime_v1_typed(&self, dictionary_path: &str, texture_name: Option<&str>, texture_hash: Option<u64>) -> AssetResult<RuntimeTextureAsset> {
+        let mut req = serde_json::json!({ "dictionary_path": dictionary_path });
+        if let Some(name) = texture_name {
+            req["texture_name"] = serde_json::Value::String(name.to_owned());
+        }
+        if let Some(hash) = texture_hash {
+            req["texture_hash"] = serde_json::Value::Number(serde_json::Number::from(hash));
+        }
+        let payload = Self::json_payload_typed(&req)?;
+        let bytes = self.call_raw_typed(self.m_texture_dictionary_runtime_v1.clone(), payload)?;
+        Self::decode_texture_runtime_wire_v2_typed(bytes).map_err(|e| e.with_logical_path(dictionary_path))
     }
 
     pub fn texture_dictionary_runtime_v1(&self, dictionary_path: &str, texture_name: Option<&str>, texture_hash: Option<u64>) -> Result<RuntimeTextureAsset, String> {
-        let mut req = serde_json::json!({ "dictionary_path": dictionary_path });
-        if let Some(name) = texture_name {
-            req["texture_name"] = serde_json::Value::String(name.to_owned());
-        }
-        if let Some(hash) = texture_hash {
-            req["texture_hash"] = serde_json::Value::Number(serde_json::Number::from(hash));
-        }
-        let payload = serde_json::to_vec(&req).map_err(|e| e.to_string())?;
-        let bytes = self.call_raw(self.m_texture_dictionary_runtime_v1.clone(), payload)?;
-        Self::decode_texture_runtime_wire_v2(bytes)
+        self.texture_dictionary_runtime_v1_typed(dictionary_path, texture_name, texture_hash)
+            .map_err(|e| e.to_string())
     }
 }
 

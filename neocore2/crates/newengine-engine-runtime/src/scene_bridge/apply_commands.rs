@@ -11,8 +11,7 @@ impl SceneBridge {
         };
 
         let mut pending_selection: Option<Option<EntityId>> = None;
-        let mut next_mode: Option<EditorPlayMode> = None;
-        let mut next_wire: Option<bool> = None;
+        let mut next_mode: Option<GameRunMode> = None;
 
         let prims = self.primitives.read();
         let mats = self.materials.read();
@@ -25,18 +24,16 @@ impl SceneBridge {
             match cmd {
                 SceneCommand::NewScene => {
                     *scene = Scene::new();
-                    pending_selection = Some(reset_editor_runtime_state(&mut *scene));
-                    next_mode = Some(EditorPlayMode::Edit);
-                    next_wire = Some(true);
+                    pending_selection = Some(reset_game_runtime_state(&mut *scene));
+                    next_mode = Some(GameRunMode::Staging);
                 }
                 SceneCommand::LoadSceneAsset { asset } => {
                     *scene = Scene::new();
                     if let Err(e) = scene.load_asset(&asset) {
                         log::error!("scene.load_asset failed: {e}");
                     }
-                    pending_selection = Some(reset_editor_runtime_state(&mut *scene));
-                    next_mode = Some(EditorPlayMode::Edit);
-                    next_wire = Some(true);
+                    pending_selection = Some(reset_game_runtime_state(&mut *scene));
+                    next_mode = Some(GameRunMode::Staging);
                 }
                 SceneCommand::SpawnPrimitive {
                     id,
@@ -232,13 +229,13 @@ impl SceneBridge {
                         pl.range = range;
                     }
                 }
-                SceneCommand::SetCollisionBody { entity, body } => {
+                SceneCommand::SetPhysicsBody { entity, body } => {
                     let world = scene.world_mut();
-                    ensure_collision_body(world, entity, body);
+                    ensure_physics_body(world, entity, body);
                 }
-                SceneCommand::ClearCollisionBody { entity } => {
+                SceneCommand::ClearPhysicsBody { entity } => {
                     let world = scene.world_mut();
-                    remove_collision_body(world, entity);
+                    remove_physics_body(world, entity);
                     restore_non_collision_bounds(world, &prims, entity);
                 }
                 SceneCommand::SetDisplayVisibility { entity, mode } => {
@@ -253,17 +250,12 @@ impl SceneBridge {
                 SceneCommand::SetPlayMode { mode } => {
                     next_mode = Some(mode);
                 }
-                SceneCommand::SetCollisionWireframe { enabled } => {
-                    next_wire = Some(enabled);
-                }
+
             }
         }
 
         if let Some(mode) = next_mode {
             *self.play_mode.lock() = mode;
-        }
-        if let Some(enabled) = next_wire {
-            *self.collision_wireframe.lock() = enabled;
         }
         if let Some(sel) = pending_selection {
             self.set_selection(sel);

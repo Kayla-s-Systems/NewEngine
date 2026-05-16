@@ -81,7 +81,7 @@ pub fn ensure_primitive_gpu(
     let mesh = reg
         .build_mesh(id)
         .map_err(|e| EngineError::other(format!("{e}")))?;
-    let gpu = upload_primitive_mesh(r, &mesh, "editor_prim")?;
+    let gpu = upload_primitive_mesh(r, &mesh, "game_prim")?;
 
     cache.insert(id, gpu);
     Ok(gpu)

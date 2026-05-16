@@ -25,7 +25,7 @@ impl Default for CameraNavParams {
         Self {
             dt: 0.0,
             viewport: CameraViewport::default(),
-            channel: CameraChannelState::dominant(CameraChannel::Editor),
+            channel: CameraChannelState::dominant(CameraChannel::Runtime),
             bounds: BoundsSphere::default(),
             selection_bounds: None,
         }

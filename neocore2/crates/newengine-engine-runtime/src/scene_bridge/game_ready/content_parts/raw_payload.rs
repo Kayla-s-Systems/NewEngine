@@ -72,14 +72,61 @@ struct RawTerrainSpec {
     base_height: f32,
     #[serde(default = "default_height_scale")]
     height_scale: f32,
-    #[serde(default = "default_collision_tile_cells")]
-    collision_tile_cells: u32,
-    #[serde(default = "default_collision_floor_depth")]
-    collision_floor_depth: f32,
-    #[serde(default = "default_collision_horizontal_skin")]
-    collision_horizontal_skin: f32,
     #[serde(default)]
     generator: RawTerrainGeneratorSpec,
+    #[serde(default)]
+    surface: RawTerrainSurfaceSpec,
+    #[serde(default)]
+    streaming: RawTerrainStreamingSpec,
+}
+
+#[derive(Debug, Deserialize)]
+struct RawTerrainSurfaceSpec {
+    #[serde(default = "default_terrain_surface_forest")]
+    forest_base_texture: String,
+    #[serde(default = "default_terrain_surface_sand")]
+    sand_base_texture: String,
+    #[serde(default = "default_terrain_surface_rock")]
+    rock_base_texture: String,
+    #[serde(default = "default_terrain_patch_scale")]
+    patch_scale: f32,
+    #[serde(default = "default_terrain_blend_softness")]
+    blend_softness: f32,
+}
+
+impl Default for RawTerrainSurfaceSpec {
+    fn default() -> Self {
+        Self {
+            forest_base_texture: default_terrain_surface_forest(),
+            sand_base_texture: default_terrain_surface_sand(),
+            rock_base_texture: default_terrain_surface_rock(),
+            patch_scale: default_terrain_patch_scale(),
+            blend_softness: default_terrain_blend_softness(),
+        }
+    }
+}
+
+#[derive(Debug, Deserialize)]
+struct RawTerrainStreamingSpec {
+    #[serde(default = "default_terrain_streaming_enabled")]
+    enabled: bool,
+    #[serde(default = "default_terrain_chunk_radius")]
+    chunk_radius: i32,
+    #[serde(default = "default_terrain_unload_radius")]
+    unload_radius: i32,
+    #[serde(default = "default_terrain_max_chunks_per_frame")]
+    max_chunks_per_frame: usize,
+}
+
+impl Default for RawTerrainStreamingSpec {
+    fn default() -> Self {
+        Self {
+            enabled: default_terrain_streaming_enabled(),
+            chunk_radius: default_terrain_chunk_radius(),
+            unload_radius: default_terrain_unload_radius(),
+            max_chunks_per_frame: default_terrain_max_chunks_per_frame(),
+        }
+    }
 }
 
 impl Default for RawTerrainSpec {
@@ -92,10 +139,9 @@ impl Default for RawTerrainSpec {
             size_z: default_terrain_size(),
             base_height: default_base_height(),
             height_scale: default_height_scale(),
-            collision_tile_cells: default_collision_tile_cells(),
-            collision_floor_depth: default_collision_floor_depth(),
-            collision_horizontal_skin: default_collision_horizontal_skin(),
             generator: RawTerrainGeneratorSpec::default(),
+            surface: RawTerrainSurfaceSpec::default(),
+            streaming: RawTerrainStreamingSpec::default(),
         }
     }
 }

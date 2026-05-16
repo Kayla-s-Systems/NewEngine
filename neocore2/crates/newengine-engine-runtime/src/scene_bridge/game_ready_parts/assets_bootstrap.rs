@@ -339,7 +339,6 @@ pub(super) fn bootstrap_fps_game_ready_scene(
     configure_game_ready_lighting(world, &map.lighting);
 
     let terrain = spawn_procedural_terrain(world, mats, root, materials.terrain, &map.terrain, map.palette.terrain);
-    spawn_terrain_collision_tiles(world, root, terrain, &map.terrain);
     spawn_foliage_prefabs(
         world,
         prims,
@@ -368,7 +367,7 @@ pub(super) fn bootstrap_fps_game_ready_scene(
         Vec3::new(start_x, start_y, start_z),
         player_tuning,
     );
-    let _ = world.insert(player, DisplayVisibility { mode: DisplayMode::EditorOnly });
+    let _ = world.insert(player, DisplayVisibility { mode: DisplayMode::RuntimeHidden });
     if let Some(motor) = world.get_mut::<newengine_sim::CharacterMotor>(player) {
         motor.move_speed = map.player.move_speed;
         motor.look_sens = map.player.look_sens;

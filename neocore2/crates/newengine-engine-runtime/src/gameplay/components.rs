@@ -1,15 +1,14 @@
-use newengine_bounds::{Aabb, Bounds, Sphere};
-use newengine_math::Vec3;
+pub use newengine_physics_contracts::{CollisionShapeDesc, PhysicsBodyDesc};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
-pub enum EditorPlayMode {
+pub enum GameRunMode {
     #[default]
-    Edit,
+    Staging,
     Simulate,
     Play,
 }
 
-impl EditorPlayMode {
+impl GameRunMode {
     #[inline]
     pub const fn is_runtime(self) -> bool {
         matches!(self, Self::Simulate | Self::Play)
@@ -26,92 +25,9 @@ impl EditorPlayMode {
     }
 }
 
-#[derive(Clone, Copy, Debug, PartialEq)]
-pub enum CollisionShape {
-    Box { half_extents: [f32; 3] },
-    Sphere { radius: f32 },
-    Capsule { radius: f32, half_height: f32 },
-}
-
-impl Default for CollisionShape {
-    #[inline]
-    fn default() -> Self {
-        Self::Box {
-            half_extents: [0.5, 0.5, 0.5],
-        }
-    }
-}
-
-impl CollisionShape {
-    #[inline]
-    pub fn local_aabb(self) -> Aabb {
-        match self {
-            CollisionShape::Box { half_extents } => Aabb::from_center_half_extents(
-                Vec3::ZERO,
-                Vec3::new(half_extents[0], half_extents[1], half_extents[2]),
-            ),
-            CollisionShape::Sphere { radius } => {
-                Aabb::from_center_half_extents(Vec3::ZERO, Vec3::splat(radius.max(0.001)))
-            }
-            CollisionShape::Capsule {
-                radius,
-                half_height,
-            } => {
-                let r = radius.max(0.001);
-                let hy = half_height.max(0.0) + r;
-                Aabb::from_center_half_extents(Vec3::ZERO, Vec3::new(r, hy, r))
-            }
-        }
-    }
-
-    #[inline]
-    pub fn local_sphere(self) -> Sphere {
-        match self {
-            CollisionShape::Box { half_extents } => {
-                let he = Vec3::new(half_extents[0], half_extents[1], half_extents[2]);
-                Sphere::new(Vec3::ZERO, he.length().max(0.001))
-            }
-            CollisionShape::Sphere { radius } => Sphere::new(Vec3::ZERO, radius.max(0.001)),
-            CollisionShape::Capsule {
-                radius,
-                half_height,
-            } => Sphere::new(Vec3::ZERO, (half_height.max(0.0) + radius.max(0.001)).max(0.001)),
-        }
-    }
-
-    #[inline]
-    pub fn to_bounds(self) -> Bounds {
-        match self {
-            CollisionShape::Sphere { .. } => Bounds::from_local_sphere(self.local_sphere()),
-            _ => Bounds::from_local_aabb(self.local_aabb()),
-        }
-    }
-}
-
-#[derive(Clone, Copy, Debug, PartialEq)]
-pub struct CollisionBody {
-    pub shape: CollisionShape,
-    pub dynamic: bool,
-    pub is_trigger: bool,
-}
-
-impl Default for CollisionBody {
-    #[inline]
-    fn default() -> Self {
-        Self {
-            shape: CollisionShape::default(),
-            dynamic: false,
-            is_trigger: false,
-        }
-    }
-}
-
-impl CollisionBody {
-    #[inline]
-    pub fn to_bounds(self) -> Bounds {
-        self.shape.to_bounds()
-    }
-}
+// Physics components are owned by `newengine-physics-contracts`.
+// GameFirst runtime may re-export them for callers, but gameplay code must not
+// define its own collision model or store backend-native handles.
 
 #[derive(Clone, Copy, Debug, Default)]
 pub struct PlayerActor;
@@ -209,7 +125,7 @@ pub struct FpsDemoHazard {
     pub radius: f32,
 }
 
-#[cfg_attr(not(feature = "editor-ui"), allow(dead_code))]
+#[allow(dead_code)]
 #[derive(Clone, Debug)]
 pub struct FpsDemoState {
     pub title: String,
@@ -224,7 +140,7 @@ pub struct FpsDemoState {
     pub completed_progress_label: String,
 }
 
-#[cfg_attr(not(feature = "editor-ui"), allow(dead_code))]
+#[allow(dead_code)]
 impl FpsDemoState {
     #[inline]
     pub fn new(pickups_total: u32) -> Self {
@@ -358,7 +274,7 @@ impl GameReadyWorldLaunchGate {
 pub enum DisplayMode {
     #[default]
     Both,
-    EditorOnly,
+    RuntimeHidden,
     GameOnly,
 }
 
@@ -369,12 +285,12 @@ pub struct DisplayVisibility {
 
 impl DisplayVisibility {
     #[inline]
-    pub const fn visible_in_editor(self) -> bool {
+    pub const fn visible_in_authoring(self) -> bool {
         !matches!(self.mode, DisplayMode::GameOnly)
     }
 
     #[inline]
     pub const fn visible_in_game(self) -> bool {
-        !matches!(self.mode, DisplayMode::EditorOnly)
+        !matches!(self.mode, DisplayMode::RuntimeHidden)
     }
 }

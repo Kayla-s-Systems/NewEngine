@@ -9,16 +9,15 @@ use newengine_primitives::{
     fnv1a_64, Primitive, PrimitiveId, PrimitiveMesh, PrimitiveRegistry, PrimitiveVertex,
 };
 use newengine_procedural_noise::{
-    NoiseAlgorithm, NoiseCombineMode, NoiseGraph2D, NoiseLayer2D, NoiseShape, ProceduralTerrain,
-    TerrainCollisionTileSettings, TerrainHeightfieldDescriptor,
+    DomainWarp2D, NoiseAlgorithm, NoiseCombineMode, NoiseDomain2D, NoiseGraph2D, NoiseLayer2D,
+    NoiseRemap, NoiseShape, ProceduralTerrain, TerrainHeightfieldDescriptor,
 };
-use newengine_scene::{spawn_named, Scene};
+use newengine_scene::{spawn_named, Scene, SceneCellCoord, SceneResidencySet, SceneStreamingBudget};
 use newengine_transform::Transform;
 
 use crate::gameplay::{
-    ensure_collision_body, spawn_default_player_with_tuning, CollisionBody, CollisionShape,
-    DisplayMode, DisplayVisibility, FpsDemoRules, FpsDemoState, FpsPlayerTuning,
-    GameReadyWorldLaunchGate,
+    spawn_default_player_with_tuning, DisplayMode, DisplayVisibility, FpsDemoRules, FpsDemoState,
+    FpsPlayerTuning, GameReadyWorldLaunchGate,
 };
 use crate::scene_bootstrap::bootstrap_runtime_scene;
 
@@ -59,6 +58,47 @@ struct PrimitiveSpawnSpec<'a> {
     position: Vec3,
     scale: Vec3,
     color: [f32; 4],
+}
+
+#[derive(Clone, Debug)]
+pub(crate) struct TerrainSurfaceLayers {
+    pub forest_base_texture: String,
+    pub sand_base_texture: String,
+    pub rock_base_texture: String,
+    pub patch_scale: f32,
+    pub blend_softness: f32,
+}
+
+type TerrainChunkCoord = SceneCellCoord;
+
+#[derive(Clone, Debug)]
+struct TerrainChunkRecord {
+    terrain: EntityId,
+}
+
+#[derive(Clone, Debug)]
+pub(crate) struct GameReadyTerrainStreamingState {
+    root: EntityId,
+    material: MaterialId,
+    color: [f32; 4],
+    spec: GameReadyTerrainSpec,
+    surface: TerrainSurfaceLayers,
+    chunk_radius: i32,
+    unload_radius: i32,
+    max_chunks_per_frame: usize,
+    loaded: std::collections::BTreeMap<TerrainChunkCoord, TerrainChunkRecord>,
+}
+
+
+#[inline]
+fn terrain_surface_layers(spec: &GameReadyTerrainSpec) -> TerrainSurfaceLayers {
+    TerrainSurfaceLayers {
+        forest_base_texture: spec.surface.forest_base_texture.clone(),
+        sand_base_texture: spec.surface.sand_base_texture.clone(),
+        rock_base_texture: spec.surface.rock_base_texture.clone(),
+        patch_scale: spec.surface.patch_scale,
+        blend_softness: spec.surface.blend_softness,
+    }
 }
 
 #[inline]
@@ -176,12 +216,12 @@ fn configure_game_ready_lighting(world: &mut newengine_ecs::World, spec: &GameRe
             *light = sun;
         }
     } else {
-        let sun_entity = spawn_named(world, "Sun");
+        let sun_entity = spawn_named(world, "Game/Sun");
         let _ = world.insert(sun_entity, sun);
     }
 
     log::info!(
-        "game-ready lighting: ambient={:?} ambient_intensity={:.3} sun_dir={:?} sun_color={:?} sun_intensity={:.3} shadows={} shadow_strength={:.3}",
+        "game-ready sun: ambient={:?} ambient_intensity={:.3} direction={:?} color={:?} intensity={:.3} real_shadows={} shadow_strength={:.3}",
         ambient.color,
         ambient.intensity,
         sun.direction_ws,
@@ -204,6 +244,128 @@ fn configure_game_ready_lighting(world: &mut newengine_ecs::World, spec: &GameRe
     });
 }
 
+
+fn terrain_graph_for_chunk(spec: &GameReadyTerrainSpec, coord: TerrainChunkCoord) -> NoiseGraph2D {
+    let center = coord.center(spec.size_x, spec.size_z);
+
+    // GameFirst terrain is intentionally not a mountain generator. The profile
+    // produces traversable land: shallow depressions, low ridges, dry creek-like
+    // cuts, and broad biome patches. Vertical relief stays modest; visual
+    // diversity comes from surface masks, foliage density, and local terrain
+    // character rather than endless hills.
+    let mut terrain_graph = NoiseGraph2D::new(NoiseDomain2D {
+        seed: spec.seed,
+        frequency: 0.018,
+        offset_x: 0.0,
+        offset_z: 0.0,
+        warp: Some(DomainWarp2D {
+            seed_offset: 0x91e7_70ad,
+            frequency: 0.045,
+            strength: 3.8,
+            octaves: 3,
+        }),
+    })
+    .with_layer(
+        NoiseLayer2D::new(NoiseAlgorithm::Value)
+            .combine(NoiseCombineMode::Replace)
+            .frequency(1.0)
+            .amplitude(0.34),
+    )
+    .with_layer(
+        NoiseLayer2D::new(NoiseAlgorithm::Cellular)
+            .seed_offset(spec.seed ^ 0x6c8e_9cf5)
+            .frequency(0.42)
+            .amplitude(0.18)
+            .shape(NoiseShape::SmoothStep { edge0: -0.72, edge1: 0.42 })
+            .combine(NoiseCombineMode::Add),
+    )
+    .with_layer(
+        NoiseLayer2D::new(NoiseAlgorithm::Billow)
+            .seed_offset(spec.seed ^ 0x2f4d_31aa)
+            .frequency(2.75)
+            .amplitude(0.08)
+            .combine(NoiseCombineMode::Add),
+    )
+    .with_layer(
+        NoiseLayer2D::new(NoiseAlgorithm::Ridged)
+            .seed_offset(spec.seed ^ spec.generator.ridged_seed_xor)
+            .frequency(spec.generator.ridged_frequency)
+            .amplitude(spec.generator.ridged_amplitude)
+            .shape(NoiseShape::SmoothStep {
+                edge0: spec.generator.ridged_shape_edge0,
+                edge1: spec.generator.ridged_shape_edge1,
+            })
+            .combine(NoiseCombineMode::Add),
+    )
+    .with_layer(
+        NoiseLayer2D::new(NoiseAlgorithm::Veins)
+            .seed_offset(spec.seed ^ spec.generator.veins_seed_xor)
+            .frequency(spec.generator.veins_frequency)
+            .amplitude(-spec.generator.veins_amplitude.abs())
+            .shape(NoiseShape::SmoothStep { edge0: 0.12, edge1: 0.95 })
+            .combine(NoiseCombineMode::Add),
+    )
+    .with_remap(NoiseRemap {
+        input_min: -0.55,
+        input_max: 0.65,
+        output_min: -0.45,
+        output_max: 0.68,
+        clamp: true,
+    });
+
+    terrain_graph.domain.offset_x += center.x * terrain_graph.domain.frequency;
+    terrain_graph.domain.offset_z += center.z * terrain_graph.domain.frequency;
+    terrain_graph
+}
+
+fn generate_terrain_for_chunk(spec: &GameReadyTerrainSpec, coord: TerrainChunkCoord, color: [f32; 4]) -> ProceduralTerrain {
+    ProceduralTerrain::generate_descriptor(
+        TerrainHeightfieldDescriptor {
+            cells_x: spec.cells_x,
+            cells_z: spec.cells_z,
+            size_x: spec.size_x,
+            size_z: spec.size_z,
+            base_height: spec.base_height,
+            height_scale: spec.height_scale,
+            graph: terrain_graph_for_chunk(spec, coord),
+            smoothing_passes: spec.generator.smoothing_passes,
+            smoothing_strength: spec.generator.smoothing_strength,
+        },
+        color,
+    )
+}
+
+fn spawn_streamed_terrain_chunk(
+    world: &mut newengine_ecs::World,
+    root: EntityId,
+    mats: &MaterialRegistry,
+    material: MaterialId,
+    spec: &GameReadyTerrainSpec,
+    surface: &TerrainSurfaceLayers,
+    color: [f32; 4],
+    coord: TerrainChunkCoord,
+) -> TerrainChunkRecord {
+    let center = coord.center(spec.size_x, spec.size_z);
+    let terrain = generate_terrain_for_chunk(spec, coord, color);
+    let bounds = Bounds::from_local_aabb(terrain.heightfield.local_bounds());
+    let entity = spawn_named(world, format!("Terrain/Chunk[{:+},{:+}]", coord.x, coord.z));
+    let _ = newengine_transform::set_parent(world, entity, Some(root));
+    let _ = world.insert(
+        entity,
+        Transform {
+            position: center,
+            rotation: Quat::IDENTITY,
+            scale: Vec3::ONE,
+        },
+    );
+    let _ = world.insert(entity, terrain.clone());
+    let _ = world.insert(entity, bounds);
+    let _ = world.insert(entity, surface.clone());
+    let _ = apply_exact_material(world, mats, entity, material, material, color);
+
+    TerrainChunkRecord { terrain: entity }
+}
+
 fn spawn_procedural_terrain(
     world: &mut newengine_ecs::World,
     mats: &MaterialRegistry,
@@ -213,102 +375,119 @@ fn spawn_procedural_terrain(
     color: [f32; 4],
 ) -> EntityId {
     log::info!(
-        "game-ready: terrain generator id='{}' seed={} cells={}x{} size={}x{}",
+        "game-ready: terrain generator id='{}' seed={} cells={}x{} chunk_size={}x{} streaming={} radius={} unload_radius={} surface_layers=[forest='{}', sand='{}', rock='{}']",
         spec.generator.id,
         spec.seed,
         spec.cells_x,
         spec.cells_z,
         spec.size_x,
         spec.size_z,
+        spec.streaming.enabled,
+        spec.streaming.chunk_radius,
+        spec.streaming.unload_radius,
+        spec.surface.forest_base_texture,
+        spec.surface.sand_base_texture,
+        spec.surface.rock_base_texture,
     );
 
-    let terrain_graph = NoiseGraph2D::soft_cells(spec.seed)
-        .with_layer(
-            NoiseLayer2D::new(NoiseAlgorithm::Ridged)
-                .seed_offset(spec.seed ^ spec.generator.ridged_seed_xor)
-                .frequency(spec.generator.ridged_frequency)
-                .amplitude(spec.generator.ridged_amplitude)
-                .shape(NoiseShape::SmoothStep {
-                    edge0: spec.generator.ridged_shape_edge0,
-                    edge1: spec.generator.ridged_shape_edge1,
-                })
-                .combine(NoiseCombineMode::Add),
-        )
-        .with_layer(
-            NoiseLayer2D::new(NoiseAlgorithm::Veins)
-                .seed_offset(spec.seed ^ spec.generator.veins_seed_xor)
-                .frequency(spec.generator.veins_frequency)
-                .amplitude(spec.generator.veins_amplitude)
-                .combine(NoiseCombineMode::Add),
-        );
+    let surface = terrain_surface_layers(spec);
+    let origin = TerrainChunkCoord { x: 0, z: 0 };
+    let record = spawn_streamed_terrain_chunk(world, root, mats, material, spec, &surface, color, origin);
+    let terrain_entity = record.terrain;
 
-    let terrain = ProceduralTerrain::generate_descriptor(
-        TerrainHeightfieldDescriptor {
-            cells_x: spec.cells_x,
-            cells_z: spec.cells_z,
-            size_x: spec.size_x,
-            size_z: spec.size_z,
-            base_height: spec.base_height,
-            height_scale: spec.height_scale,
-            graph: terrain_graph,
-            smoothing_passes: spec.generator.smoothing_passes,
-            smoothing_strength: spec.generator.smoothing_strength,
-        },
-        color,
-    );
+    if spec.streaming.enabled {
+        let budget = SceneStreamingBudget {
+            resident_radius: spec.streaming.chunk_radius,
+            unload_radius: spec.streaming.unload_radius,
+            max_commits_per_tick: spec.streaming.max_chunks_per_frame,
+        }
+        .sanitized();
+        let mut state = GameReadyTerrainStreamingState {
+            root,
+            material,
+            color,
+            spec: spec.clone(),
+            surface,
+            chunk_radius: budget.resident_radius,
+            unload_radius: budget.unload_radius,
+            max_chunks_per_frame: budget.max_commits_per_tick,
+            loaded: std::collections::BTreeMap::new(),
+        };
+        state.loaded.insert(origin, record);
+        world.insert_resource(state);
+    }
 
-    let bounds = Bounds::from_local_aabb(terrain.heightfield.local_bounds());
-    let entity = spawn_named(world, "Terrain/HeightField-Procedural");
-    let _ = newengine_transform::set_parent(world, entity, Some(root));
-    let _ = world.insert(entity, Transform::default());
-    let _ = world.insert(entity, terrain);
-    let _ = world.insert(entity, bounds);
-    let _ = apply_exact_material(world, mats, entity, material, material, color);
-    entity
+    terrain_entity
 }
 
-fn spawn_terrain_collision_tiles(
+pub(crate) fn tick_game_ready_streaming_terrain(
     world: &mut newengine_ecs::World,
-    root: EntityId,
-    terrain_entity: EntityId,
-    spec: &GameReadyTerrainSpec,
+    mats: &MaterialRegistry,
 ) {
-    let Some(terrain) = world.get::<ProceduralTerrain>(terrain_entity).cloned() else {
+    let Some(player) = crate::gameplay::first_player(world) else {
+        return;
+    };
+    let player_pos = world
+        .get::<Transform>(player)
+        .map(|t| t.position)
+        .unwrap_or(Vec3::ZERO);
+
+    let Some(mut state) = world.remove_resource::<GameReadyTerrainStreamingState>() else {
         return;
     };
 
-    for (i, tile) in terrain
-        .heightfield
-        .collision_tiles(TerrainCollisionTileSettings {
-            tile_cells: spec.collision_tile_cells,
-            floor_depth: spec.collision_floor_depth,
-            horizontal_skin: spec.collision_horizontal_skin,
-        })
-        .into_iter()
-        .enumerate()
-    {
-        let entity = spawn_named(world, format!("Terrain/CollisionTile-{i:03}"));
-        let _ = newengine_transform::set_parent(world, entity, Some(root));
-        let _ = world.insert(
-            entity,
-            Transform {
-                position: tile.center,
-                rotation: Quat::IDENTITY,
-                scale: Vec3::ONE,
-            },
-        );
-        let _ = world.insert(entity, DisplayVisibility { mode: DisplayMode::EditorOnly });
-        ensure_collision_body(
+    let center = TerrainChunkCoord::from_world_pos(player_pos, state.spec.size_x, state.spec.size_z);
+    let radius = state.chunk_radius.max(0);
+    let unload_radius = state.unload_radius.max(radius + 1);
+
+    let desired = SceneResidencySet::desired_cells(center, radius);
+
+    let mut created = 0usize;
+    for coord in desired {
+        if state.loaded.contains_key(&coord) {
+            continue;
+        }
+        if created >= state.max_chunks_per_frame.max(1) {
+            break;
+        }
+        let record = spawn_streamed_terrain_chunk(
             world,
-            entity,
-            CollisionBody {
-                shape: CollisionShape::Box {
-                    half_extents: [tile.half_extents.x, tile.half_extents.y, tile.half_extents.z],
-                },
-                dynamic: false,
-                is_trigger: true,
-            },
+            state.root,
+            mats,
+            state.material,
+            &state.spec,
+            &state.surface,
+            state.color,
+            coord,
+        );
+        state.loaded.insert(coord, record);
+        created += 1;
+    }
+
+    let to_unload = state
+        .loaded
+        .keys()
+        .copied()
+        .filter(|coord| coord.chebyshev_distance(center) > unload_radius)
+        .collect::<Vec<_>>();
+    let mut removed = 0usize;
+    for coord in to_unload {
+        if let Some(record) = state.loaded.remove(&coord) {
+            let _ = world.despawn(record.terrain);
+            removed += 1;
+        }
+    }
+
+    if created > 0 || removed > 0 {
+        log::debug!(
+            "game-ready terrain streaming: center=[{},{}] loaded={} created={} removed={}",
+            center.x,
+            center.z,
+            state.loaded.len(),
+            created,
+            removed,
         );
     }
-}
 
+    world.insert_resource(state);
+}

@@ -1,4 +1,4 @@
-//! Deterministic prebaked editor SPIR-V shaders.
+//! Deterministic prebaked GameFirst SPIR-V shaders.
 // This module keeps startup/runtime viewport rendering independent from a local Vulkan SDK `glslc.exe`.
 
 #![allow(clippy::unreadable_literal)]
@@ -18,30 +18,28 @@ pub(crate) fn lookup(stage: ShaderStage, logical_name: &str, entry: &str) -> Opt
         // shadow pass while the forward fragment shader ignores shadow sampling.
         // If glslc/Vulkan SDK is missing, fail loudly instead of silently
         // rendering an unshadowed world.
-        (ShaderStage::Vertex, "editor_lit_v2.vert")
-        | (ShaderStage::Vertex, "shaders/editor_lit_v2.vert") => PREBAKED_EDITOR_LIT_TEXTURED_VERT,
-        (ShaderStage::Fragment, "editor_lit_v2.frag")
-        | (ShaderStage::Fragment, "shaders/editor_lit_v2.frag") => PREBAKED_EDITOR_LIT_TEXTURED_FRAG,
+        (ShaderStage::Vertex, "game_lit_v1.vert")
+        | (ShaderStage::Vertex, "shaders/game_lit_v1.vert") => PREBAKED_GAME_LIT_TEXTURED_VERT,
+        (ShaderStage::Fragment, "game_lit_v1.frag")
+        | (ShaderStage::Fragment, "shaders/game_lit_v1.frag") => PREBAKED_GAME_LIT_TEXTURED_FRAG,
 
-        (ShaderStage::Vertex, "editor_lit_shadowed_v3.vert")
-        | (ShaderStage::Vertex, "shaders/editor_lit_shadowed_v3.vert")
-        | (ShaderStage::Fragment, "editor_lit_shadowed_v3.frag")
-        | (ShaderStage::Fragment, "shaders/editor_lit_shadowed_v3.frag")
-        | (ShaderStage::Vertex, "editor_shadow_depth_v1.vert")
-        | (ShaderStage::Vertex, "shaders/editor_shadow_depth_v1.vert")
-        | (ShaderStage::Fragment, "editor_shadow_depth_v1.frag")
-        | (ShaderStage::Fragment, "shaders/editor_shadow_depth_v1.frag") => return None,
+        (ShaderStage::Vertex, "game_lit_shadowed_v1.vert")
+        | (ShaderStage::Vertex, "shaders/game_lit_shadowed_v1.vert")
+        | (ShaderStage::Fragment, "game_lit_shadowed_v1.frag")
+        | (ShaderStage::Fragment, "shaders/game_lit_shadowed_v1.frag")
+        | (ShaderStage::Vertex, "game_sun_shadow_depth_v1.vert")
+        | (ShaderStage::Vertex, "shaders/game_sun_shadow_depth_v1.vert")
+        | (ShaderStage::Fragment, "game_sun_shadow_depth_v1.frag")
+        | (ShaderStage::Fragment, "shaders/game_sun_shadow_depth_v1.frag") => return None,
 
-        (ShaderStage::Vertex, "editor_grid.vert")
-        | (ShaderStage::Vertex, "shaders/editor_grid.vert") => PREBAKED_EDITOR_GRID_VERT,
-        (ShaderStage::Fragment, "editor_grid.frag")
-        | (ShaderStage::Fragment, "shaders/editor_grid.frag") => PREBAKED_EDITOR_GRID_FRAG,
-        (ShaderStage::Vertex, "editor_debug_lines.vert")
-        | (ShaderStage::Vertex, "shaders/editor_debug_lines.vert") => PREBAKED_EDITOR_DEBUG_LINES_VERT,
-        (ShaderStage::Fragment, "editor_debug_lines.frag")
-        | (ShaderStage::Fragment, "shaders/editor_debug_lines.frag") => PREBAKED_EDITOR_DEBUG_LINES_FRAG,
-        (ShaderStage::Vertex, "shaders/preview/primitive_preview.vert") => PREBAKED_PRIMITIVE_PREVIEW_VERT,
-        (ShaderStage::Fragment, "shaders/preview/primitive_preview.frag") => PREBAKED_PRIMITIVE_PREVIEW_FRAG,
+        (ShaderStage::Vertex, "game_grid.vert")
+        | (ShaderStage::Vertex, "shaders/game_grid.vert") => PREBAKED_GAME_GRID_VERT,
+        (ShaderStage::Fragment, "game_grid.frag")
+        | (ShaderStage::Fragment, "shaders/game_grid.frag") => PREBAKED_GAME_GRID_FRAG,
+        (ShaderStage::Vertex, "game_debug_lines.vert")
+        | (ShaderStage::Vertex, "shaders/game_debug_lines.vert") => PREBAKED_GAME_DEBUG_LINES_VERT,
+        (ShaderStage::Fragment, "game_debug_lines.frag")
+        | (ShaderStage::Fragment, "shaders/game_debug_lines.frag") => PREBAKED_GAME_DEBUG_LINES_FRAG,
         _ => return None,
     };
     Some(words.to_vec())
@@ -52,7 +50,7 @@ pub(crate) fn lookup(stage: ShaderStage, logical_name: &str, entry: &str) -> Opt
 // Vertex: transforms position with UBO.u_mvp and passes UBO.u_base_color + transformed UV.
 // Fragment: samples set=0/binding=1 and multiplies it by the material base color.
 // This restores material/texture rendering without requiring runtime glslc.
-const PREBAKED_EDITOR_LIT_TEXTURED_VERT: &[u32] = &[
+const PREBAKED_GAME_LIT_TEXTURED_VERT: &[u32] = &[
     119734787, 65536, 0, 55, 0, 131089, 1, 196622,
     0, 1, 655375, 0, 1, 1852399981, 0, 2,
     3, 4, 5, 6, 262215, 3, 30, 0,
@@ -97,7 +95,7 @@ const PREBAKED_EDITOR_LIT_TEXTURED_VERT: &[u32] = &[
     53, 52, 196670, 6, 54, 65789, 65592,
 ];
 
-const PREBAKED_EDITOR_LIT_TEXTURED_FRAG: &[u32] = &[
+const PREBAKED_GAME_LIT_TEXTURED_FRAG: &[u32] = &[
     119734787, 65536, 0, 28, 0, 131089, 1, 196622,
     0, 1, 524303, 4, 1, 1852399981, 0, 2,
     3, 4, 196624, 1, 7, 262215, 2, 30,
@@ -123,7 +121,7 @@ const PREBAKED_EDITOR_LIT_TEXTURED_FRAG: &[u32] = &[
 
 
 #[allow(dead_code)]
-const PREBAKED_EDITOR_LIT_VERT: &[u32] = &[
+const PREBAKED_GAME_LIT_VERT: &[u32] = &[
     119734787, 65536, 0, 36, 0, 131089, 1, 196622,
     0, 1, 589839, 0, 1, 1852399981, 0, 2,
     3, 4, 5, 262215, 2, 11, 0, 262215,
@@ -156,7 +154,7 @@ const PREBAKED_EDITOR_LIT_VERT: &[u32] = &[
 ];
 
 #[allow(dead_code)]
-const PREBAKED_EDITOR_LIT_FRAG: &[u32] = &[
+const PREBAKED_GAME_LIT_FRAG: &[u32] = &[
     119734787, 65536, 0, 20, 0, 131089, 1, 196622,
     0, 1, 458767, 4, 1, 1852399981, 0, 2,
     3, 196624, 1, 7, 262215, 2, 30, 0,
@@ -172,7 +170,7 @@ const PREBAKED_EDITOR_LIT_FRAG: &[u32] = &[
     8, 19, 2, 196670, 3, 19, 65789, 65592,
 ];
 
-const PREBAKED_EDITOR_GRID_VERT: &[u32] = &[
+const PREBAKED_GAME_GRID_VERT: &[u32] = &[
     119734787, 65536, 0, 34, 0, 131089, 1, 196622,
     0, 1, 589839, 0, 1, 1852399981, 0, 2,
     3, 4, 5, 262215, 2, 11, 0, 262215,
@@ -201,7 +199,7 @@ const PREBAKED_EDITOR_GRID_VERT: &[u32] = &[
     65789, 65592,
 ];
 
-const PREBAKED_EDITOR_GRID_FRAG: &[u32] = &[
+const PREBAKED_GAME_GRID_FRAG: &[u32] = &[
     119734787, 65536, 0, 20, 0, 131089, 1, 196622,
     0, 1, 458767, 4, 1, 1852399981, 0, 2,
     3, 196624, 1, 7, 262215, 2, 30, 0,
@@ -217,7 +215,7 @@ const PREBAKED_EDITOR_GRID_FRAG: &[u32] = &[
     8, 19, 2, 196670, 3, 19, 65789, 65592,
 ];
 
-const PREBAKED_EDITOR_DEBUG_LINES_VERT: &[u32] = &[
+const PREBAKED_GAME_DEBUG_LINES_VERT: &[u32] = &[
     119734787, 65536, 0, 23, 0, 131089, 1, 196622,
     0, 1, 589839, 0, 1, 1852399981, 0, 2,
     3, 4, 5, 262215, 2, 11, 0, 262215,
@@ -236,7 +234,7 @@ const PREBAKED_EDITOR_DEBUG_LINES_VERT: &[u32] = &[
     21, 196670, 5, 22, 65789, 65592,
 ];
 
-const PREBAKED_EDITOR_DEBUG_LINES_FRAG: &[u32] = &[
+const PREBAKED_GAME_DEBUG_LINES_FRAG: &[u32] = &[
     119734787, 65536, 0, 20, 0, 131089, 1, 196622,
     0, 1, 458767, 4, 1, 1852399981, 0, 2,
     3, 196624, 1, 7, 262215, 2, 30, 0,

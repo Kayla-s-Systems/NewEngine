@@ -6,8 +6,8 @@ Runtime-обвязка, которая подключает `newengine-camera` �
 
 - `CameraManagerResource`: единый runtime-owner camera policy (director/mode/transition/input-context/gate state).
 - Перевод viewport input snapshot в `CameraControlInput`.
-- Управление editor/gameplay camera navigation state (`Orbit`/`Fly`) через ECS.
-- Выбор `CameraChannelState` для runtime/editor режима.
+- Управление runtime/gameplay camera navigation state (`Orbit`/`Fly`) через ECS.
+- Выбор `CameraChannelState` для runtime/runtime режима.
 - Возврат `CameraNavResult { frame, controller, cursor }`, где `frame` — готовый `CameraFrame` для render/runtime слоёв.
 - Синхронизация `CameraRigComp` и `Transform` без renderer coupling.
 
@@ -22,8 +22,8 @@ Runtime-обвязка, которая подключает `newengine-camera` �
 
 `CameraManagerResource` хранит:
 
-- active director (`Editor`, `Gameplay`, ...);
-- active mode (`EditorOrbit`, `GameplayFirstPerson`, ...);
+- active director (`Runtime`, `Gameplay`, ...);
+- active mode (`RuntimeOrbit`, `GameplayFirstPerson`, ...);
 - transition FSM;
 - pending `CameraDirectorRequest` (`PossessPlayer` / `ReleasePlayer`);
 - gate-aware input policy.

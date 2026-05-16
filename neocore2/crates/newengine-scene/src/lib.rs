@@ -2,6 +2,7 @@
 
 pub mod components;
 mod settings;
+mod streaming;
 
 #[cfg(feature = "runtime")]
 mod bounds;
@@ -30,6 +31,7 @@ pub use scene::Scene;
 #[cfg(feature = "runtime")]
 pub use scene_asset::{SceneAsset, SceneAssetError, SceneAssetOptions};
 pub use settings::{ForwardAxis, SceneSettings, UnitScaleMeters, UpAxis};
+pub use streaming::{SceneCellCoord, SceneResidencySet, SceneStreamingBudget};
 #[cfg(feature = "runtime")]
 pub use spawn::{name_or, spawn_named};
 #[cfg(feature = "runtime")]

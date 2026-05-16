@@ -6,7 +6,8 @@ use newengine_materials::api::MaterialRegistryApi;
 use newengine_math::collections::FxHashSet;
 use newengine_plugin_host::default_host_api;
 
-use crate::gameplay::{clear_player_input, first_player, EditorPlayMode, GameReadyWorldLaunchGate};
+use crate::gameplay::{clear_player_input, first_player, GameRunMode, GameReadyWorldLaunchGate};
+use crate::scene_bridge::TerrainSurfaceLayers;
 
 use super::super::material_bindings::{LitMaterialPlan, MaterialTextureGpuResidency};
 use super::RuntimeRenderController;
@@ -25,7 +26,7 @@ pub(super) fn update_game_ready_launch_gate(
     this: &mut RuntimeRenderController,
     r: &mut dyn RenderApi,
     world: &mut newengine_ecs::World,
-    _requested_play_mode: EditorPlayMode,
+    _requested_play_mode: GameRunMode,
     frame_index: u64,
 ) -> bool {
     let Some(gate_snapshot) = world.resource::<GameReadyWorldLaunchGate>().cloned() else {
@@ -113,7 +114,7 @@ fn critical_scene_materials_ready(
     r: &mut dyn RenderApi,
     world: &newengine_ecs::World,
 ) -> LaunchReadiness {
-    let mats_lock = this.scene_bridge.materials();
+    let mats_lock = this.bridges.scene.materials();
     let mats = mats_lock.read();
     let mut unique_paths = FxHashSet::<String>::default();
 
@@ -130,6 +131,12 @@ fn critical_scene_materials_ready(
         {
             unique_paths.insert(path.to_owned());
         }
+    }
+
+    for (_entity, layers) in world.query::<TerrainSurfaceLayers>() {
+        unique_paths.insert(layers.forest_base_texture.clone());
+        unique_paths.insert(layers.sand_base_texture.clone());
+        unique_paths.insert(layers.rock_base_texture.clone());
     }
 
     let mut total = 0_u32;
@@ -210,7 +217,7 @@ fn material_texture_ready_state(
     r: &mut dyn RenderApi,
     path: &str,
 ) -> TextureReadyState {
-    let Some(entry) = this.material_textures.get(path).cloned() else {
+    let Some(entry) = this.gpu.material_textures.get(path).cloned() else {
         return TextureReadyState::Waiting;
     };
 
@@ -222,7 +229,7 @@ fn material_texture_ready_state(
         MaterialTextureGpuResidency::GpuLoading { texture, .. } => {
             match r.texture_residency(texture) {
                 Ok(snapshot) if snapshot.state == GpuResourceResidencyState::Ready => {
-                    this.material_textures.insert(
+                    this.gpu.material_textures.insert(
                         path.to_owned(),
                         MaterialTextureGpuResidency::Ready { texture },
                     );
@@ -251,7 +258,7 @@ fn material_texture_ready_state(
                         path,
                         message
                     );
-                    this.material_textures.insert(
+                    this.gpu.material_textures.insert(
                         path.to_owned(),
                         MaterialTextureGpuResidency::Failed { message },
                     );
@@ -264,7 +271,7 @@ fn material_texture_ready_state(
                         path,
                         message
                     );
-                    this.material_textures.insert(
+                    this.gpu.material_textures.insert(
                         path.to_owned(),
                         MaterialTextureGpuResidency::Failed { message },
                     );

@@ -21,17 +21,17 @@ impl RuntimeRenderController {
         h: u32,
     ) -> EngineResult<()> {
         if w == 0 || h == 0 {
-            self.last_w = w;
-            self.last_h = h;
+            self.viewport.last_w = w;
+            self.viewport.last_h = h;
             return Ok(());
         }
 
         // The render backend is initialized from the platform window snapshot before the
-        // first editor/game frame. Replaying the initial size through RenderApi::resize
+        // first runtime/game frame. Replaying the initial size through RenderApi::resize
         // can push Vulkan through a redundant swapchain teardown before the first acquire.
-        if self.last_w == 0 || self.last_h == 0 {
-            self.last_w = w;
-            self.last_h = h;
+        if self.viewport.last_w == 0 || self.viewport.last_h == 0 {
+            self.viewport.last_w = w;
+            self.viewport.last_h = h;
             log::debug!(
                 "render controller: adopted initial surface size {}x{}; skip first explicit resize",
                 w,
@@ -44,9 +44,9 @@ impl RuntimeRenderController {
             return Ok(());
         }
 
-        if w != self.last_w || h != self.last_h {
-            let old_w = self.last_w;
-            let old_h = self.last_h;
+        if w != self.viewport.last_w || h != self.viewport.last_h {
+            let old_w = self.viewport.last_w;
+            let old_h = self.viewport.last_h;
             log::debug!(
                 "render controller: resize requested {}x{} -> {}x{}",
                 old_w,
@@ -61,8 +61,8 @@ impl RuntimeRenderController {
 
             r.resize(w, h)?;
 
-            self.last_w = w;
-            self.last_h = h;
+            self.viewport.last_w = w;
+            self.viewport.last_h = h;
             log::debug!("render controller: resize completed {}x{}", w, h);
             newengine_core::crash::record_breadcrumb(format!(
                 "render controller: resize completed {}x{}",
@@ -74,10 +74,10 @@ impl RuntimeRenderController {
 
     #[inline]
     pub(super) fn sync_cursor_state<E: Send>(&mut self, ctx: &ModuleCtx<'_, E>, desired: CursorState) {
-        if desired == self.last_cursor_state {
+        if desired == self.viewport.last_cursor_state {
             return;
         }
-        self.last_cursor_state = desired;
+        self.viewport.last_cursor_state = desired;
         let _ = ctx
             .events()
             .publish(HostEvent::Window(WindowHostEvent::Cursor(desired)));

@@ -183,6 +183,13 @@ fn parse_payload(value: serde_json::Value) -> Result<GameReadyMapProfile, String
 
 impl RawGameReadyPayload {
     fn into_profile(self) -> GameReadyMapProfile {
+        let terrain_chunk_radius = self.terrain.streaming.chunk_radius.clamp(0, 1);
+        let terrain_unload_radius = self
+            .terrain
+            .streaming
+            .unload_radius
+            .clamp((terrain_chunk_radius + 1).max(1), 2);
+
         GameReadyMapProfile {
             title: self.title,
             objective: self.objective,
@@ -194,15 +201,12 @@ impl RawGameReadyPayload {
             },
             terrain: GameReadyTerrainSpec {
                 seed: self.terrain.seed,
-                cells_x: self.terrain.cells_x.max(8),
-                cells_z: self.terrain.cells_z.max(8),
+                cells_x: self.terrain.cells_x.clamp(16, 80),
+                cells_z: self.terrain.cells_z.clamp(16, 80),
                 size_x: self.terrain.size_x.max(4.0),
                 size_z: self.terrain.size_z.max(4.0),
                 base_height: self.terrain.base_height,
-                height_scale: self.terrain.height_scale.max(0.1),
-                collision_tile_cells: self.terrain.collision_tile_cells.max(1),
-                collision_floor_depth: self.terrain.collision_floor_depth.max(0.1),
-                collision_horizontal_skin: self.terrain.collision_horizontal_skin.max(0.0),
+                height_scale: self.terrain.height_scale.clamp(0.05, 1.45),
                 generator: GameReadyTerrainGeneratorSpec {
                     id: self.terrain.generator.id,
                     ridged_seed_xor: self.terrain.generator.ridged_seed_xor,
@@ -215,6 +219,19 @@ impl RawGameReadyPayload {
                     veins_amplitude: self.terrain.generator.veins_amplitude,
                     smoothing_passes: self.terrain.generator.smoothing_passes.min(16),
                     smoothing_strength: self.terrain.generator.smoothing_strength.clamp(0.0, 1.0),
+                },
+                surface: GameReadyTerrainSurfaceSpec {
+                    forest_base_texture: non_empty_or(self.terrain.surface.forest_base_texture, default_terrain_surface_forest()),
+                    sand_base_texture: non_empty_or(self.terrain.surface.sand_base_texture, default_terrain_surface_sand()),
+                    rock_base_texture: non_empty_or(self.terrain.surface.rock_base_texture, default_terrain_surface_rock()),
+                    patch_scale: self.terrain.surface.patch_scale.clamp(0.0025, 0.25),
+                    blend_softness: self.terrain.surface.blend_softness.clamp(0.01, 0.45),
+                },
+                streaming: GameReadyTerrainStreamingSpec {
+                    enabled: self.terrain.streaming.enabled,
+                    chunk_radius: terrain_chunk_radius,
+                    unload_radius: terrain_unload_radius,
+                    max_chunks_per_frame: self.terrain.streaming.max_chunks_per_frame.clamp(1, 1),
                 },
             },
             sky: GameReadySkySpec {

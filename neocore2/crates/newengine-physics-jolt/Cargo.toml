@@ -12,7 +12,9 @@ double-precision = ["rolt/double-precision", "joltc-sys/double-precision"]
 object-layer-u32 = ["rolt/object-layer-u32", "joltc-sys/object-layer-u32"]
 
 [dependencies]
+newengine-ecs = { path = "../newengine-ecs" }
 newengine-math = { path = "../newengine-math" }
+newengine-physics-contracts = { path = "../newengine-physics-contracts" }
 thiserror = "2"
 
 # Safe wrapper

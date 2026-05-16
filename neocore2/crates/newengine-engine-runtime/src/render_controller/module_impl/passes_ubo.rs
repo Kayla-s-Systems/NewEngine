@@ -6,29 +6,6 @@ use newengine_math::Mat4;
 use super::lights::PackedLights;
 
 #[inline]
-pub(super) fn write_lit_ubo(
-    r: &mut dyn newengine_core::render::RenderApi,
-    ubo: newengine_core::render::BufferId,
-    mvp: Mat4,
-    model: Mat4,
-    base_color: [f32; 4],
-    emissive_radiance: [f32; 3],
-    lights: &PackedLights,
-) -> EngineResult<()> {
-    write_lit_ubo_ex(
-        r,
-        ubo,
-        mvp,
-        model,
-        base_color,
-        emissive_radiance,
-        [1.0, 1.0, 0.0, 0.0],
-        [1.0, 0.75, 0.0, 1.0],
-        lights,
-    )
-}
-
-#[inline]
 pub(super) fn write_lit_ubo_ex(
     r: &mut dyn newengine_core::render::RenderApi,
     ubo: newengine_core::render::BufferId,

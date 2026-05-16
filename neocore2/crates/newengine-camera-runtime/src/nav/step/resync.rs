@@ -1,4 +1,4 @@
-use newengine_camera::{CameraRig, EditorNavController, EditorNavMode};
+use newengine_camera::{CameraRig, RuntimeNavController, RuntimeNavMode};
 use newengine_ecs::{EntityId, World};
 use newengine_sim::CameraRigComp;
 
@@ -11,8 +11,8 @@ pub(crate) fn ensure_mode_without_impulse(
     cam_id: EntityId,
     input: &mut CameraNavInput,
     bounds: BoundsSphere,
-    desired_mode: EditorNavMode,
-    ctrl: &mut EditorNavController,
+    desired_mode: RuntimeNavMode,
+    ctrl: &mut RuntimeNavController,
     rig: &mut CameraRig,
     state: &mut CameraNavState,
 ) -> bool {

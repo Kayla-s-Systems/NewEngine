@@ -6,9 +6,10 @@ mod material_bindings;
 mod metrics;
 mod module_impl;
 mod resource_lifetime;
+mod state;
 mod resource_cache;
 mod render_quality;
 mod viewport;
 
 pub use controller::RuntimeRenderController;
-pub type EditorRenderController = RuntimeRenderController;
+pub type GameRenderController = RuntimeRenderController;

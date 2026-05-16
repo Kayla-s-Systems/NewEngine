@@ -8,15 +8,15 @@ mod schedule;
 mod snapshot;
 
 pub use components::{
-    CollisionBody, CollisionShape, DisplayMode, DisplayVisibility, EditorPlayMode, FpsDemoGoal,
+    PhysicsBodyDesc, CollisionShapeDesc, DisplayMode, DisplayVisibility, GameRunMode, FpsDemoGoal,
     FpsDemoHazard, FpsDemoPickup, FpsDemoRules, FpsDemoState, FpsPlayerTuning,
     GameReadyWorldLaunchGate, GameplayActor, PlayerActor,
 };
 pub use fps_demo::step_fps_demo_gameplay;
 pub use player::{
     apply_player_input, attach_active_camera_to_player, clear_player_input,
-    detach_active_camera_from_player, display_visible_in_mode, ensure_collision_body, first_player,
-    remove_collision_body, spawn_default_player, spawn_default_player_with_tuning,
+    detach_active_camera_from_player, display_visible_in_mode, ensure_physics_body, first_player,
+    remove_physics_body, spawn_default_player, spawn_default_player_with_tuning,
 };
 pub use schedule::{default_sim_schedule, run_schedule};
 pub use snapshot::{

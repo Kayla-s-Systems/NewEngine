@@ -70,9 +70,8 @@ impl RuntimeRenderController {
     ) -> EngineResult<()> {
         if is_backend_device_lost_error(&error) {
             let first = self.backend_failure.mark_disabled(phase, &error);
-            self.viewport_pass_disabled = true;
-            self.previews_disabled = true;
-
+            self.viewport.pass_disabled = true;
+    
             if first {
                 log::error!(
                     "render controller: backend disabled after fatal GPU error phase='{}' err='{}'",

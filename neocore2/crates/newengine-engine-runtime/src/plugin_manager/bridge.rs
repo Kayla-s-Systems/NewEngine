@@ -10,7 +10,7 @@ use newengine_plugin_host::PluginsSnapshot;
 /// UI <-> engine bridge for plugin diagnostics.
 ///
 /// The engine publishes `PluginsSnapshot` every frame (via `Resources`).
-/// The editor render/controller copies it here so the UI builder can render it
+/// The runtime render/controller copies it here so the UI builder can render it
 /// without requiring access to `ModuleCtx`.
 #[derive(Debug, Default)]
 pub struct PluginManagerBridge {

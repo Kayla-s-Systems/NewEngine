@@ -54,7 +54,7 @@ pub struct ViewportBridge {
 
     camera_frame: Mutex<Option<ViewportCameraFrame>>,
 
-    /// Latest editor camera state (renderer -> UI).
+    /// Latest runtime camera state (renderer -> UI).
     ///
     /// Used for deterministic "spawn near camera" placement initiated from UI.
     camera_spawn: Mutex<CameraSpawnState>,
@@ -104,7 +104,7 @@ impl ViewportBridge {
         }
     }
 
-    /// Publish the latest editor camera position and forward direction.
+    /// Publish the latest runtime camera position and forward direction.
     ///
     /// Called from the render/controller thread once per frame.
     #[inline]

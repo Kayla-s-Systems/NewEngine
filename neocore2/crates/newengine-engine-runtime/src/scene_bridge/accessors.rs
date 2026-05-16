@@ -27,13 +27,8 @@ impl SceneBridge {
     }
 
     #[inline]
-    pub fn play_mode(&self) -> EditorPlayMode {
+    pub fn play_mode(&self) -> GameRunMode {
         *self.play_mode.lock()
-    }
-
-    #[inline]
-    pub fn collision_wireframe_enabled(&self) -> bool {
-        *self.collision_wireframe.lock()
     }
 
     #[inline]

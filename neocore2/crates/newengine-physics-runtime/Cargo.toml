@@ -1,0 +1,18 @@
+[package]
+name = "newengine-physics-runtime"
+version = "0.1.0"
+edition = "2021"
+description = "NewEngine backend-neutral physics runtime"
+license = "Proprietary"
+
+[dependencies]
+newengine-bounds = { path = "../newengine-bounds" }
+newengine-ecs = { path = "../newengine-ecs" }
+newengine-math = { path = "../newengine-math" }
+newengine-physics-contracts = { path = "../newengine-physics-contracts" }
+newengine-procedural-noise = { path = "../newengine-procedural-noise" }
+newengine-sim = { path = "../newengine-sim" }
+newengine-transform = { path = "../newengine-transform", features = ["ecs", "service"], default-features = false }
+
+[features]
+default = []

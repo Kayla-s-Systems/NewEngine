@@ -5,7 +5,8 @@ use newengine_materials::{MaterialDescriptor, MaterialId};
 use newengine_primitives::PrimitiveId;
 use newengine_scene::SceneAsset;
 
-use crate::gameplay::{CollisionBody, DisplayMode, EditorPlayMode};
+use crate::gameplay::{DisplayMode, GameRunMode};
+use newengine_physics_contracts::PhysicsBodyDesc;
 
 use super::imported_assets::SceneImportedAssetDescriptor;
 
@@ -76,11 +77,11 @@ pub enum SceneCommand {
         range: f32,
     },
 
-    SetCollisionBody {
+    SetPhysicsBody {
         entity: EntityId,
-        body: CollisionBody,
+        body: PhysicsBodyDesc,
     },
-    ClearCollisionBody {
+    ClearPhysicsBody {
         entity: EntityId,
     },
     SetDisplayVisibility {
@@ -93,10 +94,7 @@ pub enum SceneCommand {
     },
 
     SetPlayMode {
-        mode: EditorPlayMode,
-    },
-    SetCollisionWireframe {
-        enabled: bool,
+        mode: GameRunMode,
     },
 }
 

@@ -4,7 +4,7 @@ use newengine_viewport::input::{
     MOVE_A, MOVE_D, MOVE_DOWN, MOVE_S, MOVE_SHIFT, MOVE_UP, MOVE_W,
 };
 
-use newengine_camera::{CameraControlInput, EditorNavMode};
+use newengine_camera::{CameraControlInput, RuntimeNavMode};
 
 /// Minimal, renderer-agnostic viewport navigation input snapshot.
 ///
@@ -31,7 +31,7 @@ pub struct CameraNavInput {
     /// Movement key bitmask (`newengine_viewport::input::*`).
     pub move_mask: u64,
 
-    /// Additional user-controlled speed scalar from the editor shell.
+    /// Additional user-controlled speed scalar from the runtime shell.
     pub speed_scalar: f32,
 }
 
@@ -54,7 +54,7 @@ pub fn cursor_state_for_nav(input: &CameraNavInput) -> CursorState {
 }
 
 #[inline]
-pub(crate) fn build_camera_input(input: &CameraNavInput, mode: EditorNavMode) -> CameraControlInput {
+pub(crate) fn build_camera_input(input: &CameraNavInput, mode: RuntimeNavMode) -> CameraControlInput {
     let shift = (input.move_mask & MOVE_SHIFT) != 0;
 
     let fwd = ((input.move_mask & MOVE_W) != 0) as i32 - ((input.move_mask & MOVE_S) != 0) as i32;
@@ -71,12 +71,12 @@ pub(crate) fn build_camera_input(input: &CameraNavInput, mode: EditorNavMode) ->
     };
     let speed_mul = base_speed_mul * shell_speed_mul;
 
-    if input.pan_drag && mode == EditorNavMode::Orbit {
+    if input.pan_drag && mode == RuntimeNavMode::Orbit {
         move_axis.x = -input.dx_px;
         move_axis.y = input.dy_px;
     }
 
-    if mode == EditorNavMode::Fly {
+    if mode == RuntimeNavMode::Fly {
         move_axis.x = right as f32;
         move_axis.y = up as f32;
         move_axis.z = fwd as f32;

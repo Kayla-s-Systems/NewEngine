@@ -25,20 +25,22 @@ use newengine_lighting::{AmbientLight, DirectionalLight, PointLight};
 use newengine_materials::api::MaterialRegistryApi;
 use newengine_materials::{MaterialDescriptor, MaterialId, MaterialRef, MaterialRegistry};
 use newengine_math::{EulerRot, Quat, Vec3};
+use newengine_physics_contracts::PhysicsBodyDesc;
 use newengine_primitives::{builtins, Primitive, PrimitiveId, PrimitiveRegistry};
 use newengine_scene::{spawn_named, Scene, SceneAsset};
 use newengine_transform::Transform;
 
 use crate::gameplay::{
-    ensure_collision_body, remove_collision_body, spawn_default_player, CollisionBody, DisplayMode,
-    DisplayVisibility, EditorPlayMode,
+    ensure_physics_body, remove_physics_body, spawn_default_player, DisplayMode,
+    DisplayVisibility, GameRunMode,
 };
 use crate::scene_bootstrap::bootstrap_runtime_scene;
 
 use game_ready::{bootstrap_fps_game_ready_scene, game_ready_demo_enabled};
+pub(crate) use game_ready::{tick_game_ready_streaming_terrain, TerrainSurfaceLayers};
 use helpers::{
     apply_primitive_instance, effective_material_base, ensure_primitive_base, ensure_root,
-    place_spawn_position, primitive_bounds, reset_editor_runtime_state, restore_non_collision_bounds,
+    place_spawn_position, primitive_bounds, reset_game_runtime_state, restore_non_collision_bounds,
 };
 use imported_assets::{
     builtin_asset_assemblers, imported_asset_collision, imported_asset_primitive_id,
@@ -54,8 +56,7 @@ pub struct SceneBridge {
     primitives: Arc<RwLock<PrimitiveRegistry>>,
     materials: Arc<RwLock<MaterialRegistry>>,
     asset_assemblers: Arc<RwLock<Vec<SceneImportedAssetAssembler>>>,
-    play_mode: Arc<Mutex<EditorPlayMode>>,
-    collision_wireframe: Arc<Mutex<bool>>,
+    play_mode: Arc<Mutex<GameRunMode>>,
 }
 impl SceneBridge {
     #[inline]
@@ -68,13 +69,13 @@ impl SceneBridge {
         // Game-ready scenes must be assembled only after engine plugins are loaded:
         // AssetManager discovers geometryImporter during the engine plugin phase.
         // The standalone game profile owns that late bootstrap module.
-        let (initial_selection, initial_mode, initial_wire) = if game_ready_demo_enabled() {
+        let (initial_selection, initial_mode) = if game_ready_demo_enabled() {
             // Standalone game-ready scenes start in a non-playable staging mode.
             // The render controller promotes the bridge to Play only after the
             // scene launch gate verifies CPU scene assembly and GPU residency.
-            (None, EditorPlayMode::Edit, false)
+            (None, GameRunMode::Staging)
         } else {
-            (None, EditorPlayMode::Edit, true)
+            (None, GameRunMode::Staging)
         };
 
         Self {
@@ -85,7 +86,6 @@ impl SceneBridge {
             materials,
             asset_assemblers: Arc::new(RwLock::new(builtin_asset_assemblers())),
             play_mode: Arc::new(Mutex::new(initial_mode)),
-            collision_wireframe: Arc::new(Mutex::new(initial_wire)),
         }
     }
 
@@ -119,8 +119,7 @@ impl SceneBridge {
         *self.selection.lock() = selected;
         // Do not expose Play here. CPU scene bootstrap is not equivalent to
         // playable-world readiness; renderer-side launch gate owns promotion.
-        *self.play_mode.lock() = EditorPlayMode::Edit;
-        *self.collision_wireframe.lock() = false;
+        *self.play_mode.lock() = GameRunMode::Staging;
         selected
     }
 
@@ -131,11 +130,10 @@ impl SceneBridge {
         }
         let mut play_mode = self.play_mode.lock();
         if !play_mode.is_runtime() {
-            *play_mode = EditorPlayMode::Play;
+            *play_mode = GameRunMode::Play;
             log::info!(
                 "game-ready runtime: public play mode activated after scene launch gate release"
             );
         }
-        *self.collision_wireframe.lock() = false;
     }
 }

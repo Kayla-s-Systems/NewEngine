@@ -1,28 +1,5 @@
-#[derive(Clone, Copy, Debug, PartialEq)]
-pub struct GridMeshParams {
-    pub half_lines: i32,
-    pub major_every: i32,
-    pub minor_color: [f32; 4],
-    pub major_color: [f32; 4],
-}
-
-#[derive(Clone, Copy)]
-pub struct GridGpu {
-    pub vb: newengine_core::render::BufferId,
-    #[allow(dead_code)]
-    pub vs: newengine_core::render::ShaderId,
-    #[allow(dead_code)]
-    pub fs: newengine_core::render::ShaderId,
-    pub pipeline: newengine_core::render::PipelineId,
-    pub vertex_count: u32,
-    pub params: GridMeshParams,
-}
-
 #[derive(Clone, Copy)]
 pub struct LitPipeline {
-    /// Dedicated UBO for grid pass to avoid per-draw UBO overwrite hazards.
-    pub grid_ubo: newengine_core::render::BufferId,
-    pub grid_bg: newengine_core::render::BindGroupId,
     pub bgl: newengine_core::render::BindGroupLayoutId,
     pub white_texture: newengine_core::render::TextureId,
     pub flat_normal_texture: newengine_core::render::TextureId,
@@ -33,11 +10,14 @@ pub struct LitPipeline {
     #[allow(dead_code)]
     pub fs: newengine_core::render::ShaderId,
     #[allow(dead_code)]
+    pub terrain_fs: newengine_core::render::ShaderId,
+    #[allow(dead_code)]
     pub shadow_vs: newengine_core::render::ShaderId,
     #[allow(dead_code)]
     pub shadow_fs: newengine_core::render::ShaderId,
     pub pipeline: newengine_core::render::PipelineId,
     pub double_sided_pipeline: newengine_core::render::PipelineId,
+    pub terrain_pipeline: newengine_core::render::PipelineId,
     pub shadow_pipeline: newengine_core::render::PipelineId,
     pub shadow_double_sided_pipeline: newengine_core::render::PipelineId,
     #[allow(dead_code)]
@@ -52,7 +32,7 @@ pub struct LitPipeline {
     pub shadow_instanced_double_sided_pipeline: newengine_core::render::PipelineId,
 }
 
-// std140 layout (see assets/shaders/editor_lit.*):
+// std140 layout (see assets/shaders/game_lit_*):
 // mat4 mvp (64)
 // mat4 model (64)
 // vec4 base_color (16)

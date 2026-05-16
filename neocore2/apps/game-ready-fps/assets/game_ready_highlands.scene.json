@@ -3,34 +3,48 @@
     "title": "KAYLA FPS: Procedural Highlands",
     "objective": "Walk a deterministic terrain sandbox with procedural sky, resident materials and stable startup gates.",
     "player": {
-      "start": [-17.5, 0.0, -17.5],
+      "start": [
+        -17.5,
+        0.0,
+        -17.5
+      ],
       "yaw": -0.72,
       "move_speed": 7.3,
       "look_sens": 0.0022
     },
     "terrain": {
       "seed": 2316544595804117324,
-      "cells_x": 128,
-      "cells_z": 128,
+      "cells_x": 80,
+      "cells_z": 80,
       "size_x": 52.0,
       "size_z": 52.0,
       "base_height": -0.08,
-      "height_scale": 3.15,
-      "collision_tile_cells": 8,
-      "collision_floor_depth": 3.0,
-      "collision_horizontal_skin": 0.08,
+      "height_scale": 1.25,
       "generator": {
-        "id": "newengine.generator.heightfield.soft-cells.v1",
+        "id": "newengine.generator.lowland-biomes.v1",
         "ridged_seed_xor": 2116190493,
-        "ridged_frequency": 1.85,
-        "ridged_amplitude": 0.42,
+        "ridged_frequency": 1.15,
+        "ridged_amplitude": 0.08,
         "ridged_shape_edge0": -0.35,
         "ridged_shape_edge1": 1.0,
         "veins_seed_xor": 1394024449,
-        "veins_frequency": 0.68,
-        "veins_amplitude": 0.18,
-        "smoothing_passes": 0,
-        "smoothing_strength": 0.0
+        "veins_frequency": 0.46,
+        "veins_amplitude": 0.08,
+        "smoothing_passes": 2,
+        "smoothing_strength": 0.42
+      },
+      "surface": {
+        "forest_base_texture": "textures/fps/world_surfaces.neytd@terrain_forest_floor",
+        "sand_base_texture": "textures/fps/world_surfaces.neytd@ground_sand",
+        "rock_base_texture": "textures/fps/world_surfaces.neytd@rock_moss",
+        "patch_scale": 0.033,
+        "blend_softness": 0.18
+      },
+      "streaming": {
+        "enabled": true,
+        "chunk_radius": 1,
+        "unload_radius": 2,
+        "max_chunks_per_frame": 1
       }
     },
     "sky": {
@@ -39,11 +53,10 @@
     },
     "materials": {
       "terrain": {
-        "asset": "materials/fps/terrain_forest_floor.material.json",
-        "base_color_texture": "textures/fps/world_surfaces.neytd@terrain_forest_floor",
-        "normal_texture": "textures/fps/world_surfaces.neytd@terrain_forest_floor_normal",
-        "roughness_texture": "textures/fps/world_surfaces.neytd@terrain_forest_floor_roughness",
-        "uv_scale": [4.0, 4.0],
+        "uv_scale": [
+          4.0,
+          4.0
+        ],
         "roughness": 0.92,
         "normal_scale": 0.0,
         "occlusion_strength": 0.88
@@ -70,20 +83,32 @@
         "base_color_texture": "prefabs/tree_animate/textures/tree_animate.neytd@branch_diffuse",
         "normal_texture": "prefabs/tree_animate/textures/tree_animate.neytd@branch_normal",
         "roughness": 0.86,
-        "normal_scale": 0.30
+        "normal_scale": 0.3
       }
     },
     "lighting": {
-      "ambient_color": [0.38, 0.42, 0.50],
+      "ambient_color": [
+        0.38,
+        0.42,
+        0.5
+      ],
       "ambient_intensity": 0.28,
-      "sun_direction": [-0.55, -0.82, -0.28],
-      "sun_color": [1.0, 0.94, 0.82],
+      "sun_direction": [
+        -0.55,
+        -0.82,
+        -0.28
+      ],
+      "sun_color": [
+        1.0,
+        0.94,
+        0.82
+      ],
       "sun_intensity": 3.2,
       "shadows": {
         "enabled": true,
-        "resolution": 2048,
+        "resolution": 1024,
         "cascade_count": 1,
-        "max_distance": 80.0,
+        "max_distance": 55.0,
         "softness": 0.75,
         "bias": 0.0025,
         "normal_bias": 0.015,
@@ -94,12 +119,12 @@
       "enabled": true,
       "prefab": "tree_animate",
       "seed": 6075166572582,
-      "grid_min": -5,
-      "grid_max": 5,
-      "spacing": 6.0,
+      "grid_min": -3,
+      "grid_max": 3,
+      "spacing": 7.5,
       "jitter": 0.45,
-      "gate_threshold": 0.62,
-      "max_count": 8192,
+      "gate_threshold": 0.68,
+      "max_count": 384,
       "min_scale": 0.85,
       "max_scale": 1.35,
       "min_player_distance": 5.0,
@@ -122,17 +147,57 @@
       "goal_complete_status": "Extraction complete. Runtime loop is stable and playable.",
       "failed_progress_label": "FAILED",
       "completed_progress_label": "EXTRACTED",
-      "player_collision": { "radius": 0.45, "half_height": 0.45 },
-      "player_visual": { "radius": 0.45, "half_height": 0.9, "camera_eye_height": 0.85, "sprint_multiplier": 1.75 },
-      "physics": { "gravity": 9.81, "contact_skin": 0.035 }
+      "player_collision": {
+        "radius": 0.45,
+        "half_height": 0.45
+      },
+      "player_visual": {
+        "radius": 0.45,
+        "half_height": 0.9,
+        "camera_eye_height": 0.85,
+        "sprint_multiplier": 1.75
+      },
+      "physics": {
+        "gravity": 9.81,
+        "contact_skin": 0.035
+      }
     },
     "palette": {
-      "terrain": [0.78, 0.86, 0.68, 1.0],
-      "sky": [0.08, 0.16, 0.34, 1.0],
-      "sky_emissive": [0.07, 0.14, 0.34],
-      "tree_bark": [0.38, 0.23, 0.12, 1.0],
-      "tree_leaf": [0.18, 0.42, 0.16, 1.0],
-      "tree_branch": [0.32, 0.20, 0.12, 1.0]
+      "terrain": [
+        0.78,
+        0.86,
+        0.68,
+        1.0
+      ],
+      "sky": [
+        0.08,
+        0.16,
+        0.34,
+        1.0
+      ],
+      "sky_emissive": [
+        0.07,
+        0.14,
+        0.34
+      ],
+      "tree_bark": [
+        0.38,
+        0.23,
+        0.12,
+        1.0
+      ],
+      "tree_leaf": [
+        0.18,
+        0.42,
+        0.16,
+        1.0
+      ],
+      "tree_branch": [
+        0.32,
+        0.2,
+        0.12,
+        1.0
+      ]
     }
   }
 }

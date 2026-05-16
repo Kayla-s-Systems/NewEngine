@@ -1,6 +1,6 @@
 # newengine-engine-runtime
 
-Reusable runtime composition layer shared by standalone games and the editor.
+Reusable runtime composition layer for standalone GameFirst runtime apps.
 
 This crate owns systems that are engine runtime responsibilities, not application responsibilities:
 

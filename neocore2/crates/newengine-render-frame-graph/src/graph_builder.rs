@@ -1,6 +1,6 @@
 use newengine_render_api::{
     Extent2D, RenderGraphDesc, RenderGraphPassDesc, RenderGraphResourceDesc,
-    RenderGraphResourceId, RenderGraphResourceUsage, RenderTargetId, TextureFormat,
+    RenderGraphResourceId, RenderGraphResourceSemantic, RenderGraphResourceUsage, RenderTargetId, TextureFormat,
 };
 
 use crate::{
@@ -168,6 +168,7 @@ impl FrameGraphBuilder {
                 shadow_extent,
                 self.target.depth_format,
             )
+            .with_semantic(RenderGraphResourceSemantic::ShadowMap)
         } else {
             RenderGraphResourceDesc::transient_texture(
                 RG_SHADOW_MAP,
@@ -176,6 +177,7 @@ impl FrameGraphBuilder {
                 shadow_extent,
                 self.target.depth_format,
             )
+            .with_semantic(RenderGraphResourceSemantic::ShadowMap)
         };
         self.graph.resources.push(shadow_resource);
         self.add_phase_pass(StandardRenderPhase::ShadowMap, |pass| {
@@ -212,7 +214,8 @@ impl FrameGraphBuilder {
             RenderGraphResourceUsage::ColorAttachment,
             self.target.viewport_extent,
             self.target.scene_color_format,
-        ));
+        )
+        .with_semantic(RenderGraphResourceSemantic::LitColor));
         self.add_phase_pass(StandardRenderPhase::DeferredLighting, |pass| {
             pass.reads(RG_GBUFFER_ALBEDO, RenderGraphResourceUsage::SampledTexture)
                 .reads(RG_GBUFFER_NORMAL, RenderGraphResourceUsage::SampledTexture)
@@ -303,7 +306,8 @@ impl FrameGraphBuilder {
             RenderGraphResourceUsage::ColorAttachment,
             self.target.surface_extent,
             self.target.color_format,
-        ));
+        )
+        .with_semantic(RenderGraphResourceSemantic::SurfaceColor));
 
         if self.target.hdr_scene_enabled {
             self.graph.resources.push(RenderGraphResourceDesc::transient_texture(
@@ -312,7 +316,8 @@ impl FrameGraphBuilder {
                 RenderGraphResourceUsage::ColorAttachment,
                 self.target.viewport_extent,
                 self.target.scene_color_format,
-            ));
+            )
+            .with_semantic(RenderGraphResourceSemantic::SceneHdrColor));
         }
 
         if self.target.viewport_is_surface {
@@ -322,14 +327,16 @@ impl FrameGraphBuilder {
                 RenderGraphResourceUsage::ColorAttachment,
                 self.target.surface_extent,
                 self.target.color_format,
-            ));
+            )
+            .with_semantic(RenderGraphResourceSemantic::ViewportColor));
             self.graph.resources.push(RenderGraphResourceDesc::external_swapchain(
                 RG_VIEWPORT_DEPTH,
                 "viewport_surface_depth",
                 RenderGraphResourceUsage::DepthAttachment,
                 self.target.surface_extent,
                 self.target.depth_format,
-            ));
+            )
+            .with_semantic(RenderGraphResourceSemantic::ViewportDepth));
         } else if let Some(rt) = self.target.viewport_render_target {
             self.graph.resources.push(RenderGraphResourceDesc::external_render_target(
                 RG_VIEWPORT_COLOR,
@@ -338,7 +345,8 @@ impl FrameGraphBuilder {
                 RenderGraphResourceUsage::ColorAttachment,
                 self.target.viewport_extent,
                 self.target.color_format,
-            ));
+            )
+            .with_semantic(RenderGraphResourceSemantic::ViewportColor));
             self.graph.resources.push(RenderGraphResourceDesc::external_render_target(
                 RG_VIEWPORT_DEPTH,
                 "viewport_render_target_depth",
@@ -346,18 +354,21 @@ impl FrameGraphBuilder {
                 RenderGraphResourceUsage::DepthAttachment,
                 self.target.viewport_extent,
                 self.target.depth_format,
-            ));
+            )
+            .with_semantic(RenderGraphResourceSemantic::ViewportDepth));
         } else {
             self.graph.resources.push(RenderGraphResourceDesc::external(
                 RG_VIEWPORT_COLOR,
                 "viewport_render_target_color",
                 RenderGraphResourceUsage::ColorAttachment,
-            ));
+            )
+            .with_semantic(RenderGraphResourceSemantic::ViewportColor));
             self.graph.resources.push(RenderGraphResourceDesc::external(
                 RG_VIEWPORT_DEPTH,
                 "viewport_depth",
                 RenderGraphResourceUsage::DepthAttachment,
-            ));
+            )
+            .with_semantic(RenderGraphResourceSemantic::ViewportDepth));
         }
     }
 
@@ -368,7 +379,8 @@ impl FrameGraphBuilder {
             RenderGraphResourceUsage::DepthAttachment,
             self.target.viewport_extent,
             self.target.depth_format,
-        ));
+        )
+        .with_semantic(RenderGraphResourceSemantic::GBufferDepth));
         self.add_phase_pass(StandardRenderPhase::DepthPrepass, |pass| {
             pass.writes(RG_GBUFFER_DEPTH, RenderGraphResourceUsage::DepthAttachment)
         });
@@ -382,21 +394,24 @@ impl FrameGraphBuilder {
             RenderGraphResourceUsage::ColorAttachment,
             self.target.viewport_extent,
             self.target.color_format,
-        ));
+        )
+        .with_semantic(RenderGraphResourceSemantic::GBufferAlbedo));
         self.graph.resources.push(RenderGraphResourceDesc::transient_texture(
             RG_GBUFFER_NORMAL,
             "gbuffer_normal",
             RenderGraphResourceUsage::ColorAttachment,
             self.target.viewport_extent,
             self.target.color_format,
-        ));
+        )
+        .with_semantic(RenderGraphResourceSemantic::GBufferNormal));
         self.graph.resources.push(RenderGraphResourceDesc::transient_texture(
             RG_GBUFFER_MATERIAL,
             "gbuffer_material",
             RenderGraphResourceUsage::ColorAttachment,
             self.target.viewport_extent,
             TextureFormat::Rgba8Unorm,
-        ));
+        )
+        .with_semantic(RenderGraphResourceSemantic::GBufferMaterial));
         self.add_phase_pass(StandardRenderPhase::ViewportGBuffer, |pass| {
             pass.reads(RG_GBUFFER_DEPTH, RenderGraphResourceUsage::DepthAttachment)
                 .writes(RG_GBUFFER_ALBEDO, RenderGraphResourceUsage::ColorAttachment)

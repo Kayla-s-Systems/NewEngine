@@ -1,4 +1,4 @@
-use newengine_camera::{CameraFrame, EditorNavMode};
+use newengine_camera::{CameraFrame, RuntimeNavMode};
 use newengine_core::host_events::CursorState;
 
 use crate::blend::{CameraFrameBlendCurve, CameraFrameBlendPlan, CameraFrameBlendState};
@@ -26,9 +26,9 @@ impl Default for CameraManagerResource {
     #[inline]
     fn default() -> Self {
         Self {
-            active_director: CameraDirectorKind::Editor,
-            active_mode: CameraRuntimeMode::EditorOrbit,
-            input_context: CameraInputContext::EditorNav,
+            active_director: CameraDirectorKind::Runtime,
+            active_mode: CameraRuntimeMode::RuntimeOrbit,
+            input_context: CameraInputContext::RuntimeNav,
             target_entity: None,
             transition: CameraTransitionState::default(),
             gate_blocked: false,
@@ -122,13 +122,13 @@ impl CameraManagerResource {
     }
 
     #[inline]
-    pub fn sync_editor_mode_from_controller(&mut self, mode: EditorNavMode) {
-        if self.active_director != CameraDirectorKind::Editor {
+    pub fn sync_runtime_nav_mode_from_controller(&mut self, mode: RuntimeNavMode) {
+        if self.active_director != CameraDirectorKind::Runtime {
             return;
         }
         self.active_mode = match mode {
-            EditorNavMode::Orbit => CameraRuntimeMode::EditorOrbit,
-            EditorNavMode::Fly => CameraRuntimeMode::EditorFly,
+            RuntimeNavMode::Orbit => CameraRuntimeMode::RuntimeOrbit,
+            RuntimeNavMode::Fly => CameraRuntimeMode::RuntimeFly,
         };
     }
 
@@ -139,7 +139,7 @@ impl CameraManagerResource {
 
     #[inline]
     pub fn wants_navigation_input(&self) -> bool {
-        matches!(self.input_context, CameraInputContext::EditorNav)
+        matches!(self.input_context, CameraInputContext::RuntimeNav)
     }
 
     #[inline]
@@ -219,14 +219,14 @@ fn desired_camera_policy(
         );
     }
 
-    let editor_mode = match state.editor_nav_mode {
-        EditorNavMode::Orbit => CameraRuntimeMode::EditorOrbit,
-        EditorNavMode::Fly => CameraRuntimeMode::EditorFly,
+    let runtime_nav_mode = match state.game_nav_mode {
+        RuntimeNavMode::Orbit => CameraRuntimeMode::RuntimeOrbit,
+        RuntimeNavMode::Fly => CameraRuntimeMode::RuntimeFly,
     };
     (
-        CameraDirectorKind::Editor,
-        editor_mode,
-        CameraInputContext::EditorNav,
+        CameraDirectorKind::Runtime,
+        runtime_nav_mode,
+        CameraInputContext::RuntimeNav,
         None,
     )
 }

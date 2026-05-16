@@ -24,11 +24,11 @@ impl RuntimeRenderController {
             .resources()
             .get::<crate::render_runtime::ResolvedRenderBackendConfig>()
             .map(|cfg| {
-                self.clear_color = cfg.clear_color;
+                self.viewport.clear_color = cfg.clear_color;
                 cfg.work_budget
             });
 
-        let trace_frame = super::trace_policy::should_trace_frame(self.frame_index);
+        let trace_frame = super::trace_policy::should_trace_frame(self.frame.frame_index);
         let api = match require_render_api(ctx) {
             Ok(api) => api,
             Err(_) => return Ok(()),
@@ -64,10 +64,9 @@ impl RuntimeRenderController {
             return Ok(());
         };
 
-        self.frame_index = self.frame_index.saturating_add(1).max(1);
-        self.instance_uploader.begin_frame();
-        self.overlay_metrics.begin_frame(scope.dt);
-        self.pump_previews_fail_soft(&mut **r, scope.dt);
+        self.frame.frame_index = self.frame.frame_index.saturating_add(1).max(1);
+        self.gpu.instance_uploader.begin_frame();
+        self.diagnostics.overlay_metrics.begin_frame(scope.dt);
 
         let outcome = self.render_playable_viewport_frame(
             ctx,
@@ -89,7 +88,7 @@ impl RuntimeRenderController {
         } = outcome
         {
             if let Ok(diag) = r.diagnostics_snapshot() {
-                self.overlay_metrics.record_backend_snapshot(&diag);
+                self.diagnostics.overlay_metrics.record_backend_snapshot(&diag);
                 if let Some(snapshot) = frame_debug_snapshot.as_mut() {
                     snapshot.queued_upload_jobs = diag.queue.queued_upload_jobs;
                     snapshot.queued_upload_bytes = diag.queue.queued_upload_bytes;
@@ -99,20 +98,20 @@ impl RuntimeRenderController {
                 }
             }
 
-            r.set_debug_text(self.overlay_metrics.overlay_text());
+            r.set_debug_text(self.diagnostics.overlay_metrics.overlay_text());
             self.gc_per_draw_ubos(&mut **r);
             self.gc_deferred_rts(&mut **r);
             if trace_frame {
                 newengine_core::crash::record_breadcrumb(format!(
                     "render controller: end_frame frame={}",
-                    self.frame_index
+                    self.frame.frame_index
                 ));
             }
             r.end_frame()?;
 
             if let Some(snapshot) = frame_debug_snapshot.take() {
-                self.overlay_metrics.publish_debug_snapshot(snapshot);
-                telemetry_to_publish = Some(self.overlay_metrics.telemetry_snapshot());
+                self.diagnostics.overlay_metrics.publish_debug_snapshot(snapshot);
+                telemetry_to_publish = Some(self.diagnostics.overlay_metrics.telemetry_snapshot());
             }
             self.trace_render_diagnostics(&mut **r, trace_frame);
         }
@@ -131,13 +130,13 @@ impl RuntimeRenderController {
         snapshot: Option<&newengine_plugin_host::PluginsSnapshot>,
     ) {
         if let Some(snap) = snapshot {
-            self.plugins_bridge.publish(snap.clone());
+            self.bridges.plugins.publish(snap.clone());
         }
         if let Some(q) = ctx
             .resources_mut()
             .get_mut::<newengine_plugin_host::PluginControlQueue>()
         {
-            for cmd in self.plugins_bridge.drain_cmds() {
+            for cmd in self.bridges.plugins.drain_cmds() {
                 q.push(cmd);
             }
         }
@@ -152,7 +151,7 @@ impl RuntimeRenderController {
         dt: f32,
         trace_frame: bool,
     ) -> EngineResult<Option<RenderFrameScope>> {
-        let (requested_vp_w, requested_vp_h) = self.viewport_bridge.read_extent();
+        let (requested_vp_w, requested_vp_h) = self.bridges.viewport.read_extent();
         let direct_surface_viewport = !ui_enabled
             && requested_vp_w == 0
             && requested_vp_h == 0
@@ -165,7 +164,7 @@ impl RuntimeRenderController {
         };
 
         self.trace_begin_frame(trace_frame, vp_w, vp_h);
-        r.begin_frame(BeginFrameDesc::new(self.clear_color))?;
+        r.begin_frame(BeginFrameDesc::new(self.viewport.clear_color))?;
         self.trace_begin_frame_done(trace_frame);
 
         Ok(Some(RenderFrameScope {
@@ -201,7 +200,7 @@ impl RuntimeRenderController {
         if !trace_frame {
             return;
         }
-        let (requested_vp_w, requested_vp_h) = self.viewport_bridge.read_extent();
+        let (requested_vp_w, requested_vp_h) = self.bridges.viewport.read_extent();
         let direct_surface_viewport = requested_vp_w == 0 && requested_vp_h == 0 && w > 0 && h > 0;
         let (vp_w, vp_h) = if direct_surface_viewport {
             (w, h)
@@ -210,7 +209,7 @@ impl RuntimeRenderController {
         };
         log::debug!(
             "render controller: render begin next_frame={} window={}x{} viewport={}x{} direct_surface={}",
-            self.frame_index.saturating_add(1),
+            self.frame.frame_index.saturating_add(1),
             w,
             h,
             vp_w,
@@ -219,7 +218,7 @@ impl RuntimeRenderController {
         );
         newengine_core::crash::record_breadcrumb(format!(
             "render controller: render begin next_frame={} window={}x{} viewport={}x{}",
-            self.frame_index.saturating_add(1),
+            self.frame.frame_index.saturating_add(1),
             w,
             h,
             vp_w,
@@ -233,11 +232,11 @@ impl RuntimeRenderController {
         }
         log::debug!(
             "render controller: begin_frame next_frame={} clear={:.3},{:.3},{:.3},{:.3} viewport={}x{}",
-            self.frame_index.saturating_add(1),
-            self.clear_color[0],
-            self.clear_color[1],
-            self.clear_color[2],
-            self.clear_color[3],
+            self.frame.frame_index.saturating_add(1),
+            self.viewport.clear_color[0],
+            self.viewport.clear_color[1],
+            self.viewport.clear_color[2],
+            self.viewport.clear_color[3],
             vp_w,
             vp_h
         );
@@ -249,11 +248,11 @@ impl RuntimeRenderController {
         }
         log::debug!(
             "render controller: begin_frame completed frame={}",
-            self.frame_index.saturating_add(1)
+            self.frame.frame_index.saturating_add(1)
         );
         newengine_core::crash::record_breadcrumb(format!(
             "render controller: begin_frame completed frame={}",
-            self.frame_index.saturating_add(1)
+            self.frame.frame_index.saturating_add(1)
         ));
     }
 

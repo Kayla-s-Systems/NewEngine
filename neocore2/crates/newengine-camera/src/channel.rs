@@ -6,14 +6,14 @@ use serde::{Deserialize, Serialize};
 /// Stable camera ownership lane.
 ///
 /// This mirrors the reference architecture idea of explicit camera channels/directors:
-/// gameplay, editor, cinematic, debug, scripted and replay cameras must not compete through
+/// gameplay, runtime preview, cinematic, debug, scripted and replay cameras must not compete through
 /// ad-hoc globals. The runtime chooses one rendered channel per viewport and may blend between
 /// channel frames later.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub enum CameraChannel {
     Gameplay,
-    Editor,
+    Runtime,
     Debug,
     Cinematic,
     Cutscene,

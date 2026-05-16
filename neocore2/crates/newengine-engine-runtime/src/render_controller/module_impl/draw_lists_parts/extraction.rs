@@ -45,7 +45,7 @@ pub(super) struct SceneExtractionCtx<'a> {
     pub(super) viewport_extent: Extent2D,
     pub(super) surface_extent: Extent2D,
     pub(super) runtime: bool,
-    pub(super) editor_overlays: bool,
+    pub(super) debug_overlays: bool,
     pub(super) ui: Option<&'a UiDrawList>,
 }
 
@@ -55,7 +55,7 @@ impl<'a> SceneExtractionCtx<'a> {
         RuntimeVisibilityPlan::standard(
             self.render_shadow_map,
             self.ui.is_some(),
-            self.editor_overlays,
+            self.debug_overlays,
         )
     }
 }
@@ -206,11 +206,6 @@ impl RuntimeDrawList {
     fn new(kind: RenderDrawListKind) -> Self {
         Self { kind }
     }
-}
-
-#[inline]
-pub(super) const fn opaque_forward_list(active: bool) -> &'static [RenderDrawListKind] {
-    if active { OPAQUE_FORWARD } else { EMPTY_LISTS }
 }
 
 #[inline]

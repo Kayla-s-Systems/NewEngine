@@ -27,7 +27,7 @@ pub struct SceneExtractionSnapshot {
     pub viewport_extent: Extent2D,
     pub surface_extent: Extent2D,
     pub runtime: bool,
-    pub editor_overlays: bool,
+    pub debug_overlays: bool,
     pub bounds: RenderBoundsSnapshot,
     pub camera: RenderCameraSnapshot,
     #[serde(default)]

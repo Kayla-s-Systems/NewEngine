@@ -35,10 +35,26 @@ pub(in crate::scene_bridge::game_ready) struct GameReadyTerrainSpec {
     pub(in crate::scene_bridge::game_ready) size_z: f32,
     pub(in crate::scene_bridge::game_ready) base_height: f32,
     pub(in crate::scene_bridge::game_ready) height_scale: f32,
-    pub(in crate::scene_bridge::game_ready) collision_tile_cells: u32,
-    pub(in crate::scene_bridge::game_ready) collision_floor_depth: f32,
-    pub(in crate::scene_bridge::game_ready) collision_horizontal_skin: f32,
     pub(in crate::scene_bridge::game_ready) generator: GameReadyTerrainGeneratorSpec,
+    pub(in crate::scene_bridge::game_ready) surface: GameReadyTerrainSurfaceSpec,
+    pub(in crate::scene_bridge::game_ready) streaming: GameReadyTerrainStreamingSpec,
+}
+
+#[derive(Clone, Debug)]
+pub(in crate::scene_bridge::game_ready) struct GameReadyTerrainSurfaceSpec {
+    pub(in crate::scene_bridge::game_ready) forest_base_texture: String,
+    pub(in crate::scene_bridge::game_ready) sand_base_texture: String,
+    pub(in crate::scene_bridge::game_ready) rock_base_texture: String,
+    pub(in crate::scene_bridge::game_ready) patch_scale: f32,
+    pub(in crate::scene_bridge::game_ready) blend_softness: f32,
+}
+
+#[derive(Clone, Debug)]
+pub(in crate::scene_bridge::game_ready) struct GameReadyTerrainStreamingSpec {
+    pub(in crate::scene_bridge::game_ready) enabled: bool,
+    pub(in crate::scene_bridge::game_ready) chunk_radius: i32,
+    pub(in crate::scene_bridge::game_ready) unload_radius: i32,
+    pub(in crate::scene_bridge::game_ready) max_chunks_per_frame: usize,
 }
 
 #[derive(Clone, Debug)]

@@ -15,15 +15,15 @@ pub(super) fn handle_picking(
     vp_w: u32,
     vp_h: u32,
 ) {
-    let (pick_seq, pick_x, pick_y) = this.viewport_bridge.read_pick_request();
-    if pick_seq == this.last_pick_seq {
+    let (pick_seq, pick_x, pick_y) = this.bridges.viewport.read_pick_request();
+    if pick_seq == this.frame.last_pick_seq {
         return;
     }
-    this.last_pick_seq = pick_seq;
+    this.frame.last_pick_seq = pick_seq;
 
     let world = scene.world();
     let picked = pick_entity(viewproj, vp_w, vp_h, pick_x, pick_y, world);
-    this.scene_bridge.set_selection(picked);
+    this.bridges.scene.set_selection(picked);
 }
 
 #[inline]

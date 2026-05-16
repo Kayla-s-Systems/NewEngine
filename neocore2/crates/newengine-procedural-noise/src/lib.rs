@@ -5,9 +5,8 @@
 //! The crate is engine-foundation level: it does not talk to render backends,
 //! plugin hosts, filesystems, clocks, or global RNG. Callers provide explicit
 //! settings and receive deterministic CPU data that can be rendered, cooked,
-//! streamed, or converted into collision proxies.
+//! streamed, or consumed by the physics layer through heightfield residency.
 
-mod collision;
 mod graph;
 mod heightfield;
 mod mesh;
@@ -15,7 +14,6 @@ mod noise;
 mod terrain;
 mod texture;
 
-pub use collision::{TerrainCollisionTile, TerrainCollisionTileSettings};
 pub use graph::{
     DomainWarp2D, NoiseCombineMode, NoiseDomain2D, NoiseGraph2D, NoiseLayer2D, NoiseRemap,
     NoiseShape,

@@ -5,7 +5,7 @@
 //! Materials are parsed/registered by `newengine-materials`. This module is the
 //! only place in the scene bridge that turns a material id into ECS components on
 //! an object. That keeps material authoring independent from terrain/game/demo
-//! bootstrap code and makes the future editor inspector use the same path.
+//! bootstrap code and makes the future authoring inspector use the same path.
 
 use newengine_ecs::EntityId;
 use newengine_materials::{

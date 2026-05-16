@@ -67,7 +67,8 @@ pub fn compile_glsl_to_spirv(
     }
 
     let glslc = resolve_glslc();
-    let temp_dir = cache_files_root().join("tmp").join("shaders");
+    let stem = unique_stem(logical_name, stage);
+    let temp_dir = shader_compile_temp_dir(&stem);
     std::fs::create_dir_all(&temp_dir).map_err(|e| {
         ShaderCompileError::new(format!(
             "shader temp dir create failed dir='{}' err='{e}'",
@@ -75,16 +76,16 @@ pub fn compile_glsl_to_spirv(
         ))
     })?;
 
-    let stem = unique_stem(logical_name, stage);
-    let source_path = temp_dir.join(format!("{stem}.{}", stage_extension(stage)));
-    let spv_path = temp_dir.join(format!("{stem}.spv"));
+    let source_path = temp_dir.join(format!("source.{}", stage_extension(stage)));
+    let spv_path = temp_dir.join("output.spv");
 
-    std::fs::write(&source_path, source).map_err(|e| {
-        ShaderCompileError::new(format!(
+    if let Err(e) = std::fs::write(&source_path, source) {
+        let _ = std::fs::remove_dir_all(&temp_dir);
+        return Err(ShaderCompileError::new(format!(
             "shader temp source write failed path='{}' err='{e}'",
             source_path.display()
-        ))
-    })?;
+        )));
+    }
 
     let output = match Command::new(&glslc)
         .arg("-O")
@@ -96,6 +97,7 @@ pub fn compile_glsl_to_spirv(
     {
         Ok(output) => output,
         Err(e) => {
+            let _ = std::fs::remove_dir_all(&temp_dir);
             return Err(ShaderCompileError::new(format!(
                 "failed to execute glslc='{}' shader='{logical_name}' err='{e}'. Set NEWENGINE_GLSLC to a valid glslc executable or install Vulkan SDK.",
                 display_command(&glslc)
@@ -106,8 +108,7 @@ pub fn compile_glsl_to_spirv(
     if !output.status.success() {
         let stdout = String::from_utf8_lossy(&output.stdout);
         let stderr = String::from_utf8_lossy(&output.stderr);
-        let _ = std::fs::remove_file(&source_path);
-        let _ = std::fs::remove_file(&spv_path);
+        let _ = std::fs::remove_dir_all(&temp_dir);
         return Err(ShaderCompileError::new(format!(
             "glslc failed shader='{logical_name}' status='{}' stdout='{}' stderr='{}'",
             output.status,
@@ -116,15 +117,18 @@ pub fn compile_glsl_to_spirv(
         )));
     }
 
-    let bytes = std::fs::read(&spv_path).map_err(|e| {
-        ShaderCompileError::new(format!(
-            "shader SPIR-V read failed path='{}' err='{e}'",
-            spv_path.display()
-        ))
-    })?;
+    let bytes = match std::fs::read(&spv_path) {
+        Ok(bytes) => bytes,
+        Err(e) => {
+            let _ = std::fs::remove_dir_all(&temp_dir);
+            return Err(ShaderCompileError::new(format!(
+                "shader SPIR-V read failed path='{}' err='{e}'",
+                spv_path.display()
+            )));
+        }
+    };
 
-    let _ = std::fs::remove_file(&source_path);
-    let _ = std::fs::remove_file(&spv_path);
+    let _ = std::fs::remove_dir_all(&temp_dir);
 
     let words = spirv_bytes_to_words(&bytes).map_err(|e| {
         ShaderCompileError::new(format!("shader='{logical_name}' invalid SPIR-V: {e}"))
@@ -164,6 +168,13 @@ fn cache_files_root() -> PathBuf {
         .or_else(|| std::env::var_os("CACHE_FILES"))
         .map(PathBuf::from)
         .unwrap_or_else(|| PathBuf::from("cache"))
+}
+
+fn shader_compile_temp_dir(stem: &str) -> PathBuf {
+    // Keep transient GLSL sources out of the project cache. The compiler writes
+    // into a unique OS-temp directory and removes it after each invocation, so
+    // project-local temporary shader folders are not created during runtime.
+    std::env::temp_dir().join("newengine-shader-compiler").join(stem)
 }
 
 fn shader_cache_path(stage: ShaderStage, logical_name: &str, entry: &str, key: u64) -> PathBuf {

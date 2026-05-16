@@ -216,7 +216,7 @@ fn lower_debug_line_list_contribution(
             push_debug_line_vertex(&mut bytes, ctx.viewproj, pair[1], color);
         }
 
-        let gpu = ensure_debug_line_pipeline(&mut this.collision_lines, r, vertex_count)?;
+        let gpu = ensure_debug_line_pipeline(&mut this.gpu.collision_lines, r, vertex_count)?;
         r.write_buffer(gpu.vb, 0, &bytes)?;
         r.set_pipeline(gpu.pipeline)?;
         r.set_bind_group(0, gpu.bg)?;
@@ -295,8 +295,8 @@ fn lower_single_gpu_mesh_instance(
         shadow_texture,
         sampler,
     )?;
-    per.last_seen_frame = this.frame_index;
-    this.per_draw_ubo.insert(key, per);
+    per.last_seen_frame = this.frame.frame_index;
+    this.gpu.per_draw_ubo.insert(key, per);
 
     let mvp = if matches!(draw_list, RenderDrawListKind::ShadowCasters) {
         ctx.shadow_frame.light_mvp * model
@@ -329,7 +329,7 @@ fn lower_single_gpu_mesh_instance(
             vertex_offset: gpu.vertex_offset,
             first_instance: 0,
         })?;
-        this.overlay_metrics.record_indexed_triangles(gpu.index_count);
+        this.diagnostics.overlay_metrics.record_indexed_triangles(gpu.index_count);
     } else {
         r.draw(DrawArgs {
             vertex_count: gpu.vertex_count.max(1),
@@ -337,7 +337,7 @@ fn lower_single_gpu_mesh_instance(
             first_vertex: gpu.first_vertex,
             first_instance: 0,
         })?;
-        this.overlay_metrics.record_vertices_as_triangles(gpu.vertex_count);
+        this.diagnostics.overlay_metrics.record_vertices_as_triangles(gpu.vertex_count);
     }
     Ok(())
 }

@@ -156,19 +156,19 @@ impl SceneBridge {
     }
 
     #[inline]
-    pub fn cmd_set_collision_body(&self, entity: EntityId, body: CollisionBody) {
+    pub fn cmd_set_physics_body(&self, entity: EntityId, body: PhysicsBodyDesc) {
         self.queue
             .lock()
             .cmds
-            .push(SceneCommand::SetCollisionBody { entity, body });
+            .push(SceneCommand::SetPhysicsBody { entity, body });
     }
 
     #[inline]
-    pub fn cmd_clear_collision_body(&self, entity: EntityId) {
+    pub fn cmd_clear_physics_body(&self, entity: EntityId) {
         self.queue
             .lock()
             .cmds
-            .push(SceneCommand::ClearCollisionBody { entity });
+            .push(SceneCommand::ClearPhysicsBody { entity });
     }
 
 
@@ -186,16 +186,10 @@ impl SceneBridge {
     }
 
     #[inline]
-    pub fn cmd_set_play_mode(&self, mode: EditorPlayMode) {
+    pub fn cmd_set_play_mode(&self, mode: GameRunMode) {
         self.queue.lock().cmds.push(SceneCommand::SetPlayMode { mode });
     }
 
-    #[inline]
-    pub fn cmd_set_collision_wireframe(&self, enabled: bool) {
-        self.queue
-            .lock()
-            .cmds
-            .push(SceneCommand::SetCollisionWireframe { enabled });
-    }
+
 
 }

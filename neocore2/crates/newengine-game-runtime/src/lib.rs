@@ -4,7 +4,7 @@
 //!
 //! This crate is the app-facing runtime boundary for playable builds. Game code
 //! registers a profile and scene bootstrap; rendering remains owned by the
-//! engine render controller and the selected render plugin. No editor UI, panels,
+//! engine render controller and the selected render plugin. No authoring UI, panels,
 //! docking, hierarchy, property grid, or Vulkan-specific resource work is pulled
 //! into the game binary.
 
@@ -24,7 +24,7 @@ use newengine_runtime_host::asset_bootstrap::{
     collect_app_asset_roots, mount_asset_roots_best_effort,
 };
 
-pub use newengine_engine_runtime::{CollisionBody, CollisionShape, EditorPlayMode, GameplayActor, PlayerActor};
+pub use newengine_engine_runtime::{PhysicsBodyDesc, CollisionShapeDesc, GameRunMode, GameplayActor, PlayerActor};
 
 pub const GAME_FIXED_DT_MS: u32 = 16;
 pub const GAME_APP_ASSETS_DIR_ENV: &str = "NEWENGINE_GAME_ASSETS_DIR";
@@ -161,7 +161,6 @@ pub struct StandaloneGameRuntimeProfile {
     viewport: Arc<newengine_engine_runtime::ViewportBridge>,
     plugins: Arc<newengine_engine_runtime::PluginManagerBridge>,
     scene: Arc<newengine_engine_runtime::SceneBridge>,
-    previews: Arc<parking_lot::Mutex<newengine_previews::PrimitivePreviewService>>,
 }
 
 impl Default for StandaloneGameRuntimeProfile {
@@ -178,9 +177,6 @@ impl StandaloneGameRuntimeProfile {
             viewport: Arc::new(newengine_engine_runtime::ViewportBridge::new()),
             plugins: Arc::new(newengine_engine_runtime::PluginManagerBridge::new()),
             scene: Arc::new(newengine_engine_runtime::SceneBridge::new(newengine_scene::Scene::new())),
-            previews: Arc::new(parking_lot::Mutex::new(
-                newengine_previews::PrimitivePreviewService::new(),
-            )),
         }
     }
 
@@ -199,7 +195,6 @@ impl StandaloneGameRuntimeProfile {
             Arc::clone(&self.viewport),
             Arc::clone(&self.plugins),
             Arc::clone(&self.scene),
-            Arc::clone(&self.previews),
         )))?;
 
         engine.register_module(Box::new(GameReadySceneBootstrapModule::new(Arc::clone(
@@ -211,7 +206,7 @@ impl StandaloneGameRuntimeProfile {
     #[inline]
     pub fn register_scene_io_best_effort(&self) {
         // Standalone games are game-first runtime consumers. They do not register
-        // editor scene save/load host services by default.
+        // authoring scene save/load host services by default.
     }
 
     #[inline]
@@ -222,7 +217,7 @@ impl StandaloneGameRuntimeProfile {
     }
 
     /// Standalone game builds render directly into the platform surface.
-    /// No editor panels, docking, hierarchy, property grid, or markup loading.
+    /// No authoring panels, docking, hierarchy, property grid, or markup loading.
     #[inline]
     pub fn ui_build_from_startup(
         &self,

@@ -6,9 +6,9 @@ use newengine_transform_api::Transform;
 
 use crate::service::{CameraRuntimeService, CameraRuntimeServiceConfig};
 
-/// Runtime/editor session mode consumed by the camera-runtime layer.
+/// Runtime session mode consumed by the camera-runtime layer.
 ///
-/// This deliberately does not depend on editor/gameplay crates. The host maps its own
+/// This deliberately does not depend on gameplay crates. The host maps its own
 /// play-state enum into this compact session contract.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
 pub enum CameraRuntimeSessionMode {
@@ -31,7 +31,7 @@ impl CameraRuntimeSessionMode {
 }
 
 /// Camera-owned session snapshot used when a runtime director temporarily possesses
-/// the editor camera.
+/// the runtime camera.
 #[derive(Clone, Copy, Debug)]
 pub struct CameraPlaySessionSnapshot {
     pub cam_id: EntityId,

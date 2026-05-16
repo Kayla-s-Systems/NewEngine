@@ -119,7 +119,7 @@ pub(super) fn effective_material_base(material: MaterialId, fallback: MaterialId
 
 
 #[inline]
-pub(super) fn reset_editor_runtime_state(scene: &mut Scene) -> Option<EntityId> {
+pub(super) fn reset_game_runtime_state(scene: &mut Scene) -> Option<EntityId> {
     bootstrap_runtime_scene(scene);
     scene.active_camera()
 }

@@ -15,13 +15,13 @@ impl RuntimeRenderController {
         material_upload_jobs: u32,
         trace_frame: bool,
     ) -> EngineResult<Option<SceneLaunchStatus>> {
-        let next_frame = self.frame_index.saturating_add(1).max(1);
+        let next_frame = self.frame.frame_index.saturating_add(1).max(1);
         let mut prelaunch_gate = None;
         let mut prelaunch_released = false;
 
-        self.scene_bridge.apply_commands();
+        self.bridges.scene.apply_commands();
         {
-            let scene_lock = self.scene_bridge.scene();
+            let scene_lock = self.bridges.scene.scene();
             let mut scene = scene_lock.write();
             let has_pending_gate = scene
                 .world()
@@ -30,7 +30,7 @@ impl RuntimeRenderController {
                 .unwrap_or(false);
 
             if has_pending_gate {
-                let requested_play_mode = self.scene_bridge.play_mode();
+                let requested_play_mode = self.bridges.scene.play_mode();
                 let world_playable = scene.run_frame(next_frame, |world| {
                     readiness::update_game_ready_launch_gate(
                         self,
@@ -77,13 +77,13 @@ impl RuntimeRenderController {
             return Ok(None);
         };
 
-        self.frame_index = next_frame;
+        self.frame.frame_index = next_frame;
         self.sync_cursor_state(ctx, CursorState::released());
         let _ = r.discard_recorded_commands();
 
         let status = if prelaunch_released {
-            self.scene_bridge.activate_game_ready_play_now();
-            self.overlay_metrics.reset_interactive_timing();
+            self.bridges.scene.activate_game_ready_play_now();
+            self.diagnostics.overlay_metrics.reset_interactive_timing();
             log::info!(
                 "render controller: scene launch gate released; deferring first world present to next frame"
             );
@@ -97,7 +97,7 @@ impl RuntimeRenderController {
             if trace_frame {
                 log::debug!(
                     "render controller: native loading frame={} reason='{}'",
-                    self.frame_index,
+                    self.frame.frame_index,
                     gate.reason
                 );
             }

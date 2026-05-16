@@ -5,4 +5,4 @@ pub mod asset_service_client;
 pub mod consts;
 
 pub use asset_service_client::AssetServiceClient;
-pub use newengine_assets_api::{wait_ready, AssetAccess, AssetService, AssetState, Rgba8TextureAsset, RuntimeTextureAsset, RuntimeTextureFormat, RuntimeTextureMip, RuntimeTextureMipLayout, WaitReadyError};
+pub use newengine_assets_api::{wait_ready, AssetAccess, AssetError, AssetErrorKind, AssetResult, AssetService, AssetState, Rgba8TextureAsset, RuntimeTextureAsset, RuntimeTextureFormat, RuntimeTextureMip, RuntimeTextureMipLayout, WaitReadyError};

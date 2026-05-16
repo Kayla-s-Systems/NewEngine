@@ -1,5 +1,5 @@
 use newengine_camera::{
-    CameraChannel, CameraChannelState, CameraViewport, EditorNavController, EditorNavMode,
+    CameraChannel, CameraChannelState, CameraViewport, RuntimeNavController, RuntimeNavMode,
 };
 use newengine_camera_runtime::{
     step_camera_nav, BoundsSphere as CamBoundsSphere, CameraManagerResource,
@@ -16,7 +16,7 @@ use super::super::controller::RuntimeRenderController;
 use super::{readiness, scene};
 use crate::gameplay::{
     capture_runtime_world_snapshot, first_player, restore_runtime_world_snapshot, run_schedule,
-    EditorPlayMode, FpsDemoRules,
+    GameRunMode, FpsDemoRules,
 };
 
 impl RuntimeRenderController {
@@ -25,7 +25,7 @@ impl RuntimeRenderController {
         r: &mut dyn RenderApi,
         scene: &mut Scene,
         input: &ViewportInputSnap,
-        play_mode: EditorPlayMode,
+        play_mode: GameRunMode,
         dt: f32,
         _aspect: f32,
         vp_w: u32,
@@ -35,7 +35,7 @@ impl RuntimeRenderController {
         let mut activate_game_ready_play_after_frame = false;
 
         let (camera_frame, effective_play_mode, world_playable) =
-            scene.run_frame(self.frame_index, |world| {
+            scene.run_frame(self.frame.frame_index, |world| {
                 let cam_id = world
                     .resource::<newengine_scene::SceneState>()
                     .and_then(|s| s.active_camera.or(s.root))
@@ -48,7 +48,7 @@ impl RuntimeRenderController {
                     r,
                     world,
                     play_mode,
-                    self.frame_index,
+                    self.frame.frame_index,
                 );
                 let gate_released_waiting_activation = world
                     .resource::<crate::gameplay::GameReadyWorldLaunchGate>()
@@ -62,27 +62,27 @@ impl RuntimeRenderController {
                         gate.mark_play_activated();
                     }
                     activate_game_ready_play_after_frame = true;
-                    EditorPlayMode::Play
+                    GameRunMode::Play
                 } else if world_playable {
                     play_mode
                 } else {
-                    EditorPlayMode::Edit
+                    GameRunMode::Staging
                 };
 
                 let existing_nav_mode = world
-                    .get::<EditorNavController>(cam_id)
+                    .get::<RuntimeNavController>(cam_id)
                     .map(|ctrl| ctrl.mode)
-                    .unwrap_or(EditorNavMode::Orbit);
+                    .unwrap_or(RuntimeNavMode::Orbit);
                 let player = first_player(world);
                 let gate_blocked = play_mode.is_runtime() && !world_playable;
 
-                let suppress_editor_nav = {
+                let suppress_game_nav = {
                     let manager = world
                         .resource_mut::<CameraManagerResource>()
                         .expect("camera manager resource inserted");
                     manager.advance(dt);
                     manager.sync_world_state(CameraRuntimeWorldState {
-                        editor_nav_mode: existing_nav_mode,
+                        game_nav_mode: existing_nav_mode,
                         runtime_requested: play_mode.is_runtime(),
                         public_runtime_active: effective_play_mode.is_runtime(),
                         wants_direct_player_control: effective_play_mode
@@ -102,19 +102,25 @@ impl RuntimeRenderController {
                 );
                 self.apply_runtime_input(world, input, effective_play_mode, service_config);
 
+                if effective_play_mode.is_runtime() {
+                    let mats_lock = self.bridges.scene.materials();
+                    let mats = mats_lock.read();
+                    crate::scene_bridge::tick_game_ready_streaming_terrain(world, &mats);
+                }
+
                 if effective_play_mode.runs_physics() {
-                    run_schedule(&mut self.sim_schedule, world, dt);
+                    run_schedule(&mut self.frame.sim_schedule, world, dt);
                 }
 
                 let bounds = scene::scene_bounds_world(world).unwrap_or_else(scene::default_bounds);
-                let sel_bounds = scene::selection_bounds_world(world, self.scene_bridge.selection());
+                let sel_bounds = scene::selection_bounds_world(world, self.bridges.scene.selection());
                 let params = CameraNavParams {
                     dt,
                     viewport: CameraViewport::from_size(vp_w, vp_h),
                     channel: CameraChannelState::dominant(if effective_play_mode.is_runtime() {
                         CameraChannel::Gameplay
                     } else {
-                        CameraChannel::Editor
+                        CameraChannel::Runtime
                     }),
                     bounds: CamBoundsSphere {
                         center: bounds.center,
@@ -127,11 +133,11 @@ impl RuntimeRenderController {
                 };
 
                 let frame_req = CameraNavFrameRequest {
-                    seq: self.viewport_bridge.read_frame_request(),
-                    all: self.viewport_bridge.read_frame_all(),
+                    seq: self.bridges.viewport.read_frame_request(),
+                    all: self.bridges.viewport.read_frame_all(),
                 };
 
-                if suppress_editor_nav || effective_play_mode.wants_direct_player_control() {
+                if suppress_game_nav || effective_play_mode.wants_direct_player_control() {
                     nav_input.active = false;
                     nav_input.look_drag = false;
                     nav_input.pan_drag = false;
@@ -141,7 +147,7 @@ impl RuntimeRenderController {
                 }
 
                 let out = step_camera_nav(
-                    &mut self.camera_nav,
+                    &mut self.frame.camera_nav,
                     world,
                     cam_id,
                     &mut nav_input,
@@ -150,24 +156,24 @@ impl RuntimeRenderController {
                 );
 
                 let camera_frame = if let Some(manager) = world.resource_mut::<CameraManagerResource>() {
-                    manager.sync_editor_mode_from_controller(out.controller.mode);
+                    manager.sync_runtime_nav_mode_from_controller(out.controller.mode);
                     manager.set_last_cursor(out.cursor);
                     let frame = manager.resolve_camera_frame(out.frame, dt);
-                    self.overlay_metrics.record_camera_report(manager.report());
+                    self.diagnostics.overlay_metrics.record_camera_report(manager.report());
                     frame
                 } else {
                     out.frame
                 };
-                self.projection = camera_frame.projection;
-                self.last_aspect = camera_frame.viewport.aspect();
-                self.last_vp_w = vp_w;
-                self.last_vp_h = vp_h;
+                self.viewport.projection = camera_frame.projection;
+                self.viewport.last_aspect = camera_frame.viewport.aspect();
+                self.viewport.last_vp_w = vp_w;
+                self.viewport.last_vp_h = vp_h;
 
                 (camera_frame, effective_play_mode, world_playable)
             });
 
         if activate_game_ready_play_after_frame {
-            self.scene_bridge.activate_game_ready_play_now();
+            self.bridges.scene.activate_game_ready_play_now();
         }
 
         WorldFrameState {
@@ -182,21 +188,21 @@ impl RuntimeRenderController {
         &mut self,
         world: &mut newengine_ecs::World,
         cam_id: newengine_ecs::EntityId,
-        effective_play_mode: EditorPlayMode,
+        effective_play_mode: GameRunMode,
     ) {
-        if self.last_play_mode == effective_play_mode {
+        if self.frame.last_play_mode == effective_play_mode {
             return;
         }
 
-        if !self.last_play_mode.is_runtime() && effective_play_mode.is_runtime() {
-            self.runtime_session = Some(capture_runtime_world_snapshot(world));
+        if !self.frame.last_play_mode.is_runtime() && effective_play_mode.is_runtime() {
+            self.frame.runtime_session = Some(capture_runtime_world_snapshot(world));
         }
 
-        if self.last_play_mode.wants_direct_player_control() {
+        if self.frame.last_play_mode.wants_direct_player_control() {
             if let Some(player) = first_player(world) {
                 CameraRuntimeService::clear_player_input(world, player);
             }
-            if let Some(snapshot) = self.play_session.take() {
+            if let Some(snapshot) = self.frame.play_session.take() {
                 let _ = world.insert(snapshot.cam_id, snapshot.rig);
                 if let Some(transform) = snapshot.transform {
                     let _ = world.insert(snapshot.cam_id, transform);
@@ -210,26 +216,26 @@ impl RuntimeRenderController {
                 .copied()
                 .unwrap_or_default();
             let transform = world.get::<newengine_transform::Transform>(cam_id).copied();
-            self.play_session = Some(super::super::controller::PlaySessionSnapshot {
+            self.frame.play_session = Some(super::super::state::PlaySessionSnapshot {
                 cam_id,
                 rig,
                 transform,
             });
         }
 
-        if self.last_play_mode.is_runtime() && !effective_play_mode.is_runtime() {
-            if let Some(snapshot) = self.runtime_session.take() {
+        if self.frame.last_play_mode.is_runtime() && !effective_play_mode.is_runtime() {
+            if let Some(snapshot) = self.frame.runtime_session.take() {
                 restore_runtime_world_snapshot(world, snapshot);
             }
         }
-        self.last_play_mode = effective_play_mode;
+        self.frame.last_play_mode = effective_play_mode;
     }
 
     fn apply_runtime_input(
         &mut self,
         world: &mut newengine_ecs::World,
         input: &ViewportInputSnap,
-        effective_play_mode: EditorPlayMode,
+        effective_play_mode: GameRunMode,
         service_config: CameraRuntimeServiceConfig,
     ) {
         let Some(player) = first_player(world) else {
@@ -259,7 +265,7 @@ fn camera_runtime_service_config(world: &newengine_ecs::World) -> CameraRuntimeS
     config
 }
 
-fn camera_nav_input(input: &ViewportInputSnap, play_mode: EditorPlayMode) -> CameraNavInput {
+fn camera_nav_input(input: &ViewportInputSnap, play_mode: GameRunMode) -> CameraNavInput {
     let mut nav_input = CameraNavInput {
         dx_px: input.dx_px,
         dy_px: input.dy_px,

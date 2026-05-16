@@ -4,13 +4,13 @@
 
 ## Ответственность
 
-- `CameraChannel` / `CameraChannelState`: явный владелец кадра камеры, чтобы gameplay/editor/debug/cinematic/scripted/replay не конкурировали через скрытое глобальное состояние.
+- `CameraChannel` / `CameraChannelState`: явный владелец кадра камеры, чтобы gameplay/runtime/debug/cinematic/scripted/replay не конкурировали через скрытое глобальное состояние.
 - `CameraRig`: world-space pose камеры с единой конвенцией `forward = -Z`.
 - `Projection`: перспективная/ортографическая lens-модель с Vulkan-ready clip space `Z = 0..1` и baked Y-flip.
 - `CameraViewport`: physical-pixel viewport, aspect и viewport uniform `(w, h, 1/w, 1/h)`.
 - `CameraFrame`: единственный renderer-facing пакет: rig, projection, viewport, matrices, frustum, jitter и diagnostics.
-- `EditorNavController`, `FreeFlyController`, `OrbitController`: deterministic controller state без renderer/UI зависимости.
-- `CameraStack`: gameplay/editor modifier pipeline, который возвращает `CameraFrame`, а не loose matrix tuple.
+- `RuntimeNavController`, `FreeFlyController`, `OrbitController`: deterministic controller state без renderer/UI зависимости.
+- `CameraStack`: gameplay/runtime modifier pipeline, который возвращает `CameraFrame`, а не loose matrix tuple.
 
 ## Не ответственность
 

@@ -157,27 +157,33 @@ fn default_player_yaw() -> f32 { -0.72 }
 fn default_move_speed() -> f32 { 7.3 }
 fn default_look_sens() -> f32 { 0.0022 }
 fn default_terrain_seed() -> u64 { 0x2026_0509_4b41_594c }
-fn default_terrain_cells() -> u32 { 128 }
+fn default_terrain_cells() -> u32 { 80 }
 fn default_terrain_size() -> f32 { 52.0 }
-fn default_base_height() -> f32 { -0.08 }
-fn default_height_scale() -> f32 { 3.15 }
-fn default_collision_tile_cells() -> u32 { 8 }
-fn default_collision_floor_depth() -> f32 { 3.0 }
-fn default_collision_horizontal_skin() -> f32 { 0.08 }
-fn default_terrain_generator_id() -> String { "newengine.generator.heightfield.soft-cells.v1".to_owned() }
+fn default_base_height() -> f32 { -0.04 }
+fn default_height_scale() -> f32 { 1.35 }
+fn default_terrain_generator_id() -> String { "newengine.generator.lowland-biomes.v1".to_owned() }
 fn default_ridged_seed_xor() -> u64 { 0x7e22_a11d }
-fn default_ridged_frequency() -> f32 { 1.85 }
-fn default_ridged_amplitude() -> f32 { 0.42 }
-fn default_ridged_shape_edge0() -> f32 { -0.35 }
+fn default_ridged_frequency() -> f32 { 1.25 }
+fn default_ridged_amplitude() -> f32 { 0.11 }
+fn default_ridged_shape_edge0() -> f32 { 0.08 }
 fn default_ridged_shape_edge1() -> f32 { 1.0 }
 fn default_veins_seed_xor() -> u64 { 0x5317_1001 }
-fn default_veins_frequency() -> f32 { 0.68 }
-fn default_veins_amplitude() -> f32 { 0.18 }
-fn default_smoothing_passes() -> u32 { 0 }
-fn default_smoothing_strength() -> f32 { 0.0 }
+fn default_veins_frequency() -> f32 { 0.52 }
+fn default_veins_amplitude() -> f32 { 0.10 }
+fn default_smoothing_passes() -> u32 { 2 }
+fn default_smoothing_strength() -> f32 { 0.42 }
+fn default_terrain_surface_forest() -> String { "textures/fps/world_surfaces.neytd@terrain_forest_floor".to_owned() }
+fn default_terrain_surface_sand() -> String { "textures/fps/world_surfaces.neytd@ground_sand".to_owned() }
+fn default_terrain_surface_rock() -> String { "textures/fps/world_surfaces.neytd@rock_moss".to_owned() }
+fn default_terrain_patch_scale() -> f32 { 0.033 }
+fn default_terrain_blend_softness() -> f32 { 0.18 }
+fn default_terrain_streaming_enabled() -> bool { true }
+fn default_terrain_chunk_radius() -> i32 { 1 }
+fn default_terrain_unload_radius() -> i32 { 2 }
+fn default_terrain_max_chunks_per_frame() -> usize { 1 }
 fn default_sky_radius() -> f32 { 220.0 }
 fn default_skydome_mesh() -> String { "skydome/skydome_high.obj".to_owned() }
-fn default_status_text() -> String { "Terrain sandbox: procedural heightfield + imported sky dome.".to_owned() }
+fn default_status_text() -> String { "GameFirst world: streamed lowland terrain, runtime textures and sun shadows.".to_owned() }
 fn default_pickup_status() -> String { "Core acquired.".to_owned() }
 fn default_hazard_status() -> String { "Hazard touched.".to_owned() }
 fn default_goal_locked_status() -> String { "Beacon locked.".to_owned() }

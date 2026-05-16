@@ -3,6 +3,9 @@
 use core::time::Duration;
 use std::time::Instant;
 
+mod asset_error;
+pub use asset_error::*;
+
 /// Default service id for the AssetManager service.
 ///
 /// This id is part of the stable engine/plugin contract and must be imported

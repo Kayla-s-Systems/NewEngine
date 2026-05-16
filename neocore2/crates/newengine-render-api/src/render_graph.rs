@@ -36,6 +36,44 @@ pub enum RenderGraphResourceUsage {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum RenderGraphResourceSemantic {
+    Unknown,
+    SurfaceColor,
+    ViewportColor,
+    ViewportDepth,
+    ShadowMap,
+    SceneHdrColor,
+    GBufferAlbedo,
+    GBufferNormal,
+    GBufferMaterial,
+    GBufferDepth,
+    LitColor,
+    PostFxColor,
+    UiColor,
+    DebugOverlay,
+    Custom,
+}
+
+impl Default for RenderGraphResourceSemantic {
+    #[inline]
+    fn default() -> Self {
+        Self::Unknown
+    }
+}
+
+impl RenderGraphResourceSemantic {
+    #[inline]
+    pub const fn is_depth(self) -> bool {
+        matches!(self, Self::ViewportDepth | Self::ShadowMap | Self::GBufferDepth)
+    }
+
+    #[inline]
+    pub const fn is_surface_color(self) -> bool {
+        matches!(self, Self::SurfaceColor)
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum RenderGraphExternalResource {
     /// Backend-owned swapchain color surface. The backend resolves the current image.
     SwapchainColor,
@@ -93,6 +131,8 @@ impl Default for RenderGraphPassKind {
 pub struct RenderGraphResourceDesc {
     pub id: RenderGraphResourceId,
     pub label: Option<String>,
+    #[serde(default)]
+    pub semantic: RenderGraphResourceSemantic,
     pub usage: RenderGraphResourceUsage,
     pub lifetime: RenderGraphResourceLifetime,
     #[serde(default)]
@@ -115,6 +155,7 @@ impl RenderGraphResourceDesc {
         Self {
             id,
             label: Some(label.into()),
+            semantic: RenderGraphResourceSemantic::Unknown,
             usage,
             lifetime: RenderGraphResourceLifetime::TransientFrame,
             extent: Some(extent),
@@ -132,6 +173,7 @@ impl RenderGraphResourceDesc {
         Self {
             id,
             label: Some(label.into()),
+            semantic: RenderGraphResourceSemantic::Unknown,
             usage,
             lifetime: RenderGraphResourceLifetime::External,
             extent: None,
@@ -151,6 +193,7 @@ impl RenderGraphResourceDesc {
         Self {
             id,
             label: Some(label.into()),
+            semantic: RenderGraphResourceSemantic::Unknown,
             usage,
             lifetime: RenderGraphResourceLifetime::External,
             extent: Some(extent),
@@ -171,6 +214,7 @@ impl RenderGraphResourceDesc {
         Self {
             id,
             label: Some(label.into()),
+            semantic: RenderGraphResourceSemantic::Unknown,
             usage,
             lifetime: RenderGraphResourceLifetime::External,
             extent: Some(extent),
@@ -189,12 +233,19 @@ impl RenderGraphResourceDesc {
         Self {
             id,
             label: Some(label.into()),
+            semantic: RenderGraphResourceSemantic::Unknown,
             usage,
             lifetime: RenderGraphResourceLifetime::External,
             extent: None,
             format: None,
             external: Some(RenderGraphExternalResource::Texture(texture)),
         }
+    }
+
+    #[inline]
+    pub fn with_semantic(mut self, semantic: RenderGraphResourceSemantic) -> Self {
+        self.semantic = semantic;
+        self
     }
 
 }
@@ -267,13 +318,80 @@ impl RenderDrawListKind {
     #[inline]
     pub const fn is_compatible_with_pass(self, pass: RenderGraphPassKind) -> bool {
         match (self, pass) {
-            (Self::ShadowCasters, RenderGraphPassKind::ShadowMap) => true,
+            (Self::ShadowCasters, RenderGraphPassKind::ShadowMap | RenderGraphPassKind::DepthPrepass) => true,
             (Self::OpaqueForward, RenderGraphPassKind::ForwardOpaque | RenderGraphPassKind::GBuffer) => true,
             (Self::Transparent, RenderGraphPassKind::Transparent) => true,
             (Self::Ui, RenderGraphPassKind::UiComposite) => true,
             (Self::Debug, RenderGraphPassKind::DebugOverlay) => true,
             _ => false,
         }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+pub enum RenderMaterialDomain {
+    OpaqueLit,
+    Terrain,
+    Vegetation,
+    ShadowCaster,
+    Transparent,
+    Water,
+    Ui,
+    PostFx,
+    Debug,
+    Custom,
+}
+
+impl Default for RenderMaterialDomain {
+    #[inline]
+    fn default() -> Self {
+        Self::Custom
+    }
+}
+
+impl RenderMaterialDomain {
+    #[inline]
+    pub const fn is_compatible_with_pass(self, pass: RenderGraphPassKind) -> bool {
+        match (self, pass) {
+            (Self::ShadowCaster, RenderGraphPassKind::ShadowMap | RenderGraphPassKind::DepthPrepass) => true,
+            (Self::OpaqueLit | Self::Terrain | Self::Vegetation, RenderGraphPassKind::ForwardOpaque | RenderGraphPassKind::GBuffer) => true,
+            (Self::Transparent, RenderGraphPassKind::Transparent) => true,
+            (Self::Water, RenderGraphPassKind::Water) => true,
+            (Self::Ui, RenderGraphPassKind::UiComposite) => true,
+            (Self::PostFx, RenderGraphPassKind::PostFx | RenderGraphPassKind::DeferredLighting) => true,
+            (Self::Debug, RenderGraphPassKind::DebugOverlay) => true,
+            (Self::Custom, _) => true,
+            _ => false,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+pub struct PipelineKey(pub String);
+
+impl PipelineKey {
+    #[inline]
+    pub fn new(value: impl Into<String>) -> Self {
+        Self(value.into())
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DrawPacket {
+    pub pass_kind: RenderGraphPassKind,
+    pub draw_list_kind: RenderDrawListKind,
+    pub material_domain: RenderMaterialDomain,
+    pub pipeline_key: PipelineKey,
+    pub sort_key: u64,
+    pub commands: Vec<crate::RenderCommand>,
+}
+
+impl DrawPacket {
+    #[inline]
+    pub fn is_compatible_with_pass(&self, pass: RenderGraphPassKind) -> bool {
+        self.pass_kind == pass
+            && self.draw_list_kind.is_compatible_with_pass(pass)
+            && self.material_domain.is_compatible_with_pass(pass)
     }
 }
 

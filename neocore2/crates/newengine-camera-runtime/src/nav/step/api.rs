@@ -1,4 +1,4 @@
-use newengine_camera::{EditorNavController, EditorNavMode};
+use newengine_camera::{RuntimeNavController, RuntimeNavMode};
 use newengine_ecs::{EntityId, World};
 use newengine_sim::FollowTargetCameraController;
 
@@ -28,13 +28,13 @@ pub fn step_camera_nav(
     bounds.radius = bounds.radius.max(0.001);
 
     let desired_mode = if input.fly_rmb {
-        EditorNavMode::Fly
+        RuntimeNavMode::Fly
     } else {
-        EditorNavMode::Orbit
+        RuntimeNavMode::Orbit
     };
 
     let mut ctrl = world
-        .get::<EditorNavController>(cam_id)
+        .get::<RuntimeNavController>(cam_id)
         .cloned()
         .unwrap_or_default();
 
@@ -84,7 +84,7 @@ pub fn step_camera_nav(
         return finish_now(input, params, bounds, &ctrl, &rig);
     }
 
-    if desired_mode == EditorNavMode::Orbit {
+    if desired_mode == RuntimeNavMode::Orbit {
         if let Some(res) = try_step_follow_orbit(
             world,
             cam_id,
@@ -113,7 +113,7 @@ pub fn step_camera_nav(
         follow_ctrl,
     );
 
-    if desired_mode == EditorNavMode::Orbit {
+    if desired_mode == RuntimeNavMode::Orbit {
         maybe_frame_orbit(
             state,
             params,

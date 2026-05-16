@@ -94,7 +94,7 @@ fn build_draw_list_provider_request(
             viewport_extent: ctx.viewport_extent,
             surface_extent: ctx.surface_extent,
             runtime: ctx.runtime,
-            editor_overlays: ctx.editor_overlays,
+            debug_overlays: ctx.debug_overlays,
             bounds: RenderBoundsSnapshot {
                 center: [ctx.bounds.center.x, ctx.bounds.center.y, ctx.bounds.center.z],
                 radius: ctx.bounds.radius,

@@ -25,16 +25,16 @@ pub fn ensure_debug_line_pipeline(
 
     let capacity_vertices = min_vertices.max(256).next_power_of_two();
 
-    let vs_src = load_text_asset("shaders/editor_debug_lines.vert")?;
-    let fs_src = load_text_asset("shaders/editor_debug_lines.frag")?;
-    let vs_spv = compile_glsl(ShaderStage::Vertex, "editor_debug_lines.vert", &vs_src)?;
-    let fs_spv = compile_glsl(ShaderStage::Fragment, "editor_debug_lines.frag", &fs_src)?;
+    let vs_src = load_text_asset("shaders/game_debug_lines.vert")?;
+    let fs_src = load_text_asset("shaders/game_debug_lines.frag")?;
+    let vs_spv = compile_glsl(ShaderStage::Vertex, "game_debug_lines.vert", &vs_src)?;
+    let fs_spv = compile_glsl(ShaderStage::Fragment, "game_debug_lines.frag", &fs_src)?;
 
     let vs = r.create_shader(
-        ShaderDesc::new(ShaderStage::Vertex, "main", vs_spv).with_label("editor_debug_lines_vs"),
+        ShaderDesc::new(ShaderStage::Vertex, "main", vs_spv).with_label("game_debug_lines_vs"),
     )?;
     let fs = r.create_shader(
-        ShaderDesc::new(ShaderStage::Fragment, "main", fs_spv).with_label("editor_debug_lines_fs"),
+        ShaderDesc::new(ShaderStage::Fragment, "main", fs_spv).with_label("game_debug_lines_fs"),
     )?;
 
     let layout = VertexLayout::new(
@@ -47,7 +47,7 @@ pub fn ensure_debug_line_pipeline(
 
     let bgl = r.create_bind_group_layout(
         BindGroupLayoutDesc::new(vec![BindingKind::UniformBuffer])
-            .with_label("editor_debug_lines_bgl"),
+            .with_label("game_debug_lines_bgl"),
     )?;
     let ubo = r.create_buffer(
         BufferDesc::new(
@@ -55,18 +55,18 @@ pub fn ensure_debug_line_pipeline(
             BufferUsage::Uniform,
             MemoryHint::CpuToGpu,
         )
-            .with_label("editor_debug_lines_ubo"),
+            .with_label("game_debug_lines_ubo"),
     )?;
     r.write_buffer(ubo, 0, &[0u8; DEBUG_LINE_UBO_SIZE as usize])?;
     let bg = r.create_bind_group(
         BindGroupDesc::new(bgl)
-            .with_label("editor_debug_lines_bg")
+            .with_label("game_debug_lines_bg")
             .with_uniform0(BufferBinding::new(ubo, 0, DEBUG_LINE_UBO_SIZE)),
     )?;
 
     let pipeline = r.create_pipeline(
         PipelineDesc::new(vs, fs, TextureFormat::Bgra8Unorm)
-            .with_label("editor_debug_lines_pipeline")
+            .with_label("game_debug_lines_pipeline")
             .with_topology(PrimitiveTopology::LineList)
             .with_vertex_layouts(vec![layout])
             .with_bind_group_layouts(vec![bgl])
@@ -79,7 +79,7 @@ pub fn ensure_debug_line_pipeline(
             BufferUsage::Vertex,
             MemoryHint::CpuToGpu,
         )
-            .with_label("editor_debug_lines_vb"),
+            .with_label("game_debug_lines_vb"),
     )?;
 
     let gpu = DebugLineGpu {

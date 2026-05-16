@@ -1,4 +1,4 @@
-use newengine_camera::{CameraFrame, CameraRig, EditorNavController, EditorNavMode};
+use newengine_camera::{CameraFrame, CameraRig, RuntimeNavController, RuntimeNavMode};
 use newengine_ecs::{EntityId, World};
 use newengine_sim::FollowTargetCameraController;
 
@@ -15,7 +15,7 @@ pub(crate) fn handle_capture_edge(
     input: &mut CameraNavInput,
     params: CameraNavParams,
     bounds: BoundsSphere,
-    ctrl: &mut EditorNavController,
+    ctrl: &mut RuntimeNavController,
     rig: &mut CameraRig,
     follow_ctrl: Option<FollowTargetCameraController>,
 ) -> Option<CameraNavResult> {
@@ -31,14 +31,14 @@ pub(crate) fn handle_capture_edge(
     //let pre_local = world.get::<Transform>(cam_id).copied();
 
     if capture_begin {
-        if ctrl.mode != EditorNavMode::Fly {
-            ctrl.set_mode(EditorNavMode::Fly, rig);
+        if ctrl.mode != RuntimeNavMode::Fly {
+            ctrl.set_mode(RuntimeNavMode::Fly, rig);
         } else {
             ctrl.sync_fly_from_rig(rig);
         }
     } else {
-        if ctrl.mode != EditorNavMode::Orbit {
-            ctrl.set_mode(EditorNavMode::Orbit, rig);
+        if ctrl.mode != RuntimeNavMode::Orbit {
+            ctrl.set_mode(RuntimeNavMode::Orbit, rig);
         } else {
             ctrl.sync_orbit_from_rig(rig);
         }

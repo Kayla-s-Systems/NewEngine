@@ -24,7 +24,7 @@ impl ShadowLightKind {
     #[inline]
     pub(super) const fn label(self) -> &'static str {
         match self {
-            Self::Directional => "directional",
+            Self::Directional => "sun_directional",
             Self::Point => "point",
             Self::Spot => "spot",
         }
@@ -142,7 +142,7 @@ pub(super) fn build_light_shadow_plan(
         registry.sync_plugin_capabilities(snapshot);
     }
 
-    let trace_frame = super::trace_policy::should_trace_frame(this.frame_index);
+    let trace_frame = super::trace_policy::should_trace_frame(this.frame.frame_index);
     if trace_frame && log::log_enabled!(log::Level::Debug) {
         log::debug!(
             "render light extraction providers: {}",
@@ -150,7 +150,7 @@ pub(super) fn build_light_shadow_plan(
         );
     }
 
-    let frame_index = this.frame_index;
+    let frame_index = this.frame.frame_index;
     let mut ctx = LightExtractionCtx::new(
         this,
         r,
@@ -232,13 +232,13 @@ fn ensure_shadow_rt(
         super::super::render_quality::SHADOW_RESOLUTION_MIN,
         super::super::render_quality::SHADOW_RESOLUTION_MAX,
     );
-    let recreate = this.shadow_rt.is_none() || this.shadow_rt_resolution != resolution;
+    let recreate = this.shadows.render_target.is_none() || this.shadows.render_target_resolution != resolution;
 
     if recreate {
-        if let Some(old) = this.shadow_rt.take() {
+        if let Some(old) = this.shadows.render_target.take() {
             this.retire_render_target(old);
         }
-        this.shadow_rt_resolution = 0;
+        this.shadows.render_target_resolution = 0;
         this.invalidate_shadow_cache();
         let rt = r.create_render_target(
             RenderTargetDesc::new(
@@ -246,13 +246,13 @@ fn ensure_shadow_rt(
                 super::super::render_quality::SHADOW_MAP_COLOR_FORMAT,
             )
                 .with_depth(TextureFormat::Depth32Float)
-                .with_label(format!("editor_shadow_map_{resolution}")),
+                .with_label(format!("game_sun_shadow_map_{resolution}")),
         )?;
-        this.shadow_rt = Some(rt);
-        this.shadow_rt_resolution = resolution;
+        this.shadows.render_target = Some(rt);
+        this.shadows.render_target_resolution = resolution;
     }
 
-    let Some(rt) = this.shadow_rt else {
+    let Some(rt) = this.shadows.render_target else {
         return Ok(None);
     };
     let tex = r.render_target_color_texture_id(rt)?;
@@ -261,19 +261,19 @@ fn ensure_shadow_rt(
 
 #[inline]
 pub(super) fn retire_shadow_rt(this: &mut RuntimeRenderController) {
-    if let Some(old) = this.shadow_rt.take() {
+    if let Some(old) = this.shadows.render_target.take() {
         this.retire_render_target(old);
     }
-    this.shadow_rt_resolution = 0;
+    this.shadows.render_target_resolution = 0;
     this.invalidate_shadow_cache();
 }
 
 #[inline]
 pub(super) fn warn_unsupported_point_shadow_once(this: &mut RuntimeRenderController) {
-    if this.unsupported_point_shadow_warning_emitted {
+    if this.shadows.unsupported_point_warning_emitted {
         return;
     }
-    this.unsupported_point_shadow_warning_emitted = true;
+    this.shadows.unsupported_point_warning_emitted = true;
     log::warn!(
         "render shadows: PointLight is shadow-capable, but point cube-map shadows are not implemented by this Vulkan path yet; falling back to unshadowed point lighting"
     );
@@ -281,10 +281,10 @@ pub(super) fn warn_unsupported_point_shadow_once(this: &mut RuntimeRenderControl
 
 #[inline]
 pub(super) fn warn_unsupported_spot_shadow_once(this: &mut RuntimeRenderController) {
-    if this.unsupported_spot_shadow_warning_emitted {
+    if this.shadows.unsupported_spot_warning_emitted {
         return;
     }
-    this.unsupported_spot_shadow_warning_emitted = true;
+    this.shadows.unsupported_spot_warning_emitted = true;
     log::warn!(
         "render shadows: Spot shadow maps are planned, but no SpotLight component/backend path is implemented yet; falling back to unshadowed lighting"
     );

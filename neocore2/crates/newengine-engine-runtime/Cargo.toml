@@ -3,11 +3,10 @@ name = "newengine-engine-runtime"
 version = "0.1.0"
 edition = "2021"
 readme = "README.md"
-description = "Reusable game/editor-neutral runtime scene and render controller layer for NewEngine"
+description = "Reusable GameFirst runtime scene and render controller layer for NewEngine"
 
 [features]
 default = []
-editor-ui = []
 
 [dependencies]
 abi_stable = { version = "0.11" }
@@ -28,11 +27,12 @@ newengine-core = { path = "../newengine-core" }
 newengine-ecs = { path = "../newengine-ecs" }
 newengine-lighting = { path = "../newengine-lighting" }
 newengine-materials = { path = "../newengine-materials", features = ["serde"] }
+newengine-physics-contracts = { path = "../newengine-physics-contracts" }
+newengine-physics-runtime = { path = "../newengine-physics-runtime" }
 newengine-math = { path = "../newengine-math" }
 newengine-platform-api = { path = "../newengine-platform-api" }
 newengine-plugin-api = { path = "../newengine-plugin-api" }
 newengine-plugin-host = { path = "../newengine-plugin-host" }
-newengine-previews = { path = "../newengine-previews" }
 newengine-replay = { path = "../newengine-replay" }
 newengine-primitives = { path = "../newengine-primitives" }
 newengine-procedural-noise = { path = "../newengine-procedural-noise" }

@@ -30,10 +30,59 @@ impl Default for ToneMapDisplayParams {
     #[inline]
     fn default() -> Self {
         Self {
-            exposure: 1.0,
+            exposure: 1.12,
             gamma: 2.2,
             black_lift: 0.0,
             operator: ToneMapOperator::AcesApprox,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+pub struct SunPostFxParams {
+    /// Sun screen position in normalized viewport coordinates. [0,0] is lower-left.
+    pub screen_position: [f32; 2],
+    /// Linear RGB sun color from the active gameplay directional light.
+    pub color: [f32; 3],
+    /// Scalar intensity from the active gameplay directional light.
+    pub intensity: f32,
+    /// 0..1 visibility. The runtime computes this from sun direction and camera projection.
+    pub visibility: f32,
+    /// Normalized screen radius of the visible solar disk.
+    pub disk_radius: f32,
+    /// Screen-space flare strength. No ray tracing; pure post-process optics.
+    pub flare_strength: f32,
+    /// Screen-space god-ray/radial streak strength. No ray tracing.
+    pub ray_strength: f32,
+}
+
+impl Default for SunPostFxParams {
+    #[inline]
+    fn default() -> Self {
+        Self {
+            screen_position: [0.5, 0.5],
+            color: [1.0, 0.94, 0.82],
+            intensity: 0.0,
+            visibility: 0.0,
+            disk_radius: 0.018,
+            flare_strength: 0.18,
+            ray_strength: 0.16,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+pub struct PostFxFrameParams {
+    pub display: ToneMapDisplayParams,
+    pub sun: SunPostFxParams,
+}
+
+impl Default for PostFxFrameParams {
+    #[inline]
+    fn default() -> Self {
+        Self {
+            display: ToneMapDisplayParams::default(),
+            sun: SunPostFxParams::default(),
         }
     }
 }
@@ -46,6 +95,9 @@ pub enum PostFxPassKind {
     Tonemap,
     DisplayEncode,
     UiComposite,
+    SunDisk,
+    SunLensFlare,
+    SunRays,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -67,6 +119,9 @@ impl Default for PostFxPipelineDesc {
                 PostFxPassKind::Exposure,
                 PostFxPassKind::Tonemap,
                 PostFxPassKind::DisplayEncode,
+                PostFxPassKind::SunDisk,
+                PostFxPassKind::SunLensFlare,
+                PostFxPassKind::SunRays,
                 PostFxPassKind::UiComposite,
             ],
         }

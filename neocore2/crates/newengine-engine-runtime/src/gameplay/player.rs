@@ -9,19 +9,19 @@ use newengine_sim::{
 use newengine_transform::{set_parent, Transform};
 
 use super::{
-    CollisionBody, CollisionShape, DisplayVisibility, FpsDemoRules, FpsPlayerTuning,
+    PhysicsBodyDesc, CollisionShapeDesc, DisplayVisibility, FpsDemoRules, FpsPlayerTuning,
     GameplayActor, PlayerActor,
 };
 
 #[inline]
-pub fn ensure_collision_body(world: &mut World, entity: EntityId, body: CollisionBody) {
+pub fn ensure_physics_body(world: &mut World, entity: EntityId, body: PhysicsBodyDesc) {
     let _ = world.insert(entity, body);
     let _ = world.insert(entity, body.to_bounds());
 }
 
 #[inline]
-pub fn remove_collision_body(world: &mut World, entity: EntityId) {
-    let _ = world.remove::<CollisionBody>(entity);
+pub fn remove_physics_body(world: &mut World, entity: EntityId) {
+    let _ = world.remove::<PhysicsBodyDesc>(entity);
 }
 
 #[inline]
@@ -64,17 +64,13 @@ pub fn spawn_default_player_with_tuning(
     let _ = world.insert(e, MotorInput::default());
     let _ = world.insert(e, Velocity(Vec3::ZERO));
 
-    ensure_collision_body(
+    ensure_physics_body(
         world,
         e,
-        CollisionBody {
-            shape: CollisionShape::Capsule {
-                radius: tuning.body_radius,
-                half_height: tuning.body_half_height,
-            },
-            dynamic: true,
-            is_trigger: false,
-        },
+        PhysicsBodyDesc::dynamic_solid(CollisionShapeDesc::Capsule {
+            radius: tuning.body_radius,
+            half_height: tuning.body_half_height,
+        }),
     );
 
     if let Some(root) = root.filter(|id| world.exists(*id)) {
@@ -211,6 +207,6 @@ pub fn display_visible_in_mode(world: &World, entity: EntityId, runtime: bool) -
     if runtime {
         vis.visible_in_game()
     } else {
-        vis.visible_in_editor()
+        vis.visible_in_authoring()
     }
 }

@@ -1,4 +1,4 @@
-use newengine_camera::{CameraRig, EditorNavController, EditorNavMode};
+use newengine_camera::{CameraRig, RuntimeNavController, RuntimeNavMode};
 use newengine_ecs::{EntityId, World};
 use newengine_sim::FollowTargetCameraController;
 
@@ -12,15 +12,15 @@ pub(crate) fn integrate_nav(
     cam_id: EntityId,
     input: &CameraNavInput,
     dt: f32,
-    mode: EditorNavMode,
-    ctrl: &mut EditorNavController,
+    mode: RuntimeNavMode,
+    ctrl: &mut RuntimeNavController,
     rig: &mut CameraRig,
     follow_ctrl: Option<FollowTargetCameraController>,
 ) {
     let cam_input = build_camera_input(input, mode);
     ctrl.step(rig, cam_input, dt);
 
-    if mode == EditorNavMode::Fly {
+    if mode == RuntimeNavMode::Fly {
         if let Some(follow) = follow_ctrl {
             let _ = retarget_follow_to_rig(world, cam_id, follow, rig);
         }

@@ -2,7 +2,7 @@ use newengine_core::render::RenderFrameDebugSnapshot;
 use newengine_ui::draw::UiDrawList;
 
 use super::input::ViewportInputSnap;
-use crate::gameplay::EditorPlayMode;
+use crate::gameplay::GameRunMode;
 
 #[derive(Clone, Copy, Debug)]
 pub(super) struct RenderFrameScope {
@@ -26,12 +26,12 @@ impl RenderFrameScope {
 pub(super) struct ViewportFrameInput {
     pub ui: Option<UiDrawList>,
     pub input: ViewportInputSnap,
-    pub play_mode: EditorPlayMode,
+    pub play_mode: GameRunMode,
 }
 
 pub(super) struct WorldFrameState {
     pub camera_frame: newengine_camera::CameraFrame,
-    pub effective_play_mode: EditorPlayMode,
+    pub effective_play_mode: GameRunMode,
     pub world_playable: bool,
     pub nav_input: newengine_camera_runtime::CameraNavInput,
 }

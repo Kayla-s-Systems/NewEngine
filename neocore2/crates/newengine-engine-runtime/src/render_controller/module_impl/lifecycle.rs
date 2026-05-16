@@ -12,7 +12,7 @@ impl RuntimeRenderController {
     ) -> EngineResult<()> {
         if let Ok(api) = require_render_api(ctx) {
             let mut r = api.lock();
-            if let Err(e) = ensure_lit_pipeline(&mut self.lit, &mut **r) {
+            if let Err(e) = ensure_lit_pipeline(&mut self.gpu.lit, &mut **r) {
                 log::warn!("render controller: loading-screen pipeline warmup skipped: {}", e);
             } else {
                 let _ = r.pump_uploads(
@@ -31,8 +31,7 @@ impl RuntimeRenderController {
             "render controller: shutdown begin".to_string(),
         );
         self.sync_cursor_state(ctx, CursorState::released());
-        self.viewport_pass_disabled = true;
-        self.previews_disabled = true;
+        self.viewport.pass_disabled = true;
         Ok(())
     }
 }

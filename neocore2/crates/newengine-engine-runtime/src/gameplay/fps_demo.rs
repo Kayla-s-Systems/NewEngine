@@ -60,7 +60,7 @@ pub fn step_fps_demo_gameplay(world: &mut World, dt: f32) {
         let _ = world.insert(
             *entity,
             DisplayVisibility {
-                mode: DisplayMode::EditorOnly,
+                mode: DisplayMode::RuntimeHidden,
             },
         );
     }

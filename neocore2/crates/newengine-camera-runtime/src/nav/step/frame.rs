@@ -1,4 +1,4 @@
-use newengine_camera::{orbit_frame_sphere, CameraRig, EditorNavController, EditorNavMode};
+use newengine_camera::{orbit_frame_sphere, CameraRig, RuntimeNavController, RuntimeNavMode};
 
 use crate::nav::{BoundsSphere, CameraNavFrameRequest, CameraNavParams, CameraNavState};
 
@@ -10,16 +10,16 @@ pub(crate) fn maybe_frame_orbit(
     frame_req: CameraNavFrameRequest,
     explicit_frame: bool,
     user_busy: bool,
-    ctrl: &mut EditorNavController,
+    ctrl: &mut RuntimeNavController,
     rig: &mut CameraRig,
 ) {
-    debug_assert_eq!(ctrl.mode, EditorNavMode::Orbit);
+    debug_assert_eq!(ctrl.mode, RuntimeNavMode::Orbit);
 
     // Do not auto-reframe after the initial fit.
     //
     // Reframing on scene-bounds growth makes the entire world appear to jump whenever
     // a new actor is spawned or when an existing actor is moved outward. That also
-    // invalidates editor overlays/gizmo perception because the camera changes under
+    // invalidates runtime overlays perception because the camera changes under
     // the user during edit operations.
     //
     // Policy:

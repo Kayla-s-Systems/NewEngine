@@ -1,15 +1,13 @@
 
-use newengine_core::render::{BufferSlice, DrawArgs, DrawIndexedArgs, IndexFormat, PipelineId, SamplerId, TextureId};
-use newengine_math::{Mat4, Quat, Vec3, Vec4};
+use newengine_core::render::{BufferSlice, DrawIndexedArgs, IndexFormat, PipelineId, SamplerId, TextureId};
+use newengine_math::{Mat4, Vec3};
 
-use newengine_lighting::{DirectionalLight, PointLight};
 use newengine_materials::api::MaterialRegistryApi;
-use newengine_primitives::builtins as prim_builtins;
 use newengine_primitives::Primitive;
 use newengine_transform::GlobalTransform;
 
 use super::super::gpu::{
-    ensure_debug_line_pipeline, ensure_grid, ensure_primitive_gpu, upload_primitive_mesh, GridMeshParams,
+    ensure_primitive_gpu, upload_primitive_mesh,
 };
 use super::draw_bucket::{BucketedIndexedDrawStream, IndexedDrawPacket};
 use super::instancing::{
@@ -17,10 +15,10 @@ use super::instancing::{
     RenderInstanceRaw,
 };
 use super::super::material_bindings::LitMaterialPlan;
-use super::grid;
 use super::lights::PackedLights;
 use super::RuntimeRenderController;
-use crate::gameplay::{display_visible_in_mode, CollisionBody, CollisionShape};
+use crate::gameplay::display_visible_in_mode;
+use crate::scene_bridge::TerrainSurfaceLayers;
 use self::mesh_visibility::{distance_sq_to_camera, primitive_budget, sort_by_distance_then_key};
 use newengine_procedural_noise::ProceduralTerrain;
 
@@ -35,50 +33,6 @@ pub(super) fn publish_camera_spawn(
     bridge.publish_camera_spawn(cam_pos, cam_fwd);
 }
 
-pub(super) fn draw_grid(
-    this: &mut RuntimeRenderController,
-    r: &mut dyn newengine_core::render::RenderApi,
-    lit: super::super::gpu::LitPipeline,
-    viewproj: Mat4,
-    rig: &newengine_camera::CameraRig,
-    bounds_radius: f32,
-    lights: &PackedLights,
-) -> newengine_core::EngineResult<()> {
-    if !bounds_radius.is_finite() {
-        return Ok(());
-    }
-
-    let g = ensure_grid(
-        &mut this.grid,
-        r,
-        lit.bgl,
-        GridMeshParams {
-            half_lines: grid::HALF_LINES,
-            major_every: grid::MAJOR_EVERY,
-            minor_color: grid::MINOR_COLOR,
-            major_color: grid::MAJOR_COLOR,
-        },
-    )?;
-
-    let grid_model = grid::model_from_camera(rig);
-
-    super::passes_ubo::write_lit_ubo(
-        r,
-        lit.grid_ubo,
-        viewproj * grid_model,
-        grid_model,
-        [1.0, 1.0, 1.0, 1.0],
-        [0.0, 0.0, 0.0],
-        lights,
-    )?;
-
-    r.set_pipeline(g.pipeline)?;
-    r.set_bind_group(0, lit.grid_bg)?;
-    r.set_vertex_buffer(0, BufferSlice::new(g.vb, 0))?;
-    r.draw(newengine_core::render::DrawArgs::new(g.vertex_count))?;
-    this.overlay_metrics.record_vertices_as_triangles(g.vertex_count);
-    Ok(())
-}
 
 pub(super) fn draw_procedural_terrain(
     this: &mut RuntimeRenderController,
@@ -91,10 +45,16 @@ pub(super) fn draw_procedural_terrain(
     runtime: bool,
 ) -> newengine_core::EngineResult<()> {
     let world = scene.world();
-    let mats_lock = this.scene_bridge.materials();
+    let mats_lock = this.bridges.scene.materials();
     let mats = mats_lock.read();
 
-    let mut entries: Vec<(u64, ProceduralTerrain, Mat4, Option<newengine_materials::MaterialRef>)> = Vec::new();
+    let mut entries: Vec<(
+        u64,
+        ProceduralTerrain,
+        Mat4,
+        Option<newengine_materials::MaterialRef>,
+        Option<TerrainSurfaceLayers>,
+    )> = Vec::new();
     for (id, terrain, gt) in world.query2::<ProceduralTerrain, GlobalTransform>() {
         if !display_visible_in_mode(world, id, runtime) {
             continue;
@@ -104,34 +64,101 @@ pub(super) fn draw_procedural_terrain(
             terrain.clone(),
             gt.0,
             world.get::<newengine_materials::MaterialRef>(id).copied(),
+            world.get::<TerrainSurfaceLayers>(id).cloned(),
         ));
     }
     entries.sort_by(|a, b| a.0.cmp(&b.0));
 
     let mut stream = BucketedIndexedDrawStream::with_capacity(entries.len());
-    for (entity_key, terrain, model, material) in entries {
+    for (entity_key, terrain, model, material, surface_layers) in entries {
         let mesh_key = terrain.mesh_key();
-        let gpu = if let Some(gpu) = this.terrain_cache.get(&mesh_key).copied() {
+        let gpu = if let Some(gpu) = this.gpu.terrain_cache.get(&mesh_key).copied() {
             gpu
         } else {
             let mesh = terrain.heightfield.to_primitive_mesh();
-            let gpu = upload_primitive_mesh(r, &mesh, "editor_proc_terrain")?;
-            this.terrain_cache.insert(mesh_key, gpu);
+            let gpu = upload_primitive_mesh(r, &mesh, "game_proc_terrain")?;
+            this.gpu.terrain_cache.insert(mesh_key, gpu);
             gpu
         };
 
         let mvp = viewproj * model;
         let resolved = material.and_then(|mr| mats.resolve(mr.id));
         let material_plan = LitMaterialPlan::from_resolved(resolved.as_ref(), terrain.base_color);
-        let base_tex = this.material_texture_or_default(r, material_plan.base_color_texture, lit.white_texture);
-        let normal_tex = this.material_texture_or_default(r, material_plan.normal_texture, lit.flat_normal_texture);
-        let roughness_tex = this.material_texture_or_default(r, material_plan.roughness_texture, lit.white_texture);
-        let sampler = if material_plan.has_textures() { lit.repeat_sampler } else { lit.clamp_sampler };
 
         let key = entity_key ^ 0x7e44_1000_0000_0000u64;
-        let mut per = this.ensure_per_draw_ubo_with_binding(r, lit, key, base_tex, normal_tex, roughness_tex, shadow_texture, sampler)?;
-        per.last_seen_frame = this.frame_index;
-        this.per_draw_ubo.insert(key, per);
+        let (pipeline, base_tex, normal_tex, roughness_tex, sampler, material_params) =
+            if let Some(layers) = surface_layers {
+                let forest_tex = this.material_texture_or_default(
+                    r,
+                    Some(layers.forest_base_texture.as_str()),
+                    lit.white_texture,
+                );
+                let sand_tex = this.material_texture_or_default(
+                    r,
+                    Some(layers.sand_base_texture.as_str()),
+                    lit.white_texture,
+                );
+                let rock_tex = this.material_texture_or_default(
+                    r,
+                    Some(layers.rock_base_texture.as_str()),
+                    lit.white_texture,
+                );
+                (
+                    lit.terrain_pipeline,
+                    forest_tex,
+                    sand_tex,
+                    rock_tex,
+                    lit.repeat_sampler,
+                    [
+                        layers.patch_scale,
+                        layers.blend_softness,
+                        material_plan.material_params[1],
+                        material_plan.material_params[3],
+                    ],
+                )
+            } else {
+                let base_tex = this.material_texture_or_default(
+                    r,
+                    material_plan.base_color_texture,
+                    lit.white_texture,
+                );
+                let normal_tex = this.material_texture_or_default(
+                    r,
+                    material_plan.normal_texture,
+                    lit.flat_normal_texture,
+                );
+                let roughness_tex = this.material_texture_or_default(
+                    r,
+                    material_plan.roughness_texture,
+                    lit.white_texture,
+                );
+                let sampler = if material_plan.has_textures() {
+                    lit.repeat_sampler
+                } else {
+                    lit.clamp_sampler
+                };
+                (
+                    if material_plan.double_sided { lit.double_sided_pipeline } else { lit.pipeline },
+                    base_tex,
+                    normal_tex,
+                    roughness_tex,
+                    sampler,
+                    material_plan.material_params,
+                )
+            };
+
+        let mut per = this.ensure_per_draw_ubo_with_binding(
+            r,
+            lit,
+            key,
+            base_tex,
+            normal_tex,
+            roughness_tex,
+            shadow_texture,
+            sampler,
+        )?;
+        per.last_seen_frame = this.frame.frame_index;
+        this.gpu.per_draw_ubo.insert(key, per);
 
         super::passes_ubo::write_lit_ubo_ex(
             r,
@@ -141,24 +168,25 @@ pub(super) fn draw_procedural_terrain(
             material_plan.base_color,
             material_plan.emissive_radiance,
             material_plan.uv_transform,
-            material_plan.material_params,
+            material_params,
             lights,
         )?;
 
         stream.push(IndexedDrawPacket {
-            pipeline: if material_plan.double_sided { lit.double_sided_pipeline } else { lit.pipeline },
+            pipeline,
             bind_group: per.bg,
             vertex: BufferSlice::new(gpu.vb, 0),
             index: BufferSlice::new(gpu.ib, 0),
             index_format: IndexFormat::U32,
             args: DrawIndexedArgs::new(gpu.index_count),
         });
-        this.overlay_metrics.record_indexed_triangles(gpu.index_count);
+        this.diagnostics.overlay_metrics.record_indexed_triangles(gpu.index_count);
     }
     stream.emit_sorted(r)?;
 
     Ok(())
 }
+
 
 
 #[inline]
@@ -200,9 +228,9 @@ pub(super) fn draw_primitives(
     camera_position: Vec3,
 ) -> newengine_core::EngineResult<()> {
     let world = scene.world();
-    let reg_lock = this.scene_bridge.primitives();
+    let reg_lock = this.bridges.scene.primitives();
     let reg = reg_lock.read();
-    let mats_lock = this.scene_bridge.materials();
+    let mats_lock = this.bridges.scene.materials();
     let mats = mats_lock.read();
 
     let mut entries: Vec<(f32, u64, Primitive, Mat4, Option<newengine_materials::MaterialRef>)> = Vec::new();
@@ -224,7 +252,7 @@ pub(super) fn draw_primitives(
 
     let mut batches = InstanceBatchSet::default();
     for (_distance_sq, _entity_key, prim, model, material_ref) in entries {
-        let gpu = ensure_primitive_gpu(&reg, prim.id, &mut this.prim_cache, r)?;
+        let gpu = ensure_primitive_gpu(&reg, prim.id, &mut this.gpu.prim_cache, r)?;
         let resolved = material_ref.and_then(|mr| mats.resolve(mr.id));
         let material_plan = LitMaterialPlan::from_resolved(resolved.as_ref(), prim.color);
 
@@ -264,8 +292,8 @@ pub(super) fn draw_primitives(
             material_shadow_texture,
             sampler,
         )?;
-        per.last_seen_frame = this.frame_index;
-        this.per_draw_ubo.insert(ubo_key, per);
+        per.last_seen_frame = this.frame.frame_index;
+        this.gpu.per_draw_ubo.insert(ubo_key, per);
 
         // Instance shaders take transforms/material scalars from the instance
         // buffer. The shared UBO still owns lights, shadow matrix and texture
@@ -302,7 +330,7 @@ pub(super) fn draw_primitives(
             mesh_key,
         );
         batches.push(batch_key, pipeline, per.bg, gpu, instance);
-        this.overlay_metrics.record_indexed_triangles(gpu.index_count);
+        this.diagnostics.overlay_metrics.record_indexed_triangles(gpu.index_count);
     }
 
     if batches.is_empty() {
@@ -312,7 +340,7 @@ pub(super) fn draw_primitives(
     let mut replay = InstancedReplayState::default();
     for batch in batches.into_sorted_batches() {
         let instance_count = batch.instances.len() as u32;
-        let instance_slice = this.instance_uploader.upload(r, &batch.instances)?;
+        let instance_slice = this.gpu.instance_uploader.upload(r, &batch.instances)?;
         replay.set_pipeline(r, batch.pipeline)?;
         replay.set_bind_group0(r, batch.bind_group)?;
         replay.set_vertex_buffer(r, 0, BufferSlice::new(batch.gpu.vb, 0))?;
@@ -334,7 +362,7 @@ pub(super) fn draw_procedural_terrain_shadow(
     runtime: bool,
 ) -> newengine_core::EngineResult<()> {
     let world = scene.world();
-    let mats_lock = this.scene_bridge.materials();
+    let mats_lock = this.bridges.scene.materials();
     let mats = mats_lock.read();
 
     let mut entries: Vec<(u64, ProceduralTerrain, Mat4, Option<newengine_materials::MaterialRef>)> = Vec::new();
@@ -360,12 +388,12 @@ pub(super) fn draw_procedural_terrain_shadow(
         }
 
         let mesh_key = terrain.mesh_key();
-        let gpu = if let Some(gpu) = this.terrain_cache.get(&mesh_key).copied() {
+        let gpu = if let Some(gpu) = this.gpu.terrain_cache.get(&mesh_key).copied() {
             gpu
         } else {
             let mesh = terrain.heightfield.to_primitive_mesh();
-            let gpu = upload_primitive_mesh(r, &mesh, "editor_proc_terrain")?;
-            this.terrain_cache.insert(mesh_key, gpu);
+            let gpu = upload_primitive_mesh(r, &mesh, "game_proc_terrain")?;
+            this.gpu.terrain_cache.insert(mesh_key, gpu);
             gpu
         };
 
@@ -380,8 +408,8 @@ pub(super) fn draw_procedural_terrain_shadow(
             lit.white_texture,
             lit.clamp_sampler,
         )?;
-        per.last_seen_frame = this.frame_index;
-        this.per_draw_ubo.insert(key, per);
+        per.last_seen_frame = this.frame.frame_index;
+        this.gpu.per_draw_ubo.insert(key, per);
 
         let mvp = light_viewproj * model;
         super::passes_ubo::write_lit_ubo_ex(
@@ -421,9 +449,9 @@ pub(super) fn draw_primitives_shadow(
     camera_position: Vec3,
 ) -> newengine_core::EngineResult<()> {
     let world = scene.world();
-    let reg_lock = this.scene_bridge.primitives();
+    let reg_lock = this.bridges.scene.primitives();
     let reg = reg_lock.read();
-    let mats_lock = this.scene_bridge.materials();
+    let mats_lock = this.bridges.scene.materials();
     let mats = mats_lock.read();
 
     let mut entries: Vec<(f32, u64, Primitive, Mat4, Option<newengine_materials::MaterialRef>)> = Vec::new();
@@ -451,7 +479,7 @@ pub(super) fn draw_primitives_shadow(
             continue;
         }
 
-        let gpu = ensure_primitive_gpu(&reg, prim.id, &mut this.prim_cache, r)?;
+        let gpu = ensure_primitive_gpu(&reg, prim.id, &mut this.gpu.prim_cache, r)?;
         let pipeline = if material_plan.double_sided {
             lit.shadow_instanced_double_sided_pipeline
         } else {
@@ -479,8 +507,8 @@ pub(super) fn draw_primitives_shadow(
             lit.white_texture,
             lit.clamp_sampler,
         )?;
-        per.last_seen_frame = this.frame_index;
-        this.per_draw_ubo.insert(ubo_key, per);
+        per.last_seen_frame = this.frame.frame_index;
+        this.gpu.per_draw_ubo.insert(ubo_key, per);
 
         super::passes_ubo::write_lit_ubo_ex(
             r,
@@ -523,7 +551,7 @@ pub(super) fn draw_primitives_shadow(
     let mut replay = InstancedReplayState::default();
     for batch in batches.into_sorted_batches() {
         let instance_count = batch.instances.len() as u32;
-        let instance_slice = this.instance_uploader.upload(r, &batch.instances)?;
+        let instance_slice = this.gpu.instance_uploader.upload(r, &batch.instances)?;
         replay.set_pipeline(r, batch.pipeline)?;
         replay.set_bind_group0(r, batch.bind_group)?;
         replay.set_vertex_buffer(r, 0, BufferSlice::new(batch.gpu.vb, 0))?;

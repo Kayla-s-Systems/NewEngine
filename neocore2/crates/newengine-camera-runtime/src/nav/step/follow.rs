@@ -1,4 +1,4 @@
-use newengine_camera::{CameraFrame, CameraRig, EditorNavController};
+use newengine_camera::{CameraFrame, CameraRig, RuntimeNavController};
 use newengine_ecs::{EntityId, World};
 use newengine_sim::{step_follow_camera, FollowTargetCameraController, FollowTargetCameraMotor};
 use newengine_transform_api::read_entity_world_pose_local_chain;
@@ -17,7 +17,7 @@ pub(crate) fn try_step_follow_orbit(
     input: &CameraNavInput,
     params: CameraNavParams,
     bounds: BoundsSphere,
-    ctrl: &mut EditorNavController,
+    ctrl: &mut RuntimeNavController,
     rig: &mut CameraRig,
     follow_ctrl: Option<FollowTargetCameraController>,
     state: &mut CameraNavState,

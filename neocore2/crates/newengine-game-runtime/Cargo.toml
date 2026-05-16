@@ -13,7 +13,6 @@ newengine-assets = { path = "../newengine-assets" }
 newengine-core = { path = "../newengine-core" }
 newengine-engine-runtime = { path = "../newengine-engine-runtime" }
 newengine-plugin-host = { path = "../newengine-plugin-host" }
-newengine-previews = { path = "../newengine-previews" }
 newengine-runtime-host = { path = "../newengine-runtime-host" }
 newengine-scene = { path = "../newengine-scene", features = ["runtime"] }
 newengine-ui = { path = "../newengine-ui", default-features = false }

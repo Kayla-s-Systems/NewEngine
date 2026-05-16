@@ -6,7 +6,7 @@ use newengine_sim::{
 };
 use newengine_transform::Transform;
 
-use super::{CollisionBody, DisplayVisibility};
+use super::{PhysicsBodyDesc, DisplayVisibility};
 
 #[derive(Clone, Copy, Debug)]
 pub struct RuntimeEntitySnapshot {
@@ -19,7 +19,7 @@ pub struct RuntimeEntitySnapshot {
     pub camera_rig: Option<CameraRigComp>,
     pub follow_controller: Option<FollowTargetCameraController>,
     pub follow_motor: Option<FollowTargetCameraMotor>,
-    pub collision_body: Option<CollisionBody>,
+    pub physics_body: Option<PhysicsBodyDesc>,
     pub display_visibility: Option<DisplayVisibility>,
 }
 
@@ -42,7 +42,7 @@ pub fn capture_runtime_world_snapshot(world: &World) -> RuntimeWorldSnapshot {
             camera_rig: world.get::<CameraRigComp>(entity).copied(),
             follow_controller: world.get::<FollowTargetCameraController>(entity).copied(),
             follow_motor: world.get::<FollowTargetCameraMotor>(entity).copied(),
-            collision_body: world.get::<CollisionBody>(entity).copied(),
+            physics_body: world.get::<PhysicsBodyDesc>(entity).copied(),
             display_visibility: world.get::<DisplayVisibility>(entity).copied(),
         })
         .collect();
@@ -83,7 +83,7 @@ pub fn restore_runtime_world_snapshot(world: &mut World, snapshot: RuntimeWorldS
         restore_component_opt(world, entry.entity, entry.camera_rig);
         restore_component_opt(world, entry.entity, entry.follow_controller);
         restore_component_opt(world, entry.entity, entry.follow_motor);
-        restore_component_opt(world, entry.entity, entry.collision_body);
+        restore_component_opt(world, entry.entity, entry.physics_body);
         restore_component_opt(world, entry.entity, entry.display_visibility);
     }
 }

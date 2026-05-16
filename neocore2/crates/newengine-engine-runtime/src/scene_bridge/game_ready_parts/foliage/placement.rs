@@ -1,7 +1,11 @@
 fn terrain_height(world: &newengine_ecs::World, terrain: EntityId, x: f32, z: f32) -> f32 {
+    let origin = world
+        .get::<Transform>(terrain)
+        .map(|t| t.position)
+        .unwrap_or(Vec3::ZERO);
     world
         .get::<ProceduralTerrain>(terrain)
-        .map(|t| t.heightfield.sample_height_local(x, z))
+        .map(|t| t.heightfield.sample_height_local(x - origin.x, z - origin.z) + origin.y)
         .unwrap_or(0.0)
 }
 

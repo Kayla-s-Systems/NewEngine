@@ -1,4 +1,4 @@
-use newengine_camera::{CameraFrame, CameraRig, EditorNavController};
+use newengine_camera::{CameraFrame, CameraRig, RuntimeNavController};
 use newengine_ecs::{EntityId, World};
 use newengine_sim::CameraRigComp;
 
@@ -12,7 +12,7 @@ pub(crate) fn commit_and_finish(
     cam_id: EntityId,
     params: CameraNavParams,
     bounds: BoundsSphere,
-    ctrl: &EditorNavController,
+    ctrl: &RuntimeNavController,
     rig: &CameraRig,
     state: &mut CameraNavState,
     input: &CameraNavInput,
@@ -32,7 +32,7 @@ pub(crate) fn finish_now(
     input: &CameraNavInput,
     params: CameraNavParams,
     bounds: BoundsSphere,
-    ctrl: &EditorNavController,
+    ctrl: &RuntimeNavController,
     rig: &CameraRig,
 ) -> CameraNavResult {
     let projection = compute_projection(rig, bounds, params.aspect());

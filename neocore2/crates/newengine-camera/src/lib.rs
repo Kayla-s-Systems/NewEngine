@@ -2,7 +2,7 @@
 
 pub mod channel;
 pub mod controller;
-pub mod editor;
+pub mod runtime_nav;
 pub mod frame;
 pub mod frustum;
 pub mod game;
@@ -13,12 +13,12 @@ pub mod types;
 pub mod util;
 pub mod viewport;
 
-// Deterministic gameplay/editor camera modifiers.
+// Deterministic gameplay/runtime camera modifiers.
 pub mod modifiers;
 
 pub use channel::*;
 pub use controller::*;
-pub use editor::*;
+pub use runtime_nav::*;
 pub use frame::*;
 pub use frustum::*;
 pub use game::*;

@@ -1,0 +1,14 @@
+[package]
+name = "newengine-physics-contracts"
+version = "0.1.0"
+edition = "2021"
+description = "Backend-neutral NewEngine physics contracts"
+license = "Proprietary"
+
+[dependencies]
+newengine-bounds = { path = "../newengine-bounds" }
+newengine-ecs = { path = "../newengine-ecs" }
+newengine-math = { path = "../newengine-math" }
+
+[features]
+default = []

@@ -3,7 +3,8 @@
 use newengine_materials::MaterialId;
 use newengine_primitives::PrimitiveId;
 
-use crate::gameplay::{CollisionBody, DisplayMode};
+use crate::gameplay::DisplayMode;
+use newengine_physics_contracts::{CollisionShapeDesc, PhysicsBodyDesc};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct PrimitiveMaterialBase {
@@ -69,40 +70,38 @@ pub(super) fn imported_asset_primitive_id(descriptor: &SceneImportedAssetDescrip
 }
 
 #[inline]
-pub(super) fn imported_asset_collision(descriptor: &SceneImportedAssetDescriptor) -> Option<CollisionBody> {
+pub(super) fn imported_asset_collision(descriptor: &SceneImportedAssetDescriptor) -> Option<PhysicsBodyDesc> {
     if !descriptor.assembly.with_collision {
         return None;
     }
     match descriptor.assembly.assembly {
-        SceneImportedAssetAssemblyKind::StaticMeshActor | SceneImportedAssetAssemblyKind::OpaqueProxy => Some(CollisionBody {
-            shape: crate::gameplay::CollisionShape::Box {
+        SceneImportedAssetAssemblyKind::StaticMeshActor | SceneImportedAssetAssemblyKind::OpaqueProxy => Some(if descriptor.assembly.dynamic_collision {
+            PhysicsBodyDesc::dynamic_solid(CollisionShapeDesc::Box {
                 half_extents: [
                     descriptor.default_scale[0].abs().max(0.5),
                     descriptor.default_scale[1].abs().max(0.5),
                     descriptor.default_scale[2].abs().max(0.5),
                 ],
-            },
-            dynamic: descriptor.assembly.dynamic_collision,
-            is_trigger: false,
-        }),
-        SceneImportedAssetAssemblyKind::TextureCard => Some(CollisionBody {
-            shape: crate::gameplay::CollisionShape::Box {
+            })
+        } else {
+            PhysicsBodyDesc::static_solid(CollisionShapeDesc::Box {
                 half_extents: [
-                    descriptor.default_scale[0].abs().max(0.25),
-                    0.05,
-                    descriptor.default_scale[2].abs().max(0.25),
+                    descriptor.default_scale[0].abs().max(0.5),
+                    descriptor.default_scale[1].abs().max(0.5),
+                    descriptor.default_scale[2].abs().max(0.5),
                 ],
-            },
-            dynamic: false,
-            is_trigger: true,
+            })
         }),
-        SceneImportedAssetAssemblyKind::MaterialPreviewSphere => Some(CollisionBody {
-            shape: crate::gameplay::CollisionShape::Sphere {
-                radius: descriptor.default_scale[0].abs().max(0.5),
-            },
-            dynamic: false,
-            is_trigger: false,
-        }),
+        SceneImportedAssetAssemblyKind::TextureCard => Some(PhysicsBodyDesc::trigger(CollisionShapeDesc::Box {
+            half_extents: [
+                descriptor.default_scale[0].abs().max(0.25),
+                0.05,
+                descriptor.default_scale[2].abs().max(0.25),
+            ],
+        })),
+        SceneImportedAssetAssemblyKind::MaterialPreviewSphere => Some(PhysicsBodyDesc::static_solid(CollisionShapeDesc::Sphere {
+            radius: descriptor.default_scale[0].abs().max(0.5),
+        })),
         SceneImportedAssetAssemblyKind::SceneAnchor => None,
     }
 }

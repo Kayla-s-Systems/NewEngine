@@ -316,37 +316,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d0a5c400df2834b80a4c3327b3aad3a4c4cd4de0629063962b03235697506a28"
 
 [[package]]
-name = "duplicate"
-version = "2.0.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8e92f10a49176cbffacaedabfaa11d51db1ea0f80a83c26e1873b43cd1742c24"
-dependencies = [
- "heck",
- "proc-macro2",
- "proc-macro2-diagnostics",
-]
-
-[[package]]
 name = "ecolor"
 version = "0.33.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "71ddb8ac7643d1dba1bb02110e804406dd459a838efcb14011ced10556711a8e"
 dependencies = [
  "emath",
-]
-
-[[package]]
-name = "editor"
-version = "0.1.0"
-dependencies = [
- "abi_stable",
- "embed-resource",
- "log",
- "newengine-assets",
- "newengine-core",
- "newengine-editor-runtime",
- "newengine-plugin-host",
- "newengine-runtime-host",
 ]
 
 [[package]]
@@ -364,17 +339,6 @@ dependencies = [
  "profiling",
  "smallvec",
  "unicode-segmentation",
-]
-
-[[package]]
-name = "egui_dock"
-version = "0.18.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2fd0f689738efbd4afb811433b873379c6a8f3af48f2d296d9849fe70ee021d6"
-dependencies = [
- "duplicate",
- "egui",
- "paste",
 ]
 
 [[package]]
@@ -514,12 +478,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "heck"
-version = "0.5.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2304e00983f87ffb38b55b444b5e3b60a884b5d30c0fca7d82fe33449bbe55ea"
-
-[[package]]
 name = "indexmap"
 version = "2.14.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -628,19 +586,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "68354c5c6bd36d73ff3feceb05efa59b6acb7626617f4962be322a825e61f79a"
 
 [[package]]
-name = "newengine-app-launcher"
-version = "0.1.0"
-dependencies = [
- "abi_stable",
- "log",
- "newengine-assets",
- "newengine-core",
- "newengine-editor-runtime",
- "newengine-plugin-host",
- "newengine-runtime-host",
-]
-
-[[package]]
 name = "newengine-assets"
 version = "0.1.0"
 dependencies = [
@@ -724,59 +669,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "newengine-editor-core"
-version = "0.1.0"
-dependencies = [
- "newengine-ecs",
- "newengine-materials",
- "newengine-math",
-]
-
-[[package]]
-name = "newengine-editor-runtime"
-version = "0.1.0"
-dependencies = [
- "abi_stable",
- "blake3",
- "crossbeam-channel",
- "egui",
- "egui_dock",
- "libloading 0.9.0",
- "log",
- "newengine-assets",
- "newengine-bounds",
- "newengine-camera",
- "newengine-camera-runtime",
- "newengine-core",
- "newengine-ecs",
- "newengine-editor-core",
- "newengine-engine-runtime",
- "newengine-gizmo",
- "newengine-lighting",
- "newengine-materials",
- "newengine-math",
- "newengine-platform-api",
- "newengine-plugin-api",
- "newengine-plugin-host",
- "newengine-previews",
- "newengine-primitives",
- "newengine-procedural-noise",
- "newengine-runtime-host",
- "newengine-scene",
- "newengine-scene-io",
- "newengine-shader-compiler",
- "newengine-sim",
- "newengine-transform",
- "newengine-transform-api",
- "newengine-ui",
- "newengine-viewport",
- "parking_lot",
- "raw-window-handle",
- "serde",
- "serde_json",
-]
-
-[[package]]
 name = "newengine-engine-runtime"
 version = "0.1.0"
 dependencies = [
@@ -794,10 +686,11 @@ dependencies = [
  "newengine-lighting",
  "newengine-materials",
  "newengine-math",
+ "newengine-physics-contracts",
+ "newengine-physics-runtime",
  "newengine-platform-api",
  "newengine-plugin-api",
  "newengine-plugin-host",
- "newengine-previews",
  "newengine-primitives",
  "newengine-procedural-noise",
  "newengine-render-frame-graph",
@@ -834,19 +727,10 @@ dependencies = [
  "newengine-core",
  "newengine-engine-runtime",
  "newengine-plugin-host",
- "newengine-previews",
  "newengine-runtime-host",
  "newengine-scene",
  "newengine-ui",
  "parking_lot",
-]
-
-[[package]]
-name = "newengine-gizmo"
-version = "0.1.0"
-dependencies = [
- "egui",
- "newengine-math",
 ]
 
 [[package]]
@@ -879,13 +763,37 @@ dependencies = [
 ]
 
 [[package]]
+name = "newengine-physics-contracts"
+version = "0.1.0"
+dependencies = [
+ "newengine-bounds",
+ "newengine-ecs",
+ "newengine-math",
+]
+
+[[package]]
 name = "newengine-physics-jolt"
 version = "0.1.0"
 dependencies = [
  "joltc-sys",
+ "newengine-ecs",
  "newengine-math",
+ "newengine-physics-contracts",
  "rolt",
  "thiserror 2.0.18",
+]
+
+[[package]]
+name = "newengine-physics-runtime"
+version = "0.1.0"
+dependencies = [
+ "newengine-bounds",
+ "newengine-ecs",
+ "newengine-math",
+ "newengine-physics-contracts",
+ "newengine-procedural-noise",
+ "newengine-sim",
+ "newengine-transform",
 ]
 
 [[package]]
@@ -924,22 +832,6 @@ version = "0.1.0"
 dependencies = [
  "abi_stable",
  "newengine-plugin-api",
-]
-
-[[package]]
-name = "newengine-previews"
-version = "0.1.0"
-dependencies = [
- "blake3",
- "bytemuck",
- "newengine-assets",
- "newengine-core",
- "newengine-math",
- "newengine-plugin-host",
- "newengine-primitives",
- "newengine-shader-compiler",
- "newengine-ui",
- "parking_lot",
 ]
 
 [[package]]
@@ -1250,18 +1142,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8fd00f0bb2e90d81d1044c2b32617f68fcb9fa3bb7640c23e9c748e53fb30934"
 dependencies = [
  "unicode-ident",
-]
-
-[[package]]
-name = "proc-macro2-diagnostics"
-version = "0.10.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "af066a9c399a26e020ada66a034357a868728e72cd426f3adcd35f80d88d88c8"
-dependencies = [
- "proc-macro2",
- "quote",
- "syn 2.0.117",
- "version_check",
 ]
 
 [[package]]

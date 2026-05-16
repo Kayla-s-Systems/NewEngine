@@ -17,7 +17,7 @@ impl RuntimeRenderController {
         ui: Option<UiDrawList>,
         scope: RenderFrameScope,
     ) -> EngineResult<PlayableFrameOutcome> {
-        if scope.vp_w == 0 || scope.vp_h == 0 || self.viewport_pass_disabled {
+        if scope.vp_w == 0 || scope.vp_h == 0 || self.viewport.pass_disabled {
             self.render_ui_only_frame(ctx, r, ui, scope)?;
             return Ok(PlayableFrameOutcome::Continue {
                 frame_debug_snapshot: None,
@@ -38,8 +38,8 @@ impl RuntimeRenderController {
             }
         };
 
-        self.scene_bridge.apply_commands();
-        let scene_lock = self.scene_bridge.scene();
+        self.bridges.scene.apply_commands();
+        let scene_lock = self.bridges.scene.scene();
         let mut scene = scene_lock.write();
         let world_frame = self.tick_world_for_render(
             r,
@@ -89,12 +89,12 @@ impl RuntimeRenderController {
         let input = if scope.direct_surface_viewport {
             ViewportInputSnap::read_direct_surface(ctx.resources().get::<newengine_ui::UiInputFrame>())
         } else {
-            ViewportInputSnap::read(&self.viewport_bridge)
+            ViewportInputSnap::read(&self.bridges.viewport)
         };
         ViewportFrameInput {
             ui,
             input,
-            play_mode: self.scene_bridge.play_mode(),
+            play_mode: self.bridges.scene.play_mode(),
         }
     }
 
@@ -114,7 +114,7 @@ impl RuntimeRenderController {
         if scope.trace_frame {
             newengine_core::crash::record_breadcrumb(format!(
                 "render controller: end_frame frame={} after viewport RT failure",
-                self.frame_index
+                self.frame.frame_index
             ));
         }
         r.end_frame()
@@ -143,12 +143,12 @@ impl RuntimeRenderController {
         if scope.trace_frame {
             log::debug!(
                 "render controller: gated loading frame={} reason='{}'",
-                self.frame_index,
+                self.frame.frame_index,
                 gate_reason
             );
             newengine_core::crash::record_breadcrumb(format!(
                 "render controller: gated loading end_frame frame={} reason={}",
-                self.frame_index,
+                self.frame.frame_index,
                 gate_reason
             ));
         }

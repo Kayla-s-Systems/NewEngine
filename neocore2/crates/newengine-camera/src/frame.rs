@@ -7,7 +7,7 @@ use crate::projection::{Perspective, Projection};
 
 /// Computes the orbit distance required to fit a sphere into the view frustum.
 ///
-/// The result is valid for both editor framing and gameplay cameras.
+/// The result is valid for both runtime framing and gameplay cameras.
 ///
 /// Assumptions:
 /// - Right-handed world.
