@@ -10,14 +10,12 @@ use newengine_render_frame_graph::{standard_runtime_frame, StandardRuntimePipeli
 use newengine_scene::Scene;
 use newengine_ui::draw::UiDrawList;
 
-use super::draw_lists::{DrawListBuildCtx, RuntimeDrawListSet, SceneExtractionCtx};
+use super::draw_lists::{DrawListBuildCtx, RenderDrawListProviderRegistry, RuntimeDrawListSet, SceneExtractionCtx};
 use super::frame_envelope_builder::build_runtime_frame_envelope;
 use super::frame_submit::submit_frame_envelope;
 use super::frame_types::{PlayableFrameOutcome, RenderFrameScope, WorldFrameState};
-use super::providers::standard_runtime_draw_list_provider_registry;
 use super::{lights, passes, picking, postfx, scene, shadows};
 use super::super::controller::RuntimeRenderController;
-use super::super::gpu::ensure_lit_pipeline;
 
 pub(super) struct RenderFrameOrchestrator;
 
@@ -46,7 +44,7 @@ impl RenderFrameOrchestrator {
         picking::handle_picking(controller, scene, viewproj, scope.vp_w, scope.vp_h);
 
         let bounds = scene::scene_bounds(scene).unwrap_or_else(scene::default_bounds);
-        let lit = match ensure_lit_pipeline(&mut controller.gpu.lit, r) {
+        let lit = match controller.gpu.require_primary_lit_pipeline(r) {
             Ok(lit) => lit,
             Err(e) => {
                 Self::end_viewport_after_pipeline_failure(controller, r, ui.cloned(), scope, e)?;
@@ -99,7 +97,9 @@ impl RenderFrameOrchestrator {
             ui,
         };
 
-        let mut provider_registry = standard_runtime_draw_list_provider_registry();
+        let mut provider_registry = RenderDrawListProviderRegistry::from_runtime_providers(
+            controller.features.draw_list_providers.runtime_provider_arcs(),
+        );
         if let Some(snapshot) = plugin_snapshot {
             provider_registry.sync_plugin_capabilities(snapshot);
         }
@@ -242,7 +242,7 @@ impl RenderFrameOrchestrator {
         scope: RenderFrameScope,
         error: impl std::fmt::Display,
     ) -> EngineResult<()> {
-        controller.disable_viewport_pass("ensure_lit_pipeline", &error);
+        controller.disable_viewport_pass("material_gpu_registry.require_primary_lit_pipeline", &error);
         r.set_viewport(Viewport::full(Extent2D::new(scope.w, scope.h)))?;
         r.set_scissor(RectI32::new(0, 0, scope.w as i32, scope.h as i32))?;
         if let Some(ui) = ui {

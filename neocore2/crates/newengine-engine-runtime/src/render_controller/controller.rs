@@ -6,9 +6,11 @@ use crate::plugin_manager::PluginManagerBridge;
 use crate::scene_bridge::SceneBridge;
 use crate::viewport_bridge::ViewportBridge;
 
+use super::gpu::{MaterialGpuPipelineKey, MaterialGpuPipelineProvider};
+use super::feature_api::{LightExtractionProvider, RenderDrawListProvider};
 use super::state::{
-    RenderBridgeState, RenderDiagnosticsRuntimeState, RenderFrameRuntimeState, RenderGpuSceneState,
-    RenderShadowRuntimeState, RenderViewportState,
+    RenderBridgeState, RenderDiagnosticsRuntimeState, RenderFeatureProviderState,
+    RenderFrameRuntimeState, RenderGpuSceneState, RenderShadowRuntimeState, RenderViewportState,
 };
 
 /// Engine-side render composition root.
@@ -20,12 +22,65 @@ pub struct RuntimeRenderController {
     pub(super) bridges: RenderBridgeState,
     pub(super) viewport: RenderViewportState,
     pub(super) shadows: RenderShadowRuntimeState,
+    pub(super) features: RenderFeatureProviderState,
     pub(super) gpu: RenderGpuSceneState,
     pub(super) frame: RenderFrameRuntimeState,
     pub(super) diagnostics: RenderDiagnosticsRuntimeState,
 }
 
 impl RuntimeRenderController {
+
+    /// Registers a profile-owned draw-list provider.
+    ///
+    /// Engine-runtime has no built-in draw-list defaults: the active profile owns
+    /// terrain/mesh/UI extraction policy and must register it explicitly.
+    #[inline]
+    pub fn with_draw_list_provider(
+        mut self,
+        provider: Arc<dyn RenderDrawListProvider>,
+    ) -> Self {
+        self.features.draw_list_providers.register_provider(provider);
+        self
+    }
+
+    /// Registers a profile-owned light extraction provider.
+    ///
+    /// Shadow planning policy belongs to the profile/render feature pack, not to
+    /// the renderer backend adapter or reusable engine runtime.
+    #[inline]
+    pub fn with_light_extraction_provider(
+        mut self,
+        provider: Arc<dyn LightExtractionProvider>,
+    ) -> Self {
+        self.features.light_extraction_providers.register_provider(provider);
+        self
+    }
+
+    /// Registers a host-side material-domain provider used by the reusable render
+    /// controller. Profiles/features own these providers; engine-runtime only
+    /// stores the trait object.
+    #[inline]
+    pub fn with_material_pipeline_provider(
+        mut self,
+        provider: Box<dyn MaterialGpuPipelineProvider>,
+    ) -> Self {
+        self.gpu.material.registry.register_provider(provider);
+        self
+    }
+
+    /// Selects the material domain used by the current lit mesh/shadow passes.
+    ///
+    /// This keeps the reusable render controller free from GameReady shader path
+    /// knowledge: the profile chooses a domain key and registers the provider.
+    #[inline]
+    pub fn with_primary_lit_material_domain(
+        mut self,
+        key: MaterialGpuPipelineKey,
+    ) -> Self {
+        self.gpu.material.primary_lit_pipeline_key = Some(key);
+        self
+    }
+
     pub(super) fn disable_viewport_pass(
         &mut self,
         phase: &'static str,
@@ -56,6 +111,7 @@ impl RuntimeRenderController {
             bridges: RenderBridgeState::new(viewport_bridge, plugins_bridge, scene_bridge),
             viewport: RenderViewportState::new(),
             shadows: RenderShadowRuntimeState::new(),
+            features: RenderFeatureProviderState::new(),
             gpu: RenderGpuSceneState::new(),
             frame: RenderFrameRuntimeState::new(),
             diagnostics: RenderDiagnosticsRuntimeState::new(),

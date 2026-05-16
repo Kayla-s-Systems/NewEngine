@@ -123,6 +123,8 @@ pub(super) fn build_load_selection(
         }
     }
 
+    let selected_render_backend_path = select_render_backend_provider(&winners_by_id);
+
     for item in &graph.items {
         let decision = match &item.kind {
             ScannedDynlibKind::PlatformRuntime { .. } => SelectionDecision::Runtime {
@@ -133,6 +135,8 @@ pub(super) fn build_load_selection(
                 id,
                 phase,
                 descriptor_kind,
+                provides_render_backend,
+                provides_render_service,
                 ..
             } => {
                 if loaded_ids.contains(id) {
@@ -144,6 +148,12 @@ pub(super) fn build_load_selection(
                 } else if !filter.allows(*phase) {
                     SelectionDecision::Filtered {
                         filter_label: filter.label(),
+                    }
+                } else if *provides_render_backend && *provides_render_service
+                    && selected_render_backend_path.as_ref() != Some(&item.path)
+                {
+                    SelectionDecision::Filtered {
+                        filter_label: "render-provider-selection",
                     }
                 } else if let Some(winner) = winners_by_id.get(id.as_str()).copied() {
                     if winner.path == item.path {
@@ -172,6 +182,39 @@ pub(super) fn build_load_selection(
     }
 
     out
+}
+
+fn select_render_backend_provider(
+    winners_by_id: &HashMap<&str, &super::graph::ScannedDynlib>,
+) -> Option<std::path::PathBuf> {
+    let mut candidates: Vec<&super::graph::ScannedDynlib> = winners_by_id
+        .values()
+        .copied()
+        .filter(|item| match &item.kind {
+            ScannedDynlibKind::Plugin {
+                provides_render_backend,
+                provides_render_service,
+                ..
+            } => *provides_render_backend && *provides_render_service,
+            _ => false,
+        })
+        .collect();
+
+    candidates.sort_by(|a, b| {
+        render_provider_priority(a)
+            .cmp(&render_provider_priority(b))
+            .then_with(|| plugin_candidate_rank(a).cmp(&plugin_candidate_rank(b)))
+    });
+
+    candidates.last().map(|item| item.path.clone())
+}
+
+fn render_provider_priority(item: &super::graph::ScannedDynlib) -> u8 {
+    match &item.kind {
+        ScannedDynlibKind::Plugin { id, .. } if id == "newengine.renderer.null" => 0,
+        ScannedDynlibKind::Plugin { .. } => 1,
+        _ => 0,
+    }
 }
 
 fn is_better_plugin_candidate(

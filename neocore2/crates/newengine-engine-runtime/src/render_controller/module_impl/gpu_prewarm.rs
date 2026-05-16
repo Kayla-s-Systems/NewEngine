@@ -6,7 +6,7 @@ use newengine_primitives::Primitive;
 use newengine_procedural_noise::ProceduralTerrain;
 use newengine_scene::Scene;
 
-use super::super::gpu::{ensure_lit_pipeline, ensure_primitive_gpu, upload_primitive_mesh};
+use super::super::gpu::{ensure_primitive_gpu, upload_primitive_mesh};
 use super::RuntimeRenderController;
 
 impl RuntimeRenderController {
@@ -24,18 +24,18 @@ impl RuntimeRenderController {
         scene: &Scene,
     ) -> EngineResult<()> {
         let started = std::time::Instant::now();
-        let _lit = ensure_lit_pipeline(&mut self.gpu.lit, r)?;
+        let _lit = self.gpu.require_primary_lit_pipeline(r)?;
 
         let world = scene.world();
         let mut terrain_uploaded = 0_u32;
         for (_entity, terrain) in world.query::<ProceduralTerrain>() {
             let mesh_key = terrain.mesh_key();
-            if self.gpu.terrain_cache.contains_key(&mesh_key) {
+            if self.gpu.meshes.terrain_cache.contains_key(&mesh_key) {
                 continue;
             }
             let mesh = terrain.heightfield.to_primitive_mesh();
             let gpu = upload_primitive_mesh(r, &mesh, "prewarm_proc_terrain")?;
-            self.gpu.terrain_cache.insert(mesh_key, gpu);
+            self.gpu.meshes.terrain_cache.insert(mesh_key, gpu);
             terrain_uploaded = terrain_uploaded.saturating_add(1);
         }
 
@@ -43,10 +43,10 @@ impl RuntimeRenderController {
         let reg = reg_lock.read();
         let mut primitive_uploaded = 0_u32;
         for (_entity, prim) in world.query::<Primitive>() {
-            if self.gpu.prim_cache.contains_key(&prim.id) {
+            if self.gpu.meshes.prim_cache.contains_key(&prim.id) {
                 continue;
             }
-            let _ = ensure_primitive_gpu(&reg, prim.id, &mut self.gpu.prim_cache, r)?;
+            let _ = ensure_primitive_gpu(&reg, prim.id, &mut self.gpu.meshes.prim_cache, r)?;
             primitive_uploaded = primitive_uploaded.saturating_add(1);
         }
 

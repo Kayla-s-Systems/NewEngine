@@ -1,0 +1,9 @@
+[package]
+name = "newengine-material-domain-api"
+version = "0.1.0"
+edition = "2021"
+readme = "README.md"
+description = "Host-side render material domain provider contract for NewEngine"
+
+[dependencies]
+newengine-core = { path = "../newengine-core" }

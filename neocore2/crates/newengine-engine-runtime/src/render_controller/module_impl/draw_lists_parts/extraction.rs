@@ -1,10 +1,10 @@
 #[derive(Clone, Copy, Debug)]
-pub(super) struct RuntimeVisibilityPlan {
-    pub(super) shadow_casters: bool,
-    pub(super) opaque_forward: bool,
-    pub(super) transparent: bool,
-    pub(super) ui: bool,
-    pub(super) debug: bool,
+pub struct RuntimeVisibilityPlan {
+    pub shadow_casters: bool,
+    pub opaque_forward: bool,
+    pub transparent: bool,
+    pub ui: bool,
+    pub debug: bool,
 }
 
 impl RuntimeVisibilityPlan {
@@ -32,21 +32,21 @@ impl RuntimeVisibilityPlan {
 }
 
 #[derive(Clone, Copy)]
-pub(super) struct SceneExtractionCtx<'a> {
-    pub(super) scene: &'a newengine_scene::Scene,
-    pub(super) lit: super::super::gpu::LitPipeline,
-    pub(super) viewproj: Mat4,
-    pub(super) rig: &'a newengine_camera::CameraRig,
-    pub(super) bounds: BoundsSnap,
-    pub(super) lights: PackedLights,
-    pub(super) shadow_plan: LightShadowPlan,
-    pub(super) shadow_frame: ShadowFrame,
-    pub(super) render_shadow_map: bool,
-    pub(super) viewport_extent: Extent2D,
-    pub(super) surface_extent: Extent2D,
-    pub(super) runtime: bool,
-    pub(super) debug_overlays: bool,
-    pub(super) ui: Option<&'a UiDrawList>,
+pub struct SceneExtractionCtx<'a> {
+    pub scene: &'a newengine_scene::Scene,
+    pub lit: newengine_material_domain_api::LitPipeline,
+    pub viewproj: Mat4,
+    pub rig: &'a newengine_camera::CameraRig,
+    pub bounds: BoundsSnap,
+    pub lights: PackedLights,
+    pub shadow_plan: LightShadowPlan,
+    pub shadow_frame: ShadowFrame,
+    pub render_shadow_map: bool,
+    pub viewport_extent: Extent2D,
+    pub surface_extent: Extent2D,
+    pub runtime: bool,
+    pub debug_overlays: bool,
+    pub ui: Option<&'a UiDrawList>,
 }
 
 impl<'a> SceneExtractionCtx<'a> {
@@ -60,11 +60,11 @@ impl<'a> SceneExtractionCtx<'a> {
     }
 }
 
-pub(super) trait RenderDrawListProvider: Send + Sync {
+pub trait RenderDrawListProvider: Send + Sync {
     fn id(&self) -> &'static str;
 
     fn metadata(&self) -> RenderDrawListProviderMetadata {
-        RenderDrawListProviderMetadata::runtime_builtin(self.id(), self.id())
+        RenderDrawListProviderMetadata::feature(self.id(), self.id())
     }
 
     fn provided_draw_lists(&self, ctx: &SceneExtractionCtx<'_>) -> &'static [RenderDrawListKind];
@@ -160,7 +160,7 @@ impl RuntimeDrawListSet {
     }
 }
 
-pub(super) struct DrawListBuildCtx<'a> {
+pub struct DrawListBuildCtx<'a> {
     controller: &'a mut RuntimeRenderController,
     render: &'a mut dyn RenderApi,
     lists: &'a RuntimeDrawListSet,
@@ -168,7 +168,7 @@ pub(super) struct DrawListBuildCtx<'a> {
 
 impl<'a> DrawListBuildCtx<'a> {
     #[inline]
-    pub(super) fn new(
+    pub fn new(
         controller: &'a mut RuntimeRenderController,
         render: &'a mut dyn RenderApi,
         lists: &'a RuntimeDrawListSet,
@@ -180,7 +180,7 @@ impl<'a> DrawListBuildCtx<'a> {
         }
     }
 
-    pub(super) fn record<T>(
+    pub fn record<T>(
         &mut self,
         kind: RenderDrawListKind,
         record: impl FnOnce(&mut RuntimeRenderController, &mut dyn RenderApi) -> EngineResult<T>,
@@ -209,11 +209,11 @@ impl RuntimeDrawList {
 }
 
 #[inline]
-pub(super) const fn shadow_and_opaque_list(active: bool) -> &'static [RenderDrawListKind] {
+pub const fn shadow_and_opaque_list(active: bool) -> &'static [RenderDrawListKind] {
     if active { SHADOW_AND_OPAQUE } else { OPAQUE_FORWARD }
 }
 
 #[inline]
-pub(super) const fn ui_list(active: bool) -> &'static [RenderDrawListKind] {
+pub const fn ui_list(active: bool) -> &'static [RenderDrawListKind] {
     if active { UI_LIST } else { EMPTY_LISTS }
 }

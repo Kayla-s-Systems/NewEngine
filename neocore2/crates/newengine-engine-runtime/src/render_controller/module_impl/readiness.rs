@@ -217,7 +217,7 @@ fn material_texture_ready_state(
     r: &mut dyn RenderApi,
     path: &str,
 ) -> TextureReadyState {
-    let Some(entry) = this.gpu.material_textures.get(path).cloned() else {
+    let Some(entry) = this.gpu.material.textures.get(path).cloned() else {
         return TextureReadyState::Waiting;
     };
 
@@ -229,7 +229,7 @@ fn material_texture_ready_state(
         MaterialTextureGpuResidency::GpuLoading { texture, .. } => {
             match r.texture_residency(texture) {
                 Ok(snapshot) if snapshot.state == GpuResourceResidencyState::Ready => {
-                    this.gpu.material_textures.insert(
+                    this.gpu.material.textures.insert(
                         path.to_owned(),
                         MaterialTextureGpuResidency::Ready { texture },
                     );
@@ -258,7 +258,7 @@ fn material_texture_ready_state(
                         path,
                         message
                     );
-                    this.gpu.material_textures.insert(
+                    this.gpu.material.textures.insert(
                         path.to_owned(),
                         MaterialTextureGpuResidency::Failed { message },
                     );
@@ -271,7 +271,7 @@ fn material_texture_ready_state(
                         path,
                         message
                     );
-                    this.gpu.material_textures.insert(
+                    this.gpu.material.textures.insert(
                         path.to_owned(),
                         MaterialTextureGpuResidency::Failed { message },
                     );

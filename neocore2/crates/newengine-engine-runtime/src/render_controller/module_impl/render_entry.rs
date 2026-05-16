@@ -65,7 +65,7 @@ impl RuntimeRenderController {
         };
 
         self.frame.frame_index = self.frame.frame_index.saturating_add(1).max(1);
-        self.gpu.instance_uploader.begin_frame();
+        self.gpu.meshes.instance_uploader.begin_frame();
         self.diagnostics.overlay_metrics.begin_frame(scope.dt);
 
         let outcome = self.render_playable_viewport_frame(

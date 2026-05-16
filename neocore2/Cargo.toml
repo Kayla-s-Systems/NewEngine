@@ -14,6 +14,8 @@ members = [
     "crates/newengine-entity",
     "crates/newengine-game-runtime",
     "crates/newengine-lighting",
+    "crates/newengine-material-domain-api",
+    "crates/newengine-material-domain-gameready",
     "crates/newengine-materials",
     "crates/newengine-math",
     "crates/newengine-physics-contracts",

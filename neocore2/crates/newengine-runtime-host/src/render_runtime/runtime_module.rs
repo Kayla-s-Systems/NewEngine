@@ -4,45 +4,25 @@ use newengine_core::render::{RenderApiRef, RENDER_API_ID, RENDER_API_PROVIDE};
 use newengine_core::{EngineError, EngineResult, Module, ModuleCtx};
 use newengine_render_api::RENDER_SERVICE_ID;
 
-use crate::render_runtime::backend_match::backend_matches;
 use crate::render_runtime::client::RenderServiceClient;
-use crate::render_runtime::null_api::NullRenderApi;
-use crate::render_runtime::service_api::ServiceBackedRenderApi;
-use crate::render_runtime::types::{
-    ResolvedRenderBackendConfig,
-    DEFAULT_RENDER_BACKEND_CLEAR_COLOR,
-    NULL_RENDER_BACKEND_ID,
+use crate::render_runtime::provider_resolver::{
+    plugin_declares_render_backend, plugin_declares_service, RenderProviderResolver,
 };
-
-
-#[inline]
-fn plugin_declares_render_service(plugin: &newengine_plugin_host::PluginSnapshotEntry) -> bool {
-    plugin.capabilities.iter().any(|cap| {
-        cap.role == newengine_plugin_api::CapabilityRole::Provides
-            && cap.kind == newengine_plugin_api::CapabilityKind::ServiceV1
-            && cap.id.as_str() == RENDER_SERVICE_ID
-    })
-}
+use crate::render_runtime::service_api::ServiceBackedRenderApi;
+use crate::render_runtime::types::ResolvedRenderBackendConfig;
 
 pub struct RenderBackendRuntimeModule {
-    backend_spec: String,
     _modules_dir: PathBuf,
     api: Option<RenderApiRef>,
 }
 
 impl RenderBackendRuntimeModule {
     #[inline]
-    pub fn new(backend_spec: String, modules_dir: PathBuf) -> Self {
+    pub fn new(modules_dir: PathBuf) -> Self {
         Self {
-            backend_spec,
             _modules_dir: modules_dir,
             api: None,
         }
-    }
-
-    #[inline]
-    fn null_debug_text(&self) -> String {
-        format!("NewEngine | Headless ({})", self.backend_spec)
     }
 
     #[inline]
@@ -58,102 +38,30 @@ impl RenderBackendRuntimeModule {
             );
         };
 
-        let configured = self.backend_spec.as_str();
-
-        if let Some(plugin) = snapshot.plugins.iter().find(|plugin| plugin.id == configured) {
-            let declared = if plugin_declares_render_service(plugin) {
-                "declares render.api"
-            } else {
-                "does not declare render.api"
-            };
-
-            return match plugin.state.as_str() {
-                "disabled" => format!(
-                    "configured render plugin '{}' is loaded but disabled: {}",
-                    configured,
-                    plugin
-                        .disabled_reason
-                        .as_deref()
-                        .unwrap_or("reason was not provided by the plugin host")
-                ),
-                state => format!(
-                    "configured render plugin '{}' is loaded (state='{}', {}) but service '{}' is not registered: {}",
-                    configured,
-                    state,
-                    declared,
-                    RENDER_SERVICE_ID,
-                    service_error
-                ),
-            };
-        }
-
         let loaded_render_plugins: Vec<String> = snapshot
             .plugins
             .iter()
             .filter(|plugin| {
-                plugin.id.starts_with("newengine.renderer.")
-                    || plugin_declares_render_service(plugin)
+                plugin_declares_render_backend(plugin)
+                    || plugin_declares_service(plugin, RENDER_SERVICE_ID)
             })
             .map(|plugin| format!("{}:{}", plugin.id, plugin.state))
             .collect();
 
         if loaded_render_plugins.is_empty() {
             format!(
-                "configured render plugin '{}' is not loaded and no render plugins are active; service '{}' is unavailable: {}",
-                configured,
+                "no render backend plugin was loaded; service '{}' is unavailable: {}",
                 RENDER_SERVICE_ID,
                 service_error
             )
         } else {
             format!(
-                "configured render plugin '{}' is not loaded; loaded render plugins=[{}]; service '{}' is unavailable: {}",
-                configured,
+                "loaded render providers=[{}], but service '{}' is unavailable: {}",
                 loaded_render_plugins.join(", "),
                 RENDER_SERVICE_ID,
                 service_error
             )
         }
-    }
-
-    fn enable_null_render_backend<E: Send + 'static>(
-        &mut self,
-        ctx: &mut ModuleCtx<'_, E>,
-        reason: impl Into<String>,
-    ) -> EngineResult<()> {
-        let reason = reason.into();
-
-        if std::env::var("NEWENGINE_REQUIRE_RENDER_BACKEND")
-            .map(|v| v != "0" && !v.eq_ignore_ascii_case("false"))
-            .unwrap_or(false)
-        {
-            return Err(EngineError::Other(format!(
-                "required render backend '{}' is unavailable: {}. Build/copy the renderer DLL or set render.backend to '{}' for explicit headless mode.",
-                self.backend_spec,
-                reason,
-                NULL_RENDER_BACKEND_ID,
-            )));
-        }
-
-        log::warn!(
-            "render backend: '{}' is unavailable; enabling headless null backend ({})",
-            self.backend_spec,
-            reason
-        );
-
-        let api = RenderApiRef::new(NullRenderApi::default());
-        let resolved = ResolvedRenderBackendConfig {
-            backend_id: NULL_RENDER_BACKEND_ID.to_owned(),
-            clear_color: DEFAULT_RENDER_BACKEND_CLEAR_COLOR,
-            debug_text: self.null_debug_text(),
-            capabilities: newengine_core::render::RenderBackendCapabilities::headless_default(),
-            work_budget: newengine_core::render::RenderWorkBudget::default(),
-        };
-
-        ctx.resources_mut().insert(resolved);
-        ctx.resources_mut().register_api(RENDER_API_ID, api.clone())?;
-        self.api = Some(api);
-
-        Ok(())
     }
 }
 
@@ -174,26 +82,27 @@ impl<E: Send + 'static> Module<E> for RenderBackendRuntimeModule {
             Ok(info) => info,
             Err(err) => {
                 let reason = self.explain_backend_unavailability(ctx, &err);
-                return self.enable_null_render_backend(ctx, reason);
+                return Err(EngineError::Other(format!(
+                    "render backend could not be bound through service '{}': {}",
+                    RENDER_SERVICE_ID,
+                    reason
+                )));
             }
         };
+
+        let snapshot = ctx.resources().get::<newengine_plugin_host::PluginsSnapshot>();
+        let selection = RenderProviderResolver::resolve(snapshot, &info)
+            .map_err(EngineError::other)?;
         let protocol_version = info.protocol_version;
 
-        if !backend_matches(&self.backend_spec, &info.backend_id) {
-            return self.enable_null_render_backend(
-                ctx,
-                format!(
-                    "selected backend '{}' does not match active plugin '{}'",
-                    self.backend_spec, info.backend_id
-                ),
-            );
-        }
-
         log::info!(
-            "render backend: stable bridge bound id='{}' name='{}' version='{}' debug_text='{}' protocol=v{}.{}.{} features={} upload_budget={}MB/frame",
+            "render backend: service bridge bound id='{}' name='{}' version='{}' provider='{}' provider_state='{}' matched_by='{}' debug_text='{}' protocol=v{}.{}.{} features={} upload_budget={}MB/frame",
             info.backend_id,
             info.backend_name,
             info.backend_version,
+            selection.provider_plugin_id,
+            selection.provider_state,
+            selection.matched_by,
             info.debug_text,
             protocol_version.major,
             protocol_version.minor,

@@ -3,7 +3,6 @@ use newengine_core::render::require_render_api;
 use newengine_core::{EngineResult, Module, ModuleCtx};
 
 use super::super::controller::RuntimeRenderController;
-use super::super::gpu::ensure_lit_pipeline;
 
 impl RuntimeRenderController {
     pub(super) fn start_runtime_module<E: Send + 'static>(
@@ -12,7 +11,7 @@ impl RuntimeRenderController {
     ) -> EngineResult<()> {
         if let Ok(api) = require_render_api(ctx) {
             let mut r = api.lock();
-            if let Err(e) = ensure_lit_pipeline(&mut self.gpu.lit, &mut **r) {
+            if let Err(e) = self.gpu.require_primary_lit_pipeline(&mut **r) {
                 log::warn!("render controller: loading-screen pipeline warmup skipped: {}", e);
             } else {
                 let _ = r.pump_uploads(

@@ -1,0 +1,12 @@
+[package]
+name = "newengine-render-feature-gameready"
+version = "0.1.0"
+edition = "2021"
+readme = "README.md"
+description = "GameReady profile-owned render feature pack for NewEngine runtime"
+
+[dependencies]
+newengine-core = { path = "../newengine-core" }
+newengine-engine-runtime = { path = "../newengine-engine-runtime" }
+newengine-lighting = { path = "../newengine-lighting" }
+newengine-material-domain-gameready = { path = "../newengine-material-domain-gameready" }

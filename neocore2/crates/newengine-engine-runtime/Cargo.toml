@@ -27,6 +27,7 @@ newengine-core = { path = "../newengine-core" }
 newengine-ecs = { path = "../newengine-ecs" }
 newengine-lighting = { path = "../newengine-lighting" }
 newengine-materials = { path = "../newengine-materials", features = ["serde"] }
+newengine-material-domain-api = { path = "../newengine-material-domain-api" }
 newengine-physics-contracts = { path = "../newengine-physics-contracts" }
 newengine-physics-runtime = { path = "../newengine-physics-runtime" }
 newengine-math = { path = "../newengine-math" }

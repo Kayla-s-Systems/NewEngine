@@ -20,57 +20,56 @@ use serde::Deserialize;
 
 use super::scene::BoundsSnap;
 use super::shadows::LightShadowPlan;
-use super::RuntimeRenderController;
+use crate::render_controller::RuntimeRenderController;
 
-pub(super) const LIGHT_PROVIDER_TAG_RUNTIME: &str = "runtime";
-pub(super) const LIGHT_PROVIDER_TAG_BUILTIN: &str = "builtin";
+pub const LIGHT_PROVIDER_TAG_FEATURE: &str = "feature";
 pub(super) const LIGHT_PROVIDER_TAG_PLUGIN: &str = "plugin";
-pub(super) const LIGHT_PROVIDER_CAP_EXTRACTION: &str = CAPABILITY_ID_RENDER_LIGHT_EXTRACTION_PROVIDER;
+pub const LIGHT_PROVIDER_CAP_EXTRACTION: &str = CAPABILITY_ID_RENDER_LIGHT_EXTRACTION_PROVIDER;
 
 static WARNED_PLUGIN_LIGHT_PROVIDER_BRIDGE: AtomicBool = AtomicBool::new(false);
 
 #[derive(Clone, Copy, Debug)]
-pub(super) struct LightExtractionProviderMetadata {
-    pub(super) id: &'static str,
-    pub(super) label: &'static str,
-    pub(super) tags: &'static [&'static str],
-    pub(super) capabilities: &'static [&'static str],
+pub struct LightExtractionProviderMetadata {
+    pub id: &'static str,
+    pub label: &'static str,
+    pub tags: &'static [&'static str],
+    pub capabilities: &'static [&'static str],
 }
 
 impl LightExtractionProviderMetadata {
     #[inline]
-    pub(super) fn runtime_builtin(id: &'static str, label: &'static str) -> Self {
+    pub fn feature(id: &'static str, label: &'static str) -> Self {
         Self {
             id,
             label,
-            tags: &[LIGHT_PROVIDER_TAG_RUNTIME, LIGHT_PROVIDER_TAG_BUILTIN],
+            tags: &[LIGHT_PROVIDER_TAG_FEATURE],
             capabilities: &[LIGHT_PROVIDER_CAP_EXTRACTION],
         }
     }
 }
 
-pub(super) struct LightExtractionCtx<'a> {
-    pub(super) controller: &'a mut RuntimeRenderController,
-    pub(super) render: &'a mut dyn RenderApi,
-    pub(super) world: &'a newengine_ecs::World,
-    pub(super) bounds: BoundsSnap,
-    pub(super) lit: super::super::gpu::LitPipeline,
-    pub(super) settings: ShadowSettings,
-    pub(super) frame_index: u64,
-    pub(super) viewproj: Mat4,
-    pub(super) camera_position: [f32; 3],
-    pub(super) viewport_extent: Extent2D,
-    pub(super) surface_extent: Extent2D,
+pub struct LightExtractionCtx<'a> {
+    pub controller: &'a mut RuntimeRenderController,
+    pub render: &'a mut dyn RenderApi,
+    pub world: &'a newengine_ecs::World,
+    pub bounds: BoundsSnap,
+    pub lit: newengine_material_domain_api::LitPipeline,
+    pub settings: ShadowSettings,
+    pub frame_index: u64,
+    pub viewproj: Mat4,
+    pub camera_position: [f32; 3],
+    pub viewport_extent: Extent2D,
+    pub surface_extent: Extent2D,
 }
 
 impl<'a> LightExtractionCtx<'a> {
     #[inline]
-    pub(super) fn new(
+    pub fn new(
         controller: &'a mut RuntimeRenderController,
         render: &'a mut dyn RenderApi,
         world: &'a newengine_ecs::World,
         bounds: BoundsSnap,
-        lit: super::super::gpu::LitPipeline,
+        lit: newengine_material_domain_api::LitPipeline,
         settings: ShadowSettings,
         frame_index: u64,
         viewproj: Mat4,
@@ -94,11 +93,11 @@ impl<'a> LightExtractionCtx<'a> {
     }
 }
 
-pub(super) trait LightExtractionProvider: Send + Sync {
+pub trait LightExtractionProvider: Send + Sync {
     fn id(&self) -> &'static str;
 
     fn metadata(&self) -> LightExtractionProviderMetadata {
-        LightExtractionProviderMetadata::runtime_builtin(self.id(), self.id())
+        LightExtractionProviderMetadata::feature(self.id(), self.id())
     }
 
     fn supports(&self, ctx: &LightExtractionCtx<'_>) -> bool;
@@ -130,21 +129,34 @@ struct PluginLightProviderJson {
     method: Option<String>,
 }
 
-pub(super) struct LightExtractionProviderRegistry {
+pub(crate) struct LightExtractionProviderRegistry {
     providers: Vec<Arc<dyn LightExtractionProvider>>,
     external_providers: Vec<ExternalLightExtractionProviderDesc>,
 }
 
 impl LightExtractionProviderRegistry {
     #[inline]
-    pub(super) fn new() -> Self {
+    pub(crate) fn new() -> Self {
         Self {
             providers: Vec::new(),
             external_providers: Vec::new(),
         }
     }
 
-    pub(super) fn register_provider(&mut self, provider: Arc<dyn LightExtractionProvider>) {
+    #[inline]
+    pub(crate) fn from_runtime_providers(providers: Vec<Arc<dyn LightExtractionProvider>>) -> Self {
+        Self {
+            providers,
+            external_providers: Vec::new(),
+        }
+    }
+
+    #[inline]
+    pub(crate) fn runtime_provider_arcs(&self) -> Vec<Arc<dyn LightExtractionProvider>> {
+        self.providers.clone()
+    }
+
+    pub(crate) fn register_provider(&mut self, provider: Arc<dyn LightExtractionProvider>) {
         let id = provider.id();
         if self.providers.iter().any(|existing| existing.id() == id) {
             log::warn!(
@@ -157,7 +169,7 @@ impl LightExtractionProviderRegistry {
         self.providers.push(provider);
     }
 
-    pub(super) fn register_external_provider(&mut self, provider: ExternalLightExtractionProviderDesc) {
+    pub(crate) fn register_external_provider(&mut self, provider: ExternalLightExtractionProviderDesc) {
         if self
             .external_providers
             .iter()
@@ -179,7 +191,7 @@ impl LightExtractionProviderRegistry {
         self.external_providers.push(provider);
     }
 
-    pub(super) fn sync_plugin_capabilities(&mut self, snapshot: &PluginsSnapshot) {
+    pub(crate) fn sync_plugin_capabilities(&mut self, snapshot: &PluginsSnapshot) {
         for plugin in snapshot.plugins.iter() {
             for capability in plugin.capabilities.iter() {
                 if capability.role != CapabilityRole::Provides {
@@ -206,7 +218,7 @@ impl LightExtractionProviderRegistry {
         }
     }
 
-    pub(super) fn extract_shadow_plan(
+    pub(crate) fn extract_shadow_plan(
         &self,
         ctx: &mut LightExtractionCtx<'_>,
     ) -> EngineResult<Option<LightShadowPlan>> {
@@ -302,7 +314,7 @@ impl LightExtractionProviderRegistry {
     }
 
     #[inline]
-    pub(super) fn labels(&self) -> Vec<String> {
+    pub(crate) fn labels(&self) -> Vec<String> {
         let mut out = Vec::with_capacity(self.providers.len() + self.external_providers.len());
         for provider in self.providers.iter() {
             let metadata = provider.metadata();

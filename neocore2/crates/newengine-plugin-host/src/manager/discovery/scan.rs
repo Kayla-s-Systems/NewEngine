@@ -243,6 +243,8 @@ fn scan_dynamic_lib(path: &Path, manifest: Option<&PluginManifest>) -> Result<Sc
                 phase: entry.phase_value(),
                 descriptor_kind: Some(entry.kind_value()),
                 declared_capabilities: None,
+                provides_render_backend: is_render_backend_plugin_id(&entry.id),
+                provides_render_service: is_render_backend_plugin_id(&entry.id),
             },
         });
     }
@@ -299,6 +301,8 @@ fn infer_kind_from_file_name(path: &Path, file_name: &str) -> ScannedDynlibKind 
         phase,
         descriptor_kind: Some(descriptor_kind),
         declared_capabilities: None,
+        provides_render_backend: is_render_backend_plugin_id(id),
+        provides_render_service: is_render_backend_plugin_id(id),
     };
 
     if lower.starts_with("logging-") {
@@ -329,6 +333,14 @@ fn infer_kind_from_file_name(path: &Path, file_name: &str) -> ScannedDynlibKind 
             newengine_plugin_api::PluginKind::Runtime,
         );
     }
+
+    if lower.starts_with("null_renderer-") {
+        return plugin(
+            "newengine.renderer.null",
+            newengine_plugin_api::PluginBootstrapPhase::Engine,
+            newengine_plugin_api::PluginKind::Runtime,
+        );
+    }
     if lower.starts_with("egui_ui_provider-") {
         return plugin(
             "newengine.ui.provider.egui",
@@ -345,6 +357,11 @@ fn infer_kind_from_file_name(path: &Path, file_name: &str) -> ScannedDynlibKind 
     }
 
     ScannedDynlibKind::Unknown
+}
+
+#[inline]
+fn is_render_backend_plugin_id(id: &str) -> bool {
+    id == "newengine.renderer.null" || id.starts_with("newengine.renderer.")
 }
 
 fn infer_version_from_file_name(path: &Path) -> String {

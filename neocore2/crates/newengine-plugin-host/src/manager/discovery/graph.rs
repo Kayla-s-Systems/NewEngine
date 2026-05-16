@@ -16,6 +16,8 @@ pub(super) enum ScannedDynlibKind {
         phase: PluginBootstrapPhase,
         descriptor_kind: Option<PluginKind>,
         declared_capabilities: Option<usize>,
+        provides_render_backend: bool,
+        provides_render_service: bool,
     },
     Unknown,
 }

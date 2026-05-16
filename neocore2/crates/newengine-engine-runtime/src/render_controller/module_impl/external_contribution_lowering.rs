@@ -216,7 +216,7 @@ fn lower_debug_line_list_contribution(
             push_debug_line_vertex(&mut bytes, ctx.viewproj, pair[1], color);
         }
 
-        let gpu = ensure_debug_line_pipeline(&mut this.gpu.collision_lines, r, vertex_count)?;
+        let gpu = ensure_debug_line_pipeline(&mut this.gpu.meshes.collision_lines, r, vertex_count)?;
         r.write_buffer(gpu.vb, 0, &bytes)?;
         r.set_pipeline(gpu.pipeline)?;
         r.set_bind_group(0, gpu.bg)?;
@@ -296,7 +296,7 @@ fn lower_single_gpu_mesh_instance(
         sampler,
     )?;
     per.last_seen_frame = this.frame.frame_index;
-    this.gpu.per_draw_ubo.insert(key, per);
+    this.gpu.material.per_draw_ubo.insert(key, per);
 
     let mvp = if matches!(draw_list, RenderDrawListKind::ShadowCasters) {
         ctx.shadow_frame.light_mvp * model

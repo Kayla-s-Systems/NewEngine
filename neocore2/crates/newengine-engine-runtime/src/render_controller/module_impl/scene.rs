@@ -3,7 +3,7 @@
 use newengine_math::Vec3;
 
 #[derive(Clone, Copy, Debug)]
-pub(super) struct BoundsSnap {
+pub struct BoundsSnap {
     pub center: Vec3,
     pub radius: f32,
 }

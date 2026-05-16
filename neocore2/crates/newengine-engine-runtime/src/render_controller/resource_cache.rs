@@ -46,7 +46,7 @@ impl RuntimeRenderController {
                     path,
                     message
                 );
-                self.gpu.material_textures.insert(path, MaterialTextureGpuResidency::Failed { message });
+                self.gpu.material.textures.insert(path, MaterialTextureGpuResidency::Failed { message });
                 return;
             }
             Err(e) => {
@@ -56,7 +56,7 @@ impl RuntimeRenderController {
                     path,
                     message
                 );
-                self.gpu.material_textures.insert(path, MaterialTextureGpuResidency::Failed { message });
+                self.gpu.material.textures.insert(path, MaterialTextureGpuResidency::Failed { message });
                 return;
             }
         };
@@ -76,7 +76,7 @@ impl RuntimeRenderController {
                     selector.texture_hash,
                     e
                 );
-                self.gpu.material_textures.insert(
+                self.gpu.material.textures.insert(
                     path,
                     MaterialTextureGpuResidency::AssetLoading {
                         id_hex32: e.id_hex32.unwrap_or_default(),
@@ -96,7 +96,7 @@ impl RuntimeRenderController {
                     e.kind,
                     e
                 );
-                self.gpu.material_textures.insert(path, MaterialTextureGpuResidency::Failed { message });
+                self.gpu.material.textures.insert(path, MaterialTextureGpuResidency::Failed { message });
                 return;
             }
         };
@@ -128,7 +128,7 @@ impl RuntimeRenderController {
                     texture,
                     self.frame.frame_index
                 );
-                self.gpu.material_textures.insert(
+                self.gpu.material.textures.insert(
                     path,
                     MaterialTextureGpuResidency::GpuLoading {
                         texture,
@@ -143,18 +143,18 @@ impl RuntimeRenderController {
                     path,
                     message
                 );
-                self.gpu.material_textures.insert(path, MaterialTextureGpuResidency::Failed { message });
+                self.gpu.material.textures.insert(path, MaterialTextureGpuResidency::Failed { message });
             }
         }
     }
 
     pub(super) fn request_material_texture(&mut self, path: &str) {
-        if self.gpu.material_textures.contains_key(path) {
+        if self.gpu.material.textures.contains_key(path) {
             return;
         }
-        self.gpu.material_textures
+        self.gpu.material.textures
             .insert(path.to_string(), MaterialTextureGpuResidency::Requested);
-        self.gpu.material_texture_queue.push_back(path.to_string());
+        self.gpu.material.texture_queue.push_back(path.to_string());
     }
 
     pub(super) fn pump_material_texture_requests(
@@ -170,7 +170,8 @@ impl RuntimeRenderController {
 
         let loading_retry_paths = self
             .gpu
-            .material_textures
+            .material
+            .textures
             .iter()
             .filter_map(|(path, state)| match state {
                 MaterialTextureGpuResidency::AssetLoading { requested_frame, .. }
@@ -180,21 +181,21 @@ impl RuntimeRenderController {
             .collect::<Vec<_>>();
 
         for path in loading_retry_paths {
-            if !self.gpu.material_texture_queue.contains(&path) {
-                self.gpu.material_textures
+            if !self.gpu.material.texture_queue.contains(&path) {
+                self.gpu.material.textures
                     .insert(path.clone(), MaterialTextureGpuResidency::Requested);
-                self.gpu.material_texture_queue.push_back(path);
+                self.gpu.material.texture_queue.push_back(path);
             }
         }
 
         let mut started_jobs = 0_u32;
         while started_jobs < max_start_jobs {
-            let Some(path) = self.gpu.material_texture_queue.pop_front() else {
+            let Some(path) = self.gpu.material.texture_queue.pop_front() else {
                 break;
             };
 
             if !matches!(
-                self.gpu.material_textures.get(&path),
+                self.gpu.material.textures.get(&path),
                 Some(MaterialTextureGpuResidency::Requested)
             ) {
                 continue;
@@ -220,7 +221,7 @@ impl RuntimeRenderController {
 
         self.request_material_texture(path);
 
-        let Some(entry) = self.gpu.material_textures.get(path).cloned() else {
+        let Some(entry) = self.gpu.material.textures.get(path).cloned() else {
             return fallback;
         };
 
@@ -231,7 +232,7 @@ impl RuntimeRenderController {
                 requested_frame,
             } => match r.texture_residency(texture) {
                 Ok(snapshot) if snapshot.state == GpuResourceResidencyState::Ready => {
-                    self.gpu.material_textures.insert(
+                    self.gpu.material.textures.insert(
                         path.to_string(),
                         MaterialTextureGpuResidency::Ready { texture },
                     );
@@ -267,7 +268,7 @@ impl RuntimeRenderController {
                         path,
                         message
                     );
-                    self.gpu.material_textures.insert(
+                    self.gpu.material.textures.insert(
                         path.to_string(),
                         MaterialTextureGpuResidency::Failed { message },
                     );
@@ -310,7 +311,7 @@ impl RuntimeRenderController {
         shadow_texture: TextureId,
         sampler: SamplerId,
     ) -> newengine_core::EngineResult<PerDrawUbo> {
-        if let Some(mut e) = self.gpu.per_draw_ubo.get(&key).copied() {
+        if let Some(mut e) = self.gpu.material.per_draw_ubo.get(&key).copied() {
             if e.base_texture == base_texture
                 && e.normal_texture == normal_texture
                 && e.roughness_texture == roughness_texture
@@ -322,7 +323,7 @@ impl RuntimeRenderController {
             r.destroy_bind_group(e.bg);
             let bg = r.create_bind_group(
                 newengine_core::render::BindGroupDesc::new(lit.bgl)
-                    .with_label("game_lit_entity_bg")
+                    .with_label("material_lit_entity_bg")
                     .with_uniform0(newengine_core::render::BufferBinding::new(e.ubo, 0, LIT_UBO_SIZE))
                     .with_texture0(base_texture)
                     .with_texture1(normal_texture)
@@ -336,7 +337,7 @@ impl RuntimeRenderController {
             e.roughness_texture = roughness_texture;
             e.shadow_texture = shadow_texture;
             e.sampler = sampler;
-            self.gpu.per_draw_ubo.insert(key, e);
+            self.gpu.material.per_draw_ubo.insert(key, e);
             return Ok(e);
         }
 
@@ -346,12 +347,12 @@ impl RuntimeRenderController {
                 newengine_core::render::BufferUsage::Uniform,
                 newengine_core::render::MemoryHint::CpuToGpu,
             )
-            .with_label("game_lit_entity_ubo"),
+            .with_label("material_lit_entity_ubo"),
         )?;
 
         let bg = r.create_bind_group(
             newengine_core::render::BindGroupDesc::new(lit.bgl)
-                .with_label("game_lit_entity_bg")
+                .with_label("material_lit_entity_bg")
                 .with_uniform0(newengine_core::render::BufferBinding::new(ubo, 0, LIT_UBO_SIZE))
                 .with_texture0(base_texture)
                 .with_texture1(normal_texture)
@@ -370,7 +371,7 @@ impl RuntimeRenderController {
             sampler,
             last_seen_frame: self.frame.frame_index,
         };
-        self.gpu.per_draw_ubo.insert(key, entry);
+        self.gpu.material.per_draw_ubo.insert(key, entry);
         Ok(entry)
     }
 
@@ -379,13 +380,13 @@ impl RuntimeRenderController {
         let grace = 8_u64;
 
         let mut dead: Vec<u64> = Vec::new();
-        for (k, v) in &self.gpu.per_draw_ubo {
+        for (k, v) in &self.gpu.material.per_draw_ubo {
             if now.saturating_sub(v.last_seen_frame) > grace {
                 dead.push(*k);
             }
         }
         for k in dead {
-            if let Some(v) = self.gpu.per_draw_ubo.remove(&k) {
+            if let Some(v) = self.gpu.material.per_draw_ubo.remove(&k) {
                 r.destroy_bind_group(v.bg);
                 r.destroy_buffer(v.ubo);
             }
@@ -393,11 +394,11 @@ impl RuntimeRenderController {
     }
 
     pub(super) fn retire_render_target(&mut self, rt: RenderTargetId) {
-        self.gpu.render_target_lifetimes
+        self.gpu.lifetimes.render_target_lifetimes
             .retire_after_frames(rt, self.frame.frame_index, 8);
     }
 
     pub(super) fn gc_deferred_rts(&mut self, r: &mut dyn newengine_core::render::RenderApi) {
-        self.gpu.render_target_lifetimes.collect(r, self.frame.frame_index);
+        self.gpu.lifetimes.render_target_lifetimes.collect(r, self.frame.frame_index);
     }
 }

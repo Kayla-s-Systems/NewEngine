@@ -7,7 +7,7 @@ use newengine_transform::GlobalTransform;
 const MAX_POINT_LIGHTS: usize = 4;
 
 #[derive(Clone, Copy, Debug)]
-pub(super) struct PackedLights {
+pub struct PackedLights {
     pub ambient: [f32; 4],
     pub dir_dir_intensity: [f32; 4],
     pub dir_color: [f32; 4],
@@ -93,7 +93,7 @@ impl PackedLights {
     /// while giving PBR shaders the real view vector instead of the old
     /// origin-based approximation.
     #[inline]
-    pub(super) fn with_camera_position(mut self, camera_position: [f32; 3]) -> Self {
+    pub fn with_camera_position(mut self, camera_position: [f32; 3]) -> Self {
         self.point_count_pad[1] = camera_position[0];
         self.point_count_pad[2] = camera_position[1];
         self.point_count_pad[3] = camera_position[2];
@@ -101,14 +101,14 @@ impl PackedLights {
     }
 
     #[inline]
-    pub(super) fn with_shadow(mut self, light_mvp: Mat4, params: [f32; 4]) -> Self {
+    pub fn with_shadow(mut self, light_mvp: Mat4, params: [f32; 4]) -> Self {
         self.shadow_light_mvp = light_mvp;
         self.shadow_params = params;
         self
     }
 
     #[inline]
-    pub(super) fn write_into(&self, bytes: &mut [u8; Self::UBO_SIZE]) {
+    pub fn write_into(&self, bytes: &mut [u8; Self::UBO_SIZE]) {
         let mut off = 160;
 
         fn write_vec4(dst: &mut [u8], off: &mut usize, v: [f32; 4]) {
@@ -131,7 +131,7 @@ impl PackedLights {
 }
 
 #[inline]
-pub(super) fn primary_directional_light(world: &newengine_ecs::World) -> Option<DirectionalLight> {
+pub fn primary_directional_light(world: &newengine_ecs::World) -> Option<DirectionalLight> {
     let mut best_dir: Option<(u64, DirectionalLight)> = None;
     for (e, l) in world.query::<DirectionalLight>() {
         let k = e.stable_u64();
@@ -144,7 +144,7 @@ pub(super) fn primary_directional_light(world: &newengine_ecs::World) -> Option<
 
 
 #[inline]
-pub(super) fn primary_point_light(world: &newengine_ecs::World) -> Option<(PointLight, newengine_math::Vec3)> {
+pub fn primary_point_light(world: &newengine_ecs::World) -> Option<(PointLight, newengine_math::Vec3)> {
     let mut best: Option<(u64, PointLight, newengine_math::Vec3)> = None;
     for (e, l, gt) in world.query2::<PointLight, GlobalTransform>() {
         let k = e.stable_u64();

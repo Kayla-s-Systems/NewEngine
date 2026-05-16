@@ -13,6 +13,7 @@ use newengine_core::{
     Engine, EngineLifecycleEvent, EngineReadinessKey, EngineReadinessSnapshot, EngineResult, Module, ModuleCtx,
     StartupConfig,
 };
+use newengine_render_feature_gameready::GameReadyRenderFeaturePack;
 use newengine_runtime_host::render_runtime::RenderBackendRuntimeModule;
 use newengine_ui::{UiBuildFn, UiProviderKind};
 use std::any::Any;
@@ -187,15 +188,18 @@ impl StandaloneGameRuntimeProfile {
         startup: &StartupConfig,
     ) -> EngineResult<()> {
         engine.register_module(Box::new(RenderBackendRuntimeModule::new(
-            startup.render_backend.clone(),
             startup.modules_dir.clone(),
         )))?;
 
-        engine.register_module(Box::new(newengine_engine_runtime::RuntimeRenderController::new(
-            Arc::clone(&self.viewport),
-            Arc::clone(&self.plugins),
-            Arc::clone(&self.scene),
-        )))?;
+        let render_controller = GameReadyRenderFeaturePack::new().install(
+            newengine_engine_runtime::RuntimeRenderController::new(
+                Arc::clone(&self.viewport),
+                Arc::clone(&self.plugins),
+                Arc::clone(&self.scene),
+            ),
+        );
+
+        engine.register_module(Box::new(render_controller))?;
 
         engine.register_module(Box::new(GameReadySceneBootstrapModule::new(Arc::clone(
             &self.scene,

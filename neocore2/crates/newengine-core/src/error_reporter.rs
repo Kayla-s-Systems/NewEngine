@@ -176,7 +176,6 @@ fn write_startup_config(out: &mut String, cfg: &startup::StartupConfig) {
     let _ = writeln!(out, "  - window_icon_path: {:?}", cfg.window_icon_path);
     let _ = writeln!(out, "  - modules_dir: {}", display_clean(&cfg.modules_dir));
     let _ = writeln!(out, "  - cache_files: {}", display_clean(&cfg.resolved_cache_files_dir()));
-    let _ = writeln!(out, "  - render_backend: {}", cfg.render_backend);
     let _ = writeln!(out, "  - plugins: {}", cfg.plugins.len());
     let _ = writeln!(out, "  - extra: {}", cfg.extra.len());
 

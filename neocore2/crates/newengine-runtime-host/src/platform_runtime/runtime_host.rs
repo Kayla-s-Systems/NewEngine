@@ -44,6 +44,7 @@ use crate::platform_runtime::snapshot_service::{
     register_platform_window_service_best_effort, update_platform_window_snapshot,
 };
 use crate::platform_runtime::types::ResolvedPlatformRuntimeConfig;
+use crate::render_runtime::ResolvedRenderBackendConfig;
 use crate::platform_runtime::ui_provider_selection::{
     log_ui_provider_selection, UiProviderSelection,
 };
@@ -238,9 +239,6 @@ impl HostPlatformRuntime {
             height: ready.surface.height,
         });
 
-        if let Some(startup) = newengine_core::startup::last_startup_config() {
-            std::env::set_var("NEWENGINE_RENDER_BACKEND", startup.render_backend.as_str());
-        }
 
         self.window_ready_emitted = false;
         self.bootstrap_stage = RuntimeBootstrapStage::AnnounceLoadEnginePlugins;
@@ -743,22 +741,12 @@ impl HostPlatformRuntime {
         ]
     }
 
-    fn render_backend_label(&self) -> &'static str {
-        let Some(backend) = newengine_core::startup::last_startup_config()
-            .map(|startup| startup.render_backend.as_str().to_ascii_lowercase())
-        else {
-            return "WAIT";
-        };
-
-        if backend.contains("vulkan") || backend == "vk" || backend.contains("ash") {
-            "VULKAN"
-        } else if backend.contains("null") {
-            "NULL"
-        } else if backend.contains("mock") {
-            "MOCK"
-        } else {
-            "RENDER"
-        }
+    fn render_backend_label(&self) -> String {
+        self.engine
+            .resources
+            .get::<ResolvedRenderBackendConfig>()
+            .map(|resolved| render_backend_label_from_id(resolved.backend_id.as_str()))
+            .unwrap_or_else(|| "WAIT".to_owned())
     }
 
     pub(crate) fn poll_cursor_state(&mut self) -> PlatformCursorPollV1 {
@@ -798,4 +786,15 @@ fn cursor_poll_from_state(state: CursorState) -> PlatformCursorPollV1 {
             },
         },
     }
+}
+
+fn render_backend_label_from_id(id: &str) -> String {
+    id.rsplit('.')
+        .next()
+        .filter(|segment| !segment.is_empty())
+        .unwrap_or(id)
+        .chars()
+        .filter(|ch| ch.is_ascii_alphanumeric())
+        .flat_map(|ch| ch.to_uppercase())
+        .collect::<String>()
 }

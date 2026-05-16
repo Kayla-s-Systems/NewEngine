@@ -9,12 +9,11 @@ use newengine_math::{Mat4, Vec3};
 
 use super::lights;
 use super::light_extraction::LightExtractionCtx;
-use super::light_providers::standard_runtime_light_extraction_provider_registry;
 use super::scene::BoundsSnap;
-use super::RuntimeRenderController;
+use crate::render_controller::RuntimeRenderController;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(super) enum ShadowLightKind {
+pub enum ShadowLightKind {
     Directional,
     Point,
     Spot,
@@ -22,7 +21,7 @@ pub(super) enum ShadowLightKind {
 
 impl ShadowLightKind {
     #[inline]
-    pub(super) const fn label(self) -> &'static str {
+    pub const fn label(self) -> &'static str {
         match self {
             Self::Directional => "sun_directional",
             Self::Point => "point",
@@ -32,7 +31,7 @@ impl ShadowLightKind {
 }
 
 #[derive(Clone, Copy, Debug)]
-pub(super) struct ShadowFrame {
+pub struct ShadowFrame {
     pub texture: TextureId,
     pub light_mvp: Mat4,
     pub params: [f32; 4],
@@ -40,7 +39,7 @@ pub(super) struct ShadowFrame {
 
 impl ShadowFrame {
     #[inline]
-    pub(super) fn disabled(fallback: TextureId) -> Self {
+    pub fn disabled(fallback: TextureId) -> Self {
         Self {
             texture: fallback,
             light_mvp: Mat4::IDENTITY,
@@ -50,17 +49,17 @@ impl ShadowFrame {
 }
 
 #[derive(Clone, Copy, Debug)]
-pub(super) struct LightShadowPlan {
-    pub(super) light_kind: Option<ShadowLightKind>,
-    pub(super) supported: bool,
-    pub(super) target: Option<RenderTargetId>,
-    pub(super) resolution: u32,
-    pub(super) frame: ShadowFrame,
+pub struct LightShadowPlan {
+    pub light_kind: Option<ShadowLightKind>,
+    pub supported: bool,
+    pub target: Option<RenderTargetId>,
+    pub resolution: u32,
+    pub frame: ShadowFrame,
 }
 
 impl LightShadowPlan {
     #[inline]
-    pub(super) fn disabled(fallback: TextureId) -> Self {
+    pub fn disabled(fallback: TextureId) -> Self {
         Self {
             light_kind: None,
             supported: false,
@@ -71,7 +70,7 @@ impl LightShadowPlan {
     }
 
     #[inline]
-    pub(super) fn unsupported(kind: ShadowLightKind, fallback: TextureId, resolution: u32) -> Self {
+    pub fn unsupported(kind: ShadowLightKind, fallback: TextureId, resolution: u32) -> Self {
         Self {
             light_kind: Some(kind),
             supported: false,
@@ -82,7 +81,7 @@ impl LightShadowPlan {
     }
 
     #[inline]
-    pub(super) fn directional(target: RenderTargetId, texture: TextureId, resolution: u32, light_mvp: Mat4, params: [f32; 4]) -> Self {
+    pub fn directional(target: RenderTargetId, texture: TextureId, resolution: u32, light_mvp: Mat4, params: [f32; 4]) -> Self {
         Self {
             light_kind: Some(ShadowLightKind::Directional),
             supported: true,
@@ -97,17 +96,17 @@ impl LightShadowPlan {
     }
 
     #[inline]
-    pub(super) fn is_active(self) -> bool {
+    pub fn is_active(self) -> bool {
         self.supported && self.target.is_some() && self.frame.params[0] > 0.0
     }
 
     #[inline]
-    pub(super) fn render_target(self) -> Option<RenderTargetId> {
+    pub fn render_target(self) -> Option<RenderTargetId> {
         if self.is_active() { self.target } else { None }
     }
 
     #[inline]
-    pub(super) fn extent(self) -> Extent2D {
+    pub fn extent(self) -> Extent2D {
         Extent2D::new(self.resolution, self.resolution)
     }
 }
@@ -118,7 +117,7 @@ pub(super) fn build_light_shadow_plan(
     r: &mut dyn RenderApi,
     scene: &newengine_scene::Scene,
     bounds: BoundsSnap,
-    lit: super::super::gpu::LitPipeline,
+    lit: newengine_material_domain_api::LitPipeline,
     viewproj: newengine_math::Mat4,
     camera_position: [f32; 3],
     viewport_extent: Extent2D,
@@ -137,7 +136,9 @@ pub(super) fn build_light_shadow_plan(
         return Ok(LightShadowPlan::disabled(lit.white_texture));
     }
 
-    let mut registry = standard_runtime_light_extraction_provider_registry();
+    let mut registry = super::light_extraction::LightExtractionProviderRegistry::from_runtime_providers(
+        this.features.light_extraction_providers.runtime_provider_arcs(),
+    );
     if let Some(snapshot) = plugin_snapshot {
         registry.sync_plugin_capabilities(snapshot);
     }
@@ -173,12 +174,12 @@ pub(super) fn build_light_shadow_plan(
 }
 
 #[inline]
-pub(super) fn try_build_directional_shadow_plan(
+pub fn try_build_directional_shadow_plan(
     this: &mut RuntimeRenderController,
     r: &mut dyn RenderApi,
     world: &newengine_ecs::World,
     bounds: BoundsSnap,
-    _lit: super::super::gpu::LitPipeline,
+    _lit: newengine_material_domain_api::LitPipeline,
     settings: ShadowSettings,
 ) -> EngineResult<Option<LightShadowPlan>> {
     let Some(dir_light) = lights::primary_directional_light(world) else {
@@ -260,7 +261,7 @@ fn ensure_shadow_rt(
 }
 
 #[inline]
-pub(super) fn retire_shadow_rt(this: &mut RuntimeRenderController) {
+pub fn retire_shadow_rt(this: &mut RuntimeRenderController) {
     if let Some(old) = this.shadows.render_target.take() {
         this.retire_render_target(old);
     }
@@ -269,7 +270,7 @@ pub(super) fn retire_shadow_rt(this: &mut RuntimeRenderController) {
 }
 
 #[inline]
-pub(super) fn warn_unsupported_point_shadow_once(this: &mut RuntimeRenderController) {
+pub fn warn_unsupported_point_shadow_once(this: &mut RuntimeRenderController) {
     if this.shadows.unsupported_point_warning_emitted {
         return;
     }
@@ -280,7 +281,7 @@ pub(super) fn warn_unsupported_point_shadow_once(this: &mut RuntimeRenderControl
 }
 
 #[inline]
-pub(super) fn warn_unsupported_spot_shadow_once(this: &mut RuntimeRenderController) {
+pub fn warn_unsupported_spot_shadow_once(this: &mut RuntimeRenderController) {
     if this.shadows.unsupported_spot_warning_emitted {
         return;
     }

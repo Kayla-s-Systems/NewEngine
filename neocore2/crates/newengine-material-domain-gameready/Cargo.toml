@@ -1,0 +1,16 @@
+[package]
+name = "newengine-material-domain-gameready"
+version = "0.1.0"
+edition = "2021"
+readme = "README.md"
+description = "GameReady runtime lit material-domain provider for NewEngine"
+
+[dependencies]
+log = "0.4"
+
+newengine-assets = { path = "../newengine-assets" }
+newengine-core = { path = "../newengine-core" }
+newengine-material-domain-api = { path = "../newengine-material-domain-api" }
+newengine-plugin-host = { path = "../newengine-plugin-host" }
+newengine-primitives = { path = "../newengine-primitives" }
+newengine-shader-compiler = { path = "../newengine-shader-compiler" }

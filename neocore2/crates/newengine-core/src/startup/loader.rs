@@ -79,14 +79,7 @@ impl StartupLoader {
 struct RootJson {
     window: Option<WindowJson>,
     engine: Option<EngineJson>,
-    render: Option<RenderJson>,
     plugins: Option<newengine_math::collections_prelude::NeHashMap<String, serde_json::Value>>,
-
-    /// Legacy removed field. UI provider selection is service-discovery driven:
-    /// first registered `newengine.ui.provider.*` wins, otherwise provider=None.
-    /// The key is accepted here only so old config files do not produce noisy
-    /// unknown-root diagnostics. It is intentionally ignored.
-    ui: Option<serde_json::Value>,
 
     #[serde(flatten)]
     extra: newengine_math::collections_prelude::NeHashMap<String, serde_json::Value>,
@@ -128,17 +121,8 @@ struct EngineJson {
     extra: newengine_math::collections_prelude::NeHashMap<String, serde_json::Value>,
 }
 
-#[derive(Deserialize)]
-struct RenderJson {
-    backend: Option<String>,
-
-    #[serde(flatten)]
-    extra: newengine_math::collections_prelude::NeHashMap<String, serde_json::Value>,
-}
-
 
 fn apply_root(cfg: &mut StartupConfig, report: &mut StartupLoadReport, mut src: RootJson) {
-    let _legacy_ui_backend_config = src.ui.take();
     for key in ["CACHE_FILES", "cache_files"] {
         if let Some(v) = src.extra.remove(key) {
             if let Some(path) = v.as_str().map(str::trim).filter(|s| !s.is_empty()) {
@@ -230,29 +214,6 @@ fn apply_root(cfg: &mut StartupConfig, report: &mut StartupLoadReport, mut src: 
         }
     }
 
-    if let Some(render) = src.render {
-        if let Some(backend) = render.backend {
-            apply_string(
-                report,
-                "render_backend",
-                &mut cfg.render_backend,
-                normalize_render_backend_id(&backend),
-            );
-        }
-
-        if !render.extra.is_empty() {
-            let mut keys: Vec<String> = render.extra.keys().cloned().collect();
-            keys.sort();
-            report.overrides.push(StartupOverride {
-                key: "render.*",
-                from: "provided".to_owned(),
-                to: format!(
-                    "ignored plugin-owned render keys: {} (configure renderer via `plugins.<renderer-id>`)",
-                    keys.join(", ")
-                ),
-            });
-        }
-    }
 
 }
 
@@ -322,18 +283,6 @@ fn dedup_plugin_override_report_entries(entries: &mut Vec<StartupPluginOverride>
     *entries = by_id.into_values().collect();
 }
 
-
-fn normalize_render_backend_id(raw: &str) -> String {
-    let trimmed = raw.trim();
-    if trimmed.eq_ignore_ascii_case("vulkan")
-        || trimmed.eq_ignore_ascii_case("vulkan_ash")
-        || trimmed.eq_ignore_ascii_case("newengine.renderer.vulkan")
-    {
-        return "newengine.renderer.vulkan".to_owned();
-    }
-
-    trimmed.to_owned()
-}
 
 fn parse_placement(p: WindowPlacementJson) -> Option<WindowPlacement> {
     let kind = p

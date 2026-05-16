@@ -684,6 +684,7 @@ dependencies = [
  "newengine-core",
  "newengine-ecs",
  "newengine-lighting",
+ "newengine-material-domain-api",
  "newengine-materials",
  "newengine-math",
  "newengine-physics-contracts",
@@ -727,6 +728,7 @@ dependencies = [
  "newengine-core",
  "newengine-engine-runtime",
  "newengine-plugin-host",
+ "newengine-render-feature-gameready",
  "newengine-runtime-host",
  "newengine-scene",
  "newengine-ui",
@@ -738,6 +740,26 @@ name = "newengine-lighting"
 version = "0.1.0"
 dependencies = [
  "newengine-math",
+]
+
+[[package]]
+name = "newengine-material-domain-api"
+version = "0.1.0"
+dependencies = [
+ "newengine-core",
+]
+
+[[package]]
+name = "newengine-material-domain-gameready"
+version = "0.1.0"
+dependencies = [
+ "log",
+ "newengine-assets",
+ "newengine-core",
+ "newengine-material-domain-api",
+ "newengine-plugin-host",
+ "newengine-primitives",
+ "newengine-shader-compiler",
 ]
 
 [[package]]
@@ -860,6 +882,16 @@ dependencies = [
  "newengine-ui-draw",
  "serde",
  "serde_json",
+]
+
+[[package]]
+name = "newengine-render-feature-gameready"
+version = "0.1.0"
+dependencies = [
+ "newengine-core",
+ "newengine-engine-runtime",
+ "newengine-lighting",
+ "newengine-material-domain-gameready",
 ]
 
 [[package]]

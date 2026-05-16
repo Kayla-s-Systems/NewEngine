@@ -3,9 +3,6 @@
     "modules_dir": "plugins",
     "cache_files": "cache"
   },
-  "render": {
-    "backend": "newengine.renderer.vulkan"
-  },
   "plugins": {
     "newengine": {
       "logging": {

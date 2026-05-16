@@ -23,12 +23,11 @@ use super::lights::PackedLights;
 use super::scene::BoundsSnap;
 use super::shadows::{LightShadowPlan, ShadowFrame};
 use super::external_contribution_lowering::lower_external_draw_list_contribution;
-use super::RuntimeRenderController;
+use crate::render_controller::RuntimeRenderController;
 
-pub(super) const PROVIDER_TAG_RUNTIME: &str = "runtime";
-pub(super) const PROVIDER_TAG_BUILTIN: &str = "builtin";
+pub const PROVIDER_TAG_FEATURE: &str = "feature";
 pub(super) const PROVIDER_TAG_PLUGIN: &str = "plugin";
-pub(super) const PROVIDER_CAP_DRAW_LISTS: &str = CAPABILITY_ID_RENDER_DRAW_LIST_PROVIDER;
+pub const PROVIDER_CAP_DRAW_LISTS: &str = CAPABILITY_ID_RENDER_DRAW_LIST_PROVIDER;
 
 const EMPTY_LISTS: &[RenderDrawListKind] = &[];
 const OPAQUE_FORWARD: &[RenderDrawListKind] = &[RenderDrawListKind::OpaqueForward];
@@ -41,20 +40,20 @@ const UI_LIST: &[RenderDrawListKind] = &[RenderDrawListKind::Ui];
 static WARNED_PLUGIN_PROVIDER_BRIDGE: AtomicBool = AtomicBool::new(false);
 
 #[derive(Clone, Copy, Debug)]
-pub(super) struct RenderDrawListProviderMetadata {
-    pub(super) id: &'static str,
-    pub(super) label: &'static str,
-    pub(super) tags: &'static [&'static str],
-    pub(super) capabilities: &'static [&'static str],
+pub struct RenderDrawListProviderMetadata {
+    pub id: &'static str,
+    pub label: &'static str,
+    pub tags: &'static [&'static str],
+    pub capabilities: &'static [&'static str],
 }
 
 impl RenderDrawListProviderMetadata {
     #[inline]
-    pub(super) fn runtime_builtin(id: &'static str, label: &'static str) -> Self {
+    pub fn feature(id: &'static str, label: &'static str) -> Self {
         Self {
             id,
             label,
-            tags: &[PROVIDER_TAG_RUNTIME, PROVIDER_TAG_BUILTIN],
+            tags: &[PROVIDER_TAG_FEATURE],
             capabilities: &[PROVIDER_CAP_DRAW_LISTS],
         }
     }
@@ -84,21 +83,34 @@ struct PluginDrawListProviderJson {
     method: Option<String>,
 }
 
-pub(super) struct RenderDrawListProviderRegistry {
+pub(crate) struct RenderDrawListProviderRegistry {
     providers: Vec<Arc<dyn RenderDrawListProvider>>,
     external_providers: Vec<ExternalRenderDrawListProviderDesc>,
 }
 
 impl RenderDrawListProviderRegistry {
     #[inline]
-    pub(super) fn new() -> Self {
+    pub(crate) fn new() -> Self {
         Self {
             providers: Vec::new(),
             external_providers: Vec::new(),
         }
     }
 
-    pub(super) fn register_provider(&mut self, provider: Arc<dyn RenderDrawListProvider>) {
+    #[inline]
+    pub(crate) fn from_runtime_providers(providers: Vec<Arc<dyn RenderDrawListProvider>>) -> Self {
+        Self {
+            providers,
+            external_providers: Vec::new(),
+        }
+    }
+
+    #[inline]
+    pub(crate) fn runtime_provider_arcs(&self) -> Vec<Arc<dyn RenderDrawListProvider>> {
+        self.providers.clone()
+    }
+
+    pub(crate) fn register_provider(&mut self, provider: Arc<dyn RenderDrawListProvider>) {
         let id = provider.id();
         if self.providers.iter().any(|existing| existing.id() == id) {
             log::warn!(
@@ -111,7 +123,7 @@ impl RenderDrawListProviderRegistry {
         self.providers.push(provider);
     }
 
-    pub(super) fn register_external_provider(&mut self, provider: ExternalRenderDrawListProviderDesc) {
+    pub(crate) fn register_external_provider(&mut self, provider: ExternalRenderDrawListProviderDesc) {
         if self
             .external_providers
             .iter()
@@ -133,7 +145,7 @@ impl RenderDrawListProviderRegistry {
         self.external_providers.push(provider);
     }
 
-    pub(super) fn sync_plugin_capabilities(&mut self, snapshot: &PluginsSnapshot) {
+    pub(crate) fn sync_plugin_capabilities(&mut self, snapshot: &PluginsSnapshot) {
         for plugin in snapshot.plugins.iter() {
             for capability in plugin.capabilities.iter() {
                 if capability.role != CapabilityRole::Provides {
@@ -161,14 +173,14 @@ impl RenderDrawListProviderRegistry {
     }
 
     #[inline]
-    pub(super) fn providers(&self) -> Vec<&dyn RenderDrawListProvider> {
+    pub(crate) fn providers(&self) -> Vec<&dyn RenderDrawListProvider> {
         self.providers
             .iter()
             .map(|provider| provider.as_ref() as &dyn RenderDrawListProvider)
             .collect()
     }
 
-    pub(super) fn add_external_draw_lists(
+    pub(crate) fn add_external_draw_lists(
         &self,
         visibility: RuntimeVisibilityPlan,
         out: &mut RuntimeDrawListSet,
@@ -182,7 +194,7 @@ impl RenderDrawListProviderRegistry {
         }
     }
 
-    pub(super) fn extract_external_providers(
+    pub(crate) fn extract_external_providers(
         &self,
         ctx: &SceneExtractionCtx<'_>,
         lists: &RuntimeDrawListSet,
@@ -275,7 +287,7 @@ impl RenderDrawListProviderRegistry {
     }
 
     #[inline]
-    pub(super) fn labels(&self) -> Vec<String> {
+    pub(crate) fn labels(&self) -> Vec<String> {
         let mut out = Vec::with_capacity(self.providers.len() + self.external_providers.len());
         for provider in self.providers.iter() {
             let metadata = provider.metadata();
@@ -300,7 +312,7 @@ impl RenderDrawListProviderRegistry {
         out
     }
 
-    pub(super) fn validate_routes(
+    pub(crate) fn validate_routes(
         &self,
         report: &DrawListRouteValidationReport,
     ) -> EngineResult<()> {

@@ -1,8 +1,6 @@
 use newengine_core::render::{RenderBackendCapabilities, RenderWorkBudget};
 
-pub const DEFAULT_RENDER_BACKEND_ID: &str = "newengine.renderer.vulkan";
-pub const NULL_RENDER_BACKEND_ID: &str = "newengine.renderer.null";
-pub const DEFAULT_RENDER_BACKEND_CLEAR_COLOR: [f32; 4] = [0.0, 0.0, 0.0, 1.0];
+pub const RENDER_BACKEND_CAPABILITY_ID: &str = "render.backend";
 
 #[derive(Debug, Clone)]
 pub struct ResolvedRenderBackendConfig {

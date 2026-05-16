@@ -51,7 +51,6 @@ pub struct StartupConfig {
     /// must resolve their cache files through this path.
     pub cache_files: PathBuf,
 
-    pub render_backend: String,
 
     /// Raw plugin override roots from the `plugins` object in `config.json`.
     ///
@@ -81,7 +80,6 @@ impl Default for StartupConfig {
             modules_dir: PathBuf::from("plugins"),
             cache_files: PathBuf::from(crate::cache_files::DEFAULT_CACHE_FILES_DIR),
 
-            render_backend: "newengine.renderer.vulkan".to_owned(),
 
             plugins: HashMap::default(),
 
