@@ -65,6 +65,8 @@ pub fn upload_primitive_mesh(
         vb,
         ib,
         index_count: mesh.indices.len() as u32,
+        bounds_center: mesh.bounds_center,
+        bounds_radius: mesh.bounds_radius.max(0.001),
     })
 }
 

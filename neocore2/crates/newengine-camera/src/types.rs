@@ -74,10 +74,11 @@ impl CameraMatrices {
     }
 }
 
-/// Fully resolved renderer-facing camera frame.
+/// Fully resolved camera frame produced by camera directors/runtime.
 ///
-/// Render backends and editor overlays should consume this value, not reassemble camera state
-/// from loosely related pose/projection globals.
+/// Render backends should not consume this implementation type directly. The engine.camera
+/// gateway publishes a protocol snapshot and the host bridge lowers that snapshot into a
+/// renderer-neutral view frame.
 #[derive(Clone, Copy, Debug)]
 pub struct CameraFrame {
     pub channel: CameraChannelState,

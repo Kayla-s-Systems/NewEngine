@@ -17,6 +17,9 @@ pub(crate) mod plugin_forward_logger;
 pub(crate) mod log_fmt;
 pub(crate) mod path_fmt;
 pub mod render;
+pub mod camera {
+    pub use newengine_camera_api::*;
+}
 pub mod physics;
 pub mod run_id;
 pub mod sched;

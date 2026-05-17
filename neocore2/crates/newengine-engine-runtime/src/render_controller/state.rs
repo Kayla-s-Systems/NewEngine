@@ -1,6 +1,5 @@
 #![forbid(unsafe_op_in_unsafe_fn)]
 
-use newengine_camera::{Perspective, Projection};
 use newengine_core::host_events::CursorState;
 use newengine_core::render::{Extent2D, RenderTargetId, SamplerId, TextureId};
 use newengine_math::collections::FxHashMap;
@@ -25,12 +24,6 @@ use super::resource_lifetime::RenderTargetLifetimeQueue;
 type PrimGpuCache = FxHashMap<newengine_primitives::PrimitiveId, PrimitiveGpu>;
 type TerrainGpuCache = FxHashMap<u64, PrimitiveGpu>;
 
-#[derive(Clone, Copy, Debug)]
-pub(super) struct PlaySessionSnapshot {
-    pub(super) cam_id: newengine_ecs::EntityId,
-    pub(super) rig: newengine_sim::CameraRigComp,
-    pub(super) transform: Option<newengine_transform::Transform>,
-}
 
 #[derive(Clone, Copy)]
 pub struct PerDrawUbo {
@@ -98,7 +91,6 @@ pub(super) struct RenderViewportState {
     pub(super) last_vp_w: u32,
     pub(super) last_vp_h: u32,
     pub(super) last_aspect: f32,
-    pub(super) projection: Projection,
     pub(super) pass_disabled: bool,
     pub(super) render_target: Option<RenderTargetId>,
     pub(super) render_target_extent: Extent2D,
@@ -115,12 +107,6 @@ impl RenderViewportState {
             last_vp_w: 0,
             last_vp_h: 0,
             last_aspect: 1.0,
-            projection: Projection::Perspective(Perspective::new(
-                60.0f32.to_radians(),
-                1.0,
-                0.01,
-                1000.0,
-            )),
             pass_disabled: false,
             render_target: None,
             render_target_extent: Extent2D::new(0, 0),
@@ -138,6 +124,7 @@ pub(super) struct RenderShadowRuntimeState {
     pub(super) last_refresh_frame: u64,
     pub(super) refresh_period_frames: u64,
     pub(super) warmup_defer_frames_remaining: u8,
+    pub(super) current_caster_cull: Option<super::module_impl::shadows::ShadowCasterCull>,
     pub(super) unsupported_point_warning_emitted: bool,
     pub(super) unsupported_spot_warning_emitted: bool,
 }
@@ -152,6 +139,7 @@ impl RenderShadowRuntimeState {
             last_refresh_frame: 0,
             refresh_period_frames: 90,
             warmup_defer_frames_remaining: super::render_quality::SHADOW_WARMUP_DEFER_FRAMES,
+            current_caster_cull: None,
             unsupported_point_warning_emitted: false,
             unsupported_spot_warning_emitted: false,
         }
@@ -289,9 +277,6 @@ pub(super) struct RenderFrameRuntimeState {
     pub(super) last_pick_seq: u64,
     pub(super) sim_schedule: newengine_sim::SimSchedule,
     pub(super) last_play_mode: crate::GameRunMode,
-    pub(super) camera_nav: newengine_camera_runtime::CameraNavState,
-    pub(super) play_session: Option<PlaySessionSnapshot>,
-    pub(super) runtime_session: Option<crate::gameplay::RuntimeWorldSnapshot>,
 }
 
 impl RenderFrameRuntimeState {
@@ -302,9 +287,6 @@ impl RenderFrameRuntimeState {
             last_pick_seq: 0,
             sim_schedule: crate::gameplay::default_sim_schedule(),
             last_play_mode: crate::GameRunMode::Staging,
-            camera_nav: newengine_camera_runtime::CameraNavState::default(),
-            play_session: None,
-            runtime_session: None,
         }
     }
 }

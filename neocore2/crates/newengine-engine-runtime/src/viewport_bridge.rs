@@ -272,9 +272,9 @@ impl ViewportBridge {
         self.frame_all.load(Ordering::Acquire) != 0
     }
 
-    /// Publish camera matrices and current viewport size (renderer -> UI).
+    /// Publish active view matrices and current viewport size (runtime -> UI).
     #[inline]
-    pub fn publish_camera_frame(&self, view: Mat4, proj: Mat4, vp_w: u32, vp_h: u32) {
+    pub fn publish_view_frame(&self, view: Mat4, proj: Mat4, vp_w: u32, vp_h: u32) {
         let viewproj = proj * view;
         let inv_viewproj = viewproj.inverse();
         *self.camera_frame.lock() = Some(ViewportCameraFrame {

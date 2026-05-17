@@ -8,12 +8,6 @@ pub struct BoundsSnap {
     pub radius: f32,
 }
 
-#[derive(Clone, Copy, Debug)]
-pub(super) struct SelectionBoundsSnap {
-    pub center: Vec3,
-    pub radius: f32,
-}
-
 #[inline]
 pub(super) fn default_bounds() -> BoundsSnap {
     BoundsSnap {
@@ -40,12 +34,12 @@ pub(super) fn scene_bounds_world(world: &newengine_ecs::World) -> Option<BoundsS
 pub(super) fn selection_bounds_world(
     world: &newengine_ecs::World,
     sel: Option<newengine_ecs::EntityId>,
-) -> Option<SelectionBoundsSnap> {
+) -> Option<BoundsSnap> {
     let e = sel?;
     let b = newengine_scene::selection_world_bounds(world, [e].into_iter())?;
     let c = b.center();
     let r = b.half_extents().length().max(0.001);
-    Some(SelectionBoundsSnap {
+    Some(BoundsSnap {
         center: c,
         radius: r,
     })

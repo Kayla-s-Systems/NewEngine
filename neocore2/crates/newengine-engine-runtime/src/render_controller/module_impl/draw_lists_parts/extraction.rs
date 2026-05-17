@@ -36,7 +36,7 @@ pub struct SceneExtractionCtx<'a> {
     pub scene: &'a newengine_scene::Scene,
     pub lit: newengine_material_domain_api::LitPipeline,
     pub viewproj: Mat4,
-    pub rig: &'a newengine_camera::CameraRig,
+    pub camera_position: newengine_math::Vec3,
     pub bounds: BoundsSnap,
     pub lights: PackedLights,
     pub shadow_plan: LightShadowPlan,
@@ -77,7 +77,7 @@ pub trait RenderDrawListProvider: Send + Sync {
 }
 
 #[derive(Clone, Debug)]
-pub(in crate::render_controller::module_impl) struct RuntimeDrawListSet {
+pub(crate) struct RuntimeDrawListSet {
     lists: Vec<RuntimeDrawList>,
 }
 

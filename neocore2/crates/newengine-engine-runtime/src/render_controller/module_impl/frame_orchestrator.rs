@@ -4,7 +4,6 @@ use newengine_core::render::{
     Extent2D, RectI32, RenderApi, RenderFrameDebugSnapshot, RenderTargetId, Viewport,
 };
 use crate::gameplay::GameRunMode;
-use newengine_camera_runtime::CameraManagerResource;
 use newengine_core::EngineResult;
 use newengine_render_frame_graph::{standard_runtime_frame, StandardRuntimePipelineDesc};
 use newengine_scene::Scene;
@@ -15,6 +14,7 @@ use super::frame_envelope_builder::build_runtime_frame_envelope;
 use super::frame_submit::submit_frame_envelope;
 use super::frame_types::{PlayableFrameOutcome, RenderFrameScope, WorldFrameState};
 use super::{lights, passes, picking, postfx, scene, shadows};
+use crate::camera_gateway::{apply_view_postfx, CameraTransitionPhase};
 use super::super::controller::RuntimeRenderController;
 
 pub(super) struct RenderFrameOrchestrator;
@@ -31,13 +31,13 @@ impl RenderFrameOrchestrator {
         scope: RenderFrameScope,
         world_frame: &WorldFrameState,
     ) -> EngineResult<PlayableFrameOutcome> {
-        let camera = &world_frame.camera_frame;
-        let rig = camera.rig;
-        let viewproj = camera.matrices.view_proj;
-        passes::publish_camera_spawn(&controller.bridges.viewport, &rig);
-        controller.bridges.viewport.publish_camera_frame(
-            camera.matrices.view,
-            camera.matrices.proj,
+        let view_frame = &world_frame.view_frame;
+        let view = view_frame.view;
+        let viewproj = view.view_projection;
+        passes::publish_camera_spawn(&controller.bridges.viewport, view.position_ws, view.forward_ws);
+        controller.bridges.viewport.publish_view_frame(
+            view.view,
+            view.projection,
             scope.vp_w,
             scope.vp_h,
         );
@@ -52,7 +52,7 @@ impl RenderFrameOrchestrator {
             }
         };
 
-        let camera_position = [rig.position.x, rig.position.y, rig.position.z];
+        let camera_position = [view.position_ws.x, view.position_ws.y, view.position_ws.z];
         let base_lights = lights::collect_lights(scene.world()).with_camera_position(camera_position);
         let extent = Extent2D::new(scope.vp_w, scope.vp_h);
         let shadow_plan = match shadows::build_light_shadow_plan(
@@ -76,15 +76,16 @@ impl RenderFrameOrchestrator {
         };
 
         let render_shadow_map = controller.should_render_shadow_map_this_frame(shadow_plan);
+        controller.set_shadow_caster_cull(if render_shadow_map { shadow_plan.caster_cull } else { None });
         Self::trace_shadow_plan(controller, scope.trace_frame, shadow_plan, render_shadow_map);
 
         let shadow_frame = shadow_plan.frame;
-        let world_lights = base_lights.with_shadow(shadow_frame.light_mvp, shadow_frame.params);
+        let world_lights = base_lights.with_shadow(shadow_frame.light_mvp, shadow_frame.params, shadow_frame.extra);
         let extraction = SceneExtractionCtx {
             scene,
             lit,
             viewproj: viewproj,
-            rig: &rig,
+            camera_position: view.position_ws,
             bounds,
             lights: world_lights,
             shadow_plan,
@@ -92,7 +93,7 @@ impl RenderFrameOrchestrator {
             render_shadow_map,
             viewport_extent: extent,
             surface_extent: Extent2D::new(scope.w, scope.h),
-            runtime: world_frame.effective_play_mode.is_runtime(),
+            runtime: view_frame.effective_play_mode.is_runtime(),
             debug_overlays: false,
             ui,
         };
@@ -161,7 +162,10 @@ impl RenderFrameOrchestrator {
             )?;
         }
 
-        let postfx = postfx::game_sun_postfx_params(scene.world(), viewproj, rig.position);
+        let postfx = apply_view_postfx(
+            postfx::game_sun_postfx_params(scene.world(), viewproj, view.position_ws),
+            view_frame.postfx,
+        );
         let frame_envelope = build_runtime_frame_envelope(
             controller.frame.frame_index,
             controller.viewport.clear_color,
@@ -188,21 +192,29 @@ impl RenderFrameOrchestrator {
         controller.diagnostics.overlay_metrics.record_graph_submit(submit_report.clone());
 
         let mut debug_notes = Vec::new();
-        if let Some(report) = scene
-            .world()
-            .resource::<CameraManagerResource>()
-            .map(|manager| manager.report())
-        {
-            controller.diagnostics.overlay_metrics.record_camera_report(report);
+        if let Some(report) = view_frame.report.clone() {
+            controller.diagnostics.overlay_metrics.record_camera_report(report.clone());
             debug_notes.push(format!(
-                "camera director={:?} mode={:?} input={:?} gate_blocked={} blend_active={} blend_alpha={:.3}",
+                "camera director={} mode={} dominant={:?} rendered={} input={} lock={} gate_blocked={} blend_active={} blend_alpha={:.3} events={}",
                 report.active_director,
                 report.active_mode,
+                report.dominant_director,
+                report.rendered_director_count,
                 report.input_context,
+                report.director_lock_input,
                 report.gate_blocked,
                 report.frame_blend_active,
                 report.frame_blend_alpha,
+                report.pending_event_count,
             ));
+            if report.transition.phase != CameraTransitionPhase::Idle {
+                debug_notes.push(format!(
+                    "camera transition {:?} {:.2}s target={:?}",
+                    report.transition.phase,
+                    report.transition.elapsed_sec,
+                    report.target_entity,
+                ));
+            }
         }
 
         Ok(PlayableFrameOutcome::Continue {

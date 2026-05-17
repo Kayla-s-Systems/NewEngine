@@ -31,10 +31,47 @@ impl ShadowLightKind {
 }
 
 #[derive(Clone, Copy, Debug)]
+pub struct ShadowCasterCull {
+    pub light_view: Mat4,
+    pub half_extent_xy: f32,
+    pub near: f32,
+    pub far: f32,
+}
+
+impl ShadowCasterCull {
+    #[inline]
+    pub fn directional(light_view: Mat4, half_extent_xy: f32, near: f32, far: f32) -> Self {
+        Self {
+            light_view,
+            half_extent_xy: half_extent_xy.max(0.001),
+            near: near.max(0.001),
+            far: far.max(near.max(0.001) + 0.001),
+        }
+    }
+
+    #[inline]
+    pub fn contains_sphere(self, center_ws: Vec3, radius_ws: f32) -> bool {
+        let radius_ws = radius_ws.abs().max(0.001);
+        let p = self.light_view.transform_point3(center_ws);
+        if p.x.abs() > self.half_extent_xy + radius_ws {
+            return false;
+        }
+        if p.y.abs() > self.half_extent_xy + radius_ws {
+            return false;
+        }
+        // Right-handed look_at shadow view looks down -Z; visible range is [-far, -near].
+        p.z <= -self.near + radius_ws && p.z >= -self.far - radius_ws
+    }
+}
+
+#[derive(Clone, Copy, Debug)]
 pub struct ShadowFrame {
     pub texture: TextureId,
     pub light_mvp: Mat4,
+    /// x: enabled, y: receiver depth bias, z: contact strength, w: PCF softness.
     pub params: [f32; 4],
+    /// x: normal bias in shadow-depth units, y: cascade count, z/w: reserved for atlas/cascade metadata.
+    pub extra: [f32; 4],
 }
 
 impl ShadowFrame {
@@ -44,6 +81,7 @@ impl ShadowFrame {
             texture: fallback,
             light_mvp: Mat4::IDENTITY,
             params: [0.0, 0.0, 0.0, 0.0],
+            extra: [0.0, 0.0, 0.0, 0.0],
         }
     }
 }
@@ -55,6 +93,7 @@ pub struct LightShadowPlan {
     pub target: Option<RenderTargetId>,
     pub resolution: u32,
     pub frame: ShadowFrame,
+    pub caster_cull: Option<ShadowCasterCull>,
 }
 
 impl LightShadowPlan {
@@ -66,6 +105,7 @@ impl LightShadowPlan {
             target: None,
             resolution: 1,
             frame: ShadowFrame::disabled(fallback),
+            caster_cull: None,
         }
     }
 
@@ -77,11 +117,20 @@ impl LightShadowPlan {
             target: None,
             resolution: resolution.max(1),
             frame: ShadowFrame::disabled(fallback),
+            caster_cull: None,
         }
     }
 
     #[inline]
-    pub fn directional(target: RenderTargetId, texture: TextureId, resolution: u32, light_mvp: Mat4, params: [f32; 4]) -> Self {
+    pub fn directional(
+        target: RenderTargetId,
+        texture: TextureId,
+        resolution: u32,
+        light_mvp: Mat4,
+        params: [f32; 4],
+        extra: [f32; 4],
+        caster_cull: Option<ShadowCasterCull>,
+    ) -> Self {
         Self {
             light_kind: Some(ShadowLightKind::Directional),
             supported: true,
@@ -91,7 +140,9 @@ impl LightShadowPlan {
                 texture,
                 light_mvp,
                 params,
+                extra,
             },
+            caster_cull,
         }
     }
 
@@ -205,7 +256,9 @@ pub fn try_build_directional_shadow_plan(
     let eye = center - dir * (radius * 1.75);
     let up = if dir.dot(Vec3::Y).abs() > 0.92 { Vec3::Z } else { Vec3::Y };
     let view = Mat4::look_at_rh(eye, center, up);
-    let proj = Mat4::orthographic_rh(-radius, radius, -radius, radius, 0.1, radius * 4.0);
+    let near = 0.1;
+    let far = radius * 4.0;
+    let proj = Mat4::orthographic_rh(-radius, radius, -radius, radius, near, far);
     let light_mvp = proj * view;
     let params = [
         1.0,
@@ -213,6 +266,11 @@ pub fn try_build_directional_shadow_plan(
         settings.contact_strength.clamp(0.0, super::super::render_quality::SHADOW_STRENGTH_MAX),
         settings.softness.clamp(0.0, super::super::render_quality::SHADOW_SOFTNESS_MAX),
     ];
+    // Convert artist/profile normal bias into shadow-depth units. The shader
+    // multiplies this by receiver slope, so the default 0.015 remains close to
+    // the previous hardcoded 0.00018 depth offset but is now scene-controllable.
+    let extra = [settings.normal_bias.clamp(0.0, 0.5) * 0.012, 1.0, 0.0, 0.0];
+    let caster_cull = Some(ShadowCasterCull::directional(view, radius, near, far));
 
     Ok(Some(LightShadowPlan::directional(
         rt,
@@ -220,6 +278,8 @@ pub fn try_build_directional_shadow_plan(
         settings.resolution,
         light_mvp,
         params,
+        extra,
+        caster_cull,
     )))
 }
 

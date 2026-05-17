@@ -19,18 +19,18 @@ use super::lights::PackedLights;
 use crate::render_controller::RuntimeRenderController;
 use crate::gameplay::display_visible_in_mode;
 use crate::scene_bridge::TerrainSurfaceLayers;
-use self::mesh_visibility::{distance_sq_to_camera, primitive_budget, sort_by_distance_then_key};
+use self::mesh_visibility::{
+    distance_sq_to_camera, primitive_budget, shadow_caster_visible, sort_by_distance_then_key,
+    transform_sphere,
+};
 use newengine_procedural_noise::ProceduralTerrain;
 
 pub(super) fn publish_camera_spawn(
     bridge: &crate::viewport_bridge::ViewportBridge,
-    rig: &newengine_camera::CameraRig,
+    camera_position: Vec3,
+    camera_forward: Vec3,
 ) {
-    let view = rig.view_matrix();
-    let inv_view = view.inverse();
-    let cam_pos = Vec3::new(inv_view.w_axis.x, inv_view.w_axis.y, inv_view.w_axis.z);
-    let cam_fwd = -Vec3::new(inv_view.z_axis.x, inv_view.z_axis.y, inv_view.z_axis.z);
-    bridge.publish_camera_spawn(cam_pos, cam_fwd);
+    bridge.publish_camera_spawn(camera_position, camera_forward);
 }
 
 
@@ -386,6 +386,11 @@ pub fn draw_procedural_terrain_shadow(
         if !material_plan.cast_shadows {
             continue;
         }
+        let local_bounds = terrain.heightfield.local_bounds();
+        let (center_ws, radius_ws) = transform_sphere(model, local_bounds.center(), local_bounds.half_extents().length());
+        if !shadow_caster_visible(this.shadows_current_cull(), center_ws, radius_ws) {
+            continue;
+        }
 
         let mesh_key = terrain.mesh_key();
         let gpu = if let Some(gpu) = this.gpu.meshes.terrain_cache.get(&mesh_key).copied() {
@@ -480,6 +485,10 @@ pub fn draw_primitives_shadow(
         }
 
         let gpu = ensure_primitive_gpu(&reg, prim.id, &mut this.gpu.meshes.prim_cache, r)?;
+        let (center_ws, radius_ws) = transform_sphere(model, gpu.bounds_center, gpu.bounds_radius);
+        if !shadow_caster_visible(this.shadows_current_cull(), center_ws, radius_ws) {
+            continue;
+        }
         let pipeline = if material_plan.double_sided {
             lit.shadow_instanced_double_sided_pipeline
         } else {

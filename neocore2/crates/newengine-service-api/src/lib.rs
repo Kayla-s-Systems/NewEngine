@@ -84,6 +84,7 @@ impl BackendServiceSpec {
 pub enum EngineServiceKind {
     Assets,
     Render,
+    Camera,
     Physics,
     Input,
     Ui,
@@ -97,6 +98,7 @@ impl EngineServiceKind {
         match self {
             Self::Assets => "assets",
             Self::Render => "render",
+            Self::Camera => "camera",
             Self::Physics => "physics",
             Self::Input => "input",
             Self::Ui => "ui",
@@ -110,6 +112,7 @@ impl EngineServiceKind {
         match value.trim().to_ascii_lowercase().as_str() {
             "assets" => Some(Self::Assets),
             "render" => Some(Self::Render),
+            "camera" => Some(Self::Camera),
             "physics" => Some(Self::Physics),
             "input" => Some(Self::Input),
             "ui" => Some(Self::Ui),

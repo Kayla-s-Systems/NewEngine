@@ -22,6 +22,7 @@ serde_json = "1"
 newengine-assets = { path = "../newengine-assets" }
 newengine-bounds = { path = "../newengine-bounds" }
 newengine-camera = { path = "../newengine-camera" }
+newengine-camera-api = { path = "../newengine-camera-api" }
 newengine-camera-runtime = { path = "../newengine-camera-runtime" }
 newengine-core = { path = "../newengine-core" }
 newengine-ecs = { path = "../newengine-ecs" }

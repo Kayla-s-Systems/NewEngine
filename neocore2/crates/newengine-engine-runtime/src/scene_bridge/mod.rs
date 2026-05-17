@@ -30,6 +30,7 @@ use newengine_primitives::{builtins, Primitive, PrimitiveId, PrimitiveRegistry};
 use newengine_scene::{spawn_named, Scene, SceneAsset};
 use newengine_transform::Transform;
 
+use crate::camera_gateway::CameraGatewayBridge;
 use crate::gameplay::{
     ensure_physics_body, remove_physics_body, spawn_default_player, DisplayMode,
     DisplayVisibility, GameRunMode,
@@ -56,6 +57,7 @@ pub struct SceneBridge {
     primitives: Arc<RwLock<PrimitiveRegistry>>,
     materials: Arc<RwLock<MaterialRegistry>>,
     asset_assemblers: Arc<RwLock<Vec<SceneImportedAssetAssembler>>>,
+    camera_gateway: Arc<CameraGatewayBridge>,
     play_mode: Arc<Mutex<GameRunMode>>,
 }
 impl SceneBridge {
@@ -85,6 +87,7 @@ impl SceneBridge {
             primitives,
             materials,
             asset_assemblers: Arc::new(RwLock::new(builtin_asset_assemblers())),
+            camera_gateway: Arc::new(CameraGatewayBridge::new()),
             play_mode: Arc::new(Mutex::new(initial_mode)),
         }
     }
@@ -102,6 +105,11 @@ impl SceneBridge {
     #[inline]
     pub fn materials(&self) -> Arc<RwLock<MaterialRegistry>> {
         Arc::clone(&self.materials)
+    }
+
+    #[inline]
+    pub fn camera_gateway(&self) -> Arc<CameraGatewayBridge> {
+        Arc::clone(&self.camera_gateway)
     }
 
     pub fn bootstrap_game_ready_scene_now(&self) -> Option<EntityId> {

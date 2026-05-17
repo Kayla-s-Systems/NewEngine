@@ -136,7 +136,7 @@ impl RenderDrawListProvider for GameReadyPrimitiveMeshProvider {
                     ctx.shadow_frame.light_mvp,
                     &ctx.lights,
                     ctx.runtime,
-                    ctx.rig.position,
+                    ctx.camera_position,
                 )
             })?;
         }
@@ -151,7 +151,7 @@ impl RenderDrawListProvider for GameReadyPrimitiveMeshProvider {
                 &ctx.lights,
                 ctx.shadow_frame.texture,
                 ctx.runtime,
-                ctx.rig.position,
+                ctx.camera_position,
             )
         })?;
 

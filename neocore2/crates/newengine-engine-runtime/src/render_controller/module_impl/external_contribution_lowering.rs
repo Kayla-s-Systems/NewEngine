@@ -279,6 +279,13 @@ fn lower_single_gpu_mesh_instance(
         lit.clamp_sampler
     };
 
+    if matches!(draw_list, RenderDrawListKind::ShadowCasters) {
+        let (center_ws, radius_ws) = conservative_model_sphere(model);
+        if !ctx.shadow_plan.caster_cull.map(|c| c.contains_sphere(center_ws, radius_ws)).unwrap_or(true) {
+            return Ok(());
+        }
+    }
+
     let shadow_texture = if matches!(draw_list, RenderDrawListKind::ShadowCasters) || !material.receive_shadows {
         lit.white_texture
     } else {
@@ -370,3 +377,12 @@ fn stable_u64(value: &str) -> u64 {
     hash
 }
 
+
+#[inline]
+fn conservative_model_sphere(model: Mat4) -> (Vec3, f32) {
+    let center = model.transform_point3(Vec3::ZERO);
+    let sx = model.x_axis.truncate().length();
+    let sy = model.y_axis.truncate().length();
+    let sz = model.z_axis.truncate().length();
+    (center, sx.max(sy).max(sz).max(0.001) * 1.75)
+}

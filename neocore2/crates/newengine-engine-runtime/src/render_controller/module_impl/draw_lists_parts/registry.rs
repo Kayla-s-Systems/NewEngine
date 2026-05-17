@@ -5,7 +5,7 @@ use std::sync::Arc;
 
 use newengine_core::render::{
     DrawListProviderExtractRequest, DrawListProviderExtractResponse, FrameGraphRoute,
-    FrameGraphRoutes, RenderBoundsSnapshot, RenderCameraSnapshot, RenderDrawListKind,
+    FrameGraphRoutes, RenderBoundsSnapshot, RenderViewSnapshot, RenderDrawListKind,
     SceneExtractionSnapshot, VisibilityMask, Extent2D, RectI32, RenderApi, Viewport,
 };
 use newengine_core::EngineResult;
@@ -60,7 +60,7 @@ impl RenderDrawListProviderMetadata {
 }
 
 #[derive(Clone, Debug)]
-pub(in crate::render_controller::module_impl) struct ExternalRenderDrawListProviderDesc {
+pub(crate) struct ExternalRenderDrawListProviderDesc {
     pub(super) id: String,
     pub(super) plugin_id: String,
     pub(super) label: String,

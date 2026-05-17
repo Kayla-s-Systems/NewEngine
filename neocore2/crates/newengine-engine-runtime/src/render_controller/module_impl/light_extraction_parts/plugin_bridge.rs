@@ -8,7 +8,7 @@ fn build_light_provider_request(ctx: &LightExtractionCtx<'_>) -> LightExtraction
                 center: [ctx.bounds.center.x, ctx.bounds.center.y, ctx.bounds.center.z],
                 radius: ctx.bounds.radius,
             },
-            camera: RenderCameraSnapshot {
+            view: RenderViewSnapshot {
                 view_projection_cols: ctx.viewproj.to_cols_array_2d(),
                 position_ws: ctx.camera_position,
             },
@@ -21,6 +21,8 @@ fn build_light_provider_request(ctx: &LightExtractionCtx<'_>) -> LightExtraction
             bias: ctx.settings.bias,
             softness: ctx.settings.softness,
             contact_strength: ctx.settings.contact_strength,
+            normal_bias: ctx.settings.normal_bias,
+            cascade_count: 1,
         },
         backend: BackendShadowCapabilities {
             directional_depth_map: true,
@@ -28,6 +30,8 @@ fn build_light_provider_request(ctx: &LightExtractionCtx<'_>) -> LightExtraction
             point_cube_map: false,
             spot_depth_map: false,
             max_shadow_resolution: ctx.settings.resolution,
+            max_directional_cascades: 1,
+            shadow_atlas: false,
         },
     }
 }
@@ -62,7 +66,7 @@ fn light_plan_from_contribution(
 
     match kind {
         super::shadows::ShadowLightKind::Directional => {
-            LightShadowPlan::directional(rt, tex, resolution, mvp, contribution.params)
+            LightShadowPlan::directional(rt, tex, resolution, mvp, contribution.params, contribution.extra, None)
         }
         super::shadows::ShadowLightKind::Point | super::shadows::ShadowLightKind::Spot => {
             LightShadowPlan::unsupported(kind, fallback, resolution)

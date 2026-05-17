@@ -25,6 +25,8 @@ layout(set = 0, binding = 0, std140) uniform Ubo {
     mat4 u_light_mvp;
     // x: enabled, y: base bias, z: shadow/contact strength, w: PCF softness radius
     vec4 u_shadow_params;
+    // x: normal bias in shadow-depth units, y: cascade count, z/w: reserved for atlas/cascade metadata
+    vec4 u_shadow_extra;
 } ubo;
 layout(set = 0, binding = 1) uniform texture2D u_base_tex;
 layout(set = 0, binding = 2) uniform texture2D u_normal_tex;
@@ -62,6 +64,23 @@ float shadow_tap(vec2 uv, float current, float bias) {
     return (current - bias <= closest) ? 1.0 : 0.0;
 }
 
+float shadow_blocker_depth(vec2 uv, float current, float bias, vec2 texel) {
+    float blocker_sum = 0.0;
+    float blocker_count = 0.0;
+    const vec2 taps[8] = vec2[8](
+        vec2(-1.5, -0.5), vec2(-0.5, -1.5), vec2(0.5, -1.5), vec2(1.5, -0.5),
+        vec2(1.5, 0.5), vec2(0.5, 1.5), vec2(-0.5, 1.5), vec2(-1.5, 0.5)
+    );
+    for (int i = 0; i < 8; ++i) {
+        float d = texture(sampler2D(u_shadow_tex, u_material_sampler), clamp(uv + taps[i] * texel, vec2(0.001), vec2(0.999))).r;
+        if (d < current - bias && d < 0.9995) {
+            blocker_sum += d;
+            blocker_count += 1.0;
+        }
+    }
+    return blocker_count > 0.5 ? blocker_sum / blocker_count : -1.0;
+}
+
 float shadow_compare_quality(vec2 uv, float current, float bias) {
     float radius = clamp(ubo.u_shadow_params.w, 0.0, 1.25);
     if (radius <= 0.05) {
@@ -71,28 +90,31 @@ float shadow_compare_quality(vec2 uv, float current, float bias) {
     ivec2 sz = textureSize(sampler2D(u_shadow_tex, u_material_sampler), 0);
     vec2 texel = max(radius, 0.35) / vec2(max(sz.x, 1), max(sz.y, 1));
 
-    // Dynamic quality: hard/low softness uses 1 tap, normal gameplay uses 4 taps,
-    // high softness keeps the old tent 3x3. This removes the constant 9-tap cost
-    // that made shadows disproportionately expensive on the forward path.
-    if (radius <= 0.75) {
+    // PCSS-lite: first estimate blockers, then expand the PCF kernel from receiver/blocker
+    // separation. This keeps the common case cheap while avoiding the old fixed 9-tap cost.
+    float blocker = shadow_blocker_depth(uv, current, bias, texel);
+    float penumbra = blocker > 0.0 ? clamp((current - blocker) * 42.0 * radius, 0.55, 3.25) : 0.75;
+    vec2 filter_texel = texel * penumbra;
+
+    if (radius <= 0.75 && penumbra <= 1.25) {
         float lit4 = 0.0;
-        lit4 += shadow_tap(uv + texel * vec2(-0.5, -0.5), current, bias);
-        lit4 += shadow_tap(uv + texel * vec2( 0.5, -0.5), current, bias);
-        lit4 += shadow_tap(uv + texel * vec2(-0.5,  0.5), current, bias);
-        lit4 += shadow_tap(uv + texel * vec2( 0.5,  0.5), current, bias);
+        lit4 += shadow_tap(uv + filter_texel * vec2(-0.5, -0.5), current, bias);
+        lit4 += shadow_tap(uv + filter_texel * vec2( 0.5, -0.5), current, bias);
+        lit4 += shadow_tap(uv + filter_texel * vec2(-0.5,  0.5), current, bias);
+        lit4 += shadow_tap(uv + filter_texel * vec2( 0.5,  0.5), current, bias);
         return lit4 * 0.25;
     }
 
     float lit = 0.0;
-    lit += shadow_tap(uv + texel * vec2(-1.0, -1.0), current, bias) * 0.0625;
-    lit += shadow_tap(uv + texel * vec2( 0.0, -1.0), current, bias) * 0.1250;
-    lit += shadow_tap(uv + texel * vec2( 1.0, -1.0), current, bias) * 0.0625;
-    lit += shadow_tap(uv + texel * vec2(-1.0,  0.0), current, bias) * 0.1250;
-    lit += shadow_tap(uv,                              current, bias) * 0.2500;
-    lit += shadow_tap(uv + texel * vec2( 1.0,  0.0), current, bias) * 0.1250;
-    lit += shadow_tap(uv + texel * vec2(-1.0,  1.0), current, bias) * 0.0625;
-    lit += shadow_tap(uv + texel * vec2( 0.0,  1.0), current, bias) * 0.1250;
-    lit += shadow_tap(uv + texel * vec2( 1.0,  1.0), current, bias) * 0.0625;
+    lit += shadow_tap(uv + filter_texel * vec2(-1.0, -1.0), current, bias) * 0.0625;
+    lit += shadow_tap(uv + filter_texel * vec2( 0.0, -1.0), current, bias) * 0.1250;
+    lit += shadow_tap(uv + filter_texel * vec2( 1.0, -1.0), current, bias) * 0.0625;
+    lit += shadow_tap(uv + filter_texel * vec2(-1.0,  0.0), current, bias) * 0.1250;
+    lit += shadow_tap(uv,                                      current, bias) * 0.2500;
+    lit += shadow_tap(uv + filter_texel * vec2( 1.0,  0.0), current, bias) * 0.1250;
+    lit += shadow_tap(uv + filter_texel * vec2(-1.0,  1.0), current, bias) * 0.0625;
+    lit += shadow_tap(uv + filter_texel * vec2( 0.0,  1.0), current, bias) * 0.1250;
+    lit += shadow_tap(uv + filter_texel * vec2( 1.0,  1.0), current, bias) * 0.0625;
     return lit;
 }
 
@@ -111,7 +133,7 @@ float sample_shadow(vec4 light_clip, vec3 nrm, vec3 light_dir_to_scene) {
     float ndotl = max(dot(normalize(nrm), normalize(-light_dir_to_scene)), 0.0);
     float slope = 1.0 - ndotl;
     float receiver_bias = ubo.u_shadow_params.y * (1.0 + slope * 2.85);
-    float normal_bias = 0.00018 * slope;
+    float normal_bias = clamp(ubo.u_shadow_extra.x, 0.0, 0.006) * slope;
     float bias = max(receiver_bias + normal_bias, 0.00005);
     float strength = clamp(ubo.u_shadow_params.z, 0.0, 0.78);
 

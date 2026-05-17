@@ -32,6 +32,8 @@ layout(set = 0, binding = 0, std140) uniform Ubo {
     vec4 u_material_params;
     mat4 u_light_mvp;
     vec4 u_shadow_params;
+    // x: normal bias in shadow-depth units, y: cascade count, z/w: reserved for atlas/cascade metadata
+    vec4 u_shadow_extra;
 } ubo;
 
 layout(location = 0) out float v_depth;

@@ -1,4 +1,5 @@
 use newengine_core::render::RenderFrameDebugSnapshot;
+use crate::camera_gateway::CameraGatewayFrame;
 use newengine_ui::draw::UiDrawList;
 
 use super::input::ViewportInputSnap;
@@ -30,10 +31,7 @@ pub(super) struct ViewportFrameInput {
 }
 
 pub(super) struct WorldFrameState {
-    pub camera_frame: newengine_camera::CameraFrame,
-    pub effective_play_mode: GameRunMode,
-    pub world_playable: bool,
-    pub nav_input: newengine_camera_runtime::CameraNavInput,
+    pub view_frame: CameraGatewayFrame,
 }
 
 pub(super) enum PlayableFrameOutcome {

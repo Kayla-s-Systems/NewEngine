@@ -1,6 +1,10 @@
 #![forbid(unsafe_op_in_unsafe_fn)]
 
 pub mod channel;
+pub mod metadata;
+pub mod interpolator;
+pub mod effects;
+pub mod director;
 pub mod controller;
 pub mod runtime_nav;
 pub mod frame;
@@ -17,6 +21,10 @@ pub mod viewport;
 pub mod modifiers;
 
 pub use channel::*;
+pub use metadata::*;
+pub use interpolator::*;
+pub use effects::*;
+pub use director::*;
 pub use controller::*;
 pub use runtime_nav::*;
 pub use frame::*;

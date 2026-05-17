@@ -40,7 +40,14 @@ pub enum RenderFeature {
     RenderGraph,
     TransientResourceLifetime,
     Shadows,
+    ShadowCasterCulling,
+    ShadowAtlas,
+    PcssShadows,
     CascadedShadowMaps,
+    HdrSceneColor,
+    Bloom,
+    Fxaa,
+    Msaa,
     PostEffects,
     UiComposite,
 }
@@ -98,7 +105,13 @@ impl RenderBackendCapabilities {
                 RenderFeature::RenderGraph,
                 RenderFeature::TransientResourceLifetime,
                 RenderFeature::Shadows,
+                RenderFeature::ShadowCasterCulling,
+                RenderFeature::ShadowAtlas,
+                RenderFeature::PcssShadows,
                 RenderFeature::CascadedShadowMaps,
+                RenderFeature::HdrSceneColor,
+                RenderFeature::Bloom,
+                RenderFeature::Fxaa,
                 RenderFeature::PostEffects,
                 RenderFeature::UiComposite,
             ],
@@ -126,5 +139,21 @@ impl Default for RenderBackendCapabilities {
     #[inline]
     fn default() -> Self {
         Self::raster_default()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn raster_default_advertises_implemented_postfx_and_shadow_features() {
+        let caps = RenderBackendCapabilities::raster_default();
+        assert!(caps.supports(RenderFeature::HdrSceneColor));
+        assert!(caps.supports(RenderFeature::Bloom));
+        assert!(caps.supports(RenderFeature::Fxaa));
+        assert!(caps.supports(RenderFeature::PcssShadows));
+        assert!(caps.supports(RenderFeature::ShadowCasterCulling));
+        assert!(!caps.supports(RenderFeature::Msaa));
     }
 }

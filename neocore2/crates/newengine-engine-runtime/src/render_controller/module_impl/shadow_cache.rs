@@ -9,6 +9,7 @@ impl RuntimeRenderController {
         if !plan.is_active() {
             self.shadows.cache_valid = false;
             self.shadows.last_refresh_frame = 0;
+            self.shadows.current_caster_cull = None;
             return false;
         }
 
@@ -42,5 +43,19 @@ impl RuntimeRenderController {
         self.shadows.last_refresh_frame = 0;
         self.shadows.warmup_defer_frames_remaining =
             super::super::render_quality::SHADOW_WARMUP_DEFER_FRAMES;
+        self.shadows.current_caster_cull = None;
+    }
+}
+
+
+impl RuntimeRenderController {
+    #[inline]
+    pub(super) fn set_shadow_caster_cull(&mut self, cull: Option<super::shadows::ShadowCasterCull>) {
+        self.shadows.current_caster_cull = cull;
+    }
+
+    #[inline]
+    pub(super) fn shadows_current_cull(&self) -> Option<super::shadows::ShadowCasterCull> {
+        self.shadows.current_caster_cull
     }
 }

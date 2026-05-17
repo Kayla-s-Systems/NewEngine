@@ -1,6 +1,8 @@
 #![forbid(unsafe_op_in_unsafe_fn)]
 
-use newengine_core::render::{PostFxFrameParams, SunPostFxParams, ToneMapDisplayParams};
+use newengine_core::render::{
+    PostFxFrameParams, SunPostFxParams,
+};
 use newengine_math::{Vec3, Vec4};
 
 use super::lights;
@@ -10,10 +12,7 @@ pub(super) fn game_sun_postfx_params(
     viewproj: newengine_math::Mat4,
     camera_position: Vec3,
 ) -> PostFxFrameParams {
-    let mut params = PostFxFrameParams {
-        display: ToneMapDisplayParams::default(),
-        sun: SunPostFxParams::default(),
-    };
+    let mut params = PostFxFrameParams::default();
 
     let Some(sun) = lights::primary_directional_light(world) else {
         return params;
@@ -61,3 +60,4 @@ pub(super) fn game_sun_postfx_params(
     };
     params
 }
+

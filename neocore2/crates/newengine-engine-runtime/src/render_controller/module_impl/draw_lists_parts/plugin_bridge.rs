@@ -99,9 +99,9 @@ fn build_draw_list_provider_request(
                 center: [ctx.bounds.center.x, ctx.bounds.center.y, ctx.bounds.center.z],
                 radius: ctx.bounds.radius,
             },
-            camera: RenderCameraSnapshot {
+            view: RenderViewSnapshot {
                 view_projection_cols: ctx.viewproj.to_cols_array_2d(),
-                position_ws: [ctx.rig.position.x, ctx.rig.position.y, ctx.rig.position.z],
+                position_ws: [ctx.camera_position.x, ctx.camera_position.y, ctx.camera_position.z],
             },
             active_draw_lists: lists.kinds().into_iter().collect(),
         },

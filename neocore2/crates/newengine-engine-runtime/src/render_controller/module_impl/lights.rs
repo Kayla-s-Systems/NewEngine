@@ -16,6 +16,7 @@ pub struct PackedLights {
     pub point_count_pad: [f32; 4],
     pub shadow_light_mvp: Mat4,
     pub shadow_params: [f32; 4],
+    pub shadow_extra: [f32; 4],
 }
 
 impl Default for PackedLights {
@@ -30,12 +31,13 @@ impl Default for PackedLights {
             point_count_pad: [0.0; 4],
             shadow_light_mvp: Mat4::IDENTITY,
             shadow_params: [0.0; 4],
+            shadow_extra: [0.0; 4],
         }
     }
 }
 
 impl PackedLights {
-    pub(super) const UBO_SIZE: usize = 464;
+    pub(super) const UBO_SIZE: usize = 480;
 
     #[inline]
     pub(super) fn from_world(world: &newengine_ecs::World) -> Self {
@@ -101,9 +103,10 @@ impl PackedLights {
     }
 
     #[inline]
-    pub fn with_shadow(mut self, light_mvp: Mat4, params: [f32; 4]) -> Self {
+    pub fn with_shadow(mut self, light_mvp: Mat4, params: [f32; 4], extra: [f32; 4]) -> Self {
         self.shadow_light_mvp = light_mvp;
         self.shadow_params = params;
+        self.shadow_extra = extra;
         self
     }
 

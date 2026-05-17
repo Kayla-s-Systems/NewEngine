@@ -3,6 +3,8 @@ pub struct PrimitiveGpu {
     pub vb: newengine_core::render::BufferId,
     pub ib: newengine_core::render::BufferId,
     pub index_count: u32,
+    pub bounds_center: newengine_math::Vec3,
+    pub bounds_radius: f32,
 }
 
 #[derive(Clone, Copy)]

@@ -94,7 +94,7 @@ pub struct LitPipeline {
 }
 
 /// std140 layout consumed by the current lit shader family.
-pub const LIT_UBO_SIZE: u64 = 464;
+pub const LIT_UBO_SIZE: u64 = 480;
 
 /// Vertex stride consumed by the current instanced lit shader family.
 ///

@@ -7,6 +7,7 @@
 //! render controller that talks to `newengine-render-api`. Applications consume
 //! this layer; they must not create backend resources or Vulkan objects directly.
 
+pub mod camera_gateway;
 pub mod gameplay;
 pub mod plugin_manager;
 pub mod render_controller;

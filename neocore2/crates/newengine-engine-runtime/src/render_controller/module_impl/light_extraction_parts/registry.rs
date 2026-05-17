@@ -5,7 +5,7 @@ use std::sync::Arc;
 use newengine_core::render::{
     BackendShadowCapabilities, Extent2D, LightExtractionProviderRequest,
     LightExtractionProviderResponse, LightExtractionSnapshot, LightPlanContribution,
-    LightPlanContributionKind, RenderApi, RenderBoundsSnapshot, RenderCameraSnapshot,
+    LightPlanContributionKind, RenderApi, RenderBoundsSnapshot, RenderViewSnapshot,
     RenderTargetId, ShadowSettingsSnapshot, TextureId,
 };
 use newengine_core::EngineResult;
@@ -106,7 +106,7 @@ pub trait LightExtractionProvider: Send + Sync {
 }
 
 #[derive(Clone, Debug)]
-pub(in crate::render_controller::module_impl) struct ExternalLightExtractionProviderDesc {
+pub(crate) struct ExternalLightExtractionProviderDesc {
     pub(super) id: String,
     pub(super) plugin_id: String,
     pub(super) label: String,

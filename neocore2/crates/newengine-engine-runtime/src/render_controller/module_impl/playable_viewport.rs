@@ -1,4 +1,3 @@
-use newengine_camera_runtime::cursor_state_for_nav;
 use newengine_core::host_events::CursorState;
 use newengine_core::physics::PhysicsApiRef;
 use newengine_core::render::{Extent2D, RenderApi};
@@ -55,19 +54,12 @@ impl RuntimeRenderController {
             scope.vp_h,
         );
 
-        if !world_frame.world_playable {
+        if !world_frame.view_frame.world_playable {
             self.end_frame_for_unplayable_world(ctx, r, &scene, frame_input.ui, scope)?;
             return Ok(PlayableFrameOutcome::EndedEarly);
         }
 
-        let desired_cursor = if world_frame.effective_play_mode.wants_direct_player_control()
-            && frame_input.input.active
-        {
-            CursorState::captured_locked()
-        } else {
-            cursor_state_for_nav(&world_frame.nav_input)
-        };
-        self.sync_cursor_state(ctx, desired_cursor);
+        self.sync_cursor_state(ctx, world_frame.view_frame.cursor);
 
         let outcome = self.submit_scene_viewport_frame(
             r,

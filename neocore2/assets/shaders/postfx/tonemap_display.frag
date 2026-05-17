@@ -7,6 +7,10 @@ layout(push_constant) uniform PostFxPushConstants {
     vec4 sun_screen;          // x/y normalized screen pos, z visibility, w intensity
     vec4 sun_color_radius;    // rgb linear color, w disk radius
     vec4 sun_effects;         // x flare strength, y ray strength, z/w reserved
+    vec4 bloom_params;        // x threshold, y soft knee, z intensity, w radius multiplier
+    vec4 fxaa_params;         // x enabled, y edge threshold, z min threshold, w subpixel quality
+    vec4 color_params;        // x saturation, y contrast, z temperature, w vignette strength
+    vec4 post_params;         // x local contrast, y dither strength, z aa mode, w reserved
 } pc;
 
 layout(location = 0) in vec2 v_uv;
@@ -28,6 +32,10 @@ float ne_hash12(vec2 p) {
 vec2 ne_texel_size() {
     ivec2 sz = textureSize(u_scene_hdr, 0);
     return 1.0 / vec2(max(sz.x, 1), max(sz.y, 1));
+}
+
+vec3 ne_read_hdr(vec2 uv) {
+    return ne_safe_hdr(texture(u_scene_hdr, clamp(uv, vec2(0.0), vec2(1.0))).rgb);
 }
 
 vec3 ne_tonemap_reinhard(vec3 c) {
@@ -59,14 +67,73 @@ vec3 ne_display_encode(vec3 ldr) {
     return pow(clamp(ldr, vec3(0.0), vec3(1.0)), vec3(1.0 / gamma));
 }
 
+vec3 ne_fxaa_hdr(vec2 uv) {
+    if (pc.fxaa_params.x < 0.5 || pc.post_params.z < 0.5 || pc.post_params.z > 1.5) {
+        return ne_read_hdr(uv);
+    }
+
+    vec2 t = ne_texel_size();
+    vec3 rgb_m  = ne_read_hdr(uv);
+    vec3 rgb_n  = ne_read_hdr(uv + vec2(0.0, -t.y));
+    vec3 rgb_s  = ne_read_hdr(uv + vec2(0.0,  t.y));
+    vec3 rgb_w  = ne_read_hdr(uv + vec2(-t.x, 0.0));
+    vec3 rgb_e  = ne_read_hdr(uv + vec2( t.x, 0.0));
+    vec3 rgb_nw = ne_read_hdr(uv + vec2(-t.x, -t.y));
+    vec3 rgb_ne = ne_read_hdr(uv + vec2( t.x, -t.y));
+    vec3 rgb_sw = ne_read_hdr(uv + vec2(-t.x,  t.y));
+    vec3 rgb_se = ne_read_hdr(uv + vec2( t.x,  t.y));
+
+    float l_m  = ne_luma(rgb_m);
+    float l_n  = ne_luma(rgb_n);
+    float l_s  = ne_luma(rgb_s);
+    float l_w  = ne_luma(rgb_w);
+    float l_e  = ne_luma(rgb_e);
+    float l_nw = ne_luma(rgb_nw);
+    float l_ne = ne_luma(rgb_ne);
+    float l_sw = ne_luma(rgb_sw);
+    float l_se = ne_luma(rgb_se);
+
+    float l_min = min(l_m, min(min(l_n, l_s), min(l_w, l_e)));
+    float l_max = max(l_m, max(max(l_n, l_s), max(l_w, l_e)));
+    float range = l_max - l_min;
+    float threshold = max(pc.fxaa_params.z, l_max * pc.fxaa_params.y);
+    if (range < threshold) {
+        return rgb_m;
+    }
+
+    vec2 dir;
+    dir.x = -((l_nw + l_ne) - (l_sw + l_se));
+    dir.y =  ((l_nw + l_sw) - (l_ne + l_se));
+    float dir_reduce = max((l_n + l_s + l_w + l_e) * 0.03125, 1.0 / 128.0);
+    float inv_dir = 1.0 / (min(abs(dir.x), abs(dir.y)) + dir_reduce);
+    dir = clamp(dir * inv_dir, vec2(-8.0), vec2(8.0)) * t;
+
+    vec3 rgb_a = 0.5 * (ne_read_hdr(uv + dir * (1.0 / 3.0 - 0.5)) + ne_read_hdr(uv + dir * (2.0 / 3.0 - 0.5)));
+    vec3 rgb_b = rgb_a * 0.5 + 0.25 * (ne_read_hdr(uv + dir * -0.5) + ne_read_hdr(uv + dir * 0.5));
+    float l_b = ne_luma(rgb_b);
+    vec3 fxaa = (l_b < l_min || l_b > l_max) ? rgb_a : rgb_b;
+
+    float subpix = clamp(pc.fxaa_params.w, 0.0, 1.0);
+    return mix(rgb_m, fxaa, subpix);
+}
+
 vec3 ne_bloom_extract(vec3 c) {
+    c = ne_safe_hdr(c);
+    float threshold = max(pc.bloom_params.x, 0.0);
+    float knee = max(pc.bloom_params.y, 1.0e-4);
     float peak = max(max(c.r, c.g), c.b);
-    float mask = smoothstep(0.85, 2.20, peak);
+    float mask = smoothstep(threshold, threshold + knee, peak);
     return c * mask;
 }
 
 vec3 ne_soft_bloom(vec2 uv) {
+    float intensity = max(pc.bloom_params.z, 0.0);
+    if (intensity <= 0.0001) {
+        return vec3(0.0);
+    }
+
     vec2 t = ne_texel_size();
+    float radius = clamp(pc.bloom_params.w, 0.25, 4.0);
     const vec2 offsets[12] = vec2[12](
         vec2( 1.0,  0.0), vec2(-1.0,  0.0), vec2( 0.0,  1.0), vec2( 0.0, -1.0),
         vec2( 1.0,  1.0), vec2(-1.0,  1.0), vec2( 1.0, -1.0), vec2(-1.0, -1.0),
@@ -83,33 +150,45 @@ vec3 ne_soft_bloom(vec2 uv) {
     for (int i = 0; i < 12; ++i) {
         vec2 o = offsets[i];
         float w = weights[i];
-        bloom += ne_bloom_extract(texture(u_scene_hdr, uv + o * t * 2.25).rgb) * w;
-        bloom += ne_bloom_extract(texture(u_scene_hdr, uv + o * t * 6.50).rgb) * (w * 0.42);
+        bloom += ne_bloom_extract(ne_read_hdr(uv + o * t * (2.25 * radius))) * w;
+        bloom += ne_bloom_extract(ne_read_hdr(uv + o * t * (6.50 * radius))) * (w * 0.42);
         wsum += w * 1.42;
     }
-    return bloom / max(wsum, NE_EPS);
+    return (bloom / max(wsum, NE_EPS)) * intensity;
 }
 
 vec3 ne_local_contrast(vec2 uv, vec3 hdr) {
+    float strength = clamp(pc.post_params.x, 0.0, 0.25);
+    if (strength <= 0.0001) {
+        return hdr;
+    }
     vec2 t = ne_texel_size();
-    vec3 blur = texture(u_scene_hdr, uv + vec2( t.x, 0.0)).rgb;
-    blur += texture(u_scene_hdr, uv + vec2(-t.x, 0.0)).rgb;
-    blur += texture(u_scene_hdr, uv + vec2(0.0,  t.y)).rgb;
-    blur += texture(u_scene_hdr, uv + vec2(0.0, -t.y)).rgb;
+    vec3 blur = ne_read_hdr(uv + vec2( t.x, 0.0));
+    blur += ne_read_hdr(uv + vec2(-t.x, 0.0));
+    blur += ne_read_hdr(uv + vec2(0.0,  t.y));
+    blur += ne_read_hdr(uv + vec2(0.0, -t.y));
     blur *= 0.25;
     float edge_guard = 1.0 - smoothstep(1.2, 4.5, ne_luma(hdr));
-    return max(hdr + (hdr - blur) * (0.055 * edge_guard), vec3(0.0));
+    return max(hdr + (hdr - blur) * (strength * edge_guard), vec3(0.0));
 }
 
 vec3 ne_natural_pregrade(vec3 hdr, vec2 uv) {
     hdr = ne_safe_hdr(hdr);
     float y = ne_luma(hdr);
-    float sat = mix(1.045, 1.075, saturate(y / 3.0));
+    float sat = clamp(pc.color_params.x, 0.0, 2.5);
     hdr = mix(vec3(y), hdr, sat);
-    hdr *= vec3(1.015, 1.005, 0.985);
+
+    float contrast = clamp(pc.color_params.y, 0.2, 2.5);
+    hdr = max((hdr - vec3(0.18)) * contrast + vec3(0.18), vec3(0.0));
+
+    float temperature = clamp(pc.color_params.z, -1.0, 1.0);
+    vec3 warm = vec3(1.035, 1.005, 0.965);
+    vec3 cool = vec3(0.965, 1.005, 1.045);
+    hdr *= mix(vec3(1.0), temperature >= 0.0 ? warm : cool, abs(temperature));
 
     vec2 d = uv - vec2(0.5);
-    float vignette = mix(0.90, 1.0, 1.0 - smoothstep(0.16, 0.72, dot(d, d)));
+    float vignette_strength = clamp(pc.color_params.w, 0.0, 0.85);
+    float vignette = mix(1.0 - vignette_strength, 1.0, 1.0 - smoothstep(0.16, 0.72, dot(d, d)));
     hdr *= vignette;
     return max(hdr, vec3(0.0));
 }
@@ -167,12 +246,12 @@ vec3 ne_sun_optics(vec2 uv) {
 
 void main() {
     vec2 uv = clamp(v_uv, vec2(0.0), vec2(1.0));
-    vec3 hdr = texture(u_scene_hdr, uv).rgb;
+    vec3 hdr = ne_fxaa_hdr(uv);
 
-    // Single-pass production root: exposure, local contrast, soft bloom, sun optics,
-    // natural color grade, tonemap, display encode and deterministic dither.
+    // Production root: FXAA edge integration, local contrast, tunable bloom, sun optics,
+    // natural color grade, tone map, display encode and deterministic dither.
     hdr = ne_local_contrast(uv, hdr);
-    hdr += ne_soft_bloom(uv) * 0.075;
+    hdr += ne_soft_bloom(uv);
     hdr += ne_sun_optics(uv);
     hdr = max(hdr * max(pc.display_params.x, 0.0) + vec3(pc.display_params.z), vec3(0.0));
     hdr = ne_natural_pregrade(hdr, uv);
@@ -184,6 +263,7 @@ void main() {
             : clamp(hdr, vec3(0.0), vec3(1.0));
 
     vec3 display = ne_display_encode(ldr);
-    float dither = (ne_hash12(gl_FragCoord.xy) - 0.5) / 255.0;
+    float dither_strength = clamp(pc.post_params.y, 0.0, 2.0);
+    float dither = (ne_hash12(gl_FragCoord.xy) - 0.5) * dither_strength / 255.0;
     o_color = vec4(clamp(display + vec3(dither), vec3(0.0), vec3(1.0)), 1.0);
 }

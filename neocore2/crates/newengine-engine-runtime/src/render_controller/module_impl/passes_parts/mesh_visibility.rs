@@ -58,3 +58,29 @@ pub(super) fn sort_by_distance_then_key<T: DistanceKeyEntry>(items: &mut [T]) {
             .then_with(|| a.stable_key().cmp(&b.stable_key()))
     });
 }
+
+
+#[inline]
+pub(super) fn max_axis_scale(model: Mat4) -> f32 {
+    let sx = model.x_axis.truncate().length();
+    let sy = model.y_axis.truncate().length();
+    let sz = model.z_axis.truncate().length();
+    sx.max(sy).max(sz).max(0.001)
+}
+
+#[inline]
+pub(super) fn transform_sphere(model: Mat4, local_center: Vec3, local_radius: f32) -> (Vec3, f32) {
+    (
+        model.transform_point3(local_center),
+        local_radius.abs().max(0.001) * max_axis_scale(model),
+    )
+}
+
+#[inline]
+pub(super) fn shadow_caster_visible(
+    cull: Option<super::super::shadows::ShadowCasterCull>,
+    center_ws: Vec3,
+    radius_ws: f32,
+) -> bool {
+    cull.map(|c| c.contains_sphere(center_ws, radius_ws)).unwrap_or(true)
+}

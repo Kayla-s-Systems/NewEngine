@@ -73,5 +73,11 @@ pub(super) fn write_lit_ubo_ex(
         bytes[off..off + 4].copy_from_slice(&lights.shadow_params[i].to_ne_bytes());
     }
 
+    let shadow_extra_off = 464;
+    for i in 0..4 {
+        let off = shadow_extra_off + i * 4;
+        bytes[off..off + 4].copy_from_slice(&lights.shadow_extra[i].to_ne_bytes());
+    }
+
     r.write_buffer(ubo, 0, &bytes)
 }

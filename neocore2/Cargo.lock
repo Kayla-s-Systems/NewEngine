@@ -513,11 +513,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "newengine-camera-api"
+version = "0.1.0"
+dependencies = [
+ "newengine-service-api",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "newengine-camera-runtime"
 version = "0.1.0"
 dependencies = [
  "log",
  "newengine-camera",
+ "newengine-camera-api",
  "newengine-core",
  "newengine-ecs",
  "newengine-math",
@@ -534,6 +544,7 @@ dependencies = [
  "crossbeam-channel",
  "log",
  "newengine-assets-api",
+ "newengine-camera-api",
  "newengine-math",
  "newengine-physics-api",
  "newengine-platform-api",
@@ -570,6 +581,7 @@ dependencies = [
  "newengine-assets",
  "newengine-bounds",
  "newengine-camera",
+ "newengine-camera-api",
  "newengine-camera-runtime",
  "newengine-core",
  "newengine-ecs",

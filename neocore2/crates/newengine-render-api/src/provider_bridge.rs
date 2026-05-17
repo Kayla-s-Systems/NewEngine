@@ -16,9 +16,24 @@ pub struct RenderBoundsSnapshot {
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
-pub struct RenderCameraSnapshot {
+pub struct RenderViewSnapshot {
     pub view_projection_cols: [[f32; 4]; 4],
     pub position_ws: [f32; 3],
+}
+
+impl Default for RenderViewSnapshot {
+    #[inline]
+    fn default() -> Self {
+        Self {
+            view_projection_cols: [
+                [1.0, 0.0, 0.0, 0.0],
+                [0.0, 1.0, 0.0, 0.0],
+                [0.0, 0.0, 1.0, 0.0],
+                [0.0, 0.0, 0.0, 1.0],
+            ],
+            position_ws: [0.0, 0.0, 0.0],
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -29,7 +44,8 @@ pub struct SceneExtractionSnapshot {
     pub runtime: bool,
     pub debug_overlays: bool,
     pub bounds: RenderBoundsSnapshot,
-    pub camera: RenderCameraSnapshot,
+    #[serde(default)]
+    pub view: RenderViewSnapshot,
     #[serde(default)]
     pub active_draw_lists: Vec<RenderDrawListKind>,
 }
@@ -285,12 +301,24 @@ pub struct DrawListProviderExtractResponse {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct BackendShadowCapabilities {
+    #[serde(default)]
     pub directional_depth_map: bool,
+    #[serde(default)]
     pub cascaded_shadow_maps: bool,
+    #[serde(default)]
     pub point_cube_map: bool,
+    #[serde(default)]
     pub spot_depth_map: bool,
+    #[serde(default)]
     pub max_shadow_resolution: u32,
+    #[serde(default = "default_max_directional_cascades")]
+    pub max_directional_cascades: u32,
+    #[serde(default)]
+    pub shadow_atlas: bool,
 }
+
+#[inline]
+fn default_max_directional_cascades() -> u32 { 1 }
 
 impl Default for BackendShadowCapabilities {
     #[inline]
@@ -301,6 +329,8 @@ impl Default for BackendShadowCapabilities {
             point_cube_map: false,
             spot_depth_map: false,
             max_shadow_resolution: 2048,
+            max_directional_cascades: 1,
+            shadow_atlas: false,
         }
     }
 }
@@ -311,7 +341,8 @@ pub struct LightExtractionSnapshot {
     pub viewport_extent: Extent2D,
     pub surface_extent: Extent2D,
     pub bounds: RenderBoundsSnapshot,
-    pub camera: RenderCameraSnapshot,
+    #[serde(default)]
+    pub view: RenderViewSnapshot,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -323,7 +354,14 @@ pub struct ShadowSettingsSnapshot {
     pub bias: f32,
     pub softness: f32,
     pub contact_strength: f32,
+    #[serde(default)]
+    pub normal_bias: f32,
+    #[serde(default = "default_cascade_count")]
+    pub cascade_count: u32,
 }
+
+#[inline]
+fn default_cascade_count() -> u32 { 1 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct LightExtractionProviderRequest {
@@ -352,6 +390,8 @@ pub struct LightPlanContribution {
     pub light_mvp_cols: [[f32; 4]; 4],
     pub params: [f32; 4],
     #[serde(default)]
+    pub extra: [f32; 4],
+    #[serde(default)]
     pub warnings: Vec<String>,
 }
 
@@ -367,6 +407,7 @@ impl LightPlanContribution {
             shadow_texture: None,
             light_mvp_cols: [[0.0; 4]; 4],
             params: [0.0; 4],
+            extra: [0.0; 4],
             warnings: Vec::new(),
         }
     }
@@ -377,4 +418,42 @@ pub struct LightExtractionProviderResponse {
     pub contribution: Option<LightPlanContribution>,
     #[serde(default)]
     pub warnings: Vec<String>,
+}
+
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn shadow_capabilities_json_is_backward_compatible() {
+        let legacy = r#"{
+            "directional_depth_map": true,
+            "cascaded_shadow_maps": false,
+            "point_cube_map": false,
+            "spot_depth_map": false,
+            "max_shadow_resolution": 1024
+        }"#;
+        let caps: BackendShadowCapabilities = serde_json::from_str(legacy).expect("legacy caps json");
+        assert!(caps.directional_depth_map);
+        assert_eq!(caps.max_shadow_resolution, 1024);
+        assert_eq!(caps.max_directional_cascades, 1);
+        assert!(!caps.shadow_atlas);
+    }
+
+    #[test]
+    fn light_plan_contribution_extra_defaults_for_old_providers() {
+        let legacy = r#"{
+            "handled": true,
+            "kind": "Directional",
+            "supported": true,
+            "resolution": 1024,
+            "render_target": 7,
+            "shadow_texture": 9,
+            "light_mvp_cols": [[1.0,0.0,0.0,0.0],[0.0,1.0,0.0,0.0],[0.0,0.0,1.0,0.0],[0.0,0.0,0.0,1.0]],
+            "params": [1.0, 0.0015, 0.35, 0.4]
+        }"#;
+        let contribution: LightPlanContribution = serde_json::from_str(legacy).expect("legacy contribution json");
+        assert_eq!(contribution.extra, [0.0; 4]);
+    }
 }

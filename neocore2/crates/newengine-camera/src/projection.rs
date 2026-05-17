@@ -11,7 +11,7 @@ use serde::{Deserialize, Serialize};
 /// - Right-handed.
 /// - Vulkan clip Z: 0..1.
 /// - Y flip baked into the matrix.
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, PartialEq)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub enum Projection {
     Perspective(Perspective),
@@ -48,7 +48,7 @@ impl Projection {
     }
 }
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, PartialEq)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct Perspective {
     /// Vertical FOV in radians.
@@ -105,7 +105,7 @@ impl Perspective {
     }
 }
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, PartialEq)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct Orthographic {
     /// Half-height in world units.
@@ -151,4 +151,39 @@ impl Orthographic {
         let hw = hh * self.aspect;
         Mat4::orthographic_rh(-hw, hw, -hh, hh, self.near, self.far)
     }
+}
+
+/// Blends two camera projections using a stable same-kind interpolation.
+///
+/// Different projection families cut at the half-way mark because interpolating between
+/// perspective and orthographic matrices directly produces poor gameplay/cinematic semantics.
+#[inline]
+pub fn blend_camera_projection(from: Projection, to: Projection, t: f32) -> Projection {
+    let t = t.clamp(0.0, 1.0);
+    match (from, to) {
+        (Projection::Perspective(a), Projection::Perspective(b)) => {
+            Projection::Perspective(Perspective::new(
+                lerp_f32(a.fovy, b.fovy, t),
+                lerp_f32(a.aspect, b.aspect, t),
+                lerp_f32(a.near, b.near, t).max(1.0e-6),
+                lerp_f32(a.far, b.far, t).max(1.0e-3),
+            ))
+        }
+        (Projection::Orthographic(a), Projection::Orthographic(b)) => {
+            Projection::Orthographic(Orthographic::new(
+                lerp_f32(a.half_height, b.half_height, t).max(1.0e-6),
+                lerp_f32(a.aspect, b.aspect, t),
+                lerp_f32(a.near, b.near, t).max(1.0e-6),
+                lerp_f32(a.far, b.far, t).max(1.0e-3),
+            ))
+        }
+        _ => {
+            if t < 0.5 { from } else { to }
+        }
+    }
+}
+
+#[inline]
+fn lerp_f32(a: f32, b: f32, t: f32) -> f32 {
+    a + (b - a) * t
 }

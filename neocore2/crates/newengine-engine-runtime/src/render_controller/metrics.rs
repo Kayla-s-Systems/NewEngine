@@ -1,6 +1,6 @@
 #![forbid(unsafe_op_in_unsafe_fn)]
 
-use newengine_camera_runtime::{CameraRuntimeReport, CameraTransitionPhase};
+use crate::camera_gateway::{CameraRuntimeOverlayReport, CameraTransitionPhase};
 use newengine_core::render::{
     RecordedDrawListStats, RenderDebugChartSample, RenderDebugTelemetry,
     RenderDiagnosticsSnapshot, RenderFrameDebugSnapshot, RenderGraphSubmitReport,
@@ -22,7 +22,7 @@ pub(super) struct RuntimeOverlayMetrics {
     resource_pipelines: u32,
     queued_upload_jobs: u32,
     queued_upload_bytes: u64,
-    camera_report: Option<CameraRuntimeReport>,
+    camera_report: Option<CameraRuntimeOverlayReport>,
 }
 
 impl RuntimeOverlayMetrics {
@@ -84,7 +84,7 @@ impl RuntimeOverlayMetrics {
     }
 
     #[inline]
-    pub(super) fn record_camera_report(&mut self, report: CameraRuntimeReport) {
+    pub(super) fn record_camera_report(&mut self, report: CameraRuntimeOverlayReport) {
         self.camera_report = Some(report);
     }
 
@@ -143,13 +143,17 @@ impl RuntimeOverlayMetrics {
 
         if let Some(camera) = self.camera_report.as_ref() {
             lines.push(format!(
-                "CAM {:?}/{:?} {:?} gate={} blend={}{:.0}%",
+                "CAM {}/{} {} dom={:?} n={} lock={} gate={} blend={}{:.0}% events={}",
                 camera.active_director,
                 camera.active_mode,
                 camera.input_context,
+                camera.dominant_director,
+                camera.rendered_director_count,
+                camera.director_lock_input,
                 camera.gate_blocked,
                 if camera.frame_blend_active { "on " } else { "off " },
                 camera.frame_blend_alpha * 100.0,
+                camera.pending_event_count,
             ));
             if camera.transition.phase != CameraTransitionPhase::Idle {
                 lines.push(format!(
