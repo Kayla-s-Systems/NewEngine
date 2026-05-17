@@ -1,6 +1,14 @@
 use newengine_core::render::{RenderBackendCapabilities, RenderWorkBudget};
+use newengine_render_api::RENDER_SERVICE_ID;
+use newengine_service_api::BackendServiceSpec;
 
 pub const RENDER_BACKEND_CAPABILITY_ID: &str = "render.backend";
+
+pub const RENDER_BACKEND_SERVICE_SPEC: BackendServiceSpec = BackendServiceSpec::new(
+    "render",
+    RENDER_SERVICE_ID,
+    RENDER_BACKEND_CAPABILITY_ID,
+);
 
 #[derive(Debug, Clone)]
 pub struct ResolvedRenderBackendConfig {

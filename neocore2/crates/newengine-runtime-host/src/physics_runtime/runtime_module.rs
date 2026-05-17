@@ -1,15 +1,12 @@
 use std::path::PathBuf;
 
 use newengine_core::physics::{PhysicsApiRef, PHYSICS_API_ID, PHYSICS_API_PROVIDE};
-use newengine_core::{EngineError, EngineResult, Module, ModuleCtx};
-use newengine_physics_api::PHYSICS_SERVICE_ID;
+use newengine_core::{EngineResult, Module, ModuleCtx};
 
 use crate::physics_runtime::client::PhysicsServiceClient;
-use crate::physics_runtime::provider_resolver::{
-    plugin_declares_physics_backend, plugin_declares_service, PhysicsProviderResolver,
-};
 use crate::physics_runtime::service_api::ServiceBackedPhysicsApi;
-use crate::physics_runtime::types::ResolvedPhysicsBackendConfig;
+use crate::physics_runtime::types::{ResolvedPhysicsBackendConfig, PHYSICS_BACKEND_SERVICE_SPEC};
+use crate::service_runtime::bind_backend_info;
 
 pub struct PhysicsBackendRuntimeModule {
     _modules_dir: PathBuf,
@@ -20,44 +17,6 @@ impl PhysicsBackendRuntimeModule {
     #[inline]
     pub fn new(modules_dir: PathBuf) -> Self {
         Self { _modules_dir: modules_dir, api: None }
-    }
-
-    #[inline]
-    fn explain_backend_unavailability<E: Send + 'static>(
-        &self,
-        ctx: &ModuleCtx<'_, E>,
-        service_error: &str,
-    ) -> String {
-        let Some(snapshot) = ctx.resources().get::<newengine_plugin_host::PluginsSnapshot>() else {
-            return format!(
-                "physics service '{}' is unavailable: {}",
-                PHYSICS_SERVICE_ID, service_error
-            );
-        };
-
-        let loaded_physics_plugins: Vec<String> = snapshot
-            .plugins
-            .iter()
-            .filter(|plugin| {
-                plugin_declares_physics_backend(plugin)
-                    || plugin_declares_service(plugin, PHYSICS_SERVICE_ID)
-            })
-            .map(|plugin| format!("{}:{}", plugin.id, plugin.state))
-            .collect();
-
-        if loaded_physics_plugins.is_empty() {
-            format!(
-                "no physics backend plugin was loaded; service '{}' is unavailable: {}",
-                PHYSICS_SERVICE_ID, service_error
-            )
-        } else {
-            format!(
-                "loaded physics providers=[{}], but service '{}' is unavailable: {}",
-                loaded_physics_plugins.join(", "),
-                PHYSICS_SERVICE_ID,
-                service_error
-            )
-        }
     }
 }
 
@@ -70,20 +29,12 @@ impl<E: Send + 'static> Module<E> for PhysicsBackendRuntimeModule {
         let host = newengine_plugin_host::default_host_api();
         let client = PhysicsServiceClient::new(host);
 
-        let info = match client.info() {
-            Ok(info) => info,
-            Err(err) => {
-                let reason = self.explain_backend_unavailability(ctx, &err);
-                return Err(EngineError::Other(format!(
-                    "physics backend could not be bound through service '{}': {}",
-                    PHYSICS_SERVICE_ID,
-                    reason
-                )));
-            }
-        };
-
-        let snapshot = ctx.resources().get::<newengine_plugin_host::PluginsSnapshot>();
-        let selection = PhysicsProviderResolver::resolve(snapshot, &info).map_err(EngineError::other)?;
+        let (info, selection) = bind_backend_info(
+            ctx,
+            PHYSICS_BACKEND_SERVICE_SPEC,
+            client.info(),
+            |info| info.backend_id.as_str(),
+        )?;
         let protocol_version = info.protocol_version;
 
         log::info!(

@@ -18,18 +18,6 @@ impl RequiredRuntimeServiceContract {
     }
 }
 
-const RENDER_REQUIRED_METHODS: &[&str] = &[
-    newengine_render_api::RENDER_SERVICE_METHOD_INFO,
-    newengine_render_api::RENDER_SERVICE_METHOD_INVOKE,
-    newengine_render_api::RENDER_SERVICE_METHOD_SHUTDOWN_V1,
-];
-
-const PHYSICS_REQUIRED_METHODS: &[&str] = &[
-    newengine_physics_api::PHYSICS_SERVICE_METHOD_INFO,
-    newengine_physics_api::PHYSICS_SERVICE_METHOD_INVOKE,
-    newengine_physics_api::PHYSICS_SERVICE_METHOD_SHUTDOWN_V1,
-];
-
 const PLATFORM_REQUIRED_METHODS: &[&str] = &[
     newengine_platform_api::PLATFORM_WINDOW_SERVICE_METHOD_SNAPSHOT_JSON_V1,
 ];
@@ -44,13 +32,13 @@ const CONTRACTS: &[RequiredRuntimeServiceContract] = &[
     RequiredRuntimeServiceContract {
         service_id: newengine_render_api::RENDER_SERVICE_ID,
         expected_contract: "newengine.render-api >= 0.3.x",
-        required_methods: RENDER_REQUIRED_METHODS,
+        required_methods: newengine_service_api::JSON_CONTROL_SERVICE_METHODS_V1,
         required_env: "NEWENGINE_REQUIRE_RENDER_BACKEND",
     },
     RequiredRuntimeServiceContract {
         service_id: newengine_physics_api::PHYSICS_SERVICE_ID,
         expected_contract: "newengine.physics-api >= 0.1.x",
-        required_methods: PHYSICS_REQUIRED_METHODS,
+        required_methods: newengine_service_api::JSON_CONTROL_SERVICE_METHODS_V1,
         required_env: "NEWENGINE_REQUIRE_PHYSICS_BACKEND",
     },
     RequiredRuntimeServiceContract {

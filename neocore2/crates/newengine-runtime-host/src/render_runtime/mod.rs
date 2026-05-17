@@ -1,7 +1,6 @@
 #![forbid(unsafe_op_in_unsafe_fn)]
 
 mod client;
-mod provider_resolver;
 mod runtime_module;
 mod service_api;
 mod types;

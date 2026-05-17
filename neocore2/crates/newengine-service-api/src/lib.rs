@@ -2,16 +2,78 @@
 
 use core::fmt;
 
-/// Generic service lifecycle method names shared by host and providers.
+/// Generic JSON-control service method names shared by host and providers.
 ///
-/// Domain API crates may re-export these names, but the literal is owned here
-/// so teardown hooks do not drift between plugin host and services.
-pub mod lifecycle_method {
+/// Domain API crates may re-export these names, but the literals are owned here
+/// so host-side adapters and plugin services do not drift.
+pub mod standard_method {
+    /// Returns domain-specific backend/provider metadata as JSON.
+    pub const INFO_JSON: &str = "info_json";
+
+    /// Invokes a domain-specific JSON request envelope and returns a JSON response envelope.
+    pub const INVOKE_JSON: &str = "invoke_json";
+
     /// Optional explicit shutdown hook called before service unregister/drop.
     pub const SHUTDOWN_V1: &str = "shutdown_v1";
 }
 
-pub const SERVICE_METHOD_SHUTDOWN_V1: &str = lifecycle_method::SHUTDOWN_V1;
+pub const SERVICE_METHOD_INFO_JSON: &str = standard_method::INFO_JSON;
+pub const SERVICE_METHOD_INVOKE_JSON: &str = standard_method::INVOKE_JSON;
+pub const SERVICE_METHOD_SHUTDOWN_V1: &str = standard_method::SHUTDOWN_V1;
+
+/// Required method set for backend services that use the common JSON-control
+/// transport: `info_json`, `invoke_json`, `shutdown_v1`.
+pub const JSON_CONTROL_SERVICE_METHODS_V1: &[&str] = &[
+    SERVICE_METHOD_INFO_JSON,
+    SERVICE_METHOD_INVOKE_JSON,
+    SERVICE_METHOD_SHUTDOWN_V1,
+];
+
+/// Common declaration for a backend service family.
+///
+/// This intentionally does not describe domain packets. Render, physics, input,
+/// UI and future domains still own their DTOs and typed adapters; this spec only
+/// tells the host which service id and backend capability must co-exist on the
+/// provider plugin.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct BackendServiceSpec {
+    pub domain: &'static str,
+    pub service_id: &'static str,
+    pub backend_capability_id: &'static str,
+}
+
+impl BackendServiceSpec {
+    #[inline]
+    pub const fn new(
+        domain: &'static str,
+        service_id: &'static str,
+        backend_capability_id: &'static str,
+    ) -> Self {
+        Self { domain, service_id, backend_capability_id }
+    }
+}
+
+/// Startup contract for a runtime service.
+///
+/// Domain crates may expose constants of this type; startup validation can then
+/// walk specs instead of hard-coding a resolver per backend family.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct RuntimeServiceContractSpec {
+    pub service_id: &'static str,
+    pub expected_contract: &'static str,
+    pub required_methods: &'static [&'static str],
+}
+
+impl RuntimeServiceContractSpec {
+    #[inline]
+    pub const fn new(
+        service_id: &'static str,
+        expected_contract: &'static str,
+        required_methods: &'static [&'static str],
+    ) -> Self {
+        Self { service_id, expected_contract, required_methods }
+    }
+}
 
 /// Stable identifier of a service provided through `newengine-core`'s service registry.
 #[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]

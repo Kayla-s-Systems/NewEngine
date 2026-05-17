@@ -799,6 +799,7 @@ dependencies = [
  "newengine-plugin-api",
  "newengine-plugin-host",
  "newengine-render-api",
+ "newengine-service-api",
  "newengine-system-contracts",
  "newengine-system-runtime",
  "newengine-transform",

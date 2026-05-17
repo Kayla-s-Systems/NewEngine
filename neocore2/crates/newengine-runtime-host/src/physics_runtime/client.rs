@@ -1,41 +1,32 @@
-use abi_stable::std_types::RString;
-use newengine_plugin_api::{Blob, HostApiV1, MethodName};
 use newengine_physics_api::{
     decode_json, encode_json, PhysicsBackendInfo, PhysicsFrameInput, PhysicsFrameOutput,
     PhysicsServiceRequest, PhysicsServiceResponse, PHYSICS_SERVICE_ID,
-    PHYSICS_SERVICE_METHOD_INFO, PHYSICS_SERVICE_METHOD_INVOKE,
 };
+use newengine_plugin_api::HostApiV1;
+
+use crate::service_runtime::GenericJsonServiceClient;
 
 #[derive(Clone)]
 pub(crate) struct PhysicsServiceClient {
-    host: HostApiV1,
-    service_id: RString,
+    service: GenericJsonServiceClient,
 }
 
 impl PhysicsServiceClient {
     #[inline]
     pub(crate) fn new(host: HostApiV1) -> Self {
-        Self { host, service_id: RString::from(PHYSICS_SERVICE_ID) }
-    }
-
-    #[inline]
-    fn call(&self, method_name: MethodName, payload: Vec<u8>) -> Result<Vec<u8>, String> {
-        (self.host.call_service_v1)(self.service_id.clone(), method_name, Blob::from(payload))
-            .into_result()
-            .map(|value| value.into_vec())
-            .map_err(|err| err.to_string())
+        Self { service: GenericJsonServiceClient::new(host, PHYSICS_SERVICE_ID) }
     }
 
     #[inline]
     pub(crate) fn info(&self) -> Result<PhysicsBackendInfo, String> {
-        let bytes = self.call(MethodName::from(PHYSICS_SERVICE_METHOD_INFO), Vec::new())?;
+        let bytes = self.service.info_json()?;
         decode_json(&bytes)
     }
 
     #[inline]
     pub(crate) fn invoke(&self, req: PhysicsServiceRequest) -> Result<PhysicsServiceResponse, String> {
         let payload = encode_json(&req)?;
-        let bytes = self.call(MethodName::from(PHYSICS_SERVICE_METHOD_INVOKE), payload)?;
+        let bytes = self.service.invoke_json(payload)?;
         decode_json(&bytes)
     }
 

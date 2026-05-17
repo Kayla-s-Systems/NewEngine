@@ -10,8 +10,8 @@ use serde::{Deserialize, Serialize};
 
 pub const PHYSICS_SERVICE_ID: &str = "physics.api";
 pub const PHYSICS_BACKEND_CAPABILITY_ID: &str = "physics.backend";
-pub const PHYSICS_SERVICE_METHOD_INFO: &str = "info_json";
-pub const PHYSICS_SERVICE_METHOD_INVOKE: &str = "invoke_json";
+pub const PHYSICS_SERVICE_METHOD_INFO: &str = newengine_service_api::SERVICE_METHOD_INFO_JSON;
+pub const PHYSICS_SERVICE_METHOD_INVOKE: &str = newengine_service_api::SERVICE_METHOD_INVOKE_JSON;
 pub const PHYSICS_SERVICE_METHOD_SHUTDOWN_V1: &str = newengine_service_api::SERVICE_METHOD_SHUTDOWN_V1;
 
 pub type PhysicsEntityKey = u64;

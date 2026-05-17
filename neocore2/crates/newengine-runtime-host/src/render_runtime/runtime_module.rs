@@ -1,15 +1,12 @@
 use std::path::PathBuf;
 
 use newengine_core::render::{RenderApiRef, RENDER_API_ID, RENDER_API_PROVIDE};
-use newengine_core::{EngineError, EngineResult, Module, ModuleCtx};
-use newengine_render_api::RENDER_SERVICE_ID;
+use newengine_core::{EngineResult, Module, ModuleCtx};
 
 use crate::render_runtime::client::RenderServiceClient;
-use crate::render_runtime::provider_resolver::{
-    plugin_declares_render_backend, plugin_declares_service, RenderProviderResolver,
-};
 use crate::render_runtime::service_api::ServiceBackedRenderApi;
-use crate::render_runtime::types::ResolvedRenderBackendConfig;
+use crate::render_runtime::types::{ResolvedRenderBackendConfig, RENDER_BACKEND_SERVICE_SPEC};
+use crate::service_runtime::bind_backend_info;
 
 pub struct RenderBackendRuntimeModule {
     _modules_dir: PathBuf,
@@ -22,45 +19,6 @@ impl RenderBackendRuntimeModule {
         Self {
             _modules_dir: modules_dir,
             api: None,
-        }
-    }
-
-    #[inline]
-    fn explain_backend_unavailability<E: Send + 'static>(
-        &self,
-        ctx: &ModuleCtx<'_, E>,
-        service_error: &str,
-    ) -> String {
-        let Some(snapshot) = ctx.resources().get::<newengine_plugin_host::PluginsSnapshot>() else {
-            return format!(
-                "render service '{}' is unavailable: {}",
-                RENDER_SERVICE_ID, service_error
-            );
-        };
-
-        let loaded_render_plugins: Vec<String> = snapshot
-            .plugins
-            .iter()
-            .filter(|plugin| {
-                plugin_declares_render_backend(plugin)
-                    || plugin_declares_service(plugin, RENDER_SERVICE_ID)
-            })
-            .map(|plugin| format!("{}:{}", plugin.id, plugin.state))
-            .collect();
-
-        if loaded_render_plugins.is_empty() {
-            format!(
-                "no render backend plugin was loaded; service '{}' is unavailable: {}",
-                RENDER_SERVICE_ID,
-                service_error
-            )
-        } else {
-            format!(
-                "loaded render providers=[{}], but service '{}' is unavailable: {}",
-                loaded_render_plugins.join(", "),
-                RENDER_SERVICE_ID,
-                service_error
-            )
         }
     }
 }
@@ -78,21 +36,12 @@ impl<E: Send + 'static> Module<E> for RenderBackendRuntimeModule {
         let host = newengine_plugin_host::default_host_api();
         let client = RenderServiceClient::new(host);
 
-        let info = match client.info() {
-            Ok(info) => info,
-            Err(err) => {
-                let reason = self.explain_backend_unavailability(ctx, &err);
-                return Err(EngineError::Other(format!(
-                    "render backend could not be bound through service '{}': {}",
-                    RENDER_SERVICE_ID,
-                    reason
-                )));
-            }
-        };
-
-        let snapshot = ctx.resources().get::<newengine_plugin_host::PluginsSnapshot>();
-        let selection = RenderProviderResolver::resolve(snapshot, &info)
-            .map_err(EngineError::other)?;
+        let (info, selection) = bind_backend_info(
+            ctx,
+            RENDER_BACKEND_SERVICE_SPEC,
+            client.info(),
+            |info| info.backend_id.as_str(),
+        )?;
         let protocol_version = info.protocol_version;
 
         log::info!(
