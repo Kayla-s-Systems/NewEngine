@@ -1,23 +1,7 @@
 # newengine-plugin-api
 
-Чистый ABI-контракт для внешних плагинов (DLL): точки входа, версии, capability-описания, базовые типы обмена.
+Stable plugin ABI definitions: plugin roots, modules, host API, services, descriptors, and capabilities.
 
-## Ответственность
+## Architecture notes
 
-- Стабильный ABI между host’ом и dylib-плагином.
-- Идентификация/описание плагина через расширяемые capabilities.
-- Минимальный набор типов для вызовов сервисов (без знания реализаций).
-
-## Не ответственность
-
-- Не зависит от конкретных плагинов/модулей и их типов.
-- Не содержит реализаций сервисов.
-
-## Инварианты
-
-- ABI должен быть минимальным и версионированным.
-- Любые изменения, влияющие на ABI, делаются через явное введение новой версии.
-
-## Ссылки
-
-- `../../ARCHITECTURE.md`
+This crate is part of the CoreEngine host/plugin architecture. Runtime-facing code should prefer engine gateways and typed adapters over concrete provider implementation crates.

@@ -1,115 +1,46 @@
-# 03 — Гайд: чистая система providers/adapters
+# Provider / Adapter System Guide
 
-## 1. Термины
+## Terms
 
-**Provider** — plugin or feature pack that provides a declared capability/service.
+**Gateway**: stable engine-facing facade id, such as `engine.render`.
 
-**Backend provider** — plugin behind stable service API, e.g. `render.api` or `physics.api`.
+**Provider service**: concrete plugin-owned service id, such as `render.api`, `asset_manager.api`, or a third-party equivalent.
 
-**Adapter** — host-side typed wrapper over a service protocol, registered in `Resources` as a typed API ref.
+**Backend provider**: plugin that declares a backend capability and maps itself to an engine gateway through metadata.
 
-## 2. Strict rules
+**Adapter**: host-side typed wrapper over a service protocol, registered in `Resources` as a typed API ref.
+
+## Strict rules
 
 - No backend identity by filename.
-- No config aliases such as `auto`, `default`, vendor names or backend nicknames as engine selection logic.
+- No backend nickname aliases in engine selection logic.
 - No hidden in-process fallback backend.
-- Null backend must be a real service provider plugin.
+- Null backends must be real service provider plugins.
 - Runtime systems import API crates/adapters, not provider implementation crates.
-- No provider backend receives `&mut World` or backend-native handles across ABI.
 - Backend priority is declared metadata, not hard-coded engine knowledge.
+- Consumers call `engine.*` gateways, not provider service ids.
+- Unknown provider kinds warn and are ignored by default.
 
-## 3. Descriptor-first discovery
+## Provider self-description
 
-A runtime provider must self-describe through ABI metadata:
-
-```rust
-PluginDescriptor::builder(plugin_id, name, version, PluginKind::Runtime)
-    .provides_service(SERVICE_ID, 1, r#"{...}"#)
-    .push(
-        CapabilityDesc::new("<domain>.backend", Provides, Other, 1)
-            .with_json(r#"{"backend_priority":100}"#)
-    )
-    .build()
+```json
+{
+  "service_kind": "render",
+  "engine_gateway": "engine.render",
+  "contract": "vendor.render.api",
+  "backend_priority": 100
+}
 ```
 
-Selection is based on descriptor facts:
+The plugin does not import an engine enum. It writes metadata. The engine validates known strings and ignores unknown kinds.
+
+## Gateway routing
 
 ```text
-service id + backend capability + backend_priority
+consumer call: engine.render
+        -> ActiveGatewayRegistry
+        -> selected provider route
+        -> provider service call
 ```
 
-The file path is only the thing to load. It is not the source of plugin identity.
-
-## 4. Render reference implementation
-
-```text
-Renderer plugin
-  provides service render.api
-  provides capability render.backend
-      ↓
-RenderServiceClient
-      ↓
-ServiceBackedRenderApi : dyn RenderApi
-      ↓
-Resources.register_api(RENDER_API_ID, RenderApiRef)
-      ↓
-RuntimeRenderController
-```
-
-## 5. Physics implementation
-
-```text
-Physics plugin
-  provides service physics.api
-  provides capability physics.backend
-      ↓
-PhysicsServiceClient
-      ↓
-ServiceBackedPhysicsApi : dyn PhysicsApi
-      ↓
-Resources.register_api(PHYSICS_API_ID, PhysicsApiRef)
-      ↓
-PhysicsSyncModule
-```
-
-`PhysicsSyncModule` is the only place where ECS is translated into physics packets and output packets are applied back to ECS.
-
-## 6. Adapter lifecycle
-
-```text
-Provider lifecycle:
-  init_v3(host, config)
-    register_service_v1(...)
-  shutdown()
-    release native/backend resources
-
-Host adapter lifecycle:
-  init(ctx)
-    service client info/negotiate
-    validate loaded service owner capability
-    register typed API ref into Resources
-  update/fixed_update
-    call typed API methods
-  shutdown(ctx)
-    unregister typed API ref
-```
-
-## 7. Command-buffer boundary
-
-Bad:
-
-```text
-physics.step(&mut World)
-renderer.draw_scene(&SceneBridge)
-```
-
-Good:
-
-```text
-physics.step(PhysicsFrameInput) -> PhysicsFrameOutput
-renderer.submit_frame(RenderFrameEnvelope) -> RenderFrameSubmitReport
-```
-
-## 8. Null providers
-
-Null providers are not hidden compatibility shims. They are ordinary service providers with declared capabilities. This makes headless/no-op behavior testable and observable.
+No domain-specific `if render else physics else assets` routing tree is allowed.

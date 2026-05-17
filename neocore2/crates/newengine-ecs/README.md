@@ -1,27 +1,7 @@
 # newengine-ecs
 
-Детерминированный ECS для NewEngine: сущности, компоненты, запросы, ресурсы и командный буфер.
+Entity-component storage and runtime world primitives used by engine systems.
 
-## Ответственность
+## Architecture notes
 
-- `World` — сущности + хранилища компонентов + ресурсы + `tick`.
-- `Query*` — thin-итераторы без скрытых аллокаций.
-- `Commands` — структурные изменения с детерминированным применением.
-- `Events<T>` — double-buffer очередь событий.
-- `Schedule/Stage/System` — минимальный детерминированный запуск систем.
-
-## Не ответственность
-
-- Не содержит доменные компоненты (Transform/Scene/Physics и т.п.).
-- Не содержит платформу/рендер/плагины.
-
-## Ключевые правила
-
-1) **EntityId — runtime id.** Persistent id живёт в доменах сцены/ассетов.
-2) **Tick задаётся снаружи.** Хост/Scene управляют `World::set_tick`.
-3) **Scratch ресурсы.** Для allocation-free hot path используйте:
-    - `World::resource_mut_or_insert_default::<T>()`
-
-## Ссылки
-
-- `../../ARCHITECTURE.md`
+This crate is part of the CoreEngine host/plugin architecture. Runtime-facing code should prefer engine gateways and typed adapters over concrete provider implementation crates.

@@ -1,5 +1,6 @@
 // NewEngine postfx color-space base.
-// World/material shaders should output linear HDR. Display transforms live here.
+// World/material shaders output linear HDR. Display transforms live in the
+// canonical root fragment shader `postfx/tonemap_display.frag`.
 
 vec3 ne_safe_hdr(vec3 c) {
     return max(c, vec3(0.0));

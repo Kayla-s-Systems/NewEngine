@@ -1,23 +1,7 @@
 # newengine-service-api
 
-Минимальный контракт для сервисов NewEngine: стабильные идентификаторы и базовый trait интерфейса.
+Common service vocabulary, gateway constants, backend specs, and runtime requirement specs.
 
-## Ответственность
+## Architecture notes
 
-- `ServiceKey` — стабильный ключ сервиса в реестре.
-- `InterfaceId` — стабильный id версии интерфейса (vtable contract).
-- `hash_u128("...")` — детерминированное построение id из строк.
-- `ServiceInterface` — типизированная обёртка поверх `(instance_ptr, vtable_ptr)`.
-
-## Не ответственность
-
-- Не содержит реестр сервисов и загрузку плагинов (это `newengine-core`).
-- Не задаёт конкретные сервисы доменов — только инструменты для их идентификации.
-
-## Инварианты
-
-- Строковые идентификаторы должны быть **стабильны** и **версионированы** (`...v1`, `...v2`).
-
-## Ссылки
-
-- `../../ARCHITECTURE.md`
+This crate is part of the CoreEngine host/plugin architecture. Runtime-facing code should prefer engine gateways and typed adapters over concrete provider implementation crates.

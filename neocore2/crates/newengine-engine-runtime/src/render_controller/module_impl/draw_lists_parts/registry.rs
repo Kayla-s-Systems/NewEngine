@@ -60,7 +60,7 @@ impl RenderDrawListProviderMetadata {
 }
 
 #[derive(Clone, Debug)]
-pub(super) struct ExternalRenderDrawListProviderDesc {
+pub(in crate::render_controller::module_impl) struct ExternalRenderDrawListProviderDesc {
     pub(super) id: String,
     pub(super) plugin_id: String,
     pub(super) label: String,

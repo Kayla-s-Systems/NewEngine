@@ -1,59 +1,36 @@
-# 07 — Implementation checklist для providers/adapters
+# Provider / Adapter Implementation Checklist
 
-## 1. Universal rules
+## Universal rules
 
 - [ ] Provider identity comes from ABI descriptor/signature, not filename.
-- [ ] Provider declares service and capability in `PluginDescriptor`.
-- [ ] No legacy aliases unless explicitly approved for a short migration branch.
+- [ ] Provider declares `ServiceV1` in `PluginDescriptor`.
+- [ ] Provider declares a backend capability in `PluginDescriptor`.
+- [ ] Backend capability metadata contains `service_kind`.
+- [ ] Backend capability metadata contains `engine_gateway`.
+- [ ] Backend capability metadata contains `contract` when multiple `ServiceV1` entries exist.
+- [ ] Backend capability metadata contains deterministic `backend_priority`.
+- [ ] Consumers call `engine.*` gateway ids, not provider service ids.
 - [ ] No hidden in-process fallback backend.
 - [ ] Null backend is a real service provider plugin.
 - [ ] Runtime imports API crates/adapters only.
 - [ ] Backend receives DTO packets, not engine internals.
 - [ ] Backend shutdown is idempotent.
 
-## 2. Provider plugin checklist
+## Gateway routing checklist
 
-- [ ] Implements `PluginModuleV3`.
-- [ ] Stable plugin id/name/version.
-- [ ] Correct `PluginKind::Runtime` for runtime backend.
-- [ ] Declares service capability with `CapabilityKind::ServiceV1`.
-- [ ] Declares domain backend capability.
-- [ ] `describe_json` includes protocol/features/limits/priority.
-- [ ] Does not register undeclared services.
-- [ ] Unknown service methods return structured error.
-- [ ] Bad payload returns structured error.
+- [ ] Routing is descriptor-driven.
+- [ ] Unknown `service_kind` logs a warning and ignores the route.
+- [ ] Invalid `engine_gateway` logs a warning and ignores the route.
+- [ ] Multiple providers are selected by priority and deterministic tie-breakers.
+- [ ] `list_services()` includes active engine gateways for diagnostics.
+- [ ] `describe_service(engine.*)` returns the active provider description.
+- [ ] `call_service_v1(engine.*, method, payload)` routes to the active provider service.
 
-## 3. Host adapter checklist
+## Current status
 
-- [ ] Client uses API crate constants only.
-- [ ] Adapter hides raw service blobs from engine systems.
-- [ ] Adapter maps provider errors to engine errors with context.
-- [ ] Adapter validates service owner capability.
-- [ ] Adapter registers typed API ref in `Resources`.
-- [ ] Adapter unregisters API ref on shutdown.
-
-## 4. Render status
-
-- [x] Provides `render.api`.
-- [x] Provides `render.backend`.
-- [x] Runtime binds through `RenderServiceClient` and `ServiceBackedRenderApi`.
-- [x] No in-process renderer fallback.
-- [x] Null renderer is service plugin.
-- [x] No backend aliases/config selector.
-- [x] Descriptor/capability provider selection.
+- [x] Assets use `engine.assets`.
+- [x] Render uses `engine.render`.
+- [x] Physics uses `engine.physics`.
+- [x] Input is gateway-routable through `engine.input`.
 - [ ] Provider conformance tests.
 - [ ] Zero-warning CI.
-
-## 5. Physics status
-
-- [x] `newengine-physics-api` exists.
-- [x] Providers declare `physics.api`.
-- [x] Providers declare `physics.backend`.
-- [x] Host-side `PhysicsServiceClient` exists.
-- [x] Runtime registers `PhysicsApiRef`.
-- [x] Engine-runtime does not import provider implementation crates.
-- [x] No `&mut World` crosses provider boundary.
-- [x] Static terrain/world geometry is packetized as DTO colliders.
-- [x] Descriptor-first discovery, no filename identity.
-- [ ] Contact/replay conformance tests.
-- [ ] Binary packet option if profiling requires it.

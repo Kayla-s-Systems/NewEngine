@@ -58,10 +58,6 @@ impl RenderInstanceRaw {
         }
     }
 
-    #[inline]
-    pub(in crate::render_controller) const fn stride() -> u32 {
-        core::mem::size_of::<Self>() as u32
-    }
 }
 
 #[inline]

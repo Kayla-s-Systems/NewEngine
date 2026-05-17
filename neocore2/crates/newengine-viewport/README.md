@@ -1,28 +1,7 @@
 # newengine-viewport
 
-    Viewport: описание, runtime-состояние, render-resources для привязки UI↔render target.
+Viewport and surface sizing helpers for runtime presentation.
 
-    ## Роль в архитектуре
+## Architecture notes
 
-    - **Слой:** `crates/newengine-viewport`
-    - **Назначение:** Viewport: описание, runtime-состояние, render-resources для привязки UI↔render target.
-
-    ## Инварианты
-
-    - Viewport API должен быть стабильным для Editor и Runtime.
-
-- Никаких зависимостей на конкретный рендер-бэкенд.
-
-  ## Публичный API
-
-    - Смотри `src/lib.rs` и модульные реэкспорты.
-    - Для контрактов/ABI: фиксируйте изменения через версионирование (semver) и миграции.
-
-  ## Тестирование и профилирование
-
-    - Unit-тесты: `cargo test -p newengine-viewport`
-    - (Рекомендуется) bench/criterion для hot path.
-
-  ## Ссылки
-
-    - Архитектура workspace: `../../ARCHITECTURE.md`
+This crate is part of the CoreEngine host/plugin architecture. Runtime-facing code should prefer engine gateways and typed adapters over concrete provider implementation crates.

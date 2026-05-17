@@ -1,18 +1,7 @@
 # newengine-assets
 
-Engine-side контракт для **AssetManager** (как сервис) + небольшой protocol-first client.
+Asset domain helpers and runtime-facing asset abstractions. Asset consumers should call `engine.assets` through the host client instead of binding to a concrete provider service id.
 
-## Ответственность
+## Architecture notes
 
-- `AssetServiceClient` — обращение к AssetManager через `HostApiV1::call_service_v1`.
-- Минимальные трейты `AssetService/AssetAccess` для тестируемости и подмены.
-- Константы контрактов: service id и имена методов.
-
-## Не ответственность
-
-- Не содержит реализацию AssetManager (она живёт в отдельном плагине).
-- Не зависит от UI/рендера.
-
-## Ссылки
-
-- `../../ARCHITECTURE.md`
+This crate is part of the CoreEngine host/plugin architecture. Runtime-facing code should prefer engine gateways and typed adapters over concrete provider implementation crates.

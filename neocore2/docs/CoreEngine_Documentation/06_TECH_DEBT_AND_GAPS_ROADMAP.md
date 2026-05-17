@@ -1,63 +1,43 @@
-# 06 — Зазоры и технический долг: roadmap
+# Technical Debt and Gaps Roadmap
 
-## P0 — release blockers / strict cleanliness
+## P0: release blockers
 
-### 1. Provider conformance tests
+### Provider and gateway conformance tests
 
-Add domain conformance suites:
-
-```text
-render.api provider tests
-physics.api provider tests
-asset.manager provider tests
-```
-
-Physics tests should cover deterministic replay packets, collider insertion/removal, commands, queries, null provider behavior, and native provider parity expectations.
-
-### 2. Zero-warning CI
-
-Current run still shows visibility warnings in render draw/light provider internals and one unused stride helper. These are not architecture violations but should be fixed before release CI.
-
-### 3. Runtime service contract source of truth
-
-Startup contract validation still has manual service lists. Target: profile/startup declares required capabilities/services; validation walks resolver output.
-
-## P1 — scalability
-
-### 4. Input API formalization
-
-Input is service-backed but should become a first-class `newengine-input-api` crate with typed envelopes and host adapter.
-
-### 5. UI provider API formalization
-
-UI provider selection should follow the same strict pattern as render/physics: explicit service API crate, provider capability, null provider, resolver validation.
-
-### 6. Physics hardening
-
-- contact manifolds/events;
-- collision filters/layers;
-- streamed collider diffing;
-- binary frame packet option;
-- debug draw packet protocol;
-- replay fixtures.
-
-## P2 — tooling and content
-
-### 7. Codec tools
-
-- `netexturetool`: stronger `.neytd` validation, batch compression profiles, mip audit.
-- `NePak`: canonical `.nepak` output, archive signing option, package diff/patch workflows.
-
-### 8. Shutdown/reload
-
-DLL unload remains process-lifetime in normal runs. Add recreate/reload tests for providers and document unload policy.
-
-## Updated sprint order
+Add conformance suites for:
 
 ```text
-Sprint A — Provider conformance and zero-warning cleanup
-Sprint B — Physics contact/replay hardening
-Sprint C — Input/UI API formalization
-Sprint D — Asset codec validation tooling
-Sprint E — Reload/shutdown test matrix
+engine.render
+engine.physics
+engine.assets
+engine.input
 ```
+
+Tests should cover metadata validation, unknown service kinds, missing gateways, multiple providers, null providers, degradation mode, and strict mode.
+
+### Zero-warning CI
+
+CI should run `cargo fmt`, Clippy with `-D warnings`, build, tests, doc tests, Miri, and coverage.
+
+### Gateway routing conformance
+
+Required tests:
+
+- descriptor-only provider selection;
+- no filename identity;
+- deterministic tie-breakers;
+- service id rewrite through `engine.*` gateways;
+- missing provider degradation;
+- explicit strict fatal mode.
+
+## P1: scalability
+
+- Formalize `newengine-input-api`.
+- Add a formal UI provider API.
+- Harden physics contact events, replay fixtures, streamed collider diffs, and optional binary packets.
+
+## P2: tooling and content
+
+- Strengthen `.neytd` validation and mip audits.
+- Add `.nepak` signing, package diffing, and patch workflows.
+- Expand reload/shutdown tests.

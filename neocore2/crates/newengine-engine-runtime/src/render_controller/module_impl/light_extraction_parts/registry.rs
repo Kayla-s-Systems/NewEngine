@@ -106,7 +106,7 @@ pub trait LightExtractionProvider: Send + Sync {
 }
 
 #[derive(Clone, Debug)]
-pub(super) struct ExternalLightExtractionProviderDesc {
+pub(in crate::render_controller::module_impl) struct ExternalLightExtractionProviderDesc {
     pub(super) id: String,
     pub(super) plugin_id: String,
     pub(super) label: String,

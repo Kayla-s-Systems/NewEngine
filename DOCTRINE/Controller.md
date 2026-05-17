@@ -1,57 +1,11 @@
-# 🔷 Направление 2 — Controllers (Entity / Camera / Motor)
+# Controller Doctrine
 
-Это очень хороший выбор для второй группы.
+Entity controllers should produce intent commands rather than mutating world storage directly.
 
-## Почему:
+Recommended frame shape:
 
-- Это изолируемый домен
-- Не ломает ядро
-- Быстро даёт визуальный результат
-- Мотивирует команду
+```text
+input snapshot -> controller update -> intent buffer -> deterministic apply stage
+```
 
-## Как правильно поставить задачу, чтобы не получилось хаоса
-
-### 1️⃣ Разделить ответственность
-
-**Controller** — не должен знать про рендер.
-
-Он должен:
-
-- Принимать input
-- Обновлять transform/entity state
-- Работать через чистые интерфейсы
-
-### 2️⃣ Entity Motor
-
-**Motor** — это:
-
-- Скорость
-- Ускорение
-- Ограничения
-- Физическая логика (пока без полноценной физики)
-
-### 3️⃣ Camera Controller
-
-- Orbit
-- Free fly
-- Follow entity
-- Smooth damp
-
-И всё это через контракт.
-
-## ⚠️ Очень важно
-
-Не допускай, чтобы Controllers:
-
-- Напрямую лезли в ECS storage
-- Знали про конкретную реализацию Scene
-- Хардкодили input внутри себя
-
-### Лучше:
-
-- Controller → Service (Input)
-- Controller → Service (Scene/Transform API)
-
-Через capability.
-
-Ты же любишь чистоту границ 🙂
+This preserves single-writer ownership, improves replay support, and keeps gameplay policy separate from storage implementation.

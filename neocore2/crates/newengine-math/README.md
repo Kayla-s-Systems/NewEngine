@@ -1,23 +1,7 @@
 # newengine-math
 
-Единый math-слой NewEngine: типы, операции и детерминированные коллекции.
+Canonical math and runtime collection policy crate. Hot-path systems should use this crate instead of choosing ad-hoc math or collection dependencies.
 
-## Ответственность
+## Architecture notes
 
-- Математические типы: `Vec*`, `Mat*`, `Quat`, углы, преобразования.
-- Политики коллекций для детерминизма (`collections::*`).
-- Реестр математических функций (расширяемый плагинами) для «высокоуровневой» математики.
-
-## Не ответственность
-
-- Не тянет домены (ECS/Scene/Renderer) и не должен зависеть от них.
-- Не должен «протекать» сторонними math deps в другие крейты: зависимость на math — через этот крейт.
-
-## Инварианты
-
-- Детерминизм по умолчанию: порядок и поведение коллекций должны быть аудируемыми.
-- Запрещён `unsafe` в `unsafe fn` (workspace style).
-
-## Ссылки
-
-- `../../ARCHITECTURE.md`
+This crate is part of the CoreEngine host/plugin architecture. Runtime-facing code should prefer engine gateways and typed adapters over concrete provider implementation crates.

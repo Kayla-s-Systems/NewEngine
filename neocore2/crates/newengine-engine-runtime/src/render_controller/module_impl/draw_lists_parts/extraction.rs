@@ -77,7 +77,7 @@ pub trait RenderDrawListProvider: Send + Sync {
 }
 
 #[derive(Clone, Debug)]
-pub(super) struct RuntimeDrawListSet {
+pub(in crate::render_controller::module_impl) struct RuntimeDrawListSet {
     lists: Vec<RuntimeDrawList>,
 }
 
@@ -168,7 +168,7 @@ pub struct DrawListBuildCtx<'a> {
 
 impl<'a> DrawListBuildCtx<'a> {
     #[inline]
-    pub fn new(
+    pub(in crate::render_controller::module_impl) fn new(
         controller: &'a mut RuntimeRenderController,
         render: &'a mut dyn RenderApi,
         lists: &'a RuntimeDrawListSet,

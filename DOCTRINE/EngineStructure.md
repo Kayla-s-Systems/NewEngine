@@ -1,7 +1,11 @@
-ВЫНЕСТИ из движка все *-api-host
+# Engine Structure Doctrine
 
-* render
-* UI
-* physics
-* sound
-  Чтобы движок был чистым и расширяемым!!!
+Move host adapters and provider-specific implementation out of reusable engine-runtime code.
+
+The engine should remain clean and extensible:
+
+```text
+engine core -> stable contracts and gateway routing
+provider plugins -> implementation details
+runtime adapters -> typed wrappers over selected services
+```

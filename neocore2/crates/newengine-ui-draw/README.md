@@ -1,24 +1,7 @@
 # newengine-ui-draw
 
-Низкоуровневые структуры данных для отрисовки UI: меш, draw commands и texture delta.
+UI draw-list structures used by render extraction.
 
-## Ответственность
+## Architecture notes
 
-- `UiDrawList`/`UiMesh` — вершины/индексы + команды отрисовки.
-- `UiTextureDelta` — изменения текстур (set/patch/free) для синхронизации UI → renderer.
-- Строгий POD-формат `UiVertex` (совместим с GPU буферами через `bytemuck`).
-
-## Не ответственность
-
-- Не парсит markup/XML.
-- Не содержит конкретной интеграции с egui.
-- Не загружает ассеты и не декодирует изображения.
-
-## Инварианты
-
-- Все команды должны быть применимы детерминированно при одинаковом UI tree.
-- `UiVertex` остаётся POD (без padding-ловушек) — менять формат только через версионирование.
-
-## Ссылки
-
-- `../../ARCHITECTURE.md`
+This crate is part of the CoreEngine host/plugin architecture. Runtime-facing code should prefer engine gateways and typed adapters over concrete provider implementation crates.

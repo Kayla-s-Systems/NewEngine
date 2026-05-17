@@ -1,62 +1,30 @@
-# NewEngine Math & Collections Policy
+# Math and Collections Policy
 
-## Цель
+## Goal
 
-`newengine-math` является единой точкой входа для математических типов, математических операций и низкоуровневых коллекций движка.
+`newengine-math` is the canonical entry point for math types, math operations, and low-level runtime collections.
 
-## Правило для движка
+## Engine rule
 
-Hot-path код движка использует `newengine-math` напрямую:
+Hot-path engine code uses `newengine-math` directly for math types and collection aliases. Domain crates and plugins should not choose their own hashers or collection backends in runtime paths.
 
-```rust
-use newengine_math::prelude::*;
-use newengine_math::collections_prelude::*;
-```
+Recommended aliases:
 
-Запрещено тянуть в доменные крейты и плагины прямые зависимости/импорты на:
+- `NeHashMap`, `NeHashSet`: fast internal containers.
+- `NeSecureHashMap`, `NeSecureHashSet`: untrusted data from network, files, JSON, mods, or users.
+- `NeBTreeMap`, `NeBTreeSet`: stable iteration and serialization order.
+- `NeVecDeque`: queues, LRU, and FIFO structures.
 
-- `hashbrown::*`
-- `fxhash::*`
-- `ahash::*`
-- `std::collections::*` в runtime-логике движка/плагинов
-- сторонние math crates напрямую
+## Plugin rule
 
-Если нужна коллекция, она должна быть выбрана через engine policy:
+Plugins use `newengine_math::collections_prelude`. They do not choose collection policy independently.
 
-- `NeHashMap`, `NeHashSet` — внутренние быстрые контейнеры.
-- `NeSecureHashMap`, `NeSecureHashSet` — данные из сети, файлов, JSON, модов, пользователя.
-- `NeBTreeMap`, `NeBTreeSet` — стабильный порядок итерации/сериализации.
-- `NeVecDeque` — очереди/LRU/FIFO.
+## Why math is not only a DLL service
 
-## Правило для плагинов
+Per-frame math such as dot products, matrix operations, normalization, camera calculations, frustum tests, and renderer transforms must inline. ABI or service calls per scalar operation would destroy the hot path.
 
-Плагин не выбирает hasher/collection backend сам. Он использует только `newengine_math::collections_prelude`.
+Correct model: `newengine-math` is the compile-time foundation; `MathPlugin` can provide service-style extension operations on top of the same contract.
 
-Для математических расчётов есть два пути:
+## CI audit
 
-1. **Hot-path / per-frame / render / physics:** прямой вызов типов и функций из `newengine-math`.
-2. **Расширяемые/редакторские/межплагиновые операции:** вызов сервиса `newengine.math.service.v1` из `MathPlugin`.
-
-## Почему math не должен быть только DLL
-
-Полностью вынести всю математику в DLL нельзя без деградации архитектуры:
-
-- per-frame `Vec3::dot`, `Mat4 * Vec4`, normalize, camera/frustum/renderer должны инлайниться;
-- ABI/JSON/service-call на каждый скалярный расчёт убьёт hot-path;
-- deterministic foundation должен быть доступен на этапе компиляции для engine crates.
-
-Правильная модель: `newengine-math` — фундаментальный crate, `MathPlugin` — сервисный/расширяемый provider поверх того же контракта.
-
-## CI-запреты
-
-Минимальный grep/audit gate:
-
-```bash
-rg "hashbrown|fxhash|ahash|std::collections" NewEngine/neocore2/crates Plugins -g '*.rs' -g 'Cargo.toml'
-```
-
-Допустимые исключения:
-
-- внутренняя реализация `crates/newengine-math/src/collections*`;
-- внешние библиотечные примеры/тестовые fixtures;
-- код, где `std::collections` нужен только для FFI/adapters и явно обёрнут policy-типом.
+CI should reject new direct runtime dependencies on ad-hoc collection or math crates outside approved adapter boundaries.

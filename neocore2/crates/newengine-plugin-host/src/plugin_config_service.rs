@@ -388,7 +388,7 @@ mod tests {
 
     #[test]
     fn log_summary_truncates_multibyte_values_on_char_boundary() {
-        let long_value = "Ж".repeat(LOG_VALUE_MAX_BYTES);
+        let long_value = "X".repeat(LOG_VALUE_MAX_BYTES);
         let summarized = summarize_value_for_log(&json!(long_value));
 
         assert!(summarized.ends_with(LOG_TRUNCATION_SUFFIX));

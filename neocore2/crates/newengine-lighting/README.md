@@ -1,26 +1,7 @@
 # newengine-lighting
 
-Доменные типы освещения: компоненты и ресурсы света, независимые от конкретного рендера.
+Lighting-domain data structures and helpers shared by render extraction and feature packs.
 
-## Ответственность
+## Architecture notes
 
-- `AmbientLight` (resource) — параметры глобального окружения.
-- `DirectionalLight` (component) — бесконечный направленный источник (солнце).
-- `PointLight` (component) — локальный источник света.
-- `ShadowSettings` (resource) — декларативные настройки теней без привязки к backend/API.
-
-## Не ответственность
-
-- Не содержит шейдеров/пайплайнов/рендер графа.
-- Не создаёт shadow map ресурсы напрямую; backend consuming layer должен читать `ShadowSettings`.
-- Не знает про конкретный render backend.
-- Не управляет экспозицией/тонмаппингом (это отдельный домен постпроцесса).
-
-## Инварианты
-
-- Цвета задаются в **linear RGB**.
-- Координатные соглашения (направление `DirectionalLight`) должны быть едины для всех backend’ов.
-
-## Ссылки
-
-- `../../ARCHITECTURE.md`
+This crate is part of the CoreEngine host/plugin architecture. Runtime-facing code should prefer engine gateways and typed adapters over concrete provider implementation crates.

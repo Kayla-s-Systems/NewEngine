@@ -1,47 +1,31 @@
-# CoreEngine / NewEngine — документация provider architecture
+# CoreEngine / NewEngine Documentation
 
-Дата обновления: 2026-05-17  
-Источник состояния: `NewEngineRockstar-source-20260517-085857.zip` + последний runtime log `game-ready-fps`.  
-Фокус этого пакета: актуальное описание движка после перевода physics на `physics.api` service adapter plugin и формализация proprietary asset codecs `.neytd` / `.nepak`.
+Updated: 2026-05-17
 
-## Главный вывод
+This documentation describes the current host/plugin architecture after the Gateway Service Layer decomposition.
 
-CoreEngine стал ближе к release-ready границе:
+## Current model
 
 ```text
-Engine/Core = lifecycle + scheduler + Resources + service registry + plugin host
-Backend     = DLL provider за стабильным service API
-Adapter     = host-side typed wrapper over service protocol
-Feature     = explicit plugin / profile feature pack
+Engine/Core = lifecycle + scheduler + Resources + startup graph + gateway registry
+Gateway     = stable engine-facing facade id, e.g. engine.render
+Provider    = plugin-owned service implementation, e.g. render.api or vendor.render.api
+Adapter     = typed host-side wrapper over the selected route
+Feature     = explicit plugin/profile capability, not hidden engine code
 ```
 
-Renderer и physics теперь следуют одной модели:
+Consumers call stable engine-owned gateways:
 
 ```text
-provider plugin
-  declares <domain>.backend capability
-  registers <domain>.api service
-      ↓
-runtime-host service client
-      ↓
-typed adapter registered in Resources
-      ↓
-engine-runtime systems talk only to API packets
+engine.assets
+engine.render
+engine.physics
+engine.input
 ```
 
-Критический инвариант: движок не должен знать, какой конкретный physics backend исполняет физику. Он видит только `physics.api`, `physics.backend`, DTO packets и `PhysicsApiRef`.
+The host maps those gateways to active providers from plugin metadata.
 
-## Что считается текущим состоянием
-
-- Render backend: service plugin через `render.api`.
-- Physics backend: service plugin через `physics.api`.
-- Plugin discovery: descriptor-first через ABI probe; имя DLL не является identity и не используется для выбора backend provider.
-- Physics frame boundary: `ECS -> PhysicsFrameInput -> physics.api -> PhysicsFrameOutput -> ECS`.
-- Static world collision: через формальные collider DTOs (`HeightfieldColliderDto`, `MeshColliderDto`), а не backend-native handles.
-- Asset runtime texture format: `.neytd`.
-- Asset archive/container format: `.nepak`.
-
-## Файлы пакета
+## Files
 
 1. `01_ARCHITECTURE_OVERVIEW.md`
 2. `02_FUNCTIONALITY_GUIDE.md`
@@ -57,3 +41,4 @@ engine-runtime systems talk only to API packets
 12. `12_NEYTD_CODEC_SPEC.md`
 13. `13_NEPAK_CODEC_SPEC.md`
 14. `14_RELEASE_READINESS_SNAPSHOT.md`
+15. `15_GATEWAY_SERVICE_LAYER.md`
