@@ -36,12 +36,21 @@ impl<E: Send + 'static> Module<E> for RenderBackendRuntimeModule {
         let host = newengine_plugin_host::default_host_api();
         let client = RenderServiceClient::new(host);
 
-        let (info, selection) = bind_backend_info(
+        let (info, selection) = match bind_backend_info(
             ctx,
             RENDER_BACKEND_SERVICE_SPEC,
             client.info(),
             |info| info.backend_id.as_str(),
-        )?;
+        ) {
+            Ok(bound) => bound,
+            Err(err) => {
+                log::warn!(
+                    "render backend: unavailable; render API not registered and runtime will degrade without rendering: {}",
+                    err
+                );
+                return Ok(());
+            }
+        };
         let protocol_version = info.protocol_version;
 
         log::info!(

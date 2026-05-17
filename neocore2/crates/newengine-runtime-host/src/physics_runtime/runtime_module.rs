@@ -29,12 +29,21 @@ impl<E: Send + 'static> Module<E> for PhysicsBackendRuntimeModule {
         let host = newengine_plugin_host::default_host_api();
         let client = PhysicsServiceClient::new(host);
 
-        let (info, selection) = bind_backend_info(
+        let (info, selection) = match bind_backend_info(
             ctx,
             PHYSICS_BACKEND_SERVICE_SPEC,
             client.info(),
             |info| info.backend_id.as_str(),
-        )?;
+        ) {
+            Ok(bound) => bound,
+            Err(err) => {
+                log::warn!(
+                    "physics backend: unavailable; PhysicsApiRef not registered and physics steps will be skipped: {}",
+                    err
+                );
+                return Ok(());
+            }
+        };
         let protocol_version = info.protocol_version;
 
         log::info!(

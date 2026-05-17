@@ -1,7 +1,7 @@
 #![forbid(unsafe_op_in_unsafe_fn)]
 
 use newengine_plugin_api::{CapabilityDesc, CapabilityKind, CapabilityRole, PluginDescriptor};
-use newengine_service_api::EngineServiceKind;
+use newengine_service_api::{is_engine_service_gateway_id, EngineServiceKind};
 
 pub(crate) const ENGINE_GATEWAY_FIELD: &str = "engine_gateway";
 pub(crate) const SERVICE_KIND_FIELD: &str = "service_kind";
@@ -65,7 +65,7 @@ pub(crate) fn gateway_capability_from_capability(
         return None;
     };
 
-    if !gateway_id.starts_with("engine.") {
+    if !is_engine_service_gateway_id(&gateway_id) {
         log::warn!(
             "plugins: ignoring service gateway with invalid id plugin='{}' capability='{}' engine_gateway='{}'",
             plugin_id,

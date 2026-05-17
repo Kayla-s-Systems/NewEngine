@@ -29,6 +29,18 @@ pub const JSON_CONTROL_SERVICE_METHODS_V1: &[&str] = &[
     SERVICE_METHOD_SHUTDOWN_V1,
 ];
 
+/// Reserved prefix for host-owned facade service gateways.
+///
+/// This is a namespace convention, not a concrete provider decision. Providers
+/// declare a concrete gateway id in capability metadata; the host routes by the
+/// descriptor table and never by domain-specific branches.
+pub const ENGINE_SERVICE_GATEWAY_PREFIX: &str = "engine.";
+
+#[inline]
+pub fn is_engine_service_gateway_id(value: &str) -> bool {
+    value.starts_with(ENGINE_SERVICE_GATEWAY_PREFIX)
+}
+
 /// Common declaration for a backend service family.
 ///
 /// This intentionally does not describe domain packets. Render, physics, input,

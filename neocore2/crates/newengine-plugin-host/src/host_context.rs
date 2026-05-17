@@ -219,13 +219,13 @@ fn active_engine_gateways() -> Vec<String> {
     out
 }
 
-/// Resolve an engine-owned service gateway such as `engine.render` to the active
-/// registered provider service declared by plugin metadata.
+/// Resolve a host-owned facade service gateway to the active registered provider
+/// service declared by plugin metadata.
+///
+/// The lookup is purely descriptor-driven: if no loaded provider declares the
+/// requested gateway id, resolution returns `None`. It does not branch on
+/// concrete domains such as assets/render/physics/input.
 pub fn resolve_service_for_engine_gateway(gateway_id: &str) -> Option<String> {
-    if !gateway_id.starts_with("engine.") {
-        return None;
-    }
-
     let c = ctx();
     let services = match c.services.lock() {
         Ok(v) => v,

@@ -71,39 +71,34 @@ fn validate_one(
     let required = contract.is_required();
 
     if !present {
-        if required {
-            return Err(contract_error(
-                contract,
-                plugins,
-                format!("service '{}' is not registered", contract.service_id),
-            ));
-        }
-        log::debug!(
-            "runtime contract: service '{}' absent; validation skipped expected='{}'",
-            contract.service_id,
-            contract.expected_contract
+        return contract_violation(
+            contract,
+            plugins,
+            format!("service '{}' is not registered", contract.service_id),
         );
-        return Ok(());
     }
 
     let Some(description) = newengine_plugin_host::describe_service(contract.service_id) else {
-        return Err(contract_error(
+        return contract_violation(
             contract,
             plugins,
             format!("service '{}' has no describe() contract", contract.service_id),
-        ));
+        );
     };
 
-    let methods = parse_methods_from_description(&description).map_err(|e| {
-        contract_error(
-            contract,
-            plugins,
-            format!(
-                "service '{}' returned invalid describe() JSON: {e}",
-                contract.service_id
-            ),
-        )
-    })?;
+    let methods = match parse_methods_from_description(&description) {
+        Ok(methods) => methods,
+        Err(e) => {
+            return contract_violation(
+                contract,
+                plugins,
+                format!(
+                    "service '{}' returned invalid describe() JSON: {e}",
+                    contract.service_id
+                ),
+            );
+        }
+    };
 
     let mut missing = Vec::new();
     for required_method in contract.required_methods {
@@ -113,26 +108,23 @@ fn validate_one(
     }
 
     if !missing.is_empty() {
-        return Err(contract_error(
+        return contract_violation(
             contract,
             plugins,
-            format!(
-                "missing method(s): {}",
-                missing.join(", ")
-            ),
-        ));
+            format!("missing method(s): {}", missing.join(", ")),
+        );
     }
 
     if let Some(capability_id) = contract.required_capability_id {
         if !provider_with_service_and_capability_exists(plugins, contract.service_id, capability_id) {
-            return Err(contract_error(
+            return contract_violation(
                 contract,
                 plugins,
                 format!(
                     "provider must declare service '{}' and backend capability '{}'",
                     contract.service_id, capability_id
                 ),
-            ));
+            );
         }
     }
 
@@ -180,6 +172,26 @@ fn parse_methods_from_description(description: &str) -> Result<Vec<String>, Stri
     Ok(out)
 }
 
+fn contract_violation(
+    contract: RequiredRuntimeServiceContract,
+    plugins: &[PluginSnapshotEntry],
+    reason: String,
+) -> EngineResult<()> {
+    if contract.is_required() {
+        return Err(contract_error(contract, plugins, reason));
+    }
+
+    let provider = provider_for(plugins, contract.service_id);
+    log::warn!(
+        "runtime contract degraded: service='{}' provider='{}' expected='{}' reason='{}'",
+        contract.service_id,
+        provider,
+        contract.expected_contract,
+        reason
+    );
+    Ok(())
+}
+
 fn contract_error(
     contract: RequiredRuntimeServiceContract,
     plugins: &[PluginSnapshotEntry],
@@ -200,8 +212,8 @@ fn provider_with_service_and_capability_exists(
     service_id: &str,
     capability_id: &str,
 ) -> bool {
-    if service_id.starts_with("engine.") {
-        return newengine_plugin_host::resolve_service_for_engine_gateway(service_id).is_some();
+    if newengine_plugin_host::resolve_service_for_engine_gateway(service_id).is_some() {
+        return true;
     }
 
     plugins.iter().any(|plugin| {
@@ -232,19 +244,17 @@ fn provider_for(plugins: &[PluginSnapshotEntry], service_id: &str) -> String {
     let mut providers = plugins
         .iter()
         .filter(|plugin| {
-            if service_id.starts_with("engine.") {
-                return plugin.capabilities.iter().any(|cap| {
-                    capability_engine_gateway(cap)
-                        .as_deref()
-                        .is_some_and(|gateway| gateway == service_id)
-                });
-            }
-
-            plugin.capabilities.iter().any(|cap| {
+            let declares_gateway = plugin.capabilities.iter().any(|cap| {
+                capability_engine_gateway(cap)
+                    .as_deref()
+                    .is_some_and(|gateway| gateway == service_id)
+            });
+            let declares_service = plugin.capabilities.iter().any(|cap| {
                 cap.role == newengine_plugin_api::CapabilityRole::Provides
                     && cap.kind == newengine_plugin_api::CapabilityKind::ServiceV1
                     && cap.id.as_str() == service_id
-            })
+            });
+            declares_gateway || declares_service
         })
         .map(|plugin| {
             format!(
