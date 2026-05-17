@@ -1,6 +1,6 @@
 use newengine_physics_api::{
     decode_json, encode_json, PhysicsBackendInfo, PhysicsFrameInput, PhysicsFrameOutput,
-    PhysicsServiceRequest, PhysicsServiceResponse, PHYSICS_SERVICE_ID,
+    PhysicsServiceRequest, PhysicsServiceResponse, ENGINE_PHYSICS_SERVICE_ID,
 };
 use newengine_plugin_api::HostApiV1;
 
@@ -14,7 +14,7 @@ pub(crate) struct PhysicsServiceClient {
 impl PhysicsServiceClient {
     #[inline]
     pub(crate) fn new(host: HostApiV1) -> Self {
-        Self { service: GenericJsonServiceClient::new(host, PHYSICS_SERVICE_ID) }
+        Self { service: GenericJsonServiceClient::new(host, ENGINE_PHYSICS_SERVICE_ID) }
     }
 
     #[inline]

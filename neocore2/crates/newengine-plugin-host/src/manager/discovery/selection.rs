@@ -121,8 +121,7 @@ pub(super) fn build_load_selection(
         }
     }
 
-    let selected_render_backend_path = select_render_backend_provider(&winners_by_id);
-    let selected_physics_backend_path = select_physics_backend_provider(&winners_by_id);
+    let selected_gateway_provider_paths = select_gateway_provider_paths(&winners_by_id);
 
     for item in &graph.items {
         let decision = match &item.kind {
@@ -134,10 +133,7 @@ pub(super) fn build_load_selection(
                 id,
                 phase,
                 descriptor_kind,
-                provides_render_backend,
-                provides_render_service,
-                provides_physics_backend,
-                provides_physics_service,
+                service_gateways,
                 ..
             } => {
                 if loaded_ids.contains(id) {
@@ -150,17 +146,13 @@ pub(super) fn build_load_selection(
                     SelectionDecision::Filtered {
                         filter_label: filter.label(),
                     }
-                } else if *provides_render_backend && *provides_render_service
-                    && selected_render_backend_path.as_ref() != Some(&item.path)
-                {
+                } else if service_gateways.iter().any(|gateway| {
+                    selected_gateway_provider_paths
+                        .get(gateway.as_str())
+                        .is_some_and(|selected_path| selected_path != &item.path)
+                }) {
                     SelectionDecision::Filtered {
-                        filter_label: "render-provider-selection",
-                    }
-                } else if *provides_physics_backend && *provides_physics_service
-                    && selected_physics_backend_path.as_ref() != Some(&item.path)
-                {
-                    SelectionDecision::Filtered {
-                        filter_label: "physics-provider-selection",
+                        filter_label: "gateway-provider-selection",
                     }
                 } else if let Some(winner) = winners_by_id.get(id.as_str()).copied() {
                     if winner.path == item.path {
@@ -191,54 +183,33 @@ pub(super) fn build_load_selection(
     out
 }
 
-fn select_render_backend_provider(
+fn select_gateway_provider_paths(
     winners_by_id: &HashMap<&str, &super::graph::ScannedDynlib>,
-) -> Option<std::path::PathBuf> {
-    let mut candidates: Vec<&super::graph::ScannedDynlib> = winners_by_id
-        .values()
-        .copied()
-        .filter(|item| match &item.kind {
-            ScannedDynlibKind::Plugin {
-                provides_render_backend,
-                provides_render_service,
-                ..
-            } => *provides_render_backend && *provides_render_service,
-            _ => false,
-        })
-        .collect();
+) -> HashMap<String, std::path::PathBuf> {
+    let mut by_gateway: HashMap<String, Vec<&super::graph::ScannedDynlib>> = HashMap::default();
 
-    candidates.sort_by(|a, b| {
-        backend_provider_priority(a)
-            .cmp(&backend_provider_priority(b))
-            .then_with(|| plugin_candidate_rank(a).cmp(&plugin_candidate_rank(b)))
-    });
+    for item in winners_by_id.values().copied() {
+        let ScannedDynlibKind::Plugin { service_gateways, .. } = &item.kind else {
+            continue;
+        };
+        for gateway in service_gateways {
+            by_gateway.entry(gateway.clone()).or_default().push(item);
+        }
+    }
 
-    candidates.last().map(|item| item.path.clone())
-}
+    let mut selected = HashMap::default();
+    for (gateway, mut candidates) in by_gateway {
+        candidates.sort_by(|a, b| {
+            backend_provider_priority(a)
+                .cmp(&backend_provider_priority(b))
+                .then_with(|| plugin_candidate_rank(a).cmp(&plugin_candidate_rank(b)))
+        });
+        if let Some(item) = candidates.last() {
+            selected.insert(gateway, item.path.clone());
+        }
+    }
 
-fn select_physics_backend_provider(
-    winners_by_id: &HashMap<&str, &super::graph::ScannedDynlib>,
-) -> Option<std::path::PathBuf> {
-    let mut candidates: Vec<&super::graph::ScannedDynlib> = winners_by_id
-        .values()
-        .copied()
-        .filter(|item| match &item.kind {
-            ScannedDynlibKind::Plugin {
-                provides_physics_backend,
-                provides_physics_service,
-                ..
-            } => *provides_physics_backend && *provides_physics_service,
-            _ => false,
-        })
-        .collect();
-
-    candidates.sort_by(|a, b| {
-        backend_provider_priority(a)
-            .cmp(&backend_provider_priority(b))
-            .then_with(|| plugin_candidate_rank(a).cmp(&plugin_candidate_rank(b)))
-    });
-
-    candidates.last().map(|item| item.path.clone())
+    selected
 }
 
 fn backend_provider_priority(item: &super::graph::ScannedDynlib) -> i32 {

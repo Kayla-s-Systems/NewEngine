@@ -1,3 +1,8 @@
+/// Engine-facing render service gateway id. Consumers call this facade; the host
+/// resolves it to the active renderer provider service by descriptor metadata.
+pub const ENGINE_RENDER_SERVICE_ID: &str = "engine.render";
+
+/// Default/first-party provider service id for render backends.
 pub const RENDER_SERVICE_ID: &str = "render.api";
 pub const RENDER_BACKEND_CAPABILITY_ID: &str = "render.backend";
 pub const RENDER_SERVICE_METHOD_INVOKE: &str = newengine_service_api::SERVICE_METHOD_INVOKE_JSON;

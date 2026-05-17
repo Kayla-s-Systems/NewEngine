@@ -3,8 +3,9 @@
 use newengine_core::call_service_v1_optional;
 use newengine_ui::UiInputFrame;
 
-/// Canonical input service capability id.
-pub const INPUT_SERVICE_ID: &str = "newengine.input.v1";
+/// Engine-facing input gateway id. Consumers call the engine facade; the host
+/// resolves it to the active input provider by descriptor metadata.
+pub const INPUT_SERVICE_ID: &str = "engine.input";
 
 /// Calls a service method returning UTF-8 payload (best-effort).
 pub fn call_service_utf8(service_id: &str, method: &str) -> Option<String> {

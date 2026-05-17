@@ -32,14 +32,14 @@ const CONTRACTS: &[RequiredRuntimeServiceContract] = &[
         required_env: "NEWENGINE_REQUIRE_ASSET_MANAGER",
     },
     RequiredRuntimeServiceContract {
-        service_id: newengine_render_api::RENDER_SERVICE_ID,
+        service_id: newengine_render_api::ENGINE_RENDER_SERVICE_ID,
         expected_contract: "newengine.render-api >= 0.3.x",
         required_methods: newengine_service_api::JSON_CONTROL_SERVICE_METHODS_V1,
         required_capability_id: Some(newengine_render_api::RENDER_BACKEND_CAPABILITY_ID),
         required_env: "NEWENGINE_REQUIRE_RENDER_BACKEND",
     },
     RequiredRuntimeServiceContract {
-        service_id: newengine_physics_api::PHYSICS_SERVICE_ID,
+        service_id: newengine_physics_api::ENGINE_PHYSICS_SERVICE_ID,
         expected_contract: "newengine.physics-api >= 0.1.x",
         required_methods: newengine_service_api::JSON_CONTROL_SERVICE_METHODS_V1,
         required_capability_id: Some(newengine_physics_api::PHYSICS_BACKEND_CAPABILITY_ID),
@@ -200,10 +200,8 @@ fn provider_with_service_and_capability_exists(
     service_id: &str,
     capability_id: &str,
 ) -> bool {
-    if service_id == newengine_assets_api::ASSET_SERVICE_ID
-        && capability_id == newengine_assets_api::ASSET_BACKEND_CAPABILITY_ID
-    {
-        return newengine_plugin_host::resolve_service_for_backend_capability(capability_id).is_some();
+    if service_id.starts_with("engine.") {
+        return newengine_plugin_host::resolve_service_for_engine_gateway(service_id).is_some();
     }
 
     plugins.iter().any(|plugin| {
@@ -220,15 +218,25 @@ fn provider_with_service_and_capability_exists(
     })
 }
 
+fn capability_engine_gateway(capability: &newengine_plugin_api::CapabilityDesc) -> Option<String> {
+    if capability.role != newengine_plugin_api::CapabilityRole::Provides {
+        return None;
+    }
+    serde_json::from_str::<serde_json::Value>(capability.describe_json.as_str())
+        .ok()
+        .and_then(|value| value.get("engine_gateway").and_then(|v| v.as_str()).map(str::to_owned))
+}
+
+
 fn provider_for(plugins: &[PluginSnapshotEntry], service_id: &str) -> String {
-    let is_asset_gateway = service_id == newengine_assets_api::ASSET_SERVICE_ID;
     let mut providers = plugins
         .iter()
         .filter(|plugin| {
-            if is_asset_gateway {
+            if service_id.starts_with("engine.") {
                 return plugin.capabilities.iter().any(|cap| {
-                    cap.role == newengine_plugin_api::CapabilityRole::Provides
-                        && cap.id.as_str() == newengine_assets_api::ASSET_BACKEND_CAPABILITY_ID
+                    capability_engine_gateway(cap)
+                        .as_deref()
+                        .is_some_and(|gateway| gateway == service_id)
                 });
             }
 

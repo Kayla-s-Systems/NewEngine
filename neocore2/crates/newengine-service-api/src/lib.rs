@@ -37,8 +37,17 @@ pub const JSON_CONTROL_SERVICE_METHODS_V1: &[&str] = &[
 /// provider plugin.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct BackendServiceSpec {
+    /// Human-readable domain label used in diagnostics.
     pub domain: &'static str,
-    pub service_id: &'static str,
+    /// Stable engine-facing gateway id consumers call, e.g. `engine.render`.
+    pub engine_gateway_id: &'static str,
+    /// First-party/default provider service id, e.g. `render.api`.
+    ///
+    /// Third-party providers may use a different service id when their backend
+    /// capability metadata declares the same `engine_gateway` and points its
+    /// `contract` field at the registered provider service.
+    pub provider_service_id: &'static str,
+    /// Backend capability id declared by provider plugins.
     pub backend_capability_id: &'static str,
 }
 
@@ -46,10 +55,56 @@ impl BackendServiceSpec {
     #[inline]
     pub const fn new(
         domain: &'static str,
-        service_id: &'static str,
+        engine_gateway_id: &'static str,
+        provider_service_id: &'static str,
         backend_capability_id: &'static str,
     ) -> Self {
-        Self { domain, service_id, backend_capability_id }
+        Self { domain, engine_gateway_id, provider_service_id, backend_capability_id }
+    }
+}
+
+/// Engine-side vocabulary for service provider kinds accepted by the host.
+///
+/// Plugins do not need to import this enum or know the full set. They describe
+/// themselves with string metadata such as `service_kind = "render"`; the
+/// host validates that string against this vocabulary and ignores unknown kinds.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum EngineServiceKind {
+    Assets,
+    Render,
+    Physics,
+    Input,
+    Ui,
+    Logging,
+    Platform,
+}
+
+impl EngineServiceKind {
+    #[inline]
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Assets => "assets",
+            Self::Render => "render",
+            Self::Physics => "physics",
+            Self::Input => "input",
+            Self::Ui => "ui",
+            Self::Logging => "logging",
+            Self::Platform => "platform",
+        }
+    }
+
+    #[inline]
+    pub fn parse(value: &str) -> Option<Self> {
+        match value.trim().to_ascii_lowercase().as_str() {
+            "assets" => Some(Self::Assets),
+            "render" => Some(Self::Render),
+            "physics" => Some(Self::Physics),
+            "input" => Some(Self::Input),
+            "ui" => Some(Self::Ui),
+            "logging" => Some(Self::Logging),
+            "platform" => Some(Self::Platform),
+            _ => None,
+        }
     }
 }
 

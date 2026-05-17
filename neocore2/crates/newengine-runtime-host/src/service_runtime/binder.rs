@@ -28,7 +28,7 @@ where
             let reason = explain_backend_unavailability(ctx, spec, &err);
             return Err(EngineError::Other(format!(
                 "{} backend could not be bound through service '{}': {}",
-                spec.domain, spec.service_id, reason
+                spec.domain, spec.engine_gateway_id, reason
             )));
         }
     };

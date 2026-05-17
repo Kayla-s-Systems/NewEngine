@@ -17,14 +17,14 @@ pub(crate) fn resolve_backend_provider(
             backend_id,
             spec.domain,
             spec.backend_capability_id,
-            spec.service_id,
+            spec.engine_gateway_id,
         ));
     };
 
     let provider = snapshot.plugins.iter().find(|plugin| {
         plugin.id == backend_id
             && plugin_declares_backend_capability(plugin, spec.backend_capability_id)
-            && plugin_declares_service(plugin, spec.service_id)
+            && plugin_declares_service_for_spec(plugin, spec)
     });
 
     if let Some(plugin) = provider {
@@ -32,8 +32,8 @@ pub(crate) fn resolve_backend_provider(
             provider_plugin_id: plugin.id.clone(),
             provider_state: plugin.state.clone(),
             matched_by: format!(
-                "plugin-id+capability:{}+service:{}",
-                spec.backend_capability_id, spec.service_id
+                "plugin-id+gateway:{}+capability:{}",
+                spec.engine_gateway_id, spec.backend_capability_id
             ),
         });
     }
@@ -44,7 +44,7 @@ pub(crate) fn resolve_backend_provider(
         spec.domain,
         backend_id,
         spec.backend_capability_id,
-        spec.service_id,
+        spec.engine_gateway_id,
         spec.domain,
         candidates.join(", "),
     ))
@@ -58,7 +58,7 @@ pub(crate) fn explain_backend_unavailability<E: Send + 'static>(
     let Some(snapshot) = ctx.resources().get::<PluginsSnapshot>() else {
         return format!(
             "{} service '{}' is unavailable: {}",
-            spec.domain, spec.service_id, service_error
+            spec.domain, spec.engine_gateway_id, service_error
         );
     };
 
@@ -67,7 +67,7 @@ pub(crate) fn explain_backend_unavailability<E: Send + 'static>(
         .iter()
         .filter(|plugin| {
             plugin_declares_backend_capability(plugin, spec.backend_capability_id)
-                || plugin_declares_service(plugin, spec.service_id)
+                || plugin_declares_service_for_spec(plugin, spec)
         })
         .map(|plugin| format!("{}:{}", plugin.id, plugin.state))
         .collect();
@@ -75,14 +75,14 @@ pub(crate) fn explain_backend_unavailability<E: Send + 'static>(
     if loaded_plugins.is_empty() {
         format!(
             "no {} backend plugin was loaded; service '{}' is unavailable: {}",
-            spec.domain, spec.service_id, service_error
+            spec.domain, spec.engine_gateway_id, service_error
         )
     } else {
         format!(
             "loaded {} providers=[{}], but service '{}' is unavailable: {}",
             spec.domain,
             loaded_plugins.join(", "),
-            spec.service_id,
+            spec.engine_gateway_id,
             service_error
         )
     }
@@ -94,6 +94,26 @@ pub(crate) fn plugin_declares_service(plugin: &PluginSnapshotEntry, service_id: 
         cap.role == CapabilityRole::Provides
             && cap.kind == CapabilityKind::ServiceV1
             && cap.id.as_str() == service_id
+    })
+}
+
+#[inline]
+pub(crate) fn plugin_declares_service_for_spec(
+    plugin: &PluginSnapshotEntry,
+    spec: BackendServiceSpec,
+) -> bool {
+    if plugin_declares_service(plugin, spec.provider_service_id) {
+        return true;
+    }
+
+    plugin.capabilities.iter().any(|cap| {
+        if cap.role != CapabilityRole::Provides || cap.id.as_str() != spec.backend_capability_id {
+            return false;
+        }
+        serde_json::from_str::<serde_json::Value>(cap.describe_json.as_str())
+            .ok()
+            .and_then(|value| value.get("contract").and_then(|v| v.as_str()).map(str::to_owned))
+            .is_some_and(|service_id| plugin_declares_service(plugin, &service_id))
     })
 }
 
@@ -113,11 +133,11 @@ fn service_backend_candidates(snapshot: &PluginsSnapshot, spec: BackendServiceSp
         .iter()
         .filter(|plugin| {
             plugin_declares_backend_capability(plugin, spec.backend_capability_id)
-                || plugin_declares_service(plugin, spec.service_id)
+                || plugin_declares_service_for_spec(plugin, spec)
         })
         .map(|plugin| {
             let has_backend_cap = plugin_declares_backend_capability(plugin, spec.backend_capability_id);
-            let has_service = plugin_declares_service(plugin, spec.service_id);
+            let has_service = plugin_declares_service_for_spec(plugin, spec);
             format!(
                 "{}:{} backend_cap={} service={}",
                 plugin.id, plugin.state, has_backend_cap, has_service

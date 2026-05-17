@@ -15,7 +15,7 @@ pub(crate) struct GenericJsonServiceClient {
 
 impl GenericJsonServiceClient {
     #[inline]
-    pub(crate) fn new(host: HostApiV1, service_id: &'static str) -> Self {
+    pub(crate) fn new(host: HostApiV1, service_id: &str) -> Self {
         Self { host, service_id: RString::from(service_id) }
     }
 

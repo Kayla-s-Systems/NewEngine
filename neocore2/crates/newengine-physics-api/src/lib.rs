@@ -8,6 +8,11 @@
 
 use serde::{Deserialize, Serialize};
 
+/// Engine-facing physics service gateway id. Consumers call this facade; the host
+/// resolves it to the active physics provider service by descriptor metadata.
+pub const ENGINE_PHYSICS_SERVICE_ID: &str = "engine.physics";
+
+/// Default/first-party provider service id for physics backends.
 pub const PHYSICS_SERVICE_ID: &str = "physics.api";
 pub const PHYSICS_BACKEND_CAPABILITY_ID: &str = "physics.backend";
 pub const PHYSICS_SERVICE_METHOD_INFO: &str = newengine_service_api::SERVICE_METHOD_INFO_JSON;

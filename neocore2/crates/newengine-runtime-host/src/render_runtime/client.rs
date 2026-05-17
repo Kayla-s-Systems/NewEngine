@@ -1,7 +1,7 @@
 use newengine_plugin_api::HostApiV1;
 use newengine_render_api::{
     decode_json, encode_json, RenderBackendInfo, RenderCommand, RenderCommandResponse,
-    RenderServiceRequest, RenderServiceResponse, RENDER_SERVICE_ID,
+    RenderServiceRequest, RenderServiceResponse, ENGINE_RENDER_SERVICE_ID,
 };
 
 use crate::service_runtime::GenericJsonServiceClient;
@@ -14,7 +14,7 @@ pub(crate) struct RenderServiceClient {
 impl RenderServiceClient {
     #[inline]
     pub(crate) fn new(host: HostApiV1) -> Self {
-        Self { service: GenericJsonServiceClient::new(host, RENDER_SERVICE_ID) }
+        Self { service: GenericJsonServiceClient::new(host, ENGINE_RENDER_SERVICE_ID) }
     }
 
     #[inline]

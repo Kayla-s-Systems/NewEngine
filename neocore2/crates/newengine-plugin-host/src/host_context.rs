@@ -138,17 +138,20 @@ pub fn bump_services_generation() {
 /// Returns true if a plugin-owned service with the given id is currently registered.
 #[inline]
 pub fn has_service(service_id: &str) -> bool {
-    if is_engine_asset_gateway_id(service_id) {
-        return resolve_service_for_backend_capability(newengine_assets_api::ASSET_BACKEND_CAPABILITY_ID)
-            .is_some();
+    let direct_registered = {
+        let c = ctx();
+        let g = match c.services.lock() {
+            Ok(v) => v,
+            Err(e) => e.into_inner(),
+        };
+        g.contains_key(service_id)
+    };
+
+    if direct_registered {
+        return true;
     }
 
-    let c = ctx();
-    let g = match c.services.lock() {
-        Ok(v) => v,
-        Err(e) => e.into_inner(),
-    };
-    g.contains_key(service_id)
+    resolve_service_for_engine_gateway(service_id).is_some()
 }
 
 /// Returns a stable, sorted list of registered plugin-owned service ids.
@@ -162,27 +165,108 @@ pub fn list_services() -> Vec<String> {
     };
 
     let mut out: Vec<String> = g.keys().cloned().collect();
+    drop(g);
+
+    out.extend(active_engine_gateways());
     out.sort();
+    out.dedup();
     out
 }
 
 /// Returns the `describe()` JSON for the given service id, if present.
 #[inline]
 pub fn describe_service(service_id: &str) -> Option<String> {
-    if is_engine_asset_gateway_id(service_id) {
-        let routed_id = resolve_service_for_backend_capability(newengine_assets_api::ASSET_BACKEND_CAPABILITY_ID)?;
-        return describe_service(&routed_id);
-    }
+    let routed_id = resolve_service_for_engine_gateway(service_id).unwrap_or_else(|| service_id.to_owned());
 
     let c = ctx();
     let g = c.services.lock().ok()?;
-    Some(g.get(service_id)?.describe_json.clone())
+    Some(g.get(&routed_id)?.describe_json.clone())
 }
 
-#[inline]
-fn is_engine_asset_gateway_id(service_id: &str) -> bool {
-    service_id == newengine_assets_api::ASSET_SERVICE_ID
-        || service_id == newengine_assets_api::ENGINE_ASSET_SERVICE_ID
+fn active_engine_gateways() -> Vec<String> {
+    let c = ctx();
+    let services = match c.services.lock() {
+        Ok(v) => v,
+        Err(e) => e.into_inner(),
+    };
+    let descriptors = match c.plugin_descriptors.lock() {
+        Ok(v) => v,
+        Err(e) => e.into_inner(),
+    };
+
+    let mut out = Vec::new();
+    for (plugin_id, descriptor) in descriptors.iter() {
+        let service_registered_for_owner = |service_id: &str| {
+            services
+                .get(service_id)
+                .and_then(|entry| entry.owner_plugin_id.as_deref())
+                .is_some_and(|owner| owner == plugin_id)
+        };
+
+        for gateway in crate::service_gateway::descriptor_gateway_capabilities(descriptor) {
+            let _service_kind = gateway.service_kind;
+            let Some(service_id) = crate::service_gateway::gateway_provider_service_id(descriptor, &gateway) else {
+                continue;
+            };
+            if service_registered_for_owner(&service_id) {
+                out.push(gateway.gateway_id);
+            }
+        }
+    }
+
+    out.sort();
+    out.dedup();
+    out
+}
+
+/// Resolve an engine-owned service gateway such as `engine.render` to the active
+/// registered provider service declared by plugin metadata.
+pub fn resolve_service_for_engine_gateway(gateway_id: &str) -> Option<String> {
+    if !gateway_id.starts_with("engine.") {
+        return None;
+    }
+
+    let c = ctx();
+    let services = match c.services.lock() {
+        Ok(v) => v,
+        Err(e) => e.into_inner(),
+    };
+    let descriptors = match c.plugin_descriptors.lock() {
+        Ok(v) => v,
+        Err(e) => e.into_inner(),
+    };
+
+    let mut candidates: Vec<(i32, String, String)> = Vec::new();
+
+    for (plugin_id, descriptor) in descriptors.iter() {
+        for gateway in crate::service_gateway::descriptor_gateway_capabilities(descriptor) {
+            let _service_kind = gateway.service_kind;
+            if gateway.gateway_id != gateway_id {
+                continue;
+            }
+
+            let Some(service_id) = crate::service_gateway::gateway_provider_service_id(descriptor, &gateway) else {
+                continue;
+            };
+
+            let Some(entry) = services.get(&service_id) else {
+                continue;
+            };
+            if entry.owner_plugin_id.as_deref() != Some(plugin_id.as_str()) {
+                continue;
+            }
+
+            candidates.push((gateway.backend_priority, service_id, plugin_id.clone()));
+        }
+    }
+
+    candidates.sort_by(|a, b| {
+        b.0.cmp(&a.0)
+            .then_with(|| a.1.cmp(&b.1))
+            .then_with(|| a.2.cmp(&b.2))
+    });
+
+    candidates.into_iter().map(|(_, service_id, _)| service_id).next()
 }
 
 #[inline]
@@ -540,14 +624,10 @@ fn collect_declared_providers(
     out.insert(declared_cap_key("host.services.v1", CapabilityKind::ServiceV1 as u8), 1);
     out.insert(declared_cap_key("host.events.v1", CapabilityKind::EventsV1 as u8), 1);
 
-    let mut has_asset_backend = false;
     for d in descriptors {
         for c in d.capabilities.iter() {
             if c.role != CapabilityRole::Provides {
                 continue;
-            }
-            if c.id.as_str() == newengine_assets_api::ASSET_BACKEND_CAPABILITY_ID {
-                has_asset_backend = true;
             }
             let key = declared_cap_key(c.id.as_str(), c.kind as u8);
             let cur = out.get(&key).copied().unwrap_or(0);
@@ -555,18 +635,17 @@ fn collect_declared_providers(
                 out.insert(key, c.version);
             }
         }
-    }
 
-    if has_asset_backend {
-        // Host-owned asset gateway. Consumers require the engine asset service,
-        // not a concrete provider id. `asset.manager` is accepted here only as
-        // an intent-normalized requirement from already-built plugins; it is not
-        // registered as a provider service and is not exposed by list_services().
-        out.insert(
-            declared_cap_key(newengine_assets_api::ASSET_SERVICE_ID, CapabilityKind::ServiceV1 as u8),
-            1,
-        );
-        out.insert(declared_cap_key("asset.manager", CapabilityKind::ServiceV1 as u8), 1);
+        for gateway in crate::service_gateway::descriptor_gateway_capabilities(&d) {
+            let _service_kind = gateway.service_kind;
+            if crate::service_gateway::gateway_provider_service_id(&d, &gateway).is_some() {
+                let key = declared_cap_key(gateway.gateway_id.as_str(), CapabilityKind::ServiceV1 as u8);
+                let cur = out.get(&key).copied().unwrap_or(0);
+                if cur < 1 {
+                    out.insert(key, 1);
+                }
+            }
+        }
     }
 
     out

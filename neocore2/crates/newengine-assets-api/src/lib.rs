@@ -32,7 +32,8 @@ pub const ASSET_METHOD_PREFIX: &str = "asset.";
 /// Generic host/plugin backend declaration for the asset service family.
 pub const ASSET_BACKEND_SERVICE_SPEC: newengine_service_api::BackendServiceSpec =
     newengine_service_api::BackendServiceSpec::new(
-        "asset_manager",
+        "assets",
+        ENGINE_ASSET_SERVICE_ID,
         ASSET_PROVIDER_SERVICE_ID,
         ASSET_BACKEND_CAPABILITY_ID,
     );

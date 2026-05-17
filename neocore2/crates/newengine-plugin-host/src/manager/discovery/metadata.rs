@@ -4,7 +4,7 @@ use std::path::Path;
 
 use libloading::Library;
 use newengine_plugin_api::{
-    CapabilityKind, CapabilityRole, PluginBootstrapPhase, PluginDescriptor, PluginInfo,
+    PluginBootstrapPhase, PluginDescriptor, PluginInfo,
     PluginModuleDyn, PluginRootV1Ref, PluginSignatureV1,
 };
 
@@ -120,27 +120,16 @@ pub(super) fn build_scanned_plugin_kind(probe: &ScanPluginProbe) -> Option<Scann
         .or_else(|| probe.signature.as_ref().map(|s| s.kind));
 
     let declared_capabilities = probe.descriptor.as_ref().map(|d| d.capabilities.len());
-    let provides_render_backend = probe
+    let service_gateways = probe
         .descriptor
         .as_ref()
-        .is_some_and(descriptor_provides_render_backend);
-    let provides_render_service = probe
-        .descriptor
-        .as_ref()
-        .is_some_and(descriptor_provides_render_service);
-    let provides_physics_backend = probe
-        .descriptor
-        .as_ref()
-        .is_some_and(descriptor_provides_physics_backend);
-    let provides_physics_service = probe
-        .descriptor
-        .as_ref()
-        .is_some_and(descriptor_provides_physics_service);
+        .map(crate::service_gateway::descriptor_engine_gateways)
+        .unwrap_or_default();
 
     let backend_priority = probe
         .descriptor
         .as_ref()
-        .map(descriptor_backend_priority)
+        .map(crate::service_gateway::descriptor_max_gateway_priority)
         .unwrap_or(0);
 
     Some(ScannedDynlibKind::Plugin {
@@ -149,69 +138,11 @@ pub(super) fn build_scanned_plugin_kind(probe: &ScanPluginProbe) -> Option<Scann
         phase,
         descriptor_kind,
         declared_capabilities,
-        provides_render_backend,
-        provides_render_service,
-        provides_physics_backend,
-        provides_physics_service,
+        service_gateways,
         backend_priority,
     })
 }
 
-
-fn descriptor_backend_priority(descriptor: &PluginDescriptor) -> i32 {
-    descriptor
-        .capabilities
-        .iter()
-        .filter(|cap| {
-            cap.role == CapabilityRole::Provides
-                && (cap.id.as_str() == "render.backend" || cap.id.as_str() == "physics.backend")
-        })
-        .filter_map(|cap| capability_backend_priority(cap.describe_json.as_str()))
-        .max()
-        .unwrap_or(0)
-}
-
-fn capability_backend_priority(describe_json: &str) -> Option<i32> {
-    if describe_json.trim().is_empty() {
-        return None;
-    }
-    serde_json::from_str::<serde_json::Value>(describe_json)
-        .ok()
-        .and_then(|value| value.get("backend_priority").and_then(|v| v.as_i64()))
-        .map(|v| v.clamp(i32::MIN as i64, i32::MAX as i64) as i32)
-}
-
-#[inline]
-fn descriptor_provides_render_backend(descriptor: &PluginDescriptor) -> bool {
-    descriptor.capabilities.iter().any(|cap| {
-        cap.role == CapabilityRole::Provides && cap.id.as_str() == "render.backend"
-    })
-}
-
-#[inline]
-fn descriptor_provides_render_service(descriptor: &PluginDescriptor) -> bool {
-    descriptor.capabilities.iter().any(|cap| {
-        cap.role == CapabilityRole::Provides
-            && cap.kind == CapabilityKind::ServiceV1
-            && cap.id.as_str() == "render.api"
-    })
-}
-
-#[inline]
-fn descriptor_provides_physics_backend(descriptor: &PluginDescriptor) -> bool {
-    descriptor.capabilities.iter().any(|cap| {
-        cap.role == CapabilityRole::Provides && cap.id.as_str() == "physics.backend"
-    })
-}
-
-#[inline]
-fn descriptor_provides_physics_service(descriptor: &PluginDescriptor) -> bool {
-    descriptor.capabilities.iter().any(|cap| {
-        cap.role == CapabilityRole::Provides
-            && cap.kind == CapabilityKind::ServiceV1
-            && cap.id.as_str() == "physics.api"
-    })
-}
 
 fn infer_platform_runtime_identity(path: &Path) -> (String, String) {
     let stem = path

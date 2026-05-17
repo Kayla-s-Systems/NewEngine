@@ -10,6 +10,7 @@ mod path_fmt;
 mod paths;
 mod plugin_config_service;
 mod root_observers;
+mod service_gateway;
 
 /// A lightweight snapshot of loaded plugins suitable for UI/telemetry.
 ///
@@ -28,7 +29,7 @@ pub use host_api::{call_service_v1, default_host_api, host_register_service_impl
 pub use host_context::{
     describe_service, has_service, init_host_context, list_external_runtime_descriptors,
     list_external_runtime_plugins, list_services, register_external_runtime_plugin,
-    resolve_service_for_backend_capability, services_generation,
+    resolve_service_for_backend_capability, resolve_service_for_engine_gateway, services_generation,
 };
 pub use manager::{PluginIconSnapshot, PluginLoadError, PluginManager, PluginSnapshotEntry};
 pub use plugin_config_service::{

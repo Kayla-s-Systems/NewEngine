@@ -35,8 +35,6 @@ fn collect_providers(loaded: &[LoadedPlugin]) -> HashMap<CapKey, u32> {
     out.insert(cap_key("host.services.v1", CapabilityKind::ServiceV1 as u8), 1);
     out.insert(cap_key("host.events.v1", CapabilityKind::EventsV1 as u8), 1);
 
-    let mut has_asset_backend = false;
-
     for p in loaded.iter() {
         if p.state == PluginState::Disabled {
             continue;
@@ -46,52 +44,39 @@ fn collect_providers(loaded: &[LoadedPlugin]) -> HashMap<CapKey, u32> {
             continue;
         };
 
-        for c in d.capabilities.iter() {
-            if c.role != CapabilityRole::Provides {
-                continue;
-            }
-
-            if c.id.as_str() == newengine_assets_api::ASSET_BACKEND_CAPABILITY_ID {
-                has_asset_backend = true;
-            }
-
-            let key = cap_key(c.id.as_str(), c.kind as u8);
-            let cur = out.get(&key).copied().unwrap_or(0);
-            if c.version > cur {
-                out.insert(key, c.version);
-            }
-        }
+        collect_descriptor_providers(d, &mut out);
     }
-
 
     for d in crate::host_context::list_external_runtime_descriptors() {
-        for c in d.capabilities.iter() {
-            if c.role != CapabilityRole::Provides {
-                continue;
-            }
-
-            if c.id.as_str() == newengine_assets_api::ASSET_BACKEND_CAPABILITY_ID {
-                has_asset_backend = true;
-            }
-
-            let key = cap_key(c.id.as_str(), c.kind as u8);
-            let cur = out.get(&key).copied().unwrap_or(0);
-            if c.version > cur {
-                out.insert(key, c.version);
-            }
-        }
-    }
-
-    if has_asset_backend {
-        // Host-owned asset gateway capability. Consumers should require
-        // `engine.assets`; old already-built consumers that still declare
-        // `asset.manager` are intent-normalized here without registering that
-        // id as a concrete provider service.
-        out.insert(cap_key(newengine_assets_api::ASSET_SERVICE_ID, CapabilityKind::ServiceV1 as u8), 1);
-        out.insert(cap_key("asset.manager", CapabilityKind::ServiceV1 as u8), 1);
+        collect_descriptor_providers(&d, &mut out);
     }
 
     out
+}
+
+fn collect_descriptor_providers(d: &PluginDescriptor, out: &mut HashMap<CapKey, u32>) {
+    for c in d.capabilities.iter() {
+        if c.role != CapabilityRole::Provides {
+            continue;
+        }
+
+        let key = cap_key(c.id.as_str(), c.kind as u8);
+        let cur = out.get(&key).copied().unwrap_or(0);
+        if c.version > cur {
+            out.insert(key, c.version);
+        }
+    }
+
+    for gateway in crate::service_gateway::descriptor_gateway_capabilities(d) {
+        let _service_kind = gateway.service_kind;
+        if crate::service_gateway::gateway_provider_service_id(d, &gateway).is_some() {
+            let key = cap_key(gateway.gateway_id.as_str(), CapabilityKind::ServiceV1 as u8);
+            let cur = out.get(&key).copied().unwrap_or(0);
+            if cur < 1 {
+                out.insert(key, 1);
+            }
+        }
+    }
 }
 
 #[inline]
