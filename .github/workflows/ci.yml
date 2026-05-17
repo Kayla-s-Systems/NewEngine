@@ -20,7 +20,7 @@ jobs:
         rust: [stable, nightly]
     defaults:
       run:
-        working-directory: NewEngine/neocore2
+        working-directory: neocore2
     steps:
       - uses: actions/checkout@v4
 
@@ -31,7 +31,7 @@ jobs:
 
       - uses: Swatinem/rust-cache@v2
         with:
-          workspaces: NewEngine/neocore2
+          workspaces: neocore2
 
       - name: Check formatting
         run: cargo fmt --all -- --check
@@ -52,7 +52,7 @@ jobs:
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: NewEngine/neocore2
+        working-directory: neocore2
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@nightly
@@ -60,7 +60,7 @@ jobs:
           components: miri
       - uses: Swatinem/rust-cache@v2
         with:
-          workspaces: NewEngine/neocore2
+          workspaces: neocore2
       - run: cargo miri setup
       - run: cargo miri test --workspace --lib --no-fail-fast
 
@@ -68,15 +68,15 @@ jobs:
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: NewEngine/neocore2
+        working-directory: neocore2
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
         with:
-          workspaces: NewEngine/neocore2
+          workspaces: neocore2
       - uses: taiki-e/install-action@cargo-tarpaulin
       - run: cargo tarpaulin --workspace --out Xml --exclude-files '*/tests/*'
       - uses: codecov/codecov-action@v3
         with:
-          files: NewEngine/neocore2/cobertura.xml
+          files: neocore2/cobertura.xml
