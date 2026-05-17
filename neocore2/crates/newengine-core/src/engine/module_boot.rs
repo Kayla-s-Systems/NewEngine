@@ -294,7 +294,7 @@ impl<E: Send + 'static> Engine<E> {
                 let snapshot = self.make_startup_snapshot(
                     EngineStartupPhase::ServiceContracts,
                     "Runtime service contracts validated.",
-                    "AssetManager, renderer and platform service contracts match the expected ABI surface.",
+                    "AssetManager, renderer, physics and platform service contracts match the expected ABI surface.",
                     0.91,
                     None,
                     self.modules.len(),

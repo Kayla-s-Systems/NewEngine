@@ -41,20 +41,12 @@ pub struct AssetServiceClient {
 }
 
 impl AssetServiceClient {
-    /// Create a client bound to the given host API.
-    ///
-    /// Service id defaults to [`ASSET_SERVICE_ID`] and may be overridden via
-    /// `NEWENGINE_ASSET_SERVICE_ID`.
+    /// Create a client bound to the canonical AssetManager service API.
     #[inline]
     pub fn new(host: HostApiV1) -> Self {
-        let service_id = std::env::var("NEWENGINE_ASSET_SERVICE_ID")
-            .ok()
-            .filter(|s| !s.trim().is_empty())
-            .unwrap_or_else(|| ASSET_SERVICE_ID.to_string());
-
         Self {
             host,
-            service_id: RString::from(service_id),
+            service_id: RString::from(ASSET_SERVICE_ID),
 
             m_import_v1: MethodName::from(method::IMPORT_V1),
             m_reload: MethodName::from(method::RELOAD_V1),

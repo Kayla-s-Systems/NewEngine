@@ -8,6 +8,7 @@ struct RequiredRuntimeServiceContract {
     service_id: &'static str,
     expected_contract: &'static str,
     required_methods: &'static [&'static str],
+    required_capability_id: Option<&'static str>,
     required_env: &'static str,
 }
 
@@ -24,27 +25,31 @@ const PLATFORM_REQUIRED_METHODS: &[&str] = &[
 
 const CONTRACTS: &[RequiredRuntimeServiceContract] = &[
     RequiredRuntimeServiceContract {
-        service_id: newengine_assets_api::ASSET_SERVICE_ID,
-        expected_contract: "newengine.assets-api >= 0.6.x",
-        required_methods: newengine_assets_api::REQUIRED_RUNTIME_METHODS_V1,
+        service_id: newengine_assets_api::ASSET_RUNTIME_CONTRACT_SPEC.service_id,
+        expected_contract: newengine_assets_api::ASSET_RUNTIME_CONTRACT_SPEC.expected_contract,
+        required_methods: newengine_assets_api::ASSET_RUNTIME_CONTRACT_SPEC.required_methods,
+        required_capability_id: Some(newengine_assets_api::ASSET_BACKEND_CAPABILITY_ID),
         required_env: "NEWENGINE_REQUIRE_ASSET_MANAGER",
     },
     RequiredRuntimeServiceContract {
         service_id: newengine_render_api::RENDER_SERVICE_ID,
         expected_contract: "newengine.render-api >= 0.3.x",
         required_methods: newengine_service_api::JSON_CONTROL_SERVICE_METHODS_V1,
+        required_capability_id: Some(newengine_render_api::RENDER_BACKEND_CAPABILITY_ID),
         required_env: "NEWENGINE_REQUIRE_RENDER_BACKEND",
     },
     RequiredRuntimeServiceContract {
         service_id: newengine_physics_api::PHYSICS_SERVICE_ID,
         expected_contract: "newengine.physics-api >= 0.1.x",
         required_methods: newengine_service_api::JSON_CONTROL_SERVICE_METHODS_V1,
+        required_capability_id: Some(newengine_physics_api::PHYSICS_BACKEND_CAPABILITY_ID),
         required_env: "NEWENGINE_REQUIRE_PHYSICS_BACKEND",
     },
     RequiredRuntimeServiceContract {
         service_id: newengine_platform_api::PLATFORM_WINDOW_SERVICE_ID,
         expected_contract: "newengine.platform-api >= 0.1.x",
         required_methods: PLATFORM_REQUIRED_METHODS,
+        required_capability_id: None,
         required_env: "NEWENGINE_REQUIRE_PLATFORM_WINDOW_SERVICE",
     },
 ];
@@ -118,6 +123,19 @@ fn validate_one(
         ));
     }
 
+    if let Some(capability_id) = contract.required_capability_id {
+        if !provider_with_service_and_capability_exists(plugins, contract.service_id, capability_id) {
+            return Err(contract_error(
+                contract,
+                plugins,
+                format!(
+                    "provider must declare service '{}' and backend capability '{}'",
+                    contract.service_id, capability_id
+                ),
+            ));
+        }
+    }
+
     log::info!(
         "runtime contract ok: service='{}' expected='{}' required=[{}]",
         contract.service_id,
@@ -177,10 +195,43 @@ fn contract_error(
     ))
 }
 
+fn provider_with_service_and_capability_exists(
+    plugins: &[PluginSnapshotEntry],
+    service_id: &str,
+    capability_id: &str,
+) -> bool {
+    if service_id == newengine_assets_api::ASSET_SERVICE_ID
+        && capability_id == newengine_assets_api::ASSET_BACKEND_CAPABILITY_ID
+    {
+        return newengine_plugin_host::resolve_service_for_backend_capability(capability_id).is_some();
+    }
+
+    plugins.iter().any(|plugin| {
+        let has_service = plugin.capabilities.iter().any(|cap| {
+            cap.role == newengine_plugin_api::CapabilityRole::Provides
+                && cap.kind == newengine_plugin_api::CapabilityKind::ServiceV1
+                && cap.id.as_str() == service_id
+        });
+        let has_capability = plugin.capabilities.iter().any(|cap| {
+            cap.role == newengine_plugin_api::CapabilityRole::Provides
+                && cap.id.as_str() == capability_id
+        });
+        has_service && has_capability
+    })
+}
+
 fn provider_for(plugins: &[PluginSnapshotEntry], service_id: &str) -> String {
+    let is_asset_gateway = service_id == newengine_assets_api::ASSET_SERVICE_ID;
     let mut providers = plugins
         .iter()
         .filter(|plugin| {
+            if is_asset_gateway {
+                return plugin.capabilities.iter().any(|cap| {
+                    cap.role == newengine_plugin_api::CapabilityRole::Provides
+                        && cap.id.as_str() == newengine_assets_api::ASSET_BACKEND_CAPABILITY_ID
+                });
+            }
+
             plugin.capabilities.iter().any(|cap| {
                 cap.role == newengine_plugin_api::CapabilityRole::Provides
                     && cap.kind == newengine_plugin_api::CapabilityKind::ServiceV1

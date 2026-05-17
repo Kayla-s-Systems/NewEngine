@@ -35,6 +35,8 @@ fn collect_providers(loaded: &[LoadedPlugin]) -> HashMap<CapKey, u32> {
     out.insert(cap_key("host.services.v1", CapabilityKind::ServiceV1 as u8), 1);
     out.insert(cap_key("host.events.v1", CapabilityKind::EventsV1 as u8), 1);
 
+    let mut has_asset_backend = false;
+
     for p in loaded.iter() {
         if p.state == PluginState::Disabled {
             continue;
@@ -47,6 +49,10 @@ fn collect_providers(loaded: &[LoadedPlugin]) -> HashMap<CapKey, u32> {
         for c in d.capabilities.iter() {
             if c.role != CapabilityRole::Provides {
                 continue;
+            }
+
+            if c.id.as_str() == newengine_assets_api::ASSET_BACKEND_CAPABILITY_ID {
+                has_asset_backend = true;
             }
 
             let key = cap_key(c.id.as_str(), c.kind as u8);
@@ -64,12 +70,25 @@ fn collect_providers(loaded: &[LoadedPlugin]) -> HashMap<CapKey, u32> {
                 continue;
             }
 
+            if c.id.as_str() == newengine_assets_api::ASSET_BACKEND_CAPABILITY_ID {
+                has_asset_backend = true;
+            }
+
             let key = cap_key(c.id.as_str(), c.kind as u8);
             let cur = out.get(&key).copied().unwrap_or(0);
             if c.version > cur {
                 out.insert(key, c.version);
             }
         }
+    }
+
+    if has_asset_backend {
+        // Host-owned asset gateway capability. Consumers should require
+        // `engine.assets`; old already-built consumers that still declare
+        // `asset.manager` are intent-normalized here without registering that
+        // id as a concrete provider service.
+        out.insert(cap_key(newengine_assets_api::ASSET_SERVICE_ID, CapabilityKind::ServiceV1 as u8), 1);
+        out.insert(cap_key("asset.manager", CapabilityKind::ServiceV1 as u8), 1);
     }
 
     out

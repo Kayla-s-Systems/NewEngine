@@ -6,4 +6,8 @@
 //! `newengine-assets-api` so existing imports keep compiling while the API crate
 //! remains the only source of truth.
 
-pub use newengine_assets_api::{method, ASSET_SERVICE_ID, REQUIRED_RUNTIME_METHODS_V1};
+pub use newengine_assets_api::{
+    method, ASSET_BACKEND_CAPABILITY_ID, ASSET_BACKEND_SERVICE_SPEC, ASSET_METHOD_PREFIX,
+    ASSET_PROVIDER_SERVICE_ID, ASSET_RUNTIME_CONTRACT_SPEC, ASSET_SERVICE_ID,
+    ENGINE_ASSET_SERVICE_ID, REQUIRED_RUNTIME_METHODS_V1,
+};

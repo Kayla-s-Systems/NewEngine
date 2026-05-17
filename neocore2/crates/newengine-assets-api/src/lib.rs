@@ -6,11 +6,36 @@ use std::time::Instant;
 mod asset_error;
 pub use asset_error::*;
 
-/// Default service id for the AssetManager service.
+/// Engine-facing asset service gateway id.
 ///
-/// This id is part of the stable engine/plugin contract and must be imported
-/// by clients and providers instead of being duplicated in plugin crates.
-pub const ASSET_SERVICE_ID: &str = "asset.manager";
+/// Runtime and provider plugins must request assets through this stable host-owned
+/// gateway, not through a concrete AssetManager/provider service id. The host
+/// resolves this gateway to the active asset backend by declared capability.
+pub const ENGINE_ASSET_SERVICE_ID: &str = "engine.assets";
+
+/// Canonical client-facing service id for asset access.
+pub const ASSET_SERVICE_ID: &str = ENGINE_ASSET_SERVICE_ID;
+
+/// Default provider service id used by the first-party AssetManager backend.
+///
+/// This is provider-owned identity, not the id consumers should call. Third-party
+/// providers may register a different service id as long as they declare
+/// `asset_manager.backend`; the engine gateway still resolves them.
+pub const ASSET_PROVIDER_SERVICE_ID: &str = "asset_manager.api";
+
+/// Backend capability declared by plugins that provide an asset service backend.
+pub const ASSET_BACKEND_CAPABILITY_ID: &str = "asset_manager.backend";
+
+/// Wire method namespace for asset-domain service calls.
+pub const ASSET_METHOD_PREFIX: &str = "asset.";
+
+/// Generic host/plugin backend declaration for the asset service family.
+pub const ASSET_BACKEND_SERVICE_SPEC: newengine_service_api::BackendServiceSpec =
+    newengine_service_api::BackendServiceSpec::new(
+        "asset_manager",
+        ASSET_PROVIDER_SERVICE_ID,
+        ASSET_BACKEND_CAPABILITY_ID,
+    );
 
 /// Canonical AssetManager v1 method names.
 ///
@@ -19,6 +44,11 @@ pub const ASSET_SERVICE_ID: &str = "asset.manager";
 /// `asset.load`, `asset.pump`, and `asset.load_text_v1` are intentionally not
 /// part of this surface.
 pub mod method {
+    /// Standard service-framework metadata method.
+    pub const INFO_JSON: &str = newengine_service_api::SERVICE_METHOD_INFO_JSON;
+    /// Standard service-framework JSON control invocation method.
+    pub const INVOKE_JSON: &str = newengine_service_api::SERVICE_METHOD_INVOKE_JSON;
+
     pub const RELOAD_V1: &str = "asset.reload_v1";
     pub const INFO_JSON_V1: &str = "asset.info_json_v1";
     pub const STATE_JSON_V1: &str = "asset.state_json_v1";
@@ -89,6 +119,9 @@ pub mod method {
 /// The engine validates these before scene bootstrap so an old DLL cannot fail
 /// later as "unknown method" inside foliage/profile loading.
 pub const REQUIRED_RUNTIME_METHODS_V1: &[&str] = &[
+    method::INFO_JSON,
+    method::INVOKE_JSON,
+    method::SHUTDOWN_V1,
     method::RAW_BYTES_V1,
     method::TEXT_V1,
     method::IMPORT_V1,
@@ -102,6 +135,15 @@ pub const REQUIRED_RUNTIME_METHODS_V1: &[&str] = &[
     method::FORMATS_JSON_V1,
 ];
 
+/// Startup validation contract for the engine-facing asset gateway.
+///
+/// Validation reads the active backend provider description through the gateway.
+pub const ASSET_RUNTIME_CONTRACT_SPEC: newengine_service_api::RuntimeServiceContractSpec =
+    newengine_service_api::RuntimeServiceContractSpec::new(
+        ASSET_SERVICE_ID,
+        "newengine.assets-api >= 0.8.x",
+        REQUIRED_RUNTIME_METHODS_V1,
+    );
 
 /// Runtime-ready texture packet returned by AssetManager.
 ///

@@ -13,3 +13,4 @@ serde_json = "1.0.149"
 newengine-plugin-api = { path = "../newengine-plugin-api" }
 newengine-math = { path = "../newengine-math" }
 newengine-service-api = { path = "../newengine-service-api" }
+newengine-assets-api = { path = "../newengine-assets-api" }

@@ -715,6 +715,7 @@ dependencies = [
  "abi_stable",
  "libloading 0.9.0",
  "log",
+ "newengine-assets-api",
  "newengine-math",
  "newengine-plugin-api",
  "newengine-service-api",

@@ -138,6 +138,11 @@ pub fn bump_services_generation() {
 /// Returns true if a plugin-owned service with the given id is currently registered.
 #[inline]
 pub fn has_service(service_id: &str) -> bool {
+    if is_engine_asset_gateway_id(service_id) {
+        return resolve_service_for_backend_capability(newengine_assets_api::ASSET_BACKEND_CAPABILITY_ID)
+            .is_some();
+    }
+
     let c = ctx();
     let g = match c.services.lock() {
         Ok(v) => v,
@@ -164,9 +169,85 @@ pub fn list_services() -> Vec<String> {
 /// Returns the `describe()` JSON for the given service id, if present.
 #[inline]
 pub fn describe_service(service_id: &str) -> Option<String> {
+    if is_engine_asset_gateway_id(service_id) {
+        let routed_id = resolve_service_for_backend_capability(newengine_assets_api::ASSET_BACKEND_CAPABILITY_ID)?;
+        return describe_service(&routed_id);
+    }
+
     let c = ctx();
     let g = c.services.lock().ok()?;
     Some(g.get(service_id)?.describe_json.clone())
+}
+
+#[inline]
+fn is_engine_asset_gateway_id(service_id: &str) -> bool {
+    service_id == newengine_assets_api::ASSET_SERVICE_ID
+        || service_id == newengine_assets_api::ENGINE_ASSET_SERVICE_ID
+}
+
+#[inline]
+fn parse_backend_priority(json: &str) -> i64 {
+    serde_json::from_str::<serde_json::Value>(json)
+        .ok()
+        .and_then(|v| v.get("backend_priority").and_then(|x| x.as_i64()))
+        .unwrap_or(0)
+}
+
+/// Resolve the active registered provider service for a backend capability.
+///
+/// This is the host-owned service gateway primitive: callers ask the engine for
+/// a domain service, while the host selects the concrete provider service from
+/// descriptor facts instead of requiring consumers to know provider ids.
+pub fn resolve_service_for_backend_capability(capability_id: &str) -> Option<String> {
+    let c = ctx();
+    let services = match c.services.lock() {
+        Ok(v) => v,
+        Err(e) => e.into_inner(),
+    };
+    let descriptors = match c.plugin_descriptors.lock() {
+        Ok(v) => v,
+        Err(e) => e.into_inner(),
+    };
+
+    let mut candidates: Vec<(i64, String, String)> = Vec::new();
+
+    for (service_id, entry) in services.iter() {
+        let Some(owner) = entry.owner_plugin_id.as_deref() else {
+            continue;
+        };
+        let Some(descriptor) = descriptors.get(owner) else {
+            continue;
+        };
+
+        let Some(backend_capability) = descriptor.capabilities.iter().find(|cap| {
+            cap.role == CapabilityRole::Provides && cap.id.as_str() == capability_id
+        }) else {
+            continue;
+        };
+
+        let declares_registered_service = descriptor.capabilities.iter().any(|cap| {
+            cap.role == CapabilityRole::Provides
+                && cap.kind == CapabilityKind::ServiceV1
+                && cap.id.as_str() == service_id
+        });
+        if !declares_registered_service {
+            continue;
+        }
+
+        candidates.push((
+            parse_backend_priority(backend_capability.describe_json.as_str()),
+            service_id.clone(),
+            owner.to_owned(),
+        ));
+    }
+
+    candidates.sort_by(|a, b| {
+        b.0.cmp(&a.0)
+            .then_with(|| a.1.cmp(&b.1))
+            .then_with(|| a.2.cmp(&b.2))
+    });
+
+    candidates.into_iter().map(|(_, service_id, _)| service_id).next()
 }
 
 pub fn subscribe_event_sink(sink: EventSinkV1Dyn<'static>) -> Result<(), String> {
@@ -459,10 +540,14 @@ fn collect_declared_providers(
     out.insert(declared_cap_key("host.services.v1", CapabilityKind::ServiceV1 as u8), 1);
     out.insert(declared_cap_key("host.events.v1", CapabilityKind::EventsV1 as u8), 1);
 
+    let mut has_asset_backend = false;
     for d in descriptors {
         for c in d.capabilities.iter() {
             if c.role != CapabilityRole::Provides {
                 continue;
+            }
+            if c.id.as_str() == newengine_assets_api::ASSET_BACKEND_CAPABILITY_ID {
+                has_asset_backend = true;
             }
             let key = declared_cap_key(c.id.as_str(), c.kind as u8);
             let cur = out.get(&key).copied().unwrap_or(0);
@@ -470,6 +555,18 @@ fn collect_declared_providers(
                 out.insert(key, c.version);
             }
         }
+    }
+
+    if has_asset_backend {
+        // Host-owned asset gateway. Consumers require the engine asset service,
+        // not a concrete provider id. `asset.manager` is accepted here only as
+        // an intent-normalized requirement from already-built plugins; it is not
+        // registered as a provider service and is not exposed by list_services().
+        out.insert(
+            declared_cap_key(newengine_assets_api::ASSET_SERVICE_ID, CapabilityKind::ServiceV1 as u8),
+            1,
+        );
+        out.insert(declared_cap_key("asset.manager", CapabilityKind::ServiceV1 as u8), 1);
     }
 
     out

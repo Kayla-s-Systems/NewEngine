@@ -108,12 +108,29 @@ extern "C" fn host_register_service_v1_plain(svc: ServiceV1Dyn<'static>) -> RRes
     host_register_service_impl(svc)
 }
 
+#[inline]
+fn route_host_owned_service(requested_id: &str, method: &str) -> Option<String> {
+    let is_asset_gateway = requested_id == newengine_assets_api::ASSET_SERVICE_ID
+        || requested_id == newengine_assets_api::ENGINE_ASSET_SERVICE_ID;
+    let is_asset_method = method.starts_with(newengine_assets_api::ASSET_METHOD_PREFIX);
+
+    if !is_asset_gateway && !is_asset_method {
+        return None;
+    }
+
+    crate::host_context::resolve_service_for_backend_capability(
+        newengine_assets_api::ASSET_BACKEND_CAPABILITY_ID,
+    )
+}
+
 pub extern "C" fn call_service_v1(
     cap_id: CapabilityId,
     method: MethodName,
     payload: Blob,
 ) -> RResult<Blob, RString> {
-    let id = cap_id.to_string();
+    let requested_id = cap_id.to_string();
+    let method_text = method.to_string();
+    let id = route_host_owned_service(&requested_id, &method_text).unwrap_or(requested_id.clone());
     let c = ctx();
 
     let (svc, owner) = {
@@ -124,7 +141,14 @@ pub extern "C" fn call_service_v1(
 
         match g.get(&id) {
             Some(v) => (v.service.clone(), v.owner_plugin_id.clone()),
-            None => return RResult::RErr(RString::from(format!("service not found: {id}"))),
+            None => {
+                if id != requested_id {
+                    return RResult::RErr(RString::from(format!(
+                        "service not found: requested={requested_id} routed={id}"
+                    )));
+                }
+                return RResult::RErr(RString::from(format!("service not found: {id}")));
+            }
         }
     };
 

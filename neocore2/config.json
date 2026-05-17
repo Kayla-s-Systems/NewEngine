@@ -58,15 +58,6 @@
         },
         "icon": "ui/engine.ico"
       }
-    },
-    "newengine.renderer.vulkan": {
-      "clear_color": [
-        0.02,
-        0.025,
-        0.035,
-        1.0
-      ],
-      "debug_text": "NewEngine | Vulkan"
     }
   }
 }
