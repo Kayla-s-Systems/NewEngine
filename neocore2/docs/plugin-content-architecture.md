@@ -1,49 +1,36 @@
 # Plugin-owned content architecture
 
-NewEngine keeps the host thin: executable DLL plugins provide capabilities, while
-`plugins/plugins.manifest.json` publishes declarative content payloads owned by
-those plugins.
+NewEngine keeps executable provider discovery and declarative content catalogs separate.
 
-## Policy
+## Runtime plugin identity
 
-- Engine bootstrap must not hard-code game maps as the source of truth.
-- Scene/map/prefab/generator data is read from `plugins.manifest.json.content`.
-- Runtime code may keep a small fallback profile only to keep dev builds bootable
-  when no plugin catalog is present.
-- DLL descriptors declare `scene.contribution.v1` through
-  `CapabilityKind::SceneContributionV1`.
-- Content payloads reference their `provider_plugin` and required capability.
+Runtime plugin identity comes from ABI metadata only:
+
+```text
+DLL -> PluginSignatureV1 / PluginDescriptor -> services + capabilities
+```
+
+No runtime provider should be identified by filename prefix, filename pattern, or deployment manifest entry.
+
+## Content catalog
+
+Declarative content is a separate optional catalog. It is not a plugin discovery manifest and must not be used to decide which DLL provides a service.
+
+Current content catalog path:
+
+```text
+plugin-content.manifest.json
+```
+
+The catalog may publish scene/map/prefab/material/generator payloads owned by plugins or feature packs. Runtime/editor layers adapt those JSON payloads into domain-specific ECS data.
 
 ## Thin-engine boundary
 
-The current boundary is deliberately narrow:
+- `newengine-plugin-host` exposes a typed content catalog loader.
+- `newengine-plugin-api` defines generic capability metadata.
+- Domain runtimes adapt content payloads to ECS.
+- Backend providers remain selected by service/capability descriptors, not by content manifests.
 
-- `newengine-plugin-host` reads deployment manifests and exposes a typed `PluginContentCatalog`; it does not know Game Ready FPS internals.
-- `newengine-plugin-api` only adds the generic ABI capability kind `SceneContributionV1`; it does not define one-off FPS contracts.
-- `newengine-editor-runtime` contains a small adapter from plugin JSON payloads to ECS entities.
-- `GameReadyMapPlugin` owns the scene contribution identity and descriptor; the runtime manifest owns the map, terrain generator parameters, prefab anchors, marker layout and palette.
+## Physics note
 
-Generator constants such as ridge/vein frequency, amplitudes, seed xor values and smoothing edges are no longer embedded in the scene spawner. They are data in the plugin content payload and can be replaced without changing engine code.
-
-## Current Game Ready FPS flow
-
-1. `newengine-plugin-host::load_plugin_content_catalog_from_dir` reads
-   `plugins.manifest.json`.
-2. `newengine-editor-runtime::scene_bridge::game_ready::content` selects
-   `newengine.scene.game_ready.highlands.v1`.
-3. The scene bridge adapts that payload into strongly typed local specs.
-4. Terrain, skydome, gameplay markers, prefabs and foliage are spawned from the
-   specs, not from scattered literals.
-
-This is intentionally a bridge layer: the plugin manifest owns the content, the
-engine owns only the minimal adapter from declared schema to ECS components.
-
-## 2026-05-16 — Physics backend service adapter boundary
-
-Physics now follows the provider/adapter direction used by render. Runtime systems must use `PhysicsApiRef` and `newengine-physics-api` packets; backend plugins provide `physics.api` plus `physics.backend`. Concrete physics providers live under `Plugins/` and are selected as service backends. Engine/runtime code must not depend on any provider implementation crate directly.
-
-Target frame boundary:
-
-```text
-ECS -> PhysicsFrameInput -> physics.api -> PhysicsFrameOutput -> ECS
-```
+Physics is not content. Physics backend implementation is a service provider behind `physics.api`. Engine/runtime code talks to `PhysicsApiRef` and DTO packets only.

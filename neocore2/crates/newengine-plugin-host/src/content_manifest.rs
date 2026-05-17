@@ -91,7 +91,7 @@ pub fn load_plugin_content_catalog_from_dir(
     dir: impl AsRef<Path>,
 ) -> Result<PluginContentLoadReport, PluginLoadError> {
     let dir = crate::paths::resolve_plugins_dir(dir.as_ref())?;
-    let path = dir.join("plugins.manifest.json");
+    let path = dir.join("plugin-content.manifest.json");
     let bytes = match std::fs::read(&path) {
         Ok(bytes) => bytes,
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
