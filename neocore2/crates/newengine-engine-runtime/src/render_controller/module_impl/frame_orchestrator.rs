@@ -14,7 +14,7 @@ use super::frame_envelope_builder::build_runtime_frame_envelope;
 use super::frame_submit::submit_frame_envelope;
 use super::frame_types::{PlayableFrameOutcome, RenderFrameScope, WorldFrameState};
 use super::{lights, passes, picking, postfx, scene, shadows};
-use crate::camera_gateway::{apply_view_postfx, CameraTransitionPhase};
+use crate::scene_bridge::{apply_engine_view_postfx, EngineViewTransitionPhase};
 use super::super::controller::RuntimeRenderController;
 
 pub(super) struct RenderFrameOrchestrator;
@@ -162,7 +162,7 @@ impl RenderFrameOrchestrator {
             )?;
         }
 
-        let postfx = apply_view_postfx(
+        let postfx = apply_engine_view_postfx(
             postfx::game_sun_postfx_params(scene.world(), viewproj, view.position_ws),
             view_frame.postfx,
         );
@@ -192,10 +192,10 @@ impl RenderFrameOrchestrator {
         controller.diagnostics.overlay_metrics.record_graph_submit(submit_report.clone());
 
         let mut debug_notes = Vec::new();
-        if let Some(report) = view_frame.report.clone() {
-            controller.diagnostics.overlay_metrics.record_camera_report(report.clone());
+        if let Some(report) = view_frame.diagnostics.clone() {
+            controller.diagnostics.overlay_metrics.record_view_report(report.clone());
             debug_notes.push(format!(
-                "camera director={} mode={} dominant={:?} rendered={} input={} lock={} gate_blocked={} blend_active={} blend_alpha={:.3} events={}",
+                "view director={} mode={} dominant={:?} rendered={} input={} lock={} gate_blocked={} blend_active={} blend_alpha={:.3} events={}",
                 report.active_director,
                 report.active_mode,
                 report.dominant_director,
@@ -207,9 +207,9 @@ impl RenderFrameOrchestrator {
                 report.frame_blend_alpha,
                 report.pending_event_count,
             ));
-            if report.transition.phase != CameraTransitionPhase::Idle {
+            if report.transition.phase != EngineViewTransitionPhase::Idle {
                 debug_notes.push(format!(
-                    "camera transition {:?} {:.2}s target={:?}",
+                    "view transition {:?} {:.2}s target={:?}",
                     report.transition.phase,
                     report.transition.elapsed_sec,
                     report.target_entity,

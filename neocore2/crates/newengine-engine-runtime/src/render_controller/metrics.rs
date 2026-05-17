@@ -1,6 +1,6 @@
 #![forbid(unsafe_op_in_unsafe_fn)]
 
-use crate::camera_gateway::{CameraRuntimeOverlayReport, CameraTransitionPhase};
+use crate::scene_bridge::{EngineViewDiagnostics, EngineViewTransitionPhase};
 use newengine_core::render::{
     RecordedDrawListStats, RenderDebugChartSample, RenderDebugTelemetry,
     RenderDiagnosticsSnapshot, RenderFrameDebugSnapshot, RenderGraphSubmitReport,
@@ -22,7 +22,7 @@ pub(super) struct RuntimeOverlayMetrics {
     resource_pipelines: u32,
     queued_upload_jobs: u32,
     queued_upload_bytes: u64,
-    camera_report: Option<CameraRuntimeOverlayReport>,
+    view_report: Option<EngineViewDiagnostics>,
 }
 
 impl RuntimeOverlayMetrics {
@@ -41,7 +41,7 @@ impl RuntimeOverlayMetrics {
             resource_pipelines: 0,
             queued_upload_jobs: 0,
             queued_upload_bytes: 0,
-            camera_report: None,
+            view_report: None,
         }
     }
 
@@ -84,8 +84,8 @@ impl RuntimeOverlayMetrics {
     }
 
     #[inline]
-    pub(super) fn record_camera_report(&mut self, report: CameraRuntimeOverlayReport) {
-        self.camera_report = Some(report);
+    pub(super) fn record_view_report(&mut self, report: EngineViewDiagnostics) {
+        self.view_report = Some(report);
     }
 
     #[inline]
@@ -141,26 +141,26 @@ impl RuntimeOverlayMetrics {
             self.frame_draws
         ));
 
-        if let Some(camera) = self.camera_report.as_ref() {
+        if let Some(view) = self.view_report.as_ref() {
             lines.push(format!(
-                "CAM {}/{} {} dom={:?} n={} lock={} gate={} blend={}{:.0}% events={}",
-                camera.active_director,
-                camera.active_mode,
-                camera.input_context,
-                camera.dominant_director,
-                camera.rendered_director_count,
-                camera.director_lock_input,
-                camera.gate_blocked,
-                if camera.frame_blend_active { "on " } else { "off " },
-                camera.frame_blend_alpha * 100.0,
-                camera.pending_event_count,
+                "VIEW {}/{} {} dom={:?} n={} lock={} gate={} blend={}{:.0}% events={}",
+                view.active_director,
+                view.active_mode,
+                view.input_context,
+                view.dominant_director,
+                view.rendered_director_count,
+                view.director_lock_input,
+                view.gate_blocked,
+                if view.frame_blend_active { "on " } else { "off " },
+                view.frame_blend_alpha * 100.0,
+                view.pending_event_count,
             ));
-            if camera.transition.phase != CameraTransitionPhase::Idle {
+            if view.transition.phase != EngineViewTransitionPhase::Idle {
                 lines.push(format!(
-                    "CAM transition {:?} {:.2}s target={:?}",
-                    camera.transition.phase,
-                    camera.transition.elapsed_sec,
-                    camera.target_entity,
+                    "VIEW transition {:?} {:.2}s target={:?}",
+                    view.transition.phase,
+                    view.transition.elapsed_sec,
+                    view.target_entity,
                 ));
             }
         }

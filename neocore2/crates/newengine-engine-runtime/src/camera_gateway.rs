@@ -52,6 +52,7 @@ impl ServiceV1 for CameraGatewayInfoService {
             "protocol": info.protocol,
             "methods": [
                 newengine_camera_api::CAMERA_SERVICE_METHOD_INFO,
+                newengine_camera_api::CAMERA_SERVICE_METHOD_INVOKE,
                 newengine_camera_api::CAMERA_SERVICE_METHOD_SNAPSHOT_JSON_V1,
                 newengine_camera_api::CAMERA_SERVICE_METHOD_SHUTDOWN_V1
             ],

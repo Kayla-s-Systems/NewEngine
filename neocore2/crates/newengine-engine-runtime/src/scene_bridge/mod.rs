@@ -9,12 +9,17 @@ mod queue;
 mod accessors;
 mod commands_api;
 mod apply_commands;
+mod view_gateway;
 
 pub use commands::SceneCommand;
 pub use imported_assets::{
     PrimitiveMaterialBase, SceneImportedAssetAssembler, SceneImportedAssetAssemblyDescriptor,
     SceneImportedAssetAssemblyKind, SceneImportedAssetDescriptor, SceneImportedAssetKind,
     SceneImportedAssetRepresentation,
+};
+pub(crate) use view_gateway::{
+    apply_engine_view_postfx, EngineViewDiagnostics, EngineViewGatewayFrame, EngineViewInput,
+    EngineViewTransitionPhase,
 };
 
 use parking_lot::{Mutex, RwLock};
@@ -105,11 +110,6 @@ impl SceneBridge {
     #[inline]
     pub fn materials(&self) -> Arc<RwLock<MaterialRegistry>> {
         Arc::clone(&self.materials)
-    }
-
-    #[inline]
-    pub fn camera_gateway(&self) -> Arc<CameraGatewayBridge> {
-        Arc::clone(&self.camera_gateway)
     }
 
     pub fn bootstrap_game_ready_scene_now(&self) -> Option<EntityId> {

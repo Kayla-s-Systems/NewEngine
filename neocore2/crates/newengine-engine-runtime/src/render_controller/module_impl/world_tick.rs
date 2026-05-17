@@ -2,7 +2,7 @@ use newengine_core::physics::PhysicsApiRef;
 use newengine_core::render::RenderApi;
 use newengine_scene::Scene;
 
-use crate::camera_gateway::CameraGatewayInput;
+use crate::scene_bridge::EngineViewInput;
 use crate::gameplay::{run_schedule, GameRunMode};
 
 use super::frame_types::WorldFrameState;
@@ -24,7 +24,6 @@ impl RuntimeRenderController {
         vp_h: u32,
     ) -> WorldFrameState {
         let mut activate_game_ready_play_after_frame = false;
-        let camera_gateway = self.bridges.scene.camera_gateway();
         let viewport_bridge = self.bridges.viewport.clone();
         let scene_bridge = self.bridges.scene.clone();
         let selection = scene_bridge.selection();
@@ -67,10 +66,10 @@ impl RuntimeRenderController {
 
             let bounds = scene::scene_bounds_world(world).unwrap_or_else(scene::default_bounds);
             let sel_bounds = scene::selection_bounds_world(world, selection);
-            let frame = camera_gateway.tick_world_frame(
+            let frame = scene_bridge.resolve_engine_view_frame(
                 world,
                 &viewport_bridge,
-                CameraGatewayInput::from(input),
+                EngineViewInput::from(input),
                 play_mode,
                 effective_play_mode,
                 world_playable,
@@ -96,7 +95,7 @@ impl RuntimeRenderController {
     }
 }
 
-impl From<&ViewportInputSnap> for CameraGatewayInput {
+impl From<&ViewportInputSnap> for EngineViewInput {
     #[inline]
     fn from(input: &ViewportInputSnap) -> Self {
         Self {
