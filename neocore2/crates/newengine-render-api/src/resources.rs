@@ -51,6 +51,9 @@ pub enum TextureFormat {
     Bgra8Unorm,
     Bgra8Srgb,
     Rgba16Float,
+    /// Single-channel 32-bit float render/sample format.
+    /// Used for color-packed shadow depth when backend depth-sampling is not available.
+    R32Float,
     Bc1RgbaUnorm,
     Bc1RgbaSrgb,
     Bc3RgbaUnorm,

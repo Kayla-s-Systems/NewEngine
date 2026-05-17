@@ -9,7 +9,7 @@ use newengine_core::render::TextureFormat;
 /// architecture is a full RenderSettings/quality-profile resource, but constants
 /// here keep this pass safe and compile-local.
 pub(crate) const SCENE_HDR_COLOR_FORMAT: TextureFormat = TextureFormat::Rgba16Float;
-pub(crate) const SHADOW_MAP_COLOR_FORMAT: TextureFormat = TextureFormat::Rgba16Float;
+pub(crate) const SHADOW_MAP_COLOR_FORMAT: TextureFormat = TextureFormat::R32Float;
 pub(crate) const SHADOW_STRENGTH_MAX: f32 = 0.70;
 pub(crate) const SHADOW_SOFTNESS_MAX: f32 = 1.25;
 pub(crate) const SHADOW_RESOLUTION_MIN: u32 = 256;

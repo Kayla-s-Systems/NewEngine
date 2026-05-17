@@ -162,8 +162,26 @@ float shadow_tap(vec2 uv, float current, float bias) {
 }
 
 float shadow_compare_quality(vec2 uv, float current, float bias) {
+    float radius = clamp(ubo.u_shadow_params.w, 0.0, 1.25);
+    if (radius <= 0.05) {
+        return shadow_tap(uv, current, bias);
+    }
+
     ivec2 sz = textureSize(sampler2D(u_shadow_tex, u_material_sampler), 0);
-    vec2 texel = clamp(ubo.u_shadow_params.w, 0.25, 1.75) / vec2(max(sz.x, 1), max(sz.y, 1));
+    vec2 texel = max(radius, 0.35) / vec2(max(sz.x, 1), max(sz.y, 1));
+
+    // Dynamic quality: hard/low softness uses 1 tap, normal gameplay uses 4 taps,
+    // high softness keeps the old tent 3x3. This removes the constant 9-tap cost
+    // that made shadows disproportionately expensive on the forward path.
+    if (radius <= 0.75) {
+        float lit4 = 0.0;
+        lit4 += shadow_tap(uv + texel * vec2(-0.5, -0.5), current, bias);
+        lit4 += shadow_tap(uv + texel * vec2( 0.5, -0.5), current, bias);
+        lit4 += shadow_tap(uv + texel * vec2(-0.5,  0.5), current, bias);
+        lit4 += shadow_tap(uv + texel * vec2( 0.5,  0.5), current, bias);
+        return lit4 * 0.25;
+    }
+
     float lit = 0.0;
     lit += shadow_tap(uv + texel * vec2(-1.0, -1.0), current, bias) * 0.0625;
     lit += shadow_tap(uv + texel * vec2( 0.0, -1.0), current, bias) * 0.1250;
@@ -184,12 +202,11 @@ float sample_shadow(vec4 light_clip, vec3 nrm, vec3 light_dir_to_scene) {
 
     vec3 ndc = light_clip.xyz / light_clip.w;
     vec2 uv = ndc.xy * 0.5 + 0.5;
-    uv.y = 1.0 - uv.y;
-    if (uv.x < 0.001 || uv.x > 0.999 || uv.y < 0.001 || uv.y > 0.999) {
+    if (uv.x < 0.001 || uv.x > 0.999 || uv.y < 0.001 || uv.y > 0.999 || ndc.z < 0.0 || ndc.z > 1.0) {
         return 1.0;
     }
 
-    float current = clamp(ndc.z, 0.0, 1.0);
+    float current = ndc.z;
     float ndotl = max(dot(normalize(nrm), normalize(-light_dir_to_scene)), 0.0);
     float slope = 1.0 - ndotl;
     float bias = max(ubo.u_shadow_params.y * (1.0 + slope * 2.85) + 0.00018 * slope, 0.00005);
