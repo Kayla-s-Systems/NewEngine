@@ -3,7 +3,6 @@
 mod graph;
 mod load;
 mod logging;
-mod manifest;
 mod metadata;
 mod scan;
 mod selection;

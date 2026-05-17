@@ -4,6 +4,3 @@ CMAKE_BUILD_PARALLEL_LEVEL = "8"
 
 [alias]
 check-math = "deny check bans"
-
-[patch.crates-io]
-joltc-sys = { path = "third_party/joltc-sys" }

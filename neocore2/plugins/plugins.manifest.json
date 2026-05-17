@@ -1,0 +1,106 @@
+﻿{
+    "schema":  "newengine.runtime.plugins.v1",
+    "plugins":  [
+                    {
+                        "id":  "newengine.assets",
+                        "file_pattern":  "assetManager-*.dll",
+                        "phase":  "bootstrap",
+                        "kind":  "runtime",
+                        "services":  [
+                                         "asset.manager"
+                                     ],
+                        "capabilities":  [
+
+                                         ]
+                    },
+                    {
+                        "id":  "newengine.input",
+                        "file_pattern":  "input-*.dll",
+                        "phase":  "bootstrap",
+                        "kind":  "runtime",
+                        "services":  [
+                                         "newengine.input.v1"
+                                     ],
+                        "capabilities":  [
+
+                                         ]
+                    },
+                    {
+                        "id":  "newengine.logging",
+                        "file_pattern":  "logging-*.dll",
+                        "phase":  "bootstrap",
+                        "kind":  "runtime",
+                        "services":  [
+
+                                     ],
+                        "capabilities":  [
+
+                                         ]
+                    },
+                    {
+                        "id":  "newengine.renderer.vulkan",
+                        "file_pattern":  "vulkan_renderer-*.dll",
+                        "phase":  "engine",
+                        "kind":  "runtime",
+                        "services":  [
+                                         "render.api"
+                                     ],
+                        "capabilities":  [
+                                             "render.backend"
+                                         ],
+                        "backend_priority":  100
+                    },
+                    {
+                        "id":  "newengine.renderer.null",
+                        "file_pattern":  "null_renderer-*.dll",
+                        "phase":  "engine",
+                        "kind":  "runtime",
+                        "services":  [
+                                         "render.api"
+                                     ],
+                        "capabilities":  [
+                                             "render.backend"
+                                         ],
+                        "backend_priority":  0
+                    },
+                    {
+                        "id":  "newengine.physics.jolt",
+                        "file_pattern":  "newengine-physics-jolt-*.dll",
+                        "phase":  "engine",
+                        "kind":  "runtime",
+                        "services":  [
+                                         "physics.api"
+                                     ],
+                        "capabilities":  [
+                                             "physics.backend"
+                                         ],
+                        "backend_priority":  200
+                    },
+                    {
+                        "id":  "newengine.physics.deterministic",
+                        "file_pattern":  "newengine-physics-deterministic-*.dll",
+                        "phase":  "engine",
+                        "kind":  "runtime",
+                        "services":  [
+                                         "physics.api"
+                                     ],
+                        "capabilities":  [
+                                             "physics.backend"
+                                         ],
+                        "backend_priority":  100
+                    },
+                    {
+                        "id":  "newengine.physics.null",
+                        "file_pattern":  "newengine-physics-null-*.dll",
+                        "phase":  "engine",
+                        "kind":  "runtime",
+                        "services":  [
+                                         "physics.api"
+                                     ],
+                        "capabilities":  [
+                                             "physics.backend"
+                                         ],
+                        "backend_priority":  0
+                    }
+                ]
+}

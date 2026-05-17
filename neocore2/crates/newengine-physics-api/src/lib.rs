@@ -51,7 +51,7 @@ impl Default for PhysicsApiVersion {
 pub enum PhysicsBackendClass {
     Null,
     Deterministic,
-    NativeAdapter,
+    Native,
 }
 
 impl Default for PhysicsBackendClass {
@@ -68,10 +68,7 @@ pub enum PhysicsFeature {
     Contacts,
     Queries,
     DeterministicReplay,
-    NativeJoltAdapter,
-    NativeBulletAdapter,
-    NativePhysXAdapter,
-    NativeHavokAdapter,
+    NativeBackend,
     HeightfieldColliders,
     MeshColliders,
 }
@@ -124,16 +121,16 @@ impl PhysicsBackendCapabilities {
     }
 
     #[inline]
-    pub fn jolt_native_default() -> Self {
+    pub fn native_backend_default() -> Self {
         Self {
-            backend_class: PhysicsBackendClass::NativeAdapter,
+            backend_class: PhysicsBackendClass::Native,
             features: vec![
                 PhysicsFeature::StaticColliders,
                 PhysicsFeature::DynamicBodies,
                 PhysicsFeature::KinematicBodies,
                 PhysicsFeature::TriggerBodies,
                 PhysicsFeature::Queries,
-                PhysicsFeature::NativeJoltAdapter,
+                PhysicsFeature::NativeBackend,
                 PhysicsFeature::HeightfieldColliders,
                 PhysicsFeature::MeshColliders,
             ],

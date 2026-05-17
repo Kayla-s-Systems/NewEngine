@@ -24,6 +24,12 @@ pub(super) struct ManifestPluginEntry {
     pub(super) kind: String,
     #[serde(default)]
     pub(super) required: bool,
+    #[serde(default)]
+    pub(super) services: Vec<String>,
+    #[serde(default)]
+    pub(super) capabilities: Vec<String>,
+    #[serde(default)]
+    pub(super) backend_priority: i32,
 }
 
 impl PluginManifest {
@@ -99,6 +105,16 @@ impl ManifestPluginEntry {
             "editor" => PluginKind::Editor,
             _ => PluginKind::Other,
         }
+    }
+
+    #[inline]
+    pub(super) fn provides_service(&self, id: &str) -> bool {
+        self.services.iter().any(|s| s == id)
+    }
+
+    #[inline]
+    pub(super) fn provides_capability(&self, id: &str) -> bool {
+        self.capabilities.iter().any(|c| c == id)
     }
 }
 

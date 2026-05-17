@@ -20,4 +20,4 @@ pub use material::PhysicsMaterialDesc;
 pub use query::{PhysicsQuery, PhysicsQueryHit, PhysicsQueryKind};
 pub use replay::{PhysicsReplayEvent, PhysicsReplayFrame};
 pub use shape::CollisionShapeDesc;
-pub use world::{PhysicsBackendKind, PhysicsCommand, PhysicsCommandKind, PhysicsWorldDesc};
+pub use world::{PhysicsCommand, PhysicsCommandKind, PhysicsWorldDesc};

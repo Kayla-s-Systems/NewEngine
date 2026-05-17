@@ -52,8 +52,8 @@ fn apply_velocity_update(
     let next = if is_directly_controlled_body(world, entity) {
         let current = world.get::<Velocity>(entity).copied().unwrap_or_default().0;
         // Character motor owns lateral velocity and look/yaw. Physics owns vertical
-        // resolution/gravity. This prevents Jolt from erasing WASD and mouse look
-        // while still applying floor contacts.
+        // resolution/gravity. This prevents the backend from erasing WASD and
+        // mouse look while still applying floor contacts.
         newengine_math::Vec3::new(current.x, physics_velocity.y, current.z)
     } else {
         physics_velocity

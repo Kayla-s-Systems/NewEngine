@@ -137,6 +137,12 @@ pub(super) fn build_scanned_plugin_kind(probe: &ScanPluginProbe) -> Option<Scann
         .as_ref()
         .is_some_and(descriptor_provides_physics_service);
 
+    let backend_priority = probe
+        .descriptor
+        .as_ref()
+        .map(descriptor_backend_priority)
+        .unwrap_or(0);
+
     Some(ScannedDynlibKind::Plugin {
         id,
         version,
@@ -147,7 +153,32 @@ pub(super) fn build_scanned_plugin_kind(probe: &ScanPluginProbe) -> Option<Scann
         provides_render_service,
         provides_physics_backend,
         provides_physics_service,
+        backend_priority,
     })
+}
+
+
+fn descriptor_backend_priority(descriptor: &PluginDescriptor) -> i32 {
+    descriptor
+        .capabilities
+        .iter()
+        .filter(|cap| {
+            cap.role == CapabilityRole::Provides
+                && (cap.id.as_str() == "render.backend" || cap.id.as_str() == "physics.backend")
+        })
+        .filter_map(|cap| capability_backend_priority(cap.describe_json.as_str()))
+        .max()
+        .unwrap_or(0)
+}
+
+fn capability_backend_priority(describe_json: &str) -> Option<i32> {
+    if describe_json.trim().is_empty() {
+        return None;
+    }
+    serde_json::from_str::<serde_json::Value>(describe_json)
+        .ok()
+        .and_then(|value| value.get("backend_priority").and_then(|v| v.as_i64()))
+        .map(|v| v.clamp(i32::MIN as i64, i32::MAX as i64) as i32)
 }
 
 #[inline]

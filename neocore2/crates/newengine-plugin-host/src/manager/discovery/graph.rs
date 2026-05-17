@@ -20,6 +20,7 @@ pub(super) enum ScannedDynlibKind {
         provides_render_service: bool,
         provides_physics_backend: bool,
         provides_physics_service: bool,
+        backend_priority: i32,
     },
     Unknown,
 }

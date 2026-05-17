@@ -92,10 +92,8 @@ pub(super) fn build_load_selection(
     let mut winners_by_id: HashMap<&str, &super::graph::ScannedDynlib> = HashMap::default();
 
     // First pass: choose one deterministic winner per plugin id.
-    // The scan order is filename-based, so without this pass an older DLL such as
-    // `vulkan_renderer-0.3.2-release.dll` can shadow a freshly built
-    // `vulkan_renderer-0.3.3-dev.dll`. Runtime discovery must prefer the newest
-    // descriptor version, then the strongest build profile.
+    // The scan order is filesystem-dependent, so duplicate descriptors must be
+    // resolved deterministically by descriptor version and build profile.
     for item in &graph.items {
         let ScannedDynlibKind::Plugin {
             id,
@@ -210,20 +208,12 @@ fn select_render_backend_provider(
         .collect();
 
     candidates.sort_by(|a, b| {
-        render_provider_priority(a)
-            .cmp(&render_provider_priority(b))
+        backend_provider_priority(a)
+            .cmp(&backend_provider_priority(b))
             .then_with(|| plugin_candidate_rank(a).cmp(&plugin_candidate_rank(b)))
     });
 
     candidates.last().map(|item| item.path.clone())
-}
-
-fn render_provider_priority(item: &super::graph::ScannedDynlib) -> u8 {
-    match &item.kind {
-        ScannedDynlibKind::Plugin { id, .. } if id == "newengine.renderer.null" => 0,
-        ScannedDynlibKind::Plugin { .. } => 1,
-        _ => 0,
-    }
 }
 
 fn select_physics_backend_provider(
@@ -243,20 +233,17 @@ fn select_physics_backend_provider(
         .collect();
 
     candidates.sort_by(|a, b| {
-        physics_provider_priority(a)
-            .cmp(&physics_provider_priority(b))
+        backend_provider_priority(a)
+            .cmp(&backend_provider_priority(b))
             .then_with(|| plugin_candidate_rank(a).cmp(&plugin_candidate_rank(b)))
     });
 
     candidates.last().map(|item| item.path.clone())
 }
 
-fn physics_provider_priority(item: &super::graph::ScannedDynlib) -> u8 {
+fn backend_provider_priority(item: &super::graph::ScannedDynlib) -> i32 {
     match &item.kind {
-        ScannedDynlibKind::Plugin { id, .. } if id == "newengine.physics.null" => 0,
-        ScannedDynlibKind::Plugin { id, .. } if id == "newengine.physics.deterministic" => 1,
-        ScannedDynlibKind::Plugin { id, .. } if id == "newengine.physics.jolt" => 2,
-        ScannedDynlibKind::Plugin { .. } => 1,
+        ScannedDynlibKind::Plugin { backend_priority, .. } => *backend_priority,
         _ => 0,
     }
 }
@@ -270,13 +257,20 @@ fn is_better_plugin_candidate(
     candidate_rank > current_rank
 }
 
-fn plugin_candidate_rank(item: &super::graph::ScannedDynlib) -> ((u64, u64, u64, u64), u8, String) {
-    let version = match &item.kind {
-        ScannedDynlibKind::Plugin { version, .. } => semver_rank(version),
-        _ => (0, 0, 0, 0),
+fn plugin_candidate_rank(item: &super::graph::ScannedDynlib) -> ((u64, u64, u64, u64), i32, usize, String) {
+    let (version, backend_priority, declared_capabilities) = match &item.kind {
+        ScannedDynlibKind::Plugin {
+            version,
+            backend_priority,
+            declared_capabilities,
+            ..
+        } => (semver_rank(version), *backend_priority, declared_capabilities.unwrap_or(0)),
+        _ => ((0, 0, 0, 0), 0, 0),
     };
 
-    (version, build_profile_rank(&item.file_name), item.file_name.clone())
+    // The final path string is only a deterministic tie-breaker for two descriptors
+    // with equal id/version/capability metadata. It is not used for plugin identity.
+    (version, backend_priority, declared_capabilities, item.path.to_string_lossy().to_string())
 }
 
 fn semver_rank(version: &str) -> (u64, u64, u64, u64) {
@@ -295,35 +289,4 @@ fn semver_rank(version: &str) -> (u64, u64, u64, u64) {
         parts.next().unwrap_or(0),
         parts.next().unwrap_or(0),
     )
-}
-
-fn build_profile_rank(file_name: &str) -> u8 {
-    let lower = file_name.to_ascii_lowercase();
-    let actual = if lower.contains("-release.") || lower.contains("-release-") {
-        "release"
-    } else if lower.contains("-dev.") || lower.contains("-dev-") {
-        "dev"
-    } else if lower.contains("-debug.") || lower.contains("-debug-") {
-        "debug"
-    } else if lower.contains("-test.") || lower.contains("-test-") {
-        "test"
-    } else if lower.contains("-bench.") || lower.contains("-bench-") {
-        "bench"
-    } else {
-        "unknown"
-    };
-
-    let desired = if cfg!(debug_assertions) { "dev" } else { "release" };
-    if actual == desired {
-        5
-    } else {
-        match actual {
-            "dev" => 4,
-            "debug" => 3,
-            "release" => 2,
-            "test" => 1,
-            "bench" | "unknown" => 0,
-            _ => 0,
-        }
-    }
 }

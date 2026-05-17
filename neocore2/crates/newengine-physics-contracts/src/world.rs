@@ -3,15 +3,8 @@ use newengine_math::{Quat, Vec3};
 
 use crate::{PhysicsBodyDesc, PhysicsHandle};
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum PhysicsBackendKind {
-    DeterministicKinematic,
-    Jolt,
-}
-
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct PhysicsWorldDesc {
-    pub backend: PhysicsBackendKind,
     pub gravity: Vec3,
     pub fixed_dt: f32,
     pub max_substeps: u32,
@@ -23,7 +16,6 @@ impl Default for PhysicsWorldDesc {
     #[inline]
     fn default() -> Self {
         Self {
-            backend: PhysicsBackendKind::DeterministicKinematic,
             gravity: Vec3::new(0.0, -9.81, 0.0),
             fixed_dt: 1.0 / 60.0,
             max_substeps: 4,
@@ -37,7 +29,6 @@ impl PhysicsWorldDesc {
     #[inline]
     pub fn sanitized(self) -> Self {
         Self {
-            backend: self.backend,
             gravity: if self.gravity.is_finite() { self.gravity } else { Vec3::new(0.0, -9.81, 0.0) },
             fixed_dt: self.fixed_dt.clamp(1.0 / 240.0, 1.0 / 15.0),
             max_substeps: self.max_substeps.clamp(1, 16),

@@ -20,8 +20,6 @@ members = [
     "crates/newengine-math",
     "crates/newengine-physics-contracts",
     "crates/newengine-physics-api",
-    "crates/newengine-physics-runtime",
-    "crates/newengine-physics-jolt",
     "crates/newengine-platform-api",
     "crates/newengine-plugin-api",
     "crates/newengine-plugin-host",
