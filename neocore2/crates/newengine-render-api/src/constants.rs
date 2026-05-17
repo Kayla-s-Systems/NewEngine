@@ -9,5 +9,31 @@ pub const RENDER_SERVICE_METHOD_INVOKE: &str = newengine_service_api::SERVICE_ME
 pub const RENDER_SERVICE_METHOD_INFO: &str = newengine_service_api::SERVICE_METHOD_INFO_JSON;
 pub const RENDER_SERVICE_METHOD_SHUTDOWN_V1: &str = newengine_service_api::SERVICE_METHOD_SHUTDOWN_V1;
 
+/// Generic backend-family declaration for render providers.
+pub const RENDER_BACKEND_SERVICE_SPEC: newengine_service_api::BackendServiceSpec =
+    newengine_service_api::BackendServiceSpec::new(
+        "render",
+        ENGINE_RENDER_SERVICE_ID,
+        RENDER_SERVICE_ID,
+        RENDER_BACKEND_CAPABILITY_ID,
+    );
+
+/// Startup validation contract for the engine-facing render gateway.
+pub const RENDER_RUNTIME_CONTRACT_SPEC: newengine_service_api::RuntimeServiceContractSpec =
+    newengine_service_api::RuntimeServiceContractSpec::new(
+        ENGINE_RENDER_SERVICE_ID,
+        "newengine.render-api >= 0.3.x",
+        newengine_service_api::JSON_CONTROL_SERVICE_METHODS_V1,
+    );
+
+/// Declarative startup requirement for render. Missing render degrades unless
+/// the explicit env switch is enabled by a strict test/runtime profile.
+pub const RENDER_RUNTIME_REQUIREMENT_SPEC: newengine_service_api::RuntimeServiceRequirementSpec =
+    newengine_service_api::RuntimeServiceRequirementSpec::new(
+        RENDER_RUNTIME_CONTRACT_SPEC,
+        Some(RENDER_BACKEND_CAPABILITY_ID),
+        Some("NEWENGINE_REQUIRE_RENDER_BACKEND"),
+    );
+
 pub type Color4 = [f32; 4];
 pub type RenderWireResult<T> = Result<T, String>;

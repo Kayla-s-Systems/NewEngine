@@ -19,6 +19,32 @@ pub const PHYSICS_SERVICE_METHOD_INFO: &str = newengine_service_api::SERVICE_MET
 pub const PHYSICS_SERVICE_METHOD_INVOKE: &str = newengine_service_api::SERVICE_METHOD_INVOKE_JSON;
 pub const PHYSICS_SERVICE_METHOD_SHUTDOWN_V1: &str = newengine_service_api::SERVICE_METHOD_SHUTDOWN_V1;
 
+/// Generic backend-family declaration for physics providers.
+pub const PHYSICS_BACKEND_SERVICE_SPEC: newengine_service_api::BackendServiceSpec =
+    newengine_service_api::BackendServiceSpec::new(
+        "physics",
+        ENGINE_PHYSICS_SERVICE_ID,
+        PHYSICS_SERVICE_ID,
+        PHYSICS_BACKEND_CAPABILITY_ID,
+    );
+
+/// Startup validation contract for the engine-facing physics gateway.
+pub const PHYSICS_RUNTIME_CONTRACT_SPEC: newengine_service_api::RuntimeServiceContractSpec =
+    newengine_service_api::RuntimeServiceContractSpec::new(
+        ENGINE_PHYSICS_SERVICE_ID,
+        "newengine.physics-api >= 0.1.x",
+        newengine_service_api::JSON_CONTROL_SERVICE_METHODS_V1,
+    );
+
+/// Declarative startup requirement for physics. Missing physics degrades unless
+/// the explicit env switch is enabled by a strict test/runtime profile.
+pub const PHYSICS_RUNTIME_REQUIREMENT_SPEC: newengine_service_api::RuntimeServiceRequirementSpec =
+    newengine_service_api::RuntimeServiceRequirementSpec::new(
+        PHYSICS_RUNTIME_CONTRACT_SPEC,
+        Some(PHYSICS_BACKEND_CAPABILITY_ID),
+        Some("NEWENGINE_REQUIRE_PHYSICS_BACKEND"),
+    );
+
 pub type PhysicsEntityKey = u64;
 pub type PhysicsVec3 = [f32; 3];
 pub type PhysicsQuat = [f32; 4];

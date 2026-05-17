@@ -183,40 +183,46 @@ pub fn describe_service(service_id: &str) -> Option<String> {
     Some(g.get(&routed_id)?.describe_json.clone())
 }
 
-fn active_engine_gateways() -> Vec<String> {
+fn gateway_registry_snapshot() -> crate::service_gateway::ActiveGatewayRegistry {
     let c = ctx();
-    let services = match c.services.lock() {
-        Ok(v) => v,
-        Err(e) => e.into_inner(),
-    };
-    let descriptors = match c.plugin_descriptors.lock() {
-        Ok(v) => v,
-        Err(e) => e.into_inner(),
-    };
 
-    let mut out = Vec::new();
-    for (plugin_id, descriptor) in descriptors.iter() {
-        let service_registered_for_owner = |service_id: &str| {
-            services
-                .get(service_id)
-                .and_then(|entry| entry.owner_plugin_id.as_deref())
-                .is_some_and(|owner| owner == plugin_id)
+    let services = {
+        let services = match c.services.lock() {
+            Ok(v) => v,
+            Err(e) => e.into_inner(),
         };
+        services
+            .iter()
+            .map(|(service_id, entry)| {
+                crate::service_gateway::RegisteredServiceFact::new(
+                    service_id.clone(),
+                    entry.owner_plugin_id.clone(),
+                )
+            })
+            .collect::<Vec<_>>()
+    };
 
-        for gateway in crate::service_gateway::descriptor_gateway_capabilities(descriptor) {
-            let _service_kind = gateway.service_kind;
-            let Some(service_id) = crate::service_gateway::gateway_provider_service_id(descriptor, &gateway) else {
-                continue;
-            };
-            if service_registered_for_owner(&service_id) {
-                out.push(gateway.gateway_id);
-            }
-        }
-    }
+    let descriptors = {
+        let descriptors = match c.plugin_descriptors.lock() {
+            Ok(v) => v,
+            Err(e) => e.into_inner(),
+        };
+        descriptors
+            .iter()
+            .map(|(plugin_id, descriptor)| {
+                crate::service_gateway::PluginDescriptorFact::new(
+                    plugin_id.clone(),
+                    descriptor.clone(),
+                )
+            })
+            .collect::<Vec<_>>()
+    };
 
-    out.sort();
-    out.dedup();
-    out
+    crate::service_gateway::ActiveGatewayRegistry::from_facts(&descriptors, &services)
+}
+
+fn active_engine_gateways() -> Vec<String> {
+    gateway_registry_snapshot().gateway_ids()
 }
 
 /// Resolve a host-owned facade service gateway to the active registered provider
@@ -226,47 +232,11 @@ fn active_engine_gateways() -> Vec<String> {
 /// requested gateway id, resolution returns `None`. It does not branch on
 /// concrete domains such as assets/render/physics/input.
 pub fn resolve_service_for_engine_gateway(gateway_id: &str) -> Option<String> {
-    let c = ctx();
-    let services = match c.services.lock() {
-        Ok(v) => v,
-        Err(e) => e.into_inner(),
-    };
-    let descriptors = match c.plugin_descriptors.lock() {
-        Ok(v) => v,
-        Err(e) => e.into_inner(),
-    };
+    gateway_registry_snapshot().resolve_gateway(gateway_id)
+}
 
-    let mut candidates: Vec<(i32, String, String)> = Vec::new();
-
-    for (plugin_id, descriptor) in descriptors.iter() {
-        for gateway in crate::service_gateway::descriptor_gateway_capabilities(descriptor) {
-            let _service_kind = gateway.service_kind;
-            if gateway.gateway_id != gateway_id {
-                continue;
-            }
-
-            let Some(service_id) = crate::service_gateway::gateway_provider_service_id(descriptor, &gateway) else {
-                continue;
-            };
-
-            let Some(entry) = services.get(&service_id) else {
-                continue;
-            };
-            if entry.owner_plugin_id.as_deref() != Some(plugin_id.as_str()) {
-                continue;
-            }
-
-            candidates.push((gateway.backend_priority, service_id, plugin_id.clone()));
-        }
-    }
-
-    candidates.sort_by(|a, b| {
-        b.0.cmp(&a.0)
-            .then_with(|| a.1.cmp(&b.1))
-            .then_with(|| a.2.cmp(&b.2))
-    });
-
-    candidates.into_iter().map(|(_, service_id, _)| service_id).next()
+pub fn engine_gateway_has_capability(gateway_id: &str, capability_id: &str) -> bool {
+    gateway_registry_snapshot().has_gateway_capability(gateway_id, capability_id)
 }
 
 #[inline]

@@ -146,6 +146,15 @@ pub const ASSET_RUNTIME_CONTRACT_SPEC: newengine_service_api::RuntimeServiceCont
         REQUIRED_RUNTIME_METHODS_V1,
     );
 
+/// Declarative startup requirement for the engine-facing asset gateway. Missing
+/// assets degrade unless a strict runtime profile explicitly requires them.
+pub const ASSET_RUNTIME_REQUIREMENT_SPEC: newengine_service_api::RuntimeServiceRequirementSpec =
+    newengine_service_api::RuntimeServiceRequirementSpec::new(
+        ASSET_RUNTIME_CONTRACT_SPEC,
+        Some(ASSET_BACKEND_CAPABILITY_ID),
+        Some("NEWENGINE_REQUIRE_ASSET_MANAGER"),
+    );
+
 /// Runtime-ready texture packet returned by AssetManager.
 ///
 /// Important: this is not a decoder contract. The importer pipeline must already
