@@ -10,7 +10,23 @@ impl RuntimeRenderController {
             self.shadows.cache_valid = false;
             self.shadows.last_refresh_frame = 0;
             self.shadows.current_caster_cull = None;
+            self.shadows.last_light_mvp = None;
             return false;
+        }
+
+        if self.shadows.cache_valid
+            && self
+                .shadows
+                .last_light_mvp
+                .map(|last| last != plan.frame.light_mvp)
+                .unwrap_or(false)
+        {
+            log::debug!(
+                "render shadow cache: invalidated because light matrix changed frame={}",
+                self.frame.frame_index
+            );
+            self.shadows.cache_valid = false;
+            self.shadows.last_refresh_frame = 0;
         }
 
         if !self.shadows.cache_valid {
@@ -32,9 +48,10 @@ impl RuntimeRenderController {
     }
 
     #[inline]
-    pub(super) fn mark_shadow_map_rendered(&mut self) {
+    pub(super) fn mark_shadow_map_rendered(&mut self, plan: LightShadowPlan) {
         self.shadows.cache_valid = true;
         self.shadows.last_refresh_frame = self.frame.frame_index;
+        self.shadows.last_light_mvp = Some(plan.frame.light_mvp);
     }
 
     #[inline]
@@ -44,6 +61,7 @@ impl RuntimeRenderController {
         self.shadows.warmup_defer_frames_remaining =
             super::super::render_quality::SHADOW_WARMUP_DEFER_FRAMES;
         self.shadows.current_caster_cull = None;
+        self.shadows.last_light_mvp = None;
     }
 }
 

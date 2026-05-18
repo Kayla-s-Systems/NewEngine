@@ -216,6 +216,11 @@ fn encode_unit_command(out: &mut Vec<u8>, command: &RenderCommand) -> Result<(),
             put_i32(out, args.vertex_offset);
             put_u32(out, args.first_instance);
         }
+        RenderCommand::SetUiDrawList(ui) => {
+            put_u8(out, 10);
+            let ui_bytes = newengine_ui_draw::encode_ui_draw_list_bin(ui)?;
+            put_bytes(out, &ui_bytes, "ui draw-list binary payload")?;
+        }
         _ => return Err(format!("render command is not supported by binary unit batch: {command:?}")),
     }
     Ok(())
@@ -270,8 +275,27 @@ fn decode_unit_command(r: &mut BinReader<'_>) -> Result<RenderCommand, String> {
             vertex_offset: r.i32()?,
             first_instance: r.u32()?,
         })),
+        10 => {
+            let ui_bytes = r.bytes_vec()?;
+            Ok(RenderCommand::SetUiDrawList(newengine_ui_draw::decode_ui_draw_list_bin(&ui_bytes)?))
+        },
         tag => Err(format!("unknown render command batch binary tag {tag}")),
     }
+}
+
+
+#[inline]
+fn put_len(out: &mut Vec<u8>, len: usize, what: &str) -> Result<(), String> {
+    let len = u32::try_from(len).map_err(|_| format!("{what} is too large for binary render command packet"))?;
+    put_u32(out, len);
+    Ok(())
+}
+
+#[inline]
+fn put_bytes(out: &mut Vec<u8>, bytes: &[u8], what: &str) -> Result<(), String> {
+    put_len(out, bytes.len(), what)?;
+    out.extend_from_slice(bytes);
+    Ok(())
 }
 
 #[inline]
@@ -337,6 +361,10 @@ impl<'a> BinReader<'a> {
     fn u64(&mut self) -> Result<u64, String> {
         let b = self.take(8)?;
         Ok(u64::from_le_bytes([b[0], b[1], b[2], b[3], b[4], b[5], b[6], b[7]]))
+    }
+    fn bytes_vec(&mut self) -> Result<Vec<u8>, String> {
+        let len = self.u32()? as usize;
+        Ok(self.take(len)?.to_vec())
     }
     #[inline]
     fn f32(&mut self) -> Result<f32, String> {
@@ -569,4 +597,23 @@ pub enum RenderServiceResponse {
     UploadPumpReport(UploadPumpReport),
     DiagnosticsSnapshot(RenderDiagnosticsSnapshot),
     Problem(RenderProblemDetails),
+}
+
+#[cfg(test)]
+mod binary_batch_tests {
+    use super::*;
+
+    #[test]
+    fn binary_unit_batch_roundtrips_ui_draw_list() {
+        let mut ui = UiDrawList::new();
+        ui.screen_size_px = [320, 200];
+        ui.pixels_per_point = 1.0;
+
+        let encoded = encode_unit_command_batch_bin(&[RenderCommand::SetUiDrawList(ui)]).unwrap();
+        let decoded = decode_unit_command_batch_bin(&encoded).unwrap();
+        match &decoded[0] {
+            RenderCommand::SetUiDrawList(list) => assert_eq!(list.screen_size_px, [320, 200]),
+            other => panic!("expected SetUiDrawList, got {other:?}"),
+        }
+    }
 }

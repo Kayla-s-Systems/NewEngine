@@ -67,6 +67,7 @@ pub struct HostPlatformRuntime {
     bootstrap_overlay: RuntimeBootstrapOverlayState,
     bootstrap_spinner_phase: u32,
     ready_overlay_frames_left: u32,
+    ui_frame_index: u64,
     loaded_engine_plugins: Option<usize>,
     fatal_bootstrap_error: Option<String>,
 }
@@ -101,6 +102,7 @@ impl HostPlatformRuntime {
             bootstrap_overlay: RuntimeBootstrapOverlayState::default(),
             bootstrap_spinner_phase: 0,
             ready_overlay_frames_left: 45,
+            ui_frame_index: 0,
             loaded_engine_plugins: None,
             fatal_bootstrap_error: None,
         }
@@ -475,6 +477,8 @@ impl HostPlatformRuntime {
     }
 
     fn step_running(&mut self, dt_sec: f32) -> EngineResult<PlatformStepResultV1> {
+        self.ui_frame_index = self.ui_frame_index.wrapping_add(1);
+        let ui_frame_index = self.ui_frame_index;
         let input_frame = poll_input_frame();
         if let Some(telemetry) = self
             .engine
@@ -491,9 +495,20 @@ impl HostPlatformRuntime {
             let _ = self.engine.resources_mut().remove::<UiInputFrame>();
         }
 
+        if let Some(status) = self.engine.resources.get::<SceneLaunchStatus>().cloned() {
+            if status.active && matches!(self.ui_selection.active(), UiProviderKind::Plugin { .. }) {
+                let overlay = self.scene_launch_overlay(&status);
+                crate::platform_runtime::ui_gateway_frame::publish_loading_overlay(
+                    &overlay,
+                    self.ui_provider_binding(),
+                    ui_frame_index,
+                );
+            }
+        }
+
         let mut ui_draw = if matches!(self.ui_selection.active(), UiProviderKind::Plugin { .. }) {
             crate::platform_runtime::ui_gateway_frame::request_ui_draw_list(
-                0,
+                ui_frame_index,
                 dt_sec,
                 [self.surface.width, self.surface.height],
                 self.surface.pixels_per_point,
@@ -551,14 +566,39 @@ impl HostPlatformRuntime {
 
     fn scene_launch_step_result(&mut self, status: &SceneLaunchStatus) -> PlatformStepResultV1 {
         self.bootstrap_spinner_phase = self.bootstrap_spinner_phase.wrapping_add(1);
-        let overlay = bootstrap_loading_with_subsystems(
+        let overlay = self.scene_launch_overlay(status);
+
+        if matches!(self.ui_selection.active(), UiProviderKind::Plugin { .. }) {
+            crate::platform_runtime::ui_gateway_frame::publish_loading_overlay(
+                &overlay,
+                self.ui_provider_binding(),
+                self.bootstrap_spinner_phase as u64,
+            );
+            if self.bootstrap_spinner_phase % 120 == 1 {
+                log::info!(
+                    "platform loading overlay: source=engine.ui provider='{}' native_overlay=suppressed",
+                    self.ui_provider_binding().id()
+                );
+            }
+            return PlatformStepResultV1::default();
+        }
+
+        if self.bootstrap_spinner_phase % 120 == 1 {
+            log::warn!(
+                "platform loading overlay: source=minimal_native_fallback reason='engine.ui provider unavailable'"
+            );
+        }
+        overlay_to_step_result_with_provider(&overlay, self.bootstrap_spinner_phase, UiProviderBinding::NativeFallback)
+    }
+
+    fn scene_launch_overlay(&self, status: &SceneLaunchStatus) -> ScreenOverlayStatus {
+        bootstrap_loading_with_subsystems(
             status.title.as_str(),
             status.status.as_str(),
             status.detail.as_str(),
             status.progress_01,
             self.scene_launch_subsystems(status),
-        );
-        self.overlay_step_result(&overlay, self.bootstrap_spinner_phase)
+        )
     }
 
 
@@ -570,11 +610,18 @@ impl HostPlatformRuntime {
     }
 
     fn overlay_step_result(&self, overlay: &ScreenOverlayStatus, spinner_phase: u32) -> PlatformStepResultV1 {
-        overlay_to_step_result_with_provider(overlay, spinner_phase, self.ui_provider_binding())
+        overlay_to_step_result_with_provider(overlay, spinner_phase, self.overlay_provider_binding())
     }
 
     fn ui_provider_binding(&self) -> UiProviderBinding {
         self.ui_selection.binding()
+    }
+
+    fn overlay_provider_binding(&self) -> UiProviderBinding {
+        match self.ui_selection.active() {
+            UiProviderKind::Plugin { .. } => self.ui_provider_binding(),
+            UiProviderKind::Null => UiProviderBinding::NativeFallback,
+        }
     }
 
     fn refresh_ui_provider_binding(&mut self, origin: &'static str) {

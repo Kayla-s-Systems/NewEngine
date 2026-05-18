@@ -1,7 +1,7 @@
 #![forbid(unsafe_op_in_unsafe_fn)]
 
 pub use newengine_ui_draw::{
-    UiDrawCmd, UiDrawList, UiTexId, UiTexture, UiTextureDelta, UiTexturePatch, UiVertex,
+    UiDrawCmd, UiDrawList, UiRect, UiTexId, UiTexture, UiTextureDelta, UiTexturePatch, UiVertex,
 };
 
 pub mod reserved_textures {

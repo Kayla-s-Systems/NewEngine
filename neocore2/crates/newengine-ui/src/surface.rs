@@ -17,6 +17,7 @@ pub const UI_FEATURE_NATIVE_SAFE_STARTUP: &str = "native-safe-startup";
 pub const UI_FEATURE_KSYSTEMS_ERROR_MODAL: &str = "ksystems-error-modal";
 pub const UI_FEATURE_EXTERNAL_PLUGIN_PROVIDER: &str = "external-plugin-provider";
 pub const UI_SHELL_KSYSTEMS_LOADING_ID: &str = "newengine.shell.ksystems.loading.v1";
+pub const UI_SHELL_MINIMAL_FALLBACK_LOADING_ID: &str = "newengine.shell.minimal-fallback.loading.v1";
 pub const UI_THEME_DARK_GOLD_MAGENTA: &str = "newengine.dark.gold-magenta";
 pub const UI_STYLE_KSYSTEMS_INDUSTRIAL: &str = "ksystems-industrial";
 pub const UI_ERROR_MODAL_KSYSTEMS_ID: &str = "engine.error_modal.ksystems.v1";
@@ -183,6 +184,19 @@ impl UiShellSpec {
             subsystem_cards: UiSubsystemCardSpec::default(),
             error_modal: UiErrorModalSpec::default(),
         }
+    }
+
+    pub fn minimal_fallback_loading() -> Self {
+        let mut shell = Self::ksystems_loading();
+        shell.id = UI_SHELL_MINIMAL_FALLBACK_LOADING_ID.to_owned();
+        shell.style = "minimal-native-fallback".to_owned();
+        shell.loading.footer_template = "{percent}%".to_owned();
+        shell.loading.show_subsystems = false;
+        shell.loading.max_subsystems = 0;
+        shell.subsystem_cards.show_detail = false;
+        shell.subsystem_cards.show_progress = false;
+        shell.subsystem_cards.pulse_glow = false;
+        shell
     }
 }
 

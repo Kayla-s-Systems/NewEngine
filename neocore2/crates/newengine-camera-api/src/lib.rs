@@ -36,7 +36,7 @@ pub const CAMERA_RUNTIME_CONTRACT_SPEC: newengine_service_api::RuntimeServiceCon
 pub const CAMERA_RUNTIME_REQUIREMENT_SPEC: newengine_service_api::RuntimeServiceRequirementSpec =
     newengine_service_api::RuntimeServiceRequirementSpec::new(
         CAMERA_RUNTIME_CONTRACT_SPEC,
-        None,
+        Some(CAMERA_BACKEND_CAPABILITY_ID),
         Some("NEWENGINE_REQUIRE_CAMERA_BACKEND"),
     );
 

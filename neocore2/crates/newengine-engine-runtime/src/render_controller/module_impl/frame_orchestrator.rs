@@ -124,7 +124,21 @@ impl RenderFrameOrchestrator {
         Self::trace_shadow_plan(controller, scope.trace_frame, shadow_plan, render_shadow_map);
         cpu_profile.mark("shadow_plan");
 
-        let shadow_frame = shadow_plan.frame;
+        let shadow_frame = if shadow_plan.is_active()
+            && !render_shadow_map
+            && !controller.shadows.cache_valid
+        {
+            if scope.trace_frame {
+                log::debug!(
+                    "render shadow cache: using unshadowed fallback until first shadow map is rendered frame={} target={:?}",
+                    controller.frame.frame_index,
+                    shadow_plan.render_target()
+                );
+            }
+            shadows::ShadowFrame::disabled(lit.white_texture)
+        } else {
+            shadow_plan.frame
+        };
         let world_lights = base_lights.with_shadow(shadow_frame.light_mvp, shadow_frame.params, shadow_frame.extra);
         let extraction = SceneExtractionCtx {
             scene,
@@ -162,11 +176,26 @@ impl RenderFrameOrchestrator {
         provider_registry.add_external_draw_lists(visibility, &mut draw_lists);
         cpu_profile.mark("draw_list_set");
 
+        let mut feature_breakdown = Vec::new();
+        let feature_started = Instant::now();
         let provider_result = {
             let mut build_ctx = DrawListBuildCtx::new(controller, r, &draw_lists);
-            draw_lists.record_pass_state(&extraction, &mut build_ctx).and_then(|()| {
+            let pass_state_started = Instant::now();
+            let pass_state_result = draw_lists.record_pass_state(&extraction, &mut build_ctx);
+            feature_breakdown.push(format!(
+                "pass_state={:.2}ms",
+                pass_state_started.elapsed().as_secs_f32() * 1000.0
+            ));
+            pass_state_result.and_then(|()| {
                 for provider in providers.iter().copied() {
-                    provider.extract(&extraction, &mut build_ctx)?;
+                    let provider_started = Instant::now();
+                    let result = provider.extract(&extraction, &mut build_ctx);
+                    feature_breakdown.push(format!(
+                        "{}={:.2}ms",
+                        provider.id(),
+                        provider_started.elapsed().as_secs_f32() * 1000.0
+                    ));
+                    result?;
                 }
                 Ok(())
             })
@@ -176,6 +205,14 @@ impl RenderFrameOrchestrator {
             Self::end_viewport_after_draw_failure(controller, r, ui.cloned(), scope)?;
             return Ok(PlayableFrameOutcome::EndedEarly { ui_telemetry: None });
         }
+        let feature_extract_ms = feature_started.elapsed().as_secs_f32() * 1000.0;
+        Self::trace_feature_extract_profile(
+            controller.frame.frame_index,
+            scope.trace_frame,
+            feature_extract_ms,
+            feature_breakdown.as_slice(),
+            ui,
+        );
         cpu_profile.mark("feature_extract");
 
         let shadow_rt_for_graph = if render_shadow_map {
@@ -238,7 +275,7 @@ impl RenderFrameOrchestrator {
         cpu_profile.mark("submit");
         Self::trace_cpu_profile(controller.frame.frame_index, scope.trace_frame, &cpu_profile);
         if render_shadow_map {
-            controller.mark_shadow_map_rendered();
+            controller.mark_shadow_map_rendered(shadow_plan);
         }
         controller.diagnostics.overlay_metrics.record_graph_submit(submit_report.clone());
 
@@ -296,6 +333,57 @@ impl RenderFrameOrchestrator {
                 notes: debug_notes,
             }),
         })
+    }
+
+    fn trace_feature_extract_profile(
+        frame_index: u64,
+        trace_frame: bool,
+        feature_ms: f32,
+        breakdown: &[String],
+        ui: Option<&UiDrawList>,
+    ) {
+        if !trace_frame && feature_ms < 16.6 {
+            return;
+        }
+        let ui_stats = ui.map(Self::ui_draw_list_stats).unwrap_or_else(|| "ui=none".to_owned());
+        let line = format!(
+            "render feature profile: frame={} total_ms={:.2} {} {}",
+            frame_index,
+            feature_ms,
+            breakdown.join(" "),
+            ui_stats,
+        );
+        if feature_ms >= 33.3 {
+            log::warn!("{}", line);
+        } else {
+            log::debug!("{}", line);
+        }
+    }
+
+    fn ui_draw_list_stats(ui: &UiDrawList) -> String {
+        let tex_set_bytes: usize = ui
+            .texture_delta
+            .set
+            .values()
+            .map(|texture| texture.rgba8.len())
+            .sum();
+        let patch_bytes: usize = ui
+            .texture_delta
+            .patches
+            .iter()
+            .map(|patch| patch.rgba8.len())
+            .sum();
+        format!(
+            "ui(vertices={} indices={} cmds={} tex_set={} tex_set_bytes={} patches={} patch_bytes={} free={})",
+            ui.mesh.vertices.len(),
+            ui.mesh.indices.len(),
+            ui.mesh.cmds.len(),
+            ui.texture_delta.set.len(),
+            tex_set_bytes,
+            ui.texture_delta.patches.len(),
+            patch_bytes,
+            ui.texture_delta.free.len(),
+        )
     }
 
     fn trace_cpu_profile(

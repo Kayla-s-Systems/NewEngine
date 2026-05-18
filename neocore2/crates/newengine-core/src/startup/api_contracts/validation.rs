@@ -255,7 +255,13 @@ fn active_route_source(service_id: &str) -> String {
     newengine_plugin_host::active_engine_gateway_route(service_id)
         .map(|route| route.origin)
         .or_else(|| service_origin(service_id))
-        .unwrap_or_else(|| "direct".to_owned())
+        .unwrap_or_else(|| {
+            if service_id.starts_with("engine.") {
+                "missing".to_owned()
+            } else {
+                "direct".to_owned()
+            }
+        })
 }
 
 fn active_provider_service_id(service_id: &str) -> String {

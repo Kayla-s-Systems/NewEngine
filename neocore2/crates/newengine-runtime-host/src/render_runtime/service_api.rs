@@ -103,7 +103,10 @@ impl RenderApi for ServiceBackedRenderApi {
     }
 
     fn set_ui_draw_list(&mut self, ui: UiDrawList) {
-        let _ = self.unit(RenderCommand::SetUiDrawList(ui));
+        // UI draw lists can be large enough that the JSON command path becomes
+        // a frame-time bottleneck. Queue it with the other unit commands so it
+        // travels through command_batch_bin_v1 when the active renderer supports it.
+        let _ = self.queue_unit(RenderCommand::SetUiDrawList(ui));
     }
 
     fn set_debug_text(&mut self, text: String) {

@@ -6,6 +6,9 @@ use smallvec::SmallVec;
 
 use newengine_math::collections::FxHashMap;
 
+mod binary;
+pub use binary::{decode_ui_draw_list_bin, encode_ui_draw_list_bin, encode_ui_draw_list_bin_into};
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[repr(transparent)]
 pub struct UiTexId(pub u32);

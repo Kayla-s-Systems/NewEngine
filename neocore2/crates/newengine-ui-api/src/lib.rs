@@ -8,6 +8,12 @@ pub use newengine_ui_draw::{
 };
 use std::collections::BTreeMap;
 
+mod frame_binary;
+pub use frame_binary::{
+    decode_ui_frame_request_bin, decode_ui_frame_response_bin, encode_ui_frame_request_bin,
+    encode_ui_frame_response_bin,
+};
+
 /// Engine-facing UI service gateway id. Runtime consumers call this facade;
 /// the host resolves it to the active UI provider by descriptor metadata.
 pub const ENGINE_UI_SERVICE_ID: &str = "engine.ui";
@@ -27,6 +33,7 @@ pub const UI_SERVICE_METHOD_LOADING_SHELL_V1: &str = "loading_shell_v1";
 pub const UI_SERVICE_METHOD_DEBUG_TELEMETRY_SCHEMA: &str = "debug_telemetry_schema";
 pub const UI_SERVICE_METHOD_DEBUG_OVERLAY_TELEMETRY_V1: &str = "debug_overlay_telemetry_v1";
 pub const UI_SERVICE_METHOD_DRAW_FRAME_V1: &str = "draw_frame_v1";
+pub const UI_SERVICE_METHOD_DRAW_FRAME_BIN_V1: &str = "draw_frame_bin_v1";
 
 pub const UI_SURFACE_ENGINE_LOADING: &str = "engine.loading";
 pub const UI_SURFACE_ENGINE_ERROR_MODAL: &str = "engine.error_modal";
@@ -79,6 +86,8 @@ impl Default for UiServiceInfo {
                 "provider-owned-layout".to_owned(),
                 "declarative-actions".to_owned(),
                 "runtime-debug-overlay".to_owned(),
+                "draw-frame-bin-v1".to_owned(),
+                "atlas-text-quads".to_owned(),
             ],
             methods: ui_service_methods().iter().map(|it| (*it).to_owned()).collect(),
             surfaces: vec![
@@ -103,6 +112,7 @@ pub const UI_SERVICE_METHODS: &[&str] = &[
     UI_SERVICE_METHOD_DEBUG_TELEMETRY_SCHEMA,
     UI_SERVICE_METHOD_DEBUG_OVERLAY_TELEMETRY_V1,
     UI_SERVICE_METHOD_DRAW_FRAME_V1,
+    UI_SERVICE_METHOD_DRAW_FRAME_BIN_V1,
 ];
 
 #[inline]
@@ -229,6 +239,11 @@ mod tests {
     #[test]
     fn ui_service_methods_include_draw_frame() {
         assert!(ui_service_methods().contains(&UI_SERVICE_METHOD_DRAW_FRAME_V1));
+    }
+
+    #[test]
+    fn ui_service_methods_include_binary_draw_frame() {
+        assert!(ui_service_methods().contains(&UI_SERVICE_METHOD_DRAW_FRAME_BIN_V1));
     }
 
     #[test]
