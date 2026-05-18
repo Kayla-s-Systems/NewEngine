@@ -11,6 +11,10 @@ pub(crate) fn provider_has_required_capability(
         return true;
     }
 
+    if service_description_has_capability(service_id, capability_id) {
+        return true;
+    }
+
     plugins.iter().any(|plugin| {
         let has_service = plugin.capabilities.iter().any(|cap| {
             cap.role == newengine_plugin_api::CapabilityRole::Provides
@@ -23,6 +27,37 @@ pub(crate) fn provider_has_required_capability(
         });
         has_service && has_capability
     })
+}
+
+pub(crate) fn service_origin(service_id: &str) -> Option<String> {
+    let description = newengine_plugin_host::describe_service(service_id)?;
+    let json = serde_json::from_str::<serde_json::Value>(&description).ok()?;
+    json.get("origin")
+        .and_then(|value| value.as_str())
+        .map(str::to_owned)
+}
+
+fn service_description_has_capability(service_id: &str, capability_id: &str) -> bool {
+    let Some(description) = newengine_plugin_host::describe_service(service_id) else {
+        return false;
+    };
+    let Ok(json) = serde_json::from_str::<serde_json::Value>(&description) else {
+        return false;
+    };
+
+    if json.get("capability").and_then(|value| value.as_str()) == Some(capability_id) {
+        return true;
+    }
+
+    json.get("capabilities")
+        .and_then(|value| value.as_array())
+        .map(|items| {
+            items.iter().any(|item| {
+                item.as_str() == Some(capability_id)
+                    || item.get("id").and_then(|value| value.as_str()) == Some(capability_id)
+            })
+        })
+        .unwrap_or(false)
 }
 
 pub(crate) fn provider_for(plugins: &[PluginSnapshotEntry], service_id: &str) -> String {
@@ -54,10 +89,31 @@ pub(crate) fn provider_for(plugins: &[PluginSnapshotEntry], service_id: &str) ->
 
     providers.sort();
     if providers.is_empty() {
-        "<unknown>".to_owned()
+        service_description_provider(service_id).unwrap_or_else(|| "<unknown>".to_owned())
     } else {
         providers.join("; ")
     }
+}
+
+fn service_description_provider(service_id: &str) -> Option<String> {
+    let description = newengine_plugin_host::describe_service(service_id)?;
+    let json = serde_json::from_str::<serde_json::Value>(&description).ok()?;
+    let origin = json
+        .get("origin")
+        .and_then(|value| value.as_str())
+        .unwrap_or("direct");
+    let owner = json
+        .get("owner")
+        .and_then(|value| value.as_str())
+        .unwrap_or("<unknown-owner>");
+    let capability = json
+        .get("capability")
+        .and_then(|value| value.as_str())
+        .unwrap_or("-");
+    Some(format!(
+        "{}:{} service={} capability={}",
+        origin, owner, service_id, capability
+    ))
 }
 
 fn declares_service_or_gateway(plugin: &PluginSnapshotEntry, service_id: &str) -> bool {

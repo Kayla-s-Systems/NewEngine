@@ -25,3 +25,17 @@ Canonical files:
 Important constraint: do not add `#include` dependencies to these runtime GLSL
 files until the baker has a real shader virtual-include resolver. The current
 safe contract is one logical shader asset equals one self-contained source file.
+
+## 2026-05-18 effect shader parity pass
+
+`assets/shaders/effects` is now organized as a small native effect shader pack rather than minimal placeholder shaders.
+The GLSL sources borrow structure from professional multi-pass post-processing stacks, but are rewritten for NewEngine's Vulkan/ShaderRegistry contract:
+
+- `common.glsl` contains shared luminance, soft-threshold, tent sampling, temporal clamp and PCSS helpers.
+- Bloom is split into extract/downsample/upsample/composite passes with radius, knee, intensity and blend defines.
+- TAA uses bicubic history sampling, neighborhood min/max clamp and depth rejection hooks.
+- MSAA resolve supports explicit sample-count variants and optional gamma-correct accumulation.
+- PCSS shadows use blocker search + Vogel disk filtering and shadow bias defines.
+- Tessellation uses distance-sensitive factors and runtime displacement scale defines.
+
+The runtime still compiles through provider-owned `ShaderRegistry`; these shader files are content assets loaded through `engine.assets`.

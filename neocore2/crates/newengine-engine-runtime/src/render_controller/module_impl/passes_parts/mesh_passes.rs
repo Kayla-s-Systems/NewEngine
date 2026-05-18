@@ -33,6 +33,31 @@ pub(super) fn publish_camera_spawn(
     bridge.publish_camera_spawn(camera_position, camera_forward);
 }
 
+#[derive(Clone)]
+struct TerrainDrawEntry {
+    entity_key: u64,
+    mesh_key: u64,
+    base_color: [f32; 4],
+    prepared_mesh: Option<PreparedTerrainPrimitiveMesh>,
+    fallback_terrain: Option<ProceduralTerrain>,
+    model: Mat4,
+    material: Option<newengine_materials::MaterialRef>,
+    surface_layers: Option<TerrainSurfaceLayers>,
+}
+
+#[derive(Clone)]
+struct TerrainShadowEntry {
+    entity_key: u64,
+    mesh_key: u64,
+    base_color: [f32; 4],
+    prepared_mesh: Option<PreparedTerrainPrimitiveMesh>,
+    fallback_terrain: Option<ProceduralTerrain>,
+    bounds_center: Vec3,
+    bounds_radius: f32,
+    model: Mat4,
+    material: Option<newengine_materials::MaterialRef>,
+}
+
 
 pub fn draw_procedural_terrain(
     this: &mut RuntimeRenderController,
@@ -48,32 +73,39 @@ pub fn draw_procedural_terrain(
     let mats_lock = this.bridges.scene.materials();
     let mats = mats_lock.read();
 
-    let mut entries: Vec<(
-        u64,
-        ProceduralTerrain,
-        Option<PreparedTerrainPrimitiveMesh>,
-        Mat4,
-        Option<newengine_materials::MaterialRef>,
-        Option<TerrainSurfaceLayers>,
-    )> = Vec::new();
+    let mut entries: Vec<TerrainDrawEntry> = Vec::new();
     for (id, terrain, gt) in world.query2::<ProceduralTerrain, GlobalTransform>() {
         if !display_visible_in_mode(world, id, runtime) {
             continue;
         }
-        entries.push((
-            id.stable_u64(),
-            terrain.clone(),
-            world.get::<PreparedTerrainPrimitiveMesh>(id).cloned(),
-            gt.0,
-            world.get::<newengine_materials::MaterialRef>(id).copied(),
-            world.get::<TerrainSurfaceLayers>(id).cloned(),
-        ));
+        let mesh_key = terrain.mesh_key();
+        let prepared_mesh = world.get::<PreparedTerrainPrimitiveMesh>(id).cloned();
+        let fallback_terrain = if prepared_mesh.is_none() && !this.gpu.meshes.terrain_cache.contains_key(&mesh_key) {
+            Some(terrain.clone())
+        } else {
+            None
+        };
+        entries.push(TerrainDrawEntry {
+            entity_key: id.stable_u64(),
+            mesh_key,
+            base_color: terrain.base_color,
+            prepared_mesh,
+            fallback_terrain,
+            model: gt.0,
+            material: world.get::<newengine_materials::MaterialRef>(id).copied(),
+            surface_layers: world.get::<TerrainSurfaceLayers>(id).cloned(),
+        });
     }
-    entries.sort_by(|a, b| a.0.cmp(&b.0));
+    entries.sort_by(|a, b| a.entity_key.cmp(&b.entity_key));
 
     let mut stream = BucketedIndexedDrawStream::with_capacity(entries.len());
-    for (entity_key, terrain, prepared_mesh, model, material, surface_layers) in entries {
-        let mesh_key = terrain.mesh_key();
+    for entry in entries {
+        let entity_key = entry.entity_key;
+        let mesh_key = entry.mesh_key;
+        let prepared_mesh = entry.prepared_mesh;
+        let model = entry.model;
+        let material = entry.material;
+        let surface_layers = entry.surface_layers;
         let gpu = if let Some(gpu) = this.gpu.meshes.terrain_cache.get(&mesh_key).copied() {
             gpu
         } else {
@@ -84,6 +116,9 @@ pub fn draw_procedural_terrain(
                 // PreparedTerrainPrimitiveMesh component yet. Streaming terrain now
                 // creates this component off-thread, so runtime chunks avoid this
                 // expensive conversion on the render extraction hot path.
+                let terrain = entry.fallback_terrain.as_ref().ok_or_else(|| {
+                    newengine_core::EngineError::other("terrain mesh is not prepared and fallback terrain payload is unavailable")
+                })?;
                 let mesh = terrain.heightfield.to_primitive_mesh();
                 upload_primitive_mesh(r, &mesh, "game_proc_terrain")?
             };
@@ -93,7 +128,7 @@ pub fn draw_procedural_terrain(
 
         let mvp = viewproj * model;
         let resolved = material.and_then(|mr| mats.resolve(mr.id));
-        let material_plan = LitMaterialPlan::from_resolved(resolved.as_ref(), terrain.base_color);
+        let material_plan = LitMaterialPlan::from_resolved(resolved.as_ref(), entry.base_color);
 
         let key = entity_key ^ 0x7e44_1000_0000_0000u64;
         let (pipeline, base_tex, normal_tex, roughness_tex, sampler, material_params) =
@@ -375,47 +410,59 @@ pub fn draw_procedural_terrain_shadow(
     let mats_lock = this.bridges.scene.materials();
     let mats = mats_lock.read();
 
-    let mut entries: Vec<(
-        u64,
-        ProceduralTerrain,
-        Option<PreparedTerrainPrimitiveMesh>,
-        Mat4,
-        Option<newengine_materials::MaterialRef>,
-    )> = Vec::new();
+    let mut entries: Vec<TerrainShadowEntry> = Vec::new();
     for (id, terrain, gt) in world.query2::<ProceduralTerrain, GlobalTransform>() {
         if !display_visible_in_mode(world, id, runtime) {
             continue;
         }
-        entries.push((
-            id.stable_u64(),
-            terrain.clone(),
-            world.get::<PreparedTerrainPrimitiveMesh>(id).cloned(),
-            gt.0,
-            world.get::<newengine_materials::MaterialRef>(id).copied(),
-        ));
+        let mesh_key = terrain.mesh_key();
+        let prepared_mesh = world.get::<PreparedTerrainPrimitiveMesh>(id).cloned();
+        let fallback_terrain = if prepared_mesh.is_none() && !this.gpu.meshes.terrain_cache.contains_key(&mesh_key) {
+            Some(terrain.clone())
+        } else {
+            None
+        };
+        let local_bounds = terrain.heightfield.local_bounds();
+        entries.push(TerrainShadowEntry {
+            entity_key: id.stable_u64(),
+            mesh_key,
+            base_color: terrain.base_color,
+            prepared_mesh,
+            fallback_terrain,
+            bounds_center: local_bounds.center(),
+            bounds_radius: local_bounds.half_extents().length(),
+            model: gt.0,
+            material: world.get::<newengine_materials::MaterialRef>(id).copied(),
+        });
     }
-    entries.sort_by(|a, b| a.0.cmp(&b.0));
+    entries.sort_by(|a, b| a.entity_key.cmp(&b.entity_key));
 
     let mut stream = BucketedIndexedDrawStream::with_capacity(entries.len());
-    for (entity_key, terrain, prepared_mesh, model, material) in entries {
+    for entry in entries {
+        let entity_key = entry.entity_key;
+        let mesh_key = entry.mesh_key;
+        let prepared_mesh = entry.prepared_mesh;
+        let model = entry.model;
+        let material = entry.material;
         let resolved = material.and_then(|mr| mats.resolve(mr.id));
-        let material_plan = LitMaterialPlan::from_resolved(resolved.as_ref(), terrain.base_color);
+        let material_plan = LitMaterialPlan::from_resolved(resolved.as_ref(), entry.base_color);
         if !material_plan.cast_shadows {
             continue;
         }
-        let local_bounds = terrain.heightfield.local_bounds();
-        let (center_ws, radius_ws) = transform_sphere(model, local_bounds.center(), local_bounds.half_extents().length());
+        let (center_ws, radius_ws) = transform_sphere(model, entry.bounds_center, entry.bounds_radius);
         if !shadow_caster_visible(this.shadows_current_cull(), center_ws, radius_ws) {
             continue;
         }
 
-        let mesh_key = terrain.mesh_key();
         let gpu = if let Some(gpu) = this.gpu.meshes.terrain_cache.get(&mesh_key).copied() {
             gpu
         } else {
             let gpu = if let Some(prepared) = prepared_mesh.as_ref() {
                 upload_primitive_mesh(r, prepared.mesh.as_ref(), "game_proc_terrain")?
             } else {
+                let terrain = entry.fallback_terrain.as_ref().ok_or_else(|| {
+                    newengine_core::EngineError::other("terrain shadow mesh is not prepared and fallback terrain payload is unavailable")
+                })?;
                 let mesh = terrain.heightfield.to_primitive_mesh();
                 upload_primitive_mesh(r, &mesh, "game_proc_terrain")?
             };

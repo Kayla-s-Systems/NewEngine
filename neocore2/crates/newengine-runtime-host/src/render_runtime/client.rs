@@ -1,7 +1,8 @@
 use newengine_plugin_api::HostApiV1;
 use newengine_render_api::{
-    decode_json, encode_json, RenderBackendInfo, RenderCommand, RenderCommandResponse,
-    RenderServiceRequest, RenderServiceResponse, ENGINE_RENDER_SERVICE_ID,
+    decode_json, encode_json, encode_unit_command_batch_bin, RenderBackendInfo,
+    RenderCommand, RenderCommandResponse, RenderServiceRequest, RenderServiceResponse,
+    ENGINE_RENDER_SERVICE_ID, RENDER_SERVICE_METHOD_COMMAND_BATCH_BIN_V1,
 };
 
 use crate::service_runtime::GenericJsonServiceClient;
@@ -51,6 +52,19 @@ impl RenderServiceClient {
     ) -> Result<Vec<RenderCommandResponse>, String> {
         if reqs.is_empty() {
             return Ok(Vec::new());
+        }
+
+        let binary_len = reqs.len();
+        if let Ok(packet) = encode_unit_command_batch_bin(&reqs) {
+            match self.service.call_raw(RENDER_SERVICE_METHOD_COMMAND_BATCH_BIN_V1, packet) {
+                Ok(_) => return Ok(vec![RenderCommandResponse::Unit; binary_len]),
+                Err(err) => {
+                    log::debug!(
+                        "render service: binary command batch unavailable; falling back to invoke_json err='{}'",
+                        err
+                    );
+                }
+            }
         }
 
         match self.invoke(RenderServiceRequest::CommandBatch(reqs))? {

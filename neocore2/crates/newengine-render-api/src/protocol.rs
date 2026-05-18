@@ -111,9 +111,238 @@ pub fn encode_json<T: Serialize>(value: &T) -> Result<Vec<u8>, String> {
     serde_json::to_vec(value).map_err(|e| e.to_string())
 }
 
+
 #[inline]
 pub fn decode_json<T: for<'de> Deserialize<'de>>(bytes: &[u8]) -> Result<T, String> {
     serde_json::from_slice(bytes).map_err(|e| e.to_string())
+}
+
+const COMMAND_BATCH_BIN_MAGIC: &[u8; 8] = b"NECB\x01\0\0\0";
+
+/// Encodes frame-local unit render commands into a compact binary packet.
+///
+/// JSON remains the service control protocol. This packet is only for the
+/// hot path commands that return `Unit`; commands that allocate ids or query
+/// snapshots intentionally stay on the typed JSON request/response surface.
+pub fn encode_unit_command_batch_bin(commands: &[RenderCommand]) -> Result<Vec<u8>, String> {
+    let mut out = Vec::with_capacity(16 + commands.len().saturating_mul(32));
+    out.extend_from_slice(COMMAND_BATCH_BIN_MAGIC);
+    let command_count = u32::try_from(commands.len())
+        .map_err(|_| "render command binary batch contains too many commands".to_owned())?;
+    put_u32(&mut out, command_count);
+    for command in commands {
+        encode_unit_command(&mut out, command)?;
+    }
+    Ok(out)
+}
+
+pub fn decode_unit_command_batch_bin(bytes: &[u8]) -> Result<Vec<RenderCommand>, String> {
+    let mut r = BinReader::new(bytes);
+    let magic = r.take(8)?;
+    if magic != COMMAND_BATCH_BIN_MAGIC {
+        return Err("render command batch binary packet has invalid magic".to_owned());
+    }
+    let count = r.u32()? as usize;
+    let mut commands = Vec::with_capacity(count);
+    for _ in 0..count {
+        commands.push(decode_unit_command(&mut r)?);
+    }
+    if !r.is_eof() {
+        return Err("render command batch binary packet has trailing bytes".to_owned());
+    }
+    Ok(commands)
+}
+
+fn encode_unit_command(out: &mut Vec<u8>, command: &RenderCommand) -> Result<(), String> {
+    match command {
+        RenderCommand::WriteBuffer { id, offset, data } => {
+            put_u8(out, 1);
+            put_u32(out, id.get());
+            put_u64(out, *offset);
+            let len = u32::try_from(data.len())
+                .map_err(|_| "render command binary write_buffer payload is too large".to_owned())?;
+            put_u32(out, len);
+            out.extend_from_slice(data);
+        }
+        RenderCommand::SetViewport(vp) => {
+            put_u8(out, 2);
+            put_f32(out, vp.x);
+            put_f32(out, vp.y);
+            put_f32(out, vp.w);
+            put_f32(out, vp.h);
+            put_f32(out, vp.min_depth);
+            put_f32(out, vp.max_depth);
+        }
+        RenderCommand::SetScissor(rect) => {
+            put_u8(out, 3);
+            put_i32(out, rect.x);
+            put_i32(out, rect.y);
+            put_i32(out, rect.w);
+            put_i32(out, rect.h);
+        }
+        RenderCommand::SetPipeline { pipeline } => {
+            put_u8(out, 4);
+            put_u32(out, pipeline.get());
+        }
+        RenderCommand::SetBindGroup { index, group } => {
+            put_u8(out, 5);
+            put_u32(out, *index);
+            put_u32(out, group.get());
+        }
+        RenderCommand::SetVertexBuffer { slot, slice } => {
+            put_u8(out, 6);
+            put_u32(out, *slot);
+            put_u32(out, slice.buffer.get());
+            put_u64(out, slice.offset);
+        }
+        RenderCommand::SetIndexBuffer { slice, format } => {
+            put_u8(out, 7);
+            put_u32(out, slice.buffer.get());
+            put_u64(out, slice.offset);
+            put_index_format(out, *format);
+        }
+        RenderCommand::Draw(args) => {
+            put_u8(out, 8);
+            put_u32(out, args.vertex_count);
+            put_u32(out, args.instance_count);
+            put_u32(out, args.first_vertex);
+            put_u32(out, args.first_instance);
+        }
+        RenderCommand::DrawIndexed(args) => {
+            put_u8(out, 9);
+            put_u32(out, args.index_count);
+            put_u32(out, args.instance_count);
+            put_u32(out, args.first_index);
+            put_i32(out, args.vertex_offset);
+            put_u32(out, args.first_instance);
+        }
+        _ => return Err(format!("render command is not supported by binary unit batch: {command:?}")),
+    }
+    Ok(())
+}
+
+fn decode_unit_command(r: &mut BinReader<'_>) -> Result<RenderCommand, String> {
+    match r.u8()? {
+        1 => {
+            let id = BufferId::new(r.u32()?);
+            let offset = r.u64()?;
+            let len = r.u32()? as usize;
+            let data = r.take(len)?.to_vec();
+            Ok(RenderCommand::WriteBuffer { id, offset, data })
+        }
+        2 => Ok(RenderCommand::SetViewport(Viewport {
+            x: r.f32()?,
+            y: r.f32()?,
+            w: r.f32()?,
+            h: r.f32()?,
+            min_depth: r.f32()?,
+            max_depth: r.f32()?,
+        })),
+        3 => Ok(RenderCommand::SetScissor(RectI32 {
+            x: r.i32()?,
+            y: r.i32()?,
+            w: r.i32()?,
+            h: r.i32()?,
+        })),
+        4 => Ok(RenderCommand::SetPipeline { pipeline: PipelineId::new(r.u32()?) }),
+        5 => Ok(RenderCommand::SetBindGroup {
+            index: r.u32()?,
+            group: BindGroupId::new(r.u32()?),
+        }),
+        6 => Ok(RenderCommand::SetVertexBuffer {
+            slot: r.u32()?,
+            slice: BufferSlice::new(BufferId::new(r.u32()?), r.u64()?),
+        }),
+        7 => Ok(RenderCommand::SetIndexBuffer {
+            slice: BufferSlice::new(BufferId::new(r.u32()?), r.u64()?),
+            format: get_index_format(r.u8()?)?,
+        }),
+        8 => Ok(RenderCommand::Draw(DrawArgs {
+            vertex_count: r.u32()?,
+            instance_count: r.u32()?,
+            first_vertex: r.u32()?,
+            first_instance: r.u32()?,
+        })),
+        9 => Ok(RenderCommand::DrawIndexed(DrawIndexedArgs {
+            index_count: r.u32()?,
+            instance_count: r.u32()?,
+            first_index: r.u32()?,
+            vertex_offset: r.i32()?,
+            first_instance: r.u32()?,
+        })),
+        tag => Err(format!("unknown render command batch binary tag {tag}")),
+    }
+}
+
+#[inline]
+fn put_u8(out: &mut Vec<u8>, v: u8) { out.push(v); }
+#[inline]
+fn put_u32(out: &mut Vec<u8>, v: u32) { out.extend_from_slice(&v.to_le_bytes()); }
+#[inline]
+fn put_i32(out: &mut Vec<u8>, v: i32) { out.extend_from_slice(&v.to_le_bytes()); }
+#[inline]
+fn put_u64(out: &mut Vec<u8>, v: u64) { out.extend_from_slice(&v.to_le_bytes()); }
+#[inline]
+fn put_f32(out: &mut Vec<u8>, v: f32) { out.extend_from_slice(&v.to_le_bytes()); }
+#[inline]
+fn put_index_format(out: &mut Vec<u8>, format: IndexFormat) {
+    out.push(match format {
+        IndexFormat::U16 => 16,
+        IndexFormat::U32 => 32,
+    });
+}
+#[inline]
+fn get_index_format(v: u8) -> Result<IndexFormat, String> {
+    match v {
+        16 => Ok(IndexFormat::U16),
+        32 => Ok(IndexFormat::U32),
+        _ => Err(format!("invalid index format tag {v}")),
+    }
+}
+
+struct BinReader<'a> {
+    bytes: &'a [u8],
+    cursor: usize,
+}
+
+impl<'a> BinReader<'a> {
+    #[inline]
+    fn new(bytes: &'a [u8]) -> Self { Self { bytes, cursor: 0 } }
+    #[inline]
+    fn is_eof(&self) -> bool { self.cursor == self.bytes.len() }
+
+    fn take(&mut self, len: usize) -> Result<&'a [u8], String> {
+        let end = self.cursor.saturating_add(len);
+        if end > self.bytes.len() {
+            return Err("render command batch binary packet ended early".to_owned());
+        }
+        let out = &self.bytes[self.cursor..end];
+        self.cursor = end;
+        Ok(out)
+    }
+
+    #[inline]
+    fn u8(&mut self) -> Result<u8, String> { Ok(self.take(1)?[0]) }
+    #[inline]
+    fn u32(&mut self) -> Result<u32, String> {
+        let b = self.take(4)?;
+        Ok(u32::from_le_bytes([b[0], b[1], b[2], b[3]]))
+    }
+    #[inline]
+    fn i32(&mut self) -> Result<i32, String> {
+        let b = self.take(4)?;
+        Ok(i32::from_le_bytes([b[0], b[1], b[2], b[3]]))
+    }
+    #[inline]
+    fn u64(&mut self) -> Result<u64, String> {
+        let b = self.take(8)?;
+        Ok(u64::from_le_bytes([b[0], b[1], b[2], b[3], b[4], b[5], b[6], b[7]]))
+    }
+    #[inline]
+    fn f32(&mut self) -> Result<f32, String> {
+        let b = self.take(4)?;
+        Ok(f32::from_le_bytes([b[0], b[1], b[2], b[3]]))
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]

@@ -6,6 +6,7 @@ use newengine_plugin_api::HostApiV1;
 use serde::{Deserialize, Serialize};
 
 pub const PLATFORM_WINDOW_SERVICE_ID: &str = "platform.window.v1";
+pub const PLATFORM_WINDOW_BACKEND_CAPABILITY_ID: &str = "platform.window.backend";
 pub const PLATFORM_WINDOW_SERVICE_METHOD_SNAPSHOT_JSON_V1: &str = "snapshot_json_v1";
 
 #[repr(u8)]

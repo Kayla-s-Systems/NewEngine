@@ -460,6 +460,7 @@ fn spawn_procedural_terrain(
     material: MaterialId,
     spec: &GameReadyTerrainSpec,
     color: [f32; 4],
+    initial_center: TerrainChunkCoord,
 ) -> EntityId {
     log::info!(
         "game-ready: terrain generator id='{}' seed={} cells={}x{} chunk_size={}x{} streaming={} radius={} unload_radius={} surface_layers=[forest='{}', sand='{}', rock='{}']",
@@ -478,7 +479,7 @@ fn spawn_procedural_terrain(
     );
 
     let surface = terrain_surface_layers(spec);
-    let origin = TerrainChunkCoord { x: 0, z: 0 };
+    let origin = initial_center;
     let record = spawn_streamed_terrain_chunk(world, root, mats, material, spec, &surface, color, origin);
     let terrain_entity = record.terrain;
 
@@ -529,7 +530,9 @@ fn spawn_procedural_terrain(
         }
         if warmed > 1 {
             log::info!(
-                "game-ready terrain streaming: initial resident chunks warmed center=[0,0] radius={} chunks={}",
+                "game-ready terrain streaming: initial resident chunks warmed center=[{},{}] radius={} chunks={}",
+                origin.x,
+                origin.z,
                 state.chunk_radius,
                 warmed
             );

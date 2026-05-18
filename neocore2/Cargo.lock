@@ -520,6 +520,7 @@ dependencies = [
  "newengine-runtime-host",
  "newengine-scene",
  "newengine-scene-io",
+ "newengine-service-api",
  "newengine-shader-compiler",
  "newengine-sim",
  "newengine-texture-container",

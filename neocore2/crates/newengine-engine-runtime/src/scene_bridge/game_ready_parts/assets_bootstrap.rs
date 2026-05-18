@@ -338,7 +338,20 @@ pub(super) fn bootstrap_fps_game_ready_scene(
 
     configure_game_ready_lighting(world, &map.lighting);
 
-    let terrain = spawn_procedural_terrain(world, mats, root, materials.terrain, &map.terrain, map.palette.terrain);
+    let initial_terrain_center = newengine_scene::SceneCellCoord::from_world_pos(
+        map.player.start,
+        map.terrain.size_x,
+        map.terrain.size_z,
+    );
+    let terrain = spawn_procedural_terrain(
+        world,
+        mats,
+        root,
+        materials.terrain,
+        &map.terrain,
+        map.palette.terrain,
+        initial_terrain_center,
+    );
     spawn_foliage_prefabs(
         world,
         prims,

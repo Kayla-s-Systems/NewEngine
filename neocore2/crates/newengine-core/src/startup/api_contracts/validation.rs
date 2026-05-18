@@ -6,7 +6,7 @@ use newengine_service_api::RuntimeServiceRequirementSpec;
 
 use super::catalog::{runtime_service_user, RUNTIME_SERVICE_REQUIREMENTS};
 use super::description::{method_statuses, parse_methods_from_description};
-use super::diagnostics::{provider_for, provider_has_required_capability};
+use super::diagnostics::{provider_for, provider_has_required_capability, service_origin};
 
 #[derive(Debug, Clone)]
 struct ContractReport {
@@ -254,6 +254,7 @@ fn emit_runtime_api_table(reports: &[ContractReport]) {
 fn active_route_source(service_id: &str) -> String {
     newengine_plugin_host::active_engine_gateway_route(service_id)
         .map(|route| route.origin)
+        .or_else(|| service_origin(service_id))
         .unwrap_or_else(|| "direct".to_owned())
 }
 

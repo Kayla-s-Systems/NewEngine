@@ -3,7 +3,7 @@ use std::sync::{Arc, Mutex, OnceLock};
 use abi_stable::erased_types::TD_Opaque;
 use abi_stable::std_types::{RResult, RString};
 use newengine_platform_api::{
-    PlatformWindowReadyV1, PLATFORM_WINDOW_SERVICE_ID,
+    PlatformWindowReadyV1, PLATFORM_WINDOW_BACKEND_CAPABILITY_ID, PLATFORM_WINDOW_SERVICE_ID,
     PLATFORM_WINDOW_SERVICE_METHOD_SNAPSHOT_JSON_V1,
 };
 use newengine_plugin_api::{
@@ -41,6 +41,9 @@ impl ServiceV1 for PlatformWindowSnapshotService {
         let v = serde_json::json!({
             "id": PLATFORM_WINDOW_SERVICE_ID,
             "version": 1,
+            "origin": "host-owned",
+            "owner": "newengine-runtime-host.platform-window",
+            "capability": PLATFORM_WINDOW_BACKEND_CAPABILITY_ID,
             "methods": [PLATFORM_WINDOW_SERVICE_METHOD_SNAPSHOT_JSON_V1],
             "notes": "Host-provided platform window snapshot service for runtime plugins."
         });

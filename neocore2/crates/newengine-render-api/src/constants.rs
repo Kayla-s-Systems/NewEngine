@@ -8,6 +8,13 @@ pub const RENDER_BACKEND_CAPABILITY_ID: &str = "render.backend";
 pub const RENDER_SERVICE_METHOD_INVOKE: &str = newengine_service_api::SERVICE_METHOD_INVOKE_JSON;
 pub const RENDER_SERVICE_METHOD_INFO: &str = newengine_service_api::SERVICE_METHOD_INFO_JSON;
 pub const RENDER_SERVICE_METHOD_SHUTDOWN_V1: &str = newengine_service_api::SERVICE_METHOD_SHUTDOWN_V1;
+/// Binary hot-path method for frame-local unit render commands.
+///
+/// The regular invoke_json surface remains the typed control protocol. This
+/// method is intentionally narrow: it carries only unit commands such as
+/// write_buffer/set_pipeline/draw so draw-list extraction does not serialize
+/// byte payloads as JSON arrays on every frame.
+pub const RENDER_SERVICE_METHOD_COMMAND_BATCH_BIN_V1: &str = "command_batch_bin_v1";
 
 /// Generic backend-family declaration for render providers.
 pub const RENDER_BACKEND_SERVICE_SPEC: newengine_service_api::BackendServiceSpec =

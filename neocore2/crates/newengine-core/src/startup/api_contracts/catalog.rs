@@ -52,7 +52,7 @@ const PLATFORM_RUNTIME_CONTRACT_SPEC: RuntimeServiceContractSpec = RuntimeServic
 const PLATFORM_RUNTIME_REQUIREMENT_SPEC: RuntimeServiceRequirementSpec =
     RuntimeServiceRequirementSpec::new(
         PLATFORM_RUNTIME_CONTRACT_SPEC,
-        None,
+        Some(newengine_platform_api::PLATFORM_WINDOW_BACKEND_CAPABILITY_ID),
         Some("NEWENGINE_REQUIRE_PLATFORM_WINDOW_SERVICE"),
     );
 

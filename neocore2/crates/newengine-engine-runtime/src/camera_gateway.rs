@@ -9,7 +9,7 @@ use abi_stable::std_types::{RResult, RString};
 use newengine_camera::{
     CameraChannel, CameraChannelState, CameraViewport, RuntimeNavController, RuntimeNavMode,
 };
-use newengine_camera_api::{CameraFrameSnapshot, CameraServiceInfo, ENGINE_CAMERA_SERVICE_ID};
+use newengine_camera_api::{CameraFrameSnapshot, CameraServiceInfo, CAMERA_BACKEND_CAPABILITY_ID, ENGINE_CAMERA_SERVICE_ID};
 use newengine_camera_runtime::{
     camera_frame_snapshot, cursor_state_for_nav, step_camera_nav, BoundsSphere as CamBoundsSphere,
     CameraManagerResource, CameraNavFrameRequest, CameraNavInput, CameraNavParams,
@@ -56,7 +56,10 @@ impl ServiceV1 for CameraGatewayInfoService {
                 newengine_camera_api::CAMERA_SERVICE_METHOD_SNAPSHOT_JSON_V1,
                 newengine_camera_api::CAMERA_SERVICE_METHOD_SHUTDOWN_V1
             ],
-            "gateway": "host-owned engine.camera in-process bridge"
+            "origin": "engine-owned",
+            "owner": "newengine-engine-runtime.camera-gateway",
+            "capability": CAMERA_BACKEND_CAPABILITY_ID,
+            "gateway": "engine-owned engine.camera in-process bridge"
         });
         RString::from(json.to_string())
     }
@@ -91,10 +94,27 @@ fn register_camera_gateway_service_best_effort(state: Arc<Mutex<CameraGatewaySta
     }
     let dyn_svc = ServiceV1Dyn::from_value(CameraGatewayInfoService { state }, TD_Opaque);
     match newengine_plugin_host::host_register_service_impl(dyn_svc) {
-        RResult::ROk(()) => log::info!(
-            "camera gateway: host service registered id='{}'",
-            ENGINE_CAMERA_SERVICE_ID
-        ),
+        RResult::ROk(()) => {
+            match newengine_plugin_host::register_engine_owned_gateway(
+                ENGINE_CAMERA_SERVICE_ID,
+                newengine_service_api::EngineServiceKind::Camera,
+                ENGINE_CAMERA_SERVICE_ID,
+                CAMERA_BACKEND_CAPABILITY_ID,
+                0,
+                "newengine-engine-runtime.camera-gateway",
+            ) {
+                Ok(()) => log::info!(
+                    "camera gateway: engine-owned route registered id='{}' capability='{}'",
+                    ENGINE_CAMERA_SERVICE_ID,
+                    CAMERA_BACKEND_CAPABILITY_ID
+                ),
+                Err(e) => log::warn!(
+                    "camera gateway: engine-owned route registration skipped id='{}' err='{}'",
+                    ENGINE_CAMERA_SERVICE_ID,
+                    e
+                ),
+            }
+        },
         RResult::RErr(e) => log::warn!(
             "camera gateway: host service registration skipped id='{}' err='{}'",
             ENGINE_CAMERA_SERVICE_ID,
