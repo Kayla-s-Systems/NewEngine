@@ -46,6 +46,27 @@ pub struct ExternalRuntimePluginSnapshot {
     pub disabled_reason: Option<String>,
 }
 
+#[derive(Clone, Debug)]
+pub struct EngineGatewayRouteSnapshot {
+    pub gateway_id: String,
+    pub service_kind: String,
+    pub provider_service_id: String,
+    pub provider_owner_id: String,
+    pub backend_capability_id: String,
+    pub backend_priority: i32,
+    pub origin: String,
+}
+
+#[derive(Clone, Debug)]
+struct EngineOwnedGatewayEntry {
+    gateway_id: String,
+    service_kind: newengine_service_api::EngineServiceKind,
+    provider_service_id: String,
+    provider_owner_id: String,
+    backend_capability_id: String,
+    backend_priority: i32,
+}
+
 thread_local! {
     static CURRENT_PLUGIN_ID: RefCell<Option<String>> = const { RefCell::new(None) };
 }
@@ -89,6 +110,11 @@ pub(crate) struct HostContext {
     /// Host-registered runtime plugins that live outside the normal ABI loader path
     /// (currently platform runtime units only).
     pub(crate) external_runtime_plugins: Mutex<NeHashMap<String, ExternalRuntimePluginEntry>>,
+
+    /// Engine-owned routes for facade ids backed by host/runtime services rather
+    /// than plugin descriptors. These entries participate in the same gateway
+    /// registry and priority rules as plugin routes.
+    engine_owned_gateways: Mutex<NeHashMap<String, EngineOwnedGatewayEntry>>,
 }
 
 static HOST_CTX: OnceLock<Arc<HostContext>> = OnceLock::new();
@@ -104,6 +130,7 @@ fn make_default_ctx() -> Arc<HostContext> {
         event_sinks: Mutex::new(Vec::new()),
         plugin_descriptors: Mutex::new(NeHashMap::default()),
         external_runtime_plugins: Mutex::new(NeHashMap::default()),
+        engine_owned_gateways: Mutex::new(NeHashMap::default()),
     })
 }
 
@@ -218,7 +245,31 @@ fn gateway_registry_snapshot() -> crate::service_gateway::ActiveGatewayRegistry 
             .collect::<Vec<_>>()
     };
 
-    crate::service_gateway::ActiveGatewayRegistry::from_facts(&descriptors, &services)
+    let engine_owned_gateways = {
+        let gateways = match c.engine_owned_gateways.lock() {
+            Ok(v) => v,
+            Err(e) => e.into_inner(),
+        };
+        gateways
+            .values()
+            .map(|entry| {
+                crate::service_gateway::EngineOwnedGatewayFact::new(
+                    entry.gateway_id.clone(),
+                    entry.service_kind,
+                    entry.provider_service_id.clone(),
+                    entry.provider_owner_id.clone(),
+                    entry.backend_capability_id.clone(),
+                    entry.backend_priority,
+                )
+            })
+            .collect::<Vec<_>>()
+    };
+
+    crate::service_gateway::ActiveGatewayRegistry::from_facts(
+        &descriptors,
+        &services,
+        &engine_owned_gateways,
+    )
 }
 
 fn active_engine_gateways() -> Vec<String> {
@@ -237,6 +288,114 @@ pub fn resolve_service_for_engine_gateway(gateway_id: &str) -> Option<String> {
 
 pub fn engine_gateway_has_capability(gateway_id: &str, capability_id: &str) -> bool {
     gateway_registry_snapshot().has_gateway_capability(gateway_id, capability_id)
+}
+
+
+pub fn list_engine_gateway_routes() -> Vec<EngineGatewayRouteSnapshot> {
+    gateway_registry_snapshot()
+        .routes()
+        .iter()
+        .map(|route| EngineGatewayRouteSnapshot {
+            gateway_id: route.gateway_id.clone(),
+            service_kind: route.service_kind.as_str().to_owned(),
+            provider_service_id: route.provider_service_id.clone(),
+            provider_owner_id: route.provider_owner_id.clone(),
+            backend_capability_id: route.backend_capability_id.clone(),
+            backend_priority: route.backend_priority,
+            origin: route.origin.as_str().to_owned(),
+        })
+        .collect()
+}
+
+pub fn active_engine_gateway_route(gateway_id: &str) -> Option<EngineGatewayRouteSnapshot> {
+    gateway_registry_snapshot()
+        .resolve_route(gateway_id)
+        .map(|route| EngineGatewayRouteSnapshot {
+            gateway_id: route.gateway_id.clone(),
+            service_kind: route.service_kind.as_str().to_owned(),
+            provider_service_id: route.provider_service_id.clone(),
+            provider_owner_id: route.provider_owner_id.clone(),
+            backend_capability_id: route.backend_capability_id.clone(),
+            backend_priority: route.backend_priority,
+            origin: route.origin.as_str().to_owned(),
+        })
+}
+
+pub fn register_engine_owned_gateway(
+    gateway_id: &str,
+    service_kind: newengine_service_api::EngineServiceKind,
+    provider_service_id: &str,
+    backend_capability_id: &str,
+    backend_priority: i32,
+    provider_owner_id: &str,
+) -> Result<(), String> {
+    if !newengine_service_api::is_engine_service_gateway_id(gateway_id) {
+        return Err(format!("engine-owned gateway id must start with 'engine.': {gateway_id}"));
+    }
+    if provider_service_id.trim().is_empty() {
+        return Err("engine-owned gateway provider_service_id is empty".to_owned());
+    }
+    if backend_capability_id.trim().is_empty() {
+        return Err("engine-owned gateway backend_capability_id is empty".to_owned());
+    }
+
+    let c = ctx();
+    {
+        let services = match c.services.lock() {
+            Ok(v) => v,
+            Err(e) => e.into_inner(),
+        };
+        match services.get(provider_service_id) {
+            Some(entry) if entry.owner_plugin_id.is_none() => {}
+            Some(entry) => {
+                return Err(format!(
+                    "engine-owned gateway '{}' cannot route to plugin-owned service '{}' owner='{}'",
+                    gateway_id,
+                    provider_service_id,
+                    entry.owner_plugin_id.as_deref().unwrap_or("<unknown>")
+                ));
+            }
+            None => {
+                return Err(format!(
+                    "engine-owned gateway '{}' cannot route to unregistered service '{}'",
+                    gateway_id, provider_service_id
+                ));
+            }
+        }
+    }
+
+    let key = format!("{}::{}", gateway_id, provider_service_id);
+    let mut gateways = match c.engine_owned_gateways.lock() {
+        Ok(v) => v,
+        Err(e) => e.into_inner(),
+    };
+    gateways.insert(
+        key,
+        EngineOwnedGatewayEntry {
+            gateway_id: gateway_id.to_owned(),
+            service_kind,
+            provider_service_id: provider_service_id.to_owned(),
+            provider_owner_id: if provider_owner_id.trim().is_empty() {
+                "engine".to_owned()
+            } else {
+                provider_owner_id.to_owned()
+            },
+            backend_capability_id: backend_capability_id.to_owned(),
+            backend_priority,
+        },
+    );
+
+    bump_services_generation();
+    log::info!(
+        "gateways: registered engine-owned route gateway='{}' service='{}' kind='{}' capability='{}' priority={} owner='{}'",
+        gateway_id,
+        provider_service_id,
+        service_kind.as_str(),
+        backend_capability_id,
+        backend_priority,
+        provider_owner_id
+    );
+    Ok(())
 }
 
 #[inline]
@@ -548,6 +707,14 @@ pub fn unregister_by_owner(owner_plugin_id: &str) {
             Err(e) => e.into_inner(),
         };
         g.remove(owner_plugin_id);
+    }
+
+    {
+        let mut g = match c.engine_owned_gateways.lock() {
+            Ok(v) => v,
+            Err(e) => e.into_inner(),
+        };
+        g.retain(|_, route| route.provider_owner_id != owner_plugin_id);
     }
 
     if removed_services > 0 || removed_sinks > 0 {

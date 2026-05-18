@@ -4,38 +4,97 @@ use crate::error::{EngineError, EngineResult};
 use newengine_plugin_host::PluginSnapshotEntry;
 use newengine_service_api::RuntimeServiceRequirementSpec;
 
-use super::catalog::RUNTIME_SERVICE_REQUIREMENTS;
+use super::catalog::{runtime_service_user, RUNTIME_SERVICE_REQUIREMENTS};
 use super::description::{method_statuses, parse_methods_from_description};
 use super::diagnostics::{provider_for, provider_has_required_capability};
+
+#[derive(Debug, Clone)]
+struct ContractReport {
+    service_id: String,
+    status: &'static str,
+    provider_service: String,
+    provider: String,
+    source: String,
+    capability: String,
+    required: &'static str,
+    used_by: &'static str,
+    expected: String,
+    methods: String,
+    reason: String,
+}
 
 pub(crate) fn validate_runtime_service_contracts(
     plugins: &[PluginSnapshotEntry],
 ) -> EngineResult<()> {
-    for requirement in RUNTIME_SERVICE_REQUIREMENTS {
-        validate_one(*requirement, plugins)?;
+    let duplicates = super::catalog::runtime_service_requirement_duplicates();
+    if !duplicates.is_empty() {
+        return Err(EngineError::Other(format!(
+            "runtime service contract catalog contains duplicate API ids: {}",
+            duplicates.join(", ")
+        )));
     }
+
+    let mut reports = Vec::with_capacity(RUNTIME_SERVICE_REQUIREMENTS.len());
+
+    for requirement in RUNTIME_SERVICE_REQUIREMENTS {
+        let (report, error) = validate_one(*requirement, plugins);
+        emit_contract_line(&report);
+        reports.push(report);
+
+        if let Some(error) = error {
+            emit_runtime_api_table(&reports);
+            return Err(error);
+        }
+    }
+
+    emit_runtime_api_table(&reports);
     Ok(())
 }
 
 fn validate_one(
     requirement: RuntimeServiceRequirementSpec,
     plugins: &[PluginSnapshotEntry],
-) -> EngineResult<()> {
+) -> (ContractReport, Option<EngineError>) {
     let contract = requirement.contract;
-    let present = newengine_plugin_host::has_service(contract.service_id);
+    let required = is_required(requirement);
+    let provider = provider_for(plugins, contract.service_id);
+    let provider_service = active_provider_service_id(contract.service_id);
+    let source = active_route_source(contract.service_id);
+    let capability = requirement
+        .required_capability_id
+        .unwrap_or("-")
+        .to_owned();
+    let used_by = runtime_service_user(contract.service_id);
 
+    let mut report = ContractReport {
+        service_id: contract.service_id.to_owned(),
+        status: "ok",
+        provider_service,
+        provider,
+        source,
+        capability,
+        required: if required { "yes" } else { "no" },
+        used_by,
+        expected: contract.expected_contract.to_owned(),
+        methods: method_statuses(contract.required_methods).join(" "),
+        reason: "-".to_owned(),
+    };
+
+    let present = newengine_plugin_host::has_service(contract.service_id);
     if !present {
-        return contract_violation(
+        return finish_violation(
             requirement,
             plugins,
+            report,
             format!("service '{}' is not registered", contract.service_id),
         );
     }
 
     let Some(description) = newengine_plugin_host::describe_service(contract.service_id) else {
-        return contract_violation(
+        return finish_violation(
             requirement,
             plugins,
+            report,
             format!("service '{}' has no describe() contract", contract.service_id),
         );
     };
@@ -43,9 +102,10 @@ fn validate_one(
     let methods = match parse_methods_from_description(&description) {
         Ok(methods) => methods,
         Err(e) => {
-            return contract_violation(
+            return finish_violation(
                 requirement,
                 plugins,
+                report,
                 format!(
                     "service '{}' returned invalid describe() JSON: {e}",
                     contract.service_id
@@ -62,18 +122,34 @@ fn validate_one(
         .collect::<Vec<_>>();
 
     if !missing.is_empty() {
-        return contract_violation(
+        report.methods = contract
+            .required_methods
+            .iter()
+            .map(|method| {
+                let label = method.rsplit_once('.').map(|(_, tail)| tail).unwrap_or(method);
+                if missing.iter().any(|missing_method| missing_method == method) {
+                    format!("{label}=no")
+                } else {
+                    format!("{label}=yes")
+                }
+            })
+            .collect::<Vec<_>>()
+            .join(" ");
+
+        return finish_violation(
             requirement,
             plugins,
+            report,
             format!("missing method(s): {}", missing.join(", ")),
         );
     }
 
     if let Some(capability_id) = requirement.required_capability_id {
         if !provider_has_required_capability(contract.service_id, capability_id, plugins) {
-            return contract_violation(
+            return finish_violation(
                 requirement,
                 plugins,
+                report,
                 format!(
                     "provider must route service '{}' through backend capability '{}'",
                     contract.service_id, capability_id
@@ -82,34 +158,109 @@ fn validate_one(
         }
     }
 
-    log::info!(
-        "runtime contract ok: service='{}' expected='{}' required=[{}]",
-        contract.service_id,
-        contract.expected_contract,
-        method_statuses(contract.required_methods).join(" ")
-    );
-    Ok(())
+    (report, None)
 }
 
-fn contract_violation(
+fn finish_violation(
     requirement: RuntimeServiceRequirementSpec,
     plugins: &[PluginSnapshotEntry],
+    mut report: ContractReport,
     reason: String,
-) -> EngineResult<()> {
+) -> (ContractReport, Option<EngineError>) {
+    report.reason = reason.clone();
+
     if is_required(requirement) {
-        return Err(contract_error(requirement, plugins, reason));
+        report.status = "fatal";
+        let error = contract_error(requirement, plugins, reason);
+        return (report, Some(error));
     }
 
-    let contract = requirement.contract;
-    let provider = provider_for(plugins, contract.service_id);
-    log::warn!(
-        "runtime contract degraded: service='{}' provider='{}' expected='{}' reason='{}'",
-        contract.service_id,
-        provider,
-        contract.expected_contract,
-        reason
+    report.status = "degraded";
+    (report, None)
+}
+
+fn emit_contract_line(report: &ContractReport) {
+    match report.status {
+        "ok" => {
+            log::info!(
+                "runtime contract ok: service='{}' provider_service='{}' source='{}' expected='{}' required=[{}]",
+                report.service_id,
+                report.provider_service,
+                report.source,
+                report.expected,
+                report.methods
+            );
+        }
+        "fatal" => {
+            log::error!(
+                "runtime contract fatal: service='{}' provider='{}' source='{}' expected='{}' reason='{}'",
+                report.service_id,
+                report.provider,
+                report.source,
+                report.expected,
+                report.reason
+            );
+        }
+        _ => {
+            log::warn!(
+                "runtime contract degraded: service='{}' provider='{}' source='{}' expected='{}' reason='{}'",
+                report.service_id,
+                report.provider,
+                report.source,
+                report.expected,
+                report.reason
+            );
+        }
+    }
+}
+
+fn emit_runtime_api_table(reports: &[ContractReport]) {
+    let rows = reports
+        .iter()
+        .map(|report| {
+            vec![
+                report.service_id.clone(),
+                report.status.to_owned(),
+                report.provider_service.clone(),
+                report.source.clone(),
+                report.capability.clone(),
+                report.required.to_owned(),
+                report.used_by.to_owned(),
+                crate::log_fmt::ellipsize(&report.provider, 72),
+                crate::log_fmt::ellipsize(&report.methods, 64),
+            ]
+        })
+        .collect::<Vec<_>>();
+
+    crate::log_fmt::emit_prefixed_table(
+        "runtime api:",
+        "Engine API gateway/service contracts",
+        &[
+            "api",
+            "status",
+            "provider_service",
+            "source",
+            "capability",
+            "strict",
+            "used_by",
+            "provider",
+            "methods",
+        ],
+        &rows,
     );
-    Ok(())
+}
+
+
+fn active_route_source(service_id: &str) -> String {
+    newengine_plugin_host::active_engine_gateway_route(service_id)
+        .map(|route| route.origin)
+        .unwrap_or_else(|| "direct".to_owned())
+}
+
+fn active_provider_service_id(service_id: &str) -> String {
+    newengine_plugin_host::resolve_service_for_engine_gateway(service_id)
+        .or_else(|| newengine_plugin_host::has_service(service_id).then(|| service_id.to_owned()))
+        .unwrap_or_else(|| "<none>".to_owned())
 }
 
 fn contract_error(

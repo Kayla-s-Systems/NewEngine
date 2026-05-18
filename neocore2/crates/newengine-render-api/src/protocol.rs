@@ -300,6 +300,13 @@ impl RenderFrameEnvelope {
 pub enum RenderServiceRequest {
     Negotiate(RenderCapabilityNegotiationRequest),
     Command(RenderCommand),
+    /// Executes a sequence of unit render commands in one provider call.
+    ///
+    /// This keeps the engine-facing API imperative for feature extractors while
+    /// avoiding one service-boundary roundtrip per recorded draw command on the
+    /// frame hot path. Commands that return ids/snapshots should still use
+    /// `Command` so the caller can consume the typed response immediately.
+    CommandBatch(Vec<RenderCommand>),
     CompileRenderGraph(RenderGraphDesc),
     ValidateRenderGraph(RenderGraphDesc),
     SetRenderPhase { phase: Option<RenderGraphPassKind> },
@@ -317,6 +324,7 @@ pub enum RenderServiceResponse {
     Unit,
     Negotiation(RenderCapabilityNegotiationResponse),
     Command(RenderCommandResponse),
+    CommandBatch(Vec<RenderCommandResponse>),
     GraphCompileReport(RenderGraphCompileReport),
     GraphValidationReport(RenderGraphValidationReport),
     GraphSubmitReport(RenderGraphSubmitReport),

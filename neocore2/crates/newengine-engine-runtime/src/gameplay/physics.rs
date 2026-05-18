@@ -69,7 +69,7 @@ pub(super) fn step_service_physics(
         match api.step_frame(input) {
             Ok(output) => output,
             Err(err) => {
-                log::warn!("physics sync: physics.api step failed: {}", err);
+                log::warn!("physics sync: engine.physics step failed: {}", err);
                 return;
             }
         }

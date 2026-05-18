@@ -1,3 +1,5 @@
+use std::sync::Mutex;
+
 use newengine_core::render::{
     BeginFrameDesc, BeginRenderTargetDesc, BindGroupDesc, BindGroupId, BindGroupLayoutDesc,
     BindGroupLayoutId, BufferDesc, BufferId, BufferSlice, DrawArgs, DrawIndexedArgs,
@@ -15,17 +17,59 @@ use crate::render_runtime::client::RenderServiceClient;
 
 pub(crate) struct ServiceBackedRenderApi {
     client: RenderServiceClient,
+    pending_unit_commands: Mutex<Vec<RenderCommand>>,
 }
 
 impl ServiceBackedRenderApi {
     #[inline]
     pub(crate) fn new(client: RenderServiceClient) -> Self {
-        Self { client }
+        Self {
+            client,
+            pending_unit_commands: Mutex::new(Vec::with_capacity(128)),
+        }
+    }
+
+    #[inline]
+    fn pending(&self) -> std::sync::MutexGuard<'_, Vec<RenderCommand>> {
+        match self.pending_unit_commands.lock() {
+            Ok(guard) => guard,
+            Err(poisoned) => poisoned.into_inner(),
+        }
+    }
+
+    #[inline]
+    fn queue_unit(&self, req: RenderCommand) -> EngineResult<()> {
+        self.pending().push(req);
+        Ok(())
+    }
+
+    fn flush_unit_batch(&self) -> EngineResult<()> {
+        let pending = {
+            let mut guard = self.pending();
+            if guard.is_empty() {
+                return Ok(());
+            }
+            std::mem::take(&mut *guard)
+        };
+
+        let responses = self.client.command_batch(pending).map_err(EngineError::other)?;
+        for response in responses {
+            match response {
+                RenderCommandResponse::Unit => {}
+                other => {
+                    return Err(EngineError::other(format!(
+                        "render service protocol error: expected unit response in command batch, got {:?}",
+                        other
+                    )));
+                }
+            }
+        }
+        Ok(())
     }
 
     #[inline]
     fn unit(&self, req: RenderCommand) -> EngineResult<()> {
-        match self.client.command(req).map_err(EngineError::other)? {
+        match self.command(req)? {
             RenderCommandResponse::Unit => Ok(()),
             other => Err(EngineError::other(format!(
                 "render service protocol error: expected unit response, got {:?}",
@@ -35,7 +79,14 @@ impl ServiceBackedRenderApi {
     }
 
     #[inline]
+    fn command(&self, req: RenderCommand) -> EngineResult<RenderCommandResponse> {
+        self.flush_unit_batch()?;
+        self.client.command(req).map_err(EngineError::other)
+    }
+
+    #[inline]
     fn invoke_service(&self, req: RenderServiceRequest) -> EngineResult<RenderServiceResponse> {
+        self.flush_unit_batch()?;
         match self.client.invoke(req).map_err(EngineError::other)? {
             RenderServiceResponse::Problem(problem) => Err(EngineError::other(format!(
                 "render service problem {} at {:?}: {}",
@@ -68,11 +119,7 @@ impl RenderApi for ServiceBackedRenderApi {
     }
 
     fn create_render_target(&mut self, desc: RenderTargetDesc) -> EngineResult<RenderTargetId> {
-        match self
-            .client
-            .command(RenderCommand::CreateRenderTarget(desc))
-            .map_err(EngineError::other)?
-        {
+        match self.command(RenderCommand::CreateRenderTarget(desc))? {
             RenderCommandResponse::RenderTargetId(id) => Ok(id),
             other => Err(EngineError::other(format!(
                 "render service protocol error: expected RenderTargetId, got {:?}",
@@ -86,11 +133,8 @@ impl RenderApi for ServiceBackedRenderApi {
     }
 
     fn render_target_ui_tex_id(&self, id: RenderTargetId) -> EngineResult<UiTexId> {
-        match self
-            .client
-            .command(RenderCommand::RenderTargetUiTexId { id })
-            .map_err(EngineError::other)?
-        {
+        self.flush_unit_batch()?;
+        match self.command(RenderCommand::RenderTargetUiTexId { id })? {
             RenderCommandResponse::UiTexId(id) => Ok(id),
             other => Err(EngineError::other(format!(
                 "render service protocol error: expected UiTexId, got {:?}",
@@ -100,11 +144,8 @@ impl RenderApi for ServiceBackedRenderApi {
     }
 
     fn render_target_color_texture_id(&self, id: RenderTargetId) -> EngineResult<TextureId> {
-        match self
-            .client
-            .command(RenderCommand::RenderTargetColorTextureId { id })
-            .map_err(EngineError::other)?
-        {
+        self.flush_unit_batch()?;
+        match self.command(RenderCommand::RenderTargetColorTextureId { id })? {
             RenderCommandResponse::TextureId(id) => Ok(id),
             other => Err(EngineError::other(format!(
                 "render service protocol error: expected TextureId, got {:?}",
@@ -122,11 +163,7 @@ impl RenderApi for ServiceBackedRenderApi {
     }
 
     fn create_buffer(&mut self, desc: BufferDesc) -> EngineResult<BufferId> {
-        match self
-            .client
-            .command(RenderCommand::CreateBuffer(desc))
-            .map_err(EngineError::other)?
-        {
+        match self.command(RenderCommand::CreateBuffer(desc))? {
             RenderCommandResponse::BufferId(id) => Ok(id),
             other => Err(EngineError::other(format!(
                 "render service protocol error: expected BufferId, got {:?}",
@@ -140,7 +177,7 @@ impl RenderApi for ServiceBackedRenderApi {
     }
 
     fn write_buffer(&mut self, id: BufferId, offset: u64, data: &[u8]) -> EngineResult<()> {
-        self.unit(RenderCommand::WriteBuffer {
+        self.queue_unit(RenderCommand::WriteBuffer {
             id,
             offset,
             data: data.to_vec(),
@@ -148,11 +185,7 @@ impl RenderApi for ServiceBackedRenderApi {
     }
 
     fn create_texture(&mut self, desc: TextureDesc) -> EngineResult<TextureId> {
-        match self
-            .client
-            .command(RenderCommand::CreateTexture(desc))
-            .map_err(EngineError::other)?
-        {
+        match self.command(RenderCommand::CreateTexture(desc))? {
             RenderCommandResponse::TextureId(id) => Ok(id),
             other => Err(EngineError::other(format!(
                 "render service protocol error: expected TextureId, got {:?}",
@@ -166,11 +199,7 @@ impl RenderApi for ServiceBackedRenderApi {
     }
 
     fn create_sampler(&mut self, desc: SamplerDesc) -> EngineResult<SamplerId> {
-        match self
-            .client
-            .command(RenderCommand::CreateSampler(desc))
-            .map_err(EngineError::other)?
-        {
+        match self.command(RenderCommand::CreateSampler(desc))? {
             RenderCommandResponse::SamplerId(id) => Ok(id),
             other => Err(EngineError::other(format!(
                 "render service protocol error: expected SamplerId, got {:?}",
@@ -184,11 +213,7 @@ impl RenderApi for ServiceBackedRenderApi {
     }
 
     fn create_shader(&mut self, desc: ShaderDesc) -> EngineResult<ShaderId> {
-        match self
-            .client
-            .command(RenderCommand::CreateShader(desc))
-            .map_err(EngineError::other)?
-        {
+        match self.command(RenderCommand::CreateShader(desc))? {
             RenderCommandResponse::ShaderId(id) => Ok(id),
             other => Err(EngineError::other(format!(
                 "render service protocol error: expected ShaderId, got {:?}",
@@ -202,11 +227,7 @@ impl RenderApi for ServiceBackedRenderApi {
     }
 
     fn create_pipeline(&mut self, desc: PipelineDesc) -> EngineResult<PipelineId> {
-        match self
-            .client
-            .command(RenderCommand::CreatePipeline(desc))
-            .map_err(EngineError::other)?
-        {
+        match self.command(RenderCommand::CreatePipeline(desc))? {
             RenderCommandResponse::PipelineId(id) => Ok(id),
             other => Err(EngineError::other(format!(
                 "render service protocol error: expected PipelineId, got {:?}",
@@ -223,11 +244,7 @@ impl RenderApi for ServiceBackedRenderApi {
         &mut self,
         desc: BindGroupLayoutDesc,
     ) -> EngineResult<BindGroupLayoutId> {
-        match self
-            .client
-            .command(RenderCommand::CreateBindGroupLayout(desc))
-            .map_err(EngineError::other)?
-        {
+        match self.command(RenderCommand::CreateBindGroupLayout(desc))? {
             RenderCommandResponse::BindGroupLayoutId(id) => Ok(id),
             other => Err(EngineError::other(format!(
                 "render service protocol error: expected BindGroupLayoutId, got {:?}",
@@ -241,11 +258,7 @@ impl RenderApi for ServiceBackedRenderApi {
     }
 
     fn create_bind_group(&mut self, desc: BindGroupDesc) -> EngineResult<BindGroupId> {
-        match self
-            .client
-            .command(RenderCommand::CreateBindGroup(desc))
-            .map_err(EngineError::other)?
-        {
+        match self.command(RenderCommand::CreateBindGroup(desc))? {
             RenderCommandResponse::BindGroupId(id) => Ok(id),
             other => Err(EngineError::other(format!(
                 "render service protocol error: expected BindGroupId, got {:?}",
@@ -259,35 +272,35 @@ impl RenderApi for ServiceBackedRenderApi {
     }
 
     fn set_viewport(&mut self, vp: Viewport) -> EngineResult<()> {
-        self.unit(RenderCommand::SetViewport(vp))
+        self.queue_unit(RenderCommand::SetViewport(vp))
     }
 
     fn set_scissor(&mut self, rect: RectI32) -> EngineResult<()> {
-        self.unit(RenderCommand::SetScissor(rect))
+        self.queue_unit(RenderCommand::SetScissor(rect))
     }
 
     fn set_pipeline(&mut self, pipeline: PipelineId) -> EngineResult<()> {
-        self.unit(RenderCommand::SetPipeline { pipeline })
+        self.queue_unit(RenderCommand::SetPipeline { pipeline })
     }
 
     fn set_bind_group(&mut self, index: u32, group: BindGroupId) -> EngineResult<()> {
-        self.unit(RenderCommand::SetBindGroup { index, group })
+        self.queue_unit(RenderCommand::SetBindGroup { index, group })
     }
 
     fn set_vertex_buffer(&mut self, slot: u32, slice: BufferSlice) -> EngineResult<()> {
-        self.unit(RenderCommand::SetVertexBuffer { slot, slice })
+        self.queue_unit(RenderCommand::SetVertexBuffer { slot, slice })
     }
 
     fn set_index_buffer(&mut self, slice: BufferSlice, format: IndexFormat) -> EngineResult<()> {
-        self.unit(RenderCommand::SetIndexBuffer { slice, format })
+        self.queue_unit(RenderCommand::SetIndexBuffer { slice, format })
     }
 
     fn draw(&mut self, args: DrawArgs) -> EngineResult<()> {
-        self.unit(RenderCommand::Draw(args))
+        self.queue_unit(RenderCommand::Draw(args))
     }
 
     fn draw_indexed(&mut self, args: DrawIndexedArgs) -> EngineResult<()> {
-        self.unit(RenderCommand::DrawIndexed(args))
+        self.queue_unit(RenderCommand::DrawIndexed(args))
     }
 
     fn set_render_phase(&mut self, phase: Option<RenderGraphPassKind>) -> EngineResult<()> {
@@ -392,11 +405,8 @@ impl RenderApi for ServiceBackedRenderApi {
     }
 
     fn texture_residency(&self, id: TextureId) -> EngineResult<TextureResidencySnapshot> {
-        match self
-            .client
-            .command(RenderCommand::TextureResidency { id })
-            .map_err(EngineError::other)?
-        {
+        self.flush_unit_batch()?;
+        match self.command(RenderCommand::TextureResidency { id })? {
             RenderCommandResponse::TextureResidency(snapshot) => Ok(snapshot),
             other => Err(EngineError::other(format!(
                 "render service protocol error: expected TextureResidency, got {:?}",
@@ -406,11 +416,7 @@ impl RenderApi for ServiceBackedRenderApi {
     }
 
     fn warmup_pipelines(&mut self, desc: PipelineWarmupDesc) -> EngineResult<PipelineWarmupReport> {
-        match self
-            .client
-            .command(RenderCommand::WarmupPipelines(desc))
-            .map_err(EngineError::other)?
-        {
+        match self.command(RenderCommand::WarmupPipelines(desc))? {
             RenderCommandResponse::PipelineWarmupReport(report) => Ok(report),
             other => Err(EngineError::other(format!(
                 "render service protocol error: expected PipelineWarmupReport, got {:?}",
@@ -420,11 +426,8 @@ impl RenderApi for ServiceBackedRenderApi {
     }
 
     fn shader_cache_stats(&self) -> EngineResult<ShaderRuntimeCacheStats> {
-        match self
-            .client
-            .command(RenderCommand::ShaderCacheStats)
-            .map_err(EngineError::other)?
-        {
+        self.flush_unit_batch()?;
+        match self.command(RenderCommand::ShaderCacheStats)? {
             RenderCommandResponse::ShaderCacheStats(stats) => Ok(stats),
             other => Err(EngineError::other(format!(
                 "render service protocol error: expected ShaderCacheStats, got {:?}",

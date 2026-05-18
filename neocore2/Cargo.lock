@@ -468,6 +468,7 @@ dependencies = [
  "newengine-plugin-api",
  "newengine-plugin-host",
  "newengine-render-api",
+ "newengine-scene-io",
  "newengine-service-api",
  "newengine-ui-api",
  "newengine-ui-draw",
@@ -544,16 +545,21 @@ dependencies = [
 name = "newengine-game-runtime"
 version = "0.1.0"
 dependencies = [
+ "abi_stable",
  "log",
  "newengine-assets",
  "newengine-core",
  "newengine-engine-runtime",
+ "newengine-plugin-api",
  "newengine-plugin-host",
  "newengine-render-feature-gameready",
  "newengine-runtime-host",
  "newengine-scene",
+ "newengine-scene-io",
+ "newengine-service-api",
  "newengine-ui",
  "parking_lot",
+ "serde_json",
 ]
 
 [[package]]
@@ -759,6 +765,7 @@ version = "0.1.0"
 dependencies = [
  "abi_stable",
  "newengine-plugin-api",
+ "newengine-service-api",
  "serde_json",
 ]
 

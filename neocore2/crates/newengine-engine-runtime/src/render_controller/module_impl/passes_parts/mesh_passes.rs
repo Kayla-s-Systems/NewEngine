@@ -18,7 +18,7 @@ use super::super::material_bindings::LitMaterialPlan;
 use super::lights::PackedLights;
 use crate::render_controller::RuntimeRenderController;
 use crate::gameplay::display_visible_in_mode;
-use crate::scene_bridge::TerrainSurfaceLayers;
+use crate::scene_bridge::{PreparedTerrainPrimitiveMesh, TerrainSurfaceLayers};
 use self::mesh_visibility::{
     distance_sq_to_camera, primitive_budget, shadow_caster_visible, sort_by_distance_then_key,
     transform_sphere,
@@ -51,6 +51,7 @@ pub fn draw_procedural_terrain(
     let mut entries: Vec<(
         u64,
         ProceduralTerrain,
+        Option<PreparedTerrainPrimitiveMesh>,
         Mat4,
         Option<newengine_materials::MaterialRef>,
         Option<TerrainSurfaceLayers>,
@@ -62,6 +63,7 @@ pub fn draw_procedural_terrain(
         entries.push((
             id.stable_u64(),
             terrain.clone(),
+            world.get::<PreparedTerrainPrimitiveMesh>(id).cloned(),
             gt.0,
             world.get::<newengine_materials::MaterialRef>(id).copied(),
             world.get::<TerrainSurfaceLayers>(id).cloned(),
@@ -70,13 +72,21 @@ pub fn draw_procedural_terrain(
     entries.sort_by(|a, b| a.0.cmp(&b.0));
 
     let mut stream = BucketedIndexedDrawStream::with_capacity(entries.len());
-    for (entity_key, terrain, model, material, surface_layers) in entries {
+    for (entity_key, terrain, prepared_mesh, model, material, surface_layers) in entries {
         let mesh_key = terrain.mesh_key();
         let gpu = if let Some(gpu) = this.gpu.meshes.terrain_cache.get(&mesh_key).copied() {
             gpu
         } else {
-            let mesh = terrain.heightfield.to_primitive_mesh();
-            let gpu = upload_primitive_mesh(r, &mesh, "game_proc_terrain")?;
+            let gpu = if let Some(prepared) = prepared_mesh.as_ref() {
+                upload_primitive_mesh(r, prepared.mesh.as_ref(), "game_proc_terrain")?
+            } else {
+                // Compatibility path for pre-existing scenes that do not carry the
+                // PreparedTerrainPrimitiveMesh component yet. Streaming terrain now
+                // creates this component off-thread, so runtime chunks avoid this
+                // expensive conversion on the render extraction hot path.
+                let mesh = terrain.heightfield.to_primitive_mesh();
+                upload_primitive_mesh(r, &mesh, "game_proc_terrain")?
+            };
             this.gpu.meshes.terrain_cache.insert(mesh_key, gpu);
             gpu
         };
@@ -365,7 +375,13 @@ pub fn draw_procedural_terrain_shadow(
     let mats_lock = this.bridges.scene.materials();
     let mats = mats_lock.read();
 
-    let mut entries: Vec<(u64, ProceduralTerrain, Mat4, Option<newengine_materials::MaterialRef>)> = Vec::new();
+    let mut entries: Vec<(
+        u64,
+        ProceduralTerrain,
+        Option<PreparedTerrainPrimitiveMesh>,
+        Mat4,
+        Option<newengine_materials::MaterialRef>,
+    )> = Vec::new();
     for (id, terrain, gt) in world.query2::<ProceduralTerrain, GlobalTransform>() {
         if !display_visible_in_mode(world, id, runtime) {
             continue;
@@ -373,6 +389,7 @@ pub fn draw_procedural_terrain_shadow(
         entries.push((
             id.stable_u64(),
             terrain.clone(),
+            world.get::<PreparedTerrainPrimitiveMesh>(id).cloned(),
             gt.0,
             world.get::<newengine_materials::MaterialRef>(id).copied(),
         ));
@@ -380,7 +397,7 @@ pub fn draw_procedural_terrain_shadow(
     entries.sort_by(|a, b| a.0.cmp(&b.0));
 
     let mut stream = BucketedIndexedDrawStream::with_capacity(entries.len());
-    for (entity_key, terrain, model, material) in entries {
+    for (entity_key, terrain, prepared_mesh, model, material) in entries {
         let resolved = material.and_then(|mr| mats.resolve(mr.id));
         let material_plan = LitMaterialPlan::from_resolved(resolved.as_ref(), terrain.base_color);
         if !material_plan.cast_shadows {
@@ -396,8 +413,12 @@ pub fn draw_procedural_terrain_shadow(
         let gpu = if let Some(gpu) = this.gpu.meshes.terrain_cache.get(&mesh_key).copied() {
             gpu
         } else {
-            let mesh = terrain.heightfield.to_primitive_mesh();
-            let gpu = upload_primitive_mesh(r, &mesh, "game_proc_terrain")?;
+            let gpu = if let Some(prepared) = prepared_mesh.as_ref() {
+                upload_primitive_mesh(r, prepared.mesh.as_ref(), "game_proc_terrain")?
+            } else {
+                let mesh = terrain.heightfield.to_primitive_mesh();
+                upload_primitive_mesh(r, &mesh, "game_proc_terrain")?
+            };
             this.gpu.meshes.terrain_cache.insert(mesh_key, gpu);
             gpu
         };

@@ -22,6 +22,11 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
 
+use abi_stable::std_types::{RResult, RString};
+use newengine_plugin_api::{Blob, CapabilityId, MethodName, ServiceV1, ServiceV1Dyn};
+use newengine_scene::{SceneAsset, SceneAssetOptions};
+use newengine_scene_io::{method as scene_method, ENGINE_SCENE_SERVICE_ID, SCENE_BACKEND_CAPABILITY_ID};
+
 use newengine_runtime_host::asset_bootstrap::{
     collect_app_asset_roots, mount_asset_roots_best_effort,
 };
@@ -159,6 +164,206 @@ impl<E: Send + 'static> Module<E> for GameReadySceneBootstrapModule {
 }
 
 #[derive(Clone)]
+struct EngineSceneGatewayService {
+    scene: Arc<newengine_engine_runtime::SceneBridge>,
+}
+
+impl EngineSceneGatewayService {
+    #[inline]
+    fn new(scene: Arc<newengine_engine_runtime::SceneBridge>) -> Self {
+        Self { scene }
+    }
+
+    #[inline]
+    fn ok_json(value: serde_json::Value) -> RResult<Blob, RString> {
+        match serde_json::to_vec(&value) {
+            Ok(bytes) => RResult::ROk(Blob::from(bytes)),
+            Err(e) => RResult::RErr(RString::from(e.to_string())),
+        }
+    }
+
+    #[inline]
+    fn payload_json(payload: Blob) -> Result<serde_json::Value, String> {
+        if payload.is_empty() {
+            return Ok(serde_json::json!({}));
+        }
+        serde_json::from_slice(payload.as_slice()).map_err(|e| e.to_string())
+    }
+
+    fn formats_json(&self) -> RResult<Blob, RString> {
+        Self::ok_json(serde_json::json!({
+            "id": ENGINE_SCENE_SERVICE_ID,
+            "origin": "engine-owned",
+            "owner": "newengine-game-runtime.scene-bridge",
+            "version": 1,
+            "formats": [
+                {
+                    "id": "newengine.scene.asset.v1",
+                    "schema": "kalitech.scene.asset.v1",
+                    "media_type": "application/json",
+                    "load": true,
+                    "save": true
+                }
+            ],
+            "methods": [
+                scene_method::FORMATS_JSON,
+                scene_method::LOAD_JSON_V1,
+                scene_method::SAVE_JSON_V1
+            ]
+        }))
+    }
+
+    fn load_json_v1(&self, payload: Blob) -> RResult<Blob, RString> {
+        let req = match Self::payload_json(payload) {
+            Ok(v) => v,
+            Err(e) => return RResult::RErr(RString::from(e)),
+        };
+
+        let path = req
+            .get("path")
+            .and_then(|v| v.as_str())
+            .map(str::trim)
+            .filter(|s| !s.is_empty());
+        let Some(path) = path else {
+            return RResult::RErr(RString::from("engine.scene load_json_v1 requires non-empty path"));
+        };
+
+        let replace = req.get("replace").and_then(|v| v.as_bool()).unwrap_or(true);
+        if !replace {
+            return RResult::RErr(RString::from(
+                "engine.scene load_json_v1 currently supports replace=true only",
+            ));
+        }
+
+        if !newengine_plugin_host::has_service(newengine_assets::consts::ASSET_SERVICE_ID) {
+            return RResult::RErr(RString::from(format!(
+                "engine.scene cannot load '{path}': asset gateway '{}' is unavailable",
+                newengine_assets::consts::ASSET_SERVICE_ID
+            )));
+        }
+
+        let assets = AssetServiceClient::new(newengine_plugin_host::default_host_api());
+        let asset_roots = collect_app_asset_roots(GAME_READY_APP_DIR_NAME, GAME_APP_ASSETS_DIR_ENV);
+        mount_asset_roots_best_effort(&assets, &asset_roots);
+
+        let bytes = match assets.text_v1(path) {
+            Ok(bytes) => bytes,
+            Err(e) => {
+                return RResult::RErr(RString::from(format!(
+                    "engine.scene load_json_v1 asset read failed path='{path}' err='{e}'"
+                )));
+            }
+        };
+
+        let asset = match serde_json::from_slice::<SceneAsset>(&bytes) {
+            Ok(asset) => asset,
+            Err(e) => {
+                return RResult::RErr(RString::from(format!(
+                    "engine.scene load_json_v1 scene json parse failed path='{path}' err='{e}'"
+                )));
+            }
+        };
+
+        {
+            let scene_lock = self.scene.scene();
+            let mut scene = scene_lock.write();
+            if let Err(e) = scene.load_asset(&asset) {
+                return RResult::RErr(RString::from(format!(
+                    "engine.scene load_json_v1 scene apply failed path='{path}' err='{e}'"
+                )));
+            }
+        }
+
+        Self::ok_json(serde_json::json!({
+            "ok": true,
+            "path": path,
+            "replace": true,
+            "entities": asset.entities.len(),
+            "schema": asset.schema,
+            "version": asset.version
+        }))
+    }
+
+    fn save_json_v1(&self, payload: Blob) -> RResult<Blob, RString> {
+        let req = match Self::payload_json(payload) {
+            Ok(v) => v,
+            Err(e) => return RResult::RErr(RString::from(e)),
+        };
+        let path = req.get("path").and_then(|v| v.as_str()).unwrap_or("");
+        let pretty = req.get("pretty").and_then(|v| v.as_bool()).unwrap_or(true);
+        let include_empty_entities = req
+            .get("options")
+            .and_then(|v| v.get("include_empty_entities"))
+            .and_then(|v| v.as_bool())
+            .unwrap_or(false);
+
+        let asset = {
+            let scene_lock = self.scene.scene();
+            let mut scene = scene_lock.write();
+            scene.to_asset(SceneAssetOptions { include_empty_entities })
+        };
+
+        let payload = match serde_json::to_value(&asset) {
+            Ok(value) => value,
+            Err(e) => return RResult::RErr(RString::from(e.to_string())),
+        };
+        let payload_text = match if pretty {
+            serde_json::to_string_pretty(&asset)
+        } else {
+            serde_json::to_string(&asset)
+        } {
+            Ok(value) => value,
+            Err(e) => return RResult::RErr(RString::from(e.to_string())),
+        };
+
+        Self::ok_json(serde_json::json!({
+            "ok": true,
+            "path": path,
+            "stored": false,
+            "storage": "caller-owned",
+            "pretty": pretty,
+            "payload": payload,
+            "payload_text": payload_text
+        }))
+    }
+}
+
+impl ServiceV1 for EngineSceneGatewayService {
+    fn id(&self) -> CapabilityId {
+        CapabilityId::from(ENGINE_SCENE_SERVICE_ID)
+    }
+
+    fn describe(&self) -> RString {
+        RString::from(
+            serde_json::json!({
+                "id": ENGINE_SCENE_SERVICE_ID,
+                "version": 1,
+                "contract": "newengine.scene gateway >= 0.1.x",
+                "origin": "engine-owned",
+                "owner": "newengine-game-runtime.scene-bridge",
+                "methods": [
+                    scene_method::FORMATS_JSON,
+                    scene_method::LOAD_JSON_V1,
+                    scene_method::SAVE_JSON_V1
+                ]
+            })
+            .to_string(),
+        )
+    }
+
+    fn call(&self, method: MethodName, payload: Blob) -> RResult<Blob, RString> {
+        match method.as_str() {
+            scene_method::FORMATS_JSON => self.formats_json(),
+            scene_method::LOAD_JSON_V1 => self.load_json_v1(payload),
+            scene_method::SAVE_JSON_V1 => self.save_json_v1(payload),
+            other => RResult::RErr(RString::from(format!(
+                "engine.scene unknown method '{other}'"
+            ))),
+        }
+    }
+}
+
+#[derive(Clone)]
 pub struct StandaloneGameRuntimeProfile {
     viewport: Arc<newengine_engine_runtime::ViewportBridge>,
     plugins: Arc<newengine_engine_runtime::PluginManagerBridge>,
@@ -214,8 +419,51 @@ impl StandaloneGameRuntimeProfile {
 
     #[inline]
     pub fn register_scene_io_best_effort(&self) {
-        // Standalone games are game-first runtime consumers. They do not register
-        // authoring scene save/load host services by default.
+        if newengine_plugin_host::has_service(ENGINE_SCENE_SERVICE_ID) {
+            log::debug!(
+                "engine.scene gateway registration skipped; service already available"
+            );
+            return;
+        }
+
+        let service = EngineSceneGatewayService::new(Arc::clone(&self.scene));
+        let dyn_svc = ServiceV1Dyn::from_value(service, abi_stable::sabi_trait::TD_Opaque);
+
+        match newengine_plugin_host::host_register_service_impl(dyn_svc) {
+            RResult::ROk(()) => {}
+            RResult::RErr(e) => {
+                log::error!(
+                    "engine.scene service registration failed id='{}' err='{}'",
+                    ENGINE_SCENE_SERVICE_ID,
+                    e
+                );
+                return;
+            }
+        }
+
+        match newengine_plugin_host::register_engine_owned_gateway(
+            ENGINE_SCENE_SERVICE_ID,
+            newengine_service_api::EngineServiceKind::Scene,
+            ENGINE_SCENE_SERVICE_ID,
+            SCENE_BACKEND_CAPABILITY_ID,
+            0,
+            "newengine-game-runtime.scene-bridge",
+        ) {
+            Ok(()) => {
+                log::info!(
+                    "engine.scene gateway registered source=engine-owned service='{}' capability='{}'",
+                    ENGINE_SCENE_SERVICE_ID,
+                    SCENE_BACKEND_CAPABILITY_ID
+                );
+            }
+            Err(e) => {
+                log::error!(
+                    "engine.scene gateway route registration failed id='{}' err='{}'",
+                    ENGINE_SCENE_SERVICE_ID,
+                    e
+                );
+            }
+        }
     }
 
     #[inline]

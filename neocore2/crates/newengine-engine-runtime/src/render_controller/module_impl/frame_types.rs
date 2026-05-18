@@ -1,6 +1,7 @@
 use newengine_core::render::RenderFrameDebugSnapshot;
 use crate::scene_bridge::EngineViewGatewayFrame;
 use newengine_ui::draw::UiDrawList;
+use newengine_ui_api::UiRuntimeDebugOverlayTelemetry;
 
 use super::input::ViewportInputSnap;
 use crate::gameplay::GameRunMode;
@@ -38,5 +39,7 @@ pub(super) enum PlayableFrameOutcome {
     Continue {
         frame_debug_snapshot: Option<RenderFrameDebugSnapshot>,
     },
-    EndedEarly,
+    EndedEarly {
+        ui_telemetry: Option<UiRuntimeDebugOverlayTelemetry>,
+    },
 }

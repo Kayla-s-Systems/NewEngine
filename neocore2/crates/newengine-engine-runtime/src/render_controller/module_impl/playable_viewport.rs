@@ -34,7 +34,7 @@ impl RuntimeRenderController {
                 Ok(rt) => Some(rt),
                 Err(e) => {
                     self.end_frame_after_viewport_rt_failure(r, frame_input.ui, scope, &e)?;
-                    return Ok(PlayableFrameOutcome::EndedEarly);
+                    return Ok(PlayableFrameOutcome::EndedEarly { ui_telemetry: None });
                 }
             }
         };
@@ -43,9 +43,11 @@ impl RuntimeRenderController {
         let scene_lock = self.bridges.scene.scene();
         let mut scene = scene_lock.write();
         let physics_api = ctx.api::<PhysicsApiRef>(newengine_core::physics::PHYSICS_API_ID).cloned();
+        let job_system = ctx.job_system().cloned();
         let world_frame = self.tick_world_for_render(
             r,
             physics_api.as_ref(),
+            job_system.as_ref(),
             &mut scene,
             &frame_input.input,
             frame_input.play_mode,
@@ -56,8 +58,8 @@ impl RuntimeRenderController {
         );
 
         if !world_frame.view_frame.world_playable {
-            self.end_frame_for_unplayable_world(ctx, r, &scene, frame_input.ui, scope)?;
-            return Ok(PlayableFrameOutcome::EndedEarly);
+            let ui_telemetry = self.end_frame_for_unplayable_world(ctx, r, &scene, frame_input.ui, scope)?;
+            return Ok(PlayableFrameOutcome::EndedEarly { ui_telemetry: Some(ui_telemetry) });
         }
 
         self.sync_cursor_state(ctx, world_frame.view_frame.cursor);
@@ -123,7 +125,7 @@ impl RuntimeRenderController {
         scene: &newengine_scene::Scene,
         ui: Option<UiDrawList>,
         scope: RenderFrameScope,
-    ) -> EngineResult<()> {
+    ) -> EngineResult<UiRuntimeDebugOverlayTelemetry> {
         let gate_reason = scene
             .world()
             .resource::<crate::gameplay::GameReadyWorldLaunchGate>()
@@ -139,7 +141,6 @@ impl RuntimeRenderController {
             self.frame.frame_index,
             format!("NewEngine | Loading scene\n{}", gate_reason),
         );
-        crate::ui_gateway::publish_debug_overlay_telemetry(&ui_telemetry);
         if scope.trace_frame {
             log::debug!(
                 "render controller: gated loading frame={} reason='{}'",
@@ -154,7 +155,7 @@ impl RuntimeRenderController {
         }
         r.end_frame()?;
         self.trace_gated_diagnostics(r, scope.trace_frame);
-        Ok(())
+        Ok(ui_telemetry)
     }
 
     fn trace_gated_diagnostics(&self, r: &mut dyn RenderApi, trace_frame: bool) {

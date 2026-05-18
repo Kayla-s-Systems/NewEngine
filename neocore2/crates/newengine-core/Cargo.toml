@@ -28,6 +28,7 @@ newengine-physics-api = { path = "../newengine-physics-api" }
 newengine-assets-api = { path = "../newengine-assets-api" }
 newengine-camera-api = { path = "../newengine-camera-api" }
 newengine-ui-api = { path = "../newengine-ui-api" }
+newengine-scene-io = { path = "../newengine-scene-io" }
 newengine-ui-draw = { path = "../newengine-ui-draw" }
 
 

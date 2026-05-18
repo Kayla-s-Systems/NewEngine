@@ -178,9 +178,9 @@ fn default_terrain_surface_rock() -> String { "textures/fps/world_surfaces.neytd
 fn default_terrain_patch_scale() -> f32 { 0.033 }
 fn default_terrain_blend_softness() -> f32 { 0.18 }
 fn default_terrain_streaming_enabled() -> bool { true }
-fn default_terrain_chunk_radius() -> i32 { 1 }
-fn default_terrain_unload_radius() -> i32 { 2 }
-fn default_terrain_max_chunks_per_frame() -> usize { 1 }
+fn default_terrain_chunk_radius() -> i32 { 2 }
+fn default_terrain_unload_radius() -> i32 { 4 }
+fn default_terrain_max_chunks_per_frame() -> usize { 4 }
 fn default_sky_radius() -> f32 { 220.0 }
 fn default_skydome_mesh() -> String { "skydome/skydome_high.obj".to_owned() }
 fn default_status_text() -> String { "GameFirst world: streamed lowland terrain, runtime textures and sun shadows.".to_owned() }

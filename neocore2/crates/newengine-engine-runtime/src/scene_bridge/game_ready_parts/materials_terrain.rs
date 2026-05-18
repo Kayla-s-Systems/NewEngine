@@ -1,6 +1,7 @@
 
 use newengine_assets::wait_ready;
 use newengine_bounds::Bounds;
+use newengine_core::{JobLane, JobPriority, JobRequest, JobSystemHandle, JobTicket};
 use newengine_ecs::EntityId;
 use newengine_lighting::{AmbientLight, DirectionalLight, ShadowSettings};
 use newengine_materials::{MaterialFlags, MaterialId, MaterialRegistry};
@@ -12,8 +13,13 @@ use newengine_procedural_noise::{
     DomainWarp2D, NoiseAlgorithm, NoiseCombineMode, NoiseDomain2D, NoiseGraph2D, NoiseLayer2D,
     NoiseRemap, NoiseShape, ProceduralTerrain, TerrainHeightfieldDescriptor,
 };
-use newengine_scene::{spawn_named, Scene, SceneCellCoord, SceneResidencySet, SceneStreamingBudget};
+use newengine_scene::{
+    spawn_named, Scene, SceneCellCoord, SceneResidencySet, SceneStreamingBudget,
+    SceneStreamingPlan,
+};
 use newengine_transform::Transform;
+
+use std::sync::{Arc, Mutex};
 
 use crate::gameplay::{
     spawn_default_player_with_tuning, DisplayMode, DisplayVisibility, FpsDemoRules, FpsDemoState,
@@ -76,7 +82,28 @@ struct TerrainChunkRecord {
     terrain: EntityId,
 }
 
+/// CPU-prepared terrain mesh payload for render upload.
+///
+/// This is intentionally an engine-runtime scene component, not a render-provider
+/// type. Terrain generation jobs can build the expensive heightfield-to-mesh
+/// conversion off the frame thread, while the renderer still receives only the
+/// normal procedural-terrain ECS data and uploads through `engine.render`.
 #[derive(Clone, Debug)]
+pub(crate) struct PreparedTerrainPrimitiveMesh {
+    pub mesh: Arc<PrimitiveMesh>,
+}
+
+#[derive(Clone, Debug)]
+struct GeneratedTerrainChunk {
+    terrain: ProceduralTerrain,
+    mesh: Arc<PrimitiveMesh>,
+}
+
+struct PendingTerrainChunk {
+    result: Arc<Mutex<Option<GeneratedTerrainChunk>>>,
+    ticket: JobTicket,
+}
+
 pub(crate) struct GameReadyTerrainStreamingState {
     root: EntityId,
     material: MaterialId,
@@ -86,7 +113,9 @@ pub(crate) struct GameReadyTerrainStreamingState {
     chunk_radius: i32,
     unload_radius: i32,
     max_chunks_per_frame: usize,
+    max_pending_jobs: usize,
     loaded: std::collections::BTreeMap<TerrainChunkCoord, TerrainChunkRecord>,
+    pending: std::collections::BTreeMap<TerrainChunkCoord, PendingTerrainChunk>,
 }
 
 
@@ -318,8 +347,8 @@ fn terrain_graph_for_chunk(spec: &GameReadyTerrainSpec, coord: TerrainChunkCoord
     terrain_graph
 }
 
-fn generate_terrain_for_chunk(spec: &GameReadyTerrainSpec, coord: TerrainChunkCoord, color: [f32; 4]) -> ProceduralTerrain {
-    ProceduralTerrain::generate_descriptor(
+fn generate_terrain_for_chunk(spec: &GameReadyTerrainSpec, coord: TerrainChunkCoord, color: [f32; 4]) -> GeneratedTerrainChunk {
+    let terrain = ProceduralTerrain::generate_descriptor(
         TerrainHeightfieldDescriptor {
             cells_x: spec.cells_x,
             cells_z: spec.cells_z,
@@ -332,7 +361,47 @@ fn generate_terrain_for_chunk(spec: &GameReadyTerrainSpec, coord: TerrainChunkCo
             smoothing_strength: spec.generator.smoothing_strength,
         },
         color,
-    )
+    );
+    // Build the renderable primitive mesh on the generation lane as well.
+    // Previously every committed streamed chunk did this conversion inside the
+    // render draw-list extraction path; in debug/profile-dev this cost dominated
+    // the frame and made the FPS overlay report ~3 FPS while the Vulkan backend
+    // itself was idle.
+    let mesh = Arc::new(terrain.heightfield.to_primitive_mesh());
+    GeneratedTerrainChunk { terrain, mesh }
+}
+
+fn spawn_generated_terrain_chunk(
+    world: &mut newengine_ecs::World,
+    root: EntityId,
+    mats: &MaterialRegistry,
+    material: MaterialId,
+    spec: &GameReadyTerrainSpec,
+    surface: &TerrainSurfaceLayers,
+    color: [f32; 4],
+    coord: TerrainChunkCoord,
+    generated: GeneratedTerrainChunk,
+) -> TerrainChunkRecord {
+    let center = coord.center(spec.size_x, spec.size_z);
+    let terrain = generated.terrain;
+    let bounds = Bounds::from_local_aabb(terrain.heightfield.local_bounds());
+    let entity = spawn_named(world, format!("Terrain/Chunk[{:+},{:+}]", coord.x, coord.z));
+    let _ = newengine_transform::set_parent(world, entity, Some(root));
+    let _ = world.insert(
+        entity,
+        Transform {
+            position: center,
+            rotation: Quat::IDENTITY,
+            scale: Vec3::ONE,
+        },
+    );
+    let _ = world.insert(entity, terrain);
+    let _ = world.insert(entity, PreparedTerrainPrimitiveMesh { mesh: generated.mesh });
+    let _ = world.insert(entity, bounds);
+    let _ = world.insert(entity, surface.clone());
+    let _ = apply_exact_material(world, mats, entity, material, material, color);
+
+    TerrainChunkRecord { terrain: entity }
 }
 
 fn spawn_streamed_terrain_chunk(
@@ -345,25 +414,43 @@ fn spawn_streamed_terrain_chunk(
     color: [f32; 4],
     coord: TerrainChunkCoord,
 ) -> TerrainChunkRecord {
-    let center = coord.center(spec.size_x, spec.size_z);
-    let terrain = generate_terrain_for_chunk(spec, coord, color);
-    let bounds = Bounds::from_local_aabb(terrain.heightfield.local_bounds());
-    let entity = spawn_named(world, format!("Terrain/Chunk[{:+},{:+}]", coord.x, coord.z));
-    let _ = newengine_transform::set_parent(world, entity, Some(root));
-    let _ = world.insert(
-        entity,
-        Transform {
-            position: center,
-            rotation: Quat::IDENTITY,
-            scale: Vec3::ONE,
+    let generated = generate_terrain_for_chunk(spec, coord, color);
+    spawn_generated_terrain_chunk(world, root, mats, material, spec, surface, color, coord, generated)
+}
+
+fn enqueue_streamed_terrain_chunk(
+    state: &mut GameReadyTerrainStreamingState,
+    job_system: Option<&JobSystemHandle>,
+    coord: TerrainChunkCoord,
+) -> bool {
+    if state.pending.contains_key(&coord) || state.loaded.contains_key(&coord) {
+        return false;
+    }
+    if state.pending.len() >= state.max_pending_jobs.max(1) {
+        return false;
+    }
+
+    let Some(job_system) = job_system else {
+        return false;
+    };
+
+    let spec = state.spec.clone();
+    let color = state.color;
+    let result = Arc::new(Mutex::new(None));
+    let result_for_job = Arc::clone(&result);
+    let ticket = job_system.submit_request(
+        JobRequest::new("game-ready.terrain.chunk.generate")
+            .with_lane(JobLane::Streaming)
+            .with_priority(JobPriority::Normal),
+        move || {
+            let generated = generate_terrain_for_chunk(&spec, coord, color);
+            if let Ok(mut slot) = result_for_job.lock() {
+                *slot = Some(generated);
+            }
         },
     );
-    let _ = world.insert(entity, terrain.clone());
-    let _ = world.insert(entity, bounds);
-    let _ = world.insert(entity, surface.clone());
-    let _ = apply_exact_material(world, mats, entity, material, material, color);
-
-    TerrainChunkRecord { terrain: entity }
+    state.pending.insert(coord, PendingTerrainChunk { result, ticket });
+    true
 }
 
 fn spawn_procedural_terrain(
@@ -411,9 +498,43 @@ fn spawn_procedural_terrain(
             chunk_radius: budget.resident_radius,
             unload_radius: budget.unload_radius,
             max_chunks_per_frame: budget.max_commits_per_tick,
+            max_pending_jobs: budget.max_commits_per_tick.saturating_mul(4).max(4),
             loaded: std::collections::BTreeMap::new(),
+            pending: std::collections::BTreeMap::new(),
         };
         state.loaded.insert(origin, record);
+
+        // The initial resident ring must be present before the public launch gate
+        // opens. Otherwise the first playable frames stream the remaining chunks
+        // one by one, and each cold terrain GPU upload lands on the render
+        // extraction path. In the current GameReady profile that produced visible
+        // ~250-300 ms frame gaps while Vulkan submit itself stayed mostly idle.
+        let mut warmed = 1usize;
+        for coord in SceneResidencySet::desired_cells(origin, state.chunk_radius) {
+            if state.loaded.contains_key(&coord) {
+                continue;
+            }
+            let record = spawn_streamed_terrain_chunk(
+                world,
+                state.root,
+                mats,
+                state.material,
+                &state.spec,
+                &state.surface,
+                state.color,
+                coord,
+            );
+            state.loaded.insert(coord, record);
+            warmed = warmed.saturating_add(1);
+        }
+        if warmed > 1 {
+            log::info!(
+                "game-ready terrain streaming: initial resident chunks warmed center=[0,0] radius={} chunks={}",
+                state.chunk_radius,
+                warmed
+            );
+        }
+
         world.insert_resource(state);
     }
 
@@ -423,6 +544,7 @@ fn spawn_procedural_terrain(
 pub(crate) fn tick_game_ready_streaming_terrain(
     world: &mut newengine_ecs::World,
     mats: &MaterialRegistry,
+    job_system: Option<&JobSystemHandle>,
 ) {
     let Some(player) = crate::gameplay::first_player(world) else {
         return;
@@ -437,19 +559,76 @@ pub(crate) fn tick_game_ready_streaming_terrain(
     };
 
     let center = TerrainChunkCoord::from_world_pos(player_pos, state.spec.size_x, state.spec.size_z);
-    let radius = state.chunk_radius.max(0);
-    let unload_radius = state.unload_radius.max(radius + 1);
+    let budget = SceneStreamingBudget {
+        resident_radius: state.chunk_radius,
+        unload_radius: state.unload_radius,
+        max_commits_per_tick: state.max_chunks_per_frame,
+    }
+    .sanitized();
+    state.chunk_radius = budget.resident_radius;
+    state.unload_radius = budget.unload_radius;
+    state.max_chunks_per_frame = budget.max_commits_per_tick;
+    state.max_pending_jobs = state
+        .max_pending_jobs
+        .max(budget.max_commits_per_tick.saturating_mul(4).max(4));
 
-    let desired = SceneResidencySet::desired_cells(center, radius);
+    let plan = SceneStreamingPlan::build(
+        center,
+        budget,
+        state.loaded.keys().copied(),
+        state.pending.keys().copied(),
+    );
 
+    let commit_budget = budget.max_commits_per_tick.max(1);
     let mut created = 0usize;
-    for coord in desired {
-        if state.loaded.contains_key(&coord) {
+    let completed = state
+        .pending
+        .keys()
+        .copied()
+        .filter(|coord| {
+            state
+                .pending
+                .get(coord)
+                .map(|pending| pending.ticket.is_complete())
+                .unwrap_or(false)
+        })
+        .take(commit_budget)
+        .collect::<Vec<_>>();
+    for coord in completed {
+        let Some(pending) = state.pending.remove(&coord) else {
+            continue;
+        };
+        let generated = pending.result.lock().ok().and_then(|mut slot| slot.take());
+        if let Some(generated) = generated {
+            let record = spawn_generated_terrain_chunk(
+                world,
+                state.root,
+                mats,
+                state.material,
+                &state.spec,
+                &state.surface,
+                state.color,
+                coord,
+                generated,
+            );
+            state.loaded.insert(coord, record);
+            created += 1;
+        }
+    }
+
+    let remaining_commit_budget = commit_budget.saturating_sub(created);
+    let mut scheduled = 0usize;
+    for request in plan.loads.iter().take(remaining_commit_budget) {
+        let coord = request.coord;
+        if state.loaded.contains_key(&coord) || state.pending.contains_key(&coord) {
             continue;
         }
-        if created >= state.max_chunks_per_frame.max(1) {
-            break;
+
+        if enqueue_streamed_terrain_chunk(&mut state, job_system, coord) {
+            scheduled += 1;
+            continue;
         }
+
         let record = spawn_streamed_terrain_chunk(
             world,
             state.root,
@@ -462,30 +641,40 @@ pub(crate) fn tick_game_ready_streaming_terrain(
         );
         state.loaded.insert(coord, record);
         created += 1;
+        scheduled += 1;
     }
 
-    let to_unload = state
-        .loaded
-        .keys()
-        .copied()
-        .filter(|coord| coord.chebyshev_distance(center) > unload_radius)
-        .collect::<Vec<_>>();
     let mut removed = 0usize;
-    for coord in to_unload {
+    for request in &plan.unloads {
+        let coord = request.coord;
         if let Some(record) = state.loaded.remove(&coord) {
             let _ = world.despawn(record.terrain);
             removed += 1;
         }
     }
 
-    if created > 0 || removed > 0 {
+    let to_drop_pending = state
+        .pending
+        .keys()
+        .copied()
+        .filter(|coord| coord.chebyshev_distance(center) > budget.unload_radius)
+        .collect::<Vec<_>>();
+    for coord in to_drop_pending {
+        state.pending.remove(&coord);
+    }
+
+    if created > 0 || scheduled > 0 || removed > 0 {
         log::debug!(
-            "game-ready terrain streaming: center=[{},{}] loaded={} created={} removed={}",
+            "game-ready terrain streaming: center=[{},{}] loaded={} pending={} created={} scheduled={} removed={} planned_loads={} planned_unloads={}",
             center.x,
             center.z,
             state.loaded.len(),
+            state.pending.len(),
             created,
+            scheduled,
             removed,
+            plan.loads.len(),
+            plan.unloads.len(),
         );
     }
 

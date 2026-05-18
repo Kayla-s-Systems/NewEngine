@@ -5,9 +5,13 @@ use serde::Serialize;
 use std::cell::Cell;
 use std::sync::OnceLock;
 
-/// Well-known service id exposed by the logging plugin.
+/// Engine-facing logging gateway used by the host logger forwarder.
 ///
-/// The host installs a process-wide `log` backend that forwards all records to this service.
+/// The concrete logging sink remains plugin-owned; the host resolves this
+/// gateway from provider metadata instead of calling the provider id directly.
+pub const ENGINE_LOG_SERVICE_ID: &str = "engine.log";
+
+/// First-party provider service id exposed by the logging plugin.
 pub const LOGGING_SINK_SERVICE_ID: &str = "newengine.logging.sink.v1";
 
 const METHOD_WRITE_JSON: &str = "write_json";
@@ -130,7 +134,7 @@ pub fn install_forward_logger_once(host: HostApiV1) {
         return;
     }
 
-    if !newengine_plugin_host::has_service(LOGGING_SINK_SERVICE_ID) {
+    if !newengine_plugin_host::has_service(ENGINE_LOG_SERVICE_ID) {
         return;
     }
 
@@ -138,7 +142,7 @@ pub fn install_forward_logger_once(host: HostApiV1) {
     // If some other logger was installed, respect it and do nothing.
     let logger = ForwardToPluginLogger {
         host,
-        sink_id: CapabilityId::from(LOGGING_SINK_SERVICE_ID),
+        sink_id: CapabilityId::from(ENGINE_LOG_SERVICE_ID),
     };
 
     if log::set_boxed_logger(Box::new(logger)).is_ok() {

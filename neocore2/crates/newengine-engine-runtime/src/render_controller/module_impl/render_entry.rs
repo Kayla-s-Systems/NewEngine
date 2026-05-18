@@ -77,17 +77,22 @@ impl RuntimeRenderController {
             scope,
         )?;
 
-        if matches!(outcome, PlayableFrameOutcome::EndedEarly) {
-            drop(r);
-            ctx.resources_mut().insert(SceneLaunchStatus::inactive());
-            return Ok(());
-        }
-
         let mut telemetry_to_publish = None;
         let mut ui_telemetry_to_publish = None;
-        if let PlayableFrameOutcome::Continue {
-            mut frame_debug_snapshot,
-        } = outcome
+
+        let mut frame_debug_snapshot = match outcome {
+            PlayableFrameOutcome::Continue { frame_debug_snapshot } => frame_debug_snapshot,
+            PlayableFrameOutcome::EndedEarly { ui_telemetry } => {
+                ui_telemetry_to_publish = ui_telemetry;
+                drop(r);
+                ctx.resources_mut().insert(SceneLaunchStatus::inactive());
+                if let Some(ui_telemetry) = ui_telemetry_to_publish {
+                    ctx.resources_mut().insert(ui_telemetry);
+                }
+                return Ok(());
+            }
+        };
+
         {
             if let Ok(diag) = r.diagnostics_snapshot() {
                 self.diagnostics.overlay_metrics.record_backend_snapshot(&diag);
@@ -116,7 +121,6 @@ impl RuntimeRenderController {
                 let overlay_text = self.diagnostics.overlay_metrics.overlay_text();
                 let ui_telemetry = UiRuntimeDebugOverlayTelemetry::new(self.frame.frame_index, overlay_text)
                     .with_metric("render_debug", serde_json::to_value(&telemetry).unwrap_or(serde_json::Value::Null));
-                crate::ui_gateway::publish_debug_overlay_telemetry(&ui_telemetry);
                 ui_telemetry_to_publish = Some(ui_telemetry);
                 telemetry_to_publish = Some(telemetry);
             }

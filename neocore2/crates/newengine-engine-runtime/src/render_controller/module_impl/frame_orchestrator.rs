@@ -1,5 +1,7 @@
 #![forbid(unsafe_op_in_unsafe_fn)]
 
+use std::time::Instant;
+
 use newengine_core::render::{
     Extent2D, RectI32, RenderApi, RenderFrameDebugSnapshot, RenderTargetId, Viewport,
 };
@@ -17,6 +19,44 @@ use super::{lights, passes, picking, postfx, scene, shadows};
 use crate::scene_bridge::{apply_engine_view_postfx, EngineViewTransitionPhase};
 use super::super::controller::RuntimeRenderController;
 
+struct FrameCpuProfile {
+    started: Instant,
+    last_mark: Instant,
+    parts: Vec<(&'static str, f32)>,
+}
+
+impl FrameCpuProfile {
+    #[inline]
+    fn new() -> Self {
+        let now = Instant::now();
+        Self {
+            started: now,
+            last_mark: now,
+            parts: Vec::with_capacity(8),
+        }
+    }
+
+    #[inline]
+    fn mark(&mut self, label: &'static str) {
+        let now = Instant::now();
+        self.parts.push((label, now.duration_since(self.last_mark).as_secs_f32() * 1000.0));
+        self.last_mark = now;
+    }
+
+    #[inline]
+    fn total_ms(&self) -> f32 {
+        self.started.elapsed().as_secs_f32() * 1000.0
+    }
+
+    fn breakdown(&self) -> String {
+        self.parts
+            .iter()
+            .map(|(label, ms)| format!("{}={:.2}ms", label, ms))
+            .collect::<Vec<_>>()
+            .join(" ")
+    }
+}
+
 pub(super) struct RenderFrameOrchestrator;
 
 impl RenderFrameOrchestrator {
@@ -31,6 +71,8 @@ impl RenderFrameOrchestrator {
         scope: RenderFrameScope,
         world_frame: &WorldFrameState,
     ) -> EngineResult<PlayableFrameOutcome> {
+        let mut cpu_profile = FrameCpuProfile::new();
+
         let view_frame = &world_frame.view_frame;
         let view = view_frame.view;
         let viewproj = view.view_projection;
@@ -42,15 +84,17 @@ impl RenderFrameOrchestrator {
             scope.vp_h,
         );
         picking::handle_picking(controller, scene, viewproj, scope.vp_w, scope.vp_h);
+        cpu_profile.mark("view");
 
         let bounds = scene::scene_bounds(scene).unwrap_or_else(scene::default_bounds);
         let lit = match controller.gpu.require_primary_lit_pipeline(r) {
             Ok(lit) => lit,
             Err(e) => {
                 Self::end_viewport_after_pipeline_failure(controller, r, ui.cloned(), scope, e)?;
-                return Ok(PlayableFrameOutcome::EndedEarly);
+                return Ok(PlayableFrameOutcome::EndedEarly { ui_telemetry: None });
             }
         };
+        cpu_profile.mark("pipeline");
 
         let camera_position = [view.position_ws.x, view.position_ws.y, view.position_ws.z];
         let base_lights = lights::collect_lights(scene.world()).with_camera_position(camera_position);
@@ -78,6 +122,7 @@ impl RenderFrameOrchestrator {
         let render_shadow_map = controller.should_render_shadow_map_this_frame(shadow_plan);
         controller.set_shadow_caster_cull(if render_shadow_map { shadow_plan.caster_cull } else { None });
         Self::trace_shadow_plan(controller, scope.trace_frame, shadow_plan, render_shadow_map);
+        cpu_profile.mark("shadow_plan");
 
         let shadow_frame = shadow_plan.frame;
         let world_lights = base_lights.with_shadow(shadow_frame.light_mvp, shadow_frame.params, shadow_frame.extra);
@@ -115,6 +160,7 @@ impl RenderFrameOrchestrator {
         let visibility = extraction.visibility();
         let mut draw_lists = RuntimeDrawListSet::extract(visibility, &extraction, providers.as_slice());
         provider_registry.add_external_draw_lists(visibility, &mut draw_lists);
+        cpu_profile.mark("draw_list_set");
 
         let provider_result = {
             let mut build_ctx = DrawListBuildCtx::new(controller, r, &draw_lists);
@@ -128,8 +174,9 @@ impl RenderFrameOrchestrator {
         if let Err(e) = provider_result {
             controller.disable_viewport_pass("draw_list.provider_extraction", &e);
             Self::end_viewport_after_draw_failure(controller, r, ui.cloned(), scope)?;
-            return Ok(PlayableFrameOutcome::EndedEarly);
+            return Ok(PlayableFrameOutcome::EndedEarly { ui_telemetry: None });
         }
+        cpu_profile.mark("feature_extract");
 
         let shadow_rt_for_graph = if render_shadow_map {
             shadow_plan.render_target()
@@ -161,6 +208,7 @@ impl RenderFrameOrchestrator {
                 &mut build_ctx,
             )?;
         }
+        cpu_profile.mark("frame_plan_external");
 
         let postfx = apply_engine_view_postfx(
             postfx::game_sun_postfx_params(scene.world(), viewproj, view.position_ws),
@@ -177,6 +225,7 @@ impl RenderFrameOrchestrator {
             postfx,
             scope.trace_frame,
         );
+        cpu_profile.mark("envelope");
 
         let submit_report = match submit_frame_envelope(r, frame_envelope, scope.trace_frame) {
             Ok(report) => report,
@@ -186,6 +235,8 @@ impl RenderFrameOrchestrator {
                 return Err(e);
             }
         };
+        cpu_profile.mark("submit");
+        Self::trace_cpu_profile(controller.frame.frame_index, scope.trace_frame, &cpu_profile);
         if render_shadow_map {
             controller.mark_shadow_map_rendered();
         }
@@ -245,6 +296,33 @@ impl RenderFrameOrchestrator {
                 notes: debug_notes,
             }),
         })
+    }
+
+    fn trace_cpu_profile(
+        frame_index: u64,
+        trace_frame: bool,
+        profile: &FrameCpuProfile,
+    ) {
+        let total_ms = profile.total_ms();
+        if !trace_frame && total_ms < 16.6 {
+            return;
+        }
+        let breakdown = profile.breakdown();
+        if total_ms >= 33.3 {
+            log::warn!(
+                "render cpu profile: frame={} total_ms={:.2} {}",
+                frame_index,
+                total_ms,
+                breakdown
+            );
+        } else {
+            log::debug!(
+                "render cpu profile: frame={} total_ms={:.2} {}",
+                frame_index,
+                total_ms,
+                breakdown
+            );
+        }
     }
 
     fn end_viewport_after_pipeline_failure(

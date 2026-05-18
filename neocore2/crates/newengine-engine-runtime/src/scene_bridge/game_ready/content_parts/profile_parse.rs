@@ -183,12 +183,12 @@ fn parse_payload(value: serde_json::Value) -> Result<GameReadyMapProfile, String
 
 impl RawGameReadyPayload {
     fn into_profile(self) -> GameReadyMapProfile {
-        let terrain_chunk_radius = self.terrain.streaming.chunk_radius.clamp(0, 1);
+        let terrain_chunk_radius = self.terrain.streaming.chunk_radius.clamp(0, newengine_scene::SceneStreamingBudget::MAX_RESIDENT_RADIUS);
         let terrain_unload_radius = self
             .terrain
             .streaming
             .unload_radius
-            .clamp((terrain_chunk_radius + 1).max(1), 2);
+            .clamp((terrain_chunk_radius + 1).max(1), newengine_scene::SceneStreamingBudget::MAX_UNLOAD_RADIUS);
 
         GameReadyMapProfile {
             title: self.title,
@@ -231,7 +231,7 @@ impl RawGameReadyPayload {
                     enabled: self.terrain.streaming.enabled,
                     chunk_radius: terrain_chunk_radius,
                     unload_radius: terrain_unload_radius,
-                    max_chunks_per_frame: self.terrain.streaming.max_chunks_per_frame.clamp(1, 1),
+                    max_chunks_per_frame: self.terrain.streaming.max_chunks_per_frame.clamp(1, newengine_scene::SceneStreamingBudget::MAX_COMMITS_PER_TICK),
                 },
             },
             sky: GameReadySkySpec {

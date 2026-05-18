@@ -12,7 +12,6 @@ pub mod engine_bounds;
 pub mod gameplay;
 pub mod plugin_manager;
 pub mod render_controller;
-pub mod ui_gateway;
 pub mod render_runtime {
     pub use newengine_runtime_host::render_runtime::*;
 }

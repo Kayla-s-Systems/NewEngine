@@ -43,7 +43,9 @@ use crate::gameplay::{
 use crate::scene_bootstrap::bootstrap_runtime_scene;
 
 use game_ready::{bootstrap_fps_game_ready_scene, game_ready_demo_enabled};
-pub(crate) use game_ready::{tick_game_ready_streaming_terrain, TerrainSurfaceLayers};
+pub(crate) use game_ready::{
+    tick_game_ready_streaming_terrain, PreparedTerrainPrimitiveMesh, TerrainSurfaceLayers,
+};
 use helpers::{
     apply_primitive_instance, effective_material_base, ensure_primitive_base, ensure_root,
     place_spawn_position, primitive_bounds, reset_game_runtime_state, restore_non_collision_bounds,

@@ -27,9 +27,12 @@ pub use content_manifest::{
 pub use control::{PluginControlCommand, PluginControlQueue, PluginControlResult};
 pub use host_api::{call_service_v1, default_host_api, host_register_service_impl};
 pub use host_context::{
-    describe_service, has_service, init_host_context, list_external_runtime_descriptors,
-    list_external_runtime_plugins, list_services, register_external_runtime_plugin,
-    engine_gateway_has_capability, resolve_service_for_backend_capability, resolve_service_for_engine_gateway, services_generation,
+    active_engine_gateway_route, describe_service, engine_gateway_has_capability,
+    has_service, init_host_context, list_engine_gateway_routes,
+    list_external_runtime_descriptors, list_external_runtime_plugins, list_services,
+    register_engine_owned_gateway, register_external_runtime_plugin,
+    resolve_service_for_backend_capability, resolve_service_for_engine_gateway,
+    services_generation, EngineGatewayRouteSnapshot,
 };
 pub use manager::{PluginIconSnapshot, PluginLoadError, PluginManager, PluginSnapshotEntry};
 pub use plugin_config_service::{

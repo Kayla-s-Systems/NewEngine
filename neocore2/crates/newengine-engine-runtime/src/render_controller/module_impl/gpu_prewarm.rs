@@ -5,6 +5,7 @@ use newengine_core::EngineResult;
 use newengine_primitives::Primitive;
 use newengine_procedural_noise::ProceduralTerrain;
 use newengine_scene::Scene;
+use crate::scene_bridge::PreparedTerrainPrimitiveMesh;
 
 use super::super::gpu::{ensure_primitive_gpu, upload_primitive_mesh};
 use super::RuntimeRenderController;
@@ -33,8 +34,12 @@ impl RuntimeRenderController {
             if self.gpu.meshes.terrain_cache.contains_key(&mesh_key) {
                 continue;
             }
-            let mesh = terrain.heightfield.to_primitive_mesh();
-            let gpu = upload_primitive_mesh(r, &mesh, "prewarm_proc_terrain")?;
+            let gpu = if let Some(prepared) = world.get::<PreparedTerrainPrimitiveMesh>(_entity) {
+                upload_primitive_mesh(r, prepared.mesh.as_ref(), "prewarm_proc_terrain")?
+            } else {
+                let mesh = terrain.heightfield.to_primitive_mesh();
+                upload_primitive_mesh(r, &mesh, "prewarm_proc_terrain")?
+            };
             self.gpu.meshes.terrain_cache.insert(mesh_key, gpu);
             terrain_uploaded = terrain_uploaded.saturating_add(1);
         }

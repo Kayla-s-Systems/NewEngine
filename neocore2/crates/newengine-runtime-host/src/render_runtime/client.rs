@@ -44,4 +44,25 @@ impl RenderServiceClient {
             )),
         }
     }
+
+    pub(crate) fn command_batch(
+        &self,
+        reqs: Vec<RenderCommand>,
+    ) -> Result<Vec<RenderCommandResponse>, String> {
+        if reqs.is_empty() {
+            return Ok(Vec::new());
+        }
+
+        match self.invoke(RenderServiceRequest::CommandBatch(reqs))? {
+            RenderServiceResponse::CommandBatch(responses) => Ok(responses),
+            RenderServiceResponse::Problem(problem) => Err(format!(
+                "render service problem {}: {} ({})",
+                problem.code, problem.title, problem.detail
+            )),
+            other => Err(format!(
+                "render service protocol error: expected CommandBatch response, got {:?}",
+                other
+            )),
+        }
+    }
 }

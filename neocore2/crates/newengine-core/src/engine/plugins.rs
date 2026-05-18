@@ -10,6 +10,7 @@ use crate::plugin_forward_logger::install_forward_logger_once;
 use newengine_plugin_host::{
     default_host_api, PluginControlCommand, PluginControlQueue, PluginsSnapshot,
 };
+use newengine_plugin_api::PluginKind;
 
 use std::time::Instant;
 
@@ -18,6 +19,19 @@ fn bootstrap_preload_deferred() -> bool {
         .ok()
         .map(|v| matches!(v.trim().to_ascii_lowercase().as_str(), "0" | "false" | "off" | "defer" | "deferred" | "safe"))
         .unwrap_or(false)
+}
+
+
+#[inline]
+fn plugin_kind_label(kind: Option<PluginKind>) -> &'static str {
+    match kind {
+        Some(PluginKind::Runtime) => "runtime",
+        Some(PluginKind::Importer) => "importer",
+        Some(PluginKind::Editor) => "editor",
+        Some(PluginKind::Tool) => "tool",
+        Some(PluginKind::Other) => "other",
+        None => "-",
+    }
 }
 
 fn emit_startup_logs_after_logger_ready() {
@@ -206,7 +220,7 @@ impl<E: Send + 'static> Engine<E> {
                     ellipsize(&p.id, 32),
                     ellipsize(&p.version, 12),
                     ellipsize(&p.state, 16),
-                    format!("{:?}", p.kind),
+                    plugin_kind_label(p.kind).to_owned(),
                     p.capabilities.len().to_string(),
                 ]
             })
@@ -218,6 +232,31 @@ impl<E: Send + 'static> Engine<E> {
             &["id", "ver", "state", "kind", "caps"],
             &rows,
         );
+
+        let gateway_routes = newengine_plugin_host::list_engine_gateway_routes();
+        if !gateway_routes.is_empty() {
+            let route_rows = gateway_routes
+                .iter()
+                .map(|route| {
+                    vec![
+                        ellipsize(&route.gateway_id, 28),
+                        route.origin.clone(),
+                        ellipsize(&route.provider_service_id, 28),
+                        ellipsize(&route.provider_owner_id, 32),
+                        route.service_kind.clone(),
+                        ellipsize(&route.backend_capability_id, 28),
+                        route.backend_priority.to_string(),
+                    ]
+                })
+                .collect::<Vec<_>>();
+
+            emit_prefixed_table(
+                "",
+                &format!("Plugins :: Gateway Routes [{}]", tag),
+                &["gateway", "source", "provider_service", "owner", "kind", "capability", "prio"],
+                &route_rows,
+            );
+        }
 
         if log::log_enabled!(log::Level::Debug) {
             for p in &list {

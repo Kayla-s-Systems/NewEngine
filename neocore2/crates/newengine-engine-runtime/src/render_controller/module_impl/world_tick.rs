@@ -16,6 +16,7 @@ impl RuntimeRenderController {
         &mut self,
         r: &mut dyn RenderApi,
         physics_api: Option<&PhysicsApiRef>,
+        job_system: Option<&newengine_core::JobSystemHandle>,
         scene: &mut Scene,
         input: &ViewportInputSnap,
         play_mode: GameRunMode,
@@ -57,7 +58,7 @@ impl RuntimeRenderController {
             if effective_play_mode.is_runtime() {
                 let mats_lock = scene_bridge.materials();
                 let mats = mats_lock.read();
-                crate::scene_bridge::tick_game_ready_streaming_terrain(world, &mats);
+                crate::scene_bridge::tick_game_ready_streaming_terrain(world, &mats, job_system);
             }
 
             if effective_play_mode.runs_physics() {

@@ -275,15 +275,17 @@ fn apply_startup_platform_overrides(
 fn resolve_platform_runtime_config_without_metadata_probe(
     startup: &StartupConfig,
     startup_defaults: PlatformAppConfigV1,
+    runtime_path: &Path,
 ) -> ResolvedPlatformRuntimeConfig {
     let overrides = newengine_plugin_host::get_plugin_overrides_with_env(PLATFORM_PLUGIN_ID);
     let icon_path = extract_string_field(&overrides, "icon")
         .or_else(|| startup.window_icon_path.clone());
     let config = apply_startup_platform_overrides(startup_defaults, &overrides);
+    let plugin_version = platform_runtime_version_from_path(runtime_path);
     let descriptor = synthesize_platform_descriptor(
         PLATFORM_PLUGIN_ID,
         "NewEngine Platform Runtime",
-        "-",
+        &plugin_version,
     );
 
     log::info!(
@@ -299,7 +301,7 @@ fn resolve_platform_runtime_config_without_metadata_probe(
     ResolvedPlatformRuntimeConfig {
         plugin_id: PLATFORM_PLUGIN_ID.to_owned(),
         plugin_name: "NewEngine Platform Runtime".to_owned(),
-        plugin_version: "-".to_owned(),
+        plugin_version,
         descriptor,
         config,
         icon_path,
@@ -320,6 +322,7 @@ pub fn resolve_platform_runtime_config(
         return Ok(resolve_platform_runtime_config_without_metadata_probe(
             startup,
             startup_defaults,
+            runtime_path,
         ));
     }
 
@@ -341,15 +344,16 @@ pub fn resolve_platform_runtime_config(
             log::info!(
                 "platform runtime: plugin metadata not exported; using startup window config defaults"
             );
+            let plugin_version = platform_runtime_version_from_path(runtime_path);
             let descriptor = synthesize_platform_descriptor(
                 PLATFORM_PLUGIN_ID,
                 "NewEngine Platform Runtime",
-                "-",
+                &plugin_version,
             );
             return Ok(ResolvedPlatformRuntimeConfig {
                 plugin_id: PLATFORM_PLUGIN_ID.to_owned(),
                 plugin_name: "NewEngine Platform Runtime".to_owned(),
-                plugin_version: "-".to_owned(),
+                plugin_version,
                 descriptor,
                 config: startup_defaults,
                 icon_path: startup.window_icon_path.clone(),
@@ -362,15 +366,16 @@ pub fn resolve_platform_runtime_config(
         log::info!(
             "platform runtime: plugin metadata ABI V3 not available; using startup window config defaults"
         );
+        let plugin_version = platform_runtime_version_from_path(runtime_path);
         let descriptor = synthesize_platform_descriptor(
             PLATFORM_PLUGIN_ID,
             "NewEngine Platform Runtime",
-            "-",
+            &plugin_version,
         );
         return Ok(ResolvedPlatformRuntimeConfig {
             plugin_id: PLATFORM_PLUGIN_ID.to_owned(),
             plugin_name: "NewEngine Platform Runtime".to_owned(),
-            plugin_version: "-".to_owned(),
+            plugin_version,
             descriptor,
             config: startup_defaults,
             icon_path: startup.window_icon_path.clone(),
@@ -431,6 +436,32 @@ pub fn resolve_platform_runtime_config(
         config,
         icon_path,
     })
+}
+
+
+fn platform_runtime_version_from_path(runtime_path: &Path) -> String {
+    let Some(stem) = runtime_path.file_stem().and_then(|stem| stem.to_str()) else {
+        return "-".to_owned();
+    };
+
+    stem.split('-')
+        .find(|part| looks_like_semver(part))
+        .map(str::to_owned)
+        .unwrap_or_else(|| "-".to_owned())
+}
+
+fn looks_like_semver(value: &str) -> bool {
+    let mut segments = value.split('.');
+    let Some(major) = segments.next() else { return false; };
+    let Some(minor) = segments.next() else { return false; };
+    let Some(patch) = segments.next() else { return false; };
+    segments.next().is_none()
+        && !major.is_empty()
+        && !minor.is_empty()
+        && !patch.is_empty()
+        && major.chars().all(|ch| ch.is_ascii_digit())
+        && minor.chars().all(|ch| ch.is_ascii_digit())
+        && patch.chars().all(|ch| ch.is_ascii_digit())
 }
 
 fn ensure_platform_runtime_capabilities(mut descriptor: PluginDescriptor) -> PluginDescriptor {

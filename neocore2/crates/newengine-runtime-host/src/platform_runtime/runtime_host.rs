@@ -476,6 +476,15 @@ impl HostPlatformRuntime {
 
     fn step_running(&mut self, dt_sec: f32) -> EngineResult<PlatformStepResultV1> {
         let input_frame = poll_input_frame();
+        if let Some(telemetry) = self
+            .engine
+            .resources
+            .get::<newengine_ui_api::UiRuntimeDebugOverlayTelemetry>()
+            .cloned()
+        {
+            crate::platform_runtime::ui_gateway_frame::publish_debug_overlay_telemetry(&telemetry);
+        }
+
         if let Some(input) = input_frame.clone() {
             self.engine.resources_mut().insert::<UiInputFrame>(input);
         } else {

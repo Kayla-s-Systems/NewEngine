@@ -3,13 +3,13 @@
 use abi_stable::std_types::RString;
 use newengine_plugin_api::{Blob, HostApiV1, MethodName};
 
-use crate::consts::{method, SCENE_IO_SERVICE_ID};
+use crate::consts::{method, ENGINE_SCENE_SERVICE_ID};
 
-/// Thin client over the engine Scene IO service.
+/// Thin client over the engine scene gateway.
 ///
-/// The Scene IO provider is an engine service (plugin-backed or host fallback).
-/// This client performs service calls through `HostApiV1` and does not link
-/// against any concrete IO implementation.
+/// The scene gateway can be backed by a plugin provider or by an engine-owned
+/// service source. This client performs calls through `HostApiV1` and does not
+/// link against a concrete implementation.
 #[derive(Clone)]
 pub struct SceneIoClient {
     host: HostApiV1,
@@ -23,18 +23,14 @@ pub struct SceneIoClient {
 impl SceneIoClient {
     /// Create a client bound to the given host API.
     ///
-    /// Service id defaults to [`SCENE_IO_SERVICE_ID`] and may be overridden via
-    /// `NEWENGINE_SCENE_IO_SERVICE_ID`.
+    /// Service id defaults to [`ENGINE_SCENE_SERVICE_ID`].
+    ///
+    /// Scene consumers always call the stable `engine.scene` facade id.
     #[inline]
     pub fn new(host: HostApiV1) -> Self {
-        let service_id = std::env::var("NEWENGINE_SCENE_IO_SERVICE_ID")
-            .ok()
-            .filter(|s| !s.trim().is_empty())
-            .unwrap_or_else(|| SCENE_IO_SERVICE_ID.to_string());
-
         Self {
             host,
-            service_id: RString::from(service_id),
+            service_id: RString::from(ENGINE_SCENE_SERVICE_ID),
 
             m_formats_json: MethodName::from(method::FORMATS_JSON),
             m_load_json_v1: MethodName::from(method::LOAD_JSON_V1),
@@ -62,7 +58,7 @@ impl SceneIoClient {
 
     #[inline]
     fn decode_utf8(bytes: Vec<u8>) -> Result<String, String> {
-        String::from_utf8(bytes).map_err(|_| "scene io service returned non-utf8".to_string())
+        String::from_utf8(bytes).map_err(|_| "engine.scene service returned non-utf8".to_string())
     }
 
     #[inline]
