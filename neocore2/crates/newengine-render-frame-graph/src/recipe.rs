@@ -97,11 +97,18 @@ impl RenderFrameRecipe {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct RuntimeRecipeBuildParams {
     pub shadow_resolution: u32,
+    pub shadow_cascade_count: u32,
 }
 
 impl RuntimeRecipeBuildParams {
     #[inline]
     pub const fn new(shadow_resolution: u32) -> Self {
-        Self { shadow_resolution }
+        Self { shadow_resolution, shadow_cascade_count: 4 }
+    }
+
+    #[inline]
+    pub const fn with_shadow_cascade_count(mut self, cascade_count: u32) -> Self {
+        self.shadow_cascade_count = cascade_count;
+        self
     }
 }

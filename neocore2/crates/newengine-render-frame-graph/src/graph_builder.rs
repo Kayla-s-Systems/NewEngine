@@ -138,6 +138,8 @@ impl FrameGraphBuilder {
             self = match phase {
                 StandardRenderPhase::BeginFrame | StandardRenderPhase::EndFrame => self,
                 StandardRenderPhase::ShadowMap => self.shadow_map(true, params.shadow_resolution),
+                StandardRenderPhase::ShadowCascadeMap => self.shadow_cascade_map(true, params.shadow_resolution, params.shadow_cascade_count),
+                StandardRenderPhase::TessellationPrepare => self.tessellation_prepare(),
                 StandardRenderPhase::DepthPrepass => self.depth_prepass(),
                 StandardRenderPhase::ViewportGBuffer => self.gbuffer(),
                 StandardRenderPhase::DeferredLighting => self.deferred_lighting(),
@@ -145,6 +147,10 @@ impl FrameGraphBuilder {
                 StandardRenderPhase::Transparent => self.transparent(),
                 StandardRenderPhase::Water => self.water(),
                 StandardRenderPhase::PostFx => self.postfx(true),
+                StandardRenderPhase::BloomExtract => self.bloom_extract(),
+                StandardRenderPhase::BloomBlur => self.bloom_blur(),
+                StandardRenderPhase::TaaResolve => self.taa_resolve(),
+                StandardRenderPhase::MsaaResolve => self.msaa_resolve(),
                 StandardRenderPhase::UiComposite => self.ui_composite(true),
                 StandardRenderPhase::DebugOverlay => self.debug_overlay(true),
             };
@@ -184,6 +190,52 @@ impl FrameGraphBuilder {
             pass.writes(RG_SHADOW_MAP, RenderGraphResourceUsage::DepthAttachment)
                 .draw_list(DrawListKind::ShadowCasters)
         });
+        self
+    }
+
+    #[inline]
+    pub fn shadow_cascade_map(mut self, enabled: bool, resolution: u32, cascade_count: u32) -> Self {
+        if !enabled {
+            return self;
+        }
+        let resolution = resolution.clamp(256, 8192);
+        let cascades = cascade_count.clamp(1, 8);
+        let atlas_cols = if cascades <= 1 { 1 } else if cascades <= 4 { 2 } else { 4 };
+        let atlas_rows = ((cascades + atlas_cols - 1) / atlas_cols).max(1);
+        let shadow_extent = Extent2D::new(resolution.saturating_mul(atlas_cols), resolution.saturating_mul(atlas_rows));
+        let shadow_resource = if let Some(rt) = self.target.shadow_render_target {
+            RenderGraphResourceDesc::external_render_target(
+                RG_SHADOW_MAP,
+                "shadow_cascade_atlas",
+                rt,
+                RenderGraphResourceUsage::DepthAttachment,
+                shadow_extent,
+                self.target.depth_format,
+            )
+            .with_semantic(RenderGraphResourceSemantic::ShadowMap)
+        } else {
+            RenderGraphResourceDesc::transient_texture(
+                RG_SHADOW_MAP,
+                "shadow_cascade_atlas",
+                RenderGraphResourceUsage::DepthAttachment,
+                shadow_extent,
+                self.target.depth_format,
+            )
+            .with_semantic(RenderGraphResourceSemantic::ShadowMap)
+        };
+        if !self.has_resource(RG_SHADOW_MAP) {
+            self.graph.resources.push(shadow_resource);
+        }
+        self.add_phase_pass(StandardRenderPhase::ShadowCascadeMap, |pass| {
+            pass.writes(RG_SHADOW_MAP, RenderGraphResourceUsage::DepthAttachment)
+                .draw_list(DrawListKind::ShadowCasters)
+        });
+        self
+    }
+
+    #[inline]
+    pub fn tessellation_prepare(mut self) -> Self {
+        self.add_phase_pass(StandardRenderPhase::TessellationPrepare, |pass| pass);
         self
     }
 
@@ -260,6 +312,43 @@ impl FrameGraphBuilder {
         };
         self.add_phase_pass(StandardRenderPhase::PostFx, |pass| {
             pass.reads(input, RenderGraphResourceUsage::SampledTexture)
+                .writes(RG_SURFACE_COLOR, RenderGraphResourceUsage::ColorAttachment)
+        });
+        self
+    }
+
+    #[inline]
+    pub fn bloom_extract(mut self) -> Self {
+        let input = if self.has_resource(RG_LIT_COLOR) { RG_LIT_COLOR } else { RG_SCENE_HDR_COLOR };
+        self.add_phase_pass(StandardRenderPhase::BloomExtract, |pass| {
+            pass.reads(input, RenderGraphResourceUsage::SampledTexture)
+                .writes(RG_SURFACE_COLOR, RenderGraphResourceUsage::ColorAttachment)
+        });
+        self
+    }
+
+    #[inline]
+    pub fn bloom_blur(mut self) -> Self {
+        self.add_phase_pass(StandardRenderPhase::BloomBlur, |pass| {
+            pass.reads(RG_SURFACE_COLOR, RenderGraphResourceUsage::SampledTexture)
+                .writes(RG_SURFACE_COLOR, RenderGraphResourceUsage::ColorAttachment)
+        });
+        self
+    }
+
+    #[inline]
+    pub fn taa_resolve(mut self) -> Self {
+        self.add_phase_pass(StandardRenderPhase::TaaResolve, |pass| {
+            pass.reads(RG_SURFACE_COLOR, RenderGraphResourceUsage::SampledTexture)
+                .writes(RG_SURFACE_COLOR, RenderGraphResourceUsage::ColorAttachment)
+        });
+        self
+    }
+
+    #[inline]
+    pub fn msaa_resolve(mut self) -> Self {
+        self.add_phase_pass(StandardRenderPhase::MsaaResolve, |pass| {
+            pass.reads(RG_SURFACE_COLOR, RenderGraphResourceUsage::SampledTexture)
                 .writes(RG_SURFACE_COLOR, RenderGraphResourceUsage::ColorAttachment)
         });
         self

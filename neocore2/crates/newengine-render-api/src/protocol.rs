@@ -2,7 +2,7 @@ use crate::{
     BeginFrameDesc, BeginRenderTargetDesc, BindGroupDesc, BindGroupId, BindGroupLayoutDesc,
     BindGroupLayoutId, BufferDesc, BufferId, BufferSlice, Color4, DrawArgs, DrawIndexedArgs,
     Extent2D, IndexFormat, PipelineDesc, PipelineId, PipelineWarmupDesc, PipelineWarmupReport, PostFxFrameParams,
-    RectI32, RenderBackendCapabilities, RenderDiagnosticsSnapshot, RenderDrawListKind,
+    RectI32, RenderBackendCapabilities, RenderDiagnosticsSnapshot, RenderDrawListKind, RenderEffectStack,
     RenderFeature, RenderGraphCompileReport, RenderGraphDesc, RenderGraphPassKind,
     RenderGraphSubmitReport, RenderGraphValidationReport, RenderTargetDesc, RenderTargetId,
     RenderWorkBudget, SamplerDesc, SamplerId, ShaderDesc, ShaderId, ShaderRuntimeCacheStats,
@@ -245,6 +245,8 @@ pub struct RenderFrameEnvelope {
     pub viewport_is_surface: bool,
     #[serde(default)]
     pub postfx: PostFxFrameParams,
+    #[serde(default)]
+    pub effects: RenderEffectStack,
     pub graph: RenderGraphDesc,
     #[serde(default)]
     pub draw_lists: Vec<RenderDrawListKind>,
@@ -270,6 +272,7 @@ impl RenderFrameEnvelope {
             viewport_extent,
             viewport_is_surface,
             postfx: PostFxFrameParams::default(),
+            effects: RenderEffectStack::default(),
             graph,
             draw_lists: Vec::new(),
             work_budget: None,
@@ -280,6 +283,12 @@ impl RenderFrameEnvelope {
     #[inline]
     pub fn with_postfx(mut self, postfx: PostFxFrameParams) -> Self {
         self.postfx = postfx;
+        self
+    }
+
+    #[inline]
+    pub fn with_effect_stack(mut self, effects: RenderEffectStack) -> Self {
+        self.effects = effects;
         self
     }
 

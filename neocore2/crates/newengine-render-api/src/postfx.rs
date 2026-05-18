@@ -21,6 +21,8 @@ pub enum AntiAliasingMode {
     /// Single-pass post-tonemap/HDR-compatible edge filter. This is the stable default until
     /// graph-level MSAA resolve resources are available on every provider.
     Fxaa,
+    /// Temporal anti-aliasing. Requires provider-owned history color and velocity/depth inputs when available.
+    Taa,
     /// Provider advertises the mode, but execution is valid only when the frame graph allocates
     /// multisampled scene/depth targets and explicit resolves.
     Msaa2x,
@@ -141,6 +143,41 @@ fn default_fxaa_edge_threshold_min() -> f32 { 0.0312 }
 #[inline]
 fn default_fxaa_subpixel_quality() -> f32 { 0.75 }
 
+
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+pub struct TaaParams {
+    #[serde(default)]
+    pub enabled: bool,
+    /// History blend factor. Higher values are smoother but can ghost more.
+    #[serde(default = "default_taa_feedback")]
+    pub feedback: f32,
+    /// Neighborhood clamp strength for anti-ghosting.
+    #[serde(default = "default_taa_neighborhood_clamping")]
+    pub neighborhood_clamping: f32,
+    /// Jitter scale applied to view jitter from the camera/view gateway.
+    #[serde(default = "default_taa_jitter_scale")]
+    pub jitter_scale: f32,
+}
+
+impl Default for TaaParams {
+    #[inline]
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            feedback: default_taa_feedback(),
+            neighborhood_clamping: default_taa_neighborhood_clamping(),
+            jitter_scale: default_taa_jitter_scale(),
+        }
+    }
+}
+
+#[inline]
+fn default_taa_feedback() -> f32 { 0.92 }
+#[inline]
+fn default_taa_neighborhood_clamping() -> f32 { 1.0 }
+#[inline]
+fn default_taa_jitter_scale() -> f32 { 1.0 }
+
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub struct ColorGradeParams {
     #[serde(default = "default_saturation")]
@@ -190,6 +227,8 @@ pub struct PostFxQualityParams {
     #[serde(default)]
     pub fxaa: FxaaParams,
     #[serde(default)]
+    pub taa: TaaParams,
+    #[serde(default)]
     pub color: ColorGradeParams,
     #[serde(default)]
     pub anti_aliasing: AntiAliasingMode,
@@ -201,6 +240,7 @@ impl Default for PostFxQualityParams {
         Self {
             bloom: BloomParams::default(),
             fxaa: FxaaParams::default(),
+            taa: TaaParams::default(),
             color: ColorGradeParams::default(),
             anti_aliasing: AntiAliasingMode::Fxaa,
         }
@@ -379,6 +419,8 @@ pub enum PostFxPassKind {
     ColorGrade,
     Tonemap,
     Fxaa,
+    TaaResolve,
+    MsaaResolve,
     DisplayEncode,
     UiComposite,
     SunDisk,
@@ -423,6 +465,8 @@ fn default_postfx_passes() -> Vec<PostFxPassKind> {
         PostFxPassKind::ColorGrade,
         PostFxPassKind::Tonemap,
         PostFxPassKind::Fxaa,
+        PostFxPassKind::TaaResolve,
+        PostFxPassKind::MsaaResolve,
         PostFxPassKind::DisplayEncode,
         PostFxPassKind::Dither,
         PostFxPassKind::UiComposite,
@@ -469,6 +513,8 @@ mod tests {
         let desc = PostFxPipelineDesc::default();
         assert!(desc.passes.contains(&PostFxPassKind::Bloom));
         assert!(desc.passes.contains(&PostFxPassKind::Fxaa));
+        assert!(desc.passes.contains(&PostFxPassKind::TaaResolve));
+        assert!(desc.passes.contains(&PostFxPassKind::MsaaResolve));
         assert!(desc.passes.contains(&PostFxPassKind::Dither));
     }
 }

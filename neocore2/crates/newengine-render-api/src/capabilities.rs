@@ -48,6 +48,9 @@ pub enum RenderFeature {
     Bloom,
     Fxaa,
     Msaa,
+    Taa,
+    Tessellation,
+    EffectStack,
     PostEffects,
     UiComposite,
 }
@@ -112,6 +115,9 @@ impl RenderBackendCapabilities {
                 RenderFeature::HdrSceneColor,
                 RenderFeature::Bloom,
                 RenderFeature::Fxaa,
+                RenderFeature::Taa,
+                RenderFeature::Tessellation,
+                RenderFeature::EffectStack,
                 RenderFeature::PostEffects,
                 RenderFeature::UiComposite,
             ],
@@ -152,6 +158,9 @@ mod tests {
         assert!(caps.supports(RenderFeature::HdrSceneColor));
         assert!(caps.supports(RenderFeature::Bloom));
         assert!(caps.supports(RenderFeature::Fxaa));
+        assert!(caps.supports(RenderFeature::Taa));
+        assert!(caps.supports(RenderFeature::Tessellation));
+        assert!(caps.supports(RenderFeature::EffectStack));
         assert!(caps.supports(RenderFeature::PcssShadows));
         assert!(caps.supports(RenderFeature::ShadowCasterCulling));
         assert!(!caps.supports(RenderFeature::Msaa));

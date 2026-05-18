@@ -91,6 +91,50 @@ impl VertexLayout {
     }
 }
 
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum TessellationMode {
+    Disabled,
+    Fixed,
+    DistanceAdaptive,
+}
+
+impl Default for TessellationMode {
+    #[inline]
+    fn default() -> Self { Self::Disabled }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+pub struct TessellationDesc {
+    #[serde(default)]
+    pub mode: TessellationMode,
+    #[serde(default = "default_tess_factor")]
+    pub factor: f32,
+    #[serde(default = "default_tess_min_distance")]
+    pub min_distance: f32,
+    #[serde(default = "default_tess_max_distance")]
+    pub max_distance: f32,
+}
+
+impl Default for TessellationDesc {
+    #[inline]
+    fn default() -> Self {
+        Self {
+            mode: TessellationMode::Disabled,
+            factor: default_tess_factor(),
+            min_distance: default_tess_min_distance(),
+            max_distance: default_tess_max_distance(),
+        }
+    }
+}
+
+#[inline]
+fn default_tess_factor() -> f32 { 4.0 }
+#[inline]
+fn default_tess_min_distance() -> f32 { 8.0 }
+#[inline]
+fn default_tess_max_distance() -> f32 { 96.0 }
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PipelineDesc {
     pub label: Option<String>,
@@ -105,6 +149,8 @@ pub struct PipelineDesc {
     pub cull_mode: RasterCullMode,
     #[serde(default)]
     pub cache_key: Option<String>,
+    #[serde(default)]
+    pub tessellation: TessellationDesc,
     #[serde(default)]
     pub warmup: bool,
 }
@@ -123,6 +169,7 @@ impl PipelineDesc {
             depth_format: None,
             cull_mode: RasterCullMode::Back,
             cache_key: None,
+            tessellation: TessellationDesc::default(),
             warmup: false,
         }
     }
@@ -166,6 +213,12 @@ impl PipelineDesc {
     #[inline]
     pub fn with_cull_mode(mut self, cull_mode: RasterCullMode) -> Self {
         self.cull_mode = cull_mode;
+        self
+    }
+
+    #[inline]
+    pub fn with_tessellation(mut self, tessellation: TessellationDesc) -> Self {
+        self.tessellation = tessellation;
         self
     }
 

@@ -1,6 +1,6 @@
 #![forbid(unsafe_op_in_unsafe_fn)]
 
-use newengine_core::render::{Extent2D, PostFxFrameParams, RenderFrameEnvelope};
+use newengine_core::render::{Extent2D, PostFxFrameParams, RenderEffectStack, RenderFrameEnvelope};
 use newengine_render_frame_graph::{DrawListDesc, RenderFramePlan};
 
 /// Builds the backend-facing envelope from an engine-side frame plan.
@@ -36,5 +36,6 @@ pub(super) fn build_runtime_frame_envelope(
         frame_plan.graph.clone(),
     )
     .with_postfx(postfx)
+    .with_effect_stack(RenderEffectStack::aaa_default())
     .with_draw_lists(draw_list_descs.iter().map(|desc| desc.kind))
 }

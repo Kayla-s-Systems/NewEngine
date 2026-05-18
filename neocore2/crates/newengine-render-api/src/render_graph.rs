@@ -108,12 +108,18 @@ impl Default for RenderGraphQueueKind {
 pub enum RenderGraphPassKind {
     DepthPrepass,
     ShadowMap,
+    ShadowCascadeMap,
+    TessellationPrepare,
     GBuffer,
     DeferredLighting,
     ForwardOpaque,
     Transparent,
     Water,
     PostFx,
+    BloomExtract,
+    BloomBlur,
+    TaaResolve,
+    MsaaResolve,
     UiComposite,
     DebugOverlay,
     Copy,
@@ -318,7 +324,7 @@ impl RenderDrawListKind {
     #[inline]
     pub const fn is_compatible_with_pass(self, pass: RenderGraphPassKind) -> bool {
         match (self, pass) {
-            (Self::ShadowCasters, RenderGraphPassKind::ShadowMap | RenderGraphPassKind::DepthPrepass) => true,
+            (Self::ShadowCasters, RenderGraphPassKind::ShadowMap | RenderGraphPassKind::ShadowCascadeMap | RenderGraphPassKind::DepthPrepass) => true,
             (Self::OpaqueForward, RenderGraphPassKind::ForwardOpaque | RenderGraphPassKind::GBuffer) => true,
             (Self::Transparent, RenderGraphPassKind::Transparent) => true,
             (Self::Ui, RenderGraphPassKind::UiComposite) => true,
@@ -353,12 +359,12 @@ impl RenderMaterialDomain {
     #[inline]
     pub const fn is_compatible_with_pass(self, pass: RenderGraphPassKind) -> bool {
         match (self, pass) {
-            (Self::ShadowCaster, RenderGraphPassKind::ShadowMap | RenderGraphPassKind::DepthPrepass) => true,
+            (Self::ShadowCaster, RenderGraphPassKind::ShadowMap | RenderGraphPassKind::ShadowCascadeMap | RenderGraphPassKind::DepthPrepass) => true,
             (Self::OpaqueLit | Self::Terrain | Self::Vegetation, RenderGraphPassKind::ForwardOpaque | RenderGraphPassKind::GBuffer) => true,
             (Self::Transparent, RenderGraphPassKind::Transparent) => true,
             (Self::Water, RenderGraphPassKind::Water) => true,
             (Self::Ui, RenderGraphPassKind::UiComposite) => true,
-            (Self::PostFx, RenderGraphPassKind::PostFx | RenderGraphPassKind::DeferredLighting) => true,
+            (Self::PostFx, RenderGraphPassKind::PostFx | RenderGraphPassKind::BloomExtract | RenderGraphPassKind::BloomBlur | RenderGraphPassKind::TaaResolve | RenderGraphPassKind::MsaaResolve | RenderGraphPassKind::DeferredLighting) => true,
             (Self::Debug, RenderGraphPassKind::DebugOverlay) => true,
             (Self::Custom, _) => true,
             _ => false,
