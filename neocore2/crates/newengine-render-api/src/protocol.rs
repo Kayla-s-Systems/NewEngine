@@ -48,6 +48,9 @@ pub enum RenderCommand {
     BeginFrame(BeginFrameDesc),
     SetUiDrawList(UiDrawList),
     SetDebugText(String),
+    SetRenderPhase { phase: Option<RenderGraphPassKind> },
+    SetDrawListKind { kind: Option<RenderDrawListKind> },
+    DiscardRecordedCommands,
     EndFrame,
     Resize { width: u32, height: u32 },
     CreateRenderTarget(RenderTargetDesc),
@@ -221,6 +224,17 @@ fn encode_unit_command(out: &mut Vec<u8>, command: &RenderCommand) -> Result<(),
             let ui_bytes = newengine_ui_draw::encode_ui_draw_list_bin(ui)?;
             put_bytes(out, &ui_bytes, "ui draw-list binary payload")?;
         }
+        RenderCommand::SetRenderPhase { phase } => {
+            put_u8(out, 11);
+            put_optional_render_graph_pass_kind(out, *phase);
+        }
+        RenderCommand::SetDrawListKind { kind } => {
+            put_u8(out, 12);
+            put_optional_render_draw_list_kind(out, *kind);
+        }
+        RenderCommand::DiscardRecordedCommands => {
+            put_u8(out, 13);
+        }
         _ => return Err(format!("render command is not supported by binary unit batch: {command:?}")),
     }
     Ok(())
@@ -279,6 +293,9 @@ fn decode_unit_command(r: &mut BinReader<'_>) -> Result<RenderCommand, String> {
             let ui_bytes = r.bytes_vec()?;
             Ok(RenderCommand::SetUiDrawList(newengine_ui_draw::decode_ui_draw_list_bin(&ui_bytes)?))
         },
+        11 => Ok(RenderCommand::SetRenderPhase { phase: r.optional_render_graph_pass_kind()? }),
+        12 => Ok(RenderCommand::SetDrawListKind { kind: r.optional_render_draw_list_kind()? }),
+        13 => Ok(RenderCommand::DiscardRecordedCommands),
         tag => Err(format!("unknown render command batch binary tag {tag}")),
     }
 }
@@ -308,6 +325,100 @@ fn put_i32(out: &mut Vec<u8>, v: i32) { out.extend_from_slice(&v.to_le_bytes());
 fn put_u64(out: &mut Vec<u8>, v: u64) { out.extend_from_slice(&v.to_le_bytes()); }
 #[inline]
 fn put_f32(out: &mut Vec<u8>, v: f32) { out.extend_from_slice(&v.to_le_bytes()); }
+#[inline]
+fn put_optional_render_graph_pass_kind(out: &mut Vec<u8>, phase: Option<RenderGraphPassKind>) {
+    match phase {
+        Some(phase) => {
+            put_u8(out, 1);
+            put_u8(out, render_graph_pass_kind_tag(phase));
+        }
+        None => put_u8(out, 0),
+    }
+}
+
+#[inline]
+fn put_optional_render_draw_list_kind(out: &mut Vec<u8>, kind: Option<RenderDrawListKind>) {
+    match kind {
+        Some(kind) => {
+            put_u8(out, 1);
+            put_u8(out, render_draw_list_kind_tag(kind));
+        }
+        None => put_u8(out, 0),
+    }
+}
+
+#[inline]
+fn render_graph_pass_kind_tag(kind: RenderGraphPassKind) -> u8 {
+    match kind {
+        RenderGraphPassKind::DepthPrepass => 1,
+        RenderGraphPassKind::ShadowMap => 2,
+        RenderGraphPassKind::ShadowCascadeMap => 3,
+        RenderGraphPassKind::TessellationPrepare => 4,
+        RenderGraphPassKind::GBuffer => 5,
+        RenderGraphPassKind::DeferredLighting => 6,
+        RenderGraphPassKind::ForwardOpaque => 7,
+        RenderGraphPassKind::Transparent => 8,
+        RenderGraphPassKind::Water => 9,
+        RenderGraphPassKind::PostFx => 10,
+        RenderGraphPassKind::BloomExtract => 11,
+        RenderGraphPassKind::BloomBlur => 12,
+        RenderGraphPassKind::TaaResolve => 13,
+        RenderGraphPassKind::MsaaResolve => 14,
+        RenderGraphPassKind::UiComposite => 15,
+        RenderGraphPassKind::DebugOverlay => 16,
+        RenderGraphPassKind::Copy => 17,
+        RenderGraphPassKind::Custom => 18,
+    }
+}
+
+#[inline]
+fn render_graph_pass_kind_from_tag(tag: u8) -> Result<RenderGraphPassKind, String> {
+    match tag {
+        1 => Ok(RenderGraphPassKind::DepthPrepass),
+        2 => Ok(RenderGraphPassKind::ShadowMap),
+        3 => Ok(RenderGraphPassKind::ShadowCascadeMap),
+        4 => Ok(RenderGraphPassKind::TessellationPrepare),
+        5 => Ok(RenderGraphPassKind::GBuffer),
+        6 => Ok(RenderGraphPassKind::DeferredLighting),
+        7 => Ok(RenderGraphPassKind::ForwardOpaque),
+        8 => Ok(RenderGraphPassKind::Transparent),
+        9 => Ok(RenderGraphPassKind::Water),
+        10 => Ok(RenderGraphPassKind::PostFx),
+        11 => Ok(RenderGraphPassKind::BloomExtract),
+        12 => Ok(RenderGraphPassKind::BloomBlur),
+        13 => Ok(RenderGraphPassKind::TaaResolve),
+        14 => Ok(RenderGraphPassKind::MsaaResolve),
+        15 => Ok(RenderGraphPassKind::UiComposite),
+        16 => Ok(RenderGraphPassKind::DebugOverlay),
+        17 => Ok(RenderGraphPassKind::Copy),
+        18 => Ok(RenderGraphPassKind::Custom),
+        _ => Err(format!("invalid render graph pass kind tag {tag}")),
+    }
+}
+
+#[inline]
+fn render_draw_list_kind_tag(kind: RenderDrawListKind) -> u8 {
+    match kind {
+        RenderDrawListKind::ShadowCasters => 1,
+        RenderDrawListKind::OpaqueForward => 2,
+        RenderDrawListKind::Transparent => 3,
+        RenderDrawListKind::Ui => 4,
+        RenderDrawListKind::Debug => 5,
+    }
+}
+
+#[inline]
+fn render_draw_list_kind_from_tag(tag: u8) -> Result<RenderDrawListKind, String> {
+    match tag {
+        1 => Ok(RenderDrawListKind::ShadowCasters),
+        2 => Ok(RenderDrawListKind::OpaqueForward),
+        3 => Ok(RenderDrawListKind::Transparent),
+        4 => Ok(RenderDrawListKind::Ui),
+        5 => Ok(RenderDrawListKind::Debug),
+        _ => Err(format!("invalid render draw-list kind tag {tag}")),
+    }
+}
+
 #[inline]
 fn put_index_format(out: &mut Vec<u8>, format: IndexFormat) {
     out.push(match format {
@@ -366,6 +477,22 @@ impl<'a> BinReader<'a> {
         let len = self.u32()? as usize;
         Ok(self.take(len)?.to_vec())
     }
+    fn optional_render_graph_pass_kind(&mut self) -> Result<Option<RenderGraphPassKind>, String> {
+        match self.u8()? {
+            0 => Ok(None),
+            1 => Ok(Some(render_graph_pass_kind_from_tag(self.u8()?)?)),
+            tag => Err(format!("invalid optional render graph pass kind presence tag {tag}")),
+        }
+    }
+
+    fn optional_render_draw_list_kind(&mut self) -> Result<Option<RenderDrawListKind>, String> {
+        match self.u8()? {
+            0 => Ok(None),
+            1 => Ok(Some(render_draw_list_kind_from_tag(self.u8()?)?)),
+            tag => Err(format!("invalid optional render draw-list kind presence tag {tag}")),
+        }
+    }
+
     #[inline]
     fn f32(&mut self) -> Result<f32, String> {
         let b = self.take(4)?;
@@ -615,5 +742,27 @@ mod binary_batch_tests {
             RenderCommand::SetUiDrawList(list) => assert_eq!(list.screen_size_px, [320, 200]),
             other => panic!("expected SetUiDrawList, got {other:?}"),
         }
+    }
+
+    #[test]
+    fn binary_unit_batch_roundtrips_recording_scope_commands() {
+        let encoded = encode_unit_command_batch_bin(&[
+            RenderCommand::SetDrawListKind { kind: Some(RenderDrawListKind::OpaqueForward) },
+            RenderCommand::SetRenderPhase { phase: Some(RenderGraphPassKind::UiComposite) },
+            RenderCommand::SetDrawListKind { kind: None },
+            RenderCommand::DiscardRecordedCommands,
+        ]).unwrap();
+        let decoded = decode_unit_command_batch_bin(&encoded).unwrap();
+
+        assert!(matches!(
+            decoded[0],
+            RenderCommand::SetDrawListKind { kind: Some(RenderDrawListKind::OpaqueForward) }
+        ));
+        assert!(matches!(
+            decoded[1],
+            RenderCommand::SetRenderPhase { phase: Some(RenderGraphPassKind::UiComposite) }
+        ));
+        assert!(matches!(decoded[2], RenderCommand::SetDrawListKind { kind: None }));
+        assert!(matches!(decoded[3], RenderCommand::DiscardRecordedCommands));
     }
 }

@@ -21,6 +21,10 @@ engine.assets
 engine.render
 engine.physics
 engine.input
+engine.camera
+engine.ui
+engine.scene
+engine.ecs
 ```
 
 The host maps those gateways to active providers from plugin metadata.
@@ -41,4 +45,4 @@ The host maps those gateways to active providers from plugin metadata.
 12. `12_NEYTD_CODEC_SPEC.md`
 13. `13_NEPAK_CODEC_SPEC.md`
 14. `14_RELEASE_READINESS_SNAPSHOT.md`
-15. `15_GATEWAY_SERVICE_LAYER.md`
+15. `15_GATEWAY_SERVICE_LAYER.md`, `16_ENGINE_ECS_GATEWAY.md`

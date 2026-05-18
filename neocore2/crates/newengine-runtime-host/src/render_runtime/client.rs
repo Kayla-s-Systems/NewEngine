@@ -1,3 +1,5 @@
+use std::sync::atomic::{AtomicBool, Ordering};
+
 use newengine_plugin_api::HostApiV1;
 use newengine_render_api::{
     decode_json, encode_json, encode_unit_command_batch_bin, RenderBackendInfo,
@@ -6,6 +8,8 @@ use newengine_render_api::{
 };
 
 use crate::service_runtime::GenericJsonServiceClient;
+
+static TRY_BINARY_RENDER_BATCH: AtomicBool = AtomicBool::new(true);
 
 #[derive(Clone)]
 pub(crate) struct RenderServiceClient {
@@ -55,14 +59,30 @@ impl RenderServiceClient {
         }
 
         let binary_len = reqs.len();
-        if let Ok(packet) = encode_unit_command_batch_bin(&reqs) {
-            match self.service.call_raw(RENDER_SERVICE_METHOD_COMMAND_BATCH_BIN_V1, packet) {
-                Ok(_) => return Ok(vec![RenderCommandResponse::Unit; binary_len]),
-                Err(err) => {
-                    log::debug!(
-                        "render service: binary command batch unavailable; falling back to invoke_json err='{}'",
-                        err
-                    );
+        if TRY_BINARY_RENDER_BATCH.load(Ordering::Relaxed) {
+            if let Ok(packet) = encode_unit_command_batch_bin(&reqs) {
+                match self.service.call_raw(RENDER_SERVICE_METHOD_COMMAND_BATCH_BIN_V1, packet) {
+                    Ok(_) => return Ok(vec![RenderCommandResponse::Unit; binary_len]),
+                    Err(err) => {
+                        let detail = err.to_string();
+                        if detail.contains("unknown render command batch binary tag")
+                            || detail.contains("unsupported")
+                            || detail.contains("unknown method")
+                            || detail.contains("not found")
+                        {
+                            if TRY_BINARY_RENDER_BATCH.swap(false, Ordering::Relaxed) {
+                                log::debug!(
+                                    "render service: binary command batch disabled for this run; falling back to invoke_json err='{}'",
+                                    detail
+                                );
+                            }
+                        } else {
+                            log::debug!(
+                                "render service: binary command batch failed transiently; falling back to invoke_json err='{}'",
+                                detail
+                            );
+                        }
+                    }
                 }
             }
         }

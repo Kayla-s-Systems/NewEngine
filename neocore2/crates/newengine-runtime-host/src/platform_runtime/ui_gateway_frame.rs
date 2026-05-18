@@ -78,7 +78,11 @@ fn request_ui_draw_list_bin(
     let decode_ms = decode_started.elapsed().as_secs_f32() * 1000.0;
 
     log_ui_gateway_frame("bin", request.frame_index, started, encode_ms, service_ms, decode_ms, bytes.len(), &response.draw_list);
-    Ok(Some(response.draw_list))
+    if ui_draw_list_is_empty(&response.draw_list) {
+        Ok(None)
+    } else {
+        Ok(Some(response.draw_list))
+    }
 }
 
 fn request_ui_draw_list_json(
@@ -106,7 +110,11 @@ fn request_ui_draw_list_json(
     let decode_ms = decode_started.elapsed().as_secs_f32() * 1000.0;
 
     log_ui_gateway_frame("json", request.frame_index, started, encode_ms, service_ms, decode_ms, bytes.len(), &response.draw_list);
-    Ok(Some(response.draw_list))
+    if ui_draw_list_is_empty(&response.draw_list) {
+        Ok(None)
+    } else {
+        Ok(Some(response.draw_list))
+    }
 }
 
 fn log_ui_gateway_frame(
@@ -202,6 +210,15 @@ pub(crate) fn publish_debug_overlay_telemetry(telemetry: &UiRuntimeDebugOverlayT
         Ok(Some(_)) | Ok(None) => {}
         Err(e) => log::warn!("ui gateway: debug overlay telemetry publish failed: {e}"),
     }
+}
+
+fn ui_draw_list_is_empty(draw_list: &UiDrawList) -> bool {
+    draw_list.mesh.vertices.is_empty()
+        && draw_list.mesh.indices.is_empty()
+        && draw_list.mesh.cmds.is_empty()
+        && draw_list.texture_delta.set.is_empty()
+        && draw_list.texture_delta.patches.is_empty()
+        && draw_list.texture_delta.free.is_empty()
 }
 
 fn ui_draw_list_stats(draw_list: &UiDrawList) -> String {

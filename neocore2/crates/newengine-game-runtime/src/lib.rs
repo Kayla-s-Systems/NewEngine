@@ -26,6 +26,11 @@ use abi_stable::std_types::{RResult, RString};
 use newengine_plugin_api::{Blob, CapabilityId, MethodName, ServiceV1, ServiceV1Dyn};
 use newengine_scene::{SceneAsset, SceneAssetOptions};
 use newengine_scene_io::{method as scene_method, ENGINE_SCENE_SERVICE_ID, SCENE_BACKEND_CAPABILITY_ID};
+use newengine_ecs_api::{
+    EcsCommand, EcsCommandRequest, EcsCommandResponse, EcsCommandResult, EcsInvokeRequest,
+    EcsServiceInfo, EcsSnapshotRequest, EcsWorldSnapshot, EcsWorldSummary,
+    ECS_BACKEND_CAPABILITY_ID, ENGINE_ECS_SERVICE_ID,
+};
 
 use newengine_runtime_host::asset_bootstrap::{
     collect_app_asset_roots, mount_asset_roots_best_effort,
@@ -363,6 +368,191 @@ impl ServiceV1 for EngineSceneGatewayService {
     }
 }
 
+
+#[derive(Clone)]
+struct EngineEcsGatewayService {
+    scene: Arc<newengine_engine_runtime::SceneBridge>,
+}
+
+impl EngineEcsGatewayService {
+    #[inline]
+    fn new(scene: Arc<newengine_engine_runtime::SceneBridge>) -> Self {
+        Self { scene }
+    }
+
+    #[inline]
+    fn ok_json<T: serde::Serialize>(value: &T) -> RResult<Blob, RString> {
+        match serde_json::to_vec(value) {
+            Ok(bytes) => RResult::ROk(Blob::from(bytes)),
+            Err(e) => RResult::RErr(RString::from(e.to_string())),
+        }
+    }
+
+    #[inline]
+    fn payload_json(payload: Blob) -> Result<serde_json::Value, String> {
+        if payload.is_empty() {
+            return Ok(serde_json::json!({}));
+        }
+        serde_json::from_slice(payload.as_slice()).map_err(|e| e.to_string())
+    }
+
+    fn world_summary(world: &newengine_ecs::World) -> EcsWorldSummary {
+        EcsWorldSummary {
+            tick: world.tick(),
+            entity_count: world.entity_count() as u64,
+            storage_count: world.storage_count() as u64,
+            resource_count: world.resource_count() as u64,
+            entities_changed_tick: world.entities_changed_tick(),
+        }
+    }
+
+    fn summary_json_v1(&self) -> RResult<Blob, RString> {
+        let scene_lock = self.scene.scene();
+        let scene = scene_lock.read();
+        Self::ok_json(&Self::world_summary(scene.world()))
+    }
+
+    fn snapshot_json_v1(&self, payload: Blob) -> RResult<Blob, RString> {
+        let req = match Self::payload_json(payload)
+            .and_then(|v| serde_json::from_value::<EcsSnapshotRequest>(v).map_err(|e| e.to_string()))
+        {
+            Ok(v) => v,
+            Err(e) => return RResult::RErr(RString::from(e)),
+        };
+
+        let scene_lock = self.scene.scene();
+        let scene = scene_lock.read();
+        let world = scene.world();
+        let summary = Self::world_summary(world);
+        let mut entities = Vec::new();
+        let mut truncated = false;
+
+        if req.include_entities {
+            for id in world.iter_entities() {
+                if entities.len() >= req.entity_limit {
+                    truncated = true;
+                    break;
+                }
+                entities.push(newengine_ecs_api::EcsEntitySnapshot {
+                    stable_id: id.stable_u64(),
+                });
+            }
+        }
+
+        Self::ok_json(&EcsWorldSnapshot { summary, entities, truncated })
+    }
+
+    fn command_json_v1(&self, payload: Blob) -> RResult<Blob, RString> {
+        let req = match Self::payload_json(payload)
+            .and_then(|v| serde_json::from_value::<EcsCommandRequest>(v).map_err(|e| e.to_string()))
+        {
+            Ok(v) => v,
+            Err(e) => return RResult::RErr(RString::from(e)),
+        };
+
+        let scene_lock = self.scene.scene();
+        let mut scene = scene_lock.write();
+        let world = scene.world_mut();
+        let mut results = Vec::with_capacity(req.commands.len());
+
+        for (index, command) in req.commands.into_iter().enumerate() {
+            match command {
+                EcsCommand::SetTick { tick } => {
+                    world.set_tick(tick);
+                    results.push(EcsCommandResult {
+                        index,
+                        ok: true,
+                        entity_id: None,
+                        tick: world.tick(),
+                        message: "tick set".to_owned(),
+                    });
+                }
+                EcsCommand::AdvanceTick => {
+                    let tick = world.advance_tick();
+                    results.push(EcsCommandResult {
+                        index,
+                        ok: true,
+                        entity_id: None,
+                        tick,
+                        message: "tick advanced".to_owned(),
+                    });
+                }
+                EcsCommand::SpawnEmpty => {
+                    let id = world.spawn();
+                    results.push(EcsCommandResult {
+                        index,
+                        ok: true,
+                        entity_id: Some(id.stable_u64()),
+                        tick: world.tick(),
+                        message: "entity spawned".to_owned(),
+                    });
+                }
+            }
+        }
+
+        let summary = Self::world_summary(world);
+        Self::ok_json(&EcsCommandResponse { ok: true, summary, results })
+    }
+
+    fn invoke_json(&self, payload: Blob) -> RResult<Blob, RString> {
+        let req = match Self::payload_json(payload)
+            .and_then(|v| serde_json::from_value::<EcsInvokeRequest>(v).map_err(|e| e.to_string()))
+        {
+            Ok(v) => v,
+            Err(e) => return RResult::RErr(RString::from(e)),
+        };
+        let payload = match serde_json::to_vec(&req.payload) {
+            Ok(bytes) => Blob::from(bytes),
+            Err(e) => return RResult::RErr(RString::from(e.to_string())),
+        };
+
+        match req.method.as_str() {
+            newengine_ecs_api::ECS_SERVICE_METHOD_SUMMARY_JSON_V1 => self.summary_json_v1(),
+            newengine_ecs_api::ECS_SERVICE_METHOD_SNAPSHOT_JSON_V1 => self.snapshot_json_v1(payload),
+            newengine_ecs_api::ECS_SERVICE_METHOD_COMMAND_JSON_V1 => self.command_json_v1(payload),
+            other => RResult::RErr(RString::from(format!(
+                "engine.ecs invoke_json unknown target method '{other}'"
+            ))),
+        }
+    }
+}
+
+impl ServiceV1 for EngineEcsGatewayService {
+    fn id(&self) -> CapabilityId {
+        CapabilityId::from(ENGINE_ECS_SERVICE_ID)
+    }
+
+    fn describe(&self) -> RString {
+        RString::from(
+            serde_json::json!({
+                "id": ENGINE_ECS_SERVICE_ID,
+                "version": 1,
+                "contract": "newengine.ecs gateway >= 0.1.x",
+                "protocol": "newengine.ecs-api/v1",
+                "origin": "engine-owned",
+                "owner": "newengine-game-runtime.ecs-gateway",
+                "capability": ECS_BACKEND_CAPABILITY_ID,
+                "methods": newengine_ecs_api::ECS_REQUIRED_METHODS_V1,
+            })
+            .to_string(),
+        )
+    }
+
+    fn call(&self, method: MethodName, payload: Blob) -> RResult<Blob, RString> {
+        match method.as_str() {
+            newengine_ecs_api::ECS_SERVICE_METHOD_INFO => Self::ok_json(&EcsServiceInfo::default()),
+            newengine_ecs_api::ECS_SERVICE_METHOD_INVOKE => self.invoke_json(payload),
+            newengine_ecs_api::ECS_SERVICE_METHOD_SUMMARY_JSON_V1 => self.summary_json_v1(),
+            newengine_ecs_api::ECS_SERVICE_METHOD_SNAPSHOT_JSON_V1 => self.snapshot_json_v1(payload),
+            newengine_ecs_api::ECS_SERVICE_METHOD_COMMAND_JSON_V1 => self.command_json_v1(payload),
+            newengine_ecs_api::ECS_SERVICE_METHOD_SHUTDOWN_V1 => RResult::ROk(Blob::from(Vec::<u8>::new())),
+            other => RResult::RErr(RString::from(format!(
+                "engine.ecs unknown method '{other}'"
+            ))),
+        }
+    }
+}
+
 #[derive(Clone)]
 pub struct StandaloneGameRuntimeProfile {
     viewport: Arc<newengine_engine_runtime::ViewportBridge>,
@@ -460,6 +650,56 @@ impl StandaloneGameRuntimeProfile {
                 log::error!(
                     "engine.scene gateway route registration failed id='{}' err='{}'",
                     ENGINE_SCENE_SERVICE_ID,
+                    e
+                );
+            }
+        }
+    }
+
+
+    #[inline]
+    pub fn register_ecs_gateway_best_effort(&self) {
+        if newengine_plugin_host::has_service(ENGINE_ECS_SERVICE_ID) {
+            log::debug!(
+                "engine.ecs gateway registration skipped; service already available"
+            );
+            return;
+        }
+
+        let service = EngineEcsGatewayService::new(Arc::clone(&self.scene));
+        let dyn_svc = ServiceV1Dyn::from_value(service, abi_stable::sabi_trait::TD_Opaque);
+
+        match newengine_plugin_host::host_register_service_impl(dyn_svc) {
+            RResult::ROk(()) => {}
+            RResult::RErr(e) => {
+                log::error!(
+                    "engine.ecs service registration failed id='{}' err='{}'",
+                    ENGINE_ECS_SERVICE_ID,
+                    e
+                );
+                return;
+            }
+        }
+
+        match newengine_plugin_host::register_engine_owned_gateway(
+            ENGINE_ECS_SERVICE_ID,
+            newengine_service_api::EngineServiceKind::Ecs,
+            ENGINE_ECS_SERVICE_ID,
+            ECS_BACKEND_CAPABILITY_ID,
+            0,
+            "newengine-game-runtime.ecs-gateway",
+        ) {
+            Ok(()) => {
+                log::info!(
+                    "engine.ecs gateway registered source=engine-owned service='{}' capability='{}'",
+                    ENGINE_ECS_SERVICE_ID,
+                    ECS_BACKEND_CAPABILITY_ID
+                );
+            }
+            Err(e) => {
+                log::error!(
+                    "engine.ecs gateway route registration failed id='{}' err='{}'",
+                    ENGINE_ECS_SERVICE_ID,
                     e
                 );
             }

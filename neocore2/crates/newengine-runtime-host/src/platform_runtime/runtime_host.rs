@@ -27,6 +27,7 @@ use newengine_ui::{
     create_provider, UiBuildFn, UiFrameDesc, UiInputFrame, UiProvider, UiProviderKind,
     UiProviderOptions, UiProviderBinding,
 };
+use newengine_ui::draw::UiDrawList;
 
 use crate::platform_input::poll_input_frame;
 use crate::platform_runtime::callbacks::{
@@ -70,6 +71,7 @@ pub struct HostPlatformRuntime {
     ui_frame_index: u64,
     loaded_engine_plugins: Option<usize>,
     fatal_bootstrap_error: Option<String>,
+    cached_provider_ui_draw: Option<UiDrawList>,
 }
 
 
@@ -105,6 +107,7 @@ impl HostPlatformRuntime {
             ui_frame_index: 0,
             loaded_engine_plugins: None,
             fatal_bootstrap_error: None,
+            cached_provider_ui_draw: None,
         }
     }
 
@@ -506,14 +509,56 @@ impl HostPlatformRuntime {
             }
         }
 
-        let mut ui_draw = if matches!(self.ui_selection.active(), UiProviderKind::Plugin { .. }) {
-            crate::platform_runtime::ui_gateway_frame::request_ui_draw_list(
-                ui_frame_index,
-                dt_sec,
-                [self.surface.width, self.surface.height],
-                self.surface.pixels_per_point,
-            )?
+        let provider_ui_active = matches!(self.ui_selection.active(), UiProviderKind::Plugin { .. });
+        let debug_overlay_active = self
+            .engine
+            .resources
+            .get::<newengine_ui_api::UiRuntimeDebugOverlayTelemetry>()
+            .is_some();
+        let scene_launch_active = self
+            .engine
+            .resources
+            .get::<SceneLaunchStatus>()
+            .map(|status| status.active)
+            .unwrap_or(false);
+
+        // Provider UI is a persistent overlay contract, not only a debug-overlay side effect.
+        // The 1000-fps hot-path pass accidentally skipped engine.ui after launch unless
+        // runtime-debug telemetry was enabled, so the gameplay HUD vanished and the frame graph
+        // legitimately collapsed to `ui=none`. Keep UI visible by using a cached provider draw
+        // list for idle gameplay, and refresh it only when state can change.
+        let provider_ui_needed = self.ui_build.is_some() || debug_overlay_active || scene_launch_active;
+        let provider_gameplay_hud = provider_ui_active && !self.minimized && self.surface.width > 0 && self.surface.height > 0;
+        let provider_ui_refresh = provider_ui_needed
+            || self.cached_provider_ui_draw.is_none()
+            || ui_frame_index <= 4
+            || ui_frame_index % 30 == 1;
+
+        let mut ui_draw = if provider_ui_active && (provider_ui_needed || provider_gameplay_hud) {
+            if provider_ui_refresh {
+                match crate::platform_runtime::ui_gateway_frame::request_ui_draw_list(
+                    ui_frame_index,
+                    dt_sec,
+                    [self.surface.width, self.surface.height],
+                    self.surface.pixels_per_point,
+                )? {
+                    Some(draw_list) => {
+                        let mut cached = draw_list.clone();
+                        cached.texture_delta.clear();
+                        self.cached_provider_ui_draw = Some(cached);
+                        Some(draw_list)
+                    }
+                    None if provider_ui_needed => {
+                        self.cached_provider_ui_draw = None;
+                        None
+                    }
+                    None => self.cached_provider_ui_draw.clone(),
+                }
+            } else {
+                self.cached_provider_ui_draw.clone()
+            }
         } else {
+            self.cached_provider_ui_draw = None;
             None
         };
 

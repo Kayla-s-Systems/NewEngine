@@ -1,5 +1,6 @@
 #![forbid(unsafe_op_in_unsafe_fn)]
 
+use newengine_camera_contracts::CameraFrameSnapshot;
 use newengine_core::host_events::CursorState;
 use newengine_core::render::{
     PostFxFrameParams, ViewDepthOfFieldFrameParams, ViewMotionBlurFrameParams,
@@ -56,6 +57,7 @@ impl From<EngineViewInput> for CameraGatewayInput {
 #[derive(Clone, Debug)]
 pub(crate) struct EngineViewGatewayFrame {
     pub frame_index: u64,
+    pub camera_snapshot: CameraFrameSnapshot,
     pub view: EngineViewFrame,
     pub postfx: ViewPostFxFrameParams,
     pub diagnostics: Option<EngineViewDiagnostics>,
@@ -69,6 +71,7 @@ impl From<CameraGatewayFrame> for EngineViewGatewayFrame {
     fn from(frame: CameraGatewayFrame) -> Self {
         Self {
             frame_index: frame.frame_index,
+            camera_snapshot: frame.camera_snapshot,
             view: EngineViewFrame {
                 view: frame.view.view,
                 projection: frame.view.projection,

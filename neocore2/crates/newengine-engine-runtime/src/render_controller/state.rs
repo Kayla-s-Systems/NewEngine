@@ -1,5 +1,6 @@
 #![forbid(unsafe_op_in_unsafe_fn)]
 
+use newengine_camera_contracts::CameraFrameSnapshot;
 use newengine_core::host_events::CursorState;
 use newengine_core::render::{Extent2D, RenderTargetId, SamplerId, TextureId};
 use newengine_math::collections::FxHashMap;
@@ -277,6 +278,11 @@ impl RenderGpuSceneState {
 pub(super) struct RenderFrameRuntimeState {
     pub(super) frame_index: u64,
     pub(super) last_pick_seq: u64,
+    /// Last camera frame observed by render orchestration.
+    ///
+    /// This is a pure DTO snapshot from the camera contract boundary. Render
+    /// runtime must not own `newengine-camera` projection/controller/nav state.
+    pub(super) last_camera_snapshot: Option<CameraFrameSnapshot>,
     pub(super) sim_schedule: newengine_sim::SimSchedule,
     pub(super) last_play_mode: crate::GameRunMode,
 }
@@ -287,6 +293,7 @@ impl RenderFrameRuntimeState {
         Self {
             frame_index: 0,
             last_pick_seq: 0,
+            last_camera_snapshot: None,
             sim_schedule: crate::gameplay::default_sim_schedule(),
             last_play_mode: crate::GameRunMode::Staging,
         }

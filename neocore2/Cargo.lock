@@ -439,6 +439,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "newengine-camera-contracts"
+version = "0.1.0"
+dependencies = [
+ "newengine-camera-api",
+]
+
+[[package]]
 name = "newengine-camera-runtime"
 version = "0.1.0"
 dependencies = [
@@ -462,6 +469,7 @@ dependencies = [
  "log",
  "newengine-assets-api",
  "newengine-camera-api",
+ "newengine-ecs-api",
  "newengine-math",
  "newengine-physics-api",
  "newengine-platform-api",
@@ -489,6 +497,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "newengine-ecs-api"
+version = "0.1.0"
+dependencies = [
+ "newengine-service-api",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "newengine-engine-runtime"
 version = "0.1.0"
 dependencies = [
@@ -501,6 +518,7 @@ dependencies = [
  "newengine-bounds",
  "newengine-camera",
  "newengine-camera-api",
+ "newengine-camera-contracts",
  "newengine-camera-runtime",
  "newengine-core",
  "newengine-ecs",
@@ -550,6 +568,8 @@ dependencies = [
  "log",
  "newengine-assets",
  "newengine-core",
+ "newengine-ecs",
+ "newengine-ecs-api",
  "newengine-engine-runtime",
  "newengine-plugin-api",
  "newengine-plugin-host",
@@ -560,6 +580,7 @@ dependencies = [
  "newengine-service-api",
  "newengine-ui",
  "parking_lot",
+ "serde",
  "serde_json",
 ]
 
@@ -731,6 +752,7 @@ dependencies = [
  "log",
  "newengine-assets",
  "newengine-core",
+ "newengine-ecs-api",
  "newengine-math",
  "newengine-physics-api",
  "newengine-platform-api",

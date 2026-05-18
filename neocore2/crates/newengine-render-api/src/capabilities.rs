@@ -39,6 +39,10 @@ pub enum RenderFeature {
     ShaderDiskCache,
     RenderGraph,
     TransientResourceLifetime,
+    DeferredGBuffer,
+    DeferredLighting,
+    TiledLighting,
+    ClusteredLighting,
     Shadows,
     ShadowCasterCulling,
     ShadowAtlas,
@@ -52,6 +56,24 @@ pub enum RenderFeature {
     Tessellation,
     EffectStack,
     PostEffects,
+    PostFxExposureHistory,
+    Ssao,
+    AdaptiveDof,
+    LensArtefacts,
+    Mlaa,
+    PostScan,
+    OcclusionCulling,
+    HiZOcclusion,
+    PvsVisibility,
+    ZoneCulling,
+    Reflections,
+    PlanarReflections,
+    MirrorReflections,
+    WaterReflections,
+    WaterRendering,
+    Vegetation,
+    GrassRendering,
+    TreeImposters,
     UiComposite,
 }
 
@@ -70,7 +92,7 @@ impl Default for RenderLimits {
     fn default() -> Self {
         Self {
             max_texture_dimension_2d: 4096,
-            max_color_attachments: 1,
+            max_color_attachments: 4,
             max_bind_groups: 4,
             max_sampled_textures_per_stage: 16,
             max_uniform_buffer_range: 64 * 1024,
@@ -107,6 +129,10 @@ impl RenderBackendCapabilities {
                 RenderFeature::ShaderDiskCache,
                 RenderFeature::RenderGraph,
                 RenderFeature::TransientResourceLifetime,
+                RenderFeature::DeferredGBuffer,
+                RenderFeature::DeferredLighting,
+                RenderFeature::TiledLighting,
+                RenderFeature::ClusteredLighting,
                 RenderFeature::Shadows,
                 RenderFeature::ShadowCasterCulling,
                 RenderFeature::ShadowAtlas,
@@ -119,6 +145,24 @@ impl RenderBackendCapabilities {
                 RenderFeature::Tessellation,
                 RenderFeature::EffectStack,
                 RenderFeature::PostEffects,
+                RenderFeature::PostFxExposureHistory,
+                RenderFeature::Ssao,
+                RenderFeature::AdaptiveDof,
+                RenderFeature::LensArtefacts,
+                RenderFeature::Mlaa,
+                RenderFeature::PostScan,
+                RenderFeature::OcclusionCulling,
+                RenderFeature::HiZOcclusion,
+                RenderFeature::PvsVisibility,
+                RenderFeature::ZoneCulling,
+                RenderFeature::Reflections,
+                RenderFeature::PlanarReflections,
+                RenderFeature::MirrorReflections,
+                RenderFeature::WaterReflections,
+                RenderFeature::WaterRendering,
+                RenderFeature::Vegetation,
+                RenderFeature::GrassRendering,
+                RenderFeature::TreeImposters,
                 RenderFeature::UiComposite,
             ],
             limits: RenderLimits::default(),
@@ -161,8 +205,19 @@ mod tests {
         assert!(caps.supports(RenderFeature::Taa));
         assert!(caps.supports(RenderFeature::Tessellation));
         assert!(caps.supports(RenderFeature::EffectStack));
+        assert!(caps.supports(RenderFeature::DeferredGBuffer));
+        assert!(caps.supports(RenderFeature::DeferredLighting));
+        assert!(caps.supports(RenderFeature::TiledLighting));
+        assert!(caps.supports(RenderFeature::ClusteredLighting));
         assert!(caps.supports(RenderFeature::PcssShadows));
         assert!(caps.supports(RenderFeature::ShadowCasterCulling));
+        assert!(caps.supports(RenderFeature::Ssao));
+        assert!(caps.supports(RenderFeature::AdaptiveDof));
+        assert!(caps.supports(RenderFeature::LensArtefacts));
+        assert!(caps.supports(RenderFeature::HiZOcclusion));
+        assert!(caps.supports(RenderFeature::PvsVisibility));
+        assert!(caps.supports(RenderFeature::WaterRendering));
+        assert!(caps.supports(RenderFeature::TreeImposters));
         assert!(!caps.supports(RenderFeature::Msaa));
     }
 }

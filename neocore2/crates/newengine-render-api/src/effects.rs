@@ -10,6 +10,7 @@ pub enum RenderEffectKind {
     CascadedShadows,
     ShadowAtlas,
     Bloom,
+    ScreenSpaceAmbientOcclusion,
     ToneMap,
     Fxaa,
     Taa,
@@ -24,6 +25,10 @@ pub enum RenderEffectKind {
     Vignette,
     Dither,
     UiComposite,
+    WaterSurface,
+    WaterReflection,
+    GrassSurface,
+    TreeImposter,
 }
 
 impl RenderEffectKind {
@@ -34,6 +39,7 @@ impl RenderEffectKind {
             Self::CascadedShadows => "render.effect.cascaded_shadows",
             Self::ShadowAtlas => "render.effect.shadow_atlas",
             Self::Bloom => "render.effect.bloom",
+            Self::ScreenSpaceAmbientOcclusion => "render.effect.ssao",
             Self::ToneMap => "render.effect.tonemap",
             Self::Fxaa => "render.effect.fxaa",
             Self::Taa => "render.effect.taa",
@@ -48,6 +54,10 @@ impl RenderEffectKind {
             Self::Vignette => "render.effect.vignette",
             Self::Dither => "render.effect.dither",
             Self::UiComposite => "render.effect.ui_composite",
+            Self::WaterSurface => "render.effect.water_surface",
+            Self::WaterReflection => "render.effect.water_reflection",
+            Self::GrassSurface => "render.effect.grass_surface",
+            Self::TreeImposter => "render.effect.tree_imposter",
         }
     }
 }
@@ -374,6 +384,12 @@ impl RenderEffectStack {
                 )
                 .with_cache_policy(RenderEffectCachePolicy::FrameResources),
                 RenderEffectObject::new(
+                    RenderEffectKind::ScreenSpaceAmbientOcclusion,
+                    RenderEffectStage::PostProcess,
+                    RenderEffectConfig::Empty,
+                )
+                .with_cache_policy(RenderEffectCachePolicy::FrameResources),
+                RenderEffectObject::new(
                     RenderEffectKind::Taa,
                     RenderEffectStage::PostProcess,
                     RenderEffectConfig::Taa(TaaEffectConfig::default()),
@@ -388,6 +404,61 @@ impl RenderEffectStack {
                     RenderEffectKind::Msaa,
                     RenderEffectStage::Geometry,
                     RenderEffectConfig::Msaa(MsaaEffectConfig::default()),
+                )
+                .with_cache_policy(RenderEffectCachePolicy::FrameResources),
+                RenderEffectObject::new(
+                    RenderEffectKind::DepthOfField,
+                    RenderEffectStage::PostProcess,
+                    RenderEffectConfig::Empty,
+                )
+                .with_cache_policy(RenderEffectCachePolicy::TemporalHistory),
+                RenderEffectObject::new(
+                    RenderEffectKind::ColorGrade,
+                    RenderEffectStage::PostProcess,
+                    RenderEffectConfig::Empty,
+                ),
+                RenderEffectObject::new(
+                    RenderEffectKind::SunLensFlare,
+                    RenderEffectStage::PostProcess,
+                    RenderEffectConfig::Empty,
+                ),
+                RenderEffectObject::new(
+                    RenderEffectKind::SunRays,
+                    RenderEffectStage::PostProcess,
+                    RenderEffectConfig::Empty,
+                ),
+                RenderEffectObject::new(
+                    RenderEffectKind::Vignette,
+                    RenderEffectStage::PostProcess,
+                    RenderEffectConfig::Empty,
+                ),
+                RenderEffectObject::new(
+                    RenderEffectKind::Dither,
+                    RenderEffectStage::PostProcess,
+                    RenderEffectConfig::Empty,
+                ),
+                RenderEffectObject::new(
+                    RenderEffectKind::WaterSurface,
+                    RenderEffectStage::Geometry,
+                    RenderEffectConfig::Empty,
+                )
+                .with_cache_policy(RenderEffectCachePolicy::FrameResources),
+                RenderEffectObject::new(
+                    RenderEffectKind::WaterReflection,
+                    RenderEffectStage::PostProcess,
+                    RenderEffectConfig::Empty,
+                )
+                .with_cache_policy(RenderEffectCachePolicy::FrameResources),
+                RenderEffectObject::new(
+                    RenderEffectKind::GrassSurface,
+                    RenderEffectStage::Geometry,
+                    RenderEffectConfig::Empty,
+                )
+                .with_cache_policy(RenderEffectCachePolicy::FrameResources),
+                RenderEffectObject::new(
+                    RenderEffectKind::TreeImposter,
+                    RenderEffectStage::Geometry,
+                    RenderEffectConfig::Empty,
                 )
                 .with_cache_policy(RenderEffectCachePolicy::FrameResources),
                 RenderEffectObject::new(
@@ -474,9 +545,15 @@ mod tests {
             RenderEffectKind::PcssShadows,
             RenderEffectKind::CascadedShadows,
             RenderEffectKind::Bloom,
+            RenderEffectKind::ScreenSpaceAmbientOcclusion,
             RenderEffectKind::Taa,
             RenderEffectKind::Msaa,
             RenderEffectKind::Tessellation,
+            RenderEffectKind::DepthOfField,
+            RenderEffectKind::SunLensFlare,
+            RenderEffectKind::WaterSurface,
+            RenderEffectKind::GrassSurface,
+            RenderEffectKind::TreeImposter,
         ] {
             assert!(stack.find(kind).is_some(), "missing {:?}", kind);
         }

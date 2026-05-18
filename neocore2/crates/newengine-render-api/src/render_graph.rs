@@ -325,7 +325,7 @@ impl RenderDrawListKind {
     pub const fn is_compatible_with_pass(self, pass: RenderGraphPassKind) -> bool {
         match (self, pass) {
             (Self::ShadowCasters, RenderGraphPassKind::ShadowMap | RenderGraphPassKind::ShadowCascadeMap | RenderGraphPassKind::DepthPrepass) => true,
-            (Self::OpaqueForward, RenderGraphPassKind::ForwardOpaque | RenderGraphPassKind::GBuffer) => true,
+            (Self::OpaqueForward, RenderGraphPassKind::ForwardOpaque | RenderGraphPassKind::GBuffer | RenderGraphPassKind::DeferredLighting) => true,
             (Self::Transparent, RenderGraphPassKind::Transparent) => true,
             (Self::Ui, RenderGraphPassKind::UiComposite) => true,
             (Self::Debug, RenderGraphPassKind::DebugOverlay) => true,

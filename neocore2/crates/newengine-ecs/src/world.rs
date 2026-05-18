@@ -106,6 +106,24 @@ impl World {
         self.entities.len()
     }
 
+    /// Number of component storage tables currently allocated.
+    #[inline]
+    pub fn storage_count(&self) -> usize {
+        self.storages.len()
+    }
+
+    /// Number of ECS resources currently stored in the world.
+    #[inline]
+    pub fn resource_count(&self) -> usize {
+        self.resources.len()
+    }
+
+    /// Last tick where the entity set changed.
+    #[inline]
+    pub fn entities_changed_tick(&self) -> u64 {
+        self.entities_changed_tick
+    }
+
     /// Despawns an entity and removes all its components.
     #[inline]
     pub fn despawn(&mut self, id: EntityId) -> bool {

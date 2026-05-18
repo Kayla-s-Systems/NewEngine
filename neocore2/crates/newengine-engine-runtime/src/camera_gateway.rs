@@ -9,7 +9,8 @@ use abi_stable::std_types::{RResult, RString};
 use newengine_camera::{
     CameraChannel, CameraChannelState, CameraViewport, RuntimeNavController, RuntimeNavMode,
 };
-use newengine_camera_api::{CameraFrameSnapshot, CameraServiceInfo, CAMERA_BACKEND_CAPABILITY_ID, ENGINE_CAMERA_SERVICE_ID};
+use newengine_camera_api::{CameraServiceInfo, CAMERA_BACKEND_CAPABILITY_ID, ENGINE_CAMERA_SERVICE_ID};
+use newengine_camera_contracts::CameraFrameSnapshot;
 use newengine_camera_runtime::{
     camera_frame_snapshot, cursor_state_for_nav, step_camera_nav, BoundsSphere as CamBoundsSphere,
     CameraManagerResource, CameraNavFrameRequest, CameraNavInput, CameraNavParams,
@@ -259,6 +260,7 @@ impl CameraGatewayBridge {
 
         CameraGatewayFrame {
             frame_index,
+            camera_snapshot: snapshot,
             view,
             postfx: view_postfx_from_camera_snapshot(snapshot),
             report,
@@ -367,6 +369,7 @@ pub struct CameraGatewayInput {
 #[derive(Clone, Debug)]
 pub struct CameraGatewayFrame {
     pub frame_index: u64,
+    pub camera_snapshot: CameraFrameSnapshot,
     pub view: EngineViewFrame,
     pub postfx: ViewPostFxFrameParams,
     pub report: Option<CameraRuntimeOverlayReport>,

@@ -226,8 +226,9 @@ impl RenderFrameOrchestrator {
                 .viewport_is_surface(scope.direct_surface_viewport)
                 .viewport_render_target(rt)
                 .shadow(render_shadow_map && shadow_rt_for_graph.is_some(), shadow_plan.resolution)
+                .shadow_cascades(shadow_plan.cascade_count())
                 .shadow_render_target(shadow_rt_for_graph)
-                .deferred(false)
+                .deferred(runtime_deferred_enabled())
                 .hdr_scene(true)
                 .postfx(true)
                 .ui(scope.ui_enabled)
@@ -479,4 +480,11 @@ impl RenderFrameOrchestrator {
             shadow_plan.resolution
         );
     }
+}
+
+#[inline]
+fn runtime_deferred_enabled() -> bool {
+    std::env::var("NEWENGINE_RENDER_DEFERRED")
+        .map(|value| matches!(value.trim().to_ascii_lowercase().as_str(), "1" | "true" | "on" | "yes" | "deferred" | "native"))
+        .unwrap_or(false)
 }

@@ -22,16 +22,16 @@ fn build_light_provider_request(ctx: &LightExtractionCtx<'_>) -> LightExtraction
             softness: ctx.settings.softness,
             contact_strength: ctx.settings.contact_strength,
             normal_bias: ctx.settings.normal_bias,
-            cascade_count: 1,
+            cascade_count: ctx.settings.cascade_count,
         },
         backend: BackendShadowCapabilities {
             directional_depth_map: true,
-            cascaded_shadow_maps: false,
+            cascaded_shadow_maps: true,
             point_cube_map: false,
             spot_depth_map: false,
             max_shadow_resolution: ctx.settings.resolution,
-            max_directional_cascades: 1,
-            shadow_atlas: false,
+            max_directional_cascades: ctx.settings.cascade_count.clamp(1, 4),
+            shadow_atlas: true,
         },
     }
 }
@@ -80,6 +80,7 @@ const fn shadow_method_label(method: ShadowMethod) -> &'static str {
         ShadowMethod::None => "none",
         ShadowMethod::Auto => "auto",
         ShadowMethod::DirectionalDepthMap => "directional_depth_map",
+        ShadowMethod::CascadedShadowMaps => "cascaded_shadow_maps",
         ShadowMethod::PointCubeMap => "point_cube_map",
         ShadowMethod::SpotDepthMap => "spot_depth_map",
     }

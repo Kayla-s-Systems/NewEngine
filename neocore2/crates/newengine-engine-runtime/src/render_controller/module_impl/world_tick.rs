@@ -85,6 +85,7 @@ impl RuntimeRenderController {
                 sel_bounds,
             );
             self.frame.last_play_mode = effective_play_mode;
+            self.frame.last_camera_snapshot = Some(frame.camera_snapshot);
             self.viewport.last_aspect = frame.view.aspect;
             self.viewport.last_vp_w = vp_w;
             self.viewport.last_vp_h = vp_h;

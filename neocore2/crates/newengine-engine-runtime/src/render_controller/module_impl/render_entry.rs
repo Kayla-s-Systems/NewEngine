@@ -1,3 +1,5 @@
+use std::sync::OnceLock;
+
 use newengine_core::render::{
     require_render_api, BeginFrameDesc, Extent2D, RectI32, SceneLaunchStatus, Viewport,
 };
@@ -13,7 +15,11 @@ impl RuntimeRenderController {
         &mut self,
         ctx: &mut ModuleCtx<'_, E>,
     ) -> EngineResult<()> {
-        let ui: Option<UiDrawList> = ctx.resources_mut().remove::<UiDrawList>();
+        // Do not consume the UI draw list before the native launch gate.
+        // The first provider frame usually carries the font/solid atlas; if the
+        // launch gate exits before a presentable frame, removing it here makes
+        // subsequent atlas-free HUD frames invisible. Consume UI only when this
+        // module is actually going to submit a playable/UI frame.
         let plugin_snapshot = ctx
             .resources()
             .get::<newengine_plugin_host::PluginsSnapshot>()
@@ -31,7 +37,7 @@ impl RuntimeRenderController {
 
         let trace_frame = super::trace_policy::should_trace_frame(self.frame.frame_index);
         let api = match require_render_api(ctx) {
-            Ok(api) => api,
+            Ok(api) => api.clone(),
             Err(_) => return Ok(()),
         };
         let mut r = api.lock();
@@ -58,6 +64,10 @@ impl RuntimeRenderController {
         }
 
         self.resize_if_needed(&mut **r, w, h)?;
+        drop(r);
+
+        let ui: Option<UiDrawList> = ctx.resources_mut().remove::<UiDrawList>();
+        let mut r = api.lock();
         let dt = ctx.frame().map(|f| f.dt).unwrap_or(0.016);
         let Some(scope) = self.begin_playable_surface_frame(&mut **r, ui.is_some(), w, h, dt, trace_frame)? else {
             drop(r);
@@ -118,10 +128,12 @@ impl RuntimeRenderController {
             if let Some(snapshot) = frame_debug_snapshot.take() {
                 self.diagnostics.overlay_metrics.publish_debug_snapshot(snapshot);
                 let telemetry = self.diagnostics.overlay_metrics.telemetry_snapshot();
-                let overlay_text = self.diagnostics.overlay_metrics.overlay_text();
-                let ui_telemetry = UiRuntimeDebugOverlayTelemetry::new(self.frame.frame_index, overlay_text)
-                    .with_metric("render_debug", serde_json::to_value(&telemetry).unwrap_or(serde_json::Value::Null));
-                ui_telemetry_to_publish = Some(ui_telemetry);
+                if runtime_debug_overlay_enabled() {
+                    let overlay_text = self.diagnostics.overlay_metrics.overlay_text();
+                    let ui_telemetry = UiRuntimeDebugOverlayTelemetry::new(self.frame.frame_index, overlay_text)
+                        .with_metric("render_debug", serde_json::to_value(&telemetry).unwrap_or(serde_json::Value::Null));
+                    ui_telemetry_to_publish = Some(ui_telemetry);
+                }
                 telemetry_to_publish = Some(telemetry);
             }
             self.trace_render_diagnostics(&mut **r, trace_frame);
@@ -134,6 +146,8 @@ impl RuntimeRenderController {
         }
         if let Some(ui_telemetry) = ui_telemetry_to_publish {
             ctx.resources_mut().insert(ui_telemetry);
+        } else {
+            let _ = ctx.resources_mut().remove::<UiRuntimeDebugOverlayTelemetry>();
         }
         Ok(())
     }
@@ -299,5 +313,46 @@ impl RuntimeRenderController {
                 diag.queue.queued_upload_bytes as f32 / (1024.0 * 1024.0),
             );
         }
+    }
+}
+
+fn runtime_debug_overlay_enabled() -> bool {
+    static ENABLED: OnceLock<bool> = OnceLock::new();
+    *ENABLED.get_or_init(|| {
+        let configured = std::env::var("NEWENGINE_RUNTIME_DEBUG_OVERLAY").ok();
+        parse_runtime_debug_overlay_setting(configured.as_deref())
+    })
+}
+
+fn parse_runtime_debug_overlay_setting(value: Option<&str>) -> bool {
+    match value.map(str::trim).filter(|it| !it.is_empty()) {
+        // Keep the runtime statistics overlay enabled by default for the
+        // GameReady/profile-dev runtime. The provider HUD is still available
+        // as an explicit opt-out fallback, but the normal engine UI contract
+        // should continue receiving runtime telemetry after the loading handoff.
+        None => true,
+        Some("0") | Some("false") | Some("FALSE") | Some("False") | Some("no")
+        | Some("NO") | Some("No") | Some("off") | Some("OFF") | Some("Off") => false,
+        Some("1") | Some("true") | Some("TRUE") | Some("True") | Some("yes")
+        | Some("YES") | Some("Yes") | Some("on") | Some("ON") | Some("On") => true,
+        Some(_) => true,
+    }
+}
+
+#[cfg(test)]
+mod runtime_debug_overlay_setting_tests {
+    use super::parse_runtime_debug_overlay_setting;
+
+    #[test]
+    fn runtime_debug_overlay_is_enabled_by_default() {
+        assert!(parse_runtime_debug_overlay_setting(None));
+        assert!(parse_runtime_debug_overlay_setting(Some("")));
+    }
+
+    #[test]
+    fn runtime_debug_overlay_can_be_disabled_explicitly() {
+        assert!(!parse_runtime_debug_overlay_setting(Some("0")));
+        assert!(!parse_runtime_debug_overlay_setting(Some("false")));
+        assert!(!parse_runtime_debug_overlay_setting(Some("off")));
     }
 }

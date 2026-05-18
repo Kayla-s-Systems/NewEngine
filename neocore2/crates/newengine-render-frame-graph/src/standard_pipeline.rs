@@ -15,6 +15,7 @@ pub struct StandardRuntimePipelineDesc {
     pub shadow_render_target: Option<RenderTargetId>,
     pub shadow_enabled: bool,
     pub shadow_resolution: u32,
+    pub shadow_cascade_count: u32,
     pub deferred: bool,
     pub hdr_scene_enabled: bool,
     pub postfx_enabled: bool,
@@ -36,6 +37,7 @@ impl StandardRuntimePipelineDesc {
             shadow_render_target: None,
             shadow_enabled: true,
             shadow_resolution: 2048,
+            shadow_cascade_count: 1,
             deferred: false,
             hdr_scene_enabled: true,
             postfx_enabled: true,
@@ -68,6 +70,12 @@ impl StandardRuntimePipelineDesc {
     pub fn shadow(mut self, enabled: bool, resolution: u32) -> Self {
         self.shadow_enabled = enabled;
         self.shadow_resolution = resolution;
+        self
+    }
+
+    #[inline]
+    pub fn shadow_cascades(mut self, cascade_count: u32) -> Self {
+        self.shadow_cascade_count = cascade_count.clamp(1, 8);
         self
     }
 
@@ -138,12 +146,19 @@ pub fn standard_runtime_frame(desc: StandardRuntimePipelineDesc) -> RenderFrameP
             desc.debug_overlay_enabled,
         )
     };
-    let recipe = RenderFrameRecipe::standard_runtime(features);
+    let recipe = RenderFrameRecipe::standard_runtime_with_shadow_mode(
+        features,
+        desc.shadow_cascade_count > 1,
+    );
     let label = recipe.label.clone();
 
     FrameGraphBuilder::new(label, desc.frame_index, target)
         .execution_mode(desc.execution_mode)
         .draw_lists(desc.draw_lists)
-        .apply_runtime_recipe(&recipe, RuntimeRecipeBuildParams::new(desc.shadow_resolution))
+        .apply_runtime_recipe(
+            &recipe,
+            RuntimeRecipeBuildParams::new(desc.shadow_resolution)
+                .with_shadow_cascade_count(desc.shadow_cascade_count),
+        )
         .submit()
 }

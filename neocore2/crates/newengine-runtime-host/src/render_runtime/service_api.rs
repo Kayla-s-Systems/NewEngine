@@ -307,27 +307,22 @@ impl RenderApi for ServiceBackedRenderApi {
     }
 
     fn set_render_phase(&mut self, phase: Option<RenderGraphPassKind>) -> EngineResult<()> {
-        match self.invoke_service(RenderServiceRequest::SetRenderPhase { phase })? {
-            RenderServiceResponse::Unit => Ok(()),
-            other => Err(EngineError::other(format!(
-                "render service protocol error: expected Unit, got {:?}",
-                other
-            ))),
-        }
+        // Render phase/draw-list switches are hot-path recording commands.
+        // Queue them with draws so a provider receives one ordered binary batch
+        // instead of a JSON gateway round-trip for every begin/end draw list.
+        self.queue_unit(RenderCommand::SetRenderPhase { phase })
     }
 
 
     fn set_draw_list_kind(&mut self, kind: Option<RenderDrawListKind>) -> EngineResult<()> {
-        match self.invoke_service(RenderServiceRequest::SetDrawListKind { kind })? {
-            RenderServiceResponse::Unit => Ok(()),
-            other => Err(EngineError::other(format!(
-                "render service protocol error: expected Unit, got {:?}",
-                other
-            ))),
-        }
+        self.queue_unit(RenderCommand::SetDrawListKind { kind })
     }
 
     fn discard_recorded_commands(&mut self) -> EngineResult<()> {
+        {
+            let mut pending = self.pending();
+            pending.clear();
+        }
         match self.invoke_service(RenderServiceRequest::DiscardRecordedCommands)? {
             RenderServiceResponse::Unit => Ok(()),
             other => Err(EngineError::other(format!(

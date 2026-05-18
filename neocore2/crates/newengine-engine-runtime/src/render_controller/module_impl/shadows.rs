@@ -158,7 +158,21 @@ impl LightShadowPlan {
 
     #[inline]
     pub fn extent(self) -> Extent2D {
-        Extent2D::new(self.resolution, self.resolution)
+        let cascades = self.cascade_count();
+        if cascades <= 1 {
+            return Extent2D::new(self.resolution, self.resolution);
+        }
+        let columns = if cascades <= 4 { 2 } else { 4 };
+        let rows = ((cascades + columns - 1) / columns).max(1);
+        Extent2D::new(
+            self.resolution.saturating_mul(columns),
+            self.resolution.saturating_mul(rows),
+        )
+    }
+
+    #[inline]
+    pub fn cascade_count(self) -> u32 {
+        self.frame.extra[1].round().clamp(1.0, 8.0) as u32
     }
 }
 
@@ -237,7 +251,13 @@ pub fn try_build_directional_shadow_plan(
         return Ok(None);
     };
 
-    let Some((rt, shadow_texture)) = ensure_shadow_rt(this, r, settings.resolution)? else {
+    let cascade_count = if matches!(settings.method, ShadowMethod::CascadedShadowMaps) {
+        settings.cascade_count.clamp(2, 4)
+    } else {
+        1
+    };
+
+    let Some((rt, shadow_texture)) = ensure_shadow_rt(this, r, settings.resolution, cascade_count)? else {
         return Ok(None);
     };
 
@@ -269,7 +289,7 @@ pub fn try_build_directional_shadow_plan(
     // Convert artist/profile normal bias into shadow-depth units. The shader
     // multiplies this by receiver slope, so the default 0.015 remains close to
     // the previous hardcoded 0.00018 depth offset but is now scene-controllable.
-    let extra = [settings.normal_bias.clamp(0.0, 0.5) * 0.012, 1.0, 0.0, 0.0];
+    let extra = [settings.normal_bias.clamp(0.0, 0.5) * 0.012, cascade_count as f32, 0.0, 0.0];
     let caster_cull = Some(ShadowCasterCull::directional(view, radius, near, far));
 
     Ok(Some(LightShadowPlan::directional(
@@ -288,12 +308,21 @@ fn ensure_shadow_rt(
     this: &mut RuntimeRenderController,
     r: &mut dyn RenderApi,
     requested_resolution: u32,
+    cascade_count: u32,
 ) -> EngineResult<Option<(RenderTargetId, TextureId)>> {
     let resolution = requested_resolution.clamp(
         super::super::render_quality::SHADOW_RESOLUTION_MIN,
         super::super::render_quality::SHADOW_RESOLUTION_MAX,
     );
-    let recreate = this.shadows.render_target.is_none() || this.shadows.render_target_resolution != resolution;
+    let cascades = cascade_count.clamp(1, 4);
+    let columns = if cascades <= 1 { 1 } else { 2 };
+    let rows = ((cascades + columns - 1) / columns).max(1);
+    let atlas_extent = Extent2D::new(
+        resolution.saturating_mul(columns),
+        resolution.saturating_mul(rows),
+    );
+    let atlas_key = atlas_extent.width.max(atlas_extent.height);
+    let recreate = this.shadows.render_target.is_none() || this.shadows.render_target_resolution != atlas_key;
 
     if recreate {
         if let Some(old) = this.shadows.render_target.take() {
@@ -303,14 +332,18 @@ fn ensure_shadow_rt(
         this.invalidate_shadow_cache();
         let rt = r.create_render_target(
             RenderTargetDesc::new(
-                Extent2D::new(resolution, resolution),
+                atlas_extent,
                 super::super::render_quality::SHADOW_MAP_COLOR_FORMAT,
             )
                 .with_depth(TextureFormat::Depth32Float)
-                .with_label(format!("game_sun_shadow_map_{resolution}")),
+                .with_label(if cascades > 1 {
+                    format!("game_sun_csm_atlas_{}x{}_cascades_{}", atlas_extent.width, atlas_extent.height, cascades)
+                } else {
+                    format!("game_sun_shadow_map_{resolution}")
+                }),
         )?;
         this.shadows.render_target = Some(rt);
-        this.shadows.render_target_resolution = resolution;
+        this.shadows.render_target_resolution = atlas_key;
     }
 
     let Some(rt) = this.shadows.render_target else {

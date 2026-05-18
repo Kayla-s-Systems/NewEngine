@@ -8,6 +8,8 @@ pub enum ShadowMethod {
     Auto,
     /// Single orthographic/depth shadow map for a directional light.
     DirectionalDepthMap,
+    /// Cascaded directional shadow atlas for large outdoor scenes.
+    CascadedShadowMaps,
     /// Six-face cube shadow map for an omnidirectional point light. Planned backend path.
     PointCubeMap,
     /// Single perspective depth map for a cone/spot light. Planned backend path.

@@ -2,7 +2,7 @@
 
 ## Purpose
 
-The Gateway Service Layer is the host-owned facade over plugin services.
+The Gateway Service Layer is the host-owned facade over plugin-owned and engine-owned services.
 
 Old model:
 
@@ -10,18 +10,23 @@ Old model:
 consumer -> render.api
 consumer -> physics.api
 consumer -> asset.manager / asset_manager.api
+consumer -> concrete ECS World
 ```
 
-Target model:
+Target/current model:
 
 ```text
+consumer -> engine.assets
 consumer -> engine.render
 consumer -> engine.physics
-consumer -> engine.assets
 consumer -> engine.input
+consumer -> engine.camera
+consumer -> engine.ui
+consumer -> engine.scene
+consumer -> engine.ecs
 ```
 
-The engine resolves each gateway to the active provider service from plugin descriptors.
+The engine resolves each gateway to the active provider service from plugin descriptors or explicit engine-owned route facts.
 
 ## Provider metadata contract
 
@@ -39,7 +44,7 @@ A provider declares a concrete service and a backend capability whose JSON descr
 Fields:
 
 ```text
-service_kind      engine vocabulary string, e.g. assets/render/physics/input
+service_kind      engine vocabulary string, e.g. assets/render/physics/input/ecs
 engine_gateway    stable facade id consumers call
 contract          provider service id registered by the plugin
 backend_priority  provider selection priority; higher wins
@@ -47,12 +52,31 @@ backend_priority  provider selection priority; higher wins
 
 Unknown `service_kind` values are not fatal. The host logs a warning and ignores the route.
 
+## Engine-owned route facts
+
+In-process systems that are not plugin providers yet must still register as explicit route candidates:
+
+```text
+register host ServiceV1
+register_engine_owned_gateway(gateway, kind, provider_service, capability, priority, owner)
+```
+
+Current examples:
+
+```text
+engine.camera -> newengine-engine-runtime.camera-gateway
+engine.scene  -> newengine-game-runtime.scene-bridge
+engine.ecs    -> newengine-game-runtime.ecs-gateway
+```
+
+This avoids hidden fallback logic. Built-in systems become normal candidates that future providers can override through the same registry path.
+
 ## Runtime routing
 
 ```text
 HostApiV1.call_service_v1(engine.render, method, payload)
   -> ActiveGatewayRegistry snapshot
-  -> route selected by gateway + provider service + owner plugin
+  -> route selected by gateway + provider service + owner plugin/fact
   -> provider ServiceV1.call(method, payload)
 ```
 
@@ -64,7 +88,9 @@ When multiple providers expose the same gateway:
 
 1. Higher `backend_priority` wins.
 2. Provider service id is used as a deterministic tie-breaker.
-3. Plugin id is used as the final deterministic tie-breaker.
+3. Plugin id / owner id is used as the final deterministic tie-breaker.
+
+Future Plugin Override Priority should extend this with trusted origin tiers and profile policy.
 
 ## Degradation policy
 
@@ -83,4 +109,5 @@ Gateway routing does not replace typed APIs. It only finds the provider service.
 engine.render  -> ServiceBackedRenderApi  -> RenderApiRef
 engine.physics -> ServiceBackedPhysicsApi -> PhysicsApiRef
 engine.assets  -> AssetServiceClient      -> runtime asset packets
+engine.ecs     -> EcsServiceClient        -> summary/snapshot/command DTOs
 ```

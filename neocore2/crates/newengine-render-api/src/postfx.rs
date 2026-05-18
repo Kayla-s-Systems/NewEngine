@@ -415,6 +415,12 @@ impl Default for PostFxFrameParams {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum PostFxPassKind {
     Exposure,
+    ExposureAdaptation,
+    Ssao,
+    DepthReduction,
+    AdaptiveDof,
+    LensArtefacts,
+    PostScan,
     Bloom,
     ColorGrade,
     Tonemap,
@@ -458,6 +464,12 @@ impl Default for PostFxPipelineDesc {
 fn default_postfx_passes() -> Vec<PostFxPassKind> {
     vec![
         PostFxPassKind::Exposure,
+        PostFxPassKind::ExposureAdaptation,
+        PostFxPassKind::Ssao,
+        PostFxPassKind::DepthReduction,
+        PostFxPassKind::AdaptiveDof,
+        PostFxPassKind::LensArtefacts,
+        PostFxPassKind::PostScan,
         PostFxPassKind::Bloom,
         PostFxPassKind::SunDisk,
         PostFxPassKind::SunLensFlare,
@@ -511,6 +523,11 @@ mod tests {
     #[test]
     fn postfx_pipeline_defaults_include_aaa_pass_order() {
         let desc = PostFxPipelineDesc::default();
+        assert!(desc.passes.contains(&PostFxPassKind::ExposureAdaptation));
+        assert!(desc.passes.contains(&PostFxPassKind::Ssao));
+        assert!(desc.passes.contains(&PostFxPassKind::AdaptiveDof));
+        assert!(desc.passes.contains(&PostFxPassKind::LensArtefacts));
+        assert!(desc.passes.contains(&PostFxPassKind::PostScan));
         assert!(desc.passes.contains(&PostFxPassKind::Bloom));
         assert!(desc.passes.contains(&PostFxPassKind::Fxaa));
         assert!(desc.passes.contains(&PostFxPassKind::TaaResolve));

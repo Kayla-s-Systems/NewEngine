@@ -1,0 +1,11 @@
+[package]
+name = "newengine-camera-contracts"
+version = "0.1.0"
+readme = "README.md"
+edition = "2021"
+
+description = "Stable camera DTO contracts for NewEngine render/runtime consumers"
+license = "MIT OR Apache-2.0"
+
+[dependencies]
+newengine-camera-api = { path = "../newengine-camera-api" }

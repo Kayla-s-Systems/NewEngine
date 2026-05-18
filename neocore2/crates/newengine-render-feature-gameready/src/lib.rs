@@ -212,8 +212,10 @@ impl LightExtractionProvider for GameReadyDirectionalShadowProvider {
 
     #[inline]
     fn supports(&self, ctx: &LightExtractionCtx<'_>) -> bool {
-        matches!(ctx.settings.method, ShadowMethod::Auto | ShadowMethod::DirectionalDepthMap)
-            && primary_directional_light(ctx.world).is_some()
+        matches!(
+            ctx.settings.method,
+            ShadowMethod::Auto | ShadowMethod::DirectionalDepthMap | ShadowMethod::CascadedShadowMaps
+        ) && primary_directional_light(ctx.world).is_some()
     }
 
     #[inline]

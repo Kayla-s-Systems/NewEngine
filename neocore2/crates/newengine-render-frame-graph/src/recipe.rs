@@ -63,9 +63,20 @@ pub struct RenderFrameRecipe {
 
 impl RenderFrameRecipe {
     pub fn standard_runtime(features: RuntimeFrameFeatureSet) -> Self {
+        Self::standard_runtime_with_shadow_mode(features, false)
+    }
+
+    pub fn standard_runtime_with_shadow_mode(
+        features: RuntimeFrameFeatureSet,
+        cascaded_shadows: bool,
+    ) -> Self {
         let mut steps = Vec::with_capacity(12);
         steps.push(RenderPhaseRecipeStep::enabled(StandardRenderPhase::BeginFrame));
-        steps.push(RenderPhaseRecipeStep::optional(StandardRenderPhase::ShadowMap, features.shadows));
+        if cascaded_shadows {
+            steps.push(RenderPhaseRecipeStep::optional(StandardRenderPhase::ShadowCascadeMap, features.shadows));
+        } else {
+            steps.push(RenderPhaseRecipeStep::optional(StandardRenderPhase::ShadowMap, features.shadows));
+        }
         if features.deferred {
             steps.push(RenderPhaseRecipeStep::enabled(StandardRenderPhase::DepthPrepass));
             steps.push(RenderPhaseRecipeStep::enabled(StandardRenderPhase::ViewportGBuffer));
@@ -103,7 +114,7 @@ pub struct RuntimeRecipeBuildParams {
 impl RuntimeRecipeBuildParams {
     #[inline]
     pub const fn new(shadow_resolution: u32) -> Self {
-        Self { shadow_resolution, shadow_cascade_count: 4 }
+        Self { shadow_resolution, shadow_cascade_count: 1 }
     }
 
     #[inline]

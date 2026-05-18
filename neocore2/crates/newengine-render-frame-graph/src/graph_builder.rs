@@ -274,6 +274,10 @@ impl FrameGraphBuilder {
                 .reads(RG_GBUFFER_MATERIAL, RenderGraphResourceUsage::SampledTexture)
                 .reads(RG_GBUFFER_DEPTH, RenderGraphResourceUsage::SampledTexture)
                 .writes(RG_LIT_COLOR, RenderGraphResourceUsage::ColorAttachment)
+                // Forward-compatible bridge: until native MRT GBuffer material shaders land,
+                // replay opaque commands in the lighting pass so enabling deferred graph does
+                // not produce a blank frame. The pass/target is still distinct and observable.
+                .draw_list(DrawListKind::OpaqueForward)
         });
         self
     }
@@ -506,7 +510,6 @@ impl FrameGraphBuilder {
                 .writes(RG_GBUFFER_ALBEDO, RenderGraphResourceUsage::ColorAttachment)
                 .writes(RG_GBUFFER_NORMAL, RenderGraphResourceUsage::ColorAttachment)
                 .writes(RG_GBUFFER_MATERIAL, RenderGraphResourceUsage::ColorAttachment)
-                .draw_list(DrawListKind::OpaqueForward)
         });
         self
     }

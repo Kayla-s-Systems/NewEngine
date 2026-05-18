@@ -219,6 +219,7 @@ fn main_impl() -> EngineResult<()> {
     engine.preload_bootstrap_plugins()?;
     game_ready_early_log!("engine.preload_bootstrap_plugins.ok");
     profile.register_scene_io_best_effort();
+    profile.register_ecs_gateway_best_effort();
     newengine_core::crash::record_breadcrumb("game-ready fps launcher: bootstrap plugins preloaded");
 
     // The standalone game scene is intentionally not built here.
