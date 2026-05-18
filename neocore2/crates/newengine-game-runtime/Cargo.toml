@@ -10,7 +10,7 @@ log = "0.4"
 parking_lot = "0.12"
 
 newengine-assets = { path = "../newengine-assets" }
-newengine-core = { path = "../newengine-core" }
+newengine-core = { path = "../newengine-core", features = ["host-probe"] }
 newengine-engine-runtime = { path = "../newengine-engine-runtime" }
 newengine-render-feature-gameready = { path = "../newengine-render-feature-gameready" }
 newengine-plugin-host = { path = "../newengine-plugin-host" }

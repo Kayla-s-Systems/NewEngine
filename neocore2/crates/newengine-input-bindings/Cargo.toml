@@ -1,0 +1,14 @@
+[package]
+name = "newengine-input-bindings"
+version = "0.1.0"
+edition = "2021"
+readme = "README.md"
+description = "Engine-owned input binding and semantic action domain for NewEngine"
+
+[features]
+default = []
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+newengine-camera-api = { path = "../newengine-camera-api" }
+newengine-service-api = { path = "../newengine-service-api" }

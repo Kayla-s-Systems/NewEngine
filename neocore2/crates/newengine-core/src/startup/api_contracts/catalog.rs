@@ -79,6 +79,10 @@ pub(crate) const RUNTIME_SERVICE_CATALOG: &[RuntimeServiceCatalogEntry] = &[
         "platform UI bridge / overlays / HUD",
     ),
     RuntimeServiceCatalogEntry::new(
+        newengine_loading_api::LOADING_RUNTIME_REQUIREMENT_SPEC,
+        "native loading shell / startup compositor / progress projection",
+    ),
+    RuntimeServiceCatalogEntry::new(
         newengine_scene_io::SCENE_RUNTIME_REQUIREMENT_SPEC,
         "SceneBridge / world streaming / scene asset load-save",
     ),
@@ -93,6 +97,10 @@ pub(crate) const RUNTIME_SERVICE_CATALOG: &[RuntimeServiceCatalogEntry] = &[
     RuntimeServiceCatalogEntry::new(
         INPUT_RUNTIME_REQUIREMENT_SPEC,
         "platform_input::poll_input_frame / UI input projection",
+    ),
+    RuntimeServiceCatalogEntry::new(
+        newengine_input_bindings::INPUT_BINDINGS_RUNTIME_REQUIREMENT_SPEC,
+        "semantic input bindings / camera view and gameplay action projection",
     ),
     RuntimeServiceCatalogEntry::new(
         newengine_physics_api::PHYSICS_RUNTIME_REQUIREMENT_SPEC,

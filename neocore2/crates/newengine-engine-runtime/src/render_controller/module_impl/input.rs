@@ -1,6 +1,6 @@
 #![forbid(unsafe_op_in_unsafe_fn)]
 
-use newengine_ui::input::keys as ui_keys;
+use newengine_input_bindings::{CameraViewRequest, InputBindingsProfile, InputFrameSource};
 use newengine_ui::UiInputFrame;
 
 #[derive(Clone, Copy, Debug, Default)]
@@ -18,6 +18,7 @@ pub(super) struct ViewportInputSnap {
 
     pub move_mask: u64,
     pub speed_scalar: f32,
+    pub camera_view: CameraViewRequest,
 }
 
 impl ViewportInputSnap {
@@ -36,6 +37,7 @@ impl ViewportInputSnap {
             fly_rmb,
             move_mask,
             speed_scalar,
+            camera_view: CameraViewRequest::None,
         }
     }
 
@@ -44,29 +46,7 @@ impl ViewportInputSnap {
         let Some(input) = input else {
             return Self::default();
         };
-
-        let mut move_mask: u64 = 0;
-        if input.is_key_down(ui_keys::KEY_W) {
-            move_mask |= newengine_viewport::input::MOVE_W;
-        }
-        if input.is_key_down(ui_keys::KEY_A) {
-            move_mask |= newengine_viewport::input::MOVE_A;
-        }
-        if input.is_key_down(ui_keys::KEY_S) {
-            move_mask |= newengine_viewport::input::MOVE_S;
-        }
-        if input.is_key_down(ui_keys::KEY_D) {
-            move_mask |= newengine_viewport::input::MOVE_D;
-        }
-        if input.is_key_down(ui_keys::KEY_Q) {
-            move_mask |= newengine_viewport::input::MOVE_UP;
-        }
-        if input.is_key_down(ui_keys::KEY_E) {
-            move_mask |= newengine_viewport::input::MOVE_DOWN;
-        }
-        if input.is_key_down(ui_keys::SHIFT_LEFT) || input.is_key_down(ui_keys::SHIFT_RIGHT) {
-            move_mask |= newengine_viewport::input::MOVE_SHIFT;
-        }
+        let actions = InputBindingsProfile::gameplay_default().resolve(&UiInputSource(input));
 
         Self {
             dx_px: input.mouse_delta.0,
@@ -77,8 +57,26 @@ impl ViewportInputSnap {
             pan_drag: false,
             ui_busy: false,
             fly_rmb: false,
-            move_mask,
+            move_mask: actions.move_mask,
             speed_scalar: 1.0,
+            camera_view: actions.camera_view,
         }
     }
+}
+
+struct UiInputSource<'a>(&'a UiInputFrame);
+
+impl InputFrameSource for UiInputSource<'_> {
+    #[inline]
+    fn is_key_down(&self, key: u32) -> bool { self.0.is_key_down(key) }
+    #[inline]
+    fn is_key_pressed(&self, key: u32) -> bool { self.0.is_key_pressed(key) }
+    #[inline]
+    fn is_key_released(&self, key: u32) -> bool { self.0.keys_released.contains(&key) }
+    #[inline]
+    fn is_mouse_down(&self, button: u32) -> bool { self.0.is_mouse_down(button) }
+    #[inline]
+    fn is_mouse_pressed(&self, button: u32) -> bool { self.0.is_mouse_pressed(button) }
+    #[inline]
+    fn is_mouse_released(&self, button: u32) -> bool { self.0.mouse_released.contains(&button) }
 }

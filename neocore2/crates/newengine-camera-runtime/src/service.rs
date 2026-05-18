@@ -7,9 +7,7 @@ use newengine_math::{Vec2, Vec3};
 use newengine_sim::{
     CameraRigComp, FollowTargetCameraMotor, MotorInput,
 };
-use newengine_viewport::input::{
-    MOVE_A, MOVE_D, MOVE_DOWN, MOVE_S, MOVE_SHIFT, MOVE_UP, MOVE_W,
-};
+use newengine_input_bindings::move_mask as input_move;
 
 use crate::manager::{CameraDirectorRequest, CameraManagerResource};
 use crate::modes::{
@@ -135,28 +133,28 @@ impl CameraRuntimeService {
     pub fn apply_player_input(
         world: &mut World,
         player: EntityId,
-        move_mask: u64,
+        input_mask: u64,
         look_delta_px: Vec2,
         look_active: bool,
         sprint_multiplier: f32,
     ) {
         let mut axis = Vec3::ZERO;
-        if move_mask & MOVE_W != 0 {
+        if input_mask & input_move::FORWARD != 0 {
             axis.z += 1.0;
         }
-        if move_mask & MOVE_S != 0 {
+        if input_mask & input_move::BACK != 0 {
             axis.z -= 1.0;
         }
-        if move_mask & MOVE_D != 0 {
+        if input_mask & input_move::RIGHT != 0 {
             axis.x += 1.0;
         }
-        if move_mask & MOVE_A != 0 {
+        if input_mask & input_move::LEFT != 0 {
             axis.x -= 1.0;
         }
-        if move_mask & MOVE_UP != 0 {
+        if input_mask & input_move::UP != 0 {
             axis.y += 1.0;
         }
-        if move_mask & MOVE_DOWN != 0 {
+        if input_mask & input_move::DOWN != 0 {
             axis.y -= 1.0;
         }
 
@@ -164,7 +162,7 @@ impl CameraRuntimeService {
             input.move_axis = axis;
             input.look_delta = look_delta_px;
             input.look_active = look_active;
-            input.speed_mul = if move_mask & MOVE_SHIFT != 0 {
+            input.speed_mul = if input_mask & input_move::SPRINT != 0 {
                 sprint_multiplier.max(1.0)
             } else {
                 1.0

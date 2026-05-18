@@ -20,6 +20,8 @@ newengine-assets = { path = "../newengine-assets" }
 newengine-core = { path = "../newengine-core" }
 newengine-math = { path = "../newengine-math" }
 newengine-platform-api = { path = "../newengine-platform-api" }
+newengine-loading-api = { path = "../newengine-loading-api" }
+newengine-loading-runtime = { path = "../newengine-loading-runtime" }
 newengine-plugin-api = { path = "../newengine-plugin-api" }
 newengine-service-api = { path = "../newengine-service-api" }
 newengine-ecs-api = { path = "../newengine-ecs-api" }

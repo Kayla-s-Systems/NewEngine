@@ -9,10 +9,13 @@ use abi_stable::std_types::{RResult, RString};
 use newengine_camera::{
     CameraChannel, CameraChannelState, CameraViewport, RuntimeNavController, RuntimeNavMode,
 };
-use newengine_camera_api::{CameraServiceInfo, CAMERA_BACKEND_CAPABILITY_ID, ENGINE_CAMERA_SERVICE_ID};
+use newengine_camera_api::{
+    CameraServiceInfo, CameraViewCommand, CameraViewCommandRequest, CameraViewCommandResponse,
+    CameraViewMode, CAMERA_BACKEND_CAPABILITY_ID, ENGINE_CAMERA_SERVICE_ID,
+};
 use newengine_camera_contracts::CameraFrameSnapshot;
 use newengine_camera_runtime::{
-    camera_frame_snapshot, cursor_state_for_nav, step_camera_nav, BoundsSphere as CamBoundsSphere,
+    camera_frame_snapshot_for_view, cursor_state_for_nav, step_camera_nav, BoundsSphere as CamBoundsSphere,
     CameraManagerResource, CameraNavFrameRequest, CameraNavInput, CameraNavParams,
     CameraRuntimeReport, CameraRuntimeService, CameraRuntimeServiceConfig, CameraRuntimeWorldState,
     CameraTransitionPhase as RuntimeCameraTransitionPhase,
@@ -23,6 +26,7 @@ use newengine_core::render::{
     ViewPostFxFrameParams,
 };
 use newengine_ecs::{EntityId, World};
+use newengine_input_bindings::CameraViewRequest;
 use newengine_math::{Mat4, Vec2, Vec3};
 use newengine_plugin_api::{Blob, CapabilityId, MethodName, ServiceV1, ServiceV1Dyn};
 use newengine_transform::Transform;
@@ -55,6 +59,8 @@ impl ServiceV1 for CameraGatewayInfoService {
                 newengine_camera_api::CAMERA_SERVICE_METHOD_INFO,
                 newengine_camera_api::CAMERA_SERVICE_METHOD_INVOKE,
                 newengine_camera_api::CAMERA_SERVICE_METHOD_SNAPSHOT_JSON_V1,
+                newengine_camera_api::CAMERA_SERVICE_METHOD_VIEW_SET_JSON_V1,
+                newengine_camera_api::CAMERA_SERVICE_METHOD_VIEW_NEXT_JSON_V1,
                 newengine_camera_api::CAMERA_SERVICE_METHOD_SHUTDOWN_V1
             ],
             "origin": "engine-owned",
@@ -65,18 +71,28 @@ impl ServiceV1 for CameraGatewayInfoService {
         RString::from(json.to_string())
     }
 
-    fn call(&self, method: MethodName, _payload: Blob) -> RResult<Blob, RString> {
+    fn call(&self, method: MethodName, payload: Blob) -> RResult<Blob, RString> {
         match method.as_str() {
             newengine_camera_api::CAMERA_SERVICE_METHOD_INFO => {
                 ok_json(&CameraServiceInfo::default())
             }
-            newengine_camera_api::CAMERA_SERVICE_METHOD_SNAPSHOT_JSON_V1 | newengine_camera_api::CAMERA_SERVICE_METHOD_INVOKE => {
+            newengine_camera_api::CAMERA_SERVICE_METHOD_SNAPSHOT_JSON_V1 => {
                 let snapshot = self
                     .state
                     .lock()
                     .last_snapshot
                     .unwrap_or_default();
                 ok_json(&snapshot)
+            }
+            newengine_camera_api::CAMERA_SERVICE_METHOD_INVOKE => {
+                invoke_camera_gateway(&self.state, payload)
+            }
+            newengine_camera_api::CAMERA_SERVICE_METHOD_VIEW_SET_JSON_V1 => {
+                apply_camera_view_command(&self.state, payload)
+            }
+            newengine_camera_api::CAMERA_SERVICE_METHOD_VIEW_NEXT_JSON_V1 => {
+                let active_view = self.state.lock().set_view_command(CameraViewCommand::Next);
+                ok_json(&CameraViewCommandResponse { active_view })
             }
             newengine_camera_api::CAMERA_SERVICE_METHOD_SHUTDOWN_V1 => {
                 RResult::ROk(Blob::from(Vec::<u8>::new()))
@@ -87,6 +103,38 @@ impl ServiceV1 for CameraGatewayInfoService {
             ))),
         }
     }
+}
+
+fn invoke_camera_gateway(
+    state: &Arc<Mutex<CameraGatewayState>>,
+    payload: Blob,
+) -> RResult<Blob, RString> {
+    if payload.as_slice().is_empty() {
+        let snapshot = state.lock().last_snapshot.unwrap_or_default();
+        return ok_json(&snapshot);
+    }
+    apply_camera_view_command(state, payload)
+}
+
+fn apply_camera_view_command(
+    state: &Arc<Mutex<CameraGatewayState>>,
+    payload: Blob,
+) -> RResult<Blob, RString> {
+    let bytes = payload.as_slice();
+    if bytes.is_empty() {
+        return RResult::RErr(RString::from(
+            "engine.camera: view_set_json_v1 requires CameraViewCommandRequest JSON",
+        ));
+    }
+    let command = match serde_json::from_slice::<CameraViewCommandRequest>(bytes) {
+        Ok(req) => req.command,
+        Err(e) => return RResult::RErr(RString::from(format!(
+            "engine.camera: invalid camera view command payload: {}",
+            e
+        ))),
+    };
+    let active_view = state.lock().set_view_command(command);
+    ok_json(&CameraViewCommandResponse { active_view })
 }
 
 fn register_camera_gateway_service_best_effort(state: Arc<Mutex<CameraGatewayState>>) {
@@ -167,6 +215,7 @@ impl CameraGatewayBridge {
     ) -> CameraGatewayFrame {
         let mut state = self.state.lock();
         let mut nav_input = camera_nav_input(input, play_mode);
+        let active_view = state.apply_input_view_request(input.camera_view);
         let cam_id = world
             .resource::<newengine_scene::SceneState>()
             .and_then(|s| s.active_camera.or(s.root))
@@ -193,12 +242,13 @@ impl CameraGatewayBridge {
                 wants_direct_player_control: effective_play_mode.wants_direct_player_control(),
                 gate_blocked,
                 player,
+                view_mode: active_view,
             });
             !manager.wants_navigation_input()
         };
 
         state.sync_play_mode_transition(world, cam_id, effective_play_mode);
-        let service_config = camera_runtime_service_config(world);
+        let service_config = camera_runtime_service_config(world, active_view);
         CameraRuntimeService::apply_pending_director_requests(world, cam_id, service_config);
         apply_runtime_input(world, input, effective_play_mode, service_config);
 
@@ -245,9 +295,9 @@ impl CameraGatewayBridge {
             manager.set_last_cursor(out.cursor);
             let frame = manager.resolve_camera_frame(out.frame, dt);
             let effects = manager.last_post_effects().unwrap_or_default();
-            (camera_frame_snapshot(frame, effects), Some(camera_report_snapshot(manager.report())))
+            (camera_frame_snapshot_for_view(frame, effects, manager.active_view_mode()), Some(camera_report_snapshot(manager.report())))
         } else {
-            (camera_frame_snapshot(out.frame, Default::default()), None)
+            (camera_frame_snapshot_for_view(out.frame, Default::default(), active_view), None)
         };
 
         state.last_snapshot = Some(snapshot);
@@ -284,6 +334,7 @@ struct CameraGatewayState {
     play_session: Option<CameraPlaySessionSnapshot>,
     runtime_session: Option<RuntimeWorldSnapshot>,
     last_snapshot: Option<CameraFrameSnapshot>,
+    active_view: CameraViewMode,
 }
 
 
@@ -296,11 +347,31 @@ impl Default for CameraGatewayState {
             play_session: None,
             runtime_session: None,
             last_snapshot: None,
+            active_view: CameraViewMode::FirstPerson,
         }
     }
 }
 
 impl CameraGatewayState {
+
+    fn set_view_command(&mut self, command: CameraViewCommand) -> CameraViewMode {
+        self.active_view = match command {
+            CameraViewCommand::Next => self.active_view.next(),
+            CameraViewCommand::Previous => self.active_view.previous(),
+            CameraViewCommand::Set(mode) => mode,
+        };
+        self.active_view
+    }
+
+    fn apply_input_view_request(&mut self, request: CameraViewRequest) -> CameraViewMode {
+        match request {
+            CameraViewRequest::None => self.active_view,
+            CameraViewRequest::Next => self.set_view_command(CameraViewCommand::Next),
+            CameraViewRequest::Previous => self.set_view_command(CameraViewCommand::Previous),
+            CameraViewRequest::Set(mode) => self.set_view_command(CameraViewCommand::Set(mode)),
+        }
+    }
+
     fn sync_play_mode_transition(
         &mut self,
         world: &mut World,
@@ -364,6 +435,7 @@ pub struct CameraGatewayInput {
     pub fly_rmb: bool,
     pub move_mask: u64,
     pub speed_scalar: f32,
+    pub camera_view: CameraViewRequest,
 }
 
 #[derive(Clone, Debug)]
@@ -412,6 +484,7 @@ impl EngineViewFrame {
 pub struct CameraRuntimeOverlayReport {
     pub active_director: String,
     pub active_mode: String,
+    pub active_view_mode: String,
     pub target_entity: Option<EntityId>,
     pub transition: CameraTransitionOverlayReport,
     pub input_context: String,
@@ -445,12 +518,17 @@ pub fn apply_view_postfx(mut params: PostFxFrameParams, view: ViewPostFxFramePar
 }
 
 #[inline]
-fn camera_runtime_service_config(world: &World) -> CameraRuntimeServiceConfig {
+fn camera_runtime_service_config(world: &World, active_view: CameraViewMode) -> CameraRuntimeServiceConfig {
     let mut config = CameraRuntimeServiceConfig::default();
     if let Some(rules) = world.resource::<FpsDemoRules>() {
         config.first_person_eye_height = rules.player.camera_eye_height;
         config.sprint_multiplier = rules.player.sprint_multiplier;
     }
+    config.runner = match active_view {
+        CameraViewMode::FirstPerson => newengine_camera_runtime::GameplayCameraRunnerKind::FirstPerson,
+        CameraViewMode::ThirdPersonFollow => newengine_camera_runtime::GameplayCameraRunnerKind::ThirdPersonFollow,
+        CameraViewMode::ThirdPersonAim => newengine_camera_runtime::GameplayCameraRunnerKind::ThirdPersonAim,
+    };
     config
 }
 
@@ -525,6 +603,7 @@ fn camera_report_snapshot(report: CameraRuntimeReport) -> CameraRuntimeOverlayRe
     CameraRuntimeOverlayReport {
         active_director: format!("{:?}", report.active_director),
         active_mode: format!("{:?}", report.active_mode),
+        active_view_mode: format!("{:?}", report.view_mode),
         target_entity: report.target_entity,
         transition: CameraTransitionOverlayReport {
             phase: match report.transition.phase {

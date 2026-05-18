@@ -3,6 +3,7 @@
 use newengine_camera::{CameraFrame, CameraPostEffects, Projection};
 use newengine_camera_api::{
     CameraFrameSnapshot, CameraPostFxDofIntent, CameraPostFxIntent,
+    CameraViewMode,
     CameraPostFxMotionBlurIntent, CameraProjectionKind, CameraProjectionSnapshot,
     CameraViewportSnapshot, Mat4Cols,
 };
@@ -10,11 +11,21 @@ use newengine_math::{Mat4, Vec3};
 
 #[inline]
 pub fn camera_frame_snapshot(frame: CameraFrame, effects: CameraPostEffects) -> CameraFrameSnapshot {
+    camera_frame_snapshot_for_view(frame, effects, CameraViewMode::FirstPerson)
+}
+
+#[inline]
+pub fn camera_frame_snapshot_for_view(
+    frame: CameraFrame,
+    effects: CameraPostEffects,
+    view_mode: CameraViewMode,
+) -> CameraFrameSnapshot {
     let rig = frame.rig;
     let projection = projection_snapshot(frame.projection);
     let viewport = frame.viewport.sanitized();
     let effects = effects.sanitized();
     CameraFrameSnapshot {
+        view_mode,
         view_cols: mat4_cols(frame.matrices.view),
         projection_cols: mat4_cols(frame.matrices.proj),
         view_projection_cols: mat4_cols(frame.matrices.view_proj),

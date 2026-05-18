@@ -114,6 +114,7 @@ impl From<&ViewportInputSnap> for EngineViewInput {
             fly_rmb: input.fly_rmb,
             move_mask: input.move_mask,
             speed_scalar: input.speed_scalar,
+            camera_view: input.camera_view,
         }
     }
 }

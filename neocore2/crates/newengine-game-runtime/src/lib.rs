@@ -8,6 +8,8 @@
 //! docking, hierarchy, property grid, or Vulkan-specific resource work is pulled
 //! into the game binary.
 
+pub mod game_ready_fps;
+
 use newengine_assets::{AssetAccess, AssetServiceClient};
 use newengine_core::{
     Engine, EngineLifecycleEvent, EngineReadinessKey, EngineReadinessSnapshot, EngineResult, Module, ModuleCtx,
@@ -43,6 +45,8 @@ use newengine_runtime_host::asset_bootstrap::{
 };
 
 pub use newengine_engine_runtime::{PhysicsBodyDesc, CollisionShapeDesc, GameRunMode, GameplayActor, PlayerActor};
+
+pub use game_ready_fps::{run_game_ready_fps_process, GameReadyFpsApp};
 
 pub const GAME_FIXED_DT_MS: u32 = 16;
 pub const GAME_APP_ASSETS_DIR_ENV: &str = "NEWENGINE_GAME_ASSETS_DIR";

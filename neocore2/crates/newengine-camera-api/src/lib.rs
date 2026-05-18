@@ -13,6 +13,8 @@ pub const CAMERA_SERVICE_METHOD_INVOKE: &str = newengine_service_api::SERVICE_ME
 pub const CAMERA_SERVICE_METHOD_INFO: &str = newengine_service_api::SERVICE_METHOD_INFO_JSON;
 pub const CAMERA_SERVICE_METHOD_SHUTDOWN_V1: &str = newengine_service_api::SERVICE_METHOD_SHUTDOWN_V1;
 pub const CAMERA_SERVICE_METHOD_SNAPSHOT_JSON_V1: &str = "snapshot_json_v1";
+pub const CAMERA_SERVICE_METHOD_VIEW_SET_JSON_V1: &str = "view_set_json_v1";
+pub const CAMERA_SERVICE_METHOD_VIEW_NEXT_JSON_V1: &str = "view_next_json_v1";
 
 /// Generic backend-family declaration for camera providers.
 pub const CAMERA_BACKEND_SERVICE_SPEC: newengine_service_api::BackendServiceSpec =
@@ -41,6 +43,63 @@ pub const CAMERA_RUNTIME_REQUIREMENT_SPEC: newengine_service_api::RuntimeService
     );
 
 pub type Mat4Cols = [[f32; 4]; 4];
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum CameraViewMode {
+    FirstPerson,
+    ThirdPersonFollow,
+    ThirdPersonAim,
+}
+
+impl Default for CameraViewMode {
+    #[inline]
+    fn default() -> Self { Self::FirstPerson }
+}
+
+impl CameraViewMode {
+    #[inline]
+    pub const fn next(self) -> Self {
+        match self {
+            Self::FirstPerson => Self::ThirdPersonFollow,
+            Self::ThirdPersonFollow => Self::ThirdPersonAim,
+            Self::ThirdPersonAim => Self::FirstPerson,
+        }
+    }
+
+    #[inline]
+    pub const fn previous(self) -> Self {
+        match self {
+            Self::FirstPerson => Self::ThirdPersonAim,
+            Self::ThirdPersonFollow => Self::FirstPerson,
+            Self::ThirdPersonAim => Self::ThirdPersonFollow,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum CameraViewCommand {
+    Next,
+    Previous,
+    Set(CameraViewMode),
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct CameraViewCommandRequest {
+    pub command: CameraViewCommand,
+}
+
+impl CameraViewCommandRequest {
+    #[inline]
+    pub const fn set(mode: CameraViewMode) -> Self {
+        Self { command: CameraViewCommand::Set(mode) }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct CameraViewCommandResponse {
+    pub active_view: CameraViewMode,
+}
+
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum CameraProjectionKind {
@@ -188,6 +247,8 @@ impl Default for CameraPostFxIntent {
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub struct CameraFrameSnapshot {
     #[serde(default)]
+    pub view_mode: CameraViewMode,
+    #[serde(default)]
     pub view_cols: Mat4Cols,
     #[serde(default)]
     pub projection_cols: Mat4Cols,
@@ -223,6 +284,7 @@ impl Default for CameraFrameSnapshot {
     #[inline]
     fn default() -> Self {
         Self {
+            view_mode: CameraViewMode::FirstPerson,
             view_cols: identity_cols(),
             projection_cols: identity_cols(),
             view_projection_cols: identity_cols(),
@@ -263,6 +325,8 @@ impl Default for CameraServiceInfo {
                     .map(|it| (*it).to_owned())
                     .collect::<Vec<_>>();
                 methods.push(CAMERA_SERVICE_METHOD_SNAPSHOT_JSON_V1.to_owned());
+                methods.push(CAMERA_SERVICE_METHOD_VIEW_SET_JSON_V1.to_owned());
+                methods.push(CAMERA_SERVICE_METHOD_VIEW_NEXT_JSON_V1.to_owned());
                 methods
             },
         }

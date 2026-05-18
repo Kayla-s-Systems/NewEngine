@@ -7,6 +7,7 @@ use newengine_core::render::{
     ViewPostFxFrameParams,
 };
 use newengine_ecs::World;
+use newengine_input_bindings::CameraViewRequest;
 use newengine_math::{Mat4, Vec3};
 
 use crate::camera_gateway::{CameraGatewayFrame, CameraGatewayInput, CameraTransitionPhase};
@@ -33,6 +34,7 @@ pub(crate) struct EngineViewInput {
     pub fly_rmb: bool,
     pub move_mask: u64,
     pub speed_scalar: f32,
+    pub camera_view: CameraViewRequest,
 }
 
 impl From<EngineViewInput> for CameraGatewayInput {
@@ -49,6 +51,7 @@ impl From<EngineViewInput> for CameraGatewayInput {
             fly_rmb: input.fly_rmb,
             move_mask: input.move_mask,
             speed_scalar: input.speed_scalar,
+            camera_view: input.camera_view,
         }
     }
 }
@@ -110,6 +113,7 @@ pub(crate) struct EngineViewFrame {
 pub(crate) struct EngineViewDiagnostics {
     pub active_director: String,
     pub active_mode: String,
+    pub active_view_mode: String,
     pub target_entity: Option<newengine_ecs::EntityId>,
     pub transition: EngineViewTransitionDiagnostics,
     pub input_context: String,
@@ -128,6 +132,7 @@ impl From<crate::camera_gateway::CameraRuntimeOverlayReport> for EngineViewDiagn
         Self {
             active_director: report.active_director,
             active_mode: report.active_mode,
+            active_view_mode: report.active_view_mode,
             target_entity: report.target_entity,
             transition: EngineViewTransitionDiagnostics::from(report.transition),
             input_context: report.input_context,

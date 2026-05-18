@@ -1,4 +1,5 @@
 use newengine_camera::{CameraPostEffects, RuntimeNavMode};
+use newengine_camera_api::CameraViewMode;
 
 use crate::blend::{CameraFrameBlendCurve, CameraFrameBlendPlan};
 use newengine_ecs::EntityId;
@@ -141,6 +142,7 @@ pub struct CameraRuntimeWorldState {
     pub wants_direct_player_control: bool,
     pub gate_blocked: bool,
     pub player: Option<EntityId>,
+    pub view_mode: CameraViewMode,
 }
 
 impl Default for CameraRuntimeWorldState {
@@ -153,6 +155,7 @@ impl Default for CameraRuntimeWorldState {
             wants_direct_player_control: false,
             gate_blocked: false,
             player: None,
+            view_mode: CameraViewMode::FirstPerson,
         }
     }
 }
@@ -161,6 +164,7 @@ impl Default for CameraRuntimeWorldState {
 pub struct CameraRuntimeReport {
     pub active_director: CameraDirectorKind,
     pub active_mode: CameraRuntimeMode,
+    pub view_mode: CameraViewMode,
     pub target_entity: Option<EntityId>,
     pub transition: CameraTransitionState,
     pub input_context: CameraInputContext,
@@ -180,6 +184,7 @@ impl Default for CameraRuntimeReport {
         Self {
             active_director: CameraDirectorKind::Runtime,
             active_mode: CameraRuntimeMode::RuntimeOrbit,
+            view_mode: CameraViewMode::FirstPerson,
             target_entity: None,
             transition: CameraTransitionState::default(),
             input_context: CameraInputContext::RuntimeNav,

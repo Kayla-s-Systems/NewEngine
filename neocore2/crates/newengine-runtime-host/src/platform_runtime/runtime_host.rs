@@ -44,6 +44,9 @@ use crate::platform_runtime::handles::{native_to_raw_handles, raw_to_native_hand
 use crate::platform_runtime::snapshot_service::{
     register_platform_window_service_best_effort, update_platform_window_snapshot,
 };
+use crate::platform_runtime::loading_gateway::{
+    publish_platform_step_result, register_loading_gateway_service_best_effort,
+};
 use crate::platform_runtime::shutdown_watchdog::ShutdownWatchdog;
 use crate::platform_runtime::types::ResolvedPlatformRuntimeConfig;
 use crate::render_runtime::ResolvedRenderBackendConfig;
@@ -240,6 +243,7 @@ impl HostPlatformRuntime {
         );
 
         self.surface = ready.surface;
+        register_loading_gateway_service_best_effort();
         register_platform_window_service_best_effort(ready);
         let (display, window) = native_to_raw_handles(ready.handles)?;
 
@@ -334,34 +338,35 @@ impl HostPlatformRuntime {
     }
 
     pub(crate) fn step(&mut self, dt_sec: f32) -> EngineResult<PlatformStepResultV1> {
-        if self.close_requested {
-            return Ok(PlatformStepResultV1 {
+        let step = if self.close_requested {
+            PlatformStepResultV1 {
                 exit_requested: true,
                 ..PlatformStepResultV1::default()
-            });
-        }
-
-        if self.fatal_bootstrap_error.is_some() {
-            return Ok(self.fatal_bootstrap_step_result());
-        }
-
-        let bootstrap_active = self.bootstrap_stage != RuntimeBootstrapStage::Running || !self.window_ready_emitted;
-        let result = if bootstrap_active {
-            self.step_bootstrap()
+            }
+        } else if self.fatal_bootstrap_error.is_some() {
+            self.fatal_bootstrap_step_result()
         } else {
-            self.step_running(dt_sec)
+            let bootstrap_active = self.bootstrap_stage != RuntimeBootstrapStage::Running || !self.window_ready_emitted;
+            let result = if bootstrap_active {
+                self.step_bootstrap()
+            } else {
+                self.step_running(dt_sec)
+            };
+
+            match result {
+                Ok(step) => step,
+                Err(e) if bootstrap_active => {
+                    let message = e.to_string();
+                    log::error!("platform runtime bootstrap: fatal startup error: {message}");
+                    self.fatal_bootstrap_error = Some(message);
+                    self.fatal_bootstrap_step_result()
+                }
+                Err(e) => return Err(e),
+            }
         };
 
-        match result {
-            Ok(step) => Ok(step),
-            Err(e) if bootstrap_active => {
-                let message = e.to_string();
-                log::error!("platform runtime bootstrap: fatal startup error: {message}");
-                self.fatal_bootstrap_error = Some(message);
-                Ok(self.fatal_bootstrap_step_result())
-            }
-            Err(e) => Err(e),
-        }
+        publish_platform_step_result(&step);
+        Ok(step)
     }
 
     fn step_bootstrap(&mut self) -> EngineResult<PlatformStepResultV1> {

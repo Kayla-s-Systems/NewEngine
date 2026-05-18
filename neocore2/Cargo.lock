@@ -274,14 +274,8 @@ dependencies = [
 name = "game-ready-fps"
 version = "0.1.0"
 dependencies = [
- "abi_stable",
  "embed-resource",
- "log",
- "newengine-assets",
- "newengine-core",
  "newengine-game-runtime",
- "newengine-plugin-host",
- "newengine-runtime-host",
 ]
 
 [[package]]
@@ -454,10 +448,10 @@ dependencies = [
  "newengine-camera-api",
  "newengine-core",
  "newengine-ecs",
+ "newengine-input-bindings",
  "newengine-math",
  "newengine-sim",
  "newengine-transform-api",
- "newengine-viewport",
 ]
 
 [[package]]
@@ -471,6 +465,8 @@ dependencies = [
  "newengine-camera-api",
  "newengine-ecs-api",
  "newengine-entity-api",
+ "newengine-input-bindings",
+ "newengine-loading-api",
  "newengine-math",
  "newengine-physics-api",
  "newengine-platform-api",
@@ -523,6 +519,7 @@ dependencies = [
  "newengine-camera-runtime",
  "newengine-core",
  "newengine-ecs",
+ "newengine-input-bindings",
  "newengine-lighting",
  "newengine-material-domain-api",
  "newengine-materials",
@@ -596,10 +593,35 @@ dependencies = [
 ]
 
 [[package]]
+name = "newengine-input-bindings"
+version = "0.1.0"
+dependencies = [
+ "newengine-camera-api",
+ "newengine-service-api",
+ "serde",
+]
+
+[[package]]
 name = "newengine-lighting"
 version = "0.1.0"
 dependencies = [
  "newengine-math",
+]
+
+[[package]]
+name = "newengine-loading-api"
+version = "0.1.0"
+dependencies = [
+ "newengine-service-api",
+ "serde",
+]
+
+[[package]]
+name = "newengine-loading-runtime"
+version = "0.1.0"
+dependencies = [
+ "newengine-loading-api",
+ "serde_json",
 ]
 
 [[package]]
@@ -766,6 +788,8 @@ dependencies = [
  "newengine-core",
  "newengine-ecs-api",
  "newengine-entity-api",
+ "newengine-loading-api",
+ "newengine-loading-runtime",
  "newengine-math",
  "newengine-physics-api",
  "newengine-platform-api",

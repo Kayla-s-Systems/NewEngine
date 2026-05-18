@@ -71,3 +71,8 @@ Entity identity/lifecycle is exposed through `engine.entity`. Service consumers 
 ## Platform boundary
 
 Native window handles and surface metrics are exposed through `engine.platform`, not through a direct platform-window service id. The current route is engine-owned and registered as a gateway candidate so future platform providers can replace it through the same registry path.
+
+
+## 11. Third-level input domains
+
+`engine.input` remains the second-level raw input service. `engine.input.bindings` is the third-level engine-owned configuration domain for mapping physical inputs to semantic actions. `engine.input.actions` is reserved as the third-level semantic action frame domain. Gameplay and camera code should consume actions such as `player.move.forward` and `camera.view.next`, not physical key ids.

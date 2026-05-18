@@ -7,6 +7,7 @@ mod constants;
 mod discovery;
 mod early_log;
 mod handles;
+mod loading_gateway;
 mod runtime_host;
 mod snapshot_service;
 mod shutdown_watchdog;

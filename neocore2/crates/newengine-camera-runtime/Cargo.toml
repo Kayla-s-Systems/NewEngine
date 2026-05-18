@@ -12,8 +12,8 @@ log = "0.4.29"
 newengine-camera = { path = "../newengine-camera" }
 newengine-camera-api = { path = "../newengine-camera-api" }
 newengine-core = { path = "../newengine-core" }
+newengine-input-bindings = { path = "../newengine-input-bindings" }
 newengine-ecs = { path = "../newengine-ecs" }
 newengine-math = { path = "../newengine-math" }
 newengine-sim = { path = "../newengine-sim" }
 newengine-transform-api = { path = "../newengine-transform-api", features = ["ecs"], default-features = false }
-newengine-viewport = { path = "../newengine-viewport" }

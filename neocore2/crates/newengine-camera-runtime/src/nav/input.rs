@@ -1,8 +1,6 @@
 use newengine_core::host_events::CursorState;
 use newengine_math::{Vec2, Vec3};
-use newengine_viewport::input::{
-    MOVE_A, MOVE_D, MOVE_DOWN, MOVE_S, MOVE_SHIFT, MOVE_UP, MOVE_W,
-};
+use newengine_input_bindings::move_mask;
 
 use newengine_camera::{CameraControlInput, RuntimeNavMode};
 
@@ -28,7 +26,7 @@ pub struct CameraNavInput {
     /// Latched free-fly intent (e.g. RMB capture).
     pub fly_rmb: bool,
 
-    /// Movement key bitmask (`newengine_viewport::input::*`).
+    /// Semantic movement bitmask (`newengine-input-bindings::move_mask::*`).
     pub move_mask: u64,
 
     /// Additional user-controlled speed scalar from the runtime shell.
@@ -55,12 +53,12 @@ pub fn cursor_state_for_nav(input: &CameraNavInput) -> CursorState {
 
 #[inline]
 pub(crate) fn build_camera_input(input: &CameraNavInput, mode: RuntimeNavMode) -> CameraControlInput {
-    let shift = (input.move_mask & MOVE_SHIFT) != 0;
+    let shift = (input.move_mask & move_mask::SPRINT) != 0;
 
-    let fwd = ((input.move_mask & MOVE_W) != 0) as i32 - ((input.move_mask & MOVE_S) != 0) as i32;
+    let fwd = ((input.move_mask & move_mask::FORWARD) != 0) as i32 - ((input.move_mask & move_mask::BACK) != 0) as i32;
     let right =
-        ((input.move_mask & MOVE_D) != 0) as i32 - ((input.move_mask & MOVE_A) != 0) as i32;
-    let up = ((input.move_mask & MOVE_UP) != 0) as i32 - ((input.move_mask & MOVE_DOWN) != 0) as i32;
+        ((input.move_mask & move_mask::RIGHT) != 0) as i32 - ((input.move_mask & move_mask::LEFT) != 0) as i32;
+    let up = ((input.move_mask & move_mask::UP) != 0) as i32 - ((input.move_mask & move_mask::DOWN) != 0) as i32;
 
     let mut move_axis = Vec3::ZERO;
     let base_speed_mul = if shift { 2.0 } else { 1.0 };

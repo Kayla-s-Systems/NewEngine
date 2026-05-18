@@ -1,4 +1,5 @@
 use newengine_ecs::{EntityId, World};
+use newengine_input_bindings::move_mask as input_move;
 use newengine_math::{Quat, Vec2, Vec3};
 use newengine_primitives::{builtins as prim_builtins, Primitive};
 use newengine_scene::components::Name;
@@ -103,28 +104,28 @@ pub fn clear_player_input(world: &mut World, player: EntityId) {
 pub fn apply_player_input(
     world: &mut World,
     player: EntityId,
-    move_mask: u64,
+    input_mask: u64,
     look_delta_px: Vec2,
     look_active: bool,
 ) {
     let mut axis = Vec3::ZERO;
 
-    if move_mask & newengine_viewport::input::MOVE_W != 0 {
+    if input_mask & input_move::FORWARD != 0 {
         axis.z += 1.0;
     }
-    if move_mask & newengine_viewport::input::MOVE_S != 0 {
+    if input_mask & input_move::BACK != 0 {
         axis.z -= 1.0;
     }
-    if move_mask & newengine_viewport::input::MOVE_D != 0 {
+    if input_mask & input_move::RIGHT != 0 {
         axis.x += 1.0;
     }
-    if move_mask & newengine_viewport::input::MOVE_A != 0 {
+    if input_mask & input_move::LEFT != 0 {
         axis.x -= 1.0;
     }
-    if move_mask & newengine_viewport::input::MOVE_UP != 0 {
+    if input_mask & input_move::UP != 0 {
         axis.y += 1.0;
     }
-    if move_mask & newengine_viewport::input::MOVE_DOWN != 0 {
+    if input_mask & input_move::DOWN != 0 {
         axis.y -= 1.0;
     }
 
@@ -137,7 +138,7 @@ pub fn apply_player_input(
         input.move_axis = axis;
         input.look_delta = look_delta_px;
         input.look_active = look_active;
-        input.speed_mul = if move_mask & newengine_viewport::input::MOVE_SHIFT != 0 {
+        input.speed_mul = if input_mask & input_move::SPRINT != 0 {
             sprint_multiplier
         } else {
             1.0

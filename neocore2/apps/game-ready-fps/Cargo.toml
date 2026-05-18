@@ -21,14 +21,7 @@ icon = "assets/editor.ico"
 # codepage = 1200
 
 [dependencies]
-abi_stable = { version = "0.11" }
-log = "0.4"
-
-newengine-assets = { path = "../../crates/newengine-assets" }
-newengine-core = { path = "../../crates/newengine-core", features = ["host-probe"] }
 newengine-game-runtime = { path = "../../crates/newengine-game-runtime" }
-newengine-plugin-host = { path = "../../crates/newengine-plugin-host" }
-newengine-runtime-host = { path = "../../crates/newengine-runtime-host" }
 
 [build-dependencies]
 embed-resource = "2"

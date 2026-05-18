@@ -2,6 +2,7 @@ use newengine_camera::{
     CameraChannel, CameraDirectorId, CameraDirectorOutput, CameraFrame, CameraPostEffects,
     CameraRenderState, CameraResolvedFrame, RuntimeNavMode,
 };
+use newengine_camera_api::CameraViewMode;
 use newengine_core::host_events::CursorState;
 
 use crate::blend::{CameraFrameBlendCurve, CameraFrameBlendPlan, CameraFrameBlendState};
@@ -21,6 +22,7 @@ const CAMERA_EVENT_QUEUE_LIMIT: usize = 64;
 pub struct CameraManagerResource {
     pub active_director: CameraDirectorKind,
     pub active_mode: CameraRuntimeMode,
+    pub view_mode: CameraViewMode,
     pub input_context: CameraInputContext,
     pub target_entity: Option<newengine_ecs::EntityId>,
     pub transition: CameraTransitionState,
@@ -44,6 +46,7 @@ impl Default for CameraManagerResource {
         Self {
             active_director: CameraDirectorKind::Runtime,
             active_mode: CameraRuntimeMode::RuntimeOrbit,
+            view_mode: CameraViewMode::FirstPerson,
             input_context: CameraInputContext::RuntimeNav,
             target_entity: None,
             transition: CameraTransitionState::default(),
@@ -105,8 +108,10 @@ impl CameraManagerResource {
         let (desired_director, desired_mode, desired_context, desired_target) =
             desired_camera_policy(state);
 
+        let view_changed = self.view_mode != state.view_mode;
         let changed = self.active_director != desired_director
             || self.active_mode != desired_mode
+            || view_changed
             || self.input_context != desired_context
             || self.gate_blocked != state.gate_blocked;
 
@@ -143,15 +148,16 @@ impl CameraManagerResource {
             );
 
             log::info!(
-                "camera runtime: director={:?} mode={:?} context={:?} gate_blocked={}",
+                "camera runtime: director={:?} mode={:?} view={:?} context={:?} gate_blocked={}",
                 desired_director,
                 desired_mode,
+                state.view_mode,
                 desired_context,
                 state.gate_blocked
             );
         }
 
-        if self.target_entity != desired_target {
+        if self.target_entity != desired_target || view_changed {
             self.pending_request = match (self.target_entity, desired_target) {
                 (Some(_), None) => Some(CameraDirectorRequest::ReleasePlayer),
                 (_, Some(player)) => Some(CameraDirectorRequest::PossessPlayer { player }),
@@ -161,6 +167,7 @@ impl CameraManagerResource {
 
         self.active_director = desired_director;
         self.active_mode = desired_mode;
+        self.view_mode = state.view_mode;
         self.input_context = desired_context;
         self.gate_blocked = state.gate_blocked;
         self.target_entity = desired_target;
@@ -175,6 +182,16 @@ impl CameraManagerResource {
             RuntimeNavMode::Orbit => CameraRuntimeMode::RuntimeOrbit,
             RuntimeNavMode::Fly => CameraRuntimeMode::RuntimeFly,
         };
+    }
+
+    #[inline]
+    pub fn set_view_mode(&mut self, mode: CameraViewMode) {
+        self.view_mode = mode;
+    }
+
+    #[inline]
+    pub fn active_view_mode(&self) -> CameraViewMode {
+        self.view_mode
     }
 
     #[inline]
@@ -286,6 +303,7 @@ impl CameraManagerResource {
         CameraRuntimeReport {
             active_director: self.active_director,
             active_mode: self.active_mode,
+            view_mode: self.view_mode,
             target_entity: self.target_entity,
             transition: self.transition,
             input_context: self.input_context,
@@ -385,9 +403,14 @@ fn desired_camera_policy(
     }
 
     if state.wants_direct_player_control {
+        let mode = match state.view_mode {
+            CameraViewMode::FirstPerson => CameraRuntimeMode::GameplayFirstPerson,
+            CameraViewMode::ThirdPersonFollow => CameraRuntimeMode::GameplayThirdPersonFollow,
+            CameraViewMode::ThirdPersonAim => CameraRuntimeMode::GameplayThirdPersonAim,
+        };
         return (
             CameraDirectorKind::Gameplay,
-            CameraRuntimeMode::GameplayFirstPerson,
+            mode,
             CameraInputContext::GameplayLook,
             state.player,
         );

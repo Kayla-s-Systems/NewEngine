@@ -36,6 +36,7 @@ use newengine_scene::{spawn_named, Scene, SceneAsset};
 use newengine_transform::Transform;
 
 use crate::camera_gateway::CameraGatewayBridge;
+use crate::input_bindings_gateway::register_input_bindings_gateway_best_effort;
 use crate::gameplay::{
     ensure_physics_body, remove_physics_body, spawn_default_player, DisplayMode,
     DisplayVisibility, GameRunMode,
@@ -71,6 +72,7 @@ impl SceneBridge {
     #[inline]
     pub fn new(mut initial: Scene) -> Self {
         bootstrap_runtime_scene(&mut initial);
+        register_input_bindings_gateway_best_effort();
 
         let primitives = Arc::new(RwLock::new(PrimitiveRegistry::with_builtins()));
         let materials = Arc::new(RwLock::new(MaterialRegistry::with_builtins()));

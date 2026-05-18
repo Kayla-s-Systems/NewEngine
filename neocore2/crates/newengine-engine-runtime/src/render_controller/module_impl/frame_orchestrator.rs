@@ -206,9 +206,10 @@ impl RenderFrameOrchestrator {
         if let Some(report) = view_frame.diagnostics.clone() {
             controller.diagnostics.overlay_metrics.record_view_report(report.clone());
             debug_notes.push(format!(
-                "view director={} mode={} dominant={:?} rendered={} input={} lock={} gate_blocked={} blend_active={} blend_alpha={:.3} events={}",
+                "view director={} mode={} view={} dominant={:?} rendered={} input={} lock={} gate_blocked={} blend_active={} blend_alpha={:.3} events={}",
                 report.active_director,
                 report.active_mode,
+                report.active_view_mode,
                 report.dominant_director,
                 report.rendered_director_count,
                 report.input_context,

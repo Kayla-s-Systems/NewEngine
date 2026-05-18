@@ -30,6 +30,8 @@ newengine-camera-api = { path = "../newengine-camera-api" }
 newengine-ecs-api = { path = "../newengine-ecs-api" }
 newengine-entity-api = { path = "../newengine-entity-api" }
 newengine-ui-api = { path = "../newengine-ui-api" }
+newengine-loading-api = { path = "../newengine-loading-api" }
+newengine-input-bindings = { path = "../newengine-input-bindings" }
 newengine-scene-io = { path = "../newengine-scene-io" }
 newengine-ui-draw = { path = "../newengine-ui-draw" }
 

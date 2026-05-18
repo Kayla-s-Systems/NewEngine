@@ -3,5 +3,5 @@
 pub use newengine_camera_api::{
     CameraFrameSnapshot, CameraPostFxDofIntent, CameraPostFxIntent,
     CameraPostFxMotionBlurIntent, CameraProjectionKind, CameraProjectionSnapshot,
-    CameraViewportSnapshot, Mat4Cols,
+    CameraViewportSnapshot, CameraViewMode, Mat4Cols,
 };
