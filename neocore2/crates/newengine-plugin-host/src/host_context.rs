@@ -708,7 +708,7 @@ pub fn shutdown_services_by_owner(owner_plugin_id: &str, reason: &str) {
 pub fn unregister_by_owner(owner_plugin_id: &str) {
     let c = ctx();
 
-    let removed_services = {
+    let removed_service_ids = {
         let mut g = match c.services.lock() {
             Ok(v) => v,
             Err(e) => e.into_inner(),
@@ -724,15 +724,19 @@ pub fn unregister_by_owner(owner_plugin_id: &str) {
         g.retain(|_, ent| ent.owner_plugin_id.as_deref() != Some(owner_plugin_id));
         if g.len() != before {
             bump_services_generation();
-            log::info!(
-                "plugins shutdown: service unregister owner='{}' count={} services='{}'",
-                owner_plugin_id,
-                owned.len(),
-                if owned.is_empty() { "-".to_owned() } else { owned.join(",") }
-            );
         }
-        owned.len()
+        owned
     };
+
+    let removed_services = removed_service_ids.len();
+    if removed_services > 0 {
+        log::info!(
+            "plugins shutdown: service unregister owner='{}' count={} services='{}'",
+            owner_plugin_id,
+            removed_services,
+            removed_service_ids.join(",")
+        );
+    }
 
     let removed_sinks = {
         let mut g = match c.event_sinks.lock() {

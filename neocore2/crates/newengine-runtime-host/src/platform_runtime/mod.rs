@@ -9,6 +9,7 @@ mod early_log;
 mod handles;
 mod runtime_host;
 mod snapshot_service;
+mod shutdown_watchdog;
 mod types;
 mod ui_gateway_frame;
 mod ui_provider_selection;

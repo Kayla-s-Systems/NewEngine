@@ -44,6 +44,7 @@ use crate::platform_runtime::handles::{native_to_raw_handles, raw_to_native_hand
 use crate::platform_runtime::snapshot_service::{
     register_platform_window_service_best_effort, update_platform_window_snapshot,
 };
+use crate::platform_runtime::shutdown_watchdog::ShutdownWatchdog;
 use crate::platform_runtime::types::ResolvedPlatformRuntimeConfig;
 use crate::render_runtime::ResolvedRenderBackendConfig;
 use crate::platform_runtime::ui_provider_selection::{
@@ -188,9 +189,13 @@ impl HostPlatformRuntime {
             Err(e) => crate::platform_early_log!("host.ffi.call.returned err='{}'", e),
         }
 
+        let shutdown_exit_code = if result.is_ok() { 0 } else { 1 };
+        let shutdown_watchdog = ShutdownWatchdog::arm("platform runtime returned", shutdown_exit_code);
+
         self.shutdown_engine_once("platform runtime returned");
 
         newengine_plugin_host::host_context::unregister_by_owner(&resolved.plugin_id);
+        shutdown_watchdog.complete();
 
         match &result {
             Ok(()) => log::info!("platform runtime: exited cleanly"),

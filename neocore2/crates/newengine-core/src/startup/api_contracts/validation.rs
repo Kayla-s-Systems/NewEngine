@@ -4,7 +4,7 @@ use crate::error::{EngineError, EngineResult};
 use newengine_plugin_host::PluginSnapshotEntry;
 use newengine_service_api::RuntimeServiceRequirementSpec;
 
-use super::catalog::{runtime_service_user, RUNTIME_SERVICE_REQUIREMENTS};
+use super::catalog::{runtime_service_user, RUNTIME_SERVICE_CATALOG};
 use super::description::{method_statuses, parse_methods_from_description};
 use super::diagnostics::{provider_for, provider_has_required_capability, service_origin};
 
@@ -34,10 +34,10 @@ pub(crate) fn validate_runtime_service_contracts(
         )));
     }
 
-    let mut reports = Vec::with_capacity(RUNTIME_SERVICE_REQUIREMENTS.len());
+    let mut reports = Vec::with_capacity(RUNTIME_SERVICE_CATALOG.len());
 
-    for requirement in RUNTIME_SERVICE_REQUIREMENTS {
-        let (report, error) = validate_one(*requirement, plugins);
+    for entry in RUNTIME_SERVICE_CATALOG {
+        let (report, error) = validate_one(entry.requirement, plugins);
         emit_contract_line(&report);
         reports.push(report);
 

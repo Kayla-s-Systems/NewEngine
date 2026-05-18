@@ -1,7 +1,5 @@
 #![forbid(unsafe_op_in_unsafe_fn)]
 
-use std::time::Instant;
-
 use newengine_core::render::{
     Extent2D, RectI32, RenderApi, RenderFrameDebugSnapshot, RenderTargetId, Viewport,
 };
@@ -11,51 +9,15 @@ use newengine_render_frame_graph::{standard_runtime_frame, StandardRuntimePipeli
 use newengine_scene::Scene;
 use newengine_ui::draw::UiDrawList;
 
-use super::draw_lists::{DrawListBuildCtx, RenderDrawListProviderRegistry, RuntimeDrawListSet, SceneExtractionCtx};
+use super::draw_lists::{DrawListBuildCtx, SceneExtractionCtx};
+use super::feature_extraction::FeatureExtractionFrame;
 use super::frame_envelope_builder::build_runtime_frame_envelope;
 use super::frame_submit::submit_frame_envelope;
+use super::profiling::{emit_timed_profile, FrameCpuProfile};
 use super::frame_types::{PlayableFrameOutcome, RenderFrameScope, WorldFrameState};
 use super::{lights, passes, picking, postfx, scene, shadows};
 use crate::scene_bridge::{apply_engine_view_postfx, EngineViewTransitionPhase};
 use super::super::controller::RuntimeRenderController;
-
-struct FrameCpuProfile {
-    started: Instant,
-    last_mark: Instant,
-    parts: Vec<(&'static str, f32)>,
-}
-
-impl FrameCpuProfile {
-    #[inline]
-    fn new() -> Self {
-        let now = Instant::now();
-        Self {
-            started: now,
-            last_mark: now,
-            parts: Vec::with_capacity(8),
-        }
-    }
-
-    #[inline]
-    fn mark(&mut self, label: &'static str) {
-        let now = Instant::now();
-        self.parts.push((label, now.duration_since(self.last_mark).as_secs_f32() * 1000.0));
-        self.last_mark = now;
-    }
-
-    #[inline]
-    fn total_ms(&self) -> f32 {
-        self.started.elapsed().as_secs_f32() * 1000.0
-    }
-
-    fn breakdown(&self) -> String {
-        self.parts
-            .iter()
-            .map(|(label, ms)| format!("{}={:.2}ms", label, ms))
-            .collect::<Vec<_>>()
-            .join(" ")
-    }
-}
 
 pub(super) struct RenderFrameOrchestrator;
 
@@ -157,60 +119,25 @@ impl RenderFrameOrchestrator {
             ui,
         };
 
-        let mut provider_registry = RenderDrawListProviderRegistry::from_runtime_providers(
-            controller.features.draw_list_providers.runtime_provider_arcs(),
-        );
-        if let Some(snapshot) = plugin_snapshot {
-            provider_registry.sync_plugin_capabilities(snapshot);
-        }
-        if scope.trace_frame {
-            log::debug!(
-                "render draw-list providers: {}",
-                provider_registry.labels().join(",")
-            );
-        }
-
-        let providers = provider_registry.providers();
-        let visibility = extraction.visibility();
-        let mut draw_lists = RuntimeDrawListSet::extract(visibility, &extraction, providers.as_slice());
-        provider_registry.add_external_draw_lists(visibility, &mut draw_lists);
-        cpu_profile.mark("draw_list_set");
-
-        let mut feature_breakdown = Vec::new();
-        let feature_started = Instant::now();
-        let provider_result = {
-            let mut build_ctx = DrawListBuildCtx::new(controller, r, &draw_lists);
-            let pass_state_started = Instant::now();
-            let pass_state_result = draw_lists.record_pass_state(&extraction, &mut build_ctx);
-            feature_breakdown.push(format!(
-                "pass_state={:.2}ms",
-                pass_state_started.elapsed().as_secs_f32() * 1000.0
-            ));
-            pass_state_result.and_then(|()| {
-                for provider in providers.iter().copied() {
-                    let provider_started = Instant::now();
-                    let result = provider.extract(&extraction, &mut build_ctx);
-                    feature_breakdown.push(format!(
-                        "{}={:.2}ms",
-                        provider.id(),
-                        provider_started.elapsed().as_secs_f32() * 1000.0
-                    ));
-                    result?;
-                }
-                Ok(())
-            })
+        let features = match FeatureExtractionFrame::extract_runtime(
+            controller,
+            r,
+            &extraction,
+            plugin_snapshot,
+            scope.trace_frame,
+        ) {
+            Ok(features) => features,
+            Err(e) => {
+                controller.disable_viewport_pass("draw_list.provider_extraction", &e);
+                Self::end_viewport_after_draw_failure(controller, r, ui.cloned(), scope)?;
+                return Ok(PlayableFrameOutcome::EndedEarly { ui_telemetry: None });
+            }
         };
-        if let Err(e) = provider_result {
-            controller.disable_viewport_pass("draw_list.provider_extraction", &e);
-            Self::end_viewport_after_draw_failure(controller, r, ui.cloned(), scope)?;
-            return Ok(PlayableFrameOutcome::EndedEarly { ui_telemetry: None });
-        }
-        let feature_extract_ms = feature_started.elapsed().as_secs_f32() * 1000.0;
         Self::trace_feature_extract_profile(
             controller.frame.frame_index,
             scope.trace_frame,
-            feature_extract_ms,
-            feature_breakdown.as_slice(),
+            features.profile_total_ms(),
+            &features.profile_breakdown(),
             ui,
         );
         cpu_profile.mark("feature_extract");
@@ -220,7 +147,7 @@ impl RenderFrameOrchestrator {
         } else {
             None
         };
-        let draw_list_descs = draw_lists.descriptors();
+        let draw_list_descs = features.draw_list_descs().to_vec();
         let frame_plan = standard_runtime_frame(
             StandardRuntimePipelineDesc::new(controller.frame.frame_index, Extent2D::new(scope.w, scope.h), extent)
                 .viewport_is_surface(scope.direct_surface_viewport)
@@ -236,15 +163,10 @@ impl RenderFrameOrchestrator {
                 .draw_lists(draw_list_descs.clone()),
         );
 
-        provider_registry.validate_routes(&frame_plan.validate_draw_list_routes())?;
+        features.validate_routes(&frame_plan.validate_draw_list_routes())?;
         {
-            let mut build_ctx = DrawListBuildCtx::new(controller, r, &draw_lists);
-            provider_registry.extract_external_providers(
-                &extraction,
-                &draw_lists,
-                &frame_plan,
-                &mut build_ctx,
-            )?;
+            let mut build_ctx = DrawListBuildCtx::new(controller, r, features.draw_lists());
+            features.extract_external_providers(&extraction, &frame_plan, &mut build_ctx)?;
         }
         cpu_profile.mark("frame_plan_external");
 
@@ -340,25 +262,18 @@ impl RenderFrameOrchestrator {
         frame_index: u64,
         trace_frame: bool,
         feature_ms: f32,
-        breakdown: &[String],
+        breakdown: &str,
         ui: Option<&UiDrawList>,
     ) {
-        if !trace_frame && feature_ms < 16.6 {
-            return;
-        }
         let ui_stats = ui.map(Self::ui_draw_list_stats).unwrap_or_else(|| "ui=none".to_owned());
-        let line = format!(
-            "render feature profile: frame={} total_ms={:.2} {} {}",
+        emit_timed_profile(
+            "render feature profile",
             frame_index,
+            trace_frame,
             feature_ms,
-            breakdown.join(" "),
+            breakdown,
             ui_stats,
         );
-        if feature_ms >= 33.3 {
-            log::warn!("{}", line);
-        } else {
-            log::debug!("{}", line);
-        }
     }
 
     fn ui_draw_list_stats(ui: &UiDrawList) -> String {
@@ -392,26 +307,14 @@ impl RenderFrameOrchestrator {
         trace_frame: bool,
         profile: &FrameCpuProfile,
     ) {
-        let total_ms = profile.total_ms();
-        if !trace_frame && total_ms < 16.6 {
-            return;
-        }
-        let breakdown = profile.breakdown();
-        if total_ms >= 33.3 {
-            log::warn!(
-                "render cpu profile: frame={} total_ms={:.2} {}",
-                frame_index,
-                total_ms,
-                breakdown
-            );
-        } else {
-            log::debug!(
-                "render cpu profile: frame={} total_ms={:.2} {}",
-                frame_index,
-                total_ms,
-                breakdown
-            );
-        }
+        emit_timed_profile(
+            "render cpu profile",
+            frame_index,
+            trace_frame,
+            profile.total_ms(),
+            profile.breakdown(),
+            "",
+        );
     }
 
     fn end_viewport_after_pipeline_failure(
