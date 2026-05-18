@@ -2,6 +2,7 @@ use newengine_core::physics::PhysicsApiRef;
 use newengine_core::render::RenderApi;
 use newengine_scene::Scene;
 
+use crate::engine_bounds::EngineBoundsSnap;
 use crate::scene_bridge::EngineViewInput;
 use crate::gameplay::{run_schedule, GameRunMode};
 
@@ -65,7 +66,9 @@ impl RuntimeRenderController {
             }
 
             let bounds = scene::scene_bounds_world(world).unwrap_or_else(scene::default_bounds);
-            let sel_bounds = scene::selection_bounds_world(world, selection);
+            let bounds = EngineBoundsSnap::new(bounds.center, bounds.radius);
+            let sel_bounds = scene::selection_bounds_world(world, selection)
+                .map(|bounds| EngineBoundsSnap::new(bounds.center, bounds.radius));
             let frame = scene_bridge.resolve_engine_view_frame(
                 world,
                 &viewport_bridge,

@@ -3,6 +3,7 @@ use newengine_core::physics::PhysicsApiRef;
 use newengine_core::render::{Extent2D, RenderApi};
 use newengine_core::{EngineResult, ModuleCtx};
 use newengine_ui::draw::UiDrawList;
+use newengine_ui_api::UiRuntimeDebugOverlayTelemetry;
 
 use super::frame_types::{PlayableFrameOutcome, RenderFrameScope, ViewportFrameInput};
 use super::input::ViewportInputSnap;
@@ -134,7 +135,11 @@ impl RuntimeRenderController {
         if let Some(ui) = ui {
             r.set_ui_draw_list(ui);
         }
-        r.set_debug_text(format!("NewEngine | Loading scene\n{}", gate_reason));
+        let ui_telemetry = UiRuntimeDebugOverlayTelemetry::new(
+            self.frame.frame_index,
+            format!("NewEngine | Loading scene\n{}", gate_reason),
+        );
+        crate::ui_gateway::publish_debug_overlay_telemetry(&ui_telemetry);
         if scope.trace_frame {
             log::debug!(
                 "render controller: gated loading frame={} reason='{}'",

@@ -10,6 +10,7 @@ mod handles;
 mod runtime_host;
 mod snapshot_service;
 mod types;
+mod ui_gateway_frame;
 mod ui_provider_selection;
 
 pub use config::{

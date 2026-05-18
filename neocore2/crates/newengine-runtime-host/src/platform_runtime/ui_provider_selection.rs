@@ -6,7 +6,7 @@ use newengine_ui::UiProviderKind;
 ///
 /// UI is discovered, not configured. If a UI-provider service is registered,
 /// the runtime binds the first deterministic provider. If no provider exists,
-/// `none` is a valid active mode. Startup config must not select egui/webgpu/etc.
+/// `none` is a valid active mode. Startup config must not select toolkit/backend aliases.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct UiProviderSelection {
     active: UiProviderKind,
@@ -45,25 +45,13 @@ impl UiProviderSelection {
 }
 
 pub(crate) fn discover_available_ui_provider() -> UiProviderKind {
-    let services = newengine_plugin_host::list_services();
-    let selected = services
-        .iter()
-        .find(|id| is_ui_provider_service_id(id))
-        .cloned();
-
-    match selected {
-        Some(service_id) => UiProviderKind::Plugin { service_id },
-        None => UiProviderKind::Null,
+    if newengine_plugin_host::has_service(newengine_ui_api::ENGINE_UI_SERVICE_ID) {
+        UiProviderKind::Plugin {
+            service_id: newengine_ui_api::ENGINE_UI_SERVICE_ID.to_owned(),
+        }
+    } else {
+        UiProviderKind::Null
     }
-}
-
-#[inline]
-fn is_ui_provider_service_id(service_id: &str) -> bool {
-    let id = service_id.trim().to_ascii_lowercase();
-    id == "newengine.ui.provider.egui"
-        || id.starts_with("newengine.ui.provider.")
-        || id.contains(".ui.provider.")
-        || id.ends_with(".ui.provider")
 }
 
 pub(crate) fn log_ui_provider_selection(origin: &str, active: &UiProviderKind) {
@@ -73,7 +61,7 @@ pub(crate) fn log_ui_provider_selection(origin: &str, active: &UiProviderKind) {
         }
         UiProviderKind::Plugin { service_id } => {
             log::info!(
-                "ui provider: origin='{origin}' discovered plugin service='{}' active plugin-backed",
+                "ui provider: origin='{origin}' discovered gateway='{}' active gateway-backed",
                 service_id
             );
         }

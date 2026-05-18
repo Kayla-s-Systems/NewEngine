@@ -19,7 +19,7 @@ pub struct ViewportCameraFrame {
 /// Bidirectional UI <-> renderer bridge for the viewport.
 ///
 /// The UI publishes desired pixel extent (physical pixels). The renderer publishes an external
-/// texture id that the UI displays via `egui::TextureId::User(tex_id)`.
+/// texture id that the UI displays via `the external UI texture namespace`.
 ///
 /// Notes:
 /// - The bridge is mostly lock-free; viewport UI input is passed as one mutex-guarded packet to avoid torn snapshots.

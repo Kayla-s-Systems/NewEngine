@@ -10,7 +10,7 @@ use newengine_math::{Mat4, Vec3};
 
 use crate::camera_gateway::{CameraGatewayFrame, CameraGatewayInput, CameraTransitionPhase};
 use crate::gameplay::GameRunMode;
-use crate::render_controller::feature_api::BoundsSnap;
+use crate::engine_bounds::EngineBoundsSnap;
 use crate::viewport_bridge::ViewportBridge;
 
 use super::SceneBridge;
@@ -52,6 +52,7 @@ impl From<EngineViewInput> for CameraGatewayInput {
     }
 }
 
+#[allow(dead_code)]
 #[derive(Clone, Debug)]
 pub(crate) struct EngineViewGatewayFrame {
     pub frame_index: u64,
@@ -88,6 +89,7 @@ impl From<CameraGatewayFrame> for EngineViewGatewayFrame {
     }
 }
 
+#[allow(dead_code)]
 #[derive(Clone, Copy, Debug)]
 pub(crate) struct EngineViewFrame {
     pub view: Mat4,
@@ -208,8 +210,8 @@ impl SceneBridge {
         dt: f32,
         vp_w: u32,
         vp_h: u32,
-        bounds: BoundsSnap,
-        selection_bounds: Option<BoundsSnap>,
+        bounds: EngineBoundsSnap,
+        selection_bounds: Option<EngineBoundsSnap>,
     ) -> EngineViewGatewayFrame {
         self.camera_gateway
             .tick_world_frame(

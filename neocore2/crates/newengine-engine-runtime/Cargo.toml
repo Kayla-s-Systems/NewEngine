@@ -48,4 +48,5 @@ newengine-transform = { path = "../newengine-transform", features = ["ecs", "ser
 newengine-transform-api = { path = "../newengine-transform-api", features = ["ecs"], default-features = false }
 newengine-texture-container = { path = "../newengine-texture-container" }
 newengine-ui = { path = "../newengine-ui", default-features = false }
+newengine-ui-api = { path = "../newengine-ui-api" }
 newengine-viewport = { path = "../newengine-viewport" }

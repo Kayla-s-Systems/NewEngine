@@ -8,10 +8,6 @@ edition = "2021"
 default = ["provider-null"]
 provider-null = []
 
-# Legacy markup/icon adapter feature. This is not a provider and does not make egui
-# a built-in runtime backend. Concrete runtime providers live in plugins.
-egui = ["dep:egui"]
-provider-egui = []
 
 # Optional adapter to the AssetManager crate.
 #
@@ -33,7 +29,6 @@ roxmltree = "0.21.1"
 smallvec = "1.13"
 abi_stable = "0.11"
 
-egui = { version = "0.33.3", optional = true }
 serde = { version = "1.0.228", features = ["derive"] }
 serde_json = "1.0.149"
 base64 = "0.22"

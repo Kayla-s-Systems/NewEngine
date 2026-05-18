@@ -29,5 +29,6 @@ newengine-system-contracts = { path = "../newengine-system-contracts" }
 newengine-plugin-host = { path = "../newengine-plugin-host" }
 newengine-transform = { path = "../newengine-transform", features = ["ecs", "service"], default-features = false }
 newengine-ui = { path = "../newengine-ui", default-features = false }
+newengine-ui-api = { path = "../newengine-ui-api" }
 
 serde = { version = "1.0", features = ["derive"] }

@@ -42,6 +42,7 @@ members = [
     "crates/newengine-transform",
     "crates/newengine-transform-api",
     "crates/newengine-ui",
+    "crates/newengine-ui-api",
     "crates/newengine-ui-draw",
     "crates/newengine-viewport",
 ]

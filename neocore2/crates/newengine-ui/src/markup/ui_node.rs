@@ -116,7 +116,7 @@ pub(crate) enum UiNode {
 
     /// Draw a texture as an UI element.
     ///
-    /// `tex` must resolve to an `egui::TextureId::User(u64)`.
+    /// `tex` must resolve to an `a provider-neutral external texture id`.
     Image {
         id: Option<String>,
         tex: String,

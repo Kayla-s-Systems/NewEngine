@@ -30,7 +30,7 @@ use crate::gameplay::{
     capture_runtime_world_snapshot, first_player, restore_runtime_world_snapshot, FpsDemoRules,
     GameRunMode, RuntimeWorldSnapshot,
 };
-use crate::render_controller::feature_api::BoundsSnap;
+use crate::engine_bounds::EngineBoundsSnap;
 use crate::viewport_bridge::ViewportBridge;
 
 
@@ -141,8 +141,8 @@ impl CameraGatewayBridge {
         dt: f32,
         vp_w: u32,
         vp_h: u32,
-        bounds: BoundsSnap,
-        selection_bounds: Option<BoundsSnap>,
+        bounds: EngineBoundsSnap,
+        selection_bounds: Option<EngineBoundsSnap>,
     ) -> CameraGatewayFrame {
         let mut state = self.state.lock();
         let mut nav_input = camera_nav_input(input, play_mode);

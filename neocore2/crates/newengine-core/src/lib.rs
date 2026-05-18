@@ -20,6 +20,9 @@ pub mod render;
 pub mod camera {
     pub use newengine_camera_api::*;
 }
+pub mod ui {
+    pub use newengine_ui_api::*;
+}
 pub mod physics;
 pub mod run_id;
 pub mod sched;

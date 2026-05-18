@@ -21,7 +21,7 @@ pub type UiOrder = i32;
 
 /// A dynamic frame context passed to contributors.
 ///
-/// `ctx_any` is the provider-typed context (e.g. `egui::Context`).
+/// `ctx_any` is the provider-typed context (e.g. a provider-native context).
 /// `user_data` is host-provided per-frame data/services.
 pub struct UiDynFrame<'a> {
     pub ctx_any: &'a mut dyn Any,

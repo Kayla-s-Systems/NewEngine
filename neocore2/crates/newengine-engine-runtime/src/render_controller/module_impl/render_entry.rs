@@ -3,6 +3,7 @@ use newengine_core::render::{
 };
 use newengine_core::{EngineResult, ModuleCtx};
 use newengine_ui::draw::UiDrawList;
+use newengine_ui_api::UiRuntimeDebugOverlayTelemetry;
 
 use super::frame_types::{PlayableFrameOutcome, RenderFrameScope};
 use super::super::controller::RuntimeRenderController;
@@ -83,6 +84,7 @@ impl RuntimeRenderController {
         }
 
         let mut telemetry_to_publish = None;
+        let mut ui_telemetry_to_publish = None;
         if let PlayableFrameOutcome::Continue {
             mut frame_debug_snapshot,
         } = outcome
@@ -98,7 +100,6 @@ impl RuntimeRenderController {
                 }
             }
 
-            r.set_debug_text(self.diagnostics.overlay_metrics.overlay_text());
             self.gc_per_draw_ubos(&mut **r);
             self.gc_deferred_rts(&mut **r);
             if trace_frame {
@@ -111,7 +112,13 @@ impl RuntimeRenderController {
 
             if let Some(snapshot) = frame_debug_snapshot.take() {
                 self.diagnostics.overlay_metrics.publish_debug_snapshot(snapshot);
-                telemetry_to_publish = Some(self.diagnostics.overlay_metrics.telemetry_snapshot());
+                let telemetry = self.diagnostics.overlay_metrics.telemetry_snapshot();
+                let overlay_text = self.diagnostics.overlay_metrics.overlay_text();
+                let ui_telemetry = UiRuntimeDebugOverlayTelemetry::new(self.frame.frame_index, overlay_text)
+                    .with_metric("render_debug", serde_json::to_value(&telemetry).unwrap_or(serde_json::Value::Null));
+                crate::ui_gateway::publish_debug_overlay_telemetry(&ui_telemetry);
+                ui_telemetry_to_publish = Some(ui_telemetry);
+                telemetry_to_publish = Some(telemetry);
             }
             self.trace_render_diagnostics(&mut **r, trace_frame);
         }
@@ -120,6 +127,9 @@ impl RuntimeRenderController {
         ctx.resources_mut().insert(SceneLaunchStatus::inactive());
         if let Some(telemetry) = telemetry_to_publish {
             ctx.resources_mut().insert(telemetry);
+        }
+        if let Some(ui_telemetry) = ui_telemetry_to_publish {
+            ctx.resources_mut().insert(ui_telemetry);
         }
         Ok(())
     }
@@ -152,8 +162,12 @@ impl RuntimeRenderController {
         trace_frame: bool,
     ) -> EngineResult<Option<RenderFrameScope>> {
         let (requested_vp_w, requested_vp_h) = self.bridges.viewport.read_extent();
-        let direct_surface_viewport = !ui_enabled
-            && requested_vp_w == 0
+        // UI is an overlay/service output and must not change world viewport selection.
+        // A zero viewport bridge extent means "render directly to the current surface"
+        // regardless of whether an engine.ui draw list is present. The previous
+        // UI-gated condition turned this into 0x0 once UI provider output existed,
+        // clearing the surface and drawing only UI.
+        let direct_surface_viewport = requested_vp_w == 0
             && requested_vp_h == 0
             && w > 0
             && h > 0;

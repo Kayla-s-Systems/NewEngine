@@ -147,39 +147,3 @@ pub fn request_builtin_icon(
 ) {
     loader.request(assets, icon.key(), icon.default_path());
 }
-
-#[cfg(feature = "egui")]
-mod egui_ext {
-    use super::*;
-    use egui;
-
-    /// Returns egui `TextureId::User(u64)` when the icon texture is ready.
-    #[inline]
-    pub fn tex_id(loader: &UiImageLoader, icon: BuiltinUiIcon) -> Option<egui::TextureId> {
-        let id = loader.tex_id_u64(icon.key())?;
-        Some(egui::TextureId::User(id))
-    }
-
-    /// A standardized icon+label button.
-    ///
-    /// - If the icon is not ready, falls back to a text-only button.
-    /// - Keeps sizing consistent across the editor.
-    pub fn icon_button(
-        ui: &mut egui::Ui,
-        tid: Option<egui::TextureId>,
-        label: &str,
-    ) -> egui::Response {
-        let min = egui::vec2(0.0, 28.0);
-
-        match tid {
-            Some(tid) => {
-                let st = egui::load::SizedTexture::new(tid, egui::vec2(16.0, 16.0));
-                ui.add(egui::Button::image_and_text(st, label).min_size(min))
-            }
-            None => ui.add(egui::Button::new(label).min_size(min)),
-        }
-    }
-}
-
-#[cfg(feature = "egui")]
-pub use egui_ext::{icon_button, tex_id};

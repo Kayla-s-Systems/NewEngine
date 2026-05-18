@@ -129,7 +129,7 @@ pub struct UiThemeDeclaration {
 }
 
 /// Full declarative layout document. This is intentionally provider-neutral:
-/// egui, native fallback, WebGPU UI or future Scaleform-like adapters can map
+/// native fallback, WebGPU UI or future Scaleform-like adapters can map
 /// the same tree into their own renderer.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct UiDeclarativeLayout {
@@ -320,7 +320,7 @@ fn default_consumes_for_id(id: &str) -> Vec<String> {
             "ScreenOverlayStatus".to_owned(),
         ],
         UI_SURFACE_RUNTIME_OVERLAY | UI_SURFACE_DEBUG_OVERLAY => vec![
-            "RenderDebugTelemetry".to_owned(),
+            "UiRuntimeDebugOverlayTelemetry".to_owned(),
             "RuntimeFrameStats".to_owned(),
         ],
         UI_SURFACE_GAME_HUD => vec!["GameHudSnapshot".to_owned(), "PlayerRuntimeState".to_owned()],

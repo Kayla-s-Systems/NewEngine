@@ -25,7 +25,7 @@ pub const UI_ERROR_MODAL_KSYSTEMS_ID: &str = "engine.error_modal.ksystems.v1";
 ///
 /// This is intentionally serializable and renderer-agnostic. Runtime systems can
 /// project UI surfaces without knowing whether the final presentation is native,
-/// egui, webgpu, or intentionally disabled.
+/// a provider backend or intentionally disabled.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum UiProviderBinding {
     /// No user interface provider is active. This is a valid headless/minimal mode.

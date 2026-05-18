@@ -482,6 +482,17 @@ impl HostPlatformRuntime {
             let _ = self.engine.resources_mut().remove::<UiInputFrame>();
         }
 
+        let mut ui_draw = if matches!(self.ui_selection.active(), UiProviderKind::Plugin { .. }) {
+            crate::platform_runtime::ui_gateway_frame::request_ui_draw_list(
+                0,
+                dt_sec,
+                [self.surface.width, self.surface.height],
+                self.surface.pixels_per_point,
+            )?
+        } else {
+            None
+        };
+
         if let Some(build) = self.ui_build.as_deref_mut() {
             let mut desc = UiFrameDesc::new(dt_sec).with_surface(
                 self.surface.width,
@@ -494,7 +505,15 @@ impl HostPlatformRuntime {
             }
 
             let out = self.ui.run_frame(&(), desc, build);
-            self.engine.resources_mut().insert(out.draw_list);
+            if !out.draw_list.mesh.vertices.is_empty() || !out.draw_list.mesh.indices.is_empty() {
+                ui_draw = Some(out.draw_list);
+            }
+        }
+
+        if let Some(draw_list) = ui_draw {
+            self.engine.resources_mut().insert(draw_list);
+        } else {
+            let _ = self.engine.resources_mut().remove::<newengine_ui::draw::UiDrawList>();
         }
 
         match self.engine.step() {

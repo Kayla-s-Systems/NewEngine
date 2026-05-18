@@ -28,6 +28,7 @@ pub(crate) const RUNTIME_SERVICE_REQUIREMENTS: &[RuntimeServiceRequirementSpec] 
     newengine_assets_api::ASSET_RUNTIME_REQUIREMENT_SPEC,
     newengine_render_api::RENDER_RUNTIME_REQUIREMENT_SPEC,
     newengine_camera_api::CAMERA_RUNTIME_REQUIREMENT_SPEC,
+    newengine_ui_api::UI_RUNTIME_REQUIREMENT_SPEC,
     newengine_physics_api::PHYSICS_RUNTIME_REQUIREMENT_SPEC,
     PLATFORM_RUNTIME_REQUIREMENT_SPEC,
 ];
