@@ -53,6 +53,9 @@ engine.assets
 engine.render
 engine.physics
 engine.input
+engine.ecs
+engine.entity
+engine.platform
 ```
 
 The host resolves each gateway to the active provider service.
@@ -60,3 +63,11 @@ The host resolves each gateway to the active provider service.
 ## Degradation policy
 
 Missing providers are not fatal by default. The engine logs the degraded service and continues when possible. Strict startup is an explicit policy controlled by runtime/profile flags.
+
+## Entity boundary
+
+Entity identity/lifecycle is exposed through `engine.entity`. Service consumers receive opaque stable handles, not `newengine_entity::EntityId` or ECS storage internals. The current route is engine-owned over the active `SceneBridge` world and is registered as a normal gateway candidate.
+
+## Platform boundary
+
+Native window handles and surface metrics are exposed through `engine.platform`, not through a direct platform-window service id. The current route is engine-owned and registered as a gateway candidate so future platform providers can replace it through the same registry path.

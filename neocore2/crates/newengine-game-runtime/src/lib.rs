@@ -31,6 +31,12 @@ use newengine_ecs_api::{
     EcsServiceInfo, EcsSnapshotRequest, EcsWorldSnapshot, EcsWorldSummary,
     ECS_BACKEND_CAPABILITY_ID, ENGINE_ECS_SERVICE_ID,
 };
+use newengine_entity_api::{
+    EntityDespawnRequest, EntityDespawnResponse, EntityDespawnResult, EntityExistsRequest,
+    EntityExistsResponse, EntityHandle, EntityInvokeRequest, EntityListRequest, EntityListResponse,
+    EntityRecord, EntityServiceInfo, EntitySpawnRequest, EntitySpawnResponse, ENTITY_BACKEND_CAPABILITY_ID,
+    ENGINE_ENTITY_SERVICE_ID,
+};
 
 use newengine_runtime_host::asset_bootstrap::{
     collect_app_asset_roots, mount_asset_roots_best_effort,
@@ -553,6 +559,211 @@ impl ServiceV1 for EngineEcsGatewayService {
     }
 }
 
+
+
+const MAX_ENTITY_SPAWN_PER_CALL: usize = 4096;
+
+#[derive(Clone)]
+struct EngineEntityGatewayService {
+    scene: Arc<newengine_engine_runtime::SceneBridge>,
+}
+
+impl EngineEntityGatewayService {
+    #[inline]
+    fn new(scene: Arc<newengine_engine_runtime::SceneBridge>) -> Self {
+        Self { scene }
+    }
+
+    #[inline]
+    fn ok_json<T: serde::Serialize>(value: &T) -> RResult<Blob, RString> {
+        match serde_json::to_vec(value) {
+            Ok(bytes) => RResult::ROk(Blob::from(bytes)),
+            Err(e) => RResult::RErr(RString::from(e.to_string())),
+        }
+    }
+
+    #[inline]
+    fn payload_json(payload: Blob) -> Result<serde_json::Value, String> {
+        if payload.is_empty() {
+            return Ok(serde_json::json!({}));
+        }
+        serde_json::from_slice(payload.as_slice()).map_err(|e| e.to_string())
+    }
+
+    #[inline]
+    fn handle(id: newengine_ecs::EntityId) -> EntityHandle {
+        EntityHandle::new(id.stable_u64())
+    }
+
+    fn find_entity_by_handle(world: &newengine_ecs::World, handle: EntityHandle) -> Option<newengine_ecs::EntityId> {
+        world.iter_entities().find(|id| id.stable_u64() == handle.stable_id)
+    }
+
+    fn list_json_v1(&self, payload: Blob) -> RResult<Blob, RString> {
+        let req = match Self::payload_json(payload)
+            .and_then(|v| serde_json::from_value::<EntityListRequest>(v).map_err(|e| e.to_string()))
+        {
+            Ok(v) => v,
+            Err(e) => return RResult::RErr(RString::from(e)),
+        };
+
+        let scene_lock = self.scene.scene();
+        let scene = scene_lock.read();
+        let world = scene.world();
+        let mut entities = Vec::new();
+        let mut truncated = false;
+
+        for id in world.iter_entities() {
+            if entities.len() >= req.limit {
+                truncated = true;
+                break;
+            }
+            entities.push(EntityRecord { handle: Self::handle(id) });
+        }
+
+        Self::ok_json(&EntityListResponse {
+            entities,
+            truncated,
+            total_count: world.entity_count() as u64,
+        })
+    }
+
+    fn exists_json_v1(&self, payload: Blob) -> RResult<Blob, RString> {
+        let req = match Self::payload_json(payload)
+            .and_then(|v| serde_json::from_value::<EntityExistsRequest>(v).map_err(|e| e.to_string()))
+        {
+            Ok(v) => v,
+            Err(e) => return RResult::RErr(RString::from(e)),
+        };
+
+        let scene_lock = self.scene.scene();
+        let scene = scene_lock.read();
+        let world = scene.world();
+        let exists = Self::find_entity_by_handle(world, req.entity).is_some();
+
+        Self::ok_json(&EntityExistsResponse { entity: req.entity, exists })
+    }
+
+    fn spawn_json_v1(&self, payload: Blob) -> RResult<Blob, RString> {
+        let req = match Self::payload_json(payload)
+            .and_then(|v| serde_json::from_value::<EntitySpawnRequest>(v).map_err(|e| e.to_string()))
+        {
+            Ok(v) => v,
+            Err(e) => return RResult::RErr(RString::from(e)),
+        };
+
+        let count = req.count.min(MAX_ENTITY_SPAWN_PER_CALL);
+        let scene_lock = self.scene.scene();
+        let mut scene = scene_lock.write();
+        let world = scene.world_mut();
+        let mut entities = Vec::with_capacity(count);
+
+        for _ in 0..count {
+            let id = world.spawn();
+            entities.push(EntityRecord { handle: Self::handle(id) });
+        }
+
+        Self::ok_json(&EntitySpawnResponse {
+            entities,
+            tick: world.tick(),
+            total_count: world.entity_count() as u64,
+        })
+    }
+
+    fn despawn_json_v1(&self, payload: Blob) -> RResult<Blob, RString> {
+        let req = match Self::payload_json(payload)
+            .and_then(|v| serde_json::from_value::<EntityDespawnRequest>(v).map_err(|e| e.to_string()))
+        {
+            Ok(v) => v,
+            Err(e) => return RResult::RErr(RString::from(e)),
+        };
+
+        let scene_lock = self.scene.scene();
+        let mut scene = scene_lock.write();
+        let world = scene.world_mut();
+        let mut results = Vec::with_capacity(req.entities.len());
+
+        for entity in req.entities {
+            let ok = Self::find_entity_by_handle(world, entity)
+                .map(|id| world.despawn(id))
+                .unwrap_or(false);
+            results.push(EntityDespawnResult {
+                entity,
+                ok,
+                message: if ok { "entity despawned" } else { "entity not found" }.to_owned(),
+            });
+        }
+
+        let ok = results.iter().all(|result| result.ok);
+        Self::ok_json(&EntityDespawnResponse {
+            ok,
+            results,
+            tick: world.tick(),
+            total_count: world.entity_count() as u64,
+        })
+    }
+
+    fn invoke_json(&self, payload: Blob) -> RResult<Blob, RString> {
+        let req = match Self::payload_json(payload)
+            .and_then(|v| serde_json::from_value::<EntityInvokeRequest>(v).map_err(|e| e.to_string()))
+        {
+            Ok(v) => v,
+            Err(e) => return RResult::RErr(RString::from(e)),
+        };
+        let payload = match serde_json::to_vec(&req.payload) {
+            Ok(bytes) => Blob::from(bytes),
+            Err(e) => return RResult::RErr(RString::from(e.to_string())),
+        };
+
+        match req.method.as_str() {
+            newengine_entity_api::ENTITY_SERVICE_METHOD_LIST_JSON_V1 => self.list_json_v1(payload),
+            newengine_entity_api::ENTITY_SERVICE_METHOD_EXISTS_JSON_V1 => self.exists_json_v1(payload),
+            newengine_entity_api::ENTITY_SERVICE_METHOD_SPAWN_JSON_V1 => self.spawn_json_v1(payload),
+            newengine_entity_api::ENTITY_SERVICE_METHOD_DESPAWN_JSON_V1 => self.despawn_json_v1(payload),
+            other => RResult::RErr(RString::from(format!(
+                "engine.entity invoke_json unknown target method '{other}'"
+            ))),
+        }
+    }
+}
+
+impl ServiceV1 for EngineEntityGatewayService {
+    fn id(&self) -> CapabilityId {
+        CapabilityId::from(ENGINE_ENTITY_SERVICE_ID)
+    }
+
+    fn describe(&self) -> RString {
+        RString::from(
+            serde_json::json!({
+                "id": ENGINE_ENTITY_SERVICE_ID,
+                "version": 1,
+                "contract": "newengine.entity gateway >= 0.1.x",
+                "protocol": "newengine.entity-api/v1",
+                "origin": "engine-owned",
+                "owner": "newengine-game-runtime.entity-gateway",
+                "capability": ENTITY_BACKEND_CAPABILITY_ID,
+                "methods": newengine_entity_api::ENTITY_REQUIRED_METHODS_V1,
+            })
+            .to_string(),
+        )
+    }
+
+    fn call(&self, method: MethodName, payload: Blob) -> RResult<Blob, RString> {
+        match method.as_str() {
+            newengine_entity_api::ENTITY_SERVICE_METHOD_INFO => Self::ok_json(&EntityServiceInfo::default()),
+            newengine_entity_api::ENTITY_SERVICE_METHOD_INVOKE => self.invoke_json(payload),
+            newengine_entity_api::ENTITY_SERVICE_METHOD_LIST_JSON_V1 => self.list_json_v1(payload),
+            newengine_entity_api::ENTITY_SERVICE_METHOD_EXISTS_JSON_V1 => self.exists_json_v1(payload),
+            newengine_entity_api::ENTITY_SERVICE_METHOD_SPAWN_JSON_V1 => self.spawn_json_v1(payload),
+            newengine_entity_api::ENTITY_SERVICE_METHOD_DESPAWN_JSON_V1 => self.despawn_json_v1(payload),
+            newengine_entity_api::ENTITY_SERVICE_METHOD_SHUTDOWN_V1 => RResult::ROk(Blob::from(Vec::<u8>::new())),
+            other => RResult::RErr(RString::from(format!(
+                "engine.entity unknown method '{other}'"
+            ))),
+        }
+    }
+}
+
 #[derive(Clone)]
 pub struct StandaloneGameRuntimeProfile {
     viewport: Arc<newengine_engine_runtime::ViewportBridge>,
@@ -700,6 +911,55 @@ impl StandaloneGameRuntimeProfile {
                 log::error!(
                     "engine.ecs gateway route registration failed id='{}' err='{}'",
                     ENGINE_ECS_SERVICE_ID,
+                    e
+                );
+            }
+        }
+    }
+
+    #[inline]
+    pub fn register_entity_gateway_best_effort(&self) {
+        if newengine_plugin_host::has_service(ENGINE_ENTITY_SERVICE_ID) {
+            log::debug!(
+                "engine.entity gateway registration skipped; service already available"
+            );
+            return;
+        }
+
+        let service = EngineEntityGatewayService::new(Arc::clone(&self.scene));
+        let dyn_svc = ServiceV1Dyn::from_value(service, abi_stable::sabi_trait::TD_Opaque);
+
+        match newengine_plugin_host::host_register_service_impl(dyn_svc) {
+            RResult::ROk(()) => {}
+            RResult::RErr(e) => {
+                log::error!(
+                    "engine.entity service registration failed id='{}' err='{}'",
+                    ENGINE_ENTITY_SERVICE_ID,
+                    e
+                );
+                return;
+            }
+        }
+
+        match newengine_plugin_host::register_engine_owned_gateway(
+            ENGINE_ENTITY_SERVICE_ID,
+            newengine_service_api::EngineServiceKind::Entity,
+            ENGINE_ENTITY_SERVICE_ID,
+            ENTITY_BACKEND_CAPABILITY_ID,
+            0,
+            "newengine-game-runtime.entity-gateway",
+        ) {
+            Ok(()) => {
+                log::info!(
+                    "engine.entity gateway registered source=engine-owned service='{}' capability='{}'",
+                    ENGINE_ENTITY_SERVICE_ID,
+                    ENTITY_BACKEND_CAPABILITY_ID
+                );
+            }
+            Err(e) => {
+                log::error!(
+                    "engine.entity gateway route registration failed id='{}' err='{}'",
+                    ENGINE_ENTITY_SERVICE_ID,
                     e
                 );
             }

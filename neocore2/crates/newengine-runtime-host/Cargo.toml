@@ -23,6 +23,7 @@ newengine-platform-api = { path = "../newengine-platform-api" }
 newengine-plugin-api = { path = "../newengine-plugin-api" }
 newengine-service-api = { path = "../newengine-service-api" }
 newengine-ecs-api = { path = "../newengine-ecs-api" }
+newengine-entity-api = { path = "../newengine-entity-api" }
 newengine-render-api = { path = "../newengine-render-api" }
 newengine-physics-api = { path = "../newengine-physics-api" }
 newengine-system-runtime = { path = "../newengine-system-runtime" }

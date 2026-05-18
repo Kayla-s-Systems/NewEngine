@@ -470,6 +470,7 @@ dependencies = [
  "newengine-assets-api",
  "newengine-camera-api",
  "newengine-ecs-api",
+ "newengine-entity-api",
  "newengine-math",
  "newengine-physics-api",
  "newengine-platform-api",
@@ -561,6 +562,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "newengine-entity-api"
+version = "0.1.0"
+dependencies = [
+ "newengine-service-api",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "newengine-game-runtime"
 version = "0.1.0"
 dependencies = [
@@ -571,6 +581,7 @@ dependencies = [
  "newengine-ecs",
  "newengine-ecs-api",
  "newengine-engine-runtime",
+ "newengine-entity-api",
  "newengine-plugin-api",
  "newengine-plugin-host",
  "newengine-render-feature-gameready",
@@ -657,6 +668,7 @@ version = "0.1.0"
 dependencies = [
  "abi_stable",
  "newengine-plugin-api",
+ "newengine-service-api",
  "serde",
 ]
 
@@ -753,6 +765,7 @@ dependencies = [
  "newengine-assets",
  "newengine-core",
  "newengine-ecs-api",
+ "newengine-entity-api",
  "newengine-math",
  "newengine-physics-api",
  "newengine-platform-api",

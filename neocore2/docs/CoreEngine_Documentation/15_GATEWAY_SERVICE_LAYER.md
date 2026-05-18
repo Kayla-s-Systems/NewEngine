@@ -10,7 +10,7 @@ Old model:
 consumer -> render.api
 consumer -> physics.api
 consumer -> asset.manager / asset_manager.api
-consumer -> concrete ECS World
+consumer -> concrete ECS World / EntityId
 ```
 
 Target/current model:
@@ -24,6 +24,8 @@ consumer -> engine.camera
 consumer -> engine.ui
 consumer -> engine.scene
 consumer -> engine.ecs
+consumer -> engine.entity
+consumer -> engine.platform
 ```
 
 The engine resolves each gateway to the active provider service from plugin descriptors or explicit engine-owned route facts.
@@ -44,7 +46,7 @@ A provider declares a concrete service and a backend capability whose JSON descr
 Fields:
 
 ```text
-service_kind      engine vocabulary string, e.g. assets/render/physics/input/ecs
+service_kind      engine vocabulary string, e.g. assets/render/physics/input/ecs/entity
 engine_gateway    stable facade id consumers call
 contract          provider service id registered by the plugin
 backend_priority  provider selection priority; higher wins
@@ -66,7 +68,9 @@ Current examples:
 ```text
 engine.camera -> newengine-engine-runtime.camera-gateway
 engine.scene  -> newengine-game-runtime.scene-bridge
-engine.ecs    -> newengine-game-runtime.ecs-gateway
+engine.ecs      -> newengine-game-runtime.ecs-gateway
+engine.entity   -> newengine-game-runtime.entity-gateway
+engine.platform -> newengine-runtime-host.platform-gateway
 ```
 
 This avoids hidden fallback logic. Built-in systems become normal candidates that future providers can override through the same registry path.
@@ -110,4 +114,5 @@ engine.render  -> ServiceBackedRenderApi  -> RenderApiRef
 engine.physics -> ServiceBackedPhysicsApi -> PhysicsApiRef
 engine.assets  -> AssetServiceClient      -> runtime asset packets
 engine.ecs     -> EcsServiceClient        -> summary/snapshot/command DTOs
+engine.entity  -> EntityServiceClient     -> opaque entity identity/lifecycle DTOs
 ```

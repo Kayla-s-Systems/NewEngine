@@ -22,6 +22,7 @@ serde_json = "1"
 newengine-plugin-api = { path = "../newengine-plugin-api" }
 newengine-scene-io = { path = "../newengine-scene-io" }
 newengine-ecs-api = { path = "../newengine-ecs-api" }
+newengine-entity-api = { path = "../newengine-entity-api" }
 newengine-ecs = { path = "../newengine-ecs" }
 newengine-service-api = { path = "../newengine-service-api" }
 serde = { version = "1.0.228", features = ["derive"] }

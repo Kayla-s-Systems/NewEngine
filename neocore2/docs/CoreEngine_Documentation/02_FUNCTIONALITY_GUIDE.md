@@ -35,6 +35,9 @@ engine.assets
 engine.render
 engine.physics
 engine.input
+engine.ecs
+engine.entity
+engine.platform
 ```
 
 Provider-facing service ids are plugin-owned:
@@ -57,6 +60,14 @@ Physics is gateway-routed through `engine.physics`. `PhysicsSyncModule` translat
 ## Assets
 
 Asset access is routed through `engine.assets`. AssetManager owns VFS layers, `.nepak` packages, importer work, and `.neytd` texture dictionary selection.
+
+## ECS and Entity
+
+ECS world-level service access is routed through `engine.ecs` for summaries, snapshots and coarse commands. Entity identity/lifecycle access is routed through `engine.entity` and uses opaque stable handles instead of exposing `EntityId` over service boundaries.
+
+## Platform
+
+Native window/surface data is routed through `engine.platform`. Window snapshot is a gateway method, not a separate platform-window service id.
 
 ## Input
 

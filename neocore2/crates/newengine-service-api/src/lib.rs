@@ -92,6 +92,7 @@ pub enum EngineServiceKind {
     Logging,
     Platform,
     Ecs,
+    Entity,
 }
 
 impl EngineServiceKind {
@@ -108,6 +109,7 @@ impl EngineServiceKind {
             Self::Logging => "logging",
             Self::Platform => "platform",
             Self::Ecs => "ecs",
+            Self::Entity => "entity",
         }
     }
 
@@ -124,6 +126,7 @@ impl EngineServiceKind {
             "logging" | "log" => Some(Self::Logging),
             "platform" => Some(Self::Platform),
             "ecs" => Some(Self::Ecs),
+            "entity" => Some(Self::Entity),
             _ => None,
         }
     }

@@ -5,7 +5,7 @@ use libloading::Library;
 use newengine_core::{EngineError, EngineResult, StartupConfig};
 use newengine_platform_api::{
     PlatformAppConfigV1, PlatformRuntimeRunFnV1, PlatformWindowPlacementKindV1,
-    PlatformWindowPlacementV1,
+    PlatformWindowPlacementV1, ENGINE_PLATFORM_SERVICE_ID, PLATFORM_BACKEND_CAPABILITY_ID,
 };
 use newengine_plugin_api::{
     CapabilityDesc, CapabilityKind, CapabilityRole, ConfigBlobV1, ConfigDiagLevelV1,
@@ -489,18 +489,18 @@ fn ensure_platform_runtime_capabilities(mut descriptor: PluginDescriptor) -> Plu
             r#"{"role":"platform-runtime"}"#,
         ),
         (
-            "platform.window.v1",
+            PLATFORM_BACKEND_CAPABILITY_ID,
             CapabilityRole::Provides,
             CapabilityKind::Other,
             1,
-            r#"{"role":"window"}"#,
+            r#"{"service_kind":"platform","engine_gateway":"engine.platform","contract":"engine.platform","backend_priority":0,"role":"host-window-surface"}"#,
         ),
         (
-            "platform.window.v1",
+            ENGINE_PLATFORM_SERVICE_ID,
             CapabilityRole::Provides,
             CapabilityKind::ServiceV1,
             1,
-            r#"{"role":"platform-window-snapshot"}"#,
+            r#"{"role":"engine-platform-gateway"}"#,
         ),
         (
             "platform.surface.v1",
@@ -546,17 +546,17 @@ fn synthesize_platform_descriptor(
         )
         .push(
             CapabilityDesc::new(
-                "platform.window.v1",
+                PLATFORM_BACKEND_CAPABILITY_ID,
                 CapabilityRole::Provides,
                 CapabilityKind::Other,
                 1,
             )
-                .with_json(r#"{"role":"window"}"#),
+                .with_json(r#"{"service_kind":"platform","engine_gateway":"engine.platform","contract":"engine.platform","backend_priority":0,"role":"host-window-surface"}"#),
         )
         .provides_service(
-            "platform.window.v1",
+            ENGINE_PLATFORM_SERVICE_ID,
             1,
-            r#"{"role":"platform-window-snapshot"}"#,
+            r#"{"role":"engine-platform-gateway"}"#,
         )
         .push(
             CapabilityDesc::new(

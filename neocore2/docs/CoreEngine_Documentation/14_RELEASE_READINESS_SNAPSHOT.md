@@ -7,6 +7,9 @@
 - Plugin discovery is descriptor-first and no longer relies on filenames for provider identity.
 - Runtime texture and archive formats are explicit: `.neytd` and `.nepak`.
 - Engine-runtime is thinner: it orchestrates APIs and packet sync instead of owning backend implementation.
+- ECS service access is routed through `engine.ecs`.
+- Entity identity/lifecycle service access is routed through `engine.entity`.
+- Platform window/surface data is routed through `engine.platform`.
 
 ## Runtime evidence
 
@@ -18,7 +21,10 @@ physics provider registered
 physics backend service bridge bound
 runtime contract ok: physics.api
 render backend service bridge bound
-runtime contract ok: render.api
+runtime contract ok: engine.render
+runtime contract ok: engine.ecs
+runtime contract ok: engine.entity
+runtime contract ok: engine.platform
 engine state: running
 ```
 

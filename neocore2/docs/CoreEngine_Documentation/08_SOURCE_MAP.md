@@ -94,3 +94,23 @@ NewEngine/neocore2/crates/newengine-runtime-host/src/ecs_runtime
 NewEngine/neocore2/crates/newengine-game-runtime/src/lib.rs
   engine-owned engine.ecs ServiceV1 route over SceneBridge world
 ```
+
+## Entity gateway
+
+```text
+NewEngine/neocore2/crates/newengine-entity-api
+  engine.entity constants, startup requirement and opaque handle/lifecycle DTOs
+
+NewEngine/neocore2/crates/newengine-entity
+  concrete EntityId key type; internal implementation detail behind engine.entity at service boundaries
+
+NewEngine/neocore2/crates/newengine-runtime-host/src/entity_runtime
+  EntityServiceClient for list/exists/spawn/despawn calls through engine.entity
+
+NewEngine/neocore2/crates/newengine-game-runtime/src/lib.rs
+  engine-owned engine.entity ServiceV1 route over SceneBridge world
+```
+
+```text
+newengine-platform-api      engine.platform / platform.backend / native window snapshot DTOs
+```

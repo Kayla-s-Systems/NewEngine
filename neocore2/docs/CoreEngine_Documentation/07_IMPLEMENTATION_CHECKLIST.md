@@ -32,5 +32,8 @@
 - [x] Render uses `engine.render`.
 - [x] Physics uses `engine.physics`.
 - [x] Input is gateway-routable through `engine.input`.
+- [x] ECS world summary/snapshot uses `engine.ecs`.
+- [x] Entity identity/lifecycle uses `engine.entity`.
+- [x] Platform window snapshot uses `engine.platform`.
 - [ ] Provider conformance tests.
 - [ ] Zero-warning CI.

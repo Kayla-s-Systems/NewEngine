@@ -153,7 +153,7 @@ fn main_impl() -> EngineResult<()> {
     std::env::set_var("NEWENGINE_GAME_READY_DEMO", "1");
     std::env::set_var("NEWENGINE_REQUIRE_RENDER_BACKEND", "1");
     std::env::set_var("NEWENGINE_REQUIRE_ASSET_MANAGER", "1");
-    std::env::set_var("NEWENGINE_REQUIRE_PLATFORM_WINDOW_SERVICE", "1");
+    std::env::set_var("NEWENGINE_REQUIRE_PLATFORM_BACKEND", "1");
     std::env::set_var("NEWENGINE_PLUGIN_TARGET", "runtime");
     // Game-ready launch must not dlopen bootstrap DLLs before platform/runtime
     // diagnostics are visible. Bootstrap plugins are loaded together with the
@@ -220,6 +220,7 @@ fn main_impl() -> EngineResult<()> {
     game_ready_early_log!("engine.preload_bootstrap_plugins.ok");
     profile.register_scene_io_best_effort();
     profile.register_ecs_gateway_best_effort();
+    profile.register_entity_gateway_best_effort();
     newengine_core::crash::record_breadcrumb("game-ready fps launcher: bootstrap plugins preloaded");
 
     // The standalone game scene is intentionally not built here.

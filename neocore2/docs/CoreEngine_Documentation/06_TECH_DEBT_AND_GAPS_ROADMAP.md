@@ -11,6 +11,9 @@ engine.render
 engine.physics
 engine.assets
 engine.input
+engine.ecs
+engine.entity
+engine.platform
 ```
 
 Tests should cover metadata validation, unknown service kinds, missing gateways, multiple providers, null providers, degradation mode, and strict mode.
@@ -33,6 +36,7 @@ Required tests:
 ## P1: scalability
 
 - Formalize `newengine-input-api`.
+- Add Entity provider override proof for `engine.entity`.
 - Add a formal UI provider API.
 - Harden physics contact events, replay fixtures, streamed collider diffs, and optional binary packets.
 

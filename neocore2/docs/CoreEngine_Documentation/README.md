@@ -25,6 +25,8 @@ engine.camera
 engine.ui
 engine.scene
 engine.ecs
+engine.entity
+engine.platform
 ```
 
 The host maps those gateways to active providers from plugin metadata.
@@ -46,3 +48,11 @@ The host maps those gateways to active providers from plugin metadata.
 13. `13_NEPAK_CODEC_SPEC.md`
 14. `14_RELEASE_READINESS_SNAPSHOT.md`
 15. `15_GATEWAY_SERVICE_LAYER.md`, `16_ENGINE_ECS_GATEWAY.md`
+16. `17_ENGINE_PLATFORM_GATEWAY.md`
+17. `18_ENGINE_ENTITY_GATEWAY.md`
+
+## Latest gateway passes
+
+- `16_ENGINE_ECS_GATEWAY.md` — ECS service gateway boundary.
+- `17_ENGINE_PLATFORM_GATEWAY.md` — platform gateway boundary and native window snapshot method.
+- `18_ENGINE_ENTITY_GATEWAY.md` — entity identity/lifecycle gateway boundary.

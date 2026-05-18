@@ -39,23 +39,6 @@ const LOG_RUNTIME_REQUIREMENT_SPEC: RuntimeServiceRequirementSpec =
         Some("NEWENGINE_REQUIRE_LOG_BACKEND"),
     );
 
-const PLATFORM_REQUIRED_METHODS: &[&str] = &[
-    newengine_platform_api::PLATFORM_WINDOW_SERVICE_METHOD_SNAPSHOT_JSON_V1,
-];
-
-const PLATFORM_RUNTIME_CONTRACT_SPEC: RuntimeServiceContractSpec = RuntimeServiceContractSpec::new(
-    newengine_platform_api::PLATFORM_WINDOW_SERVICE_ID,
-    "newengine.platform-api >= 0.1.x",
-    PLATFORM_REQUIRED_METHODS,
-);
-
-const PLATFORM_RUNTIME_REQUIREMENT_SPEC: RuntimeServiceRequirementSpec =
-    RuntimeServiceRequirementSpec::new(
-        PLATFORM_RUNTIME_CONTRACT_SPEC,
-        Some(newengine_platform_api::PLATFORM_WINDOW_BACKEND_CAPABILITY_ID),
-        Some("NEWENGINE_REQUIRE_PLATFORM_WINDOW_SERVICE"),
-    );
-
 /// Declarative startup validation catalog.
 ///
 /// Adding a new accepted engine service family should add a data spec here (or,
@@ -68,10 +51,11 @@ pub(crate) const RUNTIME_SERVICE_REQUIREMENTS: &[RuntimeServiceRequirementSpec] 
     newengine_ui_api::UI_RUNTIME_REQUIREMENT_SPEC,
     newengine_scene_io::SCENE_RUNTIME_REQUIREMENT_SPEC,
     newengine_ecs_api::ECS_RUNTIME_REQUIREMENT_SPEC,
+    newengine_entity_api::ENTITY_RUNTIME_REQUIREMENT_SPEC,
     INPUT_RUNTIME_REQUIREMENT_SPEC,
     newengine_physics_api::PHYSICS_RUNTIME_REQUIREMENT_SPEC,
     LOG_RUNTIME_REQUIREMENT_SPEC,
-    PLATFORM_RUNTIME_REQUIREMENT_SPEC,
+    newengine_platform_api::PLATFORM_RUNTIME_REQUIREMENT_SPEC,
 ];
 
 /// Data-only diagnostics label for startup API table.
@@ -83,10 +67,11 @@ pub(crate) fn runtime_service_user(service_id: &str) -> &'static str {
         (newengine_ui_api::ENGINE_UI_SERVICE_ID, "platform UI bridge / overlays / HUD"),
         (newengine_scene_io::ENGINE_SCENE_SERVICE_ID, "SceneBridge / world streaming / scene asset load-save"),
         (newengine_ecs_api::ENGINE_ECS_SERVICE_ID, "ECS gateway / world summary-snapshot-command service"),
+        (newengine_entity_api::ENGINE_ENTITY_SERVICE_ID, "Entity gateway / service-safe identity and lifecycle commands"),
         ("engine.input", "platform_input::poll_input_frame / UI input projection"),
         (newengine_physics_api::ENGINE_PHYSICS_SERVICE_ID, "PhysicsSyncModule / gameplay ECS sync"),
         (crate::plugin_forward_logger::ENGINE_LOG_SERVICE_ID, "plugin_forward_logger / host log backend"),
-        (newengine_platform_api::PLATFORM_WINDOW_SERVICE_ID, "platform runtime / native window surface"),
+        (newengine_platform_api::ENGINE_PLATFORM_SERVICE_ID, "platform runtime / native window surface"),
     ];
 
     USERS

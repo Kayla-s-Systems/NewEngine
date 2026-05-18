@@ -1,12 +1,10 @@
 [package]
-name = "newengine-platform-api"
+name = "newengine-entity-api"
 version = "0.1.0"
-readme = "README.md"
 edition = "2021"
+readme = "README.md"
 
 [dependencies]
-abi_stable = "0.11"
-newengine-plugin-api = { path = "../newengine-plugin-api" }
 newengine-service-api = { path = "../newengine-service-api" }
-
 serde = { version = "1.0", features = ["derive"] }
+serde_json = "1"
