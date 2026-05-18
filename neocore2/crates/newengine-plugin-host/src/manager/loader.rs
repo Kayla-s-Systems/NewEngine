@@ -139,8 +139,12 @@ impl PluginManager {
         }
 
         // Register descriptor metadata for runtime validation (services/sinks).
+        // Provider origin is host-assigned from the load source, not trusted from
+        // descriptor JSON. Gateway selection later combines this origin tier with
+        // backend_priority.
+        let mut provider_origin = crate::service_gateway::GatewayProviderOrigin::from_plugin_path(path);
         if let Some(d) = descriptor.clone() {
-            register_plugin_descriptor(&id_str, d);
+            provider_origin = register_plugin_descriptor(&id_str, d, provider_origin);
         }
 
         let t = Instant::now();
@@ -161,9 +165,10 @@ impl PluginManager {
         tm.total_ms = t_total.elapsed().as_millis();
 
         log::info!(
-            "plugins: loaded id='{}' ver='{}' from '{}'",
+            "plugins: loaded id='{}' ver='{}' origin='{}' from '{}'",
             info.id,
             info.version,
+            provider_origin.as_str(),
             pretty_path.as_str()
         );
 

@@ -55,6 +55,9 @@ pub struct EngineGatewayRouteSnapshot {
     pub backend_capability_id: String,
     pub backend_priority: i32,
     pub origin: String,
+    pub override_mode: String,
+    pub active_score: i64,
+    pub active: bool,
 }
 
 #[derive(Clone, Debug)]
@@ -107,6 +110,11 @@ pub(crate) struct HostContext {
     /// against the plugin's declared capabilities.
     pub(crate) plugin_descriptors: Mutex<NeHashMap<String, PluginDescriptor>>,
 
+    /// Host-assigned provider origin keyed by plugin id. This is intentionally
+    /// separate from descriptor JSON because trust tier must be assigned by the
+    /// loader/profile layer, never by the plugin itself.
+    pub(crate) plugin_origins: Mutex<NeHashMap<String, crate::service_gateway::GatewayProviderOrigin>>,
+
     /// Host-registered runtime plugins that live outside the normal ABI loader path
     /// (currently platform runtime units only).
     pub(crate) external_runtime_plugins: Mutex<NeHashMap<String, ExternalRuntimePluginEntry>>,
@@ -129,6 +137,7 @@ fn make_default_ctx() -> Arc<HostContext> {
         services_generation: AtomicU64::new(1),
         event_sinks: Mutex::new(Vec::new()),
         plugin_descriptors: Mutex::new(NeHashMap::default()),
+        plugin_origins: Mutex::new(NeHashMap::default()),
         external_runtime_plugins: Mutex::new(NeHashMap::default()),
         engine_owned_gateways: Mutex::new(NeHashMap::default()),
     })
@@ -229,6 +238,14 @@ fn gateway_registry_snapshot() -> crate::service_gateway::ActiveGatewayRegistry 
             .collect::<Vec<_>>()
     };
 
+    let plugin_origins = {
+        let origins = match c.plugin_origins.lock() {
+            Ok(v) => v,
+            Err(e) => e.into_inner(),
+        };
+        origins.clone()
+    };
+
     let descriptors = {
         let descriptors = match c.plugin_descriptors.lock() {
             Ok(v) => v,
@@ -240,6 +257,10 @@ fn gateway_registry_snapshot() -> crate::service_gateway::ActiveGatewayRegistry 
                 crate::service_gateway::PluginDescriptorFact::new(
                     plugin_id.clone(),
                     descriptor.clone(),
+                    plugin_origins
+                        .get(plugin_id)
+                        .copied()
+                        .unwrap_or(crate::service_gateway::GatewayProviderOrigin::GamePlugin),
                 )
             })
             .collect::<Vec<_>>()
@@ -292,17 +313,31 @@ pub fn engine_gateway_has_capability(gateway_id: &str, capability_id: &str) -> b
 
 
 pub fn list_engine_gateway_routes() -> Vec<EngineGatewayRouteSnapshot> {
-    gateway_registry_snapshot()
+    let registry = gateway_registry_snapshot();
+    registry
         .routes()
         .iter()
-        .map(|route| EngineGatewayRouteSnapshot {
-            gateway_id: route.gateway_id.clone(),
-            service_kind: route.service_kind.as_str().to_owned(),
-            provider_service_id: route.provider_service_id.clone(),
-            provider_owner_id: route.provider_owner_id.clone(),
-            backend_capability_id: route.backend_capability_id.clone(),
-            backend_priority: route.backend_priority,
-            origin: route.origin.as_str().to_owned(),
+        .map(|route| {
+            let active = match registry.resolve_route(&route.gateway_id) {
+                Some(active_route) => {
+                    active_route.provider_service_id == route.provider_service_id
+                        && active_route.provider_owner_id == route.provider_owner_id
+                }
+                None => false,
+            };
+            let override_mode: crate::service_gateway::GatewayOverrideMode = route.override_mode;
+            EngineGatewayRouteSnapshot {
+                gateway_id: route.gateway_id.clone(),
+                service_kind: route.service_kind.as_str().to_owned(),
+                provider_service_id: route.provider_service_id.clone(),
+                provider_owner_id: route.provider_owner_id.clone(),
+                backend_capability_id: route.backend_capability_id.clone(),
+                backend_priority: route.backend_priority,
+                origin: route.origin.as_str().to_owned(),
+                override_mode: override_mode.as_str().to_owned(),
+                active_score: route.active_score,
+                active,
+            }
         })
         .collect()
 }
@@ -310,14 +345,20 @@ pub fn list_engine_gateway_routes() -> Vec<EngineGatewayRouteSnapshot> {
 pub fn active_engine_gateway_route(gateway_id: &str) -> Option<EngineGatewayRouteSnapshot> {
     gateway_registry_snapshot()
         .resolve_route(gateway_id)
-        .map(|route| EngineGatewayRouteSnapshot {
-            gateway_id: route.gateway_id.clone(),
-            service_kind: route.service_kind.as_str().to_owned(),
-            provider_service_id: route.provider_service_id.clone(),
-            provider_owner_id: route.provider_owner_id.clone(),
-            backend_capability_id: route.backend_capability_id.clone(),
-            backend_priority: route.backend_priority,
-            origin: route.origin.as_str().to_owned(),
+        .map(|route| {
+            let override_mode: crate::service_gateway::GatewayOverrideMode = route.override_mode;
+            EngineGatewayRouteSnapshot {
+                gateway_id: route.gateway_id.clone(),
+                service_kind: route.service_kind.as_str().to_owned(),
+                provider_service_id: route.provider_service_id.clone(),
+                provider_owner_id: route.provider_owner_id.clone(),
+                backend_capability_id: route.backend_capability_id.clone(),
+                backend_priority: route.backend_priority,
+                origin: route.origin.as_str().to_owned(),
+                override_mode: override_mode.as_str().to_owned(),
+                active_score: route.active_score,
+                active: true,
+            }
         })
 }
 
@@ -421,8 +462,12 @@ pub fn resolve_service_for_backend_capability(capability_id: &str) -> Option<Str
         Ok(v) => v,
         Err(e) => e.into_inner(),
     };
+    let plugin_origins = match c.plugin_origins.lock() {
+        Ok(v) => v,
+        Err(e) => e.into_inner(),
+    };
 
-    let mut candidates: Vec<(i64, String, String)> = Vec::new();
+    let mut candidates: Vec<(i64, i64, String, String)> = Vec::new();
 
     for (service_id, entry) in services.iter() {
         let Some(owner) = entry.owner_plugin_id.as_deref() else {
@@ -447,8 +492,14 @@ pub fn resolve_service_for_backend_capability(capability_id: &str) -> Option<Str
             continue;
         }
 
+        let backend_priority = parse_backend_priority(backend_capability.describe_json.as_str());
+        let origin = plugin_origins
+            .get(owner)
+            .copied()
+            .unwrap_or(crate::service_gateway::GatewayProviderOrigin::GamePlugin);
         candidates.push((
-            parse_backend_priority(backend_capability.describe_json.as_str()),
+            origin.origin_bias() + backend_priority,
+            backend_priority,
             service_id.clone(),
             owner.to_owned(),
         ));
@@ -456,11 +507,12 @@ pub fn resolve_service_for_backend_capability(capability_id: &str) -> Option<Str
 
     candidates.sort_by(|a, b| {
         b.0.cmp(&a.0)
-            .then_with(|| a.1.cmp(&b.1))
+            .then_with(|| b.1.cmp(&a.1))
             .then_with(|| a.2.cmp(&b.2))
+            .then_with(|| a.3.cmp(&b.3))
     });
 
-    candidates.into_iter().map(|(_, service_id, _)| service_id).next()
+    candidates.into_iter().map(|(_, _, service_id, _)| service_id).next()
 }
 
 pub fn subscribe_event_sink(sink: EventSinkV1Dyn<'static>) -> Result<(), String> {
@@ -702,6 +754,14 @@ pub fn unregister_by_owner(owner_plugin_id: &str) {
     }
 
     {
+        let mut g = match c.plugin_origins.lock() {
+            Ok(v) => v,
+            Err(e) => e.into_inner(),
+        };
+        g.remove(owner_plugin_id);
+    }
+
+    {
         let mut g = match c.external_runtime_plugins.lock() {
             Ok(v) => v,
             Err(e) => e.into_inner(),
@@ -727,17 +787,70 @@ pub fn unregister_by_owner(owner_plugin_id: &str) {
     }
 }
 
+
+#[inline]
+fn effective_provider_origin(
+    descriptor: &PluginDescriptor,
+    default_origin: crate::service_gateway::GatewayProviderOrigin,
+) -> crate::service_gateway::GatewayProviderOrigin {
+    let id = descriptor.id.as_str().to_ascii_lowercase();
+    if id.contains("null") {
+        return crate::service_gateway::GatewayProviderOrigin::NullProvider;
+    }
+
+    for cap in descriptor.capabilities.iter() {
+        if cap.role != CapabilityRole::Provides {
+            continue;
+        }
+        let Ok(value) = serde_json::from_str::<serde_json::Value>(cap.describe_json.as_str()) else {
+            continue;
+        };
+        let backend_is_null = value
+            .get("backend")
+            .and_then(|v| v.as_str())
+            .map(|v| v.eq_ignore_ascii_case("null"))
+            .unwrap_or(false);
+        let mode_is_headless = value
+            .get("mode")
+            .and_then(|v| v.as_str())
+            .map(|v| v.eq_ignore_ascii_case("headless"))
+            .unwrap_or(false);
+        if backend_is_null || mode_is_headless {
+            return crate::service_gateway::GatewayProviderOrigin::NullProvider;
+        }
+    }
+
+    default_origin
+}
+
 /// Registers a plugin descriptor (host-owned metadata) for runtime validation.
 ///
 /// Called by the plugin loader *before* `init()` so that service registrations during
 /// init can be validated against declared capabilities.
-pub(crate) fn register_plugin_descriptor(plugin_id: &str, d: PluginDescriptor) {
+pub(crate) fn register_plugin_descriptor(
+    plugin_id: &str,
+    d: PluginDescriptor,
+    origin: crate::service_gateway::GatewayProviderOrigin,
+) -> crate::service_gateway::GatewayProviderOrigin {
+    let origin = effective_provider_origin(&d, origin);
     let c = ctx();
-    let mut g = match c.plugin_descriptors.lock() {
-        Ok(v) => v,
-        Err(e) => e.into_inner(),
-    };
-    g.insert(plugin_id.to_owned(), d);
+    {
+        let mut g = match c.plugin_descriptors.lock() {
+            Ok(v) => v,
+            Err(e) => e.into_inner(),
+        };
+        g.insert(plugin_id.to_owned(), d);
+    }
+
+    {
+        let mut g = match c.plugin_origins.lock() {
+            Ok(v) => v,
+            Err(e) => e.into_inner(),
+        };
+        g.insert(plugin_id.to_owned(), origin);
+    }
+
+    origin
 }
 
 #[derive(Clone, PartialEq, Eq, Hash)]
@@ -849,6 +962,12 @@ pub fn register_external_runtime_plugin(
         ));
     }
 
+    let normalized_path = canonicalize_if_exists(&path);
+    let origin = effective_provider_origin(
+        &descriptor,
+        crate::service_gateway::GatewayProviderOrigin::from_plugin_path(&normalized_path),
+    );
+
     {
         let mut descriptors = match c.plugin_descriptors.lock() {
             Ok(v) => v,
@@ -857,7 +976,13 @@ pub fn register_external_runtime_plugin(
         descriptors.insert(plugin_id.clone(), descriptor.clone());
     }
 
-    let normalized_path = canonicalize_if_exists(&path);
+    {
+        let mut origins = match c.plugin_origins.lock() {
+            Ok(v) => v,
+            Err(e) => e.into_inner(),
+        };
+        origins.insert(plugin_id.clone(), origin);
+    }
 
     {
         let mut runtimes = match c.external_runtime_plugins.lock() {
@@ -876,10 +1001,11 @@ pub fn register_external_runtime_plugin(
     }
 
     log::info!(
-        "plugins: external runtime registered id='{}' ver='{}' kind={:?} path='{}'",
+        "plugins: external runtime registered id='{}' ver='{}' kind={:?} origin='{}' path='{}'",
         plugin_id,
         info.version,
         descriptor.kind,
+        origin.as_str(),
         crate::path_fmt::display_clean(&normalized_path)
     );
 

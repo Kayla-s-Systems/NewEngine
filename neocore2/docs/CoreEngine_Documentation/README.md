@@ -1,6 +1,6 @@
 # CoreEngine / NewEngine Documentation
 
-Updated: 2026-05-17
+Updated: 2026-05-18
 
 This documentation describes the current host/plugin architecture after the Gateway Service Layer decomposition.
 
@@ -50,9 +50,11 @@ The host maps those gateways to active providers from plugin metadata.
 15. `15_GATEWAY_SERVICE_LAYER.md`, `16_ENGINE_ECS_GATEWAY.md`
 16. `17_ENGINE_PLATFORM_GATEWAY.md`
 17. `18_ENGINE_ENTITY_GATEWAY.md`
+18. `19_PLUGIN_OVERRIDE_PRIORITY.md`
 
 ## Latest gateway passes
 
 - `16_ENGINE_ECS_GATEWAY.md` — ECS service gateway boundary.
 - `17_ENGINE_PLATFORM_GATEWAY.md` — platform gateway boundary and native window snapshot method.
 - `18_ENGINE_ENTITY_GATEWAY.md` — entity identity/lifecycle gateway boundary.
+- `19_PLUGIN_OVERRIDE_PRIORITY.md` — origin-tier route selection and plugin-over-built-in policy.

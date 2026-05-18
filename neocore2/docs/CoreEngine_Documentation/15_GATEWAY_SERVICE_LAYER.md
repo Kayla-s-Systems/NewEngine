@@ -49,7 +49,7 @@ Fields:
 service_kind      engine vocabulary string, e.g. assets/render/physics/input/ecs/entity
 engine_gateway    stable facade id consumers call
 contract          provider service id registered by the plugin
-backend_priority  provider selection priority; higher wins
+backend_priority  deterministic priority inside the provider origin tier
 ```
 
 Unknown `service_kind` values are not fatal. The host logs a warning and ignores the route.
@@ -86,15 +86,33 @@ HostApiV1.call_service_v1(engine.render, method, payload)
 
 Routing is data-driven and must not contain per-domain branches.
 
-## Selection rule
+## Selection rule: Plugin Override Priority
 
-When multiple providers expose the same gateway:
+When multiple providers expose the same gateway, the registry now selects by trusted host-assigned origin tier plus local backend priority:
 
-1. Higher `backend_priority` wins.
-2. Provider service id is used as a deterministic tie-breaker.
-3. Plugin id / owner id is used as the final deterministic tie-breaker.
+```text
+active_score = origin_bias(origin) + backend_priority
+```
 
-Future Plugin Override Priority should extend this with trusted origin tiers and profile policy.
+Origin tiers:
+
+```text
+DevOverride       +50_000
+UserMod           +40_000
+GamePlugin        +30_000
+FirstPartyPlugin  +20_000
+EngineOwned       +10_000
+NullProvider          0
+```
+
+Tie-breakers:
+
+1. Higher `active_score` wins.
+2. Higher `backend_priority` wins inside the same origin tier.
+3. Provider service id is used as a deterministic tie-breaker.
+4. Plugin id / owner id is used as the final deterministic tie-breaker.
+
+Provider origin is host-assigned from loader/profile policy and never trusted from plugin descriptor JSON. Built-in providers are normal `EngineOwned` route candidates, not privileged hidden fallbacks.
 
 ## Degradation policy
 
@@ -102,6 +120,7 @@ Future Plugin Override Priority should extend this with trusted origin tiers and
 no active route       -> service unavailable / feature degraded
 bad metadata          -> warning + ignored route
 unknown service_kind  -> warning + ignored route
+locked gateway plugin -> warning + ignored route
 strict env enabled    -> fatal startup contract error
 ```
 

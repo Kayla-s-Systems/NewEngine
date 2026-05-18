@@ -62,15 +62,16 @@ fn service_description_has_capability(service_id: &str, capability_id: &str) -> 
 
 pub(crate) fn provider_for(plugins: &[PluginSnapshotEntry], service_id: &str) -> String {
     if let Some(route) = newengine_plugin_host::active_engine_gateway_route(service_id) {
-        if route.origin == "engine-owned" {
-            return format!(
-                "engine-owned:{} service={} capability={} priority={}",
-                route.provider_owner_id,
-                route.provider_service_id,
-                route.backend_capability_id,
-                route.backend_priority
-            );
-        }
+        return format!(
+            "{}:{} service={} capability={} mode={} priority={} score={}",
+            route.origin,
+            route.provider_owner_id,
+            route.provider_service_id,
+            route.backend_capability_id,
+            route.override_mode,
+            route.backend_priority,
+            route.active_score
+        );
     }
 
     let mut providers = plugins

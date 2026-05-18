@@ -9,6 +9,8 @@
 - [ ] Backend capability metadata contains `engine_gateway`.
 - [ ] Backend capability metadata contains `contract` when multiple `ServiceV1` entries exist.
 - [ ] Backend capability metadata contains deterministic `backend_priority`.
+- [ ] Provider origin is host-assigned by loader/profile policy, not trusted from descriptor JSON.
+- [ ] Active selection uses `origin_bias + backend_priority`.
 - [ ] Consumers call `engine.*` gateway ids, not provider service ids.
 - [ ] No hidden in-process fallback backend.
 - [ ] Null backend is a real service provider plugin.

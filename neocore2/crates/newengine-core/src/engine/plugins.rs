@@ -240,12 +240,15 @@ impl<E: Send + 'static> Engine<E> {
                 .map(|route| {
                     vec![
                         ellipsize(&route.gateway_id, 28),
+                        if route.active { "active".to_owned() } else { "shadowed".to_owned() },
                         route.origin.clone(),
                         ellipsize(&route.provider_service_id, 28),
                         ellipsize(&route.provider_owner_id, 32),
                         route.service_kind.clone(),
                         ellipsize(&route.backend_capability_id, 28),
+                        route.override_mode.clone(),
                         route.backend_priority.to_string(),
+                        route.active_score.to_string(),
                     ]
                 })
                 .collect::<Vec<_>>();
@@ -253,7 +256,7 @@ impl<E: Send + 'static> Engine<E> {
             emit_prefixed_table(
                 "",
                 &format!("Plugins :: Gateway Routes [{}]", tag),
-                &["gateway", "source", "provider_service", "owner", "kind", "capability", "prio"],
+                &["gateway", "state", "source", "provider_service", "owner", "kind", "capability", "mode", "prio", "score"],
                 &route_rows,
             );
         }

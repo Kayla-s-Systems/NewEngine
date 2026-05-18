@@ -20,6 +20,7 @@
 - Backend priority is declared metadata, not hard-coded engine knowledge.
 - Consumers call `engine.*` gateways, not provider service ids.
 - Unknown provider kinds warn and are ignored by default.
+- Provider origin/trust tier is host-assigned and must never be trusted from plugin JSON.
 
 ## Provider self-description
 
