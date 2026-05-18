@@ -1,5 +1,6 @@
 pub mod bus;
 pub mod cache_files;
+pub mod config_root;
 pub mod console;
 pub mod core_invariants;
 pub mod engine;
@@ -39,6 +40,7 @@ pub use services_registry::{ErasedService, MissingServicePolicy, ServiceRegistry
 
 pub use bus::Bus;
 pub use cache_files::{cache_child, publish_cache_files_env, resolve_cache_files_dir, resolve_under_cache_root, CACHE_FILES_ENV, CACHE_FILES_ENV_LEGACY, CACHE_FILES_READY_ENV};
+pub use config_root::{config_child, publish_config_env, resolve_config_dir, resolve_under_config_root, CONFIG_ENV, CONFIG_ENV_LEGACY, CONFIG_READY_ENV};
 pub use engine::{Engine, EngineConfig, EngineFsm, EngineFsmTransition, EngineRunState, ModuleFaultTolerance, PluginFaultTolerance};
 pub use error::{EngineError, EngineResult, ModuleStage};
 pub use error_reporter::{EngineErrorReporter, EngineErrorReporterConfig};

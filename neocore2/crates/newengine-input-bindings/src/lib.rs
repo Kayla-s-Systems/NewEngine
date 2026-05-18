@@ -14,6 +14,8 @@ pub const INPUT_BINDINGS_METHOD_INFO: &str = newengine_service_api::SERVICE_METH
 pub const INPUT_BINDINGS_METHOD_INVOKE: &str = newengine_service_api::SERVICE_METHOD_INVOKE_JSON;
 pub const INPUT_BINDINGS_METHOD_SHUTDOWN_V1: &str = newengine_service_api::SERVICE_METHOD_SHUTDOWN_V1;
 pub const INPUT_BINDINGS_METHOD_PROFILE_JSON_V1: &str = "profile_json_v1";
+pub const INPUT_BINDINGS_METHOD_SAVE_PROFILE_JSON_V1: &str = "save_profile_json_v1";
+pub const INPUT_BINDINGS_METHOD_RESET_PROFILE_JSON_V1: &str = "reset_profile_json_v1";
 
 pub const INPUT_ACTIONS_METHOD_FRAME_JSON_V1: &str = "frame_json_v1";
 
@@ -77,6 +79,35 @@ pub mod action {
     pub const CAMERA_VIEW_THIRD_PERSON_AIM: &str = "camera.view.third_person.aim";
 }
 
+pub mod gamepad_button {
+    pub const SOUTH: &str = "South";
+    pub const EAST: &str = "East";
+    pub const WEST: &str = "West";
+    pub const NORTH: &str = "North";
+    pub const LEFT_TRIGGER: &str = "LeftTrigger";
+    pub const LEFT_TRIGGER_2: &str = "LeftTrigger2";
+    pub const RIGHT_TRIGGER: &str = "RightTrigger";
+    pub const RIGHT_TRIGGER_2: &str = "RightTrigger2";
+    pub const SELECT: &str = "Select";
+    pub const START: &str = "Start";
+    pub const MODE: &str = "Mode";
+    pub const LEFT_THUMB: &str = "LeftThumb";
+    pub const RIGHT_THUMB: &str = "RightThumb";
+    pub const DPAD_UP: &str = "DPadUp";
+    pub const DPAD_DOWN: &str = "DPadDown";
+    pub const DPAD_LEFT: &str = "DPadLeft";
+    pub const DPAD_RIGHT: &str = "DPadRight";
+}
+
+pub mod gamepad_axis {
+    pub const LEFT_STICK_X: &str = "LeftStickX";
+    pub const LEFT_STICK_Y: &str = "LeftStickY";
+    pub const RIGHT_STICK_X: &str = "RightStickX";
+    pub const RIGHT_STICK_Y: &str = "RightStickY";
+    pub const LEFT_Z: &str = "LeftZ";
+    pub const RIGHT_Z: &str = "RightZ";
+}
+
 pub mod move_mask {
     pub const FORWARD: u64 = 1 << 0;
     pub const LEFT: u64 = 1 << 1;
@@ -85,6 +116,31 @@ pub mod move_mask {
     pub const UP: u64 = 1 << 4;
     pub const DOWN: u64 = 1 << 5;
     pub const SPRINT: u64 = 1 << 6;
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum InputDevicePreference {
+    KeyboardMouse,
+    Gamepad,
+    Hybrid,
+}
+
+impl Default for InputDevicePreference {
+    #[inline]
+    fn default() -> Self { Self::Hybrid }
+}
+
+impl InputDevicePreference {
+    #[inline]
+    pub fn allows_keyboard_mouse(self) -> bool {
+        matches!(self, Self::KeyboardMouse | Self::Hybrid)
+    }
+
+    #[inline]
+    pub fn allows_gamepad(self) -> bool {
+        matches!(self, Self::Gamepad | Self::Hybrid)
+    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -116,7 +172,12 @@ pub struct InputBinding {
     pub action: String,
     #[serde(default)]
     pub device: InputBindingDevice,
+    /// Numeric code for keyboard/mouse bindings.
+    #[serde(default)]
     pub code: u32,
+    /// Stable symbolic name for gamepad bindings, e.g. `South`, `Start`, `DPadUp`.
+    #[serde(default)]
+    pub name: Option<String>,
     #[serde(default)]
     pub phase: InputBindingPhase,
 }
@@ -124,12 +185,53 @@ pub struct InputBinding {
 impl InputBinding {
     #[inline]
     pub fn keyboard_down(action: impl Into<String>, code: u32) -> Self {
-        Self { action: action.into(), device: InputBindingDevice::Keyboard, code, phase: InputBindingPhase::Down }
+        Self { action: action.into(), device: InputBindingDevice::Keyboard, code, name: None, phase: InputBindingPhase::Down }
     }
 
     #[inline]
     pub fn keyboard_pressed(action: impl Into<String>, code: u32) -> Self {
-        Self { action: action.into(), device: InputBindingDevice::Keyboard, code, phase: InputBindingPhase::Pressed }
+        Self { action: action.into(), device: InputBindingDevice::Keyboard, code, name: None, phase: InputBindingPhase::Pressed }
+    }
+
+    #[inline]
+    pub fn gamepad_button_down(action: impl Into<String>, name: impl Into<String>) -> Self {
+        Self { action: action.into(), device: InputBindingDevice::GamepadButton, code: 0, name: Some(name.into()), phase: InputBindingPhase::Down }
+    }
+
+    #[inline]
+    pub fn gamepad_button_pressed(action: impl Into<String>, name: impl Into<String>) -> Self {
+        Self { action: action.into(), device: InputBindingDevice::GamepadButton, code: 0, name: Some(name.into()), phase: InputBindingPhase::Pressed }
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum GamepadAxisTarget {
+    MoveX,
+    MoveY,
+    MoveZ,
+    LookX,
+    LookY,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct GamepadAxisBinding {
+    pub axis: String,
+    pub target: GamepadAxisTarget,
+    #[serde(default = "default_axis_deadzone")]
+    pub deadzone: f32,
+    #[serde(default = "default_axis_scale")]
+    pub scale: f32,
+}
+
+#[inline]
+fn default_axis_deadzone() -> f32 { 0.18 }
+#[inline]
+fn default_axis_scale() -> f32 { 1.0 }
+
+impl GamepadAxisBinding {
+    #[inline]
+    pub fn new(axis: impl Into<String>, target: GamepadAxisTarget, scale: f32) -> Self {
+        Self { axis: axis.into(), target, deadzone: default_axis_deadzone(), scale }
     }
 }
 
@@ -140,13 +242,27 @@ pub trait InputFrameSource {
     fn is_mouse_down(&self, button: u32) -> bool;
     fn is_mouse_pressed(&self, button: u32) -> bool;
     fn is_mouse_released(&self, button: u32) -> bool;
+
+    #[inline]
+    fn is_gamepad_button_down(&self, _button: &str) -> bool { false }
+    #[inline]
+    fn is_gamepad_button_pressed(&self, _button: &str) -> bool { false }
+    #[inline]
+    fn is_gamepad_button_released(&self, _button: &str) -> bool { false }
+    #[inline]
+    fn gamepad_axis(&self, _axis: &str) -> f32 { 0.0 }
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct InputBindingsProfile {
     pub id: String,
     pub version: u32,
+    #[serde(default)]
+    pub device_preference: InputDevicePreference,
+    #[serde(default)]
     pub bindings: Vec<InputBinding>,
+    #[serde(default)]
+    pub gamepad_axes: Vec<GamepadAxisBinding>,
 }
 
 impl InputBindingsProfile {
@@ -155,7 +271,8 @@ impl InputBindingsProfile {
         use crate::key_code as keys;
         Self {
             id: "newengine.default.gameplay".to_owned(),
-            version: 1,
+            version: 2,
+            device_preference: InputDevicePreference::Hybrid,
             bindings: vec![
                 InputBinding::keyboard_down(action::PLAYER_MOVE_FORWARD, keys::KEY_W),
                 InputBinding::keyboard_down(action::PLAYER_MOVE_BACK, keys::KEY_S),
@@ -169,6 +286,18 @@ impl InputBindingsProfile {
                 InputBinding::keyboard_pressed(action::CAMERA_VIEW_FIRST_PERSON, keys::DIGIT1),
                 InputBinding::keyboard_pressed(action::CAMERA_VIEW_THIRD_PERSON_FOLLOW, keys::DIGIT2),
                 InputBinding::keyboard_pressed(action::CAMERA_VIEW_THIRD_PERSON_AIM, keys::DIGIT3),
+                InputBinding::gamepad_button_down(action::PLAYER_SPRINT, gamepad_button::LEFT_THUMB),
+                InputBinding::gamepad_button_pressed(action::CAMERA_VIEW_NEXT, gamepad_button::SELECT),
+                InputBinding::gamepad_button_pressed(action::CAMERA_VIEW_NEXT, gamepad_button::MODE),
+                InputBinding::gamepad_button_pressed(action::CAMERA_VIEW_FIRST_PERSON, gamepad_button::DPAD_UP),
+                InputBinding::gamepad_button_pressed(action::CAMERA_VIEW_THIRD_PERSON_FOLLOW, gamepad_button::DPAD_LEFT),
+                InputBinding::gamepad_button_pressed(action::CAMERA_VIEW_THIRD_PERSON_AIM, gamepad_button::DPAD_RIGHT),
+            ],
+            gamepad_axes: vec![
+                GamepadAxisBinding::new(gamepad_axis::LEFT_STICK_X, GamepadAxisTarget::MoveX, 1.0),
+                GamepadAxisBinding::new(gamepad_axis::LEFT_STICK_Y, GamepadAxisTarget::MoveZ, -1.0),
+                GamepadAxisBinding::new(gamepad_axis::RIGHT_STICK_X, GamepadAxisTarget::LookX, 1.0),
+                GamepadAxisBinding::new(gamepad_axis::RIGHT_STICK_Y, GamepadAxisTarget::LookY, -1.0),
             ],
         }
     }
@@ -176,11 +305,14 @@ impl InputBindingsProfile {
     pub fn resolve<T: InputFrameSource>(&self, input: &T) -> InputActionFrame {
         let mut out = InputActionFrame::default();
         for binding in &self.bindings {
-            if !binding_matches(binding, input) {
+            if !device_allowed(self.device_preference, binding.device) || !binding_matches(binding, input) {
                 continue;
             }
             out.actions.push(binding.action.clone());
             apply_action(&mut out, binding.action.as_str());
+        }
+        if self.device_preference.allows_gamepad() {
+            apply_gamepad_axes(&mut out, &self.gamepad_axes, input);
         }
         out
     }
@@ -213,6 +345,8 @@ pub struct InputActionFrame {
     #[serde(default)]
     pub sprint: bool,
     #[serde(default)]
+    pub look_axis: [f32; 2],
+    #[serde(default)]
     pub camera_view: CameraViewRequest,
     #[serde(default)]
     pub actions: Vec<String>,
@@ -221,7 +355,7 @@ pub struct InputActionFrame {
 impl Default for InputActionFrame {
     #[inline]
     fn default() -> Self {
-        Self { move_mask: 0, move_axis: [0.0, 0.0, 0.0], sprint: false, camera_view: CameraViewRequest::None, actions: Vec::new() }
+        Self { move_mask: 0, move_axis: [0.0, 0.0, 0.0], sprint: false, look_axis: [0.0, 0.0], camera_view: CameraViewRequest::None, actions: Vec::new() }
     }
 }
 
@@ -241,6 +375,8 @@ impl Default for InputBindingsServiceInfo {
             features: vec![
                 "semantic-actions".to_owned(),
                 "camera-view-switching".to_owned(),
+                "gamepad-bindings".to_owned(),
+                "device-preference".to_owned(),
                 "gameplay-move-mask-compat".to_owned(),
             ],
             methods: vec![
@@ -248,6 +384,8 @@ impl Default for InputBindingsServiceInfo {
                 INPUT_BINDINGS_METHOD_INVOKE.to_owned(),
                 INPUT_BINDINGS_METHOD_SHUTDOWN_V1.to_owned(),
                 INPUT_BINDINGS_METHOD_PROFILE_JSON_V1.to_owned(),
+                INPUT_BINDINGS_METHOD_SAVE_PROFILE_JSON_V1.to_owned(),
+                INPUT_BINDINGS_METHOD_RESET_PROFILE_JSON_V1.to_owned(),
             ],
         }
     }
@@ -266,9 +404,63 @@ fn binding_matches<T: InputFrameSource>(binding: &InputBinding, input: &T) -> bo
             InputBindingPhase::Pressed => input.is_mouse_pressed(binding.code),
             InputBindingPhase::Released => input.is_mouse_released(binding.code),
         },
-        InputBindingDevice::GamepadButton => false,
+        InputBindingDevice::GamepadButton => {
+            let Some(name) = binding.name.as_deref() else { return false; };
+            match binding.phase {
+                InputBindingPhase::Down => input.is_gamepad_button_down(name),
+                InputBindingPhase::Pressed => input.is_gamepad_button_pressed(name),
+                InputBindingPhase::Released => input.is_gamepad_button_released(name),
+            }
+        }
     }
 }
+
+#[inline]
+fn device_allowed(preference: InputDevicePreference, device: InputBindingDevice) -> bool {
+    match device {
+        InputBindingDevice::Keyboard | InputBindingDevice::MouseButton => preference.allows_keyboard_mouse(),
+        InputBindingDevice::GamepadButton => preference.allows_gamepad(),
+    }
+}
+
+fn apply_gamepad_axes<T: InputFrameSource>(out: &mut InputActionFrame, axes: &[GamepadAxisBinding], input: &T) {
+    for binding in axes {
+        let raw = input.gamepad_axis(binding.axis.as_str());
+        let v = apply_deadzone(raw, binding.deadzone) * binding.scale;
+        if v == 0.0 {
+            continue;
+        }
+        match binding.target {
+            GamepadAxisTarget::MoveX => out.move_axis[0] = clamp_axis(out.move_axis[0] + v),
+            GamepadAxisTarget::MoveY => out.move_axis[1] = clamp_axis(out.move_axis[1] + v),
+            GamepadAxisTarget::MoveZ => out.move_axis[2] = clamp_axis(out.move_axis[2] + v),
+            GamepadAxisTarget::LookX => out.look_axis[0] = clamp_axis(out.look_axis[0] + v),
+            GamepadAxisTarget::LookY => out.look_axis[1] = clamp_axis(out.look_axis[1] + v),
+        }
+    }
+
+    if out.move_axis[0] > 0.0 { out.move_mask |= move_mask::RIGHT; }
+    if out.move_axis[0] < 0.0 { out.move_mask |= move_mask::LEFT; }
+    if out.move_axis[1] > 0.0 { out.move_mask |= move_mask::UP; }
+    if out.move_axis[1] < 0.0 { out.move_mask |= move_mask::DOWN; }
+    if out.move_axis[2] > 0.0 { out.move_mask |= move_mask::FORWARD; }
+    if out.move_axis[2] < 0.0 { out.move_mask |= move_mask::BACK; }
+}
+
+#[inline]
+fn apply_deadzone(v: f32, deadzone: f32) -> f32 {
+    let dz = deadzone.clamp(0.0, 0.95);
+    if v.abs() <= dz {
+        0.0
+    } else {
+        let sign = v.signum();
+        let scaled = ((v.abs() - dz) / (1.0 - dz)).clamp(0.0, 1.0);
+        scaled * sign
+    }
+}
+
+#[inline]
+fn clamp_axis(v: f32) -> f32 { v.clamp(-1.0, 1.0) }
 
 fn apply_action(out: &mut InputActionFrame, action_id: &str) {
     match action_id {

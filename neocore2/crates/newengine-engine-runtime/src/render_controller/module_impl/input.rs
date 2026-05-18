@@ -49,8 +49,8 @@ impl ViewportInputSnap {
         let actions = InputBindingsProfile::gameplay_default().resolve(&UiInputSource(input));
 
         Self {
-            dx_px: input.mouse_delta.0,
-            dy_px: input.mouse_delta.1,
+            dx_px: input.mouse_delta.0 + actions.look_axis[0] * 18.0,
+            dy_px: input.mouse_delta.1 + actions.look_axis[1] * 18.0,
             wheel_y: input.mouse_wheel.1,
             active: true,
             look_drag: true,
@@ -79,4 +79,12 @@ impl InputFrameSource for UiInputSource<'_> {
     fn is_mouse_pressed(&self, button: u32) -> bool { self.0.is_mouse_pressed(button) }
     #[inline]
     fn is_mouse_released(&self, button: u32) -> bool { self.0.mouse_released.contains(&button) }
+    #[inline]
+    fn is_gamepad_button_down(&self, button: &str) -> bool { self.0.is_gamepad_button_down(button) }
+    #[inline]
+    fn is_gamepad_button_pressed(&self, button: &str) -> bool { self.0.is_gamepad_button_pressed(button) }
+    #[inline]
+    fn is_gamepad_button_released(&self, button: &str) -> bool { self.0.is_gamepad_button_released(button) }
+    #[inline]
+    fn gamepad_axis(&self, axis: &str) -> f32 { self.0.gamepad_axis(axis) }
 }

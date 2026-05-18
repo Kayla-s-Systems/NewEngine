@@ -58,14 +58,20 @@ impl StartupLoader {
             Err(e) => return Err(e),
         }
 
-        // Publish the engine-level CACHE_FILES root as soon as the config is resolved.
-        // Runtime plugins, shader bakers, early logs and any future cache writers
-        // consume this environment value as the single source of truth.
+        // Publish engine-level roots as soon as startup config is resolved.
+        // CACHE_FILES is disposable generated data. CONFIG is durable user settings.
         let cache_root = cfg.publish_cache_files_env();
         report.overrides.push(StartupOverride {
             key: "cache_files",
             from: "<resolved>".to_owned(),
             to: crate::cache_files::display_cache_path(&cache_root),
+        });
+
+        let config_root = cfg.publish_config_env();
+        report.overrides.push(StartupOverride {
+            key: "config",
+            from: "<resolved>".to_owned(),
+            to: crate::config_root::display_config_path(&config_root),
         });
 
         report.total_ms = Some(t0.elapsed().as_millis().min(u128::from(u32::MAX)) as u32);
@@ -112,6 +118,9 @@ struct EngineJson {
     cache_files: Option<String>,
     #[serde(rename = "CACHE_FILES")]
     cache_files_upper: Option<String>,
+    config: Option<String>,
+    #[serde(rename = "CONFIG")]
+    config_upper: Option<String>,
 
     /// Unknown keys are preserved to produce deterministic diagnostics.
     ///
@@ -127,6 +136,14 @@ fn apply_root(cfg: &mut StartupConfig, report: &mut StartupLoadReport, mut src: 
         if let Some(v) = src.extra.remove(key) {
             if let Some(path) = v.as_str().map(str::trim).filter(|s| !s.is_empty()) {
                 apply_path(report, "cache_files", &mut cfg.cache_files, path.to_owned());
+            }
+        }
+    }
+
+    for key in ["CONFIG", "config"] {
+        if let Some(v) = src.extra.remove(key) {
+            if let Some(path) = v.as_str().map(str::trim).filter(|s| !s.is_empty()) {
+                apply_path(report, "config", &mut cfg.config, path.to_owned());
             }
         }
     }
@@ -198,6 +215,10 @@ fn apply_root(cfg: &mut StartupConfig, report: &mut StartupLoadReport, mut src: 
 
         if let Some(cache_files) = engine.cache_files.or(engine.cache_files_upper) {
             apply_path(report, "cache_files", &mut cfg.cache_files, cache_files);
+        }
+
+        if let Some(config) = engine.config.or(engine.config_upper) {
+            apply_path(report, "config", &mut cfg.config, config);
         }
 
         if !engine.extra.is_empty() {

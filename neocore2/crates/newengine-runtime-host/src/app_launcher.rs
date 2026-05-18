@@ -276,9 +276,10 @@ where
         ));
         let (startup, _report) = StartupLoader::load_json(&paths)?;
         self.early_log(format_args!(
-            "startup.load.ok modules_dir={} cache_files={}",
+            "startup.load.ok modules_dir={} cache_files={} config={}",
             startup.modules_dir.display(),
-            startup.resolved_cache_files_dir().display()
+            startup.resolved_cache_files_dir().display(),
+            startup.resolved_config_dir().display()
         ));
         Ok(Arc::new(startup))
     }

@@ -49,7 +49,15 @@ pub struct StartupConfig {
 
     /// Engine-wide cache root. All loggers, shader bakers and cache writers
     /// must resolve their cache files through this path.
+    ///
+    /// CACHE_FILES is disposable generated data and may be safely cleaned.
     pub cache_files: PathBuf,
+
+    /// Engine-wide durable user configuration root.
+    ///
+    /// CONFIG stores user settings such as input bindings and must not be
+    /// treated as disposable cache data.
+    pub config: PathBuf,
 
 
     /// Raw plugin override roots from the `plugins` object in `config.json`.
@@ -79,6 +87,7 @@ impl Default for StartupConfig {
 
             modules_dir: PathBuf::from("plugins"),
             cache_files: PathBuf::from(crate::cache_files::DEFAULT_CACHE_FILES_DIR),
+            config: PathBuf::from(crate::config_root::DEFAULT_CONFIG_DIR),
 
 
             plugins: HashMap::default(),
@@ -113,8 +122,28 @@ impl StartupConfig {
     }
 
     #[inline]
+    pub fn resolved_config_dir(&self) -> PathBuf {
+        crate::config_root::normalize_config_path(
+            self.config.clone(),
+            self.config_base_dir().as_deref(),
+        )
+    }
+
+    #[inline]
+    pub fn publish_config_env(&self) -> PathBuf {
+        let root = self.resolved_config_dir();
+        crate::config_root::publish_config_env(&root);
+        root
+    }
+
+    #[inline]
     pub fn cache_child(&self, path: impl AsRef<Path>) -> PathBuf {
         crate::cache_files::resolve_under_cache_root(&self.resolved_cache_files_dir(), path.as_ref())
+    }
+
+    #[inline]
+    pub fn config_child(&self, path: impl AsRef<Path>) -> PathBuf {
+        crate::config_root::resolve_under_config_root(&self.resolved_config_dir(), path.as_ref())
     }
 }
 

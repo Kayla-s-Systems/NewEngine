@@ -6,10 +6,12 @@ use newengine_input_bindings::{
     InputBindingsProfile, InputBindingsServiceInfo, ENGINE_INPUT_BINDINGS_SERVICE_ID,
     INPUT_BINDINGS_BACKEND_CAPABILITY_ID, INPUT_BINDINGS_METHOD_INFO,
     INPUT_BINDINGS_METHOD_INVOKE, INPUT_BINDINGS_METHOD_PROFILE_JSON_V1,
+    INPUT_BINDINGS_METHOD_RESET_PROFILE_JSON_V1, INPUT_BINDINGS_METHOD_SAVE_PROFILE_JSON_V1,
     INPUT_BINDINGS_METHOD_SHUTDOWN_V1,
 };
 use newengine_plugin_api::{Blob, CapabilityId, MethodName, ServiceV1, ServiceV1Dyn};
 use parking_lot::Mutex;
+use std::path::PathBuf;
 use std::sync::{Arc, OnceLock};
 
 static INPUT_BINDINGS_GATEWAY: OnceLock<Arc<Mutex<InputBindingsGatewayState>>> = OnceLock::new();
@@ -17,12 +19,19 @@ static INPUT_BINDINGS_GATEWAY: OnceLock<Arc<Mutex<InputBindingsGatewayState>>> =
 #[derive(Clone, Debug)]
 struct InputBindingsGatewayState {
     profile: InputBindingsProfile,
+    profile_path: PathBuf,
 }
 
 impl Default for InputBindingsGatewayState {
     #[inline]
     fn default() -> Self {
-        Self { profile: InputBindingsProfile::gameplay_default() }
+        let profile_path = profile_path();
+        let profile = load_profile_from_config(&profile_path).unwrap_or_else(|| {
+            let default = InputBindingsProfile::gameplay_default();
+            let _ = save_profile_to_config(&profile_path, &default);
+            default
+        });
+        Self { profile, profile_path }
     }
 }
 
@@ -59,7 +68,7 @@ impl ServiceV1 for InputBindingsGatewayService {
                 let profile = self.state.lock().profile.clone();
                 ok_json(&profile)
             }
-            INPUT_BINDINGS_METHOD_INVOKE => {
+            INPUT_BINDINGS_METHOD_INVOKE | INPUT_BINDINGS_METHOD_SAVE_PROFILE_JSON_V1 => {
                 let bytes = payload.as_slice();
                 if bytes.is_empty() {
                     let profile = self.state.lock().profile.clone();
@@ -67,7 +76,18 @@ impl ServiceV1 for InputBindingsGatewayService {
                 }
                 match serde_json::from_slice::<InputBindingsProfile>(&bytes) {
                     Ok(profile) => {
-                        self.state.lock().profile = profile.clone();
+                        let path = {
+                            let mut state = self.state.lock();
+                            state.profile = profile.clone();
+                            state.profile_path.clone()
+                        };
+                        if let Err(e) = save_profile_to_config(&path, &profile) {
+                            return RResult::RErr(RString::from(format!(
+                                "engine.input.bindings: save failed path='{}' err='{}'",
+                                path.display(),
+                                e
+                            )));
+                        }
                         ok_json(&profile)
                     }
                     Err(e) => RResult::RErr(RString::from(format!(
@@ -76,6 +96,22 @@ impl ServiceV1 for InputBindingsGatewayService {
                     ))),
                 }
             }
+            INPUT_BINDINGS_METHOD_RESET_PROFILE_JSON_V1 => {
+                let profile = InputBindingsProfile::gameplay_default();
+                let path = {
+                    let mut state = self.state.lock();
+                    state.profile = profile.clone();
+                    state.profile_path.clone()
+                };
+                if let Err(e) = save_profile_to_config(&path, &profile) {
+                    return RResult::RErr(RString::from(format!(
+                        "engine.input.bindings: reset save failed path='{}' err='{}'",
+                        path.display(),
+                        e
+                    )));
+                }
+                ok_json(&profile)
+            }
             INPUT_BINDINGS_METHOD_SHUTDOWN_V1 => RResult::ROk(Blob::from(Vec::<u8>::new())),
             other => RResult::RErr(RString::from(format!(
                 "engine.input.bindings: unknown method '{}'",
@@ -83,6 +119,24 @@ impl ServiceV1 for InputBindingsGatewayService {
             ))),
         }
     }
+}
+
+
+fn profile_path() -> PathBuf {
+    newengine_core::config_child("input/bindings.gameplay.json")
+}
+
+fn load_profile_from_config(path: &PathBuf) -> Option<InputBindingsProfile> {
+    let txt = std::fs::read_to_string(path).ok()?;
+    serde_json::from_str::<InputBindingsProfile>(&txt).ok()
+}
+
+fn save_profile_to_config(path: &PathBuf, profile: &InputBindingsProfile) -> Result<(), String> {
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+    }
+    let txt = serde_json::to_string_pretty(profile).map_err(|e| e.to_string())?;
+    std::fs::write(path, txt).map_err(|e| e.to_string())
 }
 
 pub fn register_input_bindings_gateway_best_effort() {
@@ -101,11 +155,18 @@ pub fn register_input_bindings_gateway_best_effort() {
                 0,
                 "newengine-engine-runtime.input-bindings-gateway",
             ) {
-                Ok(()) => log::info!(
-                    "input bindings gateway: engine-owned route registered id='{}' capability='{}'",
-                    ENGINE_INPUT_BINDINGS_SERVICE_ID,
-                    INPUT_BINDINGS_BACKEND_CAPABILITY_ID
-                ),
+                Ok(()) => {
+                    let path = INPUT_BINDINGS_GATEWAY
+                        .get()
+                        .map(|s| s.lock().profile_path.clone())
+                        .unwrap_or_else(profile_path);
+                    log::info!(
+                        "input bindings gateway: engine-owned route registered id='{}' capability='{}' config='{}'",
+                        ENGINE_INPUT_BINDINGS_SERVICE_ID,
+                        INPUT_BINDINGS_BACKEND_CAPABILITY_ID,
+                        path.display()
+                    );
+                }
                 Err(e) => log::warn!(
                     "input bindings gateway: route registration skipped id='{}' err='{}'",
                     ENGINE_INPUT_BINDINGS_SERVICE_ID,

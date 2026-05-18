@@ -1,7 +1,8 @@
 {
   "engine": {
     "modules_dir": "plugins",
-    "cache_files": "cache"
+    "cache_files": "cache",
+    "config": "config"
   },
   "plugins": {
     "newengine": {

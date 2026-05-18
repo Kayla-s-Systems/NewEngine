@@ -88,5 +88,38 @@ pub fn poll_input_frame() -> Option<UiInputFrame> {
         }
     }
 
+    if let Some(gamepads) = st.get("gamepads").and_then(|v| v.as_object()) {
+        for pad in gamepads.values() {
+            let connected = pad.get("connected").and_then(|v| v.as_bool()).unwrap_or(false);
+            if connected {
+                out.gamepad_connected = out.gamepad_connected.saturating_add(1);
+            }
+            merge_f32_object(&mut out.gamepad_buttons, pad.get("buttons"));
+            merge_f32_object(&mut out.gamepad_axes, pad.get("axes"));
+            merge_string_set(&mut out.gamepad_buttons_pressed, pad.get("buttons_pressed"));
+            merge_string_set(&mut out.gamepad_buttons_released, pad.get("buttons_released"));
+        }
+    }
+
     Some(out)
+}
+
+fn merge_f32_object(target: &mut newengine_math::collections_prelude::NeBTreeMap<String, f32>, value: Option<&serde_json::Value>) {
+    let Some(obj) = value.and_then(|v| v.as_object()) else { return; };
+    for (key, raw) in obj {
+        let v = raw.as_f64().unwrap_or(0.0) as f32;
+        let entry = target.entry(key.clone()).or_insert(0.0);
+        if v.abs() > entry.abs() {
+            *entry = v;
+        }
+    }
+}
+
+fn merge_string_set(target: &mut newengine_math::collections_prelude::NeBTreeSet<String>, value: Option<&serde_json::Value>) {
+    let Some(arr) = value.and_then(|v| v.as_array()) else { return; };
+    for item in arr {
+        if let Some(s) = item.as_str() {
+            target.insert(s.to_owned());
+        }
+    }
 }
