@@ -12,6 +12,8 @@ newengine-assets = { path = "../newengine-assets" }
 newengine-core = { path = "../newengine-core", features = ["host-probe"] }
 newengine-ecs-runtime = { path = "../newengine-ecs-runtime" }
 newengine-engine-runtime = { path = "../newengine-engine-runtime" }
+newengine-input-bindings-runtime = { path = "../newengine-input-bindings-runtime" }
+newengine-input-profile-gameready = { path = "../newengine-input-profile-gameready" }
 newengine-entity-runtime = { path = "../newengine-entity-runtime" }
 newengine-plugin-host = { path = "../newengine-plugin-host" }
 newengine-render-feature-gameready = { path = "../newengine-render-feature-gameready" }

@@ -69,7 +69,7 @@ INPUT_RUNTIME_REQUIREMENT_SPEC
 
 ## Input bindings cleanup
 
-`newengine-input-bindings` keeps the third-level data/config domain:
+`newengine-input-bindings-api` keeps the third-level data/config DTO domain:
 
 ```text
 engine.input.bindings
@@ -85,7 +85,9 @@ The old internal names `*_ENV_LEGACY` were removed. `CACHE_FILES` and `CONFIG` a
 
 ```text
 newengine-input-api       -> input gateway contract
-newengine-input-bindings  -> semantic binding/profile domain
+newengine-input-bindings-api      -> binding/profile DTO domain
+newengine-input-bindings-runtime  -> engine.input.bindings service host
+newengine-input-profile-gameready -> GameReady FPS default actions/bindings
 newengine-core            -> startup validation + CONFIG/CACHE root publication
 InputPlugin               -> provider implementation behind engine.input
 engine-runtime/gameplay   -> consumes semantic actions, not physical keys

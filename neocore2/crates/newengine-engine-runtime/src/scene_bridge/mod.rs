@@ -37,7 +37,6 @@ use newengine_transform::Transform;
 
 use crate::audio_gateway::register_audio_gateway_best_effort;
 use crate::camera_gateway::CameraGatewayBridge;
-use crate::input_bindings_gateway::register_input_bindings_gateway_best_effort;
 use crate::gameplay::{
     ensure_physics_body, remove_physics_body, spawn_default_player, DisplayMode,
     DisplayVisibility, GameRunMode,
@@ -74,8 +73,6 @@ impl SceneBridge {
     pub fn new(mut initial: Scene) -> Self {
         bootstrap_runtime_scene(&mut initial);
         register_audio_gateway_best_effort();
-        register_input_bindings_gateway_best_effort();
-
         let primitives = Arc::new(RwLock::new(PrimitiveRegistry::with_builtins()));
         let materials = Arc::new(RwLock::new(MaterialRegistry::with_builtins()));
 

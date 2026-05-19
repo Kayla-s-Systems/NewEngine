@@ -92,6 +92,9 @@ impl GameReadyRuntimeProfile {
         );
         newengine_ecs_runtime::register_ecs_gateway_best_effort(Arc::clone(&self.scene));
         newengine_entity_runtime::register_entity_gateway_best_effort(Arc::clone(&self.scene));
+        newengine_input_bindings_runtime::register_input_bindings_gateway_best_effort(
+            newengine_input_profile_gameready::game_ready_input_profile(),
+        );
     }
 
     #[inline]

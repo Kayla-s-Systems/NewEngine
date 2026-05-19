@@ -84,7 +84,7 @@ pub(crate) const RUNTIME_SERVICE_CATALOG: &[RuntimeServiceCatalogEntry] = &[
         "platform_input::poll_input_frame / UI input projection",
     ),
     RuntimeServiceCatalogEntry::new(
-        newengine_input_bindings::INPUT_BINDINGS_RUNTIME_REQUIREMENT_SPEC,
+        newengine_input_bindings_api::INPUT_BINDINGS_RUNTIME_REQUIREMENT_SPEC,
         "semantic input bindings / camera view and gameplay action projection",
     ),
     RuntimeServiceCatalogEntry::new(

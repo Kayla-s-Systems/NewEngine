@@ -7,7 +7,7 @@ use newengine_core::render::{
     ViewPostFxFrameParams,
 };
 use newengine_ecs::World;
-use newengine_input_bindings::CameraViewRequest;
+use newengine_input_actions_api::CameraViewRequest;
 use newengine_math::{Mat4, Vec3};
 
 use crate::camera_gateway::{CameraGatewayFrame, CameraGatewayInput, CameraTransitionPhase};

@@ -21,7 +21,11 @@ members = [
     "crates/newengine-entity-runtime",
     "crates/newengine-game-ready-profile",
     "crates/newengine-input-api",
-    "crates/newengine-input-bindings",
+    "crates/newengine-input-actions-api",
+    "crates/newengine-input-bindings-api",
+    "crates/newengine-input-bindings-runtime",
+    "crates/newengine-input-contexts-api",
+    "crates/newengine-input-profile-gameready",
     "crates/newengine-lighting",
     "crates/newengine-loading-api",
     "crates/newengine-loading-runtime",
@@ -58,6 +62,8 @@ members = [
     "crates/newengine-ui",
     "crates/newengine-ui-api",
     "crates/newengine-ui-draw",
+    "crates/newengine-ui-navigation-api",
+    "crates/newengine-ui-menu-runtime",
     "crates/newengine-viewport",
 ]
 

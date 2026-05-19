@@ -42,7 +42,7 @@ The missing practical pieces for this pass were:
 Added engine-owned crate:
 
 ```text
-crates/newengine-input-bindings
+crates/newengine-input-bindings-api
 ```
 
 It establishes the third-level domain pattern:

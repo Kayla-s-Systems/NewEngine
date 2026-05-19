@@ -457,7 +457,7 @@ dependencies = [
  "newengine-camera-api",
  "newengine-core",
  "newengine-ecs",
- "newengine-input-bindings",
+ "newengine-input-actions-api",
  "newengine-math",
  "newengine-sim",
  "newengine-transform-api",
@@ -476,7 +476,7 @@ dependencies = [
  "newengine-ecs-api",
  "newengine-entity-api",
  "newengine-input-api",
- "newengine-input-bindings",
+ "newengine-input-bindings-api",
  "newengine-loading-api",
  "newengine-math",
  "newengine-physics-api",
@@ -547,7 +547,10 @@ dependencies = [
  "newengine-camera-runtime",
  "newengine-core",
  "newengine-ecs",
- "newengine-input-bindings",
+ "newengine-input-actions-api",
+ "newengine-input-api",
+ "newengine-input-bindings-api",
+ "newengine-input-bindings-runtime",
  "newengine-lighting",
  "newengine-material-domain-api",
  "newengine-materials",
@@ -574,6 +577,8 @@ dependencies = [
  "newengine-transform-api",
  "newengine-ui",
  "newengine-ui-api",
+ "newengine-ui-navigation-api",
+ "newengine-ui-menu-runtime",
  "newengine-viewport",
  "parking_lot",
  "raw-window-handle",
@@ -623,12 +628,23 @@ dependencies = [
  "newengine-ecs-runtime",
  "newengine-engine-runtime",
  "newengine-entity-runtime",
+ "newengine-input-bindings-runtime",
+ "newengine-input-profile-gameready",
  "newengine-plugin-host",
  "newengine-render-feature-gameready",
  "newengine-runtime-host",
  "newengine-scene",
  "newengine-scene-runtime",
  "newengine-ui",
+]
+
+[[package]]
+name = "newengine-input-actions-api"
+version = "0.1.0"
+dependencies = [
+ "newengine-camera-api",
+ "newengine-service-api",
+ "serde",
 ]
 
 [[package]]
@@ -641,12 +657,48 @@ dependencies = [
 ]
 
 [[package]]
-name = "newengine-input-bindings"
+name = "newengine-input-bindings-api"
+version = "0.1.0"
+dependencies = [
+ "newengine-input-actions-api",
+ "newengine-input-api",
+ "newengine-service-api",
+ "serde",
+]
+
+[[package]]
+name = "newengine-input-bindings-runtime"
+version = "0.1.0"
+dependencies = [
+ "abi_stable",
+ "log",
+ "newengine-core",
+ "newengine-input-actions-api",
+ "newengine-input-bindings-api",
+ "newengine-plugin-api",
+ "newengine-plugin-host",
+ "newengine-service-api",
+ "newengine-service-kit",
+ "parking_lot",
+ "serde_json",
+]
+
+[[package]]
+name = "newengine-input-contexts-api"
+version = "0.1.0"
+dependencies = [
+ "newengine-service-api",
+ "serde",
+]
+
+[[package]]
+name = "newengine-input-profile-gameready"
 version = "0.1.0"
 dependencies = [
  "newengine-camera-api",
- "newengine-service-api",
- "serde",
+ "newengine-input-actions-api",
+ "newengine-input-api",
+ "newengine-input-bindings-api",
 ]
 
 [[package]]
@@ -1023,6 +1075,21 @@ dependencies = [
  "serde",
  "serde_json",
  "smallvec",
+]
+
+[[package]]
+name = "newengine-ui-navigation-api"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "newengine-ui-menu-runtime"
+version = "0.1.0"
+dependencies = [
+ "newengine-ui-navigation-api",
 ]
 
 [[package]]

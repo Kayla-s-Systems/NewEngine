@@ -16,7 +16,7 @@ winit native key
   -> pause-menu listener consumes engine.menu.toggle_pause
 ```
 
-The platform provider now maps `winit::keyboard::KeyCode` variants explicitly to `newengine-input-bindings::key_code` constants. It no longer casts `KeyCode as u32` because native discriminants are not an engine ABI.
+The platform provider now maps `winit::keyboard::KeyCode` variants explicitly to `newengine-input-api::key_code` constants. It no longer casts `KeyCode as u32` because native discriminants are not an engine ABI.
 
 ## Registry shape
 

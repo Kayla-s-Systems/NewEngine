@@ -1,8 +1,6 @@
 #![forbid(unsafe_op_in_unsafe_fn)]
 
-use newengine_input_bindings::{
-    CameraViewRequest, InputActionFrame, InputFrameSource,
-};
+use newengine_input_actions_api::{CameraViewRequest, InputActionFrame, InputFrameSource};
 use newengine_ui::UiInputFrame;
 
 #[derive(Clone, Debug, Default)]
@@ -50,7 +48,7 @@ impl ViewportInputSnap {
         let Some(input) = input else {
             return Self::default();
         };
-        let actions = crate::input_bindings_gateway::resolve_input_actions(&UiInputSource(input));
+        let actions = newengine_input_bindings_runtime::resolve_input_actions(&UiInputSource(input));
 
         Self {
             dx_px: input.mouse_delta.0 + actions.look_axis[0] * 18.0,

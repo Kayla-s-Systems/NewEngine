@@ -1,6 +1,6 @@
 use newengine_core::host_events::CursorState;
 use newengine_math::{Vec2, Vec3};
-use newengine_input_bindings::move_mask;
+use newengine_input_actions_api::move_mask;
 
 use newengine_camera::{CameraControlInput, RuntimeNavMode};
 
@@ -26,7 +26,7 @@ pub struct CameraNavInput {
     /// Latched free-fly intent (e.g. RMB capture).
     pub fly_rmb: bool,
 
-    /// Semantic movement bitmask (`newengine-input-bindings::move_mask::*`).
+    /// Semantic movement bitmask (`newengine-input-actions-api::move_mask::*`).
     pub move_mask: u64,
 
     /// Additional user-controlled speed scalar from the runtime shell.

@@ -1,5 +1,5 @@
 use newengine_ecs::{EntityId, World};
-use newengine_input_bindings::move_mask as input_move;
+use newengine_input_actions_api::move_mask as input_move;
 use newengine_math::{Quat, Vec2, Vec3};
 use newengine_primitives::{builtins as prim_builtins, Primitive};
 use newengine_scene::components::Name;

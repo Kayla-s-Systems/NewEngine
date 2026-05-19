@@ -1,0 +1,10 @@
+[package]
+name = "newengine-input-contexts-api"
+version = "0.1.0"
+edition = "2021"
+readme = "README.md"
+description = "Input context stack DTOs and engine.input.contexts service contract for NewEngine"
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+newengine-service-api = { path = "../newengine-service-api" }

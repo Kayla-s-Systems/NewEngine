@@ -1,0 +1,19 @@
+[package]
+name = "newengine-input-bindings-runtime"
+version = "0.1.0"
+edition = "2021"
+readme = "README.md"
+description = "Engine-owned runtime service for engine.input.bindings"
+
+[dependencies]
+abi_stable = { version = "0.11" }
+log = "0.4"
+parking_lot = "0.12"
+serde_json = "1"
+newengine-core = { path = "../newengine-core" }
+newengine-input-actions-api = { path = "../newengine-input-actions-api" }
+newengine-input-bindings-api = { path = "../newengine-input-bindings-api" }
+newengine-plugin-api = { path = "../newengine-plugin-api" }
+newengine-plugin-host = { path = "../newengine-plugin-host" }
+newengine-service-api = { path = "../newengine-service-api" }
+newengine-service-kit = { path = "../newengine-service-kit" }

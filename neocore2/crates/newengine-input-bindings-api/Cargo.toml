@@ -1,0 +1,12 @@
+[package]
+name = "newengine-input-bindings-api"
+version = "0.1.0"
+edition = "2021"
+readme = "README.md"
+description = "Input binding/profile DTOs and engine.input.bindings service contract for NewEngine"
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+newengine-input-api = { path = "../newengine-input-api" }
+newengine-input-actions-api = { path = "../newengine-input-actions-api" }
+newengine-service-api = { path = "../newengine-service-api" }

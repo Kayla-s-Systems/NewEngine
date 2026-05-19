@@ -7,7 +7,7 @@ use newengine_math::{Vec2, Vec3};
 use newengine_sim::{
     CameraRigComp, FollowTargetCameraMotor, MotorInput,
 };
-use newengine_input_bindings::move_mask as input_move;
+use newengine_input_actions_api::move_mask as input_move;
 
 use crate::manager::{CameraDirectorRequest, CameraManagerResource};
 use crate::modes::{

@@ -1,12 +1,9 @@
 [package]
-name = "newengine-input-bindings"
+name = "newengine-input-actions-api"
 version = "0.1.0"
 edition = "2021"
 readme = "README.md"
-description = "Engine-owned input binding and semantic action domain for NewEngine"
-
-[features]
-default = []
+description = "Semantic input action DTOs and engine.input.actions service contract for NewEngine"
 
 [dependencies]
 serde = { version = "1", features = ["derive"] }

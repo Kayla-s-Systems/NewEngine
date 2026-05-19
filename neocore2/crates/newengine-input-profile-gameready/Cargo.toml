@@ -1,0 +1,12 @@
+[package]
+name = "newengine-input-profile-gameready"
+version = "0.1.0"
+edition = "2021"
+readme = "README.md"
+description = "GameReady FPS default input action and binding profile"
+
+[dependencies]
+newengine-camera-api = { path = "../newengine-camera-api" }
+newengine-input-api = { path = "../newengine-input-api" }
+newengine-input-actions-api = { path = "../newengine-input-actions-api" }
+newengine-input-bindings-api = { path = "../newengine-input-bindings-api" }

@@ -25,7 +25,7 @@ use newengine_core::render::{
     ViewPostFxFrameParams,
 };
 use newengine_ecs::{EntityId, World};
-use newengine_input_bindings::CameraViewRequest;
+use newengine_input_actions_api::CameraViewRequest;
 use newengine_math::{Mat4, Vec2, Vec3};
 use newengine_plugin_api::Blob;
 use newengine_service_kit::{

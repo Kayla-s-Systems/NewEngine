@@ -75,7 +75,7 @@ The default profile is written once when no user profile exists. Later edits upd
 
 ## Gamepad semantic actions
 
-`newengine-input-bindings` now supports:
+`newengine-input-bindings-api` + `newengine-input-actions-api` now support:
 
 ```text
 GamepadButton bindings
