@@ -1,0 +1,9 @@
+[package]
+name = "newengine-ui-menu-runtime"
+version = "0.1.0"
+edition = "2021"
+readme = "README.md"
+description = "Generic declarative menu state machine for NewEngine UI surfaces"
+
+[dependencies]
+newengine-ui-navigation-api = { path = "../newengine-ui-navigation-api" }

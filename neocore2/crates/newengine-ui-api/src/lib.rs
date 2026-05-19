@@ -91,6 +91,8 @@ impl Default for UiServiceInfo {
                 "pause-menu-modal".to_owned(),
                 "pause-menu-feedback-v1".to_owned(),
                 "declarative-pause-menu-theme".to_owned(),
+                "declarative-menu-document-v1".to_owned(),
+                "menu-action-routes-v1".to_owned(),
                 "draw-frame-bin-v1".to_owned(),
                 "atlas-text-quads".to_owned(),
             ],

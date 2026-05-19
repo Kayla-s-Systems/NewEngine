@@ -577,8 +577,8 @@ dependencies = [
  "newengine-transform-api",
  "newengine-ui",
  "newengine-ui-api",
- "newengine-ui-navigation-api",
  "newengine-ui-menu-runtime",
+ "newengine-ui-navigation-api",
  "newengine-viewport",
  "parking_lot",
  "raw-window-handle",
@@ -1078,21 +1078,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "newengine-ui-navigation-api"
-version = "0.1.0"
-dependencies = [
- "serde",
- "serde_json",
-]
-
-[[package]]
-name = "newengine-ui-menu-runtime"
-version = "0.1.0"
-dependencies = [
- "newengine-ui-navigation-api",
-]
-
-[[package]]
 name = "newengine-ui-api"
 version = "0.1.0"
 dependencies = [
@@ -1110,6 +1095,21 @@ dependencies = [
  "newengine-math",
  "serde",
  "smallvec",
+]
+
+[[package]]
+name = "newengine-ui-menu-runtime"
+version = "0.1.0"
+dependencies = [
+ "newengine-ui-navigation-api",
+]
+
+[[package]]
+name = "newengine-ui-navigation-api"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
 ]
 
 [[package]]
