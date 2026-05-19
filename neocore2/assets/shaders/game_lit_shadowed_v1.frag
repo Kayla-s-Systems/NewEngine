@@ -41,6 +41,34 @@ float saturate(float v) { return clamp(v, 0.0, 1.0); }
 vec3 saturate3(vec3 v) { return clamp(v, vec3(0.0), vec3(1.0)); }
 float ne_luma(vec3 c) { return dot(c, vec3(0.2126, 0.7152, 0.0722)); }
 
+vec3 safe_normalize(vec3 v, vec3 fallback) {
+    float len2 = dot(v, v);
+    return len2 > 1.0e-8 ? v * inversesqrt(len2) : fallback;
+}
+
+// Reference-derived material guard: runtime assets can arrive through texture dictionaries,
+// but a missing/black layer should not collapse world geometry to an invisible plane.
+vec3 material_texture_safe(vec3 sampled, vec3 tint, vec3 fallback) {
+    float sampled_luma = ne_luma(sampled);
+    float tint_luma = ne_luma(abs(tint));
+    vec3 authored_fallback = mix(fallback, max(abs(tint), vec3(0.08)), saturate(tint_luma));
+    return sampled_luma < 0.003 ? authored_fallback : sampled;
+}
+
+// Reoriented normal blend, adapted from the reference shader common layer.
+vec3 reoriented_normal_blend(vec3 base_normal, vec3 detail_normal, float amount) {
+    vec3 t = base_normal * vec3(2.0, 2.0, 2.0) + vec3(-1.0, -1.0, 0.0);
+    vec3 u = detail_normal * vec3(-2.0, -2.0, 2.0) + vec3(1.0, 1.0, -1.0);
+    vec3 blended = normalize(t * dot(t, u) - u * t.z);
+    return normalize(mix(base_normal, blended, saturate(amount)));
+}
+
+float material_micro_shadow(float ndotl, float roughness, float occlusion) {
+    float contact = smoothstep(0.02, 0.55, ndotl);
+    float cavity = mix(0.55, 1.0, saturate(occlusion));
+    return mix(contact, 1.0, roughness * 0.42) * cavity;
+}
+
 mat3 cotangent_frame(vec3 n, vec3 p, vec2 uv) {
     vec3 dp1 = dFdx(p);
     vec3 dp2 = dFdy(p);
@@ -239,7 +267,7 @@ float point_light_attenuation(float dist, float range) {
 void main() {
     vec2 stable_material_uv_dx = dFdx(v_uv);
     vec2 stable_material_uv_dy = dFdy(v_uv);
-    vec3 N = normalize(v_wnrm);
+    vec3 N = safe_normalize(v_wnrm, vec3(0.0, 1.0, 0.0));
     vec4 material_params = ubo.u_material_params;
     vec4 emissive_color = ubo.u_emissive;
 
@@ -247,11 +275,13 @@ void main() {
     N = apply_normal_map(N, v_wpos, v_uv, stable_material_uv_dx, stable_material_uv_dy, normal_scale);
 
     vec4 texel = textureGrad(sampler2D(u_base_tex, u_material_sampler), v_uv, stable_material_uv_dx, stable_material_uv_dy);
-    vec3 base = saturate3((v_base * texel).rgb);
-    float roughness_sample = textureGrad(sampler2D(u_roughness_tex, u_material_sampler), v_uv, stable_material_uv_dx, stable_material_uv_dy).r;
+    vec3 safe_texel = material_texture_safe(texel.rgb, v_base.rgb, vec3(0.68, 0.64, 0.56));
+    vec3 base = max(saturate3(v_base.rgb * safe_texel), vec3(0.012));
+    float roughness_sample_raw = textureGrad(sampler2D(u_roughness_tex, u_material_sampler), v_uv, stable_material_uv_dx, stable_material_uv_dy).r;
+    float roughness_sample = roughness_sample_raw < 0.003 ? 1.0 : roughness_sample_raw;
     float roughness = clamp(material_params.y * max(roughness_sample, 0.08), 0.045, 1.0);
     float metallic = clamp(material_params.z, 0.0, 1.0);
-    float occlusion = clamp(material_params.w, 0.0, 1.0);
+    float occlusion = clamp(material_params.w, 0.06, 1.0);
 
     // `u_point_count_pad.yzw` carries the active camera world position.
     // It reuses std140 padding so the lit UBO size stays ABI-stable.
@@ -264,7 +294,8 @@ void main() {
 
     vec3 Ld = normalize(-ubo.u_dir_dir_intensity.xyz);
     float shadow = sample_shadow(v_light_clip, N, ubo.u_dir_dir_intensity.xyz);
-    color += shadow * pbr_direct(
+    float sun_micro_shadow = material_micro_shadow(max(dot(N, Ld), 0.0), roughness, occlusion);
+    color += shadow * sun_micro_shadow * pbr_direct(
         base,
         N,
         V,
@@ -282,7 +313,8 @@ void main() {
         float range = max(ubo.u_point_pos_range[i].w, 0.0001);
         vec3 L = toL / max(dist, 0.0001);
         float atten = point_light_attenuation(dist, range);
-        color += atten * pbr_direct(
+        float point_micro_shadow = material_micro_shadow(max(dot(N, L), 0.0), roughness, occlusion);
+        color += atten * point_micro_shadow * pbr_direct(
             base,
             N,
             V,

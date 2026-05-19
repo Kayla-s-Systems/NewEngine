@@ -42,6 +42,24 @@ const float NE_EPS = 1.0e-5;
 
 float saturate(float v) { return clamp(v, 0.0, 1.0); }
 vec3 saturate3(vec3 v) { return clamp(v, vec3(0.0), vec3(1.0)); }
+float ne_luma(vec3 c) { return dot(c, vec3(0.2126, 0.7152, 0.0722)); }
+
+vec3 safe_normalize(vec3 v, vec3 fallback) {
+    float len2 = dot(v, v);
+    return len2 > 1.0e-8 ? v * inversesqrt(len2) : fallback;
+}
+
+vec3 material_texture_safe(vec3 sampled, vec3 fallback) {
+    return ne_luma(sampled) < 0.003 ? fallback : sampled;
+}
+
+// Reference-style RNM utility for terrain detail normals.
+vec3 reoriented_normal_blend(vec3 base_normal, vec3 detail_normal, float amount) {
+    vec3 t = base_normal * vec3(2.0, 2.0, 2.0) + vec3(-1.0, -1.0, 0.0);
+    vec3 u = detail_normal * vec3(-2.0, -2.0, 2.0) + vec3(1.0, 1.0, -1.0);
+    vec3 blended = normalize(t * dot(t, u) - u * t.z);
+    return normalize(mix(base_normal, blended, saturate(amount)));
+}
 
 float hash12(vec2 p) {
     vec3 p3 = fract(vec3(p.xyx) * 0.1031);
@@ -75,6 +93,22 @@ float fbm(vec2 p) {
         a *= 0.5;
     }
     return s / max(n, 1.0e-4);
+}
+
+vec3 procedural_terrain_detail_normal(vec3 world_normal, vec2 world_xz, float slope) {
+    float scale = 0.18;
+    float h = fbm(world_xz * scale);
+    float hx = fbm((world_xz + vec2(0.85, 0.0)) * scale);
+    float hz = fbm((world_xz + vec2(0.0, 0.85)) * scale);
+    vec3 detail = safe_normalize(vec3((h - hx) * 1.65, 1.0, (h - hz) * 1.65), vec3(0.0, 1.0, 0.0));
+    float amount = mix(0.14, 0.34, slope);
+    return reoriented_normal_blend(world_normal, detail, amount);
+}
+
+float terrain_micro_shadow(float ndotl, float slope, float occlusion) {
+    float contact = smoothstep(0.03, 0.62, ndotl);
+    float slope_cavity = mix(1.0, 0.72, saturate(slope));
+    return mix(contact, 1.0, 0.35) * slope_cavity * mix(0.58, 1.0, saturate(occlusion));
 }
 
 vec3 terrain_weights(vec3 world_pos, vec3 world_normal) {
@@ -123,8 +157,8 @@ vec3 sample_forest_layer(vec2 uv, vec2 dx, vec2 dy, vec2 world_xz) {
     vec2 jitter_a = (hash22(cell + layer_seed) - 0.5) * 3.7;
     vec2 jitter_b = (hash22(cell + vec2(19.0, -23.0) + layer_seed) - 0.5) * 7.1;
     float blend = smoothstep(0.22, 0.78, fbm(world_xz * 0.031 * scale + vec2(layer_seed * 11.0, -layer_seed * 7.0)));
-    vec3 a = textureGrad(sampler2D(u_forest_tex, u_material_sampler), uv + jitter_a, dx, dy).rgb;
-    vec3 b = textureGrad(sampler2D(u_forest_tex, u_material_sampler), uv * 1.73 + jitter_b, dx * 1.73, dy * 1.73).rgb;
+    vec3 a = material_texture_safe(textureGrad(sampler2D(u_forest_tex, u_material_sampler), uv + jitter_a, dx, dy).rgb, vec3(0.31, 0.37, 0.23));
+    vec3 b = material_texture_safe(textureGrad(sampler2D(u_forest_tex, u_material_sampler), uv * 1.73 + jitter_b, dx * 1.73, dy * 1.73).rgb, vec3(0.22, 0.29, 0.18));
     float micro = fbm(world_xz * 0.19 * scale + vec2(layer_seed * 3.0, layer_seed * 5.0));
     return mix(a, b, blend * 0.42) * mix(0.92, 1.08, micro);
 }
@@ -136,8 +170,8 @@ vec3 sample_sand_layer(vec2 uv, vec2 dx, vec2 dy, vec2 world_xz) {
     vec2 jitter_a = (hash22(cell + layer_seed) - 0.5) * 3.7;
     vec2 jitter_b = (hash22(cell + vec2(19.0, -23.0) + layer_seed) - 0.5) * 7.1;
     float blend = smoothstep(0.22, 0.78, fbm(world_xz * 0.031 * scale + vec2(layer_seed * 11.0, -layer_seed * 7.0)));
-    vec3 a = textureGrad(sampler2D(u_sand_tex, u_material_sampler), uv + jitter_a, dx, dy).rgb;
-    vec3 b = textureGrad(sampler2D(u_sand_tex, u_material_sampler), uv * 1.73 + jitter_b, dx * 1.73, dy * 1.73).rgb;
+    vec3 a = material_texture_safe(textureGrad(sampler2D(u_sand_tex, u_material_sampler), uv + jitter_a, dx, dy).rgb, vec3(0.58, 0.50, 0.38));
+    vec3 b = material_texture_safe(textureGrad(sampler2D(u_sand_tex, u_material_sampler), uv * 1.73 + jitter_b, dx * 1.73, dy * 1.73).rgb, vec3(0.45, 0.39, 0.31));
     float micro = fbm(world_xz * 0.19 * scale + vec2(layer_seed * 3.0, layer_seed * 5.0));
     return mix(a, b, blend * 0.42) * mix(0.92, 1.08, micro);
 }
@@ -149,8 +183,8 @@ vec3 sample_rock_layer(vec2 uv, vec2 dx, vec2 dy, vec2 world_xz) {
     vec2 jitter_a = (hash22(cell + layer_seed) - 0.5) * 3.7;
     vec2 jitter_b = (hash22(cell + vec2(19.0, -23.0) + layer_seed) - 0.5) * 7.1;
     float blend = smoothstep(0.22, 0.78, fbm(world_xz * 0.031 * scale + vec2(layer_seed * 11.0, -layer_seed * 7.0)));
-    vec3 a = textureGrad(sampler2D(u_rock_tex, u_material_sampler), uv + jitter_a, dx, dy).rgb;
-    vec3 b = textureGrad(sampler2D(u_rock_tex, u_material_sampler), uv * 1.73 + jitter_b, dx * 1.73, dy * 1.73).rgb;
+    vec3 a = material_texture_safe(textureGrad(sampler2D(u_rock_tex, u_material_sampler), uv + jitter_a, dx, dy).rgb, vec3(0.34, 0.35, 0.31));
+    vec3 b = material_texture_safe(textureGrad(sampler2D(u_rock_tex, u_material_sampler), uv * 1.73 + jitter_b, dx * 1.73, dy * 1.73).rgb, vec3(0.24, 0.26, 0.25));
     float micro = fbm(world_xz * 0.19 * scale + vec2(layer_seed * 3.0, layer_seed * 5.0));
     return mix(a, b, blend * 0.42) * mix(0.92, 1.08, micro);
 }
@@ -308,32 +342,35 @@ float point_light_attenuation(float dist, float range) {
 void main() {
     vec2 dx = dFdx(v_uv);
     vec2 dy = dFdy(v_uv);
-    vec3 N = normalize(v_wnrm);
+    vec3 N = safe_normalize(v_wnrm, vec3(0.0, 1.0, 0.0));
     vec3 camera_pos = ubo.u_point_count_pad.yzw;
     vec3 view_vec = camera_pos - v_wpos;
     float view_len2 = dot(view_vec, view_vec);
     vec3 V = view_len2 > 1.0e-6 ? view_vec * inversesqrt(view_len2) : vec3(0.0, 0.0, 1.0);
+
+    float slope = 1.0 - saturate(N.y);
+    N = procedural_terrain_detail_normal(N, v_wpos.xz, slope);
 
     vec3 w = terrain_weights(v_wpos, N);
     vec3 forest = sample_forest_layer(v_uv, dx, dy, v_wpos.xz);
     vec3 sand = sample_sand_layer(v_uv * 0.82, dx * 0.82, dy * 0.82, v_wpos.xz);
     vec3 rock = sample_rock_layer(v_uv * 1.35, dx * 1.35, dy * 1.35, v_wpos.xz);
 
-    vec3 base = saturate3((forest * w.x + sand * w.y + rock * w.z) * v_base.rgb);
+    vec3 base = max(saturate3((forest * w.x + sand * w.y + rock * w.z) * max(v_base.rgb, vec3(0.18))), vec3(0.018));
     float macro_variation = fbm(v_wpos.xz * 0.012 + vec2(5.0, -3.0));
-    float slope = 1.0 - saturate(N.y);
     base *= mix(0.84, 1.10, macro_variation);
     base *= mix(vec3(1.0), vec3(0.88, 0.90, 0.94), slope * w.z * 0.45);
 
     float roughness = clamp(ubo.u_material_params.z + slope * 0.08, 0.20, 1.0);
     float procedural_occlusion = mix(0.92, 1.0, fbm(v_wpos.xz * 0.09 + vec2(91.0, -14.0)));
-    float occlusion = clamp(ubo.u_material_params.w * procedural_occlusion, 0.0, 1.0);
+    float occlusion = clamp(ubo.u_material_params.w * procedural_occlusion, 0.08, 1.0);
 
     vec3 color = terrain_ambient(base, N, V, roughness, occlusion);
 
     vec3 Ld = normalize(-ubo.u_dir_dir_intensity.xyz);
     float shadow = sample_shadow(v_light_clip, N, ubo.u_dir_dir_intensity.xyz);
-    color += shadow * pbr_direct(base, N, V, Ld, ubo.u_dir_color.rgb, ubo.u_dir_dir_intensity.w, roughness);
+    float sun_micro_shadow = terrain_micro_shadow(max(dot(N, Ld), 0.0), slope, occlusion);
+    color += shadow * sun_micro_shadow * pbr_direct(base, N, V, Ld, ubo.u_dir_color.rgb, ubo.u_dir_dir_intensity.w, roughness);
 
     int point_count = int(ubo.u_point_count_pad.x + 0.5);
     for (int i = 0; i < point_count && i < 4; ++i) {
@@ -342,7 +379,8 @@ void main() {
         float range = max(ubo.u_point_pos_range[i].w, 0.0001);
         vec3 L = toL / max(dist, 0.0001);
         float atten = point_light_attenuation(dist, range);
-        color += atten * pbr_direct(base, N, V, L, ubo.u_point_color_intensity[i].rgb, ubo.u_point_color_intensity[i].w, roughness);
+        float point_micro_shadow = terrain_micro_shadow(max(dot(N, L), 0.0), slope, occlusion);
+        color += atten * point_micro_shadow * pbr_direct(base, N, V, L, ubo.u_point_color_intensity[i].rgb, ubo.u_point_color_intensity[i].w, roughness);
     }
 
     color += ubo.u_emissive.rgb;
