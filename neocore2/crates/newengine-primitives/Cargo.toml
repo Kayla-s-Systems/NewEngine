@@ -4,6 +4,12 @@ version = "0.1.0"
 readme = "README.md"
 edition = "2021"
 
+[features]
+default = []
+serde = ["dep:serde", "newengine-math/serde"]
+
 [dependencies]
 bytemuck = { version = "1.16", features = ["derive"] }
 newengine-math = { path = "../newengine-math" }
+
+serde = { version = "1", features = ["derive"], optional = true }

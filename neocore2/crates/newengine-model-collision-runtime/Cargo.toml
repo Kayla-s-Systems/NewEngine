@@ -1,0 +1,9 @@
+[package]
+name = "newengine-model-collision-runtime"
+version = "0.1.0"
+edition = "2021"
+description = "Default model collision derivation for NewEngine"
+
+[dependencies]
+newengine-model-domain-api = { path = "../newengine-model-domain-api" }
+newengine-model-skeleton-api = { path = "../newengine-model-skeleton-api" }

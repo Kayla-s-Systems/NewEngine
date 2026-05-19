@@ -120,4 +120,4 @@ engine.model request/manifest
   -> runtime ModelAssetBundle
 ```
 
-`newengine-model-domain-api` owns the gateway vocabulary and declarative manifest DTOs. `newengine-model-adapter` resolves the current AssetManager-backed implementation and returns backend-neutral data.
+`newengine-model-domain-api` owns the gateway vocabulary and declarative manifest DTOs. `newengine-model-runtime` resolves the current AssetManager-backed implementation and returns backend-neutral data.

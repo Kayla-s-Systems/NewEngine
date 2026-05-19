@@ -556,7 +556,9 @@ dependencies = [
  "newengine-material-domain-api",
  "newengine-materials",
  "newengine-math",
- "newengine-model-adapter",
+ "newengine-model-domain-api",
+ "newengine-model-runtime",
+ "newengine-model-skeleton-api",
  "newengine-physics-api",
  "newengine-physics-contracts",
  "newengine-platform-api",
@@ -633,6 +635,7 @@ dependencies = [
  "newengine-entity-runtime",
  "newengine-input-bindings-runtime",
  "newengine-input-profile-gameready",
+ "newengine-model-runtime",
  "newengine-plugin-host",
  "newengine-render-feature-api",
  "newengine-render-feature-gameready",
@@ -750,6 +753,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "newengine-material-runtime"
+version = "0.1.0"
+dependencies = [
+ "newengine-materials",
+ "newengine-model-domain-api",
+ "newengine-model-import-obj",
+]
+
+[[package]]
 name = "newengine-materials"
 version = "0.1.0"
 dependencies = [
@@ -772,27 +784,67 @@ dependencies = [
 ]
 
 [[package]]
-name = "newengine-model-adapter"
+name = "newengine-model-collision-runtime"
 version = "0.1.0"
 dependencies = [
- "blake3",
- "log",
- "newengine-assets",
- "newengine-materials",
- "newengine-math",
  "newengine-model-domain-api",
- "newengine-plugin-host",
- "newengine-primitives",
- "serde",
- "serde_json",
+ "newengine-model-skeleton-api",
 ]
 
 [[package]]
 name = "newengine-model-domain-api"
 version = "0.1.0"
 dependencies = [
+ "newengine-materials",
+ "newengine-model-skeleton-api",
+ "newengine-primitives",
  "newengine-service-api",
  "serde",
+]
+
+[[package]]
+name = "newengine-model-import-obj"
+version = "0.1.0"
+dependencies = [
+ "log",
+ "newengine-math",
+ "newengine-primitives",
+ "serde",
+]
+
+[[package]]
+name = "newengine-model-runtime"
+version = "0.1.0"
+dependencies = [
+ "abi_stable",
+ "log",
+ "newengine-assets",
+ "newengine-material-runtime",
+ "newengine-model-collision-runtime",
+ "newengine-model-domain-api",
+ "newengine-model-import-obj",
+ "newengine-model-skeleton-api",
+ "newengine-model-skeleton-rsc7",
+ "newengine-plugin-api",
+ "newengine-service-api",
+ "newengine-service-kit",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "newengine-model-skeleton-api"
+version = "0.1.0"
+dependencies = [
+ "serde",
+]
+
+[[package]]
+name = "newengine-model-skeleton-rsc7"
+version = "0.1.0"
+dependencies = [
+ "blake3",
+ "newengine-model-skeleton-api",
 ]
 
 [[package]]
@@ -859,6 +911,7 @@ version = "0.1.0"
 dependencies = [
  "bytemuck",
  "newengine-math",
+ "serde",
 ]
 
 [[package]]

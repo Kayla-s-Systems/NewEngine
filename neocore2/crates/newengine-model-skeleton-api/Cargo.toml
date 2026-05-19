@@ -1,0 +1,8 @@
+[package]
+name = "newengine-model-skeleton-api"
+version = "0.1.0"
+edition = "2021"
+description = "Stable skeleton metadata DTOs for NewEngine model construction"
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }

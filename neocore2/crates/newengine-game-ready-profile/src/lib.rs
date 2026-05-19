@@ -111,6 +111,9 @@ impl GameReadyRuntimeProfile {
         newengine_input_bindings_runtime::register_input_bindings_gateway_best_effort(
             newengine_input_profile_gameready::game_ready_input_profile(),
         );
+        newengine_model_runtime::register_model_gateway_best_effort(
+            newengine_assets::AssetServiceClient::new(newengine_plugin_host::default_host_api()),
+        );
     }
 
     #[inline]

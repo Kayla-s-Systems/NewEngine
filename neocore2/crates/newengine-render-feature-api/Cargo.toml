@@ -1,0 +1,19 @@
+[package]
+name = "newengine-render-feature-api"
+version = "0.1.0"
+edition = "2021"
+readme = "README.md"
+description = "Profile-owned render feature provider API for NewEngine"
+
+[dependencies]
+log = "0.4"
+
+newengine-core = { path = "../newengine-core" }
+newengine-ecs = { path = "../newengine-ecs" }
+newengine-lighting = { path = "../newengine-lighting" }
+newengine-material-domain-api = { path = "../newengine-material-domain-api" }
+newengine-plugin-api = { path = "../newengine-plugin-api" }
+newengine-math = { path = "../newengine-math" }
+newengine-scene = { path = "../newengine-scene", features = ["runtime"] }
+newengine-transform = { path = "../newengine-transform", features = ["ecs"], default-features = false }
+newengine-ui = { path = "../newengine-ui", default-features = false }

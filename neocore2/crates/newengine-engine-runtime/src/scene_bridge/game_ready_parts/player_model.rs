@@ -1,4 +1,6 @@
-use newengine_model_adapter::{ModelAssetAdapter, ModelAssetRequest, ModelSkeletonMetadata};
+use newengine_model_domain_api::ModelAssetRequest;
+use newengine_model_runtime::ModelGatewayClient;
+use newengine_model_skeleton_api::ModelSkeletonMetadata;
 
 #[derive(Clone, Debug)]
 struct PlayerRuntimeModelPart {
@@ -21,8 +23,8 @@ fn ensure_player_runtime_model_parts(
         request = request.with_skeleton(skeleton);
     }
 
-    let adapter = ModelAssetAdapter::new();
-    let bundle = adapter.load_bundle(&request)?;
+    let constructor = ModelGatewayClient::new(newengine_plugin_host::default_host_api());
+    let bundle = constructor.assemble_bundle(&request)?;
 
     if let Some(metadata) = bundle.skeleton.as_ref() {
         log::info!(

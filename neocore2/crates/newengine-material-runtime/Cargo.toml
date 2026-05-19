@@ -1,0 +1,10 @@
+[package]
+name = "newengine-material-runtime"
+version = "0.1.0"
+edition = "2021"
+description = "Runtime material mapping for model construction"
+
+[dependencies]
+newengine-materials = { path = "../newengine-materials", features = ["serde"] }
+newengine-model-domain-api = { path = "../newengine-model-domain-api" }
+newengine-model-import-obj = { path = "../newengine-model-import-obj" }

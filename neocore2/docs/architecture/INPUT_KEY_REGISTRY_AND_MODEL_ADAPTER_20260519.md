@@ -62,7 +62,7 @@ OBJ parser + MTL parser + YMT probe + neytd selector derivation
 That logic now has a dedicated reusable crate:
 
 ```text
-crates/newengine-model-adapter
+crates/newengine-model-runtime
 ```
 
 Target/current flow:
@@ -70,7 +70,7 @@ Target/current flow:
 ```text
 GameReadyPlayerModelSpec
   -> ModelAssetRequest
-  -> ModelAssetAdapter
+  -> gateway-backed ModelAssetAdapter
   -> AssetManager logical model path
   -> mesh parts
   -> skeleton metadata

@@ -35,7 +35,9 @@ newengine-ecs = { path = "../newengine-ecs" }
 newengine-lighting = { path = "../newengine-lighting" }
 newengine-materials = { path = "../newengine-materials", features = ["serde"] }
 newengine-material-domain-api = { path = "../newengine-material-domain-api" }
-newengine-model-adapter = { path = "../newengine-model-adapter" }
+newengine-model-domain-api = { path = "../newengine-model-domain-api" }
+newengine-model-runtime = { path = "../newengine-model-runtime" }
+newengine-model-skeleton-api = { path = "../newengine-model-skeleton-api" }
 newengine-physics-contracts = { path = "../newengine-physics-contracts" }
 newengine-physics-api = { path = "../newengine-physics-api" }
 newengine-math = { path = "../newengine-math" }

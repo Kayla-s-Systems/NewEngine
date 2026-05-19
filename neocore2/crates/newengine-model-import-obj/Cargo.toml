@@ -1,0 +1,11 @@
+[package]
+name = "newengine-model-import-obj"
+version = "0.1.0"
+edition = "2021"
+description = "OBJ/MTL model importer for NewEngine model construction"
+
+[dependencies]
+log = "0.4"
+serde = { version = "1", features = ["derive"] }
+newengine-math = { path = "../newengine-math" }
+newengine-primitives = { path = "../newengine-primitives", features = ["serde"] }
