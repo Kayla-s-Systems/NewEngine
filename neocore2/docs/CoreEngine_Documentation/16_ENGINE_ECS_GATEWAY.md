@@ -18,7 +18,7 @@ consumer / tool / service
 Current route is engine-owned:
 
 ```text
-owner: newengine-game-runtime.ecs-gateway
+owner: newengine-ecs-runtime.ecs-gateway
 service: engine.ecs
 capability: ecs.backend
 origin: EngineOwned

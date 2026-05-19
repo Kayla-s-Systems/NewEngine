@@ -91,7 +91,7 @@ NewEngine/neocore2/crates/newengine-ecs
 NewEngine/neocore2/crates/newengine-runtime-host/src/ecs_runtime
   EcsServiceClient for summary/snapshot/command calls through engine.ecs
 
-NewEngine/neocore2/crates/newengine-game-runtime/src/lib.rs
+NewEngine/neocore2/crates/newengine-ecs-runtime/src/lib.rs
   engine-owned engine.ecs ServiceV1 route over SceneBridge world
 ```
 
@@ -107,7 +107,7 @@ NewEngine/neocore2/crates/newengine-entity
 NewEngine/neocore2/crates/newengine-runtime-host/src/entity_runtime
   EntityServiceClient for list/exists/spawn/despawn calls through engine.entity
 
-NewEngine/neocore2/crates/newengine-game-runtime/src/lib.rs
+NewEngine/neocore2/crates/newengine-entity-runtime/src/lib.rs
   engine-owned engine.entity ServiceV1 route over SceneBridge world
 ```
 

@@ -6,7 +6,7 @@ A standalone game is an application consumer of engine services. It must not own
 
 ```text
 game-ready-fps app
-  -> newengine-game-runtime profile / game bootstrap
+  -> newengine-game-ready-profile / game bootstrap
   -> newengine-engine-runtime scene + render controller
   -> newengine-render-api service contract
   -> renderer plugin, e.g. newengine.renderer.vulkan
@@ -34,7 +34,10 @@ The game layer must not:
 
 | Crate | Role |
 |---|---|
-| `newengine-game-runtime` | Thin standalone game profile and bootstrap gates. |
+| `newengine-game-ready-profile` | Game-ready module composition, scene bootstrap gate and product launch profile. |
+| `newengine-scene-runtime` | Engine-owned `engine.scene` gateway service and scene load/save DTO handling. |
+| `newengine-ecs-runtime` | Engine-owned `engine.ecs` summary/snapshot/command gateway service. |
+| `newengine-entity-runtime` | Engine-owned `engine.entity` spawn/despawn/list/exists gateway service. |
 | `newengine-engine-runtime` | Reusable scene bridge, gameplay components, viewport bridge and render controller. |
 | `newengine-render-api` | Backend-neutral render service protocol and resource contracts. |
 | `vulkan_renderer` plugin | Vulkan backend implementation: GPU resources, upload queue, pipeline cache, shader bake/cache, shadows/postFX execution. |

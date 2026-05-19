@@ -67,9 +67,9 @@ Current examples:
 
 ```text
 engine.camera -> newengine-engine-runtime.camera-gateway
-engine.scene  -> newengine-game-runtime.scene-bridge
-engine.ecs      -> newengine-game-runtime.ecs-gateway
-engine.entity   -> newengine-game-runtime.entity-gateway
+engine.scene  -> newengine-scene-runtime.scene-gateway
+engine.ecs      -> newengine-ecs-runtime.ecs-gateway
+engine.entity   -> newengine-entity-runtime.entity-gateway
 engine.platform -> newengine-runtime-host.platform-gateway
 ```
 

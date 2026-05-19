@@ -275,7 +275,7 @@ name = "game-ready-fps"
 version = "0.1.0"
 dependencies = [
  "embed-resource",
- "newengine-game-runtime",
+ "newengine-game-ready-profile",
 ]
 
 [[package]]
@@ -514,6 +514,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "newengine-ecs-runtime"
+version = "0.1.0"
+dependencies = [
+ "abi_stable",
+ "log",
+ "newengine-ecs",
+ "newengine-ecs-api",
+ "newengine-plugin-api",
+ "newengine-plugin-host",
+ "newengine-scene-runtime",
+ "newengine-service-api",
+ "newengine-service-kit",
+ "serde_json",
+]
+
+[[package]]
 name = "newengine-engine-runtime"
 version = "0.1.0"
 dependencies = [
@@ -582,29 +598,37 @@ dependencies = [
 ]
 
 [[package]]
-name = "newengine-game-runtime"
+name = "newengine-entity-runtime"
 version = "0.1.0"
 dependencies = [
  "abi_stable",
  "log",
- "newengine-assets",
- "newengine-core",
  "newengine-ecs",
- "newengine-ecs-api",
- "newengine-engine-runtime",
  "newengine-entity-api",
  "newengine-plugin-api",
+ "newengine-plugin-host",
+ "newengine-scene-runtime",
+ "newengine-service-api",
+ "newengine-service-kit",
+ "serde_json",
+]
+
+[[package]]
+name = "newengine-game-ready-profile"
+version = "0.1.0"
+dependencies = [
+ "log",
+ "newengine-assets",
+ "newengine-core",
+ "newengine-ecs-runtime",
+ "newengine-engine-runtime",
+ "newengine-entity-runtime",
  "newengine-plugin-host",
  "newengine-render-feature-gameready",
  "newengine-runtime-host",
  "newengine-scene",
- "newengine-scene-io",
- "newengine-service-api",
- "newengine-service-kit",
+ "newengine-scene-runtime",
  "newengine-ui",
- "parking_lot",
- "serde",
- "serde_json",
 ]
 
 [[package]]
@@ -876,6 +900,24 @@ dependencies = [
  "abi_stable",
  "newengine-plugin-api",
  "newengine-service-api",
+ "serde_json",
+]
+
+[[package]]
+name = "newengine-scene-runtime"
+version = "0.1.0"
+dependencies = [
+ "abi_stable",
+ "log",
+ "newengine-assets",
+ "newengine-engine-runtime",
+ "newengine-plugin-api",
+ "newengine-plugin-host",
+ "newengine-runtime-host",
+ "newengine-scene",
+ "newengine-scene-io",
+ "newengine-service-api",
+ "newengine-service-kit",
  "serde_json",
 ]
 

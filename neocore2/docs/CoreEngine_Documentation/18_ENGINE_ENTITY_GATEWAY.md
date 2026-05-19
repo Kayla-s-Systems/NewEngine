@@ -18,7 +18,7 @@ consumer / tool / service
 Current route is engine-owned:
 
 ```text
-owner: newengine-game-runtime.entity-gateway
+owner: newengine-entity-runtime.entity-gateway
 service: engine.entity
 capability: entity.backend
 origin: EngineOwned

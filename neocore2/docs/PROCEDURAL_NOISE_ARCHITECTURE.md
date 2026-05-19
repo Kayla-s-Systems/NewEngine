@@ -43,4 +43,4 @@ These are intentionally descriptors, not hardcoded assets. Renderer/importer lay
 
 ## Standalone FPS demo
 
-`game-ready-fps` depends on `newengine-game-runtime`, not directly on the editor profile. The current game runtime is a compatibility boundary that disables editor UI and renders the viewport directly to the platform surface. The next extraction pass should physically move shared render/scene/gameplay modules out of `newengine-editor-runtime` into neutral crates.
+`game-ready-fps` depends on `newengine-game-ready-profile`, not directly on the editor profile. The selected profile composes reusable runtime modules, installs the GameReady render feature pack, and delegates engine-owned scene/ECS/entity gateway services to dedicated runtime crates.

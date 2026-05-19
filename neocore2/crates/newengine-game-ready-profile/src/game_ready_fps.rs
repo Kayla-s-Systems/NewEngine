@@ -13,7 +13,7 @@ use newengine_runtime_host::app_launcher::{
 use newengine_ui::{UiBuildFn, UiProviderKind};
 
 use crate::{
-    StandaloneGameRuntimeProfile, GAME_APP_ASSETS_DIR_ENV, GAME_FIXED_DT_MS,
+    GameReadyRuntimeProfile, GAME_APP_ASSETS_DIR_ENV, GAME_FIXED_DT_MS,
     GAME_READY_APP_DIR_NAME,
 };
 
@@ -35,7 +35,7 @@ pub const GAME_READY_DEFAULT_PROFILE_ASSET: &str = "game_ready_highlands.scene.j
 
 #[derive(Clone)]
 pub struct GameReadyFpsApp {
-    profile: StandaloneGameRuntimeProfile,
+    profile: GameReadyRuntimeProfile,
 }
 
 impl Default for GameReadyFpsApp {
@@ -49,7 +49,7 @@ impl GameReadyFpsApp {
     #[inline]
     pub fn new() -> Self {
         Self {
-            profile: StandaloneGameRuntimeProfile::new(),
+            profile: GameReadyRuntimeProfile::new(),
         }
     }
 
@@ -88,14 +88,12 @@ impl RuntimeHostAppProfile for GameReadyFpsApp {
 
     #[inline]
     fn register_engine_owned_gateways_best_effort(&self) {
-        self.profile.register_scene_io_best_effort();
-        self.profile.register_ecs_gateway_best_effort();
-        self.profile.register_entity_gateway_best_effort();
+        self.profile.register_engine_owned_gateways_best_effort();
     }
 
     #[inline]
     fn bootstrap_content_best_effort(&self) {
-        self.profile.bootstrap_game_ready_scene_best_effort();
+        self.profile.bootstrap_content_best_effort();
     }
 
     #[inline]

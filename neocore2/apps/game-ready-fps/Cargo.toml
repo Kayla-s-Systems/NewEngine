@@ -21,7 +21,7 @@ icon = "assets/editor.ico"
 # codepage = 1200
 
 [dependencies]
-newengine-game-runtime = { path = "../../crates/newengine-game-runtime" }
+newengine-game-ready-profile = { path = "../../crates/newengine-game-ready-profile" }
 
 [build-dependencies]
 embed-resource = "2"
