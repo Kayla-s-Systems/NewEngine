@@ -4,7 +4,7 @@ use crate::error::{EngineError, EngineResult};
 use crate::startup::config::StartupPluginOverride;
 use crate::startup::{
     ConfigPaths, StartupConfig, StartupConfigSource, StartupLoadReport, StartupOverride,
-    StartupResolvedFrom, WindowPlacement,
+    StartupResolvedFrom, StartupStorageRootKind, WindowPlacement,
 };
 use serde::Deserialize;
 use std::fs;
@@ -60,19 +60,7 @@ impl StartupLoader {
 
         // Publish engine-level roots as soon as startup config is resolved.
         // CACHE_FILES is disposable generated data. CONFIG is durable user settings.
-        let cache_root = cfg.publish_cache_files_env();
-        report.overrides.push(StartupOverride {
-            key: "cache_files",
-            from: "<resolved>".to_owned(),
-            to: crate::cache_files::display_cache_path(&cache_root),
-        });
-
-        let config_root = cfg.publish_config_env();
-        report.overrides.push(StartupOverride {
-            key: "config",
-            from: "<resolved>".to_owned(),
-            to: crate::config_root::display_config_path(&config_root),
-        });
+        publish_startup_storage_roots(&cfg, &mut report);
 
         report.total_ms = Some(t0.elapsed().as_millis().min(u128::from(u32::MAX)) as u32);
         crate::startup::set_last_load_report(report.clone());
@@ -132,21 +120,7 @@ struct EngineJson {
 
 
 fn apply_root(cfg: &mut StartupConfig, report: &mut StartupLoadReport, mut src: RootJson) {
-    for key in ["CACHE_FILES", "cache_files"] {
-        if let Some(v) = src.extra.remove(key) {
-            if let Some(path) = v.as_str().map(str::trim).filter(|s| !s.is_empty()) {
-                apply_path(report, "cache_files", &mut cfg.cache_files, path.to_owned());
-            }
-        }
-    }
-
-    for key in ["CONFIG", "config"] {
-        if let Some(v) = src.extra.remove(key) {
-            if let Some(path) = v.as_str().map(str::trim).filter(|s| !s.is_empty()) {
-                apply_path(report, "config", &mut cfg.config, path.to_owned());
-            }
-        }
-    }
+    apply_root_level_storage_paths(cfg, report, &mut src.extra);
 
     if !src.extra.is_empty() {
         let mut keys: Vec<String> = src.extra.keys().cloned().collect();
@@ -213,13 +187,18 @@ fn apply_root(cfg: &mut StartupConfig, report: &mut StartupLoadReport, mut src: 
             apply_path(report, "modules_dir", &mut cfg.modules_dir, dir);
         }
 
-        if let Some(cache_files) = engine.cache_files.or(engine.cache_files_upper) {
-            apply_path(report, "cache_files", &mut cfg.cache_files, cache_files);
-        }
-
-        if let Some(config) = engine.config.or(engine.config_upper) {
-            apply_path(report, "config", &mut cfg.config, config);
-        }
+        apply_engine_storage_path(
+            report,
+            cfg,
+            StartupStorageRootKind::CacheFiles,
+            engine.cache_files.or(engine.cache_files_upper),
+        );
+        apply_engine_storage_path(
+            report,
+            cfg,
+            StartupStorageRootKind::Config,
+            engine.config.or(engine.config_upper),
+        );
 
         if !engine.extra.is_empty() {
             let mut keys: Vec<String> = engine.extra.keys().cloned().collect();
@@ -236,6 +215,58 @@ fn apply_root(cfg: &mut StartupConfig, report: &mut StartupLoadReport, mut src: 
     }
 
 
+}
+
+fn publish_startup_storage_roots(cfg: &StartupConfig, report: &mut StartupLoadReport) {
+    for kind in StartupStorageRootKind::ALL {
+        let root = cfg.publish_storage_root_env(kind);
+        report.overrides.push(StartupOverride {
+            key: kind.key(),
+            from: "<resolved>".to_owned(),
+            to: display_storage_root(kind, &root),
+        });
+    }
+}
+
+fn apply_root_level_storage_paths(
+    cfg: &mut StartupConfig,
+    report: &mut StartupLoadReport,
+    extra: &mut newengine_math::collections_prelude::NeHashMap<String, serde_json::Value>,
+) {
+    for kind in StartupStorageRootKind::ALL {
+        for key in kind.config_keys() {
+            let Some(v) = extra.remove(*key) else { continue; };
+            let Some(path) = v.as_str().map(str::trim).filter(|s| !s.is_empty()) else { continue; };
+            apply_storage_path(report, cfg, kind, path.to_owned());
+        }
+    }
+}
+
+fn apply_engine_storage_path(
+    report: &mut StartupLoadReport,
+    cfg: &mut StartupConfig,
+    kind: StartupStorageRootKind,
+    path: Option<String>,
+) {
+    if let Some(path) = path {
+        apply_storage_path(report, cfg, kind, path);
+    }
+}
+
+fn apply_storage_path(
+    report: &mut StartupLoadReport,
+    cfg: &mut StartupConfig,
+    kind: StartupStorageRootKind,
+    value: String,
+) {
+    apply_path(report, kind.key(), cfg.storage_root_mut(kind), value);
+}
+
+fn display_storage_root(kind: StartupStorageRootKind, path: &Path) -> String {
+    match kind {
+        StartupStorageRootKind::CacheFiles => crate::cache_files::display_cache_path(path),
+        StartupStorageRootKind::Config => crate::config_root::display_config_path(path),
+    }
 }
 
 fn collect_plugin_override_report_entries(

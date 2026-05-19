@@ -2,25 +2,6 @@
 
 use newengine_service_api::{RuntimeServiceContractSpec, RuntimeServiceRequirementSpec};
 
-const INPUT_REQUIRED_METHODS: &[&str] = &[
-    "state_json",
-    "text_take_json",
-    "ime_commit_take_json",
-];
-
-const INPUT_RUNTIME_CONTRACT_SPEC: RuntimeServiceContractSpec = RuntimeServiceContractSpec::new(
-    "engine.input",
-    "newengine.input service >= 0.3.x",
-    INPUT_REQUIRED_METHODS,
-);
-
-const INPUT_RUNTIME_REQUIREMENT_SPEC: RuntimeServiceRequirementSpec =
-    RuntimeServiceRequirementSpec::new(
-        INPUT_RUNTIME_CONTRACT_SPEC,
-        Some("input.backend"),
-        Some("NEWENGINE_REQUIRE_INPUT_BACKEND"),
-    );
-
 const LOG_REQUIRED_METHODS: &[&str] = &[
     "write_json",
     "flush",
@@ -95,7 +76,7 @@ pub(crate) const RUNTIME_SERVICE_CATALOG: &[RuntimeServiceCatalogEntry] = &[
         "Entity gateway / service-safe identity and lifecycle commands",
     ),
     RuntimeServiceCatalogEntry::new(
-        INPUT_RUNTIME_REQUIREMENT_SPEC,
+        newengine_input_api::INPUT_RUNTIME_REQUIREMENT_SPEC,
         "platform_input::poll_input_frame / UI input projection",
     ),
     RuntimeServiceCatalogEntry::new(

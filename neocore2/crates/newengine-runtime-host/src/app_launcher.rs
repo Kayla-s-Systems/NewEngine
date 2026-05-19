@@ -380,7 +380,7 @@ where
 fn cache_root_from_env_or_neocore2() -> PathBuf {
     if std::env::var_os(newengine_core::CACHE_FILES_READY_ENV).is_some() {
         if let Some(path) = std::env::var_os(newengine_core::CACHE_FILES_ENV)
-            .or_else(|| std::env::var_os(newengine_core::CACHE_FILES_ENV_LEGACY))
+            .or_else(|| std::env::var_os(newengine_core::CACHE_FILES_ALIAS_ENV))
             .filter(|v| !v.as_os_str().is_empty())
         {
             return PathBuf::from(path);

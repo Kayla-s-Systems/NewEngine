@@ -268,37 +268,12 @@ pub struct InputBindingsProfile {
 impl InputBindingsProfile {
     #[inline]
     pub fn gameplay_default() -> Self {
-        use crate::key_code as keys;
         Self {
             id: "newengine.default.gameplay".to_owned(),
             version: 2,
             device_preference: InputDevicePreference::Hybrid,
-            bindings: vec![
-                InputBinding::keyboard_down(action::PLAYER_MOVE_FORWARD, keys::KEY_W),
-                InputBinding::keyboard_down(action::PLAYER_MOVE_BACK, keys::KEY_S),
-                InputBinding::keyboard_down(action::PLAYER_MOVE_LEFT, keys::KEY_A),
-                InputBinding::keyboard_down(action::PLAYER_MOVE_RIGHT, keys::KEY_D),
-                InputBinding::keyboard_down(action::PLAYER_MOVE_UP, keys::KEY_Q),
-                InputBinding::keyboard_down(action::PLAYER_MOVE_DOWN, keys::KEY_E),
-                InputBinding::keyboard_down(action::PLAYER_SPRINT, keys::SHIFT_LEFT),
-                InputBinding::keyboard_down(action::PLAYER_SPRINT, keys::SHIFT_RIGHT),
-                InputBinding::keyboard_pressed(action::CAMERA_VIEW_NEXT, keys::KEY_F),
-                InputBinding::keyboard_pressed(action::CAMERA_VIEW_FIRST_PERSON, keys::DIGIT1),
-                InputBinding::keyboard_pressed(action::CAMERA_VIEW_THIRD_PERSON_FOLLOW, keys::DIGIT2),
-                InputBinding::keyboard_pressed(action::CAMERA_VIEW_THIRD_PERSON_AIM, keys::DIGIT3),
-                InputBinding::gamepad_button_down(action::PLAYER_SPRINT, gamepad_button::LEFT_THUMB),
-                InputBinding::gamepad_button_pressed(action::CAMERA_VIEW_NEXT, gamepad_button::SELECT),
-                InputBinding::gamepad_button_pressed(action::CAMERA_VIEW_NEXT, gamepad_button::MODE),
-                InputBinding::gamepad_button_pressed(action::CAMERA_VIEW_FIRST_PERSON, gamepad_button::DPAD_UP),
-                InputBinding::gamepad_button_pressed(action::CAMERA_VIEW_THIRD_PERSON_FOLLOW, gamepad_button::DPAD_LEFT),
-                InputBinding::gamepad_button_pressed(action::CAMERA_VIEW_THIRD_PERSON_AIM, gamepad_button::DPAD_RIGHT),
-            ],
-            gamepad_axes: vec![
-                GamepadAxisBinding::new(gamepad_axis::LEFT_STICK_X, GamepadAxisTarget::MoveX, 1.0),
-                GamepadAxisBinding::new(gamepad_axis::LEFT_STICK_Y, GamepadAxisTarget::MoveZ, -1.0),
-                GamepadAxisBinding::new(gamepad_axis::RIGHT_STICK_X, GamepadAxisTarget::LookX, 1.0),
-                GamepadAxisBinding::new(gamepad_axis::RIGHT_STICK_Y, GamepadAxisTarget::LookY, -1.0),
-            ],
+            bindings: gameplay_default_bindings(),
+            gamepad_axes: gameplay_default_gamepad_axes(),
         }
     }
 
@@ -316,6 +291,52 @@ impl InputBindingsProfile {
         }
         out
     }
+}
+
+
+fn gameplay_default_bindings() -> Vec<InputBinding> {
+    let mut bindings = Vec::with_capacity(18);
+    bindings.extend(gameplay_keyboard_bindings());
+    bindings.extend(gameplay_gamepad_button_bindings());
+    bindings
+}
+
+fn gameplay_keyboard_bindings() -> [InputBinding; 12] {
+    use crate::key_code as keys;
+    [
+        InputBinding::keyboard_down(action::PLAYER_MOVE_FORWARD, keys::KEY_W),
+        InputBinding::keyboard_down(action::PLAYER_MOVE_BACK, keys::KEY_S),
+        InputBinding::keyboard_down(action::PLAYER_MOVE_LEFT, keys::KEY_A),
+        InputBinding::keyboard_down(action::PLAYER_MOVE_RIGHT, keys::KEY_D),
+        InputBinding::keyboard_down(action::PLAYER_MOVE_UP, keys::KEY_Q),
+        InputBinding::keyboard_down(action::PLAYER_MOVE_DOWN, keys::KEY_E),
+        InputBinding::keyboard_down(action::PLAYER_SPRINT, keys::SHIFT_LEFT),
+        InputBinding::keyboard_down(action::PLAYER_SPRINT, keys::SHIFT_RIGHT),
+        InputBinding::keyboard_pressed(action::CAMERA_VIEW_NEXT, keys::KEY_F),
+        InputBinding::keyboard_pressed(action::CAMERA_VIEW_FIRST_PERSON, keys::DIGIT1),
+        InputBinding::keyboard_pressed(action::CAMERA_VIEW_THIRD_PERSON_FOLLOW, keys::DIGIT2),
+        InputBinding::keyboard_pressed(action::CAMERA_VIEW_THIRD_PERSON_AIM, keys::DIGIT3),
+    ]
+}
+
+fn gameplay_gamepad_button_bindings() -> [InputBinding; 6] {
+    [
+        InputBinding::gamepad_button_down(action::PLAYER_SPRINT, gamepad_button::LEFT_THUMB),
+        InputBinding::gamepad_button_pressed(action::CAMERA_VIEW_NEXT, gamepad_button::SELECT),
+        InputBinding::gamepad_button_pressed(action::CAMERA_VIEW_NEXT, gamepad_button::MODE),
+        InputBinding::gamepad_button_pressed(action::CAMERA_VIEW_FIRST_PERSON, gamepad_button::DPAD_UP),
+        InputBinding::gamepad_button_pressed(action::CAMERA_VIEW_THIRD_PERSON_FOLLOW, gamepad_button::DPAD_LEFT),
+        InputBinding::gamepad_button_pressed(action::CAMERA_VIEW_THIRD_PERSON_AIM, gamepad_button::DPAD_RIGHT),
+    ]
+}
+
+fn gameplay_default_gamepad_axes() -> Vec<GamepadAxisBinding> {
+    vec![
+        GamepadAxisBinding::new(gamepad_axis::LEFT_STICK_X, GamepadAxisTarget::MoveX, 1.0),
+        GamepadAxisBinding::new(gamepad_axis::LEFT_STICK_Y, GamepadAxisTarget::MoveZ, -1.0),
+        GamepadAxisBinding::new(gamepad_axis::RIGHT_STICK_X, GamepadAxisTarget::LookX, 1.0),
+        GamepadAxisBinding::new(gamepad_axis::RIGHT_STICK_Y, GamepadAxisTarget::LookY, -1.0),
+    ]
 }
 
 impl Default for InputBindingsProfile {
@@ -377,7 +398,7 @@ impl Default for InputBindingsServiceInfo {
                 "camera-view-switching".to_owned(),
                 "gamepad-bindings".to_owned(),
                 "device-preference".to_owned(),
-                "gameplay-move-mask-compat".to_owned(),
+                "gameplay-move-mask".to_owned(),
             ],
             methods: vec![
                 INPUT_BINDINGS_METHOD_INFO.to_owned(),

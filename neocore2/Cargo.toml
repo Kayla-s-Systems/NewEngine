@@ -17,6 +17,7 @@ members = [
     "crates/newengine-entity",
     "crates/newengine-entity-api",
     "crates/newengine-game-runtime",
+    "crates/newengine-input-api",
     "crates/newengine-input-bindings",
     "crates/newengine-lighting",
     "crates/newengine-loading-api",

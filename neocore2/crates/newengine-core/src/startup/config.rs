@@ -33,6 +33,35 @@ impl Default for WindowPlacement {
     }
 }
 
+const CACHE_FILES_CONFIG_KEYS: &[&str] = &["CACHE_FILES", "cache_files"];
+const CONFIG_CONFIG_KEYS: &[&str] = &["CONFIG", "config"];
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum StartupStorageRootKind {
+    CacheFiles,
+    Config,
+}
+
+impl StartupStorageRootKind {
+    pub const ALL: [Self; 2] = [Self::CacheFiles, Self::Config];
+
+    #[inline]
+    pub const fn key(self) -> &'static str {
+        match self {
+            Self::CacheFiles => "cache_files",
+            Self::Config => "config",
+        }
+    }
+
+    #[inline]
+    pub const fn config_keys(self) -> &'static [&'static str] {
+        match self {
+            Self::CacheFiles => CACHE_FILES_CONFIG_KEYS,
+            Self::Config => CONFIG_CONFIG_KEYS,
+        }
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct StartupConfig {
     pub source: StartupConfigSource,
@@ -107,43 +136,84 @@ impl StartupConfig {
     }
 
     #[inline]
+    pub fn storage_root(&self, kind: StartupStorageRootKind) -> &PathBuf {
+        match kind {
+            StartupStorageRootKind::CacheFiles => &self.cache_files,
+            StartupStorageRootKind::Config => &self.config,
+        }
+    }
+
+    #[inline]
+    pub fn storage_root_mut(&mut self, kind: StartupStorageRootKind) -> &mut PathBuf {
+        match kind {
+            StartupStorageRootKind::CacheFiles => &mut self.cache_files,
+            StartupStorageRootKind::Config => &mut self.config,
+        }
+    }
+
+    #[inline]
+    pub fn resolved_storage_root(&self, kind: StartupStorageRootKind) -> PathBuf {
+        let base = self.config_base_dir();
+        match kind {
+            StartupStorageRootKind::CacheFiles => {
+                crate::cache_files::normalize_cache_path(self.cache_files.clone(), base.as_deref())
+            }
+            StartupStorageRootKind::Config => {
+                crate::config_root::normalize_config_path(self.config.clone(), base.as_deref())
+            }
+        }
+    }
+
+    #[inline]
+    pub fn publish_storage_root_env(&self, kind: StartupStorageRootKind) -> PathBuf {
+        let root = self.resolved_storage_root(kind);
+        match kind {
+            StartupStorageRootKind::CacheFiles => crate::cache_files::publish_cache_files_env(&root),
+            StartupStorageRootKind::Config => crate::config_root::publish_config_env(&root),
+        }
+        root
+    }
+
+    #[inline]
+    pub fn storage_child(&self, kind: StartupStorageRootKind, path: impl AsRef<Path>) -> PathBuf {
+        match kind {
+            StartupStorageRootKind::CacheFiles => {
+                crate::cache_files::resolve_under_cache_root(&self.resolved_storage_root(kind), path.as_ref())
+            }
+            StartupStorageRootKind::Config => {
+                crate::config_root::resolve_under_config_root(&self.resolved_storage_root(kind), path.as_ref())
+            }
+        }
+    }
+
+    #[inline]
     pub fn resolved_cache_files_dir(&self) -> PathBuf {
-        crate::cache_files::normalize_cache_path(
-            self.cache_files.clone(),
-            self.config_base_dir().as_deref(),
-        )
+        self.resolved_storage_root(StartupStorageRootKind::CacheFiles)
     }
 
     #[inline]
     pub fn publish_cache_files_env(&self) -> PathBuf {
-        let root = self.resolved_cache_files_dir();
-        crate::cache_files::publish_cache_files_env(&root);
-        root
+        self.publish_storage_root_env(StartupStorageRootKind::CacheFiles)
     }
 
     #[inline]
     pub fn resolved_config_dir(&self) -> PathBuf {
-        crate::config_root::normalize_config_path(
-            self.config.clone(),
-            self.config_base_dir().as_deref(),
-        )
+        self.resolved_storage_root(StartupStorageRootKind::Config)
     }
 
     #[inline]
     pub fn publish_config_env(&self) -> PathBuf {
-        let root = self.resolved_config_dir();
-        crate::config_root::publish_config_env(&root);
-        root
+        self.publish_storage_root_env(StartupStorageRootKind::Config)
     }
 
     #[inline]
     pub fn cache_child(&self, path: impl AsRef<Path>) -> PathBuf {
-        crate::cache_files::resolve_under_cache_root(&self.resolved_cache_files_dir(), path.as_ref())
+        self.storage_child(StartupStorageRootKind::CacheFiles, path)
     }
 
     #[inline]
     pub fn config_child(&self, path: impl AsRef<Path>) -> PathBuf {
-        crate::config_root::resolve_under_config_root(&self.resolved_config_dir(), path.as_ref())
+        self.storage_child(StartupStorageRootKind::Config, path)
     }
 }
 

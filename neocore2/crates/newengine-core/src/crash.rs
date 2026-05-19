@@ -265,7 +265,7 @@ fn resolve_crash_dir(cfg: &CrashReporterConfig, exe: Option<&Path>) -> PathBuf {
     }
 
     if let Some(cache) = std::env::var_os(crate::cache_files::CACHE_FILES_ENV)
-        .or_else(|| std::env::var_os(crate::cache_files::CACHE_FILES_ENV_LEGACY))
+        .or_else(|| std::env::var_os(crate::cache_files::CACHE_FILES_ALIAS_ENV))
     {
         return PathBuf::from(cache).join(&cfg.crash_dir_name);
     }

@@ -1,0 +1,159 @@
+{
+  "id": "newengine.default.gameplay",
+  "version": 2,
+  "device_preference": "hybrid",
+  "bindings": [
+    {
+      "action": "player.move.forward",
+      "device": "Keyboard",
+      "code": 41,
+      "name": null,
+      "phase": "Down"
+    },
+    {
+      "action": "player.move.back",
+      "device": "Keyboard",
+      "code": 37,
+      "name": null,
+      "phase": "Down"
+    },
+    {
+      "action": "player.move.left",
+      "device": "Keyboard",
+      "code": 19,
+      "name": null,
+      "phase": "Down"
+    },
+    {
+      "action": "player.move.right",
+      "device": "Keyboard",
+      "code": 22,
+      "name": null,
+      "phase": "Down"
+    },
+    {
+      "action": "player.move.up",
+      "device": "Keyboard",
+      "code": 35,
+      "name": null,
+      "phase": "Down"
+    },
+    {
+      "action": "player.move.down",
+      "device": "Keyboard",
+      "code": 23,
+      "name": null,
+      "phase": "Down"
+    },
+    {
+      "action": "player.sprint",
+      "device": "Keyboard",
+      "code": 60,
+      "name": null,
+      "phase": "Down"
+    },
+    {
+      "action": "player.sprint",
+      "device": "Keyboard",
+      "code": 61,
+      "name": null,
+      "phase": "Down"
+    },
+    {
+      "action": "camera.view.next",
+      "device": "Keyboard",
+      "code": 24,
+      "name": null,
+      "phase": "Pressed"
+    },
+    {
+      "action": "camera.view.first_person",
+      "device": "Keyboard",
+      "code": 6,
+      "name": null,
+      "phase": "Pressed"
+    },
+    {
+      "action": "camera.view.third_person.follow",
+      "device": "Keyboard",
+      "code": 7,
+      "name": null,
+      "phase": "Pressed"
+    },
+    {
+      "action": "camera.view.third_person.aim",
+      "device": "Keyboard",
+      "code": 8,
+      "name": null,
+      "phase": "Pressed"
+    },
+    {
+      "action": "player.sprint",
+      "device": "GamepadButton",
+      "code": 0,
+      "name": "LeftThumb",
+      "phase": "Down"
+    },
+    {
+      "action": "camera.view.next",
+      "device": "GamepadButton",
+      "code": 0,
+      "name": "Select",
+      "phase": "Pressed"
+    },
+    {
+      "action": "camera.view.next",
+      "device": "GamepadButton",
+      "code": 0,
+      "name": "Mode",
+      "phase": "Pressed"
+    },
+    {
+      "action": "camera.view.first_person",
+      "device": "GamepadButton",
+      "code": 0,
+      "name": "DPadUp",
+      "phase": "Pressed"
+    },
+    {
+      "action": "camera.view.third_person.follow",
+      "device": "GamepadButton",
+      "code": 0,
+      "name": "DPadLeft",
+      "phase": "Pressed"
+    },
+    {
+      "action": "camera.view.third_person.aim",
+      "device": "GamepadButton",
+      "code": 0,
+      "name": "DPadRight",
+      "phase": "Pressed"
+    }
+  ],
+  "gamepad_axes": [
+    {
+      "axis": "LeftStickX",
+      "target": "MoveX",
+      "deadzone": 0.18,
+      "scale": 1.0
+    },
+    {
+      "axis": "LeftStickY",
+      "target": "MoveZ",
+      "deadzone": 0.18,
+      "scale": -1.0
+    },
+    {
+      "axis": "RightStickX",
+      "target": "LookX",
+      "deadzone": 0.18,
+      "scale": 1.0
+    },
+    {
+      "axis": "RightStickY",
+      "target": "LookY",
+      "deadzone": 0.18,
+      "scale": -1.0
+    }
+  ]
+}

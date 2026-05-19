@@ -1,11 +1,12 @@
 #![forbid(unsafe_op_in_unsafe_fn)]
 
 use newengine_core::call_service_v1_optional;
+use newengine_math::collections_prelude::{NeBTreeMap, NeBTreeSet};
 use newengine_ui::UiInputFrame;
 
 /// Engine-facing input gateway id. Consumers call the engine facade; the host
 /// resolves it to the active input provider by descriptor metadata.
-pub const INPUT_SERVICE_ID: &str = "engine.input";
+pub const INPUT_SERVICE_ID: &str = newengine_input_api::ENGINE_INPUT_SERVICE_ID;
 
 /// Calls a service method returning UTF-8 payload (best-effort).
 pub fn call_service_utf8(service_id: &str, method: &str) -> Option<String> {
@@ -15,29 +16,19 @@ pub fn call_service_utf8(service_id: &str, method: &str) -> Option<String> {
 
 /// Polls input snapshot from the canonical INPUT plugin and maps it into UiInputFrame.
 pub fn poll_input_frame() -> Option<UiInputFrame> {
-    let state_json = call_service_utf8(INPUT_SERVICE_ID, "state_json")?;
-    let text_json = call_service_utf8(INPUT_SERVICE_ID, "text_take_json")
+    let state_json = call_service_utf8(INPUT_SERVICE_ID, newengine_input_api::INPUT_METHOD_STATE_JSON)?;
+    let text_json = call_service_utf8(INPUT_SERVICE_ID, newengine_input_api::INPUT_METHOD_TEXT_TAKE_JSON)
         .unwrap_or_else(|| "{}".into());
-    let ime_json = call_service_utf8(INPUT_SERVICE_ID, "ime_commit_take_json")
+    let ime_json = call_service_utf8(INPUT_SERVICE_ID, newengine_input_api::INPUT_METHOD_IME_COMMIT_TAKE_JSON)
         .unwrap_or_else(|| "{}".into());
 
     let mut out = UiInputFrame::default();
     let st: serde_json::Value = serde_json::from_str(&state_json).ok()?;
 
     if let Some(keys) = st.get("keys") {
-        for (field, target) in [
-            ("down", &mut out.keys_down),
-            ("pressed", &mut out.keys_pressed),
-            ("released", &mut out.keys_released),
-        ] {
-            if let Some(arr) = keys.get(field).and_then(|v| v.as_array()) {
-                for x in arr {
-                    if let Some(u) = x.as_u64() {
-                        target.insert(u as u32);
-                    }
-                }
-            }
-        }
+        merge_u32_set(&mut out.keys_down, keys.get("down"));
+        merge_u32_set(&mut out.keys_pressed, keys.get("pressed"));
+        merge_u32_set(&mut out.keys_released, keys.get("released"));
     }
 
     if let Some(mouse) = st.get("mouse") {
@@ -55,19 +46,9 @@ pub fn poll_input_frame() -> Option<UiInputFrame> {
             out.mouse_wheel.1 = wheel.get("y").and_then(|v| v.as_f64()).unwrap_or(0.0) as f32;
         }
 
-        for (field, target) in [
-            ("down", &mut out.mouse_down),
-            ("pressed", &mut out.mouse_pressed),
-            ("released", &mut out.mouse_released),
-        ] {
-            if let Some(arr) = mouse.get(field).and_then(|v| v.as_array()) {
-                for x in arr {
-                    if let Some(u) = x.as_u64() {
-                        target.insert(u as u32);
-                    }
-                }
-            }
-        }
+        merge_u32_set(&mut out.mouse_down, mouse.get("down"));
+        merge_u32_set(&mut out.mouse_pressed, mouse.get("pressed"));
+        merge_u32_set(&mut out.mouse_released, mouse.get("released"));
     }
 
     if let Ok(v) = serde_json::from_str::<serde_json::Value>(&text_json) {
@@ -104,7 +85,16 @@ pub fn poll_input_frame() -> Option<UiInputFrame> {
     Some(out)
 }
 
-fn merge_f32_object(target: &mut newengine_math::collections_prelude::NeBTreeMap<String, f32>, value: Option<&serde_json::Value>) {
+fn merge_u32_set(target: &mut NeBTreeSet<u32>, value: Option<&serde_json::Value>) {
+    let Some(arr) = value.and_then(|v| v.as_array()) else { return; };
+    for item in arr {
+        if let Some(u) = item.as_u64() {
+            target.insert(u as u32);
+        }
+    }
+}
+
+fn merge_f32_object(target: &mut NeBTreeMap<String, f32>, value: Option<&serde_json::Value>) {
     let Some(obj) = value.and_then(|v| v.as_object()) else { return; };
     for (key, raw) in obj {
         let v = raw.as_f64().unwrap_or(0.0) as f32;
@@ -115,7 +105,7 @@ fn merge_f32_object(target: &mut newengine_math::collections_prelude::NeBTreeMap
     }
 }
 
-fn merge_string_set(target: &mut newengine_math::collections_prelude::NeBTreeSet<String>, value: Option<&serde_json::Value>) {
+fn merge_string_set(target: &mut NeBTreeSet<String>, value: Option<&serde_json::Value>) {
     let Some(arr) = value.and_then(|v| v.as_array()) else { return; };
     for item in arr {
         if let Some(s) = item.as_str() {

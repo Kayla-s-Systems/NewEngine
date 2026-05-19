@@ -465,6 +465,7 @@ dependencies = [
  "newengine-camera-api",
  "newengine-ecs-api",
  "newengine-entity-api",
+ "newengine-input-api",
  "newengine-input-bindings",
  "newengine-loading-api",
  "newengine-math",
@@ -588,6 +589,15 @@ dependencies = [
  "newengine-service-api",
  "newengine-ui",
  "parking_lot",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "newengine-input-api"
+version = "0.1.0"
+dependencies = [
+ "newengine-service-api",
  "serde",
  "serde_json",
 ]
@@ -788,6 +798,7 @@ dependencies = [
  "newengine-core",
  "newengine-ecs-api",
  "newengine-entity-api",
+ "newengine-input-api",
  "newengine-loading-api",
  "newengine-loading-runtime",
  "newengine-math",
