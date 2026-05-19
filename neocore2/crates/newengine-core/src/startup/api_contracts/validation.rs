@@ -182,13 +182,12 @@ fn finish_violation(
 fn emit_contract_line(report: &ContractReport) {
     match report.status {
         "ok" => {
-            log::info!(
-                "runtime contract ok: service='{}' provider_service='{}' source='{}' expected='{}' required=[{}]",
+            log::debug!(
+                "runtime contract ok: service='{}' provider_service='{}' source='{}' expected='{}'",
                 report.service_id,
                 report.provider_service,
                 report.source,
                 report.expected,
-                report.methods
             );
         }
         "fatal" => {
@@ -215,6 +214,43 @@ fn emit_contract_line(report: &ContractReport) {
 }
 
 fn emit_runtime_api_table(reports: &[ContractReport]) {
+    if log::log_enabled!(log::Level::Debug) {
+        let rows = reports
+            .iter()
+            .map(|report| {
+                vec![
+                    report.service_id.clone(),
+                    report.status.to_owned(),
+                    report.provider_service.clone(),
+                    report.source.clone(),
+                    report.capability.clone(),
+                    report.required.to_owned(),
+                    report.used_by.to_owned(),
+                    crate::log_fmt::ellipsize(&report.provider, 72),
+                    crate::log_fmt::ellipsize(&report.methods, 64),
+                ]
+            })
+            .collect::<Vec<_>>();
+
+        crate::log_fmt::emit_prefixed_table(
+            "runtime api:",
+            "Engine API gateway/service contracts",
+            &[
+                "api",
+                "status",
+                "provider_service",
+                "source",
+                "capability",
+                "strict",
+                "used_by",
+                "provider",
+                "methods",
+            ],
+            &rows,
+        );
+        return;
+    }
+
     let rows = reports
         .iter()
         .map(|report| {
@@ -223,11 +259,7 @@ fn emit_runtime_api_table(reports: &[ContractReport]) {
                 report.status.to_owned(),
                 report.provider_service.clone(),
                 report.source.clone(),
-                report.capability.clone(),
                 report.required.to_owned(),
-                report.used_by.to_owned(),
-                crate::log_fmt::ellipsize(&report.provider, 72),
-                crate::log_fmt::ellipsize(&report.methods, 64),
             ]
         })
         .collect::<Vec<_>>();
@@ -235,17 +267,7 @@ fn emit_runtime_api_table(reports: &[ContractReport]) {
     crate::log_fmt::emit_prefixed_table(
         "runtime api:",
         "Engine API gateway/service contracts",
-        &[
-            "api",
-            "status",
-            "provider_service",
-            "source",
-            "capability",
-            "strict",
-            "used_by",
-            "provider",
-            "methods",
-        ],
+        &["api", "status", "provider_service", "source", "strict"],
         &rows,
     );
 }

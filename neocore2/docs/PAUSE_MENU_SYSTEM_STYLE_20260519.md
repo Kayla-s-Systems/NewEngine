@@ -41,5 +41,5 @@ assets/ui/menus/engine.pause_menu.menu.json
 - ESC remains a semantic input action from `engine.input.bindings`.
 - Platform root shortcuts do not own pause-menu behavior.
 - UI provider draws; command routers own side effects.
-- `pause_menu.rs` must not branch on item ids such as `root.exit`, `settings.reset_bindings` or `binding:<action>`.
+- `render_controller/module_impl/pause_menu/` must not branch on item ids such as `root.exit`, `settings.reset_bindings` or `binding:<action>`.
 - Runtime hit-testing and provider visual layout must use the same `pause_menu_layout(...)` helper until layout geometry moves fully into provider-owned document data.

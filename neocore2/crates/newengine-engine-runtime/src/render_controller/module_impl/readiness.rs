@@ -85,8 +85,14 @@ pub(super) fn update_game_ready_launch_gate(
 
             gate.reason = readiness.reason;
             let early_wait_frame = waited_frames <= 8;
-            if first_wait || early_wait_frame || frame_index % 60 == 0 {
+            if first_wait || frame_index % 60 == 0 {
                 log::info!(
+                    "game-ready launch gate: blocked frame={} reason='{}'",
+                    frame_index,
+                    gate.reason
+                );
+            } else if early_wait_frame {
+                log::debug!(
                     "game-ready launch gate: blocked frame={} reason='{}'",
                     frame_index,
                     gate.reason

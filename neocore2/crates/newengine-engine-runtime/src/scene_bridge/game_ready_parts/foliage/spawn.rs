@@ -7,6 +7,9 @@ fn ensure_runtime_prefab_parts(
     let logical_asset = load_prefab_logical_asset(prefab)?;
     let decoded = decode_runtime_gltf_prefab(&logical_asset)?;
     let mut out = Vec::with_capacity(decoded.len());
+    let mut registered_parts = 0usize;
+    let mut registered_vertices = 0usize;
+    let mut registered_indices = 0usize;
     for part in decoded {
         let primitive_id = part.primitive_id;
         let name = part.name;
@@ -16,8 +19,11 @@ fn ensure_runtime_prefab_parts(
         let index_count = mesh.indices.len();
         if !prims.is_registered(primitive_id) {
             prims.register_mesh(primitive_id, name.clone(), mesh);
-            log::info!(
-                "game-ready: prefab mesh registered via AssetManager source='{}' asset='{}' part='{}' material='{}' vertices={} indices={}",
+            registered_parts += 1;
+            registered_vertices += vertex_count;
+            registered_indices += index_count;
+            log::debug!(
+                "game-ready: prefab mesh registered source='{}' asset='{}' part='{}' material='{}' vertices={} indices={}",
                 prefab.source,
                 logical_asset,
                 name,
@@ -33,6 +39,16 @@ fn ensure_runtime_prefab_parts(
             material_id,
             color,
         });
+    }
+    if registered_parts > 0 {
+        log::info!(
+            "game-ready: prefab mesh registered source='{}' asset='{}' parts={} vertices={} indices={}",
+            prefab.source,
+            logical_asset,
+            registered_parts,
+            registered_vertices,
+            registered_indices,
+        );
     }
     Ok(out)
 }

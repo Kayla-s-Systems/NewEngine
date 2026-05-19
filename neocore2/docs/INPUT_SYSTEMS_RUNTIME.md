@@ -24,10 +24,10 @@ Expected startup logs:
 ```text
 input bindings: initialized profile id='newengine.gameready.input.profile' actions=... bindings=... axes=...
 input bindings gateway: engine-owned route registered id='engine.input.bindings' ...
-input systems: initialized state table
-input systems: declared system='engine.input.raw' ... enabled=true
+input systems: initialized systems=8 enabled=7 disabled=[engine.input.contexts]
 input systems: raw input polling online service='engine.input' method='state_json'
-input systems: frame=... raw=true keys_down=... gamepads=... actions=... move_mask=...
+# DEBUG only: input systems: transition system='engine.input.gameplay_movement' active false->true ...
+# DEBUG only: input systems: frame=... raw=true keys_down=... gamepads=... actions=... move=...
 ```
 
 If `actions=0`, `bindings=0` or `raw=false` appears after the world is running, the fault is now localized:
@@ -89,4 +89,4 @@ render_controller.log_input_systems_snapshot("before cutscene");
 let snapshot = render_controller.input_systems_snapshot();
 ```
 
-The snapshot records `enabled`, `active`, `captured`, `owner`, `reason` and the frame index for every system. Logs are transition-based and compact per-frame summaries are deduplicated to avoid FPS loss from log spam.
+The snapshot records `enabled`, `active`, `captured`, `reason` and the frame index for every system. Normal startup emits only a compact catalog line; transition/frame summaries are `DEBUG` and sampled/deduplicated so pause-menu capture cannot spam `captured=false/true` every frame.

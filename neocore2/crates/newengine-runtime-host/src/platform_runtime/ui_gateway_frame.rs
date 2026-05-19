@@ -122,31 +122,37 @@ fn log_ui_gateway_frame(
     codec: &'static str,
     frame_index: u64,
     started: Instant,
-    encode_ms: f32,
+    _encode_ms: f32,
     service_ms: f32,
-    decode_ms: f32,
+    _decode_ms: f32,
     response_bytes: usize,
     draw_list: &UiDrawList,
 ) {
     let total_ms = started.elapsed().as_secs_f32() * 1000.0;
-    if total_ms >= 4.0 || frame_index % 120 == 1 {
-        let stats = ui_draw_list_stats(draw_list);
-        let log_line = format!(
-            "ui gateway frame: frame={} codec={} total_ms={:.2} encode={:.2}ms service={:.2}ms decode={:.2}ms response_bytes={} {}",
-            frame_index,
-            codec,
-            total_ms,
-            encode_ms,
-            service_ms,
-            decode_ms,
-            response_bytes,
-            stats,
-        );
-        if total_ms >= 16.6 {
-            log::warn!("{}", log_line);
-        } else {
-            log::debug!("{}", log_line);
-        }
+    let slow = total_ms >= 16.6;
+    let sampled = frame_index % 240 == 1;
+    if !slow && !sampled {
+        return;
+    }
+
+    let stats = if log::log_enabled!(log::Level::Debug) {
+        format!(" {}", ui_draw_list_stats(draw_list))
+    } else {
+        String::new()
+    };
+    let log_line = format!(
+        "ui gateway frame: frame={} codec={} total_ms={:.2} service={:.2}ms response_bytes={}{}",
+        frame_index,
+        codec,
+        total_ms,
+        service_ms,
+        response_bytes,
+        stats,
+    );
+    if slow {
+        log::warn!("{}", log_line);
+    } else {
+        log::debug!("{}", log_line);
     }
 }
 

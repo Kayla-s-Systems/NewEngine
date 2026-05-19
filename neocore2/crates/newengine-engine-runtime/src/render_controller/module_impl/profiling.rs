@@ -100,6 +100,11 @@ pub(super) fn warn_ms_threshold() -> f32 {
     33.3
 }
 
+#[inline]
+pub(super) fn slow_profile_log_interval_frames() -> u64 {
+    120
+}
+
 pub(super) fn emit_timed_profile(
     label: &'static str,
     frame_index: u64,
@@ -108,31 +113,42 @@ pub(super) fn emit_timed_profile(
     breakdown: impl AsRef<str>,
     suffix: impl AsRef<str>,
 ) {
-    if !trace_frame && total_ms < trace_ms_threshold() {
+    let slow = total_ms >= warn_ms_threshold();
+    let traceable = trace_frame || total_ms >= trace_ms_threshold();
+    if !traceable && !slow {
         return;
     }
 
-    let suffix = suffix.as_ref();
-    let line = if suffix.is_empty() {
-        format!(
-            "{}: frame={} total_ms={:.2} {}",
-            label,
-            frame_index,
-            total_ms,
-            breakdown.as_ref(),
-        )
+    if slow && !trace_frame && frame_index % slow_profile_log_interval_frames() != 0 {
+        return;
+    }
+
+    let include_breakdown = trace_frame || log::log_enabled!(log::Level::Debug);
+    let line = if include_breakdown {
+        let suffix = suffix.as_ref();
+        if suffix.is_empty() {
+            format!(
+                "{}: frame={} total_ms={:.2} {}",
+                label,
+                frame_index,
+                total_ms,
+                breakdown.as_ref(),
+            )
+        } else {
+            format!(
+                "{}: frame={} total_ms={:.2} {} {}",
+                label,
+                frame_index,
+                total_ms,
+                breakdown.as_ref(),
+                suffix,
+            )
+        }
     } else {
-        format!(
-            "{}: frame={} total_ms={:.2} {} {}",
-            label,
-            frame_index,
-            total_ms,
-            breakdown.as_ref(),
-            suffix,
-        )
+        format!("{}: frame={} total_ms={:.2}", label, frame_index, total_ms)
     };
 
-    if total_ms >= warn_ms_threshold() {
+    if slow {
         log::warn!("{}", line);
     } else {
         log::debug!("{}", line);

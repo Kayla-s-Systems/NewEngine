@@ -39,6 +39,9 @@ fn ensure_player_runtime_model_parts(
     }
 
     let mut out = Vec::with_capacity(bundle.parts.len());
+    let mut registered_parts = 0usize;
+    let mut registered_vertices = 0usize;
+    let mut registered_indices = 0usize;
     for part in bundle.parts {
         let primitive_id = PrimitiveId(fnv1a_64(&format!("player-model:{}:{}", bundle.source, part.material_slot)));
         if !prims.is_registered(primitive_id) {
@@ -49,7 +52,10 @@ fn ensure_player_runtime_model_parts(
                 format!("PlayerModel/{} ({})", part.material_slot, bundle.source),
                 part.mesh,
             );
-            log::info!(
+            registered_parts += 1;
+            registered_vertices += vertex_count;
+            registered_indices += index_count;
+            log::debug!(
                 "game-ready: player model part registered source='{}' material='{}' vertices={} indices={}",
                 bundle.source,
                 part.material_slot,
@@ -69,6 +75,17 @@ fn ensure_player_runtime_model_parts(
             material_slot: part.material_slot,
             color: part.material.fallback_color,
         });
+    }
+
+    if registered_parts > 0 {
+        log::info!(
+            "game-ready: player model registered source='{}' parts={} vertices={} indices={} materials={}",
+            bundle.source,
+            registered_parts,
+            registered_vertices,
+            registered_indices,
+            out.len(),
+        );
     }
 
     if let Some(dictionary) = bundle.texture_dictionary.as_deref() {

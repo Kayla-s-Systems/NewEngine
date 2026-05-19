@@ -213,23 +213,37 @@ impl<E: Send + 'static> Engine<E> {
             return;
         }
 
+        let debug_tables = log::log_enabled!(log::Level::Debug);
         let rows: Vec<Vec<String>> = list
             .iter()
             .map(|p| {
-                vec![
-                    ellipsize(&p.id, 32),
-                    ellipsize(&p.version, 12),
-                    ellipsize(&p.state, 16),
-                    plugin_kind_label(p.kind).to_owned(),
-                    p.capabilities.len().to_string(),
-                ]
+                if debug_tables {
+                    vec![
+                        ellipsize(&p.id, 32),
+                        ellipsize(&p.version, 12),
+                        ellipsize(&p.state, 16),
+                        plugin_kind_label(p.kind).to_owned(),
+                        p.capabilities.len().to_string(),
+                    ]
+                } else {
+                    vec![
+                        ellipsize(&p.id, 32),
+                        ellipsize(&p.version, 12),
+                        ellipsize(&p.state, 16),
+                    ]
+                }
             })
             .collect();
 
+        let plugin_headers: &[&str] = if debug_tables {
+            &["id", "ver", "state", "kind", "caps"]
+        } else {
+            &["id", "ver", "state"]
+        };
         emit_prefixed_table(
             "",
             &format!("Plugins :: Registered [{}]", tag),
-            &["id", "ver", "state", "kind", "caps"],
+            plugin_headers,
             &rows,
         );
 
@@ -238,25 +252,40 @@ impl<E: Send + 'static> Engine<E> {
             let route_rows = gateway_routes
                 .iter()
                 .map(|route| {
-                    vec![
-                        ellipsize(&route.gateway_id, 28),
-                        if route.active { "active".to_owned() } else { "shadowed".to_owned() },
-                        route.origin.clone(),
-                        ellipsize(&route.provider_service_id, 28),
-                        ellipsize(&route.provider_owner_id, 32),
-                        route.service_kind.clone(),
-                        ellipsize(&route.backend_capability_id, 28),
-                        route.override_mode.clone(),
-                        route.backend_priority.to_string(),
-                        route.active_score.to_string(),
-                    ]
+                    if debug_tables {
+                        vec![
+                            ellipsize(&route.gateway_id, 28),
+                            if route.active { "active".to_owned() } else { "shadowed".to_owned() },
+                            route.origin.clone(),
+                            ellipsize(&route.provider_service_id, 28),
+                            ellipsize(&route.provider_owner_id, 32),
+                            route.service_kind.clone(),
+                            ellipsize(&route.backend_capability_id, 28),
+                            route.override_mode.clone(),
+                            route.backend_priority.to_string(),
+                            route.active_score.to_string(),
+                        ]
+                    } else {
+                        vec![
+                            ellipsize(&route.gateway_id, 28),
+                            if route.active { "active".to_owned() } else { "shadowed".to_owned() },
+                            route.origin.clone(),
+                            ellipsize(&route.provider_service_id, 28),
+                            route.backend_priority.to_string(),
+                        ]
+                    }
                 })
                 .collect::<Vec<_>>();
 
+            let route_headers: &[&str] = if debug_tables {
+                &["gateway", "state", "source", "provider_service", "owner", "kind", "capability", "mode", "prio", "score"]
+            } else {
+                &["gateway", "state", "source", "provider_service", "prio"]
+            };
             emit_prefixed_table(
                 "",
                 &format!("Plugins :: Gateway Routes [{}]", tag),
-                &["gateway", "state", "source", "provider_service", "owner", "kind", "capability", "mode", "prio", "score"],
+                route_headers,
                 &route_rows,
             );
         }
