@@ -1,80 +1,9 @@
-#[derive(Clone, Copy, Debug)]
-pub struct RuntimeVisibilityPlan {
-    pub shadow_casters: bool,
-    pub opaque_forward: bool,
-    pub transparent: bool,
-    pub ui: bool,
-    pub debug: bool,
-}
+use std::collections::BTreeSet;
 
-impl RuntimeVisibilityPlan {
-    #[inline]
-    pub(super) fn standard(shadow_casters: bool, ui: bool, debug: bool) -> Self {
-        Self {
-            shadow_casters,
-            opaque_forward: true,
-            transparent: false,
-            ui,
-            debug,
-        }
-    }
+use newengine_core::render::{Extent2D, RectI32, RenderApi, Viewport};
+use newengine_render_frame_graph::DrawListDesc;
 
-    #[inline]
-    fn allows(&self, kind: RenderDrawListKind) -> bool {
-        match kind {
-            RenderDrawListKind::ShadowCasters => self.shadow_casters,
-            RenderDrawListKind::OpaqueForward => self.opaque_forward,
-            RenderDrawListKind::Transparent => self.transparent,
-            RenderDrawListKind::Ui => self.ui,
-            RenderDrawListKind::Debug => self.debug,
-        }
-    }
-}
-
-#[derive(Clone, Copy)]
-pub struct SceneExtractionCtx<'a> {
-    pub scene: &'a newengine_scene::Scene,
-    pub lit: newengine_material_domain_api::LitPipeline,
-    pub viewproj: Mat4,
-    pub camera_position: newengine_math::Vec3,
-    pub bounds: BoundsSnap,
-    pub lights: PackedLights,
-    pub shadow_plan: LightShadowPlan,
-    pub shadow_frame: ShadowFrame,
-    pub render_shadow_map: bool,
-    pub viewport_extent: Extent2D,
-    pub surface_extent: Extent2D,
-    pub runtime: bool,
-    pub debug_overlays: bool,
-    pub ui: Option<&'a UiDrawList>,
-}
-
-impl<'a> SceneExtractionCtx<'a> {
-    #[inline]
-    pub(super) fn visibility(&self) -> RuntimeVisibilityPlan {
-        RuntimeVisibilityPlan::standard(
-            self.render_shadow_map,
-            self.ui.is_some(),
-            self.debug_overlays,
-        )
-    }
-}
-
-pub trait RenderDrawListProvider: Send + Sync {
-    fn id(&self) -> &'static str;
-
-    fn metadata(&self) -> RenderDrawListProviderMetadata {
-        RenderDrawListProviderMetadata::feature(self.id(), self.id())
-    }
-
-    fn provided_draw_lists(&self, ctx: &SceneExtractionCtx<'_>) -> &'static [RenderDrawListKind];
-
-    fn extract(
-        &self,
-        ctx: &SceneExtractionCtx<'_>,
-        out: &mut DrawListBuildCtx<'_>,
-    ) -> EngineResult<()>;
-}
+use crate::render_controller::RuntimeRenderController;
 
 #[derive(Clone, Debug)]
 pub(crate) struct RuntimeDrawListSet {
@@ -125,12 +54,7 @@ impl RuntimeDrawListSet {
             let extent = ctx.shadow_plan.extent();
             let _ = out.record(RenderDrawListKind::ShadowCasters, move |_this, r| {
                 r.set_viewport(Viewport::full(extent))?;
-                r.set_scissor(RectI32::new(
-                    0,
-                    0,
-                    extent.width as i32,
-                    extent.height as i32,
-                ))?;
+                r.set_scissor(RectI32::new(0, 0, extent.width as i32, extent.height as i32))?;
                 Ok(())
             })?;
         }
@@ -139,12 +63,7 @@ impl RuntimeDrawListSet {
             let extent = ctx.viewport_extent;
             let _ = out.record(RenderDrawListKind::OpaqueForward, move |_this, r| {
                 r.set_viewport(Viewport::full(extent))?;
-                r.set_scissor(RectI32::new(
-                    0,
-                    0,
-                    extent.width as i32,
-                    extent.height as i32,
-                ))?;
+                r.set_scissor(RectI32::new(0, 0, extent.width as i32, extent.height as i32))?;
                 Ok(())
             })?;
         }
@@ -160,7 +79,7 @@ impl RuntimeDrawListSet {
     }
 }
 
-pub struct DrawListBuildCtx<'a> {
+pub(crate) struct DrawListBuildCtx<'a> {
     controller: &'a mut RuntimeRenderController,
     render: &'a mut dyn RenderApi,
     lists: &'a RuntimeDrawListSet,
@@ -173,14 +92,10 @@ impl<'a> DrawListBuildCtx<'a> {
         render: &'a mut dyn RenderApi,
         lists: &'a RuntimeDrawListSet,
     ) -> Self {
-        Self {
-            controller,
-            render,
-            lists,
-        }
+        Self { controller, render, lists }
     }
 
-    pub fn record<T>(
+    pub(crate) fn record<T>(
         &mut self,
         kind: RenderDrawListKind,
         record: impl FnOnce(&mut RuntimeRenderController, &mut dyn RenderApi) -> EngineResult<T>,
@@ -196,6 +111,86 @@ impl<'a> DrawListBuildCtx<'a> {
     }
 }
 
+impl<'a> newengine_render_feature_api::DrawListBuildCtx for DrawListBuildCtx<'a> {
+    fn record_procedural_terrain_shadow(&mut self, ctx: &SceneExtractionCtx<'_>) -> EngineResult<()> {
+        let _ = self.record(RenderDrawListKind::ShadowCasters, |this, r| {
+            super::passes::draw_procedural_terrain_shadow(
+                this,
+                r,
+                ctx.scene,
+                ctx.lit,
+                ctx.shadow_frame.light_mvp,
+                &ctx.lights,
+                ctx.runtime,
+            )
+        })?;
+        Ok(())
+    }
+
+    fn record_procedural_terrain_forward(&mut self, ctx: &SceneExtractionCtx<'_>) -> EngineResult<()> {
+        let _ = self.record(RenderDrawListKind::OpaqueForward, |this, r| {
+            super::passes::draw_procedural_terrain(
+                this,
+                r,
+                ctx.scene,
+                ctx.lit,
+                ctx.viewproj,
+                &ctx.lights,
+                ctx.shadow_frame.texture,
+                ctx.runtime,
+            )
+        })?;
+        Ok(())
+    }
+
+    fn record_primitive_mesh_shadow(&mut self, ctx: &SceneExtractionCtx<'_>) -> EngineResult<()> {
+        let _ = self.record(RenderDrawListKind::ShadowCasters, |this, r| {
+            super::passes::draw_primitives_shadow(
+                this,
+                r,
+                ctx.scene,
+                ctx.lit,
+                ctx.shadow_frame.light_mvp,
+                &ctx.lights,
+                ctx.runtime,
+                ctx.camera_position,
+            )
+        })?;
+        Ok(())
+    }
+
+    fn record_primitive_mesh_forward(&mut self, ctx: &SceneExtractionCtx<'_>) -> EngineResult<()> {
+        let _ = self.record(RenderDrawListKind::OpaqueForward, |this, r| {
+            super::passes::draw_primitives(
+                this,
+                r,
+                ctx.scene,
+                ctx.lit,
+                ctx.viewproj,
+                &ctx.lights,
+                ctx.shadow_frame.texture,
+                ctx.runtime,
+                ctx.camera_position,
+            )
+        })?;
+        Ok(())
+    }
+
+    fn record_ui(&mut self, ctx: &SceneExtractionCtx<'_>) -> EngineResult<()> {
+        let Some(ui) = ctx.ui else {
+            return Ok(());
+        };
+        let extent: Extent2D = ctx.surface_extent;
+        let _ = self.record(RenderDrawListKind::Ui, |_this, r| {
+            r.set_viewport(Viewport::full(extent))?;
+            r.set_scissor(RectI32::new(0, 0, extent.width as i32, extent.height as i32))?;
+            r.set_ui_draw_list(ui.clone());
+            Ok(())
+        })?;
+        Ok(())
+    }
+}
+
 #[derive(Clone, Debug)]
 struct RuntimeDrawList {
     kind: RenderDrawListKind,
@@ -206,14 +201,4 @@ impl RuntimeDrawList {
     fn new(kind: RenderDrawListKind) -> Self {
         Self { kind }
     }
-}
-
-#[inline]
-pub const fn shadow_and_opaque_list(active: bool) -> &'static [RenderDrawListKind] {
-    if active { SHADOW_AND_OPAQUE } else { OPAQUE_FORWARD }
-}
-
-#[inline]
-pub const fn ui_list(active: bool) -> &'static [RenderDrawListKind] {
-    if active { UI_LIST } else { EMPTY_LISTS }
 }

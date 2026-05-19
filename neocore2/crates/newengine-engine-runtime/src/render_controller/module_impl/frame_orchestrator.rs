@@ -5,11 +5,12 @@ use newengine_core::render::{
 };
 use crate::gameplay::GameRunMode;
 use newengine_core::EngineResult;
+use newengine_render_feature_api::SceneExtractionCtx;
 use newengine_render_frame_graph::{standard_runtime_frame, StandardRuntimePipelineDesc};
 use newengine_scene::Scene;
 use newengine_ui::draw::UiDrawList;
 
-use super::draw_lists::{DrawListBuildCtx, SceneExtractionCtx};
+use super::draw_lists::DrawListBuildCtx;
 use super::feature_extraction::FeatureExtractionFrame;
 use super::frame_envelope_builder::build_runtime_frame_envelope;
 use super::frame_submit::submit_frame_envelope;

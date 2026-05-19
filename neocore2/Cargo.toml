@@ -44,6 +44,7 @@ members = [
     "crates/newengine-primitives",
     "crates/newengine-procedural-noise",
     "crates/newengine-render-api",
+    "crates/newengine-render-feature-api",
     "crates/newengine-render-frame-graph",
     "crates/newengine-replay",
     "crates/newengine-runtime-host",

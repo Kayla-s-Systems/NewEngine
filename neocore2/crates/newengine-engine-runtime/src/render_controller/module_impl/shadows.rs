@@ -6,175 +6,13 @@ use newengine_core::render::{
 use newengine_core::EngineResult;
 use newengine_lighting::{ShadowMethod, ShadowSettings};
 use newengine_math::{Mat4, Vec3};
+pub(crate) use newengine_render_feature_api::{
+    BoundsSnap, LightExtractionCommand, LightExtractionCtx, LightShadowPlan, ShadowCasterCull,
+    ShadowFrame, ShadowLightKind,
+};
 
 use super::lights;
-use super::light_extraction::LightExtractionCtx;
-use super::scene::BoundsSnap;
 use crate::render_controller::RuntimeRenderController;
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum ShadowLightKind {
-    Directional,
-    Point,
-    Spot,
-}
-
-impl ShadowLightKind {
-    #[inline]
-    pub const fn label(self) -> &'static str {
-        match self {
-            Self::Directional => "sun_directional",
-            Self::Point => "point",
-            Self::Spot => "spot",
-        }
-    }
-}
-
-#[derive(Clone, Copy, Debug)]
-pub struct ShadowCasterCull {
-    pub light_view: Mat4,
-    pub half_extent_xy: f32,
-    pub near: f32,
-    pub far: f32,
-}
-
-impl ShadowCasterCull {
-    #[inline]
-    pub fn directional(light_view: Mat4, half_extent_xy: f32, near: f32, far: f32) -> Self {
-        Self {
-            light_view,
-            half_extent_xy: half_extent_xy.max(0.001),
-            near: near.max(0.001),
-            far: far.max(near.max(0.001) + 0.001),
-        }
-    }
-
-    #[inline]
-    pub fn contains_sphere(self, center_ws: Vec3, radius_ws: f32) -> bool {
-        let radius_ws = radius_ws.abs().max(0.001);
-        let p = self.light_view.transform_point3(center_ws);
-        if p.x.abs() > self.half_extent_xy + radius_ws {
-            return false;
-        }
-        if p.y.abs() > self.half_extent_xy + radius_ws {
-            return false;
-        }
-        // Right-handed look_at shadow view looks down -Z; visible range is [-far, -near].
-        p.z <= -self.near + radius_ws && p.z >= -self.far - radius_ws
-    }
-}
-
-#[derive(Clone, Copy, Debug)]
-pub struct ShadowFrame {
-    pub texture: TextureId,
-    pub light_mvp: Mat4,
-    /// x: enabled, y: receiver depth bias, z: contact strength, w: PCF softness.
-    pub params: [f32; 4],
-    /// x: normal bias in shadow-depth units, y: cascade count, z/w: reserved for atlas/cascade metadata.
-    pub extra: [f32; 4],
-}
-
-impl ShadowFrame {
-    #[inline]
-    pub fn disabled(fallback: TextureId) -> Self {
-        Self {
-            texture: fallback,
-            light_mvp: Mat4::IDENTITY,
-            params: [0.0, 0.0, 0.0, 0.0],
-            extra: [0.0, 0.0, 0.0, 0.0],
-        }
-    }
-}
-
-#[derive(Clone, Copy, Debug)]
-pub struct LightShadowPlan {
-    pub light_kind: Option<ShadowLightKind>,
-    pub supported: bool,
-    pub target: Option<RenderTargetId>,
-    pub resolution: u32,
-    pub frame: ShadowFrame,
-    pub caster_cull: Option<ShadowCasterCull>,
-}
-
-impl LightShadowPlan {
-    #[inline]
-    pub fn disabled(fallback: TextureId) -> Self {
-        Self {
-            light_kind: None,
-            supported: false,
-            target: None,
-            resolution: 1,
-            frame: ShadowFrame::disabled(fallback),
-            caster_cull: None,
-        }
-    }
-
-    #[inline]
-    pub fn unsupported(kind: ShadowLightKind, fallback: TextureId, resolution: u32) -> Self {
-        Self {
-            light_kind: Some(kind),
-            supported: false,
-            target: None,
-            resolution: resolution.max(1),
-            frame: ShadowFrame::disabled(fallback),
-            caster_cull: None,
-        }
-    }
-
-    #[inline]
-    pub fn directional(
-        target: RenderTargetId,
-        texture: TextureId,
-        resolution: u32,
-        light_mvp: Mat4,
-        params: [f32; 4],
-        extra: [f32; 4],
-        caster_cull: Option<ShadowCasterCull>,
-    ) -> Self {
-        Self {
-            light_kind: Some(ShadowLightKind::Directional),
-            supported: true,
-            target: Some(target),
-            resolution: resolution.max(1),
-            frame: ShadowFrame {
-                texture,
-                light_mvp,
-                params,
-                extra,
-            },
-            caster_cull,
-        }
-    }
-
-    #[inline]
-    pub fn is_active(self) -> bool {
-        self.supported && self.target.is_some() && self.frame.params[0] > 0.0
-    }
-
-    #[inline]
-    pub fn render_target(self) -> Option<RenderTargetId> {
-        if self.is_active() { self.target } else { None }
-    }
-
-    #[inline]
-    pub fn extent(self) -> Extent2D {
-        let cascades = self.cascade_count();
-        if cascades <= 1 {
-            return Extent2D::new(self.resolution, self.resolution);
-        }
-        let columns = if cascades <= 4 { 2 } else { 4 };
-        let rows = ((cascades + columns - 1) / columns).max(1);
-        Extent2D::new(
-            self.resolution.saturating_mul(columns),
-            self.resolution.saturating_mul(rows),
-        )
-    }
-
-    #[inline]
-    pub fn cascade_count(self) -> u32 {
-        self.frame.extra[1].round().clamp(1.0, 8.0) as u32
-    }
-}
 
 #[inline]
 pub(super) fn build_light_shadow_plan(
@@ -216,26 +54,80 @@ pub(super) fn build_light_shadow_plan(
         );
     }
 
-    let frame_index = this.frame.frame_index;
-    let mut ctx = LightExtractionCtx::new(
-        this,
-        r,
+    let ctx = LightExtractionCtx::new(
         world,
         bounds,
         lit,
         settings,
-        frame_index,
+        this.frame.frame_index,
         viewproj,
         camera_position,
         viewport_extent,
         surface_extent,
     );
-    if let Some(plan) = registry.extract_shadow_plan(&mut ctx)? {
+
+    if let Some(plan) = registry.extract_external_shadow_plan(&ctx)? {
         return Ok(plan);
     }
 
-    retire_shadow_rt(&mut *ctx.controller);
-    Ok(LightShadowPlan::disabled(ctx.lit.white_texture))
+    if let Some(command) = registry.extract_runtime_command(&ctx)? {
+        return lower_light_extraction_command(this, r, world, bounds, lit, settings, command);
+    }
+
+    retire_shadow_rt(this);
+    Ok(LightShadowPlan::disabled(lit.white_texture))
+}
+
+#[inline]
+fn lower_light_extraction_command(
+    this: &mut RuntimeRenderController,
+    r: &mut dyn RenderApi,
+    world: &newengine_ecs::World,
+    bounds: BoundsSnap,
+    lit: newengine_material_domain_api::LitPipeline,
+    settings: ShadowSettings,
+    command: LightExtractionCommand,
+) -> EngineResult<LightShadowPlan> {
+    match command {
+        LightExtractionCommand::DirectionalShadow => {
+            if let Some(plan) = try_build_directional_shadow_plan(this, r, world, bounds, lit, settings)? {
+                Ok(plan)
+            } else {
+                retire_shadow_rt(this);
+                Ok(LightShadowPlan::disabled(lit.white_texture))
+            }
+        }
+        LightExtractionCommand::Unsupported(ShadowLightKind::Point) => {
+            warn_unsupported_point_shadow_once(this);
+            retire_shadow_rt(this);
+            Ok(LightShadowPlan::unsupported(
+                ShadowLightKind::Point,
+                lit.white_texture,
+                settings.resolution,
+            ))
+        }
+        LightExtractionCommand::Unsupported(ShadowLightKind::Spot) => {
+            warn_unsupported_spot_shadow_once(this);
+            retire_shadow_rt(this);
+            Ok(LightShadowPlan::unsupported(
+                ShadowLightKind::Spot,
+                lit.white_texture,
+                settings.resolution,
+            ))
+        }
+        LightExtractionCommand::Unsupported(ShadowLightKind::Directional) => {
+            retire_shadow_rt(this);
+            Ok(LightShadowPlan::unsupported(
+                ShadowLightKind::Directional,
+                lit.white_texture,
+                settings.resolution,
+            ))
+        }
+        LightExtractionCommand::Disabled => {
+            retire_shadow_rt(this);
+            Ok(LightShadowPlan::disabled(lit.white_texture))
+        }
+    }
 }
 
 #[inline]

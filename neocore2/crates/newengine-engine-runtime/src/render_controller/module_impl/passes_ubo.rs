@@ -3,7 +3,7 @@
 use newengine_core::EngineResult;
 use newengine_math::Mat4;
 
-use super::lights::PackedLights;
+use newengine_render_feature_api::PackedLights;
 
 #[inline]
 pub(super) fn write_lit_ubo_ex(

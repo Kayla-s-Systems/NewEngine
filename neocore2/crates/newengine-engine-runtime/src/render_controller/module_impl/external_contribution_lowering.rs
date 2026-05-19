@@ -7,9 +7,10 @@ use newengine_core::render::{
 };
 use newengine_core::EngineResult;
 use newengine_math::{Mat4, Vec3, Vec4};
+use newengine_render_feature_api::SceneExtractionCtx;
 
 use super::draw_lists::{
-    DrawListBuildCtx, ExternalRenderDrawListProviderDesc, SceneExtractionCtx,
+    DrawListBuildCtx, ExternalRenderDrawListProviderDesc,
 };
 use super::RuntimeRenderController;
 use super::super::gpu::ensure_debug_line_pipeline;

@@ -2,11 +2,7 @@
 
 use newengine_math::Vec3;
 
-#[derive(Clone, Copy, Debug)]
-pub struct BoundsSnap {
-    pub center: Vec3,
-    pub radius: f32,
-}
+pub(crate) use newengine_render_feature_api::BoundsSnap;
 
 #[inline]
 pub(super) fn default_bounds() -> BoundsSnap {

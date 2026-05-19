@@ -46,6 +46,7 @@ newengine-replay = { path = "../newengine-replay" }
 newengine-primitives = { path = "../newengine-primitives" }
 newengine-procedural-noise = { path = "../newengine-procedural-noise" }
 newengine-runtime-host = { path = "../newengine-runtime-host" }
+newengine-render-feature-api = { path = "../newengine-render-feature-api" }
 newengine-render-frame-graph = { path = "../newengine-render-frame-graph" }
 newengine-scene = { path = "../newengine-scene", features = ["runtime"] }
 newengine-scene-io = { path = "../newengine-scene-io" }

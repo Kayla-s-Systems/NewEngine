@@ -1,63 +1,28 @@
-
-use std::collections::BTreeSet;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 
 use newengine_core::render::{
     DrawListProviderExtractRequest, DrawListProviderExtractResponse, FrameGraphRoute,
     FrameGraphRoutes, RenderBoundsSnapshot, RenderViewSnapshot, RenderDrawListKind,
-    SceneExtractionSnapshot, VisibilityMask, Extent2D, RectI32, RenderApi, Viewport,
+    SceneExtractionSnapshot, VisibilityMask,
 };
 use newengine_core::EngineResult;
-use newengine_math::Mat4;
 use newengine_plugin_api::{
     Blob, CapabilityId, CapabilityKind, CapabilityRole, MethodName,
     CAPABILITY_ID_RENDER_DRAW_LIST_PROVIDER,
 };
 use newengine_plugin_host::{call_service_v1, has_service, PluginsSnapshot};
-use newengine_render_frame_graph::{DrawListDesc, DrawListRouteValidationReport};
-use newengine_ui::draw::UiDrawList;
+use newengine_render_feature_api::{
+    RenderDrawListProvider, RuntimeVisibilityPlan, SceneExtractionCtx, PROVIDER_CAP_DRAW_LISTS,
+};
+use newengine_render_frame_graph::DrawListRouteValidationReport;
 use serde::Deserialize;
 
-use super::lights::PackedLights;
-use super::scene::BoundsSnap;
-use super::shadows::{LightShadowPlan, ShadowFrame};
 use super::external_contribution_lowering::lower_external_draw_list_contribution;
-use crate::render_controller::RuntimeRenderController;
 
-pub const PROVIDER_TAG_FEATURE: &str = "feature";
 pub(super) const PROVIDER_TAG_PLUGIN: &str = "plugin";
-pub const PROVIDER_CAP_DRAW_LISTS: &str = CAPABILITY_ID_RENDER_DRAW_LIST_PROVIDER;
-
-const EMPTY_LISTS: &[RenderDrawListKind] = &[];
-const OPAQUE_FORWARD: &[RenderDrawListKind] = &[RenderDrawListKind::OpaqueForward];
-const SHADOW_AND_OPAQUE: &[RenderDrawListKind] = &[
-    RenderDrawListKind::ShadowCasters,
-    RenderDrawListKind::OpaqueForward,
-];
-const UI_LIST: &[RenderDrawListKind] = &[RenderDrawListKind::Ui];
 
 static WARNED_PLUGIN_PROVIDER_BRIDGE: AtomicBool = AtomicBool::new(false);
-
-#[derive(Clone, Copy, Debug)]
-pub struct RenderDrawListProviderMetadata {
-    pub id: &'static str,
-    pub label: &'static str,
-    pub tags: &'static [&'static str],
-    pub capabilities: &'static [&'static str],
-}
-
-impl RenderDrawListProviderMetadata {
-    #[inline]
-    pub fn feature(id: &'static str, label: &'static str) -> Self {
-        Self {
-            id,
-            label,
-            tags: &[PROVIDER_TAG_FEATURE],
-            capabilities: &[PROVIDER_CAP_DRAW_LISTS],
-        }
-    }
-}
 
 #[derive(Clone, Debug)]
 pub(crate) struct ExternalRenderDrawListProviderDesc {

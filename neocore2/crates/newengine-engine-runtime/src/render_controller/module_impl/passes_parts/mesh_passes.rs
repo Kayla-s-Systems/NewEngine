@@ -15,7 +15,7 @@ use super::instancing::{
     RenderInstanceRaw,
 };
 use super::super::material_bindings::LitMaterialPlan;
-use super::lights::PackedLights;
+use newengine_render_feature_api::PackedLights;
 use crate::render_controller::RuntimeRenderController;
 use crate::gameplay::display_visible_in_mode;
 use crate::scene_bridge::{PreparedTerrainPrimitiveMesh, TerrainSurfaceLayers};

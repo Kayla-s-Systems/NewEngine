@@ -16,6 +16,7 @@ newengine-input-bindings-runtime = { path = "../newengine-input-bindings-runtime
 newengine-input-profile-gameready = { path = "../newengine-input-profile-gameready" }
 newengine-entity-runtime = { path = "../newengine-entity-runtime" }
 newengine-plugin-host = { path = "../newengine-plugin-host" }
+newengine-render-feature-api = { path = "../newengine-render-feature-api" }
 newengine-render-feature-gameready = { path = "../newengine-render-feature-gameready" }
 newengine-runtime-host = { path = "../newengine-runtime-host" }
 newengine-scene = { path = "../newengine-scene", features = ["runtime"] }

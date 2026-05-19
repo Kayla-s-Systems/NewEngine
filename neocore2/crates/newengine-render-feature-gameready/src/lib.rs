@@ -2,27 +2,25 @@
 
 //! GameReady profile-owned render feature pack.
 //!
-//! This crate is not a renderer backend. It owns GameReady scene extraction and
-//! light/shadow planning policy, then registers those providers into the reusable
-//! render controller. Backend-native rendering remains behind `render.api`.
+//! This crate is not a renderer backend and does not depend on a concrete
+//! runtime controller. It implements provider traits from
+//! `newengine-render-feature-api`; the active profile composes these providers
+//! into whatever runtime owns the render feature registries.
 
 use std::sync::Arc;
 
 use newengine_core::render::RenderDrawListKind;
 use newengine_core::EngineResult;
-use newengine_engine_runtime::render_controller::feature_api::{
-    draw_primitives, draw_primitives_shadow, draw_procedural_terrain,
-    draw_procedural_terrain_shadow, primary_directional_light, primary_point_light,
-    retire_shadow_rt, shadow_and_opaque_list, try_build_directional_shadow_plan, ui_list,
-    warn_unsupported_point_shadow_once, warn_unsupported_spot_shadow_once, DrawListBuildCtx,
-    LightExtractionCtx, LightExtractionProvider, LightExtractionProviderMetadata,
-    LightShadowPlan, RenderDrawListProvider, RenderDrawListProviderMetadata,
-    SceneExtractionCtx, ShadowLightKind,
-};
-use newengine_engine_runtime::RuntimeRenderController;
 use newengine_lighting::ShadowMethod;
+use newengine_material_domain_api::{MaterialGpuPipelineKey, MaterialGpuPipelineProvider};
 use newengine_material_domain_gameready::{
     GameReadyLitMaterialDomainProvider, GAME_READY_LIT_PIPELINE_KEY,
+};
+use newengine_render_feature_api::{
+    primary_directional_light, primary_point_light, shadow_and_opaque_list, ui_list,
+    DrawListBuildCtx, LightExtractionCommand, LightExtractionCtx, LightExtractionProvider,
+    LightExtractionProviderMetadata, RenderDrawListProvider, RenderDrawListProviderMetadata,
+    SceneExtractionCtx, ShadowLightKind,
 };
 
 pub const GAME_READY_TERRAIN_PROVIDER_ID: &str = "gameready.terrain";
@@ -43,17 +41,32 @@ impl GameReadyRenderFeaturePack {
     }
 
     #[inline]
-    pub fn install(self, controller: RuntimeRenderController) -> RuntimeRenderController {
-        controller
-            .with_material_pipeline_provider(Box::new(GameReadyLitMaterialDomainProvider::new()))
-            .with_primary_lit_material_domain(GAME_READY_LIT_PIPELINE_KEY)
-            .with_draw_list_provider(Arc::new(GameReadyTerrainProvider))
-            .with_draw_list_provider(Arc::new(GameReadyPrimitiveMeshProvider))
-            .with_draw_list_provider(Arc::new(GameReadyUiProvider))
-            .with_light_extraction_provider(Arc::new(GameReadyDirectionalShadowProvider))
-            .with_light_extraction_provider(Arc::new(GameReadyPointCubeShadowProvider))
-            .with_light_extraction_provider(Arc::new(GameReadySpotShadowProvider))
-            .with_light_extraction_provider(Arc::new(GameReadyAmbientOcclusionProvider))
+    pub fn material_pipeline_provider(&self) -> Box<dyn MaterialGpuPipelineProvider> {
+        Box::new(GameReadyLitMaterialDomainProvider::new())
+    }
+
+    #[inline]
+    pub fn primary_lit_material_domain(&self) -> MaterialGpuPipelineKey {
+        GAME_READY_LIT_PIPELINE_KEY
+    }
+
+    #[inline]
+    pub fn draw_list_providers(&self) -> Vec<Arc<dyn RenderDrawListProvider>> {
+        vec![
+            Arc::new(GameReadyTerrainProvider),
+            Arc::new(GameReadyPrimitiveMeshProvider),
+            Arc::new(GameReadyUiProvider),
+        ]
+    }
+
+    #[inline]
+    pub fn light_extraction_providers(&self) -> Vec<Arc<dyn LightExtractionProvider>> {
+        vec![
+            Arc::new(GameReadyDirectionalShadowProvider),
+            Arc::new(GameReadyPointCubeShadowProvider),
+            Arc::new(GameReadySpotShadowProvider),
+            Arc::new(GameReadyAmbientOcclusionProvider),
+        ]
     }
 }
 
@@ -75,35 +88,11 @@ impl RenderDrawListProvider for GameReadyTerrainProvider {
         shadow_and_opaque_list(ctx.render_shadow_map)
     }
 
-    fn extract(&self, ctx: &SceneExtractionCtx<'_>, out: &mut DrawListBuildCtx<'_>) -> EngineResult<()> {
+    fn extract(&self, ctx: &SceneExtractionCtx<'_>, out: &mut dyn DrawListBuildCtx) -> EngineResult<()> {
         if ctx.render_shadow_map {
-            let _ = out.record(RenderDrawListKind::ShadowCasters, |this, r| {
-                draw_procedural_terrain_shadow(
-                    this,
-                    r,
-                    ctx.scene,
-                    ctx.lit,
-                    ctx.shadow_frame.light_mvp,
-                    &ctx.lights,
-                    ctx.runtime,
-                )
-            })?;
+            out.record_procedural_terrain_shadow(ctx)?;
         }
-
-        let _ = out.record(RenderDrawListKind::OpaqueForward, |this, r| {
-            draw_procedural_terrain(
-                this,
-                r,
-                ctx.scene,
-                ctx.lit,
-                ctx.viewproj,
-                &ctx.lights,
-                ctx.shadow_frame.texture,
-                ctx.runtime,
-            )
-        })?;
-
-        Ok(())
+        out.record_procedural_terrain_forward(ctx)
     }
 }
 
@@ -125,37 +114,11 @@ impl RenderDrawListProvider for GameReadyPrimitiveMeshProvider {
         shadow_and_opaque_list(ctx.render_shadow_map)
     }
 
-    fn extract(&self, ctx: &SceneExtractionCtx<'_>, out: &mut DrawListBuildCtx<'_>) -> EngineResult<()> {
+    fn extract(&self, ctx: &SceneExtractionCtx<'_>, out: &mut dyn DrawListBuildCtx) -> EngineResult<()> {
         if ctx.render_shadow_map {
-            let _ = out.record(RenderDrawListKind::ShadowCasters, |this, r| {
-                draw_primitives_shadow(
-                    this,
-                    r,
-                    ctx.scene,
-                    ctx.lit,
-                    ctx.shadow_frame.light_mvp,
-                    &ctx.lights,
-                    ctx.runtime,
-                    ctx.camera_position,
-                )
-            })?;
+            out.record_primitive_mesh_shadow(ctx)?;
         }
-
-        let _ = out.record(RenderDrawListKind::OpaqueForward, |this, r| {
-            draw_primitives(
-                this,
-                r,
-                ctx.scene,
-                ctx.lit,
-                ctx.viewproj,
-                &ctx.lights,
-                ctx.shadow_frame.texture,
-                ctx.runtime,
-                ctx.camera_position,
-            )
-        })?;
-
-        Ok(())
+        out.record_primitive_mesh_forward(ctx)
     }
 }
 
@@ -177,23 +140,8 @@ impl RenderDrawListProvider for GameReadyUiProvider {
         ui_list(ctx.ui.is_some())
     }
 
-    fn extract(&self, ctx: &SceneExtractionCtx<'_>, out: &mut DrawListBuildCtx<'_>) -> EngineResult<()> {
-        let Some(ui) = ctx.ui else {
-            return Ok(());
-        };
-        let extent = ctx.surface_extent;
-        let _ = out.record(RenderDrawListKind::Ui, |_this, r| {
-            r.set_viewport(newengine_core::render::Viewport::full(extent))?;
-            r.set_scissor(newengine_core::render::RectI32::new(
-                0,
-                0,
-                extent.width as i32,
-                extent.height as i32,
-            ))?;
-            r.set_ui_draw_list(ui.clone());
-            Ok(())
-        })?;
-        Ok(())
+    fn extract(&self, ctx: &SceneExtractionCtx<'_>, out: &mut dyn DrawListBuildCtx) -> EngineResult<()> {
+        out.record_ui(ctx)
     }
 }
 
@@ -219,15 +167,8 @@ impl LightExtractionProvider for GameReadyDirectionalShadowProvider {
     }
 
     #[inline]
-    fn extract(&self, ctx: &mut LightExtractionCtx<'_>) -> EngineResult<Option<LightShadowPlan>> {
-        try_build_directional_shadow_plan(
-            &mut *ctx.controller,
-            &mut *ctx.render,
-            ctx.world,
-            ctx.bounds,
-            ctx.lit,
-            ctx.settings,
-        )
+    fn extract(&self, _ctx: &LightExtractionCtx<'_>) -> EngineResult<Option<LightExtractionCommand>> {
+        Ok(Some(LightExtractionCommand::DirectionalShadow))
     }
 }
 
@@ -251,14 +192,8 @@ impl LightExtractionProvider for GameReadyPointCubeShadowProvider {
     }
 
     #[inline]
-    fn extract(&self, ctx: &mut LightExtractionCtx<'_>) -> EngineResult<Option<LightShadowPlan>> {
-        warn_unsupported_point_shadow_once(&mut *ctx.controller);
-        retire_shadow_rt(&mut *ctx.controller);
-        Ok(Some(LightShadowPlan::unsupported(
-            ShadowLightKind::Point,
-            ctx.lit.white_texture,
-            ctx.settings.resolution,
-        )))
+    fn extract(&self, _ctx: &LightExtractionCtx<'_>) -> EngineResult<Option<LightExtractionCommand>> {
+        Ok(Some(LightExtractionCommand::Unsupported(ShadowLightKind::Point)))
     }
 }
 
@@ -281,14 +216,8 @@ impl LightExtractionProvider for GameReadySpotShadowProvider {
     }
 
     #[inline]
-    fn extract(&self, ctx: &mut LightExtractionCtx<'_>) -> EngineResult<Option<LightShadowPlan>> {
-        warn_unsupported_spot_shadow_once(&mut *ctx.controller);
-        retire_shadow_rt(&mut *ctx.controller);
-        Ok(Some(LightShadowPlan::unsupported(
-            ShadowLightKind::Spot,
-            ctx.lit.white_texture,
-            ctx.settings.resolution,
-        )))
+    fn extract(&self, _ctx: &LightExtractionCtx<'_>) -> EngineResult<Option<LightExtractionCommand>> {
+        Ok(Some(LightExtractionCommand::Unsupported(ShadowLightKind::Spot)))
     }
 }
 
@@ -311,7 +240,7 @@ impl LightExtractionProvider for GameReadyAmbientOcclusionProvider {
     }
 
     #[inline]
-    fn extract(&self, _ctx: &mut LightExtractionCtx<'_>) -> EngineResult<Option<LightShadowPlan>> {
+    fn extract(&self, _ctx: &LightExtractionCtx<'_>) -> EngineResult<Option<LightExtractionCommand>> {
         Ok(None)
     }
 }

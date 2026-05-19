@@ -1,7 +1,11 @@
 # newengine-render-feature-gameready
 
-Profile-owned render feature pack for the GameReady runtime profile.
+Profile-owned GameReady render feature pack.
 
-This crate owns the GameReady draw-list extraction and light/shadow planning
-providers. `newengine-engine-runtime` starts with empty provider registries and
-only executes providers explicitly registered by the active profile.
+This crate implements `newengine-render-feature-api` providers for terrain,
+primitive mesh/UI draw-list extraction and GameReady light/shadow policy. It has
+no dependency on `newengine-engine-runtime`; the product profile composes the
+returned providers into the active runtime controller.
+
+The renderer backend remains replaceable behind `render.api`. This crate owns
+profile policy, not backend submission or runtime controller state.

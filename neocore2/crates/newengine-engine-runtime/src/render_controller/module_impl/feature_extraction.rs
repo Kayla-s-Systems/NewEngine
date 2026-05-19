@@ -3,10 +3,11 @@
 use newengine_core::render::RenderApi;
 use newengine_core::EngineResult;
 use newengine_plugin_host::PluginsSnapshot;
+use newengine_render_feature_api::SceneExtractionCtx;
 use newengine_render_frame_graph::{DrawListDesc, DrawListRouteValidationReport, RenderFramePlan};
 
 use super::draw_lists::{
-    DrawListBuildCtx, RenderDrawListProviderRegistry, RuntimeDrawListSet, SceneExtractionCtx,
+    DrawListBuildCtx, RenderDrawListProviderRegistry, RuntimeDrawListSet,
 };
 use super::profiling::TimedBreakdown;
 use crate::render_controller::RuntimeRenderController;

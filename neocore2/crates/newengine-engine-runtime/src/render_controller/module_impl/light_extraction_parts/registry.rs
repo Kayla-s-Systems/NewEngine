@@ -1,109 +1,28 @@
-
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 
 use newengine_core::render::{
-    BackendShadowCapabilities, Extent2D, LightExtractionProviderRequest,
-    LightExtractionProviderResponse, LightExtractionSnapshot, LightPlanContribution,
-    LightPlanContributionKind, RenderApi, RenderBoundsSnapshot, RenderViewSnapshot,
-    RenderTargetId, ShadowSettingsSnapshot, TextureId,
+    BackendShadowCapabilities, LightExtractionProviderRequest, LightExtractionProviderResponse,
+    LightExtractionSnapshot, LightPlanContribution, LightPlanContributionKind, RenderBoundsSnapshot,
+    RenderViewSnapshot, RenderTargetId, ShadowSettingsSnapshot, TextureId,
 };
 use newengine_core::EngineResult;
-use newengine_lighting::{ShadowMethod, ShadowSettings};
 use newengine_plugin_api::{
     Blob, CapabilityId, CapabilityKind, CapabilityRole, MethodName,
     CAPABILITY_ID_RENDER_LIGHT_EXTRACTION_PROVIDER,
 };
 use newengine_plugin_host::{call_service_v1, has_service, PluginsSnapshot};
+use newengine_lighting::ShadowMethod;
 use newengine_math::Mat4;
+use newengine_render_feature_api::{
+    LightExtractionCommand, LightExtractionCtx, LightExtractionProvider, LightShadowPlan,
+    LIGHT_PROVIDER_CAP_EXTRACTION,
+};
 use serde::Deserialize;
 
-use super::scene::BoundsSnap;
-use super::shadows::LightShadowPlan;
-use crate::render_controller::RuntimeRenderController;
-
-pub const LIGHT_PROVIDER_TAG_FEATURE: &str = "feature";
 pub(super) const LIGHT_PROVIDER_TAG_PLUGIN: &str = "plugin";
-pub const LIGHT_PROVIDER_CAP_EXTRACTION: &str = CAPABILITY_ID_RENDER_LIGHT_EXTRACTION_PROVIDER;
 
 static WARNED_PLUGIN_LIGHT_PROVIDER_BRIDGE: AtomicBool = AtomicBool::new(false);
-
-#[derive(Clone, Copy, Debug)]
-pub struct LightExtractionProviderMetadata {
-    pub id: &'static str,
-    pub label: &'static str,
-    pub tags: &'static [&'static str],
-    pub capabilities: &'static [&'static str],
-}
-
-impl LightExtractionProviderMetadata {
-    #[inline]
-    pub fn feature(id: &'static str, label: &'static str) -> Self {
-        Self {
-            id,
-            label,
-            tags: &[LIGHT_PROVIDER_TAG_FEATURE],
-            capabilities: &[LIGHT_PROVIDER_CAP_EXTRACTION],
-        }
-    }
-}
-
-pub struct LightExtractionCtx<'a> {
-    pub controller: &'a mut RuntimeRenderController,
-    pub render: &'a mut dyn RenderApi,
-    pub world: &'a newengine_ecs::World,
-    pub bounds: BoundsSnap,
-    pub lit: newengine_material_domain_api::LitPipeline,
-    pub settings: ShadowSettings,
-    pub frame_index: u64,
-    pub viewproj: Mat4,
-    pub camera_position: [f32; 3],
-    pub viewport_extent: Extent2D,
-    pub surface_extent: Extent2D,
-}
-
-impl<'a> LightExtractionCtx<'a> {
-    #[inline]
-    pub fn new(
-        controller: &'a mut RuntimeRenderController,
-        render: &'a mut dyn RenderApi,
-        world: &'a newengine_ecs::World,
-        bounds: BoundsSnap,
-        lit: newengine_material_domain_api::LitPipeline,
-        settings: ShadowSettings,
-        frame_index: u64,
-        viewproj: Mat4,
-        camera_position: [f32; 3],
-        viewport_extent: Extent2D,
-        surface_extent: Extent2D,
-    ) -> Self {
-        Self {
-            controller,
-            render,
-            world,
-            bounds,
-            lit,
-            settings,
-            frame_index,
-            viewproj,
-            camera_position,
-            viewport_extent,
-            surface_extent,
-        }
-    }
-}
-
-pub trait LightExtractionProvider: Send + Sync {
-    fn id(&self) -> &'static str;
-
-    fn metadata(&self) -> LightExtractionProviderMetadata {
-        LightExtractionProviderMetadata::feature(self.id(), self.id())
-    }
-
-    fn supports(&self, ctx: &LightExtractionCtx<'_>) -> bool;
-
-    fn extract(&self, ctx: &mut LightExtractionCtx<'_>) -> EngineResult<Option<LightShadowPlan>>;
-}
 
 #[derive(Clone, Debug)]
 pub(crate) struct ExternalLightExtractionProviderDesc {
@@ -218,28 +137,24 @@ impl LightExtractionProviderRegistry {
         }
     }
 
-    pub(crate) fn extract_shadow_plan(
+    pub(crate) fn extract_runtime_command(
         &self,
-        ctx: &mut LightExtractionCtx<'_>,
-    ) -> EngineResult<Option<LightShadowPlan>> {
-        if let Some(plan) = self.extract_external_shadow_plan(ctx)? {
-            return Ok(Some(plan));
-        }
-
+        ctx: &LightExtractionCtx<'_>,
+    ) -> EngineResult<Option<LightExtractionCommand>> {
         for provider in self.providers.iter() {
             if !provider.supports(ctx) {
                 continue;
             }
-            if let Some(plan) = provider.extract(ctx)? {
-                return Ok(Some(plan));
+            if let Some(command) = provider.extract(ctx)? {
+                return Ok(Some(command));
             }
         }
         Ok(None)
     }
 
-    fn extract_external_shadow_plan(
+    pub(crate) fn extract_external_shadow_plan(
         &self,
-        ctx: &mut LightExtractionCtx<'_>,
+        ctx: &LightExtractionCtx<'_>,
     ) -> EngineResult<Option<LightShadowPlan>> {
         if self.external_providers.is_empty() {
             return Ok(None);

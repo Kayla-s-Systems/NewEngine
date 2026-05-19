@@ -7,6 +7,7 @@ description = "GameReady profile-owned render feature pack for NewEngine runtime
 
 [dependencies]
 newengine-core = { path = "../newengine-core" }
-newengine-engine-runtime = { path = "../newengine-engine-runtime" }
+newengine-render-feature-api = { path = "../newengine-render-feature-api" }
 newengine-lighting = { path = "../newengine-lighting" }
+newengine-material-domain-api = { path = "../newengine-material-domain-api" }
 newengine-material-domain-gameready = { path = "../newengine-material-domain-gameready" }

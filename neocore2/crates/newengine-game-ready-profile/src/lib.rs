@@ -72,13 +72,21 @@ impl GameReadyRuntimeProfile {
             startup.modules_dir.clone(),
         )))?;
 
-        let render_controller = GameReadyRenderFeaturePack::new().install(
-            newengine_engine_runtime::RuntimeRenderController::new(
-                Arc::clone(&self.viewport),
-                Arc::clone(&self.plugins),
-                Arc::clone(&self.scene),
-            ),
-        );
+        let render_features = GameReadyRenderFeaturePack::new();
+        let mut render_controller = newengine_engine_runtime::RuntimeRenderController::new(
+            Arc::clone(&self.viewport),
+            Arc::clone(&self.plugins),
+            Arc::clone(&self.scene),
+        )
+        .with_material_pipeline_provider(render_features.material_pipeline_provider())
+        .with_primary_lit_material_domain(render_features.primary_lit_material_domain());
+
+        for provider in render_features.draw_list_providers() {
+            render_controller = render_controller.with_draw_list_provider(provider);
+        }
+        for provider in render_features.light_extraction_providers() {
+            render_controller = render_controller.with_light_extraction_provider(provider);
+        }
 
         engine.register_module(Box::new(render_controller))?;
 

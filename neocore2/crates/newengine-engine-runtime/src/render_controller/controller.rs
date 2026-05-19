@@ -7,7 +7,7 @@ use crate::scene_bridge::SceneBridge;
 use crate::viewport_bridge::ViewportBridge;
 
 use super::gpu::{MaterialGpuPipelineKey, MaterialGpuPipelineProvider};
-use super::feature_api::{LightExtractionProvider, RenderDrawListProvider};
+use newengine_render_feature_api::{LightExtractionProvider, RenderDrawListProvider};
 use super::state::{
     RenderBridgeState, RenderDiagnosticsRuntimeState, RenderFeatureProviderState,
     RenderFrameRuntimeState, RenderGpuSceneState, RenderMenuRuntimeState, RenderShadowRuntimeState, RenderViewportState,
