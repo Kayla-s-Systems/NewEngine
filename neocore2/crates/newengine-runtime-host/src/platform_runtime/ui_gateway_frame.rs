@@ -11,8 +11,9 @@ use newengine_ui::draw::UiDrawList;
 use newengine_ui::UiProviderBinding;
 use newengine_ui_api::{
     decode_ui_frame_response_bin, encode_ui_frame_request_bin, UiFrameRequest, UiFrameResponse,
-    UiRuntimeDebugOverlayTelemetry, ENGINE_UI_SERVICE_ID, UI_SERVICE_METHOD_DEBUG_OVERLAY_TELEMETRY_V1,
-    UI_SERVICE_METHOD_DRAW_FRAME_BIN_V1, UI_SERVICE_METHOD_DRAW_FRAME_V1,
+    UiPauseMenuState, UiRuntimeDebugOverlayTelemetry, ENGINE_UI_SERVICE_ID,
+    UI_SERVICE_METHOD_DEBUG_OVERLAY_TELEMETRY_V1, UI_SERVICE_METHOD_DRAW_FRAME_BIN_V1, UI_SERVICE_METHOD_DRAW_FRAME_V1,
+    UI_SERVICE_METHOD_PAUSE_MENU_STATE_V1,
 };
 
 static TRY_BINARY_UI_FRAME: AtomicBool = AtomicBool::new(true);
@@ -245,4 +246,28 @@ fn ui_draw_list_stats(draw_list: &UiDrawList) -> String {
         patch_bytes,
         draw_list.texture_delta.free.len(),
     )
+}
+
+
+pub(crate) fn publish_pause_menu_state(state: &UiPauseMenuState) {
+    if !newengine_plugin_host::has_service(ENGINE_UI_SERVICE_ID) {
+        return;
+    }
+
+    let payload = match serde_json::to_vec(state) {
+        Ok(payload) => payload,
+        Err(e) => {
+            log::warn!("ui gateway: failed to encode pause menu state: {e}");
+            return;
+        }
+    };
+
+    match newengine_core::call_service_v1_optional(
+        ENGINE_UI_SERVICE_ID,
+        UI_SERVICE_METHOD_PAUSE_MENU_STATE_V1,
+        &payload,
+    ) {
+        Ok(Some(_)) | Ok(None) => {}
+        Err(e) => log::warn!("ui gateway: pause menu state publish failed: {e}"),
+    }
 }

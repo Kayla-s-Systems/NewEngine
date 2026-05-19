@@ -1,6 +1,6 @@
 use newengine_core::render::RenderFrameDebugSnapshot;
 use crate::scene_bridge::EngineViewGatewayFrame;
-use newengine_ui::draw::UiDrawList;
+use newengine_ui::{draw::UiDrawList, UiInputFrame};
 use newengine_ui_api::UiRuntimeDebugOverlayTelemetry;
 
 use super::input::ViewportInputSnap;
@@ -28,6 +28,7 @@ impl RenderFrameScope {
 pub(super) struct ViewportFrameInput {
     pub ui: Option<UiDrawList>,
     pub input: ViewportInputSnap,
+    pub surface_input: Option<UiInputFrame>,
     pub play_mode: GameRunMode,
 }
 

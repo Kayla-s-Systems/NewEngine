@@ -313,3 +313,18 @@ impl RenderDiagnosticsRuntimeState {
     }
 }
 
+
+
+pub(super) struct RenderMenuRuntimeState {
+    pub(super) pause: super::module_impl::pause_menu::RenderPauseMenuRuntimeState,
+}
+
+impl RenderMenuRuntimeState {
+    #[inline]
+    pub(super) fn new() -> Self {
+        Self {
+            pause: super::module_impl::pause_menu::RenderPauseMenuRuntimeState::new(),
+        }
+    }
+}
+

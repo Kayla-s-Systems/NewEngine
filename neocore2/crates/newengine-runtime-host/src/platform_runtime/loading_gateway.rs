@@ -1,89 +1,59 @@
 use std::sync::OnceLock;
 
-use abi_stable::erased_types::TD_Opaque;
-use abi_stable::std_types::{RResult, RString};
+use abi_stable::std_types::RResult;
 use newengine_loading_api::{
     LoadingScreenSnapshot, LoadingServiceInfo, ENGINE_LOADING_SERVICE_ID,
-    LOADING_BACKEND_CAPABILITY_ID, LOADING_SERVICE_METHOD_INFO,
-    LOADING_SERVICE_METHOD_INVOKE, LOADING_SERVICE_METHOD_PUBLISH_JSON_V1,
-    LOADING_SERVICE_METHOD_SHUTDOWN_V1, LOADING_SERVICE_METHOD_SNAPSHOT_JSON_V1,
+    LOADING_BACKEND_CAPABILITY_ID, LOADING_SERVICE_METHOD_INVOKE,
+    LOADING_SERVICE_METHOD_PUBLISH_JSON_V1, LOADING_SERVICE_METHOD_SNAPSHOT_JSON_V1,
 };
 use newengine_loading_runtime::{
     project_loading_snapshot_from_overlay_fields, SharedLoadingSnapshot,
 };
 use newengine_platform_api::{PlatformLoadingOverlayV1, PlatformStepResultV1};
-use newengine_plugin_api::{Blob, CapabilityId, MethodName, ServiceV1, ServiceV1_TO};
+use newengine_plugin_api::Blob;
+use newengine_service_kit::{
+    decode_json_payload, engine_owned_service_description, ok_json,
+    register_engine_owned_gateway_service, EngineOwnedGatewayDecl, JsonServiceRouter,
+};
 
 static LOADING_SNAPSHOT: OnceLock<SharedLoadingSnapshot> = OnceLock::new();
+const LOADING_GATEWAY_OWNER: &str = "newengine-runtime-host.loading-gateway";
 
-#[derive(Clone)]
-struct EngineLoadingGatewayService {
-    state: SharedLoadingSnapshot,
-}
+fn loading_gateway_service(state: SharedLoadingSnapshot) -> newengine_plugin_api::ServiceV1Dyn<'static> {
+    let info = LoadingServiceInfo::default();
+    let description = engine_owned_service_description(
+        ENGINE_LOADING_SERVICE_ID,
+        LOADING_GATEWAY_OWNER,
+        LOADING_BACKEND_CAPABILITY_ID,
+        info.methods.clone(),
+    )
+    .protocol(info.protocol.clone())
+    .features(info.features.clone())
+    .notes("Engine-facing loading shell gateway for startup overlay snapshots and native compositor state.");
 
-impl EngineLoadingGatewayService {
-    #[inline]
-    fn new(state: SharedLoadingSnapshot) -> Self {
-        Self { state }
-    }
+    let invoke_state = state.clone();
+    let snapshot_state = state.clone();
+    let publish_state = state;
 
-    #[inline]
-    fn ok_json<T: serde::Serialize>(value: &T) -> RResult<Blob, RString> {
-        match serde_json::to_vec(value) {
-            Ok(bytes) => RResult::ROk(Blob::from(bytes)),
-            Err(e) => RResult::RErr(RString::from(e.to_string())),
-        }
-    }
-}
-
-impl ServiceV1 for EngineLoadingGatewayService {
-    fn id(&self) -> CapabilityId {
-        CapabilityId::from(ENGINE_LOADING_SERVICE_ID)
-    }
-
-    fn describe(&self) -> RString {
-        let v = serde_json::json!({
-            "id": ENGINE_LOADING_SERVICE_ID,
-            "version": 1,
-            "origin": "engine-owned",
-            "owner": "newengine-runtime-host.loading-gateway",
-            "capability": LOADING_BACKEND_CAPABILITY_ID,
-            "methods": [
-                LOADING_SERVICE_METHOD_INFO,
-                LOADING_SERVICE_METHOD_INVOKE,
-                LOADING_SERVICE_METHOD_SHUTDOWN_V1,
-                LOADING_SERVICE_METHOD_SNAPSHOT_JSON_V1,
-                LOADING_SERVICE_METHOD_PUBLISH_JSON_V1
-            ],
-            "notes": "Engine-facing loading shell gateway for startup overlay snapshots and native compositor state."
-        });
-        RString::from(serde_json::to_string(&v).unwrap_or_else(|_| "{}".to_owned()))
-    }
-
-    fn call(&self, method: MethodName, payload: Blob) -> RResult<Blob, RString> {
-        match method.as_str() {
-            LOADING_SERVICE_METHOD_INFO => Self::ok_json(&LoadingServiceInfo::default()),
-            LOADING_SERVICE_METHOD_SNAPSHOT_JSON_V1 | LOADING_SERVICE_METHOD_INVOKE => {
-                Self::ok_json(&self.state.snapshot())
-            }
-            LOADING_SERVICE_METHOD_PUBLISH_JSON_V1 => {
-                match serde_json::from_slice::<LoadingScreenSnapshot>(payload.as_slice()) {
-                    Ok(snapshot) => {
-                        self.state.publish(snapshot);
-                        Self::ok_json(&serde_json::json!({ "ok": true }))
-                    }
-                    Err(e) => RResult::RErr(RString::from(format!(
-                        "engine.loading: invalid publish_json_v1 payload: {e}"
-                    ))),
-                }
-            }
-            LOADING_SERVICE_METHOD_SHUTDOWN_V1 => Self::ok_json(&serde_json::json!({ "ok": true })),
-            other => RResult::RErr(RString::from(format!(
-                "engine.loading: unknown method '{}'",
-                other
-            ))),
-        }
-    }
+    JsonServiceRouter::new(ENGINE_LOADING_SERVICE_ID)
+        .describe_json(&description)
+        .info(LoadingServiceInfo::default)
+        .get_json(LOADING_SERVICE_METHOD_INVOKE, move |_| invoke_state.snapshot())
+        .get_json(LOADING_SERVICE_METHOD_SNAPSHOT_JSON_V1, move |_| snapshot_state.snapshot())
+        .blob(LOADING_SERVICE_METHOD_PUBLISH_JSON_V1, move |_unit, payload: Blob| {
+            let snapshot = match decode_json_payload::<LoadingScreenSnapshot>(
+                ENGINE_LOADING_SERVICE_ID,
+                LOADING_SERVICE_METHOD_PUBLISH_JSON_V1,
+                &payload,
+            ) {
+                Ok(snapshot) => snapshot,
+                Err(e) => return RResult::RErr(e),
+            };
+            publish_state.publish(snapshot);
+            ok_json(&serde_json::json!({ "ok": true }))
+        })
+        .shutdown_json(|_| serde_json::json!({ "ok": true }))
+        .into_service_v1()
 }
 
 pub(crate) fn register_loading_gateway_service_best_effort() {
@@ -95,39 +65,26 @@ pub(crate) fn register_loading_gateway_service_best_effort() {
         return;
     }
 
-    let svc = EngineLoadingGatewayService::new(state);
-    let dyn_svc = ServiceV1_TO::from_value(svc, TD_Opaque);
-    let host = newengine_plugin_host::default_host_api();
-
-    match (host.register_service_v1)(dyn_svc) {
-        RResult::ROk(()) => {
-            match newengine_plugin_host::register_engine_owned_gateway(
-                ENGINE_LOADING_SERVICE_ID,
-                newengine_service_api::EngineServiceKind::Loading,
-                ENGINE_LOADING_SERVICE_ID,
-                LOADING_BACKEND_CAPABILITY_ID,
-                0,
-                "newengine-runtime-host.loading-gateway",
-            ) {
-                Ok(()) => log::info!(
-                    "engine.loading gateway registered source=engine-owned service='{}' capability='{}'",
-                    ENGINE_LOADING_SERVICE_ID,
-                    LOADING_BACKEND_CAPABILITY_ID
-                ),
-                Err(e) => log::warn!(
-                    "engine.loading gateway route registration skipped id='{}' err='{}'",
-                    ENGINE_LOADING_SERVICE_ID,
-                    e
-                ),
-            }
-        }
-        RResult::RErr(e) => {
-            log::error!(
-                "engine.loading service registration failed id='{}' err='{}'",
-                ENGINE_LOADING_SERVICE_ID,
-                e
-            );
-        }
+    let service = loading_gateway_service(state);
+    match register_engine_owned_gateway_service(EngineOwnedGatewayDecl {
+        gateway: ENGINE_LOADING_SERVICE_ID,
+        service_kind: newengine_service_api::EngineServiceKind::Loading,
+        provider_service: ENGINE_LOADING_SERVICE_ID,
+        capability: LOADING_BACKEND_CAPABILITY_ID,
+        priority: 0,
+        owner: LOADING_GATEWAY_OWNER,
+        service,
+    }) {
+        Ok(()) => log::info!(
+            "engine.loading gateway registered source=engine-owned service='{}' capability='{}'",
+            ENGINE_LOADING_SERVICE_ID,
+            LOADING_BACKEND_CAPABILITY_ID
+        ),
+        Err(e) => log::error!(
+            "engine.loading gateway registration failed id='{}' err='{}'",
+            ENGINE_LOADING_SERVICE_ID,
+            e
+        ),
     }
 }
 

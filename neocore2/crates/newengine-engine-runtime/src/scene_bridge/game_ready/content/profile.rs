@@ -24,6 +24,20 @@ pub(in crate::scene_bridge::game_ready) struct GameReadyPlayerSpec {
     pub(in crate::scene_bridge::game_ready) yaw: f32,
     pub(in crate::scene_bridge::game_ready) move_speed: f32,
     pub(in crate::scene_bridge::game_ready) look_sens: f32,
+    pub(in crate::scene_bridge::game_ready) model: GameReadyPlayerModelSpec,
+}
+
+#[derive(Clone, Debug)]
+pub(in crate::scene_bridge::game_ready) struct GameReadyPlayerModelSpec {
+    pub(in crate::scene_bridge::game_ready) enabled: bool,
+    pub(in crate::scene_bridge::game_ready) source: String,
+    pub(in crate::scene_bridge::game_ready) texture_dictionary: Option<String>,
+    pub(in crate::scene_bridge::game_ready) skeleton: Option<String>,
+    pub(in crate::scene_bridge::game_ready) target_height: f32,
+    pub(in crate::scene_bridge::game_ready) eye_height_ratio: f32,
+    pub(in crate::scene_bridge::game_ready) local_offset: Vec3,
+    pub(in crate::scene_bridge::game_ready) yaw_offset: f32,
+    pub(in crate::scene_bridge::game_ready) hide_in_first_person: bool,
 }
 
 #[derive(Clone, Debug)]

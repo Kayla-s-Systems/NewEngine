@@ -3,7 +3,6 @@
 use parking_lot::Mutex;
 use std::sync::Arc;
 
-use abi_stable::sabi_trait::TD_Opaque;
 use abi_stable::std_types::{RResult, RString};
 
 use newengine_camera::{
@@ -28,112 +27,84 @@ use newengine_core::render::{
 use newengine_ecs::{EntityId, World};
 use newengine_input_bindings::CameraViewRequest;
 use newengine_math::{Mat4, Vec2, Vec3};
-use newengine_plugin_api::{Blob, CapabilityId, MethodName, ServiceV1, ServiceV1Dyn};
+use newengine_plugin_api::Blob;
+use newengine_service_kit::{
+    decode_json_payload, engine_owned_service_description, ok_empty_blob, ok_json,
+    register_engine_owned_gateway_service, EngineOwnedGatewayDecl, JsonServiceRouter,
+};
 use newengine_transform::Transform;
 
 use crate::gameplay::{
-    capture_runtime_world_snapshot, first_player, restore_runtime_world_snapshot, FpsDemoRules,
-    GameRunMode, RuntimeWorldSnapshot,
+    capture_runtime_world_snapshot, emit_player_event, first_player, is_player_controller_enabled,
+    restore_runtime_world_snapshot, sync_player_view_listeners, FpsDemoRules, GameRunMode,
+    PlayerEventKind, RuntimeWorldSnapshot,
 };
 use crate::engine_bounds::EngineBoundsSnap;
 use crate::viewport_bridge::ViewportBridge;
 
 
-#[derive(Clone)]
-struct CameraGatewayInfoService {
-    state: Arc<Mutex<CameraGatewayState>>,
-}
+const CAMERA_GATEWAY_OWNER: &str = "newengine-engine-runtime.camera-gateway";
 
-impl ServiceV1 for CameraGatewayInfoService {
-    fn id(&self) -> CapabilityId {
-        CapabilityId::from(ENGINE_CAMERA_SERVICE_ID)
-    }
+fn camera_gateway_service(state: Arc<Mutex<CameraGatewayState>>) -> newengine_plugin_api::ServiceV1Dyn<'static> {
+    let info = CameraServiceInfo::default();
+    let description = engine_owned_service_description(
+        ENGINE_CAMERA_SERVICE_ID,
+        CAMERA_GATEWAY_OWNER,
+        CAMERA_BACKEND_CAPABILITY_ID,
+        info.methods.clone(),
+    )
+    .protocol(info.protocol.clone())
+    .gateway("engine-owned engine.camera in-process bridge");
 
-    fn describe(&self) -> RString {
-        let info = CameraServiceInfo::default();
-        let json = serde_json::json!({
-            "id": ENGINE_CAMERA_SERVICE_ID,
-            "version": 1,
-            "protocol": info.protocol,
-            "methods": [
-                newengine_camera_api::CAMERA_SERVICE_METHOD_INFO,
-                newengine_camera_api::CAMERA_SERVICE_METHOD_INVOKE,
-                newengine_camera_api::CAMERA_SERVICE_METHOD_SNAPSHOT_JSON_V1,
-                newengine_camera_api::CAMERA_SERVICE_METHOD_VIEW_SET_JSON_V1,
-                newengine_camera_api::CAMERA_SERVICE_METHOD_VIEW_NEXT_JSON_V1,
-                newengine_camera_api::CAMERA_SERVICE_METHOD_SHUTDOWN_V1
-            ],
-            "origin": "engine-owned",
-            "owner": "newengine-engine-runtime.camera-gateway",
-            "capability": CAMERA_BACKEND_CAPABILITY_ID,
-            "gateway": "engine-owned engine.camera in-process bridge"
-        });
-        RString::from(json.to_string())
-    }
-
-    fn call(&self, method: MethodName, payload: Blob) -> RResult<Blob, RString> {
-        match method.as_str() {
-            newengine_camera_api::CAMERA_SERVICE_METHOD_INFO => {
-                ok_json(&CameraServiceInfo::default())
-            }
-            newengine_camera_api::CAMERA_SERVICE_METHOD_SNAPSHOT_JSON_V1 => {
-                let snapshot = self
-                    .state
-                    .lock()
-                    .last_snapshot
-                    .unwrap_or_default();
-                ok_json(&snapshot)
-            }
-            newengine_camera_api::CAMERA_SERVICE_METHOD_INVOKE => {
-                invoke_camera_gateway(&self.state, payload)
-            }
-            newengine_camera_api::CAMERA_SERVICE_METHOD_VIEW_SET_JSON_V1 => {
-                apply_camera_view_command(&self.state, payload)
-            }
-            newengine_camera_api::CAMERA_SERVICE_METHOD_VIEW_NEXT_JSON_V1 => {
-                let active_view = self.state.lock().set_view_command(CameraViewCommand::Next);
-                ok_json(&CameraViewCommandResponse { active_view })
-            }
-            newengine_camera_api::CAMERA_SERVICE_METHOD_SHUTDOWN_V1 => {
-                RResult::ROk(Blob::from(Vec::<u8>::new()))
-            }
-            other => RResult::RErr(RString::from(format!(
-                "engine.camera: unknown method '{}'",
-                other
-            ))),
-        }
-    }
+    JsonServiceRouter::with_shared_state(ENGINE_CAMERA_SERVICE_ID, state)
+        .describe_json(&description)
+        .info(CameraServiceInfo::default)
+        .get_json(newengine_camera_api::CAMERA_SERVICE_METHOD_SNAPSHOT_JSON_V1, |state| {
+            state.last_snapshot.unwrap_or_default()
+        })
+        .blob(newengine_camera_api::CAMERA_SERVICE_METHOD_INVOKE, |state, payload| {
+            invoke_camera_gateway(state, payload)
+        })
+        .blob(newengine_camera_api::CAMERA_SERVICE_METHOD_VIEW_SET_JSON_V1, |state, payload| {
+            apply_camera_view_command(state, payload)
+        })
+        .get_json(newengine_camera_api::CAMERA_SERVICE_METHOD_VIEW_NEXT_JSON_V1, |state| {
+            let active_view = state.set_view_command(CameraViewCommand::Next);
+            CameraViewCommandResponse { active_view }
+        })
+        .blob(newengine_camera_api::CAMERA_SERVICE_METHOD_SHUTDOWN_V1, |_state, _payload| ok_empty_blob())
+        .into_service_v1()
 }
 
 fn invoke_camera_gateway(
-    state: &Arc<Mutex<CameraGatewayState>>,
+    state: &mut CameraGatewayState,
     payload: Blob,
 ) -> RResult<Blob, RString> {
     if payload.as_slice().is_empty() {
-        let snapshot = state.lock().last_snapshot.unwrap_or_default();
+        let snapshot = state.last_snapshot.unwrap_or_default();
         return ok_json(&snapshot);
     }
     apply_camera_view_command(state, payload)
 }
 
 fn apply_camera_view_command(
-    state: &Arc<Mutex<CameraGatewayState>>,
+    state: &mut CameraGatewayState,
     payload: Blob,
 ) -> RResult<Blob, RString> {
-    let bytes = payload.as_slice();
-    if bytes.is_empty() {
+    if payload.is_empty() {
         return RResult::RErr(RString::from(
             "engine.camera: view_set_json_v1 requires CameraViewCommandRequest JSON",
         ));
     }
-    let command = match serde_json::from_slice::<CameraViewCommandRequest>(bytes) {
-        Ok(req) => req.command,
-        Err(e) => return RResult::RErr(RString::from(format!(
-            "engine.camera: invalid camera view command payload: {}",
-            e
-        ))),
+    let request = match decode_json_payload::<CameraViewCommandRequest>(
+        ENGINE_CAMERA_SERVICE_ID,
+        newengine_camera_api::CAMERA_SERVICE_METHOD_VIEW_SET_JSON_V1,
+        &payload,
+    ) {
+        Ok(req) => req,
+        Err(e) => return RResult::RErr(e),
     };
-    let active_view = state.lock().set_view_command(command);
+    let active_view = state.set_view_command(request.command);
     ok_json(&CameraViewCommandResponse { active_view })
 }
 
@@ -141,42 +112,26 @@ fn register_camera_gateway_service_best_effort(state: Arc<Mutex<CameraGatewaySta
     if newengine_plugin_host::has_service(ENGINE_CAMERA_SERVICE_ID) {
         return;
     }
-    let dyn_svc = ServiceV1Dyn::from_value(CameraGatewayInfoService { state }, TD_Opaque);
-    match newengine_plugin_host::host_register_service_impl(dyn_svc) {
-        RResult::ROk(()) => {
-            match newengine_plugin_host::register_engine_owned_gateway(
-                ENGINE_CAMERA_SERVICE_ID,
-                newengine_service_api::EngineServiceKind::Camera,
-                ENGINE_CAMERA_SERVICE_ID,
-                CAMERA_BACKEND_CAPABILITY_ID,
-                0,
-                "newengine-engine-runtime.camera-gateway",
-            ) {
-                Ok(()) => log::info!(
-                    "camera gateway: engine-owned route registered id='{}' capability='{}'",
-                    ENGINE_CAMERA_SERVICE_ID,
-                    CAMERA_BACKEND_CAPABILITY_ID
-                ),
-                Err(e) => log::warn!(
-                    "camera gateway: engine-owned route registration skipped id='{}' err='{}'",
-                    ENGINE_CAMERA_SERVICE_ID,
-                    e
-                ),
-            }
-        },
-        RResult::RErr(e) => log::warn!(
-            "camera gateway: host service registration skipped id='{}' err='{}'",
+    let service = camera_gateway_service(state);
+    match register_engine_owned_gateway_service(EngineOwnedGatewayDecl {
+        gateway: ENGINE_CAMERA_SERVICE_ID,
+        service_kind: newengine_service_api::EngineServiceKind::Camera,
+        provider_service: ENGINE_CAMERA_SERVICE_ID,
+        capability: CAMERA_BACKEND_CAPABILITY_ID,
+        priority: 0,
+        owner: CAMERA_GATEWAY_OWNER,
+        service,
+    }) {
+        Ok(()) => log::info!(
+            "camera gateway: engine-owned route registered id='{}' capability='{}'",
+            ENGINE_CAMERA_SERVICE_ID,
+            CAMERA_BACKEND_CAPABILITY_ID
+        ),
+        Err(e) => log::warn!(
+            "camera gateway: registration skipped id='{}' err='{}'",
             ENGINE_CAMERA_SERVICE_ID,
             e
         ),
-    }
-}
-
-#[inline]
-fn ok_json<T: serde::Serialize>(value: &T) -> RResult<Blob, RString> {
-    match serde_json::to_vec(value) {
-        Ok(bytes) => RResult::ROk(Blob::from(bytes)),
-        Err(e) => RResult::RErr(RString::from(e.to_string())),
     }
 }
 
@@ -216,6 +171,7 @@ impl CameraGatewayBridge {
         let mut state = self.state.lock();
         let mut nav_input = camera_nav_input(input, play_mode);
         let active_view = state.apply_input_view_request(input.camera_view);
+        sync_player_view_listeners(world, matches!(active_view, CameraViewMode::FirstPerson));
         let cam_id = world
             .resource::<newengine_scene::SceneState>()
             .and_then(|s| s.active_camera.or(s.root))
@@ -541,7 +497,7 @@ fn apply_runtime_input(
     let Some(player) = first_player(world) else {
         return;
     };
-    if effective_play_mode.wants_direct_player_control() {
+    if effective_play_mode.wants_direct_player_control() && is_player_controller_enabled(world, player) {
         CameraRuntimeService::apply_player_input(
             world,
             player,
@@ -550,6 +506,7 @@ fn apply_runtime_input(
             input.active,
             service_config.sprint_multiplier,
         );
+        emit_player_event(world, player, PlayerEventKind::InputApplied, "local input sampled");
     } else {
         CameraRuntimeService::clear_player_input(world, player);
     }

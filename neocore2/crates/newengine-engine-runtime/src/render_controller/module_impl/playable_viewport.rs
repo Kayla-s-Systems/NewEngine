@@ -3,7 +3,7 @@ use newengine_core::physics::PhysicsApiRef;
 use newengine_core::render::{Extent2D, RenderApi};
 use newengine_core::{EngineResult, ModuleCtx};
 use newengine_ui::draw::UiDrawList;
-use newengine_ui_api::UiRuntimeDebugOverlayTelemetry;
+use newengine_ui_api::{UiPauseMenuState, UiRuntimeDebugOverlayTelemetry};
 
 use super::frame_types::{PlayableFrameOutcome, RenderFrameScope, ViewportFrameInput};
 use super::input::ViewportInputSnap;
@@ -12,20 +12,36 @@ use super::super::controller::RuntimeRenderController;
 impl RuntimeRenderController {
     pub(super) fn render_playable_viewport_frame<E: Send + 'static>(
         &mut self,
-        ctx: &ModuleCtx<'_, E>,
+        ctx: &mut ModuleCtx<'_, E>,
         r: &mut dyn RenderApi,
         plugin_snapshot: Option<&newengine_plugin_host::PluginsSnapshot>,
         ui: Option<UiDrawList>,
         scope: RenderFrameScope,
     ) -> EngineResult<PlayableFrameOutcome> {
+        let mut frame_input = self.read_viewport_frame_input(ctx, ui, scope);
+        let pause_menu = self.menu.pause.update(
+            frame_input.surface_input.as_ref(),
+            &frame_input.input,
+            [scope.w, scope.h],
+            scope.dt,
+            self.frame.frame_index,
+        );
+        ctx.resources_mut().insert::<UiPauseMenuState>(pause_menu.state.clone());
+        if pause_menu.exit_requested {
+            log::info!("pause menu: exit requested through declarative menu action");
+            ctx.request_exit();
+        }
+        if pause_menu.blocks_gameplay {
+            frame_input.input.suppress_runtime_controls();
+        }
+
         if scope.vp_w == 0 || scope.vp_h == 0 || self.viewport.pass_disabled {
-            self.render_ui_only_frame(ctx, r, ui, scope)?;
+            self.render_ui_only_frame(ctx, r, frame_input.ui, scope)?;
             return Ok(PlayableFrameOutcome::Continue {
                 frame_debug_snapshot: None,
             });
         }
 
-        let frame_input = self.read_viewport_frame_input(ctx, ui, scope);
         let extent = Extent2D::new(scope.vp_w, scope.vp_h);
         let rt = if scope.direct_surface_viewport {
             None
@@ -52,6 +68,7 @@ impl RuntimeRenderController {
             &frame_input.input,
             frame_input.play_mode,
             scope.dt,
+            pause_menu.blocks_gameplay,
             scope.aspect(),
             scope.vp_w,
             scope.vp_h,
@@ -62,7 +79,11 @@ impl RuntimeRenderController {
             return Ok(PlayableFrameOutcome::EndedEarly { ui_telemetry: Some(ui_telemetry) });
         }
 
-        self.sync_cursor_state(ctx, world_frame.view_frame.cursor);
+        if pause_menu.blocks_gameplay {
+            self.sync_cursor_state(ctx, CursorState::released());
+        } else {
+            self.sync_cursor_state(ctx, world_frame.view_frame.cursor);
+        }
 
         let outcome = self.submit_scene_viewport_frame(
             r,
@@ -84,14 +105,20 @@ impl RuntimeRenderController {
         ui: Option<UiDrawList>,
         scope: RenderFrameScope,
     ) -> ViewportFrameInput {
+        let surface_input = if scope.direct_surface_viewport {
+            ctx.resources().get::<newengine_ui::UiInputFrame>().cloned()
+        } else {
+            None
+        };
         let input = if scope.direct_surface_viewport {
-            ViewportInputSnap::read_direct_surface(ctx.resources().get::<newengine_ui::UiInputFrame>())
+            ViewportInputSnap::read_direct_surface(surface_input.as_ref())
         } else {
             ViewportInputSnap::read(&self.bridges.viewport)
         };
         ViewportFrameInput {
             ui,
             input,
+            surface_input,
             play_mode: self.bridges.scene.play_mode(),
         }
     }

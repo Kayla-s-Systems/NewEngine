@@ -1,7 +1,406 @@
 {
   "id": "newengine.default.gameplay",
-  "version": 2,
+  "version": 4,
   "device_preference": "hybrid",
+  "keys": [
+    {
+      "code": 6,
+      "id": "keyboard.digit1",
+      "label": "1"
+    },
+    {
+      "code": 7,
+      "id": "keyboard.digit2",
+      "label": "2"
+    },
+    {
+      "code": 8,
+      "id": "keyboard.digit3",
+      "label": "3"
+    },
+    {
+      "code": 19,
+      "id": "keyboard.key_a",
+      "label": "A"
+    },
+    {
+      "code": 22,
+      "id": "keyboard.key_d",
+      "label": "D"
+    },
+    {
+      "code": 23,
+      "id": "keyboard.key_e",
+      "label": "E"
+    },
+    {
+      "code": 24,
+      "id": "keyboard.key_f",
+      "label": "F"
+    },
+    {
+      "code": 35,
+      "id": "keyboard.key_q",
+      "label": "Q"
+    },
+    {
+      "code": 37,
+      "id": "keyboard.key_s",
+      "label": "S"
+    },
+    {
+      "code": 41,
+      "id": "keyboard.key_w",
+      "label": "W"
+    },
+    {
+      "code": 57,
+      "id": "keyboard.enter",
+      "label": "ENTER"
+    },
+    {
+      "code": 58,
+      "id": "keyboard.space",
+      "label": "SPACE"
+    },
+    {
+      "code": 60,
+      "id": "keyboard.shift_left",
+      "label": "LEFT SHIFT"
+    },
+    {
+      "code": 61,
+      "id": "keyboard.shift_right",
+      "label": "RIGHT SHIFT"
+    },
+    {
+      "code": 63,
+      "id": "keyboard.tab",
+      "label": "TAB"
+    },
+    {
+      "code": 70,
+      "id": "keyboard.backspace",
+      "label": "BACKSPACE"
+    },
+    {
+      "code": 86,
+      "id": "keyboard.arrow_left",
+      "label": "LEFT"
+    },
+    {
+      "code": 87,
+      "id": "keyboard.arrow_up",
+      "label": "UP"
+    },
+    {
+      "code": 88,
+      "id": "keyboard.arrow_right",
+      "label": "RIGHT"
+    },
+    {
+      "code": 89,
+      "id": "keyboard.arrow_down",
+      "label": "DOWN"
+    },
+    {
+      "code": 114,
+      "id": "keyboard.escape",
+      "label": "ESC"
+    }
+  ],
+  "actions": [
+    {
+      "id": "player.move.forward",
+      "label": "Move forward",
+      "contexts": [],
+      "dispatch": "broadcast",
+      "effects": [
+        {
+          "kind": "move_mask",
+          "mask": 1
+        }
+      ]
+    },
+    {
+      "id": "player.move.back",
+      "label": "Move back",
+      "contexts": [],
+      "dispatch": "broadcast",
+      "effects": [
+        {
+          "kind": "move_mask",
+          "mask": 4
+        }
+      ]
+    },
+    {
+      "id": "player.move.left",
+      "label": "Move left",
+      "contexts": [],
+      "dispatch": "broadcast",
+      "effects": [
+        {
+          "kind": "move_mask",
+          "mask": 2
+        }
+      ]
+    },
+    {
+      "id": "player.move.right",
+      "label": "Move right",
+      "contexts": [],
+      "dispatch": "broadcast",
+      "effects": [
+        {
+          "kind": "move_mask",
+          "mask": 8
+        }
+      ]
+    },
+    {
+      "id": "player.move.up",
+      "label": "Move up",
+      "contexts": [],
+      "dispatch": "broadcast",
+      "effects": [
+        {
+          "kind": "move_mask",
+          "mask": 16
+        }
+      ]
+    },
+    {
+      "id": "player.move.down",
+      "label": "Move down",
+      "contexts": [],
+      "dispatch": "broadcast",
+      "effects": [
+        {
+          "kind": "move_mask",
+          "mask": 32
+        }
+      ]
+    },
+    {
+      "id": "player.sprint",
+      "label": "Sprint",
+      "contexts": [],
+      "dispatch": "broadcast",
+      "effects": [
+        {
+          "kind": "move_mask",
+          "mask": 64
+        },
+        {
+          "kind": "sprint",
+          "enabled": true
+        }
+      ]
+    },
+    {
+      "id": "camera.view.next",
+      "label": "Next camera view",
+      "contexts": [],
+      "dispatch": "broadcast",
+      "effects": [
+        {
+          "kind": "camera_view",
+          "request": "Next"
+        }
+      ]
+    },
+    {
+      "id": "camera.view.previous",
+      "label": "Previous camera view",
+      "contexts": [],
+      "dispatch": "broadcast",
+      "effects": [
+        {
+          "kind": "camera_view",
+          "request": "Previous"
+        }
+      ]
+    },
+    {
+      "id": "camera.view.first_person",
+      "label": "First-person camera",
+      "contexts": [],
+      "dispatch": "broadcast",
+      "effects": [
+        {
+          "kind": "camera_view",
+          "request": {
+            "Set": "FirstPerson"
+          }
+        }
+      ]
+    },
+    {
+      "id": "camera.view.third_person.follow",
+      "label": "Third-person follow camera",
+      "contexts": [],
+      "dispatch": "broadcast",
+      "effects": [
+        {
+          "kind": "camera_view",
+          "request": {
+            "Set": "ThirdPersonFollow"
+          }
+        }
+      ]
+    },
+    {
+      "id": "camera.view.third_person.aim",
+      "label": "Third-person aim camera",
+      "contexts": [],
+      "dispatch": "broadcast",
+      "effects": [
+        {
+          "kind": "camera_view",
+          "request": {
+            "Set": "ThirdPersonAim"
+          }
+        }
+      ]
+    },
+    {
+      "id": "engine.menu.toggle_pause",
+      "label": "Toggle menu",
+      "contexts": [],
+      "dispatch": "consume_first",
+      "effects": [
+        {
+          "kind": "menu_toggle"
+        }
+      ]
+    },
+    {
+      "id": "ui.menu.accept",
+      "label": "Accept",
+      "contexts": [],
+      "dispatch": "consume_first",
+      "effects": [
+        {
+          "kind": "menu_accept"
+        }
+      ]
+    },
+    {
+      "id": "ui.menu.back",
+      "label": "Back",
+      "contexts": [],
+      "dispatch": "consume_first",
+      "effects": [
+        {
+          "kind": "menu_back"
+        }
+      ]
+    },
+    {
+      "id": "ui.menu.up",
+      "label": "Menu up",
+      "contexts": [],
+      "dispatch": "consume_first",
+      "effects": [
+        {
+          "kind": "menu_nav",
+          "x": 0,
+          "y": -1
+        }
+      ]
+    },
+    {
+      "id": "ui.menu.down",
+      "label": "Menu down",
+      "contexts": [],
+      "dispatch": "consume_first",
+      "effects": [
+        {
+          "kind": "menu_nav",
+          "x": 0,
+          "y": 1
+        }
+      ]
+    },
+    {
+      "id": "ui.menu.left",
+      "label": "Menu left",
+      "contexts": [],
+      "dispatch": "consume_first",
+      "effects": [
+        {
+          "kind": "menu_nav",
+          "x": -1,
+          "y": 0
+        }
+      ]
+    },
+    {
+      "id": "ui.menu.right",
+      "label": "Menu right",
+      "contexts": [],
+      "dispatch": "consume_first",
+      "effects": [
+        {
+          "kind": "menu_nav",
+          "x": 1,
+          "y": 0
+        }
+      ]
+    }
+  ],
+  "listeners": [
+    {
+      "owner": "newengine-ui",
+      "id": "pause-menu",
+      "action_filter": [
+        "engine.menu.toggle_pause",
+        "ui.menu.accept",
+        "ui.menu.back",
+        "ui.menu.up",
+        "ui.menu.down",
+        "ui.menu.left",
+        "ui.menu.right"
+      ],
+      "context_filter": [],
+      "priority": 100,
+      "consume": true,
+      "enabled": true
+    },
+    {
+      "owner": "newengine-camera-runtime",
+      "id": "camera-view",
+      "action_filter": [
+        "camera.view.next",
+        "camera.view.previous",
+        "camera.view.first_person",
+        "camera.view.third_person.follow",
+        "camera.view.third_person.aim"
+      ],
+      "context_filter": [],
+      "priority": 50,
+      "consume": false,
+      "enabled": true
+    },
+    {
+      "owner": "newengine-gameplay",
+      "id": "player-controller",
+      "action_filter": [
+        "player.move.forward",
+        "player.move.back",
+        "player.move.left",
+        "player.move.right",
+        "player.move.up",
+        "player.move.down",
+        "player.sprint"
+      ],
+      "context_filter": [],
+      "priority": 10,
+      "consume": false,
+      "enabled": true
+    }
+  ],
   "bindings": [
     {
       "action": "player.move.forward",
@@ -88,6 +487,62 @@
       "phase": "Pressed"
     },
     {
+      "action": "engine.menu.toggle_pause",
+      "device": "Keyboard",
+      "code": 114,
+      "name": null,
+      "phase": "Pressed"
+    },
+    {
+      "action": "ui.menu.accept",
+      "device": "Keyboard",
+      "code": 57,
+      "name": null,
+      "phase": "Pressed"
+    },
+    {
+      "action": "ui.menu.accept",
+      "device": "Keyboard",
+      "code": 58,
+      "name": null,
+      "phase": "Pressed"
+    },
+    {
+      "action": "ui.menu.back",
+      "device": "Keyboard",
+      "code": 70,
+      "name": null,
+      "phase": "Pressed"
+    },
+    {
+      "action": "ui.menu.up",
+      "device": "Keyboard",
+      "code": 87,
+      "name": null,
+      "phase": "Pressed"
+    },
+    {
+      "action": "ui.menu.down",
+      "device": "Keyboard",
+      "code": 89,
+      "name": null,
+      "phase": "Pressed"
+    },
+    {
+      "action": "ui.menu.left",
+      "device": "Keyboard",
+      "code": 86,
+      "name": null,
+      "phase": "Pressed"
+    },
+    {
+      "action": "ui.menu.right",
+      "device": "Keyboard",
+      "code": 88,
+      "name": null,
+      "phase": "Pressed"
+    },
+    {
       "action": "player.sprint",
       "device": "GamepadButton",
       "code": 0,
@@ -124,6 +579,55 @@
     },
     {
       "action": "camera.view.third_person.aim",
+      "device": "GamepadButton",
+      "code": 0,
+      "name": "DPadRight",
+      "phase": "Pressed"
+    },
+    {
+      "action": "engine.menu.toggle_pause",
+      "device": "GamepadButton",
+      "code": 0,
+      "name": "Start",
+      "phase": "Pressed"
+    },
+    {
+      "action": "ui.menu.accept",
+      "device": "GamepadButton",
+      "code": 0,
+      "name": "South",
+      "phase": "Pressed"
+    },
+    {
+      "action": "ui.menu.back",
+      "device": "GamepadButton",
+      "code": 0,
+      "name": "East",
+      "phase": "Pressed"
+    },
+    {
+      "action": "ui.menu.up",
+      "device": "GamepadButton",
+      "code": 0,
+      "name": "DPadUp",
+      "phase": "Pressed"
+    },
+    {
+      "action": "ui.menu.down",
+      "device": "GamepadButton",
+      "code": 0,
+      "name": "DPadDown",
+      "phase": "Pressed"
+    },
+    {
+      "action": "ui.menu.left",
+      "device": "GamepadButton",
+      "code": 0,
+      "name": "DPadLeft",
+      "phase": "Pressed"
+    },
+    {
+      "action": "ui.menu.right",
       "device": "GamepadButton",
       "code": 0,
       "name": "DPadRight",

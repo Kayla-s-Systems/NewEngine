@@ -1,9 +1,11 @@
 #![forbid(unsafe_op_in_unsafe_fn)]
 
-use newengine_input_bindings::{CameraViewRequest, InputBindingsProfile, InputFrameSource};
+use newengine_input_bindings::{
+    CameraViewRequest, InputActionFrame, InputFrameSource,
+};
 use newengine_ui::UiInputFrame;
 
-#[derive(Clone, Copy, Debug, Default)]
+#[derive(Clone, Debug, Default)]
 pub(super) struct ViewportInputSnap {
     pub dx_px: f32,
     pub dy_px: f32,
@@ -19,6 +21,7 @@ pub(super) struct ViewportInputSnap {
     pub move_mask: u64,
     pub speed_scalar: f32,
     pub camera_view: CameraViewRequest,
+    pub actions: InputActionFrame,
 }
 
 impl ViewportInputSnap {
@@ -38,6 +41,7 @@ impl ViewportInputSnap {
             move_mask,
             speed_scalar,
             camera_view: CameraViewRequest::None,
+            actions: InputActionFrame::default(),
         }
     }
 
@@ -46,7 +50,7 @@ impl ViewportInputSnap {
         let Some(input) = input else {
             return Self::default();
         };
-        let actions = InputBindingsProfile::gameplay_default().resolve(&UiInputSource(input));
+        let actions = crate::input_bindings_gateway::resolve_input_actions(&UiInputSource(input));
 
         Self {
             dx_px: input.mouse_delta.0 + actions.look_axis[0] * 18.0,
@@ -60,7 +64,23 @@ impl ViewportInputSnap {
             move_mask: actions.move_mask,
             speed_scalar: 1.0,
             camera_view: actions.camera_view,
+            actions,
         }
+    }
+
+    #[inline]
+    pub(super) fn suppress_runtime_controls(&mut self) {
+        self.dx_px = 0.0;
+        self.dy_px = 0.0;
+        self.wheel_y = 0.0;
+        self.active = false;
+        self.look_drag = false;
+        self.pan_drag = false;
+        self.ui_busy = true;
+        self.fly_rmb = false;
+        self.move_mask = 0;
+        self.speed_scalar = 1.0;
+        self.camera_view = CameraViewRequest::None;
     }
 }
 

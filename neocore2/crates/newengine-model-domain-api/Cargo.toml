@@ -1,0 +1,9 @@
+[package]
+name = "newengine-model-domain-api"
+version = "0.1.0"
+edition = "2021"
+description = "Stable model construction domain contracts for NewEngine"
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+newengine-service-api = { path = "../newengine-service-api" }

@@ -148,6 +148,7 @@ impl RenderFrameOrchestrator {
             None
         };
         let draw_list_descs = features.draw_list_descs().to_vec();
+        let ui_backdrop = controller.menu.pause.ui_backdrop_postfx();
         let frame_plan = standard_runtime_frame(
             StandardRuntimePipelineDesc::new(controller.frame.frame_index, Extent2D::new(scope.w, scope.h), extent)
                 .viewport_is_surface(scope.direct_surface_viewport)
@@ -159,6 +160,7 @@ impl RenderFrameOrchestrator {
                 .hdr_scene(true)
                 .postfx(true)
                 .ui(scope.ui_enabled)
+                .ui_backdrop_blur(scope.ui_enabled && ui_backdrop.enabled && ui_backdrop.blur_radius_px > 0.05)
                 .debug_overlay(false)
                 .draw_lists(draw_list_descs.clone()),
         );
@@ -170,10 +172,11 @@ impl RenderFrameOrchestrator {
         }
         cpu_profile.mark("frame_plan_external");
 
-        let postfx = apply_engine_view_postfx(
+        let mut postfx = apply_engine_view_postfx(
             postfx::game_sun_postfx_params(scene.world(), viewproj, view.position_ws),
             view_frame.postfx,
         );
+        postfx.ui_backdrop = ui_backdrop;
         let frame_envelope = build_runtime_frame_envelope(
             controller.frame.frame_index,
             controller.viewport.clear_color,

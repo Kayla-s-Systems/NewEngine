@@ -76,6 +76,7 @@ pub struct HostPlatformRuntime {
     loaded_engine_plugins: Option<usize>,
     fatal_bootstrap_error: Option<String>,
     cached_provider_ui_draw: Option<UiDrawList>,
+    last_pause_menu_visible: bool,
 }
 
 
@@ -112,6 +113,7 @@ impl HostPlatformRuntime {
             loaded_engine_plugins: None,
             fatal_bootstrap_error: None,
             cached_provider_ui_draw: None,
+            last_pause_menu_visible: false,
         }
     }
 
@@ -501,6 +503,14 @@ impl HostPlatformRuntime {
         {
             crate::platform_runtime::ui_gateway_frame::publish_debug_overlay_telemetry(&telemetry);
         }
+        let pause_menu_state = self
+            .engine
+            .resources
+            .get::<newengine_ui_api::UiPauseMenuState>()
+            .cloned();
+        if let Some(state) = pause_menu_state.as_ref() {
+            crate::platform_runtime::ui_gateway_frame::publish_pause_menu_state(state);
+        }
 
         if let Some(input) = input_frame.clone() {
             self.engine.resources_mut().insert::<UiInputFrame>(input);
@@ -525,6 +535,9 @@ impl HostPlatformRuntime {
             .resources
             .get::<newengine_ui_api::UiRuntimeDebugOverlayTelemetry>()
             .is_some();
+        let pause_menu_visible = pause_menu_state.as_ref().map(|state| state.visible).unwrap_or(false);
+        let pause_menu_refresh = pause_menu_visible || (self.last_pause_menu_visible && !pause_menu_visible);
+        self.last_pause_menu_visible = pause_menu_visible;
         let scene_launch_active = self
             .engine
             .resources
@@ -537,9 +550,10 @@ impl HostPlatformRuntime {
         // runtime-debug telemetry was enabled, so the gameplay HUD vanished and the frame graph
         // legitimately collapsed to `ui=none`. Keep UI visible by using a cached provider draw
         // list for idle gameplay, and refresh it only when state can change.
-        let provider_ui_needed = self.ui_build.is_some() || debug_overlay_active || scene_launch_active;
+        let provider_ui_needed = self.ui_build.is_some() || debug_overlay_active || scene_launch_active || pause_menu_visible;
         let provider_gameplay_hud = provider_ui_active && !self.minimized && self.surface.width > 0 && self.surface.height > 0;
         let provider_ui_refresh = provider_ui_needed
+            || pause_menu_refresh
             || self.cached_provider_ui_draw.is_none()
             || ui_frame_index <= 4
             || ui_frame_index % 30 == 1;

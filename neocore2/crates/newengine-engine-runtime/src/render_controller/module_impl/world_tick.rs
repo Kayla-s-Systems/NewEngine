@@ -21,6 +21,7 @@ impl RuntimeRenderController {
         input: &ViewportInputSnap,
         play_mode: GameRunMode,
         dt: f32,
+        pause_world: bool,
         _aspect: f32,
         vp_w: u32,
         vp_h: u32,
@@ -61,7 +62,7 @@ impl RuntimeRenderController {
                 crate::scene_bridge::tick_game_ready_streaming_terrain(world, &mats, job_system);
             }
 
-            if effective_play_mode.runs_physics() {
+            if effective_play_mode.runs_physics() && !pause_world {
                 world.insert_resource(crate::gameplay::PhysicsRuntimeFrameIndex(self.frame.frame_index));
                 run_schedule(&mut self.frame.sim_schedule, world, dt, physics_api);
             }

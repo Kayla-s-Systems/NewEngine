@@ -198,6 +198,17 @@ impl RawGameReadyPayload {
                 yaw: self.player.yaw,
                 move_speed: self.player.move_speed,
                 look_sens: self.player.look_sens,
+                model: GameReadyPlayerModelSpec {
+                    enabled: self.player.model.enabled && !self.player.model.source.trim().is_empty(),
+                    source: non_empty_or(self.player.model.source, default_player_model_source()),
+                    texture_dictionary: sanitize_texture_path(self.player.model.texture_dictionary),
+                    skeleton: sanitize_asset_path(self.player.model.skeleton),
+                    target_height: self.player.model.target_height.clamp(0.25, 3.0),
+                    eye_height_ratio: self.player.model.eye_height_ratio.clamp(0.55, 0.98),
+                    local_offset: arr3(self.player.model.local_offset),
+                    yaw_offset: self.player.model.yaw_offset,
+                    hide_in_first_person: self.player.model.hide_in_first_person,
+                },
             },
             terrain: GameReadyTerrainSpec {
                 seed: self.terrain.seed,

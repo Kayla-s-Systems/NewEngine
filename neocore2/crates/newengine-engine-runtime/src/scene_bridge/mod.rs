@@ -35,6 +35,7 @@ use newengine_primitives::{builtins, Primitive, PrimitiveId, PrimitiveRegistry};
 use newengine_scene::{spawn_named, Scene, SceneAsset};
 use newengine_transform::Transform;
 
+use crate::audio_gateway::register_audio_gateway_best_effort;
 use crate::camera_gateway::CameraGatewayBridge;
 use crate::input_bindings_gateway::register_input_bindings_gateway_best_effort;
 use crate::gameplay::{
@@ -72,6 +73,7 @@ impl SceneBridge {
     #[inline]
     pub fn new(mut initial: Scene) -> Self {
         bootstrap_runtime_scene(&mut initial);
+        register_audio_gateway_best_effort();
         register_input_bindings_gateway_best_effort();
 
         let primitives = Arc::new(RwLock::new(PrimitiveRegistry::with_builtins()));

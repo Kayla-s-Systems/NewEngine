@@ -50,6 +50,7 @@ pub enum RenderGraphResourceSemantic {
     LitColor,
     PostFxColor,
     UiColor,
+    UiBackdropBlur,
     DebugOverlay,
     Custom,
 }
@@ -120,6 +121,7 @@ pub enum RenderGraphPassKind {
     BloomBlur,
     TaaResolve,
     MsaaResolve,
+    UiBackdropBlur,
     UiComposite,
     DebugOverlay,
     Copy,
@@ -364,7 +366,7 @@ impl RenderMaterialDomain {
             (Self::Transparent, RenderGraphPassKind::Transparent) => true,
             (Self::Water, RenderGraphPassKind::Water) => true,
             (Self::Ui, RenderGraphPassKind::UiComposite) => true,
-            (Self::PostFx, RenderGraphPassKind::PostFx | RenderGraphPassKind::BloomExtract | RenderGraphPassKind::BloomBlur | RenderGraphPassKind::TaaResolve | RenderGraphPassKind::MsaaResolve | RenderGraphPassKind::DeferredLighting) => true,
+            (Self::PostFx, RenderGraphPassKind::PostFx | RenderGraphPassKind::BloomExtract | RenderGraphPassKind::BloomBlur | RenderGraphPassKind::TaaResolve | RenderGraphPassKind::MsaaResolve | RenderGraphPassKind::DeferredLighting | RenderGraphPassKind::UiBackdropBlur) => true,
             (Self::Debug, RenderGraphPassKind::DebugOverlay) => true,
             (Self::Custom, _) => true,
             _ => false,
@@ -402,6 +404,21 @@ impl DrawPacket {
 }
 
 
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum RenderGraphPassDomain {
+    Unknown,
+    Render3d,
+    Render2d,
+    PostProcess,
+    Presentation,
+}
+
+impl Default for RenderGraphPassDomain {
+    #[inline]
+    fn default() -> Self { Self::Unknown }
+}
+
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct RenderGraphPassFlags {
     #[serde(default)]
@@ -418,6 +435,8 @@ pub struct RenderGraphPassDesc {
     pub label: String,
     #[serde(default)]
     pub kind: RenderGraphPassKind,
+    #[serde(default)]
+    pub domain: RenderGraphPassDomain,
     #[serde(default)]
     pub queue: RenderGraphQueueKind,
     #[serde(default)]
@@ -439,6 +458,7 @@ impl RenderGraphPassDesc {
             id,
             label: label.into(),
             kind,
+            domain: RenderGraphPassDomain::Unknown,
             queue: RenderGraphQueueKind::Graphics,
             reads: Vec::new(),
             writes: Vec::new(),
@@ -446,6 +466,12 @@ impl RenderGraphPassDesc {
             draw_lists: Vec::new(),
             flags: RenderGraphPassFlags::default(),
         }
+    }
+
+    #[inline]
+    pub fn with_domain(mut self, domain: RenderGraphPassDomain) -> Self {
+        self.domain = domain;
+        self
     }
 
     #[inline]

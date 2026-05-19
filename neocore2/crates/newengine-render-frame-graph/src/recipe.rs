@@ -8,6 +8,7 @@ pub struct RuntimeFrameFeatureSet {
     pub deferred: bool,
     pub postfx: bool,
     pub ui_composite: bool,
+    pub ui_backdrop_blur: bool,
     pub debug_overlay: bool,
 }
 
@@ -19,6 +20,7 @@ impl RuntimeFrameFeatureSet {
             deferred: false,
             postfx,
             ui_composite,
+            ui_backdrop_blur: false,
             debug_overlay,
         }
     }
@@ -30,8 +32,14 @@ impl RuntimeFrameFeatureSet {
             deferred: true,
             postfx,
             ui_composite,
+            ui_backdrop_blur: false,
             debug_overlay,
         }
+    }
+    #[inline]
+    pub const fn with_ui_backdrop_blur(mut self, enabled: bool) -> Self {
+        self.ui_backdrop_blur = enabled;
+        self
     }
 }
 
@@ -85,6 +93,7 @@ impl RenderFrameRecipe {
             steps.push(RenderPhaseRecipeStep::enabled(StandardRenderPhase::ViewportForward));
         }
         steps.push(RenderPhaseRecipeStep::optional(StandardRenderPhase::PostFx, features.postfx));
+        steps.push(RenderPhaseRecipeStep::optional(StandardRenderPhase::UiBackdropBlur, features.ui_composite && features.ui_backdrop_blur));
         steps.push(RenderPhaseRecipeStep::optional(StandardRenderPhase::UiComposite, features.ui_composite));
         steps.push(RenderPhaseRecipeStep::optional(StandardRenderPhase::DebugOverlay, features.debug_overlay));
         steps.push(RenderPhaseRecipeStep::enabled(StandardRenderPhase::EndFrame));

@@ -406,6 +406,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "newengine-audio-api"
+version = "0.1.0"
+dependencies = [
+ "newengine-service-api",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "newengine-bounds"
 version = "0.1.0"
 dependencies = [
@@ -462,6 +471,7 @@ dependencies = [
  "crossbeam-channel",
  "log",
  "newengine-assets-api",
+ "newengine-audio-api",
  "newengine-camera-api",
  "newengine-ecs-api",
  "newengine-entity-api",
@@ -513,6 +523,7 @@ dependencies = [
  "libloading 0.9.0",
  "log",
  "newengine-assets",
+ "newengine-audio-api",
  "newengine-bounds",
  "newengine-camera",
  "newengine-camera-api",
@@ -525,6 +536,7 @@ dependencies = [
  "newengine-material-domain-api",
  "newengine-materials",
  "newengine-math",
+ "newengine-model-adapter",
  "newengine-physics-api",
  "newengine-physics-contracts",
  "newengine-platform-api",
@@ -538,6 +550,7 @@ dependencies = [
  "newengine-scene",
  "newengine-scene-io",
  "newengine-service-api",
+ "newengine-service-kit",
  "newengine-shader-compiler",
  "newengine-sim",
  "newengine-texture-container",
@@ -587,6 +600,7 @@ dependencies = [
  "newengine-scene",
  "newengine-scene-io",
  "newengine-service-api",
+ "newengine-service-kit",
  "newengine-ui",
  "parking_lot",
  "serde",
@@ -674,6 +688,30 @@ dependencies = [
  "parking_lot",
  "serde",
  "slotmap",
+]
+
+[[package]]
+name = "newengine-model-adapter"
+version = "0.1.0"
+dependencies = [
+ "blake3",
+ "log",
+ "newengine-assets",
+ "newengine-materials",
+ "newengine-math",
+ "newengine-model-domain-api",
+ "newengine-plugin-host",
+ "newengine-primitives",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "newengine-model-domain-api"
+version = "0.1.0"
+dependencies = [
+ "newengine-service-api",
+ "serde",
 ]
 
 [[package]]
@@ -808,6 +846,7 @@ dependencies = [
  "newengine-plugin-host",
  "newengine-render-api",
  "newengine-service-api",
+ "newengine-service-kit",
  "newengine-system-contracts",
  "newengine-system-runtime",
  "newengine-transform",
@@ -843,6 +882,20 @@ dependencies = [
 [[package]]
 name = "newengine-service-api"
 version = "0.1.0"
+
+[[package]]
+name = "newengine-service-kit"
+version = "0.1.0"
+dependencies = [
+ "abi_stable",
+ "log",
+ "newengine-plugin-api",
+ "newengine-plugin-host",
+ "newengine-service-api",
+ "parking_lot",
+ "serde",
+ "serde_json",
+]
 
 [[package]]
 name = "newengine-shader-compiler"

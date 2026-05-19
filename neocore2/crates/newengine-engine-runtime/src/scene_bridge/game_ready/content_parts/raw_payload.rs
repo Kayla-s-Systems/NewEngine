@@ -43,6 +43,8 @@ struct RawPlayerSpec {
     move_speed: f32,
     #[serde(default = "default_look_sens")]
     look_sens: f32,
+    #[serde(default)]
+    model: RawPlayerModelSpec,
 }
 
 impl Default for RawPlayerSpec {
@@ -52,6 +54,45 @@ impl Default for RawPlayerSpec {
             yaw: default_player_yaw(),
             move_speed: default_move_speed(),
             look_sens: default_look_sens(),
+            model: RawPlayerModelSpec::default(),
+        }
+    }
+}
+
+#[derive(Debug, Deserialize)]
+struct RawPlayerModelSpec {
+    #[serde(default = "default_player_model_enabled")]
+    enabled: bool,
+    #[serde(default = "default_player_model_source")]
+    source: String,
+    #[serde(default = "default_player_texture_dictionary")]
+    texture_dictionary: Option<String>,
+    #[serde(default = "default_player_skeleton")]
+    skeleton: Option<String>,
+    #[serde(default = "default_player_model_height")]
+    target_height: f32,
+    #[serde(default = "default_player_model_eye_height_ratio")]
+    eye_height_ratio: f32,
+    #[serde(default = "default_player_model_offset")]
+    local_offset: [f32; 3],
+    #[serde(default = "default_player_model_yaw_offset")]
+    yaw_offset: f32,
+    #[serde(default = "default_player_model_hide_in_first_person")]
+    hide_in_first_person: bool,
+}
+
+impl Default for RawPlayerModelSpec {
+    fn default() -> Self {
+        Self {
+            enabled: default_player_model_enabled(),
+            source: default_player_model_source(),
+            texture_dictionary: default_player_texture_dictionary(),
+            skeleton: default_player_skeleton(),
+            target_height: default_player_model_height(),
+            eye_height_ratio: default_player_model_eye_height_ratio(),
+            local_offset: default_player_model_offset(),
+            yaw_offset: default_player_model_yaw_offset(),
+            hide_in_first_person: default_player_model_hide_in_first_person(),
         }
     }
 }

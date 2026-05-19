@@ -6,7 +6,7 @@ mod system_probe;
 
 pub use config::{
     ConfigPaths, StartupConfig, StartupConfigSource, StartupLoadReport, StartupOverride,
-    StartupResolvedFrom, WindowPlacement,
+    StartupResolvedFrom, StartupStorageRootKind, WindowPlacement,
 };
 
 pub use loader::StartupLoader;

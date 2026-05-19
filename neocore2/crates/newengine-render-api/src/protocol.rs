@@ -365,6 +365,7 @@ fn render_graph_pass_kind_tag(kind: RenderGraphPassKind) -> u8 {
         RenderGraphPassKind::TaaResolve => 13,
         RenderGraphPassKind::MsaaResolve => 14,
         RenderGraphPassKind::UiComposite => 15,
+        RenderGraphPassKind::UiBackdropBlur => 19,
         RenderGraphPassKind::DebugOverlay => 16,
         RenderGraphPassKind::Copy => 17,
         RenderGraphPassKind::Custom => 18,
@@ -389,6 +390,7 @@ fn render_graph_pass_kind_from_tag(tag: u8) -> Result<RenderGraphPassKind, Strin
         13 => Ok(RenderGraphPassKind::TaaResolve),
         14 => Ok(RenderGraphPassKind::MsaaResolve),
         15 => Ok(RenderGraphPassKind::UiComposite),
+        19 => Ok(RenderGraphPassKind::UiBackdropBlur),
         16 => Ok(RenderGraphPassKind::DebugOverlay),
         17 => Ok(RenderGraphPassKind::Copy),
         18 => Ok(RenderGraphPassKind::Custom),
@@ -615,6 +617,27 @@ impl RenderProblemDetails {
     }
 }
 
+
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+pub struct RenderFrameDomainIntent {
+    #[serde(default = "default_true_domain")]
+    pub render3d_enabled: bool,
+    #[serde(default = "default_true_domain")]
+    pub render2d_enabled: bool,
+    #[serde(default)]
+    pub ui_postprocess_enabled: bool,
+}
+
+impl Default for RenderFrameDomainIntent {
+    #[inline]
+    fn default() -> Self {
+        Self { render3d_enabled: true, render2d_enabled: true, ui_postprocess_enabled: false }
+    }
+}
+
+#[inline]
+fn default_true_domain() -> bool { true }
+
 /// One renderer-facing frame package inspired by mature phase/draw-list
 /// renderers: the runtime submits a single envelope containing the graph,
 /// declared draw-list routes and frame extents instead of negotiating scattered
@@ -631,6 +654,8 @@ pub struct RenderFrameEnvelope {
     pub postfx: PostFxFrameParams,
     #[serde(default)]
     pub effects: RenderEffectStack,
+    #[serde(default)]
+    pub domains: RenderFrameDomainIntent,
     pub graph: RenderGraphDesc,
     #[serde(default)]
     pub draw_lists: Vec<RenderDrawListKind>,
@@ -657,6 +682,7 @@ impl RenderFrameEnvelope {
             viewport_is_surface,
             postfx: PostFxFrameParams::default(),
             effects: RenderEffectStack::default(),
+            domains: RenderFrameDomainIntent::default(),
             graph,
             draw_lists: Vec::new(),
             work_budget: None,
@@ -673,6 +699,12 @@ impl RenderFrameEnvelope {
     #[inline]
     pub fn with_effect_stack(mut self, effects: RenderEffectStack) -> Self {
         self.effects = effects;
+        self
+    }
+
+    #[inline]
+    pub fn with_domain_intent(mut self, domains: RenderFrameDomainIntent) -> Self {
+        self.domains = domains;
         self
     }
 

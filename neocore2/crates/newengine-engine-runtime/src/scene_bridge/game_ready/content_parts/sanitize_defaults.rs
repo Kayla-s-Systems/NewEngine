@@ -29,9 +29,14 @@ fn non_empty_or(value: String, fallback: String) -> String {
 
 #[inline]
 fn sanitize_texture_path(value: Option<String>) -> Option<String> {
+    sanitize_asset_path(value)
+}
+
+#[inline]
+fn sanitize_asset_path(value: Option<String>) -> Option<String> {
     value.and_then(|s| {
         let trimmed = s.trim();
-        if trimmed.is_empty() { None } else { Some(trimmed.to_owned()) }
+        if trimmed.is_empty() { None } else { Some(trimmed.replace('\\', "/")) }
     })
 }
 
@@ -156,6 +161,15 @@ fn default_player_start() -> [f32; 3] { [-17.5, 0.0, -17.5] }
 fn default_player_yaw() -> f32 { -0.72 }
 fn default_move_speed() -> f32 { 7.3 }
 fn default_look_sens() -> f32 { 0.0022 }
+fn default_player_model_enabled() -> bool { true }
+fn default_player_model_source() -> String { "player/abigail/csb_abigail_static_y_up.obj".to_owned() }
+fn default_player_texture_dictionary() -> Option<String> { Some("player/abigail/textures/abigail.neytd".to_owned()) }
+fn default_player_skeleton() -> Option<String> { Some("player/abigail/csb_abigail.ymt".to_owned()) }
+fn default_player_model_height() -> f32 { 1.78 }
+fn default_player_model_eye_height_ratio() -> f32 { 0.91 }
+fn default_player_model_offset() -> [f32; 3] { [0.0, 0.0, 0.0] }
+fn default_player_model_yaw_offset() -> f32 { 0.0 }
+fn default_player_model_hide_in_first_person() -> bool { true }
 fn default_terrain_seed() -> u64 { 0x2026_0509_4b41_594c }
 fn default_terrain_cells() -> u32 { 80 }
 fn default_terrain_size() -> f32 { 52.0 }
@@ -194,7 +208,7 @@ fn default_player_body_radius() -> f32 { 0.45 }
 fn default_player_body_half_height() -> f32 { 0.45 }
 fn default_player_visual_radius() -> f32 { 0.45 }
 fn default_player_visual_half_height() -> f32 { 0.90 }
-fn default_camera_eye_height() -> f32 { 0.85 }
+fn default_camera_eye_height() -> f32 { 0.72 }
 fn default_sprint_multiplier() -> f32 { 1.75 }
 fn default_gravity() -> f32 { 9.81 }
 fn default_contact_skin() -> f32 { 0.035 }

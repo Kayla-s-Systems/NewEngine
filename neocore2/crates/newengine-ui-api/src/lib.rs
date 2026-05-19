@@ -32,6 +32,7 @@ pub const UI_SERVICE_METHOD_ACTION_MANIFEST_V1: &str = "action_manifest_v1";
 pub const UI_SERVICE_METHOD_LOADING_SHELL_V1: &str = "loading_shell_v1";
 pub const UI_SERVICE_METHOD_DEBUG_TELEMETRY_SCHEMA: &str = "debug_telemetry_schema";
 pub const UI_SERVICE_METHOD_DEBUG_OVERLAY_TELEMETRY_V1: &str = "debug_overlay_telemetry_v1";
+pub const UI_SERVICE_METHOD_PAUSE_MENU_STATE_V1: &str = "pause_menu_state_v1";
 pub const UI_SERVICE_METHOD_DRAW_FRAME_V1: &str = "draw_frame_v1";
 pub const UI_SERVICE_METHOD_DRAW_FRAME_BIN_V1: &str = "draw_frame_bin_v1";
 
@@ -39,6 +40,7 @@ pub const UI_SURFACE_ENGINE_LOADING: &str = "engine.loading";
 pub const UI_SURFACE_ENGINE_ERROR_MODAL: &str = "engine.error_modal";
 pub const UI_SURFACE_RUNTIME_OVERLAY: &str = "runtime.overlay";
 pub const UI_SURFACE_RUNTIME_DEBUG_OVERLAY: &str = "runtime.debug_overlay";
+pub const UI_SURFACE_ENGINE_PAUSE_MENU: &str = "engine.pause_menu";
 
 /// Generic backend-family declaration for UI providers.
 pub const UI_BACKEND_SERVICE_SPEC: newengine_service_api::BackendServiceSpec =
@@ -86,6 +88,9 @@ impl Default for UiServiceInfo {
                 "provider-owned-layout".to_owned(),
                 "declarative-actions".to_owned(),
                 "runtime-debug-overlay".to_owned(),
+                "pause-menu-modal".to_owned(),
+                "pause-menu-feedback-v1".to_owned(),
+                "declarative-pause-menu-theme".to_owned(),
                 "draw-frame-bin-v1".to_owned(),
                 "atlas-text-quads".to_owned(),
             ],
@@ -95,6 +100,7 @@ impl Default for UiServiceInfo {
                 UI_SURFACE_ENGINE_ERROR_MODAL.to_owned(),
                 UI_SURFACE_RUNTIME_OVERLAY.to_owned(),
                 UI_SURFACE_RUNTIME_DEBUG_OVERLAY.to_owned(),
+                UI_SURFACE_ENGINE_PAUSE_MENU.to_owned(),
             ],
         }
     }
@@ -111,6 +117,7 @@ pub const UI_SERVICE_METHODS: &[&str] = &[
     UI_SERVICE_METHOD_LOADING_SHELL_V1,
     UI_SERVICE_METHOD_DEBUG_TELEMETRY_SCHEMA,
     UI_SERVICE_METHOD_DEBUG_OVERLAY_TELEMETRY_V1,
+    UI_SERVICE_METHOD_PAUSE_MENU_STATE_V1,
     UI_SERVICE_METHOD_DRAW_FRAME_V1,
     UI_SERVICE_METHOD_DRAW_FRAME_BIN_V1,
 ];
@@ -176,6 +183,261 @@ impl UiAck {
     #[inline]
     pub fn ok(provider: impl Into<String>) -> Self {
         Self { ok: true, provider: Some(provider.into()), message: None }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum UiPauseMenuItemTone {
+    Normal,
+    Accent,
+    Danger,
+    Disabled,
+}
+
+impl Default for UiPauseMenuItemTone {
+    #[inline]
+    fn default() -> Self { Self::Normal }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct UiPauseMenuItem {
+    pub id: String,
+    pub label: String,
+    #[serde(default)]
+    pub value: Option<String>,
+    #[serde(default)]
+    pub detail: Option<String>,
+    #[serde(default)]
+    pub emphasized: bool,
+    #[serde(default)]
+    pub tone: UiPauseMenuItemTone,
+}
+
+impl UiPauseMenuItem {
+    #[inline]
+    pub fn new(id: impl Into<String>, label: impl Into<String>) -> Self {
+        Self {
+            id: id.into(),
+            label: label.into(),
+            value: None,
+            detail: None,
+            emphasized: false,
+            tone: UiPauseMenuItemTone::Normal,
+        }
+    }
+
+    #[inline]
+    pub fn with_value(mut self, value: impl Into<String>) -> Self {
+        self.value = Some(value.into());
+        self
+    }
+
+    #[inline]
+    pub fn with_detail(mut self, detail: impl Into<String>) -> Self {
+        self.detail = Some(detail.into());
+        self
+    }
+
+    #[inline]
+    pub fn emphasized(mut self, emphasized: bool) -> Self {
+        self.emphasized = emphasized;
+        self
+    }
+
+    #[inline]
+    pub fn with_tone(mut self, tone: UiPauseMenuItemTone) -> Self {
+        self.tone = tone;
+        self
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum UiPauseMenuMessageSeverity {
+    Info,
+    Success,
+    Warning,
+    Danger,
+}
+
+impl Default for UiPauseMenuMessageSeverity {
+    #[inline]
+    fn default() -> Self { Self::Info }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct UiPauseMenuMessage {
+    pub title: String,
+    #[serde(default)]
+    pub detail: String,
+    #[serde(default)]
+    pub severity: UiPauseMenuMessageSeverity,
+    #[serde(default)]
+    pub age_sec: f32,
+    #[serde(default)]
+    pub ttl_sec: f32,
+}
+
+impl UiPauseMenuMessage {
+    #[inline]
+    pub fn new(title: impl Into<String>, detail: impl Into<String>, severity: UiPauseMenuMessageSeverity) -> Self {
+        Self {
+            title: title.into(),
+            detail: detail.into(),
+            severity,
+            age_sec: 0.0,
+            ttl_sec: 2.2,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct UiPauseMenuTheme {
+    pub id: String,
+    pub accent_rgba: [u8; 4],
+    pub accent_secondary_rgba: [u8; 4],
+    pub panel_rgba: [u8; 4],
+    pub panel_hot_rgba: [u8; 4],
+    pub text_rgba: [u8; 4],
+    pub text_muted_rgba: [u8; 4],
+    pub danger_rgba: [u8; 4],
+}
+
+impl Default for UiPauseMenuTheme {
+    #[inline]
+    fn default() -> Self {
+        Self {
+            id: "newengine.dark.gold-contrast".to_owned(),
+            accent_rgba: [255, 203, 76, 255],
+            accent_secondary_rgba: [255, 112, 196, 255],
+            panel_rgba: [5, 6, 10, 255],
+            panel_hot_rgba: [18, 17, 12, 255],
+            text_rgba: [246, 250, 255, 255],
+            text_muted_rgba: [188, 202, 224, 255],
+            danger_rgba: [255, 86, 98, 255],
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+pub struct UiPauseMenuLayout {
+    pub screen_w: f32,
+    pub screen_h: f32,
+    pub panel_x: f32,
+    pub panel_y: f32,
+    pub panel_w: f32,
+    pub panel_h: f32,
+    pub list_x: f32,
+    pub list_y: f32,
+    pub list_right: f32,
+    pub item_h: f32,
+    pub item_visual_h: f32,
+    pub footer_y: f32,
+    pub rail_x: f32,
+    pub rail_w: f32,
+}
+
+impl UiPauseMenuLayout {
+    #[inline]
+    pub fn hit_item_index(self, mouse_pos: Option<(f32, f32)>, item_count: usize) -> Option<usize> {
+        let (mx, my) = mouse_pos?;
+        if mx < self.list_x || mx > self.list_right || my < self.list_y {
+            return None;
+        }
+        let idx = ((my - self.list_y) / self.item_h).floor() as isize;
+        if idx < 0 || idx as usize >= item_count { None } else { Some(idx as usize) }
+    }
+}
+
+#[inline]
+pub fn pause_menu_layout(surface_size_px: [u32; 2], animation_alpha: f32, item_count: usize) -> UiPauseMenuLayout {
+    let w = surface_size_px[0].max(1) as f32;
+    let h = surface_size_px[1].max(1) as f32;
+    let a = animation_alpha.clamp(0.0, 1.0);
+    let panel_x = 72.0 - (1.0 - a) * 58.0;
+    let panel_y = (h * 0.105).max(44.0) + (1.0 - a) * 18.0;
+    let panel_w = (w * 0.42).clamp(430.0, 720.0);
+    let panel_h = (h * 0.80).clamp(452.0, 836.0);
+    let list_x = panel_x + 36.0;
+    let list_y = panel_y + 142.0;
+    let item_h = 52.0;
+    let footer_y = (panel_y + panel_h - 110.0).max(list_y + item_count as f32 * item_h + 16.0);
+    let rail_x = panel_x + panel_w + 28.0;
+    let rail_w = (w - rail_x - 72.0).clamp(250.0, 520.0);
+    UiPauseMenuLayout {
+        screen_w: w,
+        screen_h: h,
+        panel_x,
+        panel_y,
+        panel_w,
+        panel_h,
+        list_x,
+        list_y,
+        list_right: panel_x + panel_w - 36.0,
+        item_h,
+        item_visual_h: 42.0,
+        footer_y,
+        rail_x,
+        rail_w,
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct UiPauseMenuState {
+    pub version: u32,
+    pub surface_id: String,
+    pub visible: bool,
+    pub paused: bool,
+    pub page: String,
+    pub title: String,
+    pub subtitle: String,
+    #[serde(default)]
+    pub items: Vec<UiPauseMenuItem>,
+    #[serde(default)]
+    pub selected_index: usize,
+    #[serde(default)]
+    pub hovered_index: Option<usize>,
+    #[serde(default)]
+    pub footer_lines: Vec<String>,
+    #[serde(default)]
+    pub animation_alpha: f32,
+    #[serde(default)]
+    pub backdrop_opacity: f32,
+    #[serde(default)]
+    pub blur_radius_px: f32,
+    #[serde(default)]
+    pub theme: UiPauseMenuTheme,
+    #[serde(default)]
+    pub message: Option<UiPauseMenuMessage>,
+}
+
+impl Default for UiPauseMenuState {
+    #[inline]
+    fn default() -> Self { Self::hidden() }
+}
+
+impl UiPauseMenuState {
+    #[inline]
+    pub fn hidden() -> Self {
+        Self {
+            version: 1,
+            surface_id: UI_SURFACE_ENGINE_PAUSE_MENU.to_owned(),
+            visible: false,
+            paused: false,
+            page: "hidden".to_owned(),
+            title: "PAUSE".to_owned(),
+            subtitle: String::new(),
+            items: Vec::new(),
+            selected_index: 0,
+            hovered_index: None,
+            footer_lines: Vec::new(),
+            animation_alpha: 0.0,
+            backdrop_opacity: 0.0,
+            blur_radius_px: 0.0,
+            theme: UiPauseMenuTheme::default(),
+            message: None,
+        }
     }
 }
 

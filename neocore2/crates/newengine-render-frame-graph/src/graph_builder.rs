@@ -1,6 +1,6 @@
 use newengine_render_api::{
     Extent2D, RenderGraphDesc, RenderGraphPassDesc, RenderGraphResourceDesc,
-    RenderGraphResourceId, RenderGraphResourceSemantic, RenderGraphResourceUsage, RenderTargetId, TextureFormat,
+    RenderGraphPassDomain, RenderGraphResourceId, RenderGraphResourceSemantic, RenderGraphResourceUsage, RenderTargetId, TextureFormat,
 };
 
 use crate::{
@@ -151,6 +151,7 @@ impl FrameGraphBuilder {
                 StandardRenderPhase::BloomBlur => self.bloom_blur(),
                 StandardRenderPhase::TaaResolve => self.taa_resolve(),
                 StandardRenderPhase::MsaaResolve => self.msaa_resolve(),
+                StandardRenderPhase::UiBackdropBlur => self.ui_backdrop_blur(true),
                 StandardRenderPhase::UiComposite => self.ui_composite(true),
                 StandardRenderPhase::DebugOverlay => self.debug_overlay(true),
             };
@@ -187,7 +188,7 @@ impl FrameGraphBuilder {
         };
         self.graph.resources.push(shadow_resource);
         self.add_phase_pass(StandardRenderPhase::ShadowMap, |pass| {
-            pass.writes(RG_SHADOW_MAP, RenderGraphResourceUsage::DepthAttachment)
+            pass.with_domain(RenderGraphPassDomain::Render3d).writes(RG_SHADOW_MAP, RenderGraphResourceUsage::DepthAttachment)
                 .draw_list(DrawListKind::ShadowCasters)
         });
         self
@@ -227,7 +228,7 @@ impl FrameGraphBuilder {
             self.graph.resources.push(shadow_resource);
         }
         self.add_phase_pass(StandardRenderPhase::ShadowCascadeMap, |pass| {
-            pass.writes(RG_SHADOW_MAP, RenderGraphResourceUsage::DepthAttachment)
+            pass.with_domain(RenderGraphPassDomain::Render3d).writes(RG_SHADOW_MAP, RenderGraphResourceUsage::DepthAttachment)
                 .draw_list(DrawListKind::ShadowCasters)
         });
         self
@@ -269,7 +270,7 @@ impl FrameGraphBuilder {
         )
         .with_semantic(RenderGraphResourceSemantic::LitColor));
         self.add_phase_pass(StandardRenderPhase::DeferredLighting, |pass| {
-            pass.reads(RG_GBUFFER_ALBEDO, RenderGraphResourceUsage::SampledTexture)
+            pass.with_domain(RenderGraphPassDomain::Render3d).reads(RG_GBUFFER_ALBEDO, RenderGraphResourceUsage::SampledTexture)
                 .reads(RG_GBUFFER_NORMAL, RenderGraphResourceUsage::SampledTexture)
                 .reads(RG_GBUFFER_MATERIAL, RenderGraphResourceUsage::SampledTexture)
                 .reads(RG_GBUFFER_DEPTH, RenderGraphResourceUsage::SampledTexture)
@@ -286,7 +287,7 @@ impl FrameGraphBuilder {
     pub fn transparent(mut self) -> Self {
         let viewport_color = self.viewport_color_resource();
         self.add_phase_pass(StandardRenderPhase::Transparent, |pass| {
-            pass.reads(RG_VIEWPORT_DEPTH, RenderGraphResourceUsage::DepthAttachment)
+            pass.with_domain(RenderGraphPassDomain::Render3d).reads(RG_VIEWPORT_DEPTH, RenderGraphResourceUsage::DepthAttachment)
                 .writes(viewport_color, RenderGraphResourceUsage::ColorAttachment)
                 .draw_list(DrawListKind::Transparent)
         });
@@ -297,7 +298,7 @@ impl FrameGraphBuilder {
     pub fn water(mut self) -> Self {
         let viewport_color = self.viewport_color_resource();
         self.add_phase_pass(StandardRenderPhase::Water, |pass| {
-            pass.reads(RG_VIEWPORT_DEPTH, RenderGraphResourceUsage::DepthAttachment)
+            pass.with_domain(RenderGraphPassDomain::Render3d).reads(RG_VIEWPORT_DEPTH, RenderGraphResourceUsage::DepthAttachment)
                 .writes(viewport_color, RenderGraphResourceUsage::ColorAttachment)
         });
         self
@@ -315,7 +316,7 @@ impl FrameGraphBuilder {
             RG_SCENE_HDR_COLOR
         };
         self.add_phase_pass(StandardRenderPhase::PostFx, |pass| {
-            pass.reads(input, RenderGraphResourceUsage::SampledTexture)
+            pass.with_domain(RenderGraphPassDomain::PostProcess).reads(input, RenderGraphResourceUsage::SampledTexture)
                 .writes(RG_SURFACE_COLOR, RenderGraphResourceUsage::ColorAttachment)
         });
         self
@@ -325,7 +326,7 @@ impl FrameGraphBuilder {
     pub fn bloom_extract(mut self) -> Self {
         let input = if self.has_resource(RG_LIT_COLOR) { RG_LIT_COLOR } else { RG_SCENE_HDR_COLOR };
         self.add_phase_pass(StandardRenderPhase::BloomExtract, |pass| {
-            pass.reads(input, RenderGraphResourceUsage::SampledTexture)
+            pass.with_domain(RenderGraphPassDomain::PostProcess).reads(input, RenderGraphResourceUsage::SampledTexture)
                 .writes(RG_SURFACE_COLOR, RenderGraphResourceUsage::ColorAttachment)
         });
         self
@@ -334,7 +335,7 @@ impl FrameGraphBuilder {
     #[inline]
     pub fn bloom_blur(mut self) -> Self {
         self.add_phase_pass(StandardRenderPhase::BloomBlur, |pass| {
-            pass.reads(RG_SURFACE_COLOR, RenderGraphResourceUsage::SampledTexture)
+            pass.with_domain(RenderGraphPassDomain::PostProcess).reads(RG_SURFACE_COLOR, RenderGraphResourceUsage::SampledTexture)
                 .writes(RG_SURFACE_COLOR, RenderGraphResourceUsage::ColorAttachment)
         });
         self
@@ -343,7 +344,7 @@ impl FrameGraphBuilder {
     #[inline]
     pub fn taa_resolve(mut self) -> Self {
         self.add_phase_pass(StandardRenderPhase::TaaResolve, |pass| {
-            pass.reads(RG_SURFACE_COLOR, RenderGraphResourceUsage::SampledTexture)
+            pass.with_domain(RenderGraphPassDomain::PostProcess).reads(RG_SURFACE_COLOR, RenderGraphResourceUsage::SampledTexture)
                 .writes(RG_SURFACE_COLOR, RenderGraphResourceUsage::ColorAttachment)
         });
         self
@@ -352,7 +353,21 @@ impl FrameGraphBuilder {
     #[inline]
     pub fn msaa_resolve(mut self) -> Self {
         self.add_phase_pass(StandardRenderPhase::MsaaResolve, |pass| {
-            pass.reads(RG_SURFACE_COLOR, RenderGraphResourceUsage::SampledTexture)
+            pass.with_domain(RenderGraphPassDomain::PostProcess).reads(RG_SURFACE_COLOR, RenderGraphResourceUsage::SampledTexture)
+                .writes(RG_SURFACE_COLOR, RenderGraphResourceUsage::ColorAttachment)
+        });
+        self
+    }
+
+    #[inline]
+    pub fn ui_backdrop_blur(mut self, enabled: bool) -> Self {
+        if !enabled {
+            return self;
+        }
+        let input = if self.has_resource(RG_LIT_COLOR) { RG_LIT_COLOR } else { RG_SCENE_HDR_COLOR };
+        self.add_phase_pass(StandardRenderPhase::UiBackdropBlur, |pass| {
+            pass.with_domain(RenderGraphPassDomain::Render2d)
+                .reads(input, RenderGraphResourceUsage::SampledTexture)
                 .writes(RG_SURFACE_COLOR, RenderGraphResourceUsage::ColorAttachment)
         });
         self
@@ -364,7 +379,7 @@ impl FrameGraphBuilder {
             return self;
         }
         self.add_phase_pass(StandardRenderPhase::UiComposite, |pass| {
-            pass.writes(RG_SURFACE_COLOR, RenderGraphResourceUsage::ColorAttachment)
+            pass.with_domain(RenderGraphPassDomain::Render2d).writes(RG_SURFACE_COLOR, RenderGraphResourceUsage::ColorAttachment)
                 .draw_list(DrawListKind::Ui)
         });
         self
@@ -374,7 +389,7 @@ impl FrameGraphBuilder {
     pub fn debug_overlay(mut self, enabled: bool) -> Self {
         if enabled {
             self.add_phase_pass(StandardRenderPhase::DebugOverlay, |pass| {
-                pass.reads(RG_SURFACE_COLOR, RenderGraphResourceUsage::ColorAttachment)
+                pass.with_domain(RenderGraphPassDomain::Render2d).reads(RG_SURFACE_COLOR, RenderGraphResourceUsage::ColorAttachment)
                     .writes(RG_SURFACE_COLOR, RenderGraphResourceUsage::ColorAttachment)
                     .draw_list(DrawListKind::Debug)
             });
@@ -475,7 +490,7 @@ impl FrameGraphBuilder {
         )
         .with_semantic(RenderGraphResourceSemantic::GBufferDepth));
         self.add_phase_pass(StandardRenderPhase::DepthPrepass, |pass| {
-            pass.writes(RG_GBUFFER_DEPTH, RenderGraphResourceUsage::DepthAttachment)
+            pass.with_domain(RenderGraphPassDomain::Render3d).writes(RG_GBUFFER_DEPTH, RenderGraphResourceUsage::DepthAttachment)
         });
         self
     }
@@ -506,7 +521,7 @@ impl FrameGraphBuilder {
         )
         .with_semantic(RenderGraphResourceSemantic::GBufferMaterial));
         self.add_phase_pass(StandardRenderPhase::ViewportGBuffer, |pass| {
-            pass.reads(RG_GBUFFER_DEPTH, RenderGraphResourceUsage::DepthAttachment)
+            pass.with_domain(RenderGraphPassDomain::Render3d).reads(RG_GBUFFER_DEPTH, RenderGraphResourceUsage::DepthAttachment)
                 .writes(RG_GBUFFER_ALBEDO, RenderGraphResourceUsage::ColorAttachment)
                 .writes(RG_GBUFFER_NORMAL, RenderGraphResourceUsage::ColorAttachment)
                 .writes(RG_GBUFFER_MATERIAL, RenderGraphResourceUsage::ColorAttachment)
@@ -518,7 +533,7 @@ impl FrameGraphBuilder {
         let has_shadow = self.has_resource(RG_SHADOW_MAP);
         let viewport_color = self.viewport_color_resource();
         self.add_phase_pass(StandardRenderPhase::ViewportForward, |pass| {
-            let pass = pass
+            let pass = pass.with_domain(RenderGraphPassDomain::Render3d)
                 .writes(viewport_color, RenderGraphResourceUsage::ColorAttachment)
                 .writes(RG_VIEWPORT_DEPTH, RenderGraphResourceUsage::DepthAttachment)
                 .draw_list(DrawListKind::OpaqueForward);

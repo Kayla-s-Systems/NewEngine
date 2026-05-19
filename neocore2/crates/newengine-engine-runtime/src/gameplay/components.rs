@@ -35,6 +35,160 @@ pub struct PlayerActor;
 #[derive(Clone, Copy, Debug, Default)]
 pub struct GameplayActor;
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
+pub enum PlayerControllerKind {
+    #[default]
+    LocalInput,
+    AiDriven,
+    RemoteInput,
+}
+
+/// Controller marker/config attached to the same ordinary ECS entity that is
+/// currently possessed by local input. The player is selected by components,
+/// not by a hard-coded singleton outside ECS.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct PlayerController {
+    pub kind: PlayerControllerKind,
+    pub enabled: bool,
+}
+
+impl PlayerController {
+    #[inline]
+    pub const fn local_input() -> Self {
+        Self {
+            kind: PlayerControllerKind::LocalInput,
+            enabled: true,
+        }
+    }
+}
+
+impl Default for PlayerController {
+    #[inline]
+    fn default() -> Self {
+        Self::local_input()
+    }
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct PlayerModelBinding {
+    pub source: String,
+    pub skeleton_source: Option<String>,
+    pub visual_root: Option<newengine_ecs::EntityId>,
+    pub part_count: u32,
+    pub target_height: f32,
+    pub feet_to_eye_height: f32,
+}
+
+impl Default for PlayerModelBinding {
+    #[inline]
+    fn default() -> Self {
+        Self {
+            source: String::new(),
+            skeleton_source: None,
+            visual_root: None,
+            part_count: 0,
+            target_height: 1.80,
+            feet_to_eye_height: 1.64,
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
+pub enum PlayerVisualKind {
+    #[default]
+    RuntimeModelPart,
+    FallbackCapsule,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct PlayerVisualPart {
+    pub owner: newengine_ecs::EntityId,
+    pub part_index: u32,
+    pub kind: PlayerVisualKind,
+    pub material_slot: String,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
+pub enum PlayerViewVisibilityPolicy {
+    AlwaysVisible,
+    #[default]
+    HideInFirstPerson,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct PlayerViewVisibility {
+    pub base_mode: DisplayMode,
+    pub policy: PlayerViewVisibilityPolicy,
+}
+
+impl PlayerViewVisibility {
+    #[inline]
+    pub const fn runtime_model_default() -> Self {
+        Self {
+            base_mode: DisplayMode::GameOnly,
+            policy: PlayerViewVisibilityPolicy::HideInFirstPerson,
+        }
+    }
+
+    #[inline]
+    pub const fn fallback_capsule_default() -> Self {
+        Self {
+            base_mode: DisplayMode::Both,
+            policy: PlayerViewVisibilityPolicy::AlwaysVisible,
+        }
+    }
+}
+
+impl Default for PlayerViewVisibility {
+    #[inline]
+    fn default() -> Self {
+        Self::runtime_model_default()
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum PlayerEventKind {
+    Spawned,
+    ModelBound,
+    Possessed,
+    Released,
+    InputApplied,
+    VisualVisibilityChanged,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct PlayerEvent {
+    pub entity: newengine_ecs::EntityId,
+    pub kind: PlayerEventKind,
+    pub message: String,
+}
+
+#[derive(Clone, Debug, Default)]
+pub struct PlayerEventBus {
+    pub events: Vec<PlayerEvent>,
+}
+
+impl PlayerEventBus {
+    #[inline]
+    pub fn emit(&mut self, entity: newengine_ecs::EntityId, kind: PlayerEventKind, message: impl Into<String>) {
+        const MAX_RETAINED_EVENTS: usize = 256;
+        if self.events.len() >= MAX_RETAINED_EVENTS {
+            let overflow = self.events.len() + 1 - MAX_RETAINED_EVENTS;
+            self.events.drain(0..overflow);
+        }
+        self.events.push(PlayerEvent {
+            entity,
+            kind,
+            message: message.into(),
+        });
+    }
+
+    #[inline]
+    pub fn drain(&mut self) -> Vec<PlayerEvent> {
+        std::mem::take(&mut self.events)
+    }
+}
+
 /// Declarative FPS runtime tuning.
 ///
 /// The scene/profile owns these values; runtime systems only consume the resource.
@@ -58,7 +212,7 @@ impl Default for FpsPlayerTuning {
             body_half_height: 0.45,
             visual_radius: 0.45,
             visual_half_height: 0.90,
-            camera_eye_height: 0.85,
+            camera_eye_height: 0.72,
             sprint_multiplier: 1.75,
             gravity: 9.81,
             contact_skin: 0.035,

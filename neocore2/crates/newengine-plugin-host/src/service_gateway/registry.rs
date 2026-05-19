@@ -173,12 +173,49 @@ fn gateway_override_mode(gateway_id: &str) -> GatewayOverrideMode {
         | "engine.gateway_registry"
         | "engine.security"
         | "engine.scheduler.core"
-        | "engine.capability_validator" => GatewayOverrideMode::Locked,
+        | "engine.capability_validator" => return GatewayOverrideMode::Locked,
+        "engine.save" | "engine.network" => return GatewayOverrideMode::ProfileControlled,
+        _ => {}
+    }
 
-        "engine.render" | "engine.physics" | "engine.assets" | "engine.scene" | "engine.save"
-        | "engine.network" => GatewayOverrideMode::ProfileControlled,
-
-        _ => GatewayOverrideMode::Open,
+    match EngineServiceKind::parse_engine_gateway_id(gateway_id) {
+        Some(
+            EngineServiceKind::Render
+            | EngineServiceKind::Model
+            | EngineServiceKind::ModelSkeletons
+            | EngineServiceKind::ModelMaterials
+            | EngineServiceKind::ModelCollisions
+            | EngineServiceKind::Physics
+            | EngineServiceKind::PhysicsContacts
+            | EngineServiceKind::PhysicsConstraints
+            | EngineServiceKind::Assets
+            | EngineServiceKind::Scene,
+        ) => GatewayOverrideMode::ProfileControlled,
+        Some(
+            EngineServiceKind::RenderEffects
+            | EngineServiceKind::RenderMaterials
+            | EngineServiceKind::Input
+            | EngineServiceKind::InputBindings
+            | EngineServiceKind::InputActions
+            | EngineServiceKind::InputContexts
+            | EngineServiceKind::Camera
+            | EngineServiceKind::CameraModes
+            | EngineServiceKind::CameraAnimations
+            | EngineServiceKind::Audio
+            | EngineServiceKind::Ui
+            | EngineServiceKind::Logging
+            | EngineServiceKind::Loading
+            | EngineServiceKind::Platform
+            | EngineServiceKind::Ecs
+            | EngineServiceKind::Entity
+            | EngineServiceKind::PluginHost
+            | EngineServiceKind::Abi
+            | EngineServiceKind::GatewayRegistry
+            | EngineServiceKind::Security
+            | EngineServiceKind::SchedulerCore
+            | EngineServiceKind::CapabilityValidator,
+        ) => GatewayOverrideMode::Open,
+        None => GatewayOverrideMode::Open,
     }
 }
 
@@ -218,6 +255,18 @@ impl ActiveGatewayRoute {
         backend_priority: i32,
         origin: GatewayProviderOrigin,
     ) -> Option<Self> {
+        if !service_kind.matches_engine_gateway_id(&gateway_id) {
+            log::warn!(
+                "gateways: ignoring route with mixed domain levels gateway='{}' service_kind='{}' expected_gateway='{}' service='{}' owner='{}'",
+                gateway_id,
+                service_kind.as_str(),
+                service_kind.engine_gateway_id(),
+                provider_service_id,
+                provider_owner_id,
+            );
+            return None;
+        }
+
         if !route_allowed_by_default_policy(&gateway_id, origin) {
             log::warn!(
                 "gateways: ignoring route blocked by override policy gateway='{}' service='{}' owner='{}' origin='{}' mode='{}'",
@@ -523,7 +572,7 @@ mod tests {
                 "mod.security.api",
                 "engine.security",
                 "security.backend",
-                "platform",
+                "security",
                 99_999,
             ),
             GatewayProviderOrigin::DevOverride,
@@ -534,7 +583,7 @@ mod tests {
         ];
         let engine_owned = vec![EngineOwnedGatewayFact::new(
             "engine.security".to_owned(),
-            EngineServiceKind::Platform,
+            EngineServiceKind::Security,
             "engine.security".to_owned(),
             "newengine.security".to_owned(),
             "security.backend".to_owned(),
@@ -571,5 +620,48 @@ mod tests {
         let route = registry.resolve_route("engine.camera").expect("engine.camera route");
 
         assert_eq!(route.provider_service_id, "a.camera.api");
+    }
+    #[test]
+    fn child_domain_route_is_selected_when_kind_and_gateway_match() {
+        let descriptors = vec![PluginDescriptorFact::new(
+            "mod.input.bindings".to_owned(),
+            descriptor(
+                "mod.input.bindings",
+                "mod.input.bindings.api",
+                "engine.input.bindings",
+                "input.bindings.backend",
+                "input.bindings",
+                7,
+            ),
+            GatewayProviderOrigin::UserMod,
+        )];
+        let services = vec![service("mod.input.bindings.api", Some("mod.input.bindings"))];
+
+        let registry = ActiveGatewayRegistry::from_facts(&descriptors, &services, &[]);
+        let route = registry.resolve_route("engine.input.bindings").expect("engine.input.bindings route");
+
+        assert_eq!(route.service_kind, EngineServiceKind::InputBindings);
+        assert_eq!(route.provider_service_id, "mod.input.bindings.api");
+    }
+
+    #[test]
+    fn mixed_parent_and_child_domain_route_is_ignored() {
+        let descriptors = vec![PluginDescriptorFact::new(
+            "bad.input".to_owned(),
+            descriptor(
+                "bad.input",
+                "bad.input.api",
+                "engine.input.bindings",
+                "input.bindings.backend",
+                "input",
+                100,
+            ),
+            GatewayProviderOrigin::UserMod,
+        )];
+        let services = vec![service("bad.input.api", Some("bad.input"))];
+
+        let registry = ActiveGatewayRegistry::from_facts(&descriptors, &services, &[]);
+
+        assert!(registry.resolve_route("engine.input.bindings").is_none());
     }
 }

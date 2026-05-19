@@ -20,6 +20,7 @@ serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 
 newengine-assets = { path = "../newengine-assets" }
+newengine-audio-api = { path = "../newengine-audio-api" }
 newengine-bounds = { path = "../newengine-bounds" }
 newengine-camera = { path = "../newengine-camera" }
 newengine-camera-api = { path = "../newengine-camera-api" }
@@ -31,6 +32,7 @@ newengine-ecs = { path = "../newengine-ecs" }
 newengine-lighting = { path = "../newengine-lighting" }
 newengine-materials = { path = "../newengine-materials", features = ["serde"] }
 newengine-material-domain-api = { path = "../newengine-material-domain-api" }
+newengine-model-adapter = { path = "../newengine-model-adapter" }
 newengine-physics-contracts = { path = "../newengine-physics-contracts" }
 newengine-physics-api = { path = "../newengine-physics-api" }
 newengine-math = { path = "../newengine-math" }
@@ -45,6 +47,7 @@ newengine-render-frame-graph = { path = "../newengine-render-frame-graph" }
 newengine-scene = { path = "../newengine-scene", features = ["runtime"] }
 newengine-scene-io = { path = "../newengine-scene-io" }
 newengine-service-api = { path = "../newengine-service-api" }
+newengine-service-kit = { path = "../newengine-service-kit" }
 newengine-shader-compiler = { path = "../newengine-shader-compiler" }
 newengine-sim = { path = "../newengine-sim" }
 newengine-transform = { path = "../newengine-transform", features = ["ecs", "service"], default-features = false }

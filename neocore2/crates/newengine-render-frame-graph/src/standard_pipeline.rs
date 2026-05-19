@@ -20,6 +20,7 @@ pub struct StandardRuntimePipelineDesc {
     pub hdr_scene_enabled: bool,
     pub postfx_enabled: bool,
     pub ui_enabled: bool,
+    pub ui_backdrop_blur_enabled: bool,
     pub debug_overlay_enabled: bool,
     pub execution_mode: FramePlanExecutionMode,
     pub draw_lists: Vec<DrawListDesc>,
@@ -42,6 +43,7 @@ impl StandardRuntimePipelineDesc {
             hdr_scene_enabled: true,
             postfx_enabled: true,
             ui_enabled: true,
+            ui_backdrop_blur_enabled: false,
             debug_overlay_enabled: true,
             execution_mode: FramePlanExecutionMode::ImmediateCallbacks,
             draw_lists: Vec::new(),
@@ -104,6 +106,12 @@ impl StandardRuntimePipelineDesc {
     }
 
     #[inline]
+    pub fn ui_backdrop_blur(mut self, enabled: bool) -> Self {
+        self.ui_backdrop_blur_enabled = enabled;
+        self
+    }
+
+    #[inline]
     pub fn debug_overlay(mut self, enabled: bool) -> Self {
         self.debug_overlay_enabled = enabled;
         self
@@ -137,14 +145,14 @@ pub fn standard_runtime_frame(desc: StandardRuntimePipelineDesc) -> RenderFrameP
             desc.postfx_enabled,
             desc.ui_enabled,
             desc.debug_overlay_enabled,
-        )
+        ).with_ui_backdrop_blur(desc.ui_backdrop_blur_enabled)
     } else {
         RuntimeFrameFeatureSet::forward(
             desc.shadow_enabled,
             desc.postfx_enabled,
             desc.ui_enabled,
             desc.debug_overlay_enabled,
-        )
+        ).with_ui_backdrop_blur(desc.ui_backdrop_blur_enabled)
     };
     let recipe = RenderFrameRecipe::standard_runtime_with_shadow_mode(
         features,

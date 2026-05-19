@@ -11,4 +11,5 @@ include!("game_ready_parts/foliage/gltf_mesh.rs");
 include!("game_ready_parts/foliage/material_binding.rs");
 include!("game_ready_parts/foliage/diagnostics.rs");
 include!("game_ready_parts/foliage/spawn.rs");
+include!("game_ready_parts/player_model.rs");
 include!("game_ready_parts/assets_bootstrap.rs");

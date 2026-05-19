@@ -38,7 +38,24 @@ pub const ENGINE_SERVICE_GATEWAY_PREFIX: &str = "engine.";
 
 #[inline]
 pub fn is_engine_service_gateway_id(value: &str) -> bool {
-    value.starts_with(ENGINE_SERVICE_GATEWAY_PREFIX)
+    normalize_engine_gateway_id(value).is_some()
+}
+
+#[inline]
+pub fn normalize_engine_gateway_id(value: &str) -> Option<String> {
+    let trimmed = value.trim();
+    if trimmed.is_empty() || !trimmed.starts_with(ENGINE_SERVICE_GATEWAY_PREFIX) {
+        return None;
+    }
+    let mut out = Vec::new();
+    for segment in trimmed.split('.') {
+        let segment = segment.trim();
+        if segment.is_empty() {
+            return None;
+        }
+        out.push(segment.to_ascii_lowercase());
+    }
+    Some(out.join("."))
 }
 
 /// Common declaration for a backend service family.
@@ -83,19 +100,37 @@ impl BackendServiceSpec {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum EngineServiceKind {
     Assets,
+    Audio,
     Render,
+    RenderEffects,
+    RenderMaterials,
+    Model,
+    ModelSkeletons,
+    ModelMaterials,
+    ModelCollisions,
     Camera,
+    CameraModes,
+    CameraAnimations,
     Scene,
     Physics,
+    PhysicsContacts,
+    PhysicsConstraints,
     Input,
     InputBindings,
     InputActions,
+    InputContexts,
     Ui,
     Logging,
     Loading,
     Platform,
     Ecs,
     Entity,
+    PluginHost,
+    Abi,
+    GatewayRegistry,
+    Security,
+    SchedulerCore,
+    CapabilityValidator,
 }
 
 impl EngineServiceKind {
@@ -103,19 +138,37 @@ impl EngineServiceKind {
     pub const fn as_str(self) -> &'static str {
         match self {
             Self::Assets => "assets",
+            Self::Audio => "audio",
             Self::Render => "render",
+            Self::RenderEffects => "render.effects",
+            Self::RenderMaterials => "render.materials",
+            Self::Model => "model",
+            Self::ModelSkeletons => "model.skeletons",
+            Self::ModelMaterials => "model.materials",
+            Self::ModelCollisions => "model.collisions",
             Self::Camera => "camera",
+            Self::CameraModes => "camera.modes",
+            Self::CameraAnimations => "camera.animations",
             Self::Scene => "scene",
             Self::Physics => "physics",
+            Self::PhysicsContacts => "physics.contacts",
+            Self::PhysicsConstraints => "physics.constraints",
             Self::Input => "input",
             Self::InputBindings => "input.bindings",
             Self::InputActions => "input.actions",
+            Self::InputContexts => "input.contexts",
             Self::Ui => "ui",
             Self::Logging => "logging",
             Self::Loading => "loading",
             Self::Platform => "platform",
             Self::Ecs => "ecs",
             Self::Entity => "entity",
+            Self::PluginHost => "plugin_host",
+            Self::Abi => "abi",
+            Self::GatewayRegistry => "gateway_registry",
+            Self::Security => "security",
+            Self::SchedulerCore => "scheduler.core",
+            Self::CapabilityValidator => "capability_validator",
         }
     }
 
@@ -123,20 +176,123 @@ impl EngineServiceKind {
     pub fn parse(value: &str) -> Option<Self> {
         match value.trim().to_ascii_lowercase().as_str() {
             "assets" => Some(Self::Assets),
+            "audio" => Some(Self::Audio),
             "render" => Some(Self::Render),
+            "render.effects" | "render_effects" => Some(Self::RenderEffects),
+            "render.materials" | "render_materials" => Some(Self::RenderMaterials),
+            "model" => Some(Self::Model),
+            "model.skeletons" | "model_skeletons" => Some(Self::ModelSkeletons),
+            "model.materials" | "model_materials" => Some(Self::ModelMaterials),
+            "model.collisions" | "model_collisions" => Some(Self::ModelCollisions),
             "camera" => Some(Self::Camera),
+            "camera.modes" | "camera_modes" => Some(Self::CameraModes),
+            "camera.animations" | "camera_animations" => Some(Self::CameraAnimations),
             "scene" => Some(Self::Scene),
             "physics" => Some(Self::Physics),
+            "physics.contacts" | "physics_contacts" => Some(Self::PhysicsContacts),
+            "physics.constraints" | "physics_constraints" => Some(Self::PhysicsConstraints),
             "input" => Some(Self::Input),
             "input.bindings" | "input_bindings" => Some(Self::InputBindings),
             "input.actions" | "input_actions" => Some(Self::InputActions),
+            "input.contexts" | "input_contexts" => Some(Self::InputContexts),
             "ui" => Some(Self::Ui),
             "logging" | "log" => Some(Self::Logging),
             "loading" => Some(Self::Loading),
             "platform" => Some(Self::Platform),
             "ecs" => Some(Self::Ecs),
             "entity" => Some(Self::Entity),
+            "plugin_host" | "plugin-host" | "plugin.host" => Some(Self::PluginHost),
+            "abi" => Some(Self::Abi),
+            "gateway_registry" | "gateway-registry" | "gateway.registry" => Some(Self::GatewayRegistry),
+            "security" => Some(Self::Security),
+            "scheduler.core" | "scheduler_core" | "scheduler-core" => Some(Self::SchedulerCore),
+            "capability_validator" | "capability-validator" | "capability.validator" => Some(Self::CapabilityValidator),
             _ => None,
+        }
+    }
+
+
+    /// Returns the direct parent domain for third-level extension domains.
+    ///
+    /// Example: `input.bindings -> input`, `render.effects -> render`.
+    #[inline]
+    pub const fn parent(self) -> Option<Self> {
+        match self {
+            Self::RenderEffects | Self::RenderMaterials => Some(Self::Render),
+            Self::ModelSkeletons | Self::ModelMaterials | Self::ModelCollisions => Some(Self::Model),
+            Self::CameraModes | Self::CameraAnimations => Some(Self::Camera),
+            Self::PhysicsContacts | Self::PhysicsConstraints => Some(Self::Physics),
+            Self::InputBindings | Self::InputActions | Self::InputContexts => Some(Self::Input),
+            _ => None,
+        }
+    }
+
+    #[inline]
+    pub const fn root(self) -> Self {
+        match self.parent() {
+            Some(parent) => parent,
+            None => self,
+        }
+    }
+
+    #[inline]
+    pub const fn domain_depth(self) -> u8 {
+        match self.parent() {
+            Some(_) => 3,
+            None => 2,
+        }
+    }
+
+    #[inline]
+    pub const fn engine_gateway_id(self) -> &'static str {
+        match self {
+            Self::Assets => "engine.assets",
+            Self::Audio => "engine.audio",
+            Self::Render => "engine.render",
+            Self::RenderEffects => "engine.render.effects",
+            Self::RenderMaterials => "engine.render.materials",
+            Self::Model => "engine.model",
+            Self::ModelSkeletons => "engine.model.skeletons",
+            Self::ModelMaterials => "engine.model.materials",
+            Self::ModelCollisions => "engine.model.collisions",
+            Self::Camera => "engine.camera",
+            Self::CameraModes => "engine.camera.modes",
+            Self::CameraAnimations => "engine.camera.animations",
+            Self::Scene => "engine.scene",
+            Self::Physics => "engine.physics",
+            Self::PhysicsContacts => "engine.physics.contacts",
+            Self::PhysicsConstraints => "engine.physics.constraints",
+            Self::Input => "engine.input",
+            Self::InputBindings => "engine.input.bindings",
+            Self::InputActions => "engine.input.actions",
+            Self::InputContexts => "engine.input.contexts",
+            Self::Ui => "engine.ui",
+            Self::Logging => "engine.log",
+            Self::Loading => "engine.loading",
+            Self::Platform => "engine.platform",
+            Self::Ecs => "engine.ecs",
+            Self::Entity => "engine.entity",
+            Self::PluginHost => "engine.plugin_host",
+            Self::Abi => "engine.abi",
+            Self::GatewayRegistry => "engine.gateway_registry",
+            Self::Security => "engine.security",
+            Self::SchedulerCore => "engine.scheduler.core",
+            Self::CapabilityValidator => "engine.capability_validator",
+        }
+    }
+
+    #[inline]
+    pub fn matches_engine_gateway_id(self, gateway_id: &str) -> bool {
+        self.engine_gateway_id() == normalize_engine_gateway_id(gateway_id).as_deref().unwrap_or("")
+    }
+
+    #[inline]
+    pub fn parse_engine_gateway_id(gateway_id: &str) -> Option<Self> {
+        let normalized = normalize_engine_gateway_id(gateway_id)?;
+        let domain = normalized.strip_prefix(ENGINE_SERVICE_GATEWAY_PREFIX)?;
+        match domain {
+            "log" => Some(Self::Logging),
+            other => Self::parse(other),
         }
     }
 }
@@ -261,4 +417,44 @@ pub trait ServiceInterface: Sized {
     /// # Safety
     /// `instance` must be a valid instance pointer for the service, and `vtable` must match `Self::VTable`.
     unsafe fn from_raw(instance: *mut (), vtable: *const Self::VTable) -> Self;
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn child_domains_parse_with_canonical_gateways() {
+        let cases = [
+            ("input.bindings", EngineServiceKind::InputBindings, "engine.input.bindings", Some(EngineServiceKind::Input)),
+            ("input.actions", EngineServiceKind::InputActions, "engine.input.actions", Some(EngineServiceKind::Input)),
+            ("input.contexts", EngineServiceKind::InputContexts, "engine.input.contexts", Some(EngineServiceKind::Input)),
+            ("render.effects", EngineServiceKind::RenderEffects, "engine.render.effects", Some(EngineServiceKind::Render)),
+            ("render.materials", EngineServiceKind::RenderMaterials, "engine.render.materials", Some(EngineServiceKind::Render)),
+            ("model.skeletons", EngineServiceKind::ModelSkeletons, "engine.model.skeletons", Some(EngineServiceKind::Model)),
+            ("model.materials", EngineServiceKind::ModelMaterials, "engine.model.materials", Some(EngineServiceKind::Model)),
+            ("model.collisions", EngineServiceKind::ModelCollisions, "engine.model.collisions", Some(EngineServiceKind::Model)),
+            ("physics.contacts", EngineServiceKind::PhysicsContacts, "engine.physics.contacts", Some(EngineServiceKind::Physics)),
+            ("physics.constraints", EngineServiceKind::PhysicsConstraints, "engine.physics.constraints", Some(EngineServiceKind::Physics)),
+            ("camera.modes", EngineServiceKind::CameraModes, "engine.camera.modes", Some(EngineServiceKind::Camera)),
+            ("camera.animations", EngineServiceKind::CameraAnimations, "engine.camera.animations", Some(EngineServiceKind::Camera)),
+        ];
+
+        for (text, kind, gateway, parent) in cases {
+            assert_eq!(EngineServiceKind::parse(text), Some(kind));
+            assert_eq!(EngineServiceKind::parse_engine_gateway_id(gateway), Some(kind));
+            assert_eq!(kind.engine_gateway_id(), gateway);
+            assert_eq!(kind.parent(), parent);
+            assert!(kind.matches_engine_gateway_id(gateway));
+        }
+    }
+
+    #[test]
+    fn parent_domain_does_not_match_child_gateway() {
+        assert!(!EngineServiceKind::Input.matches_engine_gateway_id("engine.input.bindings"));
+        assert!(!EngineServiceKind::Render.matches_engine_gateway_id("engine.render.effects"));
+        assert!(!EngineServiceKind::Physics.matches_engine_gateway_id("engine.physics.contacts"));
+        assert!(!EngineServiceKind::Model.matches_engine_gateway_id("engine.model.skeletons"));
+        assert!(!EngineServiceKind::Camera.matches_engine_gateway_id("engine.camera.modes"));
+    }
 }

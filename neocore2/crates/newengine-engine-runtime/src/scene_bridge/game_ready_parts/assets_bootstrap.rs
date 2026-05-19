@@ -287,7 +287,26 @@ fn spawn_skydome(
     let _ = apply_exact_material(world, mats, sky, materials.sky, materials.sky, color);
 }
 
-fn to_fps_demo_rules(spec: &GameReadyGameplaySpec) -> FpsDemoRules {
+fn to_fps_demo_rules(spec: &GameReadyGameplaySpec, model: &self::content::GameReadyPlayerModelSpec) -> FpsDemoRules {
+    let base = FpsPlayerTuning {
+        body_radius: spec.player_collision.radius,
+        body_half_height: spec.player_collision.half_height,
+        visual_radius: spec.player_visual.radius,
+        visual_half_height: spec.player_visual.half_height,
+        camera_eye_height: spec.player_visual.camera_eye_height,
+        sprint_multiplier: spec.player_visual.sprint_multiplier,
+        gravity: spec.physics.gravity,
+        contact_skin: spec.physics.contact_skin,
+    }
+    .sanitized();
+    let feet_to_eye = model.target_height * model.eye_height_ratio;
+    let model_eye_offset_from_player_origin = feet_to_eye - (base.body_half_height + base.body_radius);
+    let player = FpsPlayerTuning {
+        camera_eye_height: model_eye_offset_from_player_origin.clamp(0.05, model.target_height),
+        ..base
+    }
+    .sanitized();
+
     FpsDemoRules {
         default_status: spec.default_status.clone(),
         pickup_status: spec.pickup_status.clone(),
@@ -296,17 +315,7 @@ fn to_fps_demo_rules(spec: &GameReadyGameplaySpec) -> FpsDemoRules {
         goal_complete_status: spec.goal_complete_status.clone(),
         failed_progress_label: spec.failed_progress_label.clone(),
         completed_progress_label: spec.completed_progress_label.clone(),
-        player: FpsPlayerTuning {
-            body_radius: spec.player_collision.radius,
-            body_half_height: spec.player_collision.half_height,
-            visual_radius: spec.player_visual.radius,
-            visual_half_height: spec.player_visual.half_height,
-            camera_eye_height: spec.player_visual.camera_eye_height,
-            sprint_multiplier: spec.player_visual.sprint_multiplier,
-            gravity: spec.physics.gravity,
-            contact_skin: spec.physics.contact_skin,
-        }
-        .sanitized(),
+        player,
     }
 }
 
@@ -324,7 +333,7 @@ pub(super) fn bootstrap_fps_game_ready_scene(
     let materials = register_demo_materials(mats, &map.palette, &map.materials);
     let world = scene.world_mut();
 
-    let rules = to_fps_demo_rules(&map.gameplay);
+    let rules = to_fps_demo_rules(&map.gameplay, &map.player.model);
     world.insert_resource(rules.clone());
     world.insert_resource(FpsDemoState::from_rules(
         0,
@@ -373,14 +382,21 @@ pub(super) fn bootstrap_fps_game_ready_scene(
         + player_tuning.body_half_height
         + player_tuning.body_radius
         + player_tuning.contact_skin;
-    let player = spawn_default_player_with_tuning(
+    let player = spawn_player_controller_with_tuning(
         world,
         Some(root),
         "Player/FPS",
         Vec3::new(start_x, start_y, start_z),
         player_tuning,
+        true,
     );
-    let _ = world.insert(player, DisplayVisibility { mode: DisplayMode::RuntimeHidden });
+    let model_ground_offset_y = -(player_tuning.body_half_height + player_tuning.body_radius);
+    let model_bound = spawn_game_ready_player_model(world, prims, mats, player, &map.player.model, model_ground_offset_y);
+    if !model_bound {
+        log::warn!(
+            "game-ready: player runtime model disabled or unavailable; fallback capsule remains visible"
+        );
+    }
     if let Some(motor) = world.get_mut::<newengine_sim::CharacterMotor>(player) {
         motor.move_speed = map.player.move_speed;
         motor.look_sens = map.player.look_sens;

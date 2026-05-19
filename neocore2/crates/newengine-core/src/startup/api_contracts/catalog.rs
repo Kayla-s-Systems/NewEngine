@@ -48,6 +48,10 @@ pub(crate) const RUNTIME_SERVICE_CATALOG: &[RuntimeServiceCatalogEntry] = &[
         "asset clients / VFS / material texture load",
     ),
     RuntimeServiceCatalogEntry::new(
+        newengine_audio_api::AUDIO_RUNTIME_REQUIREMENT_SPEC,
+        "semantic audio events / UI feedback / future mixer backend",
+    ),
+    RuntimeServiceCatalogEntry::new(
         newengine_render_api::RENDER_RUNTIME_REQUIREMENT_SPEC,
         "runtime-host render adapter / RuntimeRenderController",
     ),

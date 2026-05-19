@@ -1,10 +1,18 @@
 /// Engine-facing render service gateway id. Consumers call this facade; the host
 /// resolves it to the active renderer provider service by descriptor metadata.
 pub const ENGINE_RENDER_SERVICE_ID: &str = "engine.render";
+/// Third-level render domain for post-process/effect stack providers.
+pub const ENGINE_RENDER_EFFECTS_SERVICE_ID: &str = "engine.render.effects";
+/// Third-level render domain for material system providers.
+pub const ENGINE_RENDER_MATERIALS_SERVICE_ID: &str = "engine.render.materials";
 
 /// Default/first-party provider service id for render backends.
 pub const RENDER_SERVICE_ID: &str = "render.api";
 pub const RENDER_BACKEND_CAPABILITY_ID: &str = "render.backend";
+pub const RENDER_EFFECTS_SERVICE_ID: &str = "render.effects.api";
+pub const RENDER_EFFECTS_BACKEND_CAPABILITY_ID: &str = "render.effects.backend";
+pub const RENDER_MATERIALS_SERVICE_ID: &str = "render.materials.api";
+pub const RENDER_MATERIALS_BACKEND_CAPABILITY_ID: &str = "render.materials.backend";
 pub const RENDER_SERVICE_METHOD_INVOKE: &str = newengine_service_api::SERVICE_METHOD_INVOKE_JSON;
 pub const RENDER_SERVICE_METHOD_INFO: &str = newengine_service_api::SERVICE_METHOD_INFO_JSON;
 pub const RENDER_SERVICE_METHOD_SHUTDOWN_V1: &str = newengine_service_api::SERVICE_METHOD_SHUTDOWN_V1;
@@ -23,6 +31,22 @@ pub const RENDER_BACKEND_SERVICE_SPEC: newengine_service_api::BackendServiceSpec
         ENGINE_RENDER_SERVICE_ID,
         RENDER_SERVICE_ID,
         RENDER_BACKEND_CAPABILITY_ID,
+    );
+
+pub const RENDER_EFFECTS_BACKEND_SERVICE_SPEC: newengine_service_api::BackendServiceSpec =
+    newengine_service_api::BackendServiceSpec::new(
+        "render.effects",
+        ENGINE_RENDER_EFFECTS_SERVICE_ID,
+        RENDER_EFFECTS_SERVICE_ID,
+        RENDER_EFFECTS_BACKEND_CAPABILITY_ID,
+    );
+
+pub const RENDER_MATERIALS_BACKEND_SERVICE_SPEC: newengine_service_api::BackendServiceSpec =
+    newengine_service_api::BackendServiceSpec::new(
+        "render.materials",
+        ENGINE_RENDER_MATERIALS_SERVICE_ID,
+        RENDER_MATERIALS_SERVICE_ID,
+        RENDER_MATERIALS_BACKEND_CAPABILITY_ID,
     );
 
 /// Startup validation contract for the engine-facing render gateway.

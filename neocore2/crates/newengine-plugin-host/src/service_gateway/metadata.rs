@@ -96,6 +96,22 @@ pub(crate) fn gateway_capability_from_capability(
         return None;
     };
 
+    if !service_kind.matches_engine_gateway_id(&gateway_id) {
+        let parsed_gateway_kind = EngineServiceKind::parse_engine_gateway_id(&gateway_id)
+            .map(|kind| kind.as_str())
+            .unwrap_or("<unknown>");
+        log::warn!(
+            "plugins: ignoring service gateway with mixed domain levels plugin='{}' capability='{}' service_kind='{}' expected_engine_gateway='{}' actual_engine_gateway='{}' actual_gateway_kind='{}'",
+            plugin_id,
+            capability.id,
+            service_kind.as_str(),
+            service_kind.engine_gateway_id(),
+            gateway_id,
+            parsed_gateway_kind
+        );
+        return None;
+    }
+
     Some(EngineGatewayCapability {
         gateway_id,
         service_kind,

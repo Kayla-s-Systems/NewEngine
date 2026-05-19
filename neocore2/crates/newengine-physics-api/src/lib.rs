@@ -11,10 +11,16 @@ use serde::{Deserialize, Serialize};
 /// Engine-facing physics service gateway id. Consumers call this facade; the host
 /// resolves it to the active physics provider service by descriptor metadata.
 pub const ENGINE_PHYSICS_SERVICE_ID: &str = "engine.physics";
+pub const ENGINE_PHYSICS_CONTACTS_SERVICE_ID: &str = "engine.physics.contacts";
+pub const ENGINE_PHYSICS_CONSTRAINTS_SERVICE_ID: &str = "engine.physics.constraints";
 
 /// Default/first-party provider service id for physics backends.
 pub const PHYSICS_SERVICE_ID: &str = "physics.api";
 pub const PHYSICS_BACKEND_CAPABILITY_ID: &str = "physics.backend";
+pub const PHYSICS_CONTACTS_SERVICE_ID: &str = "physics.contacts.api";
+pub const PHYSICS_CONTACTS_BACKEND_CAPABILITY_ID: &str = "physics.contacts.backend";
+pub const PHYSICS_CONSTRAINTS_SERVICE_ID: &str = "physics.constraints.api";
+pub const PHYSICS_CONSTRAINTS_BACKEND_CAPABILITY_ID: &str = "physics.constraints.backend";
 pub const PHYSICS_SERVICE_METHOD_INFO: &str = newengine_service_api::SERVICE_METHOD_INFO_JSON;
 pub const PHYSICS_SERVICE_METHOD_INVOKE: &str = newengine_service_api::SERVICE_METHOD_INVOKE_JSON;
 pub const PHYSICS_SERVICE_METHOD_SHUTDOWN_V1: &str = newengine_service_api::SERVICE_METHOD_SHUTDOWN_V1;
@@ -26,6 +32,22 @@ pub const PHYSICS_BACKEND_SERVICE_SPEC: newengine_service_api::BackendServiceSpe
         ENGINE_PHYSICS_SERVICE_ID,
         PHYSICS_SERVICE_ID,
         PHYSICS_BACKEND_CAPABILITY_ID,
+    );
+
+pub const PHYSICS_CONTACTS_BACKEND_SERVICE_SPEC: newengine_service_api::BackendServiceSpec =
+    newengine_service_api::BackendServiceSpec::new(
+        "physics.contacts",
+        ENGINE_PHYSICS_CONTACTS_SERVICE_ID,
+        PHYSICS_CONTACTS_SERVICE_ID,
+        PHYSICS_CONTACTS_BACKEND_CAPABILITY_ID,
+    );
+
+pub const PHYSICS_CONSTRAINTS_BACKEND_SERVICE_SPEC: newengine_service_api::BackendServiceSpec =
+    newengine_service_api::BackendServiceSpec::new(
+        "physics.constraints",
+        ENGINE_PHYSICS_CONSTRAINTS_SERVICE_ID,
+        PHYSICS_CONSTRAINTS_SERVICE_ID,
+        PHYSICS_CONSTRAINTS_BACKEND_CAPABILITY_ID,
     );
 
 /// Startup validation contract for the engine-facing physics gateway.

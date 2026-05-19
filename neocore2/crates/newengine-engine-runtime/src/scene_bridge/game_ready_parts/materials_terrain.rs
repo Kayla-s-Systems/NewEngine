@@ -17,12 +17,12 @@ use newengine_scene::{
     spawn_named, Scene, SceneCellCoord, SceneResidencySet, SceneStreamingBudget,
     SceneStreamingPlan,
 };
-use newengine_transform::Transform;
+use newengine_transform::{set_parent, Transform};
 
 use std::sync::{Arc, Mutex};
 
 use crate::gameplay::{
-    spawn_default_player_with_tuning, DisplayMode, DisplayVisibility, FpsDemoRules, FpsDemoState,
+    spawn_player_controller_with_tuning, FpsDemoRules, FpsDemoState,
     FpsPlayerTuning, GameReadyWorldLaunchGate,
 };
 use crate::scene_bootstrap::bootstrap_runtime_scene;

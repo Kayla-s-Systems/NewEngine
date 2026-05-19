@@ -1,8 +1,8 @@
 #![forbid(unsafe_op_in_unsafe_fn)]
 
 use newengine_ui_api::{
-    UiRuntimeDebugOverlayTelemetry, ENGINE_UI_SERVICE_ID,
-    UI_SERVICE_METHOD_DEBUG_OVERLAY_TELEMETRY_V1,
+    UiPauseMenuState, UiRuntimeDebugOverlayTelemetry, ENGINE_UI_SERVICE_ID,
+    UI_SERVICE_METHOD_DEBUG_OVERLAY_TELEMETRY_V1, UI_SERVICE_METHOD_PAUSE_MENU_STATE_V1,
 };
 
 /// Publish runtime/debug UI state to the active `engine.ui` provider.
@@ -27,5 +27,25 @@ pub fn publish_debug_overlay_telemetry(telemetry: &UiRuntimeDebugOverlayTelemetr
     ) {
         Ok(Some(_)) | Ok(None) => {}
         Err(e) => log::warn!("ui gateway: debug overlay telemetry publish failed: {e}"),
+    }
+}
+
+
+pub fn publish_pause_menu_state(state: &UiPauseMenuState) {
+    let payload = match serde_json::to_vec(state) {
+        Ok(payload) => payload,
+        Err(e) => {
+            log::warn!("ui gateway: failed to encode pause menu state: {e}");
+            return;
+        }
+    };
+
+    match newengine_core::call_service_v1_optional(
+        ENGINE_UI_SERVICE_ID,
+        UI_SERVICE_METHOD_PAUSE_MENU_STATE_V1,
+        &payload,
+    ) {
+        Ok(Some(_)) | Ok(None) => {}
+        Err(e) => log::warn!("ui gateway: pause menu state publish failed: {e}"),
     }
 }

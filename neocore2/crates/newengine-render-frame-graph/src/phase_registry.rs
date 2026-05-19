@@ -18,6 +18,7 @@ pub enum StandardRenderPhase {
     BloomBlur,
     TaaResolve,
     MsaaResolve,
+    UiBackdropBlur,
     UiComposite,
     DebugOverlay,
     EndFrame,
@@ -42,6 +43,7 @@ impl StandardRenderPhase {
             Self::BloomBlur => Some(RenderGraphPassKind::BloomBlur),
             Self::TaaResolve => Some(RenderGraphPassKind::TaaResolve),
             Self::MsaaResolve => Some(RenderGraphPassKind::MsaaResolve),
+            Self::UiBackdropBlur => Some(RenderGraphPassKind::UiBackdropBlur),
             Self::UiComposite => Some(RenderGraphPassKind::UiComposite),
             Self::DebugOverlay => Some(RenderGraphPassKind::DebugOverlay),
         }
@@ -65,6 +67,7 @@ impl StandardRenderPhase {
             Self::BloomBlur => 830,
             Self::TaaResolve => 840,
             Self::MsaaResolve => 850,
+            Self::UiBackdropBlur => 880,
             Self::UiComposite => 900,
             Self::DebugOverlay => 1_000,
         };
@@ -89,6 +92,7 @@ impl StandardRenderPhase {
             Self::BloomBlur => "bloom_blur",
             Self::TaaResolve => "taa_resolve",
             Self::MsaaResolve => "msaa_resolve",
+            Self::UiBackdropBlur => "ui_backdrop_blur",
             Self::UiComposite => "ui_composite",
             Self::DebugOverlay => "debug_overlay",
             Self::EndFrame => "end_frame",

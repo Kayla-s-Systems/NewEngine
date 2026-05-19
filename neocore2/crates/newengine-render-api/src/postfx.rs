@@ -388,6 +388,26 @@ impl Default for ViewPostFxFrameParams {
     }
 }
 
+
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+pub struct UiBackdropPostFxParams {
+    #[serde(default)]
+    pub enabled: bool,
+    #[serde(default)]
+    pub alpha: f32,
+    #[serde(default)]
+    pub dim_opacity: f32,
+    #[serde(default)]
+    pub blur_radius_px: f32,
+}
+
+impl Default for UiBackdropPostFxParams {
+    #[inline]
+    fn default() -> Self {
+        Self { enabled: false, alpha: 0.0, dim_opacity: 0.0, blur_radius_px: 0.0 }
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub struct PostFxFrameParams {
     #[serde(default)]
@@ -398,6 +418,8 @@ pub struct PostFxFrameParams {
     pub quality: PostFxQualityParams,
     #[serde(default)]
     pub view: ViewPostFxFrameParams,
+    #[serde(default)]
+    pub ui_backdrop: UiBackdropPostFxParams,
 }
 
 impl Default for PostFxFrameParams {
@@ -408,6 +430,7 @@ impl Default for PostFxFrameParams {
             sun: SunPostFxParams::default(),
             quality: PostFxQualityParams::default(),
             view: ViewPostFxFrameParams::default(),
+            ui_backdrop: UiBackdropPostFxParams::default(),
         }
     }
 }
@@ -428,6 +451,7 @@ pub enum PostFxPassKind {
     TaaResolve,
     MsaaResolve,
     DisplayEncode,
+    UiBackdropBlur,
     UiComposite,
     SunDisk,
     SunLensFlare,
@@ -481,6 +505,7 @@ fn default_postfx_passes() -> Vec<PostFxPassKind> {
         PostFxPassKind::MsaaResolve,
         PostFxPassKind::DisplayEncode,
         PostFxPassKind::Dither,
+        PostFxPassKind::UiBackdropBlur,
         PostFxPassKind::UiComposite,
     ]
 }

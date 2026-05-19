@@ -10,7 +10,7 @@ use super::gpu::{MaterialGpuPipelineKey, MaterialGpuPipelineProvider};
 use super::feature_api::{LightExtractionProvider, RenderDrawListProvider};
 use super::state::{
     RenderBridgeState, RenderDiagnosticsRuntimeState, RenderFeatureProviderState,
-    RenderFrameRuntimeState, RenderGpuSceneState, RenderShadowRuntimeState, RenderViewportState,
+    RenderFrameRuntimeState, RenderGpuSceneState, RenderMenuRuntimeState, RenderShadowRuntimeState, RenderViewportState,
 };
 
 /// Engine-side render composition root.
@@ -26,6 +26,7 @@ pub struct RuntimeRenderController {
     pub(super) gpu: RenderGpuSceneState,
     pub(super) frame: RenderFrameRuntimeState,
     pub(super) diagnostics: RenderDiagnosticsRuntimeState,
+    pub(super) menu: RenderMenuRuntimeState,
 }
 
 impl RuntimeRenderController {
@@ -115,6 +116,7 @@ impl RuntimeRenderController {
             gpu: RenderGpuSceneState::new(),
             frame: RenderFrameRuntimeState::new(),
             diagnostics: RenderDiagnosticsRuntimeState::new(),
+            menu: RenderMenuRuntimeState::new(),
         }
     }
 }

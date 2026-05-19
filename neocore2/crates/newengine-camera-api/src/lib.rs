@@ -5,10 +5,16 @@ use serde::{Deserialize, Serialize};
 /// Engine-facing camera service gateway id. Runtime consumers call this facade;
 /// the host resolves it to the active camera provider by descriptor metadata.
 pub const ENGINE_CAMERA_SERVICE_ID: &str = "engine.camera";
+pub const ENGINE_CAMERA_MODES_SERVICE_ID: &str = "engine.camera.modes";
+pub const ENGINE_CAMERA_ANIMATIONS_SERVICE_ID: &str = "engine.camera.animations";
 
 /// Default/first-party provider service id for camera runtime backends.
 pub const CAMERA_SERVICE_ID: &str = "camera.api";
 pub const CAMERA_BACKEND_CAPABILITY_ID: &str = "camera.backend";
+pub const CAMERA_MODES_SERVICE_ID: &str = "camera.modes.api";
+pub const CAMERA_MODES_BACKEND_CAPABILITY_ID: &str = "camera.modes.backend";
+pub const CAMERA_ANIMATIONS_SERVICE_ID: &str = "camera.animations.api";
+pub const CAMERA_ANIMATIONS_BACKEND_CAPABILITY_ID: &str = "camera.animations.backend";
 pub const CAMERA_SERVICE_METHOD_INVOKE: &str = newengine_service_api::SERVICE_METHOD_INVOKE_JSON;
 pub const CAMERA_SERVICE_METHOD_INFO: &str = newengine_service_api::SERVICE_METHOD_INFO_JSON;
 pub const CAMERA_SERVICE_METHOD_SHUTDOWN_V1: &str = newengine_service_api::SERVICE_METHOD_SHUTDOWN_V1;
@@ -23,6 +29,22 @@ pub const CAMERA_BACKEND_SERVICE_SPEC: newengine_service_api::BackendServiceSpec
         ENGINE_CAMERA_SERVICE_ID,
         CAMERA_SERVICE_ID,
         CAMERA_BACKEND_CAPABILITY_ID,
+    );
+
+pub const CAMERA_MODES_BACKEND_SERVICE_SPEC: newengine_service_api::BackendServiceSpec =
+    newengine_service_api::BackendServiceSpec::new(
+        "camera.modes",
+        ENGINE_CAMERA_MODES_SERVICE_ID,
+        CAMERA_MODES_SERVICE_ID,
+        CAMERA_MODES_BACKEND_CAPABILITY_ID,
+    );
+
+pub const CAMERA_ANIMATIONS_BACKEND_SERVICE_SPEC: newengine_service_api::BackendServiceSpec =
+    newengine_service_api::BackendServiceSpec::new(
+        "camera.animations",
+        ENGINE_CAMERA_ANIMATIONS_SERVICE_ID,
+        CAMERA_ANIMATIONS_SERVICE_ID,
+        CAMERA_ANIMATIONS_BACKEND_CAPABILITY_ID,
     );
 
 /// Startup validation contract for the engine-facing camera gateway.
