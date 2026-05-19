@@ -11,6 +11,7 @@ pub mod audio_gateway;
 pub mod camera_gateway;
 pub mod engine_bounds;
 pub mod gameplay;
+pub mod input_systems;
 pub mod plugin_manager;
 pub mod render_controller;
 pub mod render_runtime {

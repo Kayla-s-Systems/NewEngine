@@ -7,7 +7,28 @@
 //! Service/runtime consumers must not depend on `newengine_entity::EntityId` or
 //! the concrete ECS `World` layout.
 
+use newengine_math::collections::prelude::{ne_new_key_type, NeKey};
 use serde::{Deserialize, Serialize};
+
+
+ne_new_key_type! {
+    /// Stable, deterministic identifier of an entity across the engine.
+    ///
+    /// This low-level identity type intentionally lives in `newengine-entity-api`
+    /// so API/contract crates can name entities without depending on the concrete
+    /// ECS `World` implementation or the higher-level entity runtime crate.
+    pub struct EntityId;
+}
+
+impl EntityId {
+    /// Returns a deterministic, totally ordered representation of the entity id.
+    ///
+    /// This method intentionally hides the internal generational key layout.
+    #[inline]
+    pub fn stable_u64(self) -> u64 {
+        self.data().as_ffi()
+    }
+}
 
 /// Engine-facing entity service gateway id. Consumers call this facade; the host
 /// resolves it to the active provider by descriptor metadata / engine-owned facts.
@@ -101,6 +122,13 @@ impl EntityHandle {
     #[inline]
     pub const fn new(stable_id: u64) -> Self {
         Self { stable_id }
+    }
+}
+
+impl From<EntityId> for EntityHandle {
+    #[inline]
+    fn from(value: EntityId) -> Self {
+        Self::new(value.stable_u64())
     }
 }
 

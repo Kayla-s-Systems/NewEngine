@@ -284,6 +284,7 @@ pub(super) struct RenderFrameRuntimeState {
     /// runtime must not own `newengine-camera` projection/controller/nav state.
     pub(super) last_camera_snapshot: Option<CameraFrameSnapshot>,
     pub(super) sim_schedule: newengine_sim::SimSchedule,
+    pub(super) input_systems: crate::input_systems::InputRuntimeSystems,
     pub(super) last_play_mode: crate::GameRunMode,
 }
 
@@ -295,6 +296,7 @@ impl RenderFrameRuntimeState {
             last_pick_seq: 0,
             last_camera_snapshot: None,
             sim_schedule: crate::gameplay::default_sim_schedule(),
+            input_systems: crate::input_systems::InputRuntimeSystems::new(),
             last_play_mode: crate::GameRunMode::Staging,
         }
     }

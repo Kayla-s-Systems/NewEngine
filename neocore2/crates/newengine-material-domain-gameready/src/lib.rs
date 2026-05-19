@@ -7,11 +7,11 @@
 //! `RenderApi` resources for the reusable runtime render controller.
 
 use newengine_assets::AssetServiceClient;
-use newengine_core::render::*;
-use newengine_core::{EngineError, EngineResult};
+use newengine_render_api::*;
 use newengine_material_domain_api::{
-    LitPipeline, MaterialGpuPipeline, MaterialGpuPipelineKey, MaterialGpuPipelineProvider,
-    MaterialPipelineBuildProfile, LIT_INSTANCE_VERTEX_STRIDE,
+    LitPipeline, MaterialDomainError, MaterialDomainResult, MaterialGpuPipeline,
+    MaterialGpuPipelineKey, MaterialGpuPipelineProvider, MaterialPipelineBuildProfile,
+    MaterialRenderDevice, LIT_INSTANCE_VERTEX_STRIDE,
 };
 use newengine_plugin_host::default_host_api;
 use newengine_primitives::PrimitiveVertex;
@@ -31,7 +31,7 @@ impl GameReadyLitMaterialDomainProvider {
         Self::default()
     }
 
-    fn require_bytecode(&mut self) -> EngineResult<GameReadyLitShaderBytecodeSet> {
+    fn require_bytecode(&mut self) -> MaterialDomainResult<GameReadyLitShaderBytecodeSet> {
         if let Some(shader_set) = self.bytecode.clone() {
             return Ok(shader_set);
         }
@@ -44,8 +44,8 @@ impl GameReadyLitMaterialDomainProvider {
     fn build_pipeline(
         &mut self,
         profile: MaterialPipelineBuildProfile,
-        r: &mut dyn RenderApi,
-    ) -> EngineResult<LitPipeline> {
+        r: &mut dyn MaterialRenderDevice,
+    ) -> MaterialDomainResult<LitPipeline> {
         let shader_set = self.require_bytecode()?;
 
         // Allocate GPU resources only after shader baking succeeds. Runtime shader
@@ -274,8 +274,8 @@ impl MaterialGpuPipelineProvider for GameReadyLitMaterialDomainProvider {
     fn require_pipeline(
         &mut self,
         profile: MaterialPipelineBuildProfile,
-        r: &mut dyn RenderApi,
-    ) -> EngineResult<MaterialGpuPipeline> {
+        r: &mut dyn MaterialRenderDevice,
+    ) -> MaterialDomainResult<MaterialGpuPipeline> {
         if let Some(pipeline) = self.pipeline {
             return Ok(MaterialGpuPipeline::Lit(pipeline));
         }
@@ -299,7 +299,7 @@ struct GameReadyLitShaderBytecodeSet {
 }
 
 impl GameReadyLitShaderBytecodeSet {
-    fn load_and_compile() -> EngineResult<Self> {
+    fn load_and_compile() -> MaterialDomainResult<Self> {
         let vs_src = load_text_asset("shaders/game_lit_shadowed_v1.vert")?;
         let fs_src = load_text_asset("shaders/game_lit_shadowed_v1.frag")?;
         let terrain_fs_src = load_text_asset("shaders/game_terrain_surface_v1.frag")?;
@@ -347,23 +347,23 @@ impl GameReadyLitShaderBytecodeSet {
     }
 }
 
-fn load_text_asset(rel: &str) -> EngineResult<String> {
+fn load_text_asset(rel: &str) -> MaterialDomainResult<String> {
     let assets = AssetServiceClient::new(default_host_api());
 
     log::debug!("asset text: requesting path='{rel}' through AssetManager.text_v1");
     let payload = assets.text_v1(rel).map_err(|e| {
-        EngineError::other(format!("asset.text_v1 failed path='{rel}' err='{e}'"))
+        MaterialDomainError::other(format!("asset.text_v1 failed path='{rel}' err='{e}'"))
     })?;
 
     let s = std::str::from_utf8(&payload)
-        .map_err(|_| EngineError::other(format!("asset.text_v1 returned non-utf8 path='{rel}'")))?
+        .map_err(|_| MaterialDomainError::other(format!("asset.text_v1 returned non-utf8 path='{rel}'")))?
         .to_string();
 
     log::debug!("asset text: loaded path='{rel}' bytes={}", payload.len());
     Ok(s)
 }
 
-fn compile_glsl(stage: ShaderStage, name: &str, src: &str) -> EngineResult<Vec<u32>> {
+fn compile_glsl(stage: ShaderStage, name: &str, src: &str) -> MaterialDomainResult<Vec<u32>> {
     newengine_shader_compiler::compile_glsl_to_spirv(stage, name, "main", src)
-        .map_err(|e| EngineError::other(format!("shader compile failed: {e}")))
+        .map_err(|e| MaterialDomainError::other(format!("shader compile failed: {e}")))
 }

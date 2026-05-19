@@ -58,6 +58,19 @@ impl UiInputFrame {
     }
 
     #[inline]
+    pub fn has_gamepad_connected(&self) -> bool {
+        self.gamepad_connected > 0
+    }
+
+    #[inline]
+    pub fn has_gamepad_activity(&self) -> bool {
+        self.gamepad_buttons.values().any(|v| v.abs() > 0.5)
+            || self.gamepad_axes.values().any(|v| v.abs() > 0.05)
+            || !self.gamepad_buttons_pressed.is_empty()
+            || !self.gamepad_buttons_released.is_empty()
+    }
+
+    #[inline]
     pub fn is_gamepad_button_down(&self, button: &str) -> bool {
         self.gamepad_buttons.get(button).copied().unwrap_or(0.0) > 0.5
     }

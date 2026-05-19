@@ -9,5 +9,6 @@ Primary entry points:
 - `CoreEngine_Documentation/15_GATEWAY_SERVICE_LAYER.md`
 - `CoreEngine_Documentation/12_NEYTD_CODEC_SPEC.md`
 - `CoreEngine_Documentation/13_NEPAK_CODEC_SPEC.md`
+- `INPUT_SYSTEMS_RUNTIME.md`
 
 The current architecture is gateway-first: consumers use engine-owned facade ids, and the host resolves those ids to provider-owned plugin services through descriptor metadata.

@@ -6,4 +6,5 @@ readme = "README.md"
 description = "Host-side render material domain provider contract for NewEngine"
 
 [dependencies]
-newengine-core = { path = "../newengine-core" }
+newengine-render-api = { path = "../newengine-render-api" }
+newengine-service-api = { path = "../newengine-service-api" }

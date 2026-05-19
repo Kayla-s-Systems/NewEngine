@@ -7,6 +7,7 @@ edition = "2021"
 [dependencies]
 newengine-transform-api = { path = "../newengine-transform-api", default-features = false }
 newengine-math = { path = "../newengine-math" }
+newengine-service-api = { path = "../newengine-service-api" }
 newengine-ecs = { path = "../newengine-ecs", optional = true }
 
 # Engine-host integration (service registry) is intentionally opt-in.
@@ -16,7 +17,7 @@ newengine-core = { path = "../newengine-core", default-features = false, optiona
 default = []
 
 # ECS integration layer (hierarchy + propagation + world-space helpers).
-ecs = ["dep:newengine-ecs", "newengine-transform-api/ecs"]
+ecs = ["dep:newengine-ecs"]
 
 # Registers transform runtime into the engine service registry.
 service = ["ecs", "dep:newengine-core"]

@@ -4,7 +4,7 @@ use newengine_math::Vec3;
 use newengine_sim::{
     follow_params_from_pose, CameraRigComp, FollowTargetCameraController, FollowTargetCameraMotor,
 };
-use newengine_transform_api::{read_entity_world_pose_local_chain, write_entity_local_from_world_pose_local_chain, Transform};
+use newengine_transform::{read_entity_world_pose_local_chain, write_entity_local_from_world_pose_local_chain, Transform};
 
 use super::BoundsSphere;
 use newengine_camera::CameraRig;

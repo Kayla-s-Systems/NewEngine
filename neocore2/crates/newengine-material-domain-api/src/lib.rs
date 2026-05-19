@@ -2,16 +2,17 @@
 
 //! Host-side render material-domain provider contract.
 //!
-//! The goal of this crate is to keep reusable runtime orchestration independent
-//! from GameReady/FPS shader packages and material presets. A profile or feature
-//! package registers a [`MaterialGpuPipelineProvider`]; the render controller
-//! asks for a domain key and receives the engine-side bundle needed by its pass
-//! code. Backend-native resources are still created only through `RenderApi`.
+//! This API crate is deliberately independent of `newengine-core`: material
+//! domains are feature/profile contracts, not engine lifecycle modules. They
+//! depend only on stable render DTOs/resource ids and expose a narrow render
+//! device facade implemented by the runtime-side adapter.
 
-use newengine_core::render::{
-    BindGroupLayoutId, PipelineId, SamplerId, ShaderId, TextureFormat, TextureId,
+use std::fmt;
+
+use newengine_render_api::{
+    BindGroupLayoutDesc, BindGroupLayoutId, PipelineDesc, PipelineId, SamplerDesc, SamplerId,
+    ShaderDesc, ShaderId, TextureDesc, TextureFormat, TextureId,
 };
-use newengine_core::{render::RenderApi, EngineResult};
 
 /// Stable render-material domain key.
 ///
@@ -29,6 +30,47 @@ impl MaterialGpuPipelineKey {
     pub const fn as_str(self) -> &'static str {
         self.0
     }
+}
+
+/// Error type owned by the material-domain boundary.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MaterialDomainError {
+    message: String,
+}
+
+impl MaterialDomainError {
+    #[inline]
+    pub fn other(message: impl Into<String>) -> Self {
+        Self { message: message.into() }
+    }
+
+    #[inline]
+    pub fn message(&self) -> &str {
+        &self.message
+    }
+}
+
+impl fmt::Display for MaterialDomainError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(&self.message)
+    }
+}
+
+impl std::error::Error for MaterialDomainError {}
+
+pub type MaterialDomainResult<T> = Result<T, MaterialDomainError>;
+
+/// Narrow device facade required by material-domain providers.
+///
+/// Runtime adapters bridge this to the selected render backend. The API crate
+/// stays free of `newengine-core::render::RenderApi`, which would invert the
+/// dependency direction.
+pub trait MaterialRenderDevice {
+    fn create_bind_group_layout(&mut self, desc: BindGroupLayoutDesc) -> MaterialDomainResult<BindGroupLayoutId>;
+    fn create_texture(&mut self, desc: TextureDesc) -> MaterialDomainResult<TextureId>;
+    fn create_sampler(&mut self, desc: SamplerDesc) -> MaterialDomainResult<SamplerId>;
+    fn create_shader(&mut self, desc: ShaderDesc) -> MaterialDomainResult<ShaderId>;
+    fn create_pipeline(&mut self, desc: PipelineDesc) -> MaterialDomainResult<PipelineId>;
 }
 
 /// Build profile supplied by reusable runtime orchestration.
@@ -57,7 +99,7 @@ impl MaterialPipelineBuildProfile {
 
 /// Engine-side bundle consumed by the current lit mesh and shadow passes.
 ///
-/// This remains backend-neutral: all handles are stable `RenderApi` resource ids,
+/// This remains backend-neutral: all handles are stable render resource ids,
 /// never Vulkan/WGPU/native handles.
 #[derive(Clone, Copy)]
 pub struct LitPipeline {
@@ -124,15 +166,15 @@ impl MaterialGpuPipeline {
 
 /// Host-side provider contract for an engine-visible material-domain pipeline.
 ///
-/// Providers may cache shader bytecode and `RenderApi` resource ids internally.
-/// The reusable render controller owns only this trait object and the selected
-/// domain key; GameReady/FPS shader paths and presets live in the feature crate.
+/// Providers may cache shader bytecode and render resource ids internally. The
+/// reusable render controller owns only this trait object and the selected domain
+/// key; GameReady/FPS shader paths and presets live in the feature crate.
 pub trait MaterialGpuPipelineProvider: Send {
     fn key(&self) -> MaterialGpuPipelineKey;
 
     fn require_pipeline(
         &mut self,
         profile: MaterialPipelineBuildProfile,
-        r: &mut dyn RenderApi,
-    ) -> EngineResult<MaterialGpuPipeline>;
+        r: &mut dyn MaterialRenderDevice,
+    ) -> MaterialDomainResult<MaterialGpuPipeline>;
 }

@@ -4,7 +4,7 @@ use newengine_ecs::{EntityId, World};
 // kept for type-level coherence in downstream systems
 use newengine_math::prelude::NeKey;
 use newengine_math::{EulerRot, Quat};
-use newengine_transform_api::{read_entity_world_pose_local_chain, Transform};
+use newengine_transform::{read_entity_world_pose_local_chain, Transform};
 
 use crate::{
     run_character_motor_controller, run_follow_camera_controller, run_orbit_camera_controller,

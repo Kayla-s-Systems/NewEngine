@@ -2,7 +2,7 @@
 
 use newengine_ecs::{EntityId, World};
 use newengine_math::{Quat, Vec3};
-use newengine_transform_api::{read_entity_world_pose_local_chain, Transform};
+use newengine_transform::{read_entity_world_pose_local_chain, Transform};
 
 use crate::{IntentBuffer, SimFrame};
 

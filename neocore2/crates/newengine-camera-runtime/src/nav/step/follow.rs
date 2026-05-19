@@ -1,7 +1,7 @@
 use newengine_camera::{CameraFrame, CameraRig, RuntimeNavController};
 use newengine_ecs::{EntityId, World};
 use newengine_sim::{step_follow_camera, FollowTargetCameraController, FollowTargetCameraMotor};
-use newengine_transform_api::read_entity_world_pose_local_chain;
+use newengine_transform::read_entity_world_pose_local_chain;
 
 use crate::nav::helpers::{
     compute_projection, persist_camera_pose, retarget_follow_to_rig, target_has_transform,

@@ -4,12 +4,7 @@ version = "0.1.0"
 readme = "README.md"
 edition = "2021"
 
-[features]
-default = []
-ecs = ["dep:newengine-entity"]
-
 [dependencies]
 newengine-math = { path = "../newengine-math" }
-newengine-ecs = { path = "../newengine-ecs" }
 newengine-service-api = { path = "../newengine-service-api" }
-newengine-entity = { path = "../newengine-entity", optional = true }
+newengine-entity-api = { path = "../newengine-entity-api" }

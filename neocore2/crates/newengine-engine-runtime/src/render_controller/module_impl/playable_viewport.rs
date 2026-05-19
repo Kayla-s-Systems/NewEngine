@@ -31,8 +31,13 @@ impl RuntimeRenderController {
             log::info!("pause menu: exit requested through declarative menu action");
             ctx.request_exit();
         }
-        if pause_menu.blocks_gameplay {
-            frame_input.input.suppress_runtime_controls();
+        {
+            let mut carrier = frame_input.input.action_carrier();
+            self.frame.input_systems.apply_pause_capture(
+                self.frame.frame_index,
+                pause_menu.blocks_gameplay,
+                &mut carrier,
+            );
         }
 
         if scope.vp_w == 0 || scope.vp_h == 0 || self.viewport.pass_disabled {
@@ -100,7 +105,7 @@ impl RuntimeRenderController {
     }
 
     fn read_viewport_frame_input<E: Send + 'static>(
-        &self,
+        &mut self,
         ctx: &ModuleCtx<'_, E>,
         ui: Option<UiDrawList>,
         scope: RenderFrameScope,
@@ -110,11 +115,19 @@ impl RuntimeRenderController {
         } else {
             None
         };
-        let input = if scope.direct_surface_viewport {
+        let mut input = if scope.direct_surface_viewport {
             ViewportInputSnap::read_direct_surface(surface_input.as_ref())
         } else {
             ViewportInputSnap::read(&self.bridges.viewport)
         };
+        {
+            let mut carrier = input.action_carrier();
+            self.frame.input_systems.observe_frame(
+                self.frame.frame_index,
+                surface_input.as_ref(),
+                &mut carrier,
+            );
+        }
         ViewportFrameInput {
             ui,
             input,

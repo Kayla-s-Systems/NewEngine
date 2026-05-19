@@ -2,7 +2,7 @@
 
 use newengine_ecs::{EntityId, World};
 use newengine_math::{Quat, Vec3};
-use newengine_transform_api::{
+use newengine_transform::{
     write_entity_local_from_world_pose_local_chain, Transform, TransformDirty,
 };
 

@@ -9,3 +9,4 @@ crate-type = ["rlib"]
 
 [dependencies]
 abi_stable = "0.11"
+newengine-service-api = { path = "../newengine-service-api" }

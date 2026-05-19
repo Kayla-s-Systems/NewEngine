@@ -263,6 +263,13 @@ pub trait InputFrameSource {
     fn is_mouse_pressed(&self, button: u32) -> bool;
     fn is_mouse_released(&self, button: u32) -> bool;
 
+    /// Returns true when at least one gamepad is currently visible to the raw input backend.
+    ///
+    /// This is intentionally advisory. Binding profiles use it for diagnostics and fallback
+    /// policy, not for hard device gating; modal capture belongs to `engine.input.contexts`.
+    #[inline]
+    fn has_gamepad_connected(&self) -> bool { false }
+
     #[inline]
     fn is_gamepad_button_down(&self, _button: &str) -> bool { false }
     #[inline]

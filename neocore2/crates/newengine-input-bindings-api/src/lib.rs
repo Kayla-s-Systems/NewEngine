@@ -324,10 +324,13 @@ impl InputBindingsProfile {
         }
         self.actions = actions;
 
-        self.bindings = self.bindings.into_iter().filter_map(InputBinding::normalized).collect();
-        if self.bindings.is_empty() {
-            self.bindings = defaults.bindings.clone().into_iter().filter_map(InputBinding::normalized).collect();
+        let mut bindings: Vec<_> = self.bindings.into_iter().filter_map(InputBinding::normalized).collect();
+        for binding in defaults.bindings.clone().into_iter().filter_map(InputBinding::normalized) {
+            if !bindings.iter().any(|existing| bindings_equivalent(existing, &binding)) {
+                bindings.push(binding);
+            }
         }
+        self.bindings = bindings;
 
         let mut listeners: Vec<_> = defaults.listeners.clone().into_iter().filter_map(InputActionListenerRegistration::normalized).collect();
         for listener in self.listeners.into_iter().filter_map(InputActionListenerRegistration::normalized) {
@@ -336,10 +339,13 @@ impl InputBindingsProfile {
         listeners.sort_by(|a, b| b.priority.cmp(&a.priority).then_with(|| a.id.cmp(&b.id)));
         self.listeners = listeners;
 
-        self.gamepad_axes = self.gamepad_axes.into_iter().filter_map(canonical_axis_binding).collect();
-        if self.gamepad_axes.is_empty() {
-            self.gamepad_axes = defaults.gamepad_axes.clone().into_iter().filter_map(canonical_axis_binding).collect();
+        let mut gamepad_axes: Vec<_> = self.gamepad_axes.into_iter().filter_map(canonical_axis_binding).collect();
+        for axis in defaults.gamepad_axes.clone().into_iter().filter_map(canonical_axis_binding) {
+            if !gamepad_axes.iter().any(|existing| existing.axis == axis.axis && existing.target == axis.target) {
+                gamepad_axes.push(axis);
+            }
         }
+        self.gamepad_axes = gamepad_axes;
         self
     }
 
@@ -386,7 +392,7 @@ impl InputBindingsProfile {
         let actions = self.action_catalog();
         let mut seen = std::collections::BTreeSet::<String>::new();
         for binding in &self.bindings {
-            if !device_allowed(self.device_preference, binding.device) || !binding_matches(binding, input) {
+            if !binding_matches(binding, input) {
                 continue;
             }
             if !seen.insert(binding.action.clone()) {
@@ -498,6 +504,16 @@ impl Default for InputBindingsServiceInfo {
     }
 }
 
+
+#[inline]
+fn bindings_equivalent(a: &InputBinding, b: &InputBinding) -> bool {
+    a.action == b.action
+        && a.device == b.device
+        && a.code == b.code
+        && a.name == b.name
+        && a.phase == b.phase
+}
+
 fn canonical_axis_binding(mut axis: GamepadAxisBinding) -> Option<GamepadAxisBinding> {
     axis.axis = axis.axis.trim().to_owned();
     axis.deadzone = axis.deadzone.clamp(0.0, 0.95);
@@ -524,11 +540,12 @@ fn upsert_listener_registration(listeners: &mut Vec<InputActionListenerRegistrat
 }
 
 #[inline]
-fn device_allowed(preference: InputDevicePreference, device: InputBindingDevice) -> bool {
-    match device {
-        InputBindingDevice::Keyboard | InputBindingDevice::MouseButton => preference.allows_keyboard_mouse(),
-        InputBindingDevice::GamepadButton => preference.allows_gamepad(),
-    }
+pub fn input_device_preference_is_display_only(_preference: InputDevicePreference) -> bool {
+    // Device preference is intentionally not a hard gameplay input gate. It orders binding
+    // labels and menu presentation only. Exclusive capture belongs to `engine.input.contexts`,
+    // where modal policy can be expressed explicitly instead of silently disabling fallback
+    // devices at the action resolver level.
+    true
 }
 
 #[inline]

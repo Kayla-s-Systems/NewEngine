@@ -9,7 +9,7 @@ description = "GameReady runtime lit material-domain provider for NewEngine"
 log = "0.4"
 
 newengine-assets = { path = "../newengine-assets" }
-newengine-core = { path = "../newengine-core" }
+newengine-render-api = { path = "../newengine-render-api" }
 newengine-material-domain-api = { path = "../newengine-material-domain-api" }
 newengine-plugin-host = { path = "../newengine-plugin-host" }
 newengine-primitives = { path = "../newengine-primitives" }

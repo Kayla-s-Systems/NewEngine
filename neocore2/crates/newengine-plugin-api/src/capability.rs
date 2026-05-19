@@ -5,6 +5,8 @@ use abi_stable::StableAbi;
 
 use crate::types::CapabilityId;
 
+pub use newengine_service_api::{BackendRouteDescriptor, BackendServiceSpec};
+
 pub const CAPABILITY_TAG_LEGACY: &str = "legacy";
 pub const CAPABILITY_TAG_RENDER: &str = "render";
 pub const CAPABILITY_TAG_RUNTIME: &str = "runtime";
@@ -96,6 +98,21 @@ impl CapabilityDesc {
     #[inline]
     pub fn with_json(mut self, json: impl Into<RString>) -> Self {
         self.describe_json = json.into();
+        self
+    }
+
+    #[inline]
+    pub fn backend_route(
+        id: impl Into<CapabilityId>,
+        descriptor: BackendRouteDescriptor,
+    ) -> Self {
+        Self::new(id, CapabilityRole::Provides, CapabilityKind::Other, 1)
+            .with_json(descriptor.to_json_string())
+    }
+
+    #[inline]
+    pub fn with_backend_route(mut self, descriptor: BackendRouteDescriptor) -> Self {
+        self.describe_json = RString::from(descriptor.to_json_string());
         self
     }
 

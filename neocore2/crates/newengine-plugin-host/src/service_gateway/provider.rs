@@ -1,8 +1,23 @@
 #![forbid(unsafe_op_in_unsafe_fn)]
 
+use std::collections::HashSet;
+use std::sync::{Mutex, OnceLock};
+
 use newengine_plugin_api::{CapabilityKind, CapabilityRole, PluginDescriptor};
 
 use super::metadata::EngineGatewayCapability;
+
+fn warn_once(key: String, message: impl FnOnce()) {
+    static WARNED_INVALID_GATEWAY_ROUTES: OnceLock<Mutex<HashSet<String>>> = OnceLock::new();
+    let warned = WARNED_INVALID_GATEWAY_ROUTES.get_or_init(|| Mutex::new(HashSet::new()));
+    let should_log = match warned.lock() {
+        Ok(mut set) => set.insert(key),
+        Err(poisoned) => poisoned.into_inner().insert(key),
+    };
+    if should_log {
+        message();
+    }
+}
 
 pub(crate) fn descriptor_declares_service(
     descriptor: &PluginDescriptor,
@@ -35,12 +50,20 @@ pub(crate) fn gateway_provider_service_id(
         if descriptor_declares_service(descriptor, service_id) {
             return Some(service_id.to_owned());
         }
-        log::warn!(
-            "plugins: ignoring service gateway because contract service is not declared plugin='{}' engine_gateway='{}' contract='{}' capability='{}'",
-            descriptor.id,
-            gateway.gateway_id,
-            service_id,
-            gateway.backend_capability_id
+        warn_once(
+            format!(
+                "contract-not-declared:{}:{}:{}:{}",
+                descriptor.id, gateway.gateway_id, service_id, gateway.backend_capability_id
+            ),
+            || {
+                log::warn!(
+                    "plugins: ignoring service gateway because contract service is not declared plugin='{}' engine_gateway='{}' contract='{}' capability='{}'",
+                    descriptor.id,
+                    gateway.gateway_id,
+                    service_id,
+                    gateway.backend_capability_id
+                );
+            },
         );
         return None;
     }
@@ -49,21 +72,38 @@ pub(crate) fn gateway_provider_service_id(
     match services.as_slice() {
         [single] => Some(single.clone()),
         [] => {
-            log::warn!(
-                "plugins: ignoring service gateway because provider declares no ServiceV1 plugin='{}' engine_gateway='{}' capability='{}'",
-                descriptor.id,
-                gateway.gateway_id,
-                gateway.backend_capability_id
+            warn_once(
+                format!(
+                    "no-service:{}:{}:{}",
+                    descriptor.id, gateway.gateway_id, gateway.backend_capability_id
+                ),
+                || {
+                    log::warn!(
+                        "plugins: ignoring service gateway because provider declares no ServiceV1 plugin='{}' engine_gateway='{}' capability='{}'",
+                        descriptor.id,
+                        gateway.gateway_id,
+                        gateway.backend_capability_id
+                    );
+                },
             );
             None
         }
         _ => {
-            log::warn!(
-                "plugins: ignoring service gateway because provider declares multiple ServiceV1 entries without contract plugin='{}' engine_gateway='{}' capability='{}' services='{}'",
-                descriptor.id,
-                gateway.gateway_id,
-                gateway.backend_capability_id,
-                services.join(",")
+            let services_joined = services.join(",");
+            warn_once(
+                format!(
+                    "multi-service:{}:{}:{}:{}",
+                    descriptor.id, gateway.gateway_id, gateway.backend_capability_id, services_joined
+                ),
+                || {
+                    log::warn!(
+                        "plugins: ignoring service gateway because provider declares multiple ServiceV1 entries without contract plugin='{}' engine_gateway='{}' capability='{}' services='{}'",
+                        descriptor.id,
+                        gateway.gateway_id,
+                        gateway.backend_capability_id,
+                        services_joined
+                    );
+                },
             );
             None
         }

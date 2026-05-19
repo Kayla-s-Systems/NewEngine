@@ -1,5 +1,7 @@
 #![forbid(unsafe_op_in_unsafe_fn)]
 
+use std::sync::atomic::{AtomicBool, Ordering};
+
 use newengine_core::call_service_v1_optional;
 use newengine_math::collections_prelude::{NeBTreeMap, NeBTreeSet};
 use newengine_ui::UiInputFrame;
@@ -7,6 +9,9 @@ use newengine_ui::UiInputFrame;
 /// Engine-facing input gateway id. Consumers call the engine facade; the host
 /// resolves it to the active input provider by descriptor metadata.
 pub const INPUT_SERVICE_ID: &str = newengine_input_api::ENGINE_INPUT_SERVICE_ID;
+
+static INPUT_POLL_ONLINE_LOGGED: AtomicBool = AtomicBool::new(false);
+static INPUT_POLL_OFFLINE_LOGGED: AtomicBool = AtomicBool::new(false);
 
 /// Calls a service method returning UTF-8 payload (best-effort).
 pub fn call_service_utf8(service_id: &str, method: &str) -> Option<String> {
@@ -16,14 +21,36 @@ pub fn call_service_utf8(service_id: &str, method: &str) -> Option<String> {
 
 /// Polls input snapshot from the canonical INPUT plugin and maps it into UiInputFrame.
 pub fn poll_input_frame() -> Option<UiInputFrame> {
-    let state_json = call_service_utf8(INPUT_SERVICE_ID, newengine_input_api::INPUT_METHOD_STATE_JSON)?;
+    let Some(state_json) = call_service_utf8(INPUT_SERVICE_ID, newengine_input_api::INPUT_METHOD_STATE_JSON) else {
+        if !INPUT_POLL_OFFLINE_LOGGED.swap(true, Ordering::Relaxed) {
+            log::warn!(
+                "input systems: raw input polling unavailable service='{}' method='{}'",
+                INPUT_SERVICE_ID,
+                newengine_input_api::INPUT_METHOD_STATE_JSON,
+            );
+        }
+        return None;
+    };
+    if !INPUT_POLL_ONLINE_LOGGED.swap(true, Ordering::Relaxed) {
+        log::info!(
+            "input systems: raw input polling online service='{}' method='{}'",
+            INPUT_SERVICE_ID,
+            newengine_input_api::INPUT_METHOD_STATE_JSON,
+        );
+    }
     let text_json = call_service_utf8(INPUT_SERVICE_ID, newengine_input_api::INPUT_METHOD_TEXT_TAKE_JSON)
         .unwrap_or_else(|| "{}".into());
     let ime_json = call_service_utf8(INPUT_SERVICE_ID, newengine_input_api::INPUT_METHOD_IME_COMMIT_TAKE_JSON)
         .unwrap_or_else(|| "{}".into());
 
     let mut out = UiInputFrame::default();
-    let st: serde_json::Value = serde_json::from_str(&state_json).ok()?;
+    let st: serde_json::Value = match serde_json::from_str(&state_json) {
+        Ok(value) => value,
+        Err(e) => {
+            log::warn!("input systems: raw input state_json decode failed err='{}'", e);
+            return None;
+        }
+    };
 
     if let Some(keys) = st.get("keys") {
         merge_u32_set(&mut out.keys_down, keys.get("down"));

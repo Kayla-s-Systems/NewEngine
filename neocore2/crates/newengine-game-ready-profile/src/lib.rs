@@ -56,6 +56,14 @@ impl GameReadyRuntimeProfile {
         engine: &mut Engine<()>,
         startup: &StartupConfig,
     ) -> EngineResult<()> {
+        // Install GameReady input defaults before constructing render/pause runtime.
+        // RuntimeRenderController owns the pause-menu state, and that state snapshots
+        // the active input profile during construction. Initializing the bindings
+        // gateway here prevents an empty generic profile from being captured first.
+        newengine_input_bindings_runtime::register_input_bindings_gateway_best_effort(
+            newengine_input_profile_gameready::game_ready_input_profile(),
+        );
+
         engine.register_module(Box::new(PhysicsBackendRuntimeModule::new(
             startup.modules_dir.clone(),
         )))?;

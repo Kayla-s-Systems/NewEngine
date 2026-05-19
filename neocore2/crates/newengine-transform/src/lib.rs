@@ -10,7 +10,6 @@ mod world_space;
 
 pub use newengine_transform_api::{GlobalTransform, Transform, WorldPose};
 
-#[cfg(feature = "ecs")]
 pub use newengine_transform_api::{Children, Parent, TransformDirty};
 
 #[cfg(feature = "ecs")]
@@ -30,11 +29,61 @@ pub use world_space::{
 #[cfg(all(feature = "ecs", feature = "service"))]
 pub mod service {
     use newengine_core::{ErasedService, InterfaceId, ServiceRegistry};
-    use newengine_transform_api::runtime::TransformRuntimeVTable;
+    use newengine_service_api::ServiceInterface;
     use newengine_transform_api::{ITRANSFORM_RUNTIME_V1, TRANSFORM_SERVICE};
 
     use super::{ensure_transform_outputs, propagate_transforms, set_parent};
     use newengine_ecs::{EntityId, World};
+
+    /// VTable for transform runtime integration.
+    ///
+    /// This ECS-facing ABI lives in `newengine-transform`, not
+    /// `newengine-transform-api`, so the API crate remains DTO-only.
+    #[repr(C)]
+    pub struct TransformRuntimeVTable {
+        pub ensure_outputs: unsafe fn(*mut (), *mut World),
+        pub propagate: unsafe fn(*mut (), *mut World),
+        pub set_parent: unsafe fn(*mut (), *mut World, EntityId, Option<EntityId>),
+    }
+
+    /// Thin, typed wrapper over `(instance_ptr, vtable_ptr)`.
+    #[derive(Clone, Copy)]
+    pub struct TransformRuntimeApi {
+        instance: *mut (),
+        vtbl: *const TransformRuntimeVTable,
+    }
+
+    unsafe impl Send for TransformRuntimeApi {}
+    unsafe impl Sync for TransformRuntimeApi {}
+
+    impl TransformRuntimeApi {
+        #[inline]
+        pub fn ensure_outputs(&self, world: &mut World) {
+            unsafe { ((*self.vtbl).ensure_outputs)(self.instance, world as *mut _) }
+        }
+
+        #[inline]
+        pub fn propagate(&self, world: &mut World) {
+            unsafe { ((*self.vtbl).propagate)(self.instance, world as *mut _) }
+        }
+
+        #[inline]
+        pub fn set_parent(&self, world: &mut World, child: EntityId, parent: Option<EntityId>) {
+            unsafe { ((*self.vtbl).set_parent)(self.instance, world as *mut _, child, parent) }
+        }
+    }
+
+    impl ServiceInterface for TransformRuntimeApi {
+        type VTable = TransformRuntimeVTable;
+        const INTERFACE_ID: InterfaceId = ITRANSFORM_RUNTIME_V1;
+
+        unsafe fn from_raw(instance: *mut (), vtable: *const Self::VTable) -> Self {
+            Self {
+                instance,
+                vtbl: vtable,
+            }
+        }
+    }
 
     struct TransformRuntimeService;
 

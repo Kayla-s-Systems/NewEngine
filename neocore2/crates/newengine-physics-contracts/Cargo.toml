@@ -7,7 +7,7 @@ license = "Proprietary"
 
 [dependencies]
 newengine-bounds = { path = "../newengine-bounds" }
-newengine-ecs = { path = "../newengine-ecs" }
+newengine-entity-api = { path = "../newengine-entity-api" }
 newengine-math = { path = "../newengine-math" }
 
 [features]

@@ -5,9 +5,62 @@ use std::collections::HashMap;
 use newengine_core::render::RenderApi;
 use newengine_core::{EngineError, EngineResult as CoreResult};
 use newengine_material_domain_api::{
-    MaterialGpuPipeline, MaterialGpuPipelineKey, MaterialGpuPipelineProvider,
-    MaterialPipelineBuildProfile,
+    MaterialDomainError, MaterialGpuPipeline, MaterialGpuPipelineKey, MaterialGpuPipelineProvider,
+    MaterialPipelineBuildProfile, MaterialRenderDevice,
 };
+
+struct CoreRenderMaterialDevice<'a> {
+    inner: &'a mut dyn RenderApi,
+}
+
+impl<'a> CoreRenderMaterialDevice<'a> {
+    #[inline]
+    fn new(inner: &'a mut dyn RenderApi) -> Self {
+        Self { inner }
+    }
+
+    #[inline]
+    fn map_err(e: newengine_core::EngineError) -> MaterialDomainError {
+        MaterialDomainError::other(e.to_string())
+    }
+}
+
+impl MaterialRenderDevice for CoreRenderMaterialDevice<'_> {
+    fn create_bind_group_layout(
+        &mut self,
+        desc: newengine_core::render::BindGroupLayoutDesc,
+    ) -> Result<newengine_core::render::BindGroupLayoutId, MaterialDomainError> {
+        self.inner.create_bind_group_layout(desc).map_err(Self::map_err)
+    }
+
+    fn create_texture(
+        &mut self,
+        desc: newengine_core::render::TextureDesc,
+    ) -> Result<newengine_core::render::TextureId, MaterialDomainError> {
+        self.inner.create_texture(desc).map_err(Self::map_err)
+    }
+
+    fn create_sampler(
+        &mut self,
+        desc: newengine_core::render::SamplerDesc,
+    ) -> Result<newengine_core::render::SamplerId, MaterialDomainError> {
+        self.inner.create_sampler(desc).map_err(Self::map_err)
+    }
+
+    fn create_shader(
+        &mut self,
+        desc: newengine_core::render::ShaderDesc,
+    ) -> Result<newengine_core::render::ShaderId, MaterialDomainError> {
+        self.inner.create_shader(desc).map_err(Self::map_err)
+    }
+
+    fn create_pipeline(
+        &mut self,
+        desc: newengine_core::render::PipelineDesc,
+    ) -> Result<newengine_core::render::PipelineId, MaterialDomainError> {
+        self.inner.create_pipeline(desc).map_err(Self::map_err)
+    }
+}
 
 /// GPU material registry owned by the engine runtime side of the renderer.
 ///
@@ -45,6 +98,9 @@ impl MaterialGpuRegistry {
             )));
         };
 
-        provider.require_pipeline(profile, r)
+        let mut device = CoreRenderMaterialDevice::new(r);
+        provider
+            .require_pipeline(profile, &mut device)
+            .map_err(|e| EngineError::other(format!("render material registry: {}", e)))
     }
 }

@@ -82,6 +82,32 @@ impl RuntimeRenderController {
         self
     }
 
+
+    /// Enables or disables one semantic input system at runtime.
+    ///
+    /// This is the in-process control point used by scripted states such as cutscenes,
+    /// dialogue or loading gates. Disabling a higher-level system does not stop raw
+    /// device polling; it only suppresses the matching semantic effects.
+    #[inline]
+    pub fn set_input_system_enabled(
+        &mut self,
+        system: crate::input_systems::InputRuntimeSystem,
+        enabled: bool,
+        reason: impl Into<String>,
+    ) {
+        self.frame.input_systems.set_enabled(system, enabled, reason, self.frame.frame_index);
+    }
+
+    #[inline]
+    pub fn input_systems_snapshot(&self) -> crate::input_systems::InputRuntimeSystemsSnapshot {
+        self.frame.input_systems.snapshot(self.frame.frame_index)
+    }
+
+    #[inline]
+    pub fn log_input_systems_snapshot(&self, reason: &str) {
+        self.frame.input_systems.log_explicit_snapshot(self.frame.frame_index, reason);
+    }
+
     pub(super) fn disable_viewport_pass(
         &mut self,
         phase: &'static str,

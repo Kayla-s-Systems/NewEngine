@@ -460,6 +460,7 @@ dependencies = [
  "newengine-input-actions-api",
  "newengine-math",
  "newengine-sim",
+ "newengine-transform",
  "newengine-transform-api",
 ]
 
@@ -590,13 +591,14 @@ dependencies = [
 name = "newengine-entity"
 version = "0.1.0"
 dependencies = [
- "newengine-math",
+ "newengine-entity-api",
 ]
 
 [[package]]
 name = "newengine-entity-api"
 version = "0.1.0"
 dependencies = [
+ "newengine-math",
  "newengine-service-api",
  "serde",
  "serde_json",
@@ -728,7 +730,8 @@ dependencies = [
 name = "newengine-material-domain-api"
 version = "0.1.0"
 dependencies = [
- "newengine-core",
+ "newengine-render-api",
+ "newengine-service-api",
 ]
 
 [[package]]
@@ -737,10 +740,10 @@ version = "0.1.0"
 dependencies = [
  "log",
  "newengine-assets",
- "newengine-core",
  "newengine-material-domain-api",
  "newengine-plugin-host",
  "newengine-primitives",
+ "newengine-render-api",
  "newengine-shader-compiler",
 ]
 
@@ -804,7 +807,7 @@ name = "newengine-physics-contracts"
 version = "0.1.0"
 dependencies = [
  "newengine-bounds",
- "newengine-ecs",
+ "newengine-entity-api",
  "newengine-math",
 ]
 
@@ -823,6 +826,7 @@ name = "newengine-plugin-api"
 version = "0.1.0"
 dependencies = [
  "abi_stable",
+ "newengine-service-api",
 ]
 
 [[package]]
@@ -976,6 +980,10 @@ dependencies = [
 [[package]]
 name = "newengine-service-api"
 version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+]
 
 [[package]]
 name = "newengine-service-kit"
@@ -1005,6 +1013,7 @@ dependencies = [
  "newengine-camera",
  "newengine-ecs",
  "newengine-math",
+ "newengine-transform",
  "newengine-transform-api",
  "rayon",
 ]
@@ -1047,6 +1056,7 @@ dependencies = [
  "newengine-core",
  "newengine-ecs",
  "newengine-math",
+ "newengine-service-api",
  "newengine-transform-api",
 ]
 
@@ -1054,8 +1064,7 @@ dependencies = [
 name = "newengine-transform-api"
 version = "0.1.0"
 dependencies = [
- "newengine-ecs",
- "newengine-entity",
+ "newengine-entity-api",
  "newengine-math",
  "newengine-service-api",
 ]

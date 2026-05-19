@@ -1,5 +1,5 @@
 use newengine_bounds::Bounds;
-use newengine_ecs::EntityId;
+use newengine_entity_api::EntityId;
 
 use crate::{CollisionShapeDesc, PhysicsMaterialDesc};
 

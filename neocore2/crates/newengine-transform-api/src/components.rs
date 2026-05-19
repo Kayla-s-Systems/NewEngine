@@ -1,5 +1,6 @@
 #![forbid(unsafe_op_in_unsafe_fn)]
 
+use newengine_entity_api::EntityId;
 use newengine_math::{EulerRot, Mat4, Quat, Vec3};
 
 /// Local transform relative to parent.
@@ -62,18 +63,15 @@ impl Default for GlobalTransform {
     }
 }
 
-/// Parent link (tree).
-#[cfg(feature = "ecs")]
+/// Parent link (tree). Pure DTO; ECS storage is owned by runtime crates.
 #[derive(Clone, Copy, Debug)]
-pub struct Parent(pub newengine_entity::EntityId);
+pub struct Parent(pub EntityId);
 
-/// Children list (maintained by editor/gameplay code).
-#[cfg(feature = "ecs")]
+/// Children list (maintained by editor/gameplay code). Pure DTO.
 #[derive(Clone, Debug, Default)]
-pub struct Children(pub Vec<newengine_entity::EntityId>);
+pub struct Children(pub Vec<EntityId>);
 
 /// Marks a node as needing recomputation (optional; currently used as a hint only).
-#[cfg(feature = "ecs")]
 #[derive(Clone, Copy, Debug, Default)]
 pub struct TransformDirty;
 

@@ -42,6 +42,28 @@ impl InputBindingsGatewayState {
                 let _ = save_profile_to_config(&profile_path, &default);
                 default
             });
+        log::info!(
+            "input bindings: initialized profile id='{}' actions={} bindings={} axes={} listeners={} config='{}' default_id='{}' default_actions={} default_bindings={} default_axes={}",
+            profile.id,
+            profile.actions.len(),
+            profile.bindings.len(),
+            profile.gamepad_axes.len(),
+            profile.listeners.len(),
+            profile_path.display(),
+            default_profile.id,
+            default_profile.actions.len(),
+            default_profile.bindings.len(),
+            default_profile.gamepad_axes.len(),
+        );
+        if profile.actions.is_empty() || profile.bindings.is_empty() {
+            log::warn!(
+                "input bindings: semantic profile has empty action/binding catalog id='{}' actions={} bindings={} config='{}'",
+                profile.id,
+                profile.actions.len(),
+                profile.bindings.len(),
+                profile_path.display(),
+            );
+        }
         Self { profile, default_profile, profile_path }
     }
 }
@@ -165,6 +187,44 @@ fn gateway_state_with_default(default_profile: InputBindingsProfile) -> Arc<Mute
     Arc::clone(INPUT_BINDINGS_GATEWAY.get_or_init(|| Arc::new(Mutex::new(InputBindingsGatewayState::new(default_profile)))))
 }
 
+fn install_or_update_default_profile(default_profile: InputBindingsProfile) -> Arc<Mutex<InputBindingsGatewayState>> {
+    let default_profile = default_profile.canonicalized();
+    if let Some(existing) = INPUT_BINDINGS_GATEWAY.get() {
+        let state_ref = Arc::clone(existing);
+        let mut state = state_ref.lock();
+        let old_default_id = state.default_profile.id.clone();
+        let old_actions = state.profile.actions.len();
+        let old_bindings = state.profile.bindings.len();
+        let old_axes = state.profile.gamepad_axes.len();
+        state.default_profile = default_profile.clone();
+        state.profile = state.profile.clone().canonicalized_with_defaults(&default_profile);
+        let path = state.profile_path.clone();
+        if let Err(e) = save_profile_to_config(&path, &state.profile) {
+            log::warn!(
+                "input bindings: failed to persist updated default merge config='{}' err='{}'",
+                path.display(),
+                e
+            );
+        }
+        log::info!(
+            "input bindings: default profile installed existing_state=true old_default='{}' new_default='{}' profile='{}' actions {}->{} bindings {}->{} axes {}->{} config='{}'",
+            old_default_id,
+            default_profile.id,
+            state.profile.id,
+            old_actions,
+            state.profile.actions.len(),
+            old_bindings,
+            state.profile.bindings.len(),
+            old_axes,
+            state.profile.gamepad_axes.len(),
+            path.display(),
+        );
+        drop(state);
+        return state_ref;
+    }
+    gateway_state_with_default(default_profile)
+}
+
 fn gateway_state() -> Arc<Mutex<InputBindingsGatewayState>> {
     gateway_state_with_default(InputBindingsProfile::default())
 }
@@ -260,11 +320,22 @@ pub fn register_input_manifest(manifest: InputBindingsManifest) -> Result<InputB
 }
 
 pub fn register_input_bindings_gateway_best_effort(default_profile: InputBindingsProfile) {
+    let state_ref = install_or_update_default_profile(default_profile);
     if newengine_plugin_host::has_service(ENGINE_INPUT_BINDINGS_SERVICE_ID) {
+        let state = state_ref.lock();
+        log::info!(
+            "input bindings gateway: service already registered id='{}' profile='{}' actions={} bindings={} axes={} config='{}'",
+            ENGINE_INPUT_BINDINGS_SERVICE_ID,
+            state.profile.id,
+            state.profile.actions.len(),
+            state.profile.bindings.len(),
+            state.profile.gamepad_axes.len(),
+            state.profile_path.display(),
+        );
         return;
     }
 
-    let service = input_bindings_gateway_service(gateway_state_with_default(default_profile));
+    let service = input_bindings_gateway_service(state_ref);
     match register_engine_owned_gateway_service(EngineOwnedGatewayDecl {
         gateway: ENGINE_INPUT_BINDINGS_SERVICE_ID,
         service_kind: newengine_service_api::EngineServiceKind::InputBindings,

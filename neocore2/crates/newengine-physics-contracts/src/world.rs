@@ -1,4 +1,4 @@
-use newengine_ecs::EntityId;
+use newengine_entity_api::EntityId;
 use newengine_math::{Quat, Vec3};
 
 use crate::{PhysicsBodyDesc, PhysicsHandle};

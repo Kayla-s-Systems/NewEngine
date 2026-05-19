@@ -5,4 +5,4 @@ readme = "README.md"
 edition = "2021"
 
 [dependencies]
-newengine-math = { path = "../newengine-math" }
+newengine-entity-api = { path = "../newengine-entity-api" }

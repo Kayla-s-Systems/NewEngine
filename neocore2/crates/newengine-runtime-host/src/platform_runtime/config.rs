@@ -5,7 +5,7 @@ use libloading::Library;
 use newengine_core::{EngineError, EngineResult, StartupConfig};
 use newengine_platform_api::{
     PlatformAppConfigV1, PlatformRuntimeRunFnV1, PlatformWindowPlacementKindV1,
-    PlatformWindowPlacementV1, ENGINE_PLATFORM_SERVICE_ID, PLATFORM_BACKEND_CAPABILITY_ID,
+    PlatformWindowPlacementV1,
 };
 use newengine_plugin_api::{
     CapabilityDesc, CapabilityKind, CapabilityRole, ConfigBlobV1, ConfigDiagLevelV1,
@@ -480,49 +480,37 @@ fn ensure_platform_runtime_capabilities(mut descriptor: PluginDescriptor) -> Plu
         })
     }
 
-    let required = [
-        (
+    // The platform runtime is an external event-loop entrypoint, not a plugin-owned
+    // `platform.api` ServiceV1 provider. `engine.platform` is registered later as an
+    // engine-owned snapshot gateway by `snapshot_service.rs`; advertising a backend
+    // route here makes the gateway registry try to bind `platform.api` every frame.
+    let required = vec![
+        CapabilityDesc::new(
             "platform.runtime.v1",
             CapabilityRole::Provides,
             CapabilityKind::Other,
             1,
-            r#"{"role":"platform-runtime"}"#,
-        ),
-        (
-            PLATFORM_BACKEND_CAPABILITY_ID,
-            CapabilityRole::Provides,
-            CapabilityKind::Other,
-            1,
-            r#"{"service_kind":"platform","engine_gateway":"engine.platform","contract":"engine.platform","backend_priority":0,"role":"host-window-surface"}"#,
-        ),
-        (
-            ENGINE_PLATFORM_SERVICE_ID,
-            CapabilityRole::Provides,
-            CapabilityKind::ServiceV1,
-            1,
-            r#"{"role":"engine-platform-gateway"}"#,
-        ),
-        (
+        )
+        .with_json(r#"{"role":"platform-runtime"}"#),
+        CapabilityDesc::new(
             "platform.surface.v1",
             CapabilityRole::Provides,
             CapabilityKind::Other,
             1,
-            r#"{"role":"surface"}"#,
-        ),
-        (
+        )
+        .with_json(r#"{"role":"surface"}"#),
+        CapabilityDesc::new(
             "platform.input.events.v1",
             CapabilityRole::Provides,
             CapabilityKind::EventsV1,
             1,
-            r#"{"role":"input-events"}"#,
-        ),
+        )
+        .with_json(r#"{"role":"input-events"}"#),
     ];
 
-    for (id, role, kind, version, json) in required {
-        if !has_cap(&descriptor, id, role, kind, version) {
-            descriptor.capabilities.push(
-                CapabilityDesc::new(id, role, kind, version).with_json(json),
-            );
+    for cap in required {
+        if !has_cap(&descriptor, cap.id.as_str(), cap.role, cap.kind, cap.version) {
+            descriptor.capabilities.push(cap);
         }
     }
 
@@ -543,20 +531,6 @@ fn synthesize_platform_descriptor(
                 1,
             )
                 .with_json(r#"{"role":"platform-runtime"}"#),
-        )
-        .push(
-            CapabilityDesc::new(
-                PLATFORM_BACKEND_CAPABILITY_ID,
-                CapabilityRole::Provides,
-                CapabilityKind::Other,
-                1,
-            )
-                .with_json(r#"{"service_kind":"platform","engine_gateway":"engine.platform","contract":"engine.platform","backend_priority":0,"role":"host-window-surface"}"#),
-        )
-        .provides_service(
-            ENGINE_PLATFORM_SERVICE_ID,
-            1,
-            r#"{"role":"engine-platform-gateway"}"#,
         )
         .push(
             CapabilityDesc::new(

@@ -2,6 +2,7 @@
 
 use newengine_input_actions_api::{CameraViewRequest, InputActionFrame, InputFrameSource};
 use newengine_ui::UiInputFrame;
+use crate::input_systems::InputActionFrameCarrier;
 
 #[derive(Clone, Debug, Default)]
 pub(super) struct ViewportInputSnap {
@@ -66,6 +67,25 @@ impl ViewportInputSnap {
         }
     }
 
+
+    #[inline]
+    pub(super) fn action_carrier(&mut self) -> InputActionFrameCarrier<'_> {
+        InputActionFrameCarrier {
+            dx_px: &mut self.dx_px,
+            dy_px: &mut self.dy_px,
+            wheel_y: &mut self.wheel_y,
+            active: &mut self.active,
+            look_drag: &mut self.look_drag,
+            pan_drag: &mut self.pan_drag,
+            ui_busy: &mut self.ui_busy,
+            fly_rmb: &mut self.fly_rmb,
+            move_mask: &mut self.move_mask,
+            speed_scalar: &mut self.speed_scalar,
+            camera_view: &mut self.camera_view,
+            actions: &mut self.actions,
+        }
+    }
+
     #[inline]
     pub(super) fn suppress_runtime_controls(&mut self) {
         self.dx_px = 0.0;
@@ -97,6 +117,9 @@ impl InputFrameSource for UiInputSource<'_> {
     fn is_mouse_pressed(&self, button: u32) -> bool { self.0.is_mouse_pressed(button) }
     #[inline]
     fn is_mouse_released(&self, button: u32) -> bool { self.0.mouse_released.contains(&button) }
+    #[inline]
+    fn has_gamepad_connected(&self) -> bool { self.0.has_gamepad_connected() }
+
     #[inline]
     fn is_gamepad_button_down(&self, button: &str) -> bool { self.0.is_gamepad_button_down(button) }
     #[inline]

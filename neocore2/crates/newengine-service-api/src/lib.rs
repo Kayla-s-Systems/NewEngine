@@ -1,6 +1,9 @@
 #![forbid(unsafe_op_in_unsafe_fn)]
 
 use core::fmt;
+use std::collections::BTreeMap;
+
+use serde::{Serialize, Serializer};
 
 /// Generic JSON-control service method names shared by host and providers.
 ///
@@ -92,6 +95,98 @@ impl BackendServiceSpec {
     }
 }
 
+/// Typed provider route metadata serialized into backend capability JSON.
+///
+/// This is the structured form of the descriptor fragment consumed by the
+/// gateway registry. Providers should build this from their domain
+/// `BackendServiceSpec` instead of hand-writing JSON strings for
+/// `service_kind`, `engine_gateway`, `contract` and `backend_priority`.
+#[derive(Debug, Clone, Serialize)]
+pub struct BackendRouteDescriptor {
+    pub service_kind: EngineServiceKind,
+    pub engine_gateway: &'static str,
+    pub contract: &'static str,
+    pub backend_priority: i32,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub backend: Option<&'static str>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub mode: Option<&'static str>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub features: Vec<&'static str>,
+    #[serde(flatten, skip_serializing_if = "BTreeMap::is_empty")]
+    pub metadata: BTreeMap<&'static str, serde_json::Value>,
+}
+
+impl BackendRouteDescriptor {
+    #[inline]
+    pub fn new(spec: BackendServiceSpec) -> Self {
+        let service_kind = EngineServiceKind::parse(spec.domain)
+            .or_else(|| EngineServiceKind::parse_engine_gateway_id(spec.engine_gateway_id))
+            .expect("BackendServiceSpec domain must map to EngineServiceKind");
+        debug_assert!(
+            service_kind.matches_engine_gateway_id(spec.engine_gateway_id),
+            "BackendServiceSpec domain and engine gateway must describe the same route",
+        );
+        Self {
+            service_kind,
+            engine_gateway: spec.engine_gateway_id,
+            contract: spec.provider_service_id,
+            backend_priority: 0,
+            backend: None,
+            mode: None,
+            features: Vec::new(),
+            metadata: BTreeMap::new(),
+        }
+    }
+
+    #[inline]
+    pub fn contract(mut self, contract: &'static str) -> Self {
+        self.contract = contract;
+        self
+    }
+
+    #[inline]
+    pub fn priority(mut self, backend_priority: i32) -> Self {
+        self.backend_priority = backend_priority;
+        self
+    }
+
+    #[inline]
+    pub fn backend(mut self, backend: &'static str) -> Self {
+        self.backend = Some(backend);
+        self
+    }
+
+    #[inline]
+    pub fn mode(mut self, mode: &'static str) -> Self {
+        self.mode = Some(mode);
+        self
+    }
+
+    #[inline]
+    pub fn feature(mut self, feature: &'static str) -> Self {
+        self.features.push(feature);
+        self
+    }
+
+    #[inline]
+    pub fn features(mut self, features: impl IntoIterator<Item = &'static str>) -> Self {
+        self.features.extend(features);
+        self
+    }
+
+    #[inline]
+    pub fn metadata_json(mut self, key: &'static str, value: serde_json::Value) -> Self {
+        self.metadata.insert(key, value);
+        self
+    }
+
+    #[inline]
+    pub fn to_json_string(&self) -> String {
+        serde_json::to_string(self).expect("BackendRouteDescriptor must serialize to JSON")
+    }
+}
+
 /// Engine-side vocabulary for service provider kinds accepted by the host.
 ///
 /// Plugins do not need to import this enum or know the full set. They describe
@@ -131,6 +226,16 @@ pub enum EngineServiceKind {
     Security,
     SchedulerCore,
     CapabilityValidator,
+}
+
+impl Serialize for EngineServiceKind {
+    #[inline]
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        serializer.serialize_str(self.as_str())
+    }
 }
 
 impl EngineServiceKind {
@@ -456,5 +561,31 @@ mod tests {
         assert!(!EngineServiceKind::Physics.matches_engine_gateway_id("engine.physics.contacts"));
         assert!(!EngineServiceKind::Model.matches_engine_gateway_id("engine.model.skeletons"));
         assert!(!EngineServiceKind::Camera.matches_engine_gateway_id("engine.camera.modes"));
+    }
+
+    #[test]
+    fn backend_route_descriptor_serializes_registry_fields() {
+        let json = BackendRouteDescriptor::new(BackendServiceSpec::new(
+            "render",
+            "engine.render",
+            "render.api",
+            "render.backend",
+        ))
+        .backend("native")
+        .mode("graph-draw-list")
+        .priority(100)
+        .feature("draw-list")
+        .metadata_json("shadows", serde_json::json!({ "pcss": true }))
+        .to_json_string();
+
+        let value: serde_json::Value = serde_json::from_str(&json).unwrap();
+        assert_eq!(value["service_kind"], "render");
+        assert_eq!(value["engine_gateway"], "engine.render");
+        assert_eq!(value["contract"], "render.api");
+        assert_eq!(value["backend_priority"], 100);
+        assert_eq!(value["backend"], "native");
+        assert_eq!(value["mode"], "graph-draw-list");
+        assert_eq!(value["features"][0], "draw-list");
+        assert_eq!(value["shadows"]["pcss"], true);
     }
 }

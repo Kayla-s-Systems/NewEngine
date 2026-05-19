@@ -1,4 +1,4 @@
-use newengine_ecs::EntityId;
+use newengine_entity_api::EntityId;
 use newengine_math::Vec3;
 
 #[derive(Clone, Copy, Debug, PartialEq)]
