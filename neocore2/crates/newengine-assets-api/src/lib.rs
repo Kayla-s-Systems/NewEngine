@@ -38,6 +38,256 @@ pub const ASSET_BACKEND_SERVICE_SPEC: newengine_service_api::BackendServiceSpec 
         ASSET_BACKEND_CAPABILITY_ID,
     );
 
+
+/// Engine-facing file-type registry gateway id.
+///
+/// This is a descriptor/navigation surface over runtime asset containers. It does
+/// not replace `engine.assets`; registered file-type handlers still read payloads
+/// through the AssetManager/VFS gateway.
+pub const ENGINE_ASSET_FILE_TYPES_SERVICE_ID: &str = "engine.assets.file_types";
+pub const ASSET_FILE_TYPES_SERVICE_ID: &str = "asset.file_types.api";
+pub const ASSET_FILE_TYPES_BACKEND_CAPABILITY_ID: &str = "asset.file_types.backend";
+
+pub const ASSET_FILE_TYPES_BACKEND_SERVICE_SPEC: newengine_service_api::BackendServiceSpec =
+    newengine_service_api::BackendServiceSpec::new(
+        "assets.file_types",
+        ENGINE_ASSET_FILE_TYPES_SERVICE_ID,
+        ASSET_FILE_TYPES_SERVICE_ID,
+        ASSET_FILE_TYPES_BACKEND_CAPABILITY_ID,
+    );
+
+pub mod file_type_method {
+    pub const INFO_JSON: &str = newengine_service_api::SERVICE_METHOD_INFO_JSON;
+    pub const INVOKE_JSON: &str = newengine_service_api::SERVICE_METHOD_INVOKE_JSON;
+    pub const SHUTDOWN_V1: &str = newengine_service_api::SERVICE_METHOD_SHUTDOWN_V1;
+    pub const MANIFEST_JSON_V1: &str = "asset.file_types.manifest_json_v1";
+    pub const REGISTER_JSON_V1: &str = "asset.file_types.register_json_v1";
+    pub const PROBE_JSON_V1: &str = "asset.file_types.probe_json_v1";
+    pub const RESOLVE_JSON_V1: &str = "asset.file_types.resolve_json_v1";
+}
+
+pub const ASSET_FILE_TYPE_SERVICE_METHODS: &[&str] = &[
+    file_type_method::INFO_JSON,
+    file_type_method::INVOKE_JSON,
+    file_type_method::SHUTDOWN_V1,
+    file_type_method::MANIFEST_JSON_V1,
+    file_type_method::REGISTER_JSON_V1,
+    file_type_method::PROBE_JSON_V1,
+    file_type_method::RESOLVE_JSON_V1,
+];
+
+pub const ASSET_FILE_TYPES_RUNTIME_CONTRACT_SPEC: newengine_service_api::RuntimeServiceContractSpec =
+    newengine_service_api::RuntimeServiceContractSpec::new(
+        ENGINE_ASSET_FILE_TYPES_SERVICE_ID,
+        "newengine.assets-file-types-api >= 0.1.x",
+        ASSET_FILE_TYPE_SERVICE_METHODS,
+    );
+
+pub const ASSET_FILE_TYPES_RUNTIME_REQUIREMENT_SPEC: newengine_service_api::RuntimeServiceRequirementSpec =
+    newengine_service_api::RuntimeServiceRequirementSpec::new(
+        ASSET_FILE_TYPES_RUNTIME_CONTRACT_SPEC,
+        Some(ASSET_FILE_TYPES_BACKEND_CAPABILITY_ID),
+        Some("NEWENGINE_REQUIRE_ASSET_FILE_TYPES"),
+    );
+
+
+/// Asset codec classification used by AssetManager to apply generic host rules.
+///
+/// The host does not interpret concrete formats. It only enforces broad safety
+/// constraints declared by the codec provider.
+pub mod codec_type {
+    /// Container codec. May expose nested VFS entries and may recursively host
+    /// other assets. Example: .nepak.
+    pub const CONTAINER: &str = "containerType";
+    /// List codec. A single file contains multiple same-domain records selected
+    /// by name/hash/index, but it cannot host nested assets. Examples: .neytd, .ydd.
+    pub const LIST: &str = "listType";
+    /// Single binary file with magic bytes and one decoded object. Example: .nemat.
+    pub const SINGLE: &str = "singleType";
+    /// Plain UTF-8 text without magic bytes. Example: future .bindings.json codec.
+    pub const PLAIN_TEXT: &str = "plainText";
+}
+
+#[inline]
+pub fn codec_type_allows_nested_assets(codec_type: &str) -> bool {
+    codec_type.trim().eq_ignore_ascii_case(codec_type::CONTAINER)
+}
+
+#[inline]
+pub fn codec_type_requires_magic_by_default(codec_type: &str) -> bool {
+    !codec_type.trim().eq_ignore_ascii_case(codec_type::PLAIN_TEXT)
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(default)]
+pub struct AssetFileTypeDescriptor {
+    pub extension: String,
+    pub asset_kind: String,
+    pub container: String,
+    /// Broad codec class. AssetManager uses this only for generic restrictions:
+    /// nested VFS is allowed for `containerType` and forbidden for every other kind.
+    pub codec_type: String,
+    pub gateway: String,
+    pub handler_service: String,
+    pub read_method: String,
+    pub selector_syntax: Option<String>,
+    /// Hex-encoded magic bytes. Required for binary codec types, optional for `plainText`.
+    pub magic: Option<String>,
+    pub outputs: Vec<String>,
+    pub priority: i32,
+    pub vfs_backed: bool,
+    pub runtime_ready: bool,
+    /// True only for codecs that may expose nested VFS entries. This must match
+    /// `codec_type == containerType`; mismatches are rejected by the registry.
+    pub allow_nested_assets: bool,
+    /// Kept as a semantic flag for tooling: the runtime container is native to
+    /// NewEngine, not an authoring/source format. It does not grant nesting.
+    pub native_container: bool,
+    /// Binary codecs require magic by default. `plainText` codecs may set this
+    /// to false and identify by extension/content policy.
+    pub requires_magic: bool,
+    pub notes: String,
+}
+
+impl Default for AssetFileTypeDescriptor {
+    fn default() -> Self {
+        Self {
+            extension: String::new(),
+            asset_kind: String::new(),
+            container: String::new(),
+            codec_type: codec_type::SINGLE.to_owned(),
+            gateway: ENGINE_ASSET_SERVICE_ID.to_owned(),
+            handler_service: ENGINE_ASSET_SERVICE_ID.to_owned(),
+            read_method: method::DECODE_V1.to_owned(),
+            selector_syntax: None,
+            magic: None,
+            outputs: Vec::new(),
+            priority: 0,
+            vfs_backed: true,
+            runtime_ready: false,
+            allow_nested_assets: false,
+            native_container: false,
+            requires_magic: true,
+            notes: String::new(),
+        }
+    }
+}
+
+impl AssetFileTypeDescriptor {
+    pub fn extension_key(extension: &str) -> String {
+        extension.trim().trim_start_matches('.').to_ascii_lowercase()
+    }
+
+    #[inline]
+    pub fn is_container_codec(&self) -> bool {
+        codec_type_allows_nested_assets(&self.codec_type)
+    }
+
+    #[inline]
+    pub fn validate_generic_rules(&self) -> Result<(), String> {
+        let ext = Self::extension_key(&self.extension);
+        if ext.is_empty() {
+            return Err("codec descriptor extension is empty".to_owned());
+        }
+        let is_container = self.is_container_codec();
+        if self.allow_nested_assets != is_container {
+            return Err(format!(
+                "codec '.{}' nesting flag mismatch: allow_nested_assets={} codec_type='{}'",
+                ext, self.allow_nested_assets, self.codec_type
+            ));
+        }
+        if codec_type_requires_magic_by_default(&self.codec_type) && self.requires_magic && self.magic.is_none() {
+            return Err(format!(
+                "codec '.{}' is binary type '{}' but declares no magic bytes",
+                ext, self.codec_type
+            ));
+        }
+        if !is_container && self.outputs.iter().any(|o| o == "vfs.layer" || o == "container.vfs_layer") {
+            return Err(format!(
+                "codec '.{}' is '{}' and cannot expose nested VFS outputs",
+                ext, self.codec_type
+            ));
+        }
+        Ok(())
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(default)]
+pub struct AssetFileTypeManifest {
+    pub schema: String,
+    pub gateway: String,
+    pub formats: Vec<AssetFileTypeDescriptor>,
+}
+
+impl Default for AssetFileTypeManifest {
+    fn default() -> Self {
+        Self {
+            schema: "newengine.asset_file_types.v1".to_owned(),
+            gateway: ENGINE_ASSET_FILE_TYPES_SERVICE_ID.to_owned(),
+            formats: Vec::new(),
+        }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(default)]
+pub struct AssetFileTypeProbeRequest {
+    pub logical_path: String,
+}
+
+impl Default for AssetFileTypeProbeRequest {
+    fn default() -> Self {
+        Self { logical_path: String::new() }
+    }
+}
+
+
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(default)]
+pub struct AssetFileTypeRegisterRequest {
+    pub descriptor: AssetFileTypeDescriptor,
+}
+
+impl Default for AssetFileTypeRegisterRequest {
+    fn default() -> Self {
+        Self { descriptor: AssetFileTypeDescriptor::default() }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(default)]
+pub struct AssetDecodeRequest {
+    pub logical_path: String,
+    pub output_kind: String,
+    pub selector: serde_json::Value,
+}
+
+impl Default for AssetDecodeRequest {
+    fn default() -> Self {
+        Self {
+            logical_path: String::new(),
+            output_kind: String::new(),
+            selector: serde_json::Value::Null,
+        }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(default)]
+pub struct AssetFileTypeProbeResult {
+    pub logical_path: String,
+    pub extension: String,
+    pub known: bool,
+    pub descriptor: Option<AssetFileTypeDescriptor>,
+}
+
+impl Default for AssetFileTypeProbeResult {
+    fn default() -> Self {
+        Self { logical_path: String::new(), extension: String::new(), known: false, descriptor: None }
+    }
+}
+
 /// Canonical AssetManager v1 method names.
 ///
 /// There is one supported runtime contract: explicit `*_v1` entry points for
@@ -60,8 +310,10 @@ pub mod method {
     /// Validated lifecycle projection hook. Payload is JSON with owner/domain/logical_path/stage/proof.
     pub const PROJECT_STATUS_JSON_V1: &str = "asset.project_status_json_v1";
     pub const BLOB_WIRE_V1: &str = "asset.blob_wire_v1";
-    /// Runtime-ready RGBA8 texture packet by asset id. AssetManager validates/parses importer metadata.
+    /// Runtime-ready RGBA8 texture packet by asset id. AssetManager validates/parses codec metadata.
     pub const TEXTURE_RGBA8_V1: &str = "asset.texture_rgba8_v1";
+    /// Generic codec dispatch. Payload is JSON `AssetDecodeRequest`; response is codec-defined bytes.
+    pub const DECODE_V1: &str = "asset.decode_v1";
     /// Runtime-ready RGBA8 texture selected from a .neytd dictionary. Payload: JSON { dictionary_path, texture_name | texture_hash }.
     pub const TEXTURE_DICTIONARY_RGBA8_V1: &str = "asset.texture_dictionary_rgba8_v1";
     /// Runtime-ready GPU-native texture selected from a .neytd dictionary.
@@ -77,7 +329,7 @@ pub mod method {
     pub const IMPORT_V1: &str = "asset.import_v1";
     /// Stable v1 pump entry point.
     pub const PUMP_V1: &str = "asset.pump_v1";
-    /// Raw VFS bytes by logical path. This bypasses importers but still resolves exclusively through AssetManager mounts.
+    /// Raw VFS bytes by logical path. This bypasses codecs but still resolves exclusively through AssetManager mounts.
     pub const RAW_BYTES_V1: &str = "asset.raw_bytes_v1";
     /// Raw UTF-8 text by logical path resolved through AssetManager mounts.
     pub const TEXT_V1: &str = "asset.text_v1";
@@ -127,8 +379,7 @@ pub const REQUIRED_RUNTIME_METHODS_V1: &[&str] = &[
     method::TEXT_V1,
     method::IMPORT_V1,
     method::TEXTURE_RGBA8_V1,
-    method::TEXTURE_DICTIONARY_RGBA8_V1,
-    method::TEXTURE_DICTIONARY_RUNTIME_V1,
+    method::DECODE_V1,
     method::PUMP_V1,
     method::STATUS_JSON_V1,
     method::STATUS_GRAPH_JSON_V1,
@@ -157,7 +408,7 @@ pub const ASSET_RUNTIME_REQUIREMENT_SPEC: newengine_service_api::RuntimeServiceR
 
 /// Runtime-ready texture packet returned by AssetManager.
 ///
-/// Important: this is not a decoder contract. The importer pipeline must already
+/// Important: this is not a decoder contract. The codec pipeline must already
 /// have converted the source container (DDS/PNG/JPEG/etc.) into RGBA8 or an
 /// explicit renderer-native payload. Runtime code only consumes this normalized
 /// packet.
@@ -334,7 +585,7 @@ pub enum AssetState {
     Unknown,
 }
 
-/// Residency domain. Stages are meaningful only inside a domain: VFS bytes, CPU-imported payloads, and GPU resources are not interchangeable.
+/// Residency domain. Stages are meaningful only inside a domain: VFS bytes, CPU-decoded payloads, and GPU resources are not interchangeable.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum AssetResidencyDomain {
     Vfs,
@@ -422,7 +673,7 @@ pub struct AssetStatus {
     pub domain: AssetResidencyDomain,
     pub stage: AssetStatusStage,
     pub source: Option<String>,
-    pub importer_id: Option<String>,
+    pub codec_id: Option<String>,
     pub type_id: Option<String>,
     pub format: Option<String>,
     pub bytes: Option<u64>,
@@ -441,7 +692,7 @@ impl AssetStatus {
             domain: AssetResidencyDomain::Unknown,
             stage: AssetStatusStage::Unknown,
             source: None,
-            importer_id: None,
+            codec_id: None,
             type_id: None,
             format: None,
             bytes: None,
@@ -456,7 +707,7 @@ impl AssetStatus {
 ///
 /// Implementations may be plugin-backed, filesystem-backed, HTTP-backed, etc.
 pub trait AssetAccess {
-    /// Enqueue importer-owned asset import by logical path. Returns an opaque stable id (hex32 string).
+    /// Enqueue codec-owned asset load/decode by logical path. Returns an opaque stable id (hex32 string).
     fn import_v1(&self, logical_path: &str) -> Result<String, String>;
 
     /// Progress background AssetManager work through the stable v1 pump method.
@@ -488,10 +739,13 @@ pub trait AssetAccess {
     /// Returns `(meta_json, payload_bytes)`.
     fn blob_wire_v1(&self, id_hex32: &str) -> Result<(String, Vec<u8>), String>;
 
+    /// Decode any registered runtime asset container through the codec registry.
+    fn decode_v1(&self, request: &AssetDecodeRequest) -> Result<Vec<u8>, String>;
+
     /// Read a runtime-ready RGBA8 texture packet.
     ///
-    /// The implementation must parse/validate importer metadata inside AssetManager.
-    /// Runtime callers must not parse image containers or importer metadata.
+    /// The implementation must parse/validate codec metadata inside AssetManager.
+    /// Runtime callers must not parse image containers or codec metadata.
     fn texture_rgba8_v1(&self, id_hex32: &str) -> Result<Rgba8TextureAsset, String>;
 
     /// Select and read a runtime-ready RGBA8 texture from a .neytd dictionary.

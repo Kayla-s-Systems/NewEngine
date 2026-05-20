@@ -1,4 +1,6 @@
 
+use core::f32::consts::TAU;
+
 use newengine_assets::wait_ready;
 use newengine_bounds::Bounds;
 use newengine_core::{JobLane, JobPriority, JobRequest, JobSystemHandle, JobTicket};
@@ -75,6 +77,24 @@ pub(crate) struct TerrainSurfaceLayers {
     pub blend_softness: f32,
 }
 
+#[derive(Clone, Debug)]
+pub(crate) struct SkyDomeRuntime {
+    pub follow_camera: bool,
+}
+
+#[derive(Clone, Debug)]
+pub(crate) struct SkyCycleRuntime {
+    pub enabled: bool,
+    pub time_of_day_hours: f32,
+    pub day_length_seconds: f32,
+    pub latitude_degrees: f32,
+    pub axial_tilt_degrees: f32,
+    pub base_sun_color: [f32; 3],
+    pub base_sun_intensity: f32,
+    pub base_ambient_color: [f32; 3],
+    pub base_ambient_intensity: f32,
+}
+
 type TerrainChunkCoord = SceneCellCoord;
 
 #[derive(Clone, Debug)]
@@ -118,6 +138,87 @@ pub(crate) struct GameReadyTerrainStreamingState {
     pending: std::collections::BTreeMap<TerrainChunkCoord, PendingTerrainChunk>,
 }
 
+
+
+#[inline]
+fn sky_smoothstep(edge0: f32, edge1: f32, x: f32) -> f32 {
+    let t = ((x - edge0) / (edge1 - edge0).max(1.0e-5)).clamp(0.0, 1.0);
+    t * t * (3.0 - 2.0 * t)
+}
+
+#[inline]
+fn sky_lerp3(a: [f32; 3], b: [f32; 3], t: f32) -> [f32; 3] {
+    [
+        a[0] + (b[0] - a[0]) * t,
+        a[1] + (b[1] - a[1]) * t,
+        a[2] + (b[2] - a[2]) * t,
+    ]
+}
+
+#[inline]
+fn solar_direction_from_cycle(time_hours: f32, latitude_degrees: f32, axial_tilt_degrees: f32) -> Vec3 {
+    let latitude = latitude_degrees.to_radians().clamp(-1.5533, 1.5533);
+    let axial_tilt = axial_tilt_degrees.to_radians();
+    let hour_angle = (time_hours / 24.0) * TAU - core::f32::consts::PI;
+    let declination = axial_tilt * (hour_angle + core::f32::consts::FRAC_PI_2).sin();
+    let altitude = (latitude.sin() * declination.sin()
+        + latitude.cos() * declination.cos() * hour_angle.cos()).asin();
+    let azimuth = hour_angle + core::f32::consts::PI;
+    let horizon = altitude.cos().max(0.0);
+    Vec3::new(azimuth.sin() * horizon, altitude.sin(), azimuth.cos() * horizon).normalize_or_zero()
+}
+
+pub fn tick_game_ready_sky_cycle(world: &mut newengine_ecs::World, dt: f32) {
+    let (to_sun, sun_color, sun_intensity, ambient_color, ambient_intensity) = {
+        let Some(cycle) = world.resource_mut::<SkyCycleRuntime>() else {
+            return;
+        };
+        if !cycle.enabled {
+            return;
+        }
+
+        let advance = if cycle.day_length_seconds > 0.0 {
+            dt.max(0.0) * 24.0 / cycle.day_length_seconds
+        } else {
+            0.0
+        };
+        cycle.time_of_day_hours = (cycle.time_of_day_hours + advance).rem_euclid(24.0);
+
+        let to_sun = solar_direction_from_cycle(
+            cycle.time_of_day_hours,
+            cycle.latitude_degrees,
+            cycle.axial_tilt_degrees,
+        );
+        let elevation = to_sun.y;
+        let day = sky_smoothstep(-0.08, 0.18, elevation);
+        let horizon = 1.0 - sky_smoothstep(0.10, 0.55, elevation.abs());
+        let warm = [1.0, 0.55, 0.27];
+        let moon = [0.24, 0.30, 0.48];
+        let noon = cycle.base_sun_color;
+        let day_color = sky_lerp3(noon, warm, horizon * day);
+        let sun_color = sky_lerp3(moon, day_color, day);
+        let sun_intensity = cycle.base_sun_intensity * day.powf(1.18) + 0.035 * (1.0 - day);
+        let ambient_color = sky_lerp3([0.025, 0.035, 0.075], cycle.base_ambient_color, day);
+        let ambient_intensity = cycle.base_ambient_intensity * (0.10 + 0.90 * day) + 0.018 * (1.0 - day);
+
+        (to_sun, sun_color, sun_intensity, ambient_color, ambient_intensity)
+    };
+
+    if let Some(ambient) = world.resource_mut::<AmbientLight>() {
+        ambient.color = ambient_color;
+        ambient.intensity = ambient_intensity;
+    }
+
+    let direction = -to_sun;
+    let sun_entity = world.query::<DirectionalLight>().next().map(|(entity, _)| entity);
+    if let Some(sun_entity) = sun_entity {
+        if let Some(light) = world.get_mut_tracked::<DirectionalLight>(sun_entity) {
+            light.direction_ws = [direction.x, direction.y, direction.z];
+            light.color = sun_color;
+            light.intensity = sun_intensity;
+        }
+    }
+}
 
 #[inline]
 fn terrain_surface_layers(spec: &GameReadyTerrainSpec) -> TerrainSurfaceLayers {
@@ -249,8 +350,23 @@ fn configure_game_ready_lighting(world: &mut newengine_ecs::World, spec: &GameRe
         let _ = world.insert(sun_entity, sun);
     }
 
+    world.insert_resource(SkyCycleRuntime {
+        enabled: spec.day_night.enabled,
+        time_of_day_hours: spec.day_night.time_of_day_hours,
+        day_length_seconds: spec.day_night.day_length_seconds,
+        latitude_degrees: spec.day_night.latitude_degrees,
+        axial_tilt_degrees: spec.day_night.axial_tilt_degrees,
+        base_sun_color: spec.sun_color,
+        base_sun_intensity: spec.sun_intensity,
+        base_ambient_color: spec.ambient_color,
+        base_ambient_intensity: spec.ambient_intensity,
+    });
+    tick_game_ready_sky_cycle(world, 0.0);
+
     log::info!(
-        "game-ready sun: ambient={:?} ambient_intensity={:.3} direction={:?} color={:?} intensity={:.3} real_shadows={} shadow_strength={:.3}",
+        "game-ready sky cycle: tod={:.2}h day_len={:.1}s ambient={:?}/{:.3} sun_dir={:?} sun={:?}/{:.3} shadows={} strength={:.3}",
+        spec.day_night.time_of_day_hours,
+        spec.day_night.day_length_seconds,
         ambient.color,
         ambient.intensity,
         sun.direction_ws,

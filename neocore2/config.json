@@ -20,14 +20,14 @@
         "sources": {
           "console": {
             "enabled": true,
-            "level": "debug",
+            "level": "info",
             "target": "stderr",
             "colors": true,
             "style": "auto"
           },
           "file": {
             "enabled": true,
-            "level": "debug",
+            "level": "info",
             "path": "logs/log.log",
             "mode": "truncate"
           }
@@ -44,7 +44,7 @@
           "keep_days": 7
         },
         "dedup": {
-          "window_ms": null,
+          "window_ms": 2000,
           "capacity": 2048
         }
       },

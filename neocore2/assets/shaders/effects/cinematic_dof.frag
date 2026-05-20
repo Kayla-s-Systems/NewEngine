@@ -1,4 +1,5 @@
 #version 450
+#extension GL_GOOGLE_include_directive : require
 #include "common.glsl"
 
 #ifndef DOF_SAMPLE_COUNT

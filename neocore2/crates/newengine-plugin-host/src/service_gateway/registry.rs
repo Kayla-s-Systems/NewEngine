@@ -189,11 +189,13 @@ fn gateway_override_mode(gateway_id: &str) -> GatewayOverrideMode {
             | EngineServiceKind::PhysicsContacts
             | EngineServiceKind::PhysicsConstraints
             | EngineServiceKind::Assets
+            | EngineServiceKind::Materials
             | EngineServiceKind::Scene,
         ) => GatewayOverrideMode::ProfileControlled,
         Some(
             EngineServiceKind::RenderEffects
             | EngineServiceKind::RenderMaterials
+            | EngineServiceKind::AssetFileTypes
             | EngineServiceKind::Input
             | EngineServiceKind::InputBindings
             | EngineServiceKind::InputActions

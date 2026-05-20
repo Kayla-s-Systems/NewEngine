@@ -271,7 +271,12 @@ float sample_shadow(vec4 light_clip, vec3 nrm, vec3 light_dir_to_scene) {
     float strength = clamp(ubo.u_shadow_params.z, 0.0, 0.78);
 
     float lit = shadow_compare_quality(uv, current, bias);
-    return mix(1.0 - strength, 1.0, lit);
+    float border = min(min(uv.x, uv.y), min(1.0 - uv.x, 1.0 - uv.y));
+    float edge_fade = smoothstep(0.006, 0.055, border)
+        * smoothstep(0.010, 0.080, ndc.z)
+        * (1.0 - smoothstep(0.920, 0.992, ndc.z));
+    float shadowed = mix(1.0 - strength, 1.0, lit);
+    return mix(1.0, shadowed, edge_fade);
 }
 
 float distribution_ggx(vec3 N, vec3 H, float roughness) {

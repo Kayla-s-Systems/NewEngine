@@ -297,7 +297,10 @@ void main() {
     vec2 uv = clamp(v_uv, vec2(0.0), vec2(1.0));
     vec3 hdr = ne_fxaa_hdr(uv);
 
-    hdr *= ne_mxao_luma_occlusion(uv, hdr);
+    // Depth/normal data is not bound to this root post pass yet. The old luma-only
+    // AO approximation read horizon/tree silhouettes as screen-space cavities and
+    // produced a grey field over the playable image. Keep the root post stack
+    // neutral until the real depth-backed AO pass is connected.
     hdr = ne_cinematic_dof(uv, hdr);
     hdr = ne_local_contrast(uv, hdr);
     hdr += ne_soft_bloom(uv);

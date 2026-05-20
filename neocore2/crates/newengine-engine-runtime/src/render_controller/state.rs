@@ -127,6 +127,7 @@ pub(super) struct RenderShadowRuntimeState {
     pub(super) warmup_defer_frames_remaining: u8,
     pub(super) current_caster_cull: Option<super::module_impl::shadows::ShadowCasterCull>,
     pub(super) last_light_mvp: Option<newengine_math::Mat4>,
+    pub(super) cached_shadow_frame: Option<newengine_render_feature_api::ShadowFrame>,
     pub(super) unsupported_point_warning_emitted: bool,
     pub(super) unsupported_spot_warning_emitted: bool,
 }
@@ -139,10 +140,11 @@ impl RenderShadowRuntimeState {
             render_target_resolution: 0,
             cache_valid: false,
             last_refresh_frame: 0,
-            refresh_period_frames: 90,
+            refresh_period_frames: 30,
             warmup_defer_frames_remaining: super::render_quality::SHADOW_WARMUP_DEFER_FRAMES,
             current_caster_cull: None,
             last_light_mvp: None,
+            cached_shadow_frame: None,
             unsupported_point_warning_emitted: false,
             unsupported_spot_warning_emitted: false,
         }

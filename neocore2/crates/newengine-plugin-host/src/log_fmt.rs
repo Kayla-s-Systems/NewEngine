@@ -27,6 +27,10 @@ pub(crate) fn ellipsize(value: &str, max_chars: usize) -> String {
 }
 
 pub(crate) fn emit_boxed_kv(title: &str, rows: &[(&str, String)]) {
+    if !log::log_enabled!(log::Level::Debug) {
+        return;
+    }
+
     let key_width = rows.iter().map(|(key, _)| key.chars().count()).max().unwrap_or(0);
     let value_width = rows
         .iter()
@@ -47,35 +51,35 @@ pub(crate) fn emit_boxed_kv(title: &str, rows: &[(&str, String)]) {
         .saturating_sub(if key_width > 0 { 3 } else { 0 })
         .max(16);
 
-    log::info!("+{}", "-".repeat(inner_width + 2));
-    log::info!("| {}", pad_right(title, inner_width));
+    log::debug!("+{}", "-".repeat(inner_width + 2));
+    log::debug!("| {}", pad_right(title, inner_width));
 
     if rows.is_empty() {
-        log::info!("+{}", "-".repeat(inner_width + 2));
+        log::debug!("+{}", "-".repeat(inner_width + 2));
         return;
     }
 
-    log::info!("+{}", "-".repeat(inner_width + 2));
+    log::debug!("+{}", "-".repeat(inner_width + 2));
 
     for (key, value) in rows {
         let wrapped = wrap_value(value, value_area_width);
         for (index, line) in wrapped.iter().enumerate() {
             if key_width == 0 {
-                log::info!("| {}", pad_right(line, inner_width));
+                log::debug!("| {}", pad_right(line, inner_width));
                 continue;
             }
 
             if index == 0 {
                 let rendered = format!("{:<key_width$} : {}", key, line, key_width = key_width);
-                log::info!("| {}", pad_right(&rendered, inner_width));
+                log::debug!("| {}", pad_right(&rendered, inner_width));
             } else {
                 let rendered = format!("{:<key_width$}   {}", "", line, key_width = key_width);
-                log::info!("| {}", pad_right(&rendered, inner_width));
+                log::debug!("| {}", pad_right(&rendered, inner_width));
             }
         }
     }
 
-    log::info!("+{}", "-".repeat(inner_width + 2));
+    log::debug!("+{}", "-".repeat(inner_width + 2));
 }
 
 pub(crate) fn emit_prefixed_table(
@@ -84,6 +88,10 @@ pub(crate) fn emit_prefixed_table(
     headers: &[&str],
     rows: &[Vec<String>],
 ) {
+    if !log::log_enabled!(log::Level::Debug) {
+        return;
+    }
+
     if headers.is_empty() {
         return;
     }
@@ -134,9 +142,9 @@ pub(crate) fn emit_prefixed_table(
 #[inline]
 fn emit_prefixed_line(prefix: &str, line: &str) {
     if prefix.is_empty() {
-        log::info!("{}", line);
+        log::debug!("{}", line);
     } else {
-        log::info!("{} {}", prefix, line);
+        log::debug!("{} {}", prefix, line);
     }
 }
 

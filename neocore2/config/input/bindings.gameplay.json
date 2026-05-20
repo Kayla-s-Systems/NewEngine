@@ -1,7 +1,7 @@
 {
-  "id": "newengine.input.profile",
+  "id": "newengine.gameready.input.profile",
   "version": 4,
-  "device_preference": "gamepad",
+  "device_preference": "hybrid",
   "keys": [
     {
       "code": 6,

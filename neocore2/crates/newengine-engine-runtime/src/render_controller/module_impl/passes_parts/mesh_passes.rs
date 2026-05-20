@@ -18,7 +18,7 @@ use super::super::material_bindings::LitMaterialPlan;
 use newengine_render_feature_api::PackedLights;
 use crate::render_controller::RuntimeRenderController;
 use crate::gameplay::display_visible_in_mode;
-use crate::scene_bridge::{PreparedTerrainPrimitiveMesh, TerrainSurfaceLayers};
+use crate::scene_bridge::{PreparedTerrainPrimitiveMesh, SkyDomeRuntime, TerrainSurfaceLayers};
 use self::mesh_visibility::{
     distance_sq_to_camera, primitive_budget, shadow_caster_visible, sort_by_distance_then_key,
     transform_sphere,
@@ -261,6 +261,16 @@ fn mix_u64(mut h: u64, v: u64) -> u64 {
     h
 }
 
+#[inline]
+fn recenter_model_translation(mut model: Mat4, camera_position: Vec3) -> Mat4 {
+    let mut cols = model.to_cols_array();
+    cols[12] = camera_position.x;
+    cols[13] = camera_position.y;
+    cols[14] = camera_position.z;
+    model = Mat4::from_cols_array(&cols);
+    model
+}
+
 pub fn draw_primitives(
     this: &mut RuntimeRenderController,
     r: &mut dyn newengine_core::render::RenderApi,
@@ -278,25 +288,35 @@ pub fn draw_primitives(
     let mats_lock = this.bridges.scene.materials();
     let mats = mats_lock.read();
 
-    let mut entries: Vec<(f32, u64, Primitive, Mat4, Option<newengine_materials::MaterialRef>)> = Vec::new();
+    let mut entries: Vec<(f32, u64, Primitive, Mat4, Option<newengine_materials::MaterialRef>, bool)> = Vec::new();
     for (id, prim, gt) in world.query2::<Primitive, GlobalTransform>() {
         if !display_visible_in_mode(world, id, runtime) {
             continue;
         }
+        let follow_camera_sky = world
+            .get::<SkyDomeRuntime>(id)
+            .map(|sky| sky.follow_camera)
+            .unwrap_or(false);
         let key = id.stable_u64();
         entries.push((
-            distance_sq_to_camera(gt.0, camera_position),
+            if follow_camera_sky { 0.0 } else { distance_sq_to_camera(gt.0, camera_position) },
             key,
             *prim,
             gt.0,
             world.get::<newengine_materials::MaterialRef>(id).copied(),
+            follow_camera_sky,
         ));
     }
     sort_by_distance_then_key(&mut entries);
     entries.truncate(primitive_budget(runtime, false));
 
     let mut batches = InstanceBatchSet::default();
-    for (_distance_sq, _entity_key, prim, model, material_ref) in entries {
+    for (_distance_sq, _entity_key, prim, model, material_ref, follow_camera_sky) in entries {
+        let model = if follow_camera_sky {
+            recenter_model_translation(model, camera_position)
+        } else {
+            model
+        };
         let gpu = ensure_primitive_gpu(&reg, prim.id, &mut this.gpu.meshes.prim_cache, r)?;
         let resolved = material_ref.and_then(|mr| mats.resolve(mr.id));
         let material_plan = LitMaterialPlan::from_resolved(resolved.as_ref(), prim.color);
@@ -529,7 +549,7 @@ pub fn draw_primitives_shadow(
 
     let mut entries: Vec<(f32, u64, Primitive, Mat4, Option<newengine_materials::MaterialRef>)> = Vec::new();
     for (id, prim, gt) in world.query2::<Primitive, GlobalTransform>() {
-        if !display_visible_in_mode(world, id, runtime) {
+        if !display_visible_in_mode(world, id, runtime) || world.get::<SkyDomeRuntime>(id).is_some() {
             continue;
         }
         let key = id.stable_u64();

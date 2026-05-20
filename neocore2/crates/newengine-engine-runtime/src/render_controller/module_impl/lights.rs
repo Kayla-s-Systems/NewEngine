@@ -1,7 +1,7 @@
 #![forbid(unsafe_op_in_unsafe_fn)]
 
 pub(crate) use newengine_render_feature_api::{
-    primary_directional_light, primary_point_light, PackedLights,
+    primary_directional_light, PackedLights,
 };
 
 #[inline]

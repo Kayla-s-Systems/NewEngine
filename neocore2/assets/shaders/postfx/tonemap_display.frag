@@ -203,10 +203,12 @@ float ne_radial_ray(vec2 uv, vec2 sun_pos) {
     vec2 to_px = uv - sun_pos;
     float dist = length(to_px);
     float angle = atan(to_px.y, to_px.x);
-    float bands = sin(angle * 18.0) * 0.5 + 0.5;
-    bands = mix(bands, sin(angle * 31.0 + dist * 28.0) * 0.5 + 0.5, 0.35);
-    float radial = exp(-dist * 2.2);
-    return radial * smoothstep(0.42, 1.0, bands);
+    float grain = ne_hash12(floor(uv * 720.0) + floor(sun_pos * 97.0));
+    float bands = sin(angle * 18.0 + grain * 0.85) * 0.5 + 0.5;
+    bands = mix(bands, sin(angle * 37.0 + dist * 34.0 + grain * 1.7) * 0.5 + 0.5, 0.45);
+    float radial = exp(-dist * 1.85);
+    float aperture = smoothstep(0.48, 1.0, bands);
+    return radial * aperture * (0.82 + grain * 0.18);
 }
 
 vec3 ne_sun_optics(vec2 uv) {
@@ -223,25 +225,32 @@ vec3 ne_sun_optics(vec2 uv) {
     float flare_strength = max(pc.sun_effects.x, 0.0);
     float ray_strength = max(pc.sun_effects.y, 0.0);
 
-    float center_alignment = pow(clamp(1.0 - length(sun_pos - center) * 1.85, 0.0, 1.0), 1.35);
-    float screen_fade = smoothstep(-0.12, 0.02, sun_pos.x) * smoothstep(-0.12, 0.02, sun_pos.y)
-        * smoothstep(-0.12, 0.02, 1.0 - sun_pos.x) * smoothstep(-0.12, 0.02, 1.0 - sun_pos.y);
+    float center_alignment = pow(clamp(1.0 - length(sun_pos - center) * 1.78, 0.0, 1.0), 1.22);
+    float screen_fade = smoothstep(-0.14, 0.025, sun_pos.x) * smoothstep(-0.14, 0.025, sun_pos.y)
+        * smoothstep(-0.14, 0.025, 1.0 - sun_pos.x) * smoothstep(-0.14, 0.025, 1.0 - sun_pos.y);
     float effect_visibility = visibility * screen_fade;
 
     float d = length(uv - sun_pos);
-    float disk = 1.0 - smoothstep(disk_radius * 0.35, disk_radius, d);
-    float halo = exp(-d * 20.0) * 0.34 + exp(-d * 4.2) * 0.035;
-    float rays = ne_radial_ray(uv, sun_pos) * ray_strength * center_alignment;
+    float disk_core = 1.0 - smoothstep(disk_radius * 0.28, disk_radius, d);
+    float airy = exp(-d * 32.0) * 0.55 + exp(-d * 9.0) * 0.11 + exp(-d * 2.65) * 0.018;
+    float corona = pow(clamp(1.0 - d * 1.85, 0.0, 1.0), 5.0) * 0.045;
+    float rays = ne_radial_ray(uv, sun_pos) * ray_strength * (0.35 + 0.65 * center_alignment);
 
     float ghost = 0.0;
-    ghost += ne_lens_ghost(uv, sun_pos, center, 0.34, 0.030) * 0.80;
-    ghost += ne_lens_ghost(uv, sun_pos, center, 0.82, 0.055) * 0.45;
-    ghost += ne_lens_ghost(uv, sun_pos, center, 1.45, 0.080) * 0.25;
+    ghost += ne_lens_ghost(uv, sun_pos, center, 0.28, 0.026) * 0.82;
+    ghost += ne_lens_ghost(uv, sun_pos, center, 0.68, 0.046) * 0.52;
+    ghost += ne_lens_ghost(uv, sun_pos, center, 1.18, 0.070) * 0.31;
+    ghost += ne_lens_ghost(uv, sun_pos, center, 1.72, 0.110) * 0.12;
     ghost *= flare_strength * center_alignment;
 
-    vec3 ghost_tint = mix(sun_color, sun_color * vec3(1.10, 0.86, 0.58), 0.42);
-    float optical_power = effect_visibility * clamp(sun_intensity / 3.2, 0.0, 2.0);
-    return optical_power * (sun_color * (disk * 4.0 + halo + rays) + ghost_tint * ghost);
+    vec2 anamorphic_dir = normalize(vec2(1.0, 0.085));
+    float streak_axis = abs(dot(uv - sun_pos, vec2(-anamorphic_dir.y, anamorphic_dir.x)));
+    float streak_falloff = exp(-streak_axis * 75.0) * exp(-d * 1.15);
+    float streak = streak_falloff * flare_strength * center_alignment * 0.10;
+
+    vec3 ghost_tint = mix(sun_color, sun_color * vec3(1.14, 0.82, 0.52), 0.48);
+    float optical_power = effect_visibility * clamp(sun_intensity / 3.2, 0.0, 2.25);
+    return optical_power * (sun_color * (disk_core * 5.5 + airy + corona + rays + streak) + ghost_tint * ghost);
 }
 
 void main() {

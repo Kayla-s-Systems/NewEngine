@@ -1,7 +1,7 @@
 {
   "scene": {
     "title": "KAYLA FPS: Procedural Highlands",
-    "objective": "Walk a deterministic terrain sandbox with procedural sky, resident materials and stable startup gates.",
+    "objective": "Walk a deterministic terrain sandbox with infinite skydome, packed .neytd clouds and a runtime day/night sun cycle.",
     "player": {
       "start": [
         -17.5,
@@ -64,7 +64,10 @@
     },
     "sky": {
       "radius": 220.0,
-      "mesh": "procedural:skydome"
+      "mesh": "procedural:skydome",
+      "follow_camera": true,
+      "cloud_dictionary": "textures/fps/clouds_runtime.neytd",
+      "cloud_profile": "clear"
     },
     "materials": {
       "terrain": {
@@ -77,10 +80,11 @@
         "occlusion_strength": 0.88
       },
       "sky": {
-        "base_color_texture": "textures/fps/sky_0_runtime.neytd@sky_0_runtime",
+        "base_color_texture": "textures/fps/clouds_runtime.neytd@cloud_clear__new_skyhat_clear01_bot_ap",
         "roughness": 1.0,
-        "normal_scale": 0.0,
-        "occlusion_strength": 1.0
+        "normal_scale": 0.18,
+        "occlusion_strength": 1.0,
+        "normal_texture": "textures/fps/clouds_runtime.neytd@cloud_clear__new_skyhat_clear01_bot_nrm"
       },
       "tree_bark": {
         "base_color_texture": "prefabs/tree_animate/textures/tree_animate.neytd@bark_diffuse",
@@ -128,6 +132,13 @@
         "bias": 0.0025,
         "normal_bias": 0.015,
         "contact_strength": 0.35
+      },
+      "day_night": {
+        "enabled": true,
+        "time_of_day_hours": 9.35,
+        "day_length_seconds": 720.0,
+        "latitude_degrees": 45.0,
+        "axial_tilt_degrees": 23.44
       }
     },
     "foliage": {

@@ -95,6 +95,13 @@ fn sanitize_lighting_spec(raw: RawLightingSpec) -> GameReadyLightingSpec {
         sun_direction: sanitize_direction3(raw.sun_direction, default_sun_direction()),
         sun_color: sanitize_color3(raw.sun_color, default_sun_color()),
         sun_intensity: raw.sun_intensity.clamp(0.0, 32.0),
+        day_night: GameReadyDayNightSpec {
+            enabled: raw.day_night.enabled,
+            time_of_day_hours: raw.day_night.time_of_day_hours.rem_euclid(24.0),
+            day_length_seconds: raw.day_night.day_length_seconds.clamp(30.0, 86_400.0),
+            latitude_degrees: raw.day_night.latitude_degrees.clamp(-89.0, 89.0),
+            axial_tilt_degrees: raw.day_night.axial_tilt_degrees.clamp(-45.0, 45.0),
+        },
         shadows: GameReadyShadowSpec {
             enabled: raw.shadows.enabled,
             resolution: raw.shadows.resolution.clamp(256, 8192),
@@ -196,7 +203,10 @@ fn default_terrain_chunk_radius() -> i32 { 2 }
 fn default_terrain_unload_radius() -> i32 { 4 }
 fn default_terrain_max_chunks_per_frame() -> usize { 4 }
 fn default_sky_radius() -> f32 { 220.0 }
-fn default_skydome_mesh() -> String { "skydome/skydome_high.obj".to_owned() }
+fn default_skydome_mesh() -> String { "procedural:skydome".to_owned() }
+fn default_sky_follow_camera() -> bool { true }
+fn default_cloud_dictionary() -> String { "textures/fps/clouds_runtime.neytd".to_owned() }
+fn default_cloud_profile() -> String { "clear".to_owned() }
 fn default_status_text() -> String { "GameFirst world: streamed lowland terrain, runtime textures and sun shadows.".to_owned() }
 fn default_pickup_status() -> String { "Core acquired.".to_owned() }
 fn default_hazard_status() -> String { "Hazard touched.".to_owned() }
@@ -228,6 +238,11 @@ fn default_ambient_intensity() -> f32 { 0.28 }
 fn default_sun_direction() -> ColorRgb { [-0.55, -0.82, -0.28] }
 fn default_sun_color() -> ColorRgb { [1.0, 0.94, 0.82] }
 fn default_sun_intensity() -> f32 { 3.20 }
+fn default_day_night_enabled() -> bool { true }
+fn default_time_of_day_hours() -> f32 { 9.35 }
+fn default_day_length_seconds() -> f32 { 720.0 }
+fn default_sun_latitude_degrees() -> f32 { 45.0 }
+fn default_axial_tilt_degrees() -> f32 { 23.44 }
 fn default_shadow_enabled() -> bool { true }
 fn default_shadow_resolution() -> u32 { 2048 }
 fn default_shadow_cascade_count() -> u32 { 1 }
@@ -265,9 +280,10 @@ fn default_terrain_material() -> RawMaterialSpec {
 }
 fn default_sky_material() -> RawMaterialSpec {
     RawMaterialSpec {
-        base_color_texture: Some("textures/fps/sky_0_runtime.neytd@sky_0_runtime".to_owned()),
+        base_color_texture: Some("textures/fps/clouds_runtime.neytd@cloud_clear__new_skyhat_clear01_bot_ap".to_owned()),
+        normal_texture: Some("textures/fps/clouds_runtime.neytd@cloud_clear__new_skyhat_clear01_bot_nrm".to_owned()),
         roughness: 1.0,
-        normal_scale: 0.0,
+        normal_scale: 0.18,
         occlusion_strength: 1.0,
         ..RawMaterialSpec::default()
     }

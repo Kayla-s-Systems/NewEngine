@@ -237,6 +237,12 @@ struct RawSkySpec {
     radius: f32,
     #[serde(default = "default_skydome_mesh")]
     mesh: String,
+    #[serde(default = "default_sky_follow_camera")]
+    follow_camera: bool,
+    #[serde(default = "default_cloud_dictionary")]
+    cloud_dictionary: String,
+    #[serde(default = "default_cloud_profile")]
+    cloud_profile: String,
 }
 
 impl Default for RawSkySpec {
@@ -244,6 +250,9 @@ impl Default for RawSkySpec {
         Self {
             radius: default_sky_radius(),
             mesh: default_skydome_mesh(),
+            follow_camera: default_sky_follow_camera(),
+            cloud_dictionary: default_cloud_dictionary(),
+            cloud_profile: default_cloud_profile(),
         }
     }
 }
@@ -453,6 +462,8 @@ struct RawLightingSpec {
     sun_intensity: f32,
     #[serde(default)]
     shadows: RawShadowSpec,
+    #[serde(default)]
+    day_night: RawDayNightSpec,
 }
 
 impl Default for RawLightingSpec {
@@ -464,6 +475,33 @@ impl Default for RawLightingSpec {
             sun_color: default_sun_color(),
             sun_intensity: default_sun_intensity(),
             shadows: RawShadowSpec::default(),
+            day_night: RawDayNightSpec::default(),
+        }
+    }
+}
+
+#[derive(Debug, Deserialize)]
+struct RawDayNightSpec {
+    #[serde(default = "default_day_night_enabled")]
+    enabled: bool,
+    #[serde(default = "default_time_of_day_hours")]
+    time_of_day_hours: f32,
+    #[serde(default = "default_day_length_seconds")]
+    day_length_seconds: f32,
+    #[serde(default = "default_sun_latitude_degrees")]
+    latitude_degrees: f32,
+    #[serde(default = "default_axial_tilt_degrees")]
+    axial_tilt_degrees: f32,
+}
+
+impl Default for RawDayNightSpec {
+    fn default() -> Self {
+        Self {
+            enabled: default_day_night_enabled(),
+            time_of_day_hours: default_time_of_day_hours(),
+            day_length_seconds: default_day_length_seconds(),
+            latitude_degrees: default_sun_latitude_degrees(),
+            axial_tilt_degrees: default_axial_tilt_degrees(),
         }
     }
 }

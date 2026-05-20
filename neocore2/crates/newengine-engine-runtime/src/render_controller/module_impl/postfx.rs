@@ -45,18 +45,20 @@ pub(super) fn game_sun_postfx_params(
         && screen_y >= -0.18
         && screen_y <= 1.18
         && ndc_z >= -1.0;
-    let center_alignment = (1.0 - ((screen_x - 0.5).hypot(screen_y - 0.5) * 1.75))
+    let center_alignment = (1.0 - ((screen_x - 0.5).hypot(screen_y - 0.5) * 1.72))
         .clamp(0.0, 1.0);
-    let visibility = if on_screen { center_alignment.max(0.20) } else { 0.0 };
+    let horizon_grazing = (1.0 - to_sun.y.abs()).clamp(0.0, 1.0);
+    let daylight = ((to_sun.y + 0.07) / 0.24).clamp(0.0, 1.0);
+    let visibility = if on_screen { center_alignment.max(0.12) * daylight } else { 0.0 };
 
     params.sun = SunPostFxParams {
         screen_position: [screen_x, screen_y],
         color: sun.color,
         intensity: sun.intensity,
         visibility,
-        disk_radius: 0.018,
-        flare_strength: 0.22,
-        ray_strength: 0.18,
+        disk_radius: 0.013 + 0.012 * horizon_grazing,
+        flare_strength: 0.18 + 0.32 * horizon_grazing,
+        ray_strength: 0.14 + 0.30 * horizon_grazing,
     };
     params
 }

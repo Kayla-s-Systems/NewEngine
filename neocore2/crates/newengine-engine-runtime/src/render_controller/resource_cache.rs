@@ -87,15 +87,19 @@ impl RuntimeRenderController {
             }
             Err(e) => {
                 let message = format!("asset.texture_dictionary_runtime_v1 failed err='{e}'");
-                log::warn!(
+                let line = format!(
                     "render controller: material texture dictionary lookup failed path='{}' dictionary='{}' name='{:?}' hash='{:?}' kind='{}' err='{}'",
                     path,
                     selector.dictionary_path,
                     selector.texture_name,
                     selector.texture_hash,
                     e.kind,
-                    e
+                    e,
                 );
+                match e.kind {
+                    AssetErrorKind::DecodeFailed | AssetErrorKind::UnsupportedFormat => log::debug!("{}", line),
+                    _ => log::warn!("{}", line),
+                }
                 self.gpu.material.textures.insert(path, MaterialTextureGpuResidency::Failed { message });
                 return;
             }

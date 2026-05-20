@@ -86,20 +86,6 @@ impl ViewportInputSnap {
         }
     }
 
-    #[inline]
-    pub(super) fn suppress_runtime_controls(&mut self) {
-        self.dx_px = 0.0;
-        self.dy_px = 0.0;
-        self.wheel_y = 0.0;
-        self.active = false;
-        self.look_drag = false;
-        self.pan_drag = false;
-        self.ui_busy = true;
-        self.fly_rmb = false;
-        self.move_mask = 0;
-        self.speed_scalar = 1.0;
-        self.camera_view = CameraViewRequest::None;
-    }
 }
 
 struct UiInputSource<'a>(&'a UiInputFrame);

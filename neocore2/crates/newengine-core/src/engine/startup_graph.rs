@@ -133,7 +133,7 @@ impl<E: Send + 'static> Engine<E> {
             self.modules.len(),
         );
 
-        if !rows.is_empty() && log::log_enabled!(log::Level::Info) {
+        if !rows.is_empty() && log::log_enabled!(log::Level::Debug) {
             emit_prefixed_table(
                 "[startup]",
                 &format!("StartupGraph :: Modules [{}]", phase),

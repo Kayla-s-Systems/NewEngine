@@ -12,6 +12,7 @@ pub mod builtin;
 pub mod core;
 pub mod binary;
 pub mod texture_refs;
+pub mod service;
 
 #[cfg(feature = "serde")]
 pub mod source;
@@ -41,3 +42,5 @@ pub use crate::source::{
     material_source_from_parts, parse_material_source_json, parse_material_source_slice,
     MaterialSourceDocument,
 };
+
+pub use service::*;

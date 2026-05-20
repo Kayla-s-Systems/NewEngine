@@ -284,7 +284,16 @@ fn spawn_skydome(
     // bounds in the scene union makes directional shadow fitting unstable and
     // lets shadow-map UVs appear as dark projection bands on the dome.
     let _ = world.remove::<newengine_bounds::Bounds>(sky);
+    let _ = world.insert(sky, SkyDomeRuntime { follow_camera: spec.follow_camera });
     let _ = apply_exact_material(world, mats, sky, materials.sky, materials.sky, color);
+    log::info!(
+        "game-ready skydome: follow_camera={} radius={:.1} mesh='{}' clouds='{}' profile='{}'",
+        spec.follow_camera,
+        spec.radius,
+        spec.mesh,
+        spec.cloud_dictionary,
+        spec.cloud_profile,
+    );
 }
 
 fn to_fps_demo_rules(spec: &GameReadyGameplaySpec, model: &self::content::GameReadyPlayerModelSpec) -> FpsDemoRules {

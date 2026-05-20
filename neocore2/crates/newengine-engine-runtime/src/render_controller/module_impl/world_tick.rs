@@ -61,6 +61,7 @@ impl RuntimeRenderController {
                 let mats = mats_lock.read();
                 crate::scene_bridge::tick_game_ready_streaming_terrain(world, &mats, job_system);
             }
+            crate::scene_bridge::tick_game_ready_sky_cycle(world, dt);
 
             if effective_play_mode.runs_physics() && !pause_world {
                 world.insert_resource(crate::gameplay::PhysicsRuntimeFrameIndex(self.frame.frame_index));

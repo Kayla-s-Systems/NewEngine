@@ -248,6 +248,9 @@ impl RawGameReadyPayload {
             sky: GameReadySkySpec {
                 radius: self.sky.radius.max(16.0),
                 mesh: non_empty_or(self.sky.mesh, default_skydome_mesh()),
+                follow_camera: self.sky.follow_camera,
+                cloud_dictionary: non_empty_or(self.sky.cloud_dictionary, default_cloud_dictionary()),
+                cloud_profile: non_empty_or(self.sky.cloud_profile, default_cloud_profile()),
             },
             materials: GameReadyMaterialSetSpec {
                 terrain: sanitize_material_spec(self.materials.terrain),

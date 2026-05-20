@@ -103,3 +103,207 @@ mod tests {
         assert_eq!(selector.as_deref(), Some("player/abigail/textures/abigail.neytd@hair_diff_000_a_uni"));
     }
 }
+
+use abi_stable::std_types::{RResult, RString};
+use newengine_assets::{AssetDecodeRequest, AssetServiceClient};
+use newengine_materials::{
+    binary, method as material_method, MaterialLoadRequest,
+    MaterialLoadResponse, MaterialTextureRefInfo, MaterialTextureRefRequest,
+    ENGINE_MATERIALS_SERVICE_ID, MATERIALS_BACKEND_CAPABILITY_ID, MATERIALS_SERVICE_ID,
+    MATERIALS_SERVICE_METHODS,
+};
+use newengine_plugin_api::Blob;
+use newengine_service_api::EngineServiceKind;
+use newengine_service_kit::{
+    engine_owned_service_description, ok_empty_blob, ok_json,
+    register_engine_owned_gateway_service_best_effort, EngineOwnedGatewayDecl, JsonServiceRouter,
+};
+use serde::{Deserialize, Serialize};
+use newengine_materials::api::material_id_from_name;
+
+#[derive(Clone)]
+pub struct MaterialAssetGatewayAdapter {
+    client: AssetServiceClient,
+}
+
+impl MaterialAssetGatewayAdapter {
+    #[inline]
+    pub fn with_client(client: AssetServiceClient) -> Self {
+        Self { client }
+    }
+
+    pub fn load_material(&self, request: &MaterialLoadRequest) -> Result<MaterialLoadResponse, String> {
+        let source = normalize_material_logical_path(&request.logical_path)?;
+        if !source.to_ascii_lowercase().ends_with(".nemat") {
+            return Err(format!("materials: expected .nemat material path, got '{source}'"));
+        }
+        let bytes = self
+            .client
+            .decode_v1(&AssetDecodeRequest {
+                logical_path: source.clone(),
+                output_kind: "material.raw".to_owned(),
+                selector: serde_json::Value::Null,
+            })
+            .map_err(|e| format!("engine.assets decode_v1 failed path='{source}' err='{e}'"))?;
+        let asset = binary::decode_asset(&bytes)
+            .map_err(|e| format!("materials: decode .nemat failed path='{source}' err='{e}'"))?;
+        let mut descriptor = asset.desc;
+        descriptor.sanitize_in_place();
+        Ok(MaterialLoadResponse {
+            source,
+            id: material_id_from_name(&asset.name),
+            name: asset.name,
+            descriptor,
+            textures: MaterialTextureBindings::default(),
+        })
+    }
+
+    #[inline]
+    pub fn describe_texture_ref(&self, request: &MaterialTextureRefRequest) -> MaterialTextureRefInfo {
+        MaterialTextureRefInfo::from_reference(&request.reference)
+    }
+}
+
+#[derive(Clone)]
+struct MaterialGatewayState {
+    adapter: MaterialAssetGatewayAdapter,
+}
+
+#[derive(Clone, Debug, Serialize)]
+pub struct MaterialsServiceInfo {
+    pub id: &'static str,
+    pub gateway: &'static str,
+    pub methods: &'static [&'static str],
+    pub backend: &'static str,
+    pub native_formats: &'static [&'static str],
+    pub texture_reference_policy: &'static str,
+}
+
+impl MaterialGatewayState {
+    fn new(adapter: MaterialAssetGatewayAdapter) -> Self { Self { adapter } }
+
+
+    fn formats_json(&self) -> serde_json::Value {
+        serde_json::json!({
+            "schema": "newengine.materials.formats.v1",
+            "gateway": ENGINE_MATERIALS_SERVICE_ID,
+            "formats": [
+                {
+                    "extension": "nemat",
+                    "asset_kind": "material",
+                    "container": "newengine.material.v1",
+                    "read_method": material_method::LOAD_JSON_V1,
+                    "runtime_ready": true,
+                    "notes": "Native NewEngine material descriptor container."
+                }
+            ],
+            "texture_reference_policy": "runtime material textures must be texture dictionary selectors handled by registered codecs"
+        })
+    }
+
+    fn invoke_json(&mut self, payload: Blob) -> RResult<Blob, RString> {
+        #[derive(Deserialize)]
+        struct InvokeEnvelope {
+            method: String,
+            #[serde(default)]
+            request: serde_json::Value,
+        }
+
+        let envelope = match serde_json::from_slice::<InvokeEnvelope>(payload.as_slice()) {
+            Ok(envelope) => envelope,
+            Err(e) => return RResult::RErr(RString::from(format!("materials.api: invalid invoke_json payload: {e}"))),
+        };
+
+        match envelope.method.as_str() {
+            material_method::LOAD_JSON_V1 => {
+                let request = match serde_json::from_value::<MaterialLoadRequest>(envelope.request) {
+                    Ok(request) => request,
+                    Err(e) => return RResult::RErr(RString::from(format!("materials.api: invalid load request: {e}"))),
+                };
+                match self.adapter.load_material(&request) {
+                    Ok(value) => ok_json(value),
+                    Err(e) => RResult::RErr(RString::from(e)),
+                }
+            }
+            material_method::DESCRIBE_TEXTURE_REF_JSON_V1 => {
+                let request = match serde_json::from_value::<MaterialTextureRefRequest>(envelope.request) {
+                    Ok(request) => request,
+                    Err(e) => return RResult::RErr(RString::from(format!("materials.api: invalid texture ref request: {e}"))),
+                };
+                ok_json(self.adapter.describe_texture_ref(&request))
+            }
+            material_method::FORMATS_JSON_V1 => ok_json(self.formats_json()),
+            other => RResult::RErr(RString::from(format!("materials.api: unknown invoke method '{other}'"))),
+        }
+    }
+}
+
+pub fn materials_service_info() -> MaterialsServiceInfo {
+    MaterialsServiceInfo {
+        id: MATERIALS_SERVICE_ID,
+        gateway: ENGINE_MATERIALS_SERVICE_ID,
+        methods: MATERIALS_SERVICE_METHODS,
+        backend: "engine-owned.material-runtime",
+        native_formats: &[".nemat"],
+        texture_reference_policy: ".neytd dictionary selectors only",
+    }
+}
+
+pub fn materials_gateway_service(client: AssetServiceClient) -> newengine_plugin_api::ServiceV1Dyn<'static> {
+    let description = engine_owned_service_description(
+        MATERIALS_SERVICE_ID,
+        "newengine-material-runtime.material-gateway",
+        MATERIALS_BACKEND_CAPABILITY_ID,
+        MATERIALS_SERVICE_METHODS.iter().copied(),
+    )
+    .gateway(ENGINE_MATERIALS_SERVICE_ID)
+    .protocol("json")
+    .features(["nemat", "neytd-texture-selectors"])
+    .notes("Engine material gateway. Native material containers are read through engine.assets/VFS.");
+
+    JsonServiceRouter::with_state(
+        MATERIALS_SERVICE_ID,
+        MaterialGatewayState::new(MaterialAssetGatewayAdapter::with_client(client)),
+    )
+    .describe_json(&description)
+    .info(materials_service_info)
+    .get_json(material_method::FORMATS_JSON_V1, |state| state.formats_json())
+    .post_json_result::<MaterialLoadRequest, MaterialLoadResponse, _>(
+        material_method::LOAD_JSON_V1,
+        |state, request| state.adapter.load_material(&request),
+    )
+    .post_json::<MaterialTextureRefRequest, MaterialTextureRefInfo, _>(
+        material_method::DESCRIBE_TEXTURE_REF_JSON_V1,
+        |state, request| state.adapter.describe_texture_ref(&request),
+    )
+    .blob(material_method::INVOKE_JSON, |state, payload| state.invoke_json(payload))
+    .blob(material_method::SHUTDOWN_V1, |_state, _payload| ok_empty_blob())
+    .into_service_v1()
+}
+
+pub fn register_materials_gateway_best_effort(client: AssetServiceClient) -> bool {
+    register_engine_owned_gateway_service_best_effort(EngineOwnedGatewayDecl {
+        gateway: ENGINE_MATERIALS_SERVICE_ID,
+        service_kind: EngineServiceKind::Materials,
+        provider_service: MATERIALS_SERVICE_ID,
+        capability: MATERIALS_BACKEND_CAPABILITY_ID,
+        priority: 0,
+        owner: "newengine-material-runtime.material-gateway",
+        service: materials_gateway_service(client),
+    })
+}
+
+fn normalize_material_logical_path(path: &str) -> Result<String, String> {
+    let mut s = path.trim().replace('\\', "/");
+    while let Some(rest) = s.strip_prefix("./") {
+        s = rest.to_owned();
+    }
+    s = s.trim_start_matches('/').to_owned();
+    while s.contains("//") {
+        s = s.replace("//", "/");
+    }
+    if s.is_empty() {
+        return Err("materials: logical path is empty".to_owned());
+    }
+    Ok(s)
+}

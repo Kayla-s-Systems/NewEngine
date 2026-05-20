@@ -111,9 +111,11 @@ impl GameReadyRuntimeProfile {
         newengine_input_bindings_runtime::register_input_bindings_gateway_best_effort(
             newengine_input_profile_gameready::game_ready_input_profile(),
         );
-        newengine_model_runtime::register_model_gateway_best_effort(
-            newengine_assets::AssetServiceClient::new(newengine_plugin_host::default_host_api()),
-        );
+        newengine_assets::register_asset_file_types_gateway_best_effort();
+
+        let asset_client = newengine_assets::AssetServiceClient::new(newengine_plugin_host::default_host_api());
+        newengine_material_runtime::register_materials_gateway_best_effort(asset_client.clone());
+        newengine_model_runtime::register_model_gateway_best_effort(asset_client);
     }
 
     #[inline]

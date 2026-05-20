@@ -195,6 +195,8 @@ impl BackendRouteDescriptor {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum EngineServiceKind {
     Assets,
+    AssetFileTypes,
+    Materials,
     Audio,
     Render,
     RenderEffects,
@@ -243,6 +245,8 @@ impl EngineServiceKind {
     pub const fn as_str(self) -> &'static str {
         match self {
             Self::Assets => "assets",
+            Self::AssetFileTypes => "assets.file_types",
+            Self::Materials => "materials",
             Self::Audio => "audio",
             Self::Render => "render",
             Self::RenderEffects => "render.effects",
@@ -281,6 +285,8 @@ impl EngineServiceKind {
     pub fn parse(value: &str) -> Option<Self> {
         match value.trim().to_ascii_lowercase().as_str() {
             "assets" => Some(Self::Assets),
+            "assets.file_types" | "assets_file_types" | "asset.file_types" | "asset_file_types" => Some(Self::AssetFileTypes),
+            "materials" => Some(Self::Materials),
             "audio" => Some(Self::Audio),
             "render" => Some(Self::Render),
             "render.effects" | "render_effects" => Some(Self::RenderEffects),
@@ -323,6 +329,7 @@ impl EngineServiceKind {
     #[inline]
     pub const fn parent(self) -> Option<Self> {
         match self {
+            Self::AssetFileTypes => Some(Self::Assets),
             Self::RenderEffects | Self::RenderMaterials => Some(Self::Render),
             Self::ModelSkeletons | Self::ModelMaterials | Self::ModelCollisions => Some(Self::Model),
             Self::CameraModes | Self::CameraAnimations => Some(Self::Camera),
@@ -352,6 +359,8 @@ impl EngineServiceKind {
     pub const fn engine_gateway_id(self) -> &'static str {
         match self {
             Self::Assets => "engine.assets",
+            Self::AssetFileTypes => "engine.assets.file_types",
+            Self::Materials => "engine.materials",
             Self::Audio => "engine.audio",
             Self::Render => "engine.render",
             Self::RenderEffects => "engine.render.effects",
@@ -531,6 +540,8 @@ mod tests {
     #[test]
     fn child_domains_parse_with_canonical_gateways() {
         let cases = [
+            ("assets.file_types", EngineServiceKind::AssetFileTypes, "engine.assets.file_types", Some(EngineServiceKind::Assets)),
+            ("materials", EngineServiceKind::Materials, "engine.materials", None),
             ("input.bindings", EngineServiceKind::InputBindings, "engine.input.bindings", Some(EngineServiceKind::Input)),
             ("input.actions", EngineServiceKind::InputActions, "engine.input.actions", Some(EngineServiceKind::Input)),
             ("input.contexts", EngineServiceKind::InputContexts, "engine.input.contexts", Some(EngineServiceKind::Input)),
@@ -556,6 +567,7 @@ mod tests {
 
     #[test]
     fn parent_domain_does_not_match_child_gateway() {
+        assert!(!EngineServiceKind::Assets.matches_engine_gateway_id("engine.assets.file_types"));
         assert!(!EngineServiceKind::Input.matches_engine_gateway_id("engine.input.bindings"));
         assert!(!EngineServiceKind::Render.matches_engine_gateway_id("engine.render.effects"));
         assert!(!EngineServiceKind::Physics.matches_engine_gateway_id("engine.physics.contacts"));

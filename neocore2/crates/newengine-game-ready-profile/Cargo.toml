@@ -14,6 +14,7 @@ newengine-ecs-runtime = { path = "../newengine-ecs-runtime" }
 newengine-engine-runtime = { path = "../newengine-engine-runtime" }
 newengine-input-bindings-runtime = { path = "../newengine-input-bindings-runtime" }
 newengine-input-profile-gameready = { path = "../newengine-input-profile-gameready" }
+newengine-material-runtime = { path = "../newengine-material-runtime" }
 newengine-model-runtime = { path = "../newengine-model-runtime" }
 newengine-entity-runtime = { path = "../newengine-entity-runtime" }
 newengine-plugin-host = { path = "../newengine-plugin-host" }

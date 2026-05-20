@@ -33,12 +33,81 @@ pub const MODEL_SERVICE_METHOD_SHUTDOWN_V1: &str = newengine_service_api::SERVIC
 pub const MODEL_SERVICE_METHOD_ASSEMBLE_JSON_V1: &str = "assemble_json_v1";
 pub const MODEL_SERVICE_METHOD_VALIDATE_JSON_V1: &str = "validate_json_v1";
 
+
+pub const DRAWABLE_DICTIONARY_EXTENSION: &str = "ydd";
+pub const DRAWABLE_DICTIONARY_ASSET_KIND: &str = "drawable_dictionary";
+pub const DRAWABLE_DICTIONARY_MAGIC: [u8; 4] = *b"RSC7";
+
+pub const MODEL_SERVICE_METHOD_DRAWABLE_DICTIONARY_MANIFEST_JSON_V1: &str = "model.drawable_dictionary_manifest_json_v1";
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct DrawableDictionaryRequest {
+    pub source: String,
+    pub selector: Option<String>,
+}
+
+impl Default for DrawableDictionaryRequest {
+    fn default() -> Self {
+        Self { source: String::new(), selector: None }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct DrawableDictionaryEntry {
+    pub name: String,
+    pub name_hash: u64,
+    pub mesh_count: u32,
+    pub material_slots: Vec<String>,
+    pub bounds_min: [f32; 3],
+    pub bounds_max: [f32; 3],
+}
+
+impl Default for DrawableDictionaryEntry {
+    fn default() -> Self {
+        Self {
+            name: String::new(),
+            name_hash: 0,
+            mesh_count: 0,
+            material_slots: Vec::new(),
+            bounds_min: [0.0; 3],
+            bounds_max: [0.0; 3],
+        }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct DrawableDictionaryManifest {
+    pub schema: String,
+    pub source: String,
+    pub asset_kind: String,
+    pub container: String,
+    pub texture_dictionary: Option<String>,
+    pub entries: Vec<DrawableDictionaryEntry>,
+}
+
+impl Default for DrawableDictionaryManifest {
+    fn default() -> Self {
+        Self {
+            schema: "newengine.drawable_dictionary.manifest.v1".to_owned(),
+            source: String::new(),
+            asset_kind: DRAWABLE_DICTIONARY_ASSET_KIND.to_owned(),
+            container: "rockstar.drawable_dictionary.rsc7".to_owned(),
+            texture_dictionary: None,
+            entries: Vec::new(),
+        }
+    }
+}
+
 pub const MODEL_SERVICE_METHODS: &[&str] = &[
     MODEL_SERVICE_METHOD_INFO,
     MODEL_SERVICE_METHOD_INVOKE,
     MODEL_SERVICE_METHOD_SHUTDOWN_V1,
     MODEL_SERVICE_METHOD_ASSEMBLE_JSON_V1,
     MODEL_SERVICE_METHOD_VALIDATE_JSON_V1,
+    MODEL_SERVICE_METHOD_DRAWABLE_DICTIONARY_MANIFEST_JSON_V1,
 ];
 
 pub const MODEL_BACKEND_SERVICE_SPEC: newengine_service_api::BackendServiceSpec =

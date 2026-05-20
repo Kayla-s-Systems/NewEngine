@@ -8,12 +8,13 @@
 //! same domain service path.
 
 use abi_stable::std_types::{RResult, RString};
-use newengine_assets::AssetServiceClient;
+use newengine_assets::{AssetDecodeRequest, AssetServiceClient};
 use newengine_model_domain_api::{
-    ModelAssetBundle, ModelAssetRequest, ModelConstructionManifest, ModelConstructionValidation,
-    ModelMeshPart, ENGINE_MODEL_SERVICE_ID, MODEL_BACKEND_CAPABILITY_ID, MODEL_SERVICE_ID,
-    MODEL_SERVICE_METHOD_ASSEMBLE_JSON_V1, MODEL_SERVICE_METHOD_INVOKE,
-    MODEL_SERVICE_METHOD_VALIDATE_JSON_V1, MODEL_SERVICE_METHODS,
+    DrawableDictionaryManifest, DrawableDictionaryRequest, ModelAssetBundle, ModelAssetRequest,
+    ModelConstructionManifest, ModelConstructionValidation, ModelMeshPart,
+    MODEL_SERVICE_METHOD_DRAWABLE_DICTIONARY_MANIFEST_JSON_V1, ENGINE_MODEL_SERVICE_ID,
+    MODEL_BACKEND_CAPABILITY_ID, MODEL_SERVICE_ID, MODEL_SERVICE_METHOD_ASSEMBLE_JSON_V1,
+    MODEL_SERVICE_METHOD_INVOKE, MODEL_SERVICE_METHOD_VALIDATE_JSON_V1, MODEL_SERVICE_METHODS,
 };
 use newengine_model_import_obj::normalize_logical_path;
 use newengine_model_skeleton_api::ModelSkeletonMetadata;
@@ -135,6 +136,32 @@ impl ModelAssetAdapter {
         ModelConstructionValidation { valid: errors.is_empty(), resolved, errors, warnings }
     }
 
+    pub fn load_drawable_dictionary_manifest(
+        &self,
+        request: &DrawableDictionaryRequest,
+    ) -> Result<DrawableDictionaryManifest, String> {
+        let source = normalize_logical_path(&request.source, false)?;
+        if !source.to_ascii_lowercase().ends_with(".ydd") {
+            return Err(format!(
+                "drawable dictionary manifest requires .ydd source, got '{source}'"
+            ));
+        }
+        let bytes = self.client.decode_v1(&AssetDecodeRequest {
+            logical_path: source.clone(),
+            output_kind: "drawable.manifest_json".to_owned(),
+            selector: request
+                .selector
+                .as_ref()
+                .map(|selector| serde_json::json!({"selector": selector}))
+                .unwrap_or(serde_json::Value::Null),
+        })
+        .map_err(|e| format!("engine.assets decode_v1 failed path='{source}' err='{e}'"))?;
+        serde_json::from_slice::<DrawableDictionaryManifest>(&bytes)
+            .map_err(|e| format!("model.api: ydd manifest decode returned invalid json path='{source}' err='{e}'"))
+    }
+
+
+
     pub fn load_skeleton_metadata(
         &self,
         logical_path: &str,
@@ -249,6 +276,16 @@ impl ModelRuntimeState {
                 };
                 ok_json(self.adapter.validate_request(&request))
             }
+            MODEL_SERVICE_METHOD_DRAWABLE_DICTIONARY_MANIFEST_JSON_V1 => {
+                let request = match serde_json::from_value::<DrawableDictionaryRequest>(envelope.request) {
+                    Ok(request) => request,
+                    Err(e) => return RResult::RErr(RString::from(format!("model.api: invalid ydd manifest request: {e}"))),
+                };
+                match self.adapter.load_drawable_dictionary_manifest(&request) {
+                    Ok(manifest) => ok_json(manifest),
+                    Err(e) => RResult::RErr(RString::from(e)),
+                }
+            }
             other => RResult::RErr(RString::from(format!("model.api: unknown invoke method '{other}'"))),
         }
     }
@@ -260,7 +297,7 @@ pub fn model_runtime_service_info() -> ModelRuntimeServiceInfo {
         gateway: ENGINE_MODEL_SERVICE_ID,
         methods: MODEL_SERVICE_METHODS,
         backend: "engine-owned.model-runtime",
-        feature_domains: &["mesh.obj", "material.mtl", "skeleton.rsc7", "collision.default"],
+        feature_domains: &["mesh.obj", "material.mtl", "skeleton.rsc7", "collision.default", "drawable.ydd"],
     }
 }
 
@@ -273,7 +310,7 @@ pub fn model_gateway_service(adapter: ModelAssetAdapter) -> newengine_plugin_api
     )
     .gateway(ENGINE_MODEL_SERVICE_ID)
     .protocol("json")
-    .features(["mesh.obj", "material.mtl", "skeleton.rsc7", "collision.default"])
+    .features(["mesh.obj", "material.mtl", "skeleton.rsc7", "collision.default", "drawable.ydd"])
     .notes("Gateway-backed model constructor for player/NPC/prop construction");
 
     JsonServiceRouter::with_state(MODEL_SERVICE_ID, ModelRuntimeState::new(adapter))
@@ -287,6 +324,10 @@ pub fn model_gateway_service(adapter: ModelAssetAdapter) -> newengine_plugin_api
         .post_json::<ModelAssetRequest, ModelConstructionValidation, _>(
             MODEL_SERVICE_METHOD_VALIDATE_JSON_V1,
             |state, request| state.adapter.validate_request(&request),
+        )
+        .post_json_result::<DrawableDictionaryRequest, DrawableDictionaryManifest, _>(
+            MODEL_SERVICE_METHOD_DRAWABLE_DICTIONARY_MANIFEST_JSON_V1,
+            |state, request| state.adapter.load_drawable_dictionary_manifest(&request),
         )
         .blob(newengine_service_api::SERVICE_METHOD_SHUTDOWN_V1, |_state, _payload| ok_empty_blob())
         .into_service_v1()

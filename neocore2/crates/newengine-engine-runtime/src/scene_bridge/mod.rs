@@ -45,7 +45,8 @@ use crate::scene_bootstrap::bootstrap_runtime_scene;
 
 use game_ready::{bootstrap_fps_game_ready_scene, game_ready_demo_enabled};
 pub(crate) use game_ready::{
-    tick_game_ready_streaming_terrain, PreparedTerrainPrimitiveMesh, TerrainSurfaceLayers,
+    tick_game_ready_sky_cycle, tick_game_ready_streaming_terrain, PreparedTerrainPrimitiveMesh,
+    SkyDomeRuntime, TerrainSurfaceLayers,
 };
 use helpers::{
     apply_primitive_instance, effective_material_base, ensure_primitive_base, ensure_root,

@@ -251,24 +251,15 @@ fn emit_runtime_api_table(reports: &[ContractReport]) {
         return;
     }
 
-    let rows = reports
-        .iter()
-        .map(|report| {
-            vec![
-                report.service_id.clone(),
-                report.status.to_owned(),
-                report.provider_service.clone(),
-                report.source.clone(),
-                report.required.to_owned(),
-            ]
-        })
-        .collect::<Vec<_>>();
-
-    crate::log_fmt::emit_prefixed_table(
-        "runtime api:",
-        "Engine API gateway/service contracts",
-        &["api", "status", "provider_service", "source", "strict"],
-        &rows,
+    let ok = reports.iter().filter(|report| report.status == "ok").count();
+    let degraded = reports.iter().filter(|report| report.status == "degraded").count();
+    let fatal = reports.iter().filter(|report| report.status == "fatal").count();
+    log::info!(
+        "runtime api: contracts total={} ok={} degraded={} fatal={}",
+        reports.len(),
+        ok,
+        degraded,
+        fatal,
     );
 }
 

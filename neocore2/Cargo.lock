@@ -390,8 +390,11 @@ name = "newengine-assets"
 version = "0.1.0"
 dependencies = [
  "abi_stable",
+ "log",
  "newengine-assets-api",
  "newengine-plugin-api",
+ "newengine-service-api",
+ "newengine-service-kit",
  "serde",
  "serde_json",
 ]
@@ -402,6 +405,7 @@ version = "0.1.0"
 dependencies = [
  "log",
  "newengine-service-api",
+ "serde",
  "serde_json",
 ]
 
@@ -635,6 +639,7 @@ dependencies = [
  "newengine-entity-runtime",
  "newengine-input-bindings-runtime",
  "newengine-input-profile-gameready",
+ "newengine-material-runtime",
  "newengine-model-runtime",
  "newengine-plugin-host",
  "newengine-render-feature-api",
@@ -756,15 +761,23 @@ dependencies = [
 name = "newengine-material-runtime"
 version = "0.1.0"
 dependencies = [
+ "abi_stable",
+ "newengine-assets",
  "newengine-materials",
  "newengine-model-domain-api",
  "newengine-model-import-obj",
+ "newengine-plugin-api",
+ "newengine-service-api",
+ "newengine-service-kit",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]
 name = "newengine-materials"
 version = "0.1.0"
 dependencies = [
+ "newengine-service-api",
  "parking_lot",
  "serde",
  "serde_json",

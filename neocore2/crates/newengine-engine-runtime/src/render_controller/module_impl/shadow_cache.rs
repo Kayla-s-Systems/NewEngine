@@ -11,22 +11,8 @@ impl RuntimeRenderController {
             self.shadows.last_refresh_frame = 0;
             self.shadows.current_caster_cull = None;
             self.shadows.last_light_mvp = None;
+            self.shadows.cached_shadow_frame = None;
             return false;
-        }
-
-        if self.shadows.cache_valid
-            && self
-                .shadows
-                .last_light_mvp
-                .map(|last| last != plan.frame.light_mvp)
-                .unwrap_or(false)
-        {
-            log::debug!(
-                "render shadow cache: invalidated because light matrix changed frame={}",
-                self.frame.frame_index
-            );
-            self.shadows.cache_valid = false;
-            self.shadows.last_refresh_frame = 0;
         }
 
         if !self.shadows.cache_valid {
@@ -44,7 +30,25 @@ impl RuntimeRenderController {
         }
 
         let period = self.shadows.refresh_period_frames.max(1);
-        self.frame.frame_index.saturating_sub(self.shadows.last_refresh_frame) >= period
+        let frames_since_refresh = self.frame.frame_index.saturating_sub(self.shadows.last_refresh_frame);
+        let light_matrix_changed = self
+            .shadows
+            .last_light_mvp
+            .map(|last| last != plan.frame.light_mvp)
+            .unwrap_or(true);
+        if light_matrix_changed {
+            if frames_since_refresh >= period {
+                log::debug!(
+                    "render shadow cache: live refresh because light matrix changed frame={} period_frames={}",
+                    self.frame.frame_index,
+                    period,
+                );
+                return true;
+            }
+            return false;
+        }
+
+        frames_since_refresh >= period
     }
 
     #[inline]
@@ -52,6 +56,12 @@ impl RuntimeRenderController {
         self.shadows.cache_valid = true;
         self.shadows.last_refresh_frame = self.frame.frame_index;
         self.shadows.last_light_mvp = Some(plan.frame.light_mvp);
+        self.shadows.cached_shadow_frame = Some(plan.frame);
+    }
+
+    #[inline]
+    pub(super) fn cached_shadow_frame(&self) -> Option<super::shadows::ShadowFrame> {
+        self.shadows.cached_shadow_frame
     }
 
     #[inline]
@@ -62,6 +72,7 @@ impl RuntimeRenderController {
             super::super::render_quality::SHADOW_WARMUP_DEFER_FRAMES;
         self.shadows.current_caster_cull = None;
         self.shadows.last_light_mvp = None;
+        self.shadows.cached_shadow_frame = None;
     }
 }
 

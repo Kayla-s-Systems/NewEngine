@@ -1,0 +1,1274 @@
+{
+  "dictionary": "textures/fps/clouds_runtime.neytd",
+  "entry_count": 56,
+  "mip_count": 424,
+  "payload_bytes": 28008208,
+  "directory_bytes": 18949,
+  "source": "clouds.zip/clouds",
+  "profiles": {
+    "alt_heavy": [
+      {
+        "name": "cloud_alt_heavy__cloudhat_marble02_ap",
+        "selector": "textures/fps/clouds_runtime.neytd@cloud_alt_heavy__cloudhat_marble02_ap",
+        "role": "coverage_mask",
+        "format": "BC1_RGBA_UNORM",
+        "width": 256,
+        "height": 256,
+        "mip_count": 7
+      },
+      {
+        "name": "cloud_alt_heavy__detail1_nrm",
+        "selector": "textures/fps/clouds_runtime.neytd@cloud_alt_heavy__detail1_nrm",
+        "role": "detail_normal",
+        "format": "BC1_RGBA_UNORM",
+        "width": 64,
+        "height": 64,
+        "mip_count": 5
+      },
+      {
+        "name": "cloud_alt_heavy__skyhat_raintop_ap",
+        "selector": "textures/fps/clouds_runtime.neytd@cloud_alt_heavy__skyhat_raintop_ap",
+        "role": "albedo_alpha",
+        "format": "BC1_RGBA_UNORM",
+        "width": 1024,
+        "height": 1024,
+        "mip_count": 9
+      },
+      {
+        "name": "cloud_alt_heavy__skyhat_raintop_n",
+        "selector": "textures/fps/clouds_runtime.neytd@cloud_alt_heavy__skyhat_raintop_n",
+        "role": "normal",
+        "format": "BC5_RG_UNORM",
+        "width": 1024,
+        "height": 1024,
+        "mip_count": 9
+      }
+    ],
+    "alt_light": [
+      {
+        "name": "cloud_alt_light__cloudhat_altitude_medium",
+        "selector": "textures/fps/clouds_runtime.neytd@cloud_alt_light__cloudhat_altitude_medium",
+        "role": "density_mask",
+        "format": "BC1_RGBA_UNORM",
+        "width": 1024,
+        "height": 1024,
+        "mip_count": 9
+      },
+      {
+        "name": "cloud_alt_light__cloudhat_altitude_medium_n",
+        "selector": "textures/fps/clouds_runtime.neytd@cloud_alt_light__cloudhat_altitude_medium_n",
+        "role": "normal",
+        "format": "BC5_RG_UNORM",
+        "width": 1024,
+        "height": 1024,
+        "mip_count": 9
+      },
+      {
+        "name": "cloud_alt_light__cloudhat_marble02_ap",
+        "selector": "textures/fps/clouds_runtime.neytd@cloud_alt_light__cloudhat_marble02_ap",
+        "role": "coverage_mask",
+        "format": "BC1_RGBA_UNORM",
+        "width": 256,
+        "height": 256,
+        "mip_count": 7
+      },
+      {
+        "name": "cloud_alt_light__detail1_nrm",
+        "selector": "textures/fps/clouds_runtime.neytd@cloud_alt_light__detail1_nrm",
+        "role": "detail_normal",
+        "format": "BC1_RGBA_UNORM",
+        "width": 64,
+        "height": 64,
+        "mip_count": 5
+      },
+      {
+        "name": "cloud_alt_light__skyhat_cirrocumulus01_alt2",
+        "selector": "textures/fps/clouds_runtime.neytd@cloud_alt_light__skyhat_cirrocumulus01_alt2",
+        "role": "density_mask",
+        "format": "BC1_RGBA_UNORM",
+        "width": 1024,
+        "height": 1024,
+        "mip_count": 9
+      },
+      {
+        "name": "cloud_alt_light__skyhat_cirrocumulus01_alt_n",
+        "selector": "textures/fps/clouds_runtime.neytd@cloud_alt_light__skyhat_cirrocumulus01_alt_n",
+        "role": "normal",
+        "format": "BC5_RG_UNORM",
+        "width": 1024,
+        "height": 1024,
+        "mip_count": 9
+      }
+    ],
+    "alt_med": [
+      {
+        "name": "cloud_alt_med__cloudhat_altitude_medium",
+        "selector": "textures/fps/clouds_runtime.neytd@cloud_alt_med__cloudhat_altitude_medium",
+        "role": "density_mask",
+        "format": "BC1_RGBA_UNORM",
+        "width": 1024,
+        "height": 1024,
+        "mip_count": 9
+      },
+      {
+        "name": "cloud_alt_med__cloudhat_altitude_medium_n",
+        "selector": "textures/fps/clouds_runtime.neytd@cloud_alt_med__cloudhat_altitude_medium_n",
+        "role": "normal",
+        "format": "BC5_RG_UNORM",
+        "width": 1024,
+        "height": 1024,
+        "mip_count": 9
+      },
+      {
+        "name": "cloud_alt_med__cloudhat_marble02_ap",
+        "selector": "textures/fps/clouds_runtime.neytd@cloud_alt_med__cloudhat_marble02_ap",
+        "role": "coverage_mask",
+        "format": "BC1_RGBA_UNORM",
+        "width": 256,
+        "height": 256,
+        "mip_count": 7
+      },
+      {
+        "name": "cloud_alt_med__detail1_nrm",
+        "selector": "textures/fps/clouds_runtime.neytd@cloud_alt_med__detail1_nrm",
+        "role": "detail_normal",
+        "format": "BC1_RGBA_UNORM",
+        "width": 64,
+        "height": 64,
+        "mip_count": 5
+      }
+    ],
+    "cirrus": [
+      {
+        "name": "cloud_cirrus__cloudhat_cirrus_ap",
+        "selector": "textures/fps/clouds_runtime.neytd@cloud_cirrus__cloudhat_cirrus_ap",
+        "role": "albedo_alpha",
+        "format": "BC1_RGBA_UNORM",
+        "width": 1024,
+        "height": 1024,
+        "mip_count": 9
+      },
+      {
+        "name": "cloud_cirrus__cloudhat_cirrus_nrm",
+        "selector": "textures/fps/clouds_runtime.neytd@cloud_cirrus__cloudhat_cirrus_nrm",
+        "role": "normal",
+        "format": "BC5_RG_UNORM",
+        "width": 1024,
+        "height": 1024,
+        "mip_count": 9
+      }
+    ],
+    "clear": [
+      {
+        "name": "cloud_clear__cloudhat_marble02_ap",
+        "selector": "textures/fps/clouds_runtime.neytd@cloud_clear__cloudhat_marble02_ap",
+        "role": "coverage_mask",
+        "format": "BC1_RGBA_UNORM",
+        "width": 256,
+        "height": 256,
+        "mip_count": 7
+      },
+      {
+        "name": "cloud_clear__detail1_nrm",
+        "selector": "textures/fps/clouds_runtime.neytd@cloud_clear__detail1_nrm",
+        "role": "detail_normal",
+        "format": "BC1_RGBA_UNORM",
+        "width": 64,
+        "height": 64,
+        "mip_count": 5
+      },
+      {
+        "name": "cloud_clear__new_skyhat_clear01_bot_ap",
+        "selector": "textures/fps/clouds_runtime.neytd@cloud_clear__new_skyhat_clear01_bot_ap",
+        "role": "albedo_alpha",
+        "format": "BC1_RGBA_UNORM",
+        "width": 2048,
+        "height": 512,
+        "mip_count": 8
+      },
+      {
+        "name": "cloud_clear__new_skyhat_clear01_bot_nrm",
+        "selector": "textures/fps/clouds_runtime.neytd@cloud_clear__new_skyhat_clear01_bot_nrm",
+        "role": "normal",
+        "format": "BC5_RG_UNORM",
+        "width": 2048,
+        "height": 512,
+        "mip_count": 8
+      }
+    ],
+    "cloudy": [
+      {
+        "name": "cloud_cloudy__cloudhat_marble02_ap",
+        "selector": "textures/fps/clouds_runtime.neytd@cloud_cloudy__cloudhat_marble02_ap",
+        "role": "coverage_mask",
+        "format": "BC1_RGBA_UNORM",
+        "width": 256,
+        "height": 256,
+        "mip_count": 7
+      },
+      {
+        "name": "cloud_cloudy__detail1_nrm",
+        "selector": "textures/fps/clouds_runtime.neytd@cloud_cloudy__detail1_nrm",
+        "role": "detail_normal",
+        "format": "BC1_RGBA_UNORM",
+        "width": 64,
+        "height": 64,
+        "mip_count": 5
+      },
+      {
+        "name": "cloud_cloudy__trialap",
+        "selector": "textures/fps/clouds_runtime.neytd@cloud_cloudy__trialap",
+        "role": "albedo_alpha",
+        "format": "BC1_RGBA_UNORM",
+        "width": 2048,
+        "height": 512,
+        "mip_count": 8
+      },
+      {
+        "name": "cloud_cloudy__trialn",
+        "selector": "textures/fps/clouds_runtime.neytd@cloud_cloudy__trialn",
+        "role": "normal",
+        "format": "BC5_RG_UNORM",
+        "width": 2048,
+        "height": 512,
+        "mip_count": 8
+      }
+    ],
+    "contrails": [
+      {
+        "name": "cloud_contrails__contrails_ap3",
+        "selector": "textures/fps/clouds_runtime.neytd@cloud_contrails__contrails_ap3",
+        "role": "contrail_mask",
+        "format": "BC1_RGBA_UNORM",
+        "width": 2048,
+        "height": 128,
+        "mip_count": 6
+      },
+      {
+        "name": "cloud_contrails__contrails_nrm3",
+        "selector": "textures/fps/clouds_runtime.neytd@cloud_contrails__contrails_nrm3",
+        "role": "contrail_mask",
+        "format": "BC1_RGBA_UNORM",
+        "width": 2048,
+        "height": 128,
+        "mip_count": 6
+      }
+    ],
+    "horizon": [
+      {
+        "name": "cloud_horizon__cloudhat_marble02_ap",
+        "selector": "textures/fps/clouds_runtime.neytd@cloud_horizon__cloudhat_marble02_ap",
+        "role": "coverage_mask",
+        "format": "BC1_RGBA_UNORM",
+        "width": 256,
+        "height": 256,
+        "mip_count": 7
+      },
+      {
+        "name": "cloud_horizon__detail1_nrm",
+        "selector": "textures/fps/clouds_runtime.neytd@cloud_horizon__detail1_nrm",
+        "role": "detail_normal",
+        "format": "BC1_RGBA_UNORM",
+        "width": 64,
+        "height": 64,
+        "mip_count": 5
+      },
+      {
+        "name": "cloud_horizon__stripeyclouds_ap",
+        "selector": "textures/fps/clouds_runtime.neytd@cloud_horizon__stripeyclouds_ap",
+        "role": "albedo_alpha",
+        "format": "BC1_RGBA_UNORM",
+        "width": 1024,
+        "height": 512,
+        "mip_count": 8
+      },
+      {
+        "name": "cloud_horizon__stripeyclouds_nrm",
+        "selector": "textures/fps/clouds_runtime.neytd@cloud_horizon__stripeyclouds_nrm",
+        "role": "normal",
+        "format": "BC5_RG_UNORM",
+        "width": 1024,
+        "height": 512,
+        "mip_count": 8
+      }
+    ],
+    "nimbus": [
+      {
+        "name": "cloud_nimbus__cloudhat_marble02_ap",
+        "selector": "textures/fps/clouds_runtime.neytd@cloud_nimbus__cloudhat_marble02_ap",
+        "role": "coverage_mask",
+        "format": "BC1_RGBA_UNORM",
+        "width": 256,
+        "height": 256,
+        "mip_count": 7
+      },
+      {
+        "name": "cloud_nimbus__detail1_nrm",
+        "selector": "textures/fps/clouds_runtime.neytd@cloud_nimbus__detail1_nrm",
+        "role": "detail_normal",
+        "format": "BC1_RGBA_UNORM",
+        "width": 64,
+        "height": 64,
+        "mip_count": 5
+      },
+      {
+        "name": "cloud_nimbus__final_nimbusclouds_ap",
+        "selector": "textures/fps/clouds_runtime.neytd@cloud_nimbus__final_nimbusclouds_ap",
+        "role": "albedo_alpha",
+        "format": "BC1_RGBA_UNORM",
+        "width": 2048,
+        "height": 512,
+        "mip_count": 8
+      },
+      {
+        "name": "cloud_nimbus__final_nimbusclouds_n",
+        "selector": "textures/fps/clouds_runtime.neytd@cloud_nimbus__final_nimbusclouds_n",
+        "role": "normal",
+        "format": "BC5_RG_UNORM",
+        "width": 2048,
+        "height": 512,
+        "mip_count": 8
+      }
+    ],
+    "puffs": [
+      {
+        "name": "cloud_puffs__cloudhat_marble02_ap",
+        "selector": "textures/fps/clouds_runtime.neytd@cloud_puffs__cloudhat_marble02_ap",
+        "role": "coverage_mask",
+        "format": "BC1_RGBA_UNORM",
+        "width": 256,
+        "height": 256,
+        "mip_count": 7
+      },
+      {
+        "name": "cloud_puffs__cloudhat_puffs_ap",
+        "selector": "textures/fps/clouds_runtime.neytd@cloud_puffs__cloudhat_puffs_ap",
+        "role": "albedo_alpha",
+        "format": "BC1_RGBA_UNORM",
+        "width": 2048,
+        "height": 512,
+        "mip_count": 8
+      },
+      {
+        "name": "cloud_puffs__cloudhat_puffs_nrm",
+        "selector": "textures/fps/clouds_runtime.neytd@cloud_puffs__cloudhat_puffs_nrm",
+        "role": "normal",
+        "format": "BC5_RG_UNORM",
+        "width": 2048,
+        "height": 512,
+        "mip_count": 8
+      },
+      {
+        "name": "cloud_puffs__detail1_nrm",
+        "selector": "textures/fps/clouds_runtime.neytd@cloud_puffs__detail1_nrm",
+        "role": "detail_normal",
+        "format": "BC1_RGBA_UNORM",
+        "width": 64,
+        "height": 64,
+        "mip_count": 5
+      }
+    ],
+    "rain": [
+      {
+        "name": "cloud_rain__skyhat_rain02_ap",
+        "selector": "textures/fps/clouds_runtime.neytd@cloud_rain__skyhat_rain02_ap",
+        "role": "albedo_alpha",
+        "format": "BC1_RGBA_UNORM",
+        "width": 1024,
+        "height": 1024,
+        "mip_count": 9
+      },
+      {
+        "name": "cloud_rain__skyhat_rain02_n2",
+        "selector": "textures/fps/clouds_runtime.neytd@cloud_rain__skyhat_rain02_n2",
+        "role": "density_mask",
+        "format": "BC5_RG_UNORM",
+        "width": 1024,
+        "height": 1024,
+        "mip_count": 9
+      }
+    ],
+    "showers": [
+      {
+        "name": "cloud_showers__skyhat_showers01_ap",
+        "selector": "textures/fps/clouds_runtime.neytd@cloud_showers__skyhat_showers01_ap",
+        "role": "albedo_alpha",
+        "format": "BC1_RGBA_UNORM",
+        "width": 1024,
+        "height": 1024,
+        "mip_count": 9
+      },
+      {
+        "name": "cloud_showers__skyhat_showers01_n",
+        "selector": "textures/fps/clouds_runtime.neytd@cloud_showers__skyhat_showers01_n",
+        "role": "normal",
+        "format": "BC5_RG_UNORM",
+        "width": 1024,
+        "height": 1024,
+        "mip_count": 9
+      }
+    ],
+    "storm": [
+      {
+        "name": "cloud_storm__cloudhat_marble02_ap",
+        "selector": "textures/fps/clouds_runtime.neytd@cloud_storm__cloudhat_marble02_ap",
+        "role": "coverage_mask",
+        "format": "BC1_RGBA_UNORM",
+        "width": 256,
+        "height": 256,
+        "mip_count": 7
+      },
+      {
+        "name": "cloud_storm__detail1_nrm",
+        "selector": "textures/fps/clouds_runtime.neytd@cloud_storm__detail1_nrm",
+        "role": "detail_normal",
+        "format": "BC1_RGBA_UNORM",
+        "width": 64,
+        "height": 64,
+        "mip_count": 5
+      },
+      {
+        "name": "cloud_storm__skyhat_rain02_ap",
+        "selector": "textures/fps/clouds_runtime.neytd@cloud_storm__skyhat_rain02_ap",
+        "role": "albedo_alpha",
+        "format": "BC1_RGBA_UNORM",
+        "width": 1024,
+        "height": 1024,
+        "mip_count": 9
+      },
+      {
+        "name": "cloud_storm__skyhat_rain02_n2",
+        "selector": "textures/fps/clouds_runtime.neytd@cloud_storm__skyhat_rain02_n2",
+        "role": "density_mask",
+        "format": "BC5_RG_UNORM",
+        "width": 1024,
+        "height": 1024,
+        "mip_count": 9
+      },
+      {
+        "name": "cloud_storm__stormclouds_ap",
+        "selector": "textures/fps/clouds_runtime.neytd@cloud_storm__stormclouds_ap",
+        "role": "albedo_alpha",
+        "format": "BC1_RGBA_UNORM",
+        "width": 1024,
+        "height": 512,
+        "mip_count": 8
+      },
+      {
+        "name": "cloud_storm__stormclouds_nrm",
+        "selector": "textures/fps/clouds_runtime.neytd@cloud_storm__stormclouds_nrm",
+        "role": "normal",
+        "format": "BC5_RG_UNORM",
+        "width": 1024,
+        "height": 512,
+        "mip_count": 8
+      }
+    ],
+    "test": [
+      {
+        "name": "cloud_test__cloudhat_marble02_ap",
+        "selector": "textures/fps/clouds_runtime.neytd@cloud_test__cloudhat_marble02_ap",
+        "role": "coverage_mask",
+        "format": "BC1_RGBA_UNORM",
+        "width": 256,
+        "height": 256,
+        "mip_count": 7
+      },
+      {
+        "name": "cloud_test__detail1_nrm",
+        "selector": "textures/fps/clouds_runtime.neytd@cloud_test__detail1_nrm",
+        "role": "detail_normal",
+        "format": "BC1_RGBA_UNORM",
+        "width": 64,
+        "height": 64,
+        "mip_count": 5
+      },
+      {
+        "name": "cloud_test__testwritting",
+        "selector": "textures/fps/clouds_runtime.neytd@cloud_test__testwritting",
+        "role": "density_mask",
+        "format": "BC1_RGBA_UNORM",
+        "width": 1024,
+        "height": 1024,
+        "mip_count": 9
+      },
+      {
+        "name": "cloud_test__testwritting_nrm",
+        "selector": "textures/fps/clouds_runtime.neytd@cloud_test__testwritting_nrm",
+        "role": "normal",
+        "format": "BC1_RGBA_UNORM",
+        "width": 1024,
+        "height": 1024,
+        "mip_count": 9
+      }
+    ],
+    "wispy": [
+      {
+        "name": "cloud_wispy__skyhat_cirrocumulus01_ap",
+        "selector": "textures/fps/clouds_runtime.neytd@cloud_wispy__skyhat_cirrocumulus01_ap",
+        "role": "albedo_alpha",
+        "format": "BC1_RGBA_UNORM",
+        "width": 1024,
+        "height": 1024,
+        "mip_count": 9
+      },
+      {
+        "name": "cloud_wispy__skyhat_cirrocumulus01_nrm",
+        "selector": "textures/fps/clouds_runtime.neytd@cloud_wispy__skyhat_cirrocumulus01_nrm",
+        "role": "normal",
+        "format": "BC5_RG_UNORM",
+        "width": 1024,
+        "height": 1024,
+        "mip_count": 9
+      },
+      {
+        "name": "cloud_wispy__wisps_ap",
+        "selector": "textures/fps/clouds_runtime.neytd@cloud_wispy__wisps_ap",
+        "role": "albedo_alpha",
+        "format": "BC1_RGBA_UNORM",
+        "width": 1024,
+        "height": 512,
+        "mip_count": 8
+      },
+      {
+        "name": "cloud_wispy__wisps_nrm",
+        "selector": "textures/fps/clouds_runtime.neytd@cloud_wispy__wisps_nrm",
+        "role": "normal",
+        "format": "BC5_RG_UNORM",
+        "width": 1024,
+        "height": 512,
+        "mip_count": 8
+      }
+    ]
+  },
+  "entries": [
+    {
+      "name": "cloud_alt_heavy__cloudhat_marble02_ap",
+      "selector": "textures/fps/clouds_runtime.neytd@cloud_alt_heavy__cloudhat_marble02_ap",
+      "profile": "alt_heavy",
+      "role": "coverage_mask",
+      "source": "alt_heavy/cloudhat_marble02_ap.dds",
+      "format": "BC1_RGBA_UNORM",
+      "color_space": "linear",
+      "width": 256,
+      "height": 256,
+      "mip_count": 7,
+      "name_hash": "14726862430225769952"
+    },
+    {
+      "name": "cloud_alt_heavy__detail1_nrm",
+      "selector": "textures/fps/clouds_runtime.neytd@cloud_alt_heavy__detail1_nrm",
+      "profile": "alt_heavy",
+      "role": "detail_normal",
+      "source": "alt_heavy/detail1_nrm.dds",
+      "format": "BC1_RGBA_UNORM",
+      "color_space": "linear",
+      "width": 64,
+      "height": 64,
+      "mip_count": 5,
+      "name_hash": "16395272569256244696"
+    },
+    {
+      "name": "cloud_alt_heavy__skyhat_raintop_ap",
+      "selector": "textures/fps/clouds_runtime.neytd@cloud_alt_heavy__skyhat_raintop_ap",
+      "profile": "alt_heavy",
+      "role": "albedo_alpha",
+      "source": "alt_heavy/skyhat_raintop_ap.dds",
+      "format": "BC1_RGBA_UNORM",
+      "color_space": "linear",
+      "width": 1024,
+      "height": 1024,
+      "mip_count": 9,
+      "name_hash": "8816689879628722700"
+    },
+    {
+      "name": "cloud_alt_heavy__skyhat_raintop_n",
+      "selector": "textures/fps/clouds_runtime.neytd@cloud_alt_heavy__skyhat_raintop_n",
+      "profile": "alt_heavy",
+      "role": "normal",
+      "source": "alt_heavy/skyhat_raintop_n.dds",
+      "format": "BC5_RG_UNORM",
+      "color_space": "linear",
+      "width": 1024,
+      "height": 1024,
+      "mip_count": 9,
+      "name_hash": "14777648591065315433"
+    },
+    {
+      "name": "cloud_alt_light__cloudhat_altitude_medium",
+      "selector": "textures/fps/clouds_runtime.neytd@cloud_alt_light__cloudhat_altitude_medium",
+      "profile": "alt_light",
+      "role": "density_mask",
+      "source": "alt_light/cloudhat_altitude_medium.dds",
+      "format": "BC1_RGBA_UNORM",
+      "color_space": "linear",
+      "width": 1024,
+      "height": 1024,
+      "mip_count": 9,
+      "name_hash": "15566246670184737850"
+    },
+    {
+      "name": "cloud_alt_light__cloudhat_altitude_medium_n",
+      "selector": "textures/fps/clouds_runtime.neytd@cloud_alt_light__cloudhat_altitude_medium_n",
+      "profile": "alt_light",
+      "role": "normal",
+      "source": "alt_light/cloudhat_altitude_medium_n.dds",
+      "format": "BC5_RG_UNORM",
+      "color_space": "linear",
+      "width": 1024,
+      "height": 1024,
+      "mip_count": 9,
+      "name_hash": "12459727198764201603"
+    },
+    {
+      "name": "cloud_alt_light__cloudhat_marble02_ap",
+      "selector": "textures/fps/clouds_runtime.neytd@cloud_alt_light__cloudhat_marble02_ap",
+      "profile": "alt_light",
+      "role": "coverage_mask",
+      "source": "alt_light/cloudhat_marble02_ap.dds",
+      "format": "BC1_RGBA_UNORM",
+      "color_space": "linear",
+      "width": 256,
+      "height": 256,
+      "mip_count": 7,
+      "name_hash": "3571807910254454975"
+    },
+    {
+      "name": "cloud_alt_light__detail1_nrm",
+      "selector": "textures/fps/clouds_runtime.neytd@cloud_alt_light__detail1_nrm",
+      "profile": "alt_light",
+      "role": "detail_normal",
+      "source": "alt_light/detail1_nrm.dds",
+      "format": "BC1_RGBA_UNORM",
+      "color_space": "linear",
+      "width": 64,
+      "height": 64,
+      "mip_count": 5,
+      "name_hash": "10397211300446972981"
+    },
+    {
+      "name": "cloud_alt_light__skyhat_cirrocumulus01_alt2",
+      "selector": "textures/fps/clouds_runtime.neytd@cloud_alt_light__skyhat_cirrocumulus01_alt2",
+      "profile": "alt_light",
+      "role": "density_mask",
+      "source": "alt_light/skyhat_cirrocumulus01_alt2.dds",
+      "format": "BC1_RGBA_UNORM",
+      "color_space": "linear",
+      "width": 1024,
+      "height": 1024,
+      "mip_count": 9,
+      "name_hash": "1801378085362825718"
+    },
+    {
+      "name": "cloud_alt_light__skyhat_cirrocumulus01_alt_n",
+      "selector": "textures/fps/clouds_runtime.neytd@cloud_alt_light__skyhat_cirrocumulus01_alt_n",
+      "profile": "alt_light",
+      "role": "normal",
+      "source": "alt_light/skyhat_cirrocumulus01_alt_n.dds",
+      "format": "BC5_RG_UNORM",
+      "color_space": "linear",
+      "width": 1024,
+      "height": 1024,
+      "mip_count": 9,
+      "name_hash": "13020757181235689241"
+    },
+    {
+      "name": "cloud_alt_med__cloudhat_altitude_medium",
+      "selector": "textures/fps/clouds_runtime.neytd@cloud_alt_med__cloudhat_altitude_medium",
+      "profile": "alt_med",
+      "role": "density_mask",
+      "source": "alt_med/cloudhat_altitude_medium.dds",
+      "format": "BC1_RGBA_UNORM",
+      "color_space": "linear",
+      "width": 1024,
+      "height": 1024,
+      "mip_count": 9,
+      "name_hash": "17623177403403168448"
+    },
+    {
+      "name": "cloud_alt_med__cloudhat_altitude_medium_n",
+      "selector": "textures/fps/clouds_runtime.neytd@cloud_alt_med__cloudhat_altitude_medium_n",
+      "profile": "alt_med",
+      "role": "normal",
+      "source": "alt_med/cloudhat_altitude_medium_n.dds",
+      "format": "BC5_RG_UNORM",
+      "color_space": "linear",
+      "width": 1024,
+      "height": 1024,
+      "mip_count": 9,
+      "name_hash": "17162382989893252569"
+    },
+    {
+      "name": "cloud_alt_med__cloudhat_marble02_ap",
+      "selector": "textures/fps/clouds_runtime.neytd@cloud_alt_med__cloudhat_marble02_ap",
+      "profile": "alt_med",
+      "role": "coverage_mask",
+      "source": "alt_med/cloudhat_marble02_ap.dds",
+      "format": "BC1_RGBA_UNORM",
+      "color_space": "linear",
+      "width": 256,
+      "height": 256,
+      "mip_count": 7,
+      "name_hash": "1082350041293245913"
+    },
+    {
+      "name": "cloud_alt_med__detail1_nrm",
+      "selector": "textures/fps/clouds_runtime.neytd@cloud_alt_med__detail1_nrm",
+      "profile": "alt_med",
+      "role": "detail_normal",
+      "source": "alt_med/detail1_nrm.dds",
+      "format": "BC1_RGBA_UNORM",
+      "color_space": "linear",
+      "width": 64,
+      "height": 64,
+      "mip_count": 5,
+      "name_hash": "9567878575638262803"
+    },
+    {
+      "name": "cloud_cirrus__cloudhat_cirrus_ap",
+      "selector": "textures/fps/clouds_runtime.neytd@cloud_cirrus__cloudhat_cirrus_ap",
+      "profile": "cirrus",
+      "role": "albedo_alpha",
+      "source": "cirrus/cloudhat_cirrus_ap.dds",
+      "format": "BC1_RGBA_UNORM",
+      "color_space": "linear",
+      "width": 1024,
+      "height": 1024,
+      "mip_count": 9,
+      "name_hash": "531720802603959392"
+    },
+    {
+      "name": "cloud_cirrus__cloudhat_cirrus_nrm",
+      "selector": "textures/fps/clouds_runtime.neytd@cloud_cirrus__cloudhat_cirrus_nrm",
+      "profile": "cirrus",
+      "role": "normal",
+      "source": "cirrus/cloudhat_cirrus_nrm.dds",
+      "format": "BC5_RG_UNORM",
+      "color_space": "linear",
+      "width": 1024,
+      "height": 1024,
+      "mip_count": 9,
+      "name_hash": "17388390426328765344"
+    },
+    {
+      "name": "cloud_clear__cloudhat_marble02_ap",
+      "selector": "textures/fps/clouds_runtime.neytd@cloud_clear__cloudhat_marble02_ap",
+      "profile": "clear",
+      "role": "coverage_mask",
+      "source": "clear/cloudhat_marble02_ap.dds",
+      "format": "BC1_RGBA_UNORM",
+      "color_space": "linear",
+      "width": 256,
+      "height": 256,
+      "mip_count": 7,
+      "name_hash": "452730378404539906"
+    },
+    {
+      "name": "cloud_clear__detail1_nrm",
+      "selector": "textures/fps/clouds_runtime.neytd@cloud_clear__detail1_nrm",
+      "profile": "clear",
+      "role": "detail_normal",
+      "source": "clear/detail1_nrm.dds",
+      "format": "BC1_RGBA_UNORM",
+      "color_space": "linear",
+      "width": 64,
+      "height": 64,
+      "mip_count": 5,
+      "name_hash": "7050168758131172366"
+    },
+    {
+      "name": "cloud_clear__new_skyhat_clear01_bot_ap",
+      "selector": "textures/fps/clouds_runtime.neytd@cloud_clear__new_skyhat_clear01_bot_ap",
+      "profile": "clear",
+      "role": "albedo_alpha",
+      "source": "clear/new_skyhat_clear01_bot_ap.dds",
+      "format": "BC1_RGBA_UNORM",
+      "color_space": "linear",
+      "width": 2048,
+      "height": 512,
+      "mip_count": 8,
+      "name_hash": "1924923124251824836"
+    },
+    {
+      "name": "cloud_clear__new_skyhat_clear01_bot_nrm",
+      "selector": "textures/fps/clouds_runtime.neytd@cloud_clear__new_skyhat_clear01_bot_nrm",
+      "profile": "clear",
+      "role": "normal",
+      "source": "clear/new_skyhat_clear01_bot_nrm.dds",
+      "format": "BC5_RG_UNORM",
+      "color_space": "linear",
+      "width": 2048,
+      "height": 512,
+      "mip_count": 8,
+      "name_hash": "10996549524562850572"
+    },
+    {
+      "name": "cloud_cloudy__cloudhat_marble02_ap",
+      "selector": "textures/fps/clouds_runtime.neytd@cloud_cloudy__cloudhat_marble02_ap",
+      "profile": "cloudy",
+      "role": "coverage_mask",
+      "source": "cloudy/cloudhat_marble02_ap.dds",
+      "format": "BC1_RGBA_UNORM",
+      "color_space": "linear",
+      "width": 256,
+      "height": 256,
+      "mip_count": 7,
+      "name_hash": "15272479650058631025"
+    },
+    {
+      "name": "cloud_cloudy__detail1_nrm",
+      "selector": "textures/fps/clouds_runtime.neytd@cloud_cloudy__detail1_nrm",
+      "profile": "cloudy",
+      "role": "detail_normal",
+      "source": "cloudy/detail1_nrm.dds",
+      "format": "BC1_RGBA_UNORM",
+      "color_space": "linear",
+      "width": 64,
+      "height": 64,
+      "mip_count": 5,
+      "name_hash": "3800699556692317595"
+    },
+    {
+      "name": "cloud_cloudy__trialap",
+      "selector": "textures/fps/clouds_runtime.neytd@cloud_cloudy__trialap",
+      "profile": "cloudy",
+      "role": "albedo_alpha",
+      "source": "cloudy/trialap.dds",
+      "format": "BC1_RGBA_UNORM",
+      "color_space": "linear",
+      "width": 2048,
+      "height": 512,
+      "mip_count": 8,
+      "name_hash": "11949909634281564246"
+    },
+    {
+      "name": "cloud_cloudy__trialn",
+      "selector": "textures/fps/clouds_runtime.neytd@cloud_cloudy__trialn",
+      "profile": "cloudy",
+      "role": "normal",
+      "source": "cloudy/trialn.dds",
+      "format": "BC5_RG_UNORM",
+      "color_space": "linear",
+      "width": 2048,
+      "height": 512,
+      "mip_count": 8,
+      "name_hash": "1067806308892652603"
+    },
+    {
+      "name": "cloud_contrails__contrails_ap3",
+      "selector": "textures/fps/clouds_runtime.neytd@cloud_contrails__contrails_ap3",
+      "profile": "contrails",
+      "role": "contrail_mask",
+      "source": "contrails/contrails_ap3.dds",
+      "format": "BC1_RGBA_UNORM",
+      "color_space": "linear",
+      "width": 2048,
+      "height": 128,
+      "mip_count": 6,
+      "name_hash": "1394685126028333642"
+    },
+    {
+      "name": "cloud_contrails__contrails_nrm3",
+      "selector": "textures/fps/clouds_runtime.neytd@cloud_contrails__contrails_nrm3",
+      "profile": "contrails",
+      "role": "contrail_mask",
+      "source": "contrails/contrails_nrm3.dds",
+      "format": "BC1_RGBA_UNORM",
+      "color_space": "linear",
+      "width": 2048,
+      "height": 128,
+      "mip_count": 6,
+      "name_hash": "7187518412597762856"
+    },
+    {
+      "name": "cloud_horizon__cloudhat_marble02_ap",
+      "selector": "textures/fps/clouds_runtime.neytd@cloud_horizon__cloudhat_marble02_ap",
+      "profile": "horizon",
+      "role": "coverage_mask",
+      "source": "horizon/cloudhat_marble02_ap.dds",
+      "format": "BC1_RGBA_UNORM",
+      "color_space": "linear",
+      "width": 256,
+      "height": 256,
+      "mip_count": 7,
+      "name_hash": "8579954928313262984"
+    },
+    {
+      "name": "cloud_horizon__detail1_nrm",
+      "selector": "textures/fps/clouds_runtime.neytd@cloud_horizon__detail1_nrm",
+      "profile": "horizon",
+      "role": "detail_normal",
+      "source": "horizon/detail1_nrm.dds",
+      "format": "BC1_RGBA_UNORM",
+      "color_space": "linear",
+      "width": 64,
+      "height": 64,
+      "mip_count": 5,
+      "name_hash": "15633481165956508816"
+    },
+    {
+      "name": "cloud_horizon__stripeyclouds_ap",
+      "selector": "textures/fps/clouds_runtime.neytd@cloud_horizon__stripeyclouds_ap",
+      "profile": "horizon",
+      "role": "albedo_alpha",
+      "source": "horizon/stripeyclouds_ap.dds",
+      "format": "BC1_RGBA_UNORM",
+      "color_space": "linear",
+      "width": 1024,
+      "height": 512,
+      "mip_count": 8,
+      "name_hash": "17514184330562594382"
+    },
+    {
+      "name": "cloud_horizon__stripeyclouds_nrm",
+      "selector": "textures/fps/clouds_runtime.neytd@cloud_horizon__stripeyclouds_nrm",
+      "profile": "horizon",
+      "role": "normal",
+      "source": "horizon/stripeyclouds_nrm.dds",
+      "format": "BC5_RG_UNORM",
+      "color_space": "linear",
+      "width": 1024,
+      "height": 512,
+      "mip_count": 8,
+      "name_hash": "8364579475663922874"
+    },
+    {
+      "name": "cloud_nimbus__cloudhat_marble02_ap",
+      "selector": "textures/fps/clouds_runtime.neytd@cloud_nimbus__cloudhat_marble02_ap",
+      "profile": "nimbus",
+      "role": "coverage_mask",
+      "source": "nimbus/cloudhat_marble02_ap.dds",
+      "format": "BC1_RGBA_UNORM",
+      "color_space": "linear",
+      "width": 256,
+      "height": 256,
+      "mip_count": 7,
+      "name_hash": "13860118041774018923"
+    },
+    {
+      "name": "cloud_nimbus__detail1_nrm",
+      "selector": "textures/fps/clouds_runtime.neytd@cloud_nimbus__detail1_nrm",
+      "profile": "nimbus",
+      "role": "detail_normal",
+      "source": "nimbus/detail1_nrm.dds",
+      "format": "BC1_RGBA_UNORM",
+      "color_space": "linear",
+      "width": 64,
+      "height": 64,
+      "mip_count": 5,
+      "name_hash": "16308356700780033057"
+    },
+    {
+      "name": "cloud_nimbus__final_nimbusclouds_ap",
+      "selector": "textures/fps/clouds_runtime.neytd@cloud_nimbus__final_nimbusclouds_ap",
+      "profile": "nimbus",
+      "role": "albedo_alpha",
+      "source": "nimbus/final_nimbusclouds_ap.dds",
+      "format": "BC1_RGBA_UNORM",
+      "color_space": "linear",
+      "width": 2048,
+      "height": 512,
+      "mip_count": 8,
+      "name_hash": "12155357566952045126"
+    },
+    {
+      "name": "cloud_nimbus__final_nimbusclouds_n",
+      "selector": "textures/fps/clouds_runtime.neytd@cloud_nimbus__final_nimbusclouds_n",
+      "profile": "nimbus",
+      "role": "normal",
+      "source": "nimbus/final_nimbusclouds_n.dds",
+      "format": "BC5_RG_UNORM",
+      "color_space": "linear",
+      "width": 2048,
+      "height": 512,
+      "mip_count": 8,
+      "name_hash": "12728389017054315243"
+    },
+    {
+      "name": "cloud_puffs__cloudhat_marble02_ap",
+      "selector": "textures/fps/clouds_runtime.neytd@cloud_puffs__cloudhat_marble02_ap",
+      "profile": "puffs",
+      "role": "coverage_mask",
+      "source": "puffs/cloudhat_marble02_ap.dds",
+      "format": "BC1_RGBA_UNORM",
+      "color_space": "linear",
+      "width": 256,
+      "height": 256,
+      "mip_count": 7,
+      "name_hash": "14675739012275902939"
+    },
+    {
+      "name": "cloud_puffs__cloudhat_puffs_ap",
+      "selector": "textures/fps/clouds_runtime.neytd@cloud_puffs__cloudhat_puffs_ap",
+      "profile": "puffs",
+      "role": "albedo_alpha",
+      "source": "puffs/cloudhat_puffs_ap.dds",
+      "format": "BC1_RGBA_UNORM",
+      "color_space": "linear",
+      "width": 2048,
+      "height": 512,
+      "mip_count": 8,
+      "name_hash": "8829781846445504930"
+    },
+    {
+      "name": "cloud_puffs__cloudhat_puffs_nrm",
+      "selector": "textures/fps/clouds_runtime.neytd@cloud_puffs__cloudhat_puffs_nrm",
+      "profile": "puffs",
+      "role": "normal",
+      "source": "puffs/cloudhat_puffs_nrm.dds",
+      "format": "BC5_RG_UNORM",
+      "color_space": "linear",
+      "width": 2048,
+      "height": 512,
+      "mip_count": 8,
+      "name_hash": "3002333171403529590"
+    },
+    {
+      "name": "cloud_puffs__detail1_nrm",
+      "selector": "textures/fps/clouds_runtime.neytd@cloud_puffs__detail1_nrm",
+      "profile": "puffs",
+      "role": "detail_normal",
+      "source": "puffs/detail1_nrm.dds",
+      "format": "BC1_RGBA_UNORM",
+      "color_space": "linear",
+      "width": 64,
+      "height": 64,
+      "mip_count": 5,
+      "name_hash": "11273990027018679409"
+    },
+    {
+      "name": "cloud_rain__skyhat_rain02_ap",
+      "selector": "textures/fps/clouds_runtime.neytd@cloud_rain__skyhat_rain02_ap",
+      "profile": "rain",
+      "role": "albedo_alpha",
+      "source": "rain/skyhat_rain02_ap.dds",
+      "format": "BC1_RGBA_UNORM",
+      "color_space": "linear",
+      "width": 1024,
+      "height": 1024,
+      "mip_count": 9,
+      "name_hash": "13286946167150613954"
+    },
+    {
+      "name": "cloud_rain__skyhat_rain02_n2",
+      "selector": "textures/fps/clouds_runtime.neytd@cloud_rain__skyhat_rain02_n2",
+      "profile": "rain",
+      "role": "density_mask",
+      "source": "rain/skyhat_rain02_n2.dds",
+      "format": "BC5_RG_UNORM",
+      "color_space": "linear",
+      "width": 1024,
+      "height": 1024,
+      "mip_count": 9,
+      "name_hash": "13297431110035152575"
+    },
+    {
+      "name": "cloud_showers__skyhat_showers01_ap",
+      "selector": "textures/fps/clouds_runtime.neytd@cloud_showers__skyhat_showers01_ap",
+      "profile": "showers",
+      "role": "albedo_alpha",
+      "source": "showers/skyhat_showers01_ap.dds",
+      "format": "BC1_RGBA_UNORM",
+      "color_space": "linear",
+      "width": 1024,
+      "height": 1024,
+      "mip_count": 9,
+      "name_hash": "4409965379984405883"
+    },
+    {
+      "name": "cloud_showers__skyhat_showers01_n",
+      "selector": "textures/fps/clouds_runtime.neytd@cloud_showers__skyhat_showers01_n",
+      "profile": "showers",
+      "role": "normal",
+      "source": "showers/skyhat_showers01_n.dds",
+      "format": "BC5_RG_UNORM",
+      "color_space": "linear",
+      "width": 1024,
+      "height": 1024,
+      "mip_count": 9,
+      "name_hash": "17397929188466940084"
+    },
+    {
+      "name": "cloud_storm__cloudhat_marble02_ap",
+      "selector": "textures/fps/clouds_runtime.neytd@cloud_storm__cloudhat_marble02_ap",
+      "profile": "storm",
+      "role": "coverage_mask",
+      "source": "storm/cloudhat_marble02_ap.dds",
+      "format": "BC1_RGBA_UNORM",
+      "color_space": "linear",
+      "width": 256,
+      "height": 256,
+      "mip_count": 7,
+      "name_hash": "7480263732175534010"
+    },
+    {
+      "name": "cloud_storm__detail1_nrm",
+      "selector": "textures/fps/clouds_runtime.neytd@cloud_storm__detail1_nrm",
+      "profile": "storm",
+      "role": "detail_normal",
+      "source": "storm/detail1_nrm.dds",
+      "format": "BC1_RGBA_UNORM",
+      "color_space": "linear",
+      "width": 64,
+      "height": 64,
+      "mip_count": 5,
+      "name_hash": "4378981450643352982"
+    },
+    {
+      "name": "cloud_storm__skyhat_rain02_ap",
+      "selector": "textures/fps/clouds_runtime.neytd@cloud_storm__skyhat_rain02_ap",
+      "profile": "storm",
+      "role": "albedo_alpha",
+      "source": "storm/skyhat_rain02_ap.dds",
+      "format": "BC1_RGBA_UNORM",
+      "color_space": "linear",
+      "width": 1024,
+      "height": 1024,
+      "mip_count": 9,
+      "name_hash": "16620490979291143911"
+    },
+    {
+      "name": "cloud_storm__skyhat_rain02_n2",
+      "selector": "textures/fps/clouds_runtime.neytd@cloud_storm__skyhat_rain02_n2",
+      "profile": "storm",
+      "role": "density_mask",
+      "source": "storm/skyhat_rain02_n2.dds",
+      "format": "BC5_RG_UNORM",
+      "color_space": "linear",
+      "width": 1024,
+      "height": 1024,
+      "mip_count": 9,
+      "name_hash": "16606038998452776902"
+    },
+    {
+      "name": "cloud_storm__stormclouds_ap",
+      "selector": "textures/fps/clouds_runtime.neytd@cloud_storm__stormclouds_ap",
+      "profile": "storm",
+      "role": "albedo_alpha",
+      "source": "storm/stormclouds_ap.dds",
+      "format": "BC1_RGBA_UNORM",
+      "color_space": "linear",
+      "width": 1024,
+      "height": 512,
+      "mip_count": 8,
+      "name_hash": "10233104587420983379"
+    },
+    {
+      "name": "cloud_storm__stormclouds_nrm",
+      "selector": "textures/fps/clouds_runtime.neytd@cloud_storm__stormclouds_nrm",
+      "profile": "storm",
+      "role": "normal",
+      "source": "storm/stormclouds_nrm.dds",
+      "format": "BC5_RG_UNORM",
+      "color_space": "linear",
+      "width": 1024,
+      "height": 512,
+      "mip_count": 8,
+      "name_hash": "13289996223318444245"
+    },
+    {
+      "name": "cloud_test__cloudhat_marble02_ap",
+      "selector": "textures/fps/clouds_runtime.neytd@cloud_test__cloudhat_marble02_ap",
+      "profile": "test",
+      "role": "coverage_mask",
+      "source": "test/cloudhat_marble02_ap.dds",
+      "format": "BC1_RGBA_UNORM",
+      "color_space": "linear",
+      "width": 256,
+      "height": 256,
+      "mip_count": 7,
+      "name_hash": "16581591470668961925"
+    },
+    {
+      "name": "cloud_test__detail1_nrm",
+      "selector": "textures/fps/clouds_runtime.neytd@cloud_test__detail1_nrm",
+      "profile": "test",
+      "role": "detail_normal",
+      "source": "test/detail1_nrm.dds",
+      "format": "BC1_RGBA_UNORM",
+      "color_space": "linear",
+      "width": 64,
+      "height": 64,
+      "mip_count": 5,
+      "name_hash": "14156696719170986799"
+    },
+    {
+      "name": "cloud_test__testwritting",
+      "selector": "textures/fps/clouds_runtime.neytd@cloud_test__testwritting",
+      "profile": "test",
+      "role": "density_mask",
+      "source": "test/testwritting.dds",
+      "format": "BC1_RGBA_UNORM",
+      "color_space": "linear",
+      "width": 1024,
+      "height": 1024,
+      "mip_count": 9,
+      "name_hash": "10224242007069974217"
+    },
+    {
+      "name": "cloud_test__testwritting_nrm",
+      "selector": "textures/fps/clouds_runtime.neytd@cloud_test__testwritting_nrm",
+      "profile": "test",
+      "role": "normal",
+      "source": "test/testwritting_nrm.dds",
+      "format": "BC1_RGBA_UNORM",
+      "color_space": "linear",
+      "width": 1024,
+      "height": 1024,
+      "mip_count": 9,
+      "name_hash": "18212092935375186429"
+    },
+    {
+      "name": "cloud_wispy__skyhat_cirrocumulus01_ap",
+      "selector": "textures/fps/clouds_runtime.neytd@cloud_wispy__skyhat_cirrocumulus01_ap",
+      "profile": "wispy",
+      "role": "albedo_alpha",
+      "source": "wispy/skyhat_cirrocumulus01_ap.dds",
+      "format": "BC1_RGBA_UNORM",
+      "color_space": "linear",
+      "width": 1024,
+      "height": 1024,
+      "mip_count": 9,
+      "name_hash": "14121717119732286898"
+    },
+    {
+      "name": "cloud_wispy__skyhat_cirrocumulus01_nrm",
+      "selector": "textures/fps/clouds_runtime.neytd@cloud_wispy__skyhat_cirrocumulus01_nrm",
+      "profile": "wispy",
+      "role": "normal",
+      "source": "wispy/skyhat_cirrocumulus01_nrm.dds",
+      "format": "BC5_RG_UNORM",
+      "color_space": "linear",
+      "width": 1024,
+      "height": 1024,
+      "mip_count": 9,
+      "name_hash": "10802490246910908646"
+    },
+    {
+      "name": "cloud_wispy__wisps_ap",
+      "selector": "textures/fps/clouds_runtime.neytd@cloud_wispy__wisps_ap",
+      "profile": "wispy",
+      "role": "albedo_alpha",
+      "source": "wispy/wisps_ap.dds",
+      "format": "BC1_RGBA_UNORM",
+      "color_space": "linear",
+      "width": 1024,
+      "height": 512,
+      "mip_count": 8,
+      "name_hash": "474082763823230425"
+    },
+    {
+      "name": "cloud_wispy__wisps_nrm",
+      "selector": "textures/fps/clouds_runtime.neytd@cloud_wispy__wisps_nrm",
+      "profile": "wispy",
+      "role": "normal",
+      "source": "wispy/wisps_nrm.dds",
+      "format": "BC5_RG_UNORM",
+      "color_space": "linear",
+      "width": 1024,
+      "height": 512,
+      "mip_count": 8,
+      "name_hash": "8055701053333593151"
+    }
+  ]
+}

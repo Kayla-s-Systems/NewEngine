@@ -99,6 +99,12 @@ impl RenderFrameOrchestrator {
                 );
             }
             shadows::ShadowFrame::disabled(lit.white_texture)
+        } else if shadow_plan.is_active() && !render_shadow_map {
+            // The cached shadow texture was rendered with the cached light MVP.
+            // Keep sampling with that same frame until the next scheduled shadow
+            // refresh; otherwise a moving sun would sample an old shadow map with
+            // a new light matrix and produce swimming/self-shadowing artefacts.
+            controller.cached_shadow_frame().unwrap_or(shadow_plan.frame)
         } else {
             shadow_plan.frame
         };

@@ -48,6 +48,10 @@ pub(crate) const RUNTIME_SERVICE_CATALOG: &[RuntimeServiceCatalogEntry] = &[
         "asset clients / VFS / material texture load",
     ),
     RuntimeServiceCatalogEntry::new(
+        newengine_assets_api::ASSET_FILE_TYPES_RUNTIME_REQUIREMENT_SPEC,
+        "asset browser / registered file-type handlers / VFS navigation",
+    ),
+    RuntimeServiceCatalogEntry::new(
         newengine_audio_api::AUDIO_RUNTIME_REQUIREMENT_SPEC,
         "semantic audio events / UI feedback / future mixer backend",
     ),

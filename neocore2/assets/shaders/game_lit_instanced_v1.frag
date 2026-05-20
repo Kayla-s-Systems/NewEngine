@@ -166,7 +166,12 @@ float sample_shadow(vec4 light_clip, vec3 nrm, vec3 light_dir_to_scene) {
     float strength = clamp(ubo.u_shadow_params.z, 0.0, 0.78);
 
     float lit = shadow_compare_quality(uv, current, bias);
-    return mix(1.0 - strength, 1.0, lit);
+    float border = min(min(uv.x, uv.y), min(1.0 - uv.x, 1.0 - uv.y));
+    float edge_fade = smoothstep(0.006, 0.055, border)
+        * smoothstep(0.010, 0.080, ndc.z)
+        * (1.0 - smoothstep(0.920, 0.992, ndc.z));
+    float shadowed = mix(1.0 - strength, 1.0, lit);
+    return mix(1.0, shadowed, edge_fade);
 }
 
 float distribution_ggx(vec3 N, vec3 H, float roughness) {
@@ -266,6 +271,34 @@ float point_light_attenuation(float dist, float range) {
     return (window * window) / max(1.0 + dist * dist * 0.045, 1.0);
 }
 
+vec3 sky_dome_radiance(vec3 sampled, vec3 tint, vec3 view_dir, vec3 emissive_color) {
+    vec3 to_sun = normalize(-ubo.u_dir_dir_intensity.xyz);
+    float sun_elevation = to_sun.y;
+    float day = smoothstep(-0.10, 0.22, sun_elevation);
+    float horizon = pow(saturate(1.0 - abs(view_dir.y)), 1.65);
+
+    vec3 night_zenith = vec3(0.008, 0.014, 0.035);
+    vec3 day_zenith = vec3(0.16, 0.36, 0.78);
+    vec3 zenith = mix(night_zenith, day_zenith, day);
+    vec3 sunset = vec3(1.0, 0.50, 0.23);
+    vec3 day_horizon = mix(vec3(0.54, 0.72, 0.96), sunset, smoothstep(-0.04, 0.18, sun_elevation) * (1.0 - smoothstep(0.16, 0.52, sun_elevation)));
+    vec3 night_horizon = vec3(0.018, 0.022, 0.050);
+    vec3 atmosphere = mix(zenith, mix(night_horizon, day_horizon, day), horizon);
+
+    vec3 cloud_sample = material_texture_safe(sampled, tint, vec3(0.42, 0.46, 0.54));
+    float density = saturate(max(max(cloud_sample.r, cloud_sample.g), cloud_sample.b) * 1.30);
+    vec3 cloud_day = vec3(1.0, 0.965, 0.88);
+    vec3 cloud_night = vec3(0.055, 0.065, 0.095);
+    vec3 cloud_color = mix(cloud_night, cloud_day, day) * density * (0.20 + 0.65 * horizon);
+
+    float sun_dot = saturate(dot(view_dir, to_sun));
+    float disk = pow(sun_dot, 4096.0) * 3.8;
+    float halo = pow(sun_dot, 64.0) * 0.18 + pow(sun_dot, 12.0) * 0.025;
+    vec3 sun = ubo.u_dir_color.rgb * max(ubo.u_dir_dir_intensity.w, 0.0) * day * (disk + halo);
+
+    return max(atmosphere + cloud_color + sun + emissive_color * 0.18, vec3(0.0));
+}
+
 void main() {
     vec2 stable_material_uv_dx = dFdx(v_uv);
     vec2 stable_material_uv_dy = dFdy(v_uv);
@@ -291,6 +324,14 @@ void main() {
     vec3 view_vec = camera_pos - v_wpos;
     float view_len2 = dot(view_vec, view_vec);
     vec3 V = view_len2 > 1.0e-6 ? view_vec * inversesqrt(view_len2) : vec3(0.0, 0.0, 1.0);
+
+    float sky_mask = smoothstep(0.75, 1.45, max(max(emissive_color.r, emissive_color.g), emissive_color.b));
+    if (sky_mask > 0.01) {
+        vec3 sky_view_dir = safe_normalize(-V, safe_normalize(v_wpos, vec3(0.0, 1.0, 0.0)));
+        vec3 sky = sky_dome_radiance(safe_texel, v_base.rgb, sky_view_dir, emissive_color.rgb);
+        o_color = vec4(sky, 1.0);
+        return;
+    }
 
     vec3 color = hemi_ambient(base, N, V, roughness, metallic, occlusion);
 

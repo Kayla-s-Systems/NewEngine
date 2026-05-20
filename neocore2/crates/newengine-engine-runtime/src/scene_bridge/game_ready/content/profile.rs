@@ -90,6 +90,9 @@ pub(in crate::scene_bridge::game_ready) struct GameReadyTerrainGeneratorSpec {
 pub(in crate::scene_bridge::game_ready) struct GameReadySkySpec {
     pub(in crate::scene_bridge::game_ready) radius: f32,
     pub(in crate::scene_bridge::game_ready) mesh: String,
+    pub(in crate::scene_bridge::game_ready) follow_camera: bool,
+    pub(in crate::scene_bridge::game_ready) cloud_dictionary: String,
+    pub(in crate::scene_bridge::game_ready) cloud_profile: String,
 }
 
 #[derive(Clone, Debug)]
@@ -132,6 +135,16 @@ pub(in crate::scene_bridge::game_ready) struct GameReadyLightingSpec {
     pub(in crate::scene_bridge::game_ready) sun_color: ColorRgb,
     pub(in crate::scene_bridge::game_ready) sun_intensity: f32,
     pub(in crate::scene_bridge::game_ready) shadows: GameReadyShadowSpec,
+    pub(in crate::scene_bridge::game_ready) day_night: GameReadyDayNightSpec,
+}
+
+#[derive(Clone, Debug)]
+pub(in crate::scene_bridge::game_ready) struct GameReadyDayNightSpec {
+    pub(in crate::scene_bridge::game_ready) enabled: bool,
+    pub(in crate::scene_bridge::game_ready) time_of_day_hours: f32,
+    pub(in crate::scene_bridge::game_ready) day_length_seconds: f32,
+    pub(in crate::scene_bridge::game_ready) latitude_degrees: f32,
+    pub(in crate::scene_bridge::game_ready) axial_tilt_degrees: f32,
 }
 
 #[derive(Clone, Debug)]

@@ -4,7 +4,7 @@ use abi_stable::std_types::RString;
 use newengine_plugin_api::{Blob, HostApiV1, MethodName};
 
 use crate::asset_access::{
-    AssetAccess, AssetError, AssetResult, AssetService, AssetState,
+    AssetAccess, AssetDecodeRequest, AssetError, AssetResult, AssetService, AssetState,
     Rgba8TextureAsset, RuntimeTextureAsset, RuntimeTextureFormat, RuntimeTextureMip,
 };
 use crate::consts::{method, ASSET_SERVICE_ID};
@@ -28,6 +28,7 @@ pub struct AssetServiceClient {
     m_text_v1: MethodName,
     m_raw_bytes_v1: MethodName,
     m_texture_rgba8_v1: MethodName,
+    m_decode_v1: MethodName,
     m_texture_dictionary_rgba8_v1: MethodName,
     m_texture_dictionary_runtime_v1: MethodName,
     m_status_json_v1: MethodName,
@@ -56,6 +57,7 @@ impl AssetServiceClient {
             m_text_v1: MethodName::from(method::TEXT_V1),
             m_raw_bytes_v1: MethodName::from(method::RAW_BYTES_V1),
             m_texture_rgba8_v1: MethodName::from(method::TEXTURE_RGBA8_V1),
+            m_decode_v1: MethodName::from(method::DECODE_V1),
             m_texture_dictionary_rgba8_v1: MethodName::from(method::TEXTURE_DICTIONARY_RGBA8_V1),
             m_texture_dictionary_runtime_v1: MethodName::from(method::TEXTURE_DICTIONARY_RUNTIME_V1),
             m_status_json_v1: MethodName::from(method::STATUS_JSON_V1),
@@ -325,6 +327,12 @@ impl AssetServiceClient {
         Self::decode_ok_json(self.call_raw(self.m_project_status_json_v1.clone(), bytes)?)
     }
 
+    #[inline]
+    pub fn decode_v1(&self, request: &AssetDecodeRequest) -> Result<Vec<u8>, String> {
+        let payload = serde_json::to_vec(request).map_err(|e| e.to_string())?;
+        self.call_raw(self.m_decode_v1.clone(), payload)
+    }
+
     /// Select and read one texture from a .neytd dictionary.
     ///
     /// The service accepts either texture_name or texture_hash. When both are omitted,
@@ -436,6 +444,10 @@ impl AssetAccess for AssetServiceClient {
         // Contract payload: utf8 id_u128_hex32
         let bytes = self.call_raw(self.m_blob_wire_v1.clone(), id_hex32.as_bytes().to_vec())?;
         Self::decode_blob_wire_v1(bytes)
+    }
+
+    fn decode_v1(&self, request: &AssetDecodeRequest) -> Result<Vec<u8>, String> {
+        AssetServiceClient::decode_v1(self, request)
     }
 
     fn texture_rgba8_v1(&self, id_hex32: &str) -> Result<Rgba8TextureAsset, String> {
