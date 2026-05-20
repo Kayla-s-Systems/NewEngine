@@ -76,6 +76,7 @@ impl Default for EcsServiceInfo {
                 "gateway-summary".to_owned(),
                 "entity-snapshot".to_owned(),
                 "command-envelope".to_owned(),
+                "semantic-component-packets".to_owned(),
             ],
             methods: ECS_REQUIRED_METHODS_V1.iter().map(|it| (*it).to_owned()).collect(),
         }
@@ -127,13 +128,13 @@ pub struct EcsWorldSnapshot {
     pub truncated: bool,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct EcsCommandRequest {
     #[serde(default)]
     pub commands: Vec<EcsCommand>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "op", rename_all = "snake_case")]
 pub enum EcsCommand {
     /// Sets the world tick. The implementation must clamp to its valid range.
@@ -142,6 +143,22 @@ pub enum EcsCommand {
     AdvanceTick,
     /// Creates an empty entity and returns its opaque stable id.
     SpawnEmpty,
+    /// Attaches or replaces a provider-neutral semantic component packet.
+    ///
+    /// The packet is intentionally JSON and component-type tagged. Typed hot-path
+    /// runtimes may cache it in native storages, but service boundaries must not
+    /// expose concrete `World` component storage.
+    SetComponentJson {
+        entity_id: u64,
+        component_type: String,
+        #[serde(default)]
+        payload: serde_json::Value,
+    },
+    /// Removes a provider-neutral semantic component packet from an entity.
+    RemoveComponentJson {
+        entity_id: u64,
+        component_type: String,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

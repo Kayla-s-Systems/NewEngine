@@ -55,6 +55,19 @@ impl EngineSceneGatewayService {
         Self { scene, asset_mounts: Some(asset_mounts) }
     }
 
+
+    fn authority_json(&self) -> serde_json::Value {
+        let snap = self.scene.authority_snapshot();
+        serde_json::json!({
+            "authority": snap.authority_label(),
+            "split": snap.has_split_world_authority(),
+            "ecs_owner": snap.ecs.as_ref().map(|r| r.provider_owner_id.clone()),
+            "entity_owner": snap.entity.as_ref().map(|r| r.provider_owner_id.clone()),
+            "scene_owner": snap.scene.as_ref().map(|r| r.provider_owner_id.clone()),
+            "notes": snap.notes.clone(),
+        })
+    }
+
     fn formats_json(&self) -> RResult<Blob, RString> {
         ok_json(serde_json::json!({
             "id": ENGINE_SCENE_SERVICE_ID,
@@ -70,6 +83,7 @@ impl EngineSceneGatewayService {
                     "save": true
                 }
             ],
+            "authority_topology": self.authority_json(),
             "methods": [
                 scene_method::FORMATS_JSON,
                 scene_method::LOAD_JSON_V1,
@@ -135,6 +149,14 @@ impl EngineSceneGatewayService {
         };
 
         {
+            let authority = self.scene.authority_snapshot();
+            if authority.has_split_world_authority() {
+                log::warn!(
+                    "engine.scene load_json_v1 running while world authority is split authority='{}' notes='{}'",
+                    authority.authority_label(),
+                    authority.notes.join(";")
+                );
+            }
             let scene_lock = self.scene.scene();
             let mut scene = scene_lock.write();
             if let Err(e) = scene.load_asset(&asset) {
@@ -150,7 +172,8 @@ impl EngineSceneGatewayService {
             "replace": true,
             "entities": asset.entities.len(),
             "schema": asset.schema,
-            "version": asset.version
+            "version": asset.version,
+            "authority_topology": self.authority_json()
         }))
     }
 
@@ -191,6 +214,7 @@ impl EngineSceneGatewayService {
             "path": path,
             "stored": false,
             "storage": "caller-owned",
+            "authority_topology": self.authority_json(),
             "pretty": pretty,
             "payload": payload,
             "payload_text": payload_text

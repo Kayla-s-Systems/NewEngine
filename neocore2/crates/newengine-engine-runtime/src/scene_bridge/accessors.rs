@@ -17,13 +17,34 @@ impl SceneBridge {
     }
 
     #[inline]
+    pub fn authority_bridge(&self) -> std::sync::Arc<crate::authority::RuntimeWorldAuthorityBridge> {
+        std::sync::Arc::clone(&self.authority)
+    }
+
+    #[inline]
+    pub fn authority_snapshot(&self) -> newengine_runtime_host::world_authority::WorldAuthoritySnapshot {
+        self.authority.detect()
+    }
+
+    #[inline]
     pub fn selection(&self) -> Option<EntityId> {
         *self.selection.lock()
     }
 
     #[inline]
+    pub fn selection_authority_handle(&self) -> Option<newengine_entity_api::EntityHandle> {
+        *self.selection_authority.lock()
+    }
+
+    #[inline]
     pub fn set_selection(&self, id: Option<EntityId>) {
         *self.selection.lock() = id;
+        let authority = id.and_then(|entity| {
+            let scene = self.scene.read();
+            crate::authority::current_entity_authority_map(scene.world())
+                .and_then(|map| map.provider_for_native(entity))
+        });
+        *self.selection_authority.lock() = authority;
     }
 
     #[inline]

@@ -123,6 +123,30 @@ impl EngineEcsGatewayService {
                         message: "entity spawned".to_owned(),
                     });
                 }
+                EcsCommand::SetComponentJson { entity_id, component_type, .. } => {
+                    results.push(EcsCommandResult {
+                        index,
+                        ok: false,
+                        entity_id: Some(entity_id),
+                        tick: world.tick(),
+                        message: format!(
+                            "semantic component packet '{}' requires a provider-backed component authority",
+                            component_type
+                        ),
+                    });
+                }
+                EcsCommand::RemoveComponentJson { entity_id, component_type } => {
+                    results.push(EcsCommandResult {
+                        index,
+                        ok: false,
+                        entity_id: Some(entity_id),
+                        tick: world.tick(),
+                        message: format!(
+                            "semantic component packet removal '{}' requires a provider-backed component authority",
+                            component_type
+                        ),
+                    });
+                }
             }
         }
 

@@ -7,6 +7,7 @@
 //! render controller that talks to `newengine-render-api`. Applications consume
 //! this layer; they must not create backend resources or Vulkan objects directly.
 
+pub mod authority;
 pub mod audio_gateway;
 pub mod camera_gateway;
 pub mod engine_bounds;
@@ -28,6 +29,7 @@ pub mod scene_bridge;
 pub mod viewport_bridge;
 
 pub use audio_gateway::register_audio_gateway_best_effort;
+pub use authority::{RuntimeWorldAuthorityBridge, RuntimeWorldAuthorityFrame, RuntimeWorldAuthorityMode, RuntimeWorldAuthorityResource};
 
 pub use gameplay::{PhysicsBodyDesc, CollisionShapeDesc, GameRunMode, GameplayActor, PlayerActor};
 pub use plugin_manager::PluginManagerBridge;

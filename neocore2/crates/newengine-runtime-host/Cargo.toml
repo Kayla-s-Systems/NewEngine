@@ -26,6 +26,7 @@ newengine-input-api = { path = "../newengine-input-api" }
 newengine-plugin-api = { path = "../newengine-plugin-api" }
 newengine-service-api = { path = "../newengine-service-api" }
 newengine-service-kit = { path = "../newengine-service-kit" }
+newengine-scene-io = { path = "../newengine-scene-io" }
 newengine-ecs-api = { path = "../newengine-ecs-api" }
 newengine-entity-api = { path = "../newengine-entity-api" }
 newengine-render-api = { path = "../newengine-render-api" }

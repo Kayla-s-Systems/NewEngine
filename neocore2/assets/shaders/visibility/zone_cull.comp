@@ -1,0 +1,30 @@
+#version 450
+#include "visibility_common.glsl"
+
+layout(local_size_x = 1, local_size_y = 1, local_size_z = 1) in;
+
+layout(set = 0, binding = 0, std430) readonly buffer HiZBuffer {
+    vec4 mip_stats[];
+} u_hiz;
+layout(set = 0, binding = 1, std430) readonly buffer VisibilityFeedbackBuffer {
+    NeVisibilityFeedback feedback[];
+} u_feedback;
+layout(set = 0, binding = 2, std430) readonly buffer PvsBuffer {
+    NePvsRecord pvs[];
+} u_pvs;
+layout(set = 0, binding = 3, std430) buffer ZoneBuffer {
+    NeZoneRecord zones[];
+} u_zones;
+
+void main() {
+    uint zone = ne_tile_index();
+    if (zone >= pc.counts.y) {
+        return;
+    }
+    uint pvs_index = zone % max(1u, pc.counts.z);
+    uvec4 pvs = u_pvs.pvs[pvs_index].sector_key_distance;
+    uint attr_flags = pc.flags.w != 0u ? 1u : 0u;
+    uint phase_mask = pc.counts.w;
+    uint visible_count = pvs.z;
+    u_zones.zones[zone].flags_mask_count = uvec4(attr_flags, phase_mask, visible_count, 0u);
+}

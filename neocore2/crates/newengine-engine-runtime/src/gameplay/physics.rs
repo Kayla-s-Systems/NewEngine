@@ -1,6 +1,8 @@
 use newengine_core::physics::PhysicsApiRef;
 use newengine_ecs::World;
 
+use crate::authority::{current_entity_authority_map, current_world_authority_frame, RuntimeWorldAuthorityMode};
+
 mod frame_input;
 mod frame_output;
 mod terrain_colliders;
@@ -62,6 +64,24 @@ pub(super) fn step_service_physics(
     let fixed_tick = ensure_sync_module(world)
         .map(|sync| sync.next_fixed_tick())
         .unwrap_or(0);
+    if let Some(authority) = current_world_authority_frame(world) {
+        if matches!(
+            authority.mode,
+            RuntimeWorldAuthorityMode::PluginEcsEntityAuthority | RuntimeWorldAuthorityMode::SplitAuthority
+        ) {
+            let provider_entities = current_entity_authority_map(world)
+                .map(|map| map.native_to_provider.len())
+                .unwrap_or(0);
+            log::trace!(
+                "physics sync: stepping from native component cache under service authority mode='{}' owner='{}' native_entities={} provider_entities={} source='authority-map'",
+                authority.mode.as_str(),
+                authority.route_snapshot.authority_label(),
+                authority.native_entity_count,
+                provider_entities
+            );
+        }
+    }
+
     let input = build_frame_input(world, frame_index, fixed_tick, dt);
 
     let output = {

@@ -32,6 +32,8 @@ newengine-input-api = { path = "../newengine-input-api" }
 newengine-input-bindings-api = { path = "../newengine-input-bindings-api" }
 newengine-input-bindings-runtime = { path = "../newengine-input-bindings-runtime" }
 newengine-ecs = { path = "../newengine-ecs" }
+newengine-ecs-api = { path = "../newengine-ecs-api" }
+newengine-entity-api = { path = "../newengine-entity-api" }
 newengine-lighting = { path = "../newengine-lighting" }
 newengine-materials = { path = "../newengine-materials", features = ["serde"] }
 newengine-material-domain-api = { path = "../newengine-material-domain-api" }

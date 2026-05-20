@@ -36,6 +36,7 @@ use newengine_scene::{spawn_named, Scene, SceneAsset};
 use newengine_transform::Transform;
 
 use crate::audio_gateway::register_audio_gateway_best_effort;
+use crate::authority::RuntimeWorldAuthorityBridge;
 use crate::camera_gateway::CameraGatewayBridge;
 use crate::gameplay::{
     ensure_physics_body, remove_physics_body, spawn_default_player, DisplayMode,
@@ -63,10 +64,12 @@ pub struct SceneBridge {
     scene: Arc<RwLock<Scene>>,
     queue: Arc<Mutex<SceneQueue>>,
     selection: Arc<Mutex<Option<EntityId>>>,
+    selection_authority: Arc<Mutex<Option<newengine_entity_api::EntityHandle>>>,
     primitives: Arc<RwLock<PrimitiveRegistry>>,
     materials: Arc<RwLock<MaterialRegistry>>,
     asset_assemblers: Arc<RwLock<Vec<SceneImportedAssetAssembler>>>,
     camera_gateway: Arc<CameraGatewayBridge>,
+    authority: Arc<RuntimeWorldAuthorityBridge>,
     play_mode: Arc<Mutex<GameRunMode>>,
 }
 impl SceneBridge {
@@ -93,10 +96,12 @@ impl SceneBridge {
             scene: Arc::new(RwLock::new(initial)),
             queue: Arc::new(Mutex::new(SceneQueue::default())),
             selection: Arc::new(Mutex::new(initial_selection)),
+            selection_authority: Arc::new(Mutex::new(None)),
             primitives,
             materials,
             asset_assemblers: Arc::new(RwLock::new(builtin_asset_assemblers())),
             camera_gateway: Arc::new(CameraGatewayBridge::new()),
+            authority: Arc::new(RuntimeWorldAuthorityBridge::new()),
             play_mode: Arc::new(Mutex::new(initial_mode)),
         }
     }
@@ -121,14 +126,22 @@ impl SceneBridge {
             return None;
         }
 
-        let selected = {
+        let (selected, selected_authority) = {
             let mut scene = self.scene.write();
             let mut prims = self.primitives.write();
             let mats = self.materials.read();
-            bootstrap_fps_game_ready_scene(&mut scene, &mut *prims, &*mats)
+            let selected = bootstrap_fps_game_ready_scene(&mut scene, &mut *prims, &*mats);
+            let selected_authority = self.authority.declare_native_scene_cache(
+                scene.world_mut(),
+                "game-ready-scene-bootstrap",
+                selected,
+            );
+            (selected, selected_authority)
         };
 
         *self.selection.lock() = selected;
+        *self.selection_authority.lock() = selected_authority;
+        self.authority.log_bootstrap_boundary("game-ready-scene-bootstrap");
         // Do not expose Play here. CPU scene bootstrap is not equivalent to
         // playable-world readiness; renderer-side launch gate owns promotion.
         *self.play_mode.lock() = GameRunMode::Staging;

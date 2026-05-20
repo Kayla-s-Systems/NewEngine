@@ -62,10 +62,12 @@ impl GameReadySceneBootstrapModule {
         match self.scene.bootstrap_game_ready_scene_now() {
             Some(player) => {
                 self.bootstrapped = true;
+                let selected_player_authority = self.scene.selection_authority_handle();
                 log::info!(
-                    "game-ready runtime: CPU scene bootstrapped via lifecycle dispatch origin='{}' selected_player={:?}; waiting for launch gate before public Play",
+                    "game-ready runtime: CPU scene bootstrapped via lifecycle dispatch origin='{}' selected_player_cache={:?} selected_player_authority={:?}; waiting for launch gate before public Play",
                     origin,
-                    player
+                    player,
+                    selected_player_authority
                 );
             }
             None => {

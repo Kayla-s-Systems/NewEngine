@@ -12,6 +12,21 @@ pub const ENGINE_SCENE_SERVICE_ID: &str = "engine.scene";
 /// Capability id used by scene providers or engine-owned scene gateway sources.
 pub const SCENE_BACKEND_CAPABILITY_ID: &str = "scene.backend";
 
+/// Default provider service id for replaceable scene backends.
+///
+/// Consumers still call [`ENGINE_SCENE_SERVICE_ID`]; this id is the provider-side
+/// contract declared by plugins in `scene.backend` route metadata.
+pub const SCENE_SERVICE_ID: &str = "scene.api";
+
+/// Generic backend-family declaration for scene providers.
+pub const SCENE_BACKEND_SERVICE_SPEC: newengine_service_api::BackendServiceSpec =
+    newengine_service_api::BackendServiceSpec::new(
+        "scene",
+        ENGINE_SCENE_SERVICE_ID,
+        SCENE_SERVICE_ID,
+        SCENE_BACKEND_CAPABILITY_ID,
+    );
+
 /// Canonical method names for the scene gateway.
 ///
 /// Method naming is contract-first and stable across versions.
