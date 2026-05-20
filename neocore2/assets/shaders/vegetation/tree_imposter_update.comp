@@ -1,0 +1,26 @@
+#version 450
+layout(local_size_x = 64, local_size_y = 1, local_size_z = 1) in;
+
+struct ImposterUpdateRecord {
+    vec4 center_radius;
+    vec4 atlas_page_tile;
+};
+
+layout(push_constant) uniform ImposterUpdatePush {
+    uint candidate_count;
+    uint page_count;
+    uint update_budget;
+    uint frame_index;
+} pc;
+
+layout(std430, set = 0, binding = 0) writeonly buffer ImposterUpdatesOut {
+    ImposterUpdateRecord updates[];
+};
+
+void main() {
+    uint id = gl_GlobalInvocationID.x;
+    if (id >= pc.update_budget || id >= pc.candidate_count) return;
+    uint page = (id + pc.frame_index) % max(pc.page_count, 1u);
+    updates[id].center_radius = vec4(float(id & 31u) * 4.0, 0.0, float(id >> 5u) * 4.0, 32.0);
+    updates[id].atlas_page_tile = vec4(float(page), float(id % 8u), float((id / 8u) % 8u), 1.0);
+}

@@ -322,6 +322,32 @@ float point_light_attenuation(float dist, float range) {
     return (window * window) / max(1.0 + dist * dist * 0.045, 1.0);
 }
 
+
+vec3 daylight_guard_ambient(vec3 base, vec3 normal_ws, vec3 view_ws, float roughness, float metallic, float occlusion, out bool guard_active) {
+    float ambient_energy = ne_luma(abs(ubo.u_ambient.rgb)) * max(ubo.u_ambient.a, 0.0);
+    float sun_energy = ne_luma(abs(ubo.u_dir_color.rgb)) * max(ubo.u_dir_dir_intensity.w, 0.0);
+    guard_active = ambient_energy < 0.0025 && sun_energy < 0.0025;
+    if (!guard_active) {
+        return vec3(0.0);
+    }
+
+    // Failsafe for legacy material UBOs: if a scene has TOD-driven sky/terrain
+    // but an opaque material receives zero ambient and zero sun, keep it visible
+    // with the same daytime floor used by GameReady bootstrapping. This mirrors
+    // professional shader stacks that separate black-level protection from final
+    // tone mapping instead of allowing valid albedo to collapse to black.
+    float up = saturate(normal_ws.y * 0.5 + 0.5);
+    vec3 sky = vec3(0.38, 0.42, 0.50) * 0.28 * mix(0.78, 1.16, up);
+    vec3 ground = vec3(0.20, 0.18, 0.15) * 0.28;
+    vec3 ambient = mix(ground, sky, up) * base * max(occlusion, 0.35);
+
+    vec3 L = normalize(vec3(0.53590363, 0.7989835, 0.27282366));
+    vec3 direct = pbr_direct(base, normal_ws, view_ws, L, vec3(1.0, 0.94, 0.82), 2.35, roughness, metallic);
+    vec3 F0 = mix(vec3(0.04), base, metallic);
+    vec3 rim = fresnel_schlick_roughness(max(dot(normal_ws, view_ws), 0.0), F0, roughness) * sky * 0.10;
+    return max(ambient + direct + rim, base * 0.06);
+}
+
 vec3 sky_dome_radiance(vec3 sampled, vec3 tint, vec3 view_dir, vec3 emissive_color) {
     vec3 to_sun = normalize(-ubo.u_dir_dir_intensity.xyz);
     float sun_elevation = to_sun.y;
@@ -384,7 +410,11 @@ void main() {
         return;
     }
 
-    vec3 color = hemi_ambient(base, N, V, roughness, metallic, occlusion);
+    bool daylight_guard_active = false;
+    vec3 color = daylight_guard_ambient(base, N, V, roughness, metallic, occlusion, daylight_guard_active);
+    if (!daylight_guard_active) {
+        color = hemi_ambient(base, N, V, roughness, metallic, occlusion);
+    }
 
     vec3 Ld = normalize(-ubo.u_dir_dir_intensity.xyz);
     float shadow = sample_shadow(v_light_clip, N, ubo.u_dir_dir_intensity.xyz);
@@ -421,6 +451,12 @@ void main() {
     }
 
     color += emissive_color.rgb;
+
+    // Debug-safe black floor: never let a valid non-sky material with resolved
+    // albedo become physically invisible because every light input was missing.
+    if (daylight_guard_active) {
+        color = max(color, base * 0.08);
+    }
 
     o_color = vec4(max(color, vec3(0.0)), v_base.a * texel.a);
 }

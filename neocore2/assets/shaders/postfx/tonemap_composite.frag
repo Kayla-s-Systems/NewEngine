@@ -2,9 +2,12 @@
 #include "postfx_common.glsl"
 void main() {
     vec3 hdr = sample_color(0, v_uv);
-    vec3 bloom = sample_color(1, v_uv) * pc.p[18];
-    float ao = sample_color(2, v_uv).r;
-    vec3 color = (hdr + bloom) * mix(1.0, ao, 0.55);
+
+    // Standard runtime PostFX is color-preserving until the render graph wires
+    // named bloom/SSAO targets. Descriptor fallback intentionally binds missing
+    // inputs to the scene color, so sampling binding 1/2 here would treat the
+    // scene itself as bloom/AO and crush opaque materials toward black.
+    vec3 color = hdr;
     color *= exp2(pc.p[0]);
     color = max(color - pc.p[2], vec3(0.0));
     if (pc.p[3] < 0.5) {

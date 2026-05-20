@@ -52,3 +52,15 @@ The root forward shaders were refreshed after the HDR render-scope refactor expo
 
 The uploaded professional shader archive remains a visual/architectural reference. The runtime roots are rewritten for NewEngine's current descriptor layout and stay self-contained until the native effect registry can bind shared shader libraries safely.
 
+
+## 2026-05-20 vegetation renderer pass
+
+`shaders/vegetation` is the renderer-owned contract pack for grass, tree, imposter and SPM-tree materials. Runtime shader roots remain self-contained because the current shader cache still treats one logical shader asset as one compile unit. The shared `.glsl` files document the common contract, while executable roots inline the required helpers until a proper virtual include resolver lands.
+
+Programs:
+- `effect.vegetation.grass_instanced` — wind-deformed instanced grass draw path;
+- `effect.vegetation.grass_shadow` — alpha-cutout grass shadow caster path;
+- `effect.vegetation.tree_mesh_wind` — branch-weighted wind tree mesh path;
+- `effect.vegetation.tree_imposter_atlas` — billboard/imposter atlas material;
+- `effect.vegetation.tree_imposter_update` — bounded per-frame imposter update job contract;
+- `effect.vegetation.spm_tree_surface` — SpeedTree/SPM-facing tree surface contract.

@@ -36,5 +36,9 @@ pub(crate) fn shadow_refresh_period_frames() -> u64 {
         .ok()
         .and_then(|value| value.trim().parse::<u64>().ok())
         .map(|value| value.clamp(1, 3600))
-        .unwrap_or(1)
+        // Stable CSM should not refresh every frame by default. The cache still
+        // refreshes immediately when the snapped shadow sample space changes,
+        // but otherwise this avoids wasting the first few milliseconds of every
+        // frame on a static sun shadow map.
+        .unwrap_or(12)
 }

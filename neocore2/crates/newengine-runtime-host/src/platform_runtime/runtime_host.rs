@@ -682,6 +682,24 @@ impl HostPlatformRuntime {
         overlay_to_step_result_with_provider(overlay, spinner_phase, self.overlay_provider_binding())
     }
 
+    fn loading_overlay_step_result(&self, overlay: &ScreenOverlayStatus, spinner_phase: u32) -> PlatformStepResultV1 {
+        if matches!(self.ui_selection.active(), UiProviderKind::Plugin { .. }) {
+            crate::platform_runtime::ui_gateway_frame::publish_loading_overlay(
+                overlay,
+                self.ui_provider_binding(),
+                spinner_phase as u64,
+            );
+
+            // Bootstrap may run before the renderer can composite provider draw lists.
+            // The UI provider still receives the same surface state here, while the
+            // platform compositor remains a temporary fallback presenter until normal
+            // engine frames are ticking. Scene-launch loading suppresses native overlay
+            // after `engine.step()` has produced provider UI draw data.
+        }
+
+        overlay_to_step_result_with_provider(overlay, spinner_phase, self.overlay_provider_binding())
+    }
+
     fn ui_provider_binding(&self) -> UiProviderBinding {
         self.ui_selection.binding()
     }
@@ -753,7 +771,7 @@ impl HostPlatformRuntime {
                 self.render_backend_label(),
                 self.loaded_engine_plugins,
             );
-            return self.overlay_step_result(&overlay, self.bootstrap_spinner_phase);
+            return self.loading_overlay_step_result(&overlay, self.bootstrap_spinner_phase);
         }
 
         let status = self.bootstrap_overlay.status.as_str();
@@ -768,7 +786,7 @@ impl HostPlatformRuntime {
             subsystems,
         );
 
-        self.overlay_step_result(&overlay, self.bootstrap_spinner_phase)
+        self.loading_overlay_step_result(&overlay, self.bootstrap_spinner_phase)
     }
 
     fn fatal_bootstrap_step_result(&mut self) -> PlatformStepResultV1 {
@@ -796,7 +814,7 @@ impl HostPlatformRuntime {
             .with_subsystems(self.bootstrap_subsystems())
         };
 
-        self.overlay_step_result(&overlay, self.bootstrap_spinner_phase)
+        self.loading_overlay_step_result(&overlay, self.bootstrap_spinner_phase)
     }
 
     #[inline]

@@ -3,6 +3,25 @@
 use super::shadows::{LightShadowPlan, ShadowFrame};
 use super::super::controller::RuntimeRenderController;
 
+const SHADOW_MATRIX_EPSILON: f32 = 2.0e-4;
+const SHADOW_PARAM_EPSILON: f32 = 1.0e-4;
+const SHADOW_SPLIT_EPSILON: f32 = 1.0e-3;
+
+#[inline]
+fn slices_nearly_equal(a: &[f32], b: &[f32], epsilon: f32) -> bool {
+    a.len() == b.len()
+        && a.iter()
+            .zip(b.iter())
+            .all(|(left, right)| (*left - *right).abs() <= epsilon)
+}
+
+#[inline]
+fn shadow_matrices_match(a: newengine_math::Mat4, b: newengine_math::Mat4) -> bool {
+    let a_cols = a.to_cols_array();
+    let b_cols = b.to_cols_array();
+    slices_nearly_equal(&a_cols, &b_cols, SHADOW_MATRIX_EPSILON)
+}
+
 #[inline]
 fn shadow_frames_match_sample_space(a: ShadowFrame, b: ShadowFrame) -> bool {
     if a.texture != b.texture || a.cascade_count != b.cascade_count {
@@ -10,14 +29,15 @@ fn shadow_frames_match_sample_space(a: ShadowFrame, b: ShadowFrame) -> bool {
     }
     let count = a.cascade_count.clamp(1, super::shadows::MAX_DIRECTIONAL_SHADOW_CASCADES as u32) as usize;
     for i in 0..count {
-        if a.cascade_light_mvp[i] != b.cascade_light_mvp[i] {
+        if !shadow_matrices_match(a.cascade_light_mvp[i], b.cascade_light_mvp[i]) {
             return false;
         }
-        if (a.cascade_splits[i] - b.cascade_splits[i]).abs() > 0.001 {
+        if (a.cascade_splits[i] - b.cascade_splits[i]).abs() > SHADOW_SPLIT_EPSILON {
             return false;
         }
     }
-    a.params == b.params && a.extra == b.extra
+    slices_nearly_equal(&a.params, &b.params, SHADOW_PARAM_EPSILON)
+        && slices_nearly_equal(&a.extra, &b.extra, SHADOW_PARAM_EPSILON)
 }
 
 impl RuntimeRenderController {
