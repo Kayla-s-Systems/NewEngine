@@ -1,18 +1,19 @@
 #![forbid(unsafe_op_in_unsafe_fn)]
 
-/// Renderer-agnostic shadow map strategy.
+/// Scene-declared shadow map strategy.
+///
+/// There is intentionally no `Auto` variant here: backend selection must be an
+/// explicit render-provider capability decision, not hidden scene-data policy.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ShadowMethod {
     None,
-    /// Select the best supported shadow method for the first shadow-capable light.
-    Auto,
     /// Single orthographic/depth shadow map for a directional light.
     DirectionalDepthMap,
     /// Cascaded directional shadow atlas for large outdoor scenes.
     CascadedShadowMaps,
-    /// Six-face cube shadow map for an omnidirectional point light. Planned backend path.
+    /// Six-face cube shadow map for an omnidirectional point light.
     PointCubeMap,
-    /// Single perspective depth map for a cone/spot light. Planned backend path.
+    /// Single perspective depth map for a cone/spot light.
     SpotDepthMap,
 }
 

@@ -78,7 +78,6 @@ fn light_plan_from_contribution(
 const fn shadow_method_label(method: ShadowMethod) -> &'static str {
     match method {
         ShadowMethod::None => "none",
-        ShadowMethod::Auto => "auto",
         ShadowMethod::DirectionalDepthMap => "directional_depth_map",
         ShadowMethod::CascadedShadowMaps => "cascaded_shadow_maps",
         ShadowMethod::PointCubeMap => "point_cube_map",

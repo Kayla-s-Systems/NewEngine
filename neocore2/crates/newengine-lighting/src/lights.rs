@@ -4,7 +4,8 @@ use newengine_math::Vec3;
 
 /// Global ambient lighting parameters.
 ///
-/// This is a world resource (not a component).
+/// Scene resource only. Render backends translate this into their own native
+/// constant/light buffers during extraction.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct AmbientLight {
     /// Linear RGB color.
@@ -23,9 +24,10 @@ impl Default for AmbientLight {
     }
 }
 
-/// Infinite directional light (e.g. sun).
+/// Infinite directional light such as a sun.
 ///
-/// Stored as a component on a dedicated entity.
+/// Scene component only. It carries physical-ish authoring parameters but no
+/// renderer execution policy.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct DirectionalLight {
     /// Direction of incoming light rays in world space.
@@ -51,7 +53,8 @@ impl Default for DirectionalLight {
 
 /// Local point light.
 ///
-/// Position is taken from the entity's `GlobalTransform` translation.
+/// Position is taken from the entity's `GlobalTransform` translation. Native
+/// tiled/clustered list construction is renderer-owned.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct PointLight {
     /// Linear RGB.
@@ -68,6 +71,41 @@ impl Default for PointLight {
             color: [1.0, 0.95, 0.85],
             intensity: 10.0,
             range: 6.0,
+        }
+    }
+}
+
+/// Local spot light.
+///
+/// Position is taken from the entity's `GlobalTransform` translation. Direction
+/// points from the light towards the scene in world space. This is data only;
+/// shadow atlas allocation and tiled/clustered classification are renderer-owned.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct SpotLight {
+    /// Direction of emitted light in world space.
+    pub direction_ws: [f32; 3],
+    /// Linear RGB.
+    pub color: [f32; 3],
+    pub intensity: f32,
+    /// Effective radius in world units.
+    pub range: f32,
+    /// Cone angle in radians.
+    pub outer_angle_rad: f32,
+    /// Inner cone angle in radians.
+    pub inner_angle_rad: f32,
+}
+
+impl Default for SpotLight {
+    #[inline]
+    fn default() -> Self {
+        let d = Vec3::new(0.0, -1.0, 0.0).normalize_or_zero();
+        Self {
+            direction_ws: [d.x, d.y, d.z],
+            color: [1.0, 0.92, 0.78],
+            intensity: 12.0,
+            range: 9.0,
+            outer_angle_rad: 0.78,
+            inner_angle_rad: 0.52,
         }
     }
 }
