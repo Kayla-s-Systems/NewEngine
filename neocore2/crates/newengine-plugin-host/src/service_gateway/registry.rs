@@ -111,6 +111,7 @@ pub(crate) struct GatewayPolicyFact {
     pub(crate) owner_id: String,
 }
 
+#[cfg(test)]
 impl GatewayPolicyFact {
     #[inline]
     pub(crate) fn new<I, S>(
