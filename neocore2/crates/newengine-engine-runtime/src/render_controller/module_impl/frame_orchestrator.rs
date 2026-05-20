@@ -59,6 +59,11 @@ impl RenderFrameOrchestrator {
         };
         cpu_profile.mark("pipeline");
 
+        if let Err(e) = controller.pump_scene_gpu_residency(r, scene) {
+            log::warn!("render residency: terrain gpu upload budget failed: {}", e);
+        }
+        cpu_profile.mark("gpu_residency");
+
         let camera_position = [view.position_ws.x, view.position_ws.y, view.position_ws.z];
         let base_lights = lights::collect_lights(scene.world()).with_camera_position(camera_position);
         let extent = Extent2D::new(scope.vp_w, scope.vp_h);
@@ -70,6 +75,7 @@ impl RenderFrameOrchestrator {
             lit,
             viewproj,
             camera_position,
+            [view.forward_ws.x, view.forward_ws.y, view.forward_ws.z],
             extent,
             Extent2D::new(scope.w, scope.h),
             plugin_snapshot,
@@ -108,12 +114,13 @@ impl RenderFrameOrchestrator {
         } else {
             shadow_plan.frame
         };
-        let world_lights = base_lights.with_shadow(shadow_frame.light_mvp, shadow_frame.params, shadow_frame.extra);
+        let world_lights = base_lights.with_shadow_frame(shadow_frame);
         let extraction = SceneExtractionCtx {
             scene,
             lit,
             viewproj: viewproj,
             camera_position: view.position_ws,
+            camera_forward: view.forward_ws,
             bounds,
             lights: world_lights,
             shadow_plan,

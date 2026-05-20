@@ -3,7 +3,7 @@
 use std::path::Path;
 
 use newengine_plugin_api::PluginDescriptor;
-use newengine_service_api::EngineServiceKind;
+use newengine_service_api::{engine_gateway_domain, system_tag, EngineServiceKind};
 
 use super::metadata::descriptor_gateway_capabilities;
 use super::provider::gateway_provider_service_id;
@@ -42,11 +42,12 @@ impl PluginDescriptorFact {
 #[derive(Debug, Clone)]
 pub(crate) struct EngineOwnedGatewayFact {
     pub(crate) gateway_id: String,
-    pub(crate) service_kind: EngineServiceKind,
+    pub(crate) service_kind: String,
     pub(crate) provider_service_id: String,
     pub(crate) provider_owner_id: String,
     pub(crate) backend_capability_id: String,
     pub(crate) backend_priority: i32,
+    pub(crate) system_tags: Vec<String>,
 }
 
 impl EngineOwnedGatewayFact {
@@ -59,6 +60,37 @@ impl EngineOwnedGatewayFact {
         backend_capability_id: String,
         backend_priority: i32,
     ) -> Self {
+        Self::new_dynamic(
+            gateway_id,
+            service_kind.as_str().to_owned(),
+            provider_service_id,
+            provider_owner_id,
+            backend_capability_id,
+            backend_priority,
+            [system_tag::ENGINE_DOMAIN, system_tag::PROVIDER_BACKEND],
+        )
+    }
+
+    #[inline]
+    pub(crate) fn new_dynamic<I, S>(
+        gateway_id: String,
+        service_kind: String,
+        provider_service_id: String,
+        provider_owner_id: String,
+        backend_capability_id: String,
+        backend_priority: i32,
+        system_tags: I,
+    ) -> Self
+    where
+        I: IntoIterator<Item = S>,
+        S: AsRef<str>,
+    {
+        let mut system_tags = system_tags
+            .into_iter()
+            .filter_map(|tag| newengine_service_api::normalize_system_tag(tag.as_ref()))
+            .collect::<Vec<_>>();
+        system_tags.sort();
+        system_tags.dedup();
         Self {
             gateway_id,
             service_kind,
@@ -66,7 +98,38 @@ impl EngineOwnedGatewayFact {
             provider_owner_id,
             backend_capability_id,
             backend_priority,
+            system_tags,
         }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub(crate) struct GatewayPolicyFact {
+    pub(crate) gateway_id: String,
+    pub(crate) override_mode: GatewayOverrideMode,
+    pub(crate) system_tags: Vec<String>,
+    pub(crate) owner_id: String,
+}
+
+impl GatewayPolicyFact {
+    #[inline]
+    pub(crate) fn new<I, S>(
+        gateway_id: String,
+        override_mode: GatewayOverrideMode,
+        system_tags: I,
+        owner_id: String,
+    ) -> Self
+    where
+        I: IntoIterator<Item = S>,
+        S: AsRef<str>,
+    {
+        let mut system_tags = system_tags
+            .into_iter()
+            .filter_map(|tag| newengine_service_api::normalize_system_tag(tag.as_ref()))
+            .collect::<Vec<_>>();
+        system_tags.sort();
+        system_tags.dedup();
+        Self { gateway_id, override_mode, system_tags, owner_id }
     }
 }
 
@@ -163,80 +226,45 @@ impl GatewayOverrideMode {
             Self::Locked => "locked",
         }
     }
-}
 
-#[inline]
-fn gateway_override_mode(gateway_id: &str) -> GatewayOverrideMode {
-    match gateway_id {
-        "engine.plugin_host"
-        | "engine.abi"
-        | "engine.gateway_registry"
-        | "engine.security"
-        | "engine.scheduler.core"
-        | "engine.capability_validator" => return GatewayOverrideMode::Locked,
-        "engine.save" | "engine.network" => return GatewayOverrideMode::ProfileControlled,
-        _ => {}
-    }
-
-    match EngineServiceKind::parse_engine_gateway_id(gateway_id) {
-        Some(
-            EngineServiceKind::Render
-            | EngineServiceKind::Model
-            | EngineServiceKind::ModelSkeletons
-            | EngineServiceKind::ModelMaterials
-            | EngineServiceKind::ModelCollisions
-            | EngineServiceKind::Physics
-            | EngineServiceKind::PhysicsContacts
-            | EngineServiceKind::PhysicsConstraints
-            | EngineServiceKind::Assets
-            | EngineServiceKind::Materials
-            | EngineServiceKind::Scene,
-        ) => GatewayOverrideMode::ProfileControlled,
-        Some(
-            EngineServiceKind::RenderEffects
-            | EngineServiceKind::RenderMaterials
-            | EngineServiceKind::AssetFileTypes
-            | EngineServiceKind::Input
-            | EngineServiceKind::InputBindings
-            | EngineServiceKind::InputActions
-            | EngineServiceKind::InputContexts
-            | EngineServiceKind::Camera
-            | EngineServiceKind::CameraModes
-            | EngineServiceKind::CameraAnimations
-            | EngineServiceKind::Audio
-            | EngineServiceKind::Ui
-            | EngineServiceKind::Logging
-            | EngineServiceKind::Loading
-            | EngineServiceKind::Platform
-            | EngineServiceKind::Ecs
-            | EngineServiceKind::Entity
-            | EngineServiceKind::PluginHost
-            | EngineServiceKind::Abi
-            | EngineServiceKind::GatewayRegistry
-            | EngineServiceKind::Security
-            | EngineServiceKind::SchedulerCore
-            | EngineServiceKind::CapabilityValidator,
-        ) => GatewayOverrideMode::Open,
-        None => GatewayOverrideMode::Open,
+    fn from_system_tags(tags: &[String]) -> Option<Self> {
+        if tags.iter().any(|tag| tag == system_tag::OVERRIDE_LOCKED || tag == system_tag::TRUST_ROOT) {
+            return Some(Self::Locked);
+        }
+        if tags.iter().any(|tag| tag == system_tag::OVERRIDE_PROFILE_CONTROLLED) {
+            return Some(Self::ProfileControlled);
+        }
+        if tags.iter().any(|tag| tag == system_tag::OVERRIDE_OPEN) {
+            return Some(Self::Open);
+        }
+        None
     }
 }
 
 #[inline]
-fn route_allowed_by_default_policy(gateway_id: &str, origin: GatewayProviderOrigin) -> bool {
-    match gateway_override_mode(gateway_id) {
-        GatewayOverrideMode::Open => true,
-        // Profile-controlled gateways are still selectable by default; profile
-        // loading can later clamp this further. The important safety rule here
-        // is that locked trust-root gateways cannot be taken over by plugins.
-        GatewayOverrideMode::ProfileControlled => true,
+fn route_allowed_by_policy(override_mode: GatewayOverrideMode, origin: GatewayProviderOrigin) -> bool {
+    match override_mode {
+        GatewayOverrideMode::Open | GatewayOverrideMode::ProfileControlled => true,
         GatewayOverrideMode::Locked => matches!(origin, GatewayProviderOrigin::EngineOwned),
     }
+}
+
+fn merge_system_tags(
+    mut route_tags: Vec<String>,
+    policy: Option<&GatewayPolicyFact>,
+) -> Vec<String> {
+    if let Some(policy) = policy {
+        route_tags.extend(policy.system_tags.iter().cloned());
+    }
+    route_tags.sort();
+    route_tags.dedup();
+    route_tags
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct ActiveGatewayRoute {
     pub(crate) gateway_id: String,
-    pub(crate) service_kind: EngineServiceKind,
+    pub(crate) service_kind: String,
     pub(crate) provider_service_id: String,
     pub(crate) provider_owner_id: String,
     pub(crate) backend_capability_id: String,
@@ -244,44 +272,54 @@ pub(crate) struct ActiveGatewayRoute {
     pub(crate) origin: GatewayProviderOrigin,
     pub(crate) override_mode: GatewayOverrideMode,
     pub(crate) active_score: i64,
+    pub(crate) system_tags: Vec<String>,
 }
 
 impl ActiveGatewayRoute {
     #[inline]
     fn new(
         gateway_id: String,
-        service_kind: EngineServiceKind,
+        service_kind: String,
         provider_service_id: String,
         provider_owner_id: String,
         backend_capability_id: String,
         backend_priority: i32,
         origin: GatewayProviderOrigin,
+        route_tags: Vec<String>,
+        policy: Option<&GatewayPolicyFact>,
     ) -> Option<Self> {
-        if !service_kind.matches_engine_gateway_id(&gateway_id) {
+        if engine_gateway_domain(&gateway_id).as_deref() != Some(service_kind.as_str()) {
             log::warn!(
-                "gateways: ignoring route with mixed domain levels gateway='{}' service_kind='{}' expected_gateway='{}' service='{}' owner='{}'",
+                "gateways: ignoring route with mixed domain levels gateway='{}' service_kind='{}' gateway_domain='{}' service='{}' owner='{}'",
                 gateway_id,
-                service_kind.as_str(),
-                service_kind.engine_gateway_id(),
+                service_kind,
+                engine_gateway_domain(&gateway_id).unwrap_or_else(|| "<invalid>".to_owned()),
                 provider_service_id,
                 provider_owner_id,
             );
             return None;
         }
 
-        if !route_allowed_by_default_policy(&gateway_id, origin) {
+        let system_tags = merge_system_tags(route_tags, policy);
+        let override_mode = policy
+            .map(|policy| policy.override_mode)
+            .or_else(|| GatewayOverrideMode::from_system_tags(&system_tags))
+            .unwrap_or(GatewayOverrideMode::Open);
+
+        if !route_allowed_by_policy(override_mode, origin) {
             log::warn!(
-                "gateways: ignoring route blocked by override policy gateway='{}' service='{}' owner='{}' origin='{}' mode='{}'",
+                "gateways: ignoring route blocked by override policy gateway='{}' service='{}' owner='{}' origin='{}' mode='{}' policy_owner='{}' tags='{}'",
                 gateway_id,
                 provider_service_id,
                 provider_owner_id,
                 origin.as_str(),
-                gateway_override_mode(&gateway_id).as_str(),
+                override_mode.as_str(),
+                policy.map(|policy| policy.owner_id.as_str()).unwrap_or("<route-tags>"),
+                system_tags.join(","),
             );
             return None;
         }
 
-        let override_mode = gateway_override_mode(&gateway_id);
         let active_score = origin.origin_bias() + i64::from(backend_priority);
         Some(Self {
             gateway_id,
@@ -293,6 +331,7 @@ impl ActiveGatewayRoute {
             origin,
             override_mode,
             active_score,
+            system_tags,
         })
     }
 }
@@ -308,7 +347,17 @@ impl ActiveGatewayRegistry {
         services: &[RegisteredServiceFact],
         engine_owned_gateways: &[EngineOwnedGatewayFact],
     ) -> Self {
+        Self::from_facts_with_policy(descriptors, services, engine_owned_gateways, &[])
+    }
+
+    pub(crate) fn from_facts_with_policy(
+        descriptors: &[PluginDescriptorFact],
+        services: &[RegisteredServiceFact],
+        engine_owned_gateways: &[EngineOwnedGatewayFact],
+        policy_facts: &[GatewayPolicyFact],
+    ) -> Self {
         let mut routes = Vec::new();
+        let mut skipped_unregistered = 0usize;
 
         for descriptor_fact in descriptors {
             for gateway in descriptor_gateway_capabilities(&descriptor_fact.descriptor) {
@@ -324,9 +373,18 @@ impl ActiveGatewayRegistry {
                             == Some(descriptor_fact.plugin_id.as_str())
                 });
                 if !registered {
+                    skipped_unregistered += 1;
+                    log::trace!(
+                        "gateways: plugin route skipped because service is not registered plugin='{}' gateway='{}' service='{}' capability='{}'",
+                        descriptor_fact.plugin_id,
+                        gateway.gateway_id,
+                        provider_service_id,
+                        gateway.backend_capability_id
+                    );
                     continue;
                 }
 
+                let policy = policy_facts.iter().find(|policy| policy.gateway_id == gateway.gateway_id);
                 if let Some(route) = ActiveGatewayRoute::new(
                     gateway.gateway_id,
                     gateway.service_kind,
@@ -335,6 +393,8 @@ impl ActiveGatewayRegistry {
                     gateway.backend_capability_id,
                     gateway.backend_priority,
                     descriptor_fact.origin,
+                    gateway.system_tags,
+                    policy,
                 ) {
                     routes.push(route);
                 }
@@ -346,17 +406,27 @@ impl ActiveGatewayRegistry {
                 service.service_id == gateway.provider_service_id && service.owner_plugin_id.is_none()
             });
             if !registered {
+                skipped_unregistered += 1;
+                log::trace!(
+                    "gateways: engine-owned route skipped because service is not registered gateway='{}' service='{}' owner='{}'",
+                    gateway.gateway_id,
+                    gateway.provider_service_id,
+                    gateway.provider_owner_id
+                );
                 continue;
             }
 
+            let policy = policy_facts.iter().find(|policy| policy.gateway_id == gateway.gateway_id);
             if let Some(route) = ActiveGatewayRoute::new(
                 gateway.gateway_id.clone(),
-                gateway.service_kind,
+                gateway.service_kind.clone(),
                 gateway.provider_service_id.clone(),
                 gateway.provider_owner_id.clone(),
                 gateway.backend_capability_id.clone(),
                 gateway.backend_priority,
                 GatewayProviderOrigin::EngineOwned,
+                gateway.system_tags.clone(),
+                policy,
             ) {
                 routes.push(route);
             }
@@ -368,12 +438,39 @@ impl ActiveGatewayRegistry {
                 .then_with(|| b.active_score.cmp(&a.active_score))
                 .then_with(|| b.backend_priority.cmp(&a.backend_priority))
                 .then_with(|| b.origin.origin_bias().cmp(&a.origin.origin_bias()))
-                .then_with(|| a.service_kind.as_str().cmp(b.service_kind.as_str()))
+                .then_with(|| a.service_kind.cmp(&b.service_kind))
                 .then_with(|| a.provider_service_id.cmp(&b.provider_service_id))
                 .then_with(|| a.provider_owner_id.cmp(&b.provider_owner_id))
         });
 
-        Self { routes }
+        let registry = Self { routes };
+        log::debug!(
+            "gateways: registry rebuilt descriptors={} services={} engine_owned={} policy_facts={} routes={} skipped_unregistered={}",
+            descriptors.len(),
+            services.len(),
+            engine_owned_gateways.len(),
+            policy_facts.len(),
+            registry.routes.len(),
+            skipped_unregistered
+        );
+        for gateway_id in registry.gateway_ids() {
+            if let Some(route) = registry.resolve_route(&gateway_id) {
+                log::trace!(
+                    "gateways: active route gateway='{}' service='{}' owner='{}' kind='{}' origin='{}' mode='{}' prio={} score={} tags='{}'",
+                    route.gateway_id,
+                    route.provider_service_id,
+                    route.provider_owner_id,
+                    route.service_kind,
+                    route.origin.as_str(),
+                    route.override_mode.as_str(),
+                    route.backend_priority,
+                    route.active_score,
+                    route.system_tags.join(",")
+                );
+            }
+        }
+
+        registry
     }
 
     pub(crate) fn routes(&self) -> &[ActiveGatewayRoute] {
@@ -592,7 +689,18 @@ mod tests {
             0,
         )];
 
-        let registry = ActiveGatewayRegistry::from_facts(&descriptors, &services, &engine_owned);
+        let policies = vec![GatewayPolicyFact::new(
+            "engine.security".to_owned(),
+            GatewayOverrideMode::Locked,
+            [system_tag::TRUST_ROOT, system_tag::OVERRIDE_LOCKED],
+            "newengine.security.policy".to_owned(),
+        )];
+        let registry = ActiveGatewayRegistry::from_facts_with_policy(
+            &descriptors,
+            &services,
+            &engine_owned,
+            &policies,
+        );
         let route = registry.resolve_route("engine.security").expect("engine.security route");
 
         assert_eq!(route.provider_service_id, "engine.security");
@@ -642,10 +750,69 @@ mod tests {
         let registry = ActiveGatewayRegistry::from_facts(&descriptors, &services, &[]);
         let route = registry.resolve_route("engine.input.bindings").expect("engine.input.bindings route");
 
-        assert_eq!(route.service_kind, EngineServiceKind::InputBindings);
+        assert_eq!(route.service_kind, EngineServiceKind::InputBindings.as_str());
         assert_eq!(route.provider_service_id, "mod.input.bindings.api");
     }
 
+
+
+    #[test]
+    fn dynamic_gateway_kind_does_not_require_engine_enum_entry() {
+        let descriptors = vec![PluginDescriptorFact::new(
+            "mod.weather".to_owned(),
+            descriptor(
+                "mod.weather",
+                "mod.weather.api",
+                "engine.weather",
+                "weather.backend",
+                "weather",
+                42,
+            ),
+            GatewayProviderOrigin::UserMod,
+        )];
+        let services = vec![service("mod.weather.api", Some("mod.weather"))];
+
+        let registry = ActiveGatewayRegistry::from_facts(&descriptors, &services, &[]);
+        let route = registry.resolve_route("engine.weather").expect("engine.weather route");
+
+        assert_eq!(route.service_kind, "weather");
+        assert_eq!(route.provider_service_id, "mod.weather.api");
+        assert_eq!(route.override_mode, GatewayOverrideMode::Open);
+    }
+
+    #[test]
+    fn system_tags_can_drive_policy_without_gateway_match_lists() {
+        let descriptors = vec![PluginDescriptorFact::new(
+            "mod.render".to_owned(),
+            descriptor(
+                "mod.render",
+                "mod.render.api",
+                "engine.render",
+                "render.backend",
+                "render",
+                10,
+            ),
+            GatewayProviderOrigin::GamePlugin,
+        )];
+        let services = vec![service("mod.render.api", Some("mod.render"))];
+        let policies = vec![GatewayPolicyFact::new(
+            "engine.render".to_owned(),
+            GatewayOverrideMode::ProfileControlled,
+            [system_tag::OVERRIDE_PROFILE_CONTROLLED],
+            "profile.gateway-policy".to_owned(),
+        )];
+
+        let registry = ActiveGatewayRegistry::from_facts_with_policy(
+            &descriptors,
+            &services,
+            &[],
+            &policies,
+        );
+        let route = registry.resolve_route("engine.render").expect("engine.render route");
+
+        assert_eq!(route.override_mode, GatewayOverrideMode::ProfileControlled);
+        assert!(route.system_tags.iter().any(|tag| tag == system_tag::OVERRIDE_PROFILE_CONTROLLED));
+    }
     #[test]
     fn mixed_parent_and_child_domain_route_is_ignored() {
         let descriptors = vec![PluginDescriptorFact::new(

@@ -12,7 +12,7 @@ use newengine_plugin_host::default_host_api;
 pub(super) fn load_text_asset(rel: &str) -> CoreResult<String> {
     let assets = AssetServiceClient::new(default_host_api());
 
-    log::debug!("asset text: requesting path='{rel}' through AssetManager.text_v1");
+    log::trace!("asset text: requesting path='{rel}' through AssetManager.text_v1");
     let payload = assets.text_v1(rel).map_err(|e| {
         EngineError::other(format!("asset.text_v1 failed path='{rel}' err='{e}'"))
     })?;
@@ -21,7 +21,7 @@ pub(super) fn load_text_asset(rel: &str) -> CoreResult<String> {
         .map_err(|_| EngineError::other(format!("asset.text_v1 returned non-utf8 path='{rel}'")))?
         .to_string();
 
-    log::debug!("asset text: loaded path='{rel}' bytes={}", payload.len());
+    log::trace!("asset text: loaded path='{rel}' bytes={}", payload.len());
     Ok(s)
 }
 

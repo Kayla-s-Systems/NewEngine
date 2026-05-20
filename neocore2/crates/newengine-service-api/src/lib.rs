@@ -61,6 +61,55 @@ pub fn normalize_engine_gateway_id(value: &str) -> Option<String> {
     Some(out.join("."))
 }
 
+/// Declarative classification tags attached to services, backend routes and
+/// gateway policy facts.
+///
+/// Tags intentionally stay string-based and data-driven: the host can classify
+/// a route without adding a new enum variant or editing a central gateway list.
+pub mod system_tag {
+    /// Route belongs to the engine-facing gateway namespace.
+    pub const ENGINE_DOMAIN: &str = "engine.domain";
+    /// Route points at a backend provider implementation.
+    pub const PROVIDER_BACKEND: &str = "provider.backend";
+    /// Gateway can be overridden by compatible providers.
+    pub const OVERRIDE_OPEN: &str = "override.open";
+    /// Gateway participates in profile-controlled provider selection.
+    pub const OVERRIDE_PROFILE_CONTROLLED: &str = "override.profile_controlled";
+    /// Gateway is a host trust-root and must reject plugin-owned providers.
+    pub const OVERRIDE_LOCKED: &str = "override.locked";
+    /// Gateway/service is part of the host trust root.
+    pub const TRUST_ROOT: &str = "trust.root";
+    /// Runtime-facing service, not an authoring-only/tooling surface.
+    pub const RUNTIME: &str = "runtime";
+}
+
+#[inline]
+pub fn normalize_system_tag(value: &str) -> Option<String> {
+    let trimmed = value.trim();
+    if trimmed.is_empty() {
+        return None;
+    }
+    let mut out = Vec::new();
+    for segment in trimmed.split('.') {
+        let segment = segment.trim();
+        if segment.is_empty() {
+            return None;
+        }
+        out.push(segment.to_ascii_lowercase());
+    }
+    Some(out.join("."))
+}
+
+#[inline]
+pub fn normalize_service_kind(value: &str) -> Option<String> {
+    normalize_system_tag(value)
+}
+
+#[inline]
+pub fn engine_gateway_domain(gateway_id: &str) -> Option<String> {
+    normalize_engine_gateway_id(gateway_id)?.strip_prefix(ENGINE_SERVICE_GATEWAY_PREFIX).map(str::to_owned)
+}
+
 /// Common declaration for a backend service family.
 ///
 /// This intentionally does not describe domain packets. Render, physics, input,
@@ -103,7 +152,7 @@ impl BackendServiceSpec {
 /// `service_kind`, `engine_gateway`, `contract` and `backend_priority`.
 #[derive(Debug, Clone, Serialize)]
 pub struct BackendRouteDescriptor {
-    pub service_kind: EngineServiceKind,
+    pub service_kind: &'static str,
     pub engine_gateway: &'static str,
     pub contract: &'static str,
     pub backend_priority: i32,
@@ -113,6 +162,8 @@ pub struct BackendRouteDescriptor {
     pub mode: Option<&'static str>,
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub features: Vec<&'static str>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub system_tags: Vec<&'static str>,
     #[serde(flatten, skip_serializing_if = "BTreeMap::is_empty")]
     pub metadata: BTreeMap<&'static str, serde_json::Value>,
 }
@@ -120,12 +171,10 @@ pub struct BackendRouteDescriptor {
 impl BackendRouteDescriptor {
     #[inline]
     pub fn new(spec: BackendServiceSpec) -> Self {
-        let service_kind = EngineServiceKind::parse(spec.domain)
-            .or_else(|| EngineServiceKind::parse_engine_gateway_id(spec.engine_gateway_id))
-            .expect("BackendServiceSpec domain must map to EngineServiceKind");
+        let service_kind = spec.domain;
         debug_assert!(
-            service_kind.matches_engine_gateway_id(spec.engine_gateway_id),
-            "BackendServiceSpec domain and engine gateway must describe the same route",
+            !service_kind.trim().is_empty(),
+            "BackendServiceSpec domain must not be empty",
         );
         Self {
             service_kind,
@@ -135,6 +184,7 @@ impl BackendRouteDescriptor {
             backend: None,
             mode: None,
             features: Vec::new(),
+            system_tags: Vec::new(),
             metadata: BTreeMap::new(),
         }
     }
@@ -172,6 +222,18 @@ impl BackendRouteDescriptor {
     #[inline]
     pub fn features(mut self, features: impl IntoIterator<Item = &'static str>) -> Self {
         self.features.extend(features);
+        self
+    }
+
+    #[inline]
+    pub fn system_tag(mut self, tag: &'static str) -> Self {
+        self.system_tags.push(tag);
+        self
+    }
+
+    #[inline]
+    pub fn system_tags(mut self, tags: impl IntoIterator<Item = &'static str>) -> Self {
+        self.system_tags.extend(tags);
         self
     }
 
@@ -307,7 +369,7 @@ impl EngineServiceKind {
             "input.actions" | "input_actions" => Some(Self::InputActions),
             "input.contexts" | "input_contexts" => Some(Self::InputContexts),
             "ui" => Some(Self::Ui),
-            "logging" | "log" => Some(Self::Logging),
+            "logging" => Some(Self::Logging),
             "loading" => Some(Self::Loading),
             "platform" => Some(Self::Platform),
             "ecs" => Some(Self::Ecs),
@@ -381,7 +443,7 @@ impl EngineServiceKind {
             Self::InputActions => "engine.input.actions",
             Self::InputContexts => "engine.input.contexts",
             Self::Ui => "engine.ui",
-            Self::Logging => "engine.log",
+            Self::Logging => "engine.logging",
             Self::Loading => "engine.loading",
             Self::Platform => "engine.platform",
             Self::Ecs => "engine.ecs",
@@ -404,10 +466,7 @@ impl EngineServiceKind {
     pub fn parse_engine_gateway_id(gateway_id: &str) -> Option<Self> {
         let normalized = normalize_engine_gateway_id(gateway_id)?;
         let domain = normalized.strip_prefix(ENGINE_SERVICE_GATEWAY_PREFIX)?;
-        match domain {
-            "log" => Some(Self::Logging),
-            other => Self::parse(other),
-        }
+        Self::parse(domain)
     }
 }
 

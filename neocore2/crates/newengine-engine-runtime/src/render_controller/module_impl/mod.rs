@@ -33,5 +33,5 @@ mod trace_policy;
 mod windowing;
 mod world_tick;
 
-pub(super) use frame_submit::record_draw_list;
+pub(super) use frame_submit::{record_draw_list, record_render_phase};
 pub(super) use super::controller::RuntimeRenderController;

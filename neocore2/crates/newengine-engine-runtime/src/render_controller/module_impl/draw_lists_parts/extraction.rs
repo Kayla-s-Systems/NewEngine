@@ -1,6 +1,6 @@
 use std::collections::BTreeSet;
 
-use newengine_core::render::{Extent2D, RectI32, RenderApi, Viewport};
+use newengine_core::render::{Extent2D, RectI32, RenderApi, RenderGraphPassKind, Viewport};
 use newengine_render_frame_graph::DrawListDesc;
 
 use crate::render_controller::RuntimeRenderController;
@@ -50,7 +50,10 @@ impl RuntimeDrawListSet {
         ctx: &SceneExtractionCtx<'_>,
         out: &mut DrawListBuildCtx<'_>,
     ) -> EngineResult<()> {
-        if self.contains(RenderDrawListKind::ShadowCasters) && ctx.render_shadow_map {
+        if self.contains(RenderDrawListKind::ShadowCasters)
+            && ctx.render_shadow_map
+            && ctx.shadow_frame.cascade_count <= 1
+        {
             let extent = ctx.shadow_plan.extent();
             let _ = out.record(RenderDrawListKind::ShadowCasters, move |_this, r| {
                 r.set_viewport(Viewport::full(extent))?;
@@ -109,10 +112,46 @@ impl<'a> DrawListBuildCtx<'a> {
         let value = super::record_draw_list(render, kind, |r| record(controller, r))?;
         Ok(Some(value))
     }
+
+    pub(crate) fn record_shadow_phase<T>(
+        &mut self,
+        phase: RenderGraphPassKind,
+        record: impl FnOnce(&mut RuntimeRenderController, &mut dyn RenderApi) -> EngineResult<T>,
+    ) -> EngineResult<Option<T>> {
+        if !self.lists.contains(RenderDrawListKind::ShadowCasters) {
+            return Ok(None);
+        }
+
+        let controller = &mut *self.controller;
+        let render = &mut *self.render;
+        let value = super::record_render_phase(render, phase, |r| record(controller, r))?;
+        Ok(Some(value))
+    }
 }
 
 impl<'a> newengine_render_feature_api::DrawListBuildCtx for DrawListBuildCtx<'a> {
     fn record_procedural_terrain_shadow(&mut self, ctx: &SceneExtractionCtx<'_>) -> EngineResult<()> {
+        if ctx.shadow_frame.cascade_count > 1 {
+            for cascade_index in 0..ctx.shadow_frame.cascade_count as usize {
+                let cascade = ctx.shadow_frame.cascade(cascade_index);
+                let _ = self.record_shadow_phase(RenderGraphPassKind::ShadowCascadeMap, |this, r| {
+                    r.set_viewport(cascade.viewport)?;
+                    r.set_scissor(cascade.scissor)?;
+                    this.set_shadow_caster_cull(Some(cascade.caster_cull));
+                    super::passes::draw_procedural_terrain_shadow(
+                        this,
+                        r,
+                        ctx.scene,
+                        ctx.lit,
+                        cascade.light_mvp,
+                        &ctx.lights,
+                        ctx.runtime,
+                    )
+                })?;
+            }
+            return Ok(());
+        }
+
         let _ = self.record(RenderDrawListKind::ShadowCasters, |this, r| {
             super::passes::draw_procedural_terrain_shadow(
                 this,
@@ -138,12 +177,36 @@ impl<'a> newengine_render_feature_api::DrawListBuildCtx for DrawListBuildCtx<'a>
                 &ctx.lights,
                 ctx.shadow_frame.texture,
                 ctx.runtime,
+                ctx.camera_position,
+                ctx.camera_forward,
             )
         })?;
         Ok(())
     }
 
     fn record_primitive_mesh_shadow(&mut self, ctx: &SceneExtractionCtx<'_>) -> EngineResult<()> {
+        if ctx.shadow_frame.cascade_count > 1 {
+            for cascade_index in 0..ctx.shadow_frame.cascade_count as usize {
+                let cascade = ctx.shadow_frame.cascade(cascade_index);
+                let _ = self.record_shadow_phase(RenderGraphPassKind::ShadowCascadeMap, |this, r| {
+                    r.set_viewport(cascade.viewport)?;
+                    r.set_scissor(cascade.scissor)?;
+                    this.set_shadow_caster_cull(Some(cascade.caster_cull));
+                    super::passes::draw_primitives_shadow(
+                        this,
+                        r,
+                        ctx.scene,
+                        ctx.lit,
+                        cascade.light_mvp,
+                        &ctx.lights,
+                        ctx.runtime,
+                        ctx.camera_position,
+                    )
+                })?;
+            }
+            return Ok(());
+        }
+
         let _ = self.record(RenderDrawListKind::ShadowCasters, |this, r| {
             super::passes::draw_primitives_shadow(
                 this,
@@ -171,6 +234,7 @@ impl<'a> newengine_render_feature_api::DrawListBuildCtx for DrawListBuildCtx<'a>
                 ctx.shadow_frame.texture,
                 ctx.runtime,
                 ctx.camera_position,
+                ctx.camera_forward,
             )
         })?;
         Ok(())

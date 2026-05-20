@@ -1,7 +1,24 @@
 #![forbid(unsafe_op_in_unsafe_fn)]
 
-use super::shadows::LightShadowPlan;
+use super::shadows::{LightShadowPlan, ShadowFrame};
 use super::super::controller::RuntimeRenderController;
+
+#[inline]
+fn shadow_frames_match_sample_space(a: ShadowFrame, b: ShadowFrame) -> bool {
+    if a.texture != b.texture || a.cascade_count != b.cascade_count {
+        return false;
+    }
+    let count = a.cascade_count.clamp(1, super::shadows::MAX_DIRECTIONAL_SHADOW_CASCADES as u32) as usize;
+    for i in 0..count {
+        if a.cascade_light_mvp[i] != b.cascade_light_mvp[i] {
+            return false;
+        }
+        if (a.cascade_splits[i] - b.cascade_splits[i]).abs() > 0.001 {
+            return false;
+        }
+    }
+    a.params == b.params && a.extra == b.extra
+}
 
 impl RuntimeRenderController {
     #[inline]
@@ -10,7 +27,6 @@ impl RuntimeRenderController {
             self.shadows.cache_valid = false;
             self.shadows.last_refresh_frame = 0;
             self.shadows.current_caster_cull = None;
-            self.shadows.last_light_mvp = None;
             self.shadows.cached_shadow_frame = None;
             return false;
         }
@@ -30,22 +46,23 @@ impl RuntimeRenderController {
         }
 
         let period = self.shadows.refresh_period_frames.max(1);
-        let frames_since_refresh = self.frame.frame_index.saturating_sub(self.shadows.last_refresh_frame);
-        let light_matrix_changed = self
+        let frames_since_refresh = self
+            .frame
+            .frame_index
+            .saturating_sub(self.shadows.last_refresh_frame);
+        let shadow_projection_changed = self
             .shadows
-            .last_light_mvp
-            .map(|last| last != plan.frame.light_mvp)
+            .cached_shadow_frame
+            .map(|last| !shadow_frames_match_sample_space(last, plan.frame))
             .unwrap_or(true);
-        if light_matrix_changed {
-            if frames_since_refresh >= period {
-                log::debug!(
-                    "render shadow cache: live refresh because light matrix changed frame={} period_frames={}",
-                    self.frame.frame_index,
-                    period,
-                );
-                return true;
-            }
-            return false;
+        if shadow_projection_changed {
+            log::debug!(
+                "render shadow cache: live refresh because shadow sample space changed frame={} frames_since_refresh={} period_frames={}",
+                self.frame.frame_index,
+                frames_since_refresh,
+                period,
+            );
+            return true;
         }
 
         frames_since_refresh >= period
@@ -55,7 +72,6 @@ impl RuntimeRenderController {
     pub(super) fn mark_shadow_map_rendered(&mut self, plan: LightShadowPlan) {
         self.shadows.cache_valid = true;
         self.shadows.last_refresh_frame = self.frame.frame_index;
-        self.shadows.last_light_mvp = Some(plan.frame.light_mvp);
         self.shadows.cached_shadow_frame = Some(plan.frame);
     }
 
@@ -71,11 +87,9 @@ impl RuntimeRenderController {
         self.shadows.warmup_defer_frames_remaining =
             super::super::render_quality::SHADOW_WARMUP_DEFER_FRAMES;
         self.shadows.current_caster_cull = None;
-        self.shadows.last_light_mvp = None;
         self.shadows.cached_shadow_frame = None;
     }
 }
-
 
 impl RuntimeRenderController {
     #[inline]

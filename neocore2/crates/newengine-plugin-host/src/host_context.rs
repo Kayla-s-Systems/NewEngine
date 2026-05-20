@@ -70,6 +70,12 @@ struct EngineOwnedGatewayEntry {
     backend_priority: i32,
 }
 
+#[derive(Clone)]
+struct GatewayRegistryCache {
+    generation: u64,
+    registry: crate::service_gateway::ActiveGatewayRegistry,
+}
+
 thread_local! {
     static CURRENT_PLUGIN_ID: RefCell<Option<String>> = const { RefCell::new(None) };
 }
@@ -123,6 +129,11 @@ pub(crate) struct HostContext {
     /// than plugin descriptors. These entries participate in the same gateway
     /// registry and priority rules as plugin routes.
     engine_owned_gateways: Mutex<NeHashMap<String, EngineOwnedGatewayEntry>>,
+
+    /// Cached active gateway registry. Routing is on the service hot path, so
+    /// descriptor/fact folding must happen only when the gateway fact generation
+    /// changes, not on every `call_service_v1(engine.*)` call.
+    gateway_registry_cache: Mutex<Option<GatewayRegistryCache>>,
 }
 
 static HOST_CTX: OnceLock<Arc<HostContext>> = OnceLock::new();
@@ -140,6 +151,7 @@ fn make_default_ctx() -> Arc<HostContext> {
         plugin_origins: Mutex::new(NeHashMap::default()),
         external_runtime_plugins: Mutex::new(NeHashMap::default()),
         engine_owned_gateways: Mutex::new(NeHashMap::default()),
+        gateway_registry_cache: Mutex::new(None),
     })
 }
 
@@ -219,7 +231,7 @@ pub fn describe_service(service_id: &str) -> Option<String> {
     Some(g.get(&routed_id)?.describe_json.clone())
 }
 
-fn gateway_registry_snapshot() -> crate::service_gateway::ActiveGatewayRegistry {
+fn build_gateway_registry_snapshot() -> crate::service_gateway::ActiveGatewayRegistry {
     let c = ctx();
 
     let services = {
@@ -292,6 +304,47 @@ fn gateway_registry_snapshot() -> crate::service_gateway::ActiveGatewayRegistry 
         &engine_owned_gateways,
     )
 }
+
+fn gateway_registry_snapshot() -> crate::service_gateway::ActiveGatewayRegistry {
+    let c = ctx();
+
+    loop {
+        let generation_before = c.services_generation.load(Ordering::Acquire);
+
+        {
+            let cache = match c.gateway_registry_cache.lock() {
+                Ok(v) => v,
+                Err(e) => e.into_inner(),
+            };
+            if let Some(cache) = cache.as_ref() {
+                if cache.generation == generation_before {
+                    return cache.registry.clone();
+                }
+            }
+        }
+
+        let registry = build_gateway_registry_snapshot();
+        let generation_after = c.services_generation.load(Ordering::Acquire);
+
+        if generation_before != generation_after {
+            continue;
+        }
+
+        {
+            let mut cache = match c.gateway_registry_cache.lock() {
+                Ok(v) => v,
+                Err(e) => e.into_inner(),
+            };
+            *cache = Some(GatewayRegistryCache {
+                generation: generation_after,
+                registry: registry.clone(),
+            });
+        }
+
+        return registry;
+    }
+}
+
 
 fn active_engine_gateways() -> Vec<String> {
     gateway_registry_snapshot().gateway_ids()
@@ -781,6 +834,8 @@ pub fn unregister_by_owner(owner_plugin_id: &str) {
         g.retain(|_, route| route.provider_owner_id != owner_plugin_id);
     }
 
+    bump_services_generation();
+
     if removed_services > 0 || removed_sinks > 0 {
         log::info!(
             "plugins shutdown: unregister complete owner='{}' services={} event_sinks={}",
@@ -854,6 +909,7 @@ pub(crate) fn register_plugin_descriptor(
         g.insert(plugin_id.to_owned(), origin);
     }
 
+    bump_services_generation();
     origin
 }
 
@@ -891,7 +947,7 @@ fn collect_declared_providers(
         }
 
         for gateway in crate::service_gateway::descriptor_gateway_capabilities(&d) {
-            let _service_kind = gateway.service_kind;
+            let _service_kind = gateway.service_kind.as_str();
             if crate::service_gateway::gateway_provider_service_id(&d, &gateway).is_some() {
                 let key = declared_cap_key(gateway.gateway_id.as_str(), CapabilityKind::ServiceV1 as u8);
                 let cur = out.get(&key).copied().unwrap_or(0);
@@ -1003,6 +1059,8 @@ pub fn register_external_runtime_plugin(
             },
         );
     }
+
+    bump_services_generation();
 
     log::info!(
         "plugins: external runtime registered id='{}' ver='{}' kind={:?} origin='{}' path='{}'",

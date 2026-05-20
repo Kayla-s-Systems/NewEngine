@@ -6,7 +6,7 @@
 //! render feature packs. Runtime owns lowering and backend submission; feature
 //! crates own draw-list extraction and light/shadow policy.
 
-use newengine_core::render::{Extent2D, RenderDrawListKind, RenderTargetId, TextureId};
+use newengine_core::render::{Extent2D, RectI32, RenderDrawListKind, RenderTargetId, TextureId, Viewport};
 use newengine_core::EngineResult;
 use newengine_lighting::{AmbientLight, DirectionalLight, PointLight, ShadowSettings};
 use newengine_math::{Mat4, Vec3};
@@ -65,6 +65,7 @@ pub struct BoundsSnap {
     pub radius: f32,
 }
 
+pub const MAX_DIRECTIONAL_SHADOW_CASCADES: usize = 4;
 const MAX_POINT_LIGHTS: usize = 4;
 
 #[derive(Clone, Copy, Debug)]
@@ -76,6 +77,8 @@ pub struct PackedLights {
     pub point_color_intensity: [[f32; 4]; MAX_POINT_LIGHTS],
     pub point_count_pad: [f32; 4],
     pub shadow_light_mvp: Mat4,
+    pub shadow_cascade_light_mvp: [Mat4; MAX_DIRECTIONAL_SHADOW_CASCADES],
+    pub shadow_cascade_splits: [f32; MAX_DIRECTIONAL_SHADOW_CASCADES],
     pub shadow_params: [f32; 4],
     pub shadow_extra: [f32; 4],
 }
@@ -91,6 +94,8 @@ impl Default for PackedLights {
             point_color_intensity: [[0.0; 4]; MAX_POINT_LIGHTS],
             point_count_pad: [0.0; 4],
             shadow_light_mvp: Mat4::IDENTITY,
+            shadow_cascade_light_mvp: [Mat4::IDENTITY; MAX_DIRECTIONAL_SHADOW_CASCADES],
+            shadow_cascade_splits: [0.0; MAX_DIRECTIONAL_SHADOW_CASCADES],
             shadow_params: [0.0; 4],
             shadow_extra: [0.0; 4],
         }
@@ -98,7 +103,7 @@ impl Default for PackedLights {
 }
 
 impl PackedLights {
-    pub const UBO_SIZE: usize = 480;
+    pub const UBO_SIZE: usize = 752;
 
     #[inline]
     pub fn from_world(world: &newengine_ecs::World) -> Self {
@@ -157,8 +162,20 @@ impl PackedLights {
     #[inline]
     pub fn with_shadow(mut self, light_mvp: Mat4, params: [f32; 4], extra: [f32; 4]) -> Self {
         self.shadow_light_mvp = light_mvp;
+        self.shadow_cascade_light_mvp = [light_mvp; MAX_DIRECTIONAL_SHADOW_CASCADES];
+        self.shadow_cascade_splits = [extra[3].max(0.0); MAX_DIRECTIONAL_SHADOW_CASCADES];
         self.shadow_params = params;
         self.shadow_extra = extra;
+        self
+    }
+
+    #[inline]
+    pub fn with_shadow_frame(mut self, frame: ShadowFrame) -> Self {
+        self.shadow_light_mvp = frame.light_mvp;
+        self.shadow_cascade_light_mvp = frame.cascade_light_mvp;
+        self.shadow_cascade_splits = frame.cascade_splits;
+        self.shadow_params = frame.params;
+        self.shadow_extra = frame.extra;
         self
     }
 
@@ -262,9 +279,39 @@ impl ShadowCasterCull {
 }
 
 #[derive(Clone, Copy, Debug)]
+pub struct ShadowCascadeFrame {
+    pub light_mvp: Mat4,
+    pub viewport: Viewport,
+    pub scissor: RectI32,
+    pub split_near: f32,
+    pub split_far: f32,
+    pub texel_world_size: f32,
+    pub caster_cull: ShadowCasterCull,
+}
+
+impl ShadowCascadeFrame {
+    #[inline]
+    pub fn disabled() -> Self {
+        Self {
+            light_mvp: Mat4::IDENTITY,
+            viewport: Viewport { x: 0.0, y: 0.0, w: 1.0, h: 1.0, min_depth: 0.0, max_depth: 1.0 },
+            scissor: RectI32::new(0, 0, 1, 1),
+            split_near: 0.0,
+            split_far: 0.0,
+            texel_world_size: 1.0,
+            caster_cull: ShadowCasterCull::directional(Mat4::IDENTITY, 1.0, 0.1, 1.0),
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug)]
 pub struct ShadowFrame {
     pub texture: TextureId,
     pub light_mvp: Mat4,
+    pub cascade_light_mvp: [Mat4; MAX_DIRECTIONAL_SHADOW_CASCADES],
+    pub cascade_splits: [f32; MAX_DIRECTIONAL_SHADOW_CASCADES],
+    pub cascade_count: u32,
+    pub cascades: [ShadowCascadeFrame; MAX_DIRECTIONAL_SHADOW_CASCADES],
     pub params: [f32; 4],
     pub extra: [f32; 4],
 }
@@ -275,9 +322,78 @@ impl ShadowFrame {
         Self {
             texture: fallback,
             light_mvp: Mat4::IDENTITY,
+            cascade_light_mvp: [Mat4::IDENTITY; MAX_DIRECTIONAL_SHADOW_CASCADES],
+            cascade_splits: [0.0; MAX_DIRECTIONAL_SHADOW_CASCADES],
+            cascade_count: 1,
+            cascades: [ShadowCascadeFrame::disabled(); MAX_DIRECTIONAL_SHADOW_CASCADES],
             params: [0.0, 0.0, 0.0, 0.0],
-            extra: [0.0, 0.0, 0.0, 0.0],
+            extra: [0.0, 1.0, 0.0, 0.0],
         }
+    }
+
+    #[inline]
+    pub fn single(texture: TextureId, light_mvp: Mat4, params: [f32; 4], extra: [f32; 4], caster_cull: Option<ShadowCasterCull>) -> Self {
+        let cull = caster_cull.unwrap_or_else(|| ShadowCasterCull::directional(Mat4::IDENTITY, 1.0, 0.1, 1.0));
+        let split_far = extra[3].max(0.0);
+        let cascade = ShadowCascadeFrame {
+            light_mvp,
+            viewport: Viewport { x: 0.0, y: 0.0, w: 1.0, h: 1.0, min_depth: 0.0, max_depth: 1.0 },
+            scissor: RectI32::new(0, 0, 1, 1),
+            split_near: 0.0,
+            split_far,
+            texel_world_size: 1.0,
+            caster_cull: cull,
+        };
+        let mut cascade_light_mvp = [light_mvp; MAX_DIRECTIONAL_SHADOW_CASCADES];
+        cascade_light_mvp[0] = light_mvp;
+        let mut cascade_splits = [split_far; MAX_DIRECTIONAL_SHADOW_CASCADES];
+        cascade_splits[0] = split_far;
+        let mut cascades = [ShadowCascadeFrame::disabled(); MAX_DIRECTIONAL_SHADOW_CASCADES];
+        cascades[0] = cascade;
+        Self {
+            texture,
+            light_mvp,
+            cascade_light_mvp,
+            cascade_splits,
+            cascade_count: 1,
+            cascades,
+            params,
+            extra: [extra[0], 1.0, extra[2], extra[3]],
+        }
+    }
+
+    #[inline]
+    pub fn cascaded(
+        texture: TextureId,
+        cascade_count: u32,
+        cascades: [ShadowCascadeFrame; MAX_DIRECTIONAL_SHADOW_CASCADES],
+        params: [f32; 4],
+        extra: [f32; 4],
+    ) -> Self {
+        let count = cascade_count.clamp(1, MAX_DIRECTIONAL_SHADOW_CASCADES as u32);
+        let first = cascades[0];
+        let mut cascade_light_mvp = [first.light_mvp; MAX_DIRECTIONAL_SHADOW_CASCADES];
+        let mut cascade_splits = [first.split_far; MAX_DIRECTIONAL_SHADOW_CASCADES];
+        for i in 0..count as usize {
+            cascade_light_mvp[i] = cascades[i].light_mvp;
+            cascade_splits[i] = cascades[i].split_far;
+        }
+        Self {
+            texture,
+            light_mvp: first.light_mvp,
+            cascade_light_mvp,
+            cascade_splits,
+            cascade_count: count,
+            cascades,
+            params,
+            extra: [extra[0], count as f32, extra[2], extra[3]],
+        }
+    }
+
+    #[inline]
+    pub fn cascade(self, index: usize) -> ShadowCascadeFrame {
+        let max = self.cascade_count.saturating_sub(1).min((MAX_DIRECTIONAL_SHADOW_CASCADES - 1) as u32) as usize;
+        self.cascades[index.min(max)]
     }
 }
 
@@ -331,7 +447,28 @@ impl LightShadowPlan {
             supported: true,
             target: Some(target),
             resolution: resolution.max(1),
-            frame: ShadowFrame { texture, light_mvp, params, extra },
+            frame: ShadowFrame::single(texture, light_mvp, params, extra, caster_cull),
+            caster_cull,
+        }
+    }
+
+    #[inline]
+    pub fn directional_cascaded(
+        target: RenderTargetId,
+        texture: TextureId,
+        resolution: u32,
+        cascade_count: u32,
+        cascades: [ShadowCascadeFrame; MAX_DIRECTIONAL_SHADOW_CASCADES],
+        params: [f32; 4],
+        extra: [f32; 4],
+        caster_cull: Option<ShadowCasterCull>,
+    ) -> Self {
+        Self {
+            light_kind: Some(ShadowLightKind::Directional),
+            supported: true,
+            target: Some(target),
+            resolution: resolution.max(1),
+            frame: ShadowFrame::cascaded(texture, cascade_count, cascades, params, extra),
             caster_cull,
         }
     }
@@ -362,7 +499,7 @@ impl LightShadowPlan {
 
     #[inline]
     pub fn cascade_count(self) -> u32 {
-        self.frame.extra[1].round().clamp(1.0, 8.0) as u32
+        self.frame.cascade_count.clamp(1, MAX_DIRECTIONAL_SHADOW_CASCADES as u32)
     }
 }
 
@@ -372,6 +509,7 @@ pub struct SceneExtractionCtx<'a> {
     pub lit: newengine_material_domain_api::LitPipeline,
     pub viewproj: Mat4,
     pub camera_position: Vec3,
+    pub camera_forward: Vec3,
     pub bounds: BoundsSnap,
     pub lights: PackedLights,
     pub shadow_plan: LightShadowPlan,

@@ -16,8 +16,8 @@ use newengine_procedural_noise::{
     NoiseRemap, NoiseShape, ProceduralTerrain, TerrainHeightfieldDescriptor,
 };
 use newengine_scene::{
-    spawn_named, Scene, SceneCellCoord, SceneResidencySet, SceneStreamingBudget,
-    SceneStreamingPlan,
+    spawn_named, Scene, SceneBucketedCellPlan, SceneCellCoord, SceneLayeredStreamingPlan,
+    SceneResidencySet, SceneStreamingBudget, SceneStreamingProfile,
 };
 use newengine_transform::{set_parent, Transform};
 
@@ -378,7 +378,11 @@ fn configure_game_ready_lighting(world: &mut newengine_ecs::World, spec: &GameRe
 
     world.insert_resource(ShadowSettings {
         enabled: spec.shadows.enabled,
-        method: newengine_lighting::ShadowMethod::DirectionalDepthMap,
+        method: if spec.shadows.cascade_count > 1 {
+            newengine_lighting::ShadowMethod::CascadedShadowMaps
+        } else {
+            newengine_lighting::ShadowMethod::DirectionalDepthMap
+        },
         resolution: spec.shadows.resolution,
         cascade_count: spec.shadows.cascade_count,
         max_distance: spec.shadows.max_distance,
@@ -691,11 +695,29 @@ pub(crate) fn tick_game_ready_streaming_terrain(
         .max_pending_jobs
         .max(budget.max_commits_per_tick.saturating_mul(4).max(4));
 
-    let plan = SceneStreamingPlan::build(
+    let profile = SceneStreamingProfile {
+        render: budget,
+        simulation: SceneStreamingBudget {
+            resident_radius: budget.resident_radius.saturating_add(2),
+            unload_radius: budget.unload_radius.saturating_add(2),
+            // Coarse simulation is intentionally cheaper than render residency.
+            max_commits_per_tick: budget.max_commits_per_tick.saturating_div(2).max(1),
+        },
+    }
+    .sanitized();
+    let layered_plan = SceneLayeredStreamingPlan::build(
         center,
-        budget,
+        profile,
         state.loaded.keys().copied(),
         state.pending.keys().copied(),
+        std::iter::empty::<TerrainChunkCoord>(),
+        std::iter::empty::<TerrainChunkCoord>(),
+    );
+    let plan = &layered_plan.render;
+    let bucket_plan = SceneBucketedCellPlan::from_desired_sets(
+        center,
+        layered_plan.render.desired.iter().copied(),
+        layered_plan.simulation.desired.iter().copied(),
     );
 
     let commit_budget = budget.max_commits_per_tick.max(1);
@@ -736,13 +758,27 @@ pub(crate) fn tick_game_ready_streaming_terrain(
     }
 
     let remaining_commit_budget = commit_budget.saturating_sub(created);
-    let mut scheduled = 0usize;
-    for request in plan.loads.iter().take(remaining_commit_budget) {
-        let coord = request.coord;
-        if state.loaded.contains_key(&coord) || state.pending.contains_key(&coord) {
-            continue;
-        }
+    let loaded_coords = state
+        .loaded
+        .keys()
+        .copied()
+        .collect::<std::collections::BTreeSet<_>>();
+    let pending_coords = state
+        .pending
+        .keys()
+        .copied()
+        .collect::<std::collections::BTreeSet<_>>();
+    let stream_requests = bucket_plan
+        .cells
+        .iter()
+        .filter(|cell| cell.bucket.wants_render_residency())
+        .map(|cell| cell.coord)
+        .filter(|coord| !loaded_coords.contains(coord) && !pending_coords.contains(coord))
+        .take(remaining_commit_budget)
+        .collect::<Vec<_>>();
 
+    let mut scheduled = 0usize;
+    for coord in stream_requests {
         if enqueue_streamed_terrain_chunk(&mut state, job_system, coord) {
             scheduled += 1;
             continue;
@@ -784,7 +820,7 @@ pub(crate) fn tick_game_ready_streaming_terrain(
 
     if created > 0 || scheduled > 0 || removed > 0 {
         log::debug!(
-            "game-ready terrain streaming: center=[{},{}] loaded={} pending={} created={} scheduled={} removed={} planned_loads={} planned_unloads={}",
+            "game-ready terrain streaming: center=[{},{}] render_loaded={} render_pending={} created={} scheduled={} removed={} render_loads={} render_unloads={} sim_desired={}",
             center.x,
             center.z,
             state.loaded.len(),
@@ -792,8 +828,9 @@ pub(crate) fn tick_game_ready_streaming_terrain(
             created,
             scheduled,
             removed,
-            plan.loads.len(),
+            bucket_plan.cells.iter().filter(|cell| cell.bucket.wants_render_residency()).count(),
             plan.unloads.len(),
+            bucket_plan.cells.iter().filter(|cell| cell.bucket.wants_simulation_residency()).count(),
         );
     }
 

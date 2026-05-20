@@ -244,9 +244,9 @@ fn default_day_length_seconds() -> f32 { 720.0 }
 fn default_sun_latitude_degrees() -> f32 { 45.0 }
 fn default_axial_tilt_degrees() -> f32 { 23.44 }
 fn default_shadow_enabled() -> bool { true }
-fn default_shadow_resolution() -> u32 { 2048 }
-fn default_shadow_cascade_count() -> u32 { 1 }
-fn default_shadow_max_distance() -> f32 { 80.0 }
+fn default_shadow_resolution() -> u32 { 4096 }
+fn default_shadow_cascade_count() -> u32 { 4 }
+fn default_shadow_max_distance() -> f32 { 180.0 }
 fn default_shadow_softness() -> f32 { 0.75 }
 fn default_shadow_bias() -> f32 { 0.0025 }
 fn default_shadow_normal_bias() -> f32 { 0.015 }

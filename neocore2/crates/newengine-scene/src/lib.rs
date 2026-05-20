@@ -32,7 +32,9 @@ pub use scene::Scene;
 pub use scene_asset::{SceneAsset, SceneAssetError, SceneAssetOptions};
 pub use settings::{ForwardAxis, SceneSettings, UnitScaleMeters, UpAxis};
 pub use streaming::{
-    SceneCellCoord, SceneResidencySet, SceneStreamingBudget, SceneStreamingPlan,
+    SceneBucketedCell, SceneBucketedCellPlan, SceneCellCoord, SceneLayeredStreamingPlan,
+    SceneResidencyLayer, SceneResidencySet, SceneStreamingBucket,
+    SceneStreamingBudget, SceneStreamingObserver, SceneStreamingPlan, SceneStreamingProfile,
     SceneStreamingRequest, SceneStreamingRequestKind,
 };
 #[cfg(feature = "runtime")]

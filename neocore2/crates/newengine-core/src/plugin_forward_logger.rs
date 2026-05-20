@@ -9,7 +9,7 @@ use std::sync::OnceLock;
 ///
 /// The concrete logging sink remains plugin-owned; the host resolves this
 /// gateway from provider metadata instead of calling the provider id directly.
-pub const ENGINE_LOG_SERVICE_ID: &str = "engine.log";
+pub const ENGINE_LOG_SERVICE_ID: &str = "engine.logging";
 
 /// First-party provider service id exposed by the logging plugin.
 #[allow(dead_code)]

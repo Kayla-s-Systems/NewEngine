@@ -21,10 +21,13 @@ layout(set = 0, binding = 0, std140) uniform Ubo {
     // x: biome_patch_scale, y: biome_blend_softness, z: terrain_roughness, w: occlusion_strength
     vec4 u_material_params;
     mat4 u_light_mvp;
+    mat4 u_cascade_light_mvp[4];
     // x: enabled, y: base bias, z: shadow/contact strength, w: PCF softness radius
     vec4 u_shadow_params;
-    // x: normal bias in shadow-depth units, y: cascade count, z/w: reserved for atlas/cascade metadata
+    // x: normal bias in shadow-depth units, y: cascade count, z: tile resolution, w: max shadow distance
     vec4 u_shadow_extra;
+    // per-cascade far split distances in world units from the camera
+    vec4 u_shadow_splits;
 } ubo;
 
 // Terrain pipeline intentionally reuses the lit bind group layout:
@@ -190,7 +193,10 @@ vec3 sample_rock_layer(vec2 uv, vec2 dx, vec2 dy, vec2 world_xz) {
 }
 
 float shadow_tap(vec2 uv, float current, float bias) {
-    float closest = texture(sampler2D(u_shadow_tex, u_material_sampler), clamp(uv, vec2(0.001), vec2(0.999))).r;
+    if (uv.x <= 0.0 || uv.x >= 1.0 || uv.y <= 0.0 || uv.y >= 1.0) {
+        return 1.0;
+    }
+    float closest = texture(sampler2D(u_shadow_tex, u_material_sampler), uv).r;
     if (closest >= 0.9995) {
         return 1.0;
     }
@@ -205,7 +211,11 @@ float shadow_blocker_depth(vec2 uv, float current, float bias, vec2 texel) {
         vec2(1.5, 0.5), vec2(0.5, 1.5), vec2(-0.5, 1.5), vec2(-1.5, 0.5)
     );
     for (int i = 0; i < 8; ++i) {
-        float d = texture(sampler2D(u_shadow_tex, u_material_sampler), clamp(uv + taps[i] * texel, vec2(0.001), vec2(0.999))).r;
+        vec2 tap_uv = uv + taps[i] * texel;
+        if (tap_uv.x <= 0.0 || tap_uv.x >= 1.0 || tap_uv.y <= 0.0 || tap_uv.y >= 1.0) {
+            continue;
+        }
+        float d = texture(sampler2D(u_shadow_tex, u_material_sampler), tap_uv).r;
         if (d < current - bias && d < 0.9995) {
             blocker_sum += d;
             blocker_count += 1.0;
@@ -223,8 +233,6 @@ float shadow_compare_quality(vec2 uv, float current, float bias) {
     ivec2 sz = textureSize(sampler2D(u_shadow_tex, u_material_sampler), 0);
     vec2 texel = max(radius, 0.35) / vec2(max(sz.x, 1), max(sz.y, 1));
 
-    // PCSS-lite: first estimate blockers, then expand the PCF kernel from receiver/blocker
-    // separation. This keeps the common case cheap while avoiding the old fixed 9-tap cost.
     float blocker = shadow_blocker_depth(uv, current, bias, texel);
     float penumbra = blocker > 0.0 ? clamp((current - blocker) * 42.0 * radius, 0.55, 3.25) : 0.75;
     vec2 filter_texel = texel * penumbra;
@@ -251,16 +259,60 @@ float shadow_compare_quality(vec2 uv, float current, float bias) {
     return lit;
 }
 
-float sample_shadow(vec4 light_clip, vec3 nrm, vec3 light_dir_to_scene) {
+vec4 shadow_clip_for_receiver(vec3 wpos, out vec2 tile_offset, out vec2 tile_scale, out float cascade_fade) {
+    int cascade_count = int(clamp(floor(ubo.u_shadow_extra.y + 0.5), 1.0, 4.0));
+    if (cascade_count <= 1) {
+        tile_offset = vec2(0.0);
+        tile_scale = vec2(1.0);
+        cascade_fade = 1.0;
+        return ubo.u_light_mvp * vec4(wpos, 1.0);
+    }
+
+    float view_distance = distance(wpos, ubo.u_point_count_pad.yzw);
+    int cascade_index = 0;
+    if (cascade_count > 1 && view_distance > ubo.u_shadow_splits.x) { cascade_index = 1; }
+    if (cascade_count > 2 && view_distance > ubo.u_shadow_splits.y) { cascade_index = 2; }
+    if (cascade_count > 3 && view_distance > ubo.u_shadow_splits.z) { cascade_index = 3; }
+
+    float split_far = cascade_index == 0 ? ubo.u_shadow_splits.x
+        : cascade_index == 1 ? ubo.u_shadow_splits.y
+        : cascade_index == 2 ? ubo.u_shadow_splits.z
+        : ubo.u_shadow_splits.w;
+    float split_near = cascade_index == 0 ? 0.0
+        : cascade_index == 1 ? ubo.u_shadow_splits.x
+        : cascade_index == 2 ? ubo.u_shadow_splits.y
+        : ubo.u_shadow_splits.z;
+    float split_band = max((split_far - split_near) * 0.08, 2.0);
+    cascade_fade = 1.0 - smoothstep(split_far - split_band, split_far, view_distance);
+
+    int columns = 2;
+    int rows = cascade_count <= 2 ? 1 : 2;
+    float inv_columns = 1.0 / float(columns);
+    float inv_rows = 1.0 / float(rows);
+    tile_scale = vec2(inv_columns, inv_rows);
+    tile_offset = vec2(float(cascade_index % columns) * inv_columns, float(cascade_index / columns) * inv_rows);
+    return ubo.u_cascade_light_mvp[cascade_index] * vec4(wpos, 1.0);
+}
+
+float sample_shadow(vec4 fallback_light_clip, vec3 nrm, vec3 light_dir_to_scene) {
+    vec2 tile_offset;
+    vec2 tile_scale;
+    float cascade_fade;
+    vec4 light_clip = shadow_clip_for_receiver(v_wpos, tile_offset, tile_scale, cascade_fade);
     if (ubo.u_shadow_params.x < 0.5 || light_clip.w <= 0.0) {
         return 1.0;
     }
 
     vec3 ndc = light_clip.xyz / light_clip.w;
-    vec2 uv = ndc.xy * 0.5 + 0.5;
-    if (uv.x < 0.001 || uv.x > 0.999 || uv.y < 0.001 || uv.y > 0.999 || ndc.z < 0.0 || ndc.z > 1.0) {
+    vec2 local_uv = ndc.xy * 0.5 + 0.5;
+    if (local_uv.x < 0.001 || local_uv.x > 0.999 || local_uv.y < 0.001 || local_uv.y > 0.999 || ndc.z < 0.0 || ndc.z > 1.0) {
         return 1.0;
     }
+
+    ivec2 atlas_size = textureSize(sampler2D(u_shadow_tex, u_material_sampler), 0);
+    vec2 atlas_texel = 1.0 / vec2(max(atlas_size.x, 1), max(atlas_size.y, 1));
+    vec2 guard = max(atlas_texel / max(tile_scale, vec2(0.0001)), vec2(0.0015));
+    vec2 atlas_uv = tile_offset + clamp(local_uv, guard, vec2(1.0) - guard) * tile_scale;
 
     float current = ndc.z;
     float ndotl = max(dot(normalize(nrm), normalize(-light_dir_to_scene)), 0.0);
@@ -270,11 +322,12 @@ float sample_shadow(vec4 light_clip, vec3 nrm, vec3 light_dir_to_scene) {
     float bias = max(receiver_bias + normal_bias, 0.00005);
     float strength = clamp(ubo.u_shadow_params.z, 0.0, 0.78);
 
-    float lit = shadow_compare_quality(uv, current, bias);
-    float border = min(min(uv.x, uv.y), min(1.0 - uv.x, 1.0 - uv.y));
-    float edge_fade = smoothstep(0.006, 0.055, border)
+    float lit = shadow_compare_quality(atlas_uv, current, bias);
+    float border = min(min(local_uv.x, local_uv.y), min(1.0 - local_uv.x, 1.0 - local_uv.y));
+    float edge_fade = smoothstep(0.010, 0.070, border)
         * smoothstep(0.010, 0.080, ndc.z)
-        * (1.0 - smoothstep(0.920, 0.992, ndc.z));
+        * (1.0 - smoothstep(0.920, 0.992, ndc.z))
+        * cascade_fade;
     float shadowed = mix(1.0 - strength, 1.0, lit);
     return mix(1.0, shadowed, edge_fade);
 }

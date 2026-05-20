@@ -2,8 +2,8 @@ use newengine_math::{Mat4, Vec3};
 
 /// Runtime draw budgets keep the current non-instanced Vulkan path stable.
 /// They are intentionally deterministic: nearest objects win, ties are stable-key ordered.
-pub(super) const RUNTIME_OPAQUE_PRIMITIVE_BUDGET: usize = 128;
-pub(super) const RUNTIME_SHADOW_PRIMITIVE_BUDGET: usize = 96;
+pub(super) const RUNTIME_OPAQUE_PRIMITIVE_BUDGET: usize = 64;
+pub(super) const RUNTIME_SHADOW_PRIMITIVE_BUDGET: usize = 32;
 pub(super) const EDITOR_OPAQUE_PRIMITIVE_BUDGET: usize = 256;
 pub(super) const EDITOR_SHADOW_PRIMITIVE_BUDGET: usize = 160;
 
@@ -20,12 +20,25 @@ pub(super) fn distance_sq_to_camera(model: Mat4, camera_position: Vec3) -> f32 {
 
 #[inline]
 pub(super) fn primitive_budget(runtime: bool, shadow_pass: bool) -> usize {
-    match (runtime, shadow_pass) {
+    let default = match (runtime, shadow_pass) {
         (true, true) => RUNTIME_SHADOW_PRIMITIVE_BUDGET,
         (true, false) => RUNTIME_OPAQUE_PRIMITIVE_BUDGET,
         (false, true) => EDITOR_SHADOW_PRIMITIVE_BUDGET,
         (false, false) => EDITOR_OPAQUE_PRIMITIVE_BUDGET,
-    }
+    };
+
+    let key = match (runtime, shadow_pass) {
+        (true, true) => "NEWENGINE_RUNTIME_SHADOW_PRIMITIVE_BUDGET",
+        (true, false) => "NEWENGINE_RUNTIME_OPAQUE_PRIMITIVE_BUDGET",
+        (false, true) => "NEWENGINE_EDITOR_SHADOW_PRIMITIVE_BUDGET",
+        (false, false) => "NEWENGINE_EDITOR_OPAQUE_PRIMITIVE_BUDGET",
+    };
+
+    std::env::var(key)
+        .ok()
+        .and_then(|value| value.trim().parse::<usize>().ok())
+        .map(|value| value.clamp(8, 512))
+        .unwrap_or(default)
 }
 
 pub(super) trait DistanceKeyEntry {
@@ -91,4 +104,106 @@ pub(super) fn shadow_caster_visible(
     radius_ws: f32,
 ) -> bool {
     cull.map(|c| c.contains_sphere(center_ws, radius_ws)).unwrap_or(true)
+}
+
+
+#[inline]
+pub(super) fn render_scene_culling_enabled() -> bool {
+    std::env::var("NEWENGINE_RENDER_SCENE_CULLING")
+        .map(|v| {
+            let v = v.trim().to_ascii_lowercase();
+            !matches!(v.as_str(), "" | "0" | "false" | "off" | "no")
+        })
+        .unwrap_or(true)
+}
+
+#[inline]
+fn env_f32(name: &str, default: f32, min: f32, max: f32) -> f32 {
+    std::env::var(name)
+        .ok()
+        .and_then(|v| v.trim().parse::<f32>().ok())
+        .map(|v| v.clamp(min, max))
+        .unwrap_or(default)
+}
+
+/// Conservative forward-visibility test used by the GameReady runtime draw lists.
+///
+/// This is intentionally a cheap scene-streamer bucket test, not a replacement
+/// for backend frustum clipping. It keeps the CPU extraction path from treating
+/// every resident cell as visible. Nearby objects are always accepted to avoid
+/// near-plane popping; farther objects must be inside a wide forward cone.
+#[inline]
+pub(super) fn forward_sphere_visible(
+    camera_position: Vec3,
+    camera_forward: Vec3,
+    center_ws: Vec3,
+    radius_ws: f32,
+    max_distance: f32,
+    cone_dot: f32,
+    near_accept_distance: f32,
+) -> bool {
+    if !render_scene_culling_enabled() {
+        return true;
+    }
+
+    let radius = radius_ws.abs().max(0.001);
+    let delta = center_ws - camera_position;
+    let dist2 = delta.length_squared();
+    let max_d = max_distance.max(near_accept_distance).max(radius);
+    if dist2 > (max_d + radius) * (max_d + radius) {
+        return false;
+    }
+
+    let near = near_accept_distance.max(radius * 1.15).max(0.001);
+    if dist2 <= near * near {
+        return true;
+    }
+
+    let forward = camera_forward.normalize_or_zero();
+    if forward.length_squared() <= 1.0e-6 {
+        return true;
+    }
+
+    let dir = delta.normalize_or_zero();
+    dir.dot(forward) >= cone_dot.clamp(-0.95, 0.95)
+}
+
+#[inline]
+pub(super) fn terrain_forward_max_distance() -> f32 {
+    env_f32("NEWENGINE_TERRAIN_RENDER_DISTANCE", 150.0, 32.0, 2048.0)
+}
+
+#[inline]
+pub(super) fn primitive_forward_max_distance(runtime: bool) -> f32 {
+    let default = if runtime { 92.0 } else { 180.0 };
+    env_f32("NEWENGINE_PRIMITIVE_RENDER_DISTANCE", default, 8.0, 2048.0)
+}
+
+#[inline]
+pub(super) fn primitive_shadow_max_distance(runtime: bool) -> f32 {
+    let default = if runtime { 120.0 } else { 240.0 };
+    env_f32("NEWENGINE_PRIMITIVE_SHADOW_DISTANCE", default, 16.0, 4096.0)
+}
+
+#[inline]
+pub(super) fn scene_forward_cone_dot() -> f32 {
+    // -0.25 is intentionally wider than a strict camera frustum. It keeps
+    // objects around the edges alive while cutting resident cells fully behind
+    // the player/camera, matching the reference scene streamer's active buckets.
+    env_f32("NEWENGINE_RENDER_FORWARD_CONE_DOT", -0.25, -0.95, 0.95)
+}
+
+#[inline]
+pub(super) fn terrain_near_accept_distance(radius_ws: f32) -> f32 {
+    env_f32(
+        "NEWENGINE_TERRAIN_NEAR_ACCEPT_DISTANCE",
+        radius_ws.abs().max(1.0) * 1.20,
+        8.0,
+        2048.0,
+    )
+}
+
+#[inline]
+pub(super) fn primitive_near_accept_distance() -> f32 {
+    env_f32("NEWENGINE_PRIMITIVE_NEAR_ACCEPT_DISTANCE", 12.0, 1.0, 512.0)
 }

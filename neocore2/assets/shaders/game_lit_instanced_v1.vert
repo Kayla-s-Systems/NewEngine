@@ -31,9 +31,12 @@ layout(set = 0, binding = 0, std140) uniform Ubo {
     vec4 u_uv_transform;
     vec4 u_material_params;
     mat4 u_light_mvp;
+    mat4 u_cascade_light_mvp[4];
     vec4 u_shadow_params;
-    // x: normal bias in shadow-depth units, y: cascade count, z/w: reserved for atlas/cascade metadata
+    // x: normal bias in shadow-depth units, y: cascade count, z: tile resolution, w: max shadow distance
     vec4 u_shadow_extra;
+    // per-cascade far split distances in world units from the camera
+    vec4 u_shadow_splits;
 } ubo;
 
 layout(location = 0) out vec3 v_wpos;

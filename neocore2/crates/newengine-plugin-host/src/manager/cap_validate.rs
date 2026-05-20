@@ -80,7 +80,7 @@ fn collect_descriptor_providers(d: &PluginDescriptor, out: &mut HashMap<CapKey, 
     }
 
     for gateway in crate::service_gateway::descriptor_gateway_capabilities(d) {
-        let _service_kind = gateway.service_kind;
+        let _service_kind = gateway.service_kind.as_str();
         if crate::service_gateway::gateway_provider_service_id(d, &gateway).is_some() {
             let key = cap_key(gateway.gateway_id.as_str(), CapabilityKind::ServiceV1 as u8);
             let cur = out.get(&key).copied().unwrap_or(0);

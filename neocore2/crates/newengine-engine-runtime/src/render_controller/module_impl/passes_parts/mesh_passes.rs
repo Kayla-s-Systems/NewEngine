@@ -1,14 +1,13 @@
 
-use newengine_core::render::{BufferSlice, DrawIndexedArgs, IndexFormat, PipelineId, SamplerId, TextureId};
+use newengine_core::render::{BindGroupId, BufferSlice, DrawIndexedArgs, IndexFormat, PipelineId, SamplerId, TextureId};
 use newengine_math::{Mat4, Vec3};
 
-use newengine_materials::api::MaterialRegistryApi;
+use newengine_materials::api::{MaterialId, MaterialRegistryApi};
 use newengine_primitives::Primitive;
 use newengine_transform::GlobalTransform;
+use newengine_bounds::Bounds;
 
-use super::super::gpu::{
-    ensure_primitive_gpu, upload_primitive_mesh,
-};
+use super::super::gpu::{ensure_primitive_gpu, PrimitiveGpu};
 use super::draw_bucket::{BucketedIndexedDrawStream, IndexedDrawPacket};
 use super::instancing::{
     draw_indexed_instanced_args, InstanceBatchKey, InstanceBatchSet, InstancedReplayState,
@@ -18,12 +17,15 @@ use super::super::material_bindings::LitMaterialPlan;
 use newengine_render_feature_api::PackedLights;
 use crate::render_controller::RuntimeRenderController;
 use crate::gameplay::display_visible_in_mode;
-use crate::scene_bridge::{PreparedTerrainPrimitiveMesh, SkyDomeRuntime, TerrainSurfaceLayers};
+use crate::scene_bridge::{SkyDomeRuntime, TerrainSurfaceLayers};
 use self::mesh_visibility::{
-    distance_sq_to_camera, primitive_budget, shadow_caster_visible, sort_by_distance_then_key,
-    transform_sphere,
+    distance_sq_to_camera, forward_sphere_visible, primitive_budget, primitive_forward_max_distance,
+    primitive_near_accept_distance, primitive_shadow_max_distance, scene_forward_cone_dot,
+    shadow_caster_visible, sort_by_distance_then_key, terrain_forward_max_distance,
+    terrain_near_accept_distance, transform_sphere,
 };
 use newengine_procedural_noise::ProceduralTerrain;
+use newengine_math::collections::FxHashMap;
 
 pub(super) fn publish_camera_spawn(
     bridge: &crate::viewport_bridge::ViewportBridge,
@@ -38,8 +40,6 @@ struct TerrainDrawEntry {
     entity_key: u64,
     mesh_key: u64,
     base_color: [f32; 4],
-    prepared_mesh: Option<PreparedTerrainPrimitiveMesh>,
-    fallback_terrain: Option<ProceduralTerrain>,
     model: Mat4,
     material: Option<newengine_materials::MaterialRef>,
     surface_layers: Option<TerrainSurfaceLayers>,
@@ -50,13 +50,62 @@ struct TerrainShadowEntry {
     entity_key: u64,
     mesh_key: u64,
     base_color: [f32; 4],
-    prepared_mesh: Option<PreparedTerrainPrimitiveMesh>,
-    fallback_terrain: Option<ProceduralTerrain>,
     bounds_center: Vec3,
     bounds_radius: f32,
     model: Mat4,
     material: Option<newengine_materials::MaterialRef>,
 }
+
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+struct PrimitivePlanKey {
+    primitive_id: u64,
+    material_id: u64,
+    color: [u32; 4],
+    follow_camera_sky: bool,
+    shadow_pass: bool,
+}
+
+impl PrimitivePlanKey {
+    #[inline]
+    fn new(
+        prim: Primitive,
+        material_ref: Option<newengine_materials::MaterialRef>,
+        follow_camera_sky: bool,
+        shadow_pass: bool,
+    ) -> Self {
+        Self {
+            primitive_id: prim.id.0,
+            material_id: material_ref.map(|mr| mr.id.raw()).unwrap_or(MaterialId::invalid().raw()),
+            color: [
+                prim.color[0].to_bits(),
+                prim.color[1].to_bits(),
+                prim.color[2].to_bits(),
+                prim.color[3].to_bits(),
+            ],
+            follow_camera_sky,
+            shadow_pass,
+        }
+    }
+}
+
+#[derive(Clone, Copy)]
+struct PrimitiveGpuPlan {
+    gpu: PrimitiveGpu,
+    pipeline: PipelineId,
+    bind_group: BindGroupId,
+    base_texture: TextureId,
+    normal_texture: TextureId,
+    roughness_texture: TextureId,
+    shadow_texture: TextureId,
+    sampler: SamplerId,
+    mesh_key: u64,
+    base_color: [f32; 4],
+    emissive_radiance: [f32; 3],
+    uv_transform: [f32; 4],
+    material_params: [f32; 4],
+}
+
 
 
 pub fn draw_procedural_terrain(
@@ -68,6 +117,8 @@ pub fn draw_procedural_terrain(
     lights: &PackedLights,
     shadow_texture: TextureId,
     runtime: bool,
+    camera_position: Vec3,
+    camera_forward: Vec3,
 ) -> newengine_core::EngineResult<()> {
     let world = scene.world();
     let mats_lock = this.bridges.scene.materials();
@@ -79,18 +130,29 @@ pub fn draw_procedural_terrain(
             continue;
         }
         let mesh_key = terrain.mesh_key();
-        let prepared_mesh = world.get::<PreparedTerrainPrimitiveMesh>(id).cloned();
-        let fallback_terrain = if prepared_mesh.is_none() && !this.gpu.meshes.terrain_cache.contains_key(&mesh_key) {
-            Some(terrain.clone())
-        } else {
-            None
-        };
+        if runtime {
+            let local_bounds = terrain.heightfield.local_bounds();
+            let (center_ws, radius_ws) = transform_sphere(
+                gt.0,
+                local_bounds.center(),
+                local_bounds.half_extents().length(),
+            );
+            if !forward_sphere_visible(
+                camera_position,
+                camera_forward,
+                center_ws,
+                radius_ws,
+                terrain_forward_max_distance(),
+                scene_forward_cone_dot(),
+                terrain_near_accept_distance(radius_ws),
+            ) {
+                continue;
+            }
+        }
         entries.push(TerrainDrawEntry {
             entity_key: id.stable_u64(),
             mesh_key,
             base_color: terrain.base_color,
-            prepared_mesh,
-            fallback_terrain,
             model: gt.0,
             material: world.get::<newengine_materials::MaterialRef>(id).copied(),
             surface_layers: world.get::<TerrainSurfaceLayers>(id).cloned(),
@@ -102,28 +164,14 @@ pub fn draw_procedural_terrain(
     for entry in entries {
         let entity_key = entry.entity_key;
         let mesh_key = entry.mesh_key;
-        let prepared_mesh = entry.prepared_mesh;
         let model = entry.model;
         let material = entry.material;
         let surface_layers = entry.surface_layers;
-        let gpu = if let Some(gpu) = this.gpu.meshes.terrain_cache.get(&mesh_key).copied() {
-            gpu
-        } else {
-            let gpu = if let Some(prepared) = prepared_mesh.as_ref() {
-                upload_primitive_mesh(r, prepared.mesh.as_ref(), "game_proc_terrain")?
-            } else {
-                // Compatibility path for pre-existing scenes that do not carry the
-                // PreparedTerrainPrimitiveMesh component yet. Streaming terrain now
-                // creates this component off-thread, so runtime chunks avoid this
-                // expensive conversion on the render extraction hot path.
-                let terrain = entry.fallback_terrain.as_ref().ok_or_else(|| {
-                    newengine_core::EngineError::other("terrain mesh is not prepared and fallback terrain payload is unavailable")
-                })?;
-                let mesh = terrain.heightfield.to_primitive_mesh();
-                upload_primitive_mesh(r, &mesh, "game_proc_terrain")?
-            };
-            this.gpu.meshes.terrain_cache.insert(mesh_key, gpu);
-            gpu
+        let Some(gpu) = this.gpu.meshes.terrain_cache.get(&mesh_key).copied() else {
+            // Render residency is advanced by `pump_scene_gpu_residency` before
+            // feature extraction. Missing GPU buffers are skipped for this frame
+            // instead of being uploaded on the draw-list hot path.
+            continue;
         };
 
         let mvp = viewproj * model;
@@ -281,6 +329,7 @@ pub fn draw_primitives(
     shadow_texture: TextureId,
     runtime: bool,
     camera_position: Vec3,
+    camera_forward: Vec3,
 ) -> newengine_core::EngineResult<()> {
     let world = scene.world();
     let reg_lock = this.bridges.scene.primitives();
@@ -297,6 +346,30 @@ pub fn draw_primitives(
             .get::<SkyDomeRuntime>(id)
             .map(|sky| sky.follow_camera)
             .unwrap_or(false);
+        if runtime && !follow_camera_sky {
+            if let Some(bounds) = world.get::<Bounds>(id) {
+                let (center_ws, radius_ws) = transform_sphere(
+                    gt.0,
+                    bounds.local_sphere.center,
+                    bounds.local_sphere.radius,
+                );
+                if !forward_sphere_visible(
+                    camera_position,
+                    camera_forward,
+                    center_ws,
+                    radius_ws,
+                    primitive_forward_max_distance(runtime),
+                    scene_forward_cone_dot(),
+                    primitive_near_accept_distance(),
+                ) {
+                    continue;
+                }
+            } else if distance_sq_to_camera(gt.0, camera_position)
+                > primitive_forward_max_distance(runtime) * primitive_forward_max_distance(runtime)
+            {
+                continue;
+            }
+        }
         let key = id.stable_u64();
         entries.push((
             if follow_camera_sky { 0.0 } else { distance_sq_to_camera(gt.0, camera_position) },
@@ -310,6 +383,7 @@ pub fn draw_primitives(
     sort_by_distance_then_key(&mut entries);
     entries.truncate(primitive_budget(runtime, false));
 
+    let mut plan_cache: FxHashMap<PrimitivePlanKey, PrimitiveGpuPlan> = FxHashMap::default();
     let mut batches = InstanceBatchSet::default();
     for (_distance_sq, _entity_key, prim, model, material_ref, follow_camera_sky) in entries {
         let model = if follow_camera_sky {
@@ -317,85 +391,109 @@ pub fn draw_primitives(
         } else {
             model
         };
-        let gpu = ensure_primitive_gpu(&reg, prim.id, &mut this.gpu.meshes.prim_cache, r)?;
-        let resolved = material_ref.and_then(|mr| mats.resolve(mr.id));
-        let material_plan = LitMaterialPlan::from_resolved(resolved.as_ref(), prim.color);
-
-        let base_tex = this.material_texture_or_default(r, material_plan.base_color_texture, lit.white_texture);
-        let normal_tex = this.material_texture_or_default(r, material_plan.normal_texture, lit.flat_normal_texture);
-        let roughness_tex = this.material_texture_or_default(r, material_plan.roughness_texture, lit.white_texture);
-        let sampler = if material_plan.has_textures() { lit.repeat_sampler } else { lit.clamp_sampler };
-        let material_shadow_texture = if material_plan.receive_shadows {
-            shadow_texture
+        let plan_key = PrimitivePlanKey::new(prim, material_ref, follow_camera_sky, false);
+        let plan = if let Some(plan) = plan_cache.get(&plan_key).copied() {
+            plan
         } else {
-            lit.white_texture
-        };
-        let pipeline = if material_plan.double_sided {
-            lit.instanced_double_sided_pipeline
-        } else {
-            lit.instanced_pipeline
-        };
-        let mesh_key = prim.id.0;
-        let ubo_key = instance_batch_ubo_key(
-            0x1b17_f011_0000_0000,
-            pipeline,
-            mesh_key,
-            base_tex,
-            normal_tex,
-            roughness_tex,
-            material_shadow_texture,
-            sampler,
-        );
+            let gpu = ensure_primitive_gpu(&reg, prim.id, &mut this.gpu.meshes.prim_cache, r)?;
+            let resolved = material_ref.and_then(|mr| mats.resolve(mr.id));
+            let material_plan = LitMaterialPlan::from_resolved(resolved.as_ref(), prim.color);
 
-        let mut per = this.ensure_per_draw_ubo_with_binding(
-            r,
-            lit,
-            ubo_key,
-            base_tex,
-            normal_tex,
-            roughness_tex,
-            material_shadow_texture,
-            sampler,
-        )?;
-        per.last_seen_frame = this.frame.frame_index;
-        this.gpu.material.per_draw_ubo.insert(ubo_key, per);
+            let base_tex = this.material_texture_or_default(r, material_plan.base_color_texture, lit.white_texture);
+            let normal_tex = this.material_texture_or_default(r, material_plan.normal_texture, lit.flat_normal_texture);
+            let roughness_tex = this.material_texture_or_default(r, material_plan.roughness_texture, lit.white_texture);
+            let sampler = if material_plan.has_textures() { lit.repeat_sampler } else { lit.clamp_sampler };
+            let material_shadow_texture = if material_plan.receive_shadows {
+                shadow_texture
+            } else {
+                lit.white_texture
+            };
+            let pipeline = if material_plan.double_sided {
+                lit.instanced_double_sided_pipeline
+            } else {
+                lit.instanced_pipeline
+            };
+            let mesh_key = prim.id.0;
+            let ubo_key = instance_batch_ubo_key(
+                0x1b17_f011_0000_0000,
+                pipeline,
+                mesh_key,
+                base_tex,
+                normal_tex,
+                roughness_tex,
+                material_shadow_texture,
+                sampler,
+            );
 
-        // Instance shaders take transforms/material scalars from the instance
-        // buffer. The shared UBO still owns lights, shadow matrix and texture
-        // bindings, so one bind group can serve the whole material/mesh bucket.
-        super::passes_ubo::write_lit_ubo_ex(
-            r,
-            per.ubo,
-            Mat4::IDENTITY,
-            Mat4::IDENTITY,
-            [1.0, 1.0, 1.0, 1.0],
-            [0.0, 0.0, 0.0],
-            [1.0, 1.0, 0.0, 0.0],
-            [1.0, 0.75, 0.0, 1.0],
-            lights,
-        )?;
+            let mut per = this.ensure_per_draw_ubo_with_binding(
+                r,
+                lit,
+                ubo_key,
+                base_tex,
+                normal_tex,
+                roughness_tex,
+                material_shadow_texture,
+                sampler,
+            )?;
+            per.last_seen_frame = this.frame.frame_index;
+            this.gpu.material.per_draw_ubo.insert(ubo_key, per);
+
+            // Instance shaders take transforms/material scalars from the instance
+            // buffer. The shared UBO still owns lights, shadow matrix and texture
+            // bindings, so one bind group can serve the whole material/mesh bucket.
+            // Write it once per unique material/mesh bucket, not once per instance.
+            super::passes_ubo::write_lit_ubo_ex(
+                r,
+                per.ubo,
+                Mat4::IDENTITY,
+                Mat4::IDENTITY,
+                [1.0, 1.0, 1.0, 1.0],
+                [0.0, 0.0, 0.0],
+                [1.0, 1.0, 0.0, 0.0],
+                [1.0, 0.75, 0.0, 1.0],
+                lights,
+            )?;
+
+            let plan = PrimitiveGpuPlan {
+                gpu,
+                pipeline,
+                bind_group: per.bg,
+                base_texture: base_tex,
+                normal_texture: normal_tex,
+                roughness_texture: roughness_tex,
+                shadow_texture: material_shadow_texture,
+                sampler,
+                mesh_key,
+                base_color: material_plan.base_color,
+                emissive_radiance: material_plan.emissive_radiance,
+                uv_transform: material_plan.uv_transform,
+                material_params: material_plan.material_params,
+            };
+            plan_cache.insert(plan_key, plan);
+            plan
+        };
 
         let instance = RenderInstanceRaw::new(
             model,
             viewproj * model,
-            material_plan.base_color,
-            material_plan.uv_transform,
-            material_plan.material_params,
-            material_plan.emissive_radiance,
+            plan.base_color,
+            plan.uv_transform,
+            plan.material_params,
+            plan.emissive_radiance,
         );
         let batch_key = InstanceBatchKey::new(
-            pipeline,
-            per.bg,
-            gpu,
-            base_tex,
-            normal_tex,
-            roughness_tex,
-            material_shadow_texture,
-            sampler,
-            mesh_key,
+            plan.pipeline,
+            plan.bind_group,
+            plan.gpu,
+            plan.base_texture,
+            plan.normal_texture,
+            plan.roughness_texture,
+            plan.shadow_texture,
+            plan.sampler,
+            plan.mesh_key,
         );
-        batches.push(batch_key, pipeline, per.bg, gpu, instance);
-        this.diagnostics.overlay_metrics.record_indexed_triangles(gpu.index_count);
+        batches.push(batch_key, plan.pipeline, plan.bind_group, plan.gpu, instance);
+        this.diagnostics.overlay_metrics.record_indexed_triangles(plan.gpu.index_count);
     }
 
     if batches.is_empty() {
@@ -436,19 +534,11 @@ pub fn draw_procedural_terrain_shadow(
             continue;
         }
         let mesh_key = terrain.mesh_key();
-        let prepared_mesh = world.get::<PreparedTerrainPrimitiveMesh>(id).cloned();
-        let fallback_terrain = if prepared_mesh.is_none() && !this.gpu.meshes.terrain_cache.contains_key(&mesh_key) {
-            Some(terrain.clone())
-        } else {
-            None
-        };
         let local_bounds = terrain.heightfield.local_bounds();
         entries.push(TerrainShadowEntry {
             entity_key: id.stable_u64(),
             mesh_key,
             base_color: terrain.base_color,
-            prepared_mesh,
-            fallback_terrain,
             bounds_center: local_bounds.center(),
             bounds_radius: local_bounds.half_extents().length(),
             model: gt.0,
@@ -461,7 +551,6 @@ pub fn draw_procedural_terrain_shadow(
     for entry in entries {
         let entity_key = entry.entity_key;
         let mesh_key = entry.mesh_key;
-        let prepared_mesh = entry.prepared_mesh;
         let model = entry.model;
         let material = entry.material;
         let resolved = material.and_then(|mr| mats.resolve(mr.id));
@@ -474,20 +563,11 @@ pub fn draw_procedural_terrain_shadow(
             continue;
         }
 
-        let gpu = if let Some(gpu) = this.gpu.meshes.terrain_cache.get(&mesh_key).copied() {
-            gpu
-        } else {
-            let gpu = if let Some(prepared) = prepared_mesh.as_ref() {
-                upload_primitive_mesh(r, prepared.mesh.as_ref(), "game_proc_terrain")?
-            } else {
-                let terrain = entry.fallback_terrain.as_ref().ok_or_else(|| {
-                    newengine_core::EngineError::other("terrain shadow mesh is not prepared and fallback terrain payload is unavailable")
-                })?;
-                let mesh = terrain.heightfield.to_primitive_mesh();
-                upload_primitive_mesh(r, &mesh, "game_proc_terrain")?
-            };
-            this.gpu.meshes.terrain_cache.insert(mesh_key, gpu);
-            gpu
+        let Some(gpu) = this.gpu.meshes.terrain_cache.get(&mesh_key).copied() else {
+            // Shadow pass follows the same render-residency contract as forward:
+            // not-ready streamed chunks wait until explicit GPU residency has
+            // been advanced outside extraction.
+            continue;
         };
 
         let key = entity_key ^ 0x5a44_1000_0000_0000u64;
@@ -552,6 +632,23 @@ pub fn draw_primitives_shadow(
         if !display_visible_in_mode(world, id, runtime) || world.get::<SkyDomeRuntime>(id).is_some() {
             continue;
         }
+        if runtime {
+            if let Some(bounds) = world.get::<Bounds>(id) {
+                let (center_ws, radius_ws) = transform_sphere(
+                    gt.0,
+                    bounds.local_sphere.center,
+                    bounds.local_sphere.radius,
+                );
+                if center_ws.distance_squared(camera_position)
+                    > primitive_shadow_max_distance(runtime) * primitive_shadow_max_distance(runtime)
+                {
+                    continue;
+                }
+                if !shadow_caster_visible(this.shadows_current_cull(), center_ws, radius_ws) {
+                    continue;
+                }
+            }
+        }
         let key = id.stable_u64();
         entries.push((
             distance_sq_to_camera(gt.0, camera_position),
@@ -564,81 +661,111 @@ pub fn draw_primitives_shadow(
     sort_by_distance_then_key(&mut entries);
     entries.truncate(primitive_budget(runtime, true));
 
+    let mut plan_cache: FxHashMap<PrimitivePlanKey, PrimitiveGpuPlan> = FxHashMap::default();
     let mut batches = InstanceBatchSet::default();
     for (_distance_sq, _entity_key, prim, model, material_ref) in entries {
-        let resolved = material_ref.and_then(|mr| mats.resolve(mr.id));
-        let material_plan = LitMaterialPlan::from_resolved(resolved.as_ref(), prim.color);
-        if !material_plan.cast_shadows {
-            continue;
-        }
+        let plan_key = PrimitivePlanKey::new(prim, material_ref, false, true);
+        let plan = if let Some(plan) = plan_cache.get(&plan_key).copied() {
+            plan
+        } else {
+            let resolved = material_ref.and_then(|mr| mats.resolve(mr.id));
+            let material_plan = LitMaterialPlan::from_resolved(resolved.as_ref(), prim.color);
+            if !material_plan.cast_shadows {
+                continue;
+            }
 
-        let gpu = ensure_primitive_gpu(&reg, prim.id, &mut this.gpu.meshes.prim_cache, r)?;
-        let (center_ws, radius_ws) = transform_sphere(model, gpu.bounds_center, gpu.bounds_radius);
+            let gpu = ensure_primitive_gpu(&reg, prim.id, &mut this.gpu.meshes.prim_cache, r)?;
+            let (center_ws, radius_ws) = transform_sphere(model, gpu.bounds_center, gpu.bounds_radius);
+            if !shadow_caster_visible(this.shadows_current_cull(), center_ws, radius_ws) {
+                continue;
+            }
+            let pipeline = if material_plan.double_sided {
+                lit.shadow_instanced_double_sided_pipeline
+            } else {
+                lit.shadow_instanced_pipeline
+            };
+            let mesh_key = prim.id.0;
+            let ubo_key = instance_batch_ubo_key(
+                0x5b1d_5a50_0000_0000,
+                pipeline,
+                mesh_key,
+                lit.white_texture,
+                lit.flat_normal_texture,
+                lit.white_texture,
+                lit.white_texture,
+                lit.clamp_sampler,
+            );
+
+            let mut per = this.ensure_per_draw_ubo_with_binding(
+                r,
+                lit,
+                ubo_key,
+                lit.white_texture,
+                lit.flat_normal_texture,
+                lit.white_texture,
+                lit.white_texture,
+                lit.clamp_sampler,
+            )?;
+            per.last_seen_frame = this.frame.frame_index;
+            this.gpu.material.per_draw_ubo.insert(ubo_key, per);
+
+            // Shadow instancing also shares one UBO per material/mesh bucket.
+            super::passes_ubo::write_lit_ubo_ex(
+                r,
+                per.ubo,
+                Mat4::IDENTITY,
+                Mat4::IDENTITY,
+                [1.0, 1.0, 1.0, 1.0],
+                [0.0, 0.0, 0.0],
+                [1.0, 1.0, 0.0, 0.0],
+                [1.0, 0.75, 0.0, 1.0],
+                lights,
+            )?;
+
+            let plan = PrimitiveGpuPlan {
+                gpu,
+                pipeline,
+                bind_group: per.bg,
+                base_texture: lit.white_texture,
+                normal_texture: lit.flat_normal_texture,
+                roughness_texture: lit.white_texture,
+                shadow_texture: lit.white_texture,
+                sampler: lit.clamp_sampler,
+                mesh_key,
+                base_color: material_plan.base_color,
+                emissive_radiance: material_plan.emissive_radiance,
+                uv_transform: material_plan.uv_transform,
+                material_params: material_plan.material_params,
+            };
+            plan_cache.insert(plan_key, plan);
+            plan
+        };
+
+        let (center_ws, radius_ws) = transform_sphere(model, plan.gpu.bounds_center, plan.gpu.bounds_radius);
         if !shadow_caster_visible(this.shadows_current_cull(), center_ws, radius_ws) {
             continue;
         }
-        let pipeline = if material_plan.double_sided {
-            lit.shadow_instanced_double_sided_pipeline
-        } else {
-            lit.shadow_instanced_pipeline
-        };
-        let mesh_key = prim.id.0;
-        let ubo_key = instance_batch_ubo_key(
-            0x5b1d_5a50_0000_0000,
-            pipeline,
-            mesh_key,
-            lit.white_texture,
-            lit.flat_normal_texture,
-            lit.white_texture,
-            lit.white_texture,
-            lit.clamp_sampler,
-        );
-
-        let mut per = this.ensure_per_draw_ubo_with_binding(
-            r,
-            lit,
-            ubo_key,
-            lit.white_texture,
-            lit.flat_normal_texture,
-            lit.white_texture,
-            lit.white_texture,
-            lit.clamp_sampler,
-        )?;
-        per.last_seen_frame = this.frame.frame_index;
-        this.gpu.material.per_draw_ubo.insert(ubo_key, per);
-
-        super::passes_ubo::write_lit_ubo_ex(
-            r,
-            per.ubo,
-            Mat4::IDENTITY,
-            Mat4::IDENTITY,
-            [1.0, 1.0, 1.0, 1.0],
-            [0.0, 0.0, 0.0],
-            [1.0, 1.0, 0.0, 0.0],
-            [1.0, 0.75, 0.0, 1.0],
-            lights,
-        )?;
 
         let instance = RenderInstanceRaw::new(
             model,
             light_viewproj * model,
-            material_plan.base_color,
-            material_plan.uv_transform,
-            material_plan.material_params,
-            material_plan.emissive_radiance,
+            plan.base_color,
+            plan.uv_transform,
+            plan.material_params,
+            plan.emissive_radiance,
         );
         let batch_key = InstanceBatchKey::new(
-            pipeline,
-            per.bg,
-            gpu,
-            lit.white_texture,
-            lit.flat_normal_texture,
-            lit.white_texture,
-            lit.white_texture,
-            lit.clamp_sampler,
-            mesh_key,
+            plan.pipeline,
+            plan.bind_group,
+            plan.gpu,
+            plan.base_texture,
+            plan.normal_texture,
+            plan.roughness_texture,
+            plan.shadow_texture,
+            plan.sampler,
+            plan.mesh_key,
         );
-        batches.push(batch_key, pipeline, per.bg, gpu, instance);
+        batches.push(batch_key, plan.pipeline, plan.bind_group, plan.gpu, instance);
     }
 
     if batches.is_empty() {

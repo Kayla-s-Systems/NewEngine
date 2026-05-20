@@ -27,4 +27,14 @@ pub(crate) const MATERIAL_TEXTURE_IMPORT_START_BURST: u32 = 64;
 /// population is staged immediately after initial visibility and material
 /// bindings are warm. This mirrors the reference renderer's phased draw-list
 /// warmup instead of doing every heavy pass on frame one.
-pub(crate) const SHADOW_WARMUP_DEFER_FRAMES: u8 = 2;
+pub(crate) const SHADOW_WARMUP_DEFER_FRAMES: u8 = 0;
+
+
+#[inline]
+pub(crate) fn shadow_refresh_period_frames() -> u64 {
+    std::env::var("NEWENGINE_SHADOW_REFRESH_FRAMES")
+        .ok()
+        .and_then(|value| value.trim().parse::<u64>().ok())
+        .map(|value| value.clamp(1, 3600))
+        .unwrap_or(1)
+}

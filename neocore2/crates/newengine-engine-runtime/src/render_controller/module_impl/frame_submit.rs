@@ -1,6 +1,6 @@
 #![forbid(unsafe_op_in_unsafe_fn)]
 
-use newengine_core::render::{RenderApi, RenderDrawListKind, RenderFrameEnvelope, RenderGraphSubmitReport};
+use newengine_core::render::{RenderApi, RenderDrawListKind, RenderFrameEnvelope, RenderGraphPassKind, RenderGraphSubmitReport};
 use newengine_core::EngineResult;
 
 #[inline]
@@ -60,6 +60,23 @@ pub fn record_draw_list<T>(
     r.begin_draw_list(kind)?;
     let record_result = record(r);
     let end_result = r.end_draw_list();
+    match (record_result, end_result) {
+        (Ok(value), Ok(())) => Ok(value),
+        (Err(error), _) => Err(error),
+        (Ok(_), Err(error)) => Err(error),
+    }
+}
+
+
+#[inline]
+pub fn record_render_phase<T>(
+    r: &mut dyn RenderApi,
+    phase: RenderGraphPassKind,
+    record: impl FnOnce(&mut dyn RenderApi) -> EngineResult<T>,
+) -> EngineResult<T> {
+    r.begin_render_phase(phase)?;
+    let record_result = record(r);
+    let end_result = r.end_render_phase();
     match (record_result, end_result) {
         (Ok(value), Ok(())) => Ok(value),
         (Err(error), _) => Err(error),

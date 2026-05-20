@@ -66,4 +66,81 @@ impl RuntimeRenderController {
 
         Ok(())
     }
+
+    /// Advances render residency for streamed terrain without doing cold uploads
+    /// inside draw-list extraction.
+    ///
+    /// The scene streamer may create ECS chunks before their GPU buffers are
+    /// resident. This method performs a small, explicit upload budget before
+    /// feature extraction; draw recording then only references already-ready
+    /// mesh handles and skips not-ready chunks for the current frame.
+    pub(super) fn pump_scene_gpu_residency(
+        &mut self,
+        r: &mut dyn RenderApi,
+        scene: &Scene,
+    ) -> EngineResult<u32> {
+        let budget = terrain_gpu_upload_budget_per_frame();
+        if budget == 0 {
+            return Ok(0);
+        }
+
+        let interval = terrain_gpu_upload_interval_frames();
+        if interval > 1 && self.frame.frame_index % interval != 0 {
+            return Ok(0);
+        }
+
+        let world = scene.world();
+        let mut uploaded = 0_u32;
+        for (entity, terrain) in world.query::<ProceduralTerrain>() {
+            if uploaded >= budget {
+                break;
+            }
+
+            let mesh_key = terrain.mesh_key();
+            if self.gpu.meshes.terrain_cache.contains_key(&mesh_key) {
+                continue;
+            }
+
+            let Some(prepared) = world.get::<PreparedTerrainPrimitiveMesh>(entity) else {
+                // Compatibility scenes without a prepared mesh are handled by
+                // launch prewarm. Runtime streaming must not convert heightfields
+                // on the frame extraction path.
+                continue;
+            };
+
+            let gpu = upload_primitive_mesh(r, prepared.mesh.as_ref(), "streamed_proc_terrain")?;
+            self.gpu.meshes.terrain_cache.insert(mesh_key, gpu);
+            uploaded = uploaded.saturating_add(1);
+        }
+
+        if uploaded > 0 && log::log_enabled!(log::Level::Trace) {
+            log::trace!(
+                "render residency: terrain gpu uploads frame={} uploaded={} budget={}",
+                self.frame.frame_index,
+                uploaded,
+                budget
+            );
+        }
+
+        Ok(uploaded)
+    }
+}
+
+fn terrain_gpu_upload_budget_per_frame() -> u32 {
+    std::env::var("NEWENGINE_TERRAIN_GPU_UPLOADS_PER_FRAME")
+        .ok()
+        .and_then(|value| value.trim().parse::<u32>().ok())
+        .map(|value| value.min(8))
+        .unwrap_or(1)
+}
+
+fn terrain_gpu_upload_interval_frames() -> u64 {
+    std::env::var("NEWENGINE_TERRAIN_GPU_UPLOAD_INTERVAL_FRAMES")
+        .ok()
+        .and_then(|value| value.trim().parse::<u64>().ok())
+        .map(|value| value.clamp(1, 240))
+        // A single streamed terrain chunk is still a visible CPU/GPU bridge cost
+        // on the current Vulkan service path. Do not spend that cost on every
+        // consecutive frame while the player crosses a chunk boundary.
+        .unwrap_or(6)
 }
