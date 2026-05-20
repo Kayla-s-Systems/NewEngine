@@ -603,6 +603,74 @@ mod tests {
     }
 
     #[test]
+    fn one_plugin_can_override_multiple_authority_gateways() {
+        let descriptor = PluginDescriptor::builder("newengine.ecs.flecs", "FlecsECS", "1.0.0", PluginKind::Runtime)
+            .provides_service("ecs.api", 1, r#"{"methods":["summary_json_v1","snapshot_json_v1","command_json_v1"]}"#)
+            .provides_service("entity.api", 1, r#"{"methods":["list_json_v1","spawn_json_v1","despawn_json_v1"]}"#)
+            .push(
+                CapabilityDesc::new(
+                    "ecs.backend",
+                    CapabilityRole::Provides,
+                    CapabilityKind::Other,
+                    1,
+                )
+                .with_json(r#"{"service_kind":"ecs","engine_gateway":"engine.ecs","contract":"ecs.api","backend_priority":500}"#),
+            )
+            .push(
+                CapabilityDesc::new(
+                    "entity.backend",
+                    CapabilityRole::Provides,
+                    CapabilityKind::Other,
+                    1,
+                )
+                .with_json(r#"{"service_kind":"entity","engine_gateway":"engine.entity","contract":"entity.api","backend_priority":500}"#),
+            )
+            .build();
+        let descriptors = vec![PluginDescriptorFact::new(
+            "newengine.ecs.flecs".to_owned(),
+            descriptor,
+            GatewayProviderOrigin::FirstPartyPlugin,
+        )];
+        let services = vec![
+            service("ecs.api", Some("newengine.ecs.flecs")),
+            service("entity.api", Some("newengine.ecs.flecs")),
+            service("engine.ecs", None),
+            service("engine.entity", None),
+        ];
+        let engine_owned = vec![
+            EngineOwnedGatewayFact::new(
+                "engine.ecs".to_owned(),
+                EngineServiceKind::Ecs,
+                "engine.ecs".to_owned(),
+                "newengine-ecs-runtime.ecs-gateway".to_owned(),
+                "ecs.backend".to_owned(),
+                0,
+            ),
+            EngineOwnedGatewayFact::new(
+                "engine.entity".to_owned(),
+                EngineServiceKind::Entity,
+                "engine.entity".to_owned(),
+                "newengine-entity-runtime.entity-gateway".to_owned(),
+                "entity.backend".to_owned(),
+                0,
+            ),
+        ];
+
+        let registry = ActiveGatewayRegistry::from_facts(&descriptors, &services, &engine_owned);
+        let ecs_route = registry.resolve_route("engine.ecs").expect("engine.ecs route");
+        let entity_route = registry.resolve_route("engine.entity").expect("engine.entity route");
+
+        assert_eq!(ecs_route.provider_service_id, "ecs.api");
+        assert_eq!(entity_route.provider_service_id, "entity.api");
+        assert_eq!(ecs_route.provider_owner_id, "newengine.ecs.flecs");
+        assert_eq!(entity_route.provider_owner_id, "newengine.ecs.flecs");
+        assert_eq!(ecs_route.origin, GatewayProviderOrigin::FirstPartyPlugin);
+        assert_eq!(entity_route.origin, GatewayProviderOrigin::FirstPartyPlugin);
+        assert_eq!(ecs_route.active_score, 20_500);
+        assert_eq!(entity_route.active_score, 20_500);
+    }
+
+    #[test]
     fn engine_owned_is_used_when_no_plugin_provider_exists() {
         let services = vec![service("engine.camera", None)];
         let engine_owned = vec![EngineOwnedGatewayFact::new(
