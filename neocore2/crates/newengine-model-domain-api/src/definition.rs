@@ -1,4 +1,5 @@
 use serde::{Deserialize, Serialize};
+use newengine_assets_api::{normalize_asset_reference_text, parse_asset_reference};
 
 use crate::{
     model_asset_chain_role_by_extension, CLIP_DICTIONARY_ASSET_KIND, CLIP_DICTIONARY_EXTENSION, DEFINITION_ENTRIES_SCHEMA,
@@ -26,11 +27,13 @@ pub struct DefinitionAssetRef {
     pub extension: String,
     pub asset_kind: String,
     pub logical_path_hint: Option<String>,
+    pub entry: Option<String>,
+    pub canonical_ref: String,
 }
 
 impl Default for DefinitionAssetRef {
     fn default() -> Self {
-        Self { name: String::new(), role: String::new(), extension: String::new(), asset_kind: String::new(), logical_path_hint: None }
+        Self { name: String::new(), role: String::new(), extension: String::new(), asset_kind: String::new(), logical_path_hint: None, entry: None, canonical_ref: String::new() }
     }
 }
 
@@ -38,21 +41,17 @@ impl DefinitionAssetRef {
     pub fn named(name: impl Into<String>, extension: &str, asset_kind: &str) -> Option<Self> {
         let name = name.into();
         let normalized = normalize_definition_asset_name(&name);
-        if normalized.is_empty() {
-            return None;
-        }
+        if normalized.is_empty() { return None; }
         let extension = extension.trim_start_matches('.').to_ascii_lowercase();
-        let lower = normalized.to_ascii_lowercase();
-        let logical_path_hint = if lower.ends_with(&format!(".{extension}")) {
-            lower
-        } else {
-            format!("{lower}.{extension}")
-        };
+        let reference_text = ensure_reference_extension(&normalized, &extension);
+        let reference = parse_asset_reference(&reference_text).ok()?;
         let role = model_asset_chain_role_by_extension(&extension)
             .map(|role| role.role.to_owned())
             .unwrap_or_default();
         Some(Self {
-            logical_path_hint: Some(logical_path_hint),
+            logical_path_hint: Some(reference.logical_path.clone()),
+            entry: reference.entry.clone(),
+            canonical_ref: reference.canonical,
             name: normalized,
             role,
             extension,
@@ -215,6 +214,18 @@ fn drawable_name_from_entry(entry: &DefinitionEntry) -> Option<&str> {
         }
     }
     None
+}
+
+
+fn ensure_reference_extension(value: &str, extension: &str) -> String {
+    let normalized = normalize_asset_reference_text(value).unwrap_or_else(|_| normalize_definition_asset_name(value));
+    let (path, entry) = normalized
+        .rsplit_once('@')
+        .map(|(path, entry)| (path.to_owned(), Some(entry.to_owned())))
+        .unwrap_or_else(|| (normalized.clone(), None));
+    let lower_path = path.to_ascii_lowercase();
+    let path = if lower_path.ends_with(&format!(".{extension}")) { path } else { format!("{path}.{extension}") };
+    match entry { Some(entry) if !entry.trim().is_empty() => format!("{path}@{}", entry.trim()), _ => path }
 }
 
 fn normalize_definition_asset_name(value: &str) -> String {

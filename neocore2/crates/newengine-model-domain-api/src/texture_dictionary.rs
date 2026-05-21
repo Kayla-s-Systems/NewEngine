@@ -16,6 +16,7 @@ pub struct TextureDictionaryManifest {
     /// Optional legacy/cache container used by old runtime paths. Authoring should use `.ytd`.
     pub legacy_cache_container: Option<String>,
     pub entries: Vec<TextureDictionaryEntry>,
+    pub warnings: Vec<String>,
     pub notes: Vec<String>,
 }
 
@@ -29,6 +30,7 @@ impl Default for TextureDictionaryManifest {
             runtime_ready: true,
             legacy_cache_container: Some(LEGACY_NEWENGINE_TEXTURE_DICTIONARY_CONTAINER.to_owned()),
             entries: Vec::new(),
+            warnings: Vec::new(),
             notes: Vec::new(),
         }
     }
@@ -39,10 +41,13 @@ impl Default for TextureDictionaryManifest {
 pub struct TextureDictionaryEntry {
     pub name: String,
     pub name_hash: u64,
-    pub format: String,
+    pub stable_id: String,
+    pub pixel_format: String,
+    pub color_space: String,
     pub width: u32,
     pub height: u32,
     pub mip_count: u32,
+    pub warnings: Vec<String>,
 }
 
 impl Default for TextureDictionaryEntry {
@@ -50,10 +55,13 @@ impl Default for TextureDictionaryEntry {
         Self {
             name: String::new(),
             name_hash: 0,
-            format: String::new(),
+            stable_id: String::new(),
+            pixel_format: String::new(),
+            color_space: String::new(),
             width: 0,
             height: 0,
             mip_count: 0,
+            warnings: Vec::new(),
         }
     }
 }

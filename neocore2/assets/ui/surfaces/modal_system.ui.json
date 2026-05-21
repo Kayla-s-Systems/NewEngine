@@ -1,6 +1,0 @@
-{
-  "version": 1,
-  "id": "newengine.modal.system.v1",
-  "rule": "All modal windows must use the canonical KSystems Launcher inspired surface grammar: dimmed backdrop, colored header band, dark body, pill buttons, and variant-driven accent palette.",
-  "variants": ["success", "warning", "error", "info", "debug"]
-}

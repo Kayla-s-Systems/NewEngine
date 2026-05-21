@@ -72,28 +72,28 @@ impl BuiltinUiIcon {
     #[inline]
     pub const fn default_path(self) -> &'static str {
         match self {
-            Self::AppLogo => "ui/icons/builtin_icons.neytd@app_logo",
+            Self::AppLogo => "ui/icons/builtin_icons.ytd@app_logo",
 
-            Self::FileNew => "ui/icons/builtin_icons.neytd@file_new",
-            Self::FileOpen => "ui/icons/builtin_icons.neytd@file_open",
-            Self::FileSave => "ui/icons/builtin_icons.neytd@file_save",
+            Self::FileNew => "ui/icons/builtin_icons.ytd@file_new",
+            Self::FileOpen => "ui/icons/builtin_icons.ytd@file_open",
+            Self::FileSave => "ui/icons/builtin_icons.ytd@file_save",
 
-            Self::AssetManager => "ui/icons/builtin_icons.neytd@asset_manager",
+            Self::AssetManager => "ui/icons/builtin_icons.ytd@asset_manager",
 
-            Self::Refresh => "ui/icons/builtin_icons.neytd@refresh",
-            Self::Load => "ui/icons/builtin_icons.neytd@load",
-            Self::Reset => "ui/icons/builtin_icons.neytd@reset",
-            Self::Console => "ui/icons/builtin_icons.neytd@console",
-            Self::Enable => "ui/icons/builtin_icons.neytd@enable",
-            Self::Disable => "ui/icons/builtin_icons.neytd@disable",
-            Self::Close => "ui/icons/builtin_icons.neytd@close",
-            Self::Play => "ui/icons/builtin_icons.neytd@play",
-            Self::Stop => "ui/icons/builtin_icons.neytd@stop",
-            Self::GizmoTranslate => "ui/icons/builtin_icons.neytd@gizmo_translate",
-            Self::GizmoRotate => "ui/icons/builtin_icons.neytd@gizmo_rotate",
-            Self::GizmoScale => "ui/icons/builtin_icons.neytd@gizmo_scale",
-            Self::LightDirectional => "ui/icons/builtin_icons.neytd@sun",
-            Self::LightPoint => "ui/icons/builtin_icons.neytd@light",
+            Self::Refresh => "ui/icons/builtin_icons.ytd@refresh",
+            Self::Load => "ui/icons/builtin_icons.ytd@load",
+            Self::Reset => "ui/icons/builtin_icons.ytd@reset",
+            Self::Console => "ui/icons/builtin_icons.ytd@console",
+            Self::Enable => "ui/icons/builtin_icons.ytd@enable",
+            Self::Disable => "ui/icons/builtin_icons.ytd@disable",
+            Self::Close => "ui/icons/builtin_icons.ytd@close",
+            Self::Play => "ui/icons/builtin_icons.ytd@play",
+            Self::Stop => "ui/icons/builtin_icons.ytd@stop",
+            Self::GizmoTranslate => "ui/icons/builtin_icons.ytd@gizmo_translate",
+            Self::GizmoRotate => "ui/icons/builtin_icons.ytd@gizmo_rotate",
+            Self::GizmoScale => "ui/icons/builtin_icons.ytd@gizmo_scale",
+            Self::LightDirectional => "ui/icons/builtin_icons.ytd@sun",
+            Self::LightPoint => "ui/icons/builtin_icons.ytd@light",
         }
     }
 }

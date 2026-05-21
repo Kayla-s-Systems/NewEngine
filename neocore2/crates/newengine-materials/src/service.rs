@@ -22,6 +22,11 @@ pub mod method {
     pub const LOAD_JSON_V1: &str = "materials.load_json_v1";
     pub const DESCRIBE_TEXTURE_REF_JSON_V1: &str = "materials.describe_texture_ref_json_v1";
     pub const FORMATS_JSON_V1: &str = "materials.formats_json_v1";
+    pub const MANIFEST_JSON_V1: &str = "materials.manifest_json_v1";
+    pub const LOAD_DESCRIPTOR_V1: &str = "materials.load_descriptor_v1";
+    pub const RESOLVE_GRAPH_V1: &str = "materials.resolve_graph_v1";
+    pub const VALIDATE_V1: &str = "materials.validate_v1";
+    pub const TO_RENDER_PACKET_V1: &str = "materials.to_render_packet_v1";
 }
 
 pub const MATERIALS_SERVICE_METHODS: &[&str] = &[
@@ -31,6 +36,11 @@ pub const MATERIALS_SERVICE_METHODS: &[&str] = &[
     method::LOAD_JSON_V1,
     method::DESCRIBE_TEXTURE_REF_JSON_V1,
     method::FORMATS_JSON_V1,
+    method::MANIFEST_JSON_V1,
+    method::LOAD_DESCRIPTOR_V1,
+    method::RESOLVE_GRAPH_V1,
+    method::VALIDATE_V1,
+    method::TO_RENDER_PACKET_V1,
 ];
 
 pub const MATERIALS_RUNTIME_CONTRACT_SPEC: newengine_service_api::RuntimeServiceContractSpec =
@@ -104,6 +114,9 @@ pub struct MaterialTextureRefInfo {
     pub canonical: String,
     pub dictionary_path: String,
     pub entry_selector: String,
+    pub extension: String,
+    pub warnings: Vec<String>,
+    pub errors: Vec<String>,
 }
 
 impl Default for MaterialTextureRefInfo {
@@ -113,20 +126,120 @@ impl Default for MaterialTextureRefInfo {
             canonical: String::new(),
             dictionary_path: String::new(),
             entry_selector: String::new(),
+            extension: String::new(),
+            warnings: Vec::new(),
+            errors: Vec::new(),
         }
     }
 }
 
 impl MaterialTextureRefInfo {
     pub fn from_reference(value: &str) -> Self {
-        match MaterialTextureReference::parse(value) {
-            Some(reference) => Self {
+        match MaterialTextureReference::parse_strict(value) {
+            Ok(reference) => Self {
                 valid: true,
                 canonical: reference.canonical,
                 dictionary_path: reference.dictionary_path,
                 entry_selector: reference.entry_selector,
+                extension: "ytd".to_owned(),
+                warnings: Vec::new(),
+                errors: Vec::new(),
             },
-            None => Self { canonical: value.trim().replace('\\', "/"), ..Self::default() },
+            Err(error) => Self {
+                canonical: value.trim().replace('\\', "/"),
+                errors: vec![error],
+                ..Self::default()
+            },
         }
     }
 }
+
+
+#[derive(Clone, Debug, PartialEq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde", serde(default))]
+pub struct MaterialsManifest {
+    pub schema: String,
+    pub gateway: String,
+    pub primary_format: String,
+    pub texture_reference_syntax: String,
+    pub methods: Vec<String>,
+    pub policy: Vec<String>,
+}
+
+impl Default for MaterialsManifest {
+    fn default() -> Self {
+        Self {
+            schema: "newengine.materials.manifest.v1".to_owned(),
+            gateway: ENGINE_MATERIALS_SERVICE_ID.to_owned(),
+            primary_format: "nemat".to_owned(),
+            texture_reference_syntax: "<logical-path>.ytd@entry".to_owned(),
+            methods: MATERIALS_SERVICE_METHODS.iter().map(|m| (*m).to_owned()).collect(),
+            policy: vec![
+                "engine.materials is the only material resolve gateway".to_owned(),
+                "materials reference .ytd@entry texture dictionaries".to_owned(),
+                "renderer receives RenderMaterialPacket only".to_owned(),
+                "raw image paths and .neytd authored references are invalid".to_owned(),
+            ],
+        }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde", serde(default))]
+pub struct MaterialDescriptorLoadResponse {
+    pub source: String,
+    pub name: String,
+    pub descriptor: MaterialDescriptor,
+    pub textures: MaterialTextureBindings,
+}
+
+impl Default for MaterialDescriptorLoadResponse {
+    fn default() -> Self { Self { source: String::new(), name: String::new(), descriptor: MaterialDescriptor::default(), textures: MaterialTextureBindings::default() } }
+}
+
+#[derive(Clone, Debug, PartialEq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde", serde(default))]
+pub struct MaterialValidationRequest { pub logical_path: String }
+impl Default for MaterialValidationRequest { fn default() -> Self { Self { logical_path: String::new() } } }
+
+#[derive(Clone, Debug, PartialEq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde", serde(default))]
+pub struct MaterialValidationResult {
+    pub valid: bool,
+    pub source: String,
+    pub errors: Vec<String>,
+    pub warnings: Vec<String>,
+}
+impl Default for MaterialValidationResult { fn default() -> Self { Self { valid: false, source: String::new(), errors: Vec::new(), warnings: Vec::new() } } }
+
+#[derive(Clone, Debug, PartialEq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde", serde(default))]
+pub struct ResolvedMaterialGraph {
+    pub schema: String,
+    pub source: String,
+    pub name: String,
+    pub shader: String,
+    pub descriptor: MaterialDescriptor,
+    pub textures: MaterialTextureBindings,
+    pub texture_refs: Vec<MaterialTextureRefInfo>,
+    pub warnings: Vec<String>,
+}
+impl Default for ResolvedMaterialGraph { fn default() -> Self { Self { schema: "newengine.materials.resolved_graph.v1".to_owned(), source: String::new(), name: String::new(), shader: "pbr.default".to_owned(), descriptor: MaterialDescriptor::default(), textures: MaterialTextureBindings::default(), texture_refs: Vec::new(), warnings: Vec::new() } } }
+
+#[derive(Clone, Debug, PartialEq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde", serde(default))]
+pub struct RenderMaterialPacket {
+    pub schema: String,
+    pub source: String,
+    pub name: String,
+    pub descriptor: MaterialDescriptor,
+    pub textures: MaterialTextureBindings,
+    pub packet_kind: String,
+}
+impl Default for RenderMaterialPacket { fn default() -> Self { Self { schema: "newengine.materials.render_packet.v1".to_owned(), source: String::new(), name: String::new(), descriptor: MaterialDescriptor::default(), textures: MaterialTextureBindings::default(), packet_kind: "renderer_agnostic_material_packet".to_owned() } } }

@@ -7,6 +7,7 @@ description = "Stable model construction domain contracts for NewEngine"
 [dependencies]
 serde = { version = "1", features = ["derive"] }
 newengine-service-api = { path = "../newengine-service-api" }
+newengine-assets-api = { path = "../newengine-assets-api" }
 
 newengine-materials = { path = "../newengine-materials", features = ["serde"] }
 newengine-model-skeleton-api = { path = "../newengine-model-skeleton-api" }

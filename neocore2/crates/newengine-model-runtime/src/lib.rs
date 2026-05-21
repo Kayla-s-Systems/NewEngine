@@ -48,7 +48,7 @@ impl ModelAssetAdapter {
             .as_deref()
             .map(|path| normalize_logical_path(path, false))
             .transpose()?
-            .filter(|path| path.ends_with(".ytd") || path.ends_with(".neytd"));
+            .filter(|path| path.ends_with(".ytd"));
 
         let skeleton = match request.skeleton.as_deref() {
             Some(path) => Some(self.load_skeleton_metadata(path, target_height, request.eye_height_ratio)?),

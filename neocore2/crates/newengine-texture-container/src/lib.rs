@@ -1,12 +1,12 @@
 #![forbid(unsafe_op_in_unsafe_fn)]
 
-//! NewEngine Texture Dictionary container (`.neytd`).
+//! NewEngine Texture Dictionary container payload (`.ytd`; legacy `.neytd` cache files may still be migrated).
 //!
 //! The runtime format is a binary texture dictionary: fixed header, binary
 //! directory and runtime-ready mip payloads. Runtime material dictionaries are GPU-native:
 //! BC1/BC3/BC5/BC7 entries store complete mip chains directly in the data region so the
 //! renderer can upload compressed blocks without CPU-side image decompression. RGBA8 remains
-//! supported for UI/editor and backward compatibility. `.neytd` never stores source-image
+//! supported for UI/editor and migration compatibility. `.ytd` never stores raw source-image
 //! paths, authoring provenance or JSON directory data.
 
 pub mod binary_directory;
@@ -39,7 +39,7 @@ pub use selector::{TextureDictionarySelector, TextureSelectorError};
 pub const MAGIC: [u8; 4] = *b"NETD";
 pub const VERSION_V2: u16 = 2;
 pub const HEADER_LEN: usize = 64;
-pub const EXTENSION: &str = "neytd";
+pub const EXTENSION: &str = "ytd";
 pub use format::{
     PIXEL_FORMAT_BC1_RGBA_SRGB, PIXEL_FORMAT_BC1_RGBA_UNORM,
     PIXEL_FORMAT_BC3_RGBA_SRGB, PIXEL_FORMAT_BC3_RGBA_UNORM,

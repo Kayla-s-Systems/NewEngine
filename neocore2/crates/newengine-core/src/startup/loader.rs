@@ -89,7 +89,7 @@ struct WindowJson {
 
     placement: Option<WindowPlacementJson>,
 
-    /// Logical path inside assets, e.g. "ui/icons/builtin_icons.neytd@app_logo"
+    /// Logical path inside assets, e.g. "ui/icons/builtin_icons.ytd@app_logo"
     icon: Option<String>,
 }
 

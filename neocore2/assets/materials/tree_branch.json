@@ -23,9 +23,9 @@
     0,
     0
   ],
-  "base_color_texture": "prefabs/tree_animate/textures/tree_animate.neytd@branch_diffuse",
-  "normal_texture": "prefabs/tree_animate/textures/tree_animate.neytd@branch_normal",
-  "roughness_texture": "prefabs/tree_animate/textures/tree_animate.neytd@bark_specularglossiness",
+  "base_color_texture": "prefabs/tree_animate/textures/tree_animate.ytd@branch_diffuse",
+  "normal_texture": "prefabs/tree_animate/textures/tree_animate.ytd@branch_normal",
+  "roughness_texture": "prefabs/tree_animate/textures/tree_animate.ytd@bark_specularglossiness",
   "uv_scale": [
     1.0,
     1.0

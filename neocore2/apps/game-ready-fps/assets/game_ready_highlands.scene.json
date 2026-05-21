@@ -14,7 +14,7 @@
       "model": {
         "enabled": true,
         "source": "player/abigail/csb_abigail_static_y_up.obj",
-        "texture_dictionary": "player/abigail/textures/abigail.neytd",
+        "texture_dictionary": "player/abigail/textures/abigail.ytd",
         "target_height": 1.78,
         "eye_height_ratio": 0.91,
         "local_offset": [
@@ -49,9 +49,9 @@
         "smoothing_strength": 0.42
       },
       "surface": {
-        "forest_base_texture": "textures/fps/world_surfaces.neytd@terrain_forest_floor",
-        "sand_base_texture": "textures/fps/world_surfaces.neytd@ground_sand",
-        "rock_base_texture": "textures/fps/world_surfaces.neytd@rock_moss",
+        "forest_base_texture": "textures/fps/world_surfaces.ytd@terrain_forest_floor",
+        "sand_base_texture": "textures/fps/world_surfaces.ytd@ground_sand",
+        "rock_base_texture": "textures/fps/world_surfaces.ytd@rock_moss",
         "patch_scale": 0.033,
         "blend_softness": 0.18
       },

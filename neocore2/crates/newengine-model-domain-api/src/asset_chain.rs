@@ -4,7 +4,7 @@ use crate::{
     ASSET_PACKAGE_ASSET_KIND, ASSET_PACKAGE_CONTAINER, ASSET_PACKAGE_EXTENSION,
     DRAWABLE_DICTIONARY_ASSET_KIND, DRAWABLE_DICTIONARY_CONTAINER, DRAWABLE_DICTIONARY_EXTENSION,
     LEGACY_NEWENGINE_TEXTURE_DICTIONARY_CONTAINER, LEGACY_NEWENGINE_TEXTURE_DICTIONARY_EXTENSION,
-    NEPAK_ASSET_PACKAGE_EXTENSION, OBJECT_TYPE_DEFINITIONS_ASSET_KIND, OBJECT_TYPE_DEFINITIONS_CONTAINER,
+    OBJECT_TYPE_DEFINITIONS_ASSET_KIND, OBJECT_TYPE_DEFINITIONS_CONTAINER,
     OBJECT_TYPE_DEFINITIONS_EXTENSION, TEXTURE_DICTIONARY_ASSET_KIND, TEXTURE_DICTIONARY_CONTAINER,
     TEXTURE_DICTIONARY_EXTENSION,
 };
@@ -127,22 +127,11 @@ pub const MODEL_ASSET_PACKAGE_ROLES: &[ModelAssetChainRoleSpec] = &[
         extension: ASSET_PACKAGE_EXTENSION,
         asset_kind: ASSET_PACKAGE_ASSET_KIND,
         source_container: ASSET_PACKAGE_CONTAINER,
-        codec_service: "asset.codec.nepak",
+        codec_service: "asset.codec.pak",
         primary_output: "container.manifest_json",
         runtime_ready: true,
         runtime_container: None,
         description: "Package container for delivering .ytyp/.ydd/.ytd and related assets as one VFS layer.",
-    },
-    ModelAssetChainRoleSpec {
-        role: ROLE_ASSET_PACKAGE,
-        extension: NEPAK_ASSET_PACKAGE_EXTENSION,
-        asset_kind: ASSET_PACKAGE_ASSET_KIND,
-        source_container: ASSET_PACKAGE_CONTAINER,
-        codec_service: "asset.codec.nepak",
-        primary_output: "container.manifest_json",
-        runtime_ready: true,
-        runtime_container: None,
-        description: "NewEngine package container alias for the public .pak package role.",
     },
 ];
 
@@ -215,7 +204,7 @@ impl Default for ModelAssetChainManifest {
             authored_chain: vec!["ytyp".to_owned(), "ydd".to_owned(), "ytd".to_owned()],
             notes: vec![
                 "Authoring references .ytd, not .neytd.".to_owned(),
-                ".pak/.nepak is a package/VFS delivery container, not a fourth model dependency.".to_owned(),
+                ".pak is a package/VFS delivery container, not a fourth model dependency.".to_owned(),
                 "Data-driven runtime should consume construction plans derived from .ytyp Definition Entries.".to_owned(),
             ],
         }

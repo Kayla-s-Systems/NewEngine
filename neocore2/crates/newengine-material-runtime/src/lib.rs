@@ -2,7 +2,13 @@
 
 //! Runtime material mapping for imported model material sources.
 
-use newengine_materials::{MaterialDescriptor, MaterialFlags, MaterialTextureBindings};
+use newengine_materials::{
+    validate_material_texture_reference, MaterialDescriptor, MaterialDescriptorLoadResponse,
+    MaterialFlags, MaterialLoadRequest, MaterialLoadResponse, MaterialsManifest,
+    MaterialTextureBindings, MaterialTextureRefInfo, MaterialTextureRefRequest,
+    MaterialValidationRequest, MaterialValidationResult, RenderMaterialPacket,
+    ResolvedMaterialGraph,
+};
 use newengine_model_domain_api::ModelMaterialBinding;
 use newengine_model_import_obj::{normalize_logical_path, ModelMaterialSource};
 
@@ -59,23 +65,16 @@ pub fn material_binding(
 
 pub fn runtime_texture_ref(path: &str, texture_dictionary: Option<&str>) -> Option<String> {
     let normalized = normalize_logical_path(path, true).ok()?;
-    if normalized.contains(".neytd@") {
-        return Some(normalized);
+    if normalized.contains(".neytd@") { return None; }
+    if normalized.contains(".ytd@") {
+        return validate_material_texture_reference(&normalized).ok().map(|r| r.canonical);
     }
-
     let (_, file) = normalized.rsplit_once('/').unwrap_or(("", normalized.as_str()));
     let stem = file.rsplit_once('.').map(|(stem, _)| stem).unwrap_or(file).trim();
-    if stem.is_empty() {
-        return None;
-    }
-
-    if let Some(dictionary) = texture_dictionary {
-        return Some(format!("{}@{}", dictionary, stem));
-    }
-
-    let (base, _) = normalized.rsplit_once('/').unwrap_or(("", normalized.as_str()));
-    let fallback_dict = if base.is_empty() { "textures.neytd".to_owned() } else { format!("{}/textures.neytd", base) };
-    Some(format!("{}@{}", fallback_dict, stem))
+    if stem.is_empty() { return None; }
+    let dictionary = texture_dictionary?;
+    let candidate = format!("{}@{}", dictionary.trim().replace('\\', "/"), stem);
+    validate_material_texture_reference(&candidate).ok().map(|r| r.canonical)
 }
 
 pub fn fallback_slot_color(material_slot: &str) -> [f32; 4] {
@@ -99,18 +98,16 @@ mod tests {
 
     #[test]
     fn texture_dictionary_selector_is_derived() {
-        let selector = runtime_texture_ref("player/abigail/textures/hair_diff_000_a_uni.dds", Some("player/abigail/textures/abigail.neytd"));
-        assert_eq!(selector.as_deref(), Some("player/abigail/textures/abigail.neytd@hair_diff_000_a_uni"));
+        let selector = runtime_texture_ref("player/abigail/textures/hair_diff_000_a_uni.dds", Some("player/abigail/textures/abigail.ytd"));
+        assert_eq!(selector.as_deref(), Some("player/abigail/textures/abigail.ytd@hair_diff_000_a_uni"));
     }
 }
 
 use abi_stable::std_types::{RResult, RString};
 use newengine_assets::{AssetDecodeRequest, AssetServiceClient};
 use newengine_materials::{
-    binary, method as material_method, MaterialLoadRequest,
-    MaterialLoadResponse, MaterialTextureRefInfo, MaterialTextureRefRequest,
-    ENGINE_MATERIALS_SERVICE_ID, MATERIALS_BACKEND_CAPABILITY_ID, MATERIALS_SERVICE_ID,
-    MATERIALS_SERVICE_METHODS,
+    binary, method as material_method, ENGINE_MATERIALS_SERVICE_ID,
+    MATERIALS_BACKEND_CAPABILITY_ID, MATERIALS_SERVICE_ID, MATERIALS_SERVICE_METHODS,
 };
 use newengine_plugin_api::Blob;
 use newengine_service_api::EngineServiceKind;
@@ -162,6 +159,46 @@ impl MaterialAssetGatewayAdapter {
     pub fn describe_texture_ref(&self, request: &MaterialTextureRefRequest) -> MaterialTextureRefInfo {
         MaterialTextureRefInfo::from_reference(&request.reference)
     }
+
+
+    pub fn load_descriptor(&self, request: &MaterialLoadRequest) -> Result<MaterialDescriptorLoadResponse, String> {
+        let loaded = self.load_material(request)?;
+        Ok(MaterialDescriptorLoadResponse { source: loaded.source, name: loaded.name, descriptor: loaded.descriptor, textures: loaded.textures })
+    }
+
+    pub fn validate_material(&self, request: &MaterialValidationRequest) -> MaterialValidationResult {
+        let mut result = MaterialValidationResult { source: request.logical_path.clone(), ..Default::default() };
+        let loaded = match self.load_descriptor(&MaterialLoadRequest { logical_path: request.logical_path.clone() }) {
+            Ok(value) => value,
+            Err(err) => { result.errors.push(err); return result; }
+        };
+        result.source = loaded.source.clone();
+        for texture in collect_texture_refs(&loaded.textures) {
+            let info = MaterialTextureRefInfo::from_reference(texture);
+            if !info.valid { result.errors.extend(info.errors); }
+        }
+        result.valid = result.errors.is_empty();
+        result
+    }
+
+    pub fn resolve_graph(&self, request: &MaterialLoadRequest) -> Result<ResolvedMaterialGraph, String> {
+        let loaded = self.load_descriptor(request)?;
+        let mut graph = ResolvedMaterialGraph { source: loaded.source, name: loaded.name, descriptor: loaded.descriptor, textures: loaded.textures, ..Default::default() };
+        for texture in collect_texture_refs(&graph.textures) {
+            let info = MaterialTextureRefInfo::from_reference(texture);
+            if !info.valid { graph.warnings.extend(info.errors.clone()); }
+            graph.texture_refs.push(info);
+        }
+        Ok(graph)
+    }
+
+    pub fn to_render_packet(&self, request: &MaterialLoadRequest) -> Result<RenderMaterialPacket, String> {
+        let graph = self.resolve_graph(request)?;
+        if graph.texture_refs.iter().any(|r| !r.valid) {
+            return Err(format!("materials: cannot produce RenderMaterialPacket for '{}' because texture references are invalid", graph.source));
+        }
+        Ok(RenderMaterialPacket { source: graph.source, name: graph.name, descriptor: graph.descriptor, textures: graph.textures, ..Default::default() })
+    }
 }
 
 #[derive(Clone)]
@@ -192,12 +229,14 @@ impl MaterialGatewayState {
                     "extension": "nemat",
                     "asset_kind": "material",
                     "container": "newengine.material.v1",
-                    "read_method": material_method::LOAD_JSON_V1,
+                    "read_method": material_method::LOAD_DESCRIPTOR_V1,
+                    "resolve_method": material_method::RESOLVE_GRAPH_V1,
+                    "packet_method": material_method::TO_RENDER_PACKET_V1,
                     "runtime_ready": true,
-                    "notes": "Native NewEngine material descriptor container."
+                    "notes": "Native NewEngine authored material descriptor. Materials bind .ytd@entry texture references and resolve through engine.materials."
                 }
             ],
-            "texture_reference_policy": "runtime material textures must be texture dictionary selectors handled by registered codecs"
+            "texture_reference_policy": "material textures must be VFS .ytd@entry dictionary selectors; raw images and .neytd authored references are invalid"
         })
     }
 
@@ -215,12 +254,12 @@ impl MaterialGatewayState {
         };
 
         match envelope.method.as_str() {
-            material_method::LOAD_JSON_V1 => {
+            material_method::LOAD_JSON_V1 | material_method::LOAD_DESCRIPTOR_V1 => {
                 let request = match serde_json::from_value::<MaterialLoadRequest>(envelope.request) {
                     Ok(request) => request,
                     Err(e) => return RResult::RErr(RString::from(format!("materials.api: invalid load request: {e}"))),
                 };
-                match self.adapter.load_material(&request) {
+                match self.adapter.load_descriptor(&request) {
                     Ok(value) => ok_json(value),
                     Err(e) => RResult::RErr(RString::from(e)),
                 }
@@ -232,7 +271,28 @@ impl MaterialGatewayState {
                 };
                 ok_json(self.adapter.describe_texture_ref(&request))
             }
-            material_method::FORMATS_JSON_V1 => ok_json(self.formats_json()),
+            material_method::FORMATS_JSON_V1 | material_method::MANIFEST_JSON_V1 => ok_json(MaterialsManifest::default()),
+            material_method::RESOLVE_GRAPH_V1 => {
+                let request = match serde_json::from_value::<MaterialLoadRequest>(envelope.request) {
+                    Ok(request) => request,
+                    Err(e) => return RResult::RErr(RString::from(format!("materials.api: invalid resolve graph request: {e}"))),
+                };
+                match self.adapter.resolve_graph(&request) { Ok(value) => ok_json(value), Err(e) => RResult::RErr(RString::from(e)) }
+            }
+            material_method::VALIDATE_V1 => {
+                let request = match serde_json::from_value::<MaterialValidationRequest>(envelope.request) {
+                    Ok(request) => request,
+                    Err(e) => return RResult::RErr(RString::from(format!("materials.api: invalid validate request: {e}"))),
+                };
+                ok_json(self.adapter.validate_material(&request))
+            }
+            material_method::TO_RENDER_PACKET_V1 => {
+                let request = match serde_json::from_value::<MaterialLoadRequest>(envelope.request) {
+                    Ok(request) => request,
+                    Err(e) => return RResult::RErr(RString::from(format!("materials.api: invalid render packet request: {e}"))),
+                };
+                match self.adapter.to_render_packet(&request) { Ok(value) => ok_json(value), Err(e) => RResult::RErr(RString::from(e)) }
+            }
             other => RResult::RErr(RString::from(format!("materials.api: unknown invoke method '{other}'"))),
         }
     }
@@ -245,7 +305,7 @@ pub fn materials_service_info() -> MaterialsServiceInfo {
         methods: MATERIALS_SERVICE_METHODS,
         backend: "engine-owned.material-runtime",
         native_formats: &[".nemat"],
-        texture_reference_policy: ".neytd dictionary selectors only",
+        texture_reference_policy: ".ytd@entry dictionary selectors only; .neytd is legacy/cache-only",
     }
 }
 
@@ -258,8 +318,8 @@ pub fn materials_gateway_service(client: AssetServiceClient) -> newengine_plugin
     )
     .gateway(ENGINE_MATERIALS_SERVICE_ID)
     .protocol("json")
-    .features(["nemat", "neytd-texture-selectors"])
-    .notes("Engine material gateway. Native material containers are read through engine.assets/VFS.");
+    .features(["nemat", "ytd-texture-selectors", "render-material-packet"])
+    .notes("Engine material gateway. Descriptors are read through engine.assets/VFS, resolved to material graphs, then converted to renderer-agnostic RenderMaterialPacket.");
 
     JsonServiceRouter::with_state(
         MATERIALS_SERVICE_ID,
@@ -268,9 +328,26 @@ pub fn materials_gateway_service(client: AssetServiceClient) -> newengine_plugin
     .describe_json(&description)
     .info(materials_service_info)
     .get_json(material_method::FORMATS_JSON_V1, |state| state.formats_json())
-    .post_json_result::<MaterialLoadRequest, MaterialLoadResponse, _>(
+    .get_json(material_method::MANIFEST_JSON_V1, |_state| MaterialsManifest::default())
+    .post_json_result::<MaterialLoadRequest, MaterialDescriptorLoadResponse, _>(
         material_method::LOAD_JSON_V1,
-        |state, request| state.adapter.load_material(&request),
+        |state, request| state.adapter.load_descriptor(&request),
+    )
+    .post_json_result::<MaterialLoadRequest, MaterialDescriptorLoadResponse, _>(
+        material_method::LOAD_DESCRIPTOR_V1,
+        |state, request| state.adapter.load_descriptor(&request),
+    )
+    .post_json_result::<MaterialLoadRequest, ResolvedMaterialGraph, _>(
+        material_method::RESOLVE_GRAPH_V1,
+        |state, request| state.adapter.resolve_graph(&request),
+    )
+    .post_json::<MaterialValidationRequest, MaterialValidationResult, _>(
+        material_method::VALIDATE_V1,
+        |state, request| state.adapter.validate_material(&request),
+    )
+    .post_json_result::<MaterialLoadRequest, RenderMaterialPacket, _>(
+        material_method::TO_RENDER_PACKET_V1,
+        |state, request| state.adapter.to_render_packet(&request),
     )
     .post_json::<MaterialTextureRefRequest, MaterialTextureRefInfo, _>(
         material_method::DESCRIBE_TEXTURE_REF_JSON_V1,
@@ -291,6 +368,17 @@ pub fn register_materials_gateway_best_effort(client: AssetServiceClient) -> boo
         owner: "newengine-material-runtime.material-gateway",
         service: materials_gateway_service(client),
     })
+}
+
+fn collect_texture_refs(textures: &MaterialTextureBindings) -> Vec<&str> {
+    let mut out = Vec::new();
+    if let Some(value) = textures.base_color_texture.as_deref() { out.push(value); }
+    if let Some(value) = textures.normal_texture.as_deref() { out.push(value); }
+    if let Some(value) = textures.metallic_texture.as_deref() { out.push(value); }
+    if let Some(value) = textures.roughness_texture.as_deref() { out.push(value); }
+    if let Some(value) = textures.occlusion_texture.as_deref() { out.push(value); }
+    if let Some(value) = textures.emissive_texture.as_deref() { out.push(value); }
+    out
 }
 
 fn normalize_material_logical_path(path: &str) -> Result<String, String> {

@@ -187,7 +187,7 @@ fn default_move_speed() -> f32 { 7.3 }
 fn default_look_sens() -> f32 { 0.0022 }
 fn default_player_model_enabled() -> bool { true }
 fn default_player_model_source() -> String { "player/abigail/csb_abigail_static_y_up.obj".to_owned() }
-fn default_player_texture_dictionary() -> Option<String> { Some("player/abigail/textures/abigail.neytd".to_owned()) }
+fn default_player_texture_dictionary() -> Option<String> { Some("player/abigail/textures/abigail.ytd".to_owned()) }
 fn default_player_skeleton() -> Option<String> { Some("player/abigail/csb_abigail.ymt".to_owned()) }
 fn default_player_model_height() -> f32 { 1.78 }
 fn default_player_model_eye_height_ratio() -> f32 { 0.91 }
@@ -210,9 +210,9 @@ fn default_veins_frequency() -> f32 { 0.52 }
 fn default_veins_amplitude() -> f32 { 0.10 }
 fn default_smoothing_passes() -> u32 { 2 }
 fn default_smoothing_strength() -> f32 { 0.42 }
-fn default_terrain_surface_forest() -> String { "textures/fps/world_surfaces.neytd@terrain_forest_floor".to_owned() }
-fn default_terrain_surface_sand() -> String { "textures/fps/world_surfaces.neytd@ground_sand".to_owned() }
-fn default_terrain_surface_rock() -> String { "textures/fps/world_surfaces.neytd@rock_moss".to_owned() }
+fn default_terrain_surface_forest() -> String { "textures/fps/world_surfaces.ytd@terrain_forest_floor".to_owned() }
+fn default_terrain_surface_sand() -> String { "textures/fps/world_surfaces.ytd@ground_sand".to_owned() }
+fn default_terrain_surface_rock() -> String { "textures/fps/world_surfaces.ytd@rock_moss".to_owned() }
 fn default_terrain_patch_scale() -> f32 { 0.033 }
 fn default_terrain_blend_softness() -> f32 { 0.18 }
 fn default_terrain_streaming_enabled() -> bool { true }
@@ -222,11 +222,11 @@ fn default_terrain_max_chunks_per_frame() -> usize { 4 }
 fn default_sky_radius() -> f32 { 220.0 }
 fn default_skydome_mesh() -> String { "skydome/skydome_high.obj".to_owned() }
 fn default_sky_follow_camera() -> bool { true }
-fn default_cloud_dictionary() -> String { "textures/fps/clouds_runtime.neytd".to_owned() }
+fn default_cloud_dictionary() -> String { "textures/fps/clouds_runtime.ytd".to_owned() }
 fn default_cloud_profile() -> String { "clear".to_owned() }
 fn default_sky_sun_radius() -> f32 { 18.0 }
 fn default_sky_moon_radius() -> f32 { 13.5 }
-fn default_moon_texture() -> String { "textures/fps/moon_runtime.neytd@moon_new".to_owned() }
+fn default_moon_texture() -> String { "textures/fps/moon_runtime.ytd@moon_new".to_owned() }
 fn default_sky_day_zenith() -> ColorRgb { [0.23, 0.42, 0.82] }
 fn default_sky_day_horizon() -> ColorRgb { [0.64, 0.78, 0.96] }
 fn default_sky_dusk_zenith() -> ColorRgb { [0.16, 0.20, 0.40] }
@@ -299,9 +299,9 @@ fn default_prefab_enabled() -> bool { true }
 fn default_terrain_material() -> RawMaterialSpec {
     RawMaterialSpec {
         asset: Some("materials/fps/terrain_forest_floor.material.json".to_owned()),
-        base_color_texture: Some("textures/fps/world_surfaces.neytd@terrain_forest_floor".to_owned()),
-        normal_texture: Some("textures/fps/world_surfaces.neytd@terrain_forest_floor_normal".to_owned()),
-        roughness_texture: Some("textures/fps/world_surfaces.neytd@terrain_forest_floor_roughness".to_owned()),
+        base_color_texture: Some("textures/fps/world_surfaces.ytd@terrain_forest_floor".to_owned()),
+        normal_texture: Some("textures/fps/world_surfaces.ytd@terrain_forest_floor_normal".to_owned()),
+        roughness_texture: Some("textures/fps/world_surfaces.ytd@terrain_forest_floor_roughness".to_owned()),
         uv_scale: [4.0, 4.0],
         uv_offset: [0.0, 0.0],
         roughness: 0.92,
@@ -311,8 +311,8 @@ fn default_terrain_material() -> RawMaterialSpec {
 }
 fn default_sky_material() -> RawMaterialSpec {
     RawMaterialSpec {
-        base_color_texture: Some("textures/fps/clouds_runtime.neytd@cloud_clear__new_skyhat_clear01_bot_ap".to_owned()),
-        normal_texture: Some("textures/fps/clouds_runtime.neytd@cloud_clear__new_skyhat_clear01_bot_nrm".to_owned()),
+        base_color_texture: Some("textures/fps/clouds_runtime.ytd@cloud_clear__new_skyhat_clear01_bot_ap".to_owned()),
+        normal_texture: Some("textures/fps/clouds_runtime.ytd@cloud_clear__new_skyhat_clear01_bot_nrm".to_owned()),
         roughness: 1.0,
         normal_scale: 0.18,
         occlusion_strength: 1.0,
@@ -341,8 +341,8 @@ fn default_moon_material() -> RawMaterialSpec {
 
 fn default_tree_bark_material() -> RawMaterialSpec {
     RawMaterialSpec {
-        base_color_texture: Some("prefabs/tree_animate/textures/tree_animate.neytd@bark_diffuse".to_owned()),
-        normal_texture: Some("prefabs/tree_animate/textures/tree_animate.neytd@bark_normal".to_owned()),
+        base_color_texture: Some("prefabs/tree_animate/textures/tree_animate.ytd@bark_diffuse".to_owned()),
+        normal_texture: Some("prefabs/tree_animate/textures/tree_animate.ytd@bark_normal".to_owned()),
         roughness: 0.88,
         normal_scale: 0.35,
         occlusion_strength: 1.0,
@@ -352,8 +352,8 @@ fn default_tree_bark_material() -> RawMaterialSpec {
 
 fn default_tree_leaf_material() -> RawMaterialSpec {
     RawMaterialSpec {
-        base_color_texture: Some("prefabs/tree_animate/textures/tree_animate.neytd@leaf_diffuse".to_owned()),
-        normal_texture: Some("prefabs/tree_animate/textures/tree_animate.neytd@leaf_normal".to_owned()),
+        base_color_texture: Some("prefabs/tree_animate/textures/tree_animate.ytd@leaf_diffuse".to_owned()),
+        normal_texture: Some("prefabs/tree_animate/textures/tree_animate.ytd@leaf_normal".to_owned()),
         roughness: 0.72,
         normal_scale: 0.25,
         occlusion_strength: 1.0,
@@ -363,8 +363,8 @@ fn default_tree_leaf_material() -> RawMaterialSpec {
 
 fn default_tree_branch_material() -> RawMaterialSpec {
     RawMaterialSpec {
-        base_color_texture: Some("prefabs/tree_animate/textures/tree_animate.neytd@branch_diffuse".to_owned()),
-        normal_texture: Some("prefabs/tree_animate/textures/tree_animate.neytd@branch_normal".to_owned()),
+        base_color_texture: Some("prefabs/tree_animate/textures/tree_animate.ytd@branch_diffuse".to_owned()),
+        normal_texture: Some("prefabs/tree_animate/textures/tree_animate.ytd@branch_normal".to_owned()),
         roughness: 0.86,
         normal_scale: 0.30,
         occlusion_strength: 1.0,

@@ -9,7 +9,7 @@
     "alt_heavy": [
       {
         "name": "cloud_alt_heavy__cloudhat_marble02_ap",
-        "selector": "textures/fps/clouds_runtime.neytd@cloud_alt_heavy__cloudhat_marble02_ap",
+        "selector": "textures/fps/clouds_runtime.ytd@cloud_alt_heavy__cloudhat_marble02_ap",
         "role": "coverage_mask",
         "format": "BC1_RGBA_UNORM",
         "width": 256,
@@ -18,7 +18,7 @@
       },
       {
         "name": "cloud_alt_heavy__detail1_nrm",
-        "selector": "textures/fps/clouds_runtime.neytd@cloud_alt_heavy__detail1_nrm",
+        "selector": "textures/fps/clouds_runtime.ytd@cloud_alt_heavy__detail1_nrm",
         "role": "detail_normal",
         "format": "BC1_RGBA_UNORM",
         "width": 64,
@@ -27,7 +27,7 @@
       },
       {
         "name": "cloud_alt_heavy__skyhat_raintop_ap",
-        "selector": "textures/fps/clouds_runtime.neytd@cloud_alt_heavy__skyhat_raintop_ap",
+        "selector": "textures/fps/clouds_runtime.ytd@cloud_alt_heavy__skyhat_raintop_ap",
         "role": "albedo_alpha",
         "format": "BC1_RGBA_UNORM",
         "width": 1024,
@@ -36,7 +36,7 @@
       },
       {
         "name": "cloud_alt_heavy__skyhat_raintop_n",
-        "selector": "textures/fps/clouds_runtime.neytd@cloud_alt_heavy__skyhat_raintop_n",
+        "selector": "textures/fps/clouds_runtime.ytd@cloud_alt_heavy__skyhat_raintop_n",
         "role": "normal",
         "format": "BC5_RG_UNORM",
         "width": 1024,
@@ -47,7 +47,7 @@
     "alt_light": [
       {
         "name": "cloud_alt_light__cloudhat_altitude_medium",
-        "selector": "textures/fps/clouds_runtime.neytd@cloud_alt_light__cloudhat_altitude_medium",
+        "selector": "textures/fps/clouds_runtime.ytd@cloud_alt_light__cloudhat_altitude_medium",
         "role": "density_mask",
         "format": "BC1_RGBA_UNORM",
         "width": 1024,
@@ -56,7 +56,7 @@
       },
       {
         "name": "cloud_alt_light__cloudhat_altitude_medium_n",
-        "selector": "textures/fps/clouds_runtime.neytd@cloud_alt_light__cloudhat_altitude_medium_n",
+        "selector": "textures/fps/clouds_runtime.ytd@cloud_alt_light__cloudhat_altitude_medium_n",
         "role": "normal",
         "format": "BC5_RG_UNORM",
         "width": 1024,
@@ -65,7 +65,7 @@
       },
       {
         "name": "cloud_alt_light__cloudhat_marble02_ap",
-        "selector": "textures/fps/clouds_runtime.neytd@cloud_alt_light__cloudhat_marble02_ap",
+        "selector": "textures/fps/clouds_runtime.ytd@cloud_alt_light__cloudhat_marble02_ap",
         "role": "coverage_mask",
         "format": "BC1_RGBA_UNORM",
         "width": 256,
@@ -74,7 +74,7 @@
       },
       {
         "name": "cloud_alt_light__detail1_nrm",
-        "selector": "textures/fps/clouds_runtime.neytd@cloud_alt_light__detail1_nrm",
+        "selector": "textures/fps/clouds_runtime.ytd@cloud_alt_light__detail1_nrm",
         "role": "detail_normal",
         "format": "BC1_RGBA_UNORM",
         "width": 64,
@@ -83,7 +83,7 @@
       },
       {
         "name": "cloud_alt_light__skyhat_cirrocumulus01_alt2",
-        "selector": "textures/fps/clouds_runtime.neytd@cloud_alt_light__skyhat_cirrocumulus01_alt2",
+        "selector": "textures/fps/clouds_runtime.ytd@cloud_alt_light__skyhat_cirrocumulus01_alt2",
         "role": "density_mask",
         "format": "BC1_RGBA_UNORM",
         "width": 1024,
@@ -92,7 +92,7 @@
       },
       {
         "name": "cloud_alt_light__skyhat_cirrocumulus01_alt_n",
-        "selector": "textures/fps/clouds_runtime.neytd@cloud_alt_light__skyhat_cirrocumulus01_alt_n",
+        "selector": "textures/fps/clouds_runtime.ytd@cloud_alt_light__skyhat_cirrocumulus01_alt_n",
         "role": "normal",
         "format": "BC5_RG_UNORM",
         "width": 1024,
@@ -103,7 +103,7 @@
     "alt_med": [
       {
         "name": "cloud_alt_med__cloudhat_altitude_medium",
-        "selector": "textures/fps/clouds_runtime.neytd@cloud_alt_med__cloudhat_altitude_medium",
+        "selector": "textures/fps/clouds_runtime.ytd@cloud_alt_med__cloudhat_altitude_medium",
         "role": "density_mask",
         "format": "BC1_RGBA_UNORM",
         "width": 1024,
@@ -112,7 +112,7 @@
       },
       {
         "name": "cloud_alt_med__cloudhat_altitude_medium_n",
-        "selector": "textures/fps/clouds_runtime.neytd@cloud_alt_med__cloudhat_altitude_medium_n",
+        "selector": "textures/fps/clouds_runtime.ytd@cloud_alt_med__cloudhat_altitude_medium_n",
         "role": "normal",
         "format": "BC5_RG_UNORM",
         "width": 1024,
@@ -121,7 +121,7 @@
       },
       {
         "name": "cloud_alt_med__cloudhat_marble02_ap",
-        "selector": "textures/fps/clouds_runtime.neytd@cloud_alt_med__cloudhat_marble02_ap",
+        "selector": "textures/fps/clouds_runtime.ytd@cloud_alt_med__cloudhat_marble02_ap",
         "role": "coverage_mask",
         "format": "BC1_RGBA_UNORM",
         "width": 256,
@@ -130,7 +130,7 @@
       },
       {
         "name": "cloud_alt_med__detail1_nrm",
-        "selector": "textures/fps/clouds_runtime.neytd@cloud_alt_med__detail1_nrm",
+        "selector": "textures/fps/clouds_runtime.ytd@cloud_alt_med__detail1_nrm",
         "role": "detail_normal",
         "format": "BC1_RGBA_UNORM",
         "width": 64,
@@ -141,7 +141,7 @@
     "cirrus": [
       {
         "name": "cloud_cirrus__cloudhat_cirrus_ap",
-        "selector": "textures/fps/clouds_runtime.neytd@cloud_cirrus__cloudhat_cirrus_ap",
+        "selector": "textures/fps/clouds_runtime.ytd@cloud_cirrus__cloudhat_cirrus_ap",
         "role": "albedo_alpha",
         "format": "BC1_RGBA_UNORM",
         "width": 1024,
@@ -150,7 +150,7 @@
       },
       {
         "name": "cloud_cirrus__cloudhat_cirrus_nrm",
-        "selector": "textures/fps/clouds_runtime.neytd@cloud_cirrus__cloudhat_cirrus_nrm",
+        "selector": "textures/fps/clouds_runtime.ytd@cloud_cirrus__cloudhat_cirrus_nrm",
         "role": "normal",
         "format": "BC5_RG_UNORM",
         "width": 1024,
@@ -161,7 +161,7 @@
     "clear": [
       {
         "name": "cloud_clear__cloudhat_marble02_ap",
-        "selector": "textures/fps/clouds_runtime.neytd@cloud_clear__cloudhat_marble02_ap",
+        "selector": "textures/fps/clouds_runtime.ytd@cloud_clear__cloudhat_marble02_ap",
         "role": "coverage_mask",
         "format": "BC1_RGBA_UNORM",
         "width": 256,
@@ -170,7 +170,7 @@
       },
       {
         "name": "cloud_clear__detail1_nrm",
-        "selector": "textures/fps/clouds_runtime.neytd@cloud_clear__detail1_nrm",
+        "selector": "textures/fps/clouds_runtime.ytd@cloud_clear__detail1_nrm",
         "role": "detail_normal",
         "format": "BC1_RGBA_UNORM",
         "width": 64,
@@ -179,7 +179,7 @@
       },
       {
         "name": "cloud_clear__new_skyhat_clear01_bot_ap",
-        "selector": "textures/fps/clouds_runtime.neytd@cloud_clear__new_skyhat_clear01_bot_ap",
+        "selector": "textures/fps/clouds_runtime.ytd@cloud_clear__new_skyhat_clear01_bot_ap",
         "role": "albedo_alpha",
         "format": "BC1_RGBA_UNORM",
         "width": 2048,
@@ -188,7 +188,7 @@
       },
       {
         "name": "cloud_clear__new_skyhat_clear01_bot_nrm",
-        "selector": "textures/fps/clouds_runtime.neytd@cloud_clear__new_skyhat_clear01_bot_nrm",
+        "selector": "textures/fps/clouds_runtime.ytd@cloud_clear__new_skyhat_clear01_bot_nrm",
         "role": "normal",
         "format": "BC5_RG_UNORM",
         "width": 2048,
@@ -199,7 +199,7 @@
     "cloudy": [
       {
         "name": "cloud_cloudy__cloudhat_marble02_ap",
-        "selector": "textures/fps/clouds_runtime.neytd@cloud_cloudy__cloudhat_marble02_ap",
+        "selector": "textures/fps/clouds_runtime.ytd@cloud_cloudy__cloudhat_marble02_ap",
         "role": "coverage_mask",
         "format": "BC1_RGBA_UNORM",
         "width": 256,
@@ -208,7 +208,7 @@
       },
       {
         "name": "cloud_cloudy__detail1_nrm",
-        "selector": "textures/fps/clouds_runtime.neytd@cloud_cloudy__detail1_nrm",
+        "selector": "textures/fps/clouds_runtime.ytd@cloud_cloudy__detail1_nrm",
         "role": "detail_normal",
         "format": "BC1_RGBA_UNORM",
         "width": 64,
@@ -217,7 +217,7 @@
       },
       {
         "name": "cloud_cloudy__trialap",
-        "selector": "textures/fps/clouds_runtime.neytd@cloud_cloudy__trialap",
+        "selector": "textures/fps/clouds_runtime.ytd@cloud_cloudy__trialap",
         "role": "albedo_alpha",
         "format": "BC1_RGBA_UNORM",
         "width": 2048,
@@ -226,7 +226,7 @@
       },
       {
         "name": "cloud_cloudy__trialn",
-        "selector": "textures/fps/clouds_runtime.neytd@cloud_cloudy__trialn",
+        "selector": "textures/fps/clouds_runtime.ytd@cloud_cloudy__trialn",
         "role": "normal",
         "format": "BC5_RG_UNORM",
         "width": 2048,
@@ -237,7 +237,7 @@
     "contrails": [
       {
         "name": "cloud_contrails__contrails_ap3",
-        "selector": "textures/fps/clouds_runtime.neytd@cloud_contrails__contrails_ap3",
+        "selector": "textures/fps/clouds_runtime.ytd@cloud_contrails__contrails_ap3",
         "role": "contrail_mask",
         "format": "BC1_RGBA_UNORM",
         "width": 2048,
@@ -246,7 +246,7 @@
       },
       {
         "name": "cloud_contrails__contrails_nrm3",
-        "selector": "textures/fps/clouds_runtime.neytd@cloud_contrails__contrails_nrm3",
+        "selector": "textures/fps/clouds_runtime.ytd@cloud_contrails__contrails_nrm3",
         "role": "contrail_mask",
         "format": "BC1_RGBA_UNORM",
         "width": 2048,
@@ -257,7 +257,7 @@
     "horizon": [
       {
         "name": "cloud_horizon__cloudhat_marble02_ap",
-        "selector": "textures/fps/clouds_runtime.neytd@cloud_horizon__cloudhat_marble02_ap",
+        "selector": "textures/fps/clouds_runtime.ytd@cloud_horizon__cloudhat_marble02_ap",
         "role": "coverage_mask",
         "format": "BC1_RGBA_UNORM",
         "width": 256,
@@ -266,7 +266,7 @@
       },
       {
         "name": "cloud_horizon__detail1_nrm",
-        "selector": "textures/fps/clouds_runtime.neytd@cloud_horizon__detail1_nrm",
+        "selector": "textures/fps/clouds_runtime.ytd@cloud_horizon__detail1_nrm",
         "role": "detail_normal",
         "format": "BC1_RGBA_UNORM",
         "width": 64,
@@ -275,7 +275,7 @@
       },
       {
         "name": "cloud_horizon__stripeyclouds_ap",
-        "selector": "textures/fps/clouds_runtime.neytd@cloud_horizon__stripeyclouds_ap",
+        "selector": "textures/fps/clouds_runtime.ytd@cloud_horizon__stripeyclouds_ap",
         "role": "albedo_alpha",
         "format": "BC1_RGBA_UNORM",
         "width": 1024,
@@ -284,7 +284,7 @@
       },
       {
         "name": "cloud_horizon__stripeyclouds_nrm",
-        "selector": "textures/fps/clouds_runtime.neytd@cloud_horizon__stripeyclouds_nrm",
+        "selector": "textures/fps/clouds_runtime.ytd@cloud_horizon__stripeyclouds_nrm",
         "role": "normal",
         "format": "BC5_RG_UNORM",
         "width": 1024,
@@ -295,7 +295,7 @@
     "nimbus": [
       {
         "name": "cloud_nimbus__cloudhat_marble02_ap",
-        "selector": "textures/fps/clouds_runtime.neytd@cloud_nimbus__cloudhat_marble02_ap",
+        "selector": "textures/fps/clouds_runtime.ytd@cloud_nimbus__cloudhat_marble02_ap",
         "role": "coverage_mask",
         "format": "BC1_RGBA_UNORM",
         "width": 256,
@@ -304,7 +304,7 @@
       },
       {
         "name": "cloud_nimbus__detail1_nrm",
-        "selector": "textures/fps/clouds_runtime.neytd@cloud_nimbus__detail1_nrm",
+        "selector": "textures/fps/clouds_runtime.ytd@cloud_nimbus__detail1_nrm",
         "role": "detail_normal",
         "format": "BC1_RGBA_UNORM",
         "width": 64,
@@ -313,7 +313,7 @@
       },
       {
         "name": "cloud_nimbus__final_nimbusclouds_ap",
-        "selector": "textures/fps/clouds_runtime.neytd@cloud_nimbus__final_nimbusclouds_ap",
+        "selector": "textures/fps/clouds_runtime.ytd@cloud_nimbus__final_nimbusclouds_ap",
         "role": "albedo_alpha",
         "format": "BC1_RGBA_UNORM",
         "width": 2048,
@@ -322,7 +322,7 @@
       },
       {
         "name": "cloud_nimbus__final_nimbusclouds_n",
-        "selector": "textures/fps/clouds_runtime.neytd@cloud_nimbus__final_nimbusclouds_n",
+        "selector": "textures/fps/clouds_runtime.ytd@cloud_nimbus__final_nimbusclouds_n",
         "role": "normal",
         "format": "BC5_RG_UNORM",
         "width": 2048,
@@ -333,7 +333,7 @@
     "puffs": [
       {
         "name": "cloud_puffs__cloudhat_marble02_ap",
-        "selector": "textures/fps/clouds_runtime.neytd@cloud_puffs__cloudhat_marble02_ap",
+        "selector": "textures/fps/clouds_runtime.ytd@cloud_puffs__cloudhat_marble02_ap",
         "role": "coverage_mask",
         "format": "BC1_RGBA_UNORM",
         "width": 256,
@@ -342,7 +342,7 @@
       },
       {
         "name": "cloud_puffs__cloudhat_puffs_ap",
-        "selector": "textures/fps/clouds_runtime.neytd@cloud_puffs__cloudhat_puffs_ap",
+        "selector": "textures/fps/clouds_runtime.ytd@cloud_puffs__cloudhat_puffs_ap",
         "role": "albedo_alpha",
         "format": "BC1_RGBA_UNORM",
         "width": 2048,
@@ -351,7 +351,7 @@
       },
       {
         "name": "cloud_puffs__cloudhat_puffs_nrm",
-        "selector": "textures/fps/clouds_runtime.neytd@cloud_puffs__cloudhat_puffs_nrm",
+        "selector": "textures/fps/clouds_runtime.ytd@cloud_puffs__cloudhat_puffs_nrm",
         "role": "normal",
         "format": "BC5_RG_UNORM",
         "width": 2048,
@@ -360,7 +360,7 @@
       },
       {
         "name": "cloud_puffs__detail1_nrm",
-        "selector": "textures/fps/clouds_runtime.neytd@cloud_puffs__detail1_nrm",
+        "selector": "textures/fps/clouds_runtime.ytd@cloud_puffs__detail1_nrm",
         "role": "detail_normal",
         "format": "BC1_RGBA_UNORM",
         "width": 64,
@@ -371,7 +371,7 @@
     "rain": [
       {
         "name": "cloud_rain__skyhat_rain02_ap",
-        "selector": "textures/fps/clouds_runtime.neytd@cloud_rain__skyhat_rain02_ap",
+        "selector": "textures/fps/clouds_runtime.ytd@cloud_rain__skyhat_rain02_ap",
         "role": "albedo_alpha",
         "format": "BC1_RGBA_UNORM",
         "width": 1024,
@@ -380,7 +380,7 @@
       },
       {
         "name": "cloud_rain__skyhat_rain02_n2",
-        "selector": "textures/fps/clouds_runtime.neytd@cloud_rain__skyhat_rain02_n2",
+        "selector": "textures/fps/clouds_runtime.ytd@cloud_rain__skyhat_rain02_n2",
         "role": "density_mask",
         "format": "BC5_RG_UNORM",
         "width": 1024,
@@ -391,7 +391,7 @@
     "showers": [
       {
         "name": "cloud_showers__skyhat_showers01_ap",
-        "selector": "textures/fps/clouds_runtime.neytd@cloud_showers__skyhat_showers01_ap",
+        "selector": "textures/fps/clouds_runtime.ytd@cloud_showers__skyhat_showers01_ap",
         "role": "albedo_alpha",
         "format": "BC1_RGBA_UNORM",
         "width": 1024,
@@ -400,7 +400,7 @@
       },
       {
         "name": "cloud_showers__skyhat_showers01_n",
-        "selector": "textures/fps/clouds_runtime.neytd@cloud_showers__skyhat_showers01_n",
+        "selector": "textures/fps/clouds_runtime.ytd@cloud_showers__skyhat_showers01_n",
         "role": "normal",
         "format": "BC5_RG_UNORM",
         "width": 1024,
@@ -411,7 +411,7 @@
     "storm": [
       {
         "name": "cloud_storm__cloudhat_marble02_ap",
-        "selector": "textures/fps/clouds_runtime.neytd@cloud_storm__cloudhat_marble02_ap",
+        "selector": "textures/fps/clouds_runtime.ytd@cloud_storm__cloudhat_marble02_ap",
         "role": "coverage_mask",
         "format": "BC1_RGBA_UNORM",
         "width": 256,
@@ -420,7 +420,7 @@
       },
       {
         "name": "cloud_storm__detail1_nrm",
-        "selector": "textures/fps/clouds_runtime.neytd@cloud_storm__detail1_nrm",
+        "selector": "textures/fps/clouds_runtime.ytd@cloud_storm__detail1_nrm",
         "role": "detail_normal",
         "format": "BC1_RGBA_UNORM",
         "width": 64,
@@ -429,7 +429,7 @@
       },
       {
         "name": "cloud_storm__skyhat_rain02_ap",
-        "selector": "textures/fps/clouds_runtime.neytd@cloud_storm__skyhat_rain02_ap",
+        "selector": "textures/fps/clouds_runtime.ytd@cloud_storm__skyhat_rain02_ap",
         "role": "albedo_alpha",
         "format": "BC1_RGBA_UNORM",
         "width": 1024,
@@ -438,7 +438,7 @@
       },
       {
         "name": "cloud_storm__skyhat_rain02_n2",
-        "selector": "textures/fps/clouds_runtime.neytd@cloud_storm__skyhat_rain02_n2",
+        "selector": "textures/fps/clouds_runtime.ytd@cloud_storm__skyhat_rain02_n2",
         "role": "density_mask",
         "format": "BC5_RG_UNORM",
         "width": 1024,
@@ -447,7 +447,7 @@
       },
       {
         "name": "cloud_storm__stormclouds_ap",
-        "selector": "textures/fps/clouds_runtime.neytd@cloud_storm__stormclouds_ap",
+        "selector": "textures/fps/clouds_runtime.ytd@cloud_storm__stormclouds_ap",
         "role": "albedo_alpha",
         "format": "BC1_RGBA_UNORM",
         "width": 1024,
@@ -456,7 +456,7 @@
       },
       {
         "name": "cloud_storm__stormclouds_nrm",
-        "selector": "textures/fps/clouds_runtime.neytd@cloud_storm__stormclouds_nrm",
+        "selector": "textures/fps/clouds_runtime.ytd@cloud_storm__stormclouds_nrm",
         "role": "normal",
         "format": "BC5_RG_UNORM",
         "width": 1024,
@@ -467,7 +467,7 @@
     "test": [
       {
         "name": "cloud_test__cloudhat_marble02_ap",
-        "selector": "textures/fps/clouds_runtime.neytd@cloud_test__cloudhat_marble02_ap",
+        "selector": "textures/fps/clouds_runtime.ytd@cloud_test__cloudhat_marble02_ap",
         "role": "coverage_mask",
         "format": "BC1_RGBA_UNORM",
         "width": 256,
@@ -476,7 +476,7 @@
       },
       {
         "name": "cloud_test__detail1_nrm",
-        "selector": "textures/fps/clouds_runtime.neytd@cloud_test__detail1_nrm",
+        "selector": "textures/fps/clouds_runtime.ytd@cloud_test__detail1_nrm",
         "role": "detail_normal",
         "format": "BC1_RGBA_UNORM",
         "width": 64,
@@ -485,7 +485,7 @@
       },
       {
         "name": "cloud_test__testwritting",
-        "selector": "textures/fps/clouds_runtime.neytd@cloud_test__testwritting",
+        "selector": "textures/fps/clouds_runtime.ytd@cloud_test__testwritting",
         "role": "density_mask",
         "format": "BC1_RGBA_UNORM",
         "width": 1024,
@@ -494,7 +494,7 @@
       },
       {
         "name": "cloud_test__testwritting_nrm",
-        "selector": "textures/fps/clouds_runtime.neytd@cloud_test__testwritting_nrm",
+        "selector": "textures/fps/clouds_runtime.ytd@cloud_test__testwritting_nrm",
         "role": "normal",
         "format": "BC1_RGBA_UNORM",
         "width": 1024,
@@ -505,7 +505,7 @@
     "wispy": [
       {
         "name": "cloud_wispy__skyhat_cirrocumulus01_ap",
-        "selector": "textures/fps/clouds_runtime.neytd@cloud_wispy__skyhat_cirrocumulus01_ap",
+        "selector": "textures/fps/clouds_runtime.ytd@cloud_wispy__skyhat_cirrocumulus01_ap",
         "role": "albedo_alpha",
         "format": "BC1_RGBA_UNORM",
         "width": 1024,
@@ -514,7 +514,7 @@
       },
       {
         "name": "cloud_wispy__skyhat_cirrocumulus01_nrm",
-        "selector": "textures/fps/clouds_runtime.neytd@cloud_wispy__skyhat_cirrocumulus01_nrm",
+        "selector": "textures/fps/clouds_runtime.ytd@cloud_wispy__skyhat_cirrocumulus01_nrm",
         "role": "normal",
         "format": "BC5_RG_UNORM",
         "width": 1024,
@@ -523,7 +523,7 @@
       },
       {
         "name": "cloud_wispy__wisps_ap",
-        "selector": "textures/fps/clouds_runtime.neytd@cloud_wispy__wisps_ap",
+        "selector": "textures/fps/clouds_runtime.ytd@cloud_wispy__wisps_ap",
         "role": "albedo_alpha",
         "format": "BC1_RGBA_UNORM",
         "width": 1024,
@@ -532,7 +532,7 @@
       },
       {
         "name": "cloud_wispy__wisps_nrm",
-        "selector": "textures/fps/clouds_runtime.neytd@cloud_wispy__wisps_nrm",
+        "selector": "textures/fps/clouds_runtime.ytd@cloud_wispy__wisps_nrm",
         "role": "normal",
         "format": "BC5_RG_UNORM",
         "width": 1024,
@@ -544,7 +544,7 @@
   "entries": [
     {
       "name": "cloud_alt_heavy__cloudhat_marble02_ap",
-      "selector": "textures/fps/clouds_runtime.neytd@cloud_alt_heavy__cloudhat_marble02_ap",
+      "selector": "textures/fps/clouds_runtime.ytd@cloud_alt_heavy__cloudhat_marble02_ap",
       "profile": "alt_heavy",
       "role": "coverage_mask",
       "source": "alt_heavy/cloudhat_marble02_ap.dds",
@@ -557,7 +557,7 @@
     },
     {
       "name": "cloud_alt_heavy__detail1_nrm",
-      "selector": "textures/fps/clouds_runtime.neytd@cloud_alt_heavy__detail1_nrm",
+      "selector": "textures/fps/clouds_runtime.ytd@cloud_alt_heavy__detail1_nrm",
       "profile": "alt_heavy",
       "role": "detail_normal",
       "source": "alt_heavy/detail1_nrm.dds",
@@ -570,7 +570,7 @@
     },
     {
       "name": "cloud_alt_heavy__skyhat_raintop_ap",
-      "selector": "textures/fps/clouds_runtime.neytd@cloud_alt_heavy__skyhat_raintop_ap",
+      "selector": "textures/fps/clouds_runtime.ytd@cloud_alt_heavy__skyhat_raintop_ap",
       "profile": "alt_heavy",
       "role": "albedo_alpha",
       "source": "alt_heavy/skyhat_raintop_ap.dds",
@@ -583,7 +583,7 @@
     },
     {
       "name": "cloud_alt_heavy__skyhat_raintop_n",
-      "selector": "textures/fps/clouds_runtime.neytd@cloud_alt_heavy__skyhat_raintop_n",
+      "selector": "textures/fps/clouds_runtime.ytd@cloud_alt_heavy__skyhat_raintop_n",
       "profile": "alt_heavy",
       "role": "normal",
       "source": "alt_heavy/skyhat_raintop_n.dds",
@@ -596,7 +596,7 @@
     },
     {
       "name": "cloud_alt_light__cloudhat_altitude_medium",
-      "selector": "textures/fps/clouds_runtime.neytd@cloud_alt_light__cloudhat_altitude_medium",
+      "selector": "textures/fps/clouds_runtime.ytd@cloud_alt_light__cloudhat_altitude_medium",
       "profile": "alt_light",
       "role": "density_mask",
       "source": "alt_light/cloudhat_altitude_medium.dds",
@@ -609,7 +609,7 @@
     },
     {
       "name": "cloud_alt_light__cloudhat_altitude_medium_n",
-      "selector": "textures/fps/clouds_runtime.neytd@cloud_alt_light__cloudhat_altitude_medium_n",
+      "selector": "textures/fps/clouds_runtime.ytd@cloud_alt_light__cloudhat_altitude_medium_n",
       "profile": "alt_light",
       "role": "normal",
       "source": "alt_light/cloudhat_altitude_medium_n.dds",
@@ -622,7 +622,7 @@
     },
     {
       "name": "cloud_alt_light__cloudhat_marble02_ap",
-      "selector": "textures/fps/clouds_runtime.neytd@cloud_alt_light__cloudhat_marble02_ap",
+      "selector": "textures/fps/clouds_runtime.ytd@cloud_alt_light__cloudhat_marble02_ap",
       "profile": "alt_light",
       "role": "coverage_mask",
       "source": "alt_light/cloudhat_marble02_ap.dds",
@@ -635,7 +635,7 @@
     },
     {
       "name": "cloud_alt_light__detail1_nrm",
-      "selector": "textures/fps/clouds_runtime.neytd@cloud_alt_light__detail1_nrm",
+      "selector": "textures/fps/clouds_runtime.ytd@cloud_alt_light__detail1_nrm",
       "profile": "alt_light",
       "role": "detail_normal",
       "source": "alt_light/detail1_nrm.dds",
@@ -648,7 +648,7 @@
     },
     {
       "name": "cloud_alt_light__skyhat_cirrocumulus01_alt2",
-      "selector": "textures/fps/clouds_runtime.neytd@cloud_alt_light__skyhat_cirrocumulus01_alt2",
+      "selector": "textures/fps/clouds_runtime.ytd@cloud_alt_light__skyhat_cirrocumulus01_alt2",
       "profile": "alt_light",
       "role": "density_mask",
       "source": "alt_light/skyhat_cirrocumulus01_alt2.dds",
@@ -661,7 +661,7 @@
     },
     {
       "name": "cloud_alt_light__skyhat_cirrocumulus01_alt_n",
-      "selector": "textures/fps/clouds_runtime.neytd@cloud_alt_light__skyhat_cirrocumulus01_alt_n",
+      "selector": "textures/fps/clouds_runtime.ytd@cloud_alt_light__skyhat_cirrocumulus01_alt_n",
       "profile": "alt_light",
       "role": "normal",
       "source": "alt_light/skyhat_cirrocumulus01_alt_n.dds",
@@ -674,7 +674,7 @@
     },
     {
       "name": "cloud_alt_med__cloudhat_altitude_medium",
-      "selector": "textures/fps/clouds_runtime.neytd@cloud_alt_med__cloudhat_altitude_medium",
+      "selector": "textures/fps/clouds_runtime.ytd@cloud_alt_med__cloudhat_altitude_medium",
       "profile": "alt_med",
       "role": "density_mask",
       "source": "alt_med/cloudhat_altitude_medium.dds",
@@ -687,7 +687,7 @@
     },
     {
       "name": "cloud_alt_med__cloudhat_altitude_medium_n",
-      "selector": "textures/fps/clouds_runtime.neytd@cloud_alt_med__cloudhat_altitude_medium_n",
+      "selector": "textures/fps/clouds_runtime.ytd@cloud_alt_med__cloudhat_altitude_medium_n",
       "profile": "alt_med",
       "role": "normal",
       "source": "alt_med/cloudhat_altitude_medium_n.dds",
@@ -700,7 +700,7 @@
     },
     {
       "name": "cloud_alt_med__cloudhat_marble02_ap",
-      "selector": "textures/fps/clouds_runtime.neytd@cloud_alt_med__cloudhat_marble02_ap",
+      "selector": "textures/fps/clouds_runtime.ytd@cloud_alt_med__cloudhat_marble02_ap",
       "profile": "alt_med",
       "role": "coverage_mask",
       "source": "alt_med/cloudhat_marble02_ap.dds",
@@ -713,7 +713,7 @@
     },
     {
       "name": "cloud_alt_med__detail1_nrm",
-      "selector": "textures/fps/clouds_runtime.neytd@cloud_alt_med__detail1_nrm",
+      "selector": "textures/fps/clouds_runtime.ytd@cloud_alt_med__detail1_nrm",
       "profile": "alt_med",
       "role": "detail_normal",
       "source": "alt_med/detail1_nrm.dds",
@@ -726,7 +726,7 @@
     },
     {
       "name": "cloud_cirrus__cloudhat_cirrus_ap",
-      "selector": "textures/fps/clouds_runtime.neytd@cloud_cirrus__cloudhat_cirrus_ap",
+      "selector": "textures/fps/clouds_runtime.ytd@cloud_cirrus__cloudhat_cirrus_ap",
       "profile": "cirrus",
       "role": "albedo_alpha",
       "source": "cirrus/cloudhat_cirrus_ap.dds",
@@ -739,7 +739,7 @@
     },
     {
       "name": "cloud_cirrus__cloudhat_cirrus_nrm",
-      "selector": "textures/fps/clouds_runtime.neytd@cloud_cirrus__cloudhat_cirrus_nrm",
+      "selector": "textures/fps/clouds_runtime.ytd@cloud_cirrus__cloudhat_cirrus_nrm",
       "profile": "cirrus",
       "role": "normal",
       "source": "cirrus/cloudhat_cirrus_nrm.dds",
@@ -752,7 +752,7 @@
     },
     {
       "name": "cloud_clear__cloudhat_marble02_ap",
-      "selector": "textures/fps/clouds_runtime.neytd@cloud_clear__cloudhat_marble02_ap",
+      "selector": "textures/fps/clouds_runtime.ytd@cloud_clear__cloudhat_marble02_ap",
       "profile": "clear",
       "role": "coverage_mask",
       "source": "clear/cloudhat_marble02_ap.dds",
@@ -765,7 +765,7 @@
     },
     {
       "name": "cloud_clear__detail1_nrm",
-      "selector": "textures/fps/clouds_runtime.neytd@cloud_clear__detail1_nrm",
+      "selector": "textures/fps/clouds_runtime.ytd@cloud_clear__detail1_nrm",
       "profile": "clear",
       "role": "detail_normal",
       "source": "clear/detail1_nrm.dds",
@@ -778,7 +778,7 @@
     },
     {
       "name": "cloud_clear__new_skyhat_clear01_bot_ap",
-      "selector": "textures/fps/clouds_runtime.neytd@cloud_clear__new_skyhat_clear01_bot_ap",
+      "selector": "textures/fps/clouds_runtime.ytd@cloud_clear__new_skyhat_clear01_bot_ap",
       "profile": "clear",
       "role": "albedo_alpha",
       "source": "clear/new_skyhat_clear01_bot_ap.dds",
@@ -791,7 +791,7 @@
     },
     {
       "name": "cloud_clear__new_skyhat_clear01_bot_nrm",
-      "selector": "textures/fps/clouds_runtime.neytd@cloud_clear__new_skyhat_clear01_bot_nrm",
+      "selector": "textures/fps/clouds_runtime.ytd@cloud_clear__new_skyhat_clear01_bot_nrm",
       "profile": "clear",
       "role": "normal",
       "source": "clear/new_skyhat_clear01_bot_nrm.dds",
@@ -804,7 +804,7 @@
     },
     {
       "name": "cloud_cloudy__cloudhat_marble02_ap",
-      "selector": "textures/fps/clouds_runtime.neytd@cloud_cloudy__cloudhat_marble02_ap",
+      "selector": "textures/fps/clouds_runtime.ytd@cloud_cloudy__cloudhat_marble02_ap",
       "profile": "cloudy",
       "role": "coverage_mask",
       "source": "cloudy/cloudhat_marble02_ap.dds",
@@ -817,7 +817,7 @@
     },
     {
       "name": "cloud_cloudy__detail1_nrm",
-      "selector": "textures/fps/clouds_runtime.neytd@cloud_cloudy__detail1_nrm",
+      "selector": "textures/fps/clouds_runtime.ytd@cloud_cloudy__detail1_nrm",
       "profile": "cloudy",
       "role": "detail_normal",
       "source": "cloudy/detail1_nrm.dds",
@@ -830,7 +830,7 @@
     },
     {
       "name": "cloud_cloudy__trialap",
-      "selector": "textures/fps/clouds_runtime.neytd@cloud_cloudy__trialap",
+      "selector": "textures/fps/clouds_runtime.ytd@cloud_cloudy__trialap",
       "profile": "cloudy",
       "role": "albedo_alpha",
       "source": "cloudy/trialap.dds",
@@ -843,7 +843,7 @@
     },
     {
       "name": "cloud_cloudy__trialn",
-      "selector": "textures/fps/clouds_runtime.neytd@cloud_cloudy__trialn",
+      "selector": "textures/fps/clouds_runtime.ytd@cloud_cloudy__trialn",
       "profile": "cloudy",
       "role": "normal",
       "source": "cloudy/trialn.dds",
@@ -856,7 +856,7 @@
     },
     {
       "name": "cloud_contrails__contrails_ap3",
-      "selector": "textures/fps/clouds_runtime.neytd@cloud_contrails__contrails_ap3",
+      "selector": "textures/fps/clouds_runtime.ytd@cloud_contrails__contrails_ap3",
       "profile": "contrails",
       "role": "contrail_mask",
       "source": "contrails/contrails_ap3.dds",
@@ -869,7 +869,7 @@
     },
     {
       "name": "cloud_contrails__contrails_nrm3",
-      "selector": "textures/fps/clouds_runtime.neytd@cloud_contrails__contrails_nrm3",
+      "selector": "textures/fps/clouds_runtime.ytd@cloud_contrails__contrails_nrm3",
       "profile": "contrails",
       "role": "contrail_mask",
       "source": "contrails/contrails_nrm3.dds",
@@ -882,7 +882,7 @@
     },
     {
       "name": "cloud_horizon__cloudhat_marble02_ap",
-      "selector": "textures/fps/clouds_runtime.neytd@cloud_horizon__cloudhat_marble02_ap",
+      "selector": "textures/fps/clouds_runtime.ytd@cloud_horizon__cloudhat_marble02_ap",
       "profile": "horizon",
       "role": "coverage_mask",
       "source": "horizon/cloudhat_marble02_ap.dds",
@@ -895,7 +895,7 @@
     },
     {
       "name": "cloud_horizon__detail1_nrm",
-      "selector": "textures/fps/clouds_runtime.neytd@cloud_horizon__detail1_nrm",
+      "selector": "textures/fps/clouds_runtime.ytd@cloud_horizon__detail1_nrm",
       "profile": "horizon",
       "role": "detail_normal",
       "source": "horizon/detail1_nrm.dds",
@@ -908,7 +908,7 @@
     },
     {
       "name": "cloud_horizon__stripeyclouds_ap",
-      "selector": "textures/fps/clouds_runtime.neytd@cloud_horizon__stripeyclouds_ap",
+      "selector": "textures/fps/clouds_runtime.ytd@cloud_horizon__stripeyclouds_ap",
       "profile": "horizon",
       "role": "albedo_alpha",
       "source": "horizon/stripeyclouds_ap.dds",
@@ -921,7 +921,7 @@
     },
     {
       "name": "cloud_horizon__stripeyclouds_nrm",
-      "selector": "textures/fps/clouds_runtime.neytd@cloud_horizon__stripeyclouds_nrm",
+      "selector": "textures/fps/clouds_runtime.ytd@cloud_horizon__stripeyclouds_nrm",
       "profile": "horizon",
       "role": "normal",
       "source": "horizon/stripeyclouds_nrm.dds",
@@ -934,7 +934,7 @@
     },
     {
       "name": "cloud_nimbus__cloudhat_marble02_ap",
-      "selector": "textures/fps/clouds_runtime.neytd@cloud_nimbus__cloudhat_marble02_ap",
+      "selector": "textures/fps/clouds_runtime.ytd@cloud_nimbus__cloudhat_marble02_ap",
       "profile": "nimbus",
       "role": "coverage_mask",
       "source": "nimbus/cloudhat_marble02_ap.dds",
@@ -947,7 +947,7 @@
     },
     {
       "name": "cloud_nimbus__detail1_nrm",
-      "selector": "textures/fps/clouds_runtime.neytd@cloud_nimbus__detail1_nrm",
+      "selector": "textures/fps/clouds_runtime.ytd@cloud_nimbus__detail1_nrm",
       "profile": "nimbus",
       "role": "detail_normal",
       "source": "nimbus/detail1_nrm.dds",
@@ -960,7 +960,7 @@
     },
     {
       "name": "cloud_nimbus__final_nimbusclouds_ap",
-      "selector": "textures/fps/clouds_runtime.neytd@cloud_nimbus__final_nimbusclouds_ap",
+      "selector": "textures/fps/clouds_runtime.ytd@cloud_nimbus__final_nimbusclouds_ap",
       "profile": "nimbus",
       "role": "albedo_alpha",
       "source": "nimbus/final_nimbusclouds_ap.dds",
@@ -973,7 +973,7 @@
     },
     {
       "name": "cloud_nimbus__final_nimbusclouds_n",
-      "selector": "textures/fps/clouds_runtime.neytd@cloud_nimbus__final_nimbusclouds_n",
+      "selector": "textures/fps/clouds_runtime.ytd@cloud_nimbus__final_nimbusclouds_n",
       "profile": "nimbus",
       "role": "normal",
       "source": "nimbus/final_nimbusclouds_n.dds",
@@ -986,7 +986,7 @@
     },
     {
       "name": "cloud_puffs__cloudhat_marble02_ap",
-      "selector": "textures/fps/clouds_runtime.neytd@cloud_puffs__cloudhat_marble02_ap",
+      "selector": "textures/fps/clouds_runtime.ytd@cloud_puffs__cloudhat_marble02_ap",
       "profile": "puffs",
       "role": "coverage_mask",
       "source": "puffs/cloudhat_marble02_ap.dds",
@@ -999,7 +999,7 @@
     },
     {
       "name": "cloud_puffs__cloudhat_puffs_ap",
-      "selector": "textures/fps/clouds_runtime.neytd@cloud_puffs__cloudhat_puffs_ap",
+      "selector": "textures/fps/clouds_runtime.ytd@cloud_puffs__cloudhat_puffs_ap",
       "profile": "puffs",
       "role": "albedo_alpha",
       "source": "puffs/cloudhat_puffs_ap.dds",
@@ -1012,7 +1012,7 @@
     },
     {
       "name": "cloud_puffs__cloudhat_puffs_nrm",
-      "selector": "textures/fps/clouds_runtime.neytd@cloud_puffs__cloudhat_puffs_nrm",
+      "selector": "textures/fps/clouds_runtime.ytd@cloud_puffs__cloudhat_puffs_nrm",
       "profile": "puffs",
       "role": "normal",
       "source": "puffs/cloudhat_puffs_nrm.dds",
@@ -1025,7 +1025,7 @@
     },
     {
       "name": "cloud_puffs__detail1_nrm",
-      "selector": "textures/fps/clouds_runtime.neytd@cloud_puffs__detail1_nrm",
+      "selector": "textures/fps/clouds_runtime.ytd@cloud_puffs__detail1_nrm",
       "profile": "puffs",
       "role": "detail_normal",
       "source": "puffs/detail1_nrm.dds",
@@ -1038,7 +1038,7 @@
     },
     {
       "name": "cloud_rain__skyhat_rain02_ap",
-      "selector": "textures/fps/clouds_runtime.neytd@cloud_rain__skyhat_rain02_ap",
+      "selector": "textures/fps/clouds_runtime.ytd@cloud_rain__skyhat_rain02_ap",
       "profile": "rain",
       "role": "albedo_alpha",
       "source": "rain/skyhat_rain02_ap.dds",
@@ -1051,7 +1051,7 @@
     },
     {
       "name": "cloud_rain__skyhat_rain02_n2",
-      "selector": "textures/fps/clouds_runtime.neytd@cloud_rain__skyhat_rain02_n2",
+      "selector": "textures/fps/clouds_runtime.ytd@cloud_rain__skyhat_rain02_n2",
       "profile": "rain",
       "role": "density_mask",
       "source": "rain/skyhat_rain02_n2.dds",
@@ -1064,7 +1064,7 @@
     },
     {
       "name": "cloud_showers__skyhat_showers01_ap",
-      "selector": "textures/fps/clouds_runtime.neytd@cloud_showers__skyhat_showers01_ap",
+      "selector": "textures/fps/clouds_runtime.ytd@cloud_showers__skyhat_showers01_ap",
       "profile": "showers",
       "role": "albedo_alpha",
       "source": "showers/skyhat_showers01_ap.dds",
@@ -1077,7 +1077,7 @@
     },
     {
       "name": "cloud_showers__skyhat_showers01_n",
-      "selector": "textures/fps/clouds_runtime.neytd@cloud_showers__skyhat_showers01_n",
+      "selector": "textures/fps/clouds_runtime.ytd@cloud_showers__skyhat_showers01_n",
       "profile": "showers",
       "role": "normal",
       "source": "showers/skyhat_showers01_n.dds",
@@ -1090,7 +1090,7 @@
     },
     {
       "name": "cloud_storm__cloudhat_marble02_ap",
-      "selector": "textures/fps/clouds_runtime.neytd@cloud_storm__cloudhat_marble02_ap",
+      "selector": "textures/fps/clouds_runtime.ytd@cloud_storm__cloudhat_marble02_ap",
       "profile": "storm",
       "role": "coverage_mask",
       "source": "storm/cloudhat_marble02_ap.dds",
@@ -1103,7 +1103,7 @@
     },
     {
       "name": "cloud_storm__detail1_nrm",
-      "selector": "textures/fps/clouds_runtime.neytd@cloud_storm__detail1_nrm",
+      "selector": "textures/fps/clouds_runtime.ytd@cloud_storm__detail1_nrm",
       "profile": "storm",
       "role": "detail_normal",
       "source": "storm/detail1_nrm.dds",
@@ -1116,7 +1116,7 @@
     },
     {
       "name": "cloud_storm__skyhat_rain02_ap",
-      "selector": "textures/fps/clouds_runtime.neytd@cloud_storm__skyhat_rain02_ap",
+      "selector": "textures/fps/clouds_runtime.ytd@cloud_storm__skyhat_rain02_ap",
       "profile": "storm",
       "role": "albedo_alpha",
       "source": "storm/skyhat_rain02_ap.dds",
@@ -1129,7 +1129,7 @@
     },
     {
       "name": "cloud_storm__skyhat_rain02_n2",
-      "selector": "textures/fps/clouds_runtime.neytd@cloud_storm__skyhat_rain02_n2",
+      "selector": "textures/fps/clouds_runtime.ytd@cloud_storm__skyhat_rain02_n2",
       "profile": "storm",
       "role": "density_mask",
       "source": "storm/skyhat_rain02_n2.dds",
@@ -1142,7 +1142,7 @@
     },
     {
       "name": "cloud_storm__stormclouds_ap",
-      "selector": "textures/fps/clouds_runtime.neytd@cloud_storm__stormclouds_ap",
+      "selector": "textures/fps/clouds_runtime.ytd@cloud_storm__stormclouds_ap",
       "profile": "storm",
       "role": "albedo_alpha",
       "source": "storm/stormclouds_ap.dds",
@@ -1155,7 +1155,7 @@
     },
     {
       "name": "cloud_storm__stormclouds_nrm",
-      "selector": "textures/fps/clouds_runtime.neytd@cloud_storm__stormclouds_nrm",
+      "selector": "textures/fps/clouds_runtime.ytd@cloud_storm__stormclouds_nrm",
       "profile": "storm",
       "role": "normal",
       "source": "storm/stormclouds_nrm.dds",
@@ -1168,7 +1168,7 @@
     },
     {
       "name": "cloud_test__cloudhat_marble02_ap",
-      "selector": "textures/fps/clouds_runtime.neytd@cloud_test__cloudhat_marble02_ap",
+      "selector": "textures/fps/clouds_runtime.ytd@cloud_test__cloudhat_marble02_ap",
       "profile": "test",
       "role": "coverage_mask",
       "source": "test/cloudhat_marble02_ap.dds",
@@ -1181,7 +1181,7 @@
     },
     {
       "name": "cloud_test__detail1_nrm",
-      "selector": "textures/fps/clouds_runtime.neytd@cloud_test__detail1_nrm",
+      "selector": "textures/fps/clouds_runtime.ytd@cloud_test__detail1_nrm",
       "profile": "test",
       "role": "detail_normal",
       "source": "test/detail1_nrm.dds",
@@ -1194,7 +1194,7 @@
     },
     {
       "name": "cloud_test__testwritting",
-      "selector": "textures/fps/clouds_runtime.neytd@cloud_test__testwritting",
+      "selector": "textures/fps/clouds_runtime.ytd@cloud_test__testwritting",
       "profile": "test",
       "role": "density_mask",
       "source": "test/testwritting.dds",
@@ -1207,7 +1207,7 @@
     },
     {
       "name": "cloud_test__testwritting_nrm",
-      "selector": "textures/fps/clouds_runtime.neytd@cloud_test__testwritting_nrm",
+      "selector": "textures/fps/clouds_runtime.ytd@cloud_test__testwritting_nrm",
       "profile": "test",
       "role": "normal",
       "source": "test/testwritting_nrm.dds",
@@ -1220,7 +1220,7 @@
     },
     {
       "name": "cloud_wispy__skyhat_cirrocumulus01_ap",
-      "selector": "textures/fps/clouds_runtime.neytd@cloud_wispy__skyhat_cirrocumulus01_ap",
+      "selector": "textures/fps/clouds_runtime.ytd@cloud_wispy__skyhat_cirrocumulus01_ap",
       "profile": "wispy",
       "role": "albedo_alpha",
       "source": "wispy/skyhat_cirrocumulus01_ap.dds",
@@ -1233,7 +1233,7 @@
     },
     {
       "name": "cloud_wispy__skyhat_cirrocumulus01_nrm",
-      "selector": "textures/fps/clouds_runtime.neytd@cloud_wispy__skyhat_cirrocumulus01_nrm",
+      "selector": "textures/fps/clouds_runtime.ytd@cloud_wispy__skyhat_cirrocumulus01_nrm",
       "profile": "wispy",
       "role": "normal",
       "source": "wispy/skyhat_cirrocumulus01_nrm.dds",
@@ -1246,7 +1246,7 @@
     },
     {
       "name": "cloud_wispy__wisps_ap",
-      "selector": "textures/fps/clouds_runtime.neytd@cloud_wispy__wisps_ap",
+      "selector": "textures/fps/clouds_runtime.ytd@cloud_wispy__wisps_ap",
       "profile": "wispy",
       "role": "albedo_alpha",
       "source": "wispy/wisps_ap.dds",
@@ -1259,7 +1259,7 @@
     },
     {
       "name": "cloud_wispy__wisps_nrm",
-      "selector": "textures/fps/clouds_runtime.neytd@cloud_wispy__wisps_nrm",
+      "selector": "textures/fps/clouds_runtime.ytd@cloud_wispy__wisps_nrm",
       "profile": "wispy",
       "role": "normal",
       "source": "wispy/wisps_nrm.dds",

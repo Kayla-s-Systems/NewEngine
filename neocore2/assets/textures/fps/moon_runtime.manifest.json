@@ -5,7 +5,7 @@
   "entries": [
     {
       "name": "moon_new",
-      "selector": "textures/fps/moon_runtime.neytd@moon_new",
+      "selector": "textures/fps/moon_runtime.ytd@moon_new",
       "format": "RGBA8_SRGB",
       "color_space": "srgb",
       "width": 128,

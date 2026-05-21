@@ -53,7 +53,7 @@ fn material_texture_bindings(spec: &NeGameReadyMaterialSpec) -> NeMaterialTextur
 ///
 /// Scene profile JSON, material asset JSON and fallback defaults all pass through
 /// this function before entering the `MaterialRegistry`. That gives the renderer
-/// one canonical model: material texture slots may reference only `.neytd@entry`
+/// one canonical model: material texture slots may reference only `.ytd@entry`
 /// dictionary selectors; source image containers are rejected by the material
 /// crate sanitizer and never reach `AssetManager.import_v1`.
 #[inline]

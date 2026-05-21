@@ -7,27 +7,27 @@
     {
       "slot": "Bark",
       "recommended_material": "materials/tree_bark",
-      "base_color_texture": "prefabs/tree_animate/textures/tree_animate.neytd@bark_diffuse",
-      "normal_texture": "prefabs/tree_animate/textures/tree_animate.neytd@bark_normal",
-      "specular_glossiness_texture": "prefabs/tree_animate/textures/tree_animate.neytd@bark_specularglossiness",
+      "base_color_texture": "prefabs/tree_animate/textures/tree_animate.ytd@bark_diffuse",
+      "normal_texture": "prefabs/tree_animate/textures/tree_animate.ytd@bark_normal",
+      "specular_glossiness_texture": "prefabs/tree_animate/textures/tree_animate.ytd@bark_specularglossiness",
       "double_sided": true,
       "alpha_mode": "OPAQUE"
     },
     {
       "slot": "Leaf",
       "recommended_material": "materials/tree_leaf",
-      "base_color_texture": "prefabs/tree_animate/textures/tree_animate.neytd@leaf_diffuse",
-      "normal_texture": "prefabs/tree_animate/textures/tree_animate.neytd@leaf_normal",
-      "occlusion_texture": "prefabs/tree_animate/textures/tree_animate.neytd@leaf_occlusion",
-      "specular_glossiness_texture": "prefabs/tree_animate/textures/tree_animate.neytd@leaf_specularglossiness",
+      "base_color_texture": "prefabs/tree_animate/textures/tree_animate.ytd@leaf_diffuse",
+      "normal_texture": "prefabs/tree_animate/textures/tree_animate.ytd@leaf_normal",
+      "occlusion_texture": "prefabs/tree_animate/textures/tree_animate.ytd@leaf_occlusion",
+      "specular_glossiness_texture": "prefabs/tree_animate/textures/tree_animate.ytd@leaf_specularglossiness",
       "double_sided": true,
       "alpha_mode": "MASK"
     },
     {
       "slot": "Branch",
       "recommended_material": "materials/tree_branch",
-      "base_color_texture": "prefabs/tree_animate/textures/tree_animate.neytd@branch_diffuse",
-      "normal_texture": "prefabs/tree_animate/textures/tree_animate.neytd@branch_normal",
+      "base_color_texture": "prefabs/tree_animate/textures/tree_animate.ytd@branch_diffuse",
+      "normal_texture": "prefabs/tree_animate/textures/tree_animate.ytd@branch_normal",
       "double_sided": true,
       "alpha_mode": "MASK"
     }

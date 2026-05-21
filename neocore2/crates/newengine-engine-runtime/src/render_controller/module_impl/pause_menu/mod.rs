@@ -10,18 +10,17 @@ use newengine_ui_api::{
 };
 use newengine_ui_menu_runtime::MenuRuntime;
 use newengine_ui_navigation_api::{
-    MenuDocument, MenuFeedbackEvent, MenuFeedbackSeverity, MenuItemTone,
+    MenuFeedbackEvent, MenuFeedbackSeverity, MenuItemTone,
 };
 
 use super::input::ViewportInputSnap;
 
+mod document;
 mod navigation;
 mod presentation;
 mod rebind;
 mod routes;
 
-const PAUSE_MENU_DOCUMENT_JSON: &str =
-    include_str!("../../../../../../assets/ui/menus/engine.pause_menu.menu.json");
 
 const OPEN_SPEED: f32 = 8.5;
 const CLOSE_SPEED: f32 = 10.0;
@@ -102,7 +101,9 @@ impl PauseMenuEventFeedback {
 pub(crate) struct RenderPauseMenuRuntimeState {
     open: bool,
     visual_alpha: f32,
-    menu: MenuRuntime,
+    menu: Option<MenuRuntime>,
+    document_load_error: Option<String>,
+    document_last_attempt_frame: Option<u64>,
     awaiting_rebind: Option<PendingRebind>,
     feedback: Option<PauseMenuEventFeedback>,
     exit_requested: bool,
@@ -115,7 +116,9 @@ impl RenderPauseMenuRuntimeState {
         Self {
             open: false,
             visual_alpha: 0.0,
-            menu: load_pause_menu_document(),
+            menu: None,
+            document_load_error: None,
+            document_last_attempt_frame: None,
             awaiting_rebind: None,
             feedback: None,
             exit_requested: false,
@@ -137,10 +140,22 @@ impl RenderPauseMenuRuntimeState {
         if input.actions.menu_toggle {
             if self.open {
                 self.close(frame_index);
-            } else {
+            } else if self.ensure_menu_document_loaded(frame_index) {
                 self.open(frame_index);
+            } else {
+                self.open = true;
+                self.awaiting_rebind = None;
+                self.flash_feedback(
+                    "Pause menu unavailable",
+                    "Menu document is not available through engine.assets/VFS yet",
+                    UiPauseMenuMessageSeverity::Warning,
+                );
+                audio(AudioFeedbackKind::UiMenuError, frame_index);
             }
         } else if self.open {
+            if self.menu.is_none() {
+                self.ensure_menu_document_loaded(frame_index);
+            }
             if self.awaiting_rebind.is_some() {
                 self.process_rebind_capture(surface_input, input, frame_index);
             } else {
@@ -160,7 +175,9 @@ impl RenderPauseMenuRuntimeState {
     #[inline]
     fn open(&mut self, frame_index: u64) {
         self.open = true;
-        self.menu.reset_to_root();
+        if let Some(menu) = self.menu.as_mut() {
+            menu.reset_to_root();
+        }
         self.awaiting_rebind = None;
         self.profile = newengine_input_bindings_runtime::input_bindings_profile_snapshot();
         self.flash_feedback(
@@ -174,7 +191,9 @@ impl RenderPauseMenuRuntimeState {
     #[inline]
     fn close(&mut self, frame_index: u64) {
         self.open = false;
-        self.menu.reset_to_root();
+        if let Some(menu) = self.menu.as_mut() {
+            menu.reset_to_root();
+        }
         self.awaiting_rebind = None;
         self.flash_feedback("Resume", "Returning to gameplay", UiPauseMenuMessageSeverity::Success);
         audio(AudioFeedbackKind::UiMenuClose, frame_index);
@@ -214,6 +233,41 @@ impl RenderPauseMenuRuntimeState {
         self.feedback = Some(PauseMenuEventFeedback::from_menu_feedback(feedback));
     }
 
+    fn ensure_menu_document_loaded(&mut self, frame_index: u64) -> bool {
+        if self.menu.is_some() {
+            return true;
+        }
+
+        let should_attempt = self
+            .document_last_attempt_frame
+            .map(|last| frame_index.saturating_sub(last) >= 30)
+            .unwrap_or(true);
+        if !should_attempt {
+            return false;
+        }
+
+        self.document_last_attempt_frame = Some(frame_index);
+        match document::try_load_pause_menu_document() {
+            Ok(menu) => {
+                log::info!(
+                    "engine.pause_menu: declarative MenuDocument loaded through engine.assets/VFS path='{}'",
+                    newengine_ui_navigation_api::ENGINE_PAUSE_MENU_ASSET_PATH
+                );
+                self.document_load_error = None;
+                self.menu = Some(menu);
+                true
+            }
+            Err(err) => {
+                log::warn!(
+                    "engine.pause_menu: MenuDocument unavailable path='{}' err='{}'",
+                    newengine_ui_navigation_api::ENGINE_PAUSE_MENU_ASSET_PATH,
+                    err
+                );
+                self.document_load_error = Some(err);
+                false
+            }
+        }
+    }
 
     #[inline]
     pub(super) fn ui_backdrop_postfx(&self) -> UiBackdropPostFxParams {
@@ -225,13 +279,6 @@ impl RenderPauseMenuRuntimeState {
             blur_radius_px: 22.0 * a,
         }
     }
-}
-
-fn load_pause_menu_document() -> MenuRuntime {
-    let document = MenuDocument::from_json_str(PAUSE_MENU_DOCUMENT_JSON)
-        .unwrap_or_else(|e| panic!("invalid engine.pause_menu MenuDocument asset: {e}"));
-    MenuRuntime::new(document)
-        .unwrap_or_else(|e| panic!("invalid engine.pause_menu MenuDocument contract: {e}"))
 }
 
 fn hovered_item_index(

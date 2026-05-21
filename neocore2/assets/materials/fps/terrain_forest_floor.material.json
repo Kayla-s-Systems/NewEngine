@@ -20,9 +20,9 @@
     "flags": 8
   },
   "textures": {
-    "base_color_texture": "textures/fps/world_surfaces.neytd@terrain_forest_floor",
-    "normal_texture": "textures/fps/world_surfaces.neytd@terrain_forest_floor_normal",
-    "roughness_texture": "textures/fps/world_surfaces.neytd@terrain_forest_floor_roughness",
+    "base_color_texture": "textures/fps/world_surfaces.ytd@terrain_forest_floor",
+    "normal_texture": "textures/fps/world_surfaces.ytd@terrain_forest_floor_normal",
+    "roughness_texture": "textures/fps/world_surfaces.ytd@terrain_forest_floor_roughness",
     "uv_scale": [
       10.0,
       10.0

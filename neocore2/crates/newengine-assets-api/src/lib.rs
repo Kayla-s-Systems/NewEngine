@@ -29,6 +29,10 @@ pub const ASSET_BACKEND_CAPABILITY_ID: &str = "asset_manager.backend";
 /// Wire method namespace for asset-domain service calls.
 pub const ASSET_METHOD_PREFIX: &str = "asset.";
 
+
+mod asset_ref;
+pub use asset_ref::*;
+
 /// Generic host/plugin backend declaration for the asset service family.
 pub const ASSET_BACKEND_SERVICE_SPEC: newengine_service_api::BackendServiceSpec =
     newengine_service_api::BackendServiceSpec::new(
@@ -99,7 +103,7 @@ pub const ASSET_FILE_TYPES_RUNTIME_REQUIREMENT_SPEC: newengine_service_api::Runt
 /// raw XML, native binary, deflate, etc. behind the same logical descriptor.
 pub mod codec_type {
     /// Container codec. May expose nested VFS entries and may recursively host
-    /// other assets. Example: .nepak.
+    /// other assets. Example: .pak.
     pub const CONTAINER: &str = "containerType";
     /// List codec. A single file contains multiple same-domain records selected
     /// by name/hash/index, but it cannot host nested assets. Examples: .neytd, .ydd.

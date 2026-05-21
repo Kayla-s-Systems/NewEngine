@@ -6,7 +6,7 @@ Move the engine toward a data-driven construction model:
 
 ```text
 .ytyp Definition Entries -> .ydd drawable dictionary -> .ytd texture dictionary
-.pak/.nepak package -> VFS delivery for the chain
+.pak package -> VFS delivery for the chain
 ```
 
 Scene/runtime code should no longer grow branches like "create material here, put

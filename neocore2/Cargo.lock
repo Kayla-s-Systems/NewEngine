@@ -779,6 +779,7 @@ dependencies = [
 name = "newengine-materials"
 version = "0.1.0"
 dependencies = [
+ "newengine-assets-api",
  "newengine-service-api",
  "parking_lot",
  "serde",
@@ -810,6 +811,7 @@ dependencies = [
 name = "newengine-model-domain-api"
 version = "0.1.0"
 dependencies = [
+ "newengine-assets-api",
  "newengine-materials",
  "newengine-model-skeleton-api",
  "newengine-primitives",

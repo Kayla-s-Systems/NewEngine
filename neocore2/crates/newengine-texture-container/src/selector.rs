@@ -69,7 +69,7 @@ impl TextureDictionarySelector {
         if dictionary_path.trim().is_empty() || selector.trim().is_empty() {
             return Err(TextureSelectorError::InvalidMaterialPath(normalized));
         }
-        if !dictionary_path.to_ascii_lowercase().ends_with(".neytd") {
+        if !dictionary_path.to_ascii_lowercase().ends_with(".ytd") {
             return Ok(None);
         }
         let selector = selector.trim();

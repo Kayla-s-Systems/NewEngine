@@ -8,7 +8,7 @@
 //! .ytyp Definition Entries -> .ydd drawable dictionary -> .ytd texture dictionary
 //! ```
 //!
-//! `.pak`/`.nepak` packages are VFS delivery containers for that chain. `.neytd`
+//! `.pak` packages are VFS delivery containers for that chain. `.neytd`
 //! is legacy/cache-only and must not be referenced by authored YTYP metadata.
 
 mod asset_chain;
@@ -70,7 +70,6 @@ pub const LEGACY_NEWENGINE_TEXTURE_DICTIONARY_EXTENSION: &str = "neytd";
 pub const LEGACY_NEWENGINE_TEXTURE_DICTIONARY_CONTAINER: &str = "newengine.texture_dictionary.neytd.v2";
 
 pub const ASSET_PACKAGE_EXTENSION: &str = "pak";
-pub const NEPAK_ASSET_PACKAGE_EXTENSION: &str = "nepak";
 pub const ASSET_PACKAGE_ASSET_KIND: &str = "asset_package";
 pub const ASSET_PACKAGE_CONTAINER: &str = "newengine.asset_package.v1";
 

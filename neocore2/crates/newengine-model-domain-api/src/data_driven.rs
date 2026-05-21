@@ -49,6 +49,7 @@ pub struct DataDrivenObjectConstruction {
     pub lod: DataDrivenLodPolicy,
     pub bounds: DataDrivenBoundsPolicy,
     pub material_binding: DataDrivenMaterialBindingPolicy,
+    pub material_slots: Vec<DataDrivenMaterialSlotBinding>,
     pub notes: Vec<String>,
 }
 
@@ -64,6 +65,7 @@ impl Default for DataDrivenObjectConstruction {
             lod: DataDrivenLodPolicy::default(),
             bounds: DataDrivenBoundsPolicy::default(),
             material_binding: DataDrivenMaterialBindingPolicy::default(),
+            material_slots: Vec::new(),
             notes: Vec::new(),
         }
     }
@@ -114,6 +116,21 @@ pub struct DataDrivenBoundsPolicy {
 
 impl Default for DataDrivenBoundsPolicy {
     fn default() -> Self { Self { bb_min: [0.0; 3], bb_max: [0.0; 3], bs_centre: [0.0; 3], bs_radius: 0.0 } }
+}
+
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct DataDrivenMaterialSlotBinding {
+    pub slot: String,
+    pub material: String,
+    pub resolve_gateway: String,
+}
+
+impl Default for DataDrivenMaterialSlotBinding {
+    fn default() -> Self {
+        Self { slot: String::new(), material: String::new(), resolve_gateway: "engine.materials".to_owned() }
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -221,7 +238,8 @@ fn build_data_driven_object(entry: &DefinitionEntry) -> DataDrivenObjectConstruc
             bs_radius: entry.bounds.bs_radius,
         },
         material_binding: DataDrivenMaterialBindingPolicy::default(),
-        notes: vec!["Construction is derived from Definition Entries; runtime should not hardcode material/model binding.".to_owned()],
+        material_slots: Vec::new(),
+        notes: vec!["Construction is derived from Definition Entries; runtime resolves drawable -> material slots -> texture refs -> render packet.".to_owned()],
     }
 }
 
@@ -240,10 +258,14 @@ fn fallback_drawable_link(entry: &DefinitionEntry) -> Option<DataDrivenAssetLink
 fn asset_link(reference: &DefinitionAssetRef, required: bool) -> DataDrivenAssetLink {
     DataDrivenAssetLink {
         role: reference.role.clone(),
-        logical_path: reference
-            .logical_path_hint
-            .clone()
-            .unwrap_or_else(|| ensure_extension(&reference.name, &reference.extension)),
+        logical_path: if !reference.canonical_ref.trim().is_empty() {
+            reference.canonical_ref.clone()
+        } else {
+            reference
+                .logical_path_hint
+                .clone()
+                .unwrap_or_else(|| ensure_extension(&reference.name, &reference.extension))
+        },
         asset_kind: reference.asset_kind.clone(),
         extension: reference.extension.clone(),
         required,

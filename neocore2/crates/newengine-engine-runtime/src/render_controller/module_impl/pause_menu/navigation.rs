@@ -15,7 +15,10 @@ impl RenderPauseMenuRuntimeState {
         surface_size_px: [u32; 2],
         frame_index: u64,
     ) {
-        let item_count = self.menu.current_items().len();
+        let item_count = match self.menu.as_ref() {
+            Some(menu) => menu.current_items().len(),
+            None => return,
+        };
         if item_count == 0 {
             return;
         }
@@ -30,7 +33,8 @@ impl RenderPauseMenuRuntimeState {
             pointer_primary_pressed: input_frame.is_mouse_pressed(1),
         });
 
-        let output = self.menu.handle_input(MenuRuntimeInput {
+        let Some(menu) = self.menu.as_mut() else { return; };
+        let output = menu.handle_input(MenuRuntimeInput {
             nav_x: input.actions.menu_nav[0],
             nav_y: input.actions.menu_nav[1],
             accept: input.actions.menu_accept,

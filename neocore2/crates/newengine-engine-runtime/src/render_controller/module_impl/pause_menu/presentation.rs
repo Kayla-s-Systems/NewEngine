@@ -1,6 +1,9 @@
 #![forbid(unsafe_op_in_unsafe_fn)]
 
-use newengine_ui_api::{UiPauseMenuItem, UiPauseMenuState, UiPauseMenuTheme};
+use newengine_ui_api::{
+    UiPauseMenuItem, UiPauseMenuItemTone, UiPauseMenuMessage, UiPauseMenuState,
+    UiPauseMenuTheme,
+};
 use newengine_ui_navigation_api::MenuItem;
 
 use super::*;
@@ -11,8 +14,12 @@ impl RenderPauseMenuRuntimeState {
             return UiPauseMenuState::hidden();
         }
 
-        let document = self.menu.document();
-        let current_page = self.menu.current_page();
+        let Some(menu) = self.menu.as_ref() else {
+            return self.build_unavailable_ui_state(visual_visible);
+        };
+
+        let document = menu.document();
+        let current_page = menu.current_page();
         let page_title = current_page
             .map(|page| page.title.as_str())
             .filter(|title| !title.is_empty())
@@ -44,16 +51,16 @@ impl RenderPauseMenuRuntimeState {
             surface_id: document.surface_id.clone(),
             visible: visual_visible,
             paused: self.open,
-            page: self.menu.current_page_id().to_owned(),
+            page: menu.current_page_id().to_owned(),
             title: if document.title.is_empty() { "PAUSE".to_owned() } else { document.title.clone() },
             subtitle: if page_subtitle.is_empty() {
                 page_title.to_owned()
             } else {
                 format!("{} / {}", page_subtitle, page_title)
             },
-            items: self.items(),
-            selected_index: self.menu.selected_index(),
-            hovered_index: self.menu.hovered_index(),
+            items: self.items(menu),
+            selected_index: menu.selected_index(),
+            hovered_index: menu.hovered_index(),
             footer_lines,
             animation_alpha: a,
             backdrop_opacity: 0.94 * a,
@@ -63,12 +70,56 @@ impl RenderPauseMenuRuntimeState {
         }
     }
 
-    fn items(&self) -> Vec<UiPauseMenuItem> {
-        self.menu
+    fn items(&self, menu: &MenuRuntime) -> Vec<UiPauseMenuItem> {
+        menu
             .current_items()
             .iter()
             .map(|item| self.item_to_ui(item))
             .collect()
+    }
+
+
+    fn build_unavailable_ui_state(&self, visual_visible: bool) -> UiPauseMenuState {
+        let a = ease_out_cubic(self.visual_alpha);
+        let detail = self
+            .document_load_error
+            .as_deref()
+            .unwrap_or("Menu document is waiting for engine.assets/VFS availability")
+            .to_owned();
+        let message = self.feedback.as_ref().map(PauseMenuEventFeedback::to_ui_message).or_else(|| {
+            Some(UiPauseMenuMessage::new(
+                "Pause menu document unavailable",
+                detail.clone(),
+                UiPauseMenuMessageSeverity::Warning,
+            ))
+        });
+
+        UiPauseMenuState {
+            version: 1,
+            surface_id: newengine_ui_api::UI_SURFACE_ENGINE_PAUSE_MENU.to_owned(),
+            visible: visual_visible,
+            paused: self.open,
+            page: "document_unavailable".to_owned(),
+            title: "PAUSE".to_owned(),
+            subtitle: "Declarative MenuDocument is loaded through engine.assets/VFS".to_owned(),
+            items: vec![UiPauseMenuItem::new(
+                "pause_menu_document_unavailable",
+                "Menu document unavailable",
+            )
+            .with_detail(detail)
+            .with_tone(UiPauseMenuItemTone::Disabled)],
+            selected_index: 0,
+            hovered_index: None,
+            footer_lines: vec![
+                "No embedded fallback is allowed for runtime UI assets".to_owned(),
+                "Check AssetManager mount roots and package/VFS configuration".to_owned(),
+            ],
+            animation_alpha: a,
+            backdrop_opacity: 0.94 * a,
+            blur_radius_px: 22.0 * a,
+            theme: UiPauseMenuTheme::default(),
+            message,
+        }
     }
 
     fn item_to_ui(&self, item: &MenuItem) -> UiPauseMenuItem {

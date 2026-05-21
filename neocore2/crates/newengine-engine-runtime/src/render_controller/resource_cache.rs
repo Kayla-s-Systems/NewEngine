@@ -40,7 +40,7 @@ impl RuntimeRenderController {
         let selector = match TextureDictionarySelector::parse_material_path(&path) {
             Ok(Some(selector)) => selector,
             Ok(None) => {
-                let message = "material texture reference is not a .neytd@entry selector".to_owned();
+                let message = "material texture reference is not a .ytd@entry selector".to_owned();
                 log::warn!(
                     "render controller: material texture rejected path='{}' err='{}'",
                     path,
