@@ -3,7 +3,7 @@
 ## Purpose
 
 `.ytyp` is the data-driven object metadata source for model/domain construction.
-It imports Rockstar-style `CMapTypes` XML as NewEngine Definition Entries today, and keeps the same runtime contract for a future native binary or deflate-compressed `.ytyp` envelope.
+It imports Rockstar-style `CMapTypes` XML as NewEngine Definition Entries today, and keeps the same runtime contract for a future native binary or deflate-compressed `.ytyp` envelope. Its canonical object chain is `.ytyp` Definition Entries -> `.ydd` drawable dictionary -> `.ytd` texture dictionary role.
 
 The engine should not hardcode object bounds, LOD distances, texture dictionary
 names, drawable dictionary names or asset type rules in scene/bootstrap code.
@@ -50,6 +50,13 @@ Those facts belong to asset metadata and are read through `engine.assets`.
         "drawable": null,
         "clip": null,
         "physics": null
+      },
+      "asset_chain": {
+        "definition_type": {"name": "metadata/hei_downtown_01_metadata_001.ytyp", "extension": "ytyp", "asset_kind": "object_type_definitions"},
+        "drawable_dictionary": {"name": "hei_dt1_03_garage_lod", "extension": "ydd", "asset_kind": "drawable_dictionary"},
+        "texture_dictionary": {"name": "DT1_03_Garage_LOD", "extension": "ytd", "asset_kind": "texture_dictionary"},
+        "clip_dictionary": null,
+        "physics_dictionary": null
       }
     }
   ]
@@ -67,8 +74,8 @@ Those facts belong to asset metadata and are read through `engine.assets`.
 - AssetManager dispatches it through codec registration; it does not parse XML,
   binary records or deflate streams.
 - Model runtime exposes it through `engine.model` as Definition Entries.
-- Future `.ydd` / `.neydd` containers can declare or reference which `.ytyp`
-  metadata owns their archetype definition without changing core engine code.
+- `.ydd` is the single drawable dictionary container. It can declare or reference which `.ytyp` metadata owns its archetype definition without changing core engine code.
+- `.ytd` is the texture dictionary role in the definition chain; `.neytd` is only the NewEngine runtime texture dictionary implementation after import/compilation.
 
 ## Native envelope v1
 

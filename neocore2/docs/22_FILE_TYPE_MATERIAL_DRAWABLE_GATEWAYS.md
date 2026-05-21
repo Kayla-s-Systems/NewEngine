@@ -45,13 +45,13 @@ They are descriptors/providers, not hardcoded registry rows.
 
 | Extension | Codec | Magic | Outputs | Runtime policy |
 |---|---|---|---|---|
-| `.neytd` | `asset.codec.neytd` | `NETD` | `texture.runtime`, `texture.rgba8` | runtime texture dictionary codec |
+| `.neytd` | `asset.codec.neytd` | `NETD` | `texture.runtime`, `texture.rgba8` | NewEngine runtime-ready texture dictionary codec |
+| `.ytd` | `asset.codec.ytd` | `RSC7` | `texture_dictionary.manifest_json`, `texture_dictionary.raw` | source/domain texture dictionary role referenced by `.ytyp`; import/compile to `.neytd` for runtime GPU packets |
 | `.nemat` | `asset.codec.nemat` | `NEMAT\0\0\0` | `material.raw` | native material payload boundary; material domain decodes semantics |
 | `.ydd` | `asset.codec.ydd` | `RSC7` | `drawable.manifest_json`, `drawable.raw` | drawable dictionary boundary; mesh/material extraction is codec-owned |
-| `.ytyp` | `asset.codec.ytyp` | `definitionType`; extension plus codec-owned XML/binary/deflate source policy | `model.definition_entries_json`, `ytyp.raw_source`, `ytyp.raw_payload` | object Definition Entries / archetype metadata; bounds, LOD, drawable/texture dictionary declarations |
+| `.ytyp` | `asset.codec.ytyp` | `definitionType`; extension plus codec-owned XML/binary/deflate source policy | `model.definition_entries_json`, `ytyp.raw_source`, `ytyp.raw_payload` | Definition Entries; owns the chain `.ytyp -> .ydd -> .ytd` |
 
-There is no `.neydd` runtime type yet. Drawable dictionary is a single `.ydd` codec
-boundary until the native drawable dictionary container is formalized.
+`.ydd` is the single drawable dictionary container in the model chain; there is no parallel drawable extension.
 
 ## File-type registry
 
@@ -93,15 +93,12 @@ engine.model
   -> DefinitionEntriesManifest
 ```
 
-The current `.ydd` codec validates the RSC7 boundary and returns a strict manifest
-packet. The `.ytyp` codec reads Definition Entries from XML today and from a reserved native binary/deflate envelope later, which lets
-object metadata, bounds, LOD distances and dictionary links come from assets
-instead of hardcoded spawn tables.
+The current `.ydd` codec validates the RSC7 boundary and returns a strict manifest packet. The `.ytyp` codec reads Definition Entries from XML today and from a reserved native binary/deflate envelope later. Definition Entries expose a canonical asset chain: `.ytyp` metadata, `.ydd` drawable dictionary and `.ytd` texture dictionary role. Runtime texture packets may still be compiled/imported as `.neytd`, but that is an AssetManager/runtime texture implementation detail.
 
 ## Invariants
 
 - No manually registered built-in file-type table in AssetManager.
-- No `.ydd`/`.neydd` dual runtime model.
+- `.ydd` is the only drawable dictionary container; no parallel drawable extension is modeled.
 - No hidden fallback from `.ydd` to another extension.
 - No direct format parsing in renderer/runtime host.
 - New formats arrive by codec/provider registration, not by editing AssetManager.

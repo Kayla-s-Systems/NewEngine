@@ -26,6 +26,12 @@
                        "path":  "C:\\Users\\Aiden\\Documents\\Kayla\u0027s Systems\\NewEngineRockstar\\NewEngine\\neocore2\\plugins\\codecs\\newengine-codec-ydd-0.1.0.dll"
                    },
                    {
+                       "codec":  "newengine-codec-ytd",
+                       "version":  "0.1.0",
+                       "dll":  "newengine-codec-ytd-0.1.0.dll",
+                       "path":  "C:\\Users\\Aiden\\Documents\\Kayla\u0027s Systems\\NewEngineRockstar\\NewEngine\\neocore2\\plugins\\codecs\\newengine-codec-ytd-0.1.0.dll"
+                   },
+                   {
                        "codec":  "newengine-codec-ytyp",
                        "version":  "0.1.0",
                        "dll":  "newengine-codec-ytyp-0.1.0.dll",
