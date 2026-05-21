@@ -243,6 +243,14 @@ struct RawSkySpec {
     cloud_dictionary: String,
     #[serde(default = "default_cloud_profile")]
     cloud_profile: String,
+    #[serde(default = "default_sky_sun_radius")]
+    sun_radius: f32,
+    #[serde(default = "default_sky_moon_radius")]
+    moon_radius: f32,
+    #[serde(default = "default_moon_texture")]
+    moon_texture: String,
+    #[serde(default)]
+    atmosphere: RawSkyAtmosphereSpec,
 }
 
 impl Default for RawSkySpec {
@@ -253,6 +261,54 @@ impl Default for RawSkySpec {
             follow_camera: default_sky_follow_camera(),
             cloud_dictionary: default_cloud_dictionary(),
             cloud_profile: default_cloud_profile(),
+            sun_radius: default_sky_sun_radius(),
+            moon_radius: default_sky_moon_radius(),
+            moon_texture: default_moon_texture(),
+            atmosphere: RawSkyAtmosphereSpec::default(),
+        }
+    }
+}
+
+#[derive(Debug, Deserialize)]
+struct RawSkyAtmosphereSpec {
+    #[serde(default = "default_sky_day_zenith")]
+    day_zenith: ColorRgb,
+    #[serde(default = "default_sky_day_horizon")]
+    day_horizon: ColorRgb,
+    #[serde(default = "default_sky_dusk_zenith")]
+    dusk_zenith: ColorRgb,
+    #[serde(default = "default_sky_dusk_horizon")]
+    dusk_horizon: ColorRgb,
+    #[serde(default = "default_sky_night_zenith")]
+    night_zenith: ColorRgb,
+    #[serde(default = "default_sky_night_horizon")]
+    night_horizon: ColorRgb,
+    #[serde(default = "default_sky_cloud_day")]
+    cloud_day: ColorRgb,
+    #[serde(default = "default_sky_cloud_night")]
+    cloud_night: ColorRgb,
+    #[serde(default = "default_sky_night_strength")]
+    night_sky_strength: f32,
+    #[serde(default = "default_sky_cloud_coverage")]
+    cloud_coverage: f32,
+    #[serde(default = "default_sky_cloud_softness")]
+    cloud_softness: f32,
+}
+
+impl Default for RawSkyAtmosphereSpec {
+    fn default() -> Self {
+        Self {
+            day_zenith: default_sky_day_zenith(),
+            day_horizon: default_sky_day_horizon(),
+            dusk_zenith: default_sky_dusk_zenith(),
+            dusk_horizon: default_sky_dusk_horizon(),
+            night_zenith: default_sky_night_zenith(),
+            night_horizon: default_sky_night_horizon(),
+            cloud_day: default_sky_cloud_day(),
+            cloud_night: default_sky_cloud_night(),
+            night_sky_strength: default_sky_night_strength(),
+            cloud_coverage: default_sky_cloud_coverage(),
+            cloud_softness: default_sky_cloud_softness(),
         }
     }
 }
@@ -390,6 +446,10 @@ struct RawMaterialSetSpec {
     terrain: RawMaterialSpec,
     #[serde(default = "default_sky_material")]
     sky: RawMaterialSpec,
+    #[serde(default = "default_sun_material")]
+    sun: RawMaterialSpec,
+    #[serde(default = "default_moon_material")]
+    moon: RawMaterialSpec,
     #[serde(default = "default_tree_bark_material")]
     tree_bark: RawMaterialSpec,
     #[serde(default = "default_tree_leaf_material")]
@@ -403,6 +463,8 @@ impl Default for RawMaterialSetSpec {
         Self {
             terrain: default_terrain_material(),
             sky: default_sky_material(),
+            sun: default_sun_material(),
+            moon: default_moon_material(),
             tree_bark: default_tree_bark_material(),
             tree_leaf: default_tree_leaf_material(),
             tree_branch: default_tree_branch_material(),

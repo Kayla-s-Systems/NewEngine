@@ -312,9 +312,10 @@ fn mix_u64(mut h: u64, v: u64) -> u64 {
 #[inline]
 fn recenter_model_translation(mut model: Mat4, camera_position: Vec3) -> Mat4 {
     let mut cols = model.to_cols_array();
-    cols[12] = camera_position.x;
-    cols[13] = camera_position.y;
-    cols[14] = camera_position.z;
+    let local_offset = Vec3::new(cols[12], cols[13], cols[14]);
+    cols[12] = camera_position.x + local_offset.x;
+    cols[13] = camera_position.y + local_offset.y;
+    cols[14] = camera_position.z + local_offset.z;
     model = Mat4::from_cols_array(&cols);
     model
 }

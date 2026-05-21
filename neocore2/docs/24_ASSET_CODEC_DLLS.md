@@ -1,80 +1,144 @@
-# 24 — AssetManager codec DLLs
+# 23 — AssetManager codec registry
 
 ## Verdict
 
-AssetManager is now a codec host, not a format owner.
+AssetManager is a pure VFS/bytes/dispatch host.
 
 ```text
 AssetManager
-  -> VFS bytes
-  -> codec registry
-  -> codec DLL service
-  -> decoded payload / nested container source
+  -> reads bytes from VFS/source
+  -> asks registered codec descriptors who owns the bytes
+  -> validates broad codec rules
+  -> calls the selected codec provider
+  -> returns codec-defined output through proxy APIs
 ```
 
-The first-party runtime codecs live outside the AssetManager crate:
+It must not contain concrete knowledge of runtime file formats. New formats are added by codec providers, not by editing AssetManager.
+
+## Codec loading
+
+AssetManager loads codec DLLs from `codecs_dir`.
+
+It does not load importer DLLs. A codec DLL registers an `asset_codec` service descriptor with:
 
 ```text
-Plugins/AssetManager/codecs/newengine-codec-firstparty
+extensions
+codec_type
+magic / text policy
+outputs
+method
+priority
+format/container metadata
 ```
 
-This codec worker registers:
-
-```text
-asset.codec.nepak   .nepak  containerType
-asset.codec.neytd   .neytd  listType
-asset.codec.nemat   .nemat  singleType
-asset.codec.ydd     .ydd    listType
-```
+The codec descriptor is published to `engine.assets.file_types` when the codec is ready. The file-type registry stores descriptors and supports browsing/probing. It does not parse files.
 
 ## Codec types
 
 ```text
 containerType
-  binary Magic + container index
-  may expose nested VFS entries
-  may recursively contain other assets
-  example: .nepak
+  May expose nested VFS entries.
+  May recursively host other assets.
+  Example: .nepak.
 
 listType
-  binary Magic + multiple same-domain records
-  cannot expose nested VFS entries
-  examples: .neytd, .ydd
+  One file contains multiple records of one domain.
+  Requires magic bytes.
+  Cannot expose nested VFS.
+  Examples: .neytd texture dictionaries, .ydd drawable dictionaries.
 
 singleType
-  binary Magic + one object
-  cannot expose nested VFS entries
-  example: .nemat
+  One binary file -> one decoded object.
+  Requires magic bytes.
+  Cannot expose nested VFS.
+  Example: .nemat.
 
 plainText
-  UTF-8/text policy without Magic
-  cannot expose nested VFS entries
+  Textual file without binary magic.
+  Identified by extension/content policy.
+  Cannot expose nested VFS.
+  Examples: .ytyp CMapTypes/Definition Entries, future .bindings.json codec.
 ```
 
-Only `containerType` can return nested VFS layers. `listType`, `singleType` and `plainText` descriptors are rejected if they request nesting.
+## Container rule
 
-## Runtime startup order
+Only `containerType` codecs may return `container.vfs_layer` or nested VFS sources.
+
+Every other codec type is rejected if it declares nested outputs. This prevents `.neytd`, `.ydd`, `.nemat` or plain text assets from silently becoming asset containers.
+
+## NEPAK rule
+
+`.nepak` is a codec-owned container format, not a built-in AssetManager source type.
 
 ```text
-1. AssetManager creates an empty AssetStore.
-2. AssetManager loads codec DLLs from plugins/codecs.
-3. Codec DLLs register their services and descriptors.
-4. Container VFS layers are mounted through registered containerType codecs.
-5. AssetManager registers engine.assets service.
+container layer request
+  -> generic VFS source kind: container
+  -> read bytes
+  -> codec registry selects containerType codec by extension and magic
+  -> NEPAK codec creates nested VFS source
 ```
 
-This matters because `.nepak` is no longer a built-in VFS source. It is just bytes until `asset.codec.nepak` is loaded.
+The AssetManager source registry only knows the generic `container` source kind. It does not know NEPAK layout.
 
-## Build output
+## No hardcoded format table
 
-Runtime plugin sync installs codec workers into:
+Bad shape:
 
 ```text
-NewEngine/neocore2/plugins/codecs/
+AssetManager knows .neytd/.ydd/.nemat/.nepak implementations
 ```
 
-AssetManager default config points `codecs_dir` at `codecs`, relative to the runtime plugin directory.
+Correct shape:
 
-## Hard rule
+```text
+codec provider knows format
+AssetManager stores descriptor and calls decode
+engine.assets.file_types stores navigation/probe descriptor
+```
 
-New file format support must be added as a codec worker or codec provider descriptor. AssetManager should not be modified for `.foo`, `.bar`, source package formats, drawable dictionaries, material containers or texture dictionaries.
+## Strictness
+
+- No `.pak` compatibility layer.
+- No importer loader.
+- No source-format fallback.
+- No non-container nesting.
+- Binary codecs require magic bytes unless the descriptor explicitly opts into extension-owned routing, such as `definitionType` source formats that must support legacy XML beside future binary envelopes.
+
+## First-party codec worker projects
+
+The first-party runtime codecs are real AssetManager-private codec DLL projects under:
+
+```text
+Plugins/AssetManager/codecs/newengine-codec-nepak
+Plugins/AssetManager/codecs/newengine-codec-neytd
+Plugins/AssetManager/codecs/newengine-codec-nemat
+Plugins/AssetManager/codecs/newengine-codec-ydd
+Plugins/AssetManager/codecs/newengine-codec-ytyp
+```
+
+Shared ABI/helper code lives in:
+
+```text
+Plugins/AssetManager/newengine-codec-api
+Plugins/AssetManager/codecs/newengine-codec-common
+```
+
+There is no monolithic `newengine-codec-firstparty` worker. Each format owns its parser and descriptor. The build manifest installs codec workers into:
+
+```text
+NewEngine/neocore2/plugins/codecs
+```
+
+Expected startup evidence after codec worker sync:
+
+```text
+assets: codec loaded file='newengine-codec-nepak-...dll'
+assets: codec loaded file='newengine-codec-neytd-...dll'
+assets: codec loaded file='newengine-codec-nemat-...dll'
+assets: codec loaded file='newengine-codec-ydd-...dll'
+assets: codec loaded file='newengine-codec-ytyp-...dll'
+assets: codec discovered id='asset.codec.neytd' ... exts=["neytd"]
+assets: codec discovered id='asset.codec.ytyp' ... exts=["ytyp"]
+```
+
+If the world starts untextured and `asset.decode_v1` reports `no registered codec accepted path='*.neytd'`, the `.neytd` codec worker is not installed or was rejected by descriptor validation.

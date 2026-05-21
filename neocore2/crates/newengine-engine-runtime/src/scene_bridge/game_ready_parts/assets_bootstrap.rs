@@ -253,6 +253,44 @@ fn ensure_skydome_primitive(prims: &mut PrimitiveRegistry, logical_path: &str) -
     }
 }
 
+fn spawn_sky_visual(
+    world: &mut newengine_ecs::World,
+    prims: &PrimitiveRegistry,
+    mats: &MaterialRegistry,
+    root: EntityId,
+    material_id: MaterialId,
+    primitive_id: PrimitiveId,
+    spec: &GameReadySkySpec,
+    kind: SkyVisualKind,
+    dome_color: [f32; 4],
+) -> EntityId {
+    let color = kind.initial_color(dome_color);
+    let entity = spawn_game_primitive(
+        world,
+        prims,
+        mats,
+        PrimitiveSpawnSpec {
+            parent: root,
+            primitive_id,
+            material_id,
+            name: kind.entity_name(),
+            position: Vec3::ZERO,
+            scale: Vec3::splat(kind.initial_radius(spec).max(0.1)),
+            color,
+        },
+    );
+    attach_sky_visual_runtime(
+        world,
+        mats,
+        entity,
+        material_id,
+        kind,
+        color,
+        kind.follows_camera(spec),
+    );
+    entity
+}
+
 fn spawn_skydome(
     world: &mut newengine_ecs::World,
     prims: &mut PrimitiveRegistry,
@@ -266,33 +304,36 @@ fn spawn_skydome(
         return;
     };
 
-    let sky = spawn_game_primitive(
-        world,
-        &*prims,
-        mats,
-        PrimitiveSpawnSpec {
-            parent: root,
-            primitive_id,
-            material_id: materials.sky,
-            name: "Sky/Imported-SkyDome",
-            position: Vec3::ZERO,
-            scale: Vec3::splat(spec.radius),
+
+    world.insert_resource(sky_atmosphere_from_spec(spec));
+
+    for kind in SKY_VISUAL_SPAWN_ORDER {
+        let material_id = materials.sky_visual_material(kind);
+        let _ = spawn_sky_visual(
+            world,
+            &*prims,
+            mats,
+            root,
+            material_id,
+            kind.primitive_id(primitive_id),
+            spec,
+            kind,
             color,
-        },
-    );
-    // Sky is a background primitive, not world geometry. Keeping its massive
-    // bounds in the scene union makes directional shadow fitting unstable and
-    // lets shadow-map UVs appear as dark projection bands on the dome.
-    let _ = world.remove::<newengine_bounds::Bounds>(sky);
-    let _ = world.insert(sky, SkyDomeRuntime { follow_camera: spec.follow_camera });
-    let _ = apply_exact_material(world, mats, sky, materials.sky, materials.sky, color);
+        );
+    }
+
+    tick_game_ready_sky_cycle(world, 0.0);
+
     log::info!(
-        "game-ready skydome: follow_camera={} radius={:.1} mesh='{}' clouds='{}' profile='{}'",
+        "game-ready skydome: follow_camera={} radius={:.1} mesh='{}' clouds='{}' profile='{}' sun_radius={:.1} moon_radius={:.1} moon_texture='{}'",
         spec.follow_camera,
         spec.radius,
         spec.mesh,
         spec.cloud_dictionary,
         spec.cloud_profile,
+        spec.sun_radius,
+        spec.moon_radius,
+        spec.moon_texture,
     );
 }
 
@@ -339,7 +380,7 @@ pub(super) fn bootstrap_fps_game_ready_scene(
     let root = ensure_root(scene);
     let active_camera = scene.active_camera();
     let map = load_game_ready_map_profile();
-    let materials = register_demo_materials(mats, &map.palette, &map.materials);
+    let materials = register_demo_materials(mats, &map.palette, &map.materials, &map.sky);
     let world = scene.world_mut();
 
     let rules = to_fps_demo_rules(&map.gameplay, &map.player.model);

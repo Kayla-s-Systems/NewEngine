@@ -350,30 +350,63 @@ vec3 daylight_guard_ambient(vec3 base, vec3 normal_ws, vec3 view_ws, float rough
 
 vec3 sky_dome_radiance(vec3 sampled, vec3 tint, vec3 view_dir, vec3 emissive_color) {
     vec3 to_sun = normalize(-ubo.u_dir_dir_intensity.xyz);
+    vec3 to_moon = -to_sun;
     float sun_elevation = to_sun.y;
     float day = smoothstep(-0.10, 0.22, sun_elevation);
+    float night = 1.0 - smoothstep(-0.12, 0.18, sun_elevation);
+    float twilight = (1.0 - smoothstep(0.10, 0.56, abs(sun_elevation))) * smoothstep(-0.24, 0.10, sun_elevation);
     float horizon = pow(saturate(1.0 - abs(view_dir.y)), 1.65);
 
-    vec3 night_zenith = vec3(0.008, 0.014, 0.035);
-    vec3 day_zenith = vec3(0.16, 0.36, 0.78);
-    vec3 zenith = mix(night_zenith, day_zenith, day);
-    vec3 sunset = vec3(1.0, 0.50, 0.23);
-    vec3 day_horizon = mix(vec3(0.54, 0.72, 0.96), sunset, smoothstep(-0.04, 0.18, sun_elevation) * (1.0 - smoothstep(0.16, 0.52, sun_elevation)));
+    vec3 night_zenith = vec3(0.006, 0.010, 0.030);
+    vec3 day_zenith = vec3(0.18, 0.38, 0.82);
+    vec3 dusk_zenith = vec3(0.14, 0.17, 0.34);
+    vec3 zenith = mix(mix(night_zenith, day_zenith, day), dusk_zenith, saturate(twilight * (1.0 - day * 0.45)));
+
+    vec3 sunset = vec3(1.0, 0.47, 0.20);
+    vec3 day_horizon = mix(vec3(0.58, 0.75, 0.98), sunset, saturate(twilight));
     vec3 night_horizon = vec3(0.018, 0.022, 0.050);
-    vec3 atmosphere = mix(zenith, mix(night_horizon, day_horizon, day), horizon);
+    vec3 atmosphere = mix(zenith, mix(night_horizon, day_horizon, day + twilight * 0.55), horizon);
+
+    // CPU sky-cycle writes v_base as the authoritative TOD tint. The shader
+    // multiplies procedural atmosphere by that tint, so sky luminance stays
+    // coupled to terrain lighting instead of remaining bright during night.
+    vec3 runtime_tint = max(tint, vec3(0.002));
+    float runtime_luma = max(ne_luma(runtime_tint), 0.002);
+    vec3 runtime_chroma = runtime_tint / runtime_luma;
+    float runtime_darkening = clamp(runtime_luma * 2.1, 0.035, 1.35);
+    atmosphere *= mix(vec3(runtime_darkening), runtime_chroma * runtime_darkening, 0.42);
 
     vec3 cloud_sample = material_texture_safe(sampled, tint, vec3(0.42, 0.46, 0.54));
-    float density = saturate(max(max(cloud_sample.r, cloud_sample.g), cloud_sample.b) * 1.30);
+    vec2 wind_phase = vec2(to_sun.x + to_moon.z * 0.25, to_sun.z - to_moon.x * 0.25);
+    vec2 cloud_uv_0 = v_uv * vec2(1.00, 0.58) + wind_phase * vec2(0.035, 0.012);
+    vec2 cloud_uv_1 = v_uv * vec2(1.87, 0.91) - wind_phase.yx * vec2(0.020, 0.026);
+    vec3 cloud_motion_0 = textureGrad(sampler2D(u_base_tex, u_material_sampler), cloud_uv_0, dFdx(cloud_uv_0), dFdy(cloud_uv_0)).rgb;
+    vec3 cloud_motion_1 = textureGrad(sampler2D(u_base_tex, u_material_sampler), cloud_uv_1, dFdx(cloud_uv_1), dFdy(cloud_uv_1)).rgb;
+    float density_src = max(max(cloud_sample.r, cloud_sample.g), cloud_sample.b) * 0.58
+        + max(max(cloud_motion_0.r, cloud_motion_0.g), cloud_motion_0.b) * 0.27
+        + max(max(cloud_motion_1.r, cloud_motion_1.g), cloud_motion_1.b) * 0.15;
+    float density = smoothstep(0.34, 0.78, density_src * 1.22);
     vec3 cloud_day = vec3(1.0, 0.965, 0.88);
-    vec3 cloud_night = vec3(0.055, 0.065, 0.095);
-    vec3 cloud_color = mix(cloud_night, cloud_day, day) * density * (0.20 + 0.65 * horizon);
+    vec3 cloud_dusk = vec3(1.0, 0.58, 0.32);
+    vec3 cloud_night = vec3(0.040, 0.050, 0.085);
+    vec3 cloud_color = mix(mix(cloud_night, cloud_day, day), cloud_dusk, twilight * 0.42)
+        * density
+        * (0.12 + 0.72 * horizon)
+        * clamp(runtime_darkening * 1.18, 0.04, 1.25);
 
     float sun_dot = saturate(dot(view_dir, to_sun));
-    float disk = pow(sun_dot, 4096.0) * 3.8;
-    float halo = pow(sun_dot, 64.0) * 0.18 + pow(sun_dot, 12.0) * 0.025;
-    vec3 sun = ubo.u_dir_color.rgb * max(ubo.u_dir_dir_intensity.w, 0.0) * day * (disk + halo);
+    float disk = pow(sun_dot, 4096.0) * 3.6;
+    float halo = pow(sun_dot, 64.0) * 0.20 + pow(sun_dot, 12.0) * 0.030;
+    vec3 sun = ubo.u_dir_color.rgb * max(ubo.u_dir_dir_intensity.w, 0.0) * (day + twilight * 0.22) * (disk + halo);
 
-    return max(atmosphere + cloud_color + sun + emissive_color * 0.18, vec3(0.0));
+    float moon_visibility = night * smoothstep(-0.08, 0.18, to_moon.y);
+    float moon_dot = saturate(dot(view_dir, to_moon));
+    vec3 moon = vec3(0.42, 0.48, 0.68) * moon_visibility
+        * (pow(moon_dot, 768.0) * 0.72 + pow(moon_dot, 48.0) * 0.080 + pow(moon_dot, 9.0) * 0.018);
+
+    vec3 stars = vec3(0.55, 0.62, 0.82) * pow(saturate(view_dir.y), 2.2) * pow(night, 2.0) * 0.018;
+
+    return max(atmosphere + cloud_color + sun + moon + stars + emissive_color * 0.08 * runtime_darkening, vec3(0.0));
 }
 
 void main() {

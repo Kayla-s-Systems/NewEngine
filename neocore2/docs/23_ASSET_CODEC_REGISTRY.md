@@ -57,7 +57,7 @@ plainText
   Textual file without binary magic.
   Identified by extension/content policy.
   Cannot expose nested VFS.
-  Example: future .bindings.json codec.
+  Examples: .ytyp CMapTypes/Definition Entries, future .bindings.json codec.
 ```
 
 ## Container rule
@@ -102,7 +102,7 @@ engine.assets.file_types stores navigation/probe descriptor
 - No importer loader.
 - No source-format fallback.
 - No non-container nesting.
-- Binary codecs require magic bytes unless declared `plainText`.
+- Binary codecs require magic bytes unless the descriptor explicitly opts into extension-owned routing, such as `definitionType` source formats that must support legacy XML beside future binary envelopes.
 
 ## First-party codec worker projects
 
@@ -113,6 +113,7 @@ Plugins/AssetManager/codecs/newengine-codec-nepak
 Plugins/AssetManager/codecs/newengine-codec-neytd
 Plugins/AssetManager/codecs/newengine-codec-nemat
 Plugins/AssetManager/codecs/newengine-codec-ydd
+Plugins/AssetManager/codecs/newengine-codec-ytyp
 ```
 
 Shared ABI/helper code lives in:
@@ -135,7 +136,9 @@ assets: codec loaded file='newengine-codec-nepak-...dll'
 assets: codec loaded file='newengine-codec-neytd-...dll'
 assets: codec loaded file='newengine-codec-nemat-...dll'
 assets: codec loaded file='newengine-codec-ydd-...dll'
+assets: codec loaded file='newengine-codec-ytyp-...dll'
 assets: codec discovered id='asset.codec.neytd' ... exts=["neytd"]
+assets: codec discovered id='asset.codec.ytyp' ... exts=["ytyp"]
 ```
 
 If the world starts untextured and `asset.decode_v1` reports `no registered codec accepted path='*.neytd'`, the `.neytd` codec worker is not installed or was rejected by descriptor validation.

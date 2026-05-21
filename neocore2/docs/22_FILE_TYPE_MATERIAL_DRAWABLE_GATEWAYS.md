@@ -48,9 +48,10 @@ They are descriptors/providers, not hardcoded registry rows.
 | `.neytd` | `asset.codec.neytd` | `NETD` | `texture.runtime`, `texture.rgba8` | runtime texture dictionary codec |
 | `.nemat` | `asset.codec.nemat` | `NEMAT\0\0\0` | `material.raw` | native material payload boundary; material domain decodes semantics |
 | `.ydd` | `asset.codec.ydd` | `RSC7` | `drawable.manifest_json`, `drawable.raw` | drawable dictionary boundary; mesh/material extraction is codec-owned |
+| `.ytyp` | `asset.codec.ytyp` | `definitionType`; extension plus codec-owned XML/binary/deflate source policy | `model.definition_entries_json`, `ytyp.raw_source`, `ytyp.raw_payload` | object Definition Entries / archetype metadata; bounds, LOD, drawable/texture dictionary declarations |
 
-There is no `.neydd` runtime type. Drawable dictionary is a single `.ydd` codec
-boundary.
+There is no `.neydd` runtime type yet. Drawable dictionary is a single `.ydd` codec
+boundary until the native drawable dictionary container is formalized.
 
 ## File-type registry
 
@@ -78,17 +79,24 @@ engine.materials
 The material gateway consumes the codec-dispatched payload. It does not bypass
 AssetManager/VFS with raw filesystem reads.
 
-## Drawable gateway
+## Drawable / definition gateway
 
 ```text
 engine.model
   -> model.drawable_dictionary_manifest_json_v1
   -> engine.assets / asset.decode_v1(output=drawable.manifest_json)
   -> DrawableDictionaryManifest
+
+engine.model
+  -> model.definition_entries_json_v1
+  -> engine.assets / asset.decode_v1(output=model.definition_entries_json)
+  -> DefinitionEntriesManifest
 ```
 
 The current `.ydd` codec validates the RSC7 boundary and returns a strict manifest
-packet. Full drawable record extraction is the next codec-internal pass.
+packet. The `.ytyp` codec reads Definition Entries from XML today and from a reserved native binary/deflate envelope later, which lets
+object metadata, bounds, LOD distances and dictionary links come from assets
+instead of hardcoded spawn tables.
 
 ## Invariants
 

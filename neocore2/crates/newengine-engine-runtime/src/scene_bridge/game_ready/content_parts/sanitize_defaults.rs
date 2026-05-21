@@ -88,6 +88,23 @@ fn sanitize_direction3(v: ColorRgb, fallback: ColorRgb) -> ColorRgb {
 }
 
 #[inline]
+fn sanitize_sky_atmosphere_spec(raw: RawSkyAtmosphereSpec) -> GameReadySkyAtmosphereSpec {
+    GameReadySkyAtmosphereSpec {
+        day_zenith: sanitize_color3(raw.day_zenith, default_sky_day_zenith()),
+        day_horizon: sanitize_color3(raw.day_horizon, default_sky_day_horizon()),
+        dusk_zenith: sanitize_color3(raw.dusk_zenith, default_sky_dusk_zenith()),
+        dusk_horizon: sanitize_color3(raw.dusk_horizon, default_sky_dusk_horizon()),
+        night_zenith: sanitize_color3(raw.night_zenith, default_sky_night_zenith()),
+        night_horizon: sanitize_color3(raw.night_horizon, default_sky_night_horizon()),
+        cloud_day: sanitize_color3(raw.cloud_day, default_sky_cloud_day()),
+        cloud_night: sanitize_color3(raw.cloud_night, default_sky_cloud_night()),
+        night_sky_strength: raw.night_sky_strength.clamp(0.0, 1.0),
+        cloud_coverage: raw.cloud_coverage.clamp(0.0, 1.0),
+        cloud_softness: raw.cloud_softness.clamp(0.01, 1.0),
+    }
+}
+
+#[inline]
 fn sanitize_lighting_spec(raw: RawLightingSpec) -> GameReadyLightingSpec {
     GameReadyLightingSpec {
         ambient_color: sanitize_color3(raw.ambient_color, default_ambient_color()),
@@ -203,10 +220,24 @@ fn default_terrain_chunk_radius() -> i32 { 2 }
 fn default_terrain_unload_radius() -> i32 { 4 }
 fn default_terrain_max_chunks_per_frame() -> usize { 4 }
 fn default_sky_radius() -> f32 { 220.0 }
-fn default_skydome_mesh() -> String { "procedural:skydome".to_owned() }
+fn default_skydome_mesh() -> String { "skydome/skydome_high.obj".to_owned() }
 fn default_sky_follow_camera() -> bool { true }
 fn default_cloud_dictionary() -> String { "textures/fps/clouds_runtime.neytd".to_owned() }
 fn default_cloud_profile() -> String { "clear".to_owned() }
+fn default_sky_sun_radius() -> f32 { 18.0 }
+fn default_sky_moon_radius() -> f32 { 13.5 }
+fn default_moon_texture() -> String { "textures/fps/moon_runtime.neytd@moon_new".to_owned() }
+fn default_sky_day_zenith() -> ColorRgb { [0.23, 0.42, 0.82] }
+fn default_sky_day_horizon() -> ColorRgb { [0.64, 0.78, 0.96] }
+fn default_sky_dusk_zenith() -> ColorRgb { [0.16, 0.20, 0.40] }
+fn default_sky_dusk_horizon() -> ColorRgb { [1.00, 0.47, 0.20] }
+fn default_sky_night_zenith() -> ColorRgb { [0.006, 0.010, 0.030] }
+fn default_sky_night_horizon() -> ColorRgb { [0.020, 0.024, 0.052] }
+fn default_sky_cloud_day() -> ColorRgb { [0.98, 0.96, 0.88] }
+fn default_sky_cloud_night() -> ColorRgb { [0.040, 0.050, 0.085] }
+fn default_sky_night_strength() -> f32 { 0.35 }
+fn default_sky_cloud_coverage() -> f32 { 0.42 }
+fn default_sky_cloud_softness() -> f32 { 0.72 }
 fn default_status_text() -> String { "GameFirst world: streamed lowland terrain, runtime textures and sun shadows.".to_owned() }
 fn default_pickup_status() -> String { "Core acquired.".to_owned() }
 fn default_hazard_status() -> String { "Hazard touched.".to_owned() }
@@ -284,6 +315,25 @@ fn default_sky_material() -> RawMaterialSpec {
         normal_texture: Some("textures/fps/clouds_runtime.neytd@cloud_clear__new_skyhat_clear01_bot_nrm".to_owned()),
         roughness: 1.0,
         normal_scale: 0.18,
+        occlusion_strength: 1.0,
+        ..RawMaterialSpec::default()
+    }
+}
+
+fn default_sun_material() -> RawMaterialSpec {
+    RawMaterialSpec {
+        roughness: 1.0,
+        normal_scale: 0.0,
+        occlusion_strength: 1.0,
+        ..RawMaterialSpec::default()
+    }
+}
+
+fn default_moon_material() -> RawMaterialSpec {
+    RawMaterialSpec {
+        base_color_texture: Some(default_moon_texture()),
+        roughness: 1.0,
+        normal_scale: 0.0,
         occlusion_strength: 1.0,
         ..RawMaterialSpec::default()
     }

@@ -212,10 +212,14 @@ enum TextureReadyState {
     Failed,
 }
 
+const LAUNCH_OPTIONAL_TEXTURE_TAGS: &[&str] = &["sky", "skydome", "cloud", "moon"];
+
 #[inline]
 fn is_launch_gate_optional_texture(path: &str) -> bool {
     let lower = path.to_ascii_lowercase();
-    lower.contains("sky") || lower.contains("skydome") || lower.contains("cloud")
+    LAUNCH_OPTIONAL_TEXTURE_TAGS
+        .iter()
+        .any(|tag| lower.contains(tag))
 }
 
 fn material_texture_ready_state(

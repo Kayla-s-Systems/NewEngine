@@ -1,0 +1,16 @@
+{
+  "dictionary": "textures/fps/moon_runtime.neytd",
+  "version": 2,
+  "source": "moon-new.dds",
+  "entries": [
+    {
+      "name": "moon_new",
+      "selector": "textures/fps/moon_runtime.neytd@moon_new",
+      "format": "RGBA8_SRGB",
+      "color_space": "srgb",
+      "width": 128,
+      "height": 128,
+      "mip_count": 8
+    }
+  ]
+}

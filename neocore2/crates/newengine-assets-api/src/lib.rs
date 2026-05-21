@@ -94,7 +94,9 @@ pub const ASSET_FILE_TYPES_RUNTIME_REQUIREMENT_SPEC: newengine_service_api::Runt
 /// Asset codec classification used by AssetManager to apply generic host rules.
 ///
 /// The host does not interpret concrete formats. It only enforces broad safety
-/// constraints declared by the codec provider.
+/// constraints declared by the codec provider. Encoding/compression is not part
+/// of this enum; codecs own their internal source envelope and may support
+/// raw XML, native binary, deflate, etc. behind the same logical descriptor.
 pub mod codec_type {
     /// Container codec. May expose nested VFS entries and may recursively host
     /// other assets. Example: .nepak.
@@ -104,6 +106,10 @@ pub mod codec_type {
     pub const LIST: &str = "listType";
     /// Single binary file with magic bytes and one decoded object. Example: .nemat.
     pub const SINGLE: &str = "singleType";
+    /// Asset definition metadata. It is not tied to a text encoding: the same
+    /// logical format may be XML today, binary tomorrow, or compressed binary
+    /// later. Example: .ytyp Definition Entries.
+    pub const DEFINITION: &str = "definitionType";
     /// Plain UTF-8 text without magic bytes. Example: future .bindings.json codec.
     pub const PLAIN_TEXT: &str = "plainText";
 }
@@ -131,7 +137,9 @@ pub struct AssetFileTypeDescriptor {
     pub handler_service: String,
     pub read_method: String,
     pub selector_syntax: Option<String>,
-    /// Hex-encoded magic bytes. Required for binary codec types, optional for `plainText`.
+    /// Hex-encoded magic bytes. Required for magic-routed binary codecs, optional
+    /// for codecs that deliberately own extension/source-policy routing such as
+    /// `definitionType` legacy XML beside future binary envelopes.
     pub magic: Option<String>,
     pub outputs: Vec<String>,
     pub priority: i32,
@@ -143,8 +151,9 @@ pub struct AssetFileTypeDescriptor {
     /// Kept as a semantic flag for tooling: the runtime container is native to
     /// NewEngine, not an authoring/source format. It does not grant nesting.
     pub native_container: bool,
-    /// Binary codecs require magic by default. `plainText` codecs may set this
-    /// to false and identify by extension/content policy.
+    /// Magic is required by default. `plainText` and carefully scoped
+    /// `definitionType` codecs may set this to false and identify by
+    /// extension/source policy.
     pub requires_magic: bool,
     pub notes: String,
 }

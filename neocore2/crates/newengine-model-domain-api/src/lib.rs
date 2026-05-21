@@ -39,6 +39,20 @@ pub const DRAWABLE_DICTIONARY_ASSET_KIND: &str = "drawable_dictionary";
 pub const DRAWABLE_DICTIONARY_MAGIC: [u8; 4] = *b"RSC7";
 
 pub const MODEL_SERVICE_METHOD_DRAWABLE_DICTIONARY_MANIFEST_JSON_V1: &str = "model.drawable_dictionary_manifest_json_v1";
+pub const OBJECT_TYPE_DEFINITIONS_EXTENSION: &str = "ytyp";
+pub const OBJECT_TYPE_DEFINITIONS_ASSET_KIND: &str = "object_type_definitions";
+pub const OBJECT_TYPE_DEFINITIONS_CONTAINER: &str = "rockstar.map_types.ytyp.xml";
+pub const MODEL_SERVICE_METHOD_DEFINITION_ENTRIES_JSON_V1: &str = "model.definition_entries_json_v1";
+
+pub const MODEL_FEATURE_DOMAINS: &[&str] = &[
+    "mesh.obj",
+    "material.mtl",
+    "skeleton.rsc7",
+    "collision.default",
+    "drawable.ydd",
+    "definition_entries.ytyp",
+];
+
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
@@ -101,6 +115,105 @@ impl Default for DrawableDictionaryManifest {
     }
 }
 
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct DefinitionEntriesRequest {
+    pub source: String,
+    pub selector: Option<String>,
+}
+
+impl Default for DefinitionEntriesRequest {
+    fn default() -> Self {
+        Self { source: String::new(), selector: None }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct DefinitionDictionaries {
+    pub texture: Option<String>,
+    pub drawable: Option<String>,
+    pub clip: Option<String>,
+    pub physics: Option<String>,
+}
+
+impl Default for DefinitionDictionaries {
+    fn default() -> Self {
+        Self { texture: None, drawable: None, clip: None, physics: None }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct DefinitionBounds {
+    pub bb_min: [f32; 3],
+    pub bb_max: [f32; 3],
+    pub bs_centre: [f32; 3],
+    pub bs_radius: f32,
+}
+
+impl Default for DefinitionBounds {
+    fn default() -> Self {
+        Self { bb_min: [0.0; 3], bb_max: [0.0; 3], bs_centre: [0.0; 3], bs_radius: 0.0 }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct DefinitionEntry {
+    pub entry_kind: String,
+    pub name: String,
+    pub asset_name: String,
+    pub asset_type: String,
+    pub lod_dist: f32,
+    pub hd_texture_dist: f32,
+    pub flags: u32,
+    pub special_attribute: u32,
+    pub bounds: DefinitionBounds,
+    pub dictionaries: DefinitionDictionaries,
+}
+
+impl Default for DefinitionEntry {
+    fn default() -> Self {
+        Self {
+            entry_kind: "CBaseArchetypeDef".to_owned(),
+            name: String::new(),
+            asset_name: String::new(),
+            asset_type: String::new(),
+            lod_dist: 0.0,
+            hd_texture_dist: 0.0,
+            flags: 0,
+            special_attribute: 0,
+            bounds: DefinitionBounds::default(),
+            dictionaries: DefinitionDictionaries::default(),
+        }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct DefinitionEntriesManifest {
+    pub schema: String,
+    pub codec: String,
+    pub source_format: String,
+    pub source: String,
+    pub name: String,
+    pub definition_entries: Vec<DefinitionEntry>,
+}
+
+impl Default for DefinitionEntriesManifest {
+    fn default() -> Self {
+        Self {
+            schema: "newengine.ytyp.definition_entries.v1".to_owned(),
+            codec: "asset.codec.ytyp".to_owned(),
+            source_format: OBJECT_TYPE_DEFINITIONS_CONTAINER.to_owned(),
+            source: String::new(),
+            name: String::new(),
+            definition_entries: Vec::new(),
+        }
+    }
+}
+
 pub const MODEL_SERVICE_METHODS: &[&str] = &[
     MODEL_SERVICE_METHOD_INFO,
     MODEL_SERVICE_METHOD_INVOKE,
@@ -108,6 +221,7 @@ pub const MODEL_SERVICE_METHODS: &[&str] = &[
     MODEL_SERVICE_METHOD_ASSEMBLE_JSON_V1,
     MODEL_SERVICE_METHOD_VALIDATE_JSON_V1,
     MODEL_SERVICE_METHOD_DRAWABLE_DICTIONARY_MANIFEST_JSON_V1,
+    MODEL_SERVICE_METHOD_DEFINITION_ENTRIES_JSON_V1,
 ];
 
 pub const MODEL_BACKEND_SERVICE_SPEC: newengine_service_api::BackendServiceSpec =
@@ -352,5 +466,6 @@ mod tests {
         assert_eq!(MODEL_SKELETONS_BACKEND_SERVICE_SPEC.domain, "model.skeletons");
         assert_eq!(MODEL_MATERIALS_BACKEND_SERVICE_SPEC.domain, "model.materials");
         assert_eq!(MODEL_COLLISIONS_BACKEND_SERVICE_SPEC.domain, "model.collisions");
+        assert!(MODEL_FEATURE_DOMAINS.contains(&"definition_entries.ytyp"));
     }
 }

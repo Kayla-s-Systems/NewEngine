@@ -93,6 +93,25 @@ pub(in crate::scene_bridge::game_ready) struct GameReadySkySpec {
     pub(in crate::scene_bridge::game_ready) follow_camera: bool,
     pub(in crate::scene_bridge::game_ready) cloud_dictionary: String,
     pub(in crate::scene_bridge::game_ready) cloud_profile: String,
+    pub(in crate::scene_bridge::game_ready) sun_radius: f32,
+    pub(in crate::scene_bridge::game_ready) moon_radius: f32,
+    pub(in crate::scene_bridge::game_ready) moon_texture: String,
+    pub(in crate::scene_bridge::game_ready) atmosphere: GameReadySkyAtmosphereSpec,
+}
+
+#[derive(Clone, Debug)]
+pub(in crate::scene_bridge::game_ready) struct GameReadySkyAtmosphereSpec {
+    pub(in crate::scene_bridge::game_ready) day_zenith: ColorRgb,
+    pub(in crate::scene_bridge::game_ready) day_horizon: ColorRgb,
+    pub(in crate::scene_bridge::game_ready) dusk_zenith: ColorRgb,
+    pub(in crate::scene_bridge::game_ready) dusk_horizon: ColorRgb,
+    pub(in crate::scene_bridge::game_ready) night_zenith: ColorRgb,
+    pub(in crate::scene_bridge::game_ready) night_horizon: ColorRgb,
+    pub(in crate::scene_bridge::game_ready) cloud_day: ColorRgb,
+    pub(in crate::scene_bridge::game_ready) cloud_night: ColorRgb,
+    pub(in crate::scene_bridge::game_ready) night_sky_strength: f32,
+    pub(in crate::scene_bridge::game_ready) cloud_coverage: f32,
+    pub(in crate::scene_bridge::game_ready) cloud_softness: f32,
 }
 
 #[derive(Clone, Debug)]
@@ -109,6 +128,8 @@ pub(in crate::scene_bridge::game_ready) struct GameReadyPaletteSpec {
 pub(in crate::scene_bridge::game_ready) struct GameReadyMaterialSetSpec {
     pub(in crate::scene_bridge::game_ready) terrain: GameReadyMaterialSpec,
     pub(in crate::scene_bridge::game_ready) sky: GameReadyMaterialSpec,
+    pub(in crate::scene_bridge::game_ready) sun: GameReadyMaterialSpec,
+    pub(in crate::scene_bridge::game_ready) moon: GameReadyMaterialSpec,
     pub(in crate::scene_bridge::game_ready) tree_bark: GameReadyMaterialSpec,
     pub(in crate::scene_bridge::game_ready) tree_leaf: GameReadyMaterialSpec,
     pub(in crate::scene_bridge::game_ready) tree_branch: GameReadyMaterialSpec,

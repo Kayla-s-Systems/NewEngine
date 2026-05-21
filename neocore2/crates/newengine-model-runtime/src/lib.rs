@@ -10,11 +10,13 @@
 use abi_stable::std_types::{RResult, RString};
 use newengine_assets::{AssetDecodeRequest, AssetServiceClient};
 use newengine_model_domain_api::{
-    DrawableDictionaryManifest, DrawableDictionaryRequest, ModelAssetBundle, ModelAssetRequest,
-    ModelConstructionManifest, ModelConstructionValidation, ModelMeshPart,
-    MODEL_SERVICE_METHOD_DRAWABLE_DICTIONARY_MANIFEST_JSON_V1, ENGINE_MODEL_SERVICE_ID,
-    MODEL_BACKEND_CAPABILITY_ID, MODEL_SERVICE_ID, MODEL_SERVICE_METHOD_ASSEMBLE_JSON_V1,
+    DefinitionEntriesManifest, DefinitionEntriesRequest, DrawableDictionaryManifest, DrawableDictionaryRequest,
+    ModelAssetBundle, ModelAssetRequest, ModelConstructionManifest, ModelConstructionValidation, ModelMeshPart,
+    DRAWABLE_DICTIONARY_EXTENSION, ENGINE_MODEL_SERVICE_ID, MODEL_BACKEND_CAPABILITY_ID,
+    MODEL_FEATURE_DOMAINS, MODEL_SERVICE_ID, MODEL_SERVICE_METHOD_ASSEMBLE_JSON_V1,
+    MODEL_SERVICE_METHOD_DEFINITION_ENTRIES_JSON_V1, MODEL_SERVICE_METHOD_DRAWABLE_DICTIONARY_MANIFEST_JSON_V1,
     MODEL_SERVICE_METHOD_INVOKE, MODEL_SERVICE_METHOD_VALIDATE_JSON_V1, MODEL_SERVICE_METHODS,
+    OBJECT_TYPE_DEFINITIONS_EXTENSION,
 };
 use newengine_model_import_obj::normalize_logical_path;
 use newengine_model_skeleton_api::ModelSkeletonMetadata;
@@ -24,7 +26,7 @@ use newengine_service_kit::{
     engine_owned_service_description, ok_empty_blob, ok_json, register_engine_owned_gateway_service_best_effort,
     EngineOwnedGatewayDecl, JsonServiceRouter,
 };
-use serde::{Deserialize, Serialize};
+use serde::{de::DeserializeOwned, Deserialize, Serialize};
 
 #[derive(Clone)]
 pub struct ModelAssetAdapter {
@@ -140,24 +142,56 @@ impl ModelAssetAdapter {
         &self,
         request: &DrawableDictionaryRequest,
     ) -> Result<DrawableDictionaryManifest, String> {
-        let source = normalize_logical_path(&request.source, false)?;
-        if !source.to_ascii_lowercase().ends_with(".ydd") {
+        self.decode_model_manifest(
+            &request.source,
+            request.selector.as_deref(),
+            DRAWABLE_DICTIONARY_EXTENSION,
+            "drawable.manifest_json",
+            "ydd drawable dictionary manifest",
+        )
+    }
+
+    pub fn load_definition_entries_manifest(
+        &self,
+        request: &DefinitionEntriesRequest,
+    ) -> Result<DefinitionEntriesManifest, String> {
+        self.decode_model_manifest(
+            &request.source,
+            request.selector.as_deref(),
+            OBJECT_TYPE_DEFINITIONS_EXTENSION,
+            "model.definition_entries_json",
+            "ytyp definition entries",
+        )
+    }
+
+    fn decode_model_manifest<T>(
+        &self,
+        source: &str,
+        selector: Option<&str>,
+        extension: &str,
+        output_kind: &str,
+        label: &str,
+    ) -> Result<T, String>
+    where
+        T: DeserializeOwned,
+    {
+        let source = normalize_logical_path(source, false)?;
+        if !has_extension(&source, extension) {
             return Err(format!(
-                "drawable dictionary manifest requires .ydd source, got '{source}'"
+                "{label} requires .{} source, got '{source}'",
+                extension.trim_start_matches('.')
             ));
         }
         let bytes = self.client.decode_v1(&AssetDecodeRequest {
             logical_path: source.clone(),
-            output_kind: "drawable.manifest_json".to_owned(),
-            selector: request
-                .selector
-                .as_ref()
+            output_kind: output_kind.to_owned(),
+            selector: selector
                 .map(|selector| serde_json::json!({"selector": selector}))
                 .unwrap_or(serde_json::Value::Null),
         })
-        .map_err(|e| format!("engine.assets decode_v1 failed path='{source}' err='{e}'"))?;
-        serde_json::from_slice::<DrawableDictionaryManifest>(&bytes)
-            .map_err(|e| format!("model.api: ydd manifest decode returned invalid json path='{source}' err='{e}'"))
+        .map_err(|e| format!("engine.assets decode_v1 failed path='{source}' output='{output_kind}' err='{e}'"))?;
+        serde_json::from_slice::<T>(&bytes)
+            .map_err(|e| format!("model.api: {label} decode returned invalid json path='{source}' err='{e}'"))
     }
 
 
@@ -185,6 +219,15 @@ impl ModelAssetAdapter {
         let bytes = self.read_bytes(&path)?;
         String::from_utf8(bytes).map_err(|e| format!("asset text is not UTF-8 path='{path}' err='{e}'"))
     }
+}
+
+fn has_extension(path: &str, extension: &str) -> bool {
+    let expected = extension.trim().trim_start_matches('.').to_ascii_lowercase();
+    path.split('@')
+        .next()
+        .unwrap_or(path)
+        .to_ascii_lowercase()
+        .ends_with(&format!(".{expected}"))
 }
 
 #[derive(Clone)]
@@ -216,6 +259,26 @@ impl ModelGatewayClient {
         let bytes = self.call_raw(MODEL_SERVICE_METHOD_VALIDATE_JSON_V1, payload)?;
         serde_json::from_slice::<ModelConstructionValidation>(&bytes)
             .map_err(|e| format!("engine.model returned invalid validation JSON: {e}"))
+    }
+
+    pub fn drawable_dictionary_manifest(
+        &self,
+        request: &DrawableDictionaryRequest,
+    ) -> Result<DrawableDictionaryManifest, String> {
+        let payload = serde_json::to_vec(request).map_err(|e| e.to_string())?;
+        let bytes = self.call_raw(MODEL_SERVICE_METHOD_DRAWABLE_DICTIONARY_MANIFEST_JSON_V1, payload)?;
+        serde_json::from_slice::<DrawableDictionaryManifest>(&bytes)
+            .map_err(|e| format!("engine.model returned invalid drawable dictionary manifest JSON: {e}"))
+    }
+
+    pub fn definition_entries_manifest(
+        &self,
+        request: &DefinitionEntriesRequest,
+    ) -> Result<DefinitionEntriesManifest, String> {
+        let payload = serde_json::to_vec(request).map_err(|e| e.to_string())?;
+        let bytes = self.call_raw(MODEL_SERVICE_METHOD_DEFINITION_ENTRIES_JSON_V1, payload)?;
+        serde_json::from_slice::<DefinitionEntriesManifest>(&bytes)
+            .map_err(|e| format!("engine.model returned invalid definition entries JSON: {e}"))
     }
 
     fn call_raw(&self, method_name: &str, payload: Vec<u8>) -> Result<Vec<u8>, String> {
@@ -286,6 +349,16 @@ impl ModelRuntimeState {
                     Err(e) => RResult::RErr(RString::from(e)),
                 }
             }
+            MODEL_SERVICE_METHOD_DEFINITION_ENTRIES_JSON_V1 => {
+                let request = match serde_json::from_value::<DefinitionEntriesRequest>(envelope.request) {
+                    Ok(request) => request,
+                    Err(e) => return RResult::RErr(RString::from(format!("model.api: invalid ytyp definition entries request: {e}"))),
+                };
+                match self.adapter.load_definition_entries_manifest(&request) {
+                    Ok(manifest) => ok_json(manifest),
+                    Err(e) => RResult::RErr(RString::from(e)),
+                }
+            }
             other => RResult::RErr(RString::from(format!("model.api: unknown invoke method '{other}'"))),
         }
     }
@@ -297,7 +370,7 @@ pub fn model_runtime_service_info() -> ModelRuntimeServiceInfo {
         gateway: ENGINE_MODEL_SERVICE_ID,
         methods: MODEL_SERVICE_METHODS,
         backend: "engine-owned.model-runtime",
-        feature_domains: &["mesh.obj", "material.mtl", "skeleton.rsc7", "collision.default", "drawable.ydd"],
+        feature_domains: MODEL_FEATURE_DOMAINS,
     }
 }
 
@@ -310,7 +383,7 @@ pub fn model_gateway_service(adapter: ModelAssetAdapter) -> newengine_plugin_api
     )
     .gateway(ENGINE_MODEL_SERVICE_ID)
     .protocol("json")
-    .features(["mesh.obj", "material.mtl", "skeleton.rsc7", "collision.default", "drawable.ydd"])
+    .features(MODEL_FEATURE_DOMAINS.iter().copied())
     .notes("Gateway-backed model constructor for player/NPC/prop construction");
 
     JsonServiceRouter::with_state(MODEL_SERVICE_ID, ModelRuntimeState::new(adapter))
@@ -328,6 +401,10 @@ pub fn model_gateway_service(adapter: ModelAssetAdapter) -> newengine_plugin_api
         .post_json_result::<DrawableDictionaryRequest, DrawableDictionaryManifest, _>(
             MODEL_SERVICE_METHOD_DRAWABLE_DICTIONARY_MANIFEST_JSON_V1,
             |state, request| state.adapter.load_drawable_dictionary_manifest(&request),
+        )
+        .post_json_result::<DefinitionEntriesRequest, DefinitionEntriesManifest, _>(
+            MODEL_SERVICE_METHOD_DEFINITION_ENTRIES_JSON_V1,
+            |state, request| state.adapter.load_definition_entries_manifest(&request),
         )
         .blob(newengine_service_api::SERVICE_METHOD_SHUTDOWN_V1, |_state, _payload| ok_empty_blob())
         .into_service_v1()
