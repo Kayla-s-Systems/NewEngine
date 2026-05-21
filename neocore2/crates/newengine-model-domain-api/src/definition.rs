@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    CLIP_DICTIONARY_ASSET_KIND, CLIP_DICTIONARY_EXTENSION, DEFINITION_ENTRIES_SCHEMA,
+    model_asset_chain_role_by_extension, CLIP_DICTIONARY_ASSET_KIND, CLIP_DICTIONARY_EXTENSION, DEFINITION_ENTRIES_SCHEMA,
     DRAWABLE_DICTIONARY_ASSET_KIND, DRAWABLE_DICTIONARY_EXTENSION, OBJECT_TYPE_DEFINITIONS_ASSET_KIND,
     OBJECT_TYPE_DEFINITIONS_CONTAINER, OBJECT_TYPE_DEFINITIONS_EXTENSION, PHYSICS_DICTIONARY_ASSET_KIND,
     PHYSICS_DICTIONARY_EXTENSION, TEXTURE_DICTIONARY_ASSET_KIND, TEXTURE_DICTIONARY_EXTENSION,
@@ -22,6 +22,7 @@ impl Default for DefinitionEntriesRequest {
 #[serde(default)]
 pub struct DefinitionAssetRef {
     pub name: String,
+    pub role: String,
     pub extension: String,
     pub asset_kind: String,
     pub logical_path_hint: Option<String>,
@@ -29,7 +30,7 @@ pub struct DefinitionAssetRef {
 
 impl Default for DefinitionAssetRef {
     fn default() -> Self {
-        Self { name: String::new(), extension: String::new(), asset_kind: String::new(), logical_path_hint: None }
+        Self { name: String::new(), role: String::new(), extension: String::new(), asset_kind: String::new(), logical_path_hint: None }
     }
 }
 
@@ -47,9 +48,13 @@ impl DefinitionAssetRef {
         } else {
             format!("{lower}.{extension}")
         };
+        let role = model_asset_chain_role_by_extension(&extension)
+            .map(|role| role.role.to_owned())
+            .unwrap_or_default();
         Some(Self {
             logical_path_hint: Some(logical_path_hint),
             name: normalized,
+            role,
             extension,
             asset_kind: asset_kind.to_owned(),
         })

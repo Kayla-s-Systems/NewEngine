@@ -75,7 +75,7 @@ Those facts belong to asset metadata and are read through `engine.assets`.
   binary records or deflate streams.
 - Model runtime exposes it through `engine.model` as Definition Entries.
 - `.ydd` is the single drawable dictionary container. It can declare or reference which `.ytyp` metadata owns its archetype definition without changing core engine code.
-- `.ytd` is the texture dictionary role in the definition chain; `.neytd` is only the NewEngine runtime texture dictionary implementation after import/compilation.
+- `.ytd` is the public texture dictionary contract in the definition chain; `.neytd` is legacy/cache-only and must not be referenced by new authored metadata.
 
 ## Native envelope v1
 

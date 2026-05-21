@@ -5,20 +5,25 @@
 //! The crate owns one canonical model chain:
 //!
 //! ```text
-//! .ytyp Definition Entries -> .ydd drawable dictionary -> .ytd texture dictionary role
+//! .ytyp Definition Entries -> .ydd drawable dictionary -> .ytd texture dictionary
 //! ```
 //!
-//! NewEngine runtime texture packets may come from `.neytd`, but archetype metadata
-//! speaks in source/domain roles so the core does not special-case concrete
-//! renderer/AssetManager implementation details.
+//! `.pak`/`.nepak` packages are VFS delivery containers for that chain. `.neytd`
+//! is legacy/cache-only and must not be referenced by authored YTYP metadata.
 
+mod asset_chain;
 mod construction;
 mod definition;
 mod drawable;
+mod texture_dictionary;
+mod data_driven;
 
+pub use asset_chain::*;
 pub use construction::*;
 pub use definition::*;
 pub use drawable::*;
+pub use texture_dictionary::*;
+pub use data_driven::*;
 
 pub use newengine_model_skeleton_api::{
     ModelSkeletonAnchors, ModelSkeletonJointMetadata, ModelSkeletonMetadata,
@@ -46,6 +51,7 @@ pub const MODEL_SERVICE_METHOD_VALIDATE_JSON_V1: &str = "validate_json_v1";
 
 pub const DRAWABLE_DICTIONARY_EXTENSION: &str = "ydd";
 pub const DRAWABLE_DICTIONARY_ASSET_KIND: &str = "drawable_dictionary";
+pub const DRAWABLE_DICTIONARY_CONTAINER: &str = "rockstar.drawable_dictionary.rsc7";
 pub const DRAWABLE_DICTIONARY_MAGIC: [u8; 4] = *b"RSC7";
 pub const DRAWABLE_DICTIONARY_MANIFEST_SCHEMA: &str = "newengine.drawable_dictionary.manifest.v1";
 pub const MODEL_SERVICE_METHOD_DRAWABLE_DICTIONARY_MANIFEST_JSON_V1: &str = "model.drawable_dictionary_manifest_json_v1";
@@ -53,10 +59,20 @@ pub const MODEL_SERVICE_METHOD_DRAWABLE_DICTIONARY_MANIFEST_JSON_V1: &str = "mod
 /// Source/domain texture dictionary role referenced by YTYP archetypes.
 pub const TEXTURE_DICTIONARY_EXTENSION: &str = "ytd";
 pub const TEXTURE_DICTIONARY_ASSET_KIND: &str = "texture_dictionary";
+pub const TEXTURE_DICTIONARY_CONTAINER: &str = "rockstar.texture_dictionary.rsc7";
+pub const TEXTURE_DICTIONARY_MANIFEST_SCHEMA: &str = "newengine.texture_dictionary.manifest.v2";
 
-/// Runtime-ready NewEngine texture dictionary implementation.
-pub const NEWENGINE_TEXTURE_DICTIONARY_EXTENSION: &str = "neytd";
-pub const NEWENGINE_TEXTURE_DICTIONARY_CONTAINER: &str = "newengine.texture_dictionary.neytd.v2";
+/// Legacy/runtime-cache NewEngine texture dictionary implementation.
+///
+/// Kept for compatibility with existing GPU residency paths. Public authored
+/// data-driven content should reference `.ytd` instead.
+pub const LEGACY_NEWENGINE_TEXTURE_DICTIONARY_EXTENSION: &str = "neytd";
+pub const LEGACY_NEWENGINE_TEXTURE_DICTIONARY_CONTAINER: &str = "newengine.texture_dictionary.neytd.v2";
+
+pub const ASSET_PACKAGE_EXTENSION: &str = "pak";
+pub const NEPAK_ASSET_PACKAGE_EXTENSION: &str = "nepak";
+pub const ASSET_PACKAGE_ASSET_KIND: &str = "asset_package";
+pub const ASSET_PACKAGE_CONTAINER: &str = "newengine.asset_package.v1";
 
 pub const CLIP_DICTIONARY_EXTENSION: &str = "ycd";
 pub const CLIP_DICTIONARY_ASSET_KIND: &str = "clip_dictionary";
@@ -68,6 +84,8 @@ pub const OBJECT_TYPE_DEFINITIONS_ASSET_KIND: &str = "object_type_definitions";
 pub const OBJECT_TYPE_DEFINITIONS_CONTAINER: &str = "rockstar.map_types.ytyp.xml";
 pub const DEFINITION_ENTRIES_SCHEMA: &str = "newengine.ytyp.definition_entries.v1";
 pub const MODEL_SERVICE_METHOD_DEFINITION_ENTRIES_JSON_V1: &str = "model.definition_entries_json_v1";
+pub const MODEL_SERVICE_METHOD_ASSET_CHAIN_JSON_V1: &str = "model.asset_chain_json_v1";
+pub const MODEL_SERVICE_METHOD_CONSTRUCTION_PLAN_JSON_V1: &str = "model.construction_plan_json_v1";
 
 pub const MODEL_FEATURE_DOMAINS: &[&str] = &[
     "mesh.obj",
@@ -76,6 +94,7 @@ pub const MODEL_FEATURE_DOMAINS: &[&str] = &[
     "collision.default",
     "drawable.ydd",
     "texture.ytd",
+    "package.pak",
     "definition_entries.ytyp",
 ];
 
@@ -87,6 +106,8 @@ pub const MODEL_SERVICE_METHODS: &[&str] = &[
     MODEL_SERVICE_METHOD_VALIDATE_JSON_V1,
     MODEL_SERVICE_METHOD_DRAWABLE_DICTIONARY_MANIFEST_JSON_V1,
     MODEL_SERVICE_METHOD_DEFINITION_ENTRIES_JSON_V1,
+    MODEL_SERVICE_METHOD_ASSET_CHAIN_JSON_V1,
+    MODEL_SERVICE_METHOD_CONSTRUCTION_PLAN_JSON_V1,
 ];
 
 pub const MODEL_BACKEND_SERVICE_SPEC: newengine_service_api::BackendServiceSpec =
@@ -147,6 +168,10 @@ mod tests {
         assert_eq!(MODEL_COLLISIONS_BACKEND_SERVICE_SPEC.domain, "model.collisions");
         assert!(MODEL_FEATURE_DOMAINS.contains(&"definition_entries.ytyp"));
         assert!(MODEL_FEATURE_DOMAINS.contains(&"texture.ytd"));
+        assert!(MODEL_FEATURE_DOMAINS.contains(&"package.pak"));
+        assert!(!MODEL_FEATURE_DOMAINS.contains(&"texture.neytd.runtime"));
+        assert!(MODEL_SERVICE_METHODS.contains(&MODEL_SERVICE_METHOD_ASSET_CHAIN_JSON_V1));
+        assert!(MODEL_SERVICE_METHODS.contains(&MODEL_SERVICE_METHOD_CONSTRUCTION_PLAN_JSON_V1));
     }
 
     #[test]
@@ -163,4 +188,27 @@ mod tests {
         assert_eq!(entry.asset_chain.drawable_dictionary.as_ref().unwrap().extension, "ydd");
         assert_eq!(entry.asset_chain.texture_dictionary.as_ref().unwrap().extension, "ytd");
     }
+
+    #[test]
+    fn construction_plan_derives_material_binding_from_ytyp_chain() {
+        let mut entry = DefinitionEntry {
+            name: "prop_box".to_owned(),
+            asset_name: "prop_box_drawable".to_owned(),
+            asset_type: "ASSET_TYPE_DRAWABLE".to_owned(),
+            dictionaries: DefinitionDictionaries { texture: Some("prop_box_textures".to_owned()), ..Default::default() },
+            ..Default::default()
+        };
+        refresh_definition_asset_chain("metadata/props.ytyp", &mut entry);
+        let manifest = DefinitionEntriesManifest {
+            source: "metadata/props.ytyp".to_owned(),
+            definition_entries: vec![entry],
+            ..Default::default()
+        };
+        let plan = build_data_driven_construction_plan(&manifest);
+        assert_eq!(plan.objects.len(), 1);
+        assert_eq!(plan.objects[0].drawable.as_ref().unwrap().extension, "ydd");
+        assert_eq!(plan.objects[0].texture_dictionary.as_ref().unwrap().extension, "ytd");
+        assert_eq!(plan.objects[0].material_binding.texture_dictionary_role, ROLE_TEXTURE_DICTIONARY);
+    }
+
 }

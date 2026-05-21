@@ -8,12 +8,12 @@ Make the model/asset metadata path declarative and data-driven:
 .ytyp Definition Entries
   -> .ydd drawable dictionary
   -> .ytd texture dictionary role
-  -> imported/compiled .neytd runtime texture packets
+
 ```
 
 `.ydd` is the only drawable dictionary container in this model. There is no
 parallel drawable extension. `.ytd` is the texture dictionary role referenced by
-Definition Entries. `.neytd` remains the NewEngine runtime-ready texture packet
+Definition Entries. `.neytd` is legacy/cache-only
 container selected through AssetManager texture dictionary APIs.
 
 ## Code changes
@@ -29,7 +29,7 @@ container selected through AssetManager texture dictionary APIs.
   - `tests.rs` — codec contract tests.
 - Removed duplicate local YTYP DTO definitions from the codec worker. The codec now serializes the canonical DTOs from `newengine-model-domain-api`.
 - Updated `.ydd` codec to emit the canonical `DrawableDictionaryManifest` DTO from `newengine-model-domain-api` instead of an ad-hoc JSON shape.
-- Added `newengine-codec-ytd` as a first-party source/domain texture dictionary codec. It validates the RSC7 boundary and exposes source manifest/raw outputs. Runtime GPU packets still come from `.neytd`.
+- Added `newengine-codec-ytd` as a first-party source/domain texture dictionary codec. It validates the RSC7 boundary and exposes source manifest/raw outputs. Runtime binding should target `.ytd`; `.neytd` is legacy/cache-only.
 
 ## Central model
 

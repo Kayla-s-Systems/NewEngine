@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    DRAWABLE_DICTIONARY_ASSET_KIND, DRAWABLE_DICTIONARY_MANIFEST_SCHEMA,
+    DRAWABLE_DICTIONARY_ASSET_KIND, DRAWABLE_DICTIONARY_CONTAINER, DRAWABLE_DICTIONARY_MANIFEST_SCHEMA,
 };
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -56,7 +56,7 @@ impl Default for DrawableDictionaryManifest {
             schema: DRAWABLE_DICTIONARY_MANIFEST_SCHEMA.to_owned(),
             source: String::new(),
             asset_kind: DRAWABLE_DICTIONARY_ASSET_KIND.to_owned(),
-            container: "rockstar.drawable_dictionary.rsc7".to_owned(),
+            container: DRAWABLE_DICTIONARY_CONTAINER.to_owned(),
             texture_dictionary: None,
             entries: Vec::new(),
         }

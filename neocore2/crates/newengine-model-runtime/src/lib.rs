@@ -10,12 +10,12 @@
 use abi_stable::std_types::{RResult, RString};
 use newengine_assets::{AssetDecodeRequest, AssetServiceClient};
 use newengine_model_domain_api::{
-    DefinitionEntriesManifest, DefinitionEntriesRequest, DrawableDictionaryManifest, DrawableDictionaryRequest,
-    ModelAssetBundle, ModelAssetRequest, ModelConstructionManifest, ModelConstructionValidation, ModelMeshPart,
+    build_data_driven_construction_plan, DataDrivenConstructionPlan, DefinitionEntriesManifest, DefinitionEntriesRequest, DrawableDictionaryManifest, DrawableDictionaryRequest,
+    ModelAssetBundle, ModelAssetChainManifest, ModelAssetRequest, ModelConstructionManifest, ModelConstructionValidation, ModelMeshPart,
     DRAWABLE_DICTIONARY_EXTENSION, ENGINE_MODEL_SERVICE_ID, MODEL_BACKEND_CAPABILITY_ID,
     MODEL_FEATURE_DOMAINS, MODEL_SERVICE_ID, MODEL_SERVICE_METHOD_ASSEMBLE_JSON_V1,
-    MODEL_SERVICE_METHOD_DEFINITION_ENTRIES_JSON_V1, MODEL_SERVICE_METHOD_DRAWABLE_DICTIONARY_MANIFEST_JSON_V1,
-    MODEL_SERVICE_METHOD_INVOKE, MODEL_SERVICE_METHOD_VALIDATE_JSON_V1, MODEL_SERVICE_METHODS,
+    MODEL_SERVICE_METHOD_ASSET_CHAIN_JSON_V1, MODEL_SERVICE_METHOD_CONSTRUCTION_PLAN_JSON_V1, MODEL_SERVICE_METHOD_DEFINITION_ENTRIES_JSON_V1,
+    MODEL_SERVICE_METHOD_DRAWABLE_DICTIONARY_MANIFEST_JSON_V1, MODEL_SERVICE_METHOD_INVOKE, MODEL_SERVICE_METHOD_VALIDATE_JSON_V1, MODEL_SERVICE_METHODS,
     OBJECT_TYPE_DEFINITIONS_EXTENSION,
 };
 use newengine_model_import_obj::normalize_logical_path;
@@ -48,7 +48,7 @@ impl ModelAssetAdapter {
             .as_deref()
             .map(|path| normalize_logical_path(path, false))
             .transpose()?
-            .filter(|path| path.ends_with(".neytd"));
+            .filter(|path| path.ends_with(".ytd") || path.ends_with(".neytd"));
 
         let skeleton = match request.skeleton.as_deref() {
             Some(path) => Some(self.load_skeleton_metadata(path, target_height, request.eye_height_ratio)?),
@@ -132,7 +132,7 @@ impl ModelAssetAdapter {
                 warnings.push("no skeleton source declared; runtime model will use mesh-only binding".to_owned());
             }
             if resolved.texture_dictionary.is_none() {
-                warnings.push("no texture dictionary declared; material runtime will derive textures.neytd selectors".to_owned());
+                warnings.push("no texture dictionary declared; data-driven construction should declare a .ytd texture dictionary".to_owned());
             }
         }
         ModelConstructionValidation { valid: errors.is_empty(), resolved, errors, warnings }
@@ -162,6 +162,14 @@ impl ModelAssetAdapter {
             "model.definition_entries_json",
             "ytyp definition entries",
         )
+    }
+
+    pub fn load_construction_plan(
+        &self,
+        request: &DefinitionEntriesRequest,
+    ) -> Result<DataDrivenConstructionPlan, String> {
+        let manifest = self.load_definition_entries_manifest(request)?;
+        Ok(build_data_driven_construction_plan(&manifest))
     }
 
     fn decode_model_manifest<T>(
@@ -281,6 +289,22 @@ impl ModelGatewayClient {
             .map_err(|e| format!("engine.model returned invalid definition entries JSON: {e}"))
     }
 
+    pub fn asset_chain_manifest(&self) -> Result<ModelAssetChainManifest, String> {
+        let bytes = self.call_raw(MODEL_SERVICE_METHOD_ASSET_CHAIN_JSON_V1, Vec::new())?;
+        serde_json::from_slice::<ModelAssetChainManifest>(&bytes)
+            .map_err(|e| format!("engine.model returned invalid asset chain JSON: {e}"))
+    }
+
+    pub fn construction_plan(
+        &self,
+        request: &DefinitionEntriesRequest,
+    ) -> Result<DataDrivenConstructionPlan, String> {
+        let payload = serde_json::to_vec(request).map_err(|e| e.to_string())?;
+        let bytes = self.call_raw(MODEL_SERVICE_METHOD_CONSTRUCTION_PLAN_JSON_V1, payload)?;
+        serde_json::from_slice::<DataDrivenConstructionPlan>(&bytes)
+            .map_err(|e| format!("engine.model returned invalid construction plan JSON: {e}"))
+    }
+
     fn call_raw(&self, method_name: &str, payload: Vec<u8>) -> Result<Vec<u8>, String> {
         (self.host.call_service_v1)(
             self.service_id.clone(),
@@ -359,6 +383,17 @@ impl ModelRuntimeState {
                     Err(e) => RResult::RErr(RString::from(e)),
                 }
             }
+            MODEL_SERVICE_METHOD_ASSET_CHAIN_JSON_V1 => ok_json(ModelAssetChainManifest::default()),
+            MODEL_SERVICE_METHOD_CONSTRUCTION_PLAN_JSON_V1 => {
+                let request = match serde_json::from_value::<DefinitionEntriesRequest>(envelope.request) {
+                    Ok(request) => request,
+                    Err(e) => return RResult::RErr(RString::from(format!("model.api: invalid construction plan request: {e}"))),
+                };
+                match self.adapter.load_construction_plan(&request) {
+                    Ok(plan) => ok_json(plan),
+                    Err(e) => RResult::RErr(RString::from(e)),
+                }
+            }
             other => RResult::RErr(RString::from(format!("model.api: unknown invoke method '{other}'"))),
         }
     }
@@ -384,7 +419,7 @@ pub fn model_gateway_service(adapter: ModelAssetAdapter) -> newengine_plugin_api
     .gateway(ENGINE_MODEL_SERVICE_ID)
     .protocol("json")
     .features(MODEL_FEATURE_DOMAINS.iter().copied())
-    .notes("Gateway-backed model constructor for player/NPC/prop construction");
+    .notes("Gateway-backed data-driven model constructor for YTYP/YDD/YTD player/NPC/prop construction");
 
     JsonServiceRouter::with_state(MODEL_SERVICE_ID, ModelRuntimeState::new(adapter))
         .describe_json(&description)
@@ -405,6 +440,11 @@ pub fn model_gateway_service(adapter: ModelAssetAdapter) -> newengine_plugin_api
         .post_json_result::<DefinitionEntriesRequest, DefinitionEntriesManifest, _>(
             MODEL_SERVICE_METHOD_DEFINITION_ENTRIES_JSON_V1,
             |state, request| state.adapter.load_definition_entries_manifest(&request),
+        )
+        .blob(MODEL_SERVICE_METHOD_ASSET_CHAIN_JSON_V1, |_state, _payload| ok_json(ModelAssetChainManifest::default()))
+        .post_json_result::<DefinitionEntriesRequest, DataDrivenConstructionPlan, _>(
+            MODEL_SERVICE_METHOD_CONSTRUCTION_PLAN_JSON_V1,
+            |state, request| state.adapter.load_construction_plan(&request),
         )
         .blob(newengine_service_api::SERVICE_METHOD_SHUTDOWN_V1, |_state, _payload| ok_empty_blob())
         .into_service_v1()

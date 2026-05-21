@@ -1,0 +1,59 @@
+use serde::{Deserialize, Serialize};
+
+use crate::{
+    LEGACY_NEWENGINE_TEXTURE_DICTIONARY_CONTAINER, TEXTURE_DICTIONARY_ASSET_KIND,
+    TEXTURE_DICTIONARY_CONTAINER, TEXTURE_DICTIONARY_MANIFEST_SCHEMA,
+};
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct TextureDictionaryManifest {
+    pub schema: String,
+    pub source: String,
+    pub asset_kind: String,
+    pub container: String,
+    pub runtime_ready: bool,
+    /// Optional legacy/cache container used by old runtime paths. Authoring should use `.ytd`.
+    pub legacy_cache_container: Option<String>,
+    pub entries: Vec<TextureDictionaryEntry>,
+    pub notes: Vec<String>,
+}
+
+impl Default for TextureDictionaryManifest {
+    fn default() -> Self {
+        Self {
+            schema: TEXTURE_DICTIONARY_MANIFEST_SCHEMA.to_owned(),
+            source: String::new(),
+            asset_kind: TEXTURE_DICTIONARY_ASSET_KIND.to_owned(),
+            container: TEXTURE_DICTIONARY_CONTAINER.to_owned(),
+            runtime_ready: true,
+            legacy_cache_container: Some(LEGACY_NEWENGINE_TEXTURE_DICTIONARY_CONTAINER.to_owned()),
+            entries: Vec::new(),
+            notes: Vec::new(),
+        }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct TextureDictionaryEntry {
+    pub name: String,
+    pub name_hash: u64,
+    pub format: String,
+    pub width: u32,
+    pub height: u32,
+    pub mip_count: u32,
+}
+
+impl Default for TextureDictionaryEntry {
+    fn default() -> Self {
+        Self {
+            name: String::new(),
+            name_hash: 0,
+            format: String::new(),
+            width: 0,
+            height: 0,
+            mip_count: 0,
+        }
+    }
+}
