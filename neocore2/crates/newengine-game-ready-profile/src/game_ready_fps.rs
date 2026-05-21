@@ -21,6 +21,7 @@ const GAME_READY_ENV_DEFAULTS: &[(&str, &str)] = &[
     ("NEWENGINE_GAME_READY_DEMO", "1"),
     ("NEWENGINE_REQUIRE_RENDER_BACKEND", "1"),
     ("NEWENGINE_REQUIRE_ASSET_MANAGER", "1"),
+    ("NEWENGINE_REQUIRE_MATERIALS_BACKEND", "1"),
     ("NEWENGINE_REQUIRE_PLATFORM_BACKEND", "1"),
     ("NEWENGINE_PLUGIN_TARGET", "runtime"),
     // Game-ready launch must not dlopen bootstrap DLLs before platform/runtime

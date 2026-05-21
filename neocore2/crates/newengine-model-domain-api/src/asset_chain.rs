@@ -169,7 +169,6 @@ pub fn model_asset_chain_role_by_extension(extension: &str) -> Option<&'static M
     MODEL_ASSET_CHAIN_ROLES
         .iter()
         .chain(MODEL_ASSET_PACKAGE_ROLES.iter())
-        .chain(MODEL_LEGACY_ASSET_ROLES.iter())
         .find(|role| role.extension.eq_ignore_ascii_case(ext))
 }
 
@@ -179,8 +178,13 @@ pub fn model_asset_chain_role_by_kind(asset_kind: &str) -> Option<&'static Model
     MODEL_ASSET_CHAIN_ROLES
         .iter()
         .chain(MODEL_ASSET_PACKAGE_ROLES.iter())
-        .chain(MODEL_LEGACY_ASSET_ROLES.iter())
         .find(|role| role.asset_kind.eq_ignore_ascii_case(kind))
+}
+
+#[inline]
+pub fn model_legacy_asset_role_by_extension(extension: &str) -> Option<&'static ModelAssetChainRoleSpec> {
+    let ext = extension.trim().trim_start_matches('.');
+    MODEL_LEGACY_ASSET_ROLES.iter().find(|role| role.extension.eq_ignore_ascii_case(ext))
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]

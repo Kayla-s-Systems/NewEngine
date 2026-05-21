@@ -333,7 +333,7 @@ impl AssetServiceClient {
         self.call_raw(self.m_decode_v1.clone(), payload)
     }
 
-    /// Select and read one texture from a .neytd dictionary.
+    /// Select and read one texture from a .ytd dictionary.
     ///
     /// The service accepts either texture_name or texture_hash. When both are omitted,
     /// the first dictionary entry is selected.

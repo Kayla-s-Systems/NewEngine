@@ -23,7 +23,8 @@ pub mod serde;
 mod errors;
 
 pub use crate::api::{
-    MaterialAssetDocument, MaterialDescriptor, MaterialFlags, MaterialId, MaterialRef,
+    validate_authored_material_library, AuthoredMaterialDescriptor, AuthoredMaterialLibrary,
+    AuthoredMaterialSurface, AuthoredMaterialValidation, MaterialAssetDocument, MaterialDescriptor, MaterialFlags, MaterialId, MaterialRef,
     MaterialResolved, MaterialTextureBindings, MaterialTextureResidency,
     MaterialTextureResidencyState, MaterialTextureSlot,
 };

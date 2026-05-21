@@ -10,11 +10,11 @@
 use abi_stable::std_types::{RResult, RString};
 use newengine_assets::{AssetDecodeRequest, AssetServiceClient};
 use newengine_model_domain_api::{
-    build_data_driven_construction_plan, DataDrivenConstructionPlan, DefinitionEntriesManifest, DefinitionEntriesRequest, DrawableDictionaryManifest, DrawableDictionaryRequest,
+    build_data_driven_construction_plan, AssetGraphResolver, DataDrivenConstructionPlan, DefinitionEntriesManifest, DefinitionEntriesRequest, DrawableDictionaryManifest, DrawableDictionaryRequest, ResolvedAssetGraph,
     ModelAssetBundle, ModelAssetChainManifest, ModelAssetRequest, ModelConstructionManifest, ModelConstructionValidation, ModelMeshPart,
     DRAWABLE_DICTIONARY_EXTENSION, ENGINE_MODEL_SERVICE_ID, MODEL_BACKEND_CAPABILITY_ID,
     MODEL_FEATURE_DOMAINS, MODEL_SERVICE_ID, MODEL_SERVICE_METHOD_ASSEMBLE_JSON_V1,
-    MODEL_SERVICE_METHOD_ASSET_CHAIN_JSON_V1, MODEL_SERVICE_METHOD_CONSTRUCTION_PLAN_JSON_V1, MODEL_SERVICE_METHOD_DEFINITION_ENTRIES_JSON_V1,
+    MODEL_SERVICE_METHOD_ASSET_CHAIN_JSON_V1, MODEL_SERVICE_METHOD_ASSET_GRAPH_JSON_V1, MODEL_SERVICE_METHOD_CONSTRUCTION_PLAN_JSON_V1, MODEL_SERVICE_METHOD_DEFINITION_ENTRIES_JSON_V1,
     MODEL_SERVICE_METHOD_DRAWABLE_DICTIONARY_MANIFEST_JSON_V1, MODEL_SERVICE_METHOD_INVOKE, MODEL_SERVICE_METHOD_VALIDATE_JSON_V1, MODEL_SERVICE_METHODS,
     OBJECT_TYPE_DEFINITIONS_EXTENSION,
 };
@@ -172,6 +172,14 @@ impl ModelAssetAdapter {
         Ok(build_data_driven_construction_plan(&manifest))
     }
 
+    pub fn resolve_asset_graph(
+        &self,
+        request: &DefinitionEntriesRequest,
+    ) -> Result<ResolvedAssetGraph, String> {
+        let plan = self.load_construction_plan(request)?;
+        Ok(AssetGraphResolver::resolve_construction_plan(&plan))
+    }
+
     fn decode_model_manifest<T>(
         &self,
         source: &str,
@@ -305,6 +313,16 @@ impl ModelGatewayClient {
             .map_err(|e| format!("engine.model returned invalid construction plan JSON: {e}"))
     }
 
+    pub fn asset_graph(
+        &self,
+        request: &DefinitionEntriesRequest,
+    ) -> Result<ResolvedAssetGraph, String> {
+        let payload = serde_json::to_vec(request).map_err(|e| e.to_string())?;
+        let bytes = self.call_raw(MODEL_SERVICE_METHOD_ASSET_GRAPH_JSON_V1, payload)?;
+        serde_json::from_slice::<ResolvedAssetGraph>(&bytes)
+            .map_err(|e| format!("engine.model returned invalid asset graph JSON: {e}"))
+    }
+
     fn call_raw(&self, method_name: &str, payload: Vec<u8>) -> Result<Vec<u8>, String> {
         (self.host.call_service_v1)(
             self.service_id.clone(),
@@ -394,6 +412,17 @@ impl ModelRuntimeState {
                     Err(e) => RResult::RErr(RString::from(e)),
                 }
             }
+
+            MODEL_SERVICE_METHOD_ASSET_GRAPH_JSON_V1 => {
+                let request = match serde_json::from_value::<DefinitionEntriesRequest>(envelope.request) {
+                    Ok(request) => request,
+                    Err(e) => return RResult::RErr(RString::from(format!("model.api: invalid asset graph request: {e}"))),
+                };
+                match self.adapter.resolve_asset_graph(&request) {
+                    Ok(graph) => ok_json(graph),
+                    Err(e) => RResult::RErr(RString::from(e)),
+                }
+            }
             other => RResult::RErr(RString::from(format!("model.api: unknown invoke method '{other}'"))),
         }
     }
@@ -445,6 +474,10 @@ pub fn model_gateway_service(adapter: ModelAssetAdapter) -> newengine_plugin_api
         .post_json_result::<DefinitionEntriesRequest, DataDrivenConstructionPlan, _>(
             MODEL_SERVICE_METHOD_CONSTRUCTION_PLAN_JSON_V1,
             |state, request| state.adapter.load_construction_plan(&request),
+        )
+        .post_json_result::<DefinitionEntriesRequest, ResolvedAssetGraph, _>(
+            MODEL_SERVICE_METHOD_ASSET_GRAPH_JSON_V1,
+            |state, request| state.adapter.resolve_asset_graph(&request),
         )
         .blob(newengine_service_api::SERVICE_METHOD_SHUTDOWN_V1, |_state, _payload| ok_empty_blob())
         .into_service_v1()

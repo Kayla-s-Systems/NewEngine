@@ -1,7 +1,7 @@
 {
   "scene": {
     "title": "KAYLA FPS: Procedural Highlands",
-    "objective": "Walk a deterministic terrain sandbox with infinite skydome, packed .neytd clouds and a runtime day/night sun cycle.",
+    "objective": "Walk a deterministic terrain sandbox with infinite skydome, packed .ytd clouds and a runtime day/night sun cycle.",
     "player": {
       "start": [
         -17.5,
@@ -66,7 +66,7 @@
       "radius": 220.0,
       "mesh": "procedural:skydome",
       "follow_camera": true,
-      "cloud_dictionary": "textures/fps/clouds_runtime.neytd",
+      "cloud_dictionary": "textures/fps/clouds_runtime.ytd",
       "cloud_profile": "clear"
     },
     "materials": {
@@ -80,27 +80,27 @@
         "occlusion_strength": 0.88
       },
       "sky": {
-        "base_color_texture": "textures/fps/clouds_runtime.neytd@cloud_clear__new_skyhat_clear01_bot_ap",
+        "base_color_texture": "textures/fps/clouds_runtime.ytd@cloud_clear__new_skyhat_clear01_bot_ap",
         "roughness": 1.0,
         "normal_scale": 0.18,
         "occlusion_strength": 1.0,
-        "normal_texture": "textures/fps/clouds_runtime.neytd@cloud_clear__new_skyhat_clear01_bot_nrm"
+        "normal_texture": "textures/fps/clouds_runtime.ytd@cloud_clear__new_skyhat_clear01_bot_nrm"
       },
       "tree_bark": {
-        "base_color_texture": "prefabs/tree_animate/textures/tree_animate.neytd@bark_diffuse",
-        "normal_texture": "prefabs/tree_animate/textures/tree_animate.neytd@bark_normal",
+        "base_color_texture": "prefabs/tree_animate/textures/tree_animate.ytd@bark_diffuse",
+        "normal_texture": "prefabs/tree_animate/textures/tree_animate.ytd@bark_normal",
         "roughness": 0.88,
         "normal_scale": 0.35
       },
       "tree_leaf": {
-        "base_color_texture": "prefabs/tree_animate/textures/tree_animate.neytd@leaf_diffuse",
-        "normal_texture": "prefabs/tree_animate/textures/tree_animate.neytd@leaf_normal",
+        "base_color_texture": "prefabs/tree_animate/textures/tree_animate.ytd@leaf_diffuse",
+        "normal_texture": "prefabs/tree_animate/textures/tree_animate.ytd@leaf_normal",
         "roughness": 0.72,
         "normal_scale": 0.25
       },
       "tree_branch": {
-        "base_color_texture": "prefabs/tree_animate/textures/tree_animate.neytd@branch_diffuse",
-        "normal_texture": "prefabs/tree_animate/textures/tree_animate.neytd@branch_normal",
+        "base_color_texture": "prefabs/tree_animate/textures/tree_animate.ytd@branch_diffuse",
+        "normal_texture": "prefabs/tree_animate/textures/tree_animate.ytd@branch_normal",
         "roughness": 0.86,
         "normal_scale": 0.3
       }

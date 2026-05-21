@@ -483,6 +483,7 @@ dependencies = [
  "newengine-input-api",
  "newengine-input-bindings-api",
  "newengine-loading-api",
+ "newengine-materials",
  "newengine-math",
  "newengine-physics-api",
  "newengine-platform-api",

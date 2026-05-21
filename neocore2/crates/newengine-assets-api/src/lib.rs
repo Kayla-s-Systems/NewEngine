@@ -32,6 +32,8 @@ pub const ASSET_METHOD_PREFIX: &str = "asset.";
 
 mod asset_ref;
 pub use asset_ref::*;
+mod list_file;
+pub use list_file::*;
 
 /// Generic host/plugin backend declaration for the asset service family.
 pub const ASSET_BACKEND_SERVICE_SPEC: newengine_service_api::BackendServiceSpec =
@@ -106,7 +108,7 @@ pub mod codec_type {
     /// other assets. Example: .pak.
     pub const CONTAINER: &str = "containerType";
     /// List codec. A single file contains multiple same-domain records selected
-    /// by name/hash/index, but it cannot host nested assets. Examples: .neytd, .ydd.
+    /// by name/hash/index, but it cannot host nested assets. Examples: .ytd, .ydd.
     pub const LIST: &str = "listType";
     /// Single binary file with magic bytes and one decoded object. Example: .nemat.
     pub const SINGLE: &str = "singleType";
@@ -327,9 +329,9 @@ pub mod method {
     pub const TEXTURE_RGBA8_V1: &str = "asset.texture_rgba8_v1";
     /// Generic codec dispatch. Payload is JSON `AssetDecodeRequest`; response is codec-defined bytes.
     pub const DECODE_V1: &str = "asset.decode_v1";
-    /// Runtime-ready RGBA8 texture selected from a .neytd dictionary. Payload: JSON { dictionary_path, texture_name | texture_hash }.
+    /// Runtime-ready RGBA8 texture selected from a .ytd dictionary. Payload: JSON { dictionary_path, texture_name | texture_hash }.
     pub const TEXTURE_DICTIONARY_RGBA8_V1: &str = "asset.texture_dictionary_rgba8_v1";
-    /// Runtime-ready GPU-native texture selected from a .neytd dictionary.
+    /// Runtime-ready GPU-native texture selected from a .ytd dictionary.
     /// Returns NTRT v2 with format + complete mip chain. BC1/BC3/BC5/BC7 stay compressed.
     pub const TEXTURE_DICTIONARY_RUNTIME_V1: &str = "asset.texture_dictionary_runtime_v1";
     /// Explicit BCn aliases for callers that want to assert a compressed format class.
@@ -358,6 +360,8 @@ pub mod method {
 
     // Debug/diagnostics.
     pub const RESOLVE_TRACE_JSON_V1: &str = "asset.resolve_trace_json_v1";
+    /// Standard listFiles manifest for any dictionary/container asset. Codec-defined output; not a raw VFS read.
+    pub const LIST_FILE_MANIFEST_V1: &str = "asset.list_file_manifest_v1";
 
     // Generic lifecycle hook understood by the plugin host.
     pub const SHUTDOWN_V1: &str = newengine_service_api::SERVICE_METHOD_SHUTDOWN_V1;
@@ -761,10 +765,10 @@ pub trait AssetAccess {
     /// Runtime callers must not parse image containers or codec metadata.
     fn texture_rgba8_v1(&self, id_hex32: &str) -> Result<Rgba8TextureAsset, String>;
 
-    /// Select and read a runtime-ready RGBA8 texture from a .neytd dictionary.
+    /// Select and read a runtime-ready RGBA8 texture from a .ytd dictionary.
     fn texture_dictionary_rgba8_v1(&self, dictionary_path: &str, texture_name: Option<&str>, texture_hash: Option<u64>) -> Result<Rgba8TextureAsset, String>;
 
-    /// Select and read a runtime-ready GPU-native texture from a .neytd dictionary.
+    /// Select and read a runtime-ready GPU-native texture from a .ytd dictionary.
     fn texture_dictionary_runtime_v1(&self, dictionary_path: &str, texture_name: Option<&str>, texture_hash: Option<u64>) -> Result<RuntimeTextureAsset, String>;
 }
 

@@ -52,6 +52,10 @@ pub(crate) const RUNTIME_SERVICE_CATALOG: &[RuntimeServiceCatalogEntry] = &[
         "asset browser / registered file-type handlers / VFS navigation",
     ),
     RuntimeServiceCatalogEntry::new(
+        newengine_materials::MATERIALS_RUNTIME_REQUIREMENT_SPEC,
+        "material descriptor resolve / material graph validation / render material packets",
+    ),
+    RuntimeServiceCatalogEntry::new(
         newengine_audio_api::AUDIO_RUNTIME_REQUIREMENT_SPEC,
         "semantic audio events / UI feedback / future mixer backend",
     ),

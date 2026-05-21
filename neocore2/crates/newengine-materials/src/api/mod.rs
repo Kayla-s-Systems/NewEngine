@@ -2,6 +2,7 @@
 //!
 //! Keep this module free from renderer-specific types.
 
+mod authored;
 mod descriptor;
 mod instance;
 mod material;
@@ -10,6 +11,7 @@ mod textures;
 
 mod types;
 
+pub use self::authored::{validate_authored_material_library, AuthoredMaterialDescriptor, AuthoredMaterialLibrary, AuthoredMaterialSurface, AuthoredMaterialValidation};
 pub use self::descriptor::{MaterialDescriptor, MaterialFlags};
 pub use self::instance::{MaterialInstanceDesc, MaterialOverrides};
 pub use self::material::{

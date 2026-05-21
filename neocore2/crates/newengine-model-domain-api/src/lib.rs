@@ -12,6 +12,7 @@
 //! is legacy/cache-only and must not be referenced by authored YTYP metadata.
 
 mod asset_chain;
+mod asset_graph;
 mod construction;
 mod definition;
 mod drawable;
@@ -19,6 +20,7 @@ mod texture_dictionary;
 mod data_driven;
 
 pub use asset_chain::*;
+pub use asset_graph::*;
 pub use construction::*;
 pub use definition::*;
 pub use drawable::*;
@@ -85,6 +87,7 @@ pub const DEFINITION_ENTRIES_SCHEMA: &str = "newengine.ytyp.definition_entries.v
 pub const MODEL_SERVICE_METHOD_DEFINITION_ENTRIES_JSON_V1: &str = "model.definition_entries_json_v1";
 pub const MODEL_SERVICE_METHOD_ASSET_CHAIN_JSON_V1: &str = "model.asset_chain_json_v1";
 pub const MODEL_SERVICE_METHOD_CONSTRUCTION_PLAN_JSON_V1: &str = "model.construction_plan_json_v1";
+pub const MODEL_SERVICE_METHOD_ASSET_GRAPH_JSON_V1: &str = "model.asset_graph_json_v1";
 
 pub const MODEL_FEATURE_DOMAINS: &[&str] = &[
     "mesh.obj",
@@ -107,6 +110,7 @@ pub const MODEL_SERVICE_METHODS: &[&str] = &[
     MODEL_SERVICE_METHOD_DEFINITION_ENTRIES_JSON_V1,
     MODEL_SERVICE_METHOD_ASSET_CHAIN_JSON_V1,
     MODEL_SERVICE_METHOD_CONSTRUCTION_PLAN_JSON_V1,
+    MODEL_SERVICE_METHOD_ASSET_GRAPH_JSON_V1,
 ];
 
 pub const MODEL_BACKEND_SERVICE_SPEC: newengine_service_api::BackendServiceSpec =
@@ -145,7 +149,7 @@ pub const MODEL_RUNTIME_CONTRACT_SPEC: newengine_service_api::RuntimeServiceCont
     newengine_service_api::RuntimeServiceContractSpec::new(
         ENGINE_MODEL_SERVICE_ID,
         "newengine.model-domain-api >= 0.1.x",
-        newengine_service_api::JSON_CONTROL_SERVICE_METHODS_V1,
+        MODEL_SERVICE_METHODS,
     );
 
 pub const MODEL_RUNTIME_REQUIREMENT_SPEC: newengine_service_api::RuntimeServiceRequirementSpec =
@@ -171,6 +175,7 @@ mod tests {
         assert!(!MODEL_FEATURE_DOMAINS.contains(&"texture.neytd.runtime"));
         assert!(MODEL_SERVICE_METHODS.contains(&MODEL_SERVICE_METHOD_ASSET_CHAIN_JSON_V1));
         assert!(MODEL_SERVICE_METHODS.contains(&MODEL_SERVICE_METHOD_CONSTRUCTION_PLAN_JSON_V1));
+        assert!(MODEL_SERVICE_METHODS.contains(&MODEL_SERVICE_METHOD_ASSET_GRAPH_JSON_V1));
     }
 
     #[test]

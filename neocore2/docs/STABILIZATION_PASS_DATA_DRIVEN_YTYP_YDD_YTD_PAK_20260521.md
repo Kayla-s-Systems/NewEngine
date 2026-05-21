@@ -18,7 +18,7 @@ format manifests, and `engine.model` can return a declarative construction plan.
 - `.ydd` is the only native 3D drawable dictionary container.
 - `.ytd` is the public texture dictionary contract.
 - `.neytd` is legacy/cache-only and is no longer part of the authored chain.
-- `.pak` is the public package role; `.nepak` remains the concrete NewEngine
+- `.pak` is the public and canonical package role; NEPAK remains only the internal wire magic name
   container extension and compatibility alias.
 
 ## Runtime contract

@@ -7,4 +7,4 @@ pub mod file_type_registry;
 
 pub use asset_service_client::AssetServiceClient;
 pub use file_type_registry::{asset_file_types_gateway_service, asset_file_types_service_info, register_asset_file_types_gateway_best_effort};
-pub use newengine_assets_api::{wait_ready, AssetAccess, AssetDecodeRequest, AssetError, AssetErrorKind, AssetFileTypeDescriptor, AssetFileTypeManifest, AssetFileTypeProbeRequest, AssetFileTypeProbeResult, AssetFileTypeRegisterRequest, AssetResult, AssetService, AssetState, Rgba8TextureAsset, RuntimeTextureAsset, RuntimeTextureFormat, RuntimeTextureMip, RuntimeTextureMipLayout, WaitReadyError};
+pub use newengine_assets_api::{wait_ready, AssetAccess, AssetDecodeRequest, AssetEntryDependency, AssetEntryManifest, AssetError, AssetErrorKind, AssetFileManifest, AssetFileTypeDescriptor, AssetFileTypeManifest, AssetFileTypeProbeRequest, AssetFileTypeProbeResult, AssetFileTypeRegisterRequest, AssetGatewayRoute, AssetReference, AssetResult, AssetService, AssetState, Rgba8TextureAsset, RuntimeTextureAsset, RuntimeTextureFormat, RuntimeTextureMip, RuntimeTextureMipLayout, WaitReadyError};
