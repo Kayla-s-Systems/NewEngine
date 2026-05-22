@@ -61,6 +61,7 @@ members = [
     "crates/newengine-sim",
     "crates/newengine-system-contracts",
     "crates/newengine-system-runtime",
+    "crates/newengine-textures-runtime",
     "crates/newengine-texture-container",
     "crates/newengine-transform",
     "crates/newengine-transform-api",

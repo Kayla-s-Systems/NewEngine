@@ -22,6 +22,7 @@ newengine-render-feature-api = { path = "../newengine-render-feature-api" }
 newengine-render-feature-gameready = { path = "../newengine-render-feature-gameready" }
 newengine-runtime-host = { path = "../newengine-runtime-host" }
 newengine-time-runtime = { path = "../newengine-time-runtime" }
+newengine-textures-runtime = { path = "../newengine-textures-runtime" }
 newengine-scene = { path = "../newengine-scene", features = ["runtime"] }
 newengine-scene-runtime = { path = "../newengine-scene-runtime" }
 newengine-ui = { path = "../newengine-ui", default-features = false }

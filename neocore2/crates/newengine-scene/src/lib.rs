@@ -29,7 +29,7 @@ pub use guid::{ensure_entity_guid, GuidAllocator};
 #[cfg(feature = "runtime")]
 pub use scene::Scene;
 #[cfg(feature = "runtime")]
-pub use scene_asset::{SceneAsset, SceneAssetError, SceneAssetOptions};
+pub use scene_asset::{SceneAsset, SceneAssetError, SceneAssetOptions, SCENE_ASSET_SCHEMA_V1, SCENE_ASSET_STATUS_TRANSITIONAL_JSON};
 pub use settings::{ForwardAxis, SceneSettings, UnitScaleMeters, UpAxis};
 pub use streaming::{
     SceneBucketedCell, SceneBucketedCellPlan, SceneCellCoord, SceneLayeredStreamingPlan,

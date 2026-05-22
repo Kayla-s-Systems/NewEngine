@@ -13,6 +13,9 @@ use crate::guid::{ensure_entity_guid, GuidAllocator};
 use crate::settings::SceneSettings;
 use crate::Scene;
 
+pub const SCENE_ASSET_SCHEMA_V1: &str = "newengine.scene.asset.v1";
+pub const SCENE_ASSET_STATUS_TRANSITIONAL_JSON: &str = "transitional_json_scene_asset";
+
 /// Options for extracting a `SceneAsset` from a runtime scene.
 #[derive(Clone, Copy, Debug)]
 pub struct SceneAssetOptions {
@@ -58,6 +61,10 @@ pub struct SceneEntityAsset {
     pub name: Option<String>,
     pub parent: Option<u128>,
     pub transform: Option<TransformAsset>,
+    /// Optional reference to a .ytyp Definition Entry consumed by scene placement.
+    /// Scene stores the placement reference only; .ytyp metadata is owned by engine.definitions.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub definition_ref: Option<String>,
 }
 
 #[derive(Clone, Copy, Debug, Serialize, Deserialize)]
@@ -179,6 +186,7 @@ impl Scene {
                 name,
                 parent,
                 transform,
+                definition_ref: None,
             });
         }
 
@@ -186,7 +194,7 @@ impl Scene {
         entities.sort_by(|a, b| a.guid.cmp(&b.guid));
 
         SceneAsset {
-            schema: "kalitech.scene.asset.v1".to_string(),
+            schema: SCENE_ASSET_SCHEMA_V1.to_string(),
             version: 1,
             settings: self.settings.clone(),
             guid_seed: alloc.seed,

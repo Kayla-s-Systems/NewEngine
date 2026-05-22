@@ -650,6 +650,7 @@ dependencies = [
  "newengine-runtime-host",
  "newengine-scene",
  "newengine-scene-runtime",
+ "newengine-textures-runtime",
  "newengine-time-runtime",
  "newengine-ui",
 ]
@@ -769,10 +770,12 @@ dependencies = [
  "abi_stable",
  "log",
  "newengine-assets",
+ "newengine-assets-api",
  "newengine-materials",
  "newengine-model-domain-api",
  "newengine-model-import-obj",
  "newengine-plugin-api",
+ "newengine-plugin-host",
  "newengine-service-api",
  "newengine-service-kit",
  "serde",
@@ -1062,6 +1065,7 @@ dependencies = [
  "abi_stable",
  "log",
  "newengine-assets",
+ "newengine-assets-api",
  "newengine-engine-runtime",
  "newengine-plugin-api",
  "newengine-plugin-host",
@@ -1136,6 +1140,21 @@ dependencies = [
  "serde_json",
  "thiserror",
  "zstd",
+]
+
+[[package]]
+name = "newengine-textures-runtime"
+version = "0.1.0"
+dependencies = [
+ "abi_stable",
+ "log",
+ "newengine-assets",
+ "newengine-assets-api",
+ "newengine-plugin-api",
+ "newengine-service-api",
+ "newengine-service-kit",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]

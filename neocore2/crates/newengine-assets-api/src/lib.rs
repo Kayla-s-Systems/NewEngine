@@ -29,9 +29,9 @@ pub const ASSET_BACKEND_CAPABILITY_ID: &str = "asset_manager.backend";
 /// Wire method namespace for asset-domain service calls.
 pub const ASSET_METHOD_PREFIX: &str = "asset.";
 
-/// Semantic texture dictionary gateway id. File-type descriptors route `.ytd`
-/// meaning here; the implementation may still call `engine.assets` underneath
-/// for VFS bytes and codec dispatch.
+/// Semantic texture dictionary runtime gateway id. File-type descriptors route `.ytd`
+/// meaning here. `engine.textures` owns validation, manifest semantics and runtime
+/// texture packets; `engine.assets` remains the byte/VFS/codec-dispatch owner.
 pub const ENGINE_TEXTURES_SERVICE_ID: &str = "engine.textures";
 pub const TEXTURES_SERVICE_ID: &str = "textures.api";
 pub const TEXTURES_BACKEND_CAPABILITY_ID: &str = "textures.backend";
@@ -346,12 +346,12 @@ pub fn consumer_domains_for_file_type(extension: &str, asset_kind: &str, codec_t
             "ytd" => &[ENGINE_MATERIALS_SERVICE_ID, ENGINE_MODEL_SERVICE_ID, "engine.ui", "engine.render"],
             "ydd" => &[ENGINE_MODEL_SERVICE_ID, ENGINE_MATERIALS_SERVICE_ID, "engine.render"],
             "nemat" => &[ENGINE_MATERIALS_SERVICE_ID, ENGINE_MODEL_SERVICE_ID, "engine.render"],
-            "ytyp" => &[ENGINE_MODEL_SERVICE_ID, ENGINE_MATERIALS_SERVICE_ID, "engine.physics", "engine.ai", "engine.editor", "engine.streaming"],
+            "ytyp" => &["engine.scene", ENGINE_MODEL_SERVICE_ID, ENGINE_MATERIALS_SERVICE_ID, "engine.physics", "engine.ai", "engine.editor", "engine.streaming"],
             _ => match asset_kind.trim() {
                 "texture_dictionary" | "newengine.asset.texture_dictionary" => &[ENGINE_MATERIALS_SERVICE_ID, ENGINE_MODEL_SERVICE_ID, "engine.ui", "engine.render"],
                 "drawable_dictionary" | "newengine.asset.drawable_dictionary" => &[ENGINE_MODEL_SERVICE_ID, ENGINE_MATERIALS_SERVICE_ID, "engine.render"],
                 "material_library" | "newengine.asset.material_library" => &[ENGINE_MATERIALS_SERVICE_ID, ENGINE_MODEL_SERVICE_ID, "engine.render"],
-                "archetype_dictionary" | "newengine.asset.archetype_dictionary" => &[ENGINE_MODEL_SERVICE_ID, ENGINE_MATERIALS_SERVICE_ID, "engine.physics", "engine.ai", "engine.editor", "engine.streaming"],
+                "archetype_dictionary" | "newengine.asset.archetype_dictionary" => &["engine.scene", ENGINE_MODEL_SERVICE_ID, ENGINE_MATERIALS_SERVICE_ID, "engine.physics", "engine.ai", "engine.editor", "engine.streaming"],
                 _ => &[ENGINE_ASSET_SERVICE_ID],
             },
         }
@@ -1012,6 +1012,38 @@ pub trait AssetAccess {
 
     /// Select and read a runtime-ready GPU-native texture from a .ytd dictionary.
     fn texture_dictionary_runtime_v1(&self, dictionary_path: &str, texture_name: Option<&str>, texture_hash: Option<u64>) -> Result<RuntimeTextureAsset, String>;
+
+    /// Select and read a runtime-ready RGBA8 texture through semantic `engine.textures` ownership.
+    ///
+    /// Generic AssetAccess implementors may bridge to the older dictionary methods, but the
+    /// canonical runtime host implementation routes this through `engine.textures.entry_rgba8_v1`.
+    fn textures_entry_rgba8_v1(&self, texture_ref: &str) -> Result<Rgba8TextureAsset, String> {
+        let reference = require_asset_reference_extension(texture_ref, &["ytd"], true)
+            .map_err(|e| e.to_string())?;
+        let entry = reference.entry.as_deref().unwrap_or_default();
+        let texture_hash = entry
+            .strip_prefix("hash:")
+            .map(|value| value.parse::<u64>().map_err(|_| format!("invalid texture hash selector '{entry}'")))
+            .transpose()?;
+        let texture_name = if texture_hash.is_some() { None } else { Some(entry) };
+        self.texture_dictionary_rgba8_v1(&reference.logical_path, texture_name, texture_hash)
+    }
+
+    /// Select and read a runtime-ready GPU-native texture through semantic `engine.textures` ownership.
+    ///
+    /// Generic AssetAccess implementors may bridge to the older dictionary methods, but the
+    /// canonical runtime host implementation routes this through `engine.textures.entry_runtime_v1`.
+    fn textures_entry_runtime_v1(&self, texture_ref: &str) -> Result<RuntimeTextureAsset, String> {
+        let reference = require_asset_reference_extension(texture_ref, &["ytd"], true)
+            .map_err(|e| e.to_string())?;
+        let entry = reference.entry.as_deref().unwrap_or_default();
+        let texture_hash = entry
+            .strip_prefix("hash:")
+            .map(|value| value.parse::<u64>().map_err(|_| format!("invalid texture hash selector '{entry}'")))
+            .transpose()?;
+        let texture_name = if texture_hash.is_some() { None } else { Some(entry) };
+        self.texture_dictionary_runtime_v1(&reference.logical_path, texture_name, texture_hash)
+    }
 }
 
 /// Extended contract surface.

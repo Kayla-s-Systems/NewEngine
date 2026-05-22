@@ -137,11 +137,12 @@ mod tests {
 
 use abi_stable::std_types::{RResult, RString};
 use newengine_assets::{AssetDecodeRequest, AssetServiceClient};
+use newengine_assets_api::{textures_method, ENGINE_TEXTURES_SERVICE_ID};
 use newengine_materials::{
     method as material_method, ENGINE_MATERIALS_SERVICE_ID,
     MATERIALS_BACKEND_CAPABILITY_ID, MATERIALS_SERVICE_ID, MATERIALS_SERVICE_METHODS,
 };
-use newengine_plugin_api::Blob;
+use newengine_plugin_api::{Blob, MethodName};
 use newengine_service_api::EngineServiceKind;
 use newengine_service_kit::{
     engine_owned_service_description, ok_empty_blob, ok_json,
@@ -194,7 +195,58 @@ impl MaterialAssetGatewayAdapter {
 
     #[inline]
     pub fn describe_texture_ref(&self, request: &MaterialTextureRefRequest) -> MaterialTextureRefInfo {
-        MaterialTextureRefInfo::from_reference(&request.reference)
+        self.validate_texture_ref_through_textures_gateway(&request.reference)
+    }
+
+    fn validate_texture_ref_through_textures_gateway(&self, reference: &str) -> MaterialTextureRefInfo {
+        let mut info = MaterialTextureRefInfo::from_reference(reference);
+        if !info.valid {
+            return info;
+        }
+
+        let request = serde_json::json!({ "texture_ref": info.canonical });
+        let payload = match serde_json::to_vec(&request) {
+            Ok(payload) => payload,
+            Err(e) => {
+                info.valid = false;
+                info.errors.push(format!("engine.textures validation payload encode failed: {e}"));
+                return info;
+            }
+        };
+        let host = newengine_plugin_host::default_host_api();
+        let result = (host.call_service_v1)(
+            abi_stable::std_types::RString::from(ENGINE_TEXTURES_SERVICE_ID),
+            MethodName::from(textures_method::VALIDATE_REF_V1),
+            Blob::from(payload),
+        );
+        let bytes = match result.into_result() {
+            Ok(bytes) => bytes.into_vec(),
+            Err(e) => {
+                info.valid = false;
+                info.errors.push(format!("engine.textures validation unavailable for '{}': {}", info.canonical, e));
+                return info;
+            }
+        };
+        let value = match serde_json::from_slice::<serde_json::Value>(&bytes) {
+            Ok(value) => value,
+            Err(e) => {
+                info.valid = false;
+                info.errors.push(format!("engine.textures validation returned non-json for '{}': {}", info.canonical, e));
+                return info;
+            }
+        };
+        if value.get("ok").and_then(|v| v.as_bool()).unwrap_or(false) {
+            info.warnings.push("validated_by=engine.textures".to_owned());
+        } else {
+            info.valid = false;
+            let message = value
+                .get("message")
+                .or_else(|| value.get("diagnostic"))
+                .and_then(|v| v.as_str())
+                .unwrap_or("engine.textures rejected texture ref");
+            info.errors.push(message.to_owned());
+        }
+        info
     }
 
 
@@ -211,7 +263,7 @@ impl MaterialAssetGatewayAdapter {
         };
         result.source = loaded.source.clone();
         for texture in collect_texture_refs(&loaded.textures) {
-            let info = MaterialTextureRefInfo::from_reference(texture);
+            let info = self.validate_texture_ref_through_textures_gateway(texture);
             if !info.valid { result.errors.extend(info.errors); }
         }
         result.valid = result.errors.is_empty();
@@ -222,7 +274,7 @@ impl MaterialAssetGatewayAdapter {
         let loaded = self.load_descriptor(request)?;
         let mut graph = ResolvedMaterialGraph { source: loaded.source, name: loaded.name, descriptor: loaded.descriptor, textures: loaded.textures, ..Default::default() };
         for texture in collect_texture_refs(&graph.textures) {
-            let info = MaterialTextureRefInfo::from_reference(texture);
+            let info = self.validate_texture_ref_through_textures_gateway(texture);
             if !info.valid { graph.warnings.extend(info.errors.clone()); }
             graph.texture_refs.push(info);
         }
