@@ -99,6 +99,18 @@ struct RawPrefabSpec {
     enabled: bool,
 }
 
+#[derive(Debug, Deserialize)]
+struct RawDefinitionInstanceSpec {
+    #[serde(default)]
+    definition_ref: String,
+    #[serde(default)]
+    position: [f32; 3],
+    #[serde(default)]
+    rotation_ypr: [f32; 3],
+    #[serde(default = "default_definition_scale")]
+    scale: [f32; 3],
+}
+
 pub(super) fn load_game_ready_map_profile() -> GameReadyMapProfile {
     if let Some(profile) = load_profile_from_asset_manager() {
         return profile;
@@ -268,6 +280,7 @@ impl RawGameReadyPayload {
             lighting: sanitize_lighting_spec(self.lighting),
             foliage: sanitize_foliage_spec(self.foliage),
             prefabs: self.prefabs.into_iter().filter_map(sanitize_prefab_spec).collect(),
+            definitions: self.definitions.into_iter().filter_map(sanitize_definition_instance_spec).collect(),
             gameplay: GameReadyGameplaySpec {
                 default_status: non_empty_or(self.gameplay.default_status, default_status_text()),
                 pickup_status: non_empty_or(self.gameplay.pickup_status, default_pickup_status()),

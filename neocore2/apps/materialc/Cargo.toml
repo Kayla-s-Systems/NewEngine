@@ -6,3 +6,4 @@ license = "Proprietary"
 
 [dependencies]
 newengine-materials = { path = "../../crates/newengine-materials", features = ["serde"] }
+serde_json = "1"

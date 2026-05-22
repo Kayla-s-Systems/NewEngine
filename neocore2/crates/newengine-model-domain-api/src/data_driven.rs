@@ -2,7 +2,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     DefinitionAssetRef, DefinitionEntriesManifest, DefinitionEntry, DRAWABLE_DICTIONARY_ASSET_KIND,
-    DRAWABLE_DICTIONARY_EXTENSION, ROLE_DEFINITION_ENTRIES, ROLE_DRAWABLE_DICTIONARY,
+    DRAWABLE_DICTIONARY_EXTENSION, ROLE_DEFINITION_ENTRIES, ROLE_DRAWABLE_DICTIONARY, ROLE_MATERIAL_LIBRARY,
     ROLE_TEXTURE_DICTIONARY, TEXTURE_DICTIONARY_EXTENSION,
 };
 
@@ -137,6 +137,7 @@ impl Default for DataDrivenMaterialSlotBinding {
 #[serde(default)]
 pub struct DataDrivenMaterialBindingPolicy {
     pub source: String,
+    pub material_library_role: String,
     pub texture_dictionary_role: String,
     pub policy: String,
 }
@@ -145,8 +146,9 @@ impl Default for DataDrivenMaterialBindingPolicy {
     fn default() -> Self {
         Self {
             source: "definition_entries.asset_chain".to_owned(),
+            material_library_role: ROLE_MATERIAL_LIBRARY.to_owned(),
             texture_dictionary_role: ROLE_TEXTURE_DICTIONARY.to_owned(),
-            policy: "bind_material_slots_from_drawable_using_ytd_texture_dictionary".to_owned(),
+            policy: "bind_drawable_material_slots_to_nemat_entries_then_resolve_ytd_textures".to_owned(),
         }
     }
 }
@@ -164,8 +166,8 @@ impl Default for DataDrivenPackageHint {
     fn default() -> Self {
         Self {
             role: "asset_package".to_owned(),
-            extension: "pak".to_owned(),
-            contains_roles: vec![ROLE_DEFINITION_ENTRIES.to_owned(), ROLE_DRAWABLE_DICTIONARY.to_owned(), ROLE_TEXTURE_DICTIONARY.to_owned()],
+            extension: "nepak".to_owned(),
+            contains_roles: vec![ROLE_DEFINITION_ENTRIES.to_owned(), ROLE_DRAWABLE_DICTIONARY.to_owned(), ROLE_MATERIAL_LIBRARY.to_owned(), ROLE_TEXTURE_DICTIONARY.to_owned()],
             description: "Package/VFS delivery container for the authored asset chain.".to_owned(),
         }
     }

@@ -1,6 +1,7 @@
 #![forbid(unsafe_op_in_unsafe_fn)]
 
 use std::collections::HashMap;
+use std::time::Instant;
 
 use newengine_core::render::RenderApi;
 use newengine_core::{EngineError, EngineResult as CoreResult};
@@ -71,6 +72,7 @@ impl MaterialRenderDevice for CoreRenderMaterialDevice<'_> {
 #[derive(Default)]
 pub struct MaterialGpuRegistry {
     providers: HashMap<&'static str, Box<dyn MaterialGpuPipelineProvider>>,
+    resolved_pipelines: HashMap<String, MaterialGpuPipeline>,
 }
 
 impl MaterialGpuRegistry {
@@ -78,8 +80,9 @@ impl MaterialGpuRegistry {
         let key = provider.key();
         let replaced = self.providers.insert(key.as_str(), provider).is_some();
         if replaced {
+            self.resolved_pipelines.retain(|cache_key, _| !cache_key.starts_with(key.as_str()));
             log::warn!(
-                "render material registry: replaced material-domain provider key='{}'",
+                "render material registry: replaced material-domain provider key='{}'; invalidated cached pipelines for this provider",
                 key.as_str()
             );
         }
@@ -91,6 +94,16 @@ impl MaterialGpuRegistry {
         profile: MaterialPipelineBuildProfile,
         r: &mut dyn RenderApi,
     ) -> CoreResult<MaterialGpuPipeline> {
+        let cache_key = material_pipeline_cache_key(key, profile);
+        if let Some(pipeline) = self.resolved_pipelines.get(&cache_key).copied() {
+            log::debug!(
+                "render material registry: pipeline cache hit key='{}' cache_key='{}'",
+                key.as_str(),
+                cache_key
+            );
+            return Ok(pipeline);
+        }
+
         let Some(provider) = self.providers.get_mut(key.as_str()) else {
             return Err(EngineError::other(format!(
                 "render material registry: no material-domain provider registered key='{}'",
@@ -98,9 +111,45 @@ impl MaterialGpuRegistry {
             )));
         };
 
+        let started_at = Instant::now();
+        log::info!(
+            "render material registry: pipeline request begin key='{}' cache_key='{}' provider_registered=true cache_miss=true",
+            key.as_str(),
+            cache_key
+        );
         let mut device = CoreRenderMaterialDevice::new(r);
-        provider
-            .require_pipeline(profile, &mut device)
-            .map_err(|e| EngineError::other(format!("render material registry: {}", e)))
+        match provider.require_pipeline(profile, &mut device) {
+            Ok(pipeline) => {
+                self.resolved_pipelines.insert(cache_key.clone(), pipeline);
+                log::info!(
+                    "render material registry: pipeline request completed key='{}' cache_key='{}' elapsed_ms={:.2} cached=true",
+                    key.as_str(),
+                    cache_key,
+                    started_at.elapsed().as_secs_f64() * 1000.0
+                );
+                Ok(pipeline)
+            }
+            Err(e) => {
+                log::error!(
+                    "render material registry: pipeline request failed key='{}' err='{}' elapsed_ms={:.2}",
+                    key.as_str(),
+                    e,
+                    started_at.elapsed().as_secs_f64() * 1000.0
+                );
+                Err(EngineError::other(format!("render material registry: {}", e)))
+            }
+        }
     }
+}
+
+fn material_pipeline_cache_key(
+    key: MaterialGpuPipelineKey,
+    profile: MaterialPipelineBuildProfile,
+) -> String {
+    format!(
+        "{}|scene={:?}|shadow={:?}",
+        key.as_str(),
+        profile.scene_hdr_color_format,
+        profile.shadow_map_color_format
+    )
 }

@@ -69,6 +69,22 @@ impl ViewportInputSnap {
 
 
     #[inline]
+    pub(super) fn apply_gameplay_input_handoff(
+        &mut self,
+        policy: &super::super::runtime_profile::GameplayInputProfile,
+    ) {
+        if policy.force_gameplay_actions {
+            self.move_mask |= self.actions.move_mask;
+        }
+        if policy.force_gameplay_look {
+            self.active = true;
+            self.look_drag = true;
+            self.ui_busy = false;
+            self.fly_rmb = policy.capture_cursor_on_play;
+        }
+    }
+
+    #[inline]
     pub(super) fn action_carrier(&mut self) -> InputActionFrameCarrier<'_> {
         InputActionFrameCarrier {
             dx_px: &mut self.dx_px,

@@ -1,16 +1,11 @@
 #![forbid(unsafe_op_in_unsafe_fn)]
 
-//! Binary material format.
+//! Low-level binary material descriptor payload helpers.
 //!
-//! This module defines a deterministic, little-endian, forward-compatible container for
-//! storing materials on disk and in caches.
-//!
-//! The format is intentionally conservative:
-//! - No platform-dependent struct layout.
-//! - No `unsafe`.
-//! - Explicit versioning.
-//!
-//! File extension recommendation: `.nemat`.
+//! Public `.nemat` files are NEF8/ListFile material libraries selected as
+//! `file.nemat@entry`. This module is intentionally limited to compact descriptor
+//! payload encoding/decoding for tools or inner entry payloads; it is not the
+//! top-level `.nemat` runtime file contract.
 
 mod codec;
 mod error;

@@ -58,7 +58,6 @@ members = [
     "crates/newengine-scene-runtime",
     "crates/newengine-service-api",
     "crates/newengine-service-kit",
-    "crates/newengine-shader-compiler",
     "crates/newengine-sim",
     "crates/newengine-system-contracts",
     "crates/newengine-system-runtime",

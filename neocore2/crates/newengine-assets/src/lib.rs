@@ -7,4 +7,13 @@ pub mod file_type_registry;
 
 pub use asset_service_client::AssetServiceClient;
 pub use file_type_registry::{asset_file_types_gateway_service, asset_file_types_service_info, register_asset_file_types_gateway_best_effort};
-pub use newengine_assets_api::{wait_ready, AssetAccess, AssetDecodeRequest, AssetEntryDependency, AssetEntryManifest, AssetError, AssetErrorKind, AssetFileManifest, AssetFileTypeDescriptor, AssetFileTypeManifest, AssetFileTypeProbeRequest, AssetFileTypeProbeResult, AssetFileTypeRegisterRequest, AssetGatewayRoute, AssetReference, AssetResult, AssetService, AssetState, Rgba8TextureAsset, RuntimeTextureAsset, RuntimeTextureFormat, RuntimeTextureMip, RuntimeTextureMipLayout, WaitReadyError};
+pub use newengine_assets_api::{
+    wait_ready, AssetAccess, AssetDecodeRequest, AssetEntryDependency, AssetEntryManifest,
+    AssetError, AssetErrorKind, AssetFileManifest, AssetFileTypeDescriptor,
+    AssetFileTypeManifest, AssetFileTypeProbeRequest, AssetFileTypeProbeResult,
+    AssetFileTypeRegisterRequest, AssetGatewayRoute, AssetReference, AssetResult,
+    AssetService, AssetState, Rgba8TextureAsset, RuntimeTextureAsset,
+    RuntimeTextureFormat, RuntimeTextureMip, RuntimeTextureMipLayout, WaitReadyError,
+    ENGINE_ASSET_SERVICE_ID, ENGINE_DEFINITIONS_SERVICE_ID, ENGINE_MATERIALS_SERVICE_ID,
+    ENGINE_MODEL_SERVICE_ID, ENGINE_TEXTURES_SERVICE_ID,
+};

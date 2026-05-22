@@ -72,6 +72,32 @@ impl SceneBridge {
     }
 
     #[inline]
+    pub fn cmd_instantiate_definition(&self, definition_ref: String, position: Vec3) {
+        self.queue.lock().cmds.push(SceneCommand::InstantiateDefinition {
+            definition_ref,
+            position: [position.x, position.y, position.z],
+            rotation_ypr: [0.0, 0.0, 0.0],
+            scale: [1.0, 1.0, 1.0],
+        });
+    }
+
+    #[inline]
+    pub fn cmd_instantiate_definition_with_transform(
+        &self,
+        definition_ref: String,
+        position: Vec3,
+        rotation_ypr: (f32, f32, f32),
+        scale: Vec3,
+    ) {
+        self.queue.lock().cmds.push(SceneCommand::InstantiateDefinition {
+            definition_ref,
+            position: [position.x, position.y, position.z],
+            rotation_ypr: [rotation_ypr.0, rotation_ypr.1, rotation_ypr.2],
+            scale: [scale.x, scale.y, scale.z],
+        });
+    }
+
+    #[inline]
     pub fn cmd_set_transform(
         &self,
         entity: EntityId,

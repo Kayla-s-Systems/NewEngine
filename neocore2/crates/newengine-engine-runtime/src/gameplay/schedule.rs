@@ -7,12 +7,33 @@ use newengine_core::physics::PhysicsApiRef;
 
 use crate::authority::{current_entity_authority_map, current_world_authority_frame};
 
-#[inline]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum PhysicsIntegrationMode {
+    ServiceBackend,
+    EcsFallback,
+}
+
 pub fn run_schedule(
     schedule: &mut SimSchedule,
     world: &mut World,
     dt: f32,
     physics_api: Option<&PhysicsApiRef>,
+) {
+    run_schedule_with_physics_mode(
+        schedule,
+        world,
+        dt,
+        physics_api,
+        PhysicsIntegrationMode::ServiceBackend,
+    );
+}
+
+pub fn run_schedule_with_physics_mode(
+    schedule: &mut SimSchedule,
+    world: &mut World,
+    dt: f32,
+    physics_api: Option<&PhysicsApiRef>,
+    physics_mode: PhysicsIntegrationMode,
 ) {
     let frame = SimFrame::new(dt.max(0.0001), 0);
 
@@ -29,14 +50,24 @@ pub fn run_schedule(
         );
     }
 
-    // Service-backed physics owns integration for PhysicsBodyDesc entities.
-    // Do not run the default in-process SimStage::Physics velocity integrator
-    // here, otherwise controlled characters are moved once by ECS and again by
-    // the backend provider.
     schedule.run_stage(world, SimStage::Input, frame);
     schedule.run_stage(world, SimStage::Controllers, frame);
     schedule.run_stage(world, SimStage::ApplyIntents, frame);
-    step_service_physics(world, frame.dt, physics_api);
+    match physics_mode {
+        PhysicsIntegrationMode::ServiceBackend => {
+            // Service-backed physics owns integration for PhysicsBodyDesc entities.
+            // Do not run the default in-process SimStage::Physics velocity integrator
+            // here, otherwise controlled characters are moved once by ECS and again by
+            // the backend provider.
+            step_service_physics(world, frame.dt, physics_api);
+        }
+        PhysicsIntegrationMode::EcsFallback => {
+            // Declarative safe-profile fallback: keep gameplay controls responsive
+            // without entering the native physics provider path. This is a capability
+            // downgrade, not a game-specific shortcut.
+            schedule.run_stage(world, SimStage::Physics, frame);
+        }
+    }
     schedule.run_stage(world, SimStage::Derived, frame);
 
     step_fps_demo_gameplay(world, frame.dt);

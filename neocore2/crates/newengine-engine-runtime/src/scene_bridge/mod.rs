@@ -1,6 +1,7 @@
 #![forbid(unsafe_op_in_unsafe_fn)]
 
 mod commands;
+mod definitions_runtime;
 mod game_ready;
 mod helpers;
 mod imported_assets;
@@ -12,6 +13,7 @@ mod apply_commands;
 mod view_gateway;
 
 pub use commands::SceneCommand;
+pub use definitions_runtime::{DefinitionInstance, DefinitionInstantiateTransform, DefinitionRuntimeTrace, DefinitionRuntimeTraceComponent, RuntimeCommand};
 pub use imported_assets::{
     PrimitiveMaterialBase, SceneImportedAssetAssembler, SceneImportedAssetAssemblyDescriptor,
     SceneImportedAssetAssemblyKind, SceneImportedAssetDescriptor, SceneImportedAssetKind,

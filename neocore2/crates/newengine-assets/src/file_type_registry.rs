@@ -50,10 +50,7 @@ impl FileTypeRegistryState {
 
     fn register(&mut self, request: AssetFileTypeRegisterRequest) -> AssetFileTypeDescriptor {
         let mut desc = request.descriptor;
-        desc.extension = AssetFileTypeDescriptor::extension_key(&desc.extension);
-        if desc.handler_service.trim().is_empty() {
-            desc.handler_service = desc.gateway.clone();
-        }
+        desc.normalize_layer_contract();
         if let Err(e) = desc.validate_generic_rules() {
             let mut rejected = desc.clone();
             rejected.notes = format!("descriptor rejected by generic codec rules: {e}");
@@ -176,6 +173,69 @@ pub fn register_asset_file_types_gateway_best_effort() -> bool {
         owner: "newengine-assets.file-type-registry",
         service: asset_file_types_gateway_service(),
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn register_one(descriptor: AssetFileTypeDescriptor) -> AssetFileTypeDescriptor {
+        let mut state = FileTypeRegistryState::default();
+        state.register(AssetFileTypeRegisterRequest { descriptor })
+    }
+
+    #[test]
+    fn registry_exposes_layer_split_for_ytd() {
+        let registered = register_one(AssetFileTypeDescriptor {
+            extension: "ytd".to_owned(),
+            asset_kind: "texture_dictionary".to_owned(),
+            container: "newengine.listfile.nef8.ytd".to_owned(),
+            codec_type: newengine_assets_api::codec_type::LIST_FILE.to_owned(),
+            handler_service: "asset.codec.listfile.ytd".to_owned(),
+            magic: Some("4e454638".to_owned()),
+            ..Default::default()
+        });
+        assert_eq!(registered.byte_owner, newengine_assets_api::ENGINE_ASSET_SERVICE_ID);
+        assert_eq!(registered.semantic_gateway, newengine_assets_api::ENGINE_TEXTURES_SERVICE_ID);
+        assert_eq!(registered.gateway, newengine_assets_api::ENGINE_TEXTURES_SERVICE_ID);
+        assert!(registered.consumer_domains.iter().any(|it| it == newengine_assets_api::ENGINE_MATERIALS_SERVICE_ID));
+    }
+
+    #[test]
+    fn registry_exposes_definitions_for_ytyp_not_scene() {
+        let registered = register_one(AssetFileTypeDescriptor {
+            extension: "ytyp".to_owned(),
+            asset_kind: "archetype_dictionary".to_owned(),
+            container: "newengine.listfile.nef8.ytyp".to_owned(),
+            codec_type: newengine_assets_api::codec_type::LIST_FILE.to_owned(),
+            handler_service: "asset.codec.listfile.ytyp".to_owned(),
+            magic: Some("4e454638".to_owned()),
+            ..Default::default()
+        });
+        assert_eq!(registered.byte_owner, newengine_assets_api::ENGINE_ASSET_SERVICE_ID);
+        assert_eq!(registered.semantic_gateway, newengine_assets_api::ENGINE_DEFINITIONS_SERVICE_ID);
+        assert_ne!(registered.semantic_gateway, "engine.scene");
+        assert!(registered.consumer_domains.iter().any(|it| it == "engine.ai"));
+    }
+
+    #[test]
+    fn registry_keeps_nepak_under_engine_assets() {
+        let registered = register_one(AssetFileTypeDescriptor {
+            extension: "nepak".to_owned(),
+            asset_kind: "asset_package".to_owned(),
+            container: "newengine.asset_package.v1".to_owned(),
+            codec_type: newengine_assets_api::codec_type::CONTAINER.to_owned(),
+            handler_service: "asset.codec.nepak".to_owned(),
+            magic: Some("4e4550414b010000".to_owned()),
+            allow_nested_assets: true,
+            native_container: true,
+            ..Default::default()
+        });
+        assert_eq!(registered.byte_owner, newengine_assets_api::ENGINE_ASSET_SERVICE_ID);
+        assert_eq!(registered.semantic_gateway, newengine_assets_api::ENGINE_ASSET_SERVICE_ID);
+        assert_eq!(registered.consumer_domains, vec![newengine_assets_api::ENGINE_ASSET_SERVICE_ID.to_owned()]);
+        assert!(registered.selector_syntax.is_none());
+    }
 }
 
 fn normalize_logical_path(path: &str) -> String {

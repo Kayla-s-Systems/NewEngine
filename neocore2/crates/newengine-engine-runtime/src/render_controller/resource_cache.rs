@@ -6,7 +6,6 @@ use newengine_core::render::{
     TextureId, TextureMipDataDesc, TextureUsage,
 };
 use newengine_plugin_host::default_host_api;
-use newengine_texture_container::TextureDictionarySelector;
 use std::num::NonZeroU32;
 
 use super::controller::RuntimeRenderController;
@@ -37,43 +36,12 @@ impl RuntimeRenderController {
         assets: &AssetServiceClient,
         path: String,
     ) {
-        let selector = match TextureDictionarySelector::parse_material_path(&path) {
-            Ok(Some(selector)) => selector,
-            Ok(None) => {
-                let message = "material texture reference is not a .ytd@entry selector".to_owned();
-                log::warn!(
-                    "render controller: material texture rejected path='{}' err='{}'",
-                    path,
-                    message
-                );
-                self.gpu.material.textures.insert(path, MaterialTextureGpuResidency::Failed { message });
-                return;
-            }
-            Err(e) => {
-                let message = e.to_string();
-                log::warn!(
-                    "render controller: material texture selector parse failed path='{}' err='{}'",
-                    path,
-                    message
-                );
-                self.gpu.material.textures.insert(path, MaterialTextureGpuResidency::Failed { message });
-                return;
-            }
-        };
-
-        let texture_asset = match assets.texture_dictionary_runtime_v1_typed(
-            &selector.dictionary_path,
-            selector.texture_name.as_deref(),
-            selector.texture_hash,
-        ) {
+        let texture_asset = match assets.textures_entry_runtime_ref_v1_typed(&path) {
             Ok(texture_asset) => texture_asset,
             Err(e) if e.kind == AssetErrorKind::NotReady => {
                 log::debug!(
-                    "render controller: material texture dictionary pending path='{}' dictionary='{}' name='{:?}' hash='{:?}' err='{}'",
+                    "render controller: material texture packet pending path='{}' method='textures.entry_runtime_v1' err='{}'",
                     path,
-                    selector.dictionary_path,
-                    selector.texture_name,
-                    selector.texture_hash,
                     e
                 );
                 self.gpu.material.textures.insert(
@@ -86,13 +54,10 @@ impl RuntimeRenderController {
                 return;
             }
             Err(e) => {
-                let message = format!("asset.texture_dictionary_runtime_v1 failed err='{e}'");
+                let message = format!("textures.entry_runtime_v1 failed err='{e}'");
                 let line = format!(
-                    "render controller: material texture dictionary lookup failed path='{}' dictionary='{}' name='{:?}' hash='{:?}' kind='{}' err='{}'",
+                    "render controller: material texture packet lookup failed path='{}' method='textures.entry_runtime_v1' kind='{}' err='{}'",
                     path,
-                    selector.dictionary_path,
-                    selector.texture_name,
-                    selector.texture_hash,
                     e.kind,
                     e,
                 );
@@ -126,9 +91,8 @@ impl RuntimeRenderController {
         ) {
             Ok(texture) => {
                 log::debug!(
-                    "render controller: material texture dictionary upload queued path='{}' dictionary='{}' texture={:?} frame={}",
+                    "render controller: material texture packet upload queued path='{}' method='textures.entry_runtime_v1' texture={:?} frame={}",
                     path,
-                    selector.dictionary_path,
                     texture,
                     self.frame.frame_index
                 );

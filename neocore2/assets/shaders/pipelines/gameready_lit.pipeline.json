@@ -1,0 +1,53 @@
+{
+  "schema": "newengine.shader_pipeline.gameready_lit.v1",
+  "shaders": {
+    "lit_vs": {
+      "logical_path": "shaders/game_lit_shadowed_v1.vert",
+      "source_kind": "glsl",
+      "entry": "main",
+      "variant_id": "gameready_lit"
+    },
+    "lit_fs": {
+      "logical_path": "shaders/game_lit_shadowed_v1.frag",
+      "source_kind": "glsl",
+      "entry": "main",
+      "variant_id": "gameready_lit"
+    },
+    "terrain_fs": {
+      "logical_path": "shaders/game_terrain_surface_v1.frag",
+      "source_kind": "glsl",
+      "entry": "main",
+      "variant_id": "gameready_terrain"
+    },
+    "shadow_vs": {
+      "logical_path": "shaders/game_sun_shadow_depth_v1.vert",
+      "source_kind": "glsl",
+      "entry": "main",
+      "variant_id": "gameready_shadow"
+    },
+    "shadow_fs": {
+      "logical_path": "shaders/game_sun_shadow_depth_v1.frag",
+      "source_kind": "glsl",
+      "entry": "main",
+      "variant_id": "gameready_shadow"
+    },
+    "instanced_vs": {
+      "logical_path": "shaders/game_lit_instanced_v1.vert",
+      "source_kind": "glsl",
+      "entry": "main",
+      "variant_id": "gameready_lit_instanced"
+    },
+    "instanced_fs": {
+      "logical_path": "shaders/game_lit_instanced_v1.frag",
+      "source_kind": "glsl",
+      "entry": "main",
+      "variant_id": "gameready_lit_instanced"
+    },
+    "shadow_instanced_vs": {
+      "logical_path": "shaders/game_sun_shadow_depth_instanced_v1.vert",
+      "source_kind": "glsl",
+      "entry": "main",
+      "variant_id": "gameready_shadow_instanced"
+    }
+  }
+}

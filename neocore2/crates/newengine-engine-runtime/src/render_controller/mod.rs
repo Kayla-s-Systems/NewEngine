@@ -9,6 +9,7 @@ mod resource_lifetime;
 mod state;
 mod resource_cache;
 mod render_quality;
+mod runtime_profile;
 mod viewport;
 
 pub use controller::RuntimeRenderController;

@@ -1,7 +1,7 @@
 use newengine_core::render::*;
 use newengine_core::EngineResult as CoreResult;
 
-use super::shader_assets::{compile_glsl, load_text_asset};
+use super::shader_manifest::load_runtime_shader_program_manifest;
 use super::types::{DebugLineGpu, DEBUG_LINE_UBO_SIZE};
 
 pub fn ensure_debug_line_pipeline(
@@ -25,17 +25,40 @@ pub fn ensure_debug_line_pipeline(
 
     let capacity_vertices = min_vertices.max(256).next_power_of_two();
 
-    let vs_src = load_text_asset("shaders/game_debug_lines.vert")?;
-    let fs_src = load_text_asset("shaders/game_debug_lines.frag")?;
-    let vs_spv = compile_glsl(ShaderStage::Vertex, "game_debug_lines.vert", &vs_src)?;
-    let fs_spv = compile_glsl(ShaderStage::Fragment, "game_debug_lines.frag", &fs_src)?;
+    let manifest = load_runtime_shader_program_manifest("shaders/pipelines/debug_lines.pipeline.json")?;
+    let vs_asset = manifest.shaders.vertex;
+    let fs_asset = manifest.shaders.fragment;
 
-    let vs = r.create_shader(
-        ShaderDesc::new(ShaderStage::Vertex, "main", vs_spv).with_label("game_debug_lines_vs"),
-    )?;
-    let fs = r.create_shader(
-        ShaderDesc::new(ShaderStage::Fragment, "main", fs_spv).with_label("game_debug_lines_fs"),
-    )?;
+    let vs_kind = vs_asset.source_kind()?;
+    let vs_desc = ShaderDesc::from_asset(
+        ShaderStage::Vertex,
+        vs_asset.entry.clone(),
+        vs_asset.logical_path.clone(),
+        vs_kind,
+    )
+    .with_asset(
+        ShaderAssetDesc::new(vs_asset.logical_path, vs_kind)
+            .with_entry(vs_asset.entry)
+            .with_variant(vs_asset.variant_id),
+    )
+    .with_label("game_debug_lines_vs");
+
+    let fs_kind = fs_asset.source_kind()?;
+    let fs_desc = ShaderDesc::from_asset(
+        ShaderStage::Fragment,
+        fs_asset.entry.clone(),
+        fs_asset.logical_path.clone(),
+        fs_kind,
+    )
+    .with_asset(
+        ShaderAssetDesc::new(fs_asset.logical_path, fs_kind)
+            .with_entry(fs_asset.entry)
+            .with_variant(fs_asset.variant_id),
+    )
+    .with_label("game_debug_lines_fs");
+
+    let vs = r.create_shader(vs_desc)?;
+    let fs = r.create_shader(fs_desc)?;
 
     let layout = VertexLayout::new(
         32,

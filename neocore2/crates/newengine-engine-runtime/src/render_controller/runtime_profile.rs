@@ -1,0 +1,294 @@
+#![forbid(unsafe_op_in_unsafe_fn)]
+
+use serde::{Deserialize, Serialize};
+use serde_json::Value;
+
+/// Declarative render-runtime profile loaded through the host plugin config service.
+///
+/// The reusable engine runtime must not hard-code GPU names, environment toggles or
+/// game-specific fallbacks. Profiles describe degradable capabilities; providers and
+/// feature packs decide what to register. This is the small engine-side contract that
+/// lets a host/application select a safer first playable path without recompiling.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub(crate) struct RenderRuntimeProfile {
+    #[serde(default = "default_profile_id")]
+    pub(crate) id: String,
+    #[serde(default)]
+    pub(crate) legacy_safe: bool,
+    #[serde(default)]
+    pub(crate) graphics: GraphicsProfile,
+    #[serde(default)]
+    pub(crate) world: WorldRuntimeProfile,
+    #[serde(default)]
+    pub(crate) input: GameplayInputProfile,
+    #[serde(default)]
+    pub(crate) menu: MenuRestoreProfile,
+}
+
+#[derive(Clone, Copy, Debug, Serialize, Deserialize)]
+pub(crate) struct GraphicsProfile {
+    #[serde(default = "default_clear_color")]
+    pub(crate) clear_color: [f32; 4],
+    #[serde(default)]
+    pub(crate) sky: SkyPassProfile,
+    #[serde(default)]
+    pub(crate) shadows: FeatureSwitch,
+    #[serde(default)]
+    pub(crate) hdr_scene: FeatureSwitch,
+    #[serde(default)]
+    pub(crate) postfx: FeatureSwitch,
+    #[serde(default)]
+    pub(crate) deferred: FeatureSwitch,
+}
+
+#[derive(Clone, Copy, Debug, Serialize, Deserialize)]
+pub(crate) struct SkyPassProfile {
+    /// `native` keeps authored sky visuals, `clear_gradient` and `disabled` quarantine
+    /// skydome primitives so broken fallback materials cannot fill the scene.
+    #[serde(default = "default_sky_mode")]
+    pub(crate) mode: SkyPassMode,
+    #[serde(default)]
+    pub(crate) tick_cycle: FeatureSwitch,
+}
+
+#[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub(crate) enum SkyPassMode {
+    Native,
+    ClearGradient,
+    Disabled,
+}
+
+#[derive(Clone, Copy, Debug, Serialize, Deserialize)]
+pub(crate) struct WorldRuntimeProfile {
+    #[serde(default)]
+    pub(crate) runtime_terrain_streaming: FeatureSwitch,
+    #[serde(default)]
+    pub(crate) service_physics: FeatureSwitch,
+    #[serde(default = "default_true")]
+    pub(crate) fallback_ecs_physics: bool,
+}
+
+#[derive(Clone, Copy, Debug, Serialize, Deserialize)]
+pub(crate) struct GameplayInputProfile {
+    #[serde(default = "default_true")]
+    pub(crate) capture_cursor_on_play: bool,
+    #[serde(default = "default_true")]
+    pub(crate) force_gameplay_look: bool,
+    #[serde(default = "default_true")]
+    pub(crate) force_gameplay_actions: bool,
+}
+
+#[derive(Clone, Copy, Debug, Serialize, Deserialize)]
+pub(crate) struct MenuRestoreProfile {
+    #[serde(default = "default_true")]
+    pub(crate) restore_viewport_pass_on_close: bool,
+    #[serde(default = "default_true")]
+    pub(crate) restore_gameplay_input_on_close: bool,
+    #[serde(default = "default_true")]
+    pub(crate) invalidate_shadow_cache_on_close: bool,
+}
+
+#[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub(crate) enum FeatureSwitch {
+    Enabled,
+    Disabled,
+}
+
+impl Default for FeatureSwitch {
+    #[inline]
+    fn default() -> Self {
+        Self::Enabled
+    }
+}
+
+impl FeatureSwitch {
+    #[inline]
+    pub(crate) const fn enabled(self) -> bool {
+        matches!(self, Self::Enabled)
+    }
+}
+
+impl Default for RenderRuntimeProfile {
+    #[inline]
+    fn default() -> Self {
+        Self {
+            id: default_profile_id(),
+            legacy_safe: false,
+            graphics: GraphicsProfile::default(),
+            world: WorldRuntimeProfile::default(),
+            input: GameplayInputProfile::default(),
+            menu: MenuRestoreProfile::default(),
+        }
+    }
+}
+
+impl Default for GraphicsProfile {
+    #[inline]
+    fn default() -> Self {
+        Self {
+            clear_color: default_clear_color(),
+            sky: SkyPassProfile::default(),
+            shadows: FeatureSwitch::Enabled,
+            hdr_scene: FeatureSwitch::Enabled,
+            postfx: FeatureSwitch::Enabled,
+            deferred: FeatureSwitch::Disabled,
+        }
+    }
+}
+
+impl Default for SkyPassProfile {
+    #[inline]
+    fn default() -> Self {
+        Self {
+            mode: SkyPassMode::Native,
+            tick_cycle: FeatureSwitch::Enabled,
+        }
+    }
+}
+
+impl Default for WorldRuntimeProfile {
+    #[inline]
+    fn default() -> Self {
+        Self {
+            runtime_terrain_streaming: FeatureSwitch::Enabled,
+            service_physics: FeatureSwitch::Enabled,
+            fallback_ecs_physics: true,
+        }
+    }
+}
+
+impl Default for GameplayInputProfile {
+    #[inline]
+    fn default() -> Self {
+        Self {
+            capture_cursor_on_play: true,
+            force_gameplay_look: true,
+            force_gameplay_actions: true,
+        }
+    }
+}
+
+impl Default for MenuRestoreProfile {
+    #[inline]
+    fn default() -> Self {
+        Self {
+            restore_viewport_pass_on_close: true,
+            restore_gameplay_input_on_close: true,
+            invalidate_shadow_cache_on_close: true,
+        }
+    }
+}
+
+impl RenderRuntimeProfile {
+    pub(crate) fn load() -> Self {
+        let raw = newengine_plugin_host::get_plugin_overrides_with_env("newengine.engine_runtime");
+        let Some(render_value) = raw.get("render") else {
+            return Self::default();
+        };
+        let candidate = render_value
+            .get("runtime_profile")
+            .or_else(|| render_value.get("profile"))
+            .cloned()
+            .unwrap_or_else(|| render_value.clone());
+        match serde_json::from_value::<Self>(candidate) {
+            Ok(profile) => {
+                log::info!(
+                    "render runtime profile: loaded id='{}' legacy_safe={} sky={:?} service_physics={} terrain_streaming={} shadows={} hdr={} postfx={} deferred={}",
+                    profile.id,
+                    profile.legacy_safe,
+                    profile.graphics.sky.mode,
+                    profile.world.service_physics.enabled(),
+                    profile.world.runtime_terrain_streaming.enabled(),
+                    profile.graphics.shadows.enabled(),
+                    profile.graphics.hdr_scene.enabled(),
+                    profile.graphics.postfx.enabled(),
+                    profile.graphics.deferred.enabled(),
+                );
+                profile
+            }
+            Err(e) => {
+                log::warn!(
+                    "render runtime profile: failed to decode config; using defaults err='{}' raw={}",
+                    e,
+                    compact_json(&raw),
+                );
+                Self::default()
+            }
+        }
+    }
+
+    #[inline]
+    pub(crate) fn legacy_safe_enabled(&self) -> bool {
+        self.legacy_safe
+    }
+
+    #[inline]
+    pub(crate) fn draw_sky_visuals(&self) -> bool {
+        matches!(self.graphics.sky.mode, SkyPassMode::Native)
+    }
+
+    #[inline]
+    pub(crate) fn tick_sky_cycle(&self) -> bool {
+        self.graphics.sky.tick_cycle.enabled()
+    }
+
+    #[inline]
+    pub(crate) fn use_service_physics(&self) -> bool {
+        self.world.service_physics.enabled()
+    }
+
+    #[inline]
+    pub(crate) fn use_runtime_terrain_streaming(&self) -> bool {
+        self.world.runtime_terrain_streaming.enabled()
+    }
+
+    #[inline]
+    pub(crate) fn use_fallback_ecs_physics(&self) -> bool {
+        !self.use_service_physics() && self.world.fallback_ecs_physics
+    }
+
+    #[inline]
+    pub(crate) fn shadows_enabled(&self) -> bool {
+        self.graphics.shadows.enabled()
+    }
+
+    #[inline]
+    pub(crate) fn hdr_scene_enabled(&self) -> bool {
+        self.graphics.hdr_scene.enabled()
+    }
+
+    #[inline]
+    pub(crate) fn postfx_enabled(&self) -> bool {
+        self.graphics.postfx.enabled()
+    }
+
+    #[inline]
+    pub(crate) fn deferred_enabled(&self) -> bool {
+        self.graphics.deferred.enabled()
+    }
+
+    #[inline]
+    pub(crate) fn configured_clear_color(&self) -> [f32; 4] {
+        self.graphics.clear_color
+    }
+}
+
+#[inline]
+fn default_profile_id() -> String {
+    "newengine.render.runtime.default".to_owned()
+}
+
+#[inline]
+const fn default_true() -> bool { true }
+
+#[inline]
+const fn default_clear_color() -> [f32; 4] { [0.020, 0.025, 0.035, 1.0] }
+
+#[inline]
+const fn default_sky_mode() -> SkyPassMode { SkyPassMode::Native }
+
+fn compact_json(value: &Value) -> String {
+    serde_json::to_string(value).unwrap_or_else(|_| "<unprintable>".to_owned())
+}

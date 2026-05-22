@@ -24,6 +24,12 @@ pub const RENDER_SERVICE_METHOD_SHUTDOWN_V1: &str = newengine_service_api::SERVI
 /// byte payloads as JSON arrays on every frame.
 pub const RENDER_SERVICE_METHOD_COMMAND_BATCH_BIN_V1: &str = "command_batch_bin_v1";
 
+/// Renderer diagnostics surfaces. These are JSON control-plane dumps, not frame hot-path commands.
+pub const RENDER_SERVICE_METHOD_DUMP_PHASE_GRAPH_V1: &str = "engine.render.dump_phase_graph_v1";
+pub const RENDER_SERVICE_METHOD_DUMP_RESOURCE_LIFETIME_V1: &str = "engine.render.dump_resource_lifetime_v1";
+pub const RENDER_SERVICE_METHOD_DUMP_SHADER_CACHE_V1: &str = "engine.render.dump_shader_cache_v1";
+pub const RENDER_SERVICE_METHOD_DUMP_EFFECT_GRAPH_V1: &str = "engine.render.dump_effect_graph_v1";
+
 /// Generic backend-family declaration for render providers.
 pub const RENDER_BACKEND_SERVICE_SPEC: newengine_service_api::BackendServiceSpec =
     newengine_service_api::BackendServiceSpec::new(

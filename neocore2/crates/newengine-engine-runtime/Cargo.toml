@@ -56,7 +56,6 @@ newengine-scene = { path = "../newengine-scene", features = ["runtime"] }
 newengine-scene-io = { path = "../newengine-scene-io" }
 newengine-service-api = { path = "../newengine-service-api" }
 newengine-service-kit = { path = "../newengine-service-kit" }
-newengine-shader-compiler = { path = "../newengine-shader-compiler" }
 newengine-sim = { path = "../newengine-sim" }
 newengine-transform = { path = "../newengine-transform", features = ["ecs", "service"], default-features = false }
 newengine-transform-api = { path = "../newengine-transform-api" }

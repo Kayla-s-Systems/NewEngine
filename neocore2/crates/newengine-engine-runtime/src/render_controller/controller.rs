@@ -10,7 +10,7 @@ use super::gpu::{MaterialGpuPipelineKey, MaterialGpuPipelineProvider};
 use newengine_render_feature_api::{LightExtractionProvider, RenderDrawListProvider};
 use super::state::{
     RenderBridgeState, RenderDiagnosticsRuntimeState, RenderFeatureProviderState,
-    RenderFrameRuntimeState, RenderGpuSceneState, RenderMenuRuntimeState, RenderShadowRuntimeState, RenderViewportState,
+    RenderFrameRuntimeState, RenderGpuSceneState, RenderMenuRuntimeState, RenderRuntimeProfileState, RenderShadowRuntimeState, RenderViewportState,
 };
 
 /// Engine-side render composition root.
@@ -27,9 +27,53 @@ pub struct RuntimeRenderController {
     pub(super) frame: RenderFrameRuntimeState,
     pub(super) diagnostics: RenderDiagnosticsRuntimeState,
     pub(super) menu: RenderMenuRuntimeState,
+    pub(super) runtime_profile: RenderRuntimeProfileState,
 }
 
 impl RuntimeRenderController {
+
+    #[inline]
+    pub(crate) fn runtime_profile(&self) -> &super::runtime_profile::RenderRuntimeProfile {
+        &self.runtime_profile.profile
+    }
+
+    pub(super) fn restore_playable_view_after_menu_close(&mut self) {
+        let restore_viewport = self.runtime_profile().menu.restore_viewport_pass_on_close;
+        let invalidate_shadow_cache = self.runtime_profile().menu.invalidate_shadow_cache_on_close;
+        let restore_input = self.runtime_profile().menu.restore_gameplay_input_on_close;
+        if restore_viewport && self.viewport.pass_disabled {
+            log::warn!(
+                "render controller: menu restore reopened viewport GPU pass after pause/settings close"
+            );
+            self.viewport.pass_disabled = false;
+        }
+        if invalidate_shadow_cache {
+            self.shadows.cache_valid = false;
+        }
+        if restore_input {
+            self.frame.input_systems.set_enabled(
+                crate::input_systems::InputRuntimeSystem::Actions,
+                true,
+                "menu restore contract",
+                self.frame.frame_index,
+            );
+            self.frame.input_systems.set_enabled(
+                crate::input_systems::InputRuntimeSystem::GameplayMovement,
+                true,
+                "menu restore contract",
+                self.frame.frame_index,
+            );
+            self.frame.input_systems.set_enabled(
+                crate::input_systems::InputRuntimeSystem::CameraLook,
+                true,
+                "menu restore contract",
+                self.frame.frame_index,
+            );
+        }
+        newengine_core::crash::record_breadcrumb(
+            "render controller: menu restore contract applied".to_owned(),
+        );
+    }
 
     /// Registers a profile-owned draw-list provider.
     ///
@@ -143,6 +187,7 @@ impl RuntimeRenderController {
             frame: RenderFrameRuntimeState::new(),
             diagnostics: RenderDiagnosticsRuntimeState::new(),
             menu: RenderMenuRuntimeState::new(),
+            runtime_profile: RenderRuntimeProfileState::new(),
         }
     }
 }

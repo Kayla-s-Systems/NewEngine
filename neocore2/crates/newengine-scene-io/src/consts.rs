@@ -43,12 +43,16 @@ pub mod method {
     ///
     /// Request payload: json `{ path, pretty, options }`.
     pub const SAVE_JSON_V1: &str = "scene.save_json_v1";
+
+    /// Idempotent service shutdown hook used by the plugin manager.
+    pub const SHUTDOWN_V1: &str = "shutdown_v1";
 }
 
 pub const SCENE_REQUIRED_METHODS: &[&str] = &[
     method::FORMATS_JSON,
     method::LOAD_JSON_V1,
     method::SAVE_JSON_V1,
+    method::SHUTDOWN_V1,
 ];
 
 pub const SCENE_RUNTIME_CONTRACT_SPEC: RuntimeServiceContractSpec = RuntimeServiceContractSpec::new(

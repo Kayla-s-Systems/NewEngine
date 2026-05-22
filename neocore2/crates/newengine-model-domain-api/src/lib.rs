@@ -5,11 +5,11 @@
 //! The crate owns one canonical model chain:
 //!
 //! ```text
-//! .ytyp Definition Entries -> .ydd drawable dictionary -> .ytd texture dictionary
+//! .ytyp Definition Entries -> .ydd drawable dictionary -> .nemat material library -> .ytd texture dictionary
 //! ```
 //!
-//! `.pak` packages are VFS delivery containers for that chain. `.neytd`
-//! is legacy/cache-only and must not be referenced by authored YTYP metadata.
+//! `.nepak` packages are separate VFS delivery containers for that chain. There is
+//! no public `.neytd` role or compatibility alias in this contract.
 
 mod asset_chain;
 mod asset_graph;
@@ -53,25 +53,21 @@ pub const MODEL_SERVICE_METHOD_VALIDATE_JSON_V1: &str = "validate_json_v1";
 
 pub const DRAWABLE_DICTIONARY_EXTENSION: &str = "ydd";
 pub const DRAWABLE_DICTIONARY_ASSET_KIND: &str = "drawable_dictionary";
-pub const DRAWABLE_DICTIONARY_CONTAINER: &str = "rockstar.drawable_dictionary.rsc7";
-pub const DRAWABLE_DICTIONARY_MAGIC: [u8; 4] = *b"RSC7";
+pub const DRAWABLE_DICTIONARY_CONTAINER: &str = "newengine.listfile.nef8.ydd";
 pub const DRAWABLE_DICTIONARY_MANIFEST_SCHEMA: &str = "newengine.drawable_dictionary.manifest.v1";
 pub const MODEL_SERVICE_METHOD_DRAWABLE_DICTIONARY_MANIFEST_JSON_V1: &str = "model.drawable_dictionary_manifest_json_v1";
 
 /// Source/domain texture dictionary role referenced by YTYP archetypes.
 pub const TEXTURE_DICTIONARY_EXTENSION: &str = "ytd";
 pub const TEXTURE_DICTIONARY_ASSET_KIND: &str = "texture_dictionary";
-pub const TEXTURE_DICTIONARY_CONTAINER: &str = "rockstar.texture_dictionary.rsc7";
+pub const TEXTURE_DICTIONARY_CONTAINER: &str = "newengine.listfile.nef8.ytd";
 pub const TEXTURE_DICTIONARY_MANIFEST_SCHEMA: &str = "newengine.texture_dictionary.manifest.v2";
 
-/// Legacy/runtime-cache NewEngine texture dictionary implementation.
-///
-/// Kept for compatibility with existing GPU residency paths. Public authored
-/// data-driven content should reference `.ytd` instead.
-pub const LEGACY_NEWENGINE_TEXTURE_DICTIONARY_EXTENSION: &str = "neytd";
-pub const LEGACY_NEWENGINE_TEXTURE_DICTIONARY_CONTAINER: &str = "newengine.texture_dictionary.neytd.v2";
+pub const MATERIAL_LIBRARY_EXTENSION: &str = "nemat";
+pub const MATERIAL_LIBRARY_ASSET_KIND: &str = "material_library";
+pub const MATERIAL_LIBRARY_CONTAINER: &str = "newengine.listfile.nef8.nemat";
 
-pub const ASSET_PACKAGE_EXTENSION: &str = "pak";
+pub const ASSET_PACKAGE_EXTENSION: &str = "nepak";
 pub const ASSET_PACKAGE_ASSET_KIND: &str = "asset_package";
 pub const ASSET_PACKAGE_CONTAINER: &str = "newengine.asset_package.v1";
 
@@ -82,7 +78,7 @@ pub const PHYSICS_DICTIONARY_ASSET_KIND: &str = "physics_dictionary";
 
 pub const OBJECT_TYPE_DEFINITIONS_EXTENSION: &str = "ytyp";
 pub const OBJECT_TYPE_DEFINITIONS_ASSET_KIND: &str = "object_type_definitions";
-pub const OBJECT_TYPE_DEFINITIONS_CONTAINER: &str = "rockstar.map_types.ytyp.xml";
+pub const OBJECT_TYPE_DEFINITIONS_CONTAINER: &str = "newengine.listfile.nef8.ytyp";
 pub const DEFINITION_ENTRIES_SCHEMA: &str = "newengine.ytyp.definition_entries.v1";
 pub const MODEL_SERVICE_METHOD_DEFINITION_ENTRIES_JSON_V1: &str = "model.definition_entries_json_v1";
 pub const MODEL_SERVICE_METHOD_ASSET_CHAIN_JSON_V1: &str = "model.asset_chain_json_v1";
@@ -95,8 +91,9 @@ pub const MODEL_FEATURE_DOMAINS: &[&str] = &[
     "skeleton.rsc7",
     "collision.default",
     "drawable.ydd",
+    "material.nemat",
     "texture.ytd",
-    "package.pak",
+    "package.nepak",
     "definition_entries.ytyp",
 ];
 
@@ -170,8 +167,9 @@ mod tests {
         assert_eq!(MODEL_MATERIALS_BACKEND_SERVICE_SPEC.domain, "model.materials");
         assert_eq!(MODEL_COLLISIONS_BACKEND_SERVICE_SPEC.domain, "model.collisions");
         assert!(MODEL_FEATURE_DOMAINS.contains(&"definition_entries.ytyp"));
+        assert!(MODEL_FEATURE_DOMAINS.contains(&"material.nemat"));
         assert!(MODEL_FEATURE_DOMAINS.contains(&"texture.ytd"));
-        assert!(MODEL_FEATURE_DOMAINS.contains(&"package.pak"));
+        assert!(MODEL_FEATURE_DOMAINS.contains(&"package.nepak"));
         assert!(!MODEL_FEATURE_DOMAINS.contains(&"texture.neytd.runtime"));
         assert!(MODEL_SERVICE_METHODS.contains(&MODEL_SERVICE_METHOD_ASSET_CHAIN_JSON_V1));
         assert!(MODEL_SERVICE_METHODS.contains(&MODEL_SERVICE_METHOD_CONSTRUCTION_PLAN_JSON_V1));
@@ -179,7 +177,7 @@ mod tests {
     }
 
     #[test]
-    fn definition_asset_chain_uses_ytyp_ydd_ytd_roles() {
+    fn definition_asset_chain_uses_ytyp_ydd_nemat_ytd_roles() {
         let mut entry = DefinitionEntry {
             name: "prop_box".to_owned(),
             asset_name: "prop_box_drawable".to_owned(),
@@ -212,6 +210,7 @@ mod tests {
         assert_eq!(plan.objects.len(), 1);
         assert_eq!(plan.objects[0].drawable.as_ref().unwrap().extension, "ydd");
         assert_eq!(plan.objects[0].texture_dictionary.as_ref().unwrap().extension, "ytd");
+        assert_eq!(plan.objects[0].material_binding.material_library_role, ROLE_MATERIAL_LIBRARY);
         assert_eq!(plan.objects[0].material_binding.texture_dictionary_role, ROLE_TEXTURE_DICTIONARY);
     }
 

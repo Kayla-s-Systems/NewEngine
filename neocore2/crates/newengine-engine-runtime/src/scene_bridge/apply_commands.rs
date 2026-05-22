@@ -1,4 +1,6 @@
 use super::*;
+use super::definitions_runtime;
+use newengine_model_domain_api::AssetGraphResolver;
 
 impl SceneBridge {
     pub fn apply_commands(&self) {
@@ -145,6 +147,39 @@ impl SceneBridge {
                         );
                     }
                     pending_selection = Some(Some(e));
+                }
+                SceneCommand::InstantiateDefinition { definition_ref, position, rotation_ypr, scale } => {
+                    let root = ensure_root(&mut *scene);
+                    let world = scene.world_mut();
+                    log::debug!(
+                        "definitions.runtime: command RuntimeCommand::InstantiateDefinition definition_ref='{}'",
+                        definition_ref
+                    );
+                    let graph = AssetGraphResolver::resolve_root_ref(&definition_ref);
+                    let transform = definitions_runtime::DefinitionInstantiateTransform {
+                        translation: position,
+                        rotation_ypr,
+                        scale,
+                    };
+                    let (entity, trace) = definitions_runtime::apply_definition_instantiation(
+                        world,
+                        Some(root),
+                        definition_ref,
+                        transform,
+                        graph,
+                    );
+                    log::debug!(
+                        "definitions.runtime: trace definition_ref='{}' entity={:?} graph_nodes={} render_drawables={} materials={} textures={} physics_refs={} result='{}'",
+                        trace.definition_ref,
+                        entity,
+                        trace.resolved_graph.nodes.len(),
+                        trace.render_packet_request.drawable_refs.len(),
+                        trace.render_packet_request.material_refs.len(),
+                        trace.render_packet_request.texture_refs.len(),
+                        trace.physics_declaration.physics_refs.len() + trace.physics_declaration.collision_refs.len(),
+                        trace.apply_result
+                    );
+                    pending_selection = Some(Some(entity));
                 }
                 SceneCommand::SetTransform {
                     entity,

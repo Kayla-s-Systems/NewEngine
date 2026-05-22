@@ -14,6 +14,7 @@ pub(in crate::scene_bridge::game_ready) struct GameReadyMapProfile {
     pub(in crate::scene_bridge::game_ready) lighting: GameReadyLightingSpec,
     pub(in crate::scene_bridge::game_ready) foliage: GameReadyFoliageSpec,
     pub(in crate::scene_bridge::game_ready) prefabs: Vec<GameReadyPrefabSpec>,
+    pub(in crate::scene_bridge::game_ready) definitions: Vec<GameReadyDefinitionInstanceSpec>,
     pub(in crate::scene_bridge::game_ready) gameplay: GameReadyGameplaySpec,
     pub(in crate::scene_bridge::game_ready) palette: GameReadyPaletteSpec,
 }
@@ -205,6 +206,15 @@ pub(in crate::scene_bridge::game_ready) struct GameReadyPrefabSpec {
     pub(in crate::scene_bridge::game_ready) source: String,
     pub(in crate::scene_bridge::game_ready) proxy: String,
     pub(in crate::scene_bridge::game_ready) enabled: bool,
+}
+
+
+#[derive(Clone, Debug)]
+pub(in crate::scene_bridge::game_ready) struct GameReadyDefinitionInstanceSpec {
+    pub(in crate::scene_bridge::game_ready) definition_ref: String,
+    pub(in crate::scene_bridge::game_ready) position: Vec3,
+    pub(in crate::scene_bridge::game_ready) rotation_ypr: [f32; 3],
+    pub(in crate::scene_bridge::game_ready) scale: Vec3,
 }
 
 #[derive(Clone, Debug)]

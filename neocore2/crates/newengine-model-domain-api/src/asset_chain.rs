@@ -3,8 +3,8 @@ use serde::{Deserialize, Serialize};
 use crate::{
     ASSET_PACKAGE_ASSET_KIND, ASSET_PACKAGE_CONTAINER, ASSET_PACKAGE_EXTENSION,
     DRAWABLE_DICTIONARY_ASSET_KIND, DRAWABLE_DICTIONARY_CONTAINER, DRAWABLE_DICTIONARY_EXTENSION,
-    LEGACY_NEWENGINE_TEXTURE_DICTIONARY_CONTAINER, LEGACY_NEWENGINE_TEXTURE_DICTIONARY_EXTENSION,
     OBJECT_TYPE_DEFINITIONS_ASSET_KIND, OBJECT_TYPE_DEFINITIONS_CONTAINER,
+    MATERIAL_LIBRARY_ASSET_KIND, MATERIAL_LIBRARY_CONTAINER, MATERIAL_LIBRARY_EXTENSION,
     OBJECT_TYPE_DEFINITIONS_EXTENSION, TEXTURE_DICTIONARY_ASSET_KIND, TEXTURE_DICTIONARY_CONTAINER,
     TEXTURE_DICTIONARY_EXTENSION,
 };
@@ -76,47 +76,57 @@ impl From<&ModelAssetChainRoleSpec> for ModelAssetChainRole {
 
 pub const ROLE_DEFINITION_ENTRIES: &str = "definition_entries";
 pub const ROLE_DRAWABLE_DICTIONARY: &str = "drawable_dictionary";
+pub const ROLE_MATERIAL_LIBRARY: &str = "material_library";
 pub const ROLE_TEXTURE_DICTIONARY: &str = "texture_dictionary";
 pub const ROLE_ASSET_PACKAGE: &str = "asset_package";
-pub const ROLE_LEGACY_RUNTIME_TEXTURE_CACHE: &str = "legacy_runtime_texture_cache";
 
-/// Public authored chain: `.ytyp -> .ydd -> .ytd`.
+/// Public authored chain: `.ytyp -> .ydd -> .nemat -> .ytd`.
 ///
-/// `.neytd` is intentionally not present here. It remains a legacy/cache boundary
-/// and must not be authored by scenes or YTYP metadata.
+/// `.neytd` is intentionally not present here and is not kept as a public alias.
 pub const MODEL_ASSET_CHAIN_ROLES: &[ModelAssetChainRoleSpec] = &[
     ModelAssetChainRoleSpec {
         role: ROLE_DEFINITION_ENTRIES,
         extension: OBJECT_TYPE_DEFINITIONS_EXTENSION,
         asset_kind: OBJECT_TYPE_DEFINITIONS_ASSET_KIND,
         source_container: OBJECT_TYPE_DEFINITIONS_CONTAINER,
-        codec_service: "asset.codec.ytyp",
+        codec_service: "asset.codec.listfile.ytyp",
         primary_output: "model.definition_entries_json",
         runtime_ready: true,
         runtime_container: None,
-        description: "Definition Entries / archetype metadata. Declares drawable, texture, physics, bounds and LOD metadata.",
+        description: "NEF8 ListFile Definition Entries / archetype metadata. Declares drawable, texture, physics, bounds and LOD metadata.",
     },
     ModelAssetChainRoleSpec {
         role: ROLE_DRAWABLE_DICTIONARY,
         extension: DRAWABLE_DICTIONARY_EXTENSION,
         asset_kind: DRAWABLE_DICTIONARY_ASSET_KIND,
         source_container: DRAWABLE_DICTIONARY_CONTAINER,
-        codec_service: "asset.codec.ydd",
+        codec_service: "asset.codec.listfile.ydd",
         primary_output: "model.drawable_dictionary_manifest_json",
         runtime_ready: true,
         runtime_container: None,
-        description: "Drawable dictionary source/native model container referenced by Definition Entries.",
+        description: "NEF8 ListFile drawable dictionary source/native model container referenced by Definition Entries.",
+    },
+    ModelAssetChainRoleSpec {
+        role: ROLE_MATERIAL_LIBRARY,
+        extension: MATERIAL_LIBRARY_EXTENSION,
+        asset_kind: MATERIAL_LIBRARY_ASSET_KIND,
+        source_container: MATERIAL_LIBRARY_CONTAINER,
+        codec_service: "asset.codec.listfile.nemat",
+        primary_output: "material.manifest_json",
+        runtime_ready: true,
+        runtime_container: None,
+        description: "NEF8 ListFile material library. Drawable material slots reference .nemat@entry selectors.",
     },
     ModelAssetChainRoleSpec {
         role: ROLE_TEXTURE_DICTIONARY,
         extension: TEXTURE_DICTIONARY_EXTENSION,
         asset_kind: TEXTURE_DICTIONARY_ASSET_KIND,
         source_container: TEXTURE_DICTIONARY_CONTAINER,
-        codec_service: "asset.codec.ytd",
+        codec_service: "asset.codec.listfile.ytd",
         primary_output: "texture_dictionary.manifest_json",
         runtime_ready: true,
         runtime_container: None,
-        description: "Primary authored texture dictionary. YTYP and materials reference .ytd, while AssetManager may internally cache imported runtime packets.",
+        description: "NEF8 ListFile primary authored texture dictionary. YTYP and materials reference .ytd@entry selectors.",
     },
 ];
 
@@ -127,26 +137,19 @@ pub const MODEL_ASSET_PACKAGE_ROLES: &[ModelAssetChainRoleSpec] = &[
         extension: ASSET_PACKAGE_EXTENSION,
         asset_kind: ASSET_PACKAGE_ASSET_KIND,
         source_container: ASSET_PACKAGE_CONTAINER,
-        codec_service: "asset.codec.pak",
+        codec_service: "asset.codec.nepak",
         primary_output: "container.manifest_json",
         runtime_ready: true,
         runtime_container: None,
-        description: "Package container for delivering .ytyp/.ydd/.ytd and related assets as one VFS layer.",
+        description: "Package container for delivering .ytyp/.ydd/.nemat/.ytd and related assets as one VFS layer.",
     },
 ];
 
-/// Legacy/cache roles kept visible to diagnostics only.
-pub const MODEL_LEGACY_ASSET_ROLES: &[ModelAssetChainRoleSpec] = &[ModelAssetChainRoleSpec {
-    role: ROLE_LEGACY_RUNTIME_TEXTURE_CACHE,
-    extension: LEGACY_NEWENGINE_TEXTURE_DICTIONARY_EXTENSION,
-    asset_kind: TEXTURE_DICTIONARY_ASSET_KIND,
-    source_container: LEGACY_NEWENGINE_TEXTURE_DICTIONARY_CONTAINER,
-    codec_service: "asset.codec.neytd",
-    primary_output: "texture.runtime",
-    runtime_ready: true,
-    runtime_container: Some(LEGACY_NEWENGINE_TEXTURE_DICTIONARY_CONTAINER),
-    description: "Legacy/runtime cache packet. It may exist in caches, but authored data-driven content should reference .ytd instead.",
-}];
+/// No legacy asset roles are part of the target model chain.
+///
+/// The project is still early, so old compatibility roles are intentionally not
+/// kept as aliases in the public contract.
+pub const MODEL_LEGACY_ASSET_ROLES: &[ModelAssetChainRoleSpec] = &[];
 
 #[inline]
 pub fn model_asset_chain_roles() -> Vec<ModelAssetChainRole> {
@@ -204,11 +207,11 @@ impl Default for ModelAssetChainManifest {
             schema: "newengine.model.asset_chain.v2".to_owned(),
             roles: model_asset_chain_roles(),
             package_roles: model_asset_package_roles(),
-            legacy_roles: model_legacy_asset_roles(),
-            authored_chain: vec!["ytyp".to_owned(), "ydd".to_owned(), "ytd".to_owned()],
+            legacy_roles: Vec::new(),
+            authored_chain: vec!["ytyp".to_owned(), "ydd".to_owned(), "nemat".to_owned(), "ytd".to_owned()],
             notes: vec![
-                "Authoring references .ytd, not .neytd.".to_owned(),
-                ".pak is a package/VFS delivery container, not a fourth model dependency.".to_owned(),
+                "ListFile implementers keep their extensions (.ytyp/.ydd/.ytd/.nemat) but share NEF8 as top-level magic.".to_owned(),
+                ".nepak is a separate package/VFS delivery container, not a NEF8 ListFile.".to_owned(),
                 "Data-driven runtime should consume construction plans derived from .ytyp Definition Entries.".to_owned(),
             ],
         }

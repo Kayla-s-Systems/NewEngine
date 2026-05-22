@@ -23,7 +23,9 @@ pub(super) struct RuntimeOverlayMetrics {
     queued_upload_jobs: u32,
     queued_upload_bytes: u64,
     view_report: Option<EngineViewDiagnostics>,
+    backend_notes: Vec<String>,
 }
+
 
 impl RuntimeOverlayMetrics {
     #[inline]
@@ -42,6 +44,7 @@ impl RuntimeOverlayMetrics {
             queued_upload_jobs: 0,
             queued_upload_bytes: 0,
             view_report: None,
+            backend_notes: Vec::new(),
         }
     }
 
@@ -95,6 +98,8 @@ impl RuntimeOverlayMetrics {
         self.resource_pipelines = snapshot.resources.pipelines;
         self.queued_upload_jobs = snapshot.queue.queued_upload_jobs;
         self.queued_upload_bytes = snapshot.queue.queued_upload_bytes;
+        self.backend_notes = snapshot.notes.iter().rev().take(3).cloned().collect::<Vec<_>>();
+        self.backend_notes.reverse();
     }
 
     pub(super) fn publish_debug_snapshot(&mut self, snapshot: RenderFrameDebugSnapshot) {
@@ -165,6 +170,10 @@ impl RuntimeOverlayMetrics {
             }
         }
 
+        for note in &self.backend_notes {
+            lines.push(format!("RENDER WARN {}", compact_note(note, 96)));
+        }
+
         if let Some(report) = self.last_submit.as_ref() {
             lines.push(format!(
                 "RG pass {}/{} | cpu {:.2}ms | gpu {:.2}ms",
@@ -221,4 +230,15 @@ fn compact_draw_list_label(label: &str) -> &str {
         "ui" => "ui",
         other => other,
     }
+}
+
+fn compact_note(note: &str, max_chars: usize) -> String {
+    let mut out = String::new();
+    for ch in note.chars().take(max_chars) {
+        out.push(ch);
+    }
+    if note.chars().count() > max_chars {
+        out.push_str("...");
+    }
+    out
 }

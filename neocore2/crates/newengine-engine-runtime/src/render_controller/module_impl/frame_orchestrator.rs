@@ -1,5 +1,7 @@
 #![forbid(unsafe_op_in_unsafe_fn)]
 
+use std::sync::atomic::{AtomicBool, Ordering};
+
 use newengine_core::render::{
     Extent2D, RectI32, RenderApi, RenderFrameDebugSnapshot, RenderTargetId, Viewport,
 };
@@ -67,24 +69,33 @@ impl RenderFrameOrchestrator {
         let camera_position = [view.position_ws.x, view.position_ws.y, view.position_ws.z];
         let base_lights = lights::collect_lights(scene.world()).with_camera_position(camera_position);
         let extent = Extent2D::new(scope.vp_w, scope.vp_h);
-        let shadow_plan = match shadows::build_light_shadow_plan(
-            controller,
-            r,
-            scene,
-            bounds,
-            lit,
-            viewproj,
-            camera_position,
-            [view.forward_ws.x, view.forward_ws.y, view.forward_ws.z],
-            extent,
-            Extent2D::new(scope.w, scope.h),
-            plugin_snapshot,
-        ) {
-            Ok(plan) => plan,
-            Err(e) => {
-                log::warn!("render controller: shadow plan disabled for this frame: {}", e);
-                let _ = r.discard_recorded_commands();
-                shadows::LightShadowPlan::disabled(lit.white_texture)
+        let runtime_profile = controller.runtime_profile().clone();
+        let legacy_safe_profile = runtime_profile.legacy_safe_enabled();
+        if legacy_safe_profile {
+            log_legacy_safe_profile_once();
+        }
+        let shadow_plan = if !runtime_profile.shadows_enabled() {
+            shadows::LightShadowPlan::disabled(lit.white_texture)
+        } else {
+            match shadows::build_light_shadow_plan(
+                controller,
+                r,
+                scene,
+                bounds,
+                lit,
+                viewproj,
+                camera_position,
+                [view.forward_ws.x, view.forward_ws.y, view.forward_ws.z],
+                extent,
+                Extent2D::new(scope.w, scope.h),
+                plugin_snapshot,
+            ) {
+                Ok(plan) => plan,
+                Err(e) => {
+                    log::warn!("render controller: shadow plan disabled for this frame: {}", e);
+                    let _ = r.discard_recorded_commands();
+                    shadows::LightShadowPlan::disabled(lit.white_texture)
+                }
             }
         };
 
@@ -167,12 +178,12 @@ impl RenderFrameOrchestrator {
             StandardRuntimePipelineDesc::new(controller.frame.frame_index, Extent2D::new(scope.w, scope.h), extent)
                 .viewport_is_surface(scope.direct_surface_viewport)
                 .viewport_render_target(rt)
-                .shadow(render_shadow_map && shadow_rt_for_graph.is_some(), shadow_plan.resolution)
-                .shadow_cascades(shadow_plan.cascade_count())
+                .shadow(runtime_profile.shadows_enabled() && render_shadow_map && shadow_rt_for_graph.is_some(), shadow_plan.resolution)
+                .shadow_cascades(if runtime_profile.shadows_enabled() { shadow_plan.cascade_count() } else { 0 })
                 .shadow_render_target(shadow_rt_for_graph)
-                .deferred(runtime_deferred_enabled())
-                .hdr_scene(true)
-                .postfx(true)
+                .deferred(runtime_profile.deferred_enabled())
+                .hdr_scene(runtime_profile.hdr_scene_enabled())
+                .postfx(runtime_profile.postfx_enabled())
                 .ui(scope.ui_enabled)
                 .ui_backdrop_blur(scope.ui_enabled && ui_backdrop.enabled && ui_backdrop.blur_radius_px > 0.05)
                 .debug_overlay(false)
@@ -207,9 +218,14 @@ impl RenderFrameOrchestrator {
         let submit_report = match submit_frame_envelope(r, frame_envelope, scope.trace_frame) {
             Ok(report) => report,
             Err(e) => {
+                controller.disable_viewport_pass("render_graph.submit_frame", &e);
+                log::error!(
+                    "render controller: frame graph submit failed; viewport pass disabled and renderer continues in degraded UI/safe-present mode: {}",
+                    e
+                );
                 let _ = r.discard_recorded_commands();
                 let _ = r.end_frame();
-                return Err(e);
+                return Ok(PlayableFrameOutcome::EndedEarly { ui_telemetry: None });
             }
         };
         cpu_profile.mark("submit");
@@ -403,9 +419,19 @@ impl RenderFrameOrchestrator {
     }
 }
 
-#[inline]
-fn runtime_deferred_enabled() -> bool {
-    std::env::var("NEWENGINE_RENDER_DEFERRED")
-        .map(|value| matches!(value.trim().to_ascii_lowercase().as_str(), "1" | "true" | "on" | "yes" | "deferred" | "native"))
-        .unwrap_or(false)
+
+static LEGACY_SAFE_PROFILE_LOGGED: AtomicBool = AtomicBool::new(false);
+
+fn log_legacy_safe_profile_once() {
+    if LEGACY_SAFE_PROFILE_LOGGED
+        .compare_exchange(false, true, Ordering::AcqRel, Ordering::Acquire)
+        .is_ok()
+    {
+        log::warn!(
+            "render controller: legacy GPU safe profile active; preserving original renderer path for capable GPUs, but disabling risky shadows/HDR/postfx/deferred graph branches on this device"
+        );
+        newengine_core::crash::record_breadcrumb(
+            "render controller: legacy GPU safe profile active".to_owned(),
+        );
+    }
 }

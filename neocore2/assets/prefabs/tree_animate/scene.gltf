@@ -1,0 +1,258 @@
+{
+  "asset": {
+    "version": "2.0",
+    "generator": "NewEngine minimal tree prefab repair"
+  },
+  "buffers": [
+    {
+      "uri": "scene.bin",
+      "byteLength": 888
+    }
+  ],
+  "bufferViews": [
+    {
+      "buffer": 0,
+      "byteOffset": 0,
+      "byteLength": 96
+    },
+    {
+      "buffer": 0,
+      "byteOffset": 96,
+      "byteLength": 96
+    },
+    {
+      "buffer": 0,
+      "byteOffset": 192,
+      "byteLength": 64
+    },
+    {
+      "buffer": 0,
+      "byteOffset": 256,
+      "byteLength": 72
+    },
+    {
+      "buffer": 0,
+      "byteOffset": 328,
+      "byteLength": 96
+    },
+    {
+      "buffer": 0,
+      "byteOffset": 424,
+      "byteLength": 96
+    },
+    {
+      "buffer": 0,
+      "byteOffset": 520,
+      "byteLength": 64
+    },
+    {
+      "buffer": 0,
+      "byteOffset": 584,
+      "byteLength": 24
+    },
+    {
+      "buffer": 0,
+      "byteOffset": 608,
+      "byteLength": 96
+    },
+    {
+      "buffer": 0,
+      "byteOffset": 704,
+      "byteLength": 96
+    },
+    {
+      "buffer": 0,
+      "byteOffset": 800,
+      "byteLength": 64
+    },
+    {
+      "buffer": 0,
+      "byteOffset": 864,
+      "byteLength": 24
+    }
+  ],
+  "accessors": [
+    {
+      "bufferView": 0,
+      "componentType": 5126,
+      "count": 8,
+      "type": "VEC3",
+      "min": [
+        -0.18,
+        0,
+        -0.18
+      ],
+      "max": [
+        0.18,
+        2.2,
+        0.18
+      ]
+    },
+    {
+      "bufferView": 1,
+      "componentType": 5126,
+      "count": 8,
+      "type": "VEC3"
+    },
+    {
+      "bufferView": 2,
+      "componentType": 5126,
+      "count": 8,
+      "type": "VEC2"
+    },
+    {
+      "bufferView": 3,
+      "componentType": 5123,
+      "count": 36,
+      "type": "SCALAR"
+    },
+    {
+      "bufferView": 4,
+      "componentType": 5126,
+      "count": 8,
+      "type": "VEC3",
+      "min": [
+        -1.0,
+        1.35,
+        -1.0
+      ],
+      "max": [
+        1.0,
+        3.0,
+        1.0
+      ]
+    },
+    {
+      "bufferView": 5,
+      "componentType": 5126,
+      "count": 8,
+      "type": "VEC3"
+    },
+    {
+      "bufferView": 6,
+      "componentType": 5126,
+      "count": 8,
+      "type": "VEC2"
+    },
+    {
+      "bufferView": 7,
+      "componentType": 5123,
+      "count": 12,
+      "type": "SCALAR"
+    },
+    {
+      "bufferView": 8,
+      "componentType": 5126,
+      "count": 8,
+      "type": "VEC3",
+      "min": [
+        -0.95,
+        1.2,
+        -0.22
+      ],
+      "max": [
+        0.95,
+        2.1,
+        0.2
+      ]
+    },
+    {
+      "bufferView": 9,
+      "componentType": 5126,
+      "count": 8,
+      "type": "VEC3"
+    },
+    {
+      "bufferView": 10,
+      "componentType": 5126,
+      "count": 8,
+      "type": "VEC2"
+    },
+    {
+      "bufferView": 11,
+      "componentType": 5123,
+      "count": 12,
+      "type": "SCALAR"
+    }
+  ],
+  "materials": [
+    {
+      "name": "Bark"
+    },
+    {
+      "name": "Leaf"
+    },
+    {
+      "name": "Branch"
+    }
+  ],
+  "meshes": [
+    {
+      "name": "Tree_Bark",
+      "primitives": [
+        {
+          "attributes": {
+            "POSITION": 0,
+            "NORMAL": 1,
+            "TEXCOORD_0": 2
+          },
+          "indices": 3,
+          "material": 0
+        }
+      ]
+    },
+    {
+      "name": "Tree_Leaf",
+      "primitives": [
+        {
+          "attributes": {
+            "POSITION": 4,
+            "NORMAL": 5,
+            "TEXCOORD_0": 6
+          },
+          "indices": 7,
+          "material": 1
+        }
+      ]
+    },
+    {
+      "name": "Tree_Branch",
+      "primitives": [
+        {
+          "attributes": {
+            "POSITION": 8,
+            "NORMAL": 9,
+            "TEXCOORD_0": 10
+          },
+          "indices": 11,
+          "material": 2
+        }
+      ]
+    }
+  ],
+  "nodes": [
+    {
+      "name": "BarkNode",
+      "mesh": 0
+    },
+    {
+      "name": "LeafNode",
+      "mesh": 1
+    },
+    {
+      "name": "BranchNode",
+      "mesh": 2
+    }
+  ],
+  "scenes": [
+    {
+      "name": "Scene",
+      "nodes": [
+        0,
+        1,
+        2
+      ]
+    }
+  ],
+  "scene": 0
+}

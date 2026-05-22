@@ -1,6 +1,7 @@
 #![forbid(unsafe_op_in_unsafe_fn)]
 
 use abi_stable::std_types::RString;
+use newengine_assets_api::require_asset_reference_extension;
 use newengine_plugin_api::{Blob, HostApiV1, MethodName};
 
 use crate::asset_access::{
@@ -307,7 +308,7 @@ impl AssetServiceClient {
     /// Read raw bytes from the AssetManager VFS by logical path.
     ///
     /// This intentionally bypasses importers, but it does not bypass AssetManager: resolution
-    /// still goes through the mounted VFS layers (.pak, filesystem, future remote sources).
+    /// still goes through the mounted VFS layers (.nepak, filesystem, future remote sources).
     #[inline]
     pub fn raw_bytes_v1(&self, logical_path: &str) -> Result<Vec<u8>, String> {
         self.call_raw(self.m_raw_bytes_v1.clone(), Self::logical_payload(logical_path))
@@ -374,6 +375,32 @@ impl AssetServiceClient {
     pub fn texture_dictionary_runtime_v1(&self, dictionary_path: &str, texture_name: Option<&str>, texture_hash: Option<u64>) -> Result<RuntimeTextureAsset, String> {
         self.texture_dictionary_runtime_v1_typed(dictionary_path, texture_name, texture_hash)
             .map_err(|e| e.to_string())
+    }
+
+    /// Semantic texture-domain facade for `textures.entry_runtime_v1`.
+    ///
+    /// The current transport still goes through the AssetManager service because
+    /// `engine.assets` owns VFS/raw bytes/codec dispatch. Callers should prefer
+    /// this method name when they are asking for a texture-domain runtime packet
+    /// rather than raw asset decode behavior.
+    #[inline]
+    pub fn textures_entry_runtime_v1_typed(&self, dictionary_path: &str, texture_name: Option<&str>, texture_hash: Option<u64>) -> AssetResult<RuntimeTextureAsset> {
+        self.texture_dictionary_runtime_v1_typed(dictionary_path, texture_name, texture_hash)
+    }
+
+    /// Semantic texture-domain facade that accepts the authored `.ytd@entry` selector.
+    #[inline]
+    pub fn textures_entry_runtime_ref_v1_typed(&self, texture_ref: &str) -> AssetResult<RuntimeTextureAsset> {
+        let reference = require_asset_reference_extension(texture_ref, &["ytd"], true)
+            .map_err(AssetError::invalid_request)?;
+        let texture_name = reference.entry.as_deref();
+        self.textures_entry_runtime_v1_typed(&reference.logical_path, texture_name, None)
+    }
+
+    /// Semantic texture-domain facade for `textures.entry_rgba8_v1` debug/editor packets.
+    #[inline]
+    pub fn textures_entry_rgba8_v1_typed(&self, dictionary_path: &str, texture_name: Option<&str>, texture_hash: Option<u64>) -> AssetResult<Rgba8TextureAsset> {
+        self.texture_dictionary_rgba8_v1_typed(dictionary_path, texture_name, texture_hash)
     }
 }
 

@@ -2,12 +2,13 @@
 
 //! GameReady/FPS runtime-lit material-domain provider.
 //!
-//! This crate is a feature package, not a renderer backend. It owns the current
-//! GameReady shader asset paths and pipeline presets, then creates backend-neutral
-//! `RenderApi` resources for the reusable runtime render controller.
+//! This crate owns the GameReady material-domain preset, not shader compilation.
+//! Shader source paths are declared in a data asset and are compiled/validated on
+//! demand by the active renderer backend through `ShaderDesc::from_asset`.
+
+use std::time::Instant;
 
 use newengine_assets::AssetServiceClient;
-use newengine_render_api::*;
 use newengine_material_domain_api::{
     LitPipeline, MaterialDomainError, MaterialDomainResult, MaterialGpuPipeline,
     MaterialGpuPipelineKey, MaterialGpuPipelineProvider, MaterialPipelineBuildProfile,
@@ -15,13 +16,17 @@ use newengine_material_domain_api::{
 };
 use newengine_plugin_host::default_host_api;
 use newengine_primitives::PrimitiveVertex;
+use newengine_render_api::*;
+use serde::Deserialize;
 
 pub const GAME_READY_LIT_PIPELINE_KEY: MaterialGpuPipelineKey =
     MaterialGpuPipelineKey::new("newengine.material_domain.gameready.runtime_lit");
 
+const DEFAULT_SHADER_MANIFEST_PATH: &str = "shaders/pipelines/gameready_lit.pipeline.json";
+
 #[derive(Default)]
 pub struct GameReadyLitMaterialDomainProvider {
-    bytecode: Option<GameReadyLitShaderBytecodeSet>,
+    manifest: Option<GameReadyLitShaderManifest>,
     pipeline: Option<LitPipeline>,
 }
 
@@ -31,14 +36,14 @@ impl GameReadyLitMaterialDomainProvider {
         Self::default()
     }
 
-    fn require_bytecode(&mut self) -> MaterialDomainResult<GameReadyLitShaderBytecodeSet> {
-        if let Some(shader_set) = self.bytecode.clone() {
-            return Ok(shader_set);
+    fn require_manifest(&mut self) -> MaterialDomainResult<GameReadyLitShaderManifest> {
+        if let Some(manifest) = self.manifest.clone() {
+            return Ok(manifest);
         }
 
-        let shader_set = GameReadyLitShaderBytecodeSet::load_and_compile()?;
-        self.bytecode = Some(shader_set.clone());
-        Ok(shader_set)
+        let manifest = GameReadyLitShaderManifest::load(DEFAULT_SHADER_MANIFEST_PATH)?;
+        self.manifest = Some(manifest.clone());
+        Ok(manifest)
     }
 
     fn build_pipeline(
@@ -46,11 +51,18 @@ impl GameReadyLitMaterialDomainProvider {
         profile: MaterialPipelineBuildProfile,
         r: &mut dyn MaterialRenderDevice,
     ) -> MaterialDomainResult<LitPipeline> {
-        let shader_set = self.require_bytecode()?;
+        let started_at = Instant::now();
+        log::info!(
+            "gameready material domain: pipeline build requested key='{}' manifest='{}'",
+            GAME_READY_LIT_PIPELINE_KEY.as_str(),
+            DEFAULT_SHADER_MANIFEST_PATH
+        );
+        let manifest = self.require_manifest()?;
+        log::info!(
+            "gameready material domain: creating bind resources key='{}'",
+            GAME_READY_LIT_PIPELINE_KEY.as_str()
+        );
 
-        // Allocate GPU resources only after shader baking succeeds. Runtime shader
-        // compilation is still optional during startup; a local glslc crash must not
-        // leave half-created backend objects before the controller fails soft.
         let bgl = r.create_bind_group_layout(
             BindGroupLayoutDesc::new(vec![
                 BindingKind::UniformBuffer,
@@ -84,36 +96,59 @@ impl GameReadyLitMaterialDomainProvider {
                 .with_address_v(AddressMode::ClampToEdge)
                 .with_address_w(AddressMode::ClampToEdge),
         )?;
-        let vs = r.create_shader(
-            ShaderDesc::new(ShaderStage::Vertex, "main", shader_set.vs).with_label("gameready_lit_vs"),
+        log::info!(
+            "gameready material domain: bind resources created key='{}' elapsed_ms={:.2}",
+            GAME_READY_LIT_PIPELINE_KEY.as_str(),
+            started_at.elapsed().as_secs_f64() * 1000.0
+        );
+
+        log::info!(
+            "gameready material domain: requesting renderer-owned shader builds key='{}' shader_count=8",
+            GAME_READY_LIT_PIPELINE_KEY.as_str()
+        );
+        let vs = create_manifest_shader(r, ShaderStage::Vertex, &manifest.shaders.lit_vs, "gameready_lit_vs")?;
+        let fs = create_manifest_shader(r, ShaderStage::Fragment, &manifest.shaders.lit_fs, "gameready_lit_fs")?;
+        let terrain_fs = create_manifest_shader(
+            r,
+            ShaderStage::Fragment,
+            &manifest.shaders.terrain_fs,
+            "gameready_terrain_surface_fs",
         )?;
-        let fs = r.create_shader(
-            ShaderDesc::new(ShaderStage::Fragment, "main", shader_set.fs).with_label("gameready_lit_fs"),
+        let shadow_vs = create_manifest_shader(
+            r,
+            ShaderStage::Vertex,
+            &manifest.shaders.shadow_vs,
+            "gameready_sun_shadow_depth_vs",
         )?;
-        let terrain_fs = r.create_shader(
-            ShaderDesc::new(ShaderStage::Fragment, "main", shader_set.terrain_fs)
-                .with_label("gameready_terrain_surface_fs"),
+        let shadow_fs = create_manifest_shader(
+            r,
+            ShaderStage::Fragment,
+            &manifest.shaders.shadow_fs,
+            "gameready_sun_shadow_depth_fs",
         )?;
-        let shadow_vs = r.create_shader(
-            ShaderDesc::new(ShaderStage::Vertex, "main", shader_set.shadow_vs)
-                .with_label("gameready_sun_shadow_depth_vs"),
+        let instanced_vs = create_manifest_shader(
+            r,
+            ShaderStage::Vertex,
+            &manifest.shaders.instanced_vs,
+            "gameready_lit_instanced_vs",
         )?;
-        let shadow_fs = r.create_shader(
-            ShaderDesc::new(ShaderStage::Fragment, "main", shader_set.shadow_fs)
-                .with_label("gameready_sun_shadow_depth_fs"),
+        let instanced_fs = create_manifest_shader(
+            r,
+            ShaderStage::Fragment,
+            &manifest.shaders.instanced_fs,
+            "gameready_lit_instanced_fs",
         )?;
-        let instanced_vs = r.create_shader(
-            ShaderDesc::new(ShaderStage::Vertex, "main", shader_set.instanced_vs)
-                .with_label("gameready_lit_instanced_vs"),
+        let shadow_instanced_vs = create_manifest_shader(
+            r,
+            ShaderStage::Vertex,
+            &manifest.shaders.shadow_instanced_vs,
+            "gameready_sun_shadow_instanced_vs",
         )?;
-        let instanced_fs = r.create_shader(
-            ShaderDesc::new(ShaderStage::Fragment, "main", shader_set.instanced_fs)
-                .with_label("gameready_lit_instanced_fs"),
-        )?;
-        let shadow_instanced_vs = r.create_shader(
-            ShaderDesc::new(ShaderStage::Vertex, "main", shader_set.shadow_instanced_vs)
-                .with_label("gameready_sun_shadow_instanced_vs"),
-        )?;
+        log::info!(
+            "gameready material domain: renderer-owned shader handles ready key='{}' elapsed_ms={:.2}",
+            GAME_READY_LIT_PIPELINE_KEY.as_str(),
+            started_at.elapsed().as_secs_f64() * 1000.0
+        );
 
         let stride = std::mem::size_of::<PrimitiveVertex>() as u32;
         let layout = VertexLayout::new(
@@ -144,6 +179,10 @@ impl GameReadyLitMaterialDomainProvider {
         )
         .per_instance();
 
+        log::info!(
+            "gameready material domain: creating GPU pipelines key='{}' pipeline_count=8",
+            GAME_READY_LIT_PIPELINE_KEY.as_str()
+        );
         let pipeline = r.create_pipeline(
             PipelineDesc::new(vs, fs, profile.scene_hdr_color_format)
                 .with_label("gameready_lit_pipeline")
@@ -237,6 +276,11 @@ impl GameReadyLitMaterialDomainProvider {
             .with_depth(TextureFormat::Depth32Float)
             .with_cull_mode(RasterCullMode::None),
         )?;
+        log::info!(
+            "gameready material domain: pipeline build completed key='{}' elapsed_ms={:.2}",
+            GAME_READY_LIT_PIPELINE_KEY.as_str(),
+            started_at.elapsed().as_secs_f64() * 1000.0
+        );
 
         Ok(LitPipeline {
             bgl,
@@ -286,65 +330,162 @@ impl MaterialGpuPipelineProvider for GameReadyLitMaterialDomainProvider {
     }
 }
 
-#[derive(Clone)]
-struct GameReadyLitShaderBytecodeSet {
-    vs: Vec<u32>,
-    fs: Vec<u32>,
-    terrain_fs: Vec<u32>,
-    shadow_vs: Vec<u32>,
-    shadow_fs: Vec<u32>,
-    instanced_vs: Vec<u32>,
-    instanced_fs: Vec<u32>,
-    shadow_instanced_vs: Vec<u32>,
+#[derive(Clone, Deserialize)]
+struct GameReadyLitShaderManifest {
+    #[allow(dead_code)]
+    schema: String,
+    shaders: GameReadyLitShaderSetManifest,
 }
 
-impl GameReadyLitShaderBytecodeSet {
-    fn load_and_compile() -> MaterialDomainResult<Self> {
-        let vs_src = load_text_asset("shaders/game_lit_shadowed_v1.vert")?;
-        let fs_src = load_text_asset("shaders/game_lit_shadowed_v1.frag")?;
-        let terrain_fs_src = load_text_asset("shaders/game_terrain_surface_v1.frag")?;
-        let shadow_vs_src = load_text_asset("shaders/game_sun_shadow_depth_v1.vert")?;
-        let shadow_fs_src = load_text_asset("shaders/game_sun_shadow_depth_v1.frag")?;
-        let instanced_vs_src = load_text_asset("shaders/game_lit_instanced_v1.vert")?;
-        let instanced_fs_src = load_text_asset("shaders/game_lit_instanced_v1.frag")?;
-        let shadow_instanced_vs_src =
-            load_text_asset("shaders/game_sun_shadow_depth_instanced_v1.vert")?;
-
-        Ok(Self {
-            vs: compile_glsl(ShaderStage::Vertex, "game_lit_shadowed_v1.vert", &vs_src)?,
-            fs: compile_glsl(ShaderStage::Fragment, "game_lit_shadowed_v1.frag", &fs_src)?,
-            terrain_fs: compile_glsl(
-                ShaderStage::Fragment,
-                "game_terrain_surface_v1.frag",
-                &terrain_fs_src,
-            )?,
-            shadow_vs: compile_glsl(
-                ShaderStage::Vertex,
-                "game_sun_shadow_depth_v1.vert",
-                &shadow_vs_src,
-            )?,
-            shadow_fs: compile_glsl(
-                ShaderStage::Fragment,
-                "game_sun_shadow_depth_v1.frag",
-                &shadow_fs_src,
-            )?,
-            instanced_vs: compile_glsl(
-                ShaderStage::Vertex,
-                "game_lit_instanced_v1.vert",
-                &instanced_vs_src,
-            )?,
-            instanced_fs: compile_glsl(
-                ShaderStage::Fragment,
-                "game_lit_instanced_v1.frag",
-                &instanced_fs_src,
-            )?,
-            shadow_instanced_vs: compile_glsl(
-                ShaderStage::Vertex,
-                "game_sun_shadow_depth_instanced_v1.vert",
-                &shadow_instanced_vs_src,
-            )?,
-        })
+impl GameReadyLitShaderManifest {
+    fn load(logical_path: &str) -> MaterialDomainResult<Self> {
+        let source = load_text_asset(logical_path)?;
+        let manifest: Self = serde_json::from_str(&source).map_err(|e| {
+            MaterialDomainError::other(format!(
+                "GameReady shader manifest parse failed path='{logical_path}' err='{e}'"
+            ))
+        })?;
+        manifest.validate(logical_path)?;
+        log::info!(
+            "gameready material domain: shader manifest loaded path='{}' schema='{}'",
+            logical_path,
+            manifest.schema
+        );
+        Ok(manifest)
     }
+
+    fn validate(&self, logical_path: &str) -> MaterialDomainResult<()> {
+        if self.schema.trim().is_empty() {
+            return Err(MaterialDomainError::other(format!(
+                "GameReady shader manifest path='{logical_path}' missing schema"
+            )));
+        }
+        self.shaders.validate(logical_path)
+    }
+}
+
+#[derive(Clone, Deserialize)]
+struct GameReadyLitShaderSetManifest {
+    lit_vs: GameReadyShaderAssetRef,
+    lit_fs: GameReadyShaderAssetRef,
+    terrain_fs: GameReadyShaderAssetRef,
+    shadow_vs: GameReadyShaderAssetRef,
+    shadow_fs: GameReadyShaderAssetRef,
+    instanced_vs: GameReadyShaderAssetRef,
+    instanced_fs: GameReadyShaderAssetRef,
+    shadow_instanced_vs: GameReadyShaderAssetRef,
+}
+
+impl GameReadyLitShaderSetManifest {
+    fn validate(&self, manifest_path: &str) -> MaterialDomainResult<()> {
+        for (field, shader) in [
+            ("lit_vs", &self.lit_vs),
+            ("lit_fs", &self.lit_fs),
+            ("terrain_fs", &self.terrain_fs),
+            ("shadow_vs", &self.shadow_vs),
+            ("shadow_fs", &self.shadow_fs),
+            ("instanced_vs", &self.instanced_vs),
+            ("instanced_fs", &self.instanced_fs),
+            ("shadow_instanced_vs", &self.shadow_instanced_vs),
+        ] {
+            shader.validate(manifest_path, field)?;
+        }
+        Ok(())
+    }
+}
+
+#[derive(Clone, Deserialize)]
+struct GameReadyShaderAssetRef {
+    logical_path: String,
+    #[serde(default = "default_source_kind")]
+    source_kind: String,
+    #[serde(default = "default_entry")]
+    entry: String,
+    #[serde(default = "default_variant")]
+    variant_id: String,
+}
+
+impl GameReadyShaderAssetRef {
+    fn validate(&self, manifest_path: &str, field: &str) -> MaterialDomainResult<()> {
+        if self.logical_path.trim().is_empty() {
+            return Err(MaterialDomainError::other(format!(
+                "GameReady shader manifest path='{manifest_path}' field='{field}' has empty logical_path"
+            )));
+        }
+        let _ = self.source_kind()?;
+        Ok(())
+    }
+
+    fn source_kind(&self) -> MaterialDomainResult<ShaderSourceKind> {
+        match self.source_kind.trim().to_ascii_lowercase().as_str() {
+            "glsl" => Ok(ShaderSourceKind::Glsl),
+            "hlsl" => Ok(ShaderSourceKind::Hlsl),
+            "wgsl" => Ok(ShaderSourceKind::Wgsl),
+            "spirv" | "spv" => Ok(ShaderSourceKind::Spirv),
+            other => Err(MaterialDomainError::other(format!(
+                "unsupported shader source_kind='{other}' path='{}'",
+                self.logical_path
+            ))),
+        }
+    }
+}
+
+fn default_source_kind() -> String {
+    "glsl".to_owned()
+}
+
+fn default_entry() -> String {
+    "main".to_owned()
+}
+
+fn default_variant() -> String {
+    "gameready_default".to_owned()
+}
+
+fn create_manifest_shader(
+    r: &mut dyn MaterialRenderDevice,
+    stage: ShaderStage,
+    shader: &GameReadyShaderAssetRef,
+    label: &str,
+) -> MaterialDomainResult<ShaderId> {
+    let source_kind = shader.source_kind()?;
+    let started_at = Instant::now();
+    log::info!(
+        "gameready material domain: shader build request label='{}' path='{}' stage='{:?}' source_kind='{}' entry='{}' variant='{}'",
+        label,
+        shader.logical_path,
+        stage,
+        source_kind.label(),
+        shader.entry,
+        shader.variant_id
+    );
+    let asset = ShaderAssetDesc::new(shader.logical_path.clone(), source_kind)
+        .with_entry(shader.entry.clone())
+        .with_variant(shader.variant_id.clone());
+    let result = r.create_shader(
+        ShaderDesc::from_asset(stage, shader.entry.clone(), shader.logical_path.clone(), source_kind)
+            .with_asset(asset)
+            .with_label(label),
+    );
+    match &result {
+        Ok(id) => log::info!(
+            "gameready material domain: shader build accepted label='{}' path='{}' stage='{:?}' shader_id={:?} elapsed_ms={:.2}",
+            label,
+            shader.logical_path,
+            stage,
+            id,
+            started_at.elapsed().as_secs_f64() * 1000.0
+        ),
+        Err(e) => log::error!(
+            "gameready material domain: shader build failed label='{}' path='{}' stage='{:?}' err='{}' elapsed_ms={:.2}",
+            label,
+            shader.logical_path,
+            stage,
+            e,
+            started_at.elapsed().as_secs_f64() * 1000.0
+        ),
+    }
+    result
 }
 
 fn load_text_asset(rel: &str) -> MaterialDomainResult<String> {
@@ -361,9 +502,4 @@ fn load_text_asset(rel: &str) -> MaterialDomainResult<String> {
 
     log::trace!("asset text: loaded path='{rel}' bytes={}", payload.len());
     Ok(s)
-}
-
-fn compile_glsl(stage: ShaderStage, name: &str, src: &str) -> MaterialDomainResult<Vec<u32>> {
-    newengine_shader_compiler::compile_glsl_to_spirv(stage, name, "main", src)
-        .map_err(|e| MaterialDomainError::other(format!("shader compile failed: {e}")))
 }

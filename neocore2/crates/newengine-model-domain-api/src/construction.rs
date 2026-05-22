@@ -81,11 +81,32 @@ pub struct ModelMeshPart {
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
 pub struct ModelMaterialBinding {
     pub slot: String,
+    /// Preferred authored material selector, e.g. `materials/foo.nemat@bar`.
+    /// OBJ/MTL import compatibility may still project a renderer-agnostic
+    /// descriptor, but runtime graph resolution should follow this reference.
+    pub material_ref: Option<String>,
     pub descriptor: newengine_materials::MaterialDescriptor,
     pub textures: newengine_materials::MaterialTextureBindings,
     pub fallback_color: [f32; 4],
+    pub resolution_policy: String,
+}
+
+impl Default for ModelMaterialBinding {
+    fn default() -> Self {
+        let descriptor = newengine_materials::MaterialDescriptor::default();
+        let fallback_color = descriptor.base_color;
+        Self {
+            slot: String::new(),
+            material_ref: None,
+            descriptor,
+            textures: newengine_materials::MaterialTextureBindings::default(),
+            fallback_color,
+            resolution_policy: "runtime_strict_ydd_nemat_ytd_chain".to_owned(),
+        }
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]

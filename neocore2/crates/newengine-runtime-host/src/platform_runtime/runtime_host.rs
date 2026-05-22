@@ -75,6 +75,9 @@ pub struct HostPlatformRuntime {
     ui_frame_index: u64,
     loaded_engine_plugins: Option<usize>,
     fatal_bootstrap_error: Option<String>,
+    runtime_soft_degraded_error: Option<String>,
+    runtime_soft_degraded_origin: Option<&'static str>,
+    runtime_soft_degraded_frames: u64,
     cached_provider_ui_draw: Option<UiDrawList>,
     last_pause_menu_visible: bool,
 }
@@ -112,6 +115,9 @@ impl HostPlatformRuntime {
             ui_frame_index: 0,
             loaded_engine_plugins: None,
             fatal_bootstrap_error: None,
+            runtime_soft_degraded_error: None,
+            runtime_soft_degraded_origin: None,
+            runtime_soft_degraded_frames: 0,
             cached_provider_ui_draw: None,
             last_pause_menu_visible: false,
         }
@@ -345,6 +351,8 @@ impl HostPlatformRuntime {
                 exit_requested: true,
                 ..PlatformStepResultV1::default()
             }
+        } else if self.runtime_soft_degraded_error.is_some() {
+            self.runtime_soft_degraded_step_result()
         } else if self.fatal_bootstrap_error.is_some() {
             self.fatal_bootstrap_step_result()
         } else {
@@ -628,8 +636,59 @@ impl HostPlatformRuntime {
                 exit_requested: true,
                 ..PlatformStepResultV1::default()
             }),
-            Err(e) => Err(e),
+            Err(e) => {
+                let message = e.to_string();
+                log::error!("platform runtime: engine.step failed in running state; entering soft degradation instead of exiting: {message}");
+                Ok(self.enter_runtime_soft_degraded_step("engine.step", message))
+            }
         }
+    }
+
+
+    pub(crate) fn enter_runtime_soft_degraded_step(
+        &mut self,
+        origin: &'static str,
+        message: impl Into<String>,
+    ) -> PlatformStepResultV1 {
+        let message = message.into();
+        newengine_core::crash::record_breadcrumb(format!(
+            "platform runtime: soft degradation origin='{origin}' message='{message}'"
+        ));
+        log::error!(
+            "platform runtime: soft degradation activated origin='{}' message='{}'",
+            origin,
+            message
+        );
+        self.runtime_soft_degraded_origin = Some(origin);
+        self.runtime_soft_degraded_error = Some(message.clone());
+        self.engine.resources_mut().insert(RenderBackendStatus::degraded(origin, message));
+        self.runtime_soft_degraded_step_result()
+    }
+
+    fn runtime_soft_degraded_step_result(&mut self) -> PlatformStepResultV1 {
+        self.runtime_soft_degraded_frames = self.runtime_soft_degraded_frames.wrapping_add(1);
+        let origin = self.runtime_soft_degraded_origin.unwrap_or("runtime");
+        let message = self
+            .runtime_soft_degraded_error
+            .as_deref()
+            .unwrap_or("Runtime entered recovery mode without a diagnostic message.");
+        if self.runtime_soft_degraded_frames == 1 || self.runtime_soft_degraded_frames % 120 == 1 {
+            log::error!(
+                "platform runtime: recovery overlay active origin='{}' frames={} message='{}'",
+                origin,
+                self.runtime_soft_degraded_frames,
+                message
+            );
+        }
+        let overlay = ScreenOverlayStatus::error(
+            ScreenOverlayReason::Recovery,
+            "Runtime recovered from a frame failure.",
+            format!(
+                "Origin: {origin}\n{message}\nThe process is still alive; renderer is holding a safe degraded frame instead of aborting."
+            ),
+        )
+        .with_subsystems(self.bootstrap_subsystems());
+        self.loading_overlay_step_result(&overlay, self.runtime_soft_degraded_frames as u32)
     }
 
 

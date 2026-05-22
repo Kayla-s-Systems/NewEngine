@@ -4,8 +4,8 @@
 ///
 /// The logical path is always VFS-facing and never a physical filesystem path.
 /// The optional `entry` selector is shared by dictionary/container codecs:
-/// `.ytd@texture_name`, `.ydd@drawable_name`, `.ytyp@archetype_name`, and future
-/// material dictionaries.
+/// `.ytd@texture_name`, `.ydd@drawable_name`, `.ytyp@archetype_name`,
+/// and `.nemat@material_name`.
 pub const ASSET_REF_ENTRY_SEPARATOR: char = '@';
 
 #[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
@@ -100,7 +100,7 @@ pub fn is_raw_source_image_reference(value: &str) -> bool {
         .unwrap_or(false)
 }
 
-pub fn is_legacy_neytd_reference(value: &str) -> bool {
+pub fn is_rejected_neytd_reference(value: &str) -> bool {
     parse_asset_reference(value)
         .map(|reference| reference.has_extension("neytd"))
         .unwrap_or_else(|_| value.trim().to_ascii_lowercase().contains(".neytd"))

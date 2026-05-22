@@ -1,8 +1,7 @@
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    LEGACY_NEWENGINE_TEXTURE_DICTIONARY_CONTAINER, TEXTURE_DICTIONARY_ASSET_KIND,
-    TEXTURE_DICTIONARY_CONTAINER, TEXTURE_DICTIONARY_MANIFEST_SCHEMA,
+    TEXTURE_DICTIONARY_ASSET_KIND, TEXTURE_DICTIONARY_CONTAINER, TEXTURE_DICTIONARY_MANIFEST_SCHEMA,
 };
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -13,7 +12,7 @@ pub struct TextureDictionaryManifest {
     pub asset_kind: String,
     pub container: String,
     pub runtime_ready: bool,
-    /// Optional legacy/cache container used by old runtime paths. Authoring should use `.ytd`.
+    /// Reserved for private cache implementation notes. Public authored content does not reference cache extensions.
     pub legacy_cache_container: Option<String>,
     pub entries: Vec<TextureDictionaryEntry>,
     pub warnings: Vec<String>,
@@ -28,7 +27,7 @@ impl Default for TextureDictionaryManifest {
             asset_kind: TEXTURE_DICTIONARY_ASSET_KIND.to_owned(),
             container: TEXTURE_DICTIONARY_CONTAINER.to_owned(),
             runtime_ready: true,
-            legacy_cache_container: Some(LEGACY_NEWENGINE_TEXTURE_DICTIONARY_CONTAINER.to_owned()),
+            legacy_cache_container: None,
             entries: Vec::new(),
             warnings: Vec::new(),
             notes: Vec::new(),

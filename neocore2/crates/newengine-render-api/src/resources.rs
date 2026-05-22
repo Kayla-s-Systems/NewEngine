@@ -283,12 +283,104 @@ pub enum ShaderStage {
     Compute,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum ShaderSourceKind {
+    Glsl,
+    Hlsl,
+    Wgsl,
+    Spirv,
+}
+
+impl ShaderSourceKind {
+    #[inline]
+    pub const fn label(self) -> &'static str {
+        match self {
+            Self::Glsl => "glsl",
+            Self::Hlsl => "hlsl",
+            Self::Wgsl => "wgsl",
+            Self::Spirv => "spirv",
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ShaderDefine {
+    pub name: String,
+    pub value: String,
+}
+
+impl ShaderDefine {
+    #[inline]
+    pub fn new(name: impl Into<String>, value: impl Into<String>) -> Self {
+        Self { name: name.into(), value: value.into() }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ShaderAssetDesc {
+    pub logical_path: String,
+    pub source_kind: ShaderSourceKind,
+    #[serde(default = "default_shader_entry")]
+    pub entry: String,
+    #[serde(default)]
+    pub variant_id: String,
+    #[serde(default)]
+    pub defines: Vec<ShaderDefine>,
+    #[serde(default)]
+    pub optional: bool,
+}
+
+impl ShaderAssetDesc {
+    #[inline]
+    pub fn new(logical_path: impl Into<String>, source_kind: ShaderSourceKind) -> Self {
+        Self {
+            logical_path: logical_path.into(),
+            source_kind,
+            entry: default_shader_entry(),
+            variant_id: "default".to_owned(),
+            defines: Vec::new(),
+            optional: false,
+        }
+    }
+
+    #[inline]
+    pub fn with_entry(mut self, entry: impl Into<String>) -> Self {
+        self.entry = entry.into();
+        self
+    }
+
+    #[inline]
+    pub fn with_variant(mut self, variant_id: impl Into<String>) -> Self {
+        self.variant_id = variant_id.into();
+        self
+    }
+
+    #[inline]
+    pub fn with_define(mut self, name: impl Into<String>, value: impl Into<String>) -> Self {
+        self.defines.push(ShaderDefine::new(name, value));
+        self
+    }
+
+    #[inline]
+    pub fn optional(mut self) -> Self {
+        self.optional = true;
+        self
+    }
+}
+
+fn default_shader_entry() -> String {
+    "main".to_owned()
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ShaderDesc {
     pub label: Option<String>,
     pub stage: ShaderStage,
     pub entry: String,
+    #[serde(default)]
     pub spirv: Vec<u32>,
+    #[serde(default)]
+    pub asset: Option<ShaderAssetDesc>,
 }
 
 impl ShaderDesc {
@@ -299,6 +391,24 @@ impl ShaderDesc {
             stage,
             entry: entry.into(),
             spirv,
+            asset: None,
+        }
+    }
+
+    #[inline]
+    pub fn from_asset(
+        stage: ShaderStage,
+        entry: impl Into<String>,
+        logical_path: impl Into<String>,
+        source_kind: ShaderSourceKind,
+    ) -> Self {
+        let entry = entry.into();
+        Self {
+            label: None,
+            stage,
+            entry: entry.clone(),
+            spirv: Vec::new(),
+            asset: Some(ShaderAssetDesc::new(logical_path, source_kind).with_entry(entry)),
         }
     }
 
@@ -306,5 +416,16 @@ impl ShaderDesc {
     pub fn with_label(mut self, label: impl Into<String>) -> Self {
         self.label = Some(label.into());
         self
+    }
+
+    #[inline]
+    pub fn with_asset(mut self, asset: ShaderAssetDesc) -> Self {
+        self.asset = Some(asset);
+        self
+    }
+
+    #[inline]
+    pub fn is_inline_spirv(&self) -> bool {
+        !self.spirv.is_empty()
     }
 }

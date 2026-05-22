@@ -61,12 +61,15 @@ pub const MATERIALS_RUNTIME_REQUIREMENT_SPEC: newengine_service_api::RuntimeServ
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[cfg_attr(feature = "serde", serde(default))]
 pub struct MaterialLoadRequest {
+    /// First-class material selector. Preferred form is `materials/foo.nemat@entry`.
     pub logical_path: String,
+    /// Optional split selector for hosts that pass path and entry separately.
+    pub selector: Option<String>,
 }
 
 impl Default for MaterialLoadRequest {
     fn default() -> Self {
-        Self { logical_path: String::new() }
+        Self { logical_path: String::new(), selector: None }
     }
 }
 
@@ -202,8 +205,8 @@ impl Default for MaterialDescriptorLoadResponse {
 #[derive(Clone, Debug, PartialEq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[cfg_attr(feature = "serde", serde(default))]
-pub struct MaterialValidationRequest { pub logical_path: String }
-impl Default for MaterialValidationRequest { fn default() -> Self { Self { logical_path: String::new() } } }
+pub struct MaterialValidationRequest { pub logical_path: String, pub selector: Option<String> }
+impl Default for MaterialValidationRequest { fn default() -> Self { Self { logical_path: String::new(), selector: None } } }
 
 #[derive(Clone, Debug, PartialEq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]

@@ -2,40 +2,16 @@
     "profile":  "release",
     "codecs":  [
                    {
-                       "codec":  "newengine-codec-nemat",
+                       "codec":  "newengine-codec-listfile",
                        "version":  "0.1.0",
-                       "dll":  "newengine-codec-nemat-0.1.0.dll",
-                       "path":  "C:\\Users\\Aiden\\Documents\\Kayla\u0027s Systems\\NewEngineRockstar\\NewEngine\\neocore2\\plugins\\codecs\\newengine-codec-nemat-0.1.0.dll"
+                       "dll":  "newengine-codec-listfile-0.1.0.dll",
+                       "path":  "C:\\Users\\Aiden\\Documents\\Kayla\u0027s Systems\\NewEngineRockstar\\NewEngine\\neocore2\\plugins\\codecs\\newengine-codec-listfile-0.1.0.dll"
                    },
                    {
                        "codec":  "newengine-codec-nepak",
                        "version":  "0.1.0",
                        "dll":  "newengine-codec-nepak-0.1.0.dll",
                        "path":  "C:\\Users\\Aiden\\Documents\\Kayla\u0027s Systems\\NewEngineRockstar\\NewEngine\\neocore2\\plugins\\codecs\\newengine-codec-nepak-0.1.0.dll"
-                   },
-                   {
-                       "codec":  "newengine-codec-neytd",
-                       "version":  "0.1.0",
-                       "dll":  "newengine-codec-neytd-0.1.0.dll",
-                       "path":  "C:\\Users\\Aiden\\Documents\\Kayla\u0027s Systems\\NewEngineRockstar\\NewEngine\\neocore2\\plugins\\codecs\\newengine-codec-neytd-0.1.0.dll"
-                   },
-                   {
-                       "codec":  "newengine-codec-ydd",
-                       "version":  "0.1.0",
-                       "dll":  "newengine-codec-ydd-0.1.0.dll",
-                       "path":  "C:\\Users\\Aiden\\Documents\\Kayla\u0027s Systems\\NewEngineRockstar\\NewEngine\\neocore2\\plugins\\codecs\\newengine-codec-ydd-0.1.0.dll"
-                   },
-                   {
-                       "codec":  "newengine-codec-ytd",
-                       "version":  "0.1.0",
-                       "dll":  "newengine-codec-ytd-0.1.0.dll",
-                       "path":  "C:\\Users\\Aiden\\Documents\\Kayla\u0027s Systems\\NewEngineRockstar\\NewEngine\\neocore2\\plugins\\codecs\\newengine-codec-ytd-0.1.0.dll"
-                   },
-                   {
-                       "codec":  "newengine-codec-ytyp",
-                       "version":  "0.1.0",
-                       "dll":  "newengine-codec-ytyp-0.1.0.dll",
-                       "path":  "C:\\Users\\Aiden\\Documents\\Kayla\u0027s Systems\\NewEngineRockstar\\NewEngine\\neocore2\\plugins\\codecs\\newengine-codec-ytyp-0.1.0.dll"
                    }
                ],
     "naming":  "{codec}-{version}.dll",

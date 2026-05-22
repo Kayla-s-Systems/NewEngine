@@ -21,6 +21,7 @@ use super::module_impl::instancing::InstanceBufferUploader;
 use super::module_impl::draw_lists::RenderDrawListProviderRegistry;
 use super::module_impl::light_extraction::LightExtractionProviderRegistry;
 use super::resource_lifetime::RenderTargetLifetimeQueue;
+use super::runtime_profile::RenderRuntimeProfile;
 
 type PrimGpuCache = FxHashMap<newengine_primitives::PrimitiveId, PrimitiveGpu>;
 type TerrainGpuCache = FxHashMap<u64, PrimitiveGpu>;
@@ -97,6 +98,21 @@ pub(super) struct RenderViewportState {
     pub(super) render_target_extent: Extent2D,
     pub(super) last_cursor_state: CursorState,
 }
+
+/// Runtime profile state resolved from declarative host/plugin config.
+pub(super) struct RenderRuntimeProfileState {
+    pub(super) profile: RenderRuntimeProfile,
+}
+
+impl RenderRuntimeProfileState {
+    #[inline]
+    pub(super) fn new() -> Self {
+        Self {
+            profile: RenderRuntimeProfile::load(),
+        }
+    }
+}
+
 
 impl RenderViewportState {
     #[inline]

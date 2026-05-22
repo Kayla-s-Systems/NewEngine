@@ -87,7 +87,8 @@ impl EngineSceneGatewayService {
             "methods": [
                 scene_method::FORMATS_JSON,
                 scene_method::LOAD_JSON_V1,
-                scene_method::SAVE_JSON_V1
+                scene_method::SAVE_JSON_V1,
+                scene_method::SHUTDOWN_V1
             ]
         }))
     }
@@ -240,7 +241,8 @@ pub fn scene_gateway_service(
         "methods": [
             scene_method::FORMATS_JSON,
             scene_method::LOAD_JSON_V1,
-            scene_method::SAVE_JSON_V1
+            scene_method::SAVE_JSON_V1,
+            scene_method::SHUTDOWN_V1
         ]
     });
 
@@ -253,6 +255,7 @@ pub fn scene_gateway_service(
         .blob(scene_method::FORMATS_JSON, move |_unit, _payload| formats_service.formats_json())
         .blob(scene_method::LOAD_JSON_V1, move |_unit, payload| load_service.load_json_v1(payload))
         .blob(scene_method::SAVE_JSON_V1, move |_unit, payload| save_service.save_json_v1(payload))
+        .blob(scene_method::SHUTDOWN_V1, move |_unit, _payload| RResult::ROk(Blob::from(Vec::new())))
         .into_service_v1()
 }
 

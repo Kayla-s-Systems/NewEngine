@@ -58,6 +58,45 @@
           "y": -24
         },
         "icon": "ui/engine.ico"
+      },
+      "engine_runtime": {
+        "render": {
+          "runtime_profile": {
+            "id": "newengine.render.runtime.foundation_gtx750",
+            "legacy_safe": false,
+            "graphics": {
+              "clear_color": [
+                0.02,
+                0.025,
+                0.035,
+                1.0
+              ],
+              "sky": {
+                "mode": "native",
+                "tick_cycle": "enabled"
+              },
+              "shadows": "enabled",
+              "hdr_scene": "disabled",
+              "postfx": "disabled",
+              "deferred": "disabled"
+            },
+            "world": {
+              "runtime_terrain_streaming": "enabled",
+              "service_physics": "disabled",
+              "fallback_ecs_physics": true
+            },
+            "input": {
+              "capture_cursor_on_play": true,
+              "force_gameplay_look": true,
+              "force_gameplay_actions": true
+            },
+            "menu": {
+              "restore_viewport_pass_on_close": true,
+              "restore_gameplay_input_on_close": true,
+              "invalidate_shadow_cache_on_close": true
+            }
+          }
+        }
       }
     }
   }

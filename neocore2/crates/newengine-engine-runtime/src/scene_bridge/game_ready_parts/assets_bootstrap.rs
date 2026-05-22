@@ -369,6 +369,48 @@ fn to_fps_demo_rules(spec: &GameReadyGameplaySpec, model: &self::content::GameRe
     }
 }
 
+
+fn instantiate_game_ready_definitions(
+    world: &mut newengine_ecs::World,
+    root: EntityId,
+    definitions: &[GameReadyDefinitionInstanceSpec],
+) {
+    if definitions.is_empty() {
+        return;
+    }
+    log::debug!(
+        "definitions.runtime: game-ready instantiation batch count={} policy='RuntimeCommand::InstantiateDefinition -> engine.definitions -> AssetGraphResolver -> ECS apply'",
+        definitions.len()
+    );
+    for spec in definitions {
+        let graph = newengine_model_domain_api::AssetGraphResolver::resolve_root_ref(&spec.definition_ref);
+        let transform = super::definitions_runtime::DefinitionInstantiateTransform {
+            translation: [spec.position.x, spec.position.y, spec.position.z],
+            rotation_ypr: spec.rotation_ypr,
+            scale: [spec.scale.x, spec.scale.y, spec.scale.z],
+        };
+        let (entity, trace) = super::definitions_runtime::apply_definition_instantiation(
+            world,
+            Some(root),
+            spec.definition_ref.clone(),
+            transform,
+            graph,
+        );
+        log::debug!(
+            "definitions.runtime: game-ready instantiated definition_ref='{}' entity={:?} nodes={} missing={} render_drawables={} materials={} textures={} physics_refs={} result='{}'",
+            trace.definition_ref,
+            entity,
+            trace.resolved_graph.nodes.len(),
+            trace.resolved_graph.missing_refs.len(),
+            trace.render_packet_request.drawable_refs.len(),
+            trace.render_packet_request.material_refs.len(),
+            trace.render_packet_request.texture_refs.len(),
+            trace.physics_declaration.collision_refs.len() + trace.physics_declaration.physics_refs.len(),
+            trace.apply_result
+        );
+    }
+}
+
 pub(super) fn bootstrap_fps_game_ready_scene(
     scene: &mut Scene,
     prims: &mut PrimitiveRegistry,
@@ -424,6 +466,7 @@ pub(super) fn bootstrap_fps_game_ready_scene(
         map.player.start,
     );
     spawn_skydome(world, prims, mats, materials, root, &map.sky, map.palette.sky);
+    instantiate_game_ready_definitions(world, root, &map.definitions);
 
     let start_x = map.player.start.x;
     let start_z = map.player.start.z;

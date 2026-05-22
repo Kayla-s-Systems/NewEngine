@@ -41,6 +41,13 @@ pub enum SceneCommand {
         position: [f32; 3],
     },
 
+    InstantiateDefinition {
+        definition_ref: String,
+        position: [f32; 3],
+        rotation_ypr: [f32; 3],
+        scale: [f32; 3],
+    },
+
     SetTransform {
         entity: EntityId,
         position: [f32; 3],

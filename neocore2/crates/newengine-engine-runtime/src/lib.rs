@@ -15,6 +15,7 @@ pub mod gameplay;
 pub mod input_systems;
 pub mod plugin_manager;
 pub mod render_controller;
+pub mod runtime;
 pub mod render_runtime {
     pub use newengine_runtime_host::render_runtime::*;
 }

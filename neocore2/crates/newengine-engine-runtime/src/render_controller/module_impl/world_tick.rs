@@ -4,12 +4,14 @@ use newengine_scene::Scene;
 
 use crate::engine_bounds::EngineBoundsSnap;
 use crate::scene_bridge::EngineViewInput;
-use crate::gameplay::{run_schedule, GameRunMode};
+use crate::gameplay::{run_schedule_with_physics_mode, GameRunMode, PhysicsIntegrationMode};
 
 use super::frame_types::WorldFrameState;
 use super::input::ViewportInputSnap;
 use super::super::controller::RuntimeRenderController;
 use super::{readiness, scene};
+
+use std::sync::atomic::{AtomicBool, Ordering};
 
 impl RuntimeRenderController {
     pub(super) fn tick_world_for_render(
@@ -71,18 +73,81 @@ impl RuntimeRenderController {
                 GameRunMode::Staging
             };
 
-            if effective_play_mode.is_runtime() {
-                let mats_lock = scene_bridge.materials();
-                let mats = mats_lock.read();
-                crate::scene_bridge::tick_game_ready_streaming_terrain(world, &mats, job_system);
+            let runtime_profile = self.runtime_profile().clone();
+            let legacy_safe = runtime_profile.legacy_safe_enabled();
+            if legacy_safe {
+                log_legacy_world_tick_once();
+                log::info!(
+                    "render world tick: phase='mode_resolved' frame={} play_mode={:?} effective={:?} world_playable={} pause_world={} dt={:.4}",
+                    self.frame.frame_index,
+                    play_mode,
+                    effective_play_mode,
+                    world_playable,
+                    pause_world,
+                    dt
+                );
             }
-            crate::scene_bridge::tick_game_ready_sky_cycle(world, dt);
+
+            if effective_play_mode.is_runtime() {
+                if runtime_profile.use_runtime_terrain_streaming() {
+                    if legacy_safe {
+                        log::info!("render world tick: phase='terrain_streaming.begin' frame={}", self.frame.frame_index);
+                    }
+                    let mats_lock = scene_bridge.materials();
+                    let mats = mats_lock.read();
+                    crate::scene_bridge::tick_game_ready_streaming_terrain(world, &mats, job_system);
+                    if legacy_safe {
+                        log::info!("render world tick: phase='terrain_streaming.end' frame={}", self.frame.frame_index);
+                    }
+                } else {
+                    log_legacy_streaming_skip_once();
+                }
+            }
+            if runtime_profile.tick_sky_cycle() {
+                if legacy_safe {
+                    log::info!("render world tick: phase='sky_cycle.begin' frame={}", self.frame.frame_index);
+                }
+                crate::scene_bridge::tick_game_ready_sky_cycle(world, dt);
+                if legacy_safe {
+                    log::info!("render world tick: phase='sky_cycle.end' frame={}", self.frame.frame_index);
+                }
+            } else if legacy_safe {
+                log::info!("render world tick: phase='sky_cycle.skipped' frame={} reason='runtime_profile'", self.frame.frame_index);
+            }
 
             if effective_play_mode.runs_physics() && !pause_world {
-                world.insert_resource(crate::gameplay::PhysicsRuntimeFrameIndex(self.frame.frame_index));
-                run_schedule(&mut self.frame.sim_schedule, world, dt, physics_api);
+                if runtime_profile.use_service_physics() || runtime_profile.use_fallback_ecs_physics() {
+                    if legacy_safe {
+                        log::info!("render world tick: phase='physics_schedule.begin' frame={}", self.frame.frame_index);
+                    }
+                    world.insert_resource(crate::gameplay::PhysicsRuntimeFrameIndex(self.frame.frame_index));
+                    let physics_mode = if runtime_profile.use_service_physics() {
+                        PhysicsIntegrationMode::ServiceBackend
+                    } else {
+                        PhysicsIntegrationMode::EcsFallback
+                    };
+                    run_schedule_with_physics_mode(
+                        &mut self.frame.sim_schedule,
+                        world,
+                        dt,
+                        physics_api,
+                        physics_mode,
+                    );
+                    if legacy_safe {
+                        log::info!(
+                            "render world tick: phase='physics_schedule.end' frame={} mode={:?}",
+                            self.frame.frame_index,
+                            physics_mode,
+                        );
+                    }
+                } else {
+                    log_legacy_physics_skip_once();
+                }
             }
 
+            if legacy_safe {
+                log::info!("render world tick: phase='view_resolve.begin' frame={}", self.frame.frame_index);
+            }
             let bounds = scene::scene_bounds_world(world).unwrap_or_else(scene::default_bounds);
             let bounds = EngineBoundsSnap::new(bounds.center, bounds.radius);
             let sel_bounds = scene::selection_bounds_world(world, selection)
@@ -106,6 +171,9 @@ impl RuntimeRenderController {
             self.viewport.last_aspect = frame.view.aspect;
             self.viewport.last_vp_w = vp_w;
             self.viewport.last_vp_h = vp_h;
+            if legacy_safe {
+                log::info!("render world tick: phase='view_resolve.end' frame={}", self.frame.frame_index);
+            }
             frame
         });
 
@@ -114,6 +182,52 @@ impl RuntimeRenderController {
         }
 
         WorldFrameState { view_frame }
+    }
+}
+
+static LEGACY_WORLD_TICK_LOGGED: AtomicBool = AtomicBool::new(false);
+static LEGACY_PHYSICS_SKIP_LOGGED: AtomicBool = AtomicBool::new(false);
+static LEGACY_STREAMING_SKIP_LOGGED: AtomicBool = AtomicBool::new(false);
+
+fn log_legacy_world_tick_once() {
+    if LEGACY_WORLD_TICK_LOGGED
+        .compare_exchange(false, true, Ordering::AcqRel, Ordering::Acquire)
+        .is_ok()
+    {
+        log::warn!(
+            "render world tick: legacy GPU safe profile active; runtime subsystems are staged independently so one native path cannot kill first playable frame"
+        );
+        newengine_core::crash::record_breadcrumb(
+            "render world tick: legacy GPU safe profile active".to_owned(),
+        );
+    }
+}
+
+fn log_legacy_physics_skip_once() {
+    if LEGACY_PHYSICS_SKIP_LOGGED
+        .compare_exchange(false, true, Ordering::AcqRel, Ordering::Acquire)
+        .is_ok()
+    {
+        log::warn!(
+            "render world tick: native physics schedule skipped by legacy GPU safe profile; change plugins.newengine.engine_runtime.render.runtime_profile.world.service_physics to 'enabled' to test the original physics path"
+        );
+        newengine_core::crash::record_breadcrumb(
+            "render world tick: legacy safe skipped native physics schedule".to_owned(),
+        );
+    }
+}
+
+fn log_legacy_streaming_skip_once() {
+    if LEGACY_STREAMING_SKIP_LOGGED
+        .compare_exchange(false, true, Ordering::AcqRel, Ordering::Acquire)
+        .is_ok()
+    {
+        log::warn!(
+            "render world tick: runtime terrain streaming skipped by legacy GPU safe profile; change plugins.newengine.engine_runtime.render.runtime_profile.world.runtime_terrain_streaming to 'enabled' to test the original streaming path"
+        );
+        newengine_core::crash::record_breadcrumb(
+            "render world tick: legacy safe skipped runtime terrain streaming".to_owned(),
+        );
     }
 }
 

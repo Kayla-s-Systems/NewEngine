@@ -1,3 +1,5 @@
+use std::time::Instant;
+
 use newengine_core::host_events::CursorState;
 use newengine_core::render::require_render_api;
 use newengine_core::{EngineResult, Module, ModuleCtx};
@@ -10,14 +12,26 @@ impl RuntimeRenderController {
         ctx: &mut ModuleCtx<'_, E>,
     ) -> EngineResult<()> {
         if let Ok(api) = require_render_api(ctx) {
+            let started_at = Instant::now();
+            log::info!("render controller: loading-screen pipeline warmup begin");
             let mut r = api.lock();
             if let Err(e) = self.gpu.require_primary_lit_pipeline(&mut **r) {
-                log::warn!("render controller: loading-screen pipeline warmup skipped: {}", e);
+                log::warn!(
+                    "render controller: loading-screen pipeline warmup skipped err='{}' elapsed_ms={:.2}",
+                    e,
+                    started_at.elapsed().as_secs_f64() * 1000.0
+                );
             } else {
                 let _ = r.pump_uploads(
                     newengine_core::render::UploadPumpDesc::loading_screen_warmup(),
                 );
+                log::info!(
+                    "render controller: loading-screen pipeline warmup completed elapsed_ms={:.2}",
+                    started_at.elapsed().as_secs_f64() * 1000.0
+                );
             }
+        } else {
+            log::warn!("render controller: loading-screen pipeline warmup skipped because engine.render gateway is unavailable");
         }
         Ok(())
     }

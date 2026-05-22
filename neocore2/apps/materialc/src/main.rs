@@ -1,7 +1,10 @@
 #![forbid(unsafe_op_in_unsafe_fn)]
 
-use newengine_materials::binary::{encode_asset, MaterialBinaryAsset};
 use newengine_materials::serde as mat_serde;
+use newengine_materials::{
+    AuthoredMaterialDescriptor, AuthoredMaterialLibrary, AuthoredMaterialSurface,
+    MaterialFlags, MaterialParamValue, ShadingModel,
+};
 
 use std::path::{Path, PathBuf};
 
@@ -18,7 +21,7 @@ fn main_impl() -> Result<(), String> {
         Some(v) => v,
         None => {
             return Err(
-                "usage: materialc <in.json> [--out <out.nemat>] [--name <materials/foo>]"
+                "usage: materialc <descriptor.json> [--out <out.material-library.json>] [--name <entry>]"
                     .to_string(),
             )
         }
@@ -57,11 +60,15 @@ fn main_impl() -> Result<(), String> {
     desc.sanitize_in_place();
 
     let stem = file_stem_ascii(&in_path).ok_or_else(|| "bad input filename".to_string())?;
-    let name = name.unwrap_or_else(|| format!("materials/{stem}"));
+    let name = name.unwrap_or(stem);
 
     let out_path = out_path
         .map(PathBuf::from)
-        .unwrap_or_else(|| in_path.with_extension("nemat"));
+        .unwrap_or_else(|| in_path.with_extension("material-library.json"));
+
+    if out_path.extension().and_then(|ext| ext.to_str()).map(|ext| ext.eq_ignore_ascii_case("nemat")).unwrap_or(false) {
+        return Err("materialc no longer writes top-level NEMAT binary files; compile authoring JSON into NEF8 .nemat through the ListFile toolchain".to_owned());
+    }
 
     if let Some(parent) = out_path.parent() {
         if !parent.as_os_str().is_empty() {
@@ -69,12 +76,30 @@ fn main_impl() -> Result<(), String> {
         }
     }
 
-    let bytes = encode_asset(&MaterialBinaryAsset {
-        name,
-        desc,
-    })
-        .map_err(|e| format!("encode failed: {e}"))?;
+    let library = AuthoredMaterialLibrary {
+        version: 1,
+        materials: vec![AuthoredMaterialDescriptor {
+            name,
+            shader: if matches!(desc.shading_model, ShadingModel::Unlit) { "unlit".to_owned() } else { "pbr.default".to_owned() },
+            surface: AuthoredMaterialSurface {
+                blend: if desc.flags.contains(MaterialFlags::ALPHA_BLEND) { "alpha_blend".to_owned() } else { "opaque".to_owned() },
+                two_sided: desc.flags.contains(MaterialFlags::DOUBLE_SIDED),
+                alpha_cutoff: if desc.flags.contains(MaterialFlags::ALPHA_TEST) { Some(desc.alpha_cutoff) } else { None },
+            },
+            textures: Default::default(),
+            params: [
+                ("base_color".to_owned(), MaterialParamValue::Color(desc.base_color)),
+                ("metallic".to_owned(), MaterialParamValue::Float(desc.metallic)),
+                ("roughness".to_owned(), MaterialParamValue::Float(desc.roughness)),
+                ("normal_scale".to_owned(), MaterialParamValue::Float(desc.normal_scale)),
+                ("occlusion_strength".to_owned(), MaterialParamValue::Float(desc.occlusion_strength)),
+                ("emissive".to_owned(), MaterialParamValue::Float3(desc.emissive)),
+                ("emissive_strength".to_owned(), MaterialParamValue::Float(desc.emissive_strength)),
+            ].into_iter().collect(),
+        }],
+    };
 
+    let bytes = serde_json::to_vec_pretty(&library).map_err(|e| format!("encode failed: {e}"))?;
     std::fs::write(&out_path, bytes)
         .map_err(|e| format!("write failed: '{}' err='{e}'", out_path.display()))?;
 

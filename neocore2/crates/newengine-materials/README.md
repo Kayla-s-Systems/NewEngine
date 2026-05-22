@@ -28,9 +28,14 @@ let list = reg.snapshot();
 Textures and GPU bindings are intentionally not part of the base descriptor yet.
 They should be introduced once the asset pipeline exposes a stable texture handle contract.
 
-## Binary format
+## `.nemat` material library contract
 
-The crate provides a deterministic binary container for materials (recommended extension: `.nemat`).
+`.nemat` is a NEF8/ListFile material library with multiple addressable entries:
 
-- `newengine_materials::binary::{MaterialBinaryAsset, encode_asset, decode_asset}`
-- Emission uses `emissive` (color) * `emissive_strength` (scalar), which supports HDR-style bloom workflows.
+```text
+materials/world/garage.nemat@garage_door
+```
+
+Runtime material loading resolves one selected library entry through `engine.materials`, validates `.ytd@entry` texture refs, then emits a renderer-agnostic `RenderMaterialPacket`.
+
+The old single-material binary helpers remain low-level descriptor payload utilities only; they are not the public `.nemat` file contract.

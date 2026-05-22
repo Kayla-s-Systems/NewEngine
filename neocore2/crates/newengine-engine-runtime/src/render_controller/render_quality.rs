@@ -31,14 +31,9 @@ pub(crate) const SHADOW_WARMUP_DEFER_FRAMES: u8 = 0;
 
 
 #[inline]
-pub(crate) fn shadow_refresh_period_frames() -> u64 {
-    std::env::var("NEWENGINE_SHADOW_REFRESH_FRAMES")
-        .ok()
-        .and_then(|value| value.trim().parse::<u64>().ok())
-        .map(|value| value.clamp(1, 3600))
-        // Stable CSM should not refresh every frame by default. The cache still
-        // refreshes immediately when the snapped shadow sample space changes,
-        // but otherwise this avoids wasting the first few milliseconds of every
-        // frame on a static sun shadow map.
-        .unwrap_or(12)
+pub(crate) const fn shadow_refresh_period_frames() -> u64 {
+    // Stable CSM should not refresh every frame by default. Runtime overrides
+    // now live in the declarative render runtime profile instead of environment
+    // variables embedded in engine code.
+    12
 }

@@ -1,3 +1,5 @@
+use std::any::Any;
+use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::sync::OnceLock;
 
 use newengine_core::render::{
@@ -79,13 +81,56 @@ impl RuntimeRenderController {
         self.gpu.meshes.instance_uploader.begin_frame();
         self.diagnostics.overlay_metrics.begin_frame(scope.dt);
 
-        let outcome = self.render_playable_viewport_frame(
-            ctx,
-            &mut **r,
-            plugin_snapshot.as_ref(),
-            ui,
-            scope,
-        )?;
+        let outcome = match catch_unwind(AssertUnwindSafe(|| {
+            self.render_playable_viewport_frame(
+                ctx,
+                &mut **r,
+                plugin_snapshot.as_ref(),
+                ui,
+                scope,
+            )
+        })) {
+            Ok(Ok(outcome)) => outcome,
+            Ok(Err(e)) => {
+                let message = e.to_string();
+                self.disable_viewport_pass("render_playable_viewport_frame.error", &message);
+                log::error!(
+                    "render controller: playable frame returned error; presenting degraded recovery frame instead of aborting: {}",
+                    message
+                );
+                let _ = r.discard_recorded_commands();
+                let _ = r.end_frame();
+                drop(r);
+                ctx.resources_mut().insert(newengine_core::render::RenderBackendStatus::degraded(
+                    "render.playable_frame.error",
+                    message,
+                ));
+                ctx.resources_mut().insert(SceneLaunchStatus::inactive());
+                return Ok(());
+            }
+            Err(payload) => {
+                let message = panic_payload_message(payload);
+                self.disable_viewport_pass("render_playable_viewport_frame.panic", &message);
+                log::error!(
+                    "render controller: caught panic during playable frame; presenting degraded recovery frame instead of aborting: {}",
+                    message
+                );
+                newengine_core::crash::record_breadcrumb(format!(
+                    "render controller: caught playable-frame panic frame={} msg='{}'",
+                    self.frame.frame_index,
+                    message
+                ));
+                let _ = r.discard_recorded_commands();
+                let _ = r.end_frame();
+                drop(r);
+                ctx.resources_mut().insert(newengine_core::render::RenderBackendStatus::degraded(
+                    "render.playable_frame.panic",
+                    message,
+                ));
+                ctx.resources_mut().insert(SceneLaunchStatus::inactive());
+                return Ok(());
+            }
+        };
 
         let mut telemetry_to_publish = None;
         let mut ui_telemetry_to_publish = None;
@@ -195,6 +240,7 @@ impl RuntimeRenderController {
             (requested_vp_w, requested_vp_h)
         };
 
+        self.viewport.clear_color = self.runtime_profile().configured_clear_color();
         self.trace_begin_frame(trace_frame, vp_w, vp_h);
         r.begin_frame(BeginFrameDesc::new(self.viewport.clear_color))?;
         self.trace_begin_frame_done(trace_frame);
@@ -313,6 +359,16 @@ impl RuntimeRenderController {
                 diag.queue.queued_upload_bytes as f32 / (1024.0 * 1024.0),
             );
         }
+    }
+}
+
+fn panic_payload_message(payload: Box<dyn Any + Send>) -> String {
+    if let Some(msg) = payload.downcast_ref::<&str>() {
+        (*msg).to_owned()
+    } else if let Some(msg) = payload.downcast_ref::<String>() {
+        msg.clone()
+    } else {
+        "<non-string panic payload>".to_owned()
     }
 }
 

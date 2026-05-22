@@ -310,10 +310,8 @@ impl FrameGraphBuilder {
             return self;
         }
 
-        let input = if self.has_resource(RG_LIT_COLOR) {
-            RG_LIT_COLOR
-        } else {
-            RG_SCENE_HDR_COLOR
+        let Some(input) = self.sampleable_scene_input_resource() else {
+            return self;
         };
         self.add_phase_pass(StandardRenderPhase::PostFx, |pass| {
             pass.with_domain(RenderGraphPassDomain::PostProcess).reads(input, RenderGraphResourceUsage::SampledTexture)
@@ -324,7 +322,9 @@ impl FrameGraphBuilder {
 
     #[inline]
     pub fn bloom_extract(mut self) -> Self {
-        let input = if self.has_resource(RG_LIT_COLOR) { RG_LIT_COLOR } else { RG_SCENE_HDR_COLOR };
+        let Some(input) = self.sampleable_scene_input_resource() else {
+            return self;
+        };
         self.add_phase_pass(StandardRenderPhase::BloomExtract, |pass| {
             pass.with_domain(RenderGraphPassDomain::PostProcess).reads(input, RenderGraphResourceUsage::SampledTexture)
                 .writes(RG_SURFACE_COLOR, RenderGraphResourceUsage::ColorAttachment)
@@ -364,7 +364,9 @@ impl FrameGraphBuilder {
         if !enabled {
             return self;
         }
-        let input = if self.has_resource(RG_LIT_COLOR) { RG_LIT_COLOR } else { RG_SCENE_HDR_COLOR };
+        let Some(input) = self.sampleable_scene_input_resource() else {
+            return self;
+        };
         self.add_phase_pass(StandardRenderPhase::UiBackdropBlur, |pass| {
             pass.with_domain(RenderGraphPassDomain::Render2d)
                 .reads(input, RenderGraphResourceUsage::SampledTexture)
@@ -577,6 +579,17 @@ impl FrameGraphBuilder {
         } else {
             RG_VIEWPORT_COLOR
         }
+    }
+
+    #[inline]
+    fn sampleable_scene_input_resource(&self) -> Option<RenderGraphResourceId> {
+        if self.has_resource(RG_LIT_COLOR) {
+            return Some(RG_LIT_COLOR);
+        }
+        if self.has_resource(RG_SCENE_HDR_COLOR) {
+            return Some(RG_SCENE_HDR_COLOR);
+        }
+        None
     }
 
     fn add_phase_pass(

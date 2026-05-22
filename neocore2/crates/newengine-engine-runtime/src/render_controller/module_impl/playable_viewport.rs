@@ -19,6 +19,7 @@ impl RuntimeRenderController {
         scope: RenderFrameScope,
     ) -> EngineResult<PlayableFrameOutcome> {
         let mut frame_input = self.read_viewport_frame_input(ctx, ui, scope);
+        let pause_was_open = self.menu.pause.is_open();
         let pause_menu = self.menu.pause.update(
             frame_input.surface_input.as_ref(),
             &frame_input.input,
@@ -27,6 +28,9 @@ impl RuntimeRenderController {
             self.frame.frame_index,
         );
         ctx.resources_mut().insert::<UiPauseMenuState>(pause_menu.state.clone());
+        if pause_was_open && !pause_menu.blocks_gameplay {
+            self.restore_playable_view_after_menu_close();
+        }
         if pause_menu.exit_requested {
             log::info!("pause menu: exit requested through declarative menu action");
             ctx.request_exit();
@@ -86,8 +90,10 @@ impl RuntimeRenderController {
 
         if pause_menu.blocks_gameplay {
             self.sync_cursor_state(ctx, CursorState::released());
-        } else {
+        } else if self.runtime_profile().input.capture_cursor_on_play {
             self.sync_cursor_state(ctx, world_frame.view_frame.cursor);
+        } else {
+            self.sync_cursor_state(ctx, CursorState::released());
         }
 
         let outcome = self.submit_scene_viewport_frame(
@@ -128,11 +134,15 @@ impl RuntimeRenderController {
                 &mut carrier,
             );
         }
+        let play_mode = self.bridges.scene.play_mode();
+        if play_mode.wants_direct_player_control() {
+            input.apply_gameplay_input_handoff(&self.runtime_profile().input);
+        }
         ViewportFrameInput {
             ui,
             input,
             surface_input,
-            play_mode: self.bridges.scene.play_mode(),
+            play_mode,
         }
     }
 

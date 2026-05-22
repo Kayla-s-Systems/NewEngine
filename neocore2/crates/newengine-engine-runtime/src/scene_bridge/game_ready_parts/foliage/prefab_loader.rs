@@ -71,9 +71,16 @@ fn load_prefab_logical_asset(prefab: &GameReadyPrefabSpec) -> Result<String, Str
     // Prefer the authored logical asset path exactly as declared. If it is a
     // relative sidecar path such as "scene.gltf", resolve it against the prefab
     // document directory. Both probes go through AssetManager raw VFS access.
-    if prefab_asset_raw_bytes(logical_asset).is_ok() {
-        Ok(logical_asset.to_owned())
-    } else {
-        join_logical_path(logical_dir(&prefab.source), logical_asset)
+    match prefab_asset_raw_bytes(logical_asset) {
+        Ok(_) => Ok(logical_asset.to_owned()),
+        Err(first_err) => {
+            let base_dir = logical_dir(&prefab.source);
+            let normalized = logical_asset.trim().replace('\\', "/");
+            if !base_dir.is_empty() && normalized.starts_with(&format!("{base_dir}/")) {
+                return Err(first_err);
+            }
+            let joined = join_logical_path(base_dir, logical_asset)?;
+            prefab_asset_raw_bytes(&joined).map(|_| joined)
+        }
     }
 }

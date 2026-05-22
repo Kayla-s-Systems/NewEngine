@@ -24,9 +24,11 @@ mod errors;
 
 pub use crate::api::{
     validate_authored_material_library, AuthoredMaterialDescriptor, AuthoredMaterialLibrary,
-    AuthoredMaterialSurface, AuthoredMaterialValidation, MaterialAssetDocument, MaterialDescriptor, MaterialFlags, MaterialId, MaterialRef,
-    MaterialResolved, MaterialTextureBindings, MaterialTextureResidency,
-    MaterialTextureResidencyState, MaterialTextureSlot,
+    AuthoredMaterialSurface, AuthoredMaterialValidation, MaterialAssetDocument,
+    MaterialDescriptor, MaterialEntryV1, MaterialFlags, MaterialId, MaterialParamValue,
+    MaterialRef, MaterialResolved, MaterialTextureBindingV1, MaterialTextureBindings,
+    MaterialTextureResidency, MaterialTextureResidencyState, MaterialTextureSlot,
+    NematMaterialLibraryBodyV1,
 };
 pub use crate::api::{
     MaterialDomain, MaterialInstanceDesc, MaterialOverrides, MaterialPermutationKey, ShadingModel,

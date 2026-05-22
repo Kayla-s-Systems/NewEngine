@@ -5,11 +5,10 @@
 //! Authored/runtime material graphs reference texture dictionaries through the
 //! shared VFS syntax `<logical-path>[@entry]`. Source image containers
 //! (PNG/JPG/TGA/DDS/etc.) are import inputs for tools only and must not appear in
-//! material graphs. `.neytd` is legacy/cache compatibility and is rejected by the
-//! public material contract.
+//! material graphs. `.neytd` is rejected by the public material contract.
 
 use newengine_assets_api::{
-    is_legacy_neytd_reference, is_raw_source_image_reference, require_asset_reference_extension,
+    is_rejected_neytd_reference, is_raw_source_image_reference, require_asset_reference_extension,
     AssetReference,
 };
 
@@ -27,8 +26,8 @@ impl MaterialTextureReference {
     pub fn parse(value: &str) -> Option<Self> { Self::parse_strict(value).ok() }
 
     pub fn parse_strict(value: &str) -> Result<Self, String> {
-        if is_legacy_neytd_reference(value) {
-            return Err("material texture references must use .ytd@entry; .neytd is legacy/cache-only".to_owned());
+        if is_rejected_neytd_reference(value) {
+            return Err("material texture references must use .ytd@entry; .neytd is not a public material texture reference".to_owned());
         }
         if is_raw_source_image_reference(value) {
             return Err("material texture references must use .ytd@entry; raw source image formats are import inputs only".to_owned());
@@ -51,3 +50,29 @@ pub fn validate_material_texture_reference(value: &str) -> Result<MaterialTextur
 
 #[inline]
 pub fn is_material_texture_reference(value: &str) -> bool { MaterialTextureReference::parse(value).is_some() }
+
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn rejects_raw_source_image_texture_refs() {
+        assert!(validate_material_texture_reference("foo.png").is_err());
+        assert!(validate_material_texture_reference("foo.dds").is_err());
+        assert!(validate_material_texture_reference("foo.jpg").is_err());
+    }
+
+    #[test]
+    fn rejects_ytd_without_entry() {
+        assert!(validate_material_texture_reference("textures/world.ytd").is_err());
+    }
+
+    #[test]
+    fn accepts_ytd_entry() {
+        let reference = validate_material_texture_reference("textures/world.ytd@brick_albedo").unwrap();
+        assert_eq!(reference.dictionary_path, "textures/world.ytd");
+        assert_eq!(reference.entry_selector, "brick_albedo");
+        assert_eq!(reference.canonical, "textures/world.ytd@brick_albedo");
+    }
+}

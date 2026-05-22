@@ -42,6 +42,7 @@ fn ensure_player_runtime_model_parts(
     let mut registered_parts = 0usize;
     let mut registered_vertices = 0usize;
     let mut registered_indices = 0usize;
+    let unresolved_material_id = mats.upsert_named("Player/UnresolvedDataDrivenMaterial", newengine_materials::MaterialDescriptor::default());
     for part in bundle.parts {
         let primitive_id = PrimitiveId(fnv1a_64(&format!("player-model:{}:{}", bundle.source, part.material_slot)));
         if !prims.is_registered(primitive_id) {
@@ -56,7 +57,7 @@ fn ensure_player_runtime_model_parts(
             registered_vertices += vertex_count;
             registered_indices += index_count;
             log::debug!(
-                "game-ready: player model part registered source='{}' material='{}' vertices={} indices={}",
+                "game-ready: player model part registered source='{}' slot='{}' vertices={} indices={} material_policy='ydd->nemat required'",
                 bundle.source,
                 part.material_slot,
                 vertex_count,
@@ -64,14 +65,15 @@ fn ensure_player_runtime_model_parts(
             );
         }
 
-        let material_id = mats.upsert_named_with_textures(
-            &format!("Player/Abigail/{}", part.material_slot),
-            part.material.descriptor,
-            part.material.textures,
-        );
+        if part.material.material_ref.is_none() {
+            log::debug!(
+                "game-ready: player model slot='{}' has no .nemat@entry material ref; using unresolved renderer-agnostic default until AssetGraphResolver supplies .ydd -> .nemat -> .ytd chain",
+                part.material_slot
+            );
+        }
         out.push(PlayerRuntimeModelPart {
             primitive_id,
-            material_id,
+            material_id: unresolved_material_id,
             material_slot: part.material_slot,
             color: part.material.fallback_color,
         });

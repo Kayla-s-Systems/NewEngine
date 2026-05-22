@@ -29,10 +29,40 @@ pub const ASSET_BACKEND_CAPABILITY_ID: &str = "asset_manager.backend";
 /// Wire method namespace for asset-domain service calls.
 pub const ASSET_METHOD_PREFIX: &str = "asset.";
 
+/// Semantic texture dictionary gateway id. File-type descriptors route `.ytd`
+/// meaning here; the implementation may still call `engine.assets` underneath
+/// for VFS bytes and codec dispatch.
+pub const ENGINE_TEXTURES_SERVICE_ID: &str = "engine.textures";
+/// Semantic definition/archetype metadata gateway id. File-type descriptors route
+/// `.ytyp` meaning here; scene/world systems may consume definitions later, but
+/// do not own the file type.
+pub const ENGINE_DEFINITIONS_SERVICE_ID: &str = "engine.definitions";
+pub const ENGINE_MODEL_SERVICE_ID: &str = "engine.model";
+pub const ENGINE_MATERIALS_SERVICE_ID: &str = "engine.materials";
+
+/// Semantic asset graph gateway id. This resolver owns declarative dependency
+/// graph expansion over .ytyp/.ydd/.nemat/.ytd refs; it uses engine.assets only
+/// for VFS bytes and codec dispatch.
+pub const ENGINE_ASSET_GRAPH_SERVICE_ID: &str = "engine.asset_graph";
+pub const ASSET_GRAPH_SERVICE_ID: &str = "asset_graph.api";
+pub const ASSET_GRAPH_BACKEND_CAPABILITY_ID: &str = "asset_graph.backend";
+
+pub mod asset_graph_method {
+    pub const RESOLVE_V1: &str = "asset_graph.resolve_v1";
+    pub const VALIDATE_V1: &str = "asset_graph.validate_v1";
+    pub const DUMP_JSON_V1: &str = "asset_graph.dump_json_v1";
+}
+
+pub const ASSET_GRAPH_SERVICE_METHODS: &[&str] = &[
+    asset_graph_method::RESOLVE_V1,
+    asset_graph_method::VALIDATE_V1,
+    asset_graph_method::DUMP_JSON_V1,
+];
+
 
 mod asset_ref;
 pub use asset_ref::*;
-mod list_file;
+pub mod list_file;
 pub use list_file::*;
 
 /// Generic host/plugin backend declaration for the asset service family.
@@ -105,12 +135,15 @@ pub const ASSET_FILE_TYPES_RUNTIME_REQUIREMENT_SPEC: newengine_service_api::Runt
 /// raw XML, native binary, deflate, etc. behind the same logical descriptor.
 pub mod codec_type {
     /// Container codec. May expose nested VFS entries and may recursively host
-    /// other assets. Example: .pak.
+    /// other assets. Example: .nepak.
     pub const CONTAINER: &str = "containerType";
     /// List codec. A single file contains multiple same-domain records selected
-    /// by name/hash/index, but it cannot host nested assets. Examples: .ytd, .ydd.
+    /// by name/hash/index, but it cannot host nested assets. Examples: domain dictionaries projected from NEF8 entries.
     pub const LIST: &str = "listType";
-    /// Single binary file with magic bytes and one decoded object. Example: .nemat.
+    /// Canonical NEF8 ListFile binary envelope. The file extension remains domain-facing
+    /// (`.ytyp`, `.ytd`, `.ydd`, `.nemat`) while the header content_kind selects the payload domain.
+    pub const LIST_FILE: &str = "listFile";
+    /// Single binary file with magic bytes and one decoded object. Not used for `.nemat`, which is a NEF8 material library.
     pub const SINGLE: &str = "singleType";
     /// Asset definition metadata. It is not tied to a text encoding: the same
     /// logical format may be XML today, binary tomorrow, or compressed binary
@@ -139,10 +172,18 @@ pub struct AssetFileTypeDescriptor {
     /// Broad codec class. AssetManager uses this only for generic restrictions:
     /// nested VFS is allowed for `containerType` and forbidden for every other kind.
     pub codec_type: String,
+    /// Owner of byte access, VFS/package mount and codec dispatch. For normal
+    /// runtime assets this is `engine.assets`.
+    pub byte_owner: String,
+    /// Gateway that owns semantic interpretation of decoded entries.
+    pub semantic_gateway: String,
+    /// Compatibility projection for older descriptor consumers. It mirrors
+    /// `semantic_gateway` and must not be used as the byte owner.
     pub gateway: String,
     pub handler_service: String,
     pub read_method: String,
     pub selector_syntax: Option<String>,
+    pub consumer_domains: Vec<String>,
     /// Hex-encoded magic bytes. Required for magic-routed binary codecs, optional
     /// for codecs that deliberately own extension/source-policy routing such as
     /// `definitionType` legacy XML beside future binary envelopes.
@@ -171,10 +212,13 @@ impl Default for AssetFileTypeDescriptor {
             asset_kind: String::new(),
             container: String::new(),
             codec_type: codec_type::SINGLE.to_owned(),
+            byte_owner: ENGINE_ASSET_SERVICE_ID.to_owned(),
+            semantic_gateway: ENGINE_ASSET_SERVICE_ID.to_owned(),
             gateway: ENGINE_ASSET_SERVICE_ID.to_owned(),
             handler_service: ENGINE_ASSET_SERVICE_ID.to_owned(),
             read_method: method::DECODE_V1.to_owned(),
             selector_syntax: None,
+            consumer_domains: Vec::new(),
             magic: None,
             outputs: Vec::new(),
             priority: 0,
@@ -199,10 +243,45 @@ impl AssetFileTypeDescriptor {
     }
 
     #[inline]
+    pub fn normalize_layer_contract(&mut self) {
+        self.extension = Self::extension_key(&self.extension);
+        if self.byte_owner.trim().is_empty() {
+            self.byte_owner = ENGINE_ASSET_SERVICE_ID.to_owned();
+        }
+        if self.semantic_gateway.trim().is_empty() {
+            self.semantic_gateway = semantic_gateway_for_file_type(&self.extension, &self.asset_kind, &self.codec_type);
+        }
+        // Keep the old field as a semantic projection so existing AssetBrowser
+        // consumers do not mistake `engine.assets` for the meaning owner.
+        self.gateway = self.semantic_gateway.clone();
+        if self.consumer_domains.is_empty() {
+            self.consumer_domains = consumer_domains_for_file_type(&self.extension, &self.asset_kind, &self.codec_type);
+        }
+        if self.handler_service.trim().is_empty() {
+            self.handler_service = self.byte_owner.clone();
+        }
+    }
+
+    #[inline]
     pub fn validate_generic_rules(&self) -> Result<(), String> {
         let ext = Self::extension_key(&self.extension);
         if ext.is_empty() {
             return Err("codec descriptor extension is empty".to_owned());
+        }
+        if self.byte_owner.trim().is_empty() {
+            return Err(format!("codec '.{}' descriptor byte_owner is empty", ext));
+        }
+        if self.semantic_gateway.trim().is_empty() {
+            return Err(format!("codec '.{}' descriptor semantic_gateway is empty", ext));
+        }
+        if self.gateway.trim() != self.semantic_gateway.trim() {
+            return Err(format!(
+                "codec '.{}' descriptor gateway must mirror semantic_gateway ('{}' != '{}')",
+                ext, self.gateway, self.semantic_gateway
+            ));
+        }
+        if self.handler_service.trim().is_empty() {
+            return Err(format!("codec '.{}' descriptor handler_service is empty", ext));
         }
         let is_container = self.is_container_codec();
         if self.allow_nested_assets != is_container {
@@ -227,6 +306,49 @@ impl AssetFileTypeDescriptor {
     }
 }
 
+pub fn semantic_gateway_for_file_type(extension: &str, asset_kind: &str, codec_type: &str) -> String {
+    let ext = AssetFileTypeDescriptor::extension_key(extension);
+    if codec_type.trim().eq_ignore_ascii_case(codec_type::CONTAINER) || ext == "nepak" {
+        return ENGINE_ASSET_SERVICE_ID.to_owned();
+    }
+    match ext.as_str() {
+        "ytd" => ENGINE_TEXTURES_SERVICE_ID.to_owned(),
+        "ydd" => ENGINE_MODEL_SERVICE_ID.to_owned(),
+        "nemat" => ENGINE_MATERIALS_SERVICE_ID.to_owned(),
+        "ytyp" => ENGINE_DEFINITIONS_SERVICE_ID.to_owned(),
+        _ => match asset_kind.trim() {
+            "texture_dictionary" | "newengine.asset.texture_dictionary" => ENGINE_TEXTURES_SERVICE_ID.to_owned(),
+            "drawable_dictionary" | "newengine.asset.drawable_dictionary" => ENGINE_MODEL_SERVICE_ID.to_owned(),
+            "material_library" | "newengine.asset.material_library" => ENGINE_MATERIALS_SERVICE_ID.to_owned(),
+            "archetype_dictionary" | "newengine.asset.archetype_dictionary" => ENGINE_DEFINITIONS_SERVICE_ID.to_owned(),
+            "asset_package" | "newengine.asset.package" => ENGINE_ASSET_SERVICE_ID.to_owned(),
+            _ => ENGINE_ASSET_SERVICE_ID.to_owned(),
+        },
+    }
+}
+
+pub fn consumer_domains_for_file_type(extension: &str, asset_kind: &str, codec_type: &str) -> Vec<String> {
+    let ext = AssetFileTypeDescriptor::extension_key(extension);
+    let domains: &[&str] = if codec_type.trim().eq_ignore_ascii_case(codec_type::CONTAINER) || ext == "nepak" {
+        &[ENGINE_ASSET_SERVICE_ID]
+    } else {
+        match ext.as_str() {
+            "ytd" => &[ENGINE_MATERIALS_SERVICE_ID, ENGINE_MODEL_SERVICE_ID, "engine.ui", "engine.render"],
+            "ydd" => &[ENGINE_MODEL_SERVICE_ID, ENGINE_MATERIALS_SERVICE_ID, "engine.render"],
+            "nemat" => &[ENGINE_MATERIALS_SERVICE_ID, ENGINE_MODEL_SERVICE_ID, "engine.render"],
+            "ytyp" => &[ENGINE_MODEL_SERVICE_ID, ENGINE_MATERIALS_SERVICE_ID, "engine.physics", "engine.ai", "engine.editor", "engine.streaming"],
+            _ => match asset_kind.trim() {
+                "texture_dictionary" | "newengine.asset.texture_dictionary" => &[ENGINE_MATERIALS_SERVICE_ID, ENGINE_MODEL_SERVICE_ID, "engine.ui", "engine.render"],
+                "drawable_dictionary" | "newengine.asset.drawable_dictionary" => &[ENGINE_MODEL_SERVICE_ID, ENGINE_MATERIALS_SERVICE_ID, "engine.render"],
+                "material_library" | "newengine.asset.material_library" => &[ENGINE_MATERIALS_SERVICE_ID, ENGINE_MODEL_SERVICE_ID, "engine.render"],
+                "archetype_dictionary" | "newengine.asset.archetype_dictionary" => &[ENGINE_MODEL_SERVICE_ID, ENGINE_MATERIALS_SERVICE_ID, "engine.physics", "engine.ai", "engine.editor", "engine.streaming"],
+                _ => &[ENGINE_ASSET_SERVICE_ID],
+            },
+        }
+    };
+    domains.iter().map(|it| (*it).to_owned()).collect()
+}
+
 #[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[serde(default)]
 pub struct AssetFileTypeManifest {
@@ -238,7 +360,7 @@ pub struct AssetFileTypeManifest {
 impl Default for AssetFileTypeManifest {
     fn default() -> Self {
         Self {
-            schema: "newengine.asset_file_types.v1".to_owned(),
+            schema: "newengine.asset_file_types.v2".to_owned(),
             gateway: ENGINE_ASSET_FILE_TYPES_SERVICE_ID.to_owned(),
             formats: Vec::new(),
         }
@@ -375,13 +497,29 @@ pub mod method {
         pub const SOURCES_JSON: &str = "asset.sources_json";
         pub const VERIFY_ASSETS_JSON: &str = "asset.verify_assets_json";
         pub const SOURCE_KINDS_JSON: &str = "asset.source_kinds_json";
-        pub const MOUNT_PAK: &str = "asset.mount_pak";
+        pub const MOUNT_NEPAK: &str = "asset.mount_nepak";
         pub const MOUNT_DIR: &str = "asset.mount_dir";
-        pub const MOUNT_PAK_PRIO: &str = "asset.mount_pak_prio";
+        pub const MOUNT_NEPAK_PRIO: &str = "asset.mount_nepak_prio";
         pub const MOUNT_DIR_PRIO: &str = "asset.mount_dir_prio";
         pub const MOUNT_HTTP_PRIO: &str = "asset.mount_http_prio";
         pub const RESOLVE_TRACE_JSON: &str = "asset.resolve_trace_json";
     }
+}
+
+pub mod textures_method {
+    pub const MANIFEST_JSON_V1: &str = "textures.manifest_json_v1";
+    pub const ENTRY_RUNTIME_V1: &str = "textures.entry_runtime_v1";
+    pub const ENTRY_RGBA8_V1: &str = "textures.entry_rgba8_v1";
+    pub const VALIDATE_REF_V1: &str = "textures.validate_ref_v1";
+    pub const DESCRIBE_REF_JSON_V1: &str = "textures.describe_ref_json_v1";
+}
+
+pub mod definitions_method {
+    pub const MANIFEST_JSON_V1: &str = "definitions.manifest_json_v1";
+    pub const ENTRY_JSON_V1: &str = "definitions.entry_json_v1";
+    pub const RESOLVE_REFS_V1: &str = "definitions.resolve_refs_v1";
+    pub const VALIDATE_V1: &str = "definitions.validate_v1";
+    pub const DESCRIBE_SIDE_EFFECTS_V1: &str = "definitions.describe_side_effects_v1";
 }
 
 /// Required runtime methods for AssetManager 0.6+ deployments.
@@ -824,12 +962,12 @@ pub trait AssetService: AssetAccess {
     #[cfg(feature = "legacy_asset_api_compat")]
     #[deprecated(note = "use mount_source_json_v1")]
     #[inline]
-    fn mount_pak(&self, path_to_pak: &str) -> Result<(), String> {
+    fn mount_nepak(&self, path_to_nepak: &str) -> Result<(), String> {
         self.mount_source_json_v1(serde_json::json!({
             "kind": "nepak",
             "priority": 100,
             "mount": "",
-            "config": { "path": path_to_pak }
+            "config": { "path": path_to_nepak }
         }))
     }
 
@@ -848,12 +986,12 @@ pub trait AssetService: AssetAccess {
     #[cfg(feature = "legacy_asset_api_compat")]
     #[deprecated(note = "use mount_source_json_v1")]
     #[inline]
-    fn mount_pak_prio(&self, path_to_pak: &str, priority: i32) -> Result<(), String> {
+    fn mount_nepak_prio(&self, path_to_nepak: &str, priority: i32) -> Result<(), String> {
         self.mount_source_json_v1(serde_json::json!({
             "kind": "nepak",
             "priority": priority,
             "mount": "",
-            "config": { "path": path_to_pak }
+            "config": { "path": path_to_nepak }
         }))
     }
 
@@ -915,5 +1053,38 @@ pub fn wait_ready<A: AssetAccess + ?Sized>(
         }
 
         std::thread::sleep(Duration::from_millis(SLEEP_MS));
+    }
+}
+
+
+#[cfg(test)]
+mod file_type_layer_contract_tests {
+    use super::*;
+
+    #[test]
+    fn canonical_semantic_gateways_are_not_asset_bucket() {
+        assert_eq!(semantic_gateway_for_file_type("ytd", "texture_dictionary", codec_type::LIST_FILE), ENGINE_TEXTURES_SERVICE_ID);
+        assert_eq!(semantic_gateway_for_file_type("ydd", "drawable_dictionary", codec_type::LIST_FILE), ENGINE_MODEL_SERVICE_ID);
+        assert_eq!(semantic_gateway_for_file_type("nemat", "material_library", codec_type::LIST_FILE), ENGINE_MATERIALS_SERVICE_ID);
+        assert_eq!(semantic_gateway_for_file_type("ytyp", "archetype_dictionary", codec_type::LIST_FILE), ENGINE_DEFINITIONS_SERVICE_ID);
+        assert_eq!(semantic_gateway_for_file_type("nepak", "asset_package", codec_type::CONTAINER), ENGINE_ASSET_SERVICE_ID);
+    }
+
+    #[test]
+    fn descriptor_normalization_splits_byte_and_semantic_owners() {
+        let mut ytd = AssetFileTypeDescriptor {
+            extension: "ytd".to_owned(),
+            asset_kind: "texture_dictionary".to_owned(),
+            codec_type: codec_type::LIST_FILE.to_owned(),
+            handler_service: "asset.codec.listfile.ytd".to_owned(),
+            magic: Some("4e454638".to_owned()),
+            ..Default::default()
+        };
+        ytd.normalize_layer_contract();
+        assert_eq!(ytd.byte_owner, ENGINE_ASSET_SERVICE_ID);
+        assert_eq!(ytd.semantic_gateway, ENGINE_TEXTURES_SERVICE_ID);
+        assert_eq!(ytd.gateway, ENGINE_TEXTURES_SERVICE_ID);
+        assert!(ytd.consumer_domains.iter().any(|it| it == ENGINE_MATERIALS_SERVICE_ID));
+        assert!(ytd.validate_generic_rules().is_ok());
     }
 }

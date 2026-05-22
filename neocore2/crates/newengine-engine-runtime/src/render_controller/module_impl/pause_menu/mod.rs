@@ -112,6 +112,11 @@ pub(crate) struct RenderPauseMenuRuntimeState {
 
 impl RenderPauseMenuRuntimeState {
     #[inline]
+    pub(super) fn is_open(&self) -> bool {
+        self.open
+    }
+
+    #[inline]
     pub(crate) fn new() -> Self {
         Self {
             open: false,

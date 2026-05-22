@@ -14,6 +14,7 @@ impl Default for RawGameReadyPayload {
             lighting: RawLightingSpec::default(),
             foliage: RawFoliageSpec::default(),
             prefabs: Vec::new(),
+            definitions: Vec::new(),
             gameplay: RawGameplaySpec::default(),
             palette: RawPaletteSpec::default(),
         }
@@ -176,9 +177,48 @@ fn sanitize_prefab_spec(raw: RawPrefabSpec) -> Option<GameReadyPrefabSpec> {
     })
 }
 
+
+#[inline]
+fn sanitize_definition_instance_spec(raw: RawDefinitionInstanceSpec) -> Option<GameReadyDefinitionInstanceSpec> {
+    let definition_ref = raw.definition_ref.trim().replace('\\', "/");
+    if definition_ref.is_empty() {
+        return None;
+    }
+    if !definition_ref.to_ascii_lowercase().contains(".ytyp@") {
+        log::warn!(
+            "game-ready definitions: rejected definition_ref='{}' reason='expected .ytyp@entry selector'",
+            definition_ref
+        );
+        return None;
+    }
+    Some(GameReadyDefinitionInstanceSpec {
+        definition_ref,
+        position: arr3(raw.position),
+        rotation_ypr: sanitize_array3_finite(raw.rotation_ypr, [0.0, 0.0, 0.0]),
+        scale: arr3(sanitize_array3_positive(raw.scale, default_definition_scale())),
+    })
+}
+
+#[inline]
+fn sanitize_array3_finite(mut value: [f32; 3], fallback: [f32; 3]) -> [f32; 3] {
+    for i in 0..3 {
+        if !value[i].is_finite() { value[i] = fallback[i]; }
+    }
+    value
+}
+
+#[inline]
+fn sanitize_array3_positive(mut value: [f32; 3], fallback: [f32; 3]) -> [f32; 3] {
+    for i in 0..3 {
+        if !value[i].is_finite() || value[i].abs() <= 1.0e-6 { value[i] = fallback[i]; }
+    }
+    value
+}
+
 #[inline]
 fn arr3(v: [f32; 3]) -> Vec3 { Vec3::new(v[0], v[1], v[2]) }
 
+fn default_definition_scale() -> [f32; 3] { [1.0, 1.0, 1.0] }
 fn default_title() -> String { "KAYLA FPS: Procedural Highlands".to_owned() }
 fn default_objective() -> String { "Walk a deterministic terrain sandbox with an imported sky dome.".to_owned() }
 fn default_player_start() -> [f32; 3] { [-17.5, 0.0, -17.5] }
