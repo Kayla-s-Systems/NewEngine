@@ -56,6 +56,7 @@ impl FileTypeRegistryState {
             rejected.notes = format!("descriptor rejected by generic codec rules: {e}");
             return rejected;
         }
+        warn_if_semantic_gateway_unresolved(&desc);
         let key = desc.extension.clone();
         let replace = self
             .registry
@@ -120,6 +121,28 @@ impl FileTypeRegistryState {
             }
             other => RResult::RErr(RString::from(format!("asset.file_types: unknown invoke method '{other}'"))),
         }
+    }
+}
+
+
+fn warn_if_semantic_gateway_unresolved(desc: &AssetFileTypeDescriptor) {
+    if newengine_service_api::EngineServiceKind::parse_engine_gateway_id(&desc.semantic_gateway).is_none() {
+        log::warn!(
+            "asset file type registry: unknown semantic_gateway='{}' extension='.{}' asset_kind='{}'; descriptor will remain visible but startup diagnostics should treat this as unresolved",
+            desc.semantic_gateway,
+            desc.extension,
+            desc.asset_kind
+        );
+        return;
+    }
+
+    let is_package = desc.extension == "nepak" || desc.is_container_codec();
+    if desc.semantic_gateway == newengine_assets_api::ENGINE_ASSET_SERVICE_ID && !is_package {
+        log::warn!(
+            "asset file type registry: semantic_gateway fell back to engine.assets for non-container extension='.{}' asset_kind='{}'; this is a byte-owner only fallback and must be replaced by a real domain gateway",
+            desc.extension,
+            desc.asset_kind
+        );
     }
 }
 

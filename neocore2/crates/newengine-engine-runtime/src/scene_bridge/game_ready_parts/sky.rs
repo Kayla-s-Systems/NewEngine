@@ -134,6 +134,28 @@ pub(crate) struct SkyCycleRuntime {
     pub base_ambient_intensity: f32,
 }
 
+
+fn time_snapshot_for_sky_cycle() -> Option<newengine_core::time::TimeSnapshotV1> {
+    match call_service_v1_optional(
+        newengine_core::time::ENGINE_TIME_SERVICE_ID,
+        newengine_core::time::time_method::SNAPSHOT_V1,
+        &[],
+    ) {
+        Ok(Some(bytes)) => match serde_json::from_slice::<newengine_core::time::TimeSnapshotV1>(&bytes) {
+            Ok(snapshot) => Some(snapshot),
+            Err(e) => {
+                log::warn!("game-ready sky cycle: engine.time snapshot invalid; using frame dt projection for this tick err='{e}'");
+                None
+            }
+        },
+        Ok(None) => None,
+        Err(e) => {
+            log::warn!("game-ready sky cycle: engine.time snapshot unavailable; using frame dt projection for this tick err='{e}'");
+            None
+        }
+    }
+}
+
 #[inline]
 fn sky_smoothstep(edge0: f32, edge1: f32, x: f32) -> f32 {
     let t = ((x - edge0) / (edge1 - edge0).max(1.0e-5)).clamp(0.0, 1.0);
@@ -348,12 +370,22 @@ pub fn tick_game_ready_sky_cycle(world: &mut newengine_ecs::World, dt: f32) {
             return;
         };
 
-        let advance = if cycle.enabled && cycle.day_length_seconds > 0.0 {
-            dt.max(0.0) * 24.0 / cycle.day_length_seconds
+        if let Some(snapshot) = time_snapshot_for_sky_cycle() {
+            cycle.time_of_day_hours = (snapshot.game.normalized_day as f32 * 24.0).rem_euclid(24.0);
+            log::trace!(
+                "game-ready sky cycle: time source='engine.time' frame={} normalized_day={:.6} tod_hours={:.3}",
+                snapshot.frame_index,
+                snapshot.game.normalized_day,
+                cycle.time_of_day_hours
+            );
         } else {
-            0.0
-        };
-        cycle.time_of_day_hours = (cycle.time_of_day_hours + advance).rem_euclid(24.0);
+            let advance = if cycle.enabled && cycle.day_length_seconds > 0.0 {
+                dt.max(0.0) * 24.0 / cycle.day_length_seconds
+            } else {
+                0.0
+            };
+            cycle.time_of_day_hours = (cycle.time_of_day_hours + advance).rem_euclid(24.0);
+        }
 
         let to_sun = solar_direction_from_cycle(
             cycle.time_of_day_hours,

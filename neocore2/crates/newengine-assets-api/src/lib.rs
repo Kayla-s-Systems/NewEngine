@@ -33,10 +33,16 @@ pub const ASSET_METHOD_PREFIX: &str = "asset.";
 /// meaning here; the implementation may still call `engine.assets` underneath
 /// for VFS bytes and codec dispatch.
 pub const ENGINE_TEXTURES_SERVICE_ID: &str = "engine.textures";
+pub const TEXTURES_SERVICE_ID: &str = "textures.api";
+pub const TEXTURES_BACKEND_CAPABILITY_ID: &str = "textures.backend";
+pub const TEXTURES_RUNTIME_CONTRACT: &str = "newengine.textures.runtime.v1";
 /// Semantic definition/archetype metadata gateway id. File-type descriptors route
 /// `.ytyp` meaning here; scene/world systems may consume definitions later, but
 /// do not own the file type.
 pub const ENGINE_DEFINITIONS_SERVICE_ID: &str = "engine.definitions";
+pub const DEFINITIONS_SERVICE_ID: &str = "definitions.api";
+pub const DEFINITIONS_BACKEND_CAPABILITY_ID: &str = "definitions.backend";
+pub const DEFINITIONS_RUNTIME_CONTRACT: &str = "newengine.definitions.runtime.v1";
 pub const ENGINE_MODEL_SERVICE_ID: &str = "engine.model";
 pub const ENGINE_MATERIALS_SERVICE_ID: &str = "engine.materials";
 
@@ -46,6 +52,7 @@ pub const ENGINE_MATERIALS_SERVICE_ID: &str = "engine.materials";
 pub const ENGINE_ASSET_GRAPH_SERVICE_ID: &str = "engine.asset_graph";
 pub const ASSET_GRAPH_SERVICE_ID: &str = "asset_graph.api";
 pub const ASSET_GRAPH_BACKEND_CAPABILITY_ID: &str = "asset_graph.backend";
+pub const ASSET_GRAPH_RUNTIME_CONTRACT: &str = "newengine.asset_graph.runtime.v1";
 
 pub mod asset_graph_method {
     pub const RESOLVE_V1: &str = "asset_graph.resolve_v1";
@@ -54,6 +61,9 @@ pub mod asset_graph_method {
 }
 
 pub const ASSET_GRAPH_SERVICE_METHODS: &[&str] = &[
+    newengine_service_api::SERVICE_METHOD_INFO_JSON,
+    newengine_service_api::SERVICE_METHOD_INVOKE_JSON,
+    newengine_service_api::SERVICE_METHOD_SHUTDOWN_V1,
     asset_graph_method::RESOLVE_V1,
     asset_graph_method::VALIDATE_V1,
     asset_graph_method::DUMP_JSON_V1,
@@ -507,6 +517,9 @@ pub mod method {
 }
 
 pub mod textures_method {
+    pub const INFO_JSON: &str = newengine_service_api::SERVICE_METHOD_INFO_JSON;
+    pub const INVOKE_JSON: &str = newengine_service_api::SERVICE_METHOD_INVOKE_JSON;
+    pub const SHUTDOWN_V1: &str = newengine_service_api::SERVICE_METHOD_SHUTDOWN_V1;
     pub const MANIFEST_JSON_V1: &str = "textures.manifest_json_v1";
     pub const ENTRY_RUNTIME_V1: &str = "textures.entry_runtime_v1";
     pub const ENTRY_RGBA8_V1: &str = "textures.entry_rgba8_v1";
@@ -514,13 +527,104 @@ pub mod textures_method {
     pub const DESCRIBE_REF_JSON_V1: &str = "textures.describe_ref_json_v1";
 }
 
+pub const TEXTURES_SERVICE_METHODS: &[&str] = &[
+    textures_method::INFO_JSON,
+    textures_method::INVOKE_JSON,
+    textures_method::SHUTDOWN_V1,
+    textures_method::MANIFEST_JSON_V1,
+    textures_method::ENTRY_RUNTIME_V1,
+    textures_method::ENTRY_RGBA8_V1,
+    textures_method::VALIDATE_REF_V1,
+    textures_method::DESCRIBE_REF_JSON_V1,
+];
+
 pub mod definitions_method {
+    pub const INFO_JSON: &str = newengine_service_api::SERVICE_METHOD_INFO_JSON;
+    pub const INVOKE_JSON: &str = newengine_service_api::SERVICE_METHOD_INVOKE_JSON;
+    pub const SHUTDOWN_V1: &str = newengine_service_api::SERVICE_METHOD_SHUTDOWN_V1;
     pub const MANIFEST_JSON_V1: &str = "definitions.manifest_json_v1";
     pub const ENTRY_JSON_V1: &str = "definitions.entry_json_v1";
     pub const RESOLVE_REFS_V1: &str = "definitions.resolve_refs_v1";
     pub const VALIDATE_V1: &str = "definitions.validate_v1";
     pub const DESCRIBE_SIDE_EFFECTS_V1: &str = "definitions.describe_side_effects_v1";
 }
+
+pub const DEFINITIONS_SERVICE_METHODS: &[&str] = &[
+    definitions_method::INFO_JSON,
+    definitions_method::INVOKE_JSON,
+    definitions_method::SHUTDOWN_V1,
+    definitions_method::MANIFEST_JSON_V1,
+    definitions_method::ENTRY_JSON_V1,
+    definitions_method::RESOLVE_REFS_V1,
+    definitions_method::VALIDATE_V1,
+    definitions_method::DESCRIBE_SIDE_EFFECTS_V1,
+];
+
+pub const TEXTURES_BACKEND_SERVICE_SPEC: newengine_service_api::BackendServiceSpec =
+    newengine_service_api::BackendServiceSpec::new(
+        "textures",
+        ENGINE_TEXTURES_SERVICE_ID,
+        TEXTURES_SERVICE_ID,
+        TEXTURES_BACKEND_CAPABILITY_ID,
+    );
+
+pub const DEFINITIONS_BACKEND_SERVICE_SPEC: newengine_service_api::BackendServiceSpec =
+    newengine_service_api::BackendServiceSpec::new(
+        "definitions",
+        ENGINE_DEFINITIONS_SERVICE_ID,
+        DEFINITIONS_SERVICE_ID,
+        DEFINITIONS_BACKEND_CAPABILITY_ID,
+    );
+
+pub const ASSET_GRAPH_BACKEND_SERVICE_SPEC: newengine_service_api::BackendServiceSpec =
+    newengine_service_api::BackendServiceSpec::new(
+        "asset_graph",
+        ENGINE_ASSET_GRAPH_SERVICE_ID,
+        ASSET_GRAPH_SERVICE_ID,
+        ASSET_GRAPH_BACKEND_CAPABILITY_ID,
+    );
+
+pub const TEXTURES_RUNTIME_CONTRACT_SPEC: newengine_service_api::RuntimeServiceContractSpec =
+    newengine_service_api::RuntimeServiceContractSpec::new(
+        ENGINE_TEXTURES_SERVICE_ID,
+        TEXTURES_RUNTIME_CONTRACT,
+        TEXTURES_SERVICE_METHODS,
+    );
+
+pub const TEXTURES_RUNTIME_REQUIREMENT_SPEC: newengine_service_api::RuntimeServiceRequirementSpec =
+    newengine_service_api::RuntimeServiceRequirementSpec::new(
+        TEXTURES_RUNTIME_CONTRACT_SPEC,
+        Some(TEXTURES_BACKEND_CAPABILITY_ID),
+        Some("NEWENGINE_REQUIRE_TEXTURES_BACKEND"),
+    );
+
+pub const DEFINITIONS_RUNTIME_CONTRACT_SPEC: newengine_service_api::RuntimeServiceContractSpec =
+    newengine_service_api::RuntimeServiceContractSpec::new(
+        ENGINE_DEFINITIONS_SERVICE_ID,
+        DEFINITIONS_RUNTIME_CONTRACT,
+        DEFINITIONS_SERVICE_METHODS,
+    );
+
+pub const DEFINITIONS_RUNTIME_REQUIREMENT_SPEC: newengine_service_api::RuntimeServiceRequirementSpec =
+    newengine_service_api::RuntimeServiceRequirementSpec::new(
+        DEFINITIONS_RUNTIME_CONTRACT_SPEC,
+        Some(DEFINITIONS_BACKEND_CAPABILITY_ID),
+        Some("NEWENGINE_REQUIRE_DEFINITIONS_BACKEND"),
+    );
+
+pub const ASSET_GRAPH_RUNTIME_CONTRACT_SPEC: newengine_service_api::RuntimeServiceContractSpec =
+    newengine_service_api::RuntimeServiceContractSpec::new(
+        ENGINE_ASSET_GRAPH_SERVICE_ID,
+        ASSET_GRAPH_RUNTIME_CONTRACT,
+        ASSET_GRAPH_SERVICE_METHODS,
+    );
+
+pub const ASSET_GRAPH_RUNTIME_REQUIREMENT_SPEC: newengine_service_api::RuntimeServiceRequirementSpec =
+    newengine_service_api::RuntimeServiceRequirementSpec::new(
+        ASSET_GRAPH_RUNTIME_CONTRACT_SPEC,
+        Some(ASSET_GRAPH_BACKEND_CAPABILITY_ID),
+        Some("NEWENGINE_REQUIRE_ASSET_GRAPH_BACKEND"),
+    );
 
 /// Required runtime methods for AssetManager 0.6+ deployments.
 ///

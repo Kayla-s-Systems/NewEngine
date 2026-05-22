@@ -6,7 +6,7 @@ use crate::{
     ROLE_TEXTURE_DICTIONARY, TEXTURE_DICTIONARY_EXTENSION,
 };
 
-pub const DATA_DRIVEN_CONSTRUCTION_PLAN_SCHEMA: &str = "newengine.model.data_driven_construction_plan.v1";
+pub const DATA_DRIVEN_CONSTRUCTION_PLAN_SCHEMA: &str = "newengine.definitions.data_driven_construction_plan.v1";
 
 /// Declarative construction plan derived from YTYP Definition Entries.
 ///

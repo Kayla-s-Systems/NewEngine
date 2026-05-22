@@ -32,6 +32,7 @@ newengine-ecs-api = { path = "../newengine-ecs-api" }
 newengine-entity-api = { path = "../newengine-entity-api" }
 newengine-ui-api = { path = "../newengine-ui-api" }
 newengine-loading-api = { path = "../newengine-loading-api" }
+newengine-time-api = { path = "../newengine-time-api" }
 newengine-input-api = { path = "../newengine-input-api" }
 newengine-input-bindings-api = { path = "../newengine-input-bindings-api" }
 newengine-scene-io = { path = "../newengine-scene-io" }

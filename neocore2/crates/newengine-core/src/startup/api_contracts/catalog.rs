@@ -52,6 +52,22 @@ pub(crate) const RUNTIME_SERVICE_CATALOG: &[RuntimeServiceCatalogEntry] = &[
         "asset browser / registered file-type handlers / VFS navigation",
     ),
     RuntimeServiceCatalogEntry::new(
+        newengine_assets_api::TEXTURES_RUNTIME_REQUIREMENT_SPEC,
+        "semantic .ytd texture dictionary API / runtime texture packets",
+    ),
+    RuntimeServiceCatalogEntry::new(
+        newengine_assets_api::DEFINITIONS_RUNTIME_REQUIREMENT_SPEC,
+        "semantic .ytyp Definition Entry metadata / dependency declarations",
+    ),
+    RuntimeServiceCatalogEntry::new(
+        newengine_assets_api::ASSET_GRAPH_RUNTIME_REQUIREMENT_SPEC,
+        "declarative .ytyp/.ydd/.nemat/.ytd graph resolution",
+    ),
+    RuntimeServiceCatalogEntry::new(
+        newengine_time_api::TIME_RUNTIME_REQUIREMENT_SPEC,
+        "frame clock / simulation tick / fixed timestep / game clock",
+    ),
+    RuntimeServiceCatalogEntry::new(
         newengine_materials::MATERIALS_RUNTIME_REQUIREMENT_SPEC,
         "material descriptor resolve / material graph validation / render material packets",
     ),

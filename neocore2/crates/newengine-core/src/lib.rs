@@ -25,6 +25,9 @@ pub mod audio {
 pub mod camera {
     pub use newengine_camera_api::*;
 }
+pub mod time {
+    pub use newengine_time_api::*;
+}
 pub mod ui {
     pub use newengine_ui_api::*;
 }

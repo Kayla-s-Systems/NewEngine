@@ -27,7 +27,7 @@ pub struct ModelAssetChainRoleSpec {
     pub description: &'static str,
 }
 
-/// Serializable owned role used by tools and `engine.model` JSON methods.
+/// Serializable owned role used by tools and asset graph diagnostics.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct ModelAssetChainRole {
@@ -90,7 +90,7 @@ pub const MODEL_ASSET_CHAIN_ROLES: &[ModelAssetChainRoleSpec] = &[
         asset_kind: OBJECT_TYPE_DEFINITIONS_ASSET_KIND,
         source_container: OBJECT_TYPE_DEFINITIONS_CONTAINER,
         codec_service: "asset.codec.listfile.ytyp",
-        primary_output: "model.definition_entries_json",
+        primary_output: "definitions.manifest_json_v1",
         runtime_ready: true,
         runtime_container: None,
         description: "NEF8 ListFile Definition Entries / archetype metadata. Declares drawable, texture, physics, bounds and LOD metadata.",
@@ -212,7 +212,7 @@ impl Default for ModelAssetChainManifest {
             notes: vec![
                 "ListFile implementers keep their extensions (.ytyp/.ydd/.ytd/.nemat) but share NEF8 as top-level magic.".to_owned(),
                 ".nepak is a separate package/VFS delivery container, not a NEF8 ListFile.".to_owned(),
-                "Data-driven runtime should consume construction plans derived from .ytyp Definition Entries.".to_owned(),
+                "Data-driven runtime should consume dependency graphs resolved from engine.definitions and engine.asset_graph.".to_owned(),
             ],
         }
     }

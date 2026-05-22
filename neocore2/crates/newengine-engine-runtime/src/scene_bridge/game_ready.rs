@@ -6,7 +6,7 @@ use core::f32::consts::TAU;
 
 use newengine_assets::wait_ready;
 use newengine_bounds::Bounds;
-use newengine_core::{JobLane, JobPriority, JobRequest, JobSystemHandle, JobTicket};
+use newengine_core::{call_service_v1_optional, JobLane, JobPriority, JobRequest, JobSystemHandle, JobTicket};
 use newengine_ecs::EntityId;
 use newengine_lighting::{AmbientLight, DirectionalLight, ShadowSettings};
 use newengine_materials::{MaterialFlags, MaterialId, MaterialRegistry};

@@ -8,8 +8,9 @@ use crate::{
     ROLE_MATERIAL_LIBRARY, ROLE_TEXTURE_DICTIONARY, TEXTURE_DICTIONARY_ASSET_KIND,
 };
 
-pub const ASSET_GRAPH_SCHEMA: &str = "newengine.asset_graph.resolved.v1";
+pub const ASSET_GRAPH_SCHEMA: &str = "newengine.asset_graph.resolved.v2";
 pub const ASSET_GRAPH_RESOLVED_SCHEMA_V1: &str = ASSET_GRAPH_SCHEMA;
+pub const ASSET_GRAPH_RESOLVED_SCHEMA_V2: &str = ASSET_GRAPH_SCHEMA;
 pub const ENGINE_ASSET_GRAPH_SERVICE_ID: &str = "engine.asset_graph";
 pub const ASSET_GRAPH_SERVICE_ID: &str = "asset_graph.api";
 pub const ASSET_GRAPH_BACKEND_CAPABILITY_ID: &str = "asset_graph.backend";
@@ -17,6 +18,9 @@ pub const ASSET_GRAPH_METHOD_RESOLVE_V1: &str = "asset_graph.resolve_v1";
 pub const ASSET_GRAPH_METHOD_VALIDATE_V1: &str = "asset_graph.validate_v1";
 pub const ASSET_GRAPH_METHOD_DUMP_JSON_V1: &str = "asset_graph.dump_json_v1";
 pub const ASSET_GRAPH_METHODS: &[&str] = &[
+    newengine_service_api::SERVICE_METHOD_INFO_JSON,
+    newengine_service_api::SERVICE_METHOD_INVOKE_JSON,
+    newengine_service_api::SERVICE_METHOD_SHUTDOWN_V1,
     ASSET_GRAPH_METHOD_RESOLVE_V1,
     ASSET_GRAPH_METHOD_VALIDATE_V1,
     ASSET_GRAPH_METHOD_DUMP_JSON_V1,
@@ -26,11 +30,13 @@ pub const ASSET_GRAPH_METHODS: &[&str] = &[
 #[serde(default)]
 pub struct AssetGraphResolveRequest {
     pub root_ref: String,
-    /// Backward-compatible request field used by older `engine.model` callers.
-    /// New callers should use `root_ref`.
+    /// Compatibility request field used by old callers that only knew `source`.
+    /// The public graph contract is `root_ref`; this field is not a model API.
     pub source: String,
 }
-impl Default for AssetGraphResolveRequest { fn default() -> Self { Self { root_ref: String::new(), source: String::new() } } }
+impl Default for AssetGraphResolveRequest {
+    fn default() -> Self { Self { root_ref: String::new(), source: String::new() } }
+}
 
 impl AssetGraphResolveRequest {
     #[inline]
@@ -56,7 +62,7 @@ impl Default for AssetGraphCacheKeyParts {
             logical_path: String::new(),
             entry: None,
             content_hash: None,
-            schema_version: "v1".to_owned(),
+            schema_version: "v2".to_owned(),
             import_settings_hash: None,
             provider_version: None,
         }
@@ -71,10 +77,20 @@ pub struct AssetGraphVfsSource {
     pub physical_path: Option<String>,
     pub package_path: Option<String>,
     pub package_entry: Option<String>,
+    pub layer_id: Option<String>,
+    pub overridden_by: Vec<String>,
 }
 impl Default for AssetGraphVfsSource {
     fn default() -> Self {
-        Self { source_kind: "unresolved".to_owned(), logical_path: String::new(), physical_path: None, package_path: None, package_entry: None }
+        Self {
+            source_kind: "unresolved".to_owned(),
+            logical_path: String::new(),
+            physical_path: None,
+            package_path: None,
+            package_entry: None,
+            layer_id: None,
+            overridden_by: Vec::new(),
+        }
     }
 }
 
@@ -83,24 +99,41 @@ impl Default for AssetGraphVfsSource {
 pub struct AssetGraphNode {
     pub id: String,
     pub reference: String,
+    #[serde(rename = "ref")]
+    pub asset_ref: String,
     pub role: String,
+    pub kind: String,
     pub asset_kind: String,
+    pub byte_owner: String,
     pub semantic_gateway: String,
+    pub handler_service: String,
     pub vfs_source: AssetGraphVfsSource,
+    pub content_hash: Option<String>,
+    pub entry_hash: Option<String>,
+    pub schema_version: String,
     pub cache_key_parts: AssetGraphCacheKeyParts,
     pub metadata_namespaces: Vec<String>,
+    pub warnings: Vec<String>,
 }
 impl Default for AssetGraphNode {
     fn default() -> Self {
         Self {
             id: String::new(),
             reference: String::new(),
+            asset_ref: String::new(),
             role: String::new(),
+            kind: String::new(),
             asset_kind: String::new(),
+            byte_owner: "engine.assets".to_owned(),
             semantic_gateway: String::new(),
+            handler_service: String::new(),
             vfs_source: AssetGraphVfsSource::default(),
+            content_hash: None,
+            entry_hash: None,
+            schema_version: "v2".to_owned(),
             cache_key_parts: AssetGraphCacheKeyParts::default(),
             metadata_namespaces: Vec::new(),
+            warnings: Vec::new(),
         }
     }
 }
@@ -110,17 +143,21 @@ impl Default for AssetGraphNode {
 pub struct AssetGraphEdge {
     pub from: String,
     pub to: String,
+    pub from_ref: String,
+    pub to_ref: String,
     pub kind: String,
     pub required: bool,
 }
-impl Default for AssetGraphEdge { fn default() -> Self { Self { from: String::new(), to: String::new(), kind: String::new(), required: true } } }
+impl Default for AssetGraphEdge {
+    fn default() -> Self { Self { from: String::new(), to: String::new(), from_ref: String::new(), to_ref: String::new(), kind: String::new(), required: true } }
+}
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct ResolvedAssetGraphV1 {
     pub schema: String,
     pub root_ref: String,
-    /// Compatibility projection for older model-domain callers.
+    /// Compatibility projection for older graph readers.
     pub source: String,
     pub nodes: Vec<AssetGraphNode>,
     pub edges: Vec<AssetGraphEdge>,
@@ -129,9 +166,10 @@ pub struct ResolvedAssetGraphV1 {
     pub format_warnings: Vec<String>,
     pub metadata_warnings: Vec<String>,
     pub migration_warnings: Vec<String>,
+    pub cache_key_parts: AssetGraphCacheKeyParts,
+    pub node_cache_key_parts: Vec<AssetGraphCacheKeyParts>,
     pub stable_cache_key: String,
     pub cache_key_policy: String,
-    pub cache_key_parts: AssetGraphCacheKeyParts,
     pub debug_log: Vec<String>,
 }
 impl Default for ResolvedAssetGraphV1 {
@@ -147,15 +185,17 @@ impl Default for ResolvedAssetGraphV1 {
             format_warnings: Vec::new(),
             metadata_warnings: Vec::new(),
             migration_warnings: Vec::new(),
-            stable_cache_key: String::new(),
-            cache_key_policy: "logical_path + entry + content_hash + schema_version + import_settings_hash + provider_version".to_owned(),
             cache_key_parts: AssetGraphCacheKeyParts::default(),
+            node_cache_key_parts: Vec::new(),
+            stable_cache_key: String::new(),
+            cache_key_policy: "graph(root_ref + ordered nodes + ordered edges + content_hash + entry_hash + schema_version + provider_version)".to_owned(),
             debug_log: Vec::new(),
         }
     }
 }
 
-pub type ResolvedAssetGraph = ResolvedAssetGraphV1;
+pub type ResolvedAssetGraphV2 = ResolvedAssetGraphV1;
+pub type ResolvedAssetGraph = ResolvedAssetGraphV2;
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default)]
@@ -164,7 +204,7 @@ pub struct AssetGraphValidationResult {
     pub root_ref: String,
     pub errors: Vec<String>,
     pub warnings: Vec<String>,
-    pub graph: Option<ResolvedAssetGraphV1>,
+    pub graph: Option<ResolvedAssetGraphV2>,
 }
 impl Default for AssetGraphValidationResult {
     fn default() -> Self { Self { valid: false, root_ref: String::new(), errors: Vec::new(), warnings: Vec::new(), graph: None } }
@@ -173,25 +213,28 @@ impl Default for AssetGraphValidationResult {
 pub struct AssetGraphResolver;
 
 impl AssetGraphResolver {
-    pub fn resolve_root_ref(root_ref: &str) -> ResolvedAssetGraphV1 {
+    /// Classification-only resolver kept for dry-run tests and callers that cannot
+    /// access `engine.assets`. Runtime `engine.asset_graph` hydrates this graph by
+    /// calling semantic gateways and attaching VFS/hash diagnostics.
+    pub fn resolve_root_ref(root_ref: &str) -> ResolvedAssetGraphV2 {
         let root_ref = normalize_asset_ref(root_ref);
-        let mut graph = ResolvedAssetGraphV1 {
+        let mut graph = ResolvedAssetGraphV2 {
             root_ref: root_ref.clone(),
             source: root_ref.clone(),
             cache_key_parts: cache_key_parts_for_ref(&root_ref),
             ..Default::default()
         };
-        graph.debug_log.push(format!("asset_graph.resolve_v1: begin root_ref='{root_ref}'"));
-        let (role, kind, gateway) = classify_ref(&root_ref);
-        push_node(&mut graph, &root_ref, role, kind, gateway);
-        graph.stable_cache_key = stable_cache_key(&graph.cache_key_parts);
+        graph.debug_log.push(format!("asset_graph.resolve_v1: begin root_ref='{root_ref}' mode='classification-only'"));
+        let (role, kind, gateway, handler) = classify_ref(&root_ref);
+        push_node(&mut graph, &root_ref, role, kind, gateway, handler);
+        finalize_graph(&mut graph);
         graph.debug_log.push(format!("asset_graph.resolve_v1: root classified role='{role}' semantic_gateway='{gateway}'"));
         graph
     }
 
-    pub fn resolve_construction_plan(plan: &DataDrivenConstructionPlan) -> ResolvedAssetGraphV1 {
+    pub fn resolve_construction_plan(plan: &DataDrivenConstructionPlan) -> ResolvedAssetGraphV2 {
         let root = plan.source.trim();
-        let mut graph = ResolvedAssetGraphV1 {
+        let mut graph = ResolvedAssetGraphV2 {
             root_ref: root.to_owned(),
             source: root.to_owned(),
             cache_key_parts: cache_key_parts_for_ref(root),
@@ -200,24 +243,24 @@ impl AssetGraphResolver {
         graph.debug_log.push(format!("asset_graph.resolve_v1: begin construction_plan source='{root}' objects={}", plan.objects.len()));
         for object in &plan.objects {
             let definition_ref = normalize_asset_ref(&object.definition.logical_path);
-            push_node(&mut graph, &definition_ref, ROLE_DEFINITION_ENTRIES, &object.definition.asset_kind, "engine.definitions");
+            push_node(&mut graph, &definition_ref, ROLE_DEFINITION_ENTRIES, &object.definition.asset_kind, "engine.definitions", "definitions.api");
             if let Some(drawable) = object.drawable.as_ref() {
                 let drawable_ref = normalize_asset_ref(&drawable.logical_path);
-                push_node(&mut graph, &drawable_ref, ROLE_DRAWABLE_DICTIONARY, &drawable.asset_kind, "engine.model");
+                push_node(&mut graph, &drawable_ref, ROLE_DRAWABLE_DICTIONARY, &drawable.asset_kind, "engine.model", "model.api");
                 push_edge(&mut graph, &definition_ref, &drawable_ref, ROLE_DRAWABLE_DICTIONARY, drawable.required);
             } else {
                 graph.missing_refs.push(format!("{}: missing drawable dictionary", object.name));
             }
             if let Some(texture_dictionary) = object.texture_dictionary.as_ref() {
                 let texture_ref = normalize_asset_ref(&texture_dictionary.logical_path);
-                push_node(&mut graph, &texture_ref, ROLE_TEXTURE_DICTIONARY, &texture_dictionary.asset_kind, "engine.textures");
+                push_node(&mut graph, &texture_ref, ROLE_TEXTURE_DICTIONARY, &texture_dictionary.asset_kind, "engine.textures", "textures.api");
                 push_edge(&mut graph, &definition_ref, &texture_ref, ROLE_TEXTURE_DICTIONARY, texture_dictionary.required);
             } else {
                 graph.missing_refs.push(format!("{}: missing texture dictionary", object.name));
             }
             if let Some(physics) = object.physics_dictionary.as_ref() {
                 let physics_ref = normalize_asset_ref(&physics.logical_path);
-                push_node(&mut graph, &physics_ref, "physics_dictionary", &physics.asset_kind, "engine.physics");
+                push_node(&mut graph, &physics_ref, "physics_dictionary", &physics.asset_kind, "engine.physics", "physics.api");
                 push_edge(&mut graph, &definition_ref, &physics_ref, "physics_dictionary", physics.required);
             }
             for slot in &object.material_slots {
@@ -226,7 +269,7 @@ impl AssetGraphResolver {
                     continue;
                 }
                 let material_ref = normalize_asset_ref(&slot.material);
-                push_node(&mut graph, &material_ref, ROLE_MATERIAL_LIBRARY, MATERIAL_LIBRARY_ASSET_KIND, "engine.materials");
+                push_node(&mut graph, &material_ref, ROLE_MATERIAL_LIBRARY, MATERIAL_LIBRARY_ASSET_KIND, "engine.materials", "materials.api");
                 if let Some(drawable) = object.drawable.as_ref() {
                     push_edge(&mut graph, &drawable.logical_path, &material_ref, &format!("material_slot/{}", slot.slot), true);
                 } else {
@@ -246,7 +289,7 @@ impl AssetGraphResolver {
         graph
     }
 
-    pub fn validate_graph(graph: ResolvedAssetGraphV1) -> AssetGraphValidationResult {
+    pub fn validate_graph(graph: ResolvedAssetGraphV2) -> AssetGraphValidationResult {
         let mut errors = Vec::new();
         let mut warnings = graph.format_warnings.clone();
         warnings.extend(graph.metadata_warnings.clone());
@@ -264,7 +307,7 @@ impl AssetGraphResolver {
 }
 
 pub fn push_manifest_dependency(
-    graph: &mut ResolvedAssetGraphV1,
+    graph: &mut ResolvedAssetGraphV2,
     owner_ref: &str,
     reference: &str,
     role: &str,
@@ -275,12 +318,12 @@ pub fn push_manifest_dependency(
         graph.metadata_warnings.push(format!("empty dependency reference from '{owner_ref}' role='{role}'"));
         return;
     }
-    let (node_role, asset_kind, gateway) = classify_ref(&reference);
-    push_node(graph, &reference, node_role, asset_kind, gateway);
+    let (node_role, asset_kind, gateway, handler) = classify_ref(&reference);
+    push_node(graph, &reference, node_role, asset_kind, gateway, handler);
     push_edge(graph, owner_ref, &reference, role, required);
 }
 
-pub fn attach_vfs_source(graph: &mut ResolvedAssetGraphV1, reference: &str, source: AssetGraphVfsSource) {
+pub fn attach_vfs_source(graph: &mut ResolvedAssetGraphV2, reference: &str, source: AssetGraphVfsSource) {
     let id = stable_graph_id(reference);
     for node in &mut graph.nodes {
         if node.id == id {
@@ -289,67 +332,135 @@ pub fn attach_vfs_source(graph: &mut ResolvedAssetGraphV1, reference: &str, sour
     }
 }
 
-pub fn attach_content_hash(graph: &mut ResolvedAssetGraphV1, reference: &str, content_hash: impl Into<String>) {
+pub fn attach_content_hash(graph: &mut ResolvedAssetGraphV2, reference: &str, content_hash: impl Into<String>) {
     let id = stable_graph_id(reference);
     let content_hash = content_hash.into();
     for node in &mut graph.nodes {
         if node.id == id {
+            node.content_hash = Some(content_hash.clone());
             node.cache_key_parts.content_hash = Some(content_hash.clone());
         }
     }
 }
 
-pub fn finalize_graph(graph: &mut ResolvedAssetGraphV1) {
+pub fn attach_node_warning(graph: &mut ResolvedAssetGraphV2, reference: &str, warning: impl Into<String>) {
+    let id = stable_graph_id(reference);
+    let warning = warning.into();
+    for node in &mut graph.nodes {
+        if node.id == id {
+            node.warnings.push(warning.clone());
+        }
+    }
+}
+
+pub fn attach_metadata_namespace(graph: &mut ResolvedAssetGraphV2, reference: &str, namespace: impl Into<String>) {
+    let id = stable_graph_id(reference);
+    let namespace = namespace.into();
+    for node in &mut graph.nodes {
+        if node.id == id && !node.metadata_namespaces.contains(&namespace) {
+            node.metadata_namespaces.push(namespace.clone());
+        }
+    }
+}
+
+pub fn finalize_graph(graph: &mut ResolvedAssetGraphV2) {
+    for node in &mut graph.nodes {
+        node.reference = normalize_asset_ref(&node.reference);
+        node.asset_ref = node.reference.clone();
+        node.kind = if node.kind.trim().is_empty() { node.asset_kind.clone() } else { node.kind.clone() };
+        node.entry_hash = split_ref(&node.reference)
+            .1
+            .map(|entry| format!("fnv1a64:{:016x}", fnv1a64(entry.as_bytes())));
+        node.schema_version = if node.schema_version.trim().is_empty() { "v2".to_owned() } else { node.schema_version.clone() };
+        node.cache_key_parts = cache_key_parts_for_ref(&node.reference);
+        node.cache_key_parts.content_hash = node.content_hash.clone();
+        node.cache_key_parts.schema_version = node.schema_version.clone();
+        node.warnings.sort();
+        node.warnings.dedup();
+        node.metadata_namespaces.sort();
+        node.metadata_namespaces.dedup();
+    }
     graph.nodes.sort_by(|a, b| a.id.cmp(&b.id));
     graph.nodes.dedup_by(|a, b| a.id == b.id);
     graph.edges.sort_by(|a, b| (a.from.as_str(), a.to.as_str(), a.kind.as_str()).cmp(&(b.from.as_str(), b.to.as_str(), b.kind.as_str())));
     graph.edges.dedup_by(|a, b| a.from == b.from && a.to == b.to && a.kind == b.kind);
     graph.missing_refs.sort();
     graph.missing_refs.dedup();
+    graph.format_warnings.sort();
+    graph.format_warnings.dedup();
+    graph.metadata_warnings.sort();
+    graph.metadata_warnings.dedup();
+    graph.migration_warnings.sort();
+    graph.migration_warnings.dedup();
     graph.cycle_errors = detect_cycles(&graph.edges);
-    graph.stable_cache_key = stable_cache_key(&graph.cache_key_parts);
-    graph.debug_log.push(format!("asset_graph.resolve_v1: finalized nodes={} edges={} missing={} cycles={}", graph.nodes.len(), graph.edges.len(), graph.missing_refs.len(), graph.cycle_errors.len()));
+    graph.node_cache_key_parts = graph.nodes.iter().map(|node| node.cache_key_parts.clone()).collect();
+    graph.cache_key_parts = cache_key_parts_for_ref(&graph.root_ref);
+    if let Some(root) = graph.nodes.iter().find(|node| node.reference == graph.root_ref) {
+        graph.cache_key_parts.content_hash = root.content_hash.clone();
+    }
+    graph.stable_cache_key = stable_graph_cache_key(graph);
+    graph.debug_log.push(format!("asset_graph.resolve_v1: finalized schema='{}' nodes={} edges={} missing={} cycles={} cache_key='{}'", graph.schema, graph.nodes.len(), graph.edges.len(), graph.missing_refs.len(), graph.cycle_errors.len(), graph.stable_cache_key));
 }
 
-fn push_node(graph: &mut ResolvedAssetGraphV1, reference: &str, role: &str, asset_kind: &str, semantic_gateway: &str) {
+fn push_node(graph: &mut ResolvedAssetGraphV2, reference: &str, role: &str, asset_kind: &str, semantic_gateway: &str, handler_service: &str) {
     let reference = normalize_asset_ref(reference);
     if reference.is_empty() { return; }
     graph.nodes.push(AssetGraphNode {
         id: stable_graph_id(&reference),
         reference: reference.clone(),
+        asset_ref: reference.clone(),
         role: role.to_owned(),
+        kind: asset_kind.to_owned(),
         asset_kind: asset_kind.to_owned(),
+        byte_owner: "engine.assets".to_owned(),
         semantic_gateway: semantic_gateway.to_owned(),
+        handler_service: handler_service.to_owned(),
         cache_key_parts: cache_key_parts_for_ref(&reference),
         vfs_source: AssetGraphVfsSource { logical_path: split_ref(&reference).0, ..AssetGraphVfsSource::default() },
         metadata_namespaces: Vec::new(),
+        schema_version: "v2".to_owned(),
+        ..Default::default()
     });
 }
 
-fn push_edge(graph: &mut ResolvedAssetGraphV1, from: &str, to: &str, kind: &str, required: bool) {
-    let from = normalize_asset_ref(from);
-    let to = normalize_asset_ref(to);
-    if from.trim().is_empty() || to.trim().is_empty() { return; }
-    graph.edges.push(AssetGraphEdge { from: stable_graph_id(&from), to: stable_graph_id(&to), kind: kind.to_owned(), required });
+fn push_edge(graph: &mut ResolvedAssetGraphV2, from: &str, to: &str, kind: &str, required: bool) {
+    let from_ref = normalize_asset_ref(from);
+    let to_ref = normalize_asset_ref(to);
+    if from_ref.trim().is_empty() || to_ref.trim().is_empty() { return; }
+    graph.edges.push(AssetGraphEdge {
+        from: stable_graph_id(&from_ref),
+        to: stable_graph_id(&to_ref),
+        from_ref,
+        to_ref,
+        kind: kind.to_owned(),
+        required,
+    });
 }
 
-fn classify_ref(reference: &str) -> (&'static str, &'static str, &'static str) {
+pub fn classify_asset_ref(reference: &str) -> (&'static str, &'static str, &'static str, &'static str) {
+    classify_ref(reference)
+}
+
+fn classify_ref(reference: &str) -> (&'static str, &'static str, &'static str, &'static str) {
     let (path, _) = split_ref(reference);
     let ext = path.rsplit_once('.').map(|(_, ext)| ext.to_ascii_lowercase()).unwrap_or_default();
     match ext.as_str() {
-        "ytyp" => (ROLE_DEFINITION_ENTRIES, OBJECT_TYPE_DEFINITIONS_ASSET_KIND, "engine.definitions"),
-        "ydd" => (ROLE_DRAWABLE_DICTIONARY, DRAWABLE_DICTIONARY_ASSET_KIND, "engine.model"),
-        "nemat" => (ROLE_MATERIAL_LIBRARY, MATERIAL_LIBRARY_ASSET_KIND, "engine.materials"),
-        "ytd" => (ROLE_TEXTURE_DICTIONARY, TEXTURE_DICTIONARY_ASSET_KIND, "engine.textures"),
-        "ybn" | "ycol" => ("physics_dictionary", "physics_dictionary", "engine.physics"),
-        _ => ("asset", "unknown", "engine.assets"),
+        "ytyp" => (ROLE_DEFINITION_ENTRIES, OBJECT_TYPE_DEFINITIONS_ASSET_KIND, "engine.definitions", "definitions.api"),
+        "ydd" => (ROLE_DRAWABLE_DICTIONARY, DRAWABLE_DICTIONARY_ASSET_KIND, "engine.model", "model.api"),
+        "nemat" => (ROLE_MATERIAL_LIBRARY, MATERIAL_LIBRARY_ASSET_KIND, "engine.materials", "materials.api"),
+        "ytd" => (ROLE_TEXTURE_DICTIONARY, TEXTURE_DICTIONARY_ASSET_KIND, "engine.textures", "textures.api"),
+        "ybn" | "ycol" => ("physics_dictionary", "physics_dictionary", "engine.physics", "physics.api"),
+        "nebrain" => ("ai_brain", "ai_brain_dictionary", "engine.ai", "ai.api"),
+        "nepat" => ("ai_pattern", "ai_pattern_dictionary", "engine.ai", "ai.api"),
+        "nemem" => ("ai_memory", "ai_memory_dictionary", "engine.ai", "ai.api"),
+        _ => ("asset", "unknown", "engine.assets", "asset_manager.api"),
     }
 }
 
 fn detect_cycles(edges: &[AssetGraphEdge]) -> Vec<String> {
     let mut adjacency = BTreeMap::<String, Vec<String>>::new();
     for edge in edges {
-        adjacency.entry(edge.from.clone()).or_default().push(edge.to.clone());
+        adjacency.entry(edge.from_ref.clone()).or_default().push(edge.to_ref.clone());
     }
     let mut errors = Vec::new();
     let mut visiting = BTreeSet::<String>::new();
@@ -389,22 +500,36 @@ fn visit_cycle(
     visited.insert(node.to_owned());
 }
 
-fn cache_key_parts_for_ref(reference: &str) -> AssetGraphCacheKeyParts {
+pub fn cache_key_parts_for_ref(reference: &str) -> AssetGraphCacheKeyParts {
     let (logical_path, entry) = split_ref(reference);
-    AssetGraphCacheKeyParts { logical_path, entry, schema_version: "v1".to_owned(), ..Default::default() }
+    AssetGraphCacheKeyParts { logical_path, entry, schema_version: "v2".to_owned(), ..Default::default() }
 }
 
-fn stable_cache_key(parts: &AssetGraphCacheKeyParts) -> String {
-    let key = format!(
-        "{}@{}|{}|{}|{}|{}",
-        parts.logical_path,
-        parts.entry.clone().unwrap_or_default(),
-        parts.content_hash.clone().unwrap_or_default(),
-        parts.schema_version,
-        parts.import_settings_hash.clone().unwrap_or_default(),
-        parts.provider_version.clone().unwrap_or_default(),
-    );
-    format!("asset-graph:{:016x}", fnv1a64(key.as_bytes()))
+fn stable_graph_cache_key(graph: &ResolvedAssetGraphV2) -> String {
+    let mut key = format!("root={}|schema={}", graph.root_ref, graph.schema);
+    for node in &graph.nodes {
+        key.push_str("|node=");
+        key.push_str(&node.reference);
+        key.push(':');
+        key.push_str(node.content_hash.as_deref().unwrap_or(""));
+        key.push(':');
+        key.push_str(node.entry_hash.as_deref().unwrap_or(""));
+        key.push(':');
+        key.push_str(&node.schema_version);
+    }
+    for edge in &graph.edges {
+        key.push_str("|edge=");
+        key.push_str(&edge.from_ref);
+        key.push_str("->");
+        key.push_str(&edge.to_ref);
+        key.push(':');
+        key.push_str(&edge.kind);
+    }
+    format!("asset-graph-v2:{:016x}", fnv1a64(key.as_bytes()))
+}
+
+pub fn split_asset_ref(reference: &str) -> (String, Option<String>) {
+    split_ref(reference)
 }
 
 fn split_ref(reference: &str) -> (String, Option<String>) {
@@ -415,19 +540,19 @@ fn split_ref(reference: &str) -> (String, Option<String>) {
     }
 }
 
-fn normalize_asset_ref(reference: &str) -> String {
+pub fn normalize_asset_ref(reference: &str) -> String {
     let mut s = reference.trim().replace('\\', "/");
     while let Some(rest) = s.strip_prefix("./") { s = rest.to_owned(); }
     while s.contains("//") { s = s.replace("//", "/"); }
     s.trim_start_matches('/').to_owned()
 }
 
-fn stable_graph_id(reference: &str) -> String {
+pub fn stable_graph_id(reference: &str) -> String {
     let normalized = normalize_asset_ref(reference);
     format!("asset:{:016x}", fnv1a64(normalized.as_bytes()))
 }
 
-fn fnv1a64(bytes: &[u8]) -> u64 {
+pub fn fnv1a64(bytes: &[u8]) -> u64 {
     const OFFSET: u64 = 0xcbf29ce484222325;
     const PRIME: u64 = 0x100000001b3;
     let mut hash = OFFSET;
@@ -450,6 +575,7 @@ mod tests {
         assert_eq!(root.semantic_gateway, "engine.definitions");
         assert_ne!(root.semantic_gateway, "engine.scene");
         assert_eq!(root.role, ROLE_DEFINITION_ENTRIES);
+        assert_eq!(root.byte_owner, "engine.assets");
     }
 
     #[test]
@@ -467,5 +593,14 @@ mod tests {
         let graph = AssetGraphResolver::resolve_construction_plan(&plan);
         assert!(graph.edges.iter().any(|edge| edge.kind == ROLE_DRAWABLE_DICTIONARY));
         assert!(graph.debug_log.iter().any(|line| line.contains("asset_graph.resolve_v1")));
+    }
+
+    #[test]
+    fn cycles_are_reported_by_refs_not_internal_ids() {
+        let mut graph = AssetGraphResolver::resolve_root_ref("a.ytyp@a");
+        push_manifest_dependency(&mut graph, "a.ytyp@a", "b.ydd@b", "test", true);
+        push_manifest_dependency(&mut graph, "b.ydd@b", "a.ytyp@a", "test", true);
+        finalize_graph(&mut graph);
+        assert!(graph.cycle_errors.iter().any(|cycle| cycle.contains("a.ytyp@a")));
     }
 }

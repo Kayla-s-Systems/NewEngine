@@ -1,15 +1,11 @@
 #![forbid(unsafe_op_in_unsafe_fn)]
 
-//! Stable domain contracts for model construction.
+//! Stable domain contracts for drawable/model construction.
 //!
-//! The crate owns one canonical model chain:
-//!
-//! ```text
-//! .ytyp Definition Entries -> .ydd drawable dictionary -> .nemat material library -> .ytd texture dictionary
-//! ```
-//!
-//! `.nepak` packages are separate VFS delivery containers for that chain. There is
-//! no public `.neytd` role or compatibility alias in this contract.
+//! Drawable/model semantics stay separate from definition metadata and dependency graph expansion.
+//! Definition files are routed through `engine.definitions`; graph expansion is routed through `engine.asset_graph`.
+//! `.nepak` packages remain VFS delivery containers.
+//! There is no public `.neytd` role or compatibility alias in this contract.
 
 mod asset_chain;
 mod asset_graph;
@@ -56,8 +52,9 @@ pub const DRAWABLE_DICTIONARY_ASSET_KIND: &str = "drawable_dictionary";
 pub const DRAWABLE_DICTIONARY_CONTAINER: &str = "newengine.listfile.nef8.ydd";
 pub const DRAWABLE_DICTIONARY_MANIFEST_SCHEMA: &str = "newengine.drawable_dictionary.manifest.v1";
 pub const MODEL_SERVICE_METHOD_DRAWABLE_DICTIONARY_MANIFEST_JSON_V1: &str = "model.drawable_dictionary_manifest_json_v1";
+pub const MODEL_SERVICE_METHOD_RESOLVE_DRAWABLE_V1: &str = "model.resolve_drawable_v1";
 
-/// Source/domain texture dictionary role referenced by YTYP archetypes.
+/// Texture dictionary role consumed after graph/material resolution.
 pub const TEXTURE_DICTIONARY_EXTENSION: &str = "ytd";
 pub const TEXTURE_DICTIONARY_ASSET_KIND: &str = "texture_dictionary";
 pub const TEXTURE_DICTIONARY_CONTAINER: &str = "newengine.listfile.nef8.ytd";
@@ -77,13 +74,9 @@ pub const PHYSICS_DICTIONARY_EXTENSION: &str = "ybn";
 pub const PHYSICS_DICTIONARY_ASSET_KIND: &str = "physics_dictionary";
 
 pub const OBJECT_TYPE_DEFINITIONS_EXTENSION: &str = "ytyp";
-pub const OBJECT_TYPE_DEFINITIONS_ASSET_KIND: &str = "object_type_definitions";
+pub const OBJECT_TYPE_DEFINITIONS_ASSET_KIND: &str = "archetype_dictionary";
 pub const OBJECT_TYPE_DEFINITIONS_CONTAINER: &str = "newengine.listfile.nef8.ytyp";
 pub const DEFINITION_ENTRIES_SCHEMA: &str = "newengine.ytyp.definition_entries.v1";
-pub const MODEL_SERVICE_METHOD_DEFINITION_ENTRIES_JSON_V1: &str = "model.definition_entries_json_v1";
-pub const MODEL_SERVICE_METHOD_ASSET_CHAIN_JSON_V1: &str = "model.asset_chain_json_v1";
-pub const MODEL_SERVICE_METHOD_CONSTRUCTION_PLAN_JSON_V1: &str = "model.construction_plan_json_v1";
-pub const MODEL_SERVICE_METHOD_ASSET_GRAPH_JSON_V1: &str = "model.asset_graph_json_v1";
 
 pub const MODEL_FEATURE_DOMAINS: &[&str] = &[
     "mesh.obj",
@@ -94,7 +87,7 @@ pub const MODEL_FEATURE_DOMAINS: &[&str] = &[
     "material.nemat",
     "texture.ytd",
     "package.nepak",
-    "definition_entries.ytyp",
+    "drawable.resolve",
 ];
 
 pub const MODEL_SERVICE_METHODS: &[&str] = &[
@@ -104,10 +97,7 @@ pub const MODEL_SERVICE_METHODS: &[&str] = &[
     MODEL_SERVICE_METHOD_ASSEMBLE_JSON_V1,
     MODEL_SERVICE_METHOD_VALIDATE_JSON_V1,
     MODEL_SERVICE_METHOD_DRAWABLE_DICTIONARY_MANIFEST_JSON_V1,
-    MODEL_SERVICE_METHOD_DEFINITION_ENTRIES_JSON_V1,
-    MODEL_SERVICE_METHOD_ASSET_CHAIN_JSON_V1,
-    MODEL_SERVICE_METHOD_CONSTRUCTION_PLAN_JSON_V1,
-    MODEL_SERVICE_METHOD_ASSET_GRAPH_JSON_V1,
+    MODEL_SERVICE_METHOD_RESOLVE_DRAWABLE_V1,
 ];
 
 pub const MODEL_BACKEND_SERVICE_SPEC: newengine_service_api::BackendServiceSpec =
@@ -166,14 +156,13 @@ mod tests {
         assert_eq!(MODEL_SKELETONS_BACKEND_SERVICE_SPEC.domain, "model.skeletons");
         assert_eq!(MODEL_MATERIALS_BACKEND_SERVICE_SPEC.domain, "model.materials");
         assert_eq!(MODEL_COLLISIONS_BACKEND_SERVICE_SPEC.domain, "model.collisions");
-        assert!(MODEL_FEATURE_DOMAINS.contains(&"definition_entries.ytyp"));
+        assert!(!MODEL_FEATURE_DOMAINS.contains(&"definition_entries.ytyp"));
+        assert!(MODEL_FEATURE_DOMAINS.contains(&"drawable.resolve"));
         assert!(MODEL_FEATURE_DOMAINS.contains(&"material.nemat"));
         assert!(MODEL_FEATURE_DOMAINS.contains(&"texture.ytd"));
         assert!(MODEL_FEATURE_DOMAINS.contains(&"package.nepak"));
         assert!(!MODEL_FEATURE_DOMAINS.contains(&"texture.neytd.runtime"));
-        assert!(MODEL_SERVICE_METHODS.contains(&MODEL_SERVICE_METHOD_ASSET_CHAIN_JSON_V1));
-        assert!(MODEL_SERVICE_METHODS.contains(&MODEL_SERVICE_METHOD_CONSTRUCTION_PLAN_JSON_V1));
-        assert!(MODEL_SERVICE_METHODS.contains(&MODEL_SERVICE_METHOD_ASSET_GRAPH_JSON_V1));
+        assert!(MODEL_SERVICE_METHODS.contains(&MODEL_SERVICE_METHOD_RESOLVE_DRAWABLE_V1));
     }
 
     #[test]

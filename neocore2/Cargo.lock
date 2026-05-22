@@ -492,6 +492,7 @@ dependencies = [
  "newengine-render-api",
  "newengine-scene-io",
  "newengine-service-api",
+ "newengine-time-api",
  "newengine-ui-api",
  "newengine-ui-draw",
  "parking_lot",
@@ -649,6 +650,7 @@ dependencies = [
  "newengine-runtime-host",
  "newengine-scene",
  "newengine-scene-runtime",
+ "newengine-time-runtime",
  "newengine-ui",
 ]
 
@@ -838,7 +840,9 @@ dependencies = [
  "abi_stable",
  "log",
  "newengine-assets",
+ "newengine-assets-api",
  "newengine-material-runtime",
+ "newengine-materials",
  "newengine-model-collision-runtime",
  "newengine-model-domain-api",
  "newengine-model-import-obj",
@@ -1132,6 +1136,31 @@ dependencies = [
  "serde_json",
  "thiserror",
  "zstd",
+]
+
+[[package]]
+name = "newengine-time-api"
+version = "0.1.0"
+dependencies = [
+ "newengine-service-api",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "newengine-time-runtime"
+version = "0.1.0"
+dependencies = [
+ "abi_stable",
+ "log",
+ "newengine-plugin-api",
+ "newengine-plugin-host",
+ "newengine-service-api",
+ "newengine-service-kit",
+ "newengine-time-api",
+ "parking_lot",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]
