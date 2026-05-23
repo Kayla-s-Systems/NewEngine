@@ -158,7 +158,7 @@ fn split_ydd_asset_ref(logical_path: &str) -> Option<(&str, Option<&str>)> {
         Some((dictionary, selector)) => (dictionary.trim(), Some(selector.trim()).filter(|s| !s.is_empty())),
         None => (trimmed, None),
     };
-    if dictionary.to_ascii_lowercase().ends_with(".ydd") {
+    if newengine_assets::require_asset_reference_extension(dictionary, &["ydd"], false).is_ok() {
         Some((dictionary, selector))
     } else {
         None

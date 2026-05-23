@@ -37,6 +37,7 @@ pub mod sched;
 pub mod services_registry;
 pub mod startup;
 pub mod startup_status;
+pub mod startup_window;
 pub mod sync;
 mod system_info;
 
@@ -87,3 +88,4 @@ pub use startup::{
     ConfigPaths, StartupConfig, StartupConfigSource, StartupLoadReport, StartupLoader,
     StartupOverride, StartupResolvedFrom, StartupStorageRootKind, WindowPlacement,
 };
+pub use startup_window::{StartupWindowDecision, StartupWindowReport};

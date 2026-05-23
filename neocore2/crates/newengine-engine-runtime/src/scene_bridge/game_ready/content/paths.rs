@@ -1,6 +1,5 @@
-pub(super) const GAME_READY_APP_DIR: &str = "game-ready-fps";
-pub(super) const GAME_READY_PROFILE_FILE: &str = "game_ready_highlands.ymap";
-const PROFILE_ENV_KEYS: [&str; 2] = ["NEWENGINE_GAME_READY_PROFILE", "NEWENGINE_GAME_READY_MAP"];
+pub(super) const SCENE_PROFILE_ENV: &str = "NEWENGINE_SCENE_PROFILE";
+const PROFILE_ENV_KEYS: [&str; 1] = [SCENE_PROFILE_ENV];
 /// Logical AssetManager candidates for the game-ready authored map.
 ///
 /// Environment overrides are treated as logical VFS paths. Absolute filesystem
@@ -11,7 +10,7 @@ pub(super) fn profile_asset_candidates() -> Vec<String> {
 
     for raw in PROFILE_ENV_KEYS
         .into_iter()
-        .filter_map(|key| std::env::var(key).ok())
+        .filter_map(|key| crate::env_config::var(key))
     {
         let trimmed = raw.trim();
         if trimmed.is_empty() {
@@ -20,7 +19,7 @@ pub(super) fn profile_asset_candidates() -> Vec<String> {
         let as_path = std::path::Path::new(trimmed);
         if as_path.is_absolute() {
             log::warn!(
-                "game-ready: ignoring absolute authored map path='{}'; set a logical AssetManager path instead",
+                "scene profile: ignoring absolute authored map path='{}'; set a logical AssetManager path instead",
                 trimmed
             );
             continue;
@@ -28,9 +27,11 @@ pub(super) fn profile_asset_candidates() -> Vec<String> {
         out.push(normalize_asset_path(trimmed));
     }
 
-    out.push(GAME_READY_PROFILE_FILE.to_owned());
-    out.push(format!("maps/{GAME_READY_PROFILE_FILE}"));
-    out.push(format!("game-ready/{GAME_READY_PROFILE_FILE}"));
+    if out.is_empty() {
+        log::warn!(
+            "scene profile: no authored map profile configured; set NEWENGINE_SCENE_PROFILE to a logical .ymap path from the active profile layer"
+        );
+    }
 
     dedup_strings(out)
 }

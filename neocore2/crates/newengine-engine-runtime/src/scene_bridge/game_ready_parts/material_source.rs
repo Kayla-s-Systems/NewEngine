@@ -11,8 +11,7 @@ use self::content::GameReadyMaterialSpec as NeGameReadyMaterialSpec;
 #[inline]
 fn is_nemat_entry_ref(path: &str) -> bool {
     let value = path.trim().replace('\\', "/");
-    let Some((file, entry)) = value.rsplit_once('@') else { return false; };
-    !entry.trim().is_empty() && file.to_ascii_lowercase().ends_with(".nemat")
+    newengine_assets::require_asset_reference_extension(&value, &["nemat"], true).is_ok()
 }
 
 #[inline]
@@ -142,12 +141,3 @@ fn register_material(
     mats.upsert_named_with_textures(name, desc, textures)
 }
 
-#[inline]
-pub(super) fn game_ready_demo_enabled() -> bool {
-    std::env::var("NEWENGINE_GAME_READY_DEMO")
-        .map(|v| {
-            let v = v.trim().to_ascii_lowercase();
-            !matches!(v.as_str(), "" | "0" | "false" | "off" | "no")
-        })
-        .unwrap_or(false)
-}

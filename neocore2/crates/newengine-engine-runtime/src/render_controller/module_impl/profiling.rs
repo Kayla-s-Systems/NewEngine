@@ -92,20 +92,12 @@ impl TimedBreakdown {
 
 #[inline]
 fn env_f32(name: &str, default: f32, min: f32, max: f32) -> f32 {
-    std::env::var(name)
-        .ok()
-        .and_then(|v| v.trim().parse::<f32>().ok())
-        .map(|v| v.clamp(min, max))
-        .unwrap_or(default)
+    crate::env_config::var_f32(name, default, min, max)
 }
 
 #[inline]
 fn env_u64(name: &str, default: u64, min: u64, max: u64) -> u64 {
-    std::env::var(name)
-        .ok()
-        .and_then(|v| v.trim().parse::<u64>().ok())
-        .map(|v| v.clamp(min, max))
-        .unwrap_or(default)
+    crate::env_config::var_u64(name, default, min, max)
 }
 
 #[inline]

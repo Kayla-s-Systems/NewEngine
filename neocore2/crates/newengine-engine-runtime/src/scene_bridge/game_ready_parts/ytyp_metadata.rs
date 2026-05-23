@@ -30,15 +30,13 @@ fn value_f32(value: &serde_json::Value) -> Option<f32> {
 #[inline]
 fn is_nemat_ref(value: &str) -> bool {
     let normalized = value.trim().replace('\\', "/");
-    let Some((file, entry)) = normalized.rsplit_once('@') else { return false; };
-    !entry.trim().is_empty() && file.to_ascii_lowercase().ends_with(".nemat")
+    newengine_assets::require_asset_reference_extension(&normalized, &["nemat"], true).is_ok()
 }
 
 #[inline]
 fn is_ytd_ref(value: &str) -> bool {
     let normalized = value.trim().replace('\\', "/");
-    let Some((file, entry)) = normalized.rsplit_once('@') else { return false; };
-    !entry.trim().is_empty() && file.to_ascii_lowercase().ends_with(".ytd")
+    newengine_assets::require_asset_reference_extension(&normalized, &["ytd"], true).is_ok()
 }
 
 #[inline]
@@ -175,7 +173,11 @@ fn apply_time_constants_from_ytyp(profile: &mut GameReadyMapProfile, metadata: &
 
 fn load_game_ready_definition_entry(definition_ref: &str) -> Option<serde_json::Value> {
     let payload = serde_json::to_vec(&serde_json::json!({ "definition_ref": definition_ref })).ok()?;
-    match call_service_v1("engine.assets.definitions", "assets.definitions.entry_v1", &payload) {
+    match call_service_v1(
+        newengine_assets::ENGINE_ASSETS_DEFINITIONS_SERVICE_ID,
+        newengine_assets::definitions_method::ENTRY_JSON_V1,
+        &payload,
+    ) {
         Ok(bytes) => match serde_json::from_slice::<serde_json::Value>(&bytes) {
             Ok(value) => Some(value),
             Err(e) => {

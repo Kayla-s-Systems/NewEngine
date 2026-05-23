@@ -178,7 +178,7 @@ impl RuntimeRenderController {
         });
 
         if activate_game_ready_play_after_frame {
-            self.bridges.scene.activate_game_ready_play_now();
+            self.bridges.scene.activate_profile_play_now();
         }
 
         WorldFrameState { view_frame }

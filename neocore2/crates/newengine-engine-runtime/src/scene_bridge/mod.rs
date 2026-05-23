@@ -46,7 +46,7 @@ use crate::gameplay::{
 };
 use crate::scene_bootstrap::bootstrap_runtime_scene;
 
-use game_ready::{bootstrap_fps_game_ready_scene, game_ready_demo_enabled};
+use game_ready::bootstrap_fps_game_ready_scene;
 pub(crate) use game_ready::{
     tick_game_ready_sky_cycle, tick_game_ready_streaming_terrain, PreparedTerrainPrimitiveMesh,
     SkyClearColorRuntime, SkyDomeRuntime, SkyVisualKind, SkyVisualRuntime, TerrainSurfaceLayers,
@@ -82,17 +82,10 @@ impl SceneBridge {
         let primitives = Arc::new(RwLock::new(PrimitiveRegistry::with_builtins()));
         let materials = Arc::new(RwLock::new(MaterialRegistry::with_builtins()));
 
-        // Game-ready scenes must be assembled only after engine plugins are loaded:
-        // AssetManager discovers geometryImporter during the engine plugin phase.
-        // The standalone game profile owns that late bootstrap module.
-        let (initial_selection, initial_mode) = if game_ready_demo_enabled() {
-            // Standalone game-ready scenes start in a non-playable staging mode.
-            // The render controller promotes the bridge to Play only after the
-            // scene launch gate verifies CPU scene assembly and GPU residency.
-            (None, GameRunMode::Staging)
-        } else {
-            (None, GameRunMode::Staging)
-        };
+        // Product/profile scene assembly happens through profile-owned modules.
+        // The reusable scene bridge starts in staging and exposes explicit hooks
+        // for profiles that need late bootstrap after providers are routed.
+        let (initial_selection, initial_mode) = (None, GameRunMode::Staging);
 
         Self {
             scene: Arc::new(RwLock::new(initial)),
@@ -123,11 +116,7 @@ impl SceneBridge {
         Arc::clone(&self.materials)
     }
 
-    pub fn bootstrap_game_ready_scene_now(&self) -> Option<EntityId> {
-        if !game_ready_demo_enabled() {
-            return None;
-        }
-
+    pub fn bootstrap_profile_scene_now(&self) -> Option<EntityId> {
         let (selected, selected_authority) = {
             let mut scene = self.scene.write();
             let mut prims = self.primitives.write();
@@ -151,10 +140,7 @@ impl SceneBridge {
     }
 
     #[inline]
-    pub fn activate_game_ready_play_now(&self) {
-        if !game_ready_demo_enabled() {
-            return;
-        }
+    pub fn activate_profile_play_now(&self) {
         let mut play_mode = self.play_mode.lock();
         if !play_mode.is_runtime() {
             *play_mode = GameRunMode::Play;

@@ -34,8 +34,7 @@ pub(super) fn primitive_budget(runtime: bool, shadow_pass: bool) -> usize {
         (false, false) => "NEWENGINE_EDITOR_OPAQUE_PRIMITIVE_BUDGET",
     };
 
-    std::env::var(key)
-        .ok()
+    crate::env_config::var(key)
         .and_then(|value| value.trim().parse::<usize>().ok())
         .map(|value| value.clamp(8, 512))
         .unwrap_or(default)
@@ -118,21 +117,12 @@ pub(super) fn shadow_caster_visible(
 
 #[inline]
 pub(super) fn render_scene_culling_enabled() -> bool {
-    std::env::var("NEWENGINE_RENDER_SCENE_CULLING")
-        .map(|v| {
-            let v = v.trim().to_ascii_lowercase();
-            !matches!(v.as_str(), "" | "0" | "false" | "off" | "no")
-        })
-        .unwrap_or(true)
+    crate::env_config::var_bool("NEWENGINE_RENDER_SCENE_CULLING", true)
 }
 
 #[inline]
 fn env_f32(name: &str, default: f32, min: f32, max: f32) -> f32 {
-    std::env::var(name)
-        .ok()
-        .and_then(|v| v.trim().parse::<f32>().ok())
-        .map(|v| v.clamp(min, max))
-        .unwrap_or(default)
+    crate::env_config::var_f32(name, default, min, max)
 }
 
 /// Conservative forward-visibility test used by the GameReady runtime draw lists.

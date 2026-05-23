@@ -127,20 +127,12 @@ impl RuntimeRenderController {
 }
 
 fn terrain_gpu_upload_budget_per_frame() -> u32 {
-    std::env::var("NEWENGINE_TERRAIN_GPU_UPLOADS_PER_FRAME")
-        .ok()
-        .and_then(|value| value.trim().parse::<u32>().ok())
-        .map(|value| value.min(8))
-        .unwrap_or(1)
+    crate::env_config::var_u32("NEWENGINE_TERRAIN_GPU_UPLOADS_PER_FRAME", 1, 0, 8)
 }
 
 fn terrain_gpu_upload_interval_frames() -> u64 {
-    std::env::var("NEWENGINE_TERRAIN_GPU_UPLOAD_INTERVAL_FRAMES")
-        .ok()
-        .and_then(|value| value.trim().parse::<u64>().ok())
-        .map(|value| value.clamp(1, 240))
-        // A single streamed terrain chunk is still a visible CPU/GPU bridge cost
-        // on the current Vulkan service path. Do not spend that cost on every
-        // consecutive frame while the player crosses a chunk boundary.
-        .unwrap_or(6)
+    // A single streamed terrain chunk is still a visible CPU/GPU bridge cost
+    // on the current Vulkan service path. Do not spend that cost on every
+    // consecutive frame while the player crosses a chunk boundary.
+    crate::env_config::var_u64("NEWENGINE_TERRAIN_GPU_UPLOAD_INTERVAL_FRAMES", 6, 1, 240)
 }

@@ -4,8 +4,8 @@ use abi_stable::std_types::{ROption, RString, RVec};
 use libloading::Library;
 use newengine_core::{EngineError, EngineResult, StartupConfig};
 use newengine_platform_api::{
-    PlatformAppConfigV1, PlatformRuntimeRunFnV1, PlatformWindowPlacementKindV1,
-    PlatformWindowPlacementV1,
+    PlatformAppConfigV1, PlatformDisplayConfigV1, PlatformHdrModeV1, PlatformRuntimeRunFnV1,
+    PlatformWindowModeV1, PlatformWindowPlacementKindV1, PlatformWindowPlacementV1,
 };
 use newengine_plugin_api::{
     CapabilityDesc, CapabilityKind, CapabilityRole, ConfigBlobV1, ConfigDiagLevelV1,
@@ -41,6 +41,7 @@ pub fn platform_config_from_startup_defaults(startup: &StartupConfig) -> Platfor
         height: startup.window_size.1,
         placement,
         icon: ROption::RNone,
+        display: PlatformDisplayConfigV1::default(),
     }
 }
 
@@ -143,12 +144,15 @@ fn platform_config_from_effective_blob(blob: &ConfigBlobV1) -> Result<PlatformAp
         other => return Err(format!("unsupported placement.mode '{other}'")),
     };
 
+    let display = parse_display_config(obj.get("display"));
+
     Ok(PlatformAppConfigV1 {
         title: title.into(),
         width,
         height,
         placement,
         icon: ROption::RNone,
+        display,
     })
 }
 
@@ -269,7 +273,111 @@ fn apply_startup_platform_overrides(
         };
     }
 
+    if let Some(display_obj) = obj.get("display") {
+        config.display = parse_display_config(Some(display_obj));
+    }
+
     config
+}
+
+
+fn parse_display_config(value: Option<&Value>) -> PlatformDisplayConfigV1 {
+    let Some(obj) = value.and_then(Value::as_object) else {
+        return PlatformDisplayConfigV1::default();
+    };
+
+    let monitor_index = obj
+        .get("monitor_index")
+        .and_then(Value::as_i64)
+        .map(|v| v.clamp(i64::from(i32::MIN), i64::from(i32::MAX)) as i32)
+        .or_else(|| {
+            obj.get("monitor")
+                .and_then(Value::as_str)
+                .map(parse_monitor_index)
+        })
+        .unwrap_or(-1);
+
+    let window_mode = obj
+        .get("window_mode")
+        .and_then(Value::as_str)
+        .map(parse_window_mode)
+        .unwrap_or(PlatformWindowModeV1::Windowed);
+
+    let vsync = obj.get("vsync").and_then(Value::as_bool).unwrap_or(true);
+
+    let refresh_rate_millihz = obj
+        .get("refresh_rate_millihz")
+        .and_then(Value::as_u64)
+        .map(|v| v.min(u64::from(u32::MAX)) as u32)
+        .or_else(|| parse_refresh_rate_millihz(obj.get("refresh_rate")))
+        .unwrap_or(0);
+
+    let render_scale = obj
+        .get("render_scale")
+        .and_then(Value::as_f64)
+        .map(|v| (v as f32).clamp(0.25, 2.0))
+        .unwrap_or(1.0);
+
+    let hdr = obj
+        .get("hdr")
+        .and_then(Value::as_str)
+        .map(parse_hdr_mode)
+        .unwrap_or(PlatformHdrModeV1::Auto);
+
+    PlatformDisplayConfigV1 {
+        monitor_index,
+        window_mode,
+        vsync,
+        refresh_rate_millihz,
+        render_scale,
+        hdr,
+    }
+}
+
+fn parse_monitor_index(value: &str) -> i32 {
+    let trimmed = value.trim();
+    if trimmed.eq_ignore_ascii_case("primary")
+        || trimmed.eq_ignore_ascii_case("auto")
+        || trimmed.is_empty()
+    {
+        return -1;
+    }
+    trimmed.parse::<i32>().unwrap_or(-1)
+}
+
+fn parse_window_mode(value: &str) -> PlatformWindowModeV1 {
+    match value.trim().to_ascii_lowercase().as_str() {
+        "borderless" | "borderless_fullscreen" => PlatformWindowModeV1::Borderless,
+        "exclusive" | "exclusive_fullscreen" | "fullscreen" => PlatformWindowModeV1::ExclusiveFullscreen,
+        _ => PlatformWindowModeV1::Windowed,
+    }
+}
+
+fn parse_hdr_mode(value: &str) -> PlatformHdrModeV1 {
+    match value.trim().to_ascii_lowercase().as_str() {
+        "enabled" | "on" | "true" => PlatformHdrModeV1::Enabled,
+        "disabled" | "off" | "false" => PlatformHdrModeV1::Disabled,
+        _ => PlatformHdrModeV1::Auto,
+    }
+}
+
+fn parse_refresh_rate_millihz(value: Option<&Value>) -> Option<u32> {
+    match value? {
+        Value::String(s) => {
+            let t = s.trim().to_ascii_lowercase();
+            if t == "auto" {
+                return Some(0);
+            }
+            t.trim_end_matches("hz")
+                .parse::<u32>()
+                .ok()
+                .map(|hz| hz.saturating_mul(1000))
+        }
+        Value::Number(n) => n
+            .as_u64()
+            .map(|hz| (hz.min(u64::from(u32::MAX / 1000)) as u32).saturating_mul(1000)),
+        _ => None,
+    }
 }
 
 fn resolve_platform_runtime_config_without_metadata_probe(

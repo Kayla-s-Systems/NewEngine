@@ -82,7 +82,7 @@ impl RuntimeRenderController {
         let _ = r.discard_recorded_commands();
 
         let status = if prelaunch_released {
-            self.bridges.scene.activate_game_ready_play_now();
+            self.bridges.scene.activate_profile_play_now();
             self.diagnostics.overlay_metrics.reset_interactive_timing();
             log::info!(
                 "render controller: scene launch gate released; deferring first world present to next frame"

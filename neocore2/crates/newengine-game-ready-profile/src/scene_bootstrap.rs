@@ -59,7 +59,7 @@ impl GameReadySceneBootstrapModule {
         let asset_roots = collect_app_asset_roots(GAME_READY_APP_DIR_NAME, GAME_APP_ASSETS_DIR_ENV);
         mount_asset_roots_best_effort(&assets, &asset_roots);
 
-        match self.scene.bootstrap_game_ready_scene_now() {
+        match self.scene.bootstrap_profile_scene_now() {
             Some(player) => {
                 self.bootstrapped = true;
                 let selected_player_authority = self.scene.selection_authority_handle();

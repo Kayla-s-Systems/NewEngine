@@ -31,7 +31,7 @@ const GAME_READY_ENV_DEFAULTS: &[(&str, &str)] = &[
     ("NEWENGINE_BOOTSTRAP_PLUGIN_PRELOAD", "deferred"),
 ];
 
-pub const GAME_READY_PROFILE_ENV: &str = "NEWENGINE_GAME_READY_PROFILE";
+pub const GAME_READY_PROFILE_ENV: &str = "NEWENGINE_SCENE_PROFILE";
 pub const GAME_READY_DEFAULT_PROFILE_ASSET: &str = "game_ready_highlands.ymap";
 
 #[derive(Clone)]

@@ -274,6 +274,9 @@ where
             "startup.load.begin path={}",
             self.spec.startup_config_path
         ));
+        // StartUpWindow is a core-owned PreStart gate. Do not run the legacy
+        // runtime-host adapter here: StartupLoader::load_json() presents the
+        // window by default and then consumes the canonical config.json.
         let (startup, _report) = StartupLoader::load_json(&paths)?;
         self.early_log(format_args!(
             "startup.load.ok modules_dir={} cache_files={} config={}",

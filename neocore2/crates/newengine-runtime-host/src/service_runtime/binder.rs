@@ -8,19 +8,17 @@ use super::{
 
 /// Common host-side bind step for a domain backend service.
 ///
-/// The domain supplies the already-decoded `info_json` result and a way to read
-/// the backend id from that info packet. The framework handles uniform error
-/// reporting and validates that the active service is backed by a plugin that
-/// declares both the domain service id and backend capability.
-pub(crate) fn bind_backend_info<E, I, F>(
+/// The domain supplies the already-decoded `info_json` result. The framework handles
+/// uniform error reporting and validates the active provider through
+/// `ActiveGatewayRegistry`; backend ids in info packets are diagnostic only and must
+/// not participate in provider selection.
+pub(crate) fn bind_backend_info<E, I>(
     ctx: &ModuleCtx<'_, E>,
     spec: BackendServiceSpec,
     info_result: Result<I, String>,
-    backend_id: F,
 ) -> EngineResult<(I, BackendSelection)>
 where
     E: Send + 'static,
-    F: FnOnce(&I) -> &str,
 {
     let info = match info_result {
         Ok(info) => info,
@@ -34,7 +32,6 @@ where
     };
 
     let snapshot = ctx.resources().get::<newengine_plugin_host::PluginsSnapshot>();
-    let selection = resolve_backend_provider(snapshot, spec, backend_id(&info))
-        .map_err(EngineError::other)?;
+    let selection = resolve_backend_provider(snapshot, spec).map_err(EngineError::other)?;
     Ok((info, selection))
 }

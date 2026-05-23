@@ -19,6 +19,26 @@ impl StartupLoader {
         let mut cfg = StartupConfig::default();
         let mut report = StartupLoadReport::new();
 
+        let startup_window = crate::startup_window::present_before_startup_if_needed(paths);
+        report.overrides.push(StartupOverride {
+            key: "startup_window",
+            from: "core default".to_owned(),
+            to: format!(
+                "decision={:?}; details={}; disabled_by={}; warnings={}",
+                startup_window.decision,
+                startup_window.details,
+                startup_window
+                    .disabled_by
+                    .as_deref()
+                    .unwrap_or("<none>"),
+                startup_window.warnings.len()
+            ),
+        });
+
+        if matches!(startup_window.decision, crate::startup_window::StartupWindowDecision::Cancelled) {
+            return Err(EngineError::ExitRequested);
+        }
+
         let raw_path = paths.startup_path();
 
         match resolve_startup_file_optional(paths, raw_path) {
@@ -444,15 +464,48 @@ fn resolve_startup_file_optional(
         return Ok(None);
     }
 
-    // CWD
-    let cwd = std::env::current_dir()
-        .map_err(|e| EngineError::Other(format!("startup: current_dir failed err={}", e)))?;
-    let in_cwd = cwd.join(p);
-    if in_cwd.exists() {
-        return Ok(Some((in_cwd, StartupResolvedFrom::Cwd)));
+    let roots = startup_search_roots()?;
+    for root in &roots {
+        let in_root = root.join(p);
+        if in_root.exists() {
+            return Ok(Some((in_root, StartupResolvedFrom::Cwd)));
+        }
+
+        // IDE launches from the outer repository root should still find
+        // NewEngine/neocore2/config.json when the app spec says "config.json".
+        let in_nested_neocore = root.join("NewEngine").join("neocore2").join(p);
+        if in_nested_neocore.exists() {
+            return Ok(Some((in_nested_neocore, StartupResolvedFrom::Cwd)));
+        }
     }
 
     Ok(None)
+}
+
+fn startup_search_roots() -> EngineResult<Vec<PathBuf>> {
+    let mut roots = Vec::new();
+    let cwd = std::env::current_dir()
+        .map_err(|e| EngineError::Other(format!("startup: current_dir failed err={}", e)))?;
+    push_root_with_ancestors(&mut roots, cwd, 8);
+
+    if let Ok(exe) = std::env::current_exe() {
+        if let Some(parent) = exe.parent() {
+            push_root_with_ancestors(&mut roots, parent.to_path_buf(), 10);
+        }
+    }
+
+    Ok(roots)
+}
+
+fn push_root_with_ancestors(out: &mut Vec<PathBuf>, mut root: PathBuf, max_up: usize) {
+    for _ in 0..=max_up {
+        if !out.iter().any(|existing| existing == &root) {
+            out.push(root.clone());
+        }
+        if !root.pop() {
+            break;
+        }
+    }
 }
 
 fn summarize_json(v: &serde_json::Value) -> String {

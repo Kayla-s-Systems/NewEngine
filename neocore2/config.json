@@ -1,68 +1,53 @@
 {
   "engine": {
-    "modules_dir": "plugins",
     "cache_files": "cache",
-    "config": "config"
+    "config": "config",
+    "modules_dir": "plugins"
   },
   "plugins": {
     "newengine": {
-      "logging": {
-        "filter": null,
-        "timestamp": "millis",
-        "indent": 2,
-        "format": {
-          "preset": "aaa",
-          "time": "time",
-          "brackets": true,
-          "sep": " | ",
-          "level_width": 5
+      "assets": {
+        "codecs_dir": "codecs",
+        "container_scan": {
+          "extensions": [
+            "nepak"
+          ],
+          "follow_symlinks": false,
+          "max_depth": 64,
+          "recursive": true,
+          "rescan_interval_ms": 0
         },
-        "sources": {
-          "console": {
-            "enabled": true,
-            "level": "info",
-            "target": "stderr",
-            "colors": true,
-            "style": "auto"
+        "layers": [
+          {
+            "dir": null,
+            "mount": "",
+            "path": "assets/",
+            "pattern": null,
+            "priority": 100,
+            "type": "dir"
           },
-          "file": {
-            "enabled": true,
-            "level": "debug",
-            "path": "logs/log.log",
-            "mode": "truncate"
+          {
+            "dir": "assets/",
+            "mount": "",
+            "path": null,
+            "pattern": "*",
+            "priority": 80,
+            "type": "container_glob"
+          },
+          {
+            "dir": "content/",
+            "mount": "",
+            "path": null,
+            "pattern": "*",
+            "priority": 60,
+            "type": "container_glob"
           }
-        },
-        "include": {
-          "module_path": false,
-          "target": false,
-          "file": false,
-          "line": false
-        },
-        "rolling": {
-          "max_bytes": 33554432,
-          "max_files": 5,
-          "keep_days": 7
-        },
-        "dedup": {
-          "window_ms": 2000,
-          "capacity": 2048
-        }
-      },
-      "platform.winit": {
-        "title": "Kayla's Editor",
-        "width": 1600,
-        "height": 900,
-        "placement": {
-          "mode": "centered",
-          "x": 0,
-          "y": -24
-        },
-        "icon": "ui/engine.ico"
+        ],
+        "pump_steps": 16
       },
       "engine_runtime": {
         "render": {
           "runtime_profile": {
-            "id": "newengine.render.runtime.tier.auto",
             "gpu_safe": false,
             "graphics": {
               "clear_color": [
@@ -71,33 +56,1243 @@
                 0.035,
                 1.0
               ],
+              "deferred": "disabled",
+              "hdr_scene": "disabled",
+              "postfx": "disabled",
+              "shadows": "enabled",
               "sky": {
                 "mode": "native",
                 "tick_cycle": "enabled"
-              },
-              "shadows": "enabled",
-              "hdr_scene": "disabled",
-              "postfx": "disabled",
-              "deferred": "disabled"
+              }
             },
-            "world": {
-              "runtime_terrain_streaming": "enabled",
-              "service_physics": "disabled",
-              "fallback_ecs_physics": true
-            },
+            "id": "newengine.render.runtime.tier.auto",
             "input": {
               "capture_cursor_on_play": true,
-              "force_gameplay_look": true,
-              "force_gameplay_actions": true
+              "force_gameplay_actions": true,
+              "force_gameplay_look": true
             },
             "menu": {
-              "restore_viewport_pass_on_close": true,
+              "invalidate_shadow_cache_on_close": true,
               "restore_gameplay_input_on_close": true,
-              "invalidate_shadow_cache_on_close": true
+              "restore_viewport_pass_on_close": true
+            },
+            "world": {
+              "fallback_ecs_physics": true,
+              "runtime_terrain_streaming": "enabled",
+              "service_physics": "disabled"
             }
           }
         }
+      },
+      "input": {
+        "device_mode": "hybrid",
+        "gamepad": true,
+        "gamepad_backend": "xinput",
+        "keyboard": true,
+        "mouse": true
+      },
+      "logging": {
+        "sources": {
+          "console": {
+            "level": "info"
+          },
+          "file": {
+            "level": "info",
+            "mode": "truncate"
+          }
+        },
+        "timestamp": "millis"
+      },
+      "platform.winit": {
+        "display": {
+          "borderless_fullscreen": false,
+          "fullscreen": false,
+          "hdr": "auto",
+          "monitor": "primary",
+          "monitor_index": -1,
+          "refresh_rate": "auto",
+          "refresh_rate_millihz": 0,
+          "render_scale": 1.0,
+          "resolution": {
+            "height": 900,
+            "width": 1600
+          },
+          "vsync": true,
+          "window_mode": "windowed"
+        },
+        "height": 900,
+        "icon": "ui/engine.ico",
+        "placement": {
+          "mode": "centered",
+          "x": 0,
+          "y": -24
+        },
+        "title": "Kayla's Editor",
+        "width": 1600
+      },
+      "renderer": {
+        "selection": {
+          "backend": "auto",
+          "backend_label": "Auto",
+          "debug_renderer_tools": {
+            "enabled": false,
+            "gbuffer_viewer": false,
+            "gpu_timing": false,
+            "phase_viewer": false,
+            "renderdoc_capture": false,
+            "shadow_cascade_viewer": false,
+            "target_viewer": false
+          },
+          "gpu_device": "auto",
+          "graphics_profile": "auto",
+          "graphics_profile_id": "newengine.render.runtime.tier.auto",
+          "policy": "startup_window_selected; backend still validates capabilities before activation",
+          "shader_cache_mode": "auto"
+        },
+        "vulkan": {
+          "debug_tools": {
+            "enabled": false,
+            "gbuffer_viewer": false,
+            "gpu_timing": false,
+            "phase_viewer": false,
+            "renderdoc_capture": false,
+            "shadow_cascade_viewer": false,
+            "target_viewer": false
+          },
+          "shader_cache": {
+            "mode": "auto"
+          }
+        }
+      },
+      "startup_window": {
+        "display": {
+          "borderless_fullscreen": false,
+          "fullscreen": false,
+          "hdr": "auto",
+          "monitor": "primary",
+          "refresh_rate": "auto",
+          "render_scale": 1.0,
+          "resolution": {
+            "height": 900,
+            "width": 1600
+          },
+          "vsync": true,
+          "window_mode": "windowed"
+        },
+        "graphics_backend": {
+          "debug_renderer_tools": {
+            "enabled": false,
+            "gbuffer_viewer": false,
+            "gpu_timing": false,
+            "phase_viewer": false,
+            "renderdoc_capture": false,
+            "shadow_cascade_viewer": false,
+            "target_viewer": false
+          },
+          "gpu_device": "auto",
+          "graphics_profile": "auto",
+          "renderer_backend": "auto",
+          "shader_cache_mode": "auto"
+        },
+        "launch": {
+          "presenter": {
+            "command": null,
+            "mode": "auto",
+            "wait_for_exit": true
+          },
+          "show_before_engine": true
+        },
+        "launch_parameters": "--windowed --devmode --log --console",
+        "plugin_tabs": [
+          {
+            "category": "Engine",
+            "defaults": {
+              "cache_files": "cache",
+              "config": "config",
+              "modules_dir": "plugins"
+            },
+            "diagnostics": [],
+            "effective": {
+              "cache_files": "cache",
+              "config": "config",
+              "modules_dir": "plugins"
+            },
+            "enabled": true,
+            "live_update_supported": false,
+            "plugin_id": "newengine.engine",
+            "schema": {
+              "category": "Engine",
+              "fields": [
+                {
+                  "current": "plugins",
+                  "default": "plugins",
+                  "key": "modules_dir",
+                  "kind": "string",
+                  "label": "Modules directory",
+                  "path": "modules_dir"
+                },
+                {
+                  "current": "cache",
+                  "default": "cache",
+                  "key": "cache_files",
+                  "kind": "string",
+                  "label": "Cache directory",
+                  "path": "cache_files"
+                },
+                {
+                  "current": "config",
+                  "default": "config",
+                  "key": "config",
+                  "kind": "string",
+                  "label": "Config directory",
+                  "path": "config"
+                }
+              ],
+              "mode": "schema_editor",
+              "plugin_id": "newengine.engine",
+              "policy": "host-owned engine startup settings; writes to root config.engine",
+              "schema": "newengine.startup_config_schema.v1",
+              "title": "Engine"
+            },
+            "sort_order": 0,
+            "source": "config.json:engine",
+            "title": "Engine",
+            "user_overrides": {
+              "cache_files": "cache",
+              "config": "config",
+              "modules_dir": "plugins"
+            }
+          },
+          {
+            "category": "Platform",
+            "defaults": {
+              "display": {
+                "borderless_fullscreen": false,
+                "fullscreen": false,
+                "hdr": "auto",
+                "monitor": "primary",
+                "monitor_index": -1,
+                "refresh_rate": "auto",
+                "refresh_rate_millihz": 0,
+                "render_scale": 1.0,
+                "resolution": {
+                  "height": 900,
+                  "width": 1600
+                },
+                "vsync": true,
+                "window_mode": "windowed"
+              },
+              "height": 900,
+              "placement": {
+                "mode": "os_default",
+                "x": 0,
+                "y": 0
+              },
+              "title": "NewEngine",
+              "width": 1600
+            },
+            "diagnostics": [],
+            "effective": {
+              "display": {
+                "borderless_fullscreen": false,
+                "fullscreen": false,
+                "hdr": "auto",
+                "monitor": "primary",
+                "monitor_index": -1,
+                "refresh_rate": "auto",
+                "refresh_rate_millihz": 0,
+                "render_scale": 1.0,
+                "resolution": {
+                  "height": 900,
+                  "width": 1600
+                },
+                "vsync": true,
+                "window_mode": "windowed"
+              },
+              "height": 900,
+              "icon": "ui/engine.ico",
+              "placement": {
+                "mode": "centered",
+                "x": 0,
+                "y": -24
+              },
+              "title": "Kayla's Editor",
+              "width": 1600
+            },
+            "enabled": false,
+            "live_update_supported": false,
+            "plugin_id": "newengine.platform.winit",
+            "schema": {
+              "category": "Display",
+              "fields": [
+                {
+                  "current": "Kayla's Editor",
+                  "default": "NewEngine",
+                  "key": "title",
+                  "kind": "string",
+                  "label": "Window title",
+                  "path": "title"
+                },
+                {
+                  "current": 1600,
+                  "default": 1600,
+                  "key": "width",
+                  "kind": "integer",
+                  "label": "Width",
+                  "path": "width"
+                },
+                {
+                  "current": 900,
+                  "default": 900,
+                  "key": "height",
+                  "kind": "integer",
+                  "label": "Height",
+                  "path": "height"
+                },
+                {
+                  "current": "centered",
+                  "default": "os_default",
+                  "default_label": "OS default",
+                  "key": "placement.mode",
+                  "kind": "select",
+                  "label": "Placement",
+                  "options": [
+                    {
+                      "label": "OS default",
+                      "value": "os_default"
+                    },
+                    {
+                      "label": "Centered",
+                      "value": "centered"
+                    },
+                    {
+                      "label": "Absolute",
+                      "value": "absolute"
+                    }
+                  ],
+                  "path": "placement.mode",
+                  "standard_without_window": "os_default"
+                },
+                {
+                  "current": "windowed",
+                  "default": "windowed",
+                  "default_label": "Windowed",
+                  "key": "display.window_mode",
+                  "kind": "select",
+                  "label": "Window mode",
+                  "options": [
+                    {
+                      "label": "Windowed",
+                      "value": "windowed"
+                    },
+                    {
+                      "label": "Borderless fullscreen",
+                      "value": "borderless"
+                    },
+                    {
+                      "label": "Exclusive fullscreen",
+                      "value": "exclusive_fullscreen"
+                    }
+                  ],
+                  "path": "display.window_mode",
+                  "standard_without_window": "windowed"
+                },
+                {
+                  "current": true,
+                  "default": true,
+                  "key": "display.vsync",
+                  "kind": "bool",
+                  "label": "VSync",
+                  "path": "display.vsync"
+                },
+                {
+                  "current": "auto",
+                  "default": "auto",
+                  "default_label": "Auto",
+                  "key": "display.hdr",
+                  "kind": "select",
+                  "label": "HDR",
+                  "options": [
+                    {
+                      "label": "Auto",
+                      "value": "auto"
+                    },
+                    {
+                      "label": "Enabled",
+                      "value": "enabled"
+                    },
+                    {
+                      "label": "Disabled",
+                      "value": "disabled"
+                    }
+                  ],
+                  "path": "display.hdr",
+                  "standard_without_window": "auto"
+                },
+                {
+                  "current": 1.0,
+                  "default": 1.0,
+                  "key": "display.render_scale",
+                  "kind": "number",
+                  "label": "Render scale",
+                  "path": "display.render_scale"
+                }
+              ],
+              "mode": "schema_editor",
+              "plugin_id": "newengine.platform.winit",
+              "policy": "plugin-owned schema; default is the no-window startup value",
+              "schema": "newengine.startup_config_schema.v1",
+              "title": "Platform Window"
+            },
+            "sort_order": 100,
+            "source": "winit-platform-plugin\\newengine-platform-winit\\startup_config_schema.json",
+            "title": "Platform Winit",
+            "user_overrides": {
+              "display": {
+                "borderless_fullscreen": false,
+                "fullscreen": false,
+                "hdr": "auto",
+                "monitor": "primary",
+                "monitor_index": -1,
+                "refresh_rate": "auto",
+                "refresh_rate_millihz": 0,
+                "render_scale": 1.0,
+                "resolution": {
+                  "height": 900,
+                  "width": 1600
+                },
+                "vsync": true,
+                "window_mode": "windowed"
+              },
+              "height": 900,
+              "icon": "ui/engine.ico",
+              "placement": {
+                "mode": "centered",
+                "x": 0,
+                "y": -24
+              },
+              "title": "Kayla's Editor",
+              "width": 1600
+            }
+          },
+          {
+            "category": "Render",
+            "defaults": null,
+            "diagnostics": [],
+            "effective": {
+              "selection": {
+                "backend": "auto",
+                "backend_label": "Auto",
+                "debug_renderer_tools": {
+                  "enabled": false,
+                  "gbuffer_viewer": false,
+                  "gpu_timing": false,
+                  "phase_viewer": false,
+                  "renderdoc_capture": false,
+                  "shadow_cascade_viewer": false,
+                  "target_viewer": false
+                },
+                "gpu_device": "auto",
+                "graphics_profile": "Auto",
+                "graphics_profile_id": "newengine.render.runtime.tier.auto",
+                "policy": "startup_window_selected; backend still validates capabilities before activation",
+                "shader_cache_mode": "auto"
+              },
+              "vulkan": {
+                "debug_tools": {
+                  "enabled": false,
+                  "gbuffer_viewer": false,
+                  "gpu_timing": false,
+                  "phase_viewer": false,
+                  "renderdoc_capture": false,
+                  "shadow_cascade_viewer": false,
+                  "target_viewer": false
+                },
+                "shader_cache": {
+                  "mode": "auto"
+                }
+              }
+            },
+            "enabled": false,
+            "live_update_supported": false,
+            "plugin_id": "newengine.renderer",
+            "schema": {
+              "fields": [],
+              "mode": "json_object_editor",
+              "plugin_id": "newengine.renderer",
+              "policy": "plugin-owned defaults; StartUpWindow edits user_overrides only",
+              "schema": "newengine.startup_config_schema.v1"
+            },
+            "sort_order": 200,
+            "source": "config.json",
+            "title": "Renderer",
+            "user_overrides": {
+              "selection": {
+                "backend": "auto",
+                "backend_label": "Auto",
+                "debug_renderer_tools": {
+                  "enabled": false,
+                  "gbuffer_viewer": false,
+                  "gpu_timing": false,
+                  "phase_viewer": false,
+                  "renderdoc_capture": false,
+                  "shadow_cascade_viewer": false,
+                  "target_viewer": false
+                },
+                "gpu_device": "auto",
+                "graphics_profile": "Auto",
+                "graphics_profile_id": "newengine.render.runtime.tier.auto",
+                "policy": "startup_window_selected; backend still validates capabilities before activation",
+                "shader_cache_mode": "auto"
+              },
+              "vulkan": {
+                "debug_tools": {
+                  "enabled": false,
+                  "gbuffer_viewer": false,
+                  "gpu_timing": false,
+                  "phase_viewer": false,
+                  "renderdoc_capture": false,
+                  "shadow_cascade_viewer": false,
+                  "target_viewer": false
+                },
+                "shader_cache": {
+                  "mode": "auto"
+                }
+              }
+            }
+          },
+          {
+            "category": "Render",
+            "defaults": {
+              "clear_color": [
+                0.02,
+                0.025,
+                0.035,
+                1.0
+              ],
+              "debug_tools": {
+                "enabled": false,
+                "gbuffer_viewer": false,
+                "gpu_timing": false,
+                "phase_viewer": false,
+                "renderdoc_capture": false,
+                "shadow_cascade_viewer": false,
+                "target_viewer": false
+              },
+              "shader_cache": {
+                "mode": "auto"
+              }
+            },
+            "diagnostics": [],
+            "effective": {
+              "clear_color": [
+                0.02,
+                0.025,
+                0.035,
+                1.0
+              ],
+              "debug_tools": {
+                "enabled": false,
+                "gbuffer_viewer": false,
+                "gpu_timing": false,
+                "phase_viewer": false,
+                "renderdoc_capture": false,
+                "shadow_cascade_viewer": false,
+                "target_viewer": false
+              },
+              "shader_cache": {
+                "mode": "auto"
+              }
+            },
+            "enabled": false,
+            "live_update_supported": false,
+            "plugin_id": "newengine.renderer.vulkan",
+            "schema": {
+              "category": "Render",
+              "fields": [
+                {
+                  "current": "auto",
+                  "default": "auto",
+                  "default_label": "Auto",
+                  "key": "shader_cache.mode",
+                  "kind": "select",
+                  "label": "Shader cache mode",
+                  "options": [
+                    {
+                      "label": "Auto",
+                      "value": "auto"
+                    },
+                    {
+                      "label": "Enabled",
+                      "value": "enabled"
+                    },
+                    {
+                      "label": "Disabled",
+                      "value": "disabled"
+                    },
+                    {
+                      "label": "Rebuild now",
+                      "value": "rebuild"
+                    }
+                  ],
+                  "path": "shader_cache.mode",
+                  "standard_without_window": "auto"
+                },
+                {
+                  "current": false,
+                  "default": false,
+                  "key": "debug_tools.enabled",
+                  "kind": "bool",
+                  "label": "Debug renderer tools",
+                  "path": "debug_tools.enabled"
+                },
+                {
+                  "current": false,
+                  "default": false,
+                  "key": "debug_tools.renderdoc_capture",
+                  "kind": "bool",
+                  "label": "RenderDoc capture",
+                  "path": "debug_tools.renderdoc_capture"
+                },
+                {
+                  "current": false,
+                  "default": false,
+                  "key": "debug_tools.phase_viewer",
+                  "kind": "bool",
+                  "label": "Phase viewer",
+                  "path": "debug_tools.phase_viewer"
+                },
+                {
+                  "current": false,
+                  "default": false,
+                  "key": "debug_tools.target_viewer",
+                  "kind": "bool",
+                  "label": "Target viewer",
+                  "path": "debug_tools.target_viewer"
+                },
+                {
+                  "current": false,
+                  "default": false,
+                  "key": "debug_tools.shadow_cascade_viewer",
+                  "kind": "bool",
+                  "label": "Shadow cascade viewer",
+                  "path": "debug_tools.shadow_cascade_viewer"
+                },
+                {
+                  "current": false,
+                  "default": false,
+                  "key": "debug_tools.gbuffer_viewer",
+                  "kind": "bool",
+                  "label": "GBuffer viewer",
+                  "path": "debug_tools.gbuffer_viewer"
+                },
+                {
+                  "current": false,
+                  "default": false,
+                  "key": "debug_tools.gpu_timing",
+                  "kind": "bool",
+                  "label": "GPU timing",
+                  "path": "debug_tools.gpu_timing"
+                }
+              ],
+              "mode": "schema_editor",
+              "plugin_id": "newengine.renderer.vulkan",
+              "policy": "plugin-owned schema; default is the no-window startup value",
+              "schema": "newengine.startup_config_schema.v1",
+              "title": "Vulkan Renderer"
+            },
+            "sort_order": 200,
+            "source": "VulkanRenderer\\newengine-modules-render-vulkan-ash\\startup_config_schema.json",
+            "title": "Renderer Vulkan",
+            "user_overrides": {
+              "debug_tools": {
+                "enabled": false,
+                "gbuffer_viewer": false,
+                "gpu_timing": false,
+                "phase_viewer": false,
+                "renderdoc_capture": false,
+                "shadow_cascade_viewer": false,
+                "target_viewer": false
+              },
+              "shader_cache": {
+                "mode": "auto"
+              }
+            }
+          },
+          {
+            "category": "Assets",
+            "defaults": {
+              "codecs_dir": "codecs",
+              "container_scan": {
+                "extensions": [
+                  "nepak"
+                ],
+                "follow_symlinks": false,
+                "max_depth": 64,
+                "recursive": true,
+                "rescan_interval_ms": 0
+              },
+              "layers": [
+                {
+                  "dir": null,
+                  "mount": "",
+                  "path": "assets/",
+                  "pattern": null,
+                  "priority": 100,
+                  "type": "dir"
+                },
+                {
+                  "dir": "assets/",
+                  "mount": "",
+                  "path": null,
+                  "pattern": "*",
+                  "priority": 80,
+                  "type": "container_glob"
+                },
+                {
+                  "dir": "content/",
+                  "mount": "",
+                  "path": null,
+                  "pattern": "*",
+                  "priority": 60,
+                  "type": "container_glob"
+                }
+              ],
+              "pump_steps": 16
+            },
+            "diagnostics": [],
+            "effective": {
+              "codecs_dir": "codecs",
+              "container_scan": {
+                "extensions": [
+                  "nepak"
+                ],
+                "follow_symlinks": false,
+                "max_depth": 64,
+                "recursive": true,
+                "rescan_interval_ms": 0
+              },
+              "layers": [
+                {
+                  "dir": null,
+                  "mount": "",
+                  "path": "assets/",
+                  "pattern": null,
+                  "priority": 100,
+                  "type": "dir"
+                },
+                {
+                  "dir": "assets/",
+                  "mount": "",
+                  "path": null,
+                  "pattern": "*",
+                  "priority": 80,
+                  "type": "container_glob"
+                },
+                {
+                  "dir": "content/",
+                  "mount": "",
+                  "path": null,
+                  "pattern": "*",
+                  "priority": 60,
+                  "type": "container_glob"
+                }
+              ],
+              "pump_steps": 16
+            },
+            "enabled": false,
+            "live_update_supported": false,
+            "plugin_id": "newengine.assets",
+            "schema": {
+              "fields": [
+                {
+                  "current": "codecs",
+                  "default": "codecs",
+                  "key": "codecs_dir",
+                  "kind": "string",
+                  "path": "codecs_dir"
+                },
+                {
+                  "children": [
+                    {
+                      "current": [
+                        "nepak"
+                      ],
+                      "default": [
+                        "nepak"
+                      ],
+                      "key": "extensions",
+                      "kind": "array",
+                      "path": "container_scan.extensions"
+                    },
+                    {
+                      "current": false,
+                      "default": false,
+                      "key": "follow_symlinks",
+                      "kind": "bool",
+                      "path": "container_scan.follow_symlinks"
+                    },
+                    {
+                      "current": 64,
+                      "default": 64,
+                      "key": "max_depth",
+                      "kind": "integer",
+                      "path": "container_scan.max_depth"
+                    },
+                    {
+                      "current": true,
+                      "default": true,
+                      "key": "recursive",
+                      "kind": "bool",
+                      "path": "container_scan.recursive"
+                    },
+                    {
+                      "current": 0,
+                      "default": 0,
+                      "key": "rescan_interval_ms",
+                      "kind": "integer",
+                      "path": "container_scan.rescan_interval_ms"
+                    }
+                  ],
+                  "current": {
+                    "extensions": [
+                      "nepak"
+                    ],
+                    "follow_symlinks": false,
+                    "max_depth": 64,
+                    "recursive": true,
+                    "rescan_interval_ms": 0
+                  },
+                  "default": {
+                    "extensions": [
+                      "nepak"
+                    ],
+                    "follow_symlinks": false,
+                    "max_depth": 64,
+                    "recursive": true,
+                    "rescan_interval_ms": 0
+                  },
+                  "key": "container_scan",
+                  "kind": "object",
+                  "path": "container_scan"
+                },
+                {
+                  "current": [
+                    {
+                      "dir": null,
+                      "mount": "",
+                      "path": "assets/",
+                      "pattern": null,
+                      "priority": 100,
+                      "type": "dir"
+                    },
+                    {
+                      "dir": "assets/",
+                      "mount": "",
+                      "path": null,
+                      "pattern": "*",
+                      "priority": 80,
+                      "type": "container_glob"
+                    },
+                    {
+                      "dir": "content/",
+                      "mount": "",
+                      "path": null,
+                      "pattern": "*",
+                      "priority": 60,
+                      "type": "container_glob"
+                    }
+                  ],
+                  "default": [
+                    {
+                      "dir": null,
+                      "mount": "",
+                      "path": "assets/",
+                      "pattern": null,
+                      "priority": 100,
+                      "type": "dir"
+                    },
+                    {
+                      "dir": "assets/",
+                      "mount": "",
+                      "path": null,
+                      "pattern": "*",
+                      "priority": 80,
+                      "type": "container_glob"
+                    },
+                    {
+                      "dir": "content/",
+                      "mount": "",
+                      "path": null,
+                      "pattern": "*",
+                      "priority": 60,
+                      "type": "container_glob"
+                    }
+                  ],
+                  "key": "layers",
+                  "kind": "array",
+                  "path": "layers"
+                },
+                {
+                  "current": 16,
+                  "default": 16,
+                  "key": "pump_steps",
+                  "kind": "integer",
+                  "path": "pump_steps"
+                }
+              ],
+              "mode": "json_object_editor",
+              "plugin_id": "newengine.assets",
+              "policy": "plugin-owned defaults; StartUpWindow edits user_overrides only",
+              "schema": "newengine.startup_config_schema.v1"
+            },
+            "sort_order": 300,
+            "source": "AssetManager\\newengine-AssetManager\\assets\\default_config.json",
+            "title": "Assets",
+            "user_overrides": {}
+          },
+          {
+            "category": "Input",
+            "defaults": {
+              "device_mode": "hybrid",
+              "gamepad": true,
+              "gamepad_backend": "xinput",
+              "keyboard": true,
+              "log_config_block": true,
+              "mouse": true,
+              "register_service": true,
+              "subscribe_events": true,
+              "text": true
+            },
+            "diagnostics": [],
+            "effective": {
+              "device_mode": "hybrid",
+              "gamepad": true,
+              "gamepad_backend": "xinput",
+              "keyboard": true,
+              "log_config_block": true,
+              "mouse": true,
+              "register_service": true,
+              "subscribe_events": true,
+              "text": true
+            },
+            "enabled": false,
+            "live_update_supported": false,
+            "plugin_id": "newengine.input",
+            "schema": {
+              "category": "Input",
+              "fields": [
+                {
+                  "current": "hybrid",
+                  "default": "hybrid",
+                  "default_label": "Hybrid",
+                  "key": "device_mode",
+                  "kind": "select",
+                  "label": "Device mode",
+                  "options": [
+                    {
+                      "label": "Keyboard + mouse",
+                      "value": "keyboard_mouse"
+                    },
+                    {
+                      "label": "Gamepad",
+                      "value": "gamepad"
+                    },
+                    {
+                      "label": "Hybrid",
+                      "value": "hybrid"
+                    }
+                  ],
+                  "path": "device_mode",
+                  "standard_without_window": "hybrid"
+                },
+                {
+                  "current": "xinput",
+                  "default": "xinput",
+                  "default_label": "XInput",
+                  "key": "gamepad_backend",
+                  "kind": "select",
+                  "label": "Gamepad backend",
+                  "options": [
+                    {
+                      "label": "XInput",
+                      "value": "xinput"
+                    },
+                    {
+                      "label": "Raw Input",
+                      "value": "raw_input"
+                    },
+                    {
+                      "label": "Disabled",
+                      "value": "disabled"
+                    }
+                  ],
+                  "path": "gamepad_backend",
+                  "standard_without_window": "xinput"
+                },
+                {
+                  "current": true,
+                  "default": true,
+                  "key": "keyboard",
+                  "kind": "bool",
+                  "label": "Keyboard",
+                  "path": "keyboard"
+                },
+                {
+                  "current": true,
+                  "default": true,
+                  "key": "mouse",
+                  "kind": "bool",
+                  "label": "Mouse",
+                  "path": "mouse"
+                },
+                {
+                  "current": true,
+                  "default": true,
+                  "key": "gamepad",
+                  "kind": "bool",
+                  "label": "Gamepad",
+                  "path": "gamepad"
+                }
+              ],
+              "mode": "schema_editor",
+              "plugin_id": "newengine.input",
+              "policy": "plugin-owned schema; default is the no-window startup value",
+              "schema": "newengine.startup_config_schema.v1",
+              "title": "Input"
+            },
+            "sort_order": 600,
+            "source": "InputPlugin\\newengine-modules-input\\startup_config_schema.json",
+            "title": "Input",
+            "user_overrides": {}
+          },
+          {
+            "category": "Diagnostics",
+            "defaults": {
+              "dedup": {
+                "capacity": 2048,
+                "window_ms": 2000
+              },
+              "filter": null,
+              "format": {
+                "brackets": true,
+                "level_width": 5,
+                "preset": "aaa",
+                "sep": " | ",
+                "time": "time"
+              },
+              "include": {
+                "file": false,
+                "line": false,
+                "module_path": false,
+                "target": false
+              },
+              "indent": 2,
+              "rolling": {
+                "keep_days": 7,
+                "max_bytes": 33554432,
+                "max_files": 5
+              },
+              "sources": {
+                "console": {
+                  "colors": true,
+                  "enabled": true,
+                  "level": "info",
+                  "style": "auto",
+                  "target": "stderr"
+                },
+                "file": {
+                  "enabled": false,
+                  "level": "info",
+                  "mode": "truncate",
+                  "path": "logs/newengine.log"
+                }
+              },
+              "timestamp": "millis"
+            },
+            "diagnostics": [],
+            "effective": {
+              "dedup": {
+                "capacity": 2048,
+                "window_ms": 2000
+              },
+              "filter": null,
+              "format": {
+                "brackets": true,
+                "level_width": 5,
+                "preset": "aaa",
+                "sep": " | ",
+                "time": "time"
+              },
+              "include": {
+                "file": false,
+                "line": false,
+                "module_path": false,
+                "target": false
+              },
+              "indent": 2,
+              "rolling": {
+                "keep_days": 7,
+                "max_bytes": 33554432,
+                "max_files": 5
+              },
+              "sources": {
+                "console": {
+                  "colors": true,
+                  "enabled": true,
+                  "level": "info",
+                  "style": "auto",
+                  "target": "stderr"
+                },
+                "file": {
+                  "enabled": false,
+                  "level": "info",
+                  "mode": "truncate",
+                  "path": "logs/newengine.log"
+                }
+              },
+              "timestamp": "millis"
+            },
+            "enabled": false,
+            "live_update_supported": false,
+            "plugin_id": "newengine.logging",
+            "schema": {
+              "category": "Diagnostics",
+              "fields": [
+                {
+                  "current": "millis",
+                  "default": "millis",
+                  "default_label": "Milliseconds",
+                  "key": "timestamp",
+                  "kind": "select",
+                  "label": "Timestamp",
+                  "options": [
+                    {
+                      "label": "Off",
+                      "value": "off"
+                    },
+                    {
+                      "label": "Milliseconds",
+                      "value": "millis"
+                    },
+                    {
+                      "label": "RFC3339",
+                      "value": "rfc3339"
+                    }
+                  ],
+                  "path": "timestamp",
+                  "standard_without_window": "millis"
+                },
+                {
+                  "current": "info",
+                  "default": "info",
+                  "default_label": "Info",
+                  "key": "sources.console.level",
+                  "kind": "select",
+                  "label": "Console level",
+                  "options": [
+                    {
+                      "label": "Trace",
+                      "value": "trace"
+                    },
+                    {
+                      "label": "Debug",
+                      "value": "debug"
+                    },
+                    {
+                      "label": "Info",
+                      "value": "info"
+                    },
+                    {
+                      "label": "Warn",
+                      "value": "warn"
+                    },
+                    {
+                      "label": "Error",
+                      "value": "error"
+                    }
+                  ],
+                  "path": "sources.console.level",
+                  "standard_without_window": "info"
+                },
+                {
+                  "current": "info",
+                  "default": "info",
+                  "default_label": "Info",
+                  "key": "sources.file.level",
+                  "kind": "select",
+                  "label": "File level",
+                  "options": [
+                    {
+                      "label": "Trace",
+                      "value": "trace"
+                    },
+                    {
+                      "label": "Debug",
+                      "value": "debug"
+                    },
+                    {
+                      "label": "Info",
+                      "value": "info"
+                    },
+                    {
+                      "label": "Warn",
+                      "value": "warn"
+                    },
+                    {
+                      "label": "Error",
+                      "value": "error"
+                    }
+                  ],
+                  "path": "sources.file.level",
+                  "standard_without_window": "info"
+                },
+                {
+                  "current": "truncate",
+                  "default": "truncate",
+                  "default_label": "Truncate",
+                  "key": "sources.file.mode",
+                  "kind": "select",
+                  "label": "File mode",
+                  "options": [
+                    {
+                      "label": "Truncate",
+                      "value": "truncate"
+                    },
+                    {
+                      "label": "Append",
+                      "value": "append"
+                    }
+                  ],
+                  "path": "sources.file.mode",
+                  "standard_without_window": "truncate"
+                }
+              ],
+              "mode": "schema_editor",
+              "plugin_id": "newengine.logging",
+              "policy": "plugin-owned schema; default is the no-window startup value",
+              "schema": "newengine.startup_config_schema.v1",
+              "title": "Logging"
+            },
+            "sort_order": 700,
+            "source": "LoggingPlugin\\newengine-modules-logging\\startup_config_schema.json",
+            "title": "Logging",
+            "user_overrides": {}
+          }
+        ],
+        "project": {
+          "name": "MyGameProject",
+          "path": "C:\\Users\\AidenFox\\Documents\\Kaylas-Systems\\NewEngineRockstar\\NewEngine\\neocore2"
+        },
+        "remember_last_options": true,
+        "schema": "newengine.startup_window.v1",
+        "startup_scene": "MainMenu"
       }
     }
+  },
+  "window": {
+    "height": 900,
+    "title": "Kayla's Editor",
+    "width": 1600
   }
 }

@@ -6,7 +6,7 @@ mod raw_payload_defaults;
 
 
 pub(super) use self::profile::*;
-use self::paths::{profile_asset_candidates, GAME_READY_APP_DIR};
+use self::paths::profile_asset_candidates;
 
 
 #[derive(Debug, Deserialize)]

@@ -142,7 +142,7 @@ fn load_profile_from_asset_manager() -> Result<GameReadyMapProfile, Vec<String>>
 
     let assets = newengine_assets::AssetServiceClient::new(newengine_plugin_host::default_host_api());
     let roots = newengine_runtime_host::asset_bootstrap::collect_app_asset_roots(
-        GAME_READY_APP_DIR,
+        "active-profile",
         "NEWENGINE_GAME_ASSETS_DIR",
     );
     newengine_runtime_host::asset_bootstrap::mount_asset_roots_best_effort(&assets, &roots);

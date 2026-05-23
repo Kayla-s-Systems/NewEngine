@@ -118,6 +118,15 @@ impl RenderRuntimeProfileState {
         if self.applied_hardware_tier == Some(tier) || tier == RenderHardwareTier::Unknown {
             return;
         }
+        if !self.profile.accepts_hardware_tier_resolution() {
+            log::info!(
+                "render runtime profile: startup profile '{}' is explicit; hardware_tier={:?} will not override user-selected config",
+                self.profile.id,
+                tier,
+            );
+            self.applied_hardware_tier = Some(tier);
+            return;
+        }
         self.profile.apply_hardware_tier(tier);
         self.applied_hardware_tier = Some(tier);
         log::info!(

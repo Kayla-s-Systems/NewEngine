@@ -226,6 +226,11 @@ impl RenderRuntimeProfile {
     }
 
     #[inline]
+    pub(crate) fn accepts_hardware_tier_resolution(&self) -> bool {
+        self.id == default_profile_id()
+    }
+
+    #[inline]
     pub(crate) fn draw_sky_visuals(&self) -> bool {
         matches!(self.graphics.sky.mode, SkyPassMode::Native)
     }

@@ -40,7 +40,6 @@ impl<E: Send + 'static> Module<E> for RenderBackendRuntimeModule {
             ctx,
             RENDER_BACKEND_SERVICE_SPEC,
             client.info(),
-            |info| info.backend_id.as_str(),
         ) {
             Ok(bound) => bound,
             Err(err) => {

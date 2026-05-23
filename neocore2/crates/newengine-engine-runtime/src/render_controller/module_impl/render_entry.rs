@@ -421,7 +421,7 @@ fn panic_payload_message(payload: Box<dyn Any + Send>) -> String {
 fn runtime_debug_overlay_enabled() -> bool {
     static ENABLED: OnceLock<bool> = OnceLock::new();
     *ENABLED.get_or_init(|| {
-        let configured = std::env::var("NEWENGINE_RUNTIME_DEBUG_OVERLAY").ok();
+        let configured = crate::env_config::var("NEWENGINE_RUNTIME_DEBUG_OVERLAY");
         parse_runtime_debug_overlay_setting(configured.as_deref())
     })
 }
