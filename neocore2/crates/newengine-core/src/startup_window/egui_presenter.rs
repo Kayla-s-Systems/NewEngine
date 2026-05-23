@@ -3,6 +3,7 @@
 use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::process::Command;
 use std::sync::{Arc, Mutex};
 
 use eframe::egui;
@@ -20,8 +21,10 @@ const ACCENT_BLUE_BRIGHT: egui::Color32 = egui::Color32::from_rgb(106, 181, 255)
 const ACCENT_GREEN: egui::Color32 = egui::Color32::from_rgb(121, 232, 123);
 const TEXT_PRIMARY: egui::Color32 = egui::Color32::from_rgb(232, 238, 250);
 const TEXT_MUTED: egui::Color32 = egui::Color32::from_rgb(146, 158, 184);
-const WINDOW_WIDTH: f32 = 1280.0;
-const WINDOW_HEIGHT: f32 = 860.0;
+const WINDOW_WIDTH: f32 = 1440.0;
+const WINDOW_HEIGHT: f32 = 900.0;
+const MIN_WINDOW_WIDTH: f32 = 1220.0;
+const MIN_WINDOW_HEIGHT: f32 = 760.0;
 const CENTER_ATTEMPT_LIMIT: u8 = 8;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -37,7 +40,7 @@ pub(crate) fn present(config_path: &Path) -> StartupWindowReport {
         viewport: egui::ViewportBuilder::default()
             .with_title(title)
             .with_inner_size([WINDOW_WIDTH, WINDOW_HEIGHT])
-            .with_min_inner_size([1120.0, 720.0])
+            .with_min_inner_size([MIN_WINDOW_WIDTH, MIN_WINDOW_HEIGHT])
             .with_resizable(true),
         ..Default::default()
     };
@@ -182,6 +185,19 @@ impl PreStartApp {
         }
     }
 
+    fn open_project_folder(&mut self) {
+        let raw = self.fields.string_value("project.path", ".");
+        let path = resolve_project_folder(&self.config_path, &raw);
+        match open_folder_in_shell(&path) {
+            Ok(()) => {
+                self.status = format!("Opened project folder {}", path.display());
+            }
+            Err(err) => {
+                self.status = format!("Open Project Folder failed path='{}' err={err}", path.display());
+            }
+        }
+    }
+
     fn center_window_on_startup(&mut self, ctx: &egui::Context) {
         if self.center_attempts >= CENTER_ATTEMPT_LIMIT {
             return;
@@ -315,7 +331,7 @@ impl PreStartApp {
         }
     }
 
-    fn render_header(&self, ui: &mut egui::Ui) {
+    fn render_header(&mut self, ui: &mut egui::Ui) {
         ui.add_space(6.0);
         egui::Frame::new()
             .fill(egui::Color32::from_rgb(13, 17, 25))
@@ -346,14 +362,16 @@ impl PreStartApp {
                             .fill(egui::Color32::from_rgb(16, 21, 31))
                             .corner_radius(egui::CornerRadius::same(12))
                             .stroke(egui::Stroke::new(1.0, egui::Color32::from_rgb(39, 49, 66)))
-                            .inner_margin(egui::Margin::symmetric(18, 14))
+                            .inner_margin(egui::Margin::symmetric(16, 12))
                             .show(ui, |ui| {
-                                ui.label(egui::RichText::new("●  Ready to Launch").size(18.0).strong().color(egui::Color32::from_rgb(121, 232, 123)));
-                                ui.add_space(6.0);
                                 ui.horizontal(|ui| {
-                                    icon(ui, IconKind::Folder, 18.0, egui::Color32::from_rgb(154, 170, 196));
-                                    ui.label(egui::RichText::new("Open Project Folder").size(13.0).color(egui::Color32::from_rgb(201, 210, 229)));
+                                    status_dot(ui, true);
+                                    ui.label(egui::RichText::new("Ready to Launch").size(18.0).strong().color(ACCENT_GREEN));
                                 });
+                                ui.add_space(8.0);
+                                if beveled_button(ui, IconKind::Folder, "Open Project Folder").clicked() {
+                                    self.open_project_folder();
+                                }
                             });
                     });
                 });
@@ -484,7 +502,8 @@ impl PreStartApp {
         match field.kind.as_str() {
             "bool" => {
                 ui.horizontal(|ui| {
-                    ui.label(label(&field.label));
+                    let label_width = if ui.available_width() < 330.0 { 94.0 } else { 128.0 };
+                    ui.add_sized([label_width, 22.0], egui::Label::new(label(&field.label)));
                     switch_only(ui, self.fields.bool(&key, false));
                     if let Some(default_label) = &field.default_label {
                         ui.label(egui::RichText::new(format!("default: {default_label}")).size(11.0).color(TEXT_MUTED));
@@ -493,11 +512,13 @@ impl PreStartApp {
             }
             "select" => {
                 ui.horizontal(|ui| {
-                    ui.label(label(&field.label));
+                    let label_width = if ui.available_width() < 330.0 { 94.0 } else { 128.0 };
+                    ui.add_sized([label_width, 22.0], egui::Label::new(label(&field.label)));
                     let selected = self.fields.select(&key, field.options.first().map(|o| o.value.as_str()).unwrap_or(""));
-                    styled_select_dynamic(ui, key.clone(), selected, &field.options, 300.0);
+                    let width = (ui.available_width() - 4.0).clamp(120.0, 260.0);
+                    styled_select_dynamic(ui, key.clone(), selected, &field.options, width);
                     if let Some(default_label) = &field.default_label {
-                        ui.label(egui::RichText::new(format!("default: {default_label}")).size(11.0).color(egui::Color32::from_rgb(130, 140, 160)));
+                        ui.label(egui::RichText::new(format!("default: {default_label}")).size(11.0).color(TEXT_MUTED));
                     }
                 });
             }
@@ -514,15 +535,20 @@ impl PreStartApp {
             ui.colored_label(egui::Color32::from_rgb(255, 184, 112), warning);
             ui.add_space(8.0);
         }
-        ui.horizontal(|ui| {
-            ui.set_height(ui.available_height());
+
+        let available_width = ui.available_width();
+        let gap = 14.0;
+        let right_width = (available_width * 0.31).clamp(360.0, 430.0);
+        let left_width = (available_width - right_width - gap).max(620.0);
+
+        ui.horizontal_top(|ui| {
             ui.vertical(|ui| {
-                ui.set_width((ui.available_width() - 392.0).max(560.0));
+                ui.set_width(left_width);
                 self.render_left_launch_panel(ui);
             });
-            ui.add_space(12.0);
+            ui.add_space(gap);
             ui.vertical(|ui| {
-                ui.set_width(372.0);
+                ui.set_width(right_width);
                 self.render_right_modules_panel(ui);
             });
         });
@@ -540,7 +566,7 @@ impl PreStartApp {
                 });
                 icon_button_box(ui, IconKind::Settings);
             });
-            ui.add_space(18.0);
+            ui.add_space(14.0);
 
             card_title(ui, IconKind::Terminal, "LAUNCH PARAMETERS", None);
             ui.add_space(8.0);
@@ -548,7 +574,7 @@ impl PreStartApp {
                 styled_text_edit(ui, self.fields.string("launch.parameters", "--windowed --devmode --log --console"), (ui.available_width() - 46.0).max(220.0), 34.0);
                 icon_button_box(ui, IconKind::Settings);
             });
-            ui.add_space(18.0);
+            ui.add_space(14.0);
 
             ui.columns(2, |columns| {
                 columns[0].vertical(|ui| {
@@ -559,21 +585,21 @@ impl PreStartApp {
                         ("null", "NullRenderer"),
                         ("dx12", "Future DX12"),
                     ]);
-                    ui.add_space(12.0);
+                    ui.add_space(10.0);
                     card_title(ui, IconKind::Monitor, "RESOLUTION", None);
                     ui.horizontal(|ui| {
                         styled_text_edit(ui, self.fields.string("display.width", "1600"), 90.0, 30.0);
                         ui.label("×");
                         styled_text_edit(ui, self.fields.string("display.height", "900"), 90.0, 30.0);
                     });
-                    ui.add_space(12.0);
+                    ui.add_space(10.0);
                     card_title(ui, IconKind::Check, "VSYNC", None);
                     switch_row(ui, "Enabled", "Synchronize present rate with the selected display refresh.", self.fields.bool("display.vsync", true));
                 });
                 columns[1].vertical(|ui| {
                     card_title(ui, IconKind::ScreenMode, "SCREEN MODE", None);
                     segmented_screen_mode(ui, self.fields.select("display.window_mode", "windowed"));
-                    ui.add_space(12.0);
+                    ui.add_space(10.0);
                     card_title(ui, IconKind::Check, "FULLSCREEN", None);
                     switch_row(ui, "Fullscreen", "Quick toggle between windowed and fullscreen-oriented presentation.", self.fields.bool("display.fullscreen", false));
                     switch_row(ui, "Borderless fullscreen", "Use borderless fullscreen presentation instead of a bordered window.", self.fields.bool("display.borderless_fullscreen", false));
@@ -660,9 +686,15 @@ impl PreStartApp {
             if tab.fields.is_empty() {
                 ui.label(egui::RichText::new("No editable startup fields were published by this plugin.").color(egui::Color32::from_rgb(150, 162, 185)));
             } else {
-                for field in &tab.fields {
-                    self.render_schema_field(ui, &tab.plugin_id, field);
-                }
+                egui::ScrollArea::vertical()
+                    .id_salt(format!("plugin-config-scroll-{}", tab.plugin_id))
+                    .max_height(176.0)
+                    .auto_shrink([false, false])
+                    .show(ui, |ui| {
+                        for field in &tab.fields {
+                            self.render_schema_field(ui, &tab.plugin_id, field);
+                        }
+                    });
             }
         });
     }
@@ -673,7 +705,6 @@ impl PreStartApp {
             ui.add_space(8.0);
             for (title, meta) in [
                 ("Current config", "canonical config.json"),
-                ("Safe GPU mode", "last diagnostic launch"),
                 ("Developer diagnostics", "renderer debug preset"),
             ] {
                 ui.horizontal(|ui| {
@@ -857,8 +888,8 @@ impl eframe::App for PreStartApp {
         self.center_window_on_startup(ctx);
 
         egui::TopBottomPanel::top("prestart_header")
-            .exact_height(156.0)
-            .frame(egui::Frame::new().fill(egui::Color32::from_rgb(3, 5, 9)).inner_margin(egui::Margin::symmetric(14, 10)))
+            .exact_height(146.0)
+            .frame(egui::Frame::new().fill(egui::Color32::from_rgb(3, 5, 9)).inner_margin(egui::Margin::symmetric(14, 8)))
             .show(ctx, |ui| self.render_header(ui));
 
         egui::TopBottomPanel::bottom("prestart_footer")
@@ -877,7 +908,7 @@ impl eframe::App for PreStartApp {
                         ui.label(egui::RichText::new(self.fields.select_value("graphics.graphics_profile", "auto")).size(12.0).color(egui::Color32::from_rgb(210, 219, 238)));
                     });
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                        let launch = ui.add_sized([220.0, 48.0], egui::Button::new(egui::RichText::new("▶  LAUNCH ENGINE").size(17.0).strong()));
+                        let launch = action_button(ui, IconKind::Launch, "LAUNCH ENGINE", 220.0, true);
                         if launch.clicked() {
                             match self.save() {
                                 Ok(()) => {
@@ -887,12 +918,12 @@ impl eframe::App for PreStartApp {
                                 Err(err) => self.status = err,
                             }
                         }
-                        if ui.add_sized([136.0, 48.0], egui::Button::new("SAVE")).clicked() {
+                        if action_button(ui, IconKind::Save, "SAVE", 136.0, false).clicked() {
                             if let Err(err) = self.save() {
                                 self.status = err;
                             }
                         }
-                        if ui.add_sized([136.0, 48.0], egui::Button::new("✕  CANCEL")).clicked() {
+                        if action_button(ui, IconKind::Cancel, "CANCEL", 136.0, false).clicked() {
                             self.set_outcome(WindowOutcome::Cancelled);
                             ctx.send_viewport_cmd(egui::ViewportCommand::Close);
                         }
@@ -903,9 +934,104 @@ impl eframe::App for PreStartApp {
         egui::CentralPanel::default()
             .frame(egui::Frame::new().fill(egui::Color32::from_rgb(8, 11, 17)).inner_margin(egui::Margin::symmetric(18, 14)))
             .show(ctx, |ui| {
-                self.render_dashboard(ui);
+                egui::ScrollArea::vertical()
+                    .id_salt("prestart-dashboard-scroll")
+                    .auto_shrink([false, false])
+                    .show(ui, |ui| self.render_dashboard(ui));
             });
     }
+}
+
+fn resolve_project_folder(config_path: &Path, raw_path: &str) -> PathBuf {
+    let trimmed = raw_path.trim();
+    let path = if trimmed.is_empty() { PathBuf::from(".") } else { PathBuf::from(trimmed) };
+    if path.is_absolute() {
+        path
+    } else if let Some(parent) = config_path.parent() {
+        parent.join(path)
+    } else {
+        path
+    }
+}
+
+fn open_folder_in_shell(path: &Path) -> Result<(), String> {
+    let target = if path.exists() {
+        path.to_path_buf()
+    } else {
+        path.parent().map(Path::to_path_buf).unwrap_or_else(|| PathBuf::from("."))
+    };
+
+    #[cfg(target_os = "windows")]
+    let mut command = {
+        let mut command = Command::new("explorer");
+        command.arg(&target);
+        command
+    };
+
+    #[cfg(target_os = "macos")]
+    let mut command = {
+        let mut command = Command::new("open");
+        command.arg(&target);
+        command
+    };
+
+    #[cfg(all(unix, not(target_os = "macos")))]
+    let mut command = {
+        let mut command = Command::new("xdg-open");
+        command.arg(&target);
+        command
+    };
+
+    #[cfg(not(any(target_os = "windows", target_os = "macos", unix)))]
+    {
+        let _ = target;
+        return Err("opening folders is not supported on this platform".to_owned());
+    }
+
+    command
+        .spawn()
+        .map(|_| ())
+        .map_err(|err| format!("failed to spawn platform folder opener: {err}"))
+}
+
+fn status_dot(ui: &mut egui::Ui, enabled: bool) {
+    let (rect, _) = ui.allocate_exact_size(egui::vec2(16.0, 16.0), egui::Sense::hover());
+    let color = if enabled { ACCENT_GREEN } else { egui::Color32::from_rgb(231, 79, 86) };
+    ui.painter().circle_filled(rect.center(), 4.5, color);
+    ui.painter().circle_filled(rect.center(), 8.0, egui::Color32::from_rgba_unmultiplied(color.r(), color.g(), color.b(), 28));
+}
+
+fn action_button(ui: &mut egui::Ui, kind: IconKind, text: &str, width: f32, primary: bool) -> egui::Response {
+    let fill = if primary {
+        egui::Color32::from_rgb(26, 88, 185)
+    } else {
+        egui::Color32::from_rgb(18, 23, 32)
+    };
+    let stroke = if primary {
+        egui::Stroke::new(1.1, egui::Color32::from_rgb(85, 170, 255))
+    } else {
+        egui::Stroke::new(1.0, egui::Color32::from_rgb(43, 53, 72))
+    };
+    let response = egui::Frame::new()
+        .fill(fill)
+        .corner_radius(egui::CornerRadius::same(8))
+        .stroke(stroke)
+        .inner_margin(egui::Margin::symmetric(16, 12))
+        .show(ui, |ui| {
+            ui.set_min_width(width - 32.0);
+            ui.horizontal(|ui| {
+                icon(ui, kind, 20.0, if primary { egui::Color32::WHITE } else { egui::Color32::from_rgb(174, 187, 210) });
+                ui.add_space(8.0);
+                ui.label(egui::RichText::new(text).size(if primary { 16.0 } else { 13.5 }).strong().color(if primary { egui::Color32::WHITE } else { TEXT_PRIMARY }));
+            });
+        })
+        .response
+        .interact(egui::Sense::click())
+        .on_hover_cursor(egui::CursorIcon::PointingHand);
+    if response.hovered() {
+        ui.painter().rect_stroke(response.rect.expand(1.0), egui::CornerRadius::same(9), egui::Stroke::new(1.2, ACCENT_BLUE_BRIGHT), egui::StrokeKind::Inside);
+    }
+    response
 }
 
 fn nav_button(ui: &mut egui::Ui, selected: &mut usize, index: usize, title: &str, subtitle: &str) {
@@ -952,17 +1078,21 @@ fn label(text: &str) -> egui::RichText {
 
 fn text_row(ui: &mut egui::Ui, title: &str, value: &mut String) {
     ui.horizontal(|ui| {
-        ui.label(label(title));
-        styled_text_edit(ui, value, 360.0, 28.0);
+        let label_width = if ui.available_width() < 330.0 { 94.0 } else { 128.0 };
+        ui.add_sized([label_width, 22.0], egui::Label::new(label(title)));
+        let width = (ui.available_width() - 4.0).clamp(120.0, 360.0);
+        styled_text_edit(ui, value, width, 28.0);
     });
 }
 
 fn select_row(ui: &mut egui::Ui, title: &str, selected: &mut String, options: &[(&str, &str)]) {
     ui.horizontal(|ui| {
         if !title.is_empty() {
-            ui.label(label(title));
+            let label_width = if ui.available_width() < 330.0 { 94.0 } else { 128.0 };
+            ui.add_sized([label_width, 22.0], egui::Label::new(label(title)));
         }
-        styled_select_static(ui, title, selected, options, 300.0);
+        let width = (ui.available_width() - 4.0).clamp(130.0, 300.0);
+        styled_select_static(ui, title, selected, options, width);
     });
 }
 
@@ -1099,7 +1229,11 @@ fn styled_select_box(
         (rect.top() + 4.0)..=(rect.bottom() - 4.0),
         egui::Stroke::new(1.0, egui::Color32::from_rgb(32, 42, 58)),
     );
-    ui.painter().text(
+    let label_clip = egui::Rect::from_min_max(
+        egui::pos2(rect.left() + 8.0, rect.top()),
+        egui::pos2(rect.right() - 38.0, rect.bottom()),
+    );
+    ui.painter().with_clip_rect(label_clip).text(
         egui::pos2(rect.left() + 12.0, rect.center().y),
         egui::Align2::LEFT_CENTER,
         current_label,
@@ -1213,7 +1347,7 @@ fn launcher_card(ui: &mut egui::Ui, add: impl FnOnce(&mut egui::Ui)) {
         .fill(egui::Color32::from_rgb(15, 19, 27))
         .corner_radius(egui::CornerRadius::same(14))
         .stroke(egui::Stroke::new(1.0, egui::Color32::from_rgb(33, 42, 58)))
-        .inner_margin(egui::Margin::same(18))
+        .inner_margin(egui::Margin::same(16))
         .show(ui, add);
 }
 
@@ -1397,7 +1531,15 @@ fn plugin_module_entry(ui: &mut egui::Ui, tab: &PluginTab, selected: bool) -> bo
         .show(ui, |ui| {
             ui.horizontal(|ui| {
                 icon(ui, plugin_icon(tab), 20.0, egui::Color32::from_rgb(145, 161, 187));
-                ui.label(egui::RichText::new(&tab.title).size(14.0).color(egui::Color32::from_rgb(219, 228, 245)));
+                let title_width = (ui.available_width() - 96.0).max(90.0);
+                ui.add_sized(
+                    [title_width, 22.0],
+                    egui::Label::new(
+                        egui::RichText::new(&tab.title)
+                            .size(14.0)
+                            .color(egui::Color32::from_rgb(219, 228, 245)),
+                    ),
+                );
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                     let (dot_color, status) = if tab.enabled {
                         (egui::Color32::from_rgb(107, 231, 113), "Enabled")

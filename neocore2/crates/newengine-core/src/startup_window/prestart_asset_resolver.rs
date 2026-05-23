@@ -33,9 +33,22 @@ impl PreStartAssetResolver {
         let mut warnings = Vec::<String>::new();
 
         for root in candidate_base_dirs(config_path) {
+            // Canonical project/runtime asset roots.
             push_existing_or_plausible(&mut roots, root.join("assets"));
             push_existing_or_plausible(&mut roots, root.join("NewEngine").join("neocore2").join("assets"));
+
+            // Source-module roots used by IDE/source-tree runs. These keep
+            // PreStart icons visible even before the project copies them into
+            // the public asset root. Runtime still resolves the same logical
+            // `ui/prestart/icons/*.svg` paths when AssetManager starts.
+            push_existing_or_plausible(&mut roots, root.join("startup_window"));
+            push_existing_or_plausible(&mut roots, root.join("src").join("startup_window"));
+            push_existing_or_plausible(&mut roots, root.join("crates").join("newengine-core").join("src").join("startup_window"));
         }
+
+        let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        push_existing_or_plausible(&mut roots, manifest_dir.join("assets"));
+        push_existing_or_plausible(&mut roots, manifest_dir.join("src").join("startup_window"));
 
         for layer in asset_layers(config) {
             let layer_type = layer.get("type").and_then(Value::as_str).unwrap_or("");
@@ -98,6 +111,9 @@ impl PreStartAssetResolver {
         for prefix in [
             "ui/prestart/icons",
             "ui/icons/prestart",
+            "assets/ui/prestart/icons",
+            "assets/icons/prestart",
+            "startup_window/assets/ui/prestart/icons",
             "startup_window/assets/icons/prestart",
         ] {
             let logical = format!("{prefix}/{normalized}.svg");
