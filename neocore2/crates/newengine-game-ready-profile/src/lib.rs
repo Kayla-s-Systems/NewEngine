@@ -112,6 +112,7 @@ impl GameReadyRuntimeProfile {
             newengine_input_profile_gameready::game_ready_input_profile(),
         );
         newengine_time_runtime::register_time_gateway_best_effort();
+        newengine_scripting_runtime::register_scripting_gateway_best_effort();
         newengine_assets::register_asset_file_types_gateway_best_effort();
 
         let host_api = newengine_plugin_host::default_host_api();

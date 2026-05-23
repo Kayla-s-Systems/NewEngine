@@ -57,6 +57,8 @@ members = [
     "crates/newengine-scene",
     "crates/newengine-scene-io",
     "crates/newengine-scene-runtime",
+    "crates/newengine-scripting-api",
+    "crates/newengine-scripting-runtime",
     "crates/newengine-service-api",
     "crates/newengine-service-kit",
     "crates/newengine-sim",

@@ -61,6 +61,10 @@ pub const ASSETS_UI_RUNTIME_CONTRACT: &str = "newengine.assets.ui.runtime.v1";
 /// Runtime scene gateway. It consumes resolved map/definition DTOs and mutates the world; it does not own authored map file semantics.
 pub const ENGINE_SCENE_SERVICE_ID: &str = "engine.scene";
 
+/// Runtime scripting gateway. `.ysc` compiled script entries are interpreted through
+/// this domain; AssetManager still owns VFS bytes and ListFile codec dispatch.
+pub const ENGINE_SCRIPTING_SERVICE_ID: &str = "engine.scripting";
+
 /// Semantic asset graph gateway id. This resolver owns declarative dependency
 /// graph expansion over .ytyp/.ydd/.nemat/.ytd refs; it uses engine.assets only
 /// for VFS bytes and codec dispatch.
@@ -374,7 +378,8 @@ pub fn semantic_gateway_for_file_type(extension: &str, asset_kind: &str, codec_t
         "drawable_dictionary" | "drawable" | "frag_type" | "vehicle_record_list" | "cloth_dictionary" | "newengine.asset.drawable_dictionary" => ENGINE_ASSETS_MODELS_SERVICE_ID.to_owned(),
         "material_library" | "newengine.asset.material_library" => ENGINE_ASSETS_MATERIALS_SERVICE_ID.to_owned(),
         "archetype_dictionary" | "metadata" | "unknown_y_file" | "newengine.asset.archetype_dictionary" => ENGINE_ASSETS_DEFINITIONS_SERVICE_ID.to_owned(),
-        "map_data" | "map_definition" | "waypoint_record_list" | "compiled_script" | "newengine.asset.map_definition" => ENGINE_ASSETS_MAPS_SERVICE_ID.to_owned(),
+        "compiled_script" | "newengine.asset.compiled_script" => ENGINE_SCRIPTING_SERVICE_ID.to_owned(),
+        "map_data" | "map_definition" | "waypoint_record_list" | "newengine.asset.map_definition" => ENGINE_ASSETS_MAPS_SERVICE_ID.to_owned(),
         "ui_dictionary" | "newengine.asset.ui_dictionary" => ENGINE_ASSETS_UI_SERVICE_ID.to_owned(),
         "bounds_dictionary" => "engine.assets.models.collisions".to_owned(),
         "manifest" => ENGINE_ASSETS_GRAPH_SERVICE_ID.to_owned(),
@@ -397,7 +402,8 @@ pub fn consumer_domains_for_file_type(extension: &str, asset_kind: &str, codec_t
             "nemat" => &[ENGINE_ASSETS_MATERIALS_SERVICE_ID, ENGINE_ASSETS_MODELS_SERVICE_ID, "engine.render"],
             "ytyp" | "ymt" | "ytf" => &[ENGINE_ASSETS_DEFINITIONS_SERVICE_ID, ENGINE_ASSETS_GRAPH_SERVICE_ID, "engine.scene", ENGINE_ASSETS_MODELS_SERVICE_ID, ENGINE_ASSETS_MATERIALS_SERVICE_ID, "engine.physics", "engine.ai", "engine.editor", "engine.streaming"],
             "neui" => &[ENGINE_ASSETS_UI_SERVICE_ID, ENGINE_ASSETS_GRAPH_SERVICE_ID, "engine.ui", "engine.ui.text", ENGINE_ASSETS_TEXTURES_SERVICE_ID, "engine.render", "engine.editor"],
-            "ymap" | "ywr" | "ysc" => &[ENGINE_ASSETS_MAPS_SERVICE_ID, ENGINE_SCENE_SERVICE_ID, ENGINE_ASSETS_DEFINITIONS_SERVICE_ID, ENGINE_ASSETS_GRAPH_SERVICE_ID, ENGINE_ASSETS_MODELS_SERVICE_ID, ENGINE_ASSETS_MATERIALS_SERVICE_ID, ENGINE_ASSETS_TEXTURES_SERVICE_ID, "engine.physics", "engine.streaming", "engine.editor"],
+            "ysc" => &[ENGINE_SCRIPTING_SERVICE_ID, ENGINE_SCENE_SERVICE_ID, ENGINE_ASSETS_DEFINITIONS_SERVICE_ID, ENGINE_ASSETS_GRAPH_SERVICE_ID, "engine.ui", "engine.ai", "engine.editor", "engine.streaming"],
+            "ymap" | "ywr" => &[ENGINE_ASSETS_MAPS_SERVICE_ID, ENGINE_SCENE_SERVICE_ID, ENGINE_ASSETS_DEFINITIONS_SERVICE_ID, ENGINE_ASSETS_GRAPH_SERVICE_ID, ENGINE_ASSETS_MODELS_SERVICE_ID, ENGINE_ASSETS_MATERIALS_SERVICE_ID, ENGINE_ASSETS_TEXTURES_SERVICE_ID, "engine.physics", "engine.streaming", "engine.editor"],
             "ymf" => &[ENGINE_ASSETS_GRAPH_SERVICE_ID, ENGINE_ASSETS_DEFINITIONS_SERVICE_ID, ENGINE_ASSETS_MAPS_SERVICE_ID, ENGINE_SCENE_SERVICE_ID, ENGINE_ASSETS_MODELS_SERVICE_ID, ENGINE_ASSETS_MATERIALS_SERVICE_ID, ENGINE_ASSETS_TEXTURES_SERVICE_ID],
             "ycd" | "yed" | "yfd" | "yld" | "ypdb" => &["engine.assets.models.skeletons", ENGINE_ASSETS_MODELS_SERVICE_ID, "engine.scene", "engine.render"],
             _ => match asset_kind.trim() {
@@ -405,7 +411,8 @@ pub fn consumer_domains_for_file_type(extension: &str, asset_kind: &str, codec_t
                 "drawable_dictionary" | "drawable" | "frag_type" | "vehicle_record_list" | "newengine.asset.drawable_dictionary" => &[ENGINE_ASSETS_MODELS_SERVICE_ID, ENGINE_ASSETS_MATERIALS_SERVICE_ID, "engine.render"],
                 "material_library" | "newengine.asset.material_library" => &[ENGINE_ASSETS_MATERIALS_SERVICE_ID, ENGINE_ASSETS_MODELS_SERVICE_ID, "engine.render"],
                 "archetype_dictionary" | "metadata" | "unknown_y_file" | "newengine.asset.archetype_dictionary" => &[ENGINE_ASSETS_DEFINITIONS_SERVICE_ID, ENGINE_ASSETS_GRAPH_SERVICE_ID, "engine.scene", ENGINE_ASSETS_MODELS_SERVICE_ID, ENGINE_ASSETS_MATERIALS_SERVICE_ID, "engine.physics", "engine.ai", "engine.editor", "engine.streaming"],
-                "map_data" | "map_definition" | "waypoint_record_list" | "compiled_script" | "newengine.asset.map_definition" => &[ENGINE_ASSETS_MAPS_SERVICE_ID, ENGINE_SCENE_SERVICE_ID, ENGINE_ASSETS_DEFINITIONS_SERVICE_ID, ENGINE_ASSETS_GRAPH_SERVICE_ID, ENGINE_ASSETS_MODELS_SERVICE_ID, ENGINE_ASSETS_MATERIALS_SERVICE_ID, ENGINE_ASSETS_TEXTURES_SERVICE_ID, "engine.physics", "engine.streaming", "engine.editor"],
+                "compiled_script" | "newengine.asset.compiled_script" => &[ENGINE_SCRIPTING_SERVICE_ID, ENGINE_SCENE_SERVICE_ID, ENGINE_ASSETS_DEFINITIONS_SERVICE_ID, ENGINE_ASSETS_GRAPH_SERVICE_ID, "engine.ui", "engine.ai", "engine.editor", "engine.streaming"],
+                "map_data" | "map_definition" | "waypoint_record_list" | "newengine.asset.map_definition" => &[ENGINE_ASSETS_MAPS_SERVICE_ID, ENGINE_SCENE_SERVICE_ID, ENGINE_ASSETS_DEFINITIONS_SERVICE_ID, ENGINE_ASSETS_GRAPH_SERVICE_ID, ENGINE_ASSETS_MODELS_SERVICE_ID, ENGINE_ASSETS_MATERIALS_SERVICE_ID, ENGINE_ASSETS_TEXTURES_SERVICE_ID, "engine.physics", "engine.streaming", "engine.editor"],
                 "ui_dictionary" | "newengine.asset.ui_dictionary" => &[ENGINE_ASSETS_UI_SERVICE_ID, ENGINE_ASSETS_GRAPH_SERVICE_ID, "engine.ui", "engine.ui.text", ENGINE_ASSETS_TEXTURES_SERVICE_ID, "engine.render", "engine.editor"],
                 "bounds_dictionary" => &["engine.assets.models.collisions", "engine.physics", ENGINE_ASSETS_MODELS_SERVICE_ID, "engine.scene"],
                 "manifest" => &[ENGINE_ASSETS_GRAPH_SERVICE_ID, ENGINE_ASSETS_DEFINITIONS_SERVICE_ID, ENGINE_ASSETS_MAPS_SERVICE_ID, ENGINE_SCENE_SERVICE_ID, ENGINE_ASSETS_MODELS_SERVICE_ID, ENGINE_ASSETS_MATERIALS_SERVICE_ID, ENGINE_ASSETS_TEXTURES_SERVICE_ID],

@@ -26,4 +26,5 @@ newengine-time-runtime = { path = "../newengine-time-runtime" }
 newengine-textures-runtime = { path = "../newengine-textures-runtime" }
 newengine-scene = { path = "../newengine-scene", features = ["runtime"] }
 newengine-scene-runtime = { path = "../newengine-scene-runtime" }
+newengine-scripting-runtime = { path = "../newengine-scripting-runtime" }
 newengine-ui = { path = "../newengine-ui", default-features = false }

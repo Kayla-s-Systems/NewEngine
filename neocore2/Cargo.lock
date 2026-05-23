@@ -2357,6 +2357,7 @@ dependencies = [
  "newengine-runtime-host",
  "newengine-scene",
  "newengine-scene-runtime",
+ "newengine-scripting-runtime",
  "newengine-textures-runtime",
  "newengine-time-runtime",
  "newengine-ui",
@@ -2774,6 +2775,29 @@ dependencies = [
  "newengine-scene-io",
  "newengine-service-api",
  "newengine-service-kit",
+ "serde_json",
+]
+
+[[package]]
+name = "newengine-scripting-api"
+version = "0.1.0"
+dependencies = [
+ "newengine-service-api",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "newengine-scripting-runtime"
+version = "0.1.0"
+dependencies = [
+ "abi_stable",
+ "log",
+ "newengine-plugin-api",
+ "newengine-scripting-api",
+ "newengine-service-api",
+ "newengine-service-kit",
+ "serde",
  "serde_json",
 ]
 
