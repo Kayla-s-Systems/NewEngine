@@ -19,6 +19,11 @@ pub(crate) struct SkyVisualRuntime {
     pub kind: SkyVisualKind,
 }
 
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct SkyClearColorRuntime {
+    pub color: [f32; 4],
+}
+
 #[derive(Clone, Debug)]
 pub(crate) struct SkyAtmosphereRuntime {
     pub radius: f32,
@@ -153,6 +158,44 @@ fn time_snapshot_for_sky_cycle() -> Option<newengine_core::time::TimeSnapshotV1>
             log::warn!("game-ready sky cycle: engine.time snapshot unavailable; using frame dt projection for this tick err='{e}'");
             None
         }
+    }
+}
+
+
+#[inline]
+fn sync_game_ready_day_night_to_engine_time(day_night: &GameReadyDayNightSpec) {
+    let request = newengine_core::time::TimeGameClockSetRequestV1 {
+        day_index: 0,
+        seconds_of_day: (day_night.time_of_day_hours as f64 * 3600.0).rem_euclid(86_400.0),
+        seconds_per_game_day: (day_night.day_length_seconds as f64).max(1.0),
+        time_scale: if day_night.enabled { 1.0 } else { 0.0 },
+    };
+    let Ok(payload) = serde_json::to_vec(&request) else {
+        log::warn!("game-ready sky cycle: failed to encode engine.time clock request");
+        return;
+    };
+    match call_service_v1(
+        newengine_core::time::ENGINE_TIME_SERVICE_ID,
+        newengine_core::time::time_method::SET_GAME_CLOCK_V1,
+        &payload,
+    ) {
+        Ok(bytes) => match serde_json::from_slice::<newengine_core::time::TimeSnapshotV1>(&bytes) {
+            Ok(snapshot) => log::info!(
+                "game-ready sky cycle: engine.time game clock set source='scene.day_night' tod={:.2}h day_len={:.1}s normalized_day={:.6} time_scale={:.3}",
+                day_night.time_of_day_hours,
+                day_night.day_length_seconds,
+                snapshot.game.normalized_day,
+                snapshot.game.time_scale
+            ),
+            Err(e) => log::warn!(
+                "game-ready sky cycle: engine.time set_game_clock_v1 returned invalid snapshot err='{}'",
+                e
+            ),
+        },
+        Err(e) => log::warn!(
+            "game-ready sky cycle: engine.time set_game_clock_v1 failed; sky will use local scene clock projection err='{}'",
+            e
+        ),
     }
 }
 
@@ -411,6 +454,7 @@ pub fn tick_game_ready_sky_cycle(world: &mut newengine_ecs::World, dt: f32) {
         }
     }
 
+    world.insert_resource(SkyClearColorRuntime { color: frame.sky_tint });
     apply_sky_visuals(world, frame, atmosphere);
 }
 
@@ -445,6 +489,8 @@ fn configure_game_ready_lighting(world: &mut newengine_ecs::World, spec: &GameRe
         let sun_entity = spawn_named(world, "Game/Sun");
         let _ = world.insert(sun_entity, sun);
     }
+
+    sync_game_ready_day_night_to_engine_time(&spec.day_night);
 
     world.insert_resource(SkyCycleRuntime {
         enabled: spec.day_night.enabled,

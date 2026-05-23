@@ -131,6 +131,7 @@ pub struct LitPipeline {
     pub shadow_instanced_vs: ShaderId,
     pub instanced_pipeline: PipelineId,
     pub instanced_double_sided_pipeline: PipelineId,
+    pub sky_instanced_pipeline: PipelineId,
     pub shadow_instanced_pipeline: PipelineId,
     pub shadow_instanced_double_sided_pipeline: PipelineId,
 }

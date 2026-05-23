@@ -286,6 +286,7 @@ pub const LIST_FILE_CONTENT_KIND_YTD: u32 = 1;
 pub const LIST_FILE_CONTENT_KIND_YDD: u32 = 2;
 pub const LIST_FILE_CONTENT_KIND_YTYP: u32 = 3;
 pub const LIST_FILE_CONTENT_KIND_NEMAT: u32 = 4;
+pub const LIST_FILE_CONTENT_KIND_YMAP: u32 = 5;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct ListFileHeaderV1 {
@@ -364,6 +365,7 @@ pub const fn list_file_content_kind_label(kind: u32) -> &'static str {
         LIST_FILE_CONTENT_KIND_YTD => "texture_dictionary",
         LIST_FILE_CONTENT_KIND_YDD => "drawable_dictionary",
         LIST_FILE_CONTENT_KIND_NEMAT => "material_library",
+        LIST_FILE_CONTENT_KIND_YMAP => "map_definition",
         _ => "unknown",
     }
 }
@@ -373,6 +375,8 @@ pub fn list_file_content_kind_for_extension(extension: &str) -> Option<u32> {
     let bytes = extension.as_bytes();
     if bytes.len() == 4 && (bytes[0] == b'y' || bytes[0] == b'Y') && (bytes[1] == b't' || bytes[1] == b'T') && (bytes[2] == b'y' || bytes[2] == b'Y') && (bytes[3] == b'p' || bytes[3] == b'P') {
         Some(LIST_FILE_CONTENT_KIND_YTYP)
+    } else if bytes.len() == 4 && (bytes[0] == b'y' || bytes[0] == b'Y') && (bytes[1] == b'm' || bytes[1] == b'M') && (bytes[2] == b'a' || bytes[2] == b'A') && (bytes[3] == b'p' || bytes[3] == b'P') {
+        Some(LIST_FILE_CONTENT_KIND_YMAP)
     } else if bytes.len() == 3 && (bytes[0] == b'y' || bytes[0] == b'Y') && (bytes[1] == b't' || bytes[1] == b'T') && (bytes[2] == b'd' || bytes[2] == b'D') {
         Some(LIST_FILE_CONTENT_KIND_YTD)
     } else if bytes.len() == 3 && (bytes[0] == b'y' || bytes[0] == b'Y') && (bytes[1] == b'd' || bytes[1] == b'D') && (bytes[2] == b'd' || bytes[2] == b'D') {

@@ -23,6 +23,52 @@ impl Default for RasterCullMode {
     }
 }
 
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum PipelineDepthCompare {
+    Always,
+    LessOrEqual,
+}
+
+impl Default for PipelineDepthCompare {
+    #[inline]
+    fn default() -> Self {
+        Self::LessOrEqual
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct PipelineDepthMode {
+    pub test: bool,
+    pub write: bool,
+    pub compare: PipelineDepthCompare,
+}
+
+impl PipelineDepthMode {
+    #[inline]
+    pub const fn new(test: bool, write: bool, compare: PipelineDepthCompare) -> Self {
+        Self { test, write, compare }
+    }
+
+    #[inline]
+    pub const fn read_write_less_equal() -> Self {
+        Self::new(true, true, PipelineDepthCompare::LessOrEqual)
+    }
+
+    #[inline]
+    pub const fn no_write_always() -> Self {
+        Self::new(false, false, PipelineDepthCompare::Always)
+    }
+}
+
+impl Default for PipelineDepthMode {
+    #[inline]
+    fn default() -> Self {
+        Self::read_write_less_equal()
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum IndexFormat {
     U16,
@@ -146,6 +192,8 @@ pub struct PipelineDesc {
     pub color_format: TextureFormat,
     pub depth_format: Option<TextureFormat>,
     #[serde(default)]
+    pub depth_mode: PipelineDepthMode,
+    #[serde(default)]
     pub cull_mode: RasterCullMode,
     #[serde(default)]
     pub cache_key: Option<String>,
@@ -167,6 +215,7 @@ impl PipelineDesc {
             bind_group_layouts: Vec::new(),
             color_format,
             depth_format: None,
+            depth_mode: PipelineDepthMode::default(),
             cull_mode: RasterCullMode::Back,
             cache_key: None,
             tessellation: TessellationDesc::default(),
@@ -207,6 +256,14 @@ impl PipelineDesc {
     #[inline]
     pub fn with_depth(mut self, depth_format: TextureFormat) -> Self {
         self.depth_format = Some(depth_format);
+        self.depth_mode = PipelineDepthMode::read_write_less_equal();
+        self
+    }
+
+    #[inline]
+    pub fn with_depth_state(mut self, depth_format: TextureFormat, depth_mode: PipelineDepthMode) -> Self {
+        self.depth_format = Some(depth_format);
+        self.depth_mode = depth_mode;
         self
     }
 

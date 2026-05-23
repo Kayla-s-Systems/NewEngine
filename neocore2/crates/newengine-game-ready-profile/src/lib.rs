@@ -117,7 +117,7 @@ impl GameReadyRuntimeProfile {
         let host_api = newengine_plugin_host::default_host_api();
         let asset_client = newengine_assets::AssetServiceClient::new(host_api.clone());
         newengine_textures_runtime::register_textures_gateway_best_effort(asset_client.clone());
-        newengine_assets::register_definitions_gateway_best_effort(asset_client.clone());
+        newengine_definitions_runtime::register_definitions_gateway_best_effort(asset_client.clone());
         newengine_material_runtime::register_materials_gateway_best_effort(asset_client.clone());
         newengine_model_runtime::register_model_gateway_best_effort(asset_client.clone());
         newengine_model_runtime::register_asset_graph_gateway_best_effort(host_api, asset_client);

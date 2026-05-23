@@ -30,8 +30,7 @@ fn choose_foliage_prefab<'a>(
     prefabs
         .iter()
         .find(|p| p.enabled && p.id == id)
-        .or_else(|| prefabs.iter().find(|p| p.enabled && p.proxy == "runtime_gltf_mesh"))
-        .or_else(|| prefabs.iter().find(|p| p.enabled && !p.source.trim().is_empty()))
+        .or_else(|| prefabs.iter().find(|p| p.enabled && p.proxy == "ydd_runtime_mesh"))
 }
 
 fn collect_tree_placements(

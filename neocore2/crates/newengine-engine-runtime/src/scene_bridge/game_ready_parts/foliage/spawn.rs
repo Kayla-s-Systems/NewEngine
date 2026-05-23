@@ -4,8 +4,8 @@ fn ensure_runtime_prefab_parts(
     materials: DemoMaterials,
     palette: &GameReadyPaletteSpec,
 ) -> Result<Vec<RuntimePrefabMeshPart>, String> {
-    let logical_asset = load_prefab_logical_asset(prefab)?;
-    let decoded = decode_runtime_gltf_prefab(&logical_asset)?;
+    let logical_asset = canonical_ydd_prefab_ref(prefab)?;
+    let decoded = decode_runtime_ydd_prefab(&logical_asset)?;
     let mut out = Vec::with_capacity(decoded.len());
     let mut registered_parts = 0usize;
     let mut registered_vertices = 0usize;
@@ -23,7 +23,7 @@ fn ensure_runtime_prefab_parts(
             registered_vertices += vertex_count;
             registered_indices += index_count;
             log::debug!(
-                "game-ready: prefab mesh registered source='{}' asset='{}' part='{}' material='{}' vertices={} indices={}",
+                "game-ready: ydd drawable mesh registered source='{}' asset='{}' part='{}' material='{}' vertices={} indices={}",
                 prefab.source,
                 logical_asset,
                 name,
@@ -42,7 +42,7 @@ fn ensure_runtime_prefab_parts(
     }
     if registered_parts > 0 {
         log::info!(
-            "game-ready: prefab mesh registered source='{}' asset='{}' parts={} vertices={} indices={}",
+            "game-ready: ydd drawable registered source='{}' asset='{}' parts={} vertices={} indices={}",
             prefab.source,
             logical_asset,
             registered_parts,
@@ -53,7 +53,7 @@ fn ensure_runtime_prefab_parts(
     Ok(out)
 }
 
-fn spawn_runtime_gltf_prefab_instance(
+fn spawn_runtime_ydd_prefab_instance(
     world: &mut newengine_ecs::World,
     prims: &PrimitiveRegistry,
     mats: &MaterialRegistry,
@@ -110,7 +110,7 @@ fn spawn_foliage_prefabs(
         Ok(parts) => parts,
         Err(e) => {
             log::error!(
-                "game-ready: prefab id='{}' source='{}' proxy='{}' failed to load real mesh through AssetManager; foliage skipped err='{}'",
+                "game-ready: prefab id='{}' source='{}' proxy='{}' failed to load .ydd runtime mesh through AssetManager; foliage skipped err='{}'",
                 prefab.id,
                 prefab.source,
                 prefab.proxy,
@@ -123,14 +123,14 @@ fn spawn_foliage_prefabs(
     let placements = collect_tree_placements(world, terrain, foliage, player_start);
     let count = placements.len();
     for placement in placements {
-        spawn_runtime_gltf_prefab_instance(world, &*prims, mats, root, &runtime_parts, placement);
+        spawn_runtime_ydd_prefab_instance(world, &*prims, mats, root, &runtime_parts, placement);
     }
 
     log_foliage_prefab_placement(
         &prefab.id,
         &prefab.source,
         &prefab.proxy,
-        "runtime_gltf_mesh",
+        "ydd_runtime_mesh",
         runtime_parts.len(),
         count,
         foliage.max_count,

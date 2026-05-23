@@ -1,3 +1,5 @@
+use newengine_assets::{AssetDecodeRequest, ASSET_LIST_FILE_BODY_OUTPUT};
+
 #[derive(Debug, Deserialize)]
 struct RawShadowSpec {
     #[serde(default = "default_shadow_enabled")]
@@ -117,7 +119,7 @@ pub(super) fn load_game_ready_map_profile() -> GameReadyMapProfile {
     }
 
     log::warn!(
-        "game-ready: using code default scene profile; AssetManager profile not found and direct plugin-content filesystem fallback is disabled"
+        "game-ready: using emergency fallback profile; .ymap not found. Runtime authored maps must be NEF8/ListFile and this path is diagnostic-only"
     );
     fallback_game_ready_map_profile()
 }
@@ -127,7 +129,7 @@ fn load_profile_from_asset_manager() -> Option<GameReadyMapProfile> {
 
     if !newengine_plugin_host::has_service(newengine_assets::consts::ASSET_SERVICE_ID) {
         log::debug!(
-            "game-ready: AssetManager service '{}' unavailable while resolving scene profile",
+            "game-ready: AssetManager service '{}' unavailable while resolving authored map",
             newengine_assets::consts::ASSET_SERVICE_ID
         );
         return None;
@@ -144,7 +146,7 @@ fn load_profile_from_asset_manager() -> Option<GameReadyMapProfile> {
         match load_profile_asset(&assets, &logical_path) {
             Ok(profile) => {
                 log::info!(
-                    "game-ready: loaded standalone scene profile asset='{}'",
+                    "game-ready: loaded authored map asset='{}'",
                     logical_path,
                 );
                 return Some(profile);
@@ -155,7 +157,7 @@ fn load_profile_from_asset_manager() -> Option<GameReadyMapProfile> {
                     .map(|v| v.to_string())
                     .unwrap_or_else(|te| format!("{{\"trace_error\":\"{te}\"}}"));
                 log::debug!(
-                    "game-ready: scene profile asset unavailable path='{}' err='{}' trace={}",
+                    "game-ready: map asset unavailable path='{}' err='{}' trace={}",
                     logical_path,
                     e,
                     trace
@@ -171,25 +173,53 @@ fn load_profile_asset(
     assets: &newengine_assets::AssetServiceClient,
     logical_path: &str,
 ) -> Result<GameReadyMapProfile, String> {
+    if !logical_path.to_ascii_lowercase().split('@').next().unwrap_or(logical_path).ends_with(".ymap") {
+        return Err(format!(
+            "legacy plain authored map rejected path='{logical_path}' expected='.ymap' policy='authored maps are NEF8/ListFile, not runtime plain JSON'"
+        ));
+    }
+
+    let request = AssetDecodeRequest {
+        logical_path: logical_path.to_owned(),
+        output_kind: ASSET_LIST_FILE_BODY_OUTPUT.to_owned(),
+        selector: serde_json::Value::Null,
+    };
     let payload = assets
-        .text_v1(logical_path)
-        .map_err(|e| format!("asset.text_v1 failed path='{logical_path}' err='{e}'"))?;
+        .decode_v1(&request)
+        .map_err(|e| format!("asset.decode_v1 failed path='{logical_path}' output='{}' err='{e}'", ASSET_LIST_FILE_BODY_OUTPUT))?;
 
     let value: serde_json::Value = serde_json::from_slice(&payload)
-        .map_err(|e| format!("json parse failed path='{logical_path}' err='{e}'"))?;
+        .map_err(|e| format!("ymap body json parse failed path='{logical_path}' err='{e}'"))?;
 
-    if let Some(scene) = value.get("scene").cloned() {
-        parse_payload(scene)
-    } else if let Some(payload) = value.get("payload").cloned() {
-        parse_payload(payload)
-    } else {
-        parse_payload(value)
-    }
+    parse_map_definition_payload(value, logical_path)
 }
 
-fn parse_payload(value: serde_json::Value) -> Result<GameReadyMapProfile, String> {
+fn parse_map_definition_payload(value: serde_json::Value, logical_path: &str) -> Result<GameReadyMapProfile, String> {
+    let schema = value.get("schema").and_then(|v| v.as_str()).unwrap_or_default();
+    if !schema.is_empty() && !schema.starts_with("newengine.map.definition.") {
+        return Err(format!(
+            "ymap unsupported schema path='{logical_path}' schema='{schema}' expected='newengine.map.definition.*'"
+        ));
+    }
+
+    if let Some(profile) = value.pointer("/map/profile").cloned() {
+        return parse_payload(profile, "ymap.map.profile");
+    }
+    if let Some(profile) = value.get("profile").cloned() {
+        return parse_payload(profile, "ymap.profile");
+    }
+    if let Some(scene) = value.get("scene").cloned() {
+        return parse_payload(scene, "ymap.scene_compat");
+    }
+    if let Some(payload) = value.get("payload").cloned() {
+        return parse_payload(payload, "ymap.payload");
+    }
+    parse_payload(value, "ymap.root")
+}
+
+fn parse_payload(value: serde_json::Value, source_label: &str) -> Result<GameReadyMapProfile, String> {
     let raw: RawGameReadyPayload = serde_json::from_value(value)
-        .map_err(|e| format!("scene payload parse failed: {e}"))?;
+        .map_err(|e| format!("map payload parse failed source='{source_label}': {e}"))?;
     Ok(raw.into_profile())
 }
 
@@ -212,7 +242,7 @@ impl RawGameReadyPayload {
                 look_sens: self.player.look_sens,
                 model: GameReadyPlayerModelSpec {
                     enabled: self.player.model.enabled && !self.player.model.source.trim().is_empty(),
-                    source: non_empty_or(self.player.model.source, default_player_model_source()),
+                    source: if self.player.model.enabled { non_empty_or(self.player.model.source, default_player_model_source()) } else { String::new() },
                     texture_dictionary: sanitize_texture_path(self.player.model.texture_dictionary),
                     skeleton: sanitize_asset_path(self.player.model.skeleton),
                     target_height: self.player.model.target_height.clamp(0.25, 3.0),
@@ -269,13 +299,13 @@ impl RawGameReadyPayload {
                 atmosphere: sanitize_sky_atmosphere_spec(self.sky.atmosphere),
             },
             materials: GameReadyMaterialSetSpec {
-                terrain: sanitize_material_spec(self.materials.terrain),
-                sky: sanitize_material_spec(self.materials.sky),
-                sun: sanitize_material_spec(self.materials.sun),
-                moon: sanitize_material_spec(self.materials.moon),
-                tree_bark: sanitize_material_spec(self.materials.tree_bark),
-                tree_leaf: sanitize_material_spec(self.materials.tree_leaf),
-                tree_branch: sanitize_material_spec(self.materials.tree_branch),
+                terrain: sanitize_material_spec_with_default_asset(self.materials.terrain, default_terrain_material()),
+                sky: sanitize_material_spec_with_default_asset(self.materials.sky, default_sky_material()),
+                sun: sanitize_material_spec_with_default_asset(self.materials.sun, default_sun_material()),
+                moon: sanitize_material_spec_with_default_asset(self.materials.moon, default_moon_material()),
+                tree_bark: sanitize_material_spec_with_default_asset(self.materials.tree_bark, default_tree_bark_material()),
+                tree_leaf: sanitize_material_spec_with_default_asset(self.materials.tree_leaf, default_tree_leaf_material()),
+                tree_branch: sanitize_material_spec_with_default_asset(self.materials.tree_branch, default_tree_branch_material()),
             },
             lighting: sanitize_lighting_spec(self.lighting),
             foliage: sanitize_foliage_spec(self.foliage),

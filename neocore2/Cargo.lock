@@ -504,6 +504,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "newengine-definitions-runtime"
+version = "0.1.0"
+dependencies = [
+ "abi_stable",
+ "log",
+ "newengine-assets",
+ "newengine-assets-api",
+ "newengine-plugin-api",
+ "newengine-service-api",
+ "newengine-service-kit",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "newengine-ecs"
 version = "0.1.0"
 dependencies = [
@@ -637,6 +652,7 @@ dependencies = [
  "log",
  "newengine-assets",
  "newengine-core",
+ "newengine-definitions-runtime",
  "newengine-ecs-runtime",
  "newengine-engine-runtime",
  "newengine-entity-runtime",

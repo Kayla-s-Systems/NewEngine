@@ -17,7 +17,7 @@ use super::super::material_bindings::LitMaterialPlan;
 use newengine_render_feature_api::PackedLights;
 use crate::render_controller::RuntimeRenderController;
 use crate::gameplay::display_visible_in_mode;
-use crate::scene_bridge::{SkyDomeRuntime, TerrainSurfaceLayers};
+use crate::scene_bridge::{SkyDomeRuntime, SkyVisualKind, SkyVisualRuntime, TerrainSurfaceLayers};
 use self::mesh_visibility::{
     distance_sq_to_camera, forward_sphere_visible, primitive_budget, primitive_forward_max_distance,
     primitive_near_accept_distance, primitive_shadow_max_distance, scene_forward_cone_dot,
@@ -349,12 +349,20 @@ pub fn draw_primitives(
         if !display_visible_in_mode(world, id, runtime) {
             continue;
         }
+        let sky_visual_kind = world.get::<SkyVisualRuntime>(id).map(|visual| visual.kind);
         let follow_camera_sky = world
             .get::<SkyDomeRuntime>(id)
             .map(|sky| sky.follow_camera)
             .unwrap_or(false);
         if follow_camera_sky {
             sky_seen += 1;
+        }
+        if sky_visual_kind == Some(SkyVisualKind::Dome) {
+            // The dome is a background domain now. The render controller clears the
+            // frame from SkyClearColorRuntime, so the authored sky cannot become a
+            // camera-following opaque oval in front of world geometry. Sun/moon
+            // discs remain explicit sky visuals.
+            continue;
         }
         if follow_camera_sky && !this.runtime_profile().draw_sky_visuals() {
             sky_profile_culled += 1;
@@ -404,7 +412,7 @@ pub fn draw_primitives(
     entries.truncate(primitive_budget(runtime, false));
     if runtime && (this.frame.frame_index <= 8 || this.frame.frame_index % 240 == 0) {
         log::debug!(
-            "render primitive extraction: sky_seen={} sky_emitted={} sky_profile_culled={} opaque_candidates={} opaque_budget={} runtime_profile_sky_native={}",
+            "sky.draw_list: seen={} emitted={} profile_culled={} pass='viewport_forward' depth_write=false shadow=false follow_camera=true dome_background_clear=true opaque_candidates={} opaque_budget={} runtime_profile_sky_native={}",
             sky_seen,
             sky_entries.len(),
             sky_profile_culled,
@@ -413,12 +421,16 @@ pub fn draw_primitives(
             this.runtime_profile().draw_sky_visuals()
         );
     }
-    sky_entries.append(&mut entries);
-    let entries = sky_entries;
-
     let mut plan_cache: FxHashMap<PrimitivePlanKey, PrimitiveGpuPlan> = FxHashMap::default();
-    let mut batches = InstanceBatchSet::default();
-    for (_distance_sq, _entity_key, prim, model, material_ref, follow_camera_sky) in entries {
+    let mut sky_batches = InstanceBatchSet::default();
+    let mut opaque_batches = InstanceBatchSet::default();
+
+    // Keep sky in its own replay bucket. `InstanceBatchSet` sorts by pipeline / bind
+    // group / mesh for performance, so mixing sky and opaque primitives in one set
+    // lets the sky pipeline be replayed after terrain. That was the white follow-
+    // camera oval over the world. Sky is a background domain: replay it first,
+    // depth-write disabled, then replay world opaque batches on top.
+    for (_distance_sq, _entity_key, prim, model, material_ref, follow_camera_sky) in sky_entries.into_iter().chain(entries.into_iter()) {
         let model = if follow_camera_sky {
             recenter_model_translation(model, camera_position)
         } else {
@@ -435,13 +447,21 @@ pub fn draw_primitives(
             let base_tex = this.material_texture_or_default(r, material_plan.base_color_texture, lit.white_texture);
             let normal_tex = this.material_texture_or_default(r, material_plan.normal_texture, lit.flat_normal_texture);
             let roughness_tex = this.material_texture_or_default(r, material_plan.roughness_texture, lit.white_texture);
-            let sampler = if material_plan.has_textures() { lit.repeat_sampler } else { lit.clamp_sampler };
-            let material_shadow_texture = if material_plan.receive_shadows {
-                shadow_texture
+            let sampler = if follow_camera_sky {
+                lit.clamp_sampler
+            } else if material_plan.has_textures() {
+                lit.repeat_sampler
             } else {
-                lit.white_texture
+                lit.clamp_sampler
             };
-            let pipeline = if material_plan.double_sided {
+            let material_shadow_texture = if follow_camera_sky || !material_plan.receive_shadows {
+                lit.white_texture
+            } else {
+                shadow_texture
+            };
+            let pipeline = if follow_camera_sky {
+                lit.sky_instanced_pipeline
+            } else if material_plan.double_sided {
                 lit.instanced_double_sided_pipeline
             } else {
                 lit.instanced_pipeline
@@ -525,16 +545,20 @@ pub fn draw_primitives(
             plan.sampler,
             plan.mesh_key,
         );
-        batches.push(batch_key, plan.pipeline, plan.bind_group, plan.gpu, instance);
+        if follow_camera_sky {
+            sky_batches.push(batch_key, plan.pipeline, plan.bind_group, plan.gpu, instance);
+        } else {
+            opaque_batches.push(batch_key, plan.pipeline, plan.bind_group, plan.gpu, instance);
+        }
         this.diagnostics.overlay_metrics.record_indexed_triangles(plan.gpu.index_count);
     }
 
-    if batches.is_empty() {
+    if sky_batches.is_empty() && opaque_batches.is_empty() {
         return Ok(());
     }
 
     let mut replay = InstancedReplayState::default();
-    for batch in batches.into_sorted_batches() {
+    for batch in sky_batches.into_sorted_batches().into_iter().chain(opaque_batches.into_sorted_batches().into_iter()) {
         let instance_count = batch.instances.len() as u32;
         let instance_slice = this.gpu.meshes.instance_uploader.upload(r, &batch.instances)?;
         replay.set_pipeline(r, batch.pipeline)?;

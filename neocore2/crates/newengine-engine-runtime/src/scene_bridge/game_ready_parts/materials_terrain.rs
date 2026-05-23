@@ -1,13 +1,4 @@
 
-#[inline]
-pub(super) fn game_ready_demo_enabled() -> bool {
-    std::env::var("NEWENGINE_GAME_READY_DEMO")
-        .map(|v| {
-            let v = v.trim().to_ascii_lowercase();
-            !matches!(v.as_str(), "" | "0" | "false" | "off" | "no")
-        })
-        .unwrap_or(false)
-}
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum DemoMaterialRole {

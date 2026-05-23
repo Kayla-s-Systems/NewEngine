@@ -180,7 +180,7 @@ impl GameReadyLitMaterialDomainProvider {
         .per_instance();
 
         log::info!(
-            "gameready material domain: creating GPU pipelines key='{}' pipeline_count=8",
+            "gameready material domain: creating GPU pipelines key='{}' pipeline_count=9",
             GAME_READY_LIT_PIPELINE_KEY.as_str()
         );
         let pipeline = r.create_pipeline(
@@ -250,6 +250,16 @@ impl GameReadyLitMaterialDomainProvider {
                 .with_cull_mode(RasterCullMode::None),
         )?;
 
+        let sky_instanced_pipeline = r.create_pipeline(
+            PipelineDesc::new(instanced_vs, instanced_fs, profile.scene_hdr_color_format)
+                .with_label("gameready_sky_pipeline_instanced")
+                .with_topology(PrimitiveTopology::TriangleList)
+                .with_vertex_layouts(instanced_layouts.clone())
+                .with_bind_group_layouts(vec![bgl])
+                .with_depth_state(TextureFormat::Depth32Float, PipelineDepthMode::no_write_always())
+                .with_cull_mode(RasterCullMode::None),
+        )?;
+
         let shadow_instanced_pipeline = r.create_pipeline(
             PipelineDesc::new(
                 shadow_instanced_vs,
@@ -303,6 +313,7 @@ impl GameReadyLitMaterialDomainProvider {
             shadow_instanced_vs,
             instanced_pipeline,
             instanced_double_sided_pipeline,
+            sky_instanced_pipeline,
             shadow_instanced_pipeline,
             shadow_instanced_double_sided_pipeline,
         })

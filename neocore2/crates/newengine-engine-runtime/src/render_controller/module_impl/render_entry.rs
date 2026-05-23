@@ -8,6 +8,7 @@ use newengine_core::render::{
 use newengine_core::{EngineResult, ModuleCtx};
 use newengine_ui::draw::UiDrawList;
 use newengine_ui_api::UiRuntimeDebugOverlayTelemetry;
+use crate::scene_bridge::SkyClearColorRuntime;
 
 use super::frame_types::{PlayableFrameOutcome, RenderFrameScope};
 use super::super::controller::RuntimeRenderController;
@@ -240,7 +241,15 @@ impl RuntimeRenderController {
             (requested_vp_w, requested_vp_h)
         };
 
-        self.viewport.clear_color = self.runtime_profile().configured_clear_color();
+        self.viewport.clear_color = self
+            .bridges
+            .scene
+            .scene()
+            .read()
+            .world()
+            .resource::<SkyClearColorRuntime>()
+            .map(|sky| sky.color)
+            .unwrap_or_else(|| self.runtime_profile().configured_clear_color());
         self.trace_begin_frame(trace_frame, vp_w, vp_h);
         r.begin_frame(BeginFrameDesc::new(self.viewport.clear_color))?;
         self.trace_begin_frame_done(trace_frame);

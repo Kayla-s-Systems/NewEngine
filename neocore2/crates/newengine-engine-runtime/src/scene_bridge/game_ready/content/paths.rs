@@ -1,11 +1,11 @@
 pub(super) const GAME_READY_APP_DIR: &str = "game-ready-fps";
-pub(super) const GAME_READY_PROFILE_FILE: &str = "game_ready_highlands.scene.json";
-const PROFILE_ENV_KEYS: [&str; 2] = ["NEWENGINE_GAME_READY_PROFILE", "NEWENGINE_GAME_READY_SCENE"];
-/// Logical AssetManager candidates for the game-ready scene profile.
+pub(super) const GAME_READY_PROFILE_FILE: &str = "game_ready_highlands.ymap";
+const PROFILE_ENV_KEYS: [&str; 2] = ["NEWENGINE_GAME_READY_PROFILE", "NEWENGINE_GAME_READY_MAP"];
+/// Logical AssetManager candidates for the game-ready authored map.
 ///
 /// Environment overrides are treated as logical VFS paths. Absolute filesystem
-/// paths are intentionally ignored here: runtime scene text must go through
-/// AssetManager/VFS, not direct disk reads.
+/// paths are intentionally ignored here: authored map data must go through
+/// AssetManager/VFS and the NEF8/ListFile codec, not direct disk reads.
 pub(super) fn profile_asset_candidates() -> Vec<String> {
     let mut out = Vec::new();
 
@@ -20,7 +20,7 @@ pub(super) fn profile_asset_candidates() -> Vec<String> {
         let as_path = std::path::Path::new(trimmed);
         if as_path.is_absolute() {
             log::warn!(
-                "game-ready: ignoring absolute scene profile path='{}'; set a logical AssetManager path instead",
+                "game-ready: ignoring absolute authored map path='{}'; set a logical AssetManager path instead",
                 trimmed
             );
             continue;
@@ -29,7 +29,7 @@ pub(super) fn profile_asset_candidates() -> Vec<String> {
     }
 
     out.push(GAME_READY_PROFILE_FILE.to_owned());
-    out.push(format!("scenes/{GAME_READY_PROFILE_FILE}"));
+    out.push(format!("maps/{GAME_READY_PROFILE_FILE}"));
     out.push(format!("game-ready/{GAME_READY_PROFILE_FILE}"));
 
     dedup_strings(out)

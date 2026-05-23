@@ -383,7 +383,8 @@ fn instantiate_game_ready_definitions(
         definitions.len()
     );
     for spec in definitions {
-        let graph = newengine_model_domain_api::AssetGraphResolver::resolve_root_ref(&spec.definition_ref);
+        let graph = resolve_game_ready_asset_graph(&spec.definition_ref)
+            .unwrap_or_else(|| newengine_model_domain_api::AssetGraphResolver::resolve_root_ref(&spec.definition_ref));
         let transform = super::definitions_runtime::DefinitionInstantiateTransform {
             translation: [spec.position.x, spec.position.y, spec.position.z],
             rotation_ypr: spec.rotation_ypr,
@@ -421,7 +422,8 @@ pub(super) fn bootstrap_fps_game_ready_scene(
 
     let root = ensure_root(scene);
     let active_camera = scene.active_camera();
-    let map = load_game_ready_map_profile();
+    let mut map = load_game_ready_map_profile();
+    apply_game_ready_ytyp_metadata(&mut map);
     let materials = register_demo_materials(mats, &map.palette, &map.materials, &map.sky);
     let world = scene.world_mut();
 

@@ -45,6 +45,10 @@ pub const DEFINITIONS_BACKEND_CAPABILITY_ID: &str = "definitions.backend";
 pub const DEFINITIONS_RUNTIME_CONTRACT: &str = "newengine.definitions.runtime.v1";
 pub const ENGINE_MODEL_SERVICE_ID: &str = "engine.model";
 pub const ENGINE_MATERIALS_SERVICE_ID: &str = "engine.materials";
+/// Semantic authored map/world placement gateway id. `.ymap` owns map composition,
+/// placements and references to `.ytyp` Definition Entries; it does not replace
+/// `.ytyp` as the generic metadata/knowledge source.
+pub const ENGINE_SCENE_SERVICE_ID: &str = "engine.scene";
 
 /// Semantic asset graph gateway id. This resolver owns declarative dependency
 /// graph expansion over .ytyp/.ydd/.nemat/.ytd refs; it uses engine.assets only
@@ -326,11 +330,13 @@ pub fn semantic_gateway_for_file_type(extension: &str, asset_kind: &str, codec_t
         "ydd" => ENGINE_MODEL_SERVICE_ID.to_owned(),
         "nemat" => ENGINE_MATERIALS_SERVICE_ID.to_owned(),
         "ytyp" => ENGINE_DEFINITIONS_SERVICE_ID.to_owned(),
+        "ymap" => ENGINE_SCENE_SERVICE_ID.to_owned(),
         _ => match asset_kind.trim() {
             "texture_dictionary" | "newengine.asset.texture_dictionary" => ENGINE_TEXTURES_SERVICE_ID.to_owned(),
             "drawable_dictionary" | "newengine.asset.drawable_dictionary" => ENGINE_MODEL_SERVICE_ID.to_owned(),
             "material_library" | "newengine.asset.material_library" => ENGINE_MATERIALS_SERVICE_ID.to_owned(),
             "archetype_dictionary" | "newengine.asset.archetype_dictionary" => ENGINE_DEFINITIONS_SERVICE_ID.to_owned(),
+            "map_definition" | "newengine.asset.map_definition" => ENGINE_SCENE_SERVICE_ID.to_owned(),
             "asset_package" | "newengine.asset.package" => ENGINE_ASSET_SERVICE_ID.to_owned(),
             _ => ENGINE_ASSET_SERVICE_ID.to_owned(),
         },
@@ -347,11 +353,13 @@ pub fn consumer_domains_for_file_type(extension: &str, asset_kind: &str, codec_t
             "ydd" => &[ENGINE_MODEL_SERVICE_ID, ENGINE_MATERIALS_SERVICE_ID, "engine.render"],
             "nemat" => &[ENGINE_MATERIALS_SERVICE_ID, ENGINE_MODEL_SERVICE_ID, "engine.render"],
             "ytyp" => &["engine.scene", ENGINE_MODEL_SERVICE_ID, ENGINE_MATERIALS_SERVICE_ID, "engine.physics", "engine.ai", "engine.editor", "engine.streaming"],
+            "ymap" => &[ENGINE_SCENE_SERVICE_ID, ENGINE_DEFINITIONS_SERVICE_ID, ENGINE_MODEL_SERVICE_ID, ENGINE_MATERIALS_SERVICE_ID, ENGINE_TEXTURES_SERVICE_ID, "engine.physics", "engine.streaming", "engine.editor"],
             _ => match asset_kind.trim() {
                 "texture_dictionary" | "newengine.asset.texture_dictionary" => &[ENGINE_MATERIALS_SERVICE_ID, ENGINE_MODEL_SERVICE_ID, "engine.ui", "engine.render"],
                 "drawable_dictionary" | "newengine.asset.drawable_dictionary" => &[ENGINE_MODEL_SERVICE_ID, ENGINE_MATERIALS_SERVICE_ID, "engine.render"],
                 "material_library" | "newengine.asset.material_library" => &[ENGINE_MATERIALS_SERVICE_ID, ENGINE_MODEL_SERVICE_ID, "engine.render"],
                 "archetype_dictionary" | "newengine.asset.archetype_dictionary" => &["engine.scene", ENGINE_MODEL_SERVICE_ID, ENGINE_MATERIALS_SERVICE_ID, "engine.physics", "engine.ai", "engine.editor", "engine.streaming"],
+                "map_definition" | "newengine.asset.map_definition" => &[ENGINE_SCENE_SERVICE_ID, ENGINE_DEFINITIONS_SERVICE_ID, ENGINE_MODEL_SERVICE_ID, ENGINE_MATERIALS_SERVICE_ID, ENGINE_TEXTURES_SERVICE_ID, "engine.physics", "engine.streaming", "engine.editor"],
                 _ => &[ENGINE_ASSET_SERVICE_ID],
             },
         }

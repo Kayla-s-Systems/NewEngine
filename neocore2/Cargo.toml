@@ -16,6 +16,7 @@ members = [
     "crates/newengine-ecs-api",
     "crates/newengine-ecs-runtime",
     "crates/newengine-engine-runtime",
+    "crates/newengine-definitions-runtime",
     "crates/newengine-entity",
     "crates/newengine-entity-api",
     "crates/newengine-entity-runtime",

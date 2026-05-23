@@ -118,6 +118,8 @@
       <sourceFolder url="file://$MODULE_DIR$/neocore2/crates/newengine-text-api/src" isTestSource="false" />
       <sourceFolder url="file://$MODULE_DIR$/neocore2/crates/newengine-time-api/src" isTestSource="false" />
       <sourceFolder url="file://$MODULE_DIR$/neocore2/crates/newengine-time-runtime/src" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/neocore2/crates/newengine-definitions-runtime/src" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/neocore2/crates/newengine-textures-runtime/src" isTestSource="false" />
       <excludeFolder url="file://$MODULE_DIR$/neocore2/apps/editor/target" />
       <excludeFolder url="file://$MODULE_DIR$/neocore2/target" />
       <excludeFolder url="file://$MODULE_DIR$/neocore2/crates/newengine-sim/target" />

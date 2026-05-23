@@ -139,9 +139,9 @@ impl Default for TimeGameClockV1 {
     fn default() -> Self {
         Self {
             day_index: 0,
-            seconds_of_day: 9.35 * 3600.0,
-            normalized_day: 9.35 / 24.0,
-            seconds_per_game_day: 720.0,
+            seconds_of_day: 0.0,
+            normalized_day: 0.0,
+            seconds_per_game_day: 86_400.0,
             time_scale: 1.0,
         }
     }
@@ -204,7 +204,7 @@ pub struct TimeGameClockSetRequestV1 {
 }
 
 impl Default for TimeGameClockSetRequestV1 {
-    fn default() -> Self { Self { day_index: 0, seconds_of_day: 0.0, seconds_per_game_day: 720.0, time_scale: 1.0 } }
+    fn default() -> Self { Self { day_index: 0, seconds_of_day: 0.0, seconds_per_game_day: 86_400.0, time_scale: 1.0 } }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]

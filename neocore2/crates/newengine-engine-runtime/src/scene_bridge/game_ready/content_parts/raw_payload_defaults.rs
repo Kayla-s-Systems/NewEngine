@@ -16,7 +16,7 @@ impl Default for RawPlayerModelSpec {
     fn default() -> Self {
         Self {
             enabled: default_player_model_enabled(),
-            source: default_player_model_source(),
+            source: String::new(),
             texture_dictionary: default_player_texture_dictionary(),
             skeleton: default_player_skeleton(),
             target_height: default_player_model_height(),

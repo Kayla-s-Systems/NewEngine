@@ -4,13 +4,14 @@ mod content;
 
 use core::f32::consts::TAU;
 
-use newengine_assets::wait_ready;
+use newengine_assets::{wait_ready, AssetServiceClient};
 use newengine_bounds::Bounds;
-use newengine_core::{call_service_v1_optional, JobLane, JobPriority, JobRequest, JobSystemHandle, JobTicket};
+use newengine_core::{call_service_v1, call_service_v1_optional, JobLane, JobPriority, JobRequest, JobSystemHandle, JobTicket};
 use newengine_ecs::EntityId;
 use newengine_lighting::{AmbientLight, DirectionalLight, ShadowSettings};
 use newengine_materials::{MaterialFlags, MaterialId, MaterialRegistry};
-use newengine_math::{EulerRot, Mat4, Quat, Vec3};
+use newengine_plugin_host::default_host_api;
+use newengine_math::{EulerRot, Quat, Vec3};
 use newengine_primitives::{
     fnv1a_64, Primitive, PrimitiveId, PrimitiveMesh, PrimitiveRegistry, PrimitiveVertex,
 };
@@ -33,8 +34,8 @@ use crate::gameplay::{
 use crate::scene_bootstrap::bootstrap_runtime_scene;
 
 use self::content::{
-    load_game_ready_map_profile, GameReadyDefinitionInstanceSpec, GameReadyFoliageSpec,
-    GameReadyGameplaySpec, GameReadyLightingSpec, GameReadyMaterialSetSpec, GameReadyMaterialSpec,
+    load_game_ready_map_profile, GameReadyDayNightSpec, GameReadyDefinitionInstanceSpec, GameReadyFoliageSpec,
+    GameReadyGameplaySpec, GameReadyLightingSpec, GameReadyMapProfile, GameReadyMaterialSetSpec, GameReadyMaterialSpec,
     GameReadyPaletteSpec, GameReadyPrefabSpec, GameReadySkyAtmosphereSpec,
     GameReadySkySpec, GameReadyTerrainSpec,
 };
@@ -43,13 +44,13 @@ use super::helpers::{
 };
 
 include!("game_ready_parts/material_source.rs");
+include!("game_ready_parts/ytyp_metadata.rs");
 include!("game_ready_parts/sky.rs");
 include!("game_ready_parts/materials_terrain.rs");
 include!("game_ready_parts/terrain_streaming.rs");
 include!("game_ready_parts/foliage/types.rs");
 include!("game_ready_parts/foliage/placement.rs");
-include!("game_ready_parts/foliage/prefab_loader.rs");
-include!("game_ready_parts/foliage/gltf_mesh.rs");
+include!("game_ready_parts/foliage/ydd_mesh.rs");
 include!("game_ready_parts/foliage/material_binding.rs");
 include!("game_ready_parts/foliage/diagnostics.rs");
 include!("game_ready_parts/foliage/spawn.rs");
