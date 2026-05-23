@@ -30,38 +30,41 @@ pub const ASSET_BACKEND_CAPABILITY_ID: &str = "asset_manager.backend";
 pub const ASSET_METHOD_PREFIX: &str = "asset.";
 
 /// Semantic texture dictionary runtime gateway id. File-type descriptors route `.ytd`
-/// meaning here. `engine.textures` owns validation, manifest semantics and runtime
+/// meaning here. `engine.assets.textures` owns validation, manifest semantics and runtime
 /// texture packets; `engine.assets` remains the byte/VFS/codec-dispatch owner.
-pub const ENGINE_TEXTURES_SERVICE_ID: &str = "engine.textures";
+pub const ENGINE_ASSETS_TEXTURES_SERVICE_ID: &str = "engine.assets.textures";
 pub const TEXTURES_SERVICE_ID: &str = "textures.api";
-pub const TEXTURES_BACKEND_CAPABILITY_ID: &str = "textures.backend";
-pub const TEXTURES_RUNTIME_CONTRACT: &str = "newengine.textures.runtime.v1";
+pub const TEXTURES_BACKEND_CAPABILITY_ID: &str = "assets.textures.backend";
+pub const TEXTURES_RUNTIME_CONTRACT: &str = "newengine.assets.textures.runtime.v1";
 /// Semantic definition/archetype metadata gateway id. File-type descriptors route
 /// `.ytyp` meaning here; scene/world systems may consume definitions later, but
 /// do not own the file type.
-pub const ENGINE_DEFINITIONS_SERVICE_ID: &str = "engine.definitions";
+pub const ENGINE_ASSETS_DEFINITIONS_SERVICE_ID: &str = "engine.assets.definitions";
 pub const DEFINITIONS_SERVICE_ID: &str = "definitions.api";
-pub const DEFINITIONS_BACKEND_CAPABILITY_ID: &str = "definitions.backend";
-pub const DEFINITIONS_RUNTIME_CONTRACT: &str = "newengine.definitions.runtime.v1";
-pub const ENGINE_MODEL_SERVICE_ID: &str = "engine.model";
-pub const ENGINE_MATERIALS_SERVICE_ID: &str = "engine.materials";
+pub const DEFINITIONS_BACKEND_CAPABILITY_ID: &str = "assets.definitions.backend";
+pub const DEFINITIONS_RUNTIME_CONTRACT: &str = "newengine.assets.definitions.runtime.v1";
+pub const ENGINE_ASSETS_MODELS_SERVICE_ID: &str = "engine.assets.models";
+pub const ENGINE_ASSETS_MATERIALS_SERVICE_ID: &str = "engine.assets.materials";
 /// Semantic authored map/world placement gateway id. `.ymap` owns map composition,
 /// placements and references to `.ytyp` Definition Entries; it does not replace
 /// `.ytyp` as the generic metadata/knowledge source.
+pub const ENGINE_ASSETS_MAPS_SERVICE_ID: &str = "engine.assets.maps";
+
+/// Runtime scene gateway. It consumes resolved map/definition DTOs and mutates the world; it does not own authored map file semantics.
 pub const ENGINE_SCENE_SERVICE_ID: &str = "engine.scene";
 
 /// Semantic asset graph gateway id. This resolver owns declarative dependency
 /// graph expansion over .ytyp/.ydd/.nemat/.ytd refs; it uses engine.assets only
 /// for VFS bytes and codec dispatch.
-pub const ENGINE_ASSET_GRAPH_SERVICE_ID: &str = "engine.asset_graph";
+pub const ENGINE_ASSETS_GRAPH_SERVICE_ID: &str = "engine.assets.graph";
 pub const ASSET_GRAPH_SERVICE_ID: &str = "asset_graph.api";
-pub const ASSET_GRAPH_BACKEND_CAPABILITY_ID: &str = "asset_graph.backend";
-pub const ASSET_GRAPH_RUNTIME_CONTRACT: &str = "newengine.asset_graph.runtime.v1";
+pub const ASSET_GRAPH_BACKEND_CAPABILITY_ID: &str = "assets.graph.backend";
+pub const ASSET_GRAPH_RUNTIME_CONTRACT: &str = "newengine.assets.graph.runtime.v1";
 
 pub mod asset_graph_method {
-    pub const RESOLVE_V1: &str = "asset_graph.resolve_v1";
-    pub const VALIDATE_V1: &str = "asset_graph.validate_v1";
-    pub const DUMP_JSON_V1: &str = "asset_graph.dump_json_v1";
+    pub const RESOLVE_V1: &str = "assets.graph.resolve_v1";
+    pub const VALIDATE_V1: &str = "assets.graph.validate_v1";
+    pub const DUMP_JSON_V1: &str = "assets.graph.dump_json_v1";
 }
 
 pub const ASSET_GRAPH_SERVICE_METHODS: &[&str] = &[
@@ -96,7 +99,7 @@ pub const ASSET_BACKEND_SERVICE_SPEC: newengine_service_api::BackendServiceSpec 
 /// through the AssetManager/VFS gateway.
 pub const ENGINE_ASSET_FILE_TYPES_SERVICE_ID: &str = "engine.assets.file_types";
 pub const ASSET_FILE_TYPES_SERVICE_ID: &str = "asset.file_types.api";
-pub const ASSET_FILE_TYPES_BACKEND_CAPABILITY_ID: &str = "asset.file_types.backend";
+pub const ASSET_FILE_TYPES_BACKEND_CAPABILITY_ID: &str = "assets.file_types.backend";
 
 pub const ASSET_FILE_TYPES_BACKEND_SERVICE_SPEC: newengine_service_api::BackendServiceSpec =
     newengine_service_api::BackendServiceSpec::new(
@@ -200,7 +203,7 @@ pub struct AssetFileTypeDescriptor {
     pub consumer_domains: Vec<String>,
     /// Hex-encoded magic bytes. Required for magic-routed binary codecs, optional
     /// for codecs that deliberately own extension/source-policy routing such as
-    /// `definitionType` legacy XML beside future binary envelopes.
+    /// `definitionType` authored XML beside future binary envelopes.
     pub magic: Option<String>,
     pub outputs: Vec<String>,
     pub priority: i32,
@@ -325,21 +328,20 @@ pub fn semantic_gateway_for_file_type(extension: &str, asset_kind: &str, codec_t
     if codec_type.trim().eq_ignore_ascii_case(codec_type::CONTAINER) || ext == "nepak" {
         return ENGINE_ASSET_SERVICE_ID.to_owned();
     }
-    match ext.as_str() {
-        "ytd" => ENGINE_TEXTURES_SERVICE_ID.to_owned(),
-        "ydd" => ENGINE_MODEL_SERVICE_ID.to_owned(),
-        "nemat" => ENGINE_MATERIALS_SERVICE_ID.to_owned(),
-        "ytyp" => ENGINE_DEFINITIONS_SERVICE_ID.to_owned(),
-        "ymap" => ENGINE_SCENE_SERVICE_ID.to_owned(),
-        _ => match asset_kind.trim() {
-            "texture_dictionary" | "newengine.asset.texture_dictionary" => ENGINE_TEXTURES_SERVICE_ID.to_owned(),
-            "drawable_dictionary" | "newengine.asset.drawable_dictionary" => ENGINE_MODEL_SERVICE_ID.to_owned(),
-            "material_library" | "newengine.asset.material_library" => ENGINE_MATERIALS_SERVICE_ID.to_owned(),
-            "archetype_dictionary" | "newengine.asset.archetype_dictionary" => ENGINE_DEFINITIONS_SERVICE_ID.to_owned(),
-            "map_definition" | "newengine.asset.map_definition" => ENGINE_SCENE_SERVICE_ID.to_owned(),
-            "asset_package" | "newengine.asset.package" => ENGINE_ASSET_SERVICE_ID.to_owned(),
-            _ => ENGINE_ASSET_SERVICE_ID.to_owned(),
-        },
+    if let Some(spec) = list_file_format_spec_for_extension(&ext) {
+        return spec.semantic_gateway.to_owned();
+    }
+    match asset_kind.trim() {
+        "texture_dictionary" | "newengine.asset.texture_dictionary" => ENGINE_ASSETS_TEXTURES_SERVICE_ID.to_owned(),
+        "drawable_dictionary" | "drawable" | "frag_type" | "vehicle_record_list" | "cloth_dictionary" | "newengine.asset.drawable_dictionary" => ENGINE_ASSETS_MODELS_SERVICE_ID.to_owned(),
+        "material_library" | "newengine.asset.material_library" => ENGINE_ASSETS_MATERIALS_SERVICE_ID.to_owned(),
+        "archetype_dictionary" | "metadata" | "unknown_y_file" | "newengine.asset.archetype_dictionary" => ENGINE_ASSETS_DEFINITIONS_SERVICE_ID.to_owned(),
+        "map_data" | "map_definition" | "waypoint_record_list" | "compiled_script" | "newengine.asset.map_definition" => ENGINE_ASSETS_MAPS_SERVICE_ID.to_owned(),
+        "bounds_dictionary" => "engine.assets.models.collisions".to_owned(),
+        "manifest" => ENGINE_ASSETS_GRAPH_SERVICE_ID.to_owned(),
+        "clip_dictionary" | "expression_dictionary" | "frame_filter_dictionary" | "pose_database" => "engine.assets.models.skeletons".to_owned(),
+        "asset_package" | "newengine.asset.package" => ENGINE_ASSET_SERVICE_ID.to_owned(),
+        _ => ENGINE_ASSET_SERVICE_ID.to_owned(),
     }
 }
 
@@ -349,22 +351,67 @@ pub fn consumer_domains_for_file_type(extension: &str, asset_kind: &str, codec_t
         &[ENGINE_ASSET_SERVICE_ID]
     } else {
         match ext.as_str() {
-            "ytd" => &[ENGINE_MATERIALS_SERVICE_ID, ENGINE_MODEL_SERVICE_ID, "engine.ui", "engine.render"],
-            "ydd" => &[ENGINE_MODEL_SERVICE_ID, ENGINE_MATERIALS_SERVICE_ID, "engine.render"],
-            "nemat" => &[ENGINE_MATERIALS_SERVICE_ID, ENGINE_MODEL_SERVICE_ID, "engine.render"],
-            "ytyp" => &["engine.scene", ENGINE_MODEL_SERVICE_ID, ENGINE_MATERIALS_SERVICE_ID, "engine.physics", "engine.ai", "engine.editor", "engine.streaming"],
-            "ymap" => &[ENGINE_SCENE_SERVICE_ID, ENGINE_DEFINITIONS_SERVICE_ID, ENGINE_MODEL_SERVICE_ID, ENGINE_MATERIALS_SERVICE_ID, ENGINE_TEXTURES_SERVICE_ID, "engine.physics", "engine.streaming", "engine.editor"],
+            "ytd" => &[ENGINE_ASSETS_MATERIALS_SERVICE_ID, ENGINE_ASSETS_MODELS_SERVICE_ID, "engine.ui", "engine.render"],
+            "ydd" | "ydr" => &[ENGINE_ASSETS_MODELS_SERVICE_ID, ENGINE_ASSETS_MATERIALS_SERVICE_ID, "engine.render"],
+            "yft" | "yvr" => &[ENGINE_ASSETS_MODELS_SERVICE_ID, "engine.physics", ENGINE_ASSETS_MATERIALS_SERVICE_ID, "engine.render"],
+            "ybn" | "ybd" => &["engine.assets.models.collisions", "engine.physics", ENGINE_ASSETS_MODELS_SERVICE_ID, "engine.scene"],
+            "nemat" => &[ENGINE_ASSETS_MATERIALS_SERVICE_ID, ENGINE_ASSETS_MODELS_SERVICE_ID, "engine.render"],
+            "ytyp" | "ymt" | "ytf" => &[ENGINE_ASSETS_DEFINITIONS_SERVICE_ID, ENGINE_ASSETS_GRAPH_SERVICE_ID, "engine.scene", ENGINE_ASSETS_MODELS_SERVICE_ID, ENGINE_ASSETS_MATERIALS_SERVICE_ID, "engine.physics", "engine.ai", "engine.editor", "engine.streaming"],
+            "ymap" | "ywr" | "ysc" => &[ENGINE_ASSETS_MAPS_SERVICE_ID, ENGINE_SCENE_SERVICE_ID, ENGINE_ASSETS_DEFINITIONS_SERVICE_ID, ENGINE_ASSETS_GRAPH_SERVICE_ID, ENGINE_ASSETS_MODELS_SERVICE_ID, ENGINE_ASSETS_MATERIALS_SERVICE_ID, ENGINE_ASSETS_TEXTURES_SERVICE_ID, "engine.physics", "engine.streaming", "engine.editor"],
+            "ymf" => &[ENGINE_ASSETS_GRAPH_SERVICE_ID, ENGINE_ASSETS_DEFINITIONS_SERVICE_ID, ENGINE_ASSETS_MAPS_SERVICE_ID, ENGINE_SCENE_SERVICE_ID, ENGINE_ASSETS_MODELS_SERVICE_ID, ENGINE_ASSETS_MATERIALS_SERVICE_ID, ENGINE_ASSETS_TEXTURES_SERVICE_ID],
+            "ycd" | "yed" | "yfd" | "yld" | "ypdb" => &["engine.assets.models.skeletons", ENGINE_ASSETS_MODELS_SERVICE_ID, "engine.scene", "engine.render"],
             _ => match asset_kind.trim() {
-                "texture_dictionary" | "newengine.asset.texture_dictionary" => &[ENGINE_MATERIALS_SERVICE_ID, ENGINE_MODEL_SERVICE_ID, "engine.ui", "engine.render"],
-                "drawable_dictionary" | "newengine.asset.drawable_dictionary" => &[ENGINE_MODEL_SERVICE_ID, ENGINE_MATERIALS_SERVICE_ID, "engine.render"],
-                "material_library" | "newengine.asset.material_library" => &[ENGINE_MATERIALS_SERVICE_ID, ENGINE_MODEL_SERVICE_ID, "engine.render"],
-                "archetype_dictionary" | "newengine.asset.archetype_dictionary" => &["engine.scene", ENGINE_MODEL_SERVICE_ID, ENGINE_MATERIALS_SERVICE_ID, "engine.physics", "engine.ai", "engine.editor", "engine.streaming"],
-                "map_definition" | "newengine.asset.map_definition" => &[ENGINE_SCENE_SERVICE_ID, ENGINE_DEFINITIONS_SERVICE_ID, ENGINE_MODEL_SERVICE_ID, ENGINE_MATERIALS_SERVICE_ID, ENGINE_TEXTURES_SERVICE_ID, "engine.physics", "engine.streaming", "engine.editor"],
+                "texture_dictionary" | "newengine.asset.texture_dictionary" => &[ENGINE_ASSETS_MATERIALS_SERVICE_ID, ENGINE_ASSETS_MODELS_SERVICE_ID, "engine.ui", "engine.render"],
+                "drawable_dictionary" | "drawable" | "frag_type" | "vehicle_record_list" | "newengine.asset.drawable_dictionary" => &[ENGINE_ASSETS_MODELS_SERVICE_ID, ENGINE_ASSETS_MATERIALS_SERVICE_ID, "engine.render"],
+                "material_library" | "newengine.asset.material_library" => &[ENGINE_ASSETS_MATERIALS_SERVICE_ID, ENGINE_ASSETS_MODELS_SERVICE_ID, "engine.render"],
+                "archetype_dictionary" | "metadata" | "unknown_y_file" | "newengine.asset.archetype_dictionary" => &[ENGINE_ASSETS_DEFINITIONS_SERVICE_ID, ENGINE_ASSETS_GRAPH_SERVICE_ID, "engine.scene", ENGINE_ASSETS_MODELS_SERVICE_ID, ENGINE_ASSETS_MATERIALS_SERVICE_ID, "engine.physics", "engine.ai", "engine.editor", "engine.streaming"],
+                "map_data" | "map_definition" | "waypoint_record_list" | "compiled_script" | "newengine.asset.map_definition" => &[ENGINE_ASSETS_MAPS_SERVICE_ID, ENGINE_SCENE_SERVICE_ID, ENGINE_ASSETS_DEFINITIONS_SERVICE_ID, ENGINE_ASSETS_GRAPH_SERVICE_ID, ENGINE_ASSETS_MODELS_SERVICE_ID, ENGINE_ASSETS_MATERIALS_SERVICE_ID, ENGINE_ASSETS_TEXTURES_SERVICE_ID, "engine.physics", "engine.streaming", "engine.editor"],
+                "bounds_dictionary" => &["engine.assets.models.collisions", "engine.physics", ENGINE_ASSETS_MODELS_SERVICE_ID, "engine.scene"],
+                "manifest" => &[ENGINE_ASSETS_GRAPH_SERVICE_ID, ENGINE_ASSETS_DEFINITIONS_SERVICE_ID, ENGINE_ASSETS_MAPS_SERVICE_ID, ENGINE_SCENE_SERVICE_ID, ENGINE_ASSETS_MODELS_SERVICE_ID, ENGINE_ASSETS_MATERIALS_SERVICE_ID, ENGINE_ASSETS_TEXTURES_SERVICE_ID],
+                "clip_dictionary" | "expression_dictionary" | "frame_filter_dictionary" | "cloth_dictionary" | "pose_database" => &["engine.assets.models.skeletons", ENGINE_ASSETS_MODELS_SERVICE_ID, "engine.scene", "engine.render"],
                 _ => &[ENGINE_ASSET_SERVICE_ID],
             },
         }
     };
     domains.iter().map(|it| (*it).to_owned()).collect()
+}
+
+pub fn canonical_nef8_file_type_descriptors() -> Vec<AssetFileTypeDescriptor> {
+    LIST_FILE_FORMAT_SPECS
+        .iter()
+        .map(|spec| {
+            let mut descriptor = AssetFileTypeDescriptor {
+                extension: spec.extension.to_owned(),
+                asset_kind: spec.asset_kind.to_owned(),
+                container: format!("newengine.listfile.nef8.{}", spec.extension),
+                codec_type: codec_type::LIST_FILE.to_owned(),
+                byte_owner: ENGINE_ASSET_SERVICE_ID.to_owned(),
+                semantic_gateway: spec.semantic_gateway.to_owned(),
+                gateway: spec.semantic_gateway.to_owned(),
+                handler_service: spec.handler_service.to_owned(),
+                read_method: method::DECODE_V1.to_owned(),
+                selector_syntax: Some(spec.selector_syntax.to_owned()),
+                consumer_domains: consumer_domains_for_file_type(spec.extension, spec.asset_kind, codec_type::LIST_FILE),
+                magic: Some("4e454638".to_owned()),
+                outputs: vec![
+                    ASSET_LIST_FILE_MANIFEST_OUTPUT.to_owned(),
+                    ASSET_LIST_FILE_HEADER_OUTPUT.to_owned(),
+                    ASSET_LIST_FILE_BODY_OUTPUT.to_owned(),
+                    "domain.manifest_json".to_owned(),
+                    "asset.blob".to_owned(),
+                ],
+                priority: -100,
+                vfs_backed: true,
+                runtime_ready: true,
+                allow_nested_assets: false,
+                native_container: true,
+                requires_magic: true,
+                notes: format!("Built-in NEF8/ListFile descriptor from canonical asset-family research: {}", spec.purpose),
+            };
+            descriptor.normalize_layer_contract();
+            descriptor
+        })
+        .collect()
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
@@ -506,33 +553,17 @@ pub mod method {
     // Generic lifecycle hook understood by the plugin host.
     pub const SHUTDOWN_V1: &str = newengine_service_api::SERVICE_METHOD_SHUTDOWN_V1;
 
-    #[cfg(feature = "legacy_asset_api_compat")]
-    pub mod legacy {
-        pub const INFO_JSON: &str = "asset.info_json";
-        pub const STATE_JSON: &str = "asset.state_json";
-        pub const MARK_STATUS_JSON_V1: &str = "asset.mark_status_json_v1";
-        pub const FORMATS_JSON: &str = "asset.formats_json";
-        pub const SOURCES_JSON: &str = "asset.sources_json";
-        pub const VERIFY_ASSETS_JSON: &str = "asset.verify_assets_json";
-        pub const SOURCE_KINDS_JSON: &str = "asset.source_kinds_json";
-        pub const MOUNT_NEPAK: &str = "asset.mount_nepak";
-        pub const MOUNT_DIR: &str = "asset.mount_dir";
-        pub const MOUNT_NEPAK_PRIO: &str = "asset.mount_nepak_prio";
-        pub const MOUNT_DIR_PRIO: &str = "asset.mount_dir_prio";
-        pub const MOUNT_HTTP_PRIO: &str = "asset.mount_http_prio";
-        pub const RESOLVE_TRACE_JSON: &str = "asset.resolve_trace_json";
-    }
 }
 
 pub mod textures_method {
     pub const INFO_JSON: &str = newengine_service_api::SERVICE_METHOD_INFO_JSON;
     pub const INVOKE_JSON: &str = newengine_service_api::SERVICE_METHOD_INVOKE_JSON;
     pub const SHUTDOWN_V1: &str = newengine_service_api::SERVICE_METHOD_SHUTDOWN_V1;
-    pub const MANIFEST_JSON_V1: &str = "textures.manifest_json_v1";
-    pub const ENTRY_RUNTIME_V1: &str = "textures.entry_runtime_v1";
-    pub const ENTRY_RGBA8_V1: &str = "textures.entry_rgba8_v1";
-    pub const VALIDATE_REF_V1: &str = "textures.validate_ref_v1";
-    pub const DESCRIBE_REF_JSON_V1: &str = "textures.describe_ref_json_v1";
+    pub const MANIFEST_JSON_V1: &str = "assets.textures.manifest_v1";
+    pub const ENTRY_RUNTIME_V1: &str = "assets.textures.entry_runtime_v1";
+    pub const ENTRY_RGBA8_V1: &str = "assets.textures.entry_rgba8_v1";
+    pub const VALIDATE_REF_V1: &str = "assets.textures.validate_ref_v1";
+    pub const DESCRIBE_REF_JSON_V1: &str = "assets.textures.describe_ref_json_v1";
 }
 
 pub const TEXTURES_SERVICE_METHODS: &[&str] = &[
@@ -550,11 +581,11 @@ pub mod definitions_method {
     pub const INFO_JSON: &str = newengine_service_api::SERVICE_METHOD_INFO_JSON;
     pub const INVOKE_JSON: &str = newengine_service_api::SERVICE_METHOD_INVOKE_JSON;
     pub const SHUTDOWN_V1: &str = newengine_service_api::SERVICE_METHOD_SHUTDOWN_V1;
-    pub const MANIFEST_JSON_V1: &str = "definitions.manifest_json_v1";
-    pub const ENTRY_JSON_V1: &str = "definitions.entry_json_v1";
-    pub const RESOLVE_REFS_V1: &str = "definitions.resolve_refs_v1";
-    pub const VALIDATE_V1: &str = "definitions.validate_v1";
-    pub const DESCRIBE_SIDE_EFFECTS_V1: &str = "definitions.describe_side_effects_v1";
+    pub const MANIFEST_JSON_V1: &str = "assets.definitions.manifest_v1";
+    pub const ENTRY_JSON_V1: &str = "assets.definitions.entry_v1";
+    pub const RESOLVE_REFS_V1: &str = "assets.definitions.resolve_refs_v1";
+    pub const VALIDATE_V1: &str = "assets.definitions.validate_v1";
+    pub const DESCRIBE_SIDE_EFFECTS_V1: &str = "assets.definitions.describe_side_effects_v1";
 }
 
 pub const DEFINITIONS_SERVICE_METHODS: &[&str] = &[
@@ -570,31 +601,31 @@ pub const DEFINITIONS_SERVICE_METHODS: &[&str] = &[
 
 pub const TEXTURES_BACKEND_SERVICE_SPEC: newengine_service_api::BackendServiceSpec =
     newengine_service_api::BackendServiceSpec::new(
-        "textures",
-        ENGINE_TEXTURES_SERVICE_ID,
+        "assets.textures",
+        ENGINE_ASSETS_TEXTURES_SERVICE_ID,
         TEXTURES_SERVICE_ID,
         TEXTURES_BACKEND_CAPABILITY_ID,
     );
 
 pub const DEFINITIONS_BACKEND_SERVICE_SPEC: newengine_service_api::BackendServiceSpec =
     newengine_service_api::BackendServiceSpec::new(
-        "definitions",
-        ENGINE_DEFINITIONS_SERVICE_ID,
+        "assets.definitions",
+        ENGINE_ASSETS_DEFINITIONS_SERVICE_ID,
         DEFINITIONS_SERVICE_ID,
         DEFINITIONS_BACKEND_CAPABILITY_ID,
     );
 
 pub const ASSET_GRAPH_BACKEND_SERVICE_SPEC: newengine_service_api::BackendServiceSpec =
     newengine_service_api::BackendServiceSpec::new(
-        "asset_graph",
-        ENGINE_ASSET_GRAPH_SERVICE_ID,
+        "assets.graph",
+        ENGINE_ASSETS_GRAPH_SERVICE_ID,
         ASSET_GRAPH_SERVICE_ID,
         ASSET_GRAPH_BACKEND_CAPABILITY_ID,
     );
 
 pub const TEXTURES_RUNTIME_CONTRACT_SPEC: newengine_service_api::RuntimeServiceContractSpec =
     newengine_service_api::RuntimeServiceContractSpec::new(
-        ENGINE_TEXTURES_SERVICE_ID,
+        ENGINE_ASSETS_TEXTURES_SERVICE_ID,
         TEXTURES_RUNTIME_CONTRACT,
         TEXTURES_SERVICE_METHODS,
     );
@@ -608,7 +639,7 @@ pub const TEXTURES_RUNTIME_REQUIREMENT_SPEC: newengine_service_api::RuntimeServi
 
 pub const DEFINITIONS_RUNTIME_CONTRACT_SPEC: newengine_service_api::RuntimeServiceContractSpec =
     newengine_service_api::RuntimeServiceContractSpec::new(
-        ENGINE_DEFINITIONS_SERVICE_ID,
+        ENGINE_ASSETS_DEFINITIONS_SERVICE_ID,
         DEFINITIONS_RUNTIME_CONTRACT,
         DEFINITIONS_SERVICE_METHODS,
     );
@@ -622,7 +653,7 @@ pub const DEFINITIONS_RUNTIME_REQUIREMENT_SPEC: newengine_service_api::RuntimeSe
 
 pub const ASSET_GRAPH_RUNTIME_CONTRACT_SPEC: newengine_service_api::RuntimeServiceContractSpec =
     newengine_service_api::RuntimeServiceContractSpec::new(
-        ENGINE_ASSET_GRAPH_SERVICE_ID,
+        ENGINE_ASSETS_GRAPH_SERVICE_ID,
         ASSET_GRAPH_RUNTIME_CONTRACT,
         ASSET_GRAPH_SERVICE_METHODS,
     );
@@ -1021,10 +1052,10 @@ pub trait AssetAccess {
     /// Select and read a runtime-ready GPU-native texture from a .ytd dictionary.
     fn texture_dictionary_runtime_v1(&self, dictionary_path: &str, texture_name: Option<&str>, texture_hash: Option<u64>) -> Result<RuntimeTextureAsset, String>;
 
-    /// Select and read a runtime-ready RGBA8 texture through semantic `engine.textures` ownership.
+    /// Select and read a runtime-ready RGBA8 texture through semantic `engine.assets.textures` ownership.
     ///
     /// Generic AssetAccess implementors may bridge to the older dictionary methods, but the
-    /// canonical runtime host implementation routes this through `engine.textures.entry_rgba8_v1`.
+    /// canonical runtime host implementation routes this through `engine.assets.assets.textures.entry_rgba8_v1`.
     fn textures_entry_rgba8_v1(&self, texture_ref: &str) -> Result<Rgba8TextureAsset, String> {
         let reference = require_asset_reference_extension(texture_ref, &["ytd"], true)
             .map_err(|e| e.to_string())?;
@@ -1037,10 +1068,10 @@ pub trait AssetAccess {
         self.texture_dictionary_rgba8_v1(&reference.logical_path, texture_name, texture_hash)
     }
 
-    /// Select and read a runtime-ready GPU-native texture through semantic `engine.textures` ownership.
+    /// Select and read a runtime-ready GPU-native texture through semantic `engine.assets.textures` ownership.
     ///
     /// Generic AssetAccess implementors may bridge to the older dictionary methods, but the
-    /// canonical runtime host implementation routes this through `engine.textures.entry_runtime_v1`.
+    /// canonical runtime host implementation routes this through `engine.assets.assets.textures.entry_runtime_v1`.
     fn textures_entry_runtime_v1(&self, texture_ref: &str) -> Result<RuntimeTextureAsset, String> {
         let reference = require_asset_reference_extension(texture_ref, &["ytd"], true)
             .map_err(|e| e.to_string())?;
@@ -1077,86 +1108,6 @@ pub trait AssetService: AssetAccess {
     /// Returns a deterministic trace describing which sources contain the asset.
     fn resolve_trace_json_v1(&self, logical_path: &str) -> Result<serde_json::Value, String>;
 
-    /// Backward-compatible Rust wrappers for legacy Rust callers.
-    ///
-    /// These wrappers are compiled only when `legacy_asset_api_compat` is enabled.
-    /// Strict builds must use explicit `*_v1` methods so the Rust surface mirrors
-    /// the wire-level ABI and cannot hide deprecated entry points.
-    #[cfg(feature = "legacy_asset_api_compat")]
-    #[deprecated(note = "use info_json_v1")]
-    #[inline]
-    fn info_json(&self, logical_path: &str) -> Result<serde_json::Value, String> {
-        self.info_json_v1(logical_path)
-    }
-
-    #[cfg(feature = "legacy_asset_api_compat")]
-    #[deprecated(note = "use formats_json_v1")]
-    #[inline]
-    fn formats_json(&self) -> Result<serde_json::Value, String> {
-        self.formats_json_v1()
-    }
-
-    #[cfg(feature = "legacy_asset_api_compat")]
-    #[deprecated(note = "use sources_json_v1")]
-    #[inline]
-    fn sources_json(&self) -> Result<serde_json::Value, String> {
-        self.sources_json_v1()
-    }
-
-    #[cfg(feature = "legacy_asset_api_compat")]
-    #[deprecated(note = "use mount_source_json_v1")]
-    #[inline]
-    fn mount_nepak(&self, path_to_nepak: &str) -> Result<(), String> {
-        self.mount_source_json_v1(serde_json::json!({
-            "kind": "nepak",
-            "priority": 100,
-            "mount": "",
-            "config": { "path": path_to_nepak }
-        }))
-    }
-
-    #[cfg(feature = "legacy_asset_api_compat")]
-    #[deprecated(note = "use mount_source_json_v1")]
-    #[inline]
-    fn mount_dir(&self, path_to_dir: &str) -> Result<(), String> {
-        self.mount_source_json_v1(serde_json::json!({
-            "kind": "filesystem",
-            "priority": 200,
-            "mount": "",
-            "config": { "root": path_to_dir }
-        }))
-    }
-
-    #[cfg(feature = "legacy_asset_api_compat")]
-    #[deprecated(note = "use mount_source_json_v1")]
-    #[inline]
-    fn mount_nepak_prio(&self, path_to_nepak: &str, priority: i32) -> Result<(), String> {
-        self.mount_source_json_v1(serde_json::json!({
-            "kind": "nepak",
-            "priority": priority,
-            "mount": "",
-            "config": { "path": path_to_nepak }
-        }))
-    }
-
-    #[cfg(feature = "legacy_asset_api_compat")]
-    #[deprecated(note = "use mount_source_json_v1")]
-    #[inline]
-    fn mount_dir_prio(&self, path_to_dir: &str, priority: i32) -> Result<(), String> {
-        self.mount_source_json_v1(serde_json::json!({
-            "kind": "filesystem",
-            "priority": priority,
-            "mount": "",
-            "config": { "root": path_to_dir }
-        }))
-    }
-
-    #[cfg(feature = "legacy_asset_api_compat")]
-    #[deprecated(note = "use resolve_trace_json_v1")]
-    #[inline]
-    fn resolve_trace_json(&self, logical_path: &str) -> Result<serde_json::Value, String> {
-        self.resolve_trace_json_v1(logical_path)
-    }
 
 }
 
@@ -1207,11 +1158,27 @@ mod file_type_layer_contract_tests {
 
     #[test]
     fn canonical_semantic_gateways_are_not_asset_bucket() {
-        assert_eq!(semantic_gateway_for_file_type("ytd", "texture_dictionary", codec_type::LIST_FILE), ENGINE_TEXTURES_SERVICE_ID);
-        assert_eq!(semantic_gateway_for_file_type("ydd", "drawable_dictionary", codec_type::LIST_FILE), ENGINE_MODEL_SERVICE_ID);
-        assert_eq!(semantic_gateway_for_file_type("nemat", "material_library", codec_type::LIST_FILE), ENGINE_MATERIALS_SERVICE_ID);
-        assert_eq!(semantic_gateway_for_file_type("ytyp", "archetype_dictionary", codec_type::LIST_FILE), ENGINE_DEFINITIONS_SERVICE_ID);
+        assert_eq!(semantic_gateway_for_file_type("ytd", "texture_dictionary", codec_type::LIST_FILE), ENGINE_ASSETS_TEXTURES_SERVICE_ID);
+        assert_eq!(semantic_gateway_for_file_type("ydd", "drawable_dictionary", codec_type::LIST_FILE), ENGINE_ASSETS_MODELS_SERVICE_ID);
+        assert_eq!(semantic_gateway_for_file_type("nemat", "material_library", codec_type::LIST_FILE), ENGINE_ASSETS_MATERIALS_SERVICE_ID);
+        assert_eq!(semantic_gateway_for_file_type("ytyp", "archetype_dictionary", codec_type::LIST_FILE), ENGINE_ASSETS_DEFINITIONS_SERVICE_ID);
+        assert_eq!(semantic_gateway_for_file_type("ymap", "map_data", codec_type::LIST_FILE), ENGINE_ASSETS_MAPS_SERVICE_ID);
+        assert_eq!(semantic_gateway_for_file_type("ybn", "bounds_dictionary", codec_type::LIST_FILE), "engine.assets.models.collisions");
         assert_eq!(semantic_gateway_for_file_type("nepak", "asset_package", codec_type::CONTAINER), ENGINE_ASSET_SERVICE_ID);
+    }
+
+    #[test]
+    fn canonical_nef8_descriptors_cover_researched_y_formats() {
+        let descriptors = canonical_nef8_file_type_descriptors();
+        assert!(descriptors.iter().any(|it| it.extension == "ytd" && it.semantic_gateway == ENGINE_ASSETS_TEXTURES_SERVICE_ID));
+        assert!(descriptors.iter().any(|it| it.extension == "ymap" && it.semantic_gateway == ENGINE_ASSETS_MAPS_SERVICE_ID));
+        assert!(descriptors.iter().any(|it| it.extension == "ysc" && it.asset_kind == "compiled_script"));
+        assert!(descriptors.iter().any(|it| it.extension == "ypdb" && it.selector_syntax.as_deref() == Some("file.ypdb@entry")));
+        assert_eq!(descriptors.len(), LIST_FILE_FORMAT_SPECS.len());
+        for descriptor in descriptors {
+            assert_eq!(descriptor.byte_owner, ENGINE_ASSET_SERVICE_ID);
+            assert!(descriptor.validate_generic_rules().is_ok(), "descriptor .{} invalid", descriptor.extension);
+        }
     }
 
     #[test]
@@ -1226,9 +1193,9 @@ mod file_type_layer_contract_tests {
         };
         ytd.normalize_layer_contract();
         assert_eq!(ytd.byte_owner, ENGINE_ASSET_SERVICE_ID);
-        assert_eq!(ytd.semantic_gateway, ENGINE_TEXTURES_SERVICE_ID);
-        assert_eq!(ytd.gateway, ENGINE_TEXTURES_SERVICE_ID);
-        assert!(ytd.consumer_domains.iter().any(|it| it == ENGINE_MATERIALS_SERVICE_ID));
+        assert_eq!(ytd.semantic_gateway, ENGINE_ASSETS_TEXTURES_SERVICE_ID);
+        assert_eq!(ytd.gateway, ENGINE_ASSETS_TEXTURES_SERVICE_ID);
+        assert!(ytd.consumer_domains.iter().any(|it| it == ENGINE_ASSETS_MATERIALS_SERVICE_ID));
         assert!(ytd.validate_generic_rules().is_ok());
     }
 }

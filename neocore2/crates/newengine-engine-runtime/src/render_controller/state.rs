@@ -2,7 +2,7 @@
 
 use newengine_camera_contracts::CameraFrameSnapshot;
 use newengine_core::host_events::CursorState;
-use newengine_core::render::{Extent2D, RenderTargetId, SamplerId, TextureId};
+use newengine_core::render::{Extent2D, RenderHardwareTier, RenderTargetId, SamplerId, TextureId};
 use newengine_math::collections::FxHashMap;
 use std::collections::VecDeque;
 use std::sync::Arc;
@@ -102,6 +102,7 @@ pub(super) struct RenderViewportState {
 /// Runtime profile state resolved from declarative host/plugin config.
 pub(super) struct RenderRuntimeProfileState {
     pub(super) profile: RenderRuntimeProfile,
+    applied_hardware_tier: Option<RenderHardwareTier>,
 }
 
 impl RenderRuntimeProfileState {
@@ -109,7 +110,27 @@ impl RenderRuntimeProfileState {
     pub(super) fn new() -> Self {
         Self {
             profile: RenderRuntimeProfile::load(),
+            applied_hardware_tier: None,
         }
+    }
+
+    pub(super) fn apply_hardware_tier_once(&mut self, tier: RenderHardwareTier) {
+        if self.applied_hardware_tier == Some(tier) || tier == RenderHardwareTier::Unknown {
+            return;
+        }
+        self.profile.apply_hardware_tier(tier);
+        self.applied_hardware_tier = Some(tier);
+        log::info!(
+            "render runtime profile: resolved hardware_tier={:?} effective_profile='{}' gpu_safe={} shadows={} hdr={} postfx={} deferred={} terrain_streaming={}",
+            tier,
+            self.profile.id,
+            self.profile.gpu_safe_enabled(),
+            self.profile.shadows_enabled(),
+            self.profile.hdr_scene_enabled(),
+            self.profile.postfx_enabled(),
+            self.profile.deferred_enabled(),
+            self.profile.use_runtime_terrain_streaming(),
+        );
     }
 }
 

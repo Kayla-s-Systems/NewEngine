@@ -12,4 +12,3 @@ newengine-service-api = { path = "../newengine-service-api" }
 
 [features]
 default = []
-legacy_asset_api_compat = []

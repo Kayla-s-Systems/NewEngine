@@ -1,0 +1,9 @@
+[package]
+name = "newengine-authored-xml"
+version = "0.1.0"
+edition = "2021"
+description = "Central authored XML parsing, formatting and tooling helpers for NewEngine NEF8/ListFile metadata bodies"
+
+[dependencies]
+roxmltree = "0.21.1"
+serde_json = "1"

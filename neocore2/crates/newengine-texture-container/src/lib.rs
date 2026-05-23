@@ -1,12 +1,12 @@
 #![forbid(unsafe_op_in_unsafe_fn)]
 
-//! NewEngine Texture Dictionary container payload (`.ytd`; legacy `.neytd` cache files may still be migrated).
+//! NewEngine Texture Dictionary container payload for canonical `.ytd` assets.
 //!
 //! The runtime format is a binary texture dictionary: fixed header, binary
 //! directory and runtime-ready mip payloads. Runtime material dictionaries are GPU-native:
 //! BC1/BC3/BC5/BC7 entries store complete mip chains directly in the data region so the
 //! renderer can upload compressed blocks without CPU-side image decompression. RGBA8 remains
-//! supported for UI/editor and migration compatibility. `.ytd` never stores raw source-image
+//! supported for UI/editor tooling. `.ytd` never stores raw source-image
 //! paths, authoring provenance or JSON directory data.
 
 pub mod binary_directory;
@@ -28,7 +28,7 @@ pub use storage::{TextureBuildOptions, TextureDataCompression, FLAG_DATA_RAW, FL
 pub use bcn::{decode_bcn_to_rgba8, encode_rgba8_mips_to_bcn, infer_bcn_format, BcnEncodeError};
 pub use dds::{write_dds_rgba8, write_dds_rgba8_mip_chain, write_dds_runtime_mip_chain, DdsExportError};
 pub use format::{is_block_compressed_format, is_rgba8_format, parse_pixel_format, texture_payload_len, TexturePixelFormat};
-pub use dictionary::{parse, TextureDictionary, TextureEntryView};
+pub use dictionary::{parse, parse_manifest_only, TextureDictionary, TextureEntryView};
 pub use error::{Result, TextureContainerError};
 pub use header::HeaderV2;
 pub use manifest::{TextureDictionaryManifest, TextureEntryMeta, TextureMipMeta};

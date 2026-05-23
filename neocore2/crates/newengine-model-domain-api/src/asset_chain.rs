@@ -82,18 +82,17 @@ pub const ROLE_ASSET_PACKAGE: &str = "asset_package";
 
 /// Public authored chain: `.ytyp -> .ydd -> .nemat -> .ytd`.
 ///
-/// `.neytd` is intentionally not present here and is not kept as a public alias.
 pub const MODEL_ASSET_CHAIN_ROLES: &[ModelAssetChainRoleSpec] = &[
     ModelAssetChainRoleSpec {
         role: ROLE_DEFINITION_ENTRIES,
         extension: OBJECT_TYPE_DEFINITIONS_EXTENSION,
         asset_kind: OBJECT_TYPE_DEFINITIONS_ASSET_KIND,
         source_container: OBJECT_TYPE_DEFINITIONS_CONTAINER,
-        codec_service: "asset.codec.listfile.ytyp",
-        primary_output: "definitions.manifest_json_v1",
+        codec_service: "definitions.api",
+        primary_output: "assets.definitions.manifest_v1",
         runtime_ready: true,
         runtime_container: None,
-        description: "NEF8 ListFile Definition Entries / archetype metadata. Declares drawable, texture, physics, bounds and LOD metadata.",
+        description: "Definition Entries / archetype metadata served by engine.assets.definitions. NEF8 ListFile supplies only envelope/body bytes; semantic projection declares drawable, texture, physics, bounds and LOD metadata.",
     },
     ModelAssetChainRoleSpec {
         role: ROLE_DRAWABLE_DICTIONARY,
@@ -145,10 +144,7 @@ pub const MODEL_ASSET_PACKAGE_ROLES: &[ModelAssetChainRoleSpec] = &[
     },
 ];
 
-/// No legacy asset roles are part of the target model chain.
-///
-/// The project is still early, so old compatibility roles are intentionally not
-/// kept as aliases in the public contract.
+/// No non-canonical asset roles are part of the target model chain.
 pub const MODEL_LEGACY_ASSET_ROLES: &[ModelAssetChainRoleSpec] = &[];
 
 #[inline]
@@ -162,7 +158,7 @@ pub fn model_asset_package_roles() -> Vec<ModelAssetChainRole> {
 }
 
 #[inline]
-pub fn model_legacy_asset_roles() -> Vec<ModelAssetChainRole> {
+pub fn model_previous_asset_roles() -> Vec<ModelAssetChainRole> {
     MODEL_LEGACY_ASSET_ROLES.iter().map(ModelAssetChainRole::from).collect()
 }
 
@@ -185,7 +181,7 @@ pub fn model_asset_chain_role_by_kind(asset_kind: &str) -> Option<&'static Model
 }
 
 #[inline]
-pub fn model_legacy_asset_role_by_extension(extension: &str) -> Option<&'static ModelAssetChainRoleSpec> {
+pub fn model_previous_asset_role_by_extension(extension: &str) -> Option<&'static ModelAssetChainRoleSpec> {
     let ext = extension.trim().trim_start_matches('.');
     MODEL_LEGACY_ASSET_ROLES.iter().find(|role| role.extension.eq_ignore_ascii_case(ext))
 }
@@ -196,7 +192,7 @@ pub struct ModelAssetChainManifest {
     pub schema: String,
     pub roles: Vec<ModelAssetChainRole>,
     pub package_roles: Vec<ModelAssetChainRole>,
-    pub legacy_roles: Vec<ModelAssetChainRole>,
+    pub previous_roles: Vec<ModelAssetChainRole>,
     pub authored_chain: Vec<String>,
     pub notes: Vec<String>,
 }
@@ -204,15 +200,15 @@ pub struct ModelAssetChainManifest {
 impl Default for ModelAssetChainManifest {
     fn default() -> Self {
         Self {
-            schema: "newengine.model.asset_chain.v2".to_owned(),
+            schema: "newengine.assets.models.asset_chain.v2".to_owned(),
             roles: model_asset_chain_roles(),
             package_roles: model_asset_package_roles(),
-            legacy_roles: Vec::new(),
+            previous_roles: Vec::new(),
             authored_chain: vec!["ytyp".to_owned(), "ydd".to_owned(), "nemat".to_owned(), "ytd".to_owned()],
             notes: vec![
                 "ListFile implementers keep their extensions (.ytyp/.ydd/.ytd/.nemat) but share NEF8 as top-level magic.".to_owned(),
                 ".nepak is a separate package/VFS delivery container, not a NEF8 ListFile.".to_owned(),
-                "Data-driven runtime should consume dependency graphs resolved from engine.definitions and engine.asset_graph.".to_owned(),
+                "Data-driven runtime should consume dependency graphs resolved from engine.assets.definitions and engine.assets.graph.".to_owned(),
             ],
         }
     }

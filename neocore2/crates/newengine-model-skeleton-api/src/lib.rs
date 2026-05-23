@@ -3,7 +3,7 @@
 //! Skeleton metadata contracts used by model construction services.
 //!
 //! This crate is intentionally DTO-only. Format probes and fallback derivation
-//! live in provider/runtime crates such as `newengine-model-skeleton-rsc7`.
+//! live in provider/runtime crates that consume NEF8 metadata dictionaries.
 
 use serde::{Deserialize, Serialize};
 

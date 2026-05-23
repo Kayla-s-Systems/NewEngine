@@ -122,7 +122,7 @@ pub struct TextureDesc {
     pub mip_levels: NonZeroU32,
     pub data: Option<Vec<u8>>,
     /// Optional byte layout for payloads that already contain a complete runtime mip chain.
-    /// Empty layout means legacy base-level upload followed by backend mip generation.
+    /// Empty layout means base-level upload followed by backend mip generation.
     #[serde(default)]
     pub mip_data: Vec<TextureMipDataDesc>,
     #[serde(default)]

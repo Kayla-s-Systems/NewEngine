@@ -8,15 +8,15 @@ use crate::{
     ROLE_MATERIAL_LIBRARY, ROLE_TEXTURE_DICTIONARY, TEXTURE_DICTIONARY_ASSET_KIND,
 };
 
-pub const ASSET_GRAPH_SCHEMA: &str = "newengine.asset_graph.resolved.v2";
+pub const ASSET_GRAPH_SCHEMA: &str = "newengine.assets.graph.resolved.v2";
 pub const ASSET_GRAPH_RESOLVED_SCHEMA_V1: &str = ASSET_GRAPH_SCHEMA;
 pub const ASSET_GRAPH_RESOLVED_SCHEMA_V2: &str = ASSET_GRAPH_SCHEMA;
-pub const ENGINE_ASSET_GRAPH_SERVICE_ID: &str = "engine.asset_graph";
+pub const ENGINE_ASSETS_GRAPH_SERVICE_ID: &str = "engine.assets.graph";
 pub const ASSET_GRAPH_SERVICE_ID: &str = "asset_graph.api";
-pub const ASSET_GRAPH_BACKEND_CAPABILITY_ID: &str = "asset_graph.backend";
-pub const ASSET_GRAPH_METHOD_RESOLVE_V1: &str = "asset_graph.resolve_v1";
-pub const ASSET_GRAPH_METHOD_VALIDATE_V1: &str = "asset_graph.validate_v1";
-pub const ASSET_GRAPH_METHOD_DUMP_JSON_V1: &str = "asset_graph.dump_json_v1";
+pub const ASSET_GRAPH_BACKEND_CAPABILITY_ID: &str = "assets.graph.backend";
+pub const ASSET_GRAPH_METHOD_RESOLVE_V1: &str = "assets.graph.resolve_v1";
+pub const ASSET_GRAPH_METHOD_VALIDATE_V1: &str = "assets.graph.validate_v1";
+pub const ASSET_GRAPH_METHOD_DUMP_JSON_V1: &str = "assets.graph.dump_json_v1";
 pub const ASSET_GRAPH_METHODS: &[&str] = &[
     newengine_service_api::SERVICE_METHOD_INFO_JSON,
     newengine_service_api::SERVICE_METHOD_INVOKE_JSON,
@@ -30,20 +30,14 @@ pub const ASSET_GRAPH_METHODS: &[&str] = &[
 #[serde(default)]
 pub struct AssetGraphResolveRequest {
     pub root_ref: String,
-    /// Compatibility request field used by old callers that only knew `source`.
-    /// The public graph contract is `root_ref`; this field is not a model API.
-    pub source: String,
 }
 impl Default for AssetGraphResolveRequest {
-    fn default() -> Self { Self { root_ref: String::new(), source: String::new() } }
+    fn default() -> Self { Self { root_ref: String::new() } }
 }
 
 impl AssetGraphResolveRequest {
     #[inline]
-    pub fn root(&self) -> &str {
-        let root = self.root_ref.trim();
-        if root.is_empty() { self.source.trim() } else { root }
-    }
+    pub fn root(&self) -> &str { self.root_ref.trim() }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -157,7 +151,6 @@ impl Default for AssetGraphEdge {
 pub struct ResolvedAssetGraphV1 {
     pub schema: String,
     pub root_ref: String,
-    /// Compatibility projection for older graph readers.
     pub source: String,
     pub nodes: Vec<AssetGraphNode>,
     pub edges: Vec<AssetGraphEdge>,
@@ -214,7 +207,7 @@ pub struct AssetGraphResolver;
 
 impl AssetGraphResolver {
     /// Classification-only resolver kept for dry-run tests and callers that cannot
-    /// access `engine.assets`. Runtime `engine.asset_graph` hydrates this graph by
+    /// access `engine.assets`. Runtime `engine.assets.graph` hydrates this graph by
     /// calling semantic gateways and attaching VFS/hash diagnostics.
     pub fn resolve_root_ref(root_ref: &str) -> ResolvedAssetGraphV2 {
         let root_ref = normalize_asset_ref(root_ref);
@@ -224,11 +217,11 @@ impl AssetGraphResolver {
             cache_key_parts: cache_key_parts_for_ref(&root_ref),
             ..Default::default()
         };
-        graph.debug_log.push(format!("asset_graph.resolve_v1: begin root_ref='{root_ref}' mode='classification-only'"));
+        graph.debug_log.push(format!("assets.graph.resolve_v1: begin root_ref='{root_ref}' mode='classification-only'"));
         let (role, kind, gateway, handler) = classify_ref(&root_ref);
         push_node(&mut graph, &root_ref, role, kind, gateway, handler);
         finalize_graph(&mut graph);
-        graph.debug_log.push(format!("asset_graph.resolve_v1: root classified role='{role}' semantic_gateway='{gateway}'"));
+        graph.debug_log.push(format!("assets.graph.resolve_v1: root classified role='{role}' semantic_gateway='{gateway}'"));
         graph
     }
 
@@ -240,20 +233,20 @@ impl AssetGraphResolver {
             cache_key_parts: cache_key_parts_for_ref(root),
             ..Default::default()
         };
-        graph.debug_log.push(format!("asset_graph.resolve_v1: begin construction_plan source='{root}' objects={}", plan.objects.len()));
+        graph.debug_log.push(format!("assets.graph.resolve_v1: begin construction_plan source='{root}' objects={}", plan.objects.len()));
         for object in &plan.objects {
             let definition_ref = normalize_asset_ref(&object.definition.logical_path);
-            push_node(&mut graph, &definition_ref, ROLE_DEFINITION_ENTRIES, &object.definition.asset_kind, "engine.definitions", "definitions.api");
+            push_node(&mut graph, &definition_ref, ROLE_DEFINITION_ENTRIES, &object.definition.asset_kind, "engine.assets.definitions", "definitions.api");
             if let Some(drawable) = object.drawable.as_ref() {
                 let drawable_ref = normalize_asset_ref(&drawable.logical_path);
-                push_node(&mut graph, &drawable_ref, ROLE_DRAWABLE_DICTIONARY, &drawable.asset_kind, "engine.model", "model.api");
+                push_node(&mut graph, &drawable_ref, ROLE_DRAWABLE_DICTIONARY, &drawable.asset_kind, "engine.assets.models", "model.api");
                 push_edge(&mut graph, &definition_ref, &drawable_ref, ROLE_DRAWABLE_DICTIONARY, drawable.required);
             } else {
                 graph.missing_refs.push(format!("{}: missing drawable dictionary", object.name));
             }
             if let Some(texture_dictionary) = object.texture_dictionary.as_ref() {
                 let texture_ref = normalize_asset_ref(&texture_dictionary.logical_path);
-                push_node(&mut graph, &texture_ref, ROLE_TEXTURE_DICTIONARY, &texture_dictionary.asset_kind, "engine.textures", "textures.api");
+                push_node(&mut graph, &texture_ref, ROLE_TEXTURE_DICTIONARY, &texture_dictionary.asset_kind, "engine.assets.textures", "textures.api");
                 push_edge(&mut graph, &definition_ref, &texture_ref, ROLE_TEXTURE_DICTIONARY, texture_dictionary.required);
             } else {
                 graph.missing_refs.push(format!("{}: missing texture dictionary", object.name));
@@ -269,14 +262,14 @@ impl AssetGraphResolver {
                     continue;
                 }
                 let material_ref = normalize_asset_ref(&slot.material);
-                push_node(&mut graph, &material_ref, ROLE_MATERIAL_LIBRARY, MATERIAL_LIBRARY_ASSET_KIND, "engine.materials", "materials.api");
+                push_node(&mut graph, &material_ref, ROLE_MATERIAL_LIBRARY, MATERIAL_LIBRARY_ASSET_KIND, "engine.assets.materials", "materials.api");
                 if let Some(drawable) = object.drawable.as_ref() {
                     push_edge(&mut graph, &drawable.logical_path, &material_ref, &format!("material_slot/{}", slot.slot), true);
                 } else {
                     push_edge(&mut graph, &definition_ref, &material_ref, &format!("material_slot/{}", slot.slot), true);
                 }
             }
-            graph.debug_log.push(format!("asset_graph.resolve_v1: object='{}' graph nodes={} edges={}", object.name, graph.nodes.len(), graph.edges.len()));
+            graph.debug_log.push(format!("assets.graph.resolve_v1: object='{}' graph nodes={} edges={}", object.name, graph.nodes.len(), graph.edges.len()));
         }
         for warning in &plan.warnings {
             if warning.to_ascii_lowercase().contains("neytd") {
@@ -399,7 +392,7 @@ pub fn finalize_graph(graph: &mut ResolvedAssetGraphV2) {
         graph.cache_key_parts.content_hash = root.content_hash.clone();
     }
     graph.stable_cache_key = stable_graph_cache_key(graph);
-    graph.debug_log.push(format!("asset_graph.resolve_v1: finalized schema='{}' nodes={} edges={} missing={} cycles={} cache_key='{}'", graph.schema, graph.nodes.len(), graph.edges.len(), graph.missing_refs.len(), graph.cycle_errors.len(), graph.stable_cache_key));
+    graph.debug_log.push(format!("assets.graph.resolve_v1: finalized schema='{}' nodes={} edges={} missing={} cycles={} cache_key='{}'", graph.schema, graph.nodes.len(), graph.edges.len(), graph.missing_refs.len(), graph.cycle_errors.len(), graph.stable_cache_key));
 }
 
 fn push_node(graph: &mut ResolvedAssetGraphV2, reference: &str, role: &str, asset_kind: &str, semantic_gateway: &str, handler_service: &str) {
@@ -445,14 +438,23 @@ fn classify_ref(reference: &str) -> (&'static str, &'static str, &'static str, &
     let (path, _) = split_ref(reference);
     let ext = path.rsplit_once('.').map(|(_, ext)| ext.to_ascii_lowercase()).unwrap_or_default();
     match ext.as_str() {
-        "ytyp" => (ROLE_DEFINITION_ENTRIES, OBJECT_TYPE_DEFINITIONS_ASSET_KIND, "engine.definitions", "definitions.api"),
-        "ydd" => (ROLE_DRAWABLE_DICTIONARY, DRAWABLE_DICTIONARY_ASSET_KIND, "engine.model", "model.api"),
-        "nemat" => (ROLE_MATERIAL_LIBRARY, MATERIAL_LIBRARY_ASSET_KIND, "engine.materials", "materials.api"),
-        "ytd" => (ROLE_TEXTURE_DICTIONARY, TEXTURE_DICTIONARY_ASSET_KIND, "engine.textures", "textures.api"),
-        "ybn" | "ycol" => ("physics_dictionary", "physics_dictionary", "engine.physics", "physics.api"),
+        "ytyp" => (ROLE_DEFINITION_ENTRIES, OBJECT_TYPE_DEFINITIONS_ASSET_KIND, "engine.assets.definitions", "definitions.api"),
+        "ydd" => (ROLE_DRAWABLE_DICTIONARY, DRAWABLE_DICTIONARY_ASSET_KIND, "engine.assets.models", "model.api"),
+        "nemat" => (ROLE_MATERIAL_LIBRARY, MATERIAL_LIBRARY_ASSET_KIND, "engine.assets.materials", "materials.api"),
+        "ytd" => (ROLE_TEXTURE_DICTIONARY, TEXTURE_DICTIONARY_ASSET_KIND, "engine.assets.textures", "textures.api"),
+        "ymap" => ("map_data", "map_data", "engine.assets.maps", "maps.api"),
+        "ybn" | "ybd" | "ycol" => ("physics_dictionary", "physics_dictionary", "engine.assets.models.collisions", "model.collisions.api"),
+        "ydr" | "yft" | "yvr" | "yld" => ("model_dependency", "model_dependency", "engine.assets.models", "model.api"),
+        "ycd" | "yed" | "yfd" | "ypdb" => ("skeleton_animation_dependency", "skeleton_animation_dependency", "engine.assets.models", "model.api"),
+        "ymf" => ("asset_manifest", "asset_manifest", "engine.assets.graph", "asset_graph.api"),
+        "ymt" | "ytf" => ("metadata", "metadata", "engine.assets.definitions", "definitions.api"),
+        "ywr" | "ysc" => ("scene_dependency", "scene_dependency", "engine.assets.maps", "maps.api"),
         "nebrain" => ("ai_brain", "ai_brain_dictionary", "engine.ai", "ai.api"),
+        "negoal" => ("ai_goal", "ai_goal_dictionary", "engine.ai", "ai.api"),
+        "nebt" | "nebehavior" => ("ai_behavior_tree", "ai_behavior_tree", "engine.ai", "ai.api"),
+        "neutility" => ("ai_utility", "ai_utility_dictionary", "engine.ai", "ai.api"),
+        "nebb" | "nemem" => ("ai_blackboard", "ai_blackboard_schema", "engine.ai", "ai.api"),
         "nepat" => ("ai_pattern", "ai_pattern_dictionary", "engine.ai", "ai.api"),
-        "nemem" => ("ai_memory", "ai_memory_dictionary", "engine.ai", "ai.api"),
         _ => ("asset", "unknown", "engine.assets", "asset_manager.api"),
     }
 }
@@ -572,7 +574,7 @@ mod tests {
     fn root_ref_classifies_ytyp_as_definitions_not_scene() {
         let graph = AssetGraphResolver::resolve_root_ref("world/foo.ytyp@bar");
         let root = graph.nodes.iter().find(|node| node.reference == "world/foo.ytyp@bar").unwrap();
-        assert_eq!(root.semantic_gateway, "engine.definitions");
+        assert_eq!(root.semantic_gateway, "engine.assets.definitions");
         assert_ne!(root.semantic_gateway, "engine.scene");
         assert_eq!(root.role, ROLE_DEFINITION_ENTRIES);
         assert_eq!(root.byte_owner, "engine.assets");
@@ -592,7 +594,7 @@ mod tests {
         };
         let graph = AssetGraphResolver::resolve_construction_plan(&plan);
         assert!(graph.edges.iter().any(|edge| edge.kind == ROLE_DRAWABLE_DICTIONARY));
-        assert!(graph.debug_log.iter().any(|line| line.contains("asset_graph.resolve_v1")));
+        assert!(graph.debug_log.iter().any(|line| line.contains("assets.graph.resolve_v1")));
     }
 
     #[test]

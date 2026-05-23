@@ -51,7 +51,7 @@ impl SceneCellCoord {
     }
 }
 
-/// Simple radius/budget contract retained for compatibility with older scene profiles.
+/// Simple radius/budget contract kept as the compact radius/budget contract for scene profiles.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct SceneStreamingBudget {
     pub resident_radius: i32,

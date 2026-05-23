@@ -90,6 +90,76 @@ impl<'a> TextureDictionary<'a> {
     }
 }
 
+
+/// Parse only the texture dictionary header + directory manifest.
+///
+/// This is the fast metadata path used by AssetBrowser, material validation and
+/// launch-gate dependency checks. It deliberately does not inflate/decode the
+/// texture data region. Runtime texture packet selection still uses `parse()` so
+/// payload validation and GPU upload bytes remain strict.
+pub fn parse_manifest_only(bytes: &[u8]) -> Result<TextureDictionaryManifest> {
+    let header = HeaderV2::parse(bytes)?;
+    header.validate_runtime_flags()?;
+
+    let dir = slice_checked(bytes, header.directory_offset, header.directory_len).map_err(|_| TextureContainerError::InvalidRange {
+        what: "directory",
+        offset: header.directory_offset,
+        len: header.directory_len,
+        total: bytes.len(),
+    })?;
+    if !binary_directory::sniff(dir) {
+        return Err(TextureContainerError::InvalidDirectory("texture dictionary V2 requires binary directory NTDX; JSON directories are not accepted"));
+    }
+    let manifest = binary_directory::decode(dir)?;
+    validate_manifest_directory_only(header, &manifest, bytes.len())?;
+    Ok(manifest)
+}
+
+fn validate_manifest_directory_only(header: HeaderV2, manifest: &TextureDictionaryManifest, file_total_len: usize) -> Result<()> {
+    if header.entry_count as usize != manifest.entries.len() {
+        return Err(TextureContainerError::EntryCountMismatch { header: header.entry_count, directory: manifest.entries.len() });
+    }
+
+    let data_region_len = if header.flags == FLAG_DATA_RAW {
+        header.data_len
+    } else {
+        header.data_uncompressed_len
+    } as usize;
+
+    let mut seen = BTreeSet::new();
+    for entry in &manifest.entries {
+        if !seen.insert(entry.name.to_ascii_lowercase()) {
+            return Err(TextureContainerError::DuplicateEntry(entry.name.clone()));
+        }
+        if entry.width == 0 || entry.height == 0 {
+            return Err(TextureContainerError::InvalidExtent { name: entry.name.clone(), width: entry.width, height: entry.height });
+        }
+        let _ = crate::format::parse_pixel_format(&entry.format, &entry.name)?;
+        if entry.mip_count as usize != entry.mips.len() || entry.mips.is_empty() {
+            return Err(TextureContainerError::InvalidMipChain(entry.name.clone()));
+        }
+        let _ = slice_checked_len(data_region_len, entry.byte_offset, entry.byte_len).map_err(|_| TextureContainerError::InvalidRange {
+            what: "entry-data",
+            offset: entry.byte_offset,
+            len: entry.byte_len,
+            total: file_total_len,
+        })?;
+        for mip in &entry.mips {
+            let mip_bytes = slice_checked_len(data_region_len, mip.byte_offset, mip.byte_len).map_err(|_| TextureContainerError::InvalidRange {
+                what: "mip-data",
+                offset: mip.byte_offset,
+                len: mip.byte_len,
+                total: file_total_len,
+            })?;
+            let expected = texture_payload_len(&entry.format, mip.width, mip.height)?;
+            if mip_bytes != expected {
+                return Err(TextureContainerError::PayloadSizeMismatch { name: entry.name.clone(), mip: mip.level, bytes: mip_bytes, expected });
+            }
+        }
+    }
+    Ok(())
+}
+
 pub fn parse(bytes: &[u8]) -> Result<TextureDictionary<'_>> {
     let header = HeaderV2::parse(bytes)?;
     header.validate_runtime_flags()?;
@@ -101,7 +171,7 @@ pub fn parse(bytes: &[u8]) -> Result<TextureDictionary<'_>> {
         total: bytes.len(),
     })?;
     if !binary_directory::sniff(dir) {
-        return Err(TextureContainerError::InvalidDirectory(".neytd V2 requires binary directory NTDX; JSON directories are not accepted"));
+        return Err(TextureContainerError::InvalidDirectory("texture dictionary V2 requires binary directory NTDX; JSON directories are not accepted"));
     }
     let manifest = binary_directory::decode(dir)?;
 

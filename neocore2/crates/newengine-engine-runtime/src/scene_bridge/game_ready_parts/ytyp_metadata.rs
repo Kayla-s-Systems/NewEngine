@@ -2,7 +2,7 @@
 ///
 /// `.ymap` is the launch/profile document. Runtime constants that belong
 /// to authored game content are allowed to override the profile only when they
-/// come from `engine.definitions` as `.ytyp@entry` metadata. This keeps the
+/// come from `engine.assets.definitions` as `.ytyp@entry` metadata. This keeps the
 /// chain visible:
 ///
 /// `.ytyp -> .ydd -> .nemat -> .ytd`
@@ -175,23 +175,23 @@ fn apply_time_constants_from_ytyp(profile: &mut GameReadyMapProfile, metadata: &
 
 fn load_game_ready_definition_entry(definition_ref: &str) -> Option<serde_json::Value> {
     let payload = serde_json::to_vec(&serde_json::json!({ "definition_ref": definition_ref })).ok()?;
-    match call_service_v1("engine.definitions", "definitions.entry_json_v1", &payload) {
+    match call_service_v1("engine.assets.definitions", "assets.definitions.entry_v1", &payload) {
         Ok(bytes) => match serde_json::from_slice::<serde_json::Value>(&bytes) {
             Ok(value) => Some(value),
             Err(e) => {
-                log::warn!("game-ready ytyp metadata: engine.definitions returned invalid json ref='{}' err='{}'", definition_ref, e);
+                log::warn!("game-ready ytyp metadata: engine.assets.definitions returned invalid json ref='{}' err='{}'", definition_ref, e);
                 None
             }
         },
         Err(e) => {
-            log::warn!("game-ready ytyp metadata: engine.definitions unavailable ref='{}' err='{}'", definition_ref, e);
+            log::warn!("game-ready ytyp metadata: engine.assets.definitions unavailable ref='{}' err='{}'", definition_ref, e);
             None
         }
     }
 }
 
 fn game_ready_metadata_namespace(entry: &serde_json::Value) -> Option<&serde_json::Value> {
-    // engine.definitions returns arbitrary metadata as a source-of-knowledge
+    // engine.assets.definitions returns arbitrary metadata as a source-of-knowledge
     // envelope: { arbitrary_metadata: { metadata: { ns: ... }, namespaces: { ns: ... } } }.
     // Older probes may still expose metadata directly. Accept both shapes, but
     // keep the namespace name fully data-authored; GameReady does not own .ytyp.
@@ -232,7 +232,7 @@ fn apply_game_ready_ytyp_metadata(profile: &mut GameReadyMapProfile) {
             + apply_time_constants_from_ytyp(profile, metadata);
         applied_total += applied;
         log::info!(
-            "game-ready ytyp metadata: consumed definition_ref='{}' applied_constants={} policy='metadata constants from engine.definitions; no runtime json material source'",
+            "game-ready ytyp metadata: consumed definition_ref='{}' applied_constants={} policy='metadata constants from engine.assets.definitions; no runtime json material source'",
             definition_ref,
             applied
         );
@@ -248,19 +248,19 @@ fn apply_game_ready_ytyp_metadata(profile: &mut GameReadyMapProfile) {
 fn resolve_game_ready_asset_graph(root_ref: &str) -> Option<newengine_model_domain_api::ResolvedAssetGraphV2> {
     let payload = serde_json::to_vec(&serde_json::json!({ "root_ref": root_ref })).ok()?;
     match call_service_v1(
-        newengine_model_domain_api::ENGINE_ASSET_GRAPH_SERVICE_ID,
+        newengine_model_domain_api::ENGINE_ASSETS_GRAPH_SERVICE_ID,
         newengine_model_domain_api::ASSET_GRAPH_METHOD_RESOLVE_V1,
         &payload,
     ) {
         Ok(bytes) => match serde_json::from_slice::<newengine_model_domain_api::ResolvedAssetGraphV2>(&bytes) {
             Ok(graph) => Some(graph),
             Err(e) => {
-                log::warn!("asset_graph.resolve_v1: invalid json graph root_ref='{}' err='{}'", root_ref, e);
+                log::warn!("assets.graph.resolve_v1: invalid json graph root_ref='{}' err='{}'", root_ref, e);
                 None
             }
         },
         Err(e) => {
-            log::warn!("asset_graph.resolve_v1: gateway call failed root_ref='{}' err='{}'", root_ref, e);
+            log::warn!("assets.graph.resolve_v1: gateway call failed root_ref='{}' err='{}'", root_ref, e);
             None
         }
     }

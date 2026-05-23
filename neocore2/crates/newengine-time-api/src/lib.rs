@@ -21,6 +21,9 @@ pub mod time_method {
     pub const CANCEL_EVENT_V1: &str = "time.cancel_event_v1";
     pub const DUE_EVENTS_V1: &str = "time.due_events_v1";
     pub const DESCRIBE_CLOCK_V1: &str = "time.describe_clock_v1";
+    pub const AI_CONTEXT_V1: &str = "time.ai_context_v1";
+    pub const SET_FIXED_STEP_V1: &str = "time.set_fixed_step_v1";
+    pub const SET_REPLAY_CLOCK_V1: &str = "time.set_replay_clock_v1";
 }
 
 pub const TIME_SERVICE_METHODS: &[&str] = &[
@@ -37,6 +40,9 @@ pub const TIME_SERVICE_METHODS: &[&str] = &[
     time_method::CANCEL_EVENT_V1,
     time_method::DUE_EVENTS_V1,
     time_method::DESCRIBE_CLOCK_V1,
+    time_method::AI_CONTEXT_V1,
+    time_method::SET_FIXED_STEP_V1,
+    time_method::SET_REPLAY_CLOCK_V1,
 ];
 
 pub const TIME_BACKEND_SERVICE_SPEC: newengine_service_api::BackendServiceSpec =
@@ -71,6 +77,7 @@ pub struct TimeSnapshotV1 {
     pub simulation: TimeSimulationClockV1,
     pub game: TimeGameClockV1,
     pub replay: TimeReplayClockV1,
+    pub ai: TimeAiClockV1,
 }
 
 impl Default for TimeSnapshotV1 {
@@ -83,6 +90,7 @@ impl Default for TimeSnapshotV1 {
             simulation: TimeSimulationClockV1::default(),
             game: TimeGameClockV1::default(),
             replay: TimeReplayClockV1::default(),
+            ai: TimeAiClockV1::default(),
         }
     }
 }
@@ -159,6 +167,104 @@ impl Default for TimeReplayClockV1 {
     fn default() -> Self {
         Self { deterministic: false, seed: 0, replay_frame: 0 }
     }
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct TimeAiClockV1 {
+    pub tick_budget_ns: u64,
+    pub decision_tick_interval: u32,
+    pub next_decision_tick: u64,
+    pub time_of_day_phase: String,
+    pub normalized_day: f64,
+    pub deterministic_key: String,
+}
+
+impl Default for TimeAiClockV1 {
+    fn default() -> Self {
+        Self {
+            tick_budget_ns: 1_000_000,
+            decision_tick_interval: 4,
+            next_decision_tick: 0,
+            time_of_day_phase: "night".to_owned(),
+            normalized_day: 0.0,
+            deterministic_key: String::new(),
+        }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct TimeAiContextV1 {
+    pub schema: String,
+    pub frame_index: u64,
+    pub simulation_tick: u64,
+    pub fixed_delta_ns: u64,
+    pub game_day_index: u64,
+    pub game_seconds_of_day: f64,
+    pub normalized_day: f64,
+    pub time_of_day_phase: String,
+    pub deterministic: bool,
+    pub replay_seed: u64,
+    pub replay_frame: u64,
+    pub decision_tick_interval: u32,
+    pub next_decision_tick: u64,
+    pub tick_budget_ns: u64,
+    pub deterministic_key: String,
+}
+
+impl Default for TimeAiContextV1 {
+    fn default() -> Self {
+        Self {
+            schema: "newengine.time.ai_context.v1".to_owned(),
+            frame_index: 0,
+            simulation_tick: 0,
+            fixed_delta_ns: 16_666_667,
+            game_day_index: 0,
+            game_seconds_of_day: 0.0,
+            normalized_day: 0.0,
+            time_of_day_phase: "night".to_owned(),
+            deterministic: false,
+            replay_seed: 0,
+            replay_frame: 0,
+            decision_tick_interval: 4,
+            next_decision_tick: 0,
+            tick_budget_ns: 1_000_000,
+            deterministic_key: String::new(),
+        }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct TimeFixedStepRequestV1 {
+    pub fixed_delta_ns: u64,
+    pub max_fixed_ticks_per_frame: u32,
+    pub ai_decision_tick_interval: u32,
+    pub ai_tick_budget_ns: u64,
+}
+
+impl Default for TimeFixedStepRequestV1 {
+    fn default() -> Self {
+        Self {
+            fixed_delta_ns: 16_666_667,
+            max_fixed_ticks_per_frame: 8,
+            ai_decision_tick_interval: 4,
+            ai_tick_budget_ns: 1_000_000,
+        }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct TimeReplayClockSetRequestV1 {
+    pub deterministic: bool,
+    pub seed: u64,
+    pub replay_frame: u64,
+}
+
+impl Default for TimeReplayClockSetRequestV1 {
+    fn default() -> Self { Self { deterministic: false, seed: 0, replay_frame: 0 } }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -249,6 +355,8 @@ pub struct TimeServiceInfoV1 {
     pub contract: String,
     pub methods: Vec<String>,
     pub deterministic: bool,
+    pub ai_ready: bool,
+    pub clock_domains: Vec<String>,
 }
 
 impl Default for TimeServiceInfoV1 {
@@ -260,6 +368,14 @@ impl Default for TimeServiceInfoV1 {
             contract: TIME_RUNTIME_CONTRACT.to_owned(),
             methods: TIME_SERVICE_METHODS.iter().map(|m| (*m).to_owned()).collect(),
             deterministic: false,
+            ai_ready: true,
+            clock_domains: vec![
+                "real".to_owned(),
+                "simulation".to_owned(),
+                "game".to_owned(),
+                "replay".to_owned(),
+                "ai".to_owned(),
+            ],
         }
     }
 }

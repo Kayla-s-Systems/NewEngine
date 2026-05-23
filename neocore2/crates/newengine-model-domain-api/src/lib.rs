@@ -3,9 +3,8 @@
 //! Stable domain contracts for drawable/model construction.
 //!
 //! Drawable/model semantics stay separate from definition metadata and dependency graph expansion.
-//! Definition files are routed through `engine.definitions`; graph expansion is routed through `engine.asset_graph`.
+//! Definition files are routed through `engine.assets.definitions`; graph expansion is routed through `engine.assets.graph`.
 //! `.nepak` packages remain VFS delivery containers.
-//! There is no public `.neytd` role or compatibility alias in this contract.
 
 mod asset_chain;
 mod asset_graph;
@@ -27,19 +26,19 @@ pub use newengine_model_skeleton_api::{
     ModelSkeletonAnchors, ModelSkeletonJointMetadata, ModelSkeletonMetadata,
 };
 
-pub const ENGINE_MODEL_SERVICE_ID: &str = "engine.model";
-pub const ENGINE_MODEL_SKELETONS_SERVICE_ID: &str = "engine.model.skeletons";
-pub const ENGINE_MODEL_MATERIALS_SERVICE_ID: &str = "engine.model.materials";
-pub const ENGINE_MODEL_COLLISIONS_SERVICE_ID: &str = "engine.model.collisions";
+pub const ENGINE_ASSETS_MODELS_SERVICE_ID: &str = "engine.assets.models";
+pub const ENGINE_MODEL_SKELETONS_SERVICE_ID: &str = "engine.assets.models.skeletons";
+pub const ENGINE_MODEL_MATERIALS_SERVICE_ID: &str = "engine.assets.models.materials";
+pub const ENGINE_MODEL_COLLISIONS_SERVICE_ID: &str = "engine.assets.models.collisions";
 
 pub const MODEL_SERVICE_ID: &str = "model.api";
-pub const MODEL_BACKEND_CAPABILITY_ID: &str = "model.backend";
+pub const MODEL_BACKEND_CAPABILITY_ID: &str = "assets.models.backend";
 pub const MODEL_SKELETONS_SERVICE_ID: &str = "model.skeletons.api";
-pub const MODEL_SKELETONS_BACKEND_CAPABILITY_ID: &str = "model.skeletons.backend";
+pub const MODEL_SKELETONS_BACKEND_CAPABILITY_ID: &str = "assets.models.skeletons.backend";
 pub const MODEL_MATERIALS_SERVICE_ID: &str = "model.materials.api";
-pub const MODEL_MATERIALS_BACKEND_CAPABILITY_ID: &str = "model.materials.backend";
+pub const MODEL_MATERIALS_BACKEND_CAPABILITY_ID: &str = "assets.models.materials.backend";
 pub const MODEL_COLLISIONS_SERVICE_ID: &str = "model.collisions.api";
-pub const MODEL_COLLISIONS_BACKEND_CAPABILITY_ID: &str = "model.collisions.backend";
+pub const MODEL_COLLISIONS_BACKEND_CAPABILITY_ID: &str = "assets.models.collisions.backend";
 
 pub const MODEL_SERVICE_METHOD_INFO: &str = newengine_service_api::SERVICE_METHOD_INFO_JSON;
 pub const MODEL_SERVICE_METHOD_INVOKE: &str = newengine_service_api::SERVICE_METHOD_INVOKE_JSON;
@@ -51,8 +50,8 @@ pub const DRAWABLE_DICTIONARY_EXTENSION: &str = "ydd";
 pub const DRAWABLE_DICTIONARY_ASSET_KIND: &str = "drawable_dictionary";
 pub const DRAWABLE_DICTIONARY_CONTAINER: &str = "newengine.listfile.nef8.ydd";
 pub const DRAWABLE_DICTIONARY_MANIFEST_SCHEMA: &str = "newengine.drawable_dictionary.manifest.v1";
-pub const MODEL_SERVICE_METHOD_DRAWABLE_DICTIONARY_MANIFEST_JSON_V1: &str = "model.drawable_dictionary_manifest_json_v1";
-pub const MODEL_SERVICE_METHOD_RESOLVE_DRAWABLE_V1: &str = "model.resolve_drawable_v1";
+pub const MODEL_SERVICE_METHOD_DRAWABLE_DICTIONARY_MANIFEST_JSON_V1: &str = "assets.models.drawable_manifest_v1";
+pub const MODEL_SERVICE_METHOD_RESOLVE_DRAWABLE_V1: &str = "assets.models.resolve_drawable_v1";
 
 /// Texture dictionary role consumed after graph/material resolution.
 pub const TEXTURE_DICTIONARY_EXTENSION: &str = "ytd";
@@ -81,7 +80,7 @@ pub const DEFINITION_ENTRIES_SCHEMA: &str = "newengine.ytyp.definition_entries.v
 pub const MODEL_FEATURE_DOMAINS: &[&str] = &[
     "mesh.obj",
     "material.mtl",
-    "skeleton.rsc7",
+    "skeleton.nef8",
     "collision.default",
     "drawable.ydd",
     "material.nemat",
@@ -102,15 +101,15 @@ pub const MODEL_SERVICE_METHODS: &[&str] = &[
 
 pub const MODEL_BACKEND_SERVICE_SPEC: newengine_service_api::BackendServiceSpec =
     newengine_service_api::BackendServiceSpec::new(
-        "model",
-        ENGINE_MODEL_SERVICE_ID,
+        "assets.models",
+        ENGINE_ASSETS_MODELS_SERVICE_ID,
         MODEL_SERVICE_ID,
         MODEL_BACKEND_CAPABILITY_ID,
     );
 
 pub const MODEL_SKELETONS_BACKEND_SERVICE_SPEC: newengine_service_api::BackendServiceSpec =
     newengine_service_api::BackendServiceSpec::new(
-        "model.skeletons",
+        "assets.models.skeletons",
         ENGINE_MODEL_SKELETONS_SERVICE_ID,
         MODEL_SKELETONS_SERVICE_ID,
         MODEL_SKELETONS_BACKEND_CAPABILITY_ID,
@@ -118,7 +117,7 @@ pub const MODEL_SKELETONS_BACKEND_SERVICE_SPEC: newengine_service_api::BackendSe
 
 pub const MODEL_MATERIALS_BACKEND_SERVICE_SPEC: newengine_service_api::BackendServiceSpec =
     newengine_service_api::BackendServiceSpec::new(
-        "model.materials",
+        "assets.models.materials",
         ENGINE_MODEL_MATERIALS_SERVICE_ID,
         MODEL_MATERIALS_SERVICE_ID,
         MODEL_MATERIALS_BACKEND_CAPABILITY_ID,
@@ -126,7 +125,7 @@ pub const MODEL_MATERIALS_BACKEND_SERVICE_SPEC: newengine_service_api::BackendSe
 
 pub const MODEL_COLLISIONS_BACKEND_SERVICE_SPEC: newengine_service_api::BackendServiceSpec =
     newengine_service_api::BackendServiceSpec::new(
-        "model.collisions",
+        "assets.models.collisions",
         ENGINE_MODEL_COLLISIONS_SERVICE_ID,
         MODEL_COLLISIONS_SERVICE_ID,
         MODEL_COLLISIONS_BACKEND_CAPABILITY_ID,
@@ -134,8 +133,8 @@ pub const MODEL_COLLISIONS_BACKEND_SERVICE_SPEC: newengine_service_api::BackendS
 
 pub const MODEL_RUNTIME_CONTRACT_SPEC: newengine_service_api::RuntimeServiceContractSpec =
     newengine_service_api::RuntimeServiceContractSpec::new(
-        ENGINE_MODEL_SERVICE_ID,
-        "newengine.model-domain-api >= 0.1.x",
+        ENGINE_ASSETS_MODELS_SERVICE_ID,
+        "newengine.assets.models-domain-api >= 0.1.x",
         MODEL_SERVICE_METHODS,
     );
 
@@ -152,16 +151,16 @@ mod tests {
 
     #[test]
     fn specs_are_gateway_first() {
-        assert_eq!(MODEL_BACKEND_SERVICE_SPEC.engine_gateway_id, ENGINE_MODEL_SERVICE_ID);
-        assert_eq!(MODEL_SKELETONS_BACKEND_SERVICE_SPEC.domain, "model.skeletons");
-        assert_eq!(MODEL_MATERIALS_BACKEND_SERVICE_SPEC.domain, "model.materials");
-        assert_eq!(MODEL_COLLISIONS_BACKEND_SERVICE_SPEC.domain, "model.collisions");
+        assert_eq!(MODEL_BACKEND_SERVICE_SPEC.engine_gateway_id, ENGINE_ASSETS_MODELS_SERVICE_ID);
+        assert_eq!(MODEL_SKELETONS_BACKEND_SERVICE_SPEC.domain, "assets.models.skeletons");
+        assert_eq!(MODEL_MATERIALS_BACKEND_SERVICE_SPEC.domain, "assets.models.materials");
+        assert_eq!(MODEL_COLLISIONS_BACKEND_SERVICE_SPEC.domain, "assets.models.collisions");
         assert!(!MODEL_FEATURE_DOMAINS.contains(&"definition_entries.ytyp"));
         assert!(MODEL_FEATURE_DOMAINS.contains(&"drawable.resolve"));
         assert!(MODEL_FEATURE_DOMAINS.contains(&"material.nemat"));
         assert!(MODEL_FEATURE_DOMAINS.contains(&"texture.ytd"));
         assert!(MODEL_FEATURE_DOMAINS.contains(&"package.nepak"));
-        assert!(!MODEL_FEATURE_DOMAINS.contains(&"texture.neytd.runtime"));
+        assert!(!MODEL_FEATURE_DOMAINS.contains(&"texture.noncanonical.runtime"));
         assert!(MODEL_SERVICE_METHODS.contains(&MODEL_SERVICE_METHOD_RESOLVE_DRAWABLE_V1));
     }
 

@@ -419,6 +419,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "newengine-authored-xml"
+version = "0.1.0"
+dependencies = [
+ "roxmltree",
+ "serde_json",
+]
+
+[[package]]
 name = "newengine-bounds"
 version = "0.1.0"
 dependencies = [
@@ -511,6 +519,7 @@ dependencies = [
  "log",
  "newengine-assets",
  "newengine-assets-api",
+ "newengine-authored-xml",
  "newengine-plugin-api",
  "newengine-service-api",
  "newengine-service-kit",
@@ -562,6 +571,7 @@ dependencies = [
  "log",
  "newengine-assets",
  "newengine-audio-api",
+ "newengine-authored-xml",
  "newengine-bounds",
  "newengine-camera",
  "newengine-camera-api",
@@ -787,11 +797,11 @@ dependencies = [
  "log",
  "newengine-assets",
  "newengine-assets-api",
+ "newengine-authored-xml",
  "newengine-materials",
  "newengine-model-domain-api",
  "newengine-model-import-obj",
  "newengine-plugin-api",
- "newengine-plugin-host",
  "newengine-service-api",
  "newengine-service-kit",
  "serde",
@@ -862,12 +872,13 @@ dependencies = [
  "newengine-assets-api",
  "newengine-material-runtime",
  "newengine-materials",
+ "newengine-math",
  "newengine-model-collision-runtime",
  "newengine-model-domain-api",
  "newengine-model-import-obj",
  "newengine-model-skeleton-api",
- "newengine-model-skeleton-rsc7",
  "newengine-plugin-api",
+ "newengine-primitives",
  "newengine-service-api",
  "newengine-service-kit",
  "serde",
@@ -879,14 +890,6 @@ name = "newengine-model-skeleton-api"
 version = "0.1.0"
 dependencies = [
  "serde",
-]
-
-[[package]]
-name = "newengine-model-skeleton-rsc7"
-version = "0.1.0"
-dependencies = [
- "blake3",
- "newengine-model-skeleton-api",
 ]
 
 [[package]]
@@ -1169,6 +1172,7 @@ dependencies = [
  "newengine-plugin-api",
  "newengine-service-api",
  "newengine-service-kit",
+ "newengine-texture-container",
  "serde",
  "serde_json",
 ]

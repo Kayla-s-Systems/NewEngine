@@ -65,7 +65,7 @@ impl TerrainHeightfieldSettings {
 
 /// Fully declarative heightfield source.
 ///
-/// `TerrainHeightfieldSettings` remains as the compact backwards-compatible
+/// `TerrainHeightfieldSettings` remains as the compact stable
 /// fractal form. New code should prefer this descriptor when the terrain is
 /// assembled from multiple layers, cellular edges, domain warps, or texture-like
 /// masks.

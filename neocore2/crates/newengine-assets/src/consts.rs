@@ -2,9 +2,8 @@
 
 //! AssetManager service contract constants.
 //!
-//! This module intentionally re-exports the canonical constants from
-//! `newengine-assets-api` so existing imports keep compiling while the API crate
-//! remains the only source of truth.
+//! This module re-exports the canonical constants from
+//! `newengine-assets-api`; the API crate remains the only source of truth.
 
 pub use newengine_assets_api::{
     asset_graph_method, file_type_method, method, ASSET_BACKEND_CAPABILITY_ID, ASSET_BACKEND_SERVICE_SPEC,
@@ -13,7 +12,7 @@ pub use newengine_assets_api::{
     ASSET_FILE_TYPES_RUNTIME_REQUIREMENT_SPEC, ASSET_FILE_TYPES_SERVICE_ID, ASSET_GRAPH_BACKEND_CAPABILITY_ID,
     ASSET_GRAPH_SERVICE_ID, ASSET_GRAPH_SERVICE_METHODS, ASSET_METHOD_PREFIX,
     ASSET_PROVIDER_SERVICE_ID, ASSET_RUNTIME_CONTRACT_SPEC, ASSET_SERVICE_ID,
-    ENGINE_ASSET_FILE_TYPES_SERVICE_ID, ENGINE_ASSET_GRAPH_SERVICE_ID, ENGINE_ASSET_SERVICE_ID, ENGINE_DEFINITIONS_SERVICE_ID,
-    ENGINE_MATERIALS_SERVICE_ID, ENGINE_MODEL_SERVICE_ID, ENGINE_TEXTURES_SERVICE_ID,
+    ENGINE_ASSET_FILE_TYPES_SERVICE_ID, ENGINE_ASSETS_GRAPH_SERVICE_ID, ENGINE_ASSET_SERVICE_ID, ENGINE_ASSETS_DEFINITIONS_SERVICE_ID,
+    ENGINE_ASSETS_MAPS_SERVICE_ID, ENGINE_ASSETS_MATERIALS_SERVICE_ID, ENGINE_ASSETS_MODELS_SERVICE_ID, ENGINE_ASSETS_TEXTURES_SERVICE_ID,
     REQUIRED_RUNTIME_METHODS_V1,
 };

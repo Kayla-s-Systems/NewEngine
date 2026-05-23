@@ -1,20 +1,21 @@
 #![forbid(unsafe_op_in_unsafe_fn)]
 
-//! Engine-owned `engine.definitions` runtime service.
+//! Engine-owned `engine.assets.definitions` runtime service.
 //!
 //! `.ytyp` ownership lives here. The service uses `engine.assets` only as the
-//! VFS/raw-bytes/codec owner and returns Definition Entry DTOs to tools,
+//! VFS/raw-bytes/NEF8-envelope owner and returns Definition Entry DTOs to tools,
 //! scene/map placement loaders and the asset graph resolver.
 
 use std::collections::{BTreeMap, BTreeSet};
 
 use abi_stable::std_types::{RResult, RString};
+use newengine_authored_xml as authored_xml;
 use newengine_assets::{AssetDecodeRequest, AssetServiceClient};
 use newengine_assets_api::{
     definitions_method, stable_hash_from_text, AssetDependencyRecordV1, AssetReference,
     ASSET_LIST_FILE_BODY_OUTPUT, DEFINITIONS_BACKEND_CAPABILITY_ID, DEFINITIONS_RUNTIME_CONTRACT,
-    DEFINITIONS_SERVICE_ID, DEFINITIONS_SERVICE_METHODS, ENGINE_ASSET_GRAPH_SERVICE_ID,
-    ENGINE_ASSET_SERVICE_ID, ENGINE_DEFINITIONS_SERVICE_ID,
+    DEFINITIONS_SERVICE_ID, DEFINITIONS_SERVICE_METHODS, ENGINE_ASSETS_GRAPH_SERVICE_ID,
+    ENGINE_ASSET_SERVICE_ID, ENGINE_ASSETS_DEFINITIONS_SERVICE_ID,
 };
 use newengine_plugin_api::Blob;
 use newengine_service_api::EngineServiceKind;
@@ -75,17 +76,6 @@ impl Default for DefinitionManifestRequest {
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(default)]
-struct DefinitionDictionaryBodyV1 {
-    schema: String,
-    entries: Vec<RawDefinitionEntryV1>,
-}
-
-impl Default for DefinitionDictionaryBodyV1 {
-    fn default() -> Self { Self { schema: String::new(), entries: Vec::new() } }
-}
-
-#[derive(Clone, Debug, Serialize, Deserialize)]
-#[serde(default)]
 struct RawDefinitionEntryV1 {
     name: String,
     stable_hash: u64,
@@ -120,13 +110,6 @@ impl Default for RawDefinitionEntryV1 {
             flags: 0,
         }
     }
-}
-
-#[derive(Clone, Debug, Default, Serialize, Deserialize)]
-#[serde(default)]
-struct LegacyDefinitionManifest {
-    source: String,
-    definition_entries: Vec<serde_json::Value>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -188,7 +171,7 @@ pub struct DefinitionEntryV1 {
 impl Default for DefinitionEntryV1 {
     fn default() -> Self {
         Self {
-            schema: "newengine.definitions.entry.v1".to_owned(),
+            schema: "newengine.assets.definitions.entry.v1".to_owned(),
             identity: DefinitionIdentityV1::default(),
             kind: "archetype_definition".to_owned(),
             stable_hash: 0,
@@ -262,13 +245,13 @@ struct StableDiagnostic {
 pub fn definitions_service_info() -> DefinitionsServiceInfo {
     DefinitionsServiceInfo {
         id: DEFINITIONS_SERVICE_ID,
-        gateway: ENGINE_DEFINITIONS_SERVICE_ID,
+        gateway: ENGINE_ASSETS_DEFINITIONS_SERVICE_ID,
         provider: "EngineOwnedDefinitionsRuntimeProvider",
         contract: DEFINITIONS_RUNTIME_CONTRACT,
         byte_owner: ENGINE_ASSET_SERVICE_ID,
-        semantic_owner: ENGINE_DEFINITIONS_SERVICE_ID,
+        semantic_owner: ENGINE_ASSETS_DEFINITIONS_SERVICE_ID,
         methods: DEFINITIONS_SERVICE_METHODS,
-        ownership_policy: ".ytyp Definition Entry metadata is owned by engine.definitions; scene/model may consume refs but never decode or own .ytyp",
+        ownership_policy: ".ytyp Definition Entry metadata is owned by engine.assets.definitions; scene/model may consume refs but never decode or own .ytyp; AssetManager only exposes NEF8 envelope/body bytes",
     }
 }
 
@@ -286,10 +269,10 @@ fn definition_ref_from_request(request: &DefinitionRefRequest) -> Result<String,
     }
     let source = normalize_logical_ref(&request.source);
     if source.is_empty() {
-        return Err("definitions.entry_json_v1 requires definition_ref='.ytyp@entry' or source + entry".to_owned());
+        return Err("assets.definitions.entry_v1 requires definition_ref='.ytyp@entry' or source + entry".to_owned());
     }
     let Some(entry) = request.entry.as_deref().map(str::trim).filter(|it| !it.is_empty()) else {
-        return Err("definitions.entry_json_v1 requires .ytyp@entry; .ytyp without @entry is a dictionary manifest request".to_owned());
+        return Err("assets.definitions.entry_v1 requires .ytyp@entry; .ytyp without @entry is a dictionary manifest request".to_owned());
     };
     Ok(format!("{source}@{entry}"))
 }
@@ -306,7 +289,7 @@ fn manifest_source_from_request(request: &DefinitionManifestRequest) -> Result<S
     } else if !request.definition_ref.trim().is_empty() {
         request.definition_ref.split('@').next().unwrap_or(request.definition_ref.trim())
     } else {
-        return Err("definitions.manifest_json_v1 requires source='world/foo.ytyp' or definition_ref='world/foo.ytyp@entry'".to_owned());
+        return Err("assets.definitions.manifest_v1 requires source='world/foo.ytyp' or definition_ref='world/foo.ytyp@entry'".to_owned());
     };
     let normalized = normalize_logical_ref(raw);
     let reference = newengine_assets_api::require_asset_reference_extension(&normalized, &["ytyp"], false)
@@ -345,61 +328,114 @@ fn manifest_request_from_payload(payload: &[u8], method: &str) -> Result<Definit
 }
 
 fn load_dictionary_body(state: &DefinitionsRuntimeState, source: &str) -> Result<(Vec<RawDefinitionEntryV1>, Vec<String>), String> {
-    let mut warnings = Vec::new();
-    match state.client.decode_v1(&AssetDecodeRequest {
+    let body = state.client.decode_v1(&AssetDecodeRequest {
         logical_path: source.to_owned(),
         output_kind: ASSET_LIST_FILE_BODY_OUTPUT.to_owned(),
         selector: serde_json::Value::Null,
-    }) {
-        Ok(body) => match serde_json::from_slice::<DefinitionDictionaryBodyV1>(&body) {
-            Ok(dictionary) => return Ok((dictionary.entries, warnings)),
-            Err(error) => warnings.push(format!(
-                "definitions.runtime: raw .ytyp body did not match DefinitionDictionaryBodyV1; falling back to codec manifest projection; unknown metadata may be incomplete err='{error}'"
-            )),
-        },
-        Err(error) => warnings.push(format!(
-            "definitions.runtime: raw .ytyp body unavailable; falling back to codec manifest projection err='{error}'"
-        )),
+    }).map_err(|error| format!(
+        "engine.assets.definitions: raw NEF8 body unavailable source='{source}' output='{}' err='{error}'",
+        ASSET_LIST_FILE_BODY_OUTPUT
+    ))?;
+
+    if !authored_xml::body_is_xml(&body) {
+        return Err(format!(
+            "engine.assets.definitions: .ytyp body must be XML DefinitionDictionary source='{source}' policy='metadata ListFiles use XML presentation inside NEF8; JSON runtime bodies are forbidden'"
+        ));
+    }
+    parse_definition_dictionary_xml(source, &body)
+}
+
+
+fn parse_definition_dictionary_xml(source: &str, body: &[u8]) -> Result<(Vec<RawDefinitionEntryV1>, Vec<String>), String> {
+    let text = std::str::from_utf8(body)
+        .map_err(|error| format!("engine.assets.definitions: .ytyp XML body is not UTF-8 source='{source}' err='{error}'"))?;
+    let doc = authored_xml::parse_xml_document(text, &format!("engine.assets.definitions source='{source}'"))?;
+    let root = doc.root_element();
+    if !root.has_tag_name("YtypDefinitionDictionary") && !root.has_tag_name("DefinitionDictionary") {
+        return Err(format!(
+            "engine.assets.definitions: .ytyp XML root must be <YtypDefinitionDictionary> source='{source}' actual='{}'",
+            root.tag_name().name()
+        ));
+    }
+    let schema = authored_xml::xml_attr_any(root, &["schema"]).unwrap_or_default();
+    if schema.trim().is_empty() {
+        return Err(format!("engine.assets.definitions: .ytyp XML dictionary missing schema source='{source}'"));
+    }
+    if schema != "newengine.ytyp.definition_dictionary.v1" {
+        return Err(format!(
+            "engine.assets.definitions: unsupported .ytyp XML schema source='{source}' expected='newengine.ytyp.definition_dictionary.v1' actual='{schema}'"
+        ));
     }
 
-    let bytes = state.client.decode_v1(&AssetDecodeRequest {
-        logical_path: source.to_owned(),
-        output_kind: definitions_method::MANIFEST_JSON_V1.to_owned(),
-        selector: serde_json::Value::Null,
-    }).map_err(|e| format!("engine.definitions: manifest decode failed source='{source}' err='{e}'"))?;
-    let manifest = serde_json::from_slice::<LegacyDefinitionManifest>(&bytes)
-        .map_err(|e| format!("engine.definitions: projected manifest was not json source='{source}' err='{e}'"))?;
-    let entries = manifest.definition_entries.into_iter().map(raw_from_legacy_entry).collect();
+    let mut warnings = Vec::new();
+    warnings.push(".ytyp body parsed as XML metadata projection; NEF8 envelope still owns compression/hash/content_kind".to_owned());
+    let mut entries = Vec::new();
+    for entry_node in root.children().filter(|node| node.is_element() && node.has_tag_name("Entry")) {
+        entries.push(parse_definition_entry_xml(entry_node, source)?);
+    }
+    if entries.is_empty() {
+        warnings.push(format!("source='{source}' contains no <Entry> nodes"));
+    }
     Ok((entries, warnings))
 }
 
-fn raw_from_legacy_entry(value: serde_json::Value) -> RawDefinitionEntryV1 {
-    let name = value.get("name").and_then(|v| v.as_str()).unwrap_or_default().to_owned();
-    let entry_kind = value
-        .get("entry_kind")
-        .or_else(|| value.get("asset_type"))
-        .and_then(|v| v.as_str())
-        .unwrap_or("archetype_definition")
-        .to_owned();
-    let stable_hash = value.get("stable_hash").and_then(|v| v.as_u64()).unwrap_or_else(|| stable_hash_from_text(&name));
-    let mut dependencies = Vec::new();
-    if let Some(drawable) = value.pointer("/dictionaries/drawable").and_then(|v| v.as_str()) {
-        dependencies.push(AssetDependencyRecordV1::new(drawable, "drawable", "engine.model", true));
+fn parse_definition_entry_xml(node: authored_xml::XmlNode<'_, '_>, source: &str) -> Result<RawDefinitionEntryV1, String> {
+    let mut raw = RawDefinitionEntryV1::default();
+    raw.name = authored_xml::xml_attr_any(node, &["name", "asset_name", "id"]).unwrap_or_default();
+    if raw.name.trim().is_empty() {
+        return Err(format!("engine.assets.definitions: .ytyp XML <Entry> without name source='{source}'"));
     }
-    if let Some(texture) = value.pointer("/dictionaries/texture").and_then(|v| v.as_str()) {
-        dependencies.push(AssetDependencyRecordV1::new(texture, "texture", "engine.textures", true));
+    raw.stable_hash = authored_xml::xml_attr_u64_any(node, &["stable_hash", "stableHash"]).unwrap_or(0);
+    raw.entry_kind = authored_xml::xml_attr_any(node, &["entry_kind", "entryKind"]).unwrap_or_else(|| "archetype_definition".to_owned());
+    raw.kind = authored_xml::xml_attr_any(node, &["kind"]).unwrap_or_else(|| raw.entry_kind.clone());
+    raw.schema = authored_xml::xml_attr_any(node, &["schema"]).unwrap_or_else(|| "newengine.ytyp.definition_entry.v1".to_owned());
+    raw.flags = authored_xml::xml_attr_u32_any(node, &["flags"]).unwrap_or(0);
+
+    if let Some(deps) = authored_xml::xml_child(node, "Dependencies") {
+        for dep in deps.children().filter(|child| child.is_element() && child.has_tag_name("Dependency")) {
+            let reference = authored_xml::xml_attr_any(dep, &["reference", "ref"]).unwrap_or_default();
+            if reference.trim().is_empty() { continue; }
+            raw.dependencies.push(AssetDependencyRecordV1 {
+                reference,
+                role: authored_xml::xml_attr_any(dep, &["role"]).unwrap_or_default(),
+                domain: authored_xml::xml_attr_any(dep, &["domain"]).unwrap_or_default(),
+                required: authored_xml::xml_attr_bool_any(dep, &["required"]).unwrap_or(true),
+            });
+        }
     }
-    if let Some(physics) = value.pointer("/dictionaries/physics").and_then(|v| v.as_str()) {
-        dependencies.push(AssetDependencyRecordV1::new(physics, "physics", "engine.physics", true));
+
+    raw.semantic_tags = authored_xml::xml_tags(node, "SemanticTags");
+    raw.domain_tags = authored_xml::xml_tags(node, "DomainTags");
+    if let Some(namespaces) = authored_xml::xml_child(node, "Namespaces") {
+        raw.namespaces = authored_xml::xml_namespace_map(namespaces);
     }
-    RawDefinitionEntryV1 {
-        name,
-        stable_hash,
-        entry_kind,
-        dependencies,
-        metadata: BTreeMap::from([("legacy_projected_definition".to_owned(), value)]),
-        ..Default::default()
+    if let Some(metadata) = authored_xml::xml_child(node, "Metadata") {
+        raw.metadata = authored_xml::xml_namespace_map(metadata);
     }
+    if let Some(side_effects) = authored_xml::xml_child(node, "SideEffects") {
+        raw.side_effects = side_effects
+            .children()
+            .filter(|child| child.is_element() && child.has_tag_name("SideEffect"))
+            .map(xml_side_effect)
+            .collect();
+    }
+    if let Some(target) = authored_xml::xml_child(node, "Target") {
+        raw.target = Some(authored_xml::xml_node_object(target));
+    }
+    Ok(raw)
+}
+
+fn xml_side_effect(node: authored_xml::XmlNode<'_, '_>) -> DefinitionSideEffectV1 {
+    let mut effect = DefinitionSideEffectV1 {
+        domain: authored_xml::xml_attr_any(node, &["domain"]).unwrap_or_default(),
+        effect: authored_xml::xml_attr_any(node, &["effect"]).unwrap_or_default(),
+        target: authored_xml::xml_attr_any(node, &["target"]).unwrap_or_default(),
+        metadata: BTreeMap::new(),
+    };
+    for child in node.children().filter(|child| child.is_element()) {
+        effect.metadata.insert(child.tag_name().name().to_owned(), authored_xml::xml_node_object(child));
+    }
+    effect
 }
 
 fn entry_matches(raw: &RawDefinitionEntryV1, selector: &str) -> bool {
@@ -656,10 +692,10 @@ fn load_manifest(state: &DefinitionsRuntimeState, source: &str) -> Result<Defini
     }
     entries.sort_by(|a, b| a.name.cmp(&b.name).then_with(|| a.stable_hash.cmp(&b.stable_hash)));
     Ok(DefinitionManifestV1 {
-        schema: "newengine.definitions.manifest.v1",
-        gateway: ENGINE_DEFINITIONS_SERVICE_ID,
+        schema: "newengine.assets.definitions.manifest.v1",
+        gateway: ENGINE_ASSETS_DEFINITIONS_SERVICE_ID,
         byte_owner: ENGINE_ASSET_SERVICE_ID,
-        semantic_owner: ENGINE_DEFINITIONS_SERVICE_ID,
+        semantic_owner: ENGINE_ASSETS_DEFINITIONS_SERVICE_ID,
         source: source.to_owned(),
         status: "definition_dictionary_manifest",
         entries,
@@ -676,7 +712,7 @@ fn load_entry(state: &DefinitionsRuntimeState, request: DefinitionRefRequest) ->
             return build_entry(&reference.logical_path, raw, &warnings);
         }
     }
-    Err(format!("engine.definitions: Definition Entry not found ref='{}'", reference.canonical))
+    Err(format!("engine.assets.definitions: Definition Entry not found ref='{}'", reference.canonical))
 }
 
 fn flatten_refs(refs: &DefinitionRefsV1) -> Vec<String> {
@@ -699,9 +735,9 @@ fn validate_entry(state: &DefinitionsRuntimeState, request: DefinitionRefRequest
     match load_entry(state, request) {
         Ok(entry) => DefinitionValidationV1 {
             ok: true,
-            gateway: ENGINE_DEFINITIONS_SERVICE_ID,
+            gateway: ENGINE_ASSETS_DEFINITIONS_SERVICE_ID,
             byte_owner: ENGINE_ASSET_SERVICE_ID,
-            semantic_owner: ENGINE_DEFINITIONS_SERVICE_ID,
+            semantic_owner: ENGINE_ASSETS_DEFINITIONS_SERVICE_ID,
             definition_ref: entry.identity.definition_ref,
             code: "definitions.ok",
             message: ".ytyp Definition Entry is valid metadata; no imperative side-effect fields detected".to_owned(),
@@ -709,9 +745,9 @@ fn validate_entry(state: &DefinitionsRuntimeState, request: DefinitionRefRequest
         },
         Err(message) => DefinitionValidationV1 {
             ok: false,
-            gateway: ENGINE_DEFINITIONS_SERVICE_ID,
+            gateway: ENGINE_ASSETS_DEFINITIONS_SERVICE_ID,
             byte_owner: ENGINE_ASSET_SERVICE_ID,
-            semantic_owner: ENGINE_DEFINITIONS_SERVICE_ID,
+            semantic_owner: ENGINE_ASSETS_DEFINITIONS_SERVICE_ID,
             definition_ref: String::new(),
             code: "definitions.invalid_entry",
             message,
@@ -723,14 +759,14 @@ fn validate_entry(state: &DefinitionsRuntimeState, request: DefinitionRefRequest
 fn manifest_blob(state: &mut DefinitionsRuntimeState, payload: Blob) -> RResult<Blob, RString> {
     if payload.is_empty() {
         return ok_json(serde_json::json!({
-            "schema": "newengine.definitions.service_manifest.v1",
-            "gateway": ENGINE_DEFINITIONS_SERVICE_ID,
+            "schema": "newengine.assets.definitions.service_manifest.v1",
+            "gateway": ENGINE_ASSETS_DEFINITIONS_SERVICE_ID,
             "provider": "EngineOwnedDefinitionsRuntimeProvider",
             "byte_owner": ENGINE_ASSET_SERVICE_ID,
-            "semantic_owner": ENGINE_DEFINITIONS_SERVICE_ID,
+            "semantic_owner": ENGINE_ASSETS_DEFINITIONS_SERVICE_ID,
             "methods": DEFINITIONS_SERVICE_METHODS,
-            "entry_schema": "newengine.definitions.entry.v1",
-            "ownership_policy": ".ytyp is metadata owned by engine.definitions; not scene and not model"
+            "entry_schema": "newengine.assets.definitions.entry.v1",
+            "ownership_policy": ".ytyp is metadata owned by engine.assets.definitions; not scene and not model"
         }));
     }
     let request = match manifest_request_from_payload(payload.as_slice(), definitions_method::MANIFEST_JSON_V1) {
@@ -773,7 +809,7 @@ fn invoke_json(state: &mut DefinitionsRuntimeState, payload: Blob) -> RResult<Bl
             let request = serde_json::from_value::<DefinitionRefRequest>(value.get("request").cloned().unwrap_or_default()).unwrap_or_default();
             match load_entry(state, request) {
                 Ok(entry) => ok_json(entry),
-                Err(e) => ok_json(StableDiagnostic { ok: false, code: "definitions.entry_unavailable", message: e, gateway: ENGINE_DEFINITIONS_SERVICE_ID, byte_owner: ENGINE_ASSET_SERVICE_ID, semantic_owner: ENGINE_DEFINITIONS_SERVICE_ID }),
+                Err(e) => ok_json(StableDiagnostic { ok: false, code: "definitions.entry_unavailable", message: e, gateway: ENGINE_ASSETS_DEFINITIONS_SERVICE_ID, byte_owner: ENGINE_ASSET_SERVICE_ID, semantic_owner: ENGINE_ASSETS_DEFINITIONS_SERVICE_ID }),
             }
         }
         definitions_method::RESOLVE_REFS_V1 => {
@@ -783,17 +819,17 @@ fn invoke_json(state: &mut DefinitionsRuntimeState, payload: Blob) -> RResult<Bl
                     let flattened_refs = flatten_refs(&entry.refs);
                     ok_json(DefinitionRefResolutionV1 {
                         ok: true,
-                        gateway: ENGINE_DEFINITIONS_SERVICE_ID,
+                        gateway: ENGINE_ASSETS_DEFINITIONS_SERVICE_ID,
                         byte_owner: ENGINE_ASSET_SERVICE_ID,
-                        semantic_owner: ENGINE_DEFINITIONS_SERVICE_ID,
+                        semantic_owner: ENGINE_ASSETS_DEFINITIONS_SERVICE_ID,
                         definition_ref: entry.identity.definition_ref,
                         refs: entry.refs,
                         flattened_refs,
-                        resolver: ENGINE_ASSET_GRAPH_SERVICE_ID,
+                        resolver: ENGINE_ASSETS_GRAPH_SERVICE_ID,
                         warnings: entry.warnings,
                     })
                 }
-                Err(e) => ok_json(StableDiagnostic { ok: false, code: "definitions.refs_unavailable", message: e, gateway: ENGINE_DEFINITIONS_SERVICE_ID, byte_owner: ENGINE_ASSET_SERVICE_ID, semantic_owner: ENGINE_DEFINITIONS_SERVICE_ID }),
+                Err(e) => ok_json(StableDiagnostic { ok: false, code: "definitions.refs_unavailable", message: e, gateway: ENGINE_ASSETS_DEFINITIONS_SERVICE_ID, byte_owner: ENGINE_ASSET_SERVICE_ID, semantic_owner: ENGINE_ASSETS_DEFINITIONS_SERVICE_ID }),
             }
         }
         definitions_method::DESCRIBE_SIDE_EFFECTS_V1 => {
@@ -801,25 +837,25 @@ fn invoke_json(state: &mut DefinitionsRuntimeState, payload: Blob) -> RResult<Bl
             match load_entry(state, request) {
                 Ok(entry) => ok_json(serde_json::json!({
                     "ok": true,
-                    "gateway": ENGINE_DEFINITIONS_SERVICE_ID,
+                    "gateway": ENGINE_ASSETS_DEFINITIONS_SERVICE_ID,
                     "byte_owner": ENGINE_ASSET_SERVICE_ID,
-                    "semantic_owner": ENGINE_DEFINITIONS_SERVICE_ID,
+                    "semantic_owner": ENGINE_ASSETS_DEFINITIONS_SERVICE_ID,
                     "definition_ref": entry.identity.definition_ref,
                     "side_effect_policy": "declarative-only; allowed shape is {domain,effect,target}; imperative run_code/script/call/function fields are rejected",
                     "side_effects": entry.side_effects,
                     "domain_tags": entry.domain_tags,
                 })),
-                Err(e) => ok_json(StableDiagnostic { ok: false, code: "definitions.side_effects_unavailable", message: e, gateway: ENGINE_DEFINITIONS_SERVICE_ID, byte_owner: ENGINE_ASSET_SERVICE_ID, semantic_owner: ENGINE_DEFINITIONS_SERVICE_ID }),
+                Err(e) => ok_json(StableDiagnostic { ok: false, code: "definitions.side_effects_unavailable", message: e, gateway: ENGINE_ASSETS_DEFINITIONS_SERVICE_ID, byte_owner: ENGINE_ASSET_SERVICE_ID, semantic_owner: ENGINE_ASSETS_DEFINITIONS_SERVICE_ID }),
             }
         }
         definitions_method::MANIFEST_JSON_V1 => {
             let request = serde_json::from_value::<DefinitionManifestRequest>(value.get("request").cloned().unwrap_or_default()).unwrap_or_default();
             match manifest_source_from_request(&request).and_then(|source| load_manifest(state, &source)) {
                 Ok(manifest) => ok_json(manifest),
-                Err(e) => ok_json(StableDiagnostic { ok: false, code: "definitions.manifest_unavailable", message: e, gateway: ENGINE_DEFINITIONS_SERVICE_ID, byte_owner: ENGINE_ASSET_SERVICE_ID, semantic_owner: ENGINE_DEFINITIONS_SERVICE_ID }),
+                Err(e) => ok_json(StableDiagnostic { ok: false, code: "definitions.manifest_unavailable", message: e, gateway: ENGINE_ASSETS_DEFINITIONS_SERVICE_ID, byte_owner: ENGINE_ASSET_SERVICE_ID, semantic_owner: ENGINE_ASSETS_DEFINITIONS_SERVICE_ID }),
             }
         }
-        other => RResult::RErr(RString::from(format!("engine.definitions: unknown invoke method '{other}'"))),
+        other => RResult::RErr(RString::from(format!("engine.assets.definitions: unknown invoke method '{other}'"))),
     }
 }
 
@@ -830,10 +866,10 @@ pub fn definitions_gateway_service(client: AssetServiceClient) -> newengine_plug
         DEFINITIONS_BACKEND_CAPABILITY_ID,
         DEFINITIONS_SERVICE_METHODS.iter().copied(),
     )
-    .gateway(ENGINE_DEFINITIONS_SERVICE_ID)
+    .gateway(ENGINE_ASSETS_DEFINITIONS_SERVICE_ID)
     .protocol(DEFINITIONS_RUNTIME_CONTRACT)
     .features(["definition-entry-v1", "metadata-namespace-preservation", "declarative-side-effects", "strict-ytyp-ownership"])
-    .notes("Engine definitions runtime service. .ytyp semantics live in engine.definitions; VFS/raw bytes/codec dispatch remain in engine.assets.");
+    .notes("Engine definitions runtime service. .ytyp semantics live in engine.assets.definitions; engine.assets exposes only VFS bytes and the generic NEF8 ListFile envelope.");
 
     JsonServiceRouter::with_state(DEFINITIONS_SERVICE_ID, DefinitionsRuntimeState::new(client))
         .describe_json(&description)
@@ -846,13 +882,13 @@ pub fn definitions_gateway_service(client: AssetServiceClient) -> newengine_plug
             let flattened_refs = flatten_refs(&entry.refs);
             Ok(DefinitionRefResolutionV1 {
                 ok: true,
-                gateway: ENGINE_DEFINITIONS_SERVICE_ID,
+                gateway: ENGINE_ASSETS_DEFINITIONS_SERVICE_ID,
                 byte_owner: ENGINE_ASSET_SERVICE_ID,
-                semantic_owner: ENGINE_DEFINITIONS_SERVICE_ID,
+                semantic_owner: ENGINE_ASSETS_DEFINITIONS_SERVICE_ID,
                 definition_ref: entry.identity.definition_ref,
                 refs: entry.refs,
                 flattened_refs,
-                resolver: ENGINE_ASSET_GRAPH_SERVICE_ID,
+                resolver: ENGINE_ASSETS_GRAPH_SERVICE_ID,
                 warnings: entry.warnings,
             })
         })
@@ -860,9 +896,9 @@ pub fn definitions_gateway_service(client: AssetServiceClient) -> newengine_plug
             let entry = load_entry(state, request)?;
             Ok(serde_json::json!({
                 "ok": true,
-                "gateway": ENGINE_DEFINITIONS_SERVICE_ID,
+                "gateway": ENGINE_ASSETS_DEFINITIONS_SERVICE_ID,
                 "byte_owner": ENGINE_ASSET_SERVICE_ID,
-                "semantic_owner": ENGINE_DEFINITIONS_SERVICE_ID,
+                "semantic_owner": ENGINE_ASSETS_DEFINITIONS_SERVICE_ID,
                 "definition_ref": entry.identity.definition_ref,
                 "side_effect_policy": "declarative-only; allowed shape is {domain,effect,target}; imperative run_code/script/call/function fields are rejected",
                 "side_effects": entry.side_effects,
@@ -876,7 +912,7 @@ pub fn definitions_gateway_service(client: AssetServiceClient) -> newengine_plug
 
 pub fn register_definitions_gateway_best_effort(client: AssetServiceClient) -> bool {
     register_engine_owned_gateway_service_best_effort(EngineOwnedGatewayDecl {
-        gateway: ENGINE_DEFINITIONS_SERVICE_ID,
+        gateway: ENGINE_ASSETS_DEFINITIONS_SERVICE_ID,
         service_kind: EngineServiceKind::Definitions,
         provider_service: DEFINITIONS_SERVICE_ID,
         capability: DEFINITIONS_BACKEND_CAPABILITY_ID,
@@ -909,12 +945,12 @@ mod tests {
             name: "body".to_owned(),
             metadata: BTreeMap::from([(
                 "side_effects".to_owned(),
-                serde_json::json!([{ "domain": "engine.model", "effect": "require_drawable", "target": "models/foo.ydd@body" }]),
+                serde_json::json!([{ "domain": "engine.assets.models", "effect": "require_drawable", "target": "models/foo.ydd@body" }]),
             )]),
             ..Default::default()
         };
         let effects = collect_side_effects(&raw).unwrap();
-        assert_eq!(effects[0].domain, "engine.model");
+        assert_eq!(effects[0].domain, "engine.assets.models");
     }
 
     #[test]
@@ -922,9 +958,9 @@ mod tests {
         let raw = RawDefinitionEntryV1 {
             name: "body".to_owned(),
             dependencies: vec![
-                AssetDependencyRecordV1::new("models/foo.ydd@body", "drawable", "engine.model", true),
-                AssetDependencyRecordV1::new("materials/foo.nemat@body", "material", "engine.materials", true),
-                AssetDependencyRecordV1::new("textures/foo.ytd@diff", "texture", "engine.textures", true),
+                AssetDependencyRecordV1::new("models/foo.ydd@body", "drawable", "engine.assets.models", true),
+                AssetDependencyRecordV1::new("materials/foo.nemat@body", "material", "engine.assets.materials", true),
+                AssetDependencyRecordV1::new("textures/foo.ytd@diff", "texture", "engine.assets.textures", true),
             ],
             ..Default::default()
         };

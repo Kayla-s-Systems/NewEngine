@@ -34,7 +34,7 @@ use crate::gameplay::{
 use crate::scene_bootstrap::bootstrap_runtime_scene;
 
 use self::content::{
-    load_game_ready_map_profile, GameReadyDayNightSpec, GameReadyDefinitionInstanceSpec, GameReadyFoliageSpec,
+    load_game_ready_map_profile, GameReadyDayNightSpec, GameReadyDefinitionApplyMode, GameReadyDefinitionInstanceSpec, GameReadyFoliageSpec,
     GameReadyGameplaySpec, GameReadyLightingSpec, GameReadyMapProfile, GameReadyMaterialSetSpec, GameReadyMaterialSpec,
     GameReadyPaletteSpec, GameReadyPrefabSpec, GameReadySkyAtmosphereSpec,
     GameReadySkySpec, GameReadyTerrainSpec,

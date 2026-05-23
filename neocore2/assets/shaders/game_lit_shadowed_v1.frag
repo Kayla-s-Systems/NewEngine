@@ -331,7 +331,7 @@ vec3 daylight_guard_ambient(vec3 base, vec3 normal_ws, vec3 view_ws, float rough
         return vec3(0.0);
     }
 
-    // Failsafe for legacy material UBOs: if a scene has TOD-driven sky/terrain
+    // Failsafe for previous material UBOs: if a scene has TOD-driven sky/terrain
     // but an opaque material receives zero ambient and zero sun, keep it visible
     // with the same daytime floor used by GameReady bootstrapping. This mirrors
     // professional shader stacks that separate black-level protection from final

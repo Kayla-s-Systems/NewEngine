@@ -62,7 +62,7 @@ pub struct SceneEntityAsset {
     pub parent: Option<u128>,
     pub transform: Option<TransformAsset>,
     /// Optional reference to a .ytyp Definition Entry consumed by scene placement.
-    /// Scene stores the placement reference only; .ytyp metadata is owned by engine.definitions.
+    /// Scene stores the placement reference only; .ytyp metadata is owned by engine.assets.definitions.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub definition_ref: Option<String>,
 }

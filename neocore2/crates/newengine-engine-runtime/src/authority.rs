@@ -184,7 +184,7 @@ impl RuntimeWorldAuthorityBridge {
     /// Declare the freshly assembled native scene cache to the selected provider
     /// authority and publish an explicit native->provider handle map.
     ///
-    /// This is not a hidden fallback or compatibility shim: it is a boundary
+    /// This is a visible authority boundary
     /// declaration. Scene/bootstrap code may keep native typed storages for hot
     /// paths, but identity and semantic component lifecycle are pushed through
     /// `engine.entity` / `engine.ecs` provider packets.

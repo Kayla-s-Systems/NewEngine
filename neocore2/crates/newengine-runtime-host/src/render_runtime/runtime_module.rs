@@ -54,7 +54,7 @@ impl<E: Send + 'static> Module<E> for RenderBackendRuntimeModule {
         let protocol_version = info.protocol_version;
 
         log::info!(
-            "render backend: service bridge bound id='{}' name='{}' version='{}' provider='{}' provider_state='{}' matched_by='{}' debug_text='{}' protocol=v{}.{}.{} features={} upload_budget={}MB/frame",
+            "render backend: service bridge bound id='{}' name='{}' version='{}' provider='{}' provider_state='{}' matched_by='{}' debug_text='{}' protocol=v{}.{}.{} features={} hardware_tier={:?} upload_budget={}MB/frame",
             info.backend_id,
             info.backend_name,
             info.backend_version,
@@ -66,6 +66,7 @@ impl<E: Send + 'static> Module<E> for RenderBackendRuntimeModule {
             protocol_version.minor,
             protocol_version.patch,
             info.capabilities.features.len(),
+            info.capabilities.hardware_tier,
             info.work_budget.max_upload_bytes_per_frame / (1024 * 1024)
         );
 

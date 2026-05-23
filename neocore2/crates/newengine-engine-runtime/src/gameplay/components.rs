@@ -133,8 +133,8 @@ impl PlayerViewVisibility {
     #[inline]
     pub const fn fallback_capsule_default() -> Self {
         Self {
-            base_mode: DisplayMode::Both,
-            policy: PlayerViewVisibilityPolicy::AlwaysVisible,
+            base_mode: DisplayMode::GameOnly,
+            policy: PlayerViewVisibilityPolicy::HideInFirstPerson,
         }
     }
 }

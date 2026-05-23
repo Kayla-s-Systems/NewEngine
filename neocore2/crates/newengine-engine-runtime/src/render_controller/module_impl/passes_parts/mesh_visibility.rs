@@ -70,6 +70,15 @@ impl<T0, T1, T2, T3> DistanceKeyEntry for (f32, u64, T0, T1, T2, T3) {
     fn stable_key(&self) -> u64 { self.1 }
 }
 
+
+impl<T0, T1, T2, T3, T4> DistanceKeyEntry for (f32, u64, T0, T1, T2, T3, T4) {
+    #[inline]
+    fn distance_sq(&self) -> f32 { self.0 }
+
+    #[inline]
+    fn stable_key(&self) -> u64 { self.1 }
+}
+
 #[inline]
 pub(super) fn sort_by_distance_then_key<T: DistanceKeyEntry>(items: &mut [T]) {
     items.sort_by(|a, b| {

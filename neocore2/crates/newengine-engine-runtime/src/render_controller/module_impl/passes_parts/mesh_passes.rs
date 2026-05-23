@@ -341,8 +341,8 @@ pub fn draw_primitives(
     let mats_lock = this.bridges.scene.materials();
     let mats = mats_lock.read();
 
-    let mut sky_entries: Vec<(f32, u64, Primitive, Mat4, Option<newengine_materials::MaterialRef>, bool)> = Vec::new();
-    let mut entries: Vec<(f32, u64, Primitive, Mat4, Option<newengine_materials::MaterialRef>, bool)> = Vec::new();
+    let mut sky_entries: Vec<(f32, u64, Primitive, Mat4, Option<newengine_materials::MaterialRef>, bool, bool)> = Vec::new();
+    let mut entries: Vec<(f32, u64, Primitive, Mat4, Option<newengine_materials::MaterialRef>, bool, bool)> = Vec::new();
     let mut sky_seen = 0usize;
     let mut sky_profile_culled = 0usize;
     for (id, prim, gt) in world.query2::<Primitive, GlobalTransform>() {
@@ -350,6 +350,7 @@ pub fn draw_primitives(
             continue;
         }
         let sky_visual_kind = world.get::<SkyVisualRuntime>(id).map(|visual| visual.kind);
+        let background_sky = sky_visual_kind == Some(SkyVisualKind::Dome);
         let follow_camera_sky = world
             .get::<SkyDomeRuntime>(id)
             .map(|sky| sky.follow_camera)
@@ -357,13 +358,10 @@ pub fn draw_primitives(
         if follow_camera_sky {
             sky_seen += 1;
         }
-        if sky_visual_kind == Some(SkyVisualKind::Dome) {
-            // The dome is a background domain now. The render controller clears the
-            // frame from SkyClearColorRuntime, so the authored sky cannot become a
-            // camera-following opaque oval in front of world geometry. Sun/moon
-            // discs remain explicit sky visuals.
-            continue;
-        }
+        // Data-driven sky uses an authored Dome mesh again. It remains in the
+        // sky bucket and is replayed before world geometry with sky-depth policy;
+        // the clear color is only a fallback background, not a replacement for
+        // `.ytyp -> .ydd -> .nemat -> .ytd` sky assets.
         if follow_camera_sky && !this.runtime_profile().draw_sky_visuals() {
             sky_profile_culled += 1;
             continue;
@@ -400,6 +398,7 @@ pub fn draw_primitives(
             gt.0,
             world.get::<newengine_materials::MaterialRef>(id).copied(),
             follow_camera_sky,
+            background_sky,
         );
         if follow_camera_sky {
             sky_entries.push(entry);
@@ -412,7 +411,7 @@ pub fn draw_primitives(
     entries.truncate(primitive_budget(runtime, false));
     if runtime && (this.frame.frame_index <= 8 || this.frame.frame_index % 240 == 0) {
         log::debug!(
-            "sky.draw_list: seen={} emitted={} profile_culled={} pass='viewport_forward' depth_write=false shadow=false follow_camera=true dome_background_clear=true opaque_candidates={} opaque_budget={} runtime_profile_sky_native={}",
+            "sky.draw_list: seen={} emitted={} profile_culled={} pass='viewport_forward' depth_write=false shadow=false follow_camera=true dome_background_mesh=true opaque_candidates={} opaque_budget={} runtime_profile_sky_native={}",
             sky_seen,
             sky_entries.len(),
             sky_profile_culled,
@@ -422,15 +421,15 @@ pub fn draw_primitives(
         );
     }
     let mut plan_cache: FxHashMap<PrimitivePlanKey, PrimitiveGpuPlan> = FxHashMap::default();
-    let mut sky_batches = InstanceBatchSet::default();
+    let mut sky_background_batches = InstanceBatchSet::default();
+    let mut sky_foreground_batches = InstanceBatchSet::default();
     let mut opaque_batches = InstanceBatchSet::default();
 
-    // Keep sky in its own replay bucket. `InstanceBatchSet` sorts by pipeline / bind
-    // group / mesh for performance, so mixing sky and opaque primitives in one set
-    // lets the sky pipeline be replayed after terrain. That was the white follow-
-    // camera oval over the world. Sky is a background domain: replay it first,
-    // depth-write disabled, then replay world opaque batches on top.
-    for (_distance_sq, _entity_key, prim, model, material_ref, follow_camera_sky) in sky_entries.into_iter().chain(entries.into_iter()) {
+    // Keep sky in ordered replay buckets. `InstanceBatchSet` sorts by pipeline / bind
+    // group / mesh for performance, so the dome must not share the same unordered
+    // set with sun/moon discs: draw authored dome first, sky foreground discs next,
+    // then world opaque batches.
+    for (_distance_sq, _entity_key, prim, model, material_ref, follow_camera_sky, background_sky) in sky_entries.into_iter().chain(entries.into_iter()) {
         let model = if follow_camera_sky {
             recenter_model_translation(model, camera_position)
         } else {
@@ -545,20 +544,27 @@ pub fn draw_primitives(
             plan.sampler,
             plan.mesh_key,
         );
-        if follow_camera_sky {
-            sky_batches.push(batch_key, plan.pipeline, plan.bind_group, plan.gpu, instance);
+        if follow_camera_sky && background_sky {
+            sky_background_batches.push(batch_key, plan.pipeline, plan.bind_group, plan.gpu, instance);
+        } else if follow_camera_sky {
+            sky_foreground_batches.push(batch_key, plan.pipeline, plan.bind_group, plan.gpu, instance);
         } else {
             opaque_batches.push(batch_key, plan.pipeline, plan.bind_group, plan.gpu, instance);
         }
         this.diagnostics.overlay_metrics.record_indexed_triangles(plan.gpu.index_count);
     }
 
-    if sky_batches.is_empty() && opaque_batches.is_empty() {
+    if sky_background_batches.is_empty() && sky_foreground_batches.is_empty() && opaque_batches.is_empty() {
         return Ok(());
     }
 
     let mut replay = InstancedReplayState::default();
-    for batch in sky_batches.into_sorted_batches().into_iter().chain(opaque_batches.into_sorted_batches().into_iter()) {
+    for batch in sky_background_batches
+        .into_sorted_batches()
+        .into_iter()
+        .chain(sky_foreground_batches.into_sorted_batches().into_iter())
+        .chain(opaque_batches.into_sorted_batches().into_iter())
+    {
         let instance_count = batch.instances.len() as u32;
         let instance_slice = this.gpu.meshes.instance_uploader.upload(r, &batch.instances)?;
         replay.set_pipeline(r, batch.pipeline)?;

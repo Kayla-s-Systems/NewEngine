@@ -25,9 +25,19 @@ pub struct AssetFileTypesServiceInfo {
     pub registered_extensions: Vec<String>,
 }
 
-#[derive(Clone, Default)]
+#[derive(Clone)]
 struct FileTypeRegistryState {
     registry: BTreeMap<String, AssetFileTypeDescriptor>,
+}
+
+impl Default for FileTypeRegistryState {
+    fn default() -> Self {
+        let registry = newengine_assets_api::canonical_nef8_file_type_descriptors()
+            .into_iter()
+            .map(|descriptor| (descriptor.extension.clone(), descriptor))
+            .collect();
+        Self { registry }
+    }
 }
 
 impl FileTypeRegistryState {
@@ -159,8 +169,8 @@ pub fn asset_file_types_gateway_service() -> newengine_plugin_api::ServiceV1Dyn<
     )
     .gateway(ENGINE_ASSET_FILE_TYPES_SERVICE_ID)
     .protocol("json")
-    .features(["codec-descriptor-registry", "self-registration"])
-    .notes("Empty descriptor registry. Asset codecs/providers register themselves when ready; the registry does not know or parse formats.");
+    .features(["codec-descriptor-registry", "self-registration", "canonical-nef8-y-file-descriptors"])
+    .notes("Descriptor registry starts with researched NEF8 .y* ListFile cells. Codec/provider descriptors may override them deterministically; the registry still does not parse payload semantics.");
 
     JsonServiceRouter::with_state(
         ASSET_FILE_TYPES_SERVICE_ID,
@@ -219,9 +229,9 @@ mod tests {
             ..Default::default()
         });
         assert_eq!(registered.byte_owner, newengine_assets_api::ENGINE_ASSET_SERVICE_ID);
-        assert_eq!(registered.semantic_gateway, newengine_assets_api::ENGINE_TEXTURES_SERVICE_ID);
-        assert_eq!(registered.gateway, newengine_assets_api::ENGINE_TEXTURES_SERVICE_ID);
-        assert!(registered.consumer_domains.iter().any(|it| it == newengine_assets_api::ENGINE_MATERIALS_SERVICE_ID));
+        assert_eq!(registered.semantic_gateway, newengine_assets_api::ENGINE_ASSETS_TEXTURES_SERVICE_ID);
+        assert_eq!(registered.gateway, newengine_assets_api::ENGINE_ASSETS_TEXTURES_SERVICE_ID);
+        assert!(registered.consumer_domains.iter().any(|it| it == newengine_assets_api::ENGINE_ASSETS_MATERIALS_SERVICE_ID));
     }
 
     #[test]
@@ -236,9 +246,18 @@ mod tests {
             ..Default::default()
         });
         assert_eq!(registered.byte_owner, newengine_assets_api::ENGINE_ASSET_SERVICE_ID);
-        assert_eq!(registered.semantic_gateway, newengine_assets_api::ENGINE_DEFINITIONS_SERVICE_ID);
+        assert_eq!(registered.semantic_gateway, newengine_assets_api::ENGINE_ASSETS_DEFINITIONS_SERVICE_ID);
         assert_ne!(registered.semantic_gateway, "engine.scene");
         assert!(registered.consumer_domains.iter().any(|it| it == "engine.ai"));
+    }
+
+    #[test]
+    fn registry_preloads_researched_nef8_y_formats() {
+        let state = FileTypeRegistryState::default();
+        let manifest = state.manifest();
+        assert!(manifest.formats.iter().any(|it| it.extension == "ymap" && it.semantic_gateway == newengine_assets_api::ENGINE_ASSETS_MAPS_SERVICE_ID));
+        assert!(manifest.formats.iter().any(|it| it.extension == "ycd" && it.semantic_gateway == "engine.assets.models.skeletons"));
+        assert!(manifest.formats.iter().any(|it| it.extension == "ysc" && it.asset_kind == "compiled_script"));
     }
 
     #[test]

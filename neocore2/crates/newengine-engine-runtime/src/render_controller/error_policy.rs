@@ -6,7 +6,7 @@ use newengine_core::{EngineError, EngineResult};
 use super::controller::RuntimeRenderController;
 
 #[derive(Default)]
-pub(super) struct RenderBackendFailureState {
+pub(crate) struct RenderBackendFailureState {
     disabled: bool,
     phase: Option<&'static str>,
     message: Option<String>,
@@ -14,18 +14,18 @@ pub(super) struct RenderBackendFailureState {
 
 impl RenderBackendFailureState {
     #[inline]
-    pub(super) fn new() -> Self {
+    pub(crate) fn new() -> Self {
         Self::default()
     }
 
     #[inline]
-    pub(super) fn is_disabled(&self) -> bool {
+    pub(crate) fn is_disabled(&self) -> bool {
         self.disabled
     }
 
 
     #[inline]
-    pub(super) fn snapshot(&self) -> RenderBackendStatus {
+    pub(crate) fn snapshot(&self) -> RenderBackendStatus {
         if self.disabled {
             RenderBackendStatus {
                 degraded: true,
@@ -47,7 +47,7 @@ impl RenderBackendFailureState {
 }
 
 #[inline]
-pub(super) fn is_backend_device_lost_error(error: &EngineError) -> bool {
+pub(crate) fn is_backend_device_lost_error(error: &EngineError) -> bool {
     let mut text = error.to_string();
     text.make_ascii_lowercase();
     text.contains("device lost")
@@ -59,11 +59,11 @@ pub(super) fn is_backend_device_lost_error(error: &EngineError) -> bool {
 
 impl RuntimeRenderController {
     #[inline]
-    pub(super) fn backend_render_disabled(&self) -> bool {
+    pub(crate) fn backend_render_disabled(&self) -> bool {
         self.backend_failure.is_disabled()
     }
 
-    pub(super) fn record_render_backend_error(
+    pub(crate) fn record_render_backend_error(
         &mut self,
         phase: &'static str,
         error: EngineError,
@@ -94,7 +94,7 @@ impl RuntimeRenderController {
     }
 
     #[inline]
-    pub(super) fn record_render_backend_result(
+    pub(crate) fn record_render_backend_result(
         &mut self,
         phase: &'static str,
         result: EngineResult<()>,

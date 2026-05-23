@@ -110,6 +110,31 @@ pub fn engine_gateway_domain(gateway_id: &str) -> Option<String> {
     normalize_engine_gateway_id(gateway_id)?.strip_prefix(ENGINE_SERVICE_GATEWAY_PREFIX).map(str::to_owned)
 }
 
+#[inline]
+pub fn engine_gateway_parent_id(gateway_id: &str) -> Option<String> {
+    let normalized = normalize_engine_gateway_id(gateway_id)?;
+    let mut parts: Vec<&str> = normalized.split('.').collect();
+    if parts.len() <= 2 {
+        return None;
+    }
+    parts.pop();
+    Some(parts.join("."))
+}
+
+#[inline]
+pub fn engine_gateway_root_id(gateway_id: &str) -> Option<String> {
+    let normalized = normalize_engine_gateway_id(gateway_id)?;
+    let mut parts = normalized.split('.');
+    let prefix = parts.next()?;
+    let domain = parts.next()?;
+    Some(format!("{prefix}.{domain}"))
+}
+
+#[inline]
+pub fn engine_gateway_depth(gateway_id: &str) -> Option<usize> {
+    Some(normalize_engine_gateway_id(gateway_id)?.split('.').count())
+}
+
 /// Common declaration for a backend service family.
 ///
 /// This intentionally does not describe domain packets. Render, physics, input,
@@ -257,7 +282,12 @@ impl BackendRouteDescriptor {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum EngineServiceKind {
     Assets,
+    AssetVfs,
     AssetFileTypes,
+    AssetPackages,
+    AssetListFiles,
+    AssetMaps,
+    AssetValidation,
     Materials,
     Textures,
     Definitions,
@@ -311,20 +341,25 @@ impl EngineServiceKind {
     pub const fn as_str(self) -> &'static str {
         match self {
             Self::Assets => "assets",
+            Self::AssetVfs => "assets.vfs",
             Self::AssetFileTypes => "assets.file_types",
-            Self::Materials => "materials",
-            Self::Textures => "textures",
-            Self::Definitions => "definitions",
-            Self::AssetGraph => "asset_graph",
+            Self::AssetPackages => "assets.packages",
+            Self::AssetListFiles => "assets.listfiles",
+            Self::AssetMaps => "assets.maps",
+            Self::AssetValidation => "assets.validation",
+            Self::Materials => "assets.materials",
+            Self::Textures => "assets.textures",
+            Self::Definitions => "assets.definitions",
+            Self::AssetGraph => "assets.graph",
             Self::Time => "time",
             Self::Audio => "audio",
             Self::Render => "render",
             Self::RenderEffects => "render.effects",
             Self::RenderMaterials => "render.materials",
-            Self::Model => "model",
-            Self::ModelSkeletons => "model.skeletons",
-            Self::ModelMaterials => "model.materials",
-            Self::ModelCollisions => "model.collisions",
+            Self::Model => "assets.models",
+            Self::ModelSkeletons => "assets.models.skeletons",
+            Self::ModelMaterials => "assets.models.materials",
+            Self::ModelCollisions => "assets.models.collisions",
             Self::Camera => "camera",
             Self::CameraModes => "camera.modes",
             Self::CameraAnimations => "camera.animations",
@@ -355,20 +390,25 @@ impl EngineServiceKind {
     pub fn parse(value: &str) -> Option<Self> {
         match value.trim().to_ascii_lowercase().as_str() {
             "assets" => Some(Self::Assets),
-            "assets.file_types" | "assets_file_types" | "asset.file_types" | "asset_file_types" => Some(Self::AssetFileTypes),
-            "materials" => Some(Self::Materials),
-            "textures" => Some(Self::Textures),
-            "definitions" => Some(Self::Definitions),
-            "asset_graph" | "asset.graph" | "asset-graph" => Some(Self::AssetGraph),
+            "assets.vfs" | "assets_vfs" => Some(Self::AssetVfs),
+            "assets.file_types" | "assets_file_types" => Some(Self::AssetFileTypes),
+            "assets.packages" | "assets_packages" => Some(Self::AssetPackages),
+            "assets.listfiles" | "assets_listfiles" | "assets.list_files" | "assets_list_files" => Some(Self::AssetListFiles),
+            "assets.maps" | "assets_maps" => Some(Self::AssetMaps),
+            "assets.validation" | "assets_validation" => Some(Self::AssetValidation),
+            "assets.materials" | "assets_materials" => Some(Self::Materials),
+            "assets.textures" | "assets_textures" => Some(Self::Textures),
+            "assets.definitions" | "assets_definitions" => Some(Self::Definitions),
+            "assets.graph" | "assets_graph" | "assets-graph" => Some(Self::AssetGraph),
             "time" => Some(Self::Time),
             "audio" => Some(Self::Audio),
             "render" => Some(Self::Render),
             "render.effects" | "render_effects" => Some(Self::RenderEffects),
             "render.materials" | "render_materials" => Some(Self::RenderMaterials),
-            "model" => Some(Self::Model),
-            "model.skeletons" | "model_skeletons" => Some(Self::ModelSkeletons),
-            "model.materials" | "model_materials" => Some(Self::ModelMaterials),
-            "model.collisions" | "model_collisions" => Some(Self::ModelCollisions),
+            "assets.models" | "assets_models" => Some(Self::Model),
+            "assets.models.skeletons" | "assets_models_skeletons" => Some(Self::ModelSkeletons),
+            "assets.models.materials" | "assets_models_materials" => Some(Self::ModelMaterials),
+            "assets.models.collisions" | "assets_models_collisions" => Some(Self::ModelCollisions),
             "camera" => Some(Self::Camera),
             "camera.modes" | "camera_modes" => Some(Self::CameraModes),
             "camera.animations" | "camera_animations" => Some(Self::CameraAnimations),
@@ -403,7 +443,7 @@ impl EngineServiceKind {
     #[inline]
     pub const fn parent(self) -> Option<Self> {
         match self {
-            Self::AssetFileTypes => Some(Self::Assets),
+            Self::AssetVfs | Self::AssetFileTypes | Self::AssetPackages | Self::AssetListFiles | Self::AssetMaps | Self::AssetValidation | Self::Materials | Self::Textures | Self::Definitions | Self::AssetGraph | Self::Model => Some(Self::Assets),
             Self::RenderEffects | Self::RenderMaterials => Some(Self::Render),
             Self::ModelSkeletons | Self::ModelMaterials | Self::ModelCollisions => Some(Self::Model),
             Self::CameraModes | Self::CameraAnimations => Some(Self::Camera),
@@ -433,20 +473,25 @@ impl EngineServiceKind {
     pub const fn engine_gateway_id(self) -> &'static str {
         match self {
             Self::Assets => "engine.assets",
+            Self::AssetVfs => "engine.assets.vfs",
             Self::AssetFileTypes => "engine.assets.file_types",
-            Self::Materials => "engine.materials",
-            Self::Textures => "engine.textures",
-            Self::Definitions => "engine.definitions",
-            Self::AssetGraph => "engine.asset_graph",
+            Self::AssetPackages => "engine.assets.packages",
+            Self::AssetListFiles => "engine.assets.listfiles",
+            Self::AssetMaps => "engine.assets.maps",
+            Self::AssetValidation => "engine.assets.validation",
+            Self::Materials => "engine.assets.materials",
+            Self::Textures => "engine.assets.textures",
+            Self::Definitions => "engine.assets.definitions",
+            Self::AssetGraph => "engine.assets.graph",
             Self::Time => "engine.time",
             Self::Audio => "engine.audio",
             Self::Render => "engine.render",
             Self::RenderEffects => "engine.render.effects",
             Self::RenderMaterials => "engine.render.materials",
-            Self::Model => "engine.model",
-            Self::ModelSkeletons => "engine.model.skeletons",
-            Self::ModelMaterials => "engine.model.materials",
-            Self::ModelCollisions => "engine.model.collisions",
+            Self::Model => "engine.assets.models",
+            Self::ModelSkeletons => "engine.assets.models.skeletons",
+            Self::ModelMaterials => "engine.assets.models.materials",
+            Self::ModelCollisions => "engine.assets.models.collisions",
             Self::Camera => "engine.camera",
             Self::CameraModes => "engine.camera.modes",
             Self::CameraAnimations => "engine.camera.animations",
@@ -615,20 +660,26 @@ mod tests {
     #[test]
     fn child_domains_parse_with_canonical_gateways() {
         let cases = [
+            ("assets.vfs", EngineServiceKind::AssetVfs, "engine.assets.vfs", Some(EngineServiceKind::Assets)),
             ("assets.file_types", EngineServiceKind::AssetFileTypes, "engine.assets.file_types", Some(EngineServiceKind::Assets)),
-            ("materials", EngineServiceKind::Materials, "engine.materials", None),
-            ("textures", EngineServiceKind::Textures, "engine.textures", None),
-            ("definitions", EngineServiceKind::Definitions, "engine.definitions", None),
-            ("asset_graph", EngineServiceKind::AssetGraph, "engine.asset_graph", None),
+            ("assets.packages", EngineServiceKind::AssetPackages, "engine.assets.packages", Some(EngineServiceKind::Assets)),
+            ("assets.listfiles", EngineServiceKind::AssetListFiles, "engine.assets.listfiles", Some(EngineServiceKind::Assets)),
+            ("assets.maps", EngineServiceKind::AssetMaps, "engine.assets.maps", Some(EngineServiceKind::Assets)),
+            ("assets.validation", EngineServiceKind::AssetValidation, "engine.assets.validation", Some(EngineServiceKind::Assets)),
+            ("assets.materials", EngineServiceKind::Materials, "engine.assets.materials", Some(EngineServiceKind::Assets)),
+            ("assets.textures", EngineServiceKind::Textures, "engine.assets.textures", Some(EngineServiceKind::Assets)),
+            ("assets.definitions", EngineServiceKind::Definitions, "engine.assets.definitions", Some(EngineServiceKind::Assets)),
+            ("assets.graph", EngineServiceKind::AssetGraph, "engine.assets.graph", Some(EngineServiceKind::Assets)),
             ("time", EngineServiceKind::Time, "engine.time", None),
             ("input.bindings", EngineServiceKind::InputBindings, "engine.input.bindings", Some(EngineServiceKind::Input)),
             ("input.actions", EngineServiceKind::InputActions, "engine.input.actions", Some(EngineServiceKind::Input)),
             ("input.contexts", EngineServiceKind::InputContexts, "engine.input.contexts", Some(EngineServiceKind::Input)),
             ("render.effects", EngineServiceKind::RenderEffects, "engine.render.effects", Some(EngineServiceKind::Render)),
             ("render.materials", EngineServiceKind::RenderMaterials, "engine.render.materials", Some(EngineServiceKind::Render)),
-            ("model.skeletons", EngineServiceKind::ModelSkeletons, "engine.model.skeletons", Some(EngineServiceKind::Model)),
-            ("model.materials", EngineServiceKind::ModelMaterials, "engine.model.materials", Some(EngineServiceKind::Model)),
-            ("model.collisions", EngineServiceKind::ModelCollisions, "engine.model.collisions", Some(EngineServiceKind::Model)),
+            ("assets.models", EngineServiceKind::Model, "engine.assets.models", Some(EngineServiceKind::Assets)),
+            ("assets.models.skeletons", EngineServiceKind::ModelSkeletons, "engine.assets.models.skeletons", Some(EngineServiceKind::Model)),
+            ("assets.models.materials", EngineServiceKind::ModelMaterials, "engine.assets.models.materials", Some(EngineServiceKind::Model)),
+            ("assets.models.collisions", EngineServiceKind::ModelCollisions, "engine.assets.models.collisions", Some(EngineServiceKind::Model)),
             ("physics.contacts", EngineServiceKind::PhysicsContacts, "engine.physics.contacts", Some(EngineServiceKind::Physics)),
             ("physics.constraints", EngineServiceKind::PhysicsConstraints, "engine.physics.constraints", Some(EngineServiceKind::Physics)),
             ("camera.modes", EngineServiceKind::CameraModes, "engine.camera.modes", Some(EngineServiceKind::Camera)),
@@ -650,7 +701,7 @@ mod tests {
         assert!(!EngineServiceKind::Input.matches_engine_gateway_id("engine.input.bindings"));
         assert!(!EngineServiceKind::Render.matches_engine_gateway_id("engine.render.effects"));
         assert!(!EngineServiceKind::Physics.matches_engine_gateway_id("engine.physics.contacts"));
-        assert!(!EngineServiceKind::Model.matches_engine_gateway_id("engine.model.skeletons"));
+        assert!(!EngineServiceKind::Model.matches_engine_gateway_id("engine.assets.models.skeletons"));
         assert!(!EngineServiceKind::Camera.matches_engine_gateway_id("engine.camera.modes"));
     }
 

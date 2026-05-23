@@ -3,14 +3,14 @@
 use crate::api::{MaterialDescriptor, MaterialId, MaterialTextureBindings};
 use crate::texture_refs::MaterialTextureReference;
 
-pub const ENGINE_MATERIALS_SERVICE_ID: &str = "engine.materials";
+pub const ENGINE_ASSETS_MATERIALS_SERVICE_ID: &str = "engine.assets.materials";
 pub const MATERIALS_SERVICE_ID: &str = "materials.api";
-pub const MATERIALS_BACKEND_CAPABILITY_ID: &str = "materials.backend";
+pub const MATERIALS_BACKEND_CAPABILITY_ID: &str = "assets.materials.backend";
 
 pub const MATERIALS_BACKEND_SERVICE_SPEC: newengine_service_api::BackendServiceSpec =
     newengine_service_api::BackendServiceSpec::new(
-        "materials",
-        ENGINE_MATERIALS_SERVICE_ID,
+        "assets.materials",
+        ENGINE_ASSETS_MATERIALS_SERVICE_ID,
         MATERIALS_SERVICE_ID,
         MATERIALS_BACKEND_CAPABILITY_ID,
     );
@@ -19,14 +19,14 @@ pub mod method {
     pub const INFO_JSON: &str = newengine_service_api::SERVICE_METHOD_INFO_JSON;
     pub const INVOKE_JSON: &str = newengine_service_api::SERVICE_METHOD_INVOKE_JSON;
     pub const SHUTDOWN_V1: &str = newengine_service_api::SERVICE_METHOD_SHUTDOWN_V1;
-    pub const LOAD_JSON_V1: &str = "materials.load_json_v1";
-    pub const DESCRIBE_TEXTURE_REF_JSON_V1: &str = "materials.describe_texture_ref_json_v1";
-    pub const FORMATS_JSON_V1: &str = "materials.formats_json_v1";
-    pub const MANIFEST_JSON_V1: &str = "materials.manifest_json_v1";
-    pub const LOAD_DESCRIPTOR_V1: &str = "materials.load_descriptor_v1";
-    pub const RESOLVE_GRAPH_V1: &str = "materials.resolve_graph_v1";
-    pub const VALIDATE_V1: &str = "materials.validate_v1";
-    pub const TO_RENDER_PACKET_V1: &str = "materials.to_render_packet_v1";
+    pub const LOAD_JSON_V1: &str = "assets.materials.load_json_v1";
+    pub const DESCRIBE_TEXTURE_REF_JSON_V1: &str = "assets.materials.describe_texture_ref_json_v1";
+    pub const FORMATS_JSON_V1: &str = "assets.materials.formats_json_v1";
+    pub const MANIFEST_JSON_V1: &str = "assets.materials.manifest_v1";
+    pub const LOAD_DESCRIPTOR_V1: &str = "assets.materials.load_descriptor_v1";
+    pub const RESOLVE_GRAPH_V1: &str = "assets.materials.resolve_graph_v1";
+    pub const VALIDATE_V1: &str = "assets.materials.validate_v1";
+    pub const TO_RENDER_PACKET_V1: &str = "assets.materials.to_render_packet_v1";
 }
 
 pub const MATERIALS_SERVICE_METHODS: &[&str] = &[
@@ -45,8 +45,8 @@ pub const MATERIALS_SERVICE_METHODS: &[&str] = &[
 
 pub const MATERIALS_RUNTIME_CONTRACT_SPEC: newengine_service_api::RuntimeServiceContractSpec =
     newengine_service_api::RuntimeServiceContractSpec::new(
-        ENGINE_MATERIALS_SERVICE_ID,
-        "newengine.materials-api >= 0.1.x",
+        ENGINE_ASSETS_MATERIALS_SERVICE_ID,
+        "newengine.assets.materials-api >= 0.1.x",
         MATERIALS_SERVICE_METHODS,
     );
 
@@ -173,16 +173,16 @@ pub struct MaterialsManifest {
 impl Default for MaterialsManifest {
     fn default() -> Self {
         Self {
-            schema: "newengine.materials.manifest.v1".to_owned(),
-            gateway: ENGINE_MATERIALS_SERVICE_ID.to_owned(),
+            schema: "newengine.assets.materials.manifest.v1".to_owned(),
+            gateway: ENGINE_ASSETS_MATERIALS_SERVICE_ID.to_owned(),
             primary_format: "nemat".to_owned(),
             texture_reference_syntax: "<logical-path>.ytd@entry".to_owned(),
             methods: MATERIALS_SERVICE_METHODS.iter().map(|m| (*m).to_owned()).collect(),
             policy: vec![
-                "engine.materials is the only material resolve gateway".to_owned(),
+                "engine.assets.materials is the only material resolve gateway".to_owned(),
                 "materials reference .ytd@entry texture dictionaries".to_owned(),
                 "renderer receives RenderMaterialPacket only".to_owned(),
-                "raw image paths and .neytd authored references are invalid".to_owned(),
+                "raw image paths outside authored ListFile dictionaries are invalid".to_owned(),
             ],
         }
     }
@@ -232,7 +232,7 @@ pub struct ResolvedMaterialGraph {
     pub texture_refs: Vec<MaterialTextureRefInfo>,
     pub warnings: Vec<String>,
 }
-impl Default for ResolvedMaterialGraph { fn default() -> Self { Self { schema: "newengine.materials.resolved_graph.v1".to_owned(), source: String::new(), name: String::new(), shader: "pbr.default".to_owned(), descriptor: MaterialDescriptor::default(), textures: MaterialTextureBindings::default(), texture_refs: Vec::new(), warnings: Vec::new() } } }
+impl Default for ResolvedMaterialGraph { fn default() -> Self { Self { schema: "newengine.assets.materials.resolved_graph.v1".to_owned(), source: String::new(), name: String::new(), shader: "pbr.default".to_owned(), descriptor: MaterialDescriptor::default(), textures: MaterialTextureBindings::default(), texture_refs: Vec::new(), warnings: Vec::new() } } }
 
 #[derive(Clone, Debug, PartialEq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
@@ -245,4 +245,4 @@ pub struct RenderMaterialPacket {
     pub textures: MaterialTextureBindings,
     pub packet_kind: String,
 }
-impl Default for RenderMaterialPacket { fn default() -> Self { Self { schema: "newengine.materials.render_packet.v1".to_owned(), source: String::new(), name: String::new(), descriptor: MaterialDescriptor::default(), textures: MaterialTextureBindings::default(), packet_kind: "renderer_agnostic_material_packet".to_owned() } } }
+impl Default for RenderMaterialPacket { fn default() -> Self { Self { schema: "newengine.assets.materials.render_packet.v1".to_owned(), source: String::new(), name: String::new(), descriptor: MaterialDescriptor::default(), textures: MaterialTextureBindings::default(), packet_kind: "renderer_agnostic_material_packet".to_owned() } } }

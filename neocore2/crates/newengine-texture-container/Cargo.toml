@@ -3,7 +3,7 @@ name = "newengine-texture-container"
 version = "0.1.0"
 edition = "2021"
 license = "Proprietary"
-description = "NewEngine runtime texture dictionary container (.neytd)"
+description = "NewEngine NEF8/YTD texture dictionary payload container"
 
 [dependencies]
 serde = { version = "1", features = ["derive"] }

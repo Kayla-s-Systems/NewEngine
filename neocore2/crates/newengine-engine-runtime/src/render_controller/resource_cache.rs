@@ -40,7 +40,7 @@ impl RuntimeRenderController {
             Ok(texture_asset) => texture_asset,
             Err(e) if e.kind == AssetErrorKind::NotReady => {
                 log::debug!(
-                    "render controller: material texture packet pending path='{}' method='textures.entry_runtime_v1' err='{}'",
+                    "render controller: material texture packet pending path='{}' method='assets.textures.entry_runtime_v1' err='{}'",
                     path,
                     e
                 );
@@ -54,9 +54,9 @@ impl RuntimeRenderController {
                 return;
             }
             Err(e) => {
-                let message = format!("textures.entry_runtime_v1 failed err='{e}'");
+                let message = format!("assets.textures.entry_runtime_v1 failed err='{e}'");
                 let line = format!(
-                    "render controller: material texture packet lookup failed path='{}' method='textures.entry_runtime_v1' kind='{}' err='{}'",
+                    "render controller: material texture packet lookup failed path='{}' method='assets.textures.entry_runtime_v1' kind='{}' err='{}'",
                     path,
                     e.kind,
                     e,
@@ -91,7 +91,7 @@ impl RuntimeRenderController {
         ) {
             Ok(texture) => {
                 log::debug!(
-                    "render controller: material texture packet upload queued path='{}' method='textures.entry_runtime_v1' texture={:?} frame={}",
+                    "render controller: material texture packet upload queued path='{}' method='assets.textures.entry_runtime_v1' texture={:?} frame={}",
                     path,
                     texture,
                     self.frame.frame_index

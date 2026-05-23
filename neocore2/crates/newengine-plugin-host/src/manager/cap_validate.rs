@@ -5,13 +5,13 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use newengine_math::collections_prelude::NeHashMap as HashMap;
 
 use newengine_plugin_api::{
-    capability_has_tag, CapabilityKind, CapabilityRole, PluginDescriptor, CAPABILITY_TAG_LEGACY,
+    capability_has_tag, CapabilityKind, CapabilityRole, PluginDescriptor, CAPABILITY_TAG_RETIRED,
 };
 
 use super::types::{LoadedPlugin, PluginState};
 use super::PluginManager;
 
-static WARNED_LEGACY_CAPABILITIES: AtomicBool = AtomicBool::new(false);
+static WARNED_RETIRED_CAPABILITIES: AtomicBool = AtomicBool::new(false);
 
 #[derive(Clone, PartialEq, Eq, Hash)]
 struct CapKey {
@@ -120,11 +120,11 @@ fn missing_requirements(d: &PluginDescriptor, providers: &HashMap<CapKey, u32>) 
 
 
 #[inline]
-fn warn_descriptor_legacy_capabilities(plugin_id: &str, descriptor: &PluginDescriptor) {
+fn warn_descriptor_retired_capabilities(plugin_id: &str, descriptor: &PluginDescriptor) {
     for capability in descriptor.capabilities.iter() {
-        if capability_has_tag(capability, CAPABILITY_TAG_LEGACY) {
+        if capability_has_tag(capability, CAPABILITY_TAG_RETIRED) {
             log::warn!(
-                "plugins: capability id='{}' plugin='{}' tag='legacy' kind={} role={:?} version={} -- migrate consumers/providers to a current tagged capability",
+                "plugins: capability id='{}' plugin='{}' tag='retired' kind={} role={:?} version={} -- retire or replace this capability declaration",
                 capability.id,
                 plugin_id,
                 capability.kind as u8,
@@ -135,8 +135,8 @@ fn warn_descriptor_legacy_capabilities(plugin_id: &str, descriptor: &PluginDescr
     }
 }
 
-fn warn_legacy_capabilities_once(loaded: &[LoadedPlugin]) {
-    if WARNED_LEGACY_CAPABILITIES.swap(true, Ordering::Relaxed) {
+fn warn_retired_capabilities_once(loaded: &[LoadedPlugin]) {
+    if WARNED_RETIRED_CAPABILITIES.swap(true, Ordering::Relaxed) {
         return;
     }
 
@@ -144,12 +144,12 @@ fn warn_legacy_capabilities_once(loaded: &[LoadedPlugin]) {
         let Some(descriptor) = &plugin.descriptor else {
             continue;
         };
-        warn_descriptor_legacy_capabilities(plugin.info.id.as_str(), descriptor);
+        warn_descriptor_retired_capabilities(plugin.info.id.as_str(), descriptor);
     }
 
     for descriptor in crate::host_context::list_external_runtime_descriptors() {
         let plugin_id = descriptor.id.to_string();
-        warn_descriptor_legacy_capabilities(&plugin_id, &descriptor);
+        warn_descriptor_retired_capabilities(&plugin_id, &descriptor);
     }
 }
 
@@ -173,7 +173,7 @@ impl PluginManager {
     /// - Plugins with unmet requirements are disabled (soft-fail) before `start_all()`.
     /// - Validation is iterated to a fixpoint to handle cascading disables.
     pub(crate) fn validate_required_capabilities(&mut self) {
-        warn_legacy_capabilities_once(&self.loaded);
+        warn_retired_capabilities_once(&self.loaded);
 
         let mut iteration: u32 = 0;
 

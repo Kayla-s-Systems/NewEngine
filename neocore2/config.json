@@ -62,8 +62,8 @@
       "engine_runtime": {
         "render": {
           "runtime_profile": {
-            "id": "newengine.render.runtime.foundation_gtx750",
-            "legacy_safe": false,
+            "id": "newengine.render.runtime.tier.auto",
+            "gpu_safe": false,
             "graphics": {
               "clear_color": [
                 0.02,

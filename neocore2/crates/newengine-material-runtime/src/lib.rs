@@ -2,9 +2,10 @@
 
 //! Runtime material gateway and strict .nemat -> .ytd@entry material resolution.
 //!
-//! Importer compatibility may still project legacy OBJ/MTL material sources, but
-//! runtime texture refs are never derived from DDS/PNG/JPG names here.
+//! Runtime material gateway for `.nemat@entry -> .ytd@entry` resolution.
+//! Source image names are importer inputs, never runtime texture refs.
 
+use newengine_authored_xml as authored_xml;
 use newengine_materials::{
     validate_authored_material_library, validate_material_texture_reference,
     AuthoredMaterialDescriptor, AuthoredMaterialLibrary, MaterialDescriptor,
@@ -117,18 +118,19 @@ mod tests {
 
     #[test]
     fn material_library_payload_selects_entry() {
-        let payload = br#"{
-            "version": 1,
-            "materials": [
-                {
-                    "name": "garage_door",
-                    "shader": "pbr.default",
-                    "surface": { "blend": "opaque", "two_sided": false, "alpha_cutoff": null },
-                    "textures": { "base_color": "textures/world/garage.ytd@garage_door_bc" },
-                    "params": { "roughness": { "type": "float", "value": 0.7 } }
-                }
-            ]
-        }"#;
+        let payload = br#"<?xml version="1.0" encoding="UTF-8"?>
+<NematMaterialLibrary schema="newengine.nemat.material_library.v1" version="1">
+  <Material name="garage_door" shader="pbr.default">
+    <Surface blend="opaque" two_sided="false" />
+    <Textures>
+      <Texture slot="base_color" ref="textures/world/garage.ytd@garage_door_bc" />
+    </Textures>
+    <Params>
+      <Param name="roughness" type="float" value="0.7" />
+    </Params>
+  </Material>
+</NematMaterialLibrary>
+"#;
         let material = decode_material_entry_payload(payload, "garage_door").unwrap();
         assert_eq!(material.name, "garage_door");
         assert!(material.textures.contains_key("base_color"));
@@ -137,29 +139,39 @@ mod tests {
 
 use abi_stable::std_types::{RResult, RString};
 use newengine_assets::{AssetDecodeRequest, AssetServiceClient};
-use newengine_assets_api::{textures_method, ENGINE_TEXTURES_SERVICE_ID};
+use newengine_assets_api::{textures_method, ASSET_LIST_FILE_BODY_OUTPUT, ENGINE_ASSETS_TEXTURES_SERVICE_ID};
 use newengine_materials::{
-    method as material_method, ENGINE_MATERIALS_SERVICE_ID,
+    method as material_method, ENGINE_ASSETS_MATERIALS_SERVICE_ID,
     MATERIALS_BACKEND_CAPABILITY_ID, MATERIALS_SERVICE_ID, MATERIALS_SERVICE_METHODS,
 };
-use newengine_plugin_api::{Blob, MethodName};
+use newengine_plugin_api::{Blob, HostApiV1, MethodName};
 use newengine_service_api::EngineServiceKind;
 use newengine_service_kit::{
     engine_owned_service_description, ok_empty_blob, ok_json,
     register_engine_owned_gateway_service_best_effort, EngineOwnedGatewayDecl, JsonServiceRouter,
 };
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
+use std::sync::{Arc, Mutex};
 use newengine_materials::api::material_id_from_name;
 
 #[derive(Clone)]
 pub struct MaterialAssetGatewayAdapter {
     client: AssetServiceClient,
+    host: Option<HostApiV1>,
+    descriptor_cache: Arc<Mutex<HashMap<String, MaterialDescriptorLoadResponse>>>,
+    graph_cache: Arc<Mutex<HashMap<String, ResolvedMaterialGraph>>>,
 }
 
 impl MaterialAssetGatewayAdapter {
     #[inline]
     pub fn with_client(client: AssetServiceClient) -> Self {
-        Self { client }
+        Self { client, host: None, descriptor_cache: Arc::new(Mutex::new(HashMap::default())), graph_cache: Arc::new(Mutex::new(HashMap::default())) }
+    }
+
+    #[inline]
+    pub fn with_client_and_host(client: AssetServiceClient, host: HostApiV1) -> Self {
+        Self { client, host: Some(host), descriptor_cache: Arc::new(Mutex::new(HashMap::default())), graph_cache: Arc::new(Mutex::new(HashMap::default())) }
     }
 
     pub fn load_material(&self, request: &MaterialLoadRequest) -> Result<MaterialLoadResponse, String> {
@@ -169,22 +181,23 @@ impl MaterialAssetGatewayAdapter {
             return Err(format!("materials: expected .nemat material library path, got '{source}'"));
         }
         log::debug!(
-            "materials.load_descriptor_v1: source='{}' selector='{}' output_kind='material.raw'",
+            "assets.materials.load_descriptor_v1: source='{}' selector='{}' output_kind='{}' policy='NEF8 body from engine.assets; material semantics stay in engine.assets.materials'",
             source,
-            selector
+            selector,
+            ASSET_LIST_FILE_BODY_OUTPUT
         );
         let bytes = self
             .client
             .decode_v1(&AssetDecodeRequest {
                 logical_path: source.clone(),
-                output_kind: "material.raw".to_owned(),
-                selector: serde_json::json!({ "entry": selector.clone() }),
+                output_kind: ASSET_LIST_FILE_BODY_OUTPUT.to_owned(),
+                selector: serde_json::Value::Null,
             })
-            .map_err(|e| format!("engine.assets decode_v1 failed path='{source}' selector='{selector}' err='{e}'"))?;
+            .map_err(|e| format!("engine.assets decode_v1 failed path='{source}' selector='{selector}' output='{ASSET_LIST_FILE_BODY_OUTPUT}' err='{e}'"))?;
         let material = decode_material_entry_payload(&bytes, &selector)
             .map_err(|e| format!("materials: decode .nemat library failed source='{source}' selector='{selector}' err='{e}'"))?;
         log::debug!(
-            "materials.load_descriptor_v1: decoded source='{}' selector='{}' texture_slots={} params={}",
+            "assets.materials.load_descriptor_v1: decoded source='{}' selector='{}' texture_slots={} params={}",
             source,
             selector,
             material.textures.len(),
@@ -209,13 +222,20 @@ impl MaterialAssetGatewayAdapter {
             Ok(payload) => payload,
             Err(e) => {
                 info.valid = false;
-                info.errors.push(format!("engine.textures validation payload encode failed: {e}"));
+                info.errors.push(format!("engine.assets.textures validation payload encode failed: {e}"));
                 return info;
             }
         };
-        let host = newengine_plugin_host::default_host_api();
+        let Some(host) = self.host.clone() else {
+            info.valid = false;
+            info.errors.push(format!(
+                "engine.assets.textures validation requires a HostApiV1 supplied by the runtime gateway registry for '{}'",
+                info.canonical
+            ));
+            return info;
+        };
         let result = (host.call_service_v1)(
-            abi_stable::std_types::RString::from(ENGINE_TEXTURES_SERVICE_ID),
+            abi_stable::std_types::RString::from(ENGINE_ASSETS_TEXTURES_SERVICE_ID),
             MethodName::from(textures_method::VALIDATE_REF_V1),
             Blob::from(payload),
         );
@@ -223,7 +243,7 @@ impl MaterialAssetGatewayAdapter {
             Ok(bytes) => bytes.into_vec(),
             Err(e) => {
                 info.valid = false;
-                info.errors.push(format!("engine.textures validation unavailable for '{}': {}", info.canonical, e));
+                info.errors.push(format!("engine.assets.textures validation unavailable for '{}': {}", info.canonical, e));
                 return info;
             }
         };
@@ -231,19 +251,19 @@ impl MaterialAssetGatewayAdapter {
             Ok(value) => value,
             Err(e) => {
                 info.valid = false;
-                info.errors.push(format!("engine.textures validation returned non-json for '{}': {}", info.canonical, e));
+                info.errors.push(format!("engine.assets.textures validation returned non-json for '{}': {}", info.canonical, e));
                 return info;
             }
         };
         if value.get("ok").and_then(|v| v.as_bool()).unwrap_or(false) {
-            info.warnings.push("validated_by=engine.textures".to_owned());
+            info.warnings.push("validated_by=engine.assets.textures".to_owned());
         } else {
             info.valid = false;
             let message = value
                 .get("message")
                 .or_else(|| value.get("diagnostic"))
                 .and_then(|v| v.as_str())
-                .unwrap_or("engine.textures rejected texture ref");
+                .unwrap_or("engine.assets.textures rejected texture ref");
             info.errors.push(message.to_owned());
         }
         info
@@ -251,8 +271,26 @@ impl MaterialAssetGatewayAdapter {
 
 
     pub fn load_descriptor(&self, request: &MaterialLoadRequest) -> Result<MaterialDescriptorLoadResponse, String> {
-        let loaded = self.load_material(request)?;
-        Ok(MaterialDescriptorLoadResponse { source: loaded.source, name: loaded.name, descriptor: loaded.descriptor, textures: loaded.textures })
+        let material_ref = normalize_material_logical_path(&request.logical_path)?;
+        let (source, selector) = split_nemat_selector(&material_ref, request.selector.as_deref())?;
+        let cache_key = material_cache_key(&source, &selector);
+        if let Ok(cache) = self.descriptor_cache.lock() {
+            if let Some(cached) = cache.get(&cache_key).cloned() {
+                log::debug!(
+                    "assets.materials.load_descriptor_v1: cache hit source='{}' selector='{}' policy='decoded .nemat entry cache'",
+                    source,
+                    selector
+                );
+                return Ok(cached);
+            }
+        }
+
+        let loaded = self.load_material(&MaterialLoadRequest { logical_path: format!("{source}@{selector}"), selector: None })?;
+        let response = MaterialDescriptorLoadResponse { source: loaded.source, name: loaded.name, descriptor: loaded.descriptor, textures: loaded.textures };
+        if let Ok(mut cache) = self.descriptor_cache.lock() {
+            cache.insert(cache_key, response.clone());
+        }
+        Ok(response)
     }
 
     pub fn validate_material(&self, request: &MaterialValidationRequest) -> MaterialValidationResult {
@@ -271,7 +309,23 @@ impl MaterialAssetGatewayAdapter {
     }
 
     pub fn resolve_graph(&self, request: &MaterialLoadRequest) -> Result<ResolvedMaterialGraph, String> {
-        let loaded = self.load_descriptor(request)?;
+        let material_ref = normalize_material_logical_path(&request.logical_path)?;
+        let (source, selector) = split_nemat_selector(&material_ref, request.selector.as_deref())?;
+        let cache_key = material_cache_key(&source, &selector);
+        if let Ok(cache) = self.graph_cache.lock() {
+            if let Some(cached) = cache.get(&cache_key).cloned() {
+                log::debug!(
+                    "assets.materials.resolve_graph_v1: cache hit source='{}' selector='{}' texture_refs={} warnings={}",
+                    source,
+                    selector,
+                    cached.texture_refs.len(),
+                    cached.warnings.len()
+                );
+                return Ok(cached);
+            }
+        }
+
+        let loaded = self.load_descriptor(&MaterialLoadRequest { logical_path: format!("{source}@{selector}"), selector: None })?;
         let mut graph = ResolvedMaterialGraph { source: loaded.source, name: loaded.name, descriptor: loaded.descriptor, textures: loaded.textures, ..Default::default() };
         for texture in collect_texture_refs(&graph.textures) {
             let info = self.validate_texture_ref_through_textures_gateway(texture);
@@ -279,11 +333,14 @@ impl MaterialAssetGatewayAdapter {
             graph.texture_refs.push(info);
         }
         log::debug!(
-            "materials.resolve_graph_v1: source='{}' texture_refs={} warnings={}",
+            "assets.materials.resolve_graph_v1: source='{}' texture_refs={} warnings={} cache='store'",
             graph.source,
             graph.texture_refs.len(),
             graph.warnings.len()
         );
+        if let Ok(mut cache) = self.graph_cache.lock() {
+            cache.insert(cache_key, graph.clone());
+        }
         Ok(graph)
     }
 
@@ -293,7 +350,7 @@ impl MaterialAssetGatewayAdapter {
             return Err(format!("materials: cannot produce RenderMaterialPacket for '{}' because texture references are invalid", graph.source));
         }
         log::debug!(
-            "materials.to_render_packet_v1: source='{}' name='{}' packet_kind='renderer_agnostic_material_packet'",
+            "assets.materials.to_render_packet_v1: source='{}' name='{}' packet_kind='renderer_agnostic_material_packet'",
             graph.source,
             graph.name
         );
@@ -322,8 +379,8 @@ impl MaterialGatewayState {
 
     fn formats_json(&self) -> serde_json::Value {
         serde_json::json!({
-            "schema": "newengine.materials.formats.v1",
-            "gateway": ENGINE_MATERIALS_SERVICE_ID,
+            "schema": "newengine.assets.materials.formats.v1",
+            "gateway": ENGINE_ASSETS_MATERIALS_SERVICE_ID,
             "formats": [
                 {
                     "extension": "nemat",
@@ -334,10 +391,11 @@ impl MaterialGatewayState {
                     "packet_method": material_method::TO_RENDER_PACKET_V1,
                     "runtime_ready": true,
                     "selector_syntax": "<logical-path>.nemat@entry",
-                    "notes": "Native NewEngine material library. Entries bind .ytd@entry texture references and resolve through engine.materials."
+                    "notes": "Native NewEngine XML material library inside NEF8/ListFile. Entries bind .ytd@entry texture references and resolve through engine.assets.materials."
                 }
             ],
-            "texture_reference_policy": "material textures must be VFS .ytd@entry dictionary selectors; raw images and .neytd references are invalid"
+            "body_presentation": "xml",
+            "texture_reference_policy": "material textures must be VFS .ytd@entry dictionary selectors; source image paths are importer-only"
         })
     }
 
@@ -402,29 +460,39 @@ impl MaterialGatewayState {
 pub fn materials_service_info() -> MaterialsServiceInfo {
     MaterialsServiceInfo {
         id: MATERIALS_SERVICE_ID,
-        gateway: ENGINE_MATERIALS_SERVICE_ID,
+        gateway: ENGINE_ASSETS_MATERIALS_SERVICE_ID,
         methods: MATERIALS_SERVICE_METHODS,
         backend: "engine-owned.material-runtime",
         native_formats: &[".nemat"],
-        texture_reference_policy: ".ytd@entry dictionary selectors only; .neytd is invalid in authored/runtime material graphs",
+        texture_reference_policy: ".ytd@entry dictionary selectors only for authored/runtime material graphs",
     }
 }
 
 pub fn materials_gateway_service(client: AssetServiceClient) -> newengine_plugin_api::ServiceV1Dyn<'static> {
+    materials_gateway_service_with_host(client, None)
+}
+
+pub fn materials_gateway_service_with_host(
+    client: AssetServiceClient,
+    host: Option<HostApiV1>,
+) -> newengine_plugin_api::ServiceV1Dyn<'static> {
     let description = engine_owned_service_description(
         MATERIALS_SERVICE_ID,
         "newengine-material-runtime.material-gateway",
         MATERIALS_BACKEND_CAPABILITY_ID,
         MATERIALS_SERVICE_METHODS.iter().copied(),
     )
-    .gateway(ENGINE_MATERIALS_SERVICE_ID)
+    .gateway(ENGINE_ASSETS_MATERIALS_SERVICE_ID)
     .protocol("json")
     .features(["nemat-library", "nemat-entry-selectors", "ytd-texture-selectors", "render-material-packet"])
     .notes("Engine material gateway. Descriptors are read through engine.assets/VFS, resolved to material graphs, then converted to renderer-agnostic RenderMaterialPacket.");
 
     JsonServiceRouter::with_state(
         MATERIALS_SERVICE_ID,
-        MaterialGatewayState::new(MaterialAssetGatewayAdapter::with_client(client)),
+        MaterialGatewayState::new(match host {
+            Some(host) => MaterialAssetGatewayAdapter::with_client_and_host(client, host),
+            None => MaterialAssetGatewayAdapter::with_client(client),
+        }),
     )
     .describe_json(&description)
     .info(materials_service_info)
@@ -460,17 +528,26 @@ pub fn materials_gateway_service(client: AssetServiceClient) -> newengine_plugin
 }
 
 pub fn register_materials_gateway_best_effort(client: AssetServiceClient) -> bool {
+    register_materials_gateway_best_effort_with_host(None, client)
+}
+
+pub fn register_materials_gateway_best_effort_with_host(host: Option<HostApiV1>, client: AssetServiceClient) -> bool {
     register_engine_owned_gateway_service_best_effort(EngineOwnedGatewayDecl {
-        gateway: ENGINE_MATERIALS_SERVICE_ID,
+        gateway: ENGINE_ASSETS_MATERIALS_SERVICE_ID,
         service_kind: EngineServiceKind::Materials,
         provider_service: MATERIALS_SERVICE_ID,
         capability: MATERIALS_BACKEND_CAPABILITY_ID,
         priority: 0,
         owner: "newengine-material-runtime.material-gateway",
-        service: materials_gateway_service(client),
+        service: materials_gateway_service_with_host(client, host),
     })
 }
 
+
+#[inline]
+fn material_cache_key(source: &str, selector: &str) -> String {
+    format!("{}@{}", source.trim().replace('\\', "/"), selector.trim())
+}
 
 #[inline]
 fn split_nemat_selector(logical_path: &str, request_selector: Option<&str>) -> Result<(String, String), String> {
@@ -495,28 +572,122 @@ fn split_nemat_selector(logical_path: &str, request_selector: Option<&str>) -> R
 
 fn decode_material_entry_payload(bytes: &[u8], selector: &str) -> Result<AuthoredMaterialDescriptor, String> {
     let text = std::str::from_utf8(bytes)
-        .map_err(|_| "binary single-material NEMAT payload is no longer a runtime material-library body; expected material library JSON/domain entry payload from NEF8 .nemat".to_owned())?;
-
-    if let Ok(library) = serde_json::from_str::<AuthoredMaterialLibrary>(text) {
-        let validation = validate_authored_material_library(&library);
-        if !validation.valid {
-            return Err(format!("invalid material library: {}", validation.errors.join("; ")));
-        }
-        return library
-            .materials
-            .into_iter()
-            .find(|material| material.name == selector)
-            .ok_or_else(|| format!("material entry '{selector}' not found in .nemat library"));
+        .map_err(|_| "NEMAT payload must be UTF-8 XML material library inside the NEF8 ListFile body".to_owned())?;
+    if !authored_xml::text_is_xml(text) {
+        return Err("NEMAT body must be XML <NematMaterialLibrary>; JSON material bodies are forbidden in authored .nemat files".to_owned());
     }
-
-    if let Ok(material) = serde_json::from_str::<AuthoredMaterialDescriptor>(text) {
-        if !material.name.is_empty() && material.name != selector {
-            return Err(format!("selected material entry '{selector}' does not match payload entry '{}'", material.name));
-        }
-        return Ok(AuthoredMaterialDescriptor { name: selector.to_owned(), ..material });
+    let library = decode_nemat_material_library_xml(text)?;
+    let validation = validate_authored_material_library(&library);
+    if !validation.valid {
+        return Err(format!("invalid XML material library: {}", validation.errors.join("; ")));
     }
+    let available = library
+        .materials
+        .iter()
+        .map(|material| material.name.as_str())
+        .filter(|name| !name.trim().is_empty())
+        .collect::<Vec<_>>()
+        .join(",");
+    library
+        .materials
+        .into_iter()
+        .find(|material| material.name.trim().eq_ignore_ascii_case(selector.trim()))
+        .ok_or_else(|| format!("material entry '{selector}' not found in XML .nemat library; available=[{available}]"))
+}
 
-    Err("material.raw is neither AuthoredMaterialLibrary nor AuthoredMaterialDescriptor JSON; .nemat must use one material-library body model".to_owned())
+fn decode_nemat_material_library_xml(text: &str) -> Result<AuthoredMaterialLibrary, String> {
+    let doc = authored_xml::parse_xml_document(text, "engine.assets.materials .nemat")?;
+    let root = doc.root_element();
+    if !authored_xml::root_has_any_name(root, &["NematMaterialLibrary", "MaterialLibrary"]) {
+        return Err(format!(
+            "NEMAT XML root must be <NematMaterialLibrary>, actual='{}'",
+            root.tag_name().name()
+        ));
+    }
+    let schema = authored_xml::root_schema(root);
+    if !schema.is_empty() && schema != "newengine.nemat.material_library.v1" {
+        return Err(format!("unsupported NEMAT XML schema '{schema}', expected 'newengine.nemat.material_library.v1'"));
+    }
+    let mut library = AuthoredMaterialLibrary {
+        version: authored_xml::xml_attr_u32_any(root, &["version"]).unwrap_or(1),
+        materials: Vec::new(),
+    };
+    for material_node in root.children().filter(|child| child.is_element() && child.has_tag_name("Material")) {
+        library.materials.push(decode_nemat_material_xml(material_node)?);
+    }
+    Ok(library)
+}
+
+fn decode_nemat_material_xml(node: authored_xml::XmlNode<'_, '_>) -> Result<AuthoredMaterialDescriptor, String> {
+    let mut material = AuthoredMaterialDescriptor {
+        name: authored_xml::xml_attr_any(node, &["name", "id"]).unwrap_or_default(),
+        shader: authored_xml::xml_attr_any(node, &["shader", "shader_id", "shaderId"]).unwrap_or_else(|| "pbr.default".to_owned()),
+        ..AuthoredMaterialDescriptor::default()
+    };
+    if material.name.trim().is_empty() {
+        return Err("NEMAT XML <Material> entry missing name".to_owned());
+    }
+    if let Some(surface) = authored_xml::xml_child(node, "Surface") {
+        material.surface.blend = authored_xml::xml_attr_any(surface, &["blend"]).unwrap_or_else(|| "opaque".to_owned());
+        material.surface.two_sided = authored_xml::xml_attr_bool_any(surface, &["two_sided", "twoSided", "double_sided", "doubleSided"]).unwrap_or(false);
+        material.surface.alpha_cutoff = authored_xml::xml_attr_f32_any(surface, &["alpha_cutoff", "alphaCutoff"]);
+    }
+    if let Some(textures) = authored_xml::xml_child(node, "Textures") {
+        for texture in textures.children().filter(|child| child.is_element() && child.has_tag_name("Texture")) {
+            let slot = authored_xml::xml_attr_any(texture, &["slot", "name"]).unwrap_or_default();
+            let reference = authored_xml::xml_attr_any(texture, &["ref", "reference", "texture_ref", "textureRef"]).unwrap_or_default();
+            if !slot.trim().is_empty() && !reference.trim().is_empty() {
+                material.textures.insert(slot, reference);
+            }
+        }
+    }
+    if let Some(params) = authored_xml::xml_child(node, "Params") {
+        for param in params.children().filter(|child| child.is_element() && child.has_tag_name("Param")) {
+            let name = authored_xml::xml_attr_any(param, &["name", "key"]).unwrap_or_default();
+            if name.trim().is_empty() { continue; }
+            let kind = authored_xml::xml_attr_any(param, &["type", "kind"]).unwrap_or_else(|| "float".to_owned());
+            let raw = authored_xml::xml_attr_any(param, &["value", "ref", "reference"])
+                .or_else(|| param.text().map(str::trim).filter(|v| !v.is_empty()).map(ToOwned::to_owned))
+                .unwrap_or_default();
+            material.params.insert(name, parse_material_param_value(&kind, &raw)?);
+        }
+    }
+    Ok(material)
+}
+
+fn parse_material_param_value(kind: &str, raw: &str) -> Result<MaterialParamValue, String> {
+    let kind = kind.trim().to_ascii_lowercase();
+    match kind.as_str() {
+        "float" | "f32" => Ok(MaterialParamValue::Float(parse_f32(raw)?)),
+        "float2" | "vec2" => Ok(MaterialParamValue::Float2(parse_f32_array::<2>(raw)?)),
+        "float3" | "vec3" => Ok(MaterialParamValue::Float3(parse_f32_array::<3>(raw)?)),
+        "float4" | "vec4" => Ok(MaterialParamValue::Float4(parse_f32_array::<4>(raw)?)),
+        "color" | "rgba" => Ok(MaterialParamValue::Color(parse_f32_array::<4>(raw)?)),
+        "int" | "i32" => raw.trim().parse::<i32>().map(MaterialParamValue::Int).map_err(|e| format!("material int param parse failed value='{raw}' err='{e}'")),
+        "bool" | "boolean" => Ok(MaterialParamValue::Bool(matches!(raw.trim().to_ascii_lowercase().as_str(), "1" | "true" | "yes" | "on"))),
+        "enum" => Ok(MaterialParamValue::Enum(raw.trim().to_owned())),
+        "texture_ref" | "texture" => Ok(MaterialParamValue::TextureRef(raw.trim().to_owned())),
+        other => Err(format!("unsupported material XML param type '{other}' value='{raw}'")),
+    }
+}
+
+fn parse_f32(raw: &str) -> Result<f32, String> {
+    raw.trim().parse::<f32>().map_err(|e| format!("material float param parse failed value='{raw}' err='{e}'"))
+}
+
+fn parse_f32_array<const N: usize>(raw: &str) -> Result<[f32; N], String> {
+    let values = raw
+        .split(',')
+        .map(str::trim)
+        .filter(|v| !v.is_empty())
+        .map(parse_f32)
+        .collect::<Result<Vec<_>, _>>()?;
+    if values.len() != N {
+        return Err(format!("material vector param expected {N} components, got {} value='{raw}'", values.len()));
+    }
+    let mut out = [0.0; N];
+    out.copy_from_slice(&values);
+    Ok(out)
 }
 
 fn material_response_from_authored(source: &str, selector: &str, material: AuthoredMaterialDescriptor) -> Result<MaterialLoadResponse, String> {

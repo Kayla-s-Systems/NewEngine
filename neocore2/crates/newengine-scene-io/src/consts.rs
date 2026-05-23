@@ -6,7 +6,7 @@ use newengine_service_api::{RuntimeServiceContractSpec, RuntimeServiceRequiremen
 ///
 /// `engine.scene` is the only consumer-facing scene gateway. Providers and
 /// engine-owned implementations route through the same gateway registry; there
-/// is no secondary legacy scene service id.
+/// is no secondary scene service id.
 pub const ENGINE_SCENE_SERVICE_ID: &str = "engine.scene";
 
 /// Capability id used by scene providers or engine-owned scene gateway sources.

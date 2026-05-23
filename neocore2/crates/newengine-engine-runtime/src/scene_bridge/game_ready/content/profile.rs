@@ -88,7 +88,7 @@ pub(in crate::scene_bridge::game_ready) struct GameReadyTerrainGeneratorSpec {
 }
 
 #[derive(Clone, Debug)]
-pub(in crate::scene_bridge::game_ready) struct GameReadySkySpec {
+pub(in crate::scene_bridge) struct GameReadySkySpec {
     pub(in crate::scene_bridge::game_ready) radius: f32,
     pub(in crate::scene_bridge::game_ready) mesh: String,
     pub(in crate::scene_bridge::game_ready) follow_camera: bool,
@@ -101,7 +101,7 @@ pub(in crate::scene_bridge::game_ready) struct GameReadySkySpec {
 }
 
 #[derive(Clone, Debug)]
-pub(in crate::scene_bridge::game_ready) struct GameReadySkyAtmosphereSpec {
+pub(in crate::scene_bridge) struct GameReadySkyAtmosphereSpec {
     pub(in crate::scene_bridge::game_ready) day_zenith: ColorRgb,
     pub(in crate::scene_bridge::game_ready) day_horizon: ColorRgb,
     pub(in crate::scene_bridge::game_ready) dusk_zenith: ColorRgb,
@@ -209,12 +209,45 @@ pub(in crate::scene_bridge::game_ready) struct GameReadyPrefabSpec {
 }
 
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(in crate::scene_bridge::game_ready) enum GameReadyDefinitionApplyMode {
+    /// Resolve metadata/dependency graph only. No ECS marker and no render packet
+    /// are produced by the generic definition instantiator. Domain systems such
+    /// as sky, terrain, foliage or player avatar consume the metadata explicitly.
+    MetadataOnly,
+    /// Spawn a lightweight diagnostic marker entity carrying DefinitionInstance
+    /// and DefinitionRuntimeTrace. This is explicit because `.ytyp` dependencies
+    /// are not render/spawn commands.
+    InstantiateMarker,
+}
+
+impl Default for GameReadyDefinitionApplyMode {
+    fn default() -> Self { Self::MetadataOnly }
+}
+
+impl GameReadyDefinitionApplyMode {
+    pub(in crate::scene_bridge::game_ready) fn from_str(value: &str) -> Self {
+        match value.trim().to_ascii_lowercase().as_str() {
+            "instantiate" | "instantiate_marker" | "marker" | "diagnostic_marker" => Self::InstantiateMarker,
+            _ => Self::MetadataOnly,
+        }
+    }
+
+    pub(in crate::scene_bridge::game_ready) const fn as_str(self) -> &'static str {
+        match self {
+            Self::MetadataOnly => "metadata_only",
+            Self::InstantiateMarker => "instantiate_marker",
+        }
+    }
+}
+
 #[derive(Clone, Debug)]
 pub(in crate::scene_bridge::game_ready) struct GameReadyDefinitionInstanceSpec {
     pub(in crate::scene_bridge::game_ready) definition_ref: String,
     pub(in crate::scene_bridge::game_ready) position: Vec3,
     pub(in crate::scene_bridge::game_ready) rotation_ypr: [f32; 3],
     pub(in crate::scene_bridge::game_ready) scale: Vec3,
+    pub(in crate::scene_bridge::game_ready) apply_mode: GameReadyDefinitionApplyMode,
 }
 
 #[derive(Clone, Debug)]

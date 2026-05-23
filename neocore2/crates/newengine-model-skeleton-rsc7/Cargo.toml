@@ -1,9 +1,0 @@
-[package]
-name = "newengine-model-skeleton-rsc7"
-version = "0.1.0"
-edition = "2021"
-description = "Opaque RSC7/YMT skeleton probe for NewEngine model construction"
-
-[dependencies]
-blake3 = "1"
-newengine-model-skeleton-api = { path = "../newengine-model-skeleton-api" }

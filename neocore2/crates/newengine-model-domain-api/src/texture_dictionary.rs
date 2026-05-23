@@ -13,7 +13,7 @@ pub struct TextureDictionaryManifest {
     pub container: String,
     pub runtime_ready: bool,
     /// Reserved for private cache implementation notes. Public authored content does not reference cache extensions.
-    pub legacy_cache_container: Option<String>,
+    pub previous_cache_container: Option<String>,
     pub entries: Vec<TextureDictionaryEntry>,
     pub warnings: Vec<String>,
     pub notes: Vec<String>,
@@ -27,7 +27,7 @@ impl Default for TextureDictionaryManifest {
             asset_kind: TEXTURE_DICTIONARY_ASSET_KIND.to_owned(),
             container: TEXTURE_DICTIONARY_CONTAINER.to_owned(),
             runtime_ready: true,
-            legacy_cache_container: None,
+            previous_cache_container: None,
             entries: Vec::new(),
             warnings: Vec::new(),
             notes: Vec::new(),

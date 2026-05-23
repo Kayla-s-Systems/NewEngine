@@ -2,19 +2,20 @@
 
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use newengine_core::render::RenderHardwareTier;
 
 /// Declarative render-runtime profile loaded through the host plugin config service.
 ///
-/// The reusable engine runtime must not hard-code GPU names, environment toggles or
-/// game-specific fallbacks. Profiles describe degradable capabilities; providers and
-/// feature packs decide what to register. This is the small engine-side contract that
-/// lets a host/application select a safer first playable path without recompiling.
+/// The reusable engine runtime must not hard-code GPU model names, environment toggles
+/// or game-specific fallbacks. Profiles describe degradable capability tiers; providers
+/// and feature packs decide what to register. This is the small engine-side contract
+/// that lets a host/application select a safer first playable path without recompiling.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub(crate) struct RenderRuntimeProfile {
     #[serde(default = "default_profile_id")]
     pub(crate) id: String,
     #[serde(default)]
-    pub(crate) legacy_safe: bool,
+    pub(crate) gpu_safe: bool,
     #[serde(default)]
     pub(crate) graphics: GraphicsProfile,
     #[serde(default)]
@@ -115,7 +116,7 @@ impl Default for RenderRuntimeProfile {
     fn default() -> Self {
         Self {
             id: default_profile_id(),
-            legacy_safe: false,
+            gpu_safe: false,
             graphics: GraphicsProfile::default(),
             world: WorldRuntimeProfile::default(),
             input: GameplayInputProfile::default(),
@@ -195,9 +196,9 @@ impl RenderRuntimeProfile {
         match serde_json::from_value::<Self>(candidate) {
             Ok(profile) => {
                 log::info!(
-                    "render runtime profile: loaded id='{}' legacy_safe={} sky={:?} service_physics={} terrain_streaming={} shadows={} hdr={} postfx={} deferred={}",
+                    "render runtime profile: loaded id='{}' gpu_safe={} sky={:?} service_physics={} terrain_streaming={} shadows={} hdr={} postfx={} deferred={}",
                     profile.id,
-                    profile.legacy_safe,
+                    profile.gpu_safe,
                     profile.graphics.sky.mode,
                     profile.world.service_physics.enabled(),
                     profile.world.runtime_terrain_streaming.enabled(),
@@ -220,8 +221,8 @@ impl RenderRuntimeProfile {
     }
 
     #[inline]
-    pub(crate) fn legacy_safe_enabled(&self) -> bool {
-        self.legacy_safe
+    pub(crate) fn gpu_safe_enabled(&self) -> bool {
+        self.gpu_safe
     }
 
     #[inline]
@@ -273,11 +274,38 @@ impl RenderRuntimeProfile {
     pub(crate) fn configured_clear_color(&self) -> [f32; 4] {
         self.graphics.clear_color
     }
+
+    pub(crate) fn apply_hardware_tier(&mut self, tier: RenderHardwareTier) {
+        match tier {
+            RenderHardwareTier::LegacyGtx => {
+                self.id = tier.profile_id().to_owned();
+                self.gpu_safe = true;
+                self.graphics.shadows = FeatureSwitch::Disabled;
+                self.graphics.hdr_scene = FeatureSwitch::Disabled;
+                self.graphics.postfx = FeatureSwitch::Disabled;
+                self.graphics.deferred = FeatureSwitch::Disabled;
+                self.world.runtime_terrain_streaming = FeatureSwitch::Disabled;
+            }
+            RenderHardwareTier::Gtx => {
+                self.id = tier.profile_id().to_owned();
+                self.gpu_safe = true;
+                self.graphics.shadows = FeatureSwitch::Disabled;
+                self.graphics.hdr_scene = FeatureSwitch::Disabled;
+                self.graphics.postfx = FeatureSwitch::Disabled;
+                self.graphics.deferred = FeatureSwitch::Disabled;
+            }
+            RenderHardwareTier::Rtx => {
+                self.id = tier.profile_id().to_owned();
+                self.gpu_safe = false;
+            }
+            RenderHardwareTier::Headless | RenderHardwareTier::Unknown => {}
+        }
+    }
 }
 
 #[inline]
 fn default_profile_id() -> String {
-    "newengine.render.runtime.default".to_owned()
+    "newengine.render.runtime.tier.auto".to_owned()
 }
 
 #[inline]

@@ -2,7 +2,7 @@ use serde::{Deserialize, Serialize};
 
 use newengine_ecs::{EntityId, World};
 use newengine_math::Vec3;
-use newengine_model_domain_api::{AssetGraphResolver, ResolvedAssetGraphV1};
+use newengine_model_domain_api::ResolvedAssetGraphV1;
 use newengine_scene::spawn_named;
 use newengine_transform::Transform;
 
@@ -97,11 +97,6 @@ pub struct DefinitionRuntimeTraceComponent {
     pub trace: DefinitionRuntimeTrace,
 }
 
-pub fn resolve_definition_runtime_trace(definition_ref: &str, transform: DefinitionInstantiateTransform) -> DefinitionRuntimeTrace {
-    let graph = AssetGraphResolver::resolve_root_ref(definition_ref);
-    build_definition_runtime_trace(definition_ref, transform, graph, None)
-}
-
 pub fn apply_definition_instantiation(
     world: &mut World,
     parent: Option<EntityId>,
@@ -139,10 +134,10 @@ pub fn build_definition_runtime_trace(
     entity: Option<EntityId>,
 ) -> DefinitionRuntimeTrace {
     let render_packet_request = DefinitionRenderPacketRequest {
-        drawable_refs: graph_refs_by_extension(&graph, "ydd"),
-        material_refs: graph_refs_by_extension(&graph, "nemat"),
-        texture_refs: graph_refs_by_extension(&graph, "ytd"),
-        policy: "renderer receives resolved mesh/material/texture packets only; definitions do not call renderer".to_owned(),
+        drawable_refs: graph_refs_by_render_edge(&graph, "ydd"),
+        material_refs: graph_refs_by_render_edge(&graph, "nemat"),
+        texture_refs: graph_refs_by_render_edge(&graph, "ytd"),
+        policy: ".ytyp dependencies are graph dependencies only. Generic Definition instantiation emits render refs only for explicit render/spawn edge roles; domain systems consume sky/player/terrain metadata themselves.".to_owned(),
     };
     let physics_declaration = DefinitionPhysicsDeclaration {
         collision_refs: graph_refs_by_extension(&graph, "ycol"),
@@ -156,7 +151,7 @@ pub fn build_definition_runtime_trace(
     };
     let mut debug_log = vec![
         format!("definitions.runtime: definition_ref='{definition_ref}'"),
-        "definitions.runtime: request definitions.entry_json_v1 through engine.definitions".to_owned(),
+        "definitions.runtime: request assets.definitions.entry_v1 through engine.assets.definitions".to_owned(),
         format!("definitions.runtime: resolved graph nodes={} edges={} missing={} cache_key='{}'", graph.nodes.len(), graph.edges.len(), graph.missing_refs.len(), graph.stable_cache_key),
         format!("definitions.runtime: entity command EntityCommand::Spawn name='{entity_name}'"),
         format!("definitions.runtime: render packet request drawables={} materials={} textures={}", render_packet_request.drawable_refs.len(), render_packet_request.material_refs.len(), render_packet_request.texture_refs.len()),
@@ -196,23 +191,36 @@ fn graph_refs_by_extension(graph: &ResolvedAssetGraphV1, extension: &str) -> Vec
     refs
 }
 
+fn graph_refs_by_render_edge(graph: &ResolvedAssetGraphV1, extension: &str) -> Vec<String> {
+    let suffix = format!(".{}", extension.trim_start_matches('.'));
+    let mut refs = graph
+        .edges
+        .iter()
+        .filter(|edge| explicit_render_edge_role(&edge.kind))
+        .map(|edge| edge.to_ref.clone())
+        .filter(|reference| reference.split('@').next().unwrap_or(reference).to_ascii_lowercase().ends_with(&suffix))
+        .collect::<Vec<_>>();
+    refs.sort();
+    refs.dedup();
+    refs
+}
+
+fn explicit_render_edge_role(role: &str) -> bool {
+    let role = role.trim().to_ascii_lowercase();
+    role.starts_with("render/")
+        || role.starts_with("spawn/")
+        || role.starts_with("entity/")
+        || role == "renderable"
+        || role == "spawnable"
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn ytyp_trace_is_definitions_driven_not_scene_owned() {
-        let trace = resolve_definition_runtime_trace("world/foo.ytyp@bar", DefinitionInstantiateTransform::default());
-        assert_eq!(trace.definition_ref, "world/foo.ytyp@bar");
-        assert!(trace.debug_log.iter().any(|line| line.contains("definitions.entry_json_v1")));
-        assert!(trace.resolved_graph.nodes.iter().any(|node| node.semantic_gateway == "engine.definitions"));
-        assert!(!trace.resolved_graph.nodes.iter().any(|node| node.semantic_gateway == "engine.scene"));
-    }
-
     #[test]
     fn apply_instantiation_spawns_entity_and_trace_component() {
         let mut world = World::new();
-        let graph = AssetGraphResolver::resolve_root_ref("world/foo.ytyp@bar");
+        let graph = newengine_model_domain_api::AssetGraphResolver::resolve_root_ref("world/foo.ytyp@bar");
         let (entity, trace) = apply_definition_instantiation(
             &mut world,
             None,

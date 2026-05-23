@@ -19,7 +19,8 @@ newengine-model-collision-runtime = { path = "../newengine-model-collision-runti
 newengine-model-domain-api = { path = "../newengine-model-domain-api" }
 newengine-model-import-obj = { path = "../newengine-model-import-obj" }
 newengine-model-skeleton-api = { path = "../newengine-model-skeleton-api" }
-newengine-model-skeleton-rsc7 = { path = "../newengine-model-skeleton-rsc7" }
 newengine-plugin-api = { path = "../newengine-plugin-api" }
+newengine-primitives = { path = "../newengine-primitives", features = ["serde"] }
+newengine-math = { path = "../newengine-math", features = ["serde"] }
 newengine-service-api = { path = "../newengine-service-api" }
 newengine-service-kit = { path = "../newengine-service-kit" }

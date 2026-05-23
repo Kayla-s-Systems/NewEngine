@@ -11,7 +11,7 @@ use newengine_transform::{set_parent, Transform};
 
 use super::listeners::emit_player_event;
 use super::{
-    CollisionShapeDesc, DisplayVisibility, FpsDemoRules, FpsPlayerTuning,
+    CollisionShapeDesc, DisplayMode, DisplayVisibility, FpsDemoRules, FpsPlayerTuning,
     GameplayActor, PhysicsBodyDesc, PlayerActor, PlayerController, PlayerEventKind,
     PlayerModelBinding, PlayerViewVisibility, PlayerVisualKind, PlayerVisualPart,
 };
@@ -298,6 +298,14 @@ pub fn display_visible_in_mode(world: &World, entity: EntityId, runtime: bool) -
         .get::<DisplayVisibility>(entity)
         .copied()
         .unwrap_or_default();
+    // RuntimeHidden is a hard presentation quarantine. This is important during
+    // loading / first-world handoff, where the render controller may still use
+    // a non-runtime extraction path while the camera is already first-person.
+    // First-person avatar bodies and fallback capsules must not leak as white
+    // diagnostic silhouettes in the center of the screen.
+    if matches!(vis.mode, DisplayMode::RuntimeHidden) {
+        return false;
+    }
     if runtime {
         vis.visible_in_game()
     } else {

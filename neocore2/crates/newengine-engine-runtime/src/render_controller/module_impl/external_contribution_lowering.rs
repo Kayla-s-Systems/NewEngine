@@ -197,7 +197,7 @@ fn lower_debug_line_list_contribution(
 
     if !matches!(draw_list, RenderDrawListKind::Debug | RenderDrawListKind::OpaqueForward) {
         log::warn!(
-            "render draw-list provider '{}' submitted DebugLineList to incompatible draw-list '{}'",
+            "render draw-list provider '{}' submitted DebugLineList to mismatched draw-list '{}'",
             provider.id,
             draw_list.label()
         );

@@ -85,8 +85,8 @@ pub struct ModelMeshPart {
 pub struct ModelMaterialBinding {
     pub slot: String,
     /// Preferred authored material selector, e.g. `materials/foo.nemat@bar`.
-    /// OBJ/MTL import compatibility may still project a renderer-agnostic
-    /// descriptor, but runtime graph resolution should follow this reference.
+    /// Importers may project a renderer-agnostic descriptor, but runtime graph
+    /// resolution should follow this reference.
     pub material_ref: Option<String>,
     pub descriptor: newengine_materials::MaterialDescriptor,
     pub textures: newengine_materials::MaterialTextureBindings,

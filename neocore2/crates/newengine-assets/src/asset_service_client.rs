@@ -1,7 +1,7 @@
 #![forbid(unsafe_op_in_unsafe_fn)]
 
 use abi_stable::std_types::RString;
-use newengine_assets_api::{require_asset_reference_extension, textures_method, ENGINE_TEXTURES_SERVICE_ID};
+use newengine_assets_api::{require_asset_reference_extension, textures_method, ENGINE_ASSETS_TEXTURES_SERVICE_ID};
 use newengine_plugin_api::{Blob, HostApiV1, MethodName};
 
 use crate::asset_access::{
@@ -377,24 +377,24 @@ impl AssetServiceClient {
             .map_err(|e| e.to_string())
     }
 
-    /// Call the semantic `engine.textures` gateway for `textures.entry_runtime_v1`.
+    /// Call the semantic `engine.assets.textures` gateway for `assets.textures.entry_runtime_v1`.
     ///
     /// `engine.assets` remains the byte/VFS/codec-dispatch owner, but texture semantics,
-    /// selector validation and runtime packet ownership belong to `engine.textures`.
+    /// selector validation and runtime packet ownership belong to `engine.assets.textures`.
     #[inline]
     pub fn textures_entry_runtime_v1_typed(&self, dictionary_path: &str, texture_name: Option<&str>, texture_hash: Option<u64>) -> AssetResult<RuntimeTextureAsset> {
         let texture_ref = texture_ref_from_parts(dictionary_path, texture_name, texture_hash)?;
         self.textures_entry_runtime_ref_v1_typed(&texture_ref)
     }
 
-    /// Call the semantic `engine.textures` gateway with an authored `.ytd@entry` selector.
+    /// Call the semantic `engine.assets.textures` gateway with an authored `.ytd@entry` selector.
     #[inline]
     pub fn textures_entry_runtime_ref_v1_typed(&self, texture_ref: &str) -> AssetResult<RuntimeTextureAsset> {
         let reference = require_asset_reference_extension(texture_ref, &["ytd"], true)
             .map_err(AssetError::invalid_request)?;
         let payload = Self::json_payload_typed(&serde_json::json!({ "texture_ref": reference.canonical }))?;
         let res = (self.host.call_service_v1)(
-            RString::from(ENGINE_TEXTURES_SERVICE_ID),
+            RString::from(ENGINE_ASSETS_TEXTURES_SERVICE_ID),
             MethodName::from(textures_method::ENTRY_RUNTIME_V1),
             Blob::from(payload),
         );
@@ -404,21 +404,21 @@ impl AssetServiceClient {
         Self::decode_texture_runtime_wire_v2_typed(bytes).map_err(|e| e.with_logical_path(&reference.canonical))
     }
 
-    /// Call the semantic `engine.textures` gateway for `textures.entry_rgba8_v1` debug/editor packets.
+    /// Call the semantic `engine.assets.textures` gateway for `assets.textures.entry_rgba8_v1` debug/editor packets.
     #[inline]
     pub fn textures_entry_rgba8_v1_typed(&self, dictionary_path: &str, texture_name: Option<&str>, texture_hash: Option<u64>) -> AssetResult<Rgba8TextureAsset> {
         let texture_ref = texture_ref_from_parts(dictionary_path, texture_name, texture_hash)?;
         self.textures_entry_rgba8_ref_v1_typed(&texture_ref)
     }
 
-    /// Call the semantic `engine.textures` gateway with an authored `.ytd@entry` selector.
+    /// Call the semantic `engine.assets.textures` gateway with an authored `.ytd@entry` selector.
     #[inline]
     pub fn textures_entry_rgba8_ref_v1_typed(&self, texture_ref: &str) -> AssetResult<Rgba8TextureAsset> {
         let reference = require_asset_reference_extension(texture_ref, &["ytd"], true)
             .map_err(AssetError::invalid_request)?;
         let payload = Self::json_payload_typed(&serde_json::json!({ "texture_ref": reference.canonical }))?;
         let res = (self.host.call_service_v1)(
-            RString::from(ENGINE_TEXTURES_SERVICE_ID),
+            RString::from(ENGINE_ASSETS_TEXTURES_SERVICE_ID),
             MethodName::from(textures_method::ENTRY_RGBA8_V1),
             Blob::from(payload),
         );
@@ -432,13 +432,13 @@ impl AssetServiceClient {
 fn texture_ref_from_parts(dictionary_path: &str, texture_name: Option<&str>, texture_hash: Option<u64>) -> AssetResult<String> {
     let dictionary_path = dictionary_path.trim().replace('\\', "/");
     if dictionary_path.trim().is_empty() {
-        return Err(AssetError::invalid_request("textures.entry_* requires non-empty .ytd dictionary path"));
+        return Err(AssetError::invalid_request("assets.textures.entry_* requires non-empty .ytd dictionary path"));
     }
     if let Some(hash) = texture_hash {
         return Ok(format!("{}@hash:{}", dictionary_path, hash));
     }
     let Some(name) = texture_name.map(str::trim).filter(|it| !it.is_empty()) else {
-        return Err(AssetError::invalid_request("textures.entry_* requires .ytd@entry or texture_hash"));
+        return Err(AssetError::invalid_request("assets.textures.entry_* requires .ytd@entry or texture_hash"));
     };
     Ok(format!("{}@{}", dictionary_path, name))
 }

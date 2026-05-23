@@ -6,7 +6,7 @@
 //! request named material assets and then apply `MaterialRef` to objects; it should
 //! not parse ad-hoc texture/color fields inline.
 
-use crate::api::{MaterialAssetDocument, MaterialDescriptor, MaterialTextureBindings};
+use crate::api::{MaterialDescriptor, MaterialTextureBindings};
 
 /// Parsed, renderer-agnostic material source asset.
 #[derive(Clone, Debug, PartialEq)]
@@ -41,7 +41,7 @@ impl MaterialSourceDocument {
 }
 
 #[derive(Debug, serde::Deserialize)]
-#[serde(default)]
+#[serde(default, deny_unknown_fields)]
 struct RawMaterialSourceDocument {
     /// Stable registry name, for example `materials/fps/terrain`.
     name: Option<String>,
@@ -55,9 +55,6 @@ struct RawMaterialSourceDocument {
     /// Preferred nested texture bindings.
     textures: Option<MaterialTextureBindings>,
 
-    /// Backward-compatible flat material file support.
-    #[serde(flatten)]
-    flat: MaterialAssetDocument,
 }
 
 impl Default for RawMaterialSourceDocument {
@@ -68,7 +65,6 @@ impl Default for RawMaterialSourceDocument {
             material: None,
             descriptor: None,
             textures: None,
-            flat: MaterialAssetDocument::default(),
         }
     }
 }
@@ -76,17 +72,18 @@ impl Default for RawMaterialSourceDocument {
 impl RawMaterialSourceDocument {
     #[inline]
     fn into_source(self) -> MaterialSourceDocument {
-        let desc = self.material.or(self.descriptor).unwrap_or(self.flat.desc);
-        let textures = self.textures.unwrap_or(self.flat.textures);
+        let desc = self.material.or(self.descriptor).unwrap_or_default();
+        let textures = self.textures.unwrap_or_default();
         MaterialSourceDocument::new(self.name, desc, textures)
     }
 }
 
 /// Parse a material source JSON document.
 ///
-/// Supported forms:
-/// - flat legacy material: `{ "base_color": ..., "base_color_texture": ... }`
+/// Supported form:
 /// - source asset: `{ "name": "materials/foo", "material": {...}, "textures": {...} }`
+///
+/// Flat ad-hoc material JSON is not a runtime material source in NEF8.
 #[inline]
 pub fn parse_material_source_json(json: &str) -> Result<MaterialSourceDocument, serde_json::Error> {
     let raw = serde_json::from_str::<RawMaterialSourceDocument>(json)?;

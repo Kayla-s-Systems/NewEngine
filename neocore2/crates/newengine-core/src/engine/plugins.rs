@@ -249,6 +249,39 @@ impl<E: Send + 'static> Engine<E> {
 
         let gateway_routes = newengine_plugin_host::list_engine_gateway_routes();
         if !gateway_routes.is_empty() {
+            let mut hierarchy_routes = gateway_routes.clone();
+            hierarchy_routes.sort_by(|a, b| {
+                let ar = newengine_service_api::engine_gateway_root_id(&a.gateway_id).unwrap_or_else(|| a.gateway_id.clone());
+                let br = newengine_service_api::engine_gateway_root_id(&b.gateway_id).unwrap_or_else(|| b.gateway_id.clone());
+                ar.cmp(&br)
+                    .then_with(|| newengine_service_api::engine_gateway_depth(&a.gateway_id).unwrap_or(0).cmp(&newengine_service_api::engine_gateway_depth(&b.gateway_id).unwrap_or(0)))
+                    .then_with(|| a.gateway_id.cmp(&b.gateway_id))
+                    .then_with(|| b.active.cmp(&a.active))
+            });
+            let hierarchy_rows = hierarchy_routes
+                .iter()
+                .map(|route| {
+                    let root = newengine_service_api::engine_gateway_root_id(&route.gateway_id).unwrap_or_else(|| route.gateway_id.clone());
+                    let parent = newengine_service_api::engine_gateway_parent_id(&route.gateway_id).unwrap_or_else(|| "<root>".to_owned());
+                    let attach = if parent == "<root>" { "root" } else { "child" };
+                    vec![
+                        ellipsize(&root, 28),
+                        ellipsize(&parent, 32),
+                        ellipsize(&route.gateway_id, 36),
+                        attach.to_owned(),
+                        if route.active { "active".to_owned() } else { "shadowed".to_owned() },
+                        route.service_kind.clone(),
+                        ellipsize(&route.provider_service_id, 28),
+                    ]
+                })
+                .collect::<Vec<_>>();
+            emit_prefixed_table(
+                "",
+                &format!("Plugins :: Gateway Hierarchy [{}]", tag),
+                &["root", "parent", "gateway", "attach", "state", "kind", "provider_service"],
+                &hierarchy_rows,
+            );
+
             let route_rows = gateway_routes
                 .iter()
                 .map(|route| {

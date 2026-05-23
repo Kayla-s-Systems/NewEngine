@@ -36,6 +36,6 @@ They should be introduced once the asset pipeline exposes a stable texture handl
 materials/world/garage.nemat@garage_door
 ```
 
-Runtime material loading resolves one selected library entry through `engine.materials`, validates `.ytd@entry` texture refs, then emits a renderer-agnostic `RenderMaterialPacket`.
+Runtime material loading resolves one selected library entry through `engine.assets.materials`, validates `.ytd@entry` texture refs, then emits a renderer-agnostic `RenderMaterialPacket`.
 
 The old single-material binary helpers remain low-level descriptor payload utilities only; they are not the public `.nemat` file contract.

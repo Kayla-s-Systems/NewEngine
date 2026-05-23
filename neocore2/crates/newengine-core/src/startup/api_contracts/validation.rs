@@ -182,9 +182,11 @@ fn finish_violation(
 fn emit_contract_line(report: &ContractReport) {
     match report.status {
         "ok" => {
+            let parent = newengine_service_api::engine_gateway_parent_id(&report.service_id).unwrap_or_else(|| "<root>".to_owned());
             log::debug!(
-                "runtime contract ok: service='{}' provider_service='{}' source='{}' expected='{}'",
+                "runtime contract ok: service='{}' parent='{}' provider_service='{}' source='{}' expected='{}'",
                 report.service_id,
+                parent,
                 report.provider_service,
                 report.source,
                 report.expected,
@@ -218,7 +220,11 @@ fn emit_runtime_api_table(reports: &[ContractReport]) {
         let rows = reports
             .iter()
             .map(|report| {
+                let root = newengine_service_api::engine_gateway_root_id(&report.service_id).unwrap_or_else(|| report.service_id.clone());
+                let parent = newengine_service_api::engine_gateway_parent_id(&report.service_id).unwrap_or_else(|| "<root>".to_owned());
                 vec![
+                    root,
+                    parent,
                     report.service_id.clone(),
                     report.status.to_owned(),
                     report.provider_service.clone(),
@@ -236,6 +242,8 @@ fn emit_runtime_api_table(reports: &[ContractReport]) {
             "runtime api:",
             "Engine API gateway/service contracts",
             &[
+                "root",
+                "parent",
                 "api",
                 "status",
                 "provider_service",

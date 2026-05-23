@@ -7,7 +7,7 @@ use crate::{AssetAccess, UiImageLoader};
 /// This is a *data contract* between UI code and assets. UI code depends on stable logical keys,
 /// while the actual files are sourced via AssetManager.
 ///
-/// Paths are semantic `.ytd@entry` selectors resolved by `engine.textures`, with
+/// Paths are semantic `.ytd@entry` selectors resolved by `engine.assets.textures`, with
 /// AssetManager/VFS used only as byte owner behind that gateway.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum BuiltinUiIcon {

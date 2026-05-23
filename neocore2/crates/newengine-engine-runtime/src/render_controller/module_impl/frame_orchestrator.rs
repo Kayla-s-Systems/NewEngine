@@ -21,6 +21,7 @@ use super::frame_types::{PlayableFrameOutcome, RenderFrameScope, WorldFrameState
 use super::{lights, passes, picking, postfx, scene, shadows};
 use crate::scene_bridge::{apply_engine_view_postfx, EngineViewTransitionPhase};
 use super::super::controller::RuntimeRenderController;
+use super::super::error_policy::is_backend_device_lost_error;
 
 pub(super) struct RenderFrameOrchestrator;
 
@@ -70,9 +71,9 @@ impl RenderFrameOrchestrator {
         let base_lights = lights::collect_lights(scene.world()).with_camera_position(camera_position);
         let extent = Extent2D::new(scope.vp_w, scope.vp_h);
         let runtime_profile = controller.runtime_profile().clone();
-        let legacy_safe_profile = runtime_profile.legacy_safe_enabled();
-        if legacy_safe_profile {
-            log_legacy_safe_profile_once();
+        let gpu_safe_profile = runtime_profile.gpu_safe_enabled();
+        if gpu_safe_profile {
+            log_gpu_safe_profile_once();
         }
         let shadow_plan = if !runtime_profile.shadows_enabled() {
             shadows::LightShadowPlan::disabled(lit.white_texture)
@@ -218,13 +219,18 @@ impl RenderFrameOrchestrator {
         let submit_report = match submit_frame_envelope(r, frame_envelope, scope.trace_frame) {
             Ok(report) => report,
             Err(e) => {
-                controller.disable_viewport_pass("render_graph.submit_frame", &e);
+                let message = e.to_string();
+                controller.disable_viewport_pass("render_graph.submit_frame", &message);
                 log::error!(
                     "render controller: frame graph submit failed; viewport pass disabled and renderer continues in degraded UI/safe-present mode: {}",
-                    e
+                    message
                 );
-                let _ = r.discard_recorded_commands();
-                let _ = r.end_frame();
+                if is_backend_device_lost_error(&e) {
+                    controller.record_render_backend_error("render_graph.submit_frame", e)?;
+                } else {
+                    let _ = r.discard_recorded_commands();
+                    let _ = r.end_frame();
+                }
                 return Ok(PlayableFrameOutcome::EndedEarly { ui_telemetry: None });
             }
         };
@@ -420,18 +426,18 @@ impl RenderFrameOrchestrator {
 }
 
 
-static LEGACY_SAFE_PROFILE_LOGGED: AtomicBool = AtomicBool::new(false);
+static GPU_SAFE_PROFILE_LOGGED: AtomicBool = AtomicBool::new(false);
 
-fn log_legacy_safe_profile_once() {
-    if LEGACY_SAFE_PROFILE_LOGGED
+fn log_gpu_safe_profile_once() {
+    if GPU_SAFE_PROFILE_LOGGED
         .compare_exchange(false, true, Ordering::AcqRel, Ordering::Acquire)
         .is_ok()
     {
         log::warn!(
-            "render controller: legacy GPU safe profile active; preserving original renderer path for capable GPUs, but disabling risky shadows/HDR/postfx/deferred graph branches on this device"
+            "render controller: conservative GPU profile active; preserving original renderer path for capable GPUs, but disabling risky shadows/HDR/postfx/deferred graph branches on this device"
         );
         newengine_core::crash::record_breadcrumb(
-            "render controller: legacy GPU safe profile active".to_owned(),
+            "render controller: conservative GPU profile active".to_owned(),
         );
     }
 }

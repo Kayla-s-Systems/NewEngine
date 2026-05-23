@@ -7,7 +7,7 @@ use crate::types::CapabilityId;
 
 pub use newengine_service_api::{BackendRouteDescriptor, BackendServiceSpec};
 
-pub const CAPABILITY_TAG_LEGACY: &str = "legacy";
+pub const CAPABILITY_TAG_RETIRED: &str = "retired";
 pub const CAPABILITY_TAG_RENDER: &str = "render";
 pub const CAPABILITY_TAG_RUNTIME: &str = "runtime";
 pub const CAPABILITY_ID_RENDER_DRAW_LIST_PROVIDER: &str = "render.draw_list_provider";

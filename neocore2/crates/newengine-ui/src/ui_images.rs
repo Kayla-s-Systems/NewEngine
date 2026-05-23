@@ -6,7 +6,7 @@ use crate::asset::AssetAccess;
 ///
 /// UI images are requested as semantic texture refs, normally `.ytd@entry`.
 /// When the supplied [`AssetAccess`] implementation is the runtime host client,
-/// requests go through `engine.textures.entry_rgba8_v1`; UI providers receive an
+/// requests go through `engine.assets.assets.textures.entry_rgba8_v1`; UI providers receive an
 /// RGBA8/debug texture packet or provider-neutral texture deltas, never raw
 /// `.ytd` bytes. Concrete UI providers still own native texture handles and
 /// widget library state.

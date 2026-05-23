@@ -45,23 +45,23 @@ impl RuntimeServiceCatalogEntry {
 pub(crate) const RUNTIME_SERVICE_CATALOG: &[RuntimeServiceCatalogEntry] = &[
     RuntimeServiceCatalogEntry::new(
         newengine_assets_api::ASSET_RUNTIME_REQUIREMENT_SPEC,
-        "asset clients / VFS / material texture load",
+        "engine.assets root / VFS bytes / codec dispatch",
     ),
     RuntimeServiceCatalogEntry::new(
         newengine_assets_api::ASSET_FILE_TYPES_RUNTIME_REQUIREMENT_SPEC,
-        "asset browser / registered file-type handlers / VFS navigation",
+        "engine.assets.file_types descriptor registry / VFS navigation",
     ),
     RuntimeServiceCatalogEntry::new(
         newengine_assets_api::TEXTURES_RUNTIME_REQUIREMENT_SPEC,
-        "semantic .ytd texture dictionary API / runtime texture packets",
+        "engine.assets.textures semantic .ytd dictionary API / runtime texture packets",
     ),
     RuntimeServiceCatalogEntry::new(
         newengine_assets_api::DEFINITIONS_RUNTIME_REQUIREMENT_SPEC,
-        "semantic .ytyp Definition Entry metadata / dependency declarations",
+        "engine.assets.definitions semantic .ytyp Definition Entry metadata / dependency declarations",
     ),
     RuntimeServiceCatalogEntry::new(
         newengine_assets_api::ASSET_GRAPH_RUNTIME_REQUIREMENT_SPEC,
-        "declarative .ytyp/.ydd/.nemat/.ytd graph resolution",
+        "engine.assets.graph declarative .ytyp/.ydd/.nemat/.ytd graph resolution",
     ),
     RuntimeServiceCatalogEntry::new(
         newengine_time_api::TIME_RUNTIME_REQUIREMENT_SPEC,
@@ -69,7 +69,7 @@ pub(crate) const RUNTIME_SERVICE_CATALOG: &[RuntimeServiceCatalogEntry] = &[
     ),
     RuntimeServiceCatalogEntry::new(
         newengine_materials::MATERIALS_RUNTIME_REQUIREMENT_SPEC,
-        "material descriptor resolve / material graph validation / render material packets",
+        "engine.assets.materials material descriptor resolve / material graph validation / render packets",
     ),
     RuntimeServiceCatalogEntry::new(
         newengine_audio_api::AUDIO_RUNTIME_REQUIREMENT_SPEC,

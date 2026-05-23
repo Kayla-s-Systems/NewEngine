@@ -6,7 +6,9 @@ use crate::plugin_manager::PluginManagerBridge;
 use crate::scene_bridge::SceneBridge;
 use crate::viewport_bridge::ViewportBridge;
 
+use super::error_policy::RenderBackendFailureState;
 use super::gpu::{MaterialGpuPipelineKey, MaterialGpuPipelineProvider};
+use newengine_core::render::{RenderBackendCapabilities, RenderBackendStatus};
 use newengine_render_feature_api::{LightExtractionProvider, RenderDrawListProvider};
 use super::state::{
     RenderBridgeState, RenderDiagnosticsRuntimeState, RenderFeatureProviderState,
@@ -28,6 +30,7 @@ pub struct RuntimeRenderController {
     pub(super) diagnostics: RenderDiagnosticsRuntimeState,
     pub(super) menu: RenderMenuRuntimeState,
     pub(super) runtime_profile: RenderRuntimeProfileState,
+    pub(super) backend_failure: RenderBackendFailureState,
 }
 
 impl RuntimeRenderController {
@@ -37,11 +40,19 @@ impl RuntimeRenderController {
         &self.runtime_profile.profile
     }
 
+    pub(crate) fn apply_backend_capability_profile(&mut self, capabilities: &RenderBackendCapabilities) {
+        self.runtime_profile.apply_hardware_tier_once(capabilities.hardware_tier);
+    }
+
+    pub(crate) fn backend_status_snapshot(&self) -> RenderBackendStatus {
+        self.backend_failure.snapshot()
+    }
+
     pub(super) fn restore_playable_view_after_menu_close(&mut self) {
         let restore_viewport = self.runtime_profile().menu.restore_viewport_pass_on_close;
         let invalidate_shadow_cache = self.runtime_profile().menu.invalidate_shadow_cache_on_close;
         let restore_input = self.runtime_profile().menu.restore_gameplay_input_on_close;
-        if restore_viewport && self.viewport.pass_disabled {
+        if restore_viewport && self.viewport.pass_disabled && !self.backend_render_disabled() {
             log::warn!(
                 "render controller: menu restore reopened viewport GPU pass after pause/settings close"
             );
@@ -188,6 +199,7 @@ impl RuntimeRenderController {
             diagnostics: RenderDiagnosticsRuntimeState::new(),
             menu: RenderMenuRuntimeState::new(),
             runtime_profile: RenderRuntimeProfileState::new(),
+            backend_failure: RenderBackendFailureState::new(),
         }
     }
 }

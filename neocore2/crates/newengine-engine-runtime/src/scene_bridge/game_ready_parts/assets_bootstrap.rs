@@ -1,6 +1,8 @@
 use core::f32::consts::PI;
 use std::time::Duration;
-use newengine_assets::AssetAccess;
+use newengine_assets::{AssetAccess, AssetDecodeRequest, ASSET_LIST_FILE_BODY_OUTPUT};
+
+const SKYDOME_PROCEDURAL_CAPABILITY: &str = "geometry.procedural.skydome";
 
 fn read_u32_le(payload: &[u8], offset: &mut usize) -> Result<u32, String> {
     let end = offset.saturating_add(4);
@@ -147,6 +149,344 @@ fn load_ne3d_mesh_asset(logical_path: &str) -> Result<PrimitiveMesh, String> {
 }
 
 
+fn split_ydd_asset_ref(logical_path: &str) -> Option<(&str, Option<&str>)> {
+    let trimmed = logical_path.trim();
+    if trimmed.is_empty() {
+        return None;
+    }
+    let (dictionary, selector) = match trimmed.split_once('@') {
+        Some((dictionary, selector)) => (dictionary.trim(), Some(selector.trim()).filter(|s| !s.is_empty())),
+        None => (trimmed, None),
+    };
+    if dictionary.to_ascii_lowercase().ends_with(".ydd") {
+        Some((dictionary, selector))
+    } else {
+        None
+    }
+}
+
+fn json_array<'a>(value: &'a serde_json::Value, label: &str) -> Result<&'a [serde_json::Value], String> {
+    value
+        .as_array()
+        .map(Vec::as_slice)
+        .ok_or_else(|| format!("{label} must be an array"))
+}
+
+fn json_f32(value: &serde_json::Value, label: &str) -> Result<f32, String> {
+    value
+        .as_f64()
+        .map(|v| v as f32)
+        .ok_or_else(|| format!("{label} must be a number"))
+}
+
+fn json_vec3(value: &serde_json::Value, label: &str) -> Result<[f32; 3], String> {
+    let arr = json_array(value, label)?;
+    if arr.len() != 3 {
+        return Err(format!("{label} must have 3 components, got {}", arr.len()));
+    }
+    Ok([
+        json_f32(&arr[0], label)?,
+        json_f32(&arr[1], label)?,
+        json_f32(&arr[2], label)?,
+    ])
+}
+
+fn json_vec2(value: &serde_json::Value, label: &str) -> Result<[f32; 2], String> {
+    let arr = json_array(value, label)?;
+    if arr.len() != 2 {
+        return Err(format!("{label} must have 2 components, got {}", arr.len()));
+    }
+    Ok([json_f32(&arr[0], label)?, json_f32(&arr[1], label)?])
+}
+
+fn select_ydd_mesh_part<'a>(
+    root: &'a serde_json::Value,
+    selector: Option<&str>,
+) -> Result<&'a serde_json::Value, String> {
+    let parts = root
+        .get("mesh_parts")
+        .ok_or_else(|| "YDD payload has no mesh_parts array".to_owned())
+        .and_then(|v| json_array(v, "mesh_parts"))?;
+    if parts.is_empty() {
+        return Err("YDD payload has no mesh parts".to_owned());
+    }
+
+    if let Some(selector) = selector {
+        if let Some(part) = parts.iter().find(|part| {
+            part.get("entry")
+                .and_then(serde_json::Value::as_str)
+                .map(|v| v.eq_ignore_ascii_case(selector))
+                .unwrap_or(false)
+                || part
+                    .get("name")
+                    .and_then(serde_json::Value::as_str)
+                    .map(|v| v.eq_ignore_ascii_case(selector))
+                    .unwrap_or(false)
+        }) {
+            return Ok(part);
+        }
+        return Err(format!("YDD selector '{selector}' was not found in mesh_parts"));
+    }
+
+    Ok(&parts[0])
+}
+
+fn decode_ydd_mesh(dictionary_path: &str, selector: Option<&str>, payload: &[u8]) -> Result<PrimitiveMesh, String> {
+    let root: serde_json::Value = serde_json::from_slice(payload)
+        .map_err(|e| format!("YDD payload is not valid JSON path='{dictionary_path}' err='{e}'"))?;
+    if root
+        .get("mesh_encoding")
+        .and_then(serde_json::Value::as_str)
+        .map(|encoding| encoding == "newengine.ydd.runtime_mesh_parts.v1")
+        .unwrap_or(false)
+    {
+        let part = select_ydd_runtime_mesh_part(&root, selector)?;
+        return decode_ydd_runtime_mesh_part_for_skydome(dictionary_path, selector, part);
+    }
+    let part = select_ydd_mesh_part(&root, selector)?;
+    let streams = part
+        .get("vertex_streams")
+        .and_then(serde_json::Value::as_object)
+        .ok_or_else(|| "YDD mesh part has no vertex_streams object".to_owned())?;
+
+    let positions = streams
+        .get("position_f32x3")
+        .ok_or_else(|| "YDD mesh part has no position_f32x3 stream".to_owned())
+        .and_then(|v| json_array(v, "position_f32x3"))?;
+    let normals = streams
+        .get("normal_f32x3_generated_from_position")
+        .or_else(|| streams.get("normal_f32x3"))
+        .and_then(serde_json::Value::as_array);
+    let uvs = streams
+        .get("uv0_f32x2")
+        .and_then(serde_json::Value::as_array);
+    let indices_json = part
+        .get("indices")
+        .ok_or_else(|| "YDD mesh part has no indices array".to_owned())
+        .and_then(|v| json_array(v, "indices"))?;
+
+    decode_ydd_position_stream_mesh(dictionary_path, selector, positions, normals, uvs, indices_json)
+}
+
+fn select_ydd_runtime_mesh_part<'a>(
+    root: &'a serde_json::Value,
+    selector: Option<&str>,
+) -> Result<&'a serde_json::Value, String> {
+    let parts = root
+        .get("runtime_mesh_parts")
+        .ok_or_else(|| "YDD payload has no runtime_mesh_parts array".to_owned())
+        .and_then(|v| json_array(v, "runtime_mesh_parts"))?;
+    if parts.is_empty() {
+        return Err("YDD payload has no runtime mesh parts".to_owned());
+    }
+    if let Some(selector) = selector {
+        if let Some(part) = parts.iter().find(|part| {
+            part.get("entry")
+                .and_then(serde_json::Value::as_str)
+                .map(|v| v.eq_ignore_ascii_case(selector))
+                .unwrap_or(false)
+                || part
+                    .get("name")
+                    .and_then(serde_json::Value::as_str)
+                    .map(|v| v.eq_ignore_ascii_case(selector))
+                    .unwrap_or(false)
+        }) {
+            return Ok(part);
+        }
+        return Err(format!("YDD selector '{selector}' was not found in runtime_mesh_parts"));
+    }
+    Ok(&parts[0])
+}
+
+fn decode_ydd_runtime_mesh_part_for_skydome(
+    dictionary_path: &str,
+    selector: Option<&str>,
+    part: &serde_json::Value,
+) -> Result<PrimitiveMesh, String> {
+    let vertices_json = part
+        .get("vertices")
+        .ok_or_else(|| "YDD runtime mesh part has no vertices array".to_owned())
+        .and_then(|v| json_array(v, "vertices"))?;
+    let indices_json = part
+        .get("indices")
+        .ok_or_else(|| "YDD runtime mesh part has no indices array".to_owned())
+        .and_then(|v| json_array(v, "indices"))?;
+    if vertices_json.is_empty() || indices_json.is_empty() {
+        return Err(format!(
+            "YDD runtime mesh is empty path='{dictionary_path}' selector='{}' vertices={} indices={}",
+            selector.unwrap_or("<first>"),
+            vertices_json.len(),
+            indices_json.len()
+        ));
+    }
+    if vertices_json.len() > 1_000_000 || indices_json.len() > 6_000_000 {
+        return Err(format!(
+            "YDD runtime mesh exceeds runtime limits vertices={} indices={}",
+            vertices_json.len(),
+            indices_json.len()
+        ));
+    }
+
+    let mut vertices = Vec::with_capacity(vertices_json.len());
+    let mut min = Vec3::splat(f32::INFINITY);
+    let mut max = Vec3::splat(f32::NEG_INFINITY);
+    for value in vertices_json {
+        let pos = value
+            .get("pos")
+            .map(|v| json_vec3(v, "vertices[].pos"))
+            .transpose()?
+            .unwrap_or([0.0, 0.0, 0.0]);
+        let nrm = value
+            .get("nrm")
+            .map(|v| json_vec3(v, "vertices[].nrm"))
+            .transpose()?
+            .unwrap_or_else(|| {
+                let p = Vec3::new(pos[0], pos[1], pos[2]);
+                let n = if p.length_squared() > f32::EPSILON { -p.normalize() } else { Vec3::Y };
+                [n.x, n.y, n.z]
+            });
+        let uv = value
+            .get("uv")
+            .map(|v| json_vec2(v, "vertices[].uv"))
+            .transpose()?
+            .unwrap_or([0.0, 0.0]);
+        min.x = min.x.min(pos[0]);
+        min.y = min.y.min(pos[1]);
+        min.z = min.z.min(pos[2]);
+        max.x = max.x.max(pos[0]);
+        max.y = max.y.max(pos[1]);
+        max.z = max.z.max(pos[2]);
+        vertices.push(PrimitiveVertex { pos, nrm, uv });
+    }
+
+    decode_ydd_indexed_mesh_from_vertices(dictionary_path, vertices, indices_json, min, max)
+}
+
+fn decode_ydd_position_stream_mesh(
+    dictionary_path: &str,
+    selector: Option<&str>,
+    positions: &[serde_json::Value],
+    normals: Option<&Vec<serde_json::Value>>,
+    uvs: Option<&Vec<serde_json::Value>>,
+    indices_json: &[serde_json::Value],
+) -> Result<PrimitiveMesh, String> {
+    if positions.is_empty() || indices_json.is_empty() {
+        return Err(format!(
+            "YDD mesh is empty path='{dictionary_path}' selector='{}' vertices={} indices={}",
+            selector.unwrap_or("<first>"),
+            positions.len(),
+            indices_json.len()
+        ));
+    }
+    if positions.len() > 1_000_000 || indices_json.len() > 6_000_000 {
+        return Err(format!(
+            "YDD mesh exceeds runtime limits vertices={} indices={}",
+            positions.len(),
+            indices_json.len()
+        ));
+    }
+
+    let mut vertices = Vec::with_capacity(positions.len());
+    let mut min = Vec3::splat(f32::INFINITY);
+    let mut max = Vec3::splat(f32::NEG_INFINITY);
+
+    for (index, value) in positions.iter().enumerate() {
+        let pos = json_vec3(value, "position_f32x3[]")?;
+        let nrm = normals
+            .and_then(|n| n.get(index))
+            .map(|v| json_vec3(v, "normal_f32x3[]"))
+            .transpose()?
+            .unwrap_or_else(|| {
+                let p = Vec3::new(pos[0], pos[1], pos[2]);
+                let n = if p.length_squared() > f32::EPSILON {
+                    -p.normalize()
+                } else {
+                    Vec3::Y
+                };
+                [n.x, n.y, n.z]
+            });
+        let uv = uvs
+            .and_then(|uvs| uvs.get(index))
+            .map(|v| json_vec2(v, "uv0_f32x2[]"))
+            .transpose()?
+            .unwrap_or([0.0, 0.0]);
+
+        min.x = min.x.min(pos[0]);
+        min.y = min.y.min(pos[1]);
+        min.z = min.z.min(pos[2]);
+        max.x = max.x.max(pos[0]);
+        max.y = max.y.max(pos[1]);
+        max.z = max.z.max(pos[2]);
+        vertices.push(PrimitiveVertex { pos, nrm, uv });
+    }
+
+    decode_ydd_indexed_mesh_from_vertices(dictionary_path, vertices, indices_json, min, max)
+}
+
+fn decode_ydd_indexed_mesh_from_vertices(
+    dictionary_path: &str,
+    vertices: Vec<PrimitiveVertex>,
+    indices_json: &[serde_json::Value],
+    min: Vec3,
+    max: Vec3,
+) -> Result<PrimitiveMesh, String> {
+    let mut indices = Vec::with_capacity(indices_json.len());
+    for value in indices_json {
+        let index = value
+            .as_u64()
+            .ok_or_else(|| "YDD index must be an unsigned integer".to_owned())? as u32;
+        if index as usize >= vertices.len() {
+            return Err(format!(
+                "YDD index out of bounds path='{dictionary_path}' index={index} vertex_count={}",
+                vertices.len()
+            ));
+        }
+        indices.push(index);
+    }
+
+    let bounds_center = (min + max) * 0.5;
+    let mut bounds_radius = 0.0f32;
+    for v in &vertices {
+        let p = Vec3::new(v.pos[0], v.pos[1], v.pos[2]);
+        bounds_radius = bounds_radius.max((p - bounds_center).length());
+    }
+
+    Ok(PrimitiveMesh {
+        vertices,
+        indices,
+        bounds_center,
+        bounds_radius: bounds_radius.max(0.001),
+    })
+}
+
+fn load_ydd_mesh_asset(logical_path: &str) -> Result<PrimitiveMesh, String> {
+    let (dictionary_path, selector) = split_ydd_asset_ref(logical_path)
+        .ok_or_else(|| format!("not a .ydd asset ref path='{logical_path}'"))?;
+    let assets = AssetServiceClient::new(default_host_api());
+    let request = AssetDecodeRequest {
+        logical_path: dictionary_path.to_owned(),
+        output_kind: ASSET_LIST_FILE_BODY_OUTPUT.to_owned(),
+        selector: selector
+            .map(|selector| serde_json::json!({ "selector": selector }))
+            .unwrap_or(serde_json::Value::Null),
+    };
+    let body = assets.decode_v1(&request).map_err(|e| {
+        format!(
+            "asset.decode_v1 failed path='{dictionary_path}' output='{ASSET_LIST_FILE_BODY_OUTPUT}' err='{e}'"
+        )
+    })?;
+    decode_ydd_mesh(dictionary_path, selector, &body)
+}
+
+fn load_skydome_mesh_asset(logical_path: &str) -> Result<PrimitiveMesh, String> {
+    if split_ydd_asset_ref(logical_path).is_some() {
+        load_ydd_mesh_asset(logical_path)
+    } else {
+        load_ne3d_mesh_asset(logical_path)
+    }
+}
+
+
 fn build_procedural_skydome_mesh() -> PrimitiveMesh {
     const SLICES: u32 = 64;
     const STACKS: u32 = 32;
@@ -198,7 +538,7 @@ fn ensure_skydome_primitive(prims: &mut PrimitiveRegistry, logical_path: &str) -
         return Some(SKYDOME_PRIMITIVE_ID);
     }
 
-    if logical_path.eq_ignore_ascii_case("procedural:skydome") {
+    if logical_path.eq_ignore_ascii_case(SKYDOME_PROCEDURAL_CAPABILITY) {
         let mesh = build_procedural_skydome_mesh();
         let vertex_count = mesh.vertices.len();
         let index_count = mesh.indices.len();
@@ -208,14 +548,15 @@ fn ensure_skydome_primitive(prims: &mut PrimitiveRegistry, logical_path: &str) -
             mesh,
         );
         log::info!(
-            "game-ready: procedural skydome selected vertices={} indices={}",
+            "game-ready: procedural skydome selected capability='{}' vertices={} indices={}",
+            SKYDOME_PROCEDURAL_CAPABILITY,
             vertex_count,
             index_count
         );
         return Some(SKYDOME_PRIMITIVE_ID);
     }
 
-    match load_ne3d_mesh_asset(logical_path) {
+    match load_skydome_mesh_asset(logical_path) {
         Ok(mesh) => {
             let vertex_count = mesh.vertices.len();
             let index_count = mesh.indices.len();
@@ -225,7 +566,7 @@ fn ensure_skydome_primitive(prims: &mut PrimitiveRegistry, logical_path: &str) -
                 mesh,
             );
             log::info!(
-                "game-ready: skydome imported through AssetManager/geometryImporter path='{}' vertices={} indices={}",
+                "game-ready: skydome imported through AssetManager path='{}' vertices={} indices={}",
                 logical_path,
                 vertex_count,
                 index_count
@@ -379,12 +720,23 @@ fn instantiate_game_ready_definitions(
         return;
     }
     log::debug!(
-        "definitions.runtime: game-ready instantiation batch count={} policy='RuntimeCommand::InstantiateDefinition -> engine.definitions -> AssetGraphResolver -> ECS apply'",
+        "definitions.runtime: game-ready definition batch count={} policy='.ymap placements declare apply_mode; .ytyp dependencies are graph inputs, not implicit render/spawn commands'",
         definitions.len()
     );
     for spec in definitions {
         let graph = resolve_game_ready_asset_graph(&spec.definition_ref)
             .unwrap_or_else(|| newengine_model_domain_api::AssetGraphResolver::resolve_root_ref(&spec.definition_ref));
+        if matches!(spec.apply_mode, GameReadyDefinitionApplyMode::MetadataOnly) {
+            log::debug!(
+                "definitions.runtime: metadata-only definition_ref='{}' nodes={} missing={} apply_mode='{}' policy='domain systems consume engine.assets.definitions/engine.assets.graph explicitly; no generic ECS/render marker spawned'",
+                spec.definition_ref,
+                graph.nodes.len(),
+                graph.missing_refs.len(),
+                spec.apply_mode.as_str()
+            );
+            continue;
+        }
+
         let transform = super::definitions_runtime::DefinitionInstantiateTransform {
             translation: [spec.position.x, spec.position.y, spec.position.z],
             rotation_ypr: spec.rotation_ypr,
@@ -398,7 +750,7 @@ fn instantiate_game_ready_definitions(
             graph,
         );
         log::debug!(
-            "definitions.runtime: game-ready instantiated definition_ref='{}' entity={:?} nodes={} missing={} render_drawables={} materials={} textures={} physics_refs={} result='{}'",
+            "definitions.runtime: instantiated marker definition_ref='{}' entity={:?} nodes={} missing={} render_drawables={} materials={} textures={} physics_refs={} result='{}' apply_mode='{}'",
             trace.definition_ref,
             entity,
             trace.resolved_graph.nodes.len(),
@@ -407,7 +759,8 @@ fn instantiate_game_ready_definitions(
             trace.render_packet_request.material_refs.len(),
             trace.render_packet_request.texture_refs.len(),
             trace.physics_declaration.collision_refs.len() + trace.physics_declaration.physics_refs.len(),
-            trace.apply_result
+            trace.apply_result,
+            spec.apply_mode.as_str()
         );
     }
 }
@@ -483,13 +836,13 @@ pub(super) fn bootstrap_fps_game_ready_scene(
         "Player/FPS",
         Vec3::new(start_x, start_y, start_z),
         player_tuning,
-        true,
+        false,
     );
     let model_ground_offset_y = -(player_tuning.body_half_height + player_tuning.body_radius);
     let model_bound = spawn_game_ready_player_model(world, prims, mats, player, &map.player.model, model_ground_offset_y);
     if !model_bound {
         log::warn!(
-            "game-ready: player runtime model disabled or unavailable; fallback capsule remains visible"
+            "game-ready: player runtime model disabled or unavailable; player visual was not spawned because authored model data is required"
         );
     }
     if let Some(motor) = world.get_mut::<newengine_sim::CharacterMotor>(player) {

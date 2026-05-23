@@ -6,7 +6,7 @@ use crate::{
     ROLE_TEXTURE_DICTIONARY, TEXTURE_DICTIONARY_EXTENSION,
 };
 
-pub const DATA_DRIVEN_CONSTRUCTION_PLAN_SCHEMA: &str = "newengine.definitions.data_driven_construction_plan.v1";
+pub const DATA_DRIVEN_CONSTRUCTION_PLAN_SCHEMA: &str = "newengine.assets.definitions.data_driven_construction_plan.v1";
 
 /// Declarative construction plan derived from YTYP Definition Entries.
 ///
@@ -129,7 +129,7 @@ pub struct DataDrivenMaterialSlotBinding {
 
 impl Default for DataDrivenMaterialSlotBinding {
     fn default() -> Self {
-        Self { slot: String::new(), material: String::new(), resolve_gateway: "engine.materials".to_owned() }
+        Self { slot: String::new(), material: String::new(), resolve_gateway: "engine.assets.materials".to_owned() }
     }
 }
 

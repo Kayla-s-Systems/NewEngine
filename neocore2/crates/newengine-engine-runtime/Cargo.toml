@@ -20,6 +20,7 @@ serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 
 newengine-assets = { path = "../newengine-assets" }
+newengine-authored-xml = { path = "../newengine-authored-xml" }
 newengine-audio-api = { path = "../newengine-audio-api" }
 newengine-bounds = { path = "../newengine-bounds" }
 newengine-camera = { path = "../newengine-camera" }

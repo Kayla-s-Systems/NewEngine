@@ -5,7 +5,7 @@
 //! Authored/runtime material graphs reference texture dictionaries through the
 //! shared VFS syntax `<logical-path>[@entry]`. Source image containers
 //! (PNG/JPG/TGA/DDS/etc.) are import inputs for tools only and must not appear in
-//! material graphs. `.neytd` is rejected by the public material contract.
+//! material graphs. 
 
 use newengine_assets_api::{
     is_rejected_neytd_reference, is_raw_source_image_reference, require_asset_reference_extension,
@@ -27,7 +27,7 @@ impl MaterialTextureReference {
 
     pub fn parse_strict(value: &str) -> Result<Self, String> {
         if is_rejected_neytd_reference(value) {
-            return Err("material texture references must use .ytd@entry; .neytd is not a public material texture reference".to_owned());
+            return Err("material texture references must use .ytd@entry; non-canonical texture dictionaries are not public material texture references".to_owned());
         }
         if is_raw_source_image_reference(value) {
             return Err("material texture references must use .ytd@entry; raw source image formats are import inputs only".to_owned());

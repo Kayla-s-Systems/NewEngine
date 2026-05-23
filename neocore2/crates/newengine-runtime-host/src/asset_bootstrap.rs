@@ -19,6 +19,19 @@ pub fn collect_app_asset_roots(app_dir_name: &str, env_var: &str) -> Vec<PathBuf
         roots.push(PathBuf::from(p));
     }
 
+    // Cargo --manifest-path does not guarantee that the process CWD is the
+    // workspace root. Resolve both executable-relative and CWD-relative asset
+    // roots so VFS mount discovery is deterministic during editor/dev runs.
+    if let Ok(cwd) = std::env::current_dir() {
+        push_asset_roots_from_base(&mut roots, &cwd, app_dir_name);
+        let mut cur = Some(cwd);
+        for _ in 0..8 {
+            let Some(base) = cur.clone() else { break; };
+            push_asset_roots_from_base(&mut roots, &base, app_dir_name);
+            cur = base.parent().map(Path::to_path_buf);
+        }
+    }
+
     if let Ok(exe) = std::env::current_exe() {
         if let Some(dir) = exe.parent() {
             roots.push(dir.join("assets"));
@@ -27,21 +40,12 @@ pub fn collect_app_asset_roots(app_dir_name: &str, env_var: &str) -> Vec<PathBuf
 
     if let Ok(exe) = std::env::current_exe() {
         let mut cur = exe.parent().map(Path::to_path_buf);
-        for _ in 0..6 {
+        for _ in 0..8 {
             let Some(base) = cur.clone() else {
                 break;
             };
 
-            let shared_assets = base.join("assets");
-            if shared_assets.is_dir() {
-                roots.push(shared_assets);
-            }
-
-            let app_assets = base.join("apps").join(app_dir_name).join("assets");
-            if app_assets.is_dir() {
-                roots.push(app_assets);
-                break;
-            }
+            push_asset_roots_from_base(&mut roots, &base, app_dir_name);
 
             cur = base.parent().map(Path::to_path_buf);
         }
@@ -55,6 +59,26 @@ pub fn collect_app_asset_roots(app_dir_name: &str, env_var: &str) -> Vec<PathBuf
         }
     }
     out
+}
+
+fn push_asset_roots_from_base(roots: &mut Vec<PathBuf>, base: &Path, app_dir_name: &str) {
+    let shared_assets = base.join("assets");
+    if shared_assets.is_dir() {
+        roots.push(shared_assets);
+    }
+
+    let app_assets = base.join("apps").join(app_dir_name).join("assets");
+    if app_assets.is_dir() {
+        roots.push(app_assets);
+    }
+
+    // Common monorepo launch shape: commands may run from repository root while
+    // runtime assets live under NewEngine/neocore2/assets. This is still a VFS
+    // mount, not a direct asset read.
+    let neocore_assets = base.join("NewEngine").join("neocore2").join("assets");
+    if neocore_assets.is_dir() {
+        roots.push(neocore_assets);
+    }
 }
 
 pub fn mount_asset_roots_best_effort(assets: &AssetServiceClient, roots: &[PathBuf]) {

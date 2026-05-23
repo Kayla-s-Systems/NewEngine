@@ -1,6 +1,6 @@
 // NewEngine SkyDome cloud layer helper (HLSL source contract)
-// Cloud sources are packed in textures/fps/clouds_runtime.ytd and selected as
-// textures/fps/clouds_runtime.ytd@cloud_<profile>__<entry>.
+// Cloud sources are packed in textures/fps/skydome.ytd and selected as
+// textures/fps/skydome.ytd@cloud_<profile>__<entry>.
 #ifndef NEWENGINE_SKYDOME_CLOUD_LAYER_HLSL
 #define NEWENGINE_SKYDOME_CLOUD_LAYER_HLSL
 

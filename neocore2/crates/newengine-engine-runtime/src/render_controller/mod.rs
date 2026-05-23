@@ -1,6 +1,7 @@
 #![forbid(unsafe_op_in_unsafe_fn)]
 
 mod controller;
+mod error_policy;
 mod gpu;
 mod material_bindings;
 mod metrics;

@@ -12,6 +12,7 @@ use crate::scene_bridge::SkyClearColorRuntime;
 
 use super::frame_types::{PlayableFrameOutcome, RenderFrameScope};
 use super::super::controller::RuntimeRenderController;
+use super::super::error_policy::is_backend_device_lost_error;
 
 impl RuntimeRenderController {
     pub(super) fn render_runtime_module<E: Send + 'static>(
@@ -35,6 +36,7 @@ impl RuntimeRenderController {
             .get::<crate::render_runtime::ResolvedRenderBackendConfig>()
             .map(|cfg| {
                 self.viewport.clear_color = cfg.clear_color;
+                self.apply_backend_capability_profile(&cfg.capabilities);
                 cfg.work_budget
             });
 
@@ -43,6 +45,11 @@ impl RuntimeRenderController {
             Ok(api) => api.clone(),
             Err(_) => return Ok(()),
         };
+        if self.backend_render_disabled() {
+            ctx.resources_mut().insert(self.backend_status_snapshot());
+            ctx.resources_mut().insert(SceneLaunchStatus::inactive());
+            return Ok(());
+        }
         let mut r = api.lock();
         if let Some(budget) = backend_work_budget {
             let _ = r.set_work_budget(budget);
@@ -72,7 +79,18 @@ impl RuntimeRenderController {
         let ui: Option<UiDrawList> = ctx.resources_mut().remove::<UiDrawList>();
         let mut r = api.lock();
         let dt = ctx.frame().map(|f| f.dt).unwrap_or(0.016);
-        let Some(scope) = self.begin_playable_surface_frame(&mut **r, ui.is_some(), w, h, dt, trace_frame)? else {
+        let scope_result = self.begin_playable_surface_frame(&mut **r, ui.is_some(), w, h, dt, trace_frame);
+        let Some(scope) = (match scope_result {
+            Ok(scope) => scope,
+            Err(e) if is_backend_device_lost_error(&e) => {
+                self.record_render_backend_error("render.begin_frame", e)?;
+                drop(r);
+                ctx.resources_mut().insert(self.backend_status_snapshot());
+                ctx.resources_mut().insert(SceneLaunchStatus::inactive());
+                return Ok(());
+            }
+            Err(e) => return Err(e),
+        }) else {
             drop(r);
             ctx.resources_mut().insert(SceneLaunchStatus::inactive());
             return Ok(());
@@ -94,6 +112,13 @@ impl RuntimeRenderController {
             Ok(Ok(outcome)) => outcome,
             Ok(Err(e)) => {
                 let message = e.to_string();
+                if is_backend_device_lost_error(&e) {
+                    self.record_render_backend_error("render.playable_frame.error", e)?;
+                    drop(r);
+                    ctx.resources_mut().insert(self.backend_status_snapshot());
+                    ctx.resources_mut().insert(SceneLaunchStatus::inactive());
+                    return Ok(());
+                }
                 self.disable_viewport_pass("render_playable_viewport_frame.error", &message);
                 log::error!(
                     "render controller: playable frame returned error; presenting degraded recovery frame instead of aborting: {}",
@@ -141,6 +166,9 @@ impl RuntimeRenderController {
             PlayableFrameOutcome::EndedEarly { ui_telemetry } => {
                 ui_telemetry_to_publish = ui_telemetry;
                 drop(r);
+                if self.backend_render_disabled() {
+                    ctx.resources_mut().insert(self.backend_status_snapshot());
+                }
                 ctx.resources_mut().insert(SceneLaunchStatus::inactive());
                 if let Some(ui_telemetry) = ui_telemetry_to_publish {
                     ctx.resources_mut().insert(ui_telemetry);
@@ -169,7 +197,16 @@ impl RuntimeRenderController {
                     self.frame.frame_index
                 ));
             }
-            r.end_frame()?;
+            if let Err(e) = r.end_frame() {
+                if is_backend_device_lost_error(&e) {
+                    self.record_render_backend_error("render.end_frame", e)?;
+                    drop(r);
+                    ctx.resources_mut().insert(self.backend_status_snapshot());
+                    ctx.resources_mut().insert(SceneLaunchStatus::inactive());
+                    return Ok(());
+                }
+                return Err(e);
+            }
 
             if let Some(snapshot) = frame_debug_snapshot.take() {
                 self.diagnostics.overlay_metrics.publish_debug_snapshot(snapshot);

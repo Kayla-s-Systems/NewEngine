@@ -158,7 +158,7 @@ impl Default for DefinitionEntriesManifest {
     fn default() -> Self {
         Self {
             schema: DEFINITION_ENTRIES_SCHEMA.to_owned(),
-            codec: "asset.codec.listfile.ytyp".to_owned(),
+            codec: "definitions.api".to_owned(),
             source_format: OBJECT_TYPE_DEFINITIONS_CONTAINER.to_owned(),
             source_encoding: "nef8.deflate.body".to_owned(),
             source: String::new(),

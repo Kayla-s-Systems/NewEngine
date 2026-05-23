@@ -63,8 +63,7 @@ pub(crate) fn default_plugins_dir() -> Result<PathBuf, PluginLoadError> {
         push_ancestor_plugin_dirs(&mut candidates, &cwd);
     }
 
-    // Backward-compatible packaged layout: dynamic libraries may live directly
-    // next to the executable.
+    // Packaged runtime layout: dynamic libraries may live directly next to the executable.
     push_unique(&mut candidates, exe_dir.clone());
 
     if let Some(found) = best_existing_plugins_dir(candidates) {

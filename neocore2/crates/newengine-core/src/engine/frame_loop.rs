@@ -90,9 +90,9 @@ impl<E: Send + 'static> Engine<E> {
         }
 
         let time_snapshot = self.begin_time_frame_snapshot()?;
-        // Keep the legacy wall-clock anchor read-only until the Engine struct is
+        // Keep the wall-clock anchor read-only until the Engine struct is
         // trimmed; frame time itself is now owned by engine.time.
-        let _legacy_wall_clock_anchor = self.last;
+        let _wall_clock_anchor = self.last;
         let mut dt = variable_delta_seconds_from_time(&time_snapshot);
         dt = dt.clamp(0.0, 0.2);
         self.acc = time_snapshot.simulation.accumulator_ns as f32 / 1_000_000_000.0;

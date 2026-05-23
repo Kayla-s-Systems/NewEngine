@@ -5,13 +5,13 @@
                        "codec":  "newengine-codec-listfile",
                        "version":  "0.1.0",
                        "dll":  "newengine-codec-listfile-0.1.0.dll",
-                       "path":  "C:\\Users\\Aiden\\Documents\\Kayla\u0027s Systems\\NewEngineRockstar\\NewEngine\\neocore2\\plugins\\codecs\\newengine-codec-listfile-0.1.0.dll"
+                       "path":  "C:\\Users\\AidenFox\\Documents\\Kaylas-Systems\\NewEngineRockstar\\NewEngine\\neocore2\\plugins\\codecs\\newengine-codec-listfile-0.1.0.dll"
                    },
                    {
                        "codec":  "newengine-codec-nepak",
                        "version":  "0.1.0",
                        "dll":  "newengine-codec-nepak-0.1.0.dll",
-                       "path":  "C:\\Users\\Aiden\\Documents\\Kayla\u0027s Systems\\NewEngineRockstar\\NewEngine\\neocore2\\plugins\\codecs\\newengine-codec-nepak-0.1.0.dll"
+                       "path":  "C:\\Users\\AidenFox\\Documents\\Kaylas-Systems\\NewEngineRockstar\\NewEngine\\neocore2\\plugins\\codecs\\newengine-codec-nepak-0.1.0.dll"
                    }
                ],
     "naming":  "{codec}-{version}.dll",

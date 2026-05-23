@@ -11,10 +11,11 @@ use newengine_service_kit::{
     JsonServiceRouter,
 };
 use newengine_time_api::{
-    time_method, TimeBeginFrameRequestV1, TimeCancelEventRequestV1, TimeDueEventsV1,
-    TimeGameClockSetRequestV1, TimePauseRequestV1, TimeRealClockV1, TimeReplayClockV1,
-    TimeScaleRequestV1, TimeScheduledEventV1, TimeServiceInfoV1, TimeSimulationClockV1,
-    TimeSnapshotV1, ENGINE_TIME_SERVICE_ID, TIME_BACKEND_CAPABILITY_ID, TIME_RUNTIME_CONTRACT,
+    time_method, TimeAiClockV1, TimeAiContextV1, TimeBeginFrameRequestV1, TimeCancelEventRequestV1,
+    TimeDueEventsV1, TimeFixedStepRequestV1, TimeGameClockSetRequestV1, TimePauseRequestV1,
+    TimeRealClockV1, TimeReplayClockSetRequestV1, TimeReplayClockV1, TimeScaleRequestV1,
+    TimeScheduledEventV1, TimeServiceInfoV1, TimeSimulationClockV1, TimeSnapshotV1,
+    ENGINE_TIME_SERVICE_ID, TIME_BACKEND_CAPABILITY_ID, TIME_RUNTIME_CONTRACT,
     TIME_SERVICE_ID, TIME_SERVICE_METHODS,
 };
 use parking_lot::Mutex;
@@ -34,6 +35,7 @@ struct EngineOwnedTimeState {
     last_raw_delta_ns: u64,
     last_clamped_delta_ns: u64,
     fixed_delta_ns: u64,
+    max_fixed_ticks_per_frame: u32,
     accumulator_ns: u64,
     tick: u64,
     ticks_to_run: u32,
@@ -46,6 +48,8 @@ struct EngineOwnedTimeState {
     replay_deterministic: bool,
     replay_seed: u64,
     replay_frame: u64,
+    ai_tick_budget_ns: u64,
+    ai_decision_tick_interval: u32,
     scheduled_events: BTreeMap<String, TimeScheduledEventV1>,
 }
 
@@ -59,6 +63,7 @@ impl Default for EngineOwnedTimeState {
             last_raw_delta_ns: 0,
             last_clamped_delta_ns: 0,
             fixed_delta_ns: 16_666_667,
+            max_fixed_ticks_per_frame: MAX_FIXED_TICKS_PER_FRAME,
             accumulator_ns: 0,
             tick: 0,
             ticks_to_run: 0,
@@ -71,18 +76,81 @@ impl Default for EngineOwnedTimeState {
             replay_deterministic: false,
             replay_seed: 0,
             replay_frame: 0,
+            ai_tick_budget_ns: 1_000_000,
+            ai_decision_tick_interval: 4,
             scheduled_events: BTreeMap::new(),
         }
     }
 }
 
 impl EngineOwnedTimeState {
-    fn snapshot(&self) -> TimeSnapshotV1 {
-        let normalized_day = if self.seconds_per_game_day <= f64::EPSILON {
+    fn normalized_day(&self) -> f64 {
+        if self.seconds_per_game_day <= f64::EPSILON {
             0.0
         } else {
             (self.seconds_of_day / 86_400.0).rem_euclid(1.0)
-        };
+        }
+    }
+
+    fn time_of_day_phase(&self) -> String {
+        let hour = (self.normalized_day() * 24.0).rem_euclid(24.0);
+        match hour {
+            h if h < 5.0 => "night",
+            h if h < 8.0 => "dawn",
+            h if h < 17.0 => "day",
+            h if h < 20.0 => "dusk",
+            _ => "night",
+        }.to_owned()
+    }
+
+    fn next_ai_decision_tick(&self) -> u64 {
+        let interval = self.ai_decision_tick_interval.max(1) as u64;
+        let rem = self.tick % interval;
+        if rem == 0 { self.tick } else { self.tick + (interval - rem) }
+    }
+
+    fn ai_deterministic_key(&self) -> String {
+        format!(
+            "ai-time:v1:seed={:016x}:day={}:tick={}:frame={}",
+            self.replay_seed,
+            self.day_index,
+            self.tick,
+            self.replay_frame,
+        )
+    }
+
+    fn ai_clock(&self) -> TimeAiClockV1 {
+        TimeAiClockV1 {
+            tick_budget_ns: self.ai_tick_budget_ns,
+            decision_tick_interval: self.ai_decision_tick_interval.max(1),
+            next_decision_tick: self.next_ai_decision_tick(),
+            time_of_day_phase: self.time_of_day_phase(),
+            normalized_day: self.normalized_day(),
+            deterministic_key: self.ai_deterministic_key(),
+        }
+    }
+
+    fn ai_context(&self) -> TimeAiContextV1 {
+        TimeAiContextV1 {
+            frame_index: self.frame_index,
+            simulation_tick: self.tick,
+            fixed_delta_ns: self.fixed_delta_ns,
+            game_day_index: self.day_index,
+            game_seconds_of_day: self.seconds_of_day,
+            normalized_day: self.normalized_day(),
+            time_of_day_phase: self.time_of_day_phase(),
+            deterministic: self.replay_deterministic,
+            replay_seed: self.replay_seed,
+            replay_frame: self.replay_frame,
+            decision_tick_interval: self.ai_decision_tick_interval.max(1),
+            next_decision_tick: self.next_ai_decision_tick(),
+            tick_budget_ns: self.ai_tick_budget_ns,
+            deterministic_key: self.ai_deterministic_key(),
+            ..Default::default()
+        }
+    }
+    fn snapshot(&self) -> TimeSnapshotV1 {
+        let normalized_day = self.normalized_day();
         TimeSnapshotV1 {
             schema: TIME_RUNTIME_CONTRACT.to_owned(),
             provider: "EngineOwnedTimeProvider".to_owned(),
@@ -112,6 +180,7 @@ impl EngineOwnedTimeState {
                 seed: self.replay_seed,
                 replay_frame: self.replay_frame,
             },
+            ai: self.ai_clock(),
         }
     }
 
@@ -131,11 +200,14 @@ impl EngineOwnedTimeState {
         } else {
             ((self.last_clamped_delta_ns as f64) * self.scale.max(0.0)) as u64
         };
-        self.accumulator_ns = self.accumulator_ns.saturating_add(scaled_delta_ns).min(self.fixed_delta_ns.saturating_mul(64));
+        let accumulator_cap = self
+            .fixed_delta_ns
+            .saturating_mul(u64::from(self.max_fixed_ticks_per_frame.max(1)));
+        self.accumulator_ns = self.accumulator_ns.saturating_add(scaled_delta_ns).min(accumulator_cap);
         self.ticks_to_run = if self.fixed_delta_ns == 0 {
             0
         } else {
-            (self.accumulator_ns / self.fixed_delta_ns).min(u64::from(MAX_FIXED_TICKS_PER_FRAME)) as u32
+            (self.accumulator_ns / self.fixed_delta_ns).min(u64::from(self.max_fixed_ticks_per_frame.max(1))) as u32
         };
 
         if !self.paused && self.seconds_per_game_day > f64::EPSILON {
@@ -171,7 +243,7 @@ impl EngineOwnedTimeState {
         self.ticks_to_run = if self.fixed_delta_ns == 0 {
             0
         } else {
-            (self.accumulator_ns / self.fixed_delta_ns).min(u64::from(MAX_FIXED_TICKS_PER_FRAME)) as u32
+            (self.accumulator_ns / self.fixed_delta_ns).min(u64::from(self.max_fixed_ticks_per_frame.max(1))) as u32
         };
         log::debug!(
             "time gateway: advance_fixed tick={} frame={} accumulator_ns={}",
@@ -223,6 +295,7 @@ fn invoke(state: &mut EngineOwnedTimeState, payload: Blob) -> RResult<Blob, RStr
     match method {
         time_method::SNAPSHOT_V1 => ok_json(state.snapshot()),
         time_method::DESCRIBE_CLOCK_V1 => ok_json(info()),
+        time_method::AI_CONTEXT_V1 => ok_json(state.ai_context()),
         other => RResult::RErr(RString::from(format!("engine.time: unknown invoke method '{other}'"))),
     }
 }
@@ -235,9 +308,9 @@ fn service() -> newengine_plugin_api::ServiceV1Dyn<'static> {
         TIME_SERVICE_METHODS.iter().copied(),
     )
     .protocol(TIME_RUNTIME_CONTRACT)
-    .features(["frame-clock", "fixed-timestep", "game-clock", "scheduler-clock"])
+    .features(["frame-clock", "fixed-timestep", "game-clock", "scheduler-clock", "ai-context-clock", "deterministic-replay-clock"])
     .gateway("engine-owned engine.time baseline provider")
-    .notes("Owns runtime clock state. Domains consume TimeSnapshotV1 instead of calling Instant::now().");
+    .notes("Owns runtime clock state. Domains and AI providers consume TimeSnapshotV1/TimeAiContextV1 instead of calling Instant::now().");
 
     JsonServiceRouter::with_shared_state(TIME_SERVICE_ID, state())
         .describe_json(&description)
@@ -262,6 +335,22 @@ fn service() -> newengine_plugin_api::ServiceV1Dyn<'static> {
             state.game_time_scale = request.time_scale.max(0.0);
             state.snapshot()
         })
+        .post_json::<TimeFixedStepRequestV1, TimeSnapshotV1, _>(time_method::SET_FIXED_STEP_V1, |state, request| {
+            if request.fixed_delta_ns > 0 {
+                state.fixed_delta_ns = request.fixed_delta_ns;
+            }
+            state.max_fixed_ticks_per_frame = request.max_fixed_ticks_per_frame.clamp(1, 64);
+            state.ai_decision_tick_interval = request.ai_decision_tick_interval.max(1);
+            state.ai_tick_budget_ns = request.ai_tick_budget_ns.max(1_000);
+            state.snapshot()
+        })
+        .post_json::<TimeReplayClockSetRequestV1, TimeSnapshotV1, _>(time_method::SET_REPLAY_CLOCK_V1, |state, request| {
+            state.replay_deterministic = request.deterministic;
+            state.replay_seed = request.seed;
+            state.replay_frame = request.replay_frame;
+            state.snapshot()
+        })
+        .get_json(time_method::AI_CONTEXT_V1, |state| state.ai_context())
         .post_json::<TimeScheduledEventV1, TimeScheduledEventV1, _>(time_method::SCHEDULE_EVENT_V1, |state, event| {
             let mut event = event;
             if event.id.trim().is_empty() {

@@ -103,7 +103,7 @@ pub fn is_raw_source_image_reference(value: &str) -> bool {
 pub fn is_rejected_neytd_reference(value: &str) -> bool {
     parse_asset_reference(value)
         .map(|reference| reference.has_extension("neytd"))
-        .unwrap_or_else(|_| value.trim().to_ascii_lowercase().contains(".neytd"))
+        .unwrap_or_else(|_| value.trim().to_ascii_lowercase().contains(".ytd"))
 }
 
 pub fn require_asset_reference_extension(value: &str, extensions: &[&str], require_entry: bool) -> Result<AssetReference, String> {

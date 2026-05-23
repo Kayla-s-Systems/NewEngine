@@ -3,7 +3,7 @@ use std::io::Cursor;
 
 /// Stored data region is raw runtime mip payload. For BCn material dictionaries this is GPU-native block data.
 pub const FLAG_DATA_RAW: u16 = 0;
-/// Stored data region is one zstd frame containing runtime mip payload. Kept for backward compatibility; GPU-native material dictionaries should use raw data for direct upload.
+/// Stored data region is one zstd frame containing runtime mip payload. GPU-native material dictionaries should use raw data for direct upload.
 pub const FLAG_DATA_ZSTD: u16 = 0x0001;
 const SUPPORTED_FLAGS: u16 = FLAG_DATA_ZSTD;
 const DEFAULT_ZSTD_LEVEL: i32 = 10;

@@ -15,6 +15,46 @@ pub enum RenderThreadingModel {
     MultiQueue,
 }
 
+/// Coarse hardware capability tier exposed by a render backend.
+///
+/// This is intentionally not a per-GPU model profile. Backends classify the
+/// selected adapter by capabilities and broad family, then the host/profile
+/// decides which optional render features are allowed.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum RenderHardwareTier {
+    Headless,
+    LegacyGtx,
+    Gtx,
+    Rtx,
+    Unknown,
+}
+
+impl Default for RenderHardwareTier {
+    #[inline]
+    fn default() -> Self {
+        Self::Unknown
+    }
+}
+
+impl RenderHardwareTier {
+    #[inline]
+    pub const fn profile_id(self) -> &'static str {
+        match self {
+            Self::Headless => "newengine.render.runtime.tier.headless",
+            Self::LegacyGtx => "newengine.render.runtime.tier.legacy_gtx",
+            Self::Gtx => "newengine.render.runtime.tier.gtx",
+            Self::Rtx => "newengine.render.runtime.tier.rtx",
+            Self::Unknown => "newengine.render.runtime.tier.auto",
+        }
+    }
+
+    #[inline]
+    pub const fn is_conservative(self) -> bool {
+        matches!(self, Self::LegacyGtx | Self::Gtx)
+    }
+}
+
 impl Default for RenderThreadingModel {
     #[inline]
     fn default() -> Self {
@@ -107,6 +147,8 @@ pub struct RenderBackendCapabilities {
     pub threading: RenderThreadingModel,
     pub features: Vec<RenderFeature>,
     pub limits: RenderLimits,
+    #[serde(default)]
+    pub hardware_tier: RenderHardwareTier,
 }
 
 impl RenderBackendCapabilities {
@@ -166,6 +208,7 @@ impl RenderBackendCapabilities {
                 RenderFeature::UiComposite,
             ],
             limits: RenderLimits::default(),
+            hardware_tier: RenderHardwareTier::Unknown,
         }
     }
 
@@ -176,6 +219,7 @@ impl RenderBackendCapabilities {
             threading: RenderThreadingModel::SingleThreaded,
             features: Vec::new(),
             limits: RenderLimits::default(),
+            hardware_tier: RenderHardwareTier::Headless,
         }
     }
 

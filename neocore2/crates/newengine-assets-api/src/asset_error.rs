@@ -139,7 +139,7 @@ impl AssetError {
     #[inline]
     pub fn from_wire_or_message(message: impl Into<String>) -> Self {
         let message = message.into();
-        decode_asset_error_wire(&message).unwrap_or_else(|| classify_legacy_asset_error(message))
+        decode_asset_error_wire(&message).unwrap_or_else(|| classify_text_asset_error(message))
     }
 
     pub fn to_json_value(&self) -> Value {
@@ -227,7 +227,7 @@ pub fn decode_asset_error_wire(value: &str) -> Option<AssetError> {
     AssetError::from_json_value(&json)
 }
 
-pub fn classify_legacy_asset_error(message: impl Into<String>) -> AssetError {
+pub fn classify_text_asset_error(message: impl Into<String>) -> AssetError {
     let message = message.into();
     let lower = message.to_ascii_lowercase();
     let kind = if lower.contains("not ready") || lower.contains("loading") || lower.contains("queued") {

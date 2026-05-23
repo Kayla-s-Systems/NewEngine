@@ -426,15 +426,15 @@ mod tests {
     use super::*;
 
     #[test]
-    fn shadow_capabilities_json_is_backward_compatible() {
-        let legacy = r#"{
+    fn shadow_capabilities_json_use_defaults_for_missing_fields() {
+        let minimal = r#"{
             "directional_depth_map": true,
             "cascaded_shadow_maps": false,
             "point_cube_map": false,
             "spot_depth_map": false,
             "max_shadow_resolution": 1024
         }"#;
-        let caps: BackendShadowCapabilities = serde_json::from_str(legacy).expect("legacy caps json");
+        let caps: BackendShadowCapabilities = serde_json::from_str(minimal).expect("caps json");
         assert!(caps.directional_depth_map);
         assert_eq!(caps.max_shadow_resolution, 1024);
         assert_eq!(caps.max_directional_cascades, 1);
@@ -443,7 +443,7 @@ mod tests {
 
     #[test]
     fn light_plan_contribution_extra_defaults_for_old_providers() {
-        let legacy = r#"{
+        let minimal = r#"{
             "handled": true,
             "kind": "Directional",
             "supported": true,
@@ -453,7 +453,7 @@ mod tests {
             "light_mvp_cols": [[1.0,0.0,0.0,0.0],[0.0,1.0,0.0,0.0],[0.0,0.0,1.0,0.0],[0.0,0.0,0.0,1.0]],
             "params": [1.0, 0.0015, 0.35, 0.4]
         }"#;
-        let contribution: LightPlanContribution = serde_json::from_str(legacy).expect("legacy contribution json");
+        let contribution: LightPlanContribution = serde_json::from_str(minimal).expect("minimal contribution json");
         assert_eq!(contribution.extra, [0.0; 4]);
     }
 }
