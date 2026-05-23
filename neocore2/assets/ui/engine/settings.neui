@@ -1,0 +1,7 @@
+<NeUiDictionary schema="newengine.neui.dictionary.v1" representation="xmlcentral" owner_scope="engine" document_kind="surface">
+  <Entries><Entry name="surface" kind="ui_surface" /><Entry name="layout.main" kind="ui_layout" /><Entry name="bindings" kind="ui_binding_graph" /><Entry name="actions" kind="ui_action_map" /></Entries>
+  <Surface name="engine.settings" kind="settings" modal="true" z_order="750" root="layout.main" theme="assets/ui/themes/aurelia_dark.neui@theme" bindings="bindings" actions="actions" />
+  <Layout name="layout.main" surface="engine.settings"><Panel id="settings.root" class="settings-shell"><Text id="settings.title" class="title" value="Settings" /><Select id="settings.renderer" class="input input-select dark-select"><Bind property="value" source="settings.renderer" /></Select><Switch id="settings.vsync" class="switch switch-primary"><Bind property="checked" source="settings.vsync" /></Switch></Panel></Layout>
+  <BindingGraph name="bindings"><StateSource id="settings" source="engine.settings.snapshot" contract="SettingsSnapshot" update="dirty" /><Bind element="settings.renderer" property="value" source="settings.renderer" mode="twoWay" /><Bind element="settings.vsync" property="checked" source="settings.vsync" mode="twoWay" /></BindingGraph>
+  <ActionMap name="actions"><Action id="engine.settings.apply" target="engine.settings" command="apply" /></ActionMap>
+</NeUiDictionary>

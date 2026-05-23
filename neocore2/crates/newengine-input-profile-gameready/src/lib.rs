@@ -19,7 +19,7 @@ pub mod action {
     pub const CAMERA_VIEW_THIRD_PERSON_FOLLOW: &str = "camera.view.third_person.follow";
     pub const CAMERA_VIEW_THIRD_PERSON_AIM: &str = "camera.view.third_person.aim";
 
-    pub const UI_MENU_TOGGLE: &str = "engine.menu.toggle_pause";
+    pub const UI_MENU_TOGGLE: &str = "engine.ui.menu.toggle_pause";
     pub const UI_MENU_ACCEPT: &str = "ui.menu.accept";
     pub const UI_MENU_BACK: &str = "ui.menu.back";
     pub const UI_MENU_UP: &str = "ui.menu.up";

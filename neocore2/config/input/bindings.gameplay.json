@@ -265,7 +265,7 @@
       ]
     },
     {
-      "id": "engine.menu.toggle_pause",
+      "id": "engine.ui.menu.toggle_pause",
       "label": "Toggle menu",
       "contexts": [],
       "dispatch": "consume_first",
@@ -346,6 +346,17 @@
           "kind": "menu_nav",
           "x": 1,
           "y": 0
+        }
+      ]
+    },
+    {
+      "id": "engine.menu.toggle_pause",
+      "label": "Toggle menu",
+      "contexts": [],
+      "dispatch": "consume_first",
+      "effects": [
+        {
+          "kind": "menu_toggle"
         }
       ]
     }
@@ -631,6 +642,20 @@
       "device": "GamepadButton",
       "code": 0,
       "name": "DPadRight",
+      "phase": "Pressed"
+    },
+    {
+      "action": "engine.ui.menu.toggle_pause",
+      "device": "Keyboard",
+      "code": 114,
+      "name": null,
+      "phase": "Pressed"
+    },
+    {
+      "action": "engine.ui.menu.toggle_pause",
+      "device": "GamepadButton",
+      "code": 0,
+      "name": "Start",
       "phase": "Pressed"
     }
   ],

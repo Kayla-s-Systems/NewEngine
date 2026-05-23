@@ -4,7 +4,10 @@ use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 
 pub const ENGINE_PAUSE_MENU_DOCUMENT_ID: &str = "engine.pause_menu";
-pub const ENGINE_PAUSE_MENU_ASSET_PATH: &str = "ui/menus/engine.pause_menu.menu.json";
+/// Canonical runtime UI source. The pause menu is authored as `.neui` and must be
+/// compiled by `engine.assets.ui` before `engine.ui` mounts it. Runtime JSON menu
+/// assets are intentionally not supported as compatibility fallback.
+pub const ENGINE_PAUSE_MENU_SURFACE_REF: &str = "assets/ui/engine/pause_menu.neui@surface";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]

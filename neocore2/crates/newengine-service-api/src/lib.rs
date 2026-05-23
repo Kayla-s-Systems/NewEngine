@@ -288,6 +288,7 @@ pub enum EngineServiceKind {
     AssetListFiles,
     AssetMaps,
     AssetValidation,
+    AssetUi,
     Materials,
     Textures,
     Definitions,
@@ -313,6 +314,8 @@ pub enum EngineServiceKind {
     InputActions,
     InputContexts,
     Ui,
+    UiText,
+    UiDebug,
     Logging,
     Loading,
     Platform,
@@ -347,6 +350,7 @@ impl EngineServiceKind {
             Self::AssetListFiles => "assets.listfiles",
             Self::AssetMaps => "assets.maps",
             Self::AssetValidation => "assets.validation",
+            Self::AssetUi => "assets.ui",
             Self::Materials => "assets.materials",
             Self::Textures => "assets.textures",
             Self::Definitions => "assets.definitions",
@@ -372,6 +376,8 @@ impl EngineServiceKind {
             Self::InputActions => "input.actions",
             Self::InputContexts => "input.contexts",
             Self::Ui => "ui",
+            Self::UiText => "ui.text",
+            Self::UiDebug => "ui.debug",
             Self::Logging => "logging",
             Self::Loading => "loading",
             Self::Platform => "platform",
@@ -396,6 +402,7 @@ impl EngineServiceKind {
             "assets.listfiles" | "assets_listfiles" | "assets.list_files" | "assets_list_files" => Some(Self::AssetListFiles),
             "assets.maps" | "assets_maps" => Some(Self::AssetMaps),
             "assets.validation" | "assets_validation" => Some(Self::AssetValidation),
+            "assets.ui" | "assets_ui" => Some(Self::AssetUi),
             "assets.materials" | "assets_materials" => Some(Self::Materials),
             "assets.textures" | "assets_textures" => Some(Self::Textures),
             "assets.definitions" | "assets_definitions" => Some(Self::Definitions),
@@ -421,6 +428,8 @@ impl EngineServiceKind {
             "input.actions" | "input_actions" => Some(Self::InputActions),
             "input.contexts" | "input_contexts" => Some(Self::InputContexts),
             "ui" => Some(Self::Ui),
+            "ui.text" | "ui_text" => Some(Self::UiText),
+            "ui.debug" | "ui_debug" => Some(Self::UiDebug),
             "logging" => Some(Self::Logging),
             "loading" => Some(Self::Loading),
             "platform" => Some(Self::Platform),
@@ -443,12 +452,13 @@ impl EngineServiceKind {
     #[inline]
     pub const fn parent(self) -> Option<Self> {
         match self {
-            Self::AssetVfs | Self::AssetFileTypes | Self::AssetPackages | Self::AssetListFiles | Self::AssetMaps | Self::AssetValidation | Self::Materials | Self::Textures | Self::Definitions | Self::AssetGraph | Self::Model => Some(Self::Assets),
+            Self::AssetVfs | Self::AssetFileTypes | Self::AssetPackages | Self::AssetListFiles | Self::AssetMaps | Self::AssetValidation | Self::AssetUi | Self::Materials | Self::Textures | Self::Definitions | Self::AssetGraph | Self::Model => Some(Self::Assets),
             Self::RenderEffects | Self::RenderMaterials => Some(Self::Render),
             Self::ModelSkeletons | Self::ModelMaterials | Self::ModelCollisions => Some(Self::Model),
             Self::CameraModes | Self::CameraAnimations => Some(Self::Camera),
             Self::PhysicsContacts | Self::PhysicsConstraints => Some(Self::Physics),
             Self::InputBindings | Self::InputActions | Self::InputContexts => Some(Self::Input),
+            Self::UiText | Self::UiDebug => Some(Self::Ui),
             _ => None,
         }
     }
@@ -479,6 +489,7 @@ impl EngineServiceKind {
             Self::AssetListFiles => "engine.assets.listfiles",
             Self::AssetMaps => "engine.assets.maps",
             Self::AssetValidation => "engine.assets.validation",
+            Self::AssetUi => "engine.assets.ui",
             Self::Materials => "engine.assets.materials",
             Self::Textures => "engine.assets.textures",
             Self::Definitions => "engine.assets.definitions",
@@ -504,6 +515,8 @@ impl EngineServiceKind {
             Self::InputActions => "engine.input.actions",
             Self::InputContexts => "engine.input.contexts",
             Self::Ui => "engine.ui",
+            Self::UiText => "engine.ui.text",
+            Self::UiDebug => "engine.ui.debug",
             Self::Logging => "engine.logging",
             Self::Loading => "engine.loading",
             Self::Platform => "engine.platform",
@@ -666,6 +679,7 @@ mod tests {
             ("assets.listfiles", EngineServiceKind::AssetListFiles, "engine.assets.listfiles", Some(EngineServiceKind::Assets)),
             ("assets.maps", EngineServiceKind::AssetMaps, "engine.assets.maps", Some(EngineServiceKind::Assets)),
             ("assets.validation", EngineServiceKind::AssetValidation, "engine.assets.validation", Some(EngineServiceKind::Assets)),
+            ("assets.ui", EngineServiceKind::AssetUi, "engine.assets.ui", Some(EngineServiceKind::Assets)),
             ("assets.materials", EngineServiceKind::Materials, "engine.assets.materials", Some(EngineServiceKind::Assets)),
             ("assets.textures", EngineServiceKind::Textures, "engine.assets.textures", Some(EngineServiceKind::Assets)),
             ("assets.definitions", EngineServiceKind::Definitions, "engine.assets.definitions", Some(EngineServiceKind::Assets)),
@@ -684,6 +698,8 @@ mod tests {
             ("physics.constraints", EngineServiceKind::PhysicsConstraints, "engine.physics.constraints", Some(EngineServiceKind::Physics)),
             ("camera.modes", EngineServiceKind::CameraModes, "engine.camera.modes", Some(EngineServiceKind::Camera)),
             ("camera.animations", EngineServiceKind::CameraAnimations, "engine.camera.animations", Some(EngineServiceKind::Camera)),
+            ("ui.text", EngineServiceKind::UiText, "engine.ui.text", Some(EngineServiceKind::Ui)),
+            ("ui.debug", EngineServiceKind::UiDebug, "engine.ui.debug", Some(EngineServiceKind::Ui)),
         ];
 
         for (text, kind, gateway, parent) in cases {
@@ -703,6 +719,8 @@ mod tests {
         assert!(!EngineServiceKind::Physics.matches_engine_gateway_id("engine.physics.contacts"));
         assert!(!EngineServiceKind::Model.matches_engine_gateway_id("engine.assets.models.skeletons"));
         assert!(!EngineServiceKind::Camera.matches_engine_gateway_id("engine.camera.modes"));
+        assert!(!EngineServiceKind::Ui.matches_engine_gateway_id("engine.ui.text"));
+        assert!(!EngineServiceKind::Assets.matches_engine_gateway_id("engine.assets.ui"));
     }
 
     #[test]

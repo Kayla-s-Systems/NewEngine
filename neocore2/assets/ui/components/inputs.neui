@@ -1,0 +1,8 @@
+<NeUiComponentLibrary schema="newengine.neui.components.v1" representation="xmlcentral" owner_scope="shared" document_kind="component_library">
+  <Entries>
+    <Entry name="input.text" kind="ui_component" />
+    <Entry name="input.select" kind="ui_component" />
+  </Entries>
+  <Component name="input.text" root="input.text.root"><TextInput id="input.text.root" class="input input-text"><Bind property="value" source="$props.value" /></TextInput></Component>
+  <Component name="input.select" root="input.select.root"><Select id="input.select.root" class="input input-select dark-select"><Bind property="value" source="$props.value" /></Select></Component>
+</NeUiComponentLibrary>

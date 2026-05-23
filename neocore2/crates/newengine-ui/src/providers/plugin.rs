@@ -78,11 +78,11 @@ impl UiProvider for PluginUiProvider {
         let manifest = self.manifest();
         let mut catalog = UiProviderCatalog::from_manifest(manifest);
         catalog.layouts = vec![
-            UiLayoutDeclaration { id: "engine.loading.ksystems".to_owned(), surface_id: UI_SURFACE_ENGINE_LOADING.to_owned(), document: "ui/layouts/engine.loading.ksystems.json".to_owned(), hot_reload: true, fallback_document: None },
-            UiLayoutDeclaration { id: "engine.loading.subsystem_card.ksystems".to_owned(), surface_id: UI_SURFACE_ENGINE_LOADING.to_owned(), document: "ui/layouts/engine.loading.subsystem_cards.ksystems.json".to_owned(), hot_reload: true, fallback_document: None },
-            UiLayoutDeclaration { id: "engine.error_modal.ksystems".to_owned(), surface_id: UI_SURFACE_ENGINE_ERROR_MODAL.to_owned(), document: "ui/layouts/engine.error_modal.ksystems.json".to_owned(), hot_reload: true, fallback_document: None },
-            UiLayoutDeclaration { id: "game.hud.open_world".to_owned(), surface_id: UI_SURFACE_GAME_HUD.to_owned(), document: "ui/layouts/game.hud.open_world.json".to_owned(), hot_reload: true, fallback_document: None },
-            UiLayoutDeclaration { id: "engine.pause_menu.open_world".to_owned(), surface_id: UI_SURFACE_PAUSE_MENU.to_owned(), document: "ui/layouts/engine.pause_menu.open_world.json".to_owned(), hot_reload: true, fallback_document: None },
+            UiLayoutDeclaration { id: "engine.loading.ksystems".to_owned(), surface_id: UI_SURFACE_ENGINE_LOADING.to_owned(), document: "assets/ui/engine/loading.neui@surface".to_owned(), hot_reload: true, fallback_document: None },
+            UiLayoutDeclaration { id: "engine.loading.subsystem_card.ksystems".to_owned(), surface_id: UI_SURFACE_ENGINE_LOADING.to_owned(), document: "assets/ui/engine/loading.neui@layout.subsystem_cards".to_owned(), hot_reload: true, fallback_document: None },
+            UiLayoutDeclaration { id: "engine.error_modal.ksystems".to_owned(), surface_id: UI_SURFACE_ENGINE_ERROR_MODAL.to_owned(), document: "assets/ui/engine/error_modal.neui@surface".to_owned(), hot_reload: true, fallback_document: None },
+            UiLayoutDeclaration { id: "game.hud.open_world".to_owned(), surface_id: UI_SURFACE_GAME_HUD.to_owned(), document: "assets/ui/game/hud.neui@surface".to_owned(), hot_reload: true, fallback_document: None },
+            UiLayoutDeclaration { id: "engine.pause_menu.open_world".to_owned(), surface_id: UI_SURFACE_PAUSE_MENU.to_owned(), document: "assets/ui/engine/pause_menu.neui@surface".to_owned(), hot_reload: true, fallback_document: None },
         ];
         catalog.actions = vec![
             action(UI_ACTION_START_GAME, "Start", "GameCommand"),
@@ -97,7 +97,7 @@ impl UiProvider for PluginUiProvider {
         catalog.themes = vec![UiThemeDeclaration {
             id: "newengine.dark.gold-magenta".to_owned(),
             display_name: "NewEngine Dark / Gold-Magenta".to_owned(),
-            token_document: "ui/themes/newengine.dark.gold-magenta.tokens.json".to_owned(),
+            token_document: "assets/ui/themes/aurelia_dark.neui@theme".to_owned(),
         }];
         catalog
     }

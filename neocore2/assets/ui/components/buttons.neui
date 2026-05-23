@@ -1,0 +1,20 @@
+<NeUiComponentLibrary schema="newengine.neui.components.v1" representation="xmlcentral" owner_scope="shared" document_kind="component_library">
+  <Entries>
+    <Entry name="button.primary" kind="ui_component" />
+    <Entry name="button.secondary" kind="ui_component" />
+    <Entry name="button.danger" kind="ui_component" />
+    <Entry name="button.icon" kind="ui_component" />
+  </Entries>
+  <Component name="button.primary" root="button.primary.root">
+    <Button id="button.primary.root" class="button button-primary interactive-glow"><Slot name="content" /></Button>
+  </Component>
+  <Component name="button.secondary" root="button.secondary.root">
+    <Button id="button.secondary.root" class="button button-secondary"><Slot name="content" /></Button>
+  </Component>
+  <Component name="button.danger" root="button.danger.root">
+    <Button id="button.danger.root" class="button button-danger"><Slot name="content" /></Button>
+  </Component>
+  <Component name="button.icon" root="button.icon.root">
+    <Button id="button.icon.root" class="button button-icon"><Image id="button.icon.image"><Bind property="texture" source="$props.icon" /></Image></Button>
+  </Component>
+</NeUiComponentLibrary>

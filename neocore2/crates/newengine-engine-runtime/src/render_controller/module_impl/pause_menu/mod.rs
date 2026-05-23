@@ -255,8 +255,8 @@ impl RenderPauseMenuRuntimeState {
         match document::try_load_pause_menu_document() {
             Ok(menu) => {
                 log::info!(
-                    "engine.pause_menu: declarative MenuDocument loaded through engine.assets/VFS path='{}'",
-                    newengine_ui_navigation_api::ENGINE_PAUSE_MENU_ASSET_PATH
+                    "engine.pause_menu: compiled .neui pause surface available through engine.ui ref='{}'",
+                    newengine_ui_navigation_api::ENGINE_PAUSE_MENU_SURFACE_REF
                 );
                 self.document_load_error = None;
                 self.menu = Some(menu);
@@ -264,8 +264,8 @@ impl RenderPauseMenuRuntimeState {
             }
             Err(err) => {
                 log::warn!(
-                    "engine.pause_menu: MenuDocument unavailable path='{}' err='{}'",
-                    newengine_ui_navigation_api::ENGINE_PAUSE_MENU_ASSET_PATH,
+                    "engine.pause_menu: compiled .neui pause surface unavailable ref='{}' err='{}'",
+                    newengine_ui_navigation_api::ENGINE_PAUSE_MENU_SURFACE_REF,
                     err
                 );
                 self.document_load_error = Some(err);

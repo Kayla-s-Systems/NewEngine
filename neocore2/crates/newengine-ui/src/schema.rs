@@ -287,16 +287,16 @@ fn state_contract_for_id(id: &str) -> &'static str {
 
 fn default_layout_for_id(id: &str) -> &'static str {
     match id {
-        UI_SURFACE_ENGINE_LOADING => "ui/layouts/engine.loading.ksystems.json",
-        UI_SURFACE_ENGINE_ERROR_MODAL => "ui/layouts/engine.error_modal.ksystems.json",
-        UI_SURFACE_RUNTIME_OVERLAY => "ui/layouts/runtime.overlay.default.json",
-        UI_SURFACE_GAME_HUD => "ui/layouts/game.hud.open_world.json",
-        UI_SURFACE_MAIN_MENU => "ui/layouts/engine.main_menu.open_world.json",
-        UI_SURFACE_PAUSE_MENU => "ui/layouts/engine.pause_menu.open_world.json",
-        UI_SURFACE_SETTINGS => "ui/layouts/engine.settings.default.json",
-        UI_SURFACE_DEBUG_OVERLAY => "ui/layouts/runtime.debug_overlay.default.json",
-        UI_SURFACE_ASSET_BROWSER => "ui/layouts/editor.asset_browser.default.json",
-        UI_SURFACE_INSPECTOR => "ui/layouts/editor.inspector.default.json",
+        UI_SURFACE_ENGINE_LOADING => "assets/ui/engine/loading.neui@surface",
+        UI_SURFACE_ENGINE_ERROR_MODAL => "assets/ui/engine/error_modal.neui@surface",
+        UI_SURFACE_RUNTIME_OVERLAY => "assets/ui/runtime/overlay.neui@surface",
+        UI_SURFACE_GAME_HUD => "assets/ui/game/hud.neui@surface",
+        UI_SURFACE_MAIN_MENU => "assets/ui/engine/main_menu.neui@surface",
+        UI_SURFACE_PAUSE_MENU => "assets/ui/engine/pause_menu.neui@surface",
+        UI_SURFACE_SETTINGS => "assets/ui/engine/settings.neui@surface",
+        UI_SURFACE_DEBUG_OVERLAY => "assets/ui/runtime/debug_overlay.neui@surface",
+        UI_SURFACE_ASSET_BROWSER => "assets/ui/editor/asset_browser.neui@surface",
+        UI_SURFACE_INSPECTOR => "assets/ui/editor/inspector.neui@surface",
         _ => "",
     }
 }

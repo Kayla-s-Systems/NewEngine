@@ -1,0 +1,6 @@
+<NeUiDictionary schema="newengine.neui.dictionary.v1" representation="xmlcentral" owner_scope="editor" document_kind="surface">
+  <Entries><Entry name="surface" kind="ui_surface" /><Entry name="layout.main" kind="ui_layout" /><Entry name="bindings" kind="ui_binding_graph" /></Entries>
+  <Surface name="editor.inspector" kind="tool_panel" modal="false" z_order="610" root="layout.main" theme="assets/ui/themes/aurelia_dark.neui@theme" bindings="bindings" />
+  <Layout name="layout.main" surface="editor.inspector"><Panel id="inspector.root" class="editor-panel"><Text id="inspector.title" class="title" value="Inspector" /><PropertyGrid id="inspector.properties"><Bind property="items" source="selection.properties" /></PropertyGrid></Panel></Layout>
+  <BindingGraph name="bindings"><StateSource id="selection" source="engine.editor.selection" contract="EditorSelectionSnapshot" update="dirty" /><Bind element="inspector.properties" property="items" source="selection.properties" /></BindingGraph>
+</NeUiDictionary>

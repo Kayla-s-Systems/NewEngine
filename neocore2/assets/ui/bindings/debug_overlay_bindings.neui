@@ -1,0 +1,4 @@
+<NeUiBindingLibrary schema="newengine.neui.bindings.v1" representation="xmlcentral" owner_scope="runtime" document_kind="binding_library">
+  <Entries><Entry name="bindings" kind="ui_binding_graph" /></Entries>
+  <BindingGraph name="bindings"><StateSource id="telemetry" source="engine.runtime.debug.telemetry" contract="DebugOverlayTelemetry" update="frame" /></BindingGraph>
+</NeUiBindingLibrary>

@@ -1,0 +1,8 @@
+<NeUiComponentLibrary schema="newengine.neui.components.v1" representation="xmlcentral" owner_scope="shared" document_kind="component_library">
+  <Entries>
+    <Entry name="progress.linear" kind="ui_component" />
+    <Entry name="progress.phase" kind="ui_component" />
+  </Entries>
+  <Component name="progress.linear" root="progress.linear.root"><Progress id="progress.linear.root" class="progress progress-linear"><Bind property="value" source="$props.value" fallback="0" /></Progress></Component>
+  <Component name="progress.phase" root="progress.phase.root"><Panel id="progress.phase.root" class="progress-phase"><Text id="progress.phase.label"><Bind property="text" source="$props.label" /></Text><Progress id="progress.phase.value"><Bind property="value" source="$props.value" /></Progress></Panel></Component>
+</NeUiComponentLibrary>

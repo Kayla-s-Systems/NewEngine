@@ -1,0 +1,41 @@
+<NeUiDictionary schema="newengine.neui.dictionary.v1" representation="xmlcentral" owner_scope="engine" document_kind="surface">
+  <Entries>
+    <Entry name="surface" kind="ui_surface" />
+    <Entry name="layout.main" kind="ui_layout" />
+    <Entry name="layout.subsystem_cards" kind="ui_layout" />
+    <Entry name="bindings" kind="ui_binding_graph" />
+    <Entry name="actions" kind="ui_action_map" />
+  </Entries>
+  <Surface name="engine.loading" kind="loading" modal="true" z_order="900" root="layout.main" theme="assets/ui/themes/aurelia_dark.neui@theme" bindings="bindings">
+    <Dependencies>
+      <TextureRef ref="assets/loading/loading_ui.ytd@newengine_logo" />
+      <ComponentRef ref="assets/ui/components/cards.neui@card.status" />
+      <ComponentRef ref="assets/ui/components/progress.neui@progress.linear" />
+    </Dependencies>
+  </Surface>
+  <Layout name="layout.main" surface="engine.loading">
+    <Panel id="loading.root" class="loading-shell aurelia-panel">
+      <Image id="loading.logo" texture="assets/loading/loading_ui.ytd@newengine_logo" />
+      <Text id="loading.title" class="title"><Bind property="text" source="loading.title" fallback="Loading" /></Text>
+      <Text id="loading.stage" class="subtitle"><Bind property="text" source="loading.stage_label" fallback="Preparing engine" /></Text>
+      <Progress id="loading.progress" class="progress-main"><Bind property="value" source="loading.progress" fallback="0" /></Progress>
+      <Panel id="loading.subsystems" use="layout.subsystem_cards" />
+    </Panel>
+  </Layout>
+  <Layout name="layout.subsystem_cards" surface="engine.loading">
+    <Panel id="loading.subsystem.cards" class="subsystem-grid">
+      <StatusCard id="subsystem.assets" label="Assets" source="loading.subsystems.assets" />
+      <StatusCard id="subsystem.render" label="Render" source="loading.subsystems.render" />
+      <StatusCard id="subsystem.ui" label="UI" source="loading.subsystems.ui" />
+    </Panel>
+  </Layout>
+  <BindingGraph name="bindings">
+    <StateSource id="loading" source="engine.loading.status" contract="LoadingStatusSnapshot" update="event" />
+    <Bind element="loading.title" property="text" source="loading.title" />
+    <Bind element="loading.stage" property="text" source="loading.stage_label" />
+    <Bind element="loading.progress" property="value" source="loading.progress" />
+  </BindingGraph>
+  <ActionMap name="actions">
+    <Action id="engine.loading.cancel" target="engine.lifecycle" command="loading.cancel" />
+  </ActionMap>
+</NeUiDictionary>

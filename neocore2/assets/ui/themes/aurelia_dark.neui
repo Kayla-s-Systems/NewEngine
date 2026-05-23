@@ -1,0 +1,35 @@
+<NeUiThemeLibrary schema="newengine.neui.theme.v1" representation="xmlcentral" owner_scope="shared" document_kind="theme">
+  <Entries>
+    <Entry name="theme" kind="ui_theme" />
+    <Entry name="aurelia.dark" kind="ui_theme" />
+  </Entries>
+  <Theme name="aurelia.dark">
+    <Token name="color.bg" value="#080B11" />
+    <Token name="color.bg.deep" value="#05080D" />
+    <Token name="color.panel" value="#0F141D" />
+    <Token name="color.panel.elevated" value="#151B28" />
+    <Token name="color.panel.hover" value="#1D2638" />
+    <Token name="color.input" value="#111827" />
+    <Token name="color.input.hover" value="#172033" />
+    <Token name="color.input.open" value="#0D1420" />
+    <Token name="color.stroke" value="#263247" />
+    <Token name="color.stroke.strong" value="#3D5274" />
+    <Token name="color.text" value="#EEF4FF" />
+    <Token name="color.text.muted" value="#9EACC4" />
+    <Token name="color.text.faint" value="#6E7D96" />
+    <Token name="color.accent" value="#5BA7FF" />
+    <Token name="color.accent.hot" value="#FF8A2A" />
+    <Token name="color.good" value="#79E87B" />
+    <Token name="color.warn" value="#FFB870" />
+    <Token name="color.danger" value="#FF5D6C" />
+    <Token name="radius.card" value="16" />
+    <Token name="radius.button" value="11" />
+    <Token name="radius.input" value="10" />
+    <Token name="spacing.1" value="4" />
+    <Token name="spacing.2" value="8" />
+    <Token name="spacing.3" value="12" />
+    <Token name="spacing.4" value="16" />
+    <Token name="font.body" value="engine.default" />
+    <Token name="font.mono" value="engine.monospace" />
+  </Theme>
+</NeUiThemeLibrary>

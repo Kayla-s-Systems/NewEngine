@@ -1,0 +1,5 @@
+<NeUiDictionary schema="newengine.neui.dictionary.v1" representation="xmlcentral" owner_scope="runtime" document_kind="surface">
+  <Entries><Entry name="surface" kind="ui_surface" /><Entry name="layout.main" kind="ui_layout" /></Entries>
+  <Surface name="runtime.overlay" kind="runtime_overlay" modal="false" z_order="920" root="layout.main" theme="assets/ui/themes/aurelia_dark.neui@theme" />
+  <Layout name="layout.main" surface="runtime.overlay"><Panel id="runtime.overlay.root" class="runtime-overlay"><Slot name="debug" /><Slot name="notifications" /></Panel></Layout>
+</NeUiDictionary>

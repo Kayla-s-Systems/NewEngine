@@ -1,0 +1,8 @@
+<NeUiComponentLibrary schema="newengine.neui.components.v1" representation="xmlcentral" owner_scope="shared" document_kind="component_library">
+  <Entries>
+    <Entry name="tabs.primary" kind="ui_component" />
+    <Entry name="tab.item" kind="ui_component" />
+  </Entries>
+  <Component name="tabs.primary" root="tabs.primary.root"><Panel id="tabs.primary.root" class="tabs tabs-primary"><Slot name="items" /></Panel></Component>
+  <Component name="tab.item" root="tab.item.root"><Button id="tab.item.root" class="tab-item"><Slot name="content" /></Button></Component>
+</NeUiComponentLibrary>

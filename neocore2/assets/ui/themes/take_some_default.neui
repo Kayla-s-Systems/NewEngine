@@ -1,0 +1,12 @@
+<NeUiThemeLibrary schema="newengine.neui.theme.v1" representation="xmlcentral" owner_scope="shared" document_kind="theme">
+  <Entries>
+    <Entry name="theme" kind="ui_theme" />
+    <Entry name="take_some.default" kind="ui_theme" />
+  </Entries>
+  <Theme name="take_some.default" extends="assets/ui/themes/aurelia_dark.neui@theme">
+    <Token name="brand.name" value="Take Some()" />
+    <Token name="color.accent" value="#6FB5FF" />
+    <Token name="color.accent.hot" value="#F58A1F" />
+    <Token name="surface.noise" value="subtle_metal" />
+  </Theme>
+</NeUiThemeLibrary>

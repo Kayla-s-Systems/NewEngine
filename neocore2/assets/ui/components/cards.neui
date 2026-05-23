@@ -1,0 +1,20 @@
+<NeUiComponentLibrary schema="newengine.neui.components.v1" representation="xmlcentral" owner_scope="shared" document_kind="component_library">
+  <Entries>
+    <Entry name="card.status" kind="ui_component" />
+    <Entry name="card.metric" kind="ui_component" />
+    <Entry name="card.warning" kind="ui_component" />
+    <Entry name="card.plugin" kind="ui_component" />
+  </Entries>
+  <Component name="card.status" root="card.status.root">
+    <Panel id="card.status.root" class="card card-status"><Slot name="content" /></Panel>
+  </Component>
+  <Component name="card.metric" root="card.metric.root">
+    <Panel id="card.metric.root" class="card card-metric"><Text id="card.metric.label"><Bind property="text" source="$props.label" /></Text><Text id="card.metric.value" class="metric-value"><Bind property="text" source="$props.value" /></Text></Panel>
+  </Component>
+  <Component name="card.warning" root="card.warning.root">
+    <Panel id="card.warning.root" class="card card-warning"><Slot name="content" /></Panel>
+  </Component>
+  <Component name="card.plugin" root="card.plugin.root">
+    <Panel id="card.plugin.root" class="card card-plugin"><Slot name="content" /></Panel>
+  </Component>
+</NeUiComponentLibrary>

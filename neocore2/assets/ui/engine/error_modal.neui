@@ -1,0 +1,9 @@
+<NeUiDictionary schema="newengine.neui.dictionary.v1" representation="xmlcentral" owner_scope="engine" document_kind="surface">
+  <Entries><Entry name="surface" kind="ui_surface" /><Entry name="layout.main" kind="ui_layout" /><Entry name="bindings" kind="ui_binding_graph" /><Entry name="actions" kind="ui_action_map" /></Entries>
+  <Surface name="engine.error_modal" kind="modal" modal="true" z_order="1000" root="layout.main" theme="assets/ui/themes/aurelia_dark.neui@theme" bindings="bindings" actions="actions" />
+  <Layout name="layout.main" surface="engine.error_modal">
+    <Panel id="error.root" class="modal-scrim"><Panel id="error.card" class="modal-card danger"><Text id="error.title" class="title"><Bind property="text" source="error.title" fallback="Engine Error" /></Text><Text id="error.message" class="body"><Bind property="text" source="error.message" fallback="No details." /></Text><Button id="error.close" class="button button-primary"><Text value="Close" /><Event trigger="click" action="engine.error.close" /></Button></Panel></Panel>
+  </Layout>
+  <BindingGraph name="bindings"><StateSource id="error" source="engine.ui.error" contract="UiErrorModalState" update="event" /><Bind element="error.title" property="text" source="error.title" /><Bind element="error.message" property="text" source="error.message" /></BindingGraph>
+  <ActionMap name="actions"><Action id="engine.error.close" target="engine.ui" command="surface.hide"><Payload surface="engine.error_modal" /></Action></ActionMap>
+</NeUiDictionary>

@@ -1,0 +1,29 @@
+<NeUiRegistry schema="newengine.neui.registry.v1" representation="xmlcentral">
+  <Entries>
+    <Entry name="registry" kind="ui_registry" />
+  </Entries>
+  <Surfaces>
+    <SurfaceRef id="engine.loading" ref="assets/ui/engine/loading.neui@surface" />
+    <SurfaceRef id="engine.pause_menu" ref="assets/ui/engine/pause_menu.neui@surface" />
+    <SurfaceRef id="engine.error_modal" ref="assets/ui/engine/error_modal.neui@surface" />
+    <SurfaceRef id="engine.main_menu" ref="assets/ui/engine/main_menu.neui@surface" />
+    <SurfaceRef id="engine.settings" ref="assets/ui/engine/settings.neui@surface" />
+    <SurfaceRef id="game.hud" ref="assets/ui/game/hud.neui@surface" />
+    <SurfaceRef id="runtime.overlay" ref="assets/ui/runtime/overlay.neui@surface" />
+    <SurfaceRef id="runtime.debug_overlay" ref="assets/ui/runtime/debug_overlay.neui@surface" />
+    <SurfaceRef id="editor.asset_browser" ref="assets/ui/editor/asset_browser.neui@surface" />
+    <SurfaceRef id="editor.inspector" ref="assets/ui/editor/inspector.neui@surface" />
+  </Surfaces>
+  <Themes>
+    <ThemeRef id="aurelia.dark" ref="assets/ui/themes/aurelia_dark.neui@theme" />
+    <ThemeRef id="take_some.default" ref="assets/ui/themes/take_some_default.neui@theme" />
+  </Themes>
+  <ComponentPacks>
+    <ComponentPackRef id="buttons" ref="assets/ui/components/buttons.neui" />
+    <ComponentPackRef id="cards" ref="assets/ui/components/cards.neui" />
+    <ComponentPackRef id="tabs" ref="assets/ui/components/tabs.neui" />
+    <ComponentPackRef id="progress" ref="assets/ui/components/progress.neui" />
+    <ComponentPackRef id="inputs" ref="assets/ui/components/inputs.neui" />
+    <ComponentPackRef id="switches" ref="assets/ui/components/switches.neui" />
+  </ComponentPacks>
+</NeUiRegistry>

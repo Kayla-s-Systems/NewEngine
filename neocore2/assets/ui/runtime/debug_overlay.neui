@@ -1,0 +1,6 @@
+<NeUiDictionary schema="newengine.neui.dictionary.v1" representation="xmlcentral" owner_scope="runtime" document_kind="surface">
+  <Entries><Entry name="surface" kind="ui_surface" /><Entry name="layout.main" kind="ui_layout" /><Entry name="bindings" kind="ui_binding_graph" /></Entries>
+  <Surface name="runtime.debug_overlay" kind="debug_overlay" modal="false" z_order="950" root="layout.main" theme="assets/ui/themes/aurelia_dark.neui@theme" bindings="bindings" />
+  <Layout name="layout.main" surface="runtime.debug_overlay"><Panel id="debug.root" class="debug-overlay"><Text id="debug.fps" class="metric"><Bind property="text" source="telemetry.fps_label" fallback="FPS --" /></Text><Text id="debug.frame" class="metric"><Bind property="text" source="telemetry.frame_label" /></Text><Text id="debug.route" class="mono"><Bind property="text" source="telemetry.active_route" /></Text></Panel></Layout>
+  <BindingGraph name="bindings"><StateSource id="telemetry" source="engine.runtime.debug.telemetry" contract="DebugOverlayTelemetry" update="frame" /><Bind element="debug.fps" property="text" source="telemetry.fps_label" /><Bind element="debug.frame" property="text" source="telemetry.frame_label" /><Bind element="debug.route" property="text" source="telemetry.active_route" /></BindingGraph>
+</NeUiDictionary>

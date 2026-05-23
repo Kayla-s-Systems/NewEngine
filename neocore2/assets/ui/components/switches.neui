@@ -1,0 +1,8 @@
+<NeUiComponentLibrary schema="newengine.neui.components.v1" representation="xmlcentral" owner_scope="shared" document_kind="component_library">
+  <Entries>
+    <Entry name="switch.primary" kind="ui_component" />
+    <Entry name="switch.compact" kind="ui_component" />
+  </Entries>
+  <Component name="switch.primary" root="switch.primary.root"><Switch id="switch.primary.root" class="switch switch-primary"><Bind property="checked" source="$props.checked" /></Switch></Component>
+  <Component name="switch.compact" root="switch.compact.root"><Switch id="switch.compact.root" class="switch switch-compact"><Bind property="checked" source="$props.checked" /></Switch></Component>
+</NeUiComponentLibrary>

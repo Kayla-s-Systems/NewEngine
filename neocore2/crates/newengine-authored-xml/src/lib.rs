@@ -287,6 +287,75 @@ static METADATA_ROOT_SNIPPETS: &[XmlSnippet] = &[
     XmlSnippet { label: "Ymt Metadata", insert: "<YmtMetadata schema=\"newengine.ymt.metadata.v1\" representation=\"xml\" body_format=\"newengine.xml.metadata.v1\">\n  <Entry name=\"metadata_entry\">\n  </Entry>\n</YmtMetadata>\n", detail: "Root .ymt metadata container" },
 ];
 static METADATA_CHILD_SNIPPETS: &[XmlSnippet] = DEFINITION_CHILD_SNIPPETS;
+static NEUI_ROOT_SNIPPETS: &[XmlSnippet] = &[
+    XmlSnippet { label: "NeUi Surface Dictionary", insert: r##"<NeUiDictionary schema="newengine.neui.dictionary.v1" representation="xmlcentral" owner_scope="engine" document_kind="surface">
+  <Surface name="engine.loading" root="layout.main" theme="assets/ui/themes/aurelia_dark.neui@theme" bindings="bindings">
+    <Dependencies>
+    </Dependencies>
+  </Surface>
+
+  <Layout name="layout.main" surface="engine.loading">
+    <Panel id="root" class="surface-shell" />
+  </Layout>
+
+  <BindingGraph name="bindings">
+  </BindingGraph>
+</NeUiDictionary>
+"##, detail: "Root .neui surface dictionary" },
+    XmlSnippet { label: "NeUi Registry", insert: r##"<NeUiRegistry schema="newengine.neui.registry.v1">
+  <Surfaces>
+    <SurfaceRef id="engine.loading" ref="assets/ui/engine/loading.neui@surface" />
+  </Surfaces>
+  <Themes>
+    <ThemeRef id="aurelia.dark" ref="assets/ui/themes/aurelia_dark.neui@theme" />
+  </Themes>
+  <ComponentPacks>
+  </ComponentPacks>
+</NeUiRegistry>
+"##, detail: "Registry of UI refs only; no inline layouts" },
+    XmlSnippet { label: "NeUi Theme Library", insert: r##"<NeUiThemeLibrary schema="newengine.neui.theme.v1" representation="xmlcentral" owner_scope="shared" document_kind="theme">
+  <Theme name="aurelia.dark">
+    <Token name="color.bg" value="#0B0D10" />
+    <Token name="color.accent" value="#FF7A18" />
+  </Theme>
+</NeUiThemeLibrary>
+"##, detail: "Theme tokens split from surfaces" },
+];
+static NEUI_CHILD_SNIPPETS: &[XmlSnippet] = &[
+    XmlSnippet { label: "Surface", insert: r##"
+  <Surface name="engine.loading" root="layout.main" theme="assets/ui/themes/aurelia_dark.neui@theme" bindings="bindings">
+    <Dependencies>
+      <ComponentRef ref="assets/ui/components/cards.neui@card.status" />
+      <TextureRef ref="assets/ui/icons/builtin_icons.ytd@app_logo" />
+    </Dependencies>
+  </Surface>"##, detail: "Addressable UI surface entry" },
+    XmlSnippet { label: "Layout", insert: r##"
+  <Layout name="layout.main" surface="engine.loading">
+    <Panel id="root" class="surface-shell" />
+  </Layout>"##, detail: "UI layout tree" },
+    XmlSnippet { label: "BindingGraph", insert: r##"
+  <BindingGraph name="bindings">
+    <StateSource id="loading" source="engine.loading.status" contract="LoadingStatusSnapshot" update="event" />
+    <Bind element="loading.progress" property="value" source="loading.progress" />
+  </BindingGraph>"##, detail: "Declarative state binding plan" },
+    XmlSnippet { label: "ActionMap", insert: r##"
+  <ActionMap name="actions">
+    <Action id="game.resume" target="engine.lifecycle" command="game.resume" />
+  </ActionMap>"##, detail: "UI actions routed through engine gateway contracts" },
+    XmlSnippet { label: "ComponentRef", insert: r##"
+      <ComponentRef ref="assets/ui/components/buttons.neui@button.primary" />"##, detail: "Reference reusable component entry" },
+];
+pub const NEUI_ROOT_NAMES: &[&str] = &[
+    "NeUiDictionary",
+    "NeUiRegistry",
+    "NeUiThemeLibrary",
+    "NeUiComponentLibrary",
+    "NeUiBindingLibrary",
+];
+
+#[inline]
+pub fn is_neui_root_name(name: &str) -> bool { NEUI_ROOT_NAMES.iter().any(|candidate| *candidate == name) }
+
 static EMPTY_SNIPPETS: &[XmlSnippet] = &[];
 
 pub fn completion_catalog_for_extension(extension: &str) -> XmlCompletionCatalog {
@@ -295,6 +364,7 @@ pub fn completion_catalog_for_extension(extension: &str) -> XmlCompletionCatalog
         "ymap" => XmlCompletionCatalog { schema_family: "newengine.map.definition.v1", root_snippets: MAP_ROOT_SNIPPETS, child_snippets: MAP_CHILD_SNIPPETS },
         "ymt" => XmlCompletionCatalog { schema_family: "newengine.ymt.metadata.v1", root_snippets: METADATA_ROOT_SNIPPETS, child_snippets: METADATA_CHILD_SNIPPETS },
         "nemat" => XmlCompletionCatalog { schema_family: "newengine.nemat.material_library.v1", root_snippets: MATERIAL_ROOT_SNIPPETS, child_snippets: MATERIAL_CHILD_SNIPPETS },
+        "neui" => XmlCompletionCatalog { schema_family: "newengine.neui.dictionary.v1", root_snippets: NEUI_ROOT_SNIPPETS, child_snippets: NEUI_CHILD_SNIPPETS },
         _ => XmlCompletionCatalog { schema_family: "generic.xml", root_snippets: EMPTY_SNIPPETS, child_snippets: EMPTY_SNIPPETS },
     }
 }
@@ -307,6 +377,7 @@ pub fn completion_catalog_for_text_or_extension(text: &str, extension: &str) -> 
             "YmapMapDefinition" | "MapDefinition" => return completion_catalog_for_extension("ymap"),
             "YmtMetadata" => return completion_catalog_for_extension("ymt"),
             "NematMaterialLibrary" | "MaterialLibrary" => return completion_catalog_for_extension("nemat"),
+            name if is_neui_root_name(name) => return completion_catalog_for_extension("neui"),
             _ => {}
         }
     }
@@ -328,5 +399,15 @@ mod tests {
     #[test]
     fn xml_scalar_parses_numeric_vectors() {
         assert_eq!(xml_scalar("1.0,2.5,-3.0"), serde_json::json!([1.0, 2.5, -3.0]));
+    }
+
+    #[test]
+    fn neui_catalog_recognizes_dictionary_root() {
+        let catalog = completion_catalog_for_text_or_extension(
+            "<NeUiDictionary schema=\"newengine.neui.dictionary.v1\" />",
+            "xml",
+        );
+        assert_eq!(catalog.schema_family, "newengine.neui.dictionary.v1");
+        assert!(catalog.root_snippets.iter().any(|snippet| snippet.label.contains("NeUi")));
     }
 }

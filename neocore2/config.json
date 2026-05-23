@@ -105,8 +105,8 @@
       },
       "platform.winit": {
         "display": {
-          "borderless_fullscreen": false,
-          "fullscreen": false,
+          "borderless_fullscreen": true,
+          "fullscreen": true,
           "hdr": "auto",
           "monitor": "primary",
           "monitor_index": -1,
@@ -166,8 +166,8 @@
       },
       "startup_window": {
         "display": {
-          "borderless_fullscreen": false,
-          "fullscreen": false,
+          "borderless_fullscreen": true,
+          "fullscreen": true,
           "hdr": "auto",
           "monitor": "primary",
           "refresh_rate": "auto",
@@ -177,7 +177,7 @@
             "width": 1600
           },
           "vsync": true,
-          "window_mode": "windowed"
+          "window_mode": "borderless"
         },
         "graphics_backend": {
           "debug_renderer_tools": {
@@ -319,7 +319,7 @@
               "title": "Kayla's Editor",
               "width": 1600
             },
-            "enabled": false,
+            "enabled": true,
             "live_update_supported": false,
             "plugin_id": "newengine.platform.winit",
             "schema": {
@@ -513,7 +513,7 @@
                 }
               }
             },
-            "enabled": false,
+            "enabled": true,
             "live_update_supported": false,
             "plugin_id": "newengine.renderer",
             "schema": {
@@ -604,7 +604,7 @@
                 "mode": "auto"
               }
             },
-            "enabled": false,
+            "enabled": true,
             "live_update_supported": false,
             "plugin_id": "newengine.renderer.vulkan",
             "schema": {
@@ -800,7 +800,7 @@
               ],
               "pump_steps": 16
             },
-            "enabled": false,
+            "enabled": true,
             "live_update_supported": false,
             "plugin_id": "newengine.assets",
             "schema": {
@@ -976,7 +976,7 @@
               "subscribe_events": true,
               "text": true
             },
-            "enabled": false,
+            "enabled": true,
             "live_update_supported": false,
             "plugin_id": "newengine.input",
             "schema": {
@@ -1153,7 +1153,7 @@
               },
               "timestamp": "millis"
             },
-            "enabled": false,
+            "enabled": true,
             "live_update_supported": false,
             "plugin_id": "newengine.logging",
             "schema": {

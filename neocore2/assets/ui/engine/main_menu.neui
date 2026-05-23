@@ -1,0 +1,6 @@
+<NeUiDictionary schema="newengine.neui.dictionary.v1" representation="xmlcentral" owner_scope="engine" document_kind="surface">
+  <Entries><Entry name="surface" kind="ui_surface" /><Entry name="layout.main" kind="ui_layout" /><Entry name="actions" kind="ui_action_map" /></Entries>
+  <Surface name="engine.main_menu" kind="main_menu" modal="true" z_order="700" root="layout.main" theme="assets/ui/themes/aurelia_dark.neui@theme" actions="actions" />
+  <Layout name="layout.main" surface="engine.main_menu"><Panel id="main.root" class="menu-shell"><Text id="main.title" class="title" value="NewEngine" /><Button id="main.start" class="button button-primary"><Text value="Start" /><Event trigger="click" action="game.start" /></Button><Button id="main.settings" class="button button-secondary"><Text value="Settings" /><Event trigger="click" action="engine.settings.open" /></Button></Panel></Layout>
+  <ActionMap name="actions"><Action id="game.start" target="engine.lifecycle" command="game.start" /><Action id="engine.settings.open" target="engine.ui.navigation" command="menu.open_page"><Payload page="settings" /></Action></ActionMap>
+</NeUiDictionary>

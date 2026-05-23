@@ -15,6 +15,14 @@ use super::svg_assets::SvgIconRegistry;
 const APP_TITLE: &str = "PreStart Engine";
 const APP_SUBTITLE: &str = "Launch configuration workbench";
 const SCHEMA_LABEL: &str = "newengine.startup_window.v1";
+const ACCENT_BLUE: egui::Color32 = egui::Color32::from_rgb(78, 153, 255);
+const ACCENT_BLUE_BRIGHT: egui::Color32 = egui::Color32::from_rgb(106, 181, 255);
+const ACCENT_GREEN: egui::Color32 = egui::Color32::from_rgb(121, 232, 123);
+const TEXT_PRIMARY: egui::Color32 = egui::Color32::from_rgb(232, 238, 250);
+const TEXT_MUTED: egui::Color32 = egui::Color32::from_rgb(146, 158, 184);
+const WINDOW_WIDTH: f32 = 1280.0;
+const WINDOW_HEIGHT: f32 = 860.0;
+const CENTER_ATTEMPT_LIMIT: u8 = 8;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum WindowOutcome {
@@ -28,7 +36,7 @@ pub(crate) fn present(config_path: &Path) -> StartupWindowReport {
     let options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()
             .with_title(title)
-            .with_inner_size([1280.0, 860.0])
+            .with_inner_size([WINDOW_WIDTH, WINDOW_HEIGHT])
             .with_min_inner_size([1120.0, 720.0])
             .with_resizable(true),
         ..Default::default()
@@ -134,6 +142,7 @@ struct PreStartApp {
     status: String,
     style_ready: bool,
     svg_icons: SvgIconRegistry,
+    center_attempts: u8,
     outcome: Arc<Mutex<WindowOutcome>>,
 }
 
@@ -158,6 +167,7 @@ impl PreStartApp {
             status: format!("Ready to launch. {icon_status}. Closing this window will NOT start the engine."),
             style_ready: false,
             svg_icons,
+            center_attempts: 0,
             outcome,
         };
         app.seed_builtin_fields();
@@ -172,21 +182,70 @@ impl PreStartApp {
         }
     }
 
+    fn center_window_on_startup(&mut self, ctx: &egui::Context) {
+        if self.center_attempts >= CENTER_ATTEMPT_LIMIT {
+            return;
+        }
+
+        self.center_attempts = self.center_attempts.saturating_add(1);
+        let target_position = ctx.input(|input| {
+            let viewport = input.viewport();
+            let monitor_size = viewport.monitor_size?;
+            let rect = match (viewport.outer_rect, viewport.inner_rect) {
+                (Some(rect), _) | (None, Some(rect)) => rect,
+                (None, None) => return None,
+            };
+            let size = rect.size();
+            if monitor_size.x <= 0.0 || monitor_size.y <= 0.0 || size.x <= 0.0 || size.y <= 0.0 {
+                return None;
+            }
+            Some(egui::pos2(
+                ((monitor_size.x - size.x) * 0.5).max(0.0),
+                ((monitor_size.y - size.y) * 0.5).max(0.0),
+            ))
+        });
+
+        if let Some(position) = target_position {
+            ctx.send_viewport_cmd(egui::ViewportCommand::OuterPosition(position));
+            self.center_attempts = CENTER_ATTEMPT_LIMIT;
+        } else {
+            ctx.request_repaint();
+        }
+    }
+
     fn apply_style(&mut self, ctx: &egui::Context) {
         if self.style_ready {
             return;
         }
         let mut style = (*ctx.style()).clone();
         style.visuals = egui::Visuals::dark();
-        style.visuals.panel_fill = egui::Color32::from_rgb(13, 15, 20);
-        style.visuals.extreme_bg_color = egui::Color32::from_rgb(7, 9, 13);
-        style.visuals.faint_bg_color = egui::Color32::from_rgb(23, 27, 36);
-        style.visuals.widgets.inactive.bg_fill = egui::Color32::from_rgb(28, 34, 45);
-        style.visuals.widgets.hovered.bg_fill = egui::Color32::from_rgb(42, 51, 67);
-        style.visuals.widgets.active.bg_fill = egui::Color32::from_rgb(72, 90, 122);
-        style.visuals.selection.bg_fill = egui::Color32::from_rgb(70, 106, 180);
-        style.spacing.item_spacing = egui::vec2(10.0, 8.0);
-        style.spacing.button_padding = egui::vec2(14.0, 8.0);
+        style.visuals.window_fill = egui::Color32::from_rgb(5, 7, 11);
+        style.visuals.panel_fill = egui::Color32::from_rgb(7, 10, 15);
+        style.visuals.extreme_bg_color = egui::Color32::from_rgb(3, 5, 9);
+        style.visuals.faint_bg_color = egui::Color32::from_rgb(16, 20, 29);
+        style.visuals.override_text_color = Some(TEXT_PRIMARY);
+        style.visuals.widgets.noninteractive.bg_fill = egui::Color32::from_rgb(10, 13, 20);
+        style.visuals.widgets.noninteractive.fg_stroke = egui::Stroke::new(1.0, TEXT_MUTED);
+        style.visuals.widgets.inactive.bg_fill = egui::Color32::from_rgb(17, 22, 32);
+        style.visuals.widgets.inactive.weak_bg_fill = egui::Color32::from_rgb(14, 18, 27);
+        style.visuals.widgets.inactive.bg_stroke = egui::Stroke::new(1.0, egui::Color32::from_rgb(44, 56, 77));
+        style.visuals.widgets.inactive.fg_stroke = egui::Stroke::new(1.0, TEXT_PRIMARY);
+        style.visuals.widgets.hovered.bg_fill = egui::Color32::from_rgb(24, 34, 52);
+        style.visuals.widgets.hovered.weak_bg_fill = egui::Color32::from_rgb(20, 28, 43);
+        style.visuals.widgets.hovered.bg_stroke = egui::Stroke::new(1.0, ACCENT_BLUE_BRIGHT);
+        style.visuals.widgets.hovered.fg_stroke = egui::Stroke::new(1.0, egui::Color32::WHITE);
+        style.visuals.widgets.active.bg_fill = egui::Color32::from_rgb(31, 58, 102);
+        style.visuals.widgets.active.weak_bg_fill = egui::Color32::from_rgb(28, 48, 83);
+        style.visuals.widgets.active.bg_stroke = egui::Stroke::new(1.0, ACCENT_BLUE_BRIGHT);
+        style.visuals.widgets.active.fg_stroke = egui::Stroke::new(1.1, egui::Color32::WHITE);
+        style.visuals.selection.bg_fill = egui::Color32::from_rgb(34, 89, 176);
+        style.visuals.selection.stroke = egui::Stroke::new(1.0, ACCENT_BLUE_BRIGHT);
+        style.visuals.widgets.open.bg_fill = egui::Color32::from_rgb(24, 33, 50);
+        style.visuals.widgets.open.weak_bg_fill = egui::Color32::from_rgb(18, 25, 38);
+        style.visuals.widgets.open.bg_stroke = egui::Stroke::new(1.0, ACCENT_BLUE_BRIGHT);
+        style.spacing.item_spacing = egui::vec2(11.0, 9.0);
+        style.spacing.button_padding = egui::vec2(14.0, 10.0);
+        style.spacing.indent = 16.0;
         ctx.set_style(style);
         self.style_ready = true;
     }
@@ -332,9 +391,9 @@ impl PreStartApp {
             text_row(ui, "Title", self.fields.string("display.title", "Kayla's Editor"));
             ui.horizontal(|ui| {
                 ui.label(label("Resolution"));
-                ui.add_sized([110.0, 26.0], egui::TextEdit::singleline(self.fields.string("display.width", "1600")));
-                ui.label("×");
-                ui.add_sized([110.0, 26.0], egui::TextEdit::singleline(self.fields.string("display.height", "900")));
+                styled_text_edit(ui, self.fields.string("display.width", "1600"), 110.0, 28.0);
+                ui.label(egui::RichText::new("×").color(TEXT_MUTED));
+                styled_text_edit(ui, self.fields.string("display.height", "900"), 110.0, 28.0);
             });
             text_row(ui, "Monitor", self.fields.string("display.monitor", "primary"));
             select_row(ui, "Window mode", self.fields.select("display.window_mode", "windowed"), &[
@@ -342,11 +401,11 @@ impl PreStartApp {
                 ("borderless", "Borderless fullscreen"),
                 ("exclusive_fullscreen", "Exclusive fullscreen"),
             ]);
-            ui.horizontal(|ui| {
+            ui.horizontal_wrapped(|ui| {
                 ui.label(label("Quick controls"));
-                ui.checkbox(self.fields.bool("display.fullscreen", false), "Fullscreen");
-                ui.checkbox(self.fields.bool("display.borderless_fullscreen", false), "Borderless");
-                ui.checkbox(self.fields.bool("display.vsync", true), "VSync");
+                switch_chip(ui, "Fullscreen", self.fields.bool("display.fullscreen", false));
+                switch_chip(ui, "Borderless", self.fields.bool("display.borderless_fullscreen", false));
+                switch_chip(ui, "VSync", self.fields.bool("display.vsync", true));
             });
             text_row(ui, "Refresh rate", self.fields.string("display.refresh_rate", "auto"));
             text_row(ui, "Render scale", self.fields.string("display.render_scale", "1.0"));
@@ -386,15 +445,15 @@ impl PreStartApp {
         ui.add_space(10.0);
         section_header(ui, "Debug renderer tools", "Optional diagnostics exposed as explicit startup configuration.");
         card(ui, |ui| {
-            ui.checkbox(self.fields.bool("graphics.debug.enabled", false), "Enable debug renderer tools");
+            switch_row(ui, "Enable debug renderer tools", "Expose renderer diagnostics in the launch profile.", self.fields.bool("graphics.debug.enabled", false));
             ui.separator();
             ui.horizontal_wrapped(|ui| {
-                ui.checkbox(self.fields.bool("graphics.debug.renderdoc_capture", false), "RenderDoc capture");
-                ui.checkbox(self.fields.bool("graphics.debug.phase_viewer", false), "Phase viewer");
-                ui.checkbox(self.fields.bool("graphics.debug.target_viewer", false), "Target viewer");
-                ui.checkbox(self.fields.bool("graphics.debug.shadow_cascade_viewer", false), "Shadow cascade viewer");
-                ui.checkbox(self.fields.bool("graphics.debug.gbuffer_viewer", false), "GBuffer viewer");
-                ui.checkbox(self.fields.bool("graphics.debug.gpu_timing", false), "GPU timing");
+                switch_chip(ui, "RenderDoc capture", self.fields.bool("graphics.debug.renderdoc_capture", false));
+                switch_chip(ui, "Phase viewer", self.fields.bool("graphics.debug.phase_viewer", false));
+                switch_chip(ui, "Target viewer", self.fields.bool("graphics.debug.target_viewer", false));
+                switch_chip(ui, "Shadow cascade viewer", self.fields.bool("graphics.debug.shadow_cascade_viewer", false));
+                switch_chip(ui, "GBuffer viewer", self.fields.bool("graphics.debug.gbuffer_viewer", false));
+                switch_chip(ui, "GPU timing", self.fields.bool("graphics.debug.gpu_timing", false));
             });
         });
     }
@@ -426,9 +485,9 @@ impl PreStartApp {
             "bool" => {
                 ui.horizontal(|ui| {
                     ui.label(label(&field.label));
-                    ui.checkbox(self.fields.bool(&key, false), "");
+                    switch_only(ui, self.fields.bool(&key, false));
                     if let Some(default_label) = &field.default_label {
-                        ui.label(egui::RichText::new(format!("default: {default_label}")).size(11.0).color(egui::Color32::from_rgb(130, 140, 160)));
+                        ui.label(egui::RichText::new(format!("default: {default_label}")).size(11.0).color(TEXT_MUTED));
                     }
                 });
             }
@@ -436,14 +495,7 @@ impl PreStartApp {
                 ui.horizontal(|ui| {
                     ui.label(label(&field.label));
                     let selected = self.fields.select(&key, field.options.first().map(|o| o.value.as_str()).unwrap_or(""));
-                    egui::ComboBox::from_id_salt(key.clone())
-                        .selected_text(option_label(&field.options, selected))
-                        .width(300.0)
-                        .show_ui(ui, |ui| {
-                            for option in &field.options {
-                                ui.selectable_value(selected, option.value.clone(), &option.label);
-                            }
-                        });
+                    styled_select_dynamic(ui, key.clone(), selected, &field.options, 300.0);
                     if let Some(default_label) = &field.default_label {
                         ui.label(egui::RichText::new(format!("default: {default_label}")).size(11.0).color(egui::Color32::from_rgb(130, 140, 160)));
                     }
@@ -483,8 +535,8 @@ impl PreStartApp {
             ui.horizontal(|ui| {
                 icon_box(ui, IconKind::Project);
                 ui.vertical(|ui| {
-                    ui.add_sized([ui.available_width() - 52.0, 28.0], egui::TextEdit::singleline(self.fields.string("project.name", "MyGameProject")));
-                    ui.add_sized([ui.available_width() - 52.0, 22.0], egui::TextEdit::singleline(self.fields.string("project.path", ".")));
+                    styled_text_edit(ui, self.fields.string("project.name", "MyGameProject"), (ui.available_width() - 52.0).max(160.0), 30.0);
+                    styled_text_edit(ui, self.fields.string("project.path", "."), (ui.available_width() - 52.0).max(160.0), 26.0);
                 });
                 icon_button_box(ui, IconKind::Settings);
             });
@@ -493,7 +545,7 @@ impl PreStartApp {
             card_title(ui, IconKind::Terminal, "LAUNCH PARAMETERS", None);
             ui.add_space(8.0);
             ui.horizontal(|ui| {
-                ui.add_sized([ui.available_width() - 46.0, 32.0], egui::TextEdit::singleline(self.fields.string("launch.parameters", "--windowed --devmode --log --console")));
+                styled_text_edit(ui, self.fields.string("launch.parameters", "--windowed --devmode --log --console"), (ui.available_width() - 46.0).max(220.0), 34.0);
                 icon_button_box(ui, IconKind::Settings);
             });
             ui.add_space(18.0);
@@ -510,27 +562,25 @@ impl PreStartApp {
                     ui.add_space(12.0);
                     card_title(ui, IconKind::Monitor, "RESOLUTION", None);
                     ui.horizontal(|ui| {
-                        ui.add_sized([90.0, 28.0], egui::TextEdit::singleline(self.fields.string("display.width", "1600")));
+                        styled_text_edit(ui, self.fields.string("display.width", "1600"), 90.0, 30.0);
                         ui.label("×");
-                        ui.add_sized([90.0, 28.0], egui::TextEdit::singleline(self.fields.string("display.height", "900")));
+                        styled_text_edit(ui, self.fields.string("display.height", "900"), 90.0, 30.0);
                     });
                     ui.add_space(12.0);
                     card_title(ui, IconKind::Check, "VSYNC", None);
-                    ui.checkbox(self.fields.bool("display.vsync", true), "Enabled");
+                    switch_row(ui, "Enabled", "Synchronize present rate with the selected display refresh.", self.fields.bool("display.vsync", true));
                 });
                 columns[1].vertical(|ui| {
                     card_title(ui, IconKind::ScreenMode, "SCREEN MODE", None);
                     segmented_screen_mode(ui, self.fields.select("display.window_mode", "windowed"));
                     ui.add_space(12.0);
                     card_title(ui, IconKind::Check, "FULLSCREEN", None);
-                    ui.horizontal(|ui| {
-                        ui.checkbox(self.fields.bool("display.fullscreen", false), "Fullscreen");
-                        ui.checkbox(self.fields.bool("display.borderless_fullscreen", false), "Borderless");
-                    });
+                    switch_row(ui, "Fullscreen", "Quick toggle between windowed and fullscreen-oriented presentation.", self.fields.bool("display.fullscreen", false));
+                    switch_row(ui, "Borderless fullscreen", "Use borderless fullscreen presentation instead of a bordered window.", self.fields.bool("display.borderless_fullscreen", false));
                     ui.add_space(12.0);
                     card_title(ui, IconKind::ScreenMode, "STARTUP SCENE / PROFILE", None);
                     ui.horizontal(|ui| {
-                        ui.add_sized([ui.available_width() - 44.0, 30.0], egui::TextEdit::singleline(self.fields.string("launch.startup_scene", "MainMenu")));
+                        styled_text_edit(ui, self.fields.string("launch.startup_scene", "MainMenu"), (ui.available_width() - 44.0).max(180.0), 32.0);
                         icon_button_box(ui, IconKind::Settings);
                     });
                 });
@@ -546,7 +596,7 @@ impl PreStartApp {
                     ui.label(egui::RichText::new("Load the last used configuration on startup").size(12.0).color(egui::Color32::from_rgb(142, 154, 178)));
                 });
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    ui.toggle_value(self.fields.bool("launch.remember_last_options", true), "");
+                    switch_only(ui, self.fields.bool("launch.remember_last_options", true));
                 });
             });
         });
@@ -804,15 +854,16 @@ impl PreStartApp {
 impl eframe::App for PreStartApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         self.apply_style(ctx);
+        self.center_window_on_startup(ctx);
 
         egui::TopBottomPanel::top("prestart_header")
             .exact_height(156.0)
-            .frame(egui::Frame::new().fill(egui::Color32::from_rgb(5, 8, 13)).inner_margin(egui::Margin::symmetric(14, 10)))
+            .frame(egui::Frame::new().fill(egui::Color32::from_rgb(3, 5, 9)).inner_margin(egui::Margin::symmetric(14, 10)))
             .show(ctx, |ui| self.render_header(ui));
 
         egui::TopBottomPanel::bottom("prestart_footer")
             .exact_height(78.0)
-            .frame(egui::Frame::new().fill(egui::Color32::from_rgb(8, 11, 17)).inner_margin(egui::Margin::symmetric(18, 10)))
+            .frame(egui::Frame::new().fill(egui::Color32::from_rgb(6, 8, 13)).inner_margin(egui::Margin::symmetric(18, 10)))
             .show(ctx, |ui| {
                 ui.horizontal(|ui| {
                     icon(ui, IconKind::Settings, 22.0, egui::Color32::from_rgb(144, 160, 186));
@@ -902,29 +953,260 @@ fn label(text: &str) -> egui::RichText {
 fn text_row(ui: &mut egui::Ui, title: &str, value: &mut String) {
     ui.horizontal(|ui| {
         ui.label(label(title));
-        ui.add_sized([360.0, 26.0], egui::TextEdit::singleline(value));
+        styled_text_edit(ui, value, 360.0, 28.0);
     });
 }
 
 fn select_row(ui: &mut egui::Ui, title: &str, selected: &mut String, options: &[(&str, &str)]) {
     ui.horizontal(|ui| {
-        ui.label(label(title));
-        let current_label = options
-            .iter()
-            .find(|(value, _)| *value == selected.as_str())
-            .map(|(_, label)| *label)
-            .unwrap_or(selected.as_str());
-        egui::ComboBox::from_id_salt(title)
-            .selected_text(current_label)
-            .width(300.0)
-            .show_ui(ui, |ui| {
-                for (value, label) in options {
-                    ui.selectable_value(selected, (*value).to_owned(), *label);
-                }
-            });
+        if !title.is_empty() {
+            ui.label(label(title));
+        }
+        styled_select_static(ui, title, selected, options, 300.0);
     });
 }
 
+fn styled_text_edit(ui: &mut egui::Ui, value: &mut String, width: f32, height: f32) -> egui::Response {
+    let frame_response = egui::Frame::new()
+        .fill(egui::Color32::from_rgb(9, 12, 18))
+        .corner_radius(egui::CornerRadius::same(7))
+        .stroke(egui::Stroke::new(1.0, egui::Color32::from_rgb(40, 51, 70)))
+        .inner_margin(egui::Margin::symmetric(10, 3))
+        .show(ui, |ui| {
+            ui.add_sized(
+                [width, height],
+                egui::TextEdit::singleline(value)
+                    .frame(false)
+                    .desired_width(width),
+            )
+        });
+    let response = frame_response.inner;
+    let stroke = if response.has_focus() {
+        egui::Stroke::new(1.35, ACCENT_BLUE_BRIGHT)
+    } else if response.hovered() || frame_response.response.hovered() {
+        egui::Stroke::new(1.1, ACCENT_BLUE)
+    } else {
+        egui::Stroke::new(1.0, egui::Color32::from_rgb(40, 51, 70))
+    };
+    ui.painter().rect_stroke(frame_response.response.rect, egui::CornerRadius::same(7), stroke, egui::StrokeKind::Inside);
+    response
+}
+
+fn styled_multiline_edit(ui: &mut egui::Ui, value: &mut String, width: f32, height: f32) -> egui::Response {
+    let frame_response = egui::Frame::new()
+        .fill(egui::Color32::from_rgb(9, 12, 18))
+        .corner_radius(egui::CornerRadius::same(8))
+        .stroke(egui::Stroke::new(1.0, egui::Color32::from_rgb(40, 51, 70)))
+        .inner_margin(egui::Margin::symmetric(10, 6))
+        .show(ui, |ui| {
+            ui.add_sized(
+                [width, height],
+                egui::TextEdit::multiline(value)
+                    .frame(false)
+                    .desired_width(width),
+            )
+        });
+    let response = frame_response.inner;
+    let stroke = if response.has_focus() {
+        egui::Stroke::new(1.35, ACCENT_BLUE_BRIGHT)
+    } else if response.hovered() || frame_response.response.hovered() {
+        egui::Stroke::new(1.1, ACCENT_BLUE)
+    } else {
+        egui::Stroke::new(1.0, egui::Color32::from_rgb(40, 51, 70))
+    };
+    ui.painter().rect_stroke(frame_response.response.rect, egui::CornerRadius::same(8), stroke, egui::StrokeKind::Inside);
+    response
+}
+
+fn styled_select_static(ui: &mut egui::Ui, id_salt: &str, selected: &mut String, options: &[(&str, &str)], width: f32) {
+    let current_label = options
+        .iter()
+        .find(|(value, _)| *value == selected.as_str())
+        .map(|(_, label)| (*label).to_owned())
+        .unwrap_or_else(|| selected.clone());
+    let owned_options: Vec<(String, String)> = options
+        .iter()
+        .map(|(value, label)| ((*value).to_owned(), (*label).to_owned()))
+        .collect();
+
+    styled_select_box(ui, id_salt, selected, &current_label, &owned_options, width);
+}
+
+fn styled_select_dynamic(
+    ui: &mut egui::Ui,
+    id_salt: impl std::hash::Hash,
+    selected: &mut String,
+    options: &[SelectOption],
+    width: f32,
+) {
+    let current_label = option_label(options, selected.as_str());
+    let owned_options: Vec<(String, String)> = options
+        .iter()
+        .map(|option| (option.value.clone(), option.label.clone()))
+        .collect();
+
+    styled_select_box(ui, id_salt, selected, &current_label, &owned_options, width);
+}
+
+fn styled_select_box(
+    ui: &mut egui::Ui,
+    id_salt: impl std::hash::Hash,
+    selected: &mut String,
+    current_label: &str,
+    options: &[(String, String)],
+    width: f32,
+) {
+    let button_id = ui.make_persistent_id(("prestart_select", id_salt));
+    let popup_id = button_id.with("popup");
+    let area_id = popup_id.with("area");
+    let mut open = ui.ctx().data(|data| data.get_temp::<bool>(popup_id).unwrap_or(false));
+
+    let button_height = 34.0;
+    let desired_size = egui::vec2(width, button_height);
+    let (rect, response) = ui.allocate_exact_size(desired_size, egui::Sense::click());
+    let response = response.on_hover_cursor(egui::CursorIcon::PointingHand);
+
+    if response.clicked() {
+        open = !open;
+        ui.ctx().data_mut(|data| data.insert_temp(popup_id, open));
+    }
+
+    let fill = if response.hovered() || open {
+        egui::Color32::from_rgb(14, 20, 31)
+    } else {
+        egui::Color32::from_rgb(9, 12, 18)
+    };
+    let stroke = if open {
+        egui::Stroke::new(1.25, ACCENT_BLUE_BRIGHT)
+    } else if response.hovered() {
+        egui::Stroke::new(1.1, ACCENT_BLUE)
+    } else {
+        egui::Stroke::new(1.0, egui::Color32::from_rgb(40, 51, 70))
+    };
+
+    ui.painter().rect_filled(rect, egui::CornerRadius::same(8), fill);
+    ui.painter().rect_stroke(rect, egui::CornerRadius::same(8), stroke, egui::StrokeKind::Inside);
+    ui.painter().rect_filled(
+        egui::Rect::from_min_max(
+            egui::pos2(rect.right() - 34.0, rect.top() + 1.0),
+            egui::pos2(rect.right() - 1.0, rect.bottom() - 1.0),
+        ),
+        egui::CornerRadius { nw: 0, ne: 8, sw: 0, se: 8 },
+        egui::Color32::from_rgb(14, 18, 27),
+    );
+    ui.painter().vline(
+        rect.right() - 34.0,
+        (rect.top() + 4.0)..=(rect.bottom() - 4.0),
+        egui::Stroke::new(1.0, egui::Color32::from_rgb(32, 42, 58)),
+    );
+    ui.painter().text(
+        egui::pos2(rect.left() + 12.0, rect.center().y),
+        egui::Align2::LEFT_CENTER,
+        current_label,
+        egui::FontId::proportional(13.5),
+        TEXT_PRIMARY,
+    );
+    paint_chevron(ui, egui::Rect::from_center_size(egui::pos2(rect.right() - 17.0, rect.center().y), egui::vec2(14.0, 14.0)), open);
+
+    let mut popup_rect: Option<egui::Rect> = None;
+    if open {
+        let popup_pos = egui::pos2(rect.left(), rect.bottom() + 6.0);
+        let popup = egui::Area::new(area_id)
+            .order(egui::Order::Foreground)
+            .fixed_pos(popup_pos)
+            .show(ui.ctx(), |ui| {
+                egui::Frame::new()
+                    .fill(egui::Color32::from_rgb(10, 14, 21))
+                    .corner_radius(egui::CornerRadius::same(10))
+                    .stroke(egui::Stroke::new(1.0, egui::Color32::from_rgb(53, 78, 118)))
+                    .inner_margin(egui::Margin::same(6))
+                    .show(ui, |ui| {
+                        ui.set_min_width(width);
+                        egui::ScrollArea::vertical()
+                            .auto_shrink([false, false])
+                            .max_height(240.0)
+                            .show(ui, |ui| {
+                                for (value, label) in options {
+                                    if popup_option_row(ui, label, selected.as_str() == value.as_str()).clicked() {
+                                        *selected = value.clone();
+                                        open = false;
+                                    }
+                                    ui.add_space(2.0);
+                                }
+                            });
+                    });
+            });
+        popup_rect = Some(popup.response.rect);
+    }
+
+    if open && ui.ctx().input(|i| i.pointer.any_pressed()) {
+        if let Some(pointer_pos) = ui.ctx().input(|i| i.pointer.interact_pos()) {
+            let clicked_button = rect.contains(pointer_pos);
+            let clicked_popup = popup_rect.map(|r| r.contains(pointer_pos)).unwrap_or(false);
+            if !clicked_button && !clicked_popup {
+                open = false;
+            }
+        }
+    }
+
+    ui.ctx().data_mut(|data| {
+        data.insert_temp(popup_id, open);
+    });
+}
+
+fn popup_option_row(ui: &mut egui::Ui, label: &str, is_selected: bool) -> egui::Response {
+    let desired_size = egui::vec2(ui.available_width(), 30.0);
+    let (rect, response) = ui.allocate_exact_size(desired_size, egui::Sense::click());
+    let response = response.on_hover_cursor(egui::CursorIcon::PointingHand);
+    let fill = if is_selected {
+        egui::Color32::from_rgb(24, 45, 79)
+    } else if response.hovered() {
+        egui::Color32::from_rgb(18, 27, 41)
+    } else {
+        egui::Color32::TRANSPARENT
+    };
+    let stroke = if is_selected {
+        egui::Stroke::new(1.0, ACCENT_BLUE)
+    } else if response.hovered() {
+        egui::Stroke::new(1.0, egui::Color32::from_rgb(55, 81, 120))
+    } else {
+        egui::Stroke::NONE
+    };
+    ui.painter().rect_filled(rect, egui::CornerRadius::same(7), fill);
+    if stroke != egui::Stroke::NONE {
+        ui.painter().rect_stroke(rect, egui::CornerRadius::same(7), stroke, egui::StrokeKind::Inside);
+    }
+    if is_selected {
+        ui.painter().circle_filled(egui::pos2(rect.left() + 12.0, rect.center().y), 3.5, ACCENT_BLUE_BRIGHT);
+    }
+    ui.painter().text(
+        egui::pos2(rect.left() + if is_selected { 22.0 } else { 12.0 }, rect.center().y),
+        egui::Align2::LEFT_CENTER,
+        label,
+        egui::FontId::proportional(12.8),
+        if is_selected { egui::Color32::WHITE } else { TEXT_PRIMARY },
+    );
+    response.on_hover_cursor(egui::CursorIcon::PointingHand)
+}
+
+fn paint_chevron(ui: &mut egui::Ui, rect: egui::Rect, open: bool) {
+    let stroke = egui::Stroke::new(1.7, egui::Color32::from_rgb(198, 210, 232));
+    let (a, b, c) = if open {
+        (
+            egui::pos2(rect.left() + 3.0, rect.bottom() - 4.5),
+            egui::pos2(rect.center().x, rect.top() + 4.5),
+            egui::pos2(rect.right() - 3.0, rect.bottom() - 4.5),
+        )
+    } else {
+        (
+            egui::pos2(rect.left() + 3.0, rect.top() + 4.5),
+            egui::pos2(rect.center().x, rect.bottom() - 4.5),
+            egui::pos2(rect.right() - 3.0, rect.top() + 4.5),
+        )
+    };
+    ui.painter().line_segment([a, b], stroke);
+    ui.painter().line_segment([b, c], stroke);
+}
 
 fn launcher_card(ui: &mut egui::Ui, add: impl FnOnce(&mut egui::Ui)) {
     egui::Frame::new()
@@ -963,6 +1245,70 @@ fn icon_box(ui: &mut egui::Ui, kind: IconKind) {
         .show(ui, |ui| {
             icon(ui, kind, 24.0, egui::Color32::from_rgb(154, 170, 196));
         });
+}
+
+fn switch_only(ui: &mut egui::Ui, value: &mut bool) -> egui::Response {
+    let desired_size = egui::vec2(52.0, 28.0);
+    let (rect, mut response) = ui.allocate_exact_size(desired_size, egui::Sense::click());
+    if response.clicked() {
+        *value = !*value;
+        response.mark_changed();
+    }
+
+    let t = ui.ctx().animate_bool(response.id, *value);
+    let track_fill = if *value {
+        egui::Color32::from_rgb(32, 86, 170)
+    } else {
+        egui::Color32::from_rgb(25, 31, 43)
+    };
+    let track_fill = egui::Color32::from_rgba_unmultiplied(track_fill.r(), track_fill.g(), track_fill.b(), 255);
+    let stroke_color = if response.hovered() { ACCENT_BLUE_BRIGHT } else if *value { ACCENT_BLUE } else { egui::Color32::from_rgb(58, 69, 89) };
+    let glow_color = if *value { egui::Color32::from_rgba_unmultiplied(74, 150, 255, 28) } else { egui::Color32::from_rgba_unmultiplied(104, 116, 138, 14) };
+
+    ui.painter().rect_filled(rect.expand(1.5), egui::CornerRadius::same(14), glow_color);
+    ui.painter().rect_filled(rect, egui::CornerRadius::same(14), track_fill);
+    ui.painter().rect_stroke(rect, egui::CornerRadius::same(14), egui::Stroke::new(1.2, stroke_color), egui::StrokeKind::Inside);
+
+    let knob_radius = 10.0;
+    let knob_x = egui::lerp((rect.left() + 14.0)..=(rect.right() - 14.0), t);
+    let knob_center = egui::pos2(knob_x, rect.center().y);
+    if *value {
+        ui.painter().circle_filled(knob_center, 13.0, egui::Color32::from_rgba_unmultiplied(84, 163, 255, 38));
+    }
+    ui.painter().circle_filled(knob_center, knob_radius, egui::Color32::from_rgb(244, 248, 255));
+    ui.painter().circle_stroke(knob_center, knob_radius, egui::Stroke::new(1.0, egui::Color32::from_rgb(188, 205, 236)));
+
+    response.on_hover_cursor(egui::CursorIcon::PointingHand)
+}
+
+fn switch_chip(ui: &mut egui::Ui, label_text: &str, value: &mut bool) -> egui::Response {
+    egui::Frame::new()
+        .fill(if *value { egui::Color32::from_rgb(17, 32, 58) } else { egui::Color32::from_rgb(14, 18, 26) })
+        .corner_radius(egui::CornerRadius::same(10))
+        .stroke(egui::Stroke::new(1.0, if *value { ACCENT_BLUE } else { egui::Color32::from_rgb(40, 50, 67) }))
+        .inner_margin(egui::Margin::symmetric(10, 8))
+        .show(ui, |ui| {
+            ui.horizontal(|ui| {
+                ui.label(egui::RichText::new(label_text).size(12.5).color(TEXT_PRIMARY));
+                switch_only(ui, value);
+            });
+        })
+        .response
+        .on_hover_cursor(egui::CursorIcon::PointingHand)
+}
+
+fn switch_row(ui: &mut egui::Ui, title: &str, subtitle: &str, value: &mut bool) {
+    ui.horizontal(|ui| {
+        ui.vertical(|ui| {
+            ui.label(egui::RichText::new(title).size(13.0).strong().color(TEXT_PRIMARY));
+            if !subtitle.is_empty() {
+                ui.label(egui::RichText::new(subtitle).size(11.0).color(TEXT_MUTED));
+            }
+        });
+        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+            switch_only(ui, value);
+        });
+    });
 }
 
 fn icon_button_box(ui: &mut egui::Ui, kind: IconKind) -> egui::Response {
@@ -1037,11 +1383,11 @@ fn segmented_screen_mode(ui: &mut egui::Ui, selected: &mut String) {
 
 fn plugin_module_entry(ui: &mut egui::Ui, tab: &PluginTab, selected: bool) -> bool {
     let fill = if selected && tab.enabled {
-        egui::Color32::from_rgb(23, 34, 52)
+        egui::Color32::from_rgb(22, 34, 56)
     } else if tab.enabled {
-        egui::Color32::from_rgb(14, 18, 26)
+        egui::Color32::from_rgb(12, 17, 26)
     } else {
-        egui::Color32::from_rgb(20, 13, 17)
+        egui::Color32::from_rgb(26, 13, 18)
     };
     let response = egui::Frame::new()
         .fill(fill)
@@ -1074,8 +1420,8 @@ fn plugin_module_entry(ui: &mut egui::Ui, tab: &PluginTab, selected: bool) -> bo
         .on_hover_cursor(egui::CursorIcon::PointingHand);
 
     if response.hovered() {
-        ui.painter().rect_filled(response.rect.expand(1.0), egui::CornerRadius::same(10), egui::Color32::from_rgba_unmultiplied(80, 150, 255, 22));
-        ui.painter().rect_stroke(response.rect.expand(1.0), egui::CornerRadius::same(10), egui::Stroke::new(1.0, egui::Color32::from_rgb(88, 166, 255)), egui::StrokeKind::Inside);
+        ui.painter().rect_filled(response.rect.expand(1.0), egui::CornerRadius::same(10), egui::Color32::from_rgba_unmultiplied(82, 158, 255, 26));
+        ui.painter().rect_stroke(response.rect.expand(1.0), egui::CornerRadius::same(10), egui::Stroke::new(1.2, ACCENT_BLUE_BRIGHT), egui::StrokeKind::Inside);
     }
     response.clicked()
 }

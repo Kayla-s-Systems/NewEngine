@@ -50,6 +50,14 @@ pub const ENGINE_ASSETS_MATERIALS_SERVICE_ID: &str = "engine.assets.materials";
 /// `.ytyp` as the generic metadata/knowledge source.
 pub const ENGINE_ASSETS_MAPS_SERVICE_ID: &str = "engine.assets.maps";
 
+/// Semantic UI dictionary gateway id. `.neui` meaning lives here: XMLcentral validation,
+/// entry selection, binding/action/dependency extraction and authored-to-runtime DTO
+/// compilation. `engine.assets` remains byte/VFS/codec owner; `engine.ui` remains live runtime.
+pub const ENGINE_ASSETS_UI_SERVICE_ID: &str = "engine.assets.ui";
+pub const ASSETS_UI_SERVICE_ID: &str = "assets.ui.api";
+pub const ASSETS_UI_BACKEND_CAPABILITY_ID: &str = "assets.ui.backend";
+pub const ASSETS_UI_RUNTIME_CONTRACT: &str = "newengine.assets.ui.runtime.v1";
+
 /// Runtime scene gateway. It consumes resolved map/definition DTOs and mutates the world; it does not own authored map file semantics.
 pub const ENGINE_SCENE_SERVICE_ID: &str = "engine.scene";
 
@@ -74,6 +82,36 @@ pub const ASSET_GRAPH_SERVICE_METHODS: &[&str] = &[
     asset_graph_method::RESOLVE_V1,
     asset_graph_method::VALIDATE_V1,
     asset_graph_method::DUMP_JSON_V1,
+];
+
+pub mod assets_ui_method {
+    pub const INFO_JSON: &str = newengine_service_api::SERVICE_METHOD_INFO_JSON;
+    pub const INVOKE_JSON: &str = newengine_service_api::SERVICE_METHOD_INVOKE_JSON;
+    pub const SHUTDOWN_V1: &str = newengine_service_api::SERVICE_METHOD_SHUTDOWN_V1;
+    pub const MANIFEST_V1: &str = "assets.ui.manifest_v1";
+    pub const REGISTRY_V1: &str = "assets.ui.registry_v1";
+    pub const ENTRY_V1: &str = "assets.ui.entry_v1";
+    pub const DOCUMENT_V1: &str = "assets.ui.document_v1";
+    pub const COMPILE_DOCUMENT_V1: &str = "assets.ui.compile_document_v1";
+    pub const BINDING_PLAN_V1: &str = "assets.ui.binding_plan_v1";
+    pub const VALIDATE_V1: &str = "assets.ui.validate_v1";
+    pub const DEPENDENCIES_V1: &str = "assets.ui.dependencies_v1";
+    pub const DUMP_XMLCENTRAL_V1: &str = "assets.ui.dump_xmlcentral_v1";
+}
+
+pub const ASSETS_UI_SERVICE_METHODS: &[&str] = &[
+    assets_ui_method::INFO_JSON,
+    assets_ui_method::INVOKE_JSON,
+    assets_ui_method::SHUTDOWN_V1,
+    assets_ui_method::MANIFEST_V1,
+    assets_ui_method::REGISTRY_V1,
+    assets_ui_method::ENTRY_V1,
+    assets_ui_method::DOCUMENT_V1,
+    assets_ui_method::COMPILE_DOCUMENT_V1,
+    assets_ui_method::BINDING_PLAN_V1,
+    assets_ui_method::VALIDATE_V1,
+    assets_ui_method::DEPENDENCIES_V1,
+    assets_ui_method::DUMP_XMLCENTRAL_V1,
 ];
 
 
@@ -337,6 +375,7 @@ pub fn semantic_gateway_for_file_type(extension: &str, asset_kind: &str, codec_t
         "material_library" | "newengine.asset.material_library" => ENGINE_ASSETS_MATERIALS_SERVICE_ID.to_owned(),
         "archetype_dictionary" | "metadata" | "unknown_y_file" | "newengine.asset.archetype_dictionary" => ENGINE_ASSETS_DEFINITIONS_SERVICE_ID.to_owned(),
         "map_data" | "map_definition" | "waypoint_record_list" | "compiled_script" | "newengine.asset.map_definition" => ENGINE_ASSETS_MAPS_SERVICE_ID.to_owned(),
+        "ui_dictionary" | "newengine.asset.ui_dictionary" => ENGINE_ASSETS_UI_SERVICE_ID.to_owned(),
         "bounds_dictionary" => "engine.assets.models.collisions".to_owned(),
         "manifest" => ENGINE_ASSETS_GRAPH_SERVICE_ID.to_owned(),
         "clip_dictionary" | "expression_dictionary" | "frame_filter_dictionary" | "pose_database" => "engine.assets.models.skeletons".to_owned(),
@@ -357,6 +396,7 @@ pub fn consumer_domains_for_file_type(extension: &str, asset_kind: &str, codec_t
             "ybn" | "ybd" => &["engine.assets.models.collisions", "engine.physics", ENGINE_ASSETS_MODELS_SERVICE_ID, "engine.scene"],
             "nemat" => &[ENGINE_ASSETS_MATERIALS_SERVICE_ID, ENGINE_ASSETS_MODELS_SERVICE_ID, "engine.render"],
             "ytyp" | "ymt" | "ytf" => &[ENGINE_ASSETS_DEFINITIONS_SERVICE_ID, ENGINE_ASSETS_GRAPH_SERVICE_ID, "engine.scene", ENGINE_ASSETS_MODELS_SERVICE_ID, ENGINE_ASSETS_MATERIALS_SERVICE_ID, "engine.physics", "engine.ai", "engine.editor", "engine.streaming"],
+            "neui" => &[ENGINE_ASSETS_UI_SERVICE_ID, ENGINE_ASSETS_GRAPH_SERVICE_ID, "engine.ui", "engine.ui.text", ENGINE_ASSETS_TEXTURES_SERVICE_ID, "engine.render", "engine.editor"],
             "ymap" | "ywr" | "ysc" => &[ENGINE_ASSETS_MAPS_SERVICE_ID, ENGINE_SCENE_SERVICE_ID, ENGINE_ASSETS_DEFINITIONS_SERVICE_ID, ENGINE_ASSETS_GRAPH_SERVICE_ID, ENGINE_ASSETS_MODELS_SERVICE_ID, ENGINE_ASSETS_MATERIALS_SERVICE_ID, ENGINE_ASSETS_TEXTURES_SERVICE_ID, "engine.physics", "engine.streaming", "engine.editor"],
             "ymf" => &[ENGINE_ASSETS_GRAPH_SERVICE_ID, ENGINE_ASSETS_DEFINITIONS_SERVICE_ID, ENGINE_ASSETS_MAPS_SERVICE_ID, ENGINE_SCENE_SERVICE_ID, ENGINE_ASSETS_MODELS_SERVICE_ID, ENGINE_ASSETS_MATERIALS_SERVICE_ID, ENGINE_ASSETS_TEXTURES_SERVICE_ID],
             "ycd" | "yed" | "yfd" | "yld" | "ypdb" => &["engine.assets.models.skeletons", ENGINE_ASSETS_MODELS_SERVICE_ID, "engine.scene", "engine.render"],
@@ -366,6 +406,7 @@ pub fn consumer_domains_for_file_type(extension: &str, asset_kind: &str, codec_t
                 "material_library" | "newengine.asset.material_library" => &[ENGINE_ASSETS_MATERIALS_SERVICE_ID, ENGINE_ASSETS_MODELS_SERVICE_ID, "engine.render"],
                 "archetype_dictionary" | "metadata" | "unknown_y_file" | "newengine.asset.archetype_dictionary" => &[ENGINE_ASSETS_DEFINITIONS_SERVICE_ID, ENGINE_ASSETS_GRAPH_SERVICE_ID, "engine.scene", ENGINE_ASSETS_MODELS_SERVICE_ID, ENGINE_ASSETS_MATERIALS_SERVICE_ID, "engine.physics", "engine.ai", "engine.editor", "engine.streaming"],
                 "map_data" | "map_definition" | "waypoint_record_list" | "compiled_script" | "newengine.asset.map_definition" => &[ENGINE_ASSETS_MAPS_SERVICE_ID, ENGINE_SCENE_SERVICE_ID, ENGINE_ASSETS_DEFINITIONS_SERVICE_ID, ENGINE_ASSETS_GRAPH_SERVICE_ID, ENGINE_ASSETS_MODELS_SERVICE_ID, ENGINE_ASSETS_MATERIALS_SERVICE_ID, ENGINE_ASSETS_TEXTURES_SERVICE_ID, "engine.physics", "engine.streaming", "engine.editor"],
+                "ui_dictionary" | "newengine.asset.ui_dictionary" => &[ENGINE_ASSETS_UI_SERVICE_ID, ENGINE_ASSETS_GRAPH_SERVICE_ID, "engine.ui", "engine.ui.text", ENGINE_ASSETS_TEXTURES_SERVICE_ID, "engine.render", "engine.editor"],
                 "bounds_dictionary" => &["engine.assets.models.collisions", "engine.physics", ENGINE_ASSETS_MODELS_SERVICE_ID, "engine.scene"],
                 "manifest" => &[ENGINE_ASSETS_GRAPH_SERVICE_ID, ENGINE_ASSETS_DEFINITIONS_SERVICE_ID, ENGINE_ASSETS_MAPS_SERVICE_ID, ENGINE_SCENE_SERVICE_ID, ENGINE_ASSETS_MODELS_SERVICE_ID, ENGINE_ASSETS_MATERIALS_SERVICE_ID, ENGINE_ASSETS_TEXTURES_SERVICE_ID],
                 "clip_dictionary" | "expression_dictionary" | "frame_filter_dictionary" | "cloth_dictionary" | "pose_database" => &["engine.assets.models.skeletons", ENGINE_ASSETS_MODELS_SERVICE_ID, "engine.scene", "engine.render"],
@@ -623,6 +664,14 @@ pub const ASSET_GRAPH_BACKEND_SERVICE_SPEC: newengine_service_api::BackendServic
         ASSET_GRAPH_BACKEND_CAPABILITY_ID,
     );
 
+pub const ASSETS_UI_BACKEND_SERVICE_SPEC: newengine_service_api::BackendServiceSpec =
+    newengine_service_api::BackendServiceSpec::new(
+        "assets.ui",
+        ENGINE_ASSETS_UI_SERVICE_ID,
+        ASSETS_UI_SERVICE_ID,
+        ASSETS_UI_BACKEND_CAPABILITY_ID,
+    );
+
 pub const TEXTURES_RUNTIME_CONTRACT_SPEC: newengine_service_api::RuntimeServiceContractSpec =
     newengine_service_api::RuntimeServiceContractSpec::new(
         ENGINE_ASSETS_TEXTURES_SERVICE_ID,
@@ -663,6 +712,20 @@ pub const ASSET_GRAPH_RUNTIME_REQUIREMENT_SPEC: newengine_service_api::RuntimeSe
         ASSET_GRAPH_RUNTIME_CONTRACT_SPEC,
         Some(ASSET_GRAPH_BACKEND_CAPABILITY_ID),
         Some("NEWENGINE_REQUIRE_ASSET_GRAPH_BACKEND"),
+    );
+
+pub const ASSETS_UI_RUNTIME_CONTRACT_SPEC: newengine_service_api::RuntimeServiceContractSpec =
+    newengine_service_api::RuntimeServiceContractSpec::new(
+        ENGINE_ASSETS_UI_SERVICE_ID,
+        ASSETS_UI_RUNTIME_CONTRACT,
+        ASSETS_UI_SERVICE_METHODS,
+    );
+
+pub const ASSETS_UI_RUNTIME_REQUIREMENT_SPEC: newengine_service_api::RuntimeServiceRequirementSpec =
+    newengine_service_api::RuntimeServiceRequirementSpec::new(
+        ASSETS_UI_RUNTIME_CONTRACT_SPEC,
+        Some(ASSETS_UI_BACKEND_CAPABILITY_ID),
+        Some("NEWENGINE_REQUIRE_ASSETS_UI_BACKEND"),
     );
 
 /// Required runtime methods for AssetManager 0.6+ deployments.
@@ -1163,6 +1226,7 @@ mod file_type_layer_contract_tests {
         assert_eq!(semantic_gateway_for_file_type("nemat", "material_library", codec_type::LIST_FILE), ENGINE_ASSETS_MATERIALS_SERVICE_ID);
         assert_eq!(semantic_gateway_for_file_type("ytyp", "archetype_dictionary", codec_type::LIST_FILE), ENGINE_ASSETS_DEFINITIONS_SERVICE_ID);
         assert_eq!(semantic_gateway_for_file_type("ymap", "map_data", codec_type::LIST_FILE), ENGINE_ASSETS_MAPS_SERVICE_ID);
+        assert_eq!(semantic_gateway_for_file_type("neui", "ui_dictionary", codec_type::LIST_FILE), ENGINE_ASSETS_UI_SERVICE_ID);
         assert_eq!(semantic_gateway_for_file_type("ybn", "bounds_dictionary", codec_type::LIST_FILE), "engine.assets.models.collisions");
         assert_eq!(semantic_gateway_for_file_type("nepak", "asset_package", codec_type::CONTAINER), ENGINE_ASSET_SERVICE_ID);
     }
@@ -1172,6 +1236,7 @@ mod file_type_layer_contract_tests {
         let descriptors = canonical_nef8_file_type_descriptors();
         assert!(descriptors.iter().any(|it| it.extension == "ytd" && it.semantic_gateway == ENGINE_ASSETS_TEXTURES_SERVICE_ID));
         assert!(descriptors.iter().any(|it| it.extension == "ymap" && it.semantic_gateway == ENGINE_ASSETS_MAPS_SERVICE_ID));
+        assert!(descriptors.iter().any(|it| it.extension == "neui" && it.semantic_gateway == ENGINE_ASSETS_UI_SERVICE_ID));
         assert!(descriptors.iter().any(|it| it.extension == "ysc" && it.asset_kind == "compiled_script"));
         assert!(descriptors.iter().any(|it| it.extension == "ypdb" && it.selector_syntax.as_deref() == Some("file.ypdb@entry")));
         assert_eq!(descriptors.len(), LIST_FILE_FORMAT_SPECS.len());

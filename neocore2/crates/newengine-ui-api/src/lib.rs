@@ -36,6 +36,23 @@ pub const UI_SERVICE_METHOD_PAUSE_MENU_STATE_V1: &str = "pause_menu_state_v1";
 pub const UI_SERVICE_METHOD_DRAW_FRAME_V1: &str = "draw_frame_v1";
 pub const UI_SERVICE_METHOD_DRAW_FRAME_BIN_V1: &str = "draw_frame_bin_v1";
 
+/// Provider-owned XML document export for diagnostics/import tooling only.
+/// Runtime UI should mount compiled `.neui` documents through the methods below.
+pub const UI_SERVICE_METHOD_DOCUMENT_XML_V1: &str = "document_xml_v1";
+
+/// Canonical live runtime UI methods. `engine.assets.ui` compiles `.neui` entries;
+/// `engine.ui` mounts, patches, routes input/actions and emits draw packets.
+pub const UI_SERVICE_METHOD_REGISTRY_LOAD_V1: &str = "ui.registry_load_v1";
+pub const UI_SERVICE_METHOD_MOUNT_SURFACE_V1: &str = "ui.mount_surface_v1";
+pub const UI_SERVICE_METHOD_UNMOUNT_SURFACE_V1: &str = "ui.unmount_surface_v1";
+pub const UI_SERVICE_METHOD_SET_SURFACE_VISIBLE_V1: &str = "ui.set_surface_visible_v1";
+pub const UI_SERVICE_METHOD_APPLY_STATE_PATCH_V1: &str = "ui.apply_state_patch_v1";
+pub const UI_SERVICE_METHOD_DISPATCH_INPUT_V1: &str = "ui.dispatch_input_v1";
+pub const UI_SERVICE_METHOD_DISPATCH_ACTION_V1: &str = "ui.dispatch_action_v1";
+pub const UI_SERVICE_METHOD_NAVIGATE_V1: &str = "ui.navigate_v1";
+pub const UI_SERVICE_METHOD_DEBUG_TREE_V1: &str = "ui.debug_tree_v1";
+pub const UI_SERVICE_METHOD_DEBUG_BINDINGS_V1: &str = "ui.debug_bindings_v1";
+
 pub const UI_SURFACE_ENGINE_LOADING: &str = "engine.loading";
 pub const UI_SURFACE_ENGINE_ERROR_MODAL: &str = "engine.error_modal";
 pub const UI_SURFACE_RUNTIME_OVERLAY: &str = "runtime.overlay";
@@ -95,6 +112,10 @@ impl Default for UiServiceInfo {
                 "menu-action-routes-v1".to_owned(),
                 "draw-frame-bin-v1".to_owned(),
                 "atlas-text-quads".to_owned(),
+                "neui-compiled-document-mount-v1".to_owned(),
+                "state-patch-bindings-v1".to_owned(),
+                "debug-tree-v1".to_owned(),
+                "debug-bindings-v1".to_owned(),
             ],
             methods: ui_service_methods().iter().map(|it| (*it).to_owned()).collect(),
             surfaces: vec![
@@ -122,6 +143,17 @@ pub const UI_SERVICE_METHODS: &[&str] = &[
     UI_SERVICE_METHOD_PAUSE_MENU_STATE_V1,
     UI_SERVICE_METHOD_DRAW_FRAME_V1,
     UI_SERVICE_METHOD_DRAW_FRAME_BIN_V1,
+    UI_SERVICE_METHOD_DOCUMENT_XML_V1,
+    UI_SERVICE_METHOD_REGISTRY_LOAD_V1,
+    UI_SERVICE_METHOD_MOUNT_SURFACE_V1,
+    UI_SERVICE_METHOD_UNMOUNT_SURFACE_V1,
+    UI_SERVICE_METHOD_SET_SURFACE_VISIBLE_V1,
+    UI_SERVICE_METHOD_APPLY_STATE_PATCH_V1,
+    UI_SERVICE_METHOD_DISPATCH_INPUT_V1,
+    UI_SERVICE_METHOD_DISPATCH_ACTION_V1,
+    UI_SERVICE_METHOD_NAVIGATE_V1,
+    UI_SERVICE_METHOD_DEBUG_TREE_V1,
+    UI_SERVICE_METHOD_DEBUG_BINDINGS_V1,
 ];
 
 #[inline]
@@ -187,6 +219,245 @@ impl UiAck {
         Self { ok: true, provider: Some(provider.into()), message: None }
     }
 }
+
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum UiBindingMode {
+    OneWay,
+    TwoWay,
+    Event,
+}
+
+impl Default for UiBindingMode {
+    #[inline]
+    fn default() -> Self { Self::OneWay }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum UiUpdatePolicy {
+    Frame,
+    Event,
+    Dirty,
+    OnChange,
+    Manual,
+}
+
+impl Default for UiUpdatePolicy {
+    #[inline]
+    fn default() -> Self { Self::OnChange }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
+pub struct UiStateSource {
+    pub id: String,
+    pub source: String,
+    pub contract: String,
+    pub update_policy: UiUpdatePolicy,
+}
+
+impl Default for UiStateSource {
+    fn default() -> Self {
+        Self { id: String::new(), source: String::new(), contract: String::new(), update_policy: UiUpdatePolicy::default() }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
+pub struct UiBindingEdge {
+    pub element_id: String,
+    pub property: String,
+    pub source_id: String,
+    pub path: String,
+    pub mode: UiBindingMode,
+    #[serde(default)]
+    pub fallback: Option<String>,
+    #[serde(default)]
+    pub transform: Option<String>,
+}
+
+impl Default for UiBindingEdge {
+    fn default() -> Self {
+        Self {
+            element_id: String::new(),
+            property: String::new(),
+            source_id: String::new(),
+            path: String::new(),
+            mode: UiBindingMode::default(),
+            fallback: None,
+            transform: None,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
+pub struct UiActionEdge {
+    pub element_id: String,
+    pub trigger: String,
+    pub action_id: String,
+    pub target_gateway: String,
+    pub command: String,
+    #[serde(default)]
+    pub payload_schema: Option<String>,
+}
+
+impl Default for UiActionEdge {
+    fn default() -> Self {
+        Self { element_id: String::new(), trigger: String::new(), action_id: String::new(), target_gateway: String::new(), command: String::new(), payload_schema: None }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
+pub struct UiBindingPlan {
+    pub document_ref: String,
+    pub surface_id: String,
+    pub state_sources: Vec<UiStateSource>,
+    pub bindings: Vec<UiBindingEdge>,
+    pub actions: Vec<UiActionEdge>,
+}
+
+impl Default for UiBindingPlan {
+    fn default() -> Self {
+        Self { document_ref: String::new(), surface_id: String::new(), state_sources: Vec::new(), bindings: Vec::new(), actions: Vec::new() }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
+pub struct UiCompiledDocument {
+    pub version: u32,
+    pub document_ref: String,
+    pub surface_id: String,
+    pub root_id: String,
+    pub theme_ref: Option<String>,
+    pub dependencies: Vec<String>,
+    pub binding_plan: UiBindingPlan,
+}
+
+impl Default for UiCompiledDocument {
+    fn default() -> Self {
+        Self { version: 1, document_ref: String::new(), surface_id: String::new(), root_id: String::new(), theme_ref: None, dependencies: Vec::new(), binding_plan: UiBindingPlan::default() }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
+pub struct UiStateChange {
+    pub source_id: String,
+    pub path: String,
+    pub value: serde_json::Value,
+}
+
+impl Default for UiStateChange {
+    fn default() -> Self {
+        Self { source_id: String::new(), path: String::new(), value: serde_json::Value::Null }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
+pub struct UiStatePatch {
+    pub frame_index: u64,
+    pub surface_id: String,
+    pub changes: Vec<UiStateChange>,
+}
+
+impl Default for UiStatePatch {
+    fn default() -> Self { Self { frame_index: 0, surface_id: String::new(), changes: Vec::new() } }
+}
+
+impl UiStatePatch {
+    #[inline]
+    pub fn new(frame_index: u64, surface_id: impl Into<String>) -> Self {
+        Self { frame_index, surface_id: surface_id.into(), changes: Vec::new() }
+    }
+
+    #[inline]
+    pub fn with_change(mut self, source_id: impl Into<String>, path: impl Into<String>, value: serde_json::Value) -> Self {
+        self.changes.push(UiStateChange { source_id: source_id.into(), path: path.into(), value });
+        self
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
+pub struct UiRegistryLoadRequest {
+    pub registry_ref: String,
+}
+impl Default for UiRegistryLoadRequest { fn default() -> Self { Self { registry_ref: String::new() } } }
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
+pub struct UiMountSurfaceRequest {
+    pub surface_id: String,
+    pub document: UiCompiledDocument,
+    pub visible: bool,
+}
+impl Default for UiMountSurfaceRequest { fn default() -> Self { Self { surface_id: String::new(), document: UiCompiledDocument::default(), visible: true } } }
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
+pub struct UiSurfaceRequest {
+    pub surface_id: String,
+}
+impl Default for UiSurfaceRequest { fn default() -> Self { Self { surface_id: String::new() } } }
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
+pub struct UiSurfaceVisibilityRequest {
+    pub surface_id: String,
+    pub visible: bool,
+}
+impl Default for UiSurfaceVisibilityRequest { fn default() -> Self { Self { surface_id: String::new(), visible: true } } }
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
+pub struct UiDispatchInputRequest {
+    pub surface_id: String,
+    pub event: String,
+    pub payload: serde_json::Value,
+}
+impl Default for UiDispatchInputRequest { fn default() -> Self { Self { surface_id: String::new(), event: String::new(), payload: serde_json::Value::Null } } }
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
+pub struct UiDispatchActionRequest {
+    pub surface_id: String,
+    pub action_id: String,
+    pub payload: serde_json::Value,
+}
+impl Default for UiDispatchActionRequest { fn default() -> Self { Self { surface_id: String::new(), action_id: String::new(), payload: serde_json::Value::Null } } }
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
+pub struct UiNavigateRequest {
+    pub surface_id: String,
+    pub target: String,
+}
+impl Default for UiNavigateRequest { fn default() -> Self { Self { surface_id: String::new(), target: String::new() } } }
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
+pub struct UiDebugTreeResponse {
+    pub version: u32,
+    pub surface_id: String,
+    pub nodes: Vec<serde_json::Value>,
+}
+impl Default for UiDebugTreeResponse { fn default() -> Self { Self { version: 1, surface_id: String::new(), nodes: Vec::new() } } }
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
+pub struct UiDebugBindingsResponse {
+    pub version: u32,
+    pub surface_id: String,
+    pub bindings: Vec<UiBindingEdge>,
+    pub actions: Vec<UiActionEdge>,
+}
+impl Default for UiDebugBindingsResponse { fn default() -> Self { Self { version: 1, surface_id: String::new(), bindings: Vec::new(), actions: Vec::new() } } }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -508,6 +779,22 @@ mod tests {
     #[test]
     fn ui_service_methods_include_binary_draw_frame() {
         assert!(ui_service_methods().contains(&UI_SERVICE_METHOD_DRAW_FRAME_BIN_V1));
+    }
+
+    #[test]
+    fn ui_service_methods_include_neui_runtime_lifecycle() {
+        assert!(ui_service_methods().contains(&UI_SERVICE_METHOD_MOUNT_SURFACE_V1));
+        assert!(ui_service_methods().contains(&UI_SERVICE_METHOD_APPLY_STATE_PATCH_V1));
+        assert!(ui_service_methods().contains(&UI_SERVICE_METHOD_DEBUG_TREE_V1));
+        assert!(ui_service_methods().contains(&UI_SERVICE_METHOD_DEBUG_BINDINGS_V1));
+    }
+
+    #[test]
+    fn state_patch_is_surface_scoped() {
+        let patch = UiStatePatch::new(42, UI_SURFACE_ENGINE_LOADING)
+            .with_change("loading", "progress", serde_json::json!(0.5));
+        assert_eq!(patch.surface_id, UI_SURFACE_ENGINE_LOADING);
+        assert_eq!(patch.changes.len(), 1);
     }
 
     #[test]

@@ -302,6 +302,8 @@ pub const LIST_FILE_CONTENT_KIND_YWR: u32 = 17;
 pub const LIST_FILE_CONTENT_KIND_YSC: u32 = 18;
 pub const LIST_FILE_CONTENT_KIND_YBD: u32 = 19;
 pub const LIST_FILE_CONTENT_KIND_YTF: u32 = 20;
+/// NewEngine UI dictionary: surfaces/layouts/themes/components/bindings in XMLcentral payload.
+pub const LIST_FILE_CONTENT_KIND_NEUI: u32 = 32;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct ListFileHeaderV1 {
@@ -396,6 +398,7 @@ pub const fn list_file_content_kind_label(kind: u32) -> &'static str {
         LIST_FILE_CONTENT_KIND_YSC => "compiled_script",
         LIST_FILE_CONTENT_KIND_YBD => "bounds_dictionary",
         LIST_FILE_CONTENT_KIND_YTF => "unknown_y_file",
+        LIST_FILE_CONTENT_KIND_NEUI => "ui_dictionary",
         _ => "unknown",
     }
 }
@@ -419,6 +422,7 @@ pub const LIST_FILE_FORMAT_SPECS: &[ListFileFormatSpec] = &[
     ListFileFormatSpec { extension: "ybn", content_kind: LIST_FILE_CONTENT_KIND_YBN, asset_kind: "bounds_dictionary", purpose: "Bounds / Collision", semantic_gateway: "engine.assets.models.collisions", handler_service: "asset.codec.listfile.ybn", selector_syntax: "file.ybn@entry" },
     ListFileFormatSpec { extension: "ytyp", content_kind: LIST_FILE_CONTENT_KIND_YTYP, asset_kind: "archetype_dictionary", purpose: "Archetype Definition Dictionary", semantic_gateway: "engine.assets.definitions", handler_service: "asset.codec.listfile.ytyp", selector_syntax: "file.ytyp@definition_entry" },
     ListFileFormatSpec { extension: "nemat", content_kind: LIST_FILE_CONTENT_KIND_NEMAT, asset_kind: "material_library", purpose: "Material Library", semantic_gateway: "engine.assets.materials", handler_service: "asset.codec.listfile.nemat", selector_syntax: "file.nemat@material_entry" },
+    ListFileFormatSpec { extension: "neui", content_kind: LIST_FILE_CONTENT_KIND_NEUI, asset_kind: "ui_dictionary", purpose: "NewEngine UI Dictionary", semantic_gateway: "engine.assets.ui", handler_service: "asset.codec.listfile.neui", selector_syntax: "file.neui@entry" },
     ListFileFormatSpec { extension: "ymap", content_kind: LIST_FILE_CONTENT_KIND_YMAP, asset_kind: "map_data", purpose: "Map Data / Placement", semantic_gateway: "engine.assets.maps", handler_service: "asset.codec.listfile.ymap", selector_syntax: "file.ymap@entry" },
     ListFileFormatSpec { extension: "ymf", content_kind: LIST_FILE_CONTENT_KIND_YMF, asset_kind: "manifest", purpose: "Manifest / Dependencies", semantic_gateway: "engine.assets.graph", handler_service: "asset.codec.listfile.ymf", selector_syntax: "file.ymf@entry" },
     ListFileFormatSpec { extension: "ymt", content_kind: LIST_FILE_CONTENT_KIND_YMT, asset_kind: "metadata", purpose: "Metadata Container", semantic_gateway: "engine.assets.definitions", handler_service: "asset.codec.listfile.ymt", selector_syntax: "file.ymt@entry" },

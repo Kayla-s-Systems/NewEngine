@@ -1,0 +1,7 @@
+<NeUiDictionary schema="newengine.neui.dictionary.v1" representation="xmlcentral" owner_scope="editor" document_kind="surface">
+  <Entries><Entry name="surface" kind="ui_surface" /><Entry name="layout.main" kind="ui_layout" /><Entry name="bindings" kind="ui_binding_graph" /><Entry name="actions" kind="ui_action_map" /></Entries>
+  <Surface name="editor.asset_browser" kind="tool_panel" modal="false" z_order="600" root="layout.main" theme="assets/ui/themes/aurelia_dark.neui@theme" bindings="bindings" actions="actions" />
+  <Layout name="layout.main" surface="editor.asset_browser"><Panel id="asset_browser.root" class="editor-panel"><Text id="asset_browser.title" class="title" value="Asset Browser" /><Tree id="asset_browser.tree"><Bind property="items" source="assets.tree" /></Tree><Panel id="asset_browser.preview" class="preview-card"><Bind property="asset" source="assets.selected" /></Panel></Panel></Layout>
+  <BindingGraph name="bindings"><StateSource id="assets" source="engine.assets.browser.snapshot" contract="AssetBrowserSnapshot" update="dirty" /><Bind element="asset_browser.tree" property="items" source="assets.tree" /><Bind element="asset_browser.preview" property="asset" source="assets.selected" /></BindingGraph>
+  <ActionMap name="actions"><Action id="asset.open" target="engine.editor.assets" command="asset.open" /></ActionMap>
+</NeUiDictionary>

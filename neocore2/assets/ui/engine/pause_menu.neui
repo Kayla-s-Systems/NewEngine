@@ -1,0 +1,33 @@
+<NeUiDictionary schema="newengine.neui.dictionary.v1" representation="xmlcentral" owner_scope="engine" document_kind="surface">
+  <Entries>
+    <Entry name="surface" kind="ui_surface" />
+    <Entry name="layout.main" kind="ui_layout" />
+    <Entry name="bindings" kind="ui_binding_graph" />
+    <Entry name="actions" kind="ui_action_map" />
+  </Entries>
+  <Surface name="engine.pause_menu" kind="pause_menu" modal="true" z_order="800" root="layout.main" theme="assets/ui/themes/aurelia_dark.neui@theme" bindings="bindings" actions="actions">
+    <Dependencies>
+      <ComponentRef ref="assets/ui/components/buttons.neui@button.primary" />
+      <ComponentRef ref="assets/ui/components/cards.neui@card.status" />
+    </Dependencies>
+  </Surface>
+  <Layout name="layout.main" surface="engine.pause_menu">
+    <Panel id="pause.root" class="pause-shell">
+      <Panel id="pause.card" class="pause-card">
+        <Text id="pause.title" class="title" value="Paused" />
+        <MenuList id="pause.items" items="pause.items" selected="pause.selected_index" action_source="item.action" />
+        <Text id="pause.footer" class="hint" value="Runtime menu is data-bound. No JSON fallback." />
+      </Panel>
+    </Panel>
+  </Layout>
+  <BindingGraph name="bindings">
+    <StateSource id="pause" source="engine.ui.pause_menu.state" contract="PauseMenuState" update="event" />
+    <Bind element="pause.items" property="items" source="pause.items" />
+    <Bind element="pause.items" property="selected" source="pause.selected_index" />
+  </BindingGraph>
+  <ActionMap name="actions">
+    <Action id="game.resume" target="engine.lifecycle" command="game.resume" />
+    <Action id="engine.settings.open" target="engine.ui.navigation" command="menu.open_page"><Payload page="settings" /></Action>
+    <Action id="engine.quit_to_desktop" target="engine.lifecycle" command="game.quit_to_desktop" />
+  </ActionMap>
+</NeUiDictionary>
