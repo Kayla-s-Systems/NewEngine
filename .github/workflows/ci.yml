@@ -48,6 +48,9 @@ jobs:
       - name: Asset format descriptor scan
         run: python scripts/asset_format_boilerplate_scan.py
 
+      - name: AssetManager codec sync scan
+        run: python scripts/assetmanager_codec_sync_scan.py
+
       - name: Asset format contract tests
         run: cargo test -p newengine-asset-format-common -p newengine-asset-format-catalog-nef8 --lib
 

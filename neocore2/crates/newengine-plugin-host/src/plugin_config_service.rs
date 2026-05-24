@@ -223,6 +223,17 @@ pub fn get_plugin_overrides_with_env(plugin_id: &str) -> Value {
         .unwrap_or_else(empty_object)
 }
 
+#[inline]
+pub fn plugin_enabled_by_config(plugin_id: &str) -> bool {
+    let resolved = get_plugin_overrides_with_env(plugin_id);
+    resolved
+        .get("host")
+        .and_then(|host| host.get("enabled"))
+        .and_then(Value::as_bool)
+        .or_else(|| resolved.get("enabled").and_then(Value::as_bool))
+        .unwrap_or(true)
+}
+
 /// Registers a core service that exposes per-plugin override objects.
 ///
 /// Resolution order:

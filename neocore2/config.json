@@ -17,6 +17,10 @@
           "recursive": true,
           "rescan_interval_ms": 0
         },
+        "enabled": true,
+        "host": {
+          "enabled": true
+        },
         "layers": [
           {
             "dir": null,
@@ -44,6 +48,12 @@
           }
         ],
         "pump_steps": 16
+      },
+      "engine": {
+        "enabled": true,
+        "host": {
+          "enabled": true
+        }
       },
       "engine_runtime": {
         "render": {
@@ -86,12 +96,20 @@
       },
       "input": {
         "device_mode": "hybrid",
+        "enabled": true,
         "gamepad": true,
         "gamepad_backend": "xinput",
+        "host": {
+          "enabled": true
+        },
         "keyboard": true,
         "mouse": true
       },
       "logging": {
+        "enabled": true,
+        "host": {
+          "enabled": true
+        },
         "sources": {
           "console": {
             "level": "info"
@@ -120,7 +138,11 @@
           "vsync": true,
           "window_mode": "windowed"
         },
+        "enabled": true,
         "height": 900,
+        "host": {
+          "enabled": true
+        },
         "icon": "ui/engine.ico",
         "placement": {
           "mode": "centered",
@@ -131,6 +153,10 @@
         "width": 1600
       },
       "renderer": {
+        "enabled": true,
+        "host": {
+          "enabled": true
+        },
         "selection": {
           "backend": "auto",
           "backend_label": "Auto",
@@ -159,6 +185,10 @@
             "shadow_cascade_viewer": false,
             "target_viewer": false
           },
+          "enabled": true,
+          "host": {
+            "enabled": true
+          },
           "shader_cache": {
             "mode": "auto"
           }
@@ -176,7 +206,7 @@
             "height": 900,
             "width": 1600
           },
-          "vsync": false,
+          "vsync": true,
           "window_mode": "borderless"
         },
         "graphics_backend": {
@@ -1291,6 +1321,11 @@
     }
   },
   "window": {
+    "display": {
+      "borderless_fullscreen": true,
+      "fullscreen": true,
+      "window_mode": "borderless"
+    },
     "height": 900,
     "title": "Kayla's Editor",
     "width": 1600

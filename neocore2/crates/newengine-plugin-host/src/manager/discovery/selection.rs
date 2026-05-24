@@ -21,6 +21,7 @@ pub(super) enum SelectionDecision {
     Unsupported { reason: &'static str },
     Unknown,
     AlreadyLoaded,
+    DisabledByConfig,
     Filtered { filter_label: &'static str },
     DuplicateId { winner_file: String },
 }
@@ -49,6 +50,7 @@ impl SelectionDecision {
             Self::Unsupported { .. }
             | Self::Unknown
             | Self::AlreadyLoaded
+            | Self::DisabledByConfig
             | Self::Filtered { .. }
             | Self::DuplicateId { .. } => "no",
         }
@@ -62,6 +64,7 @@ impl SelectionDecision {
             Self::Unsupported { reason } => (*reason).to_owned(),
             Self::Unknown => "unknown dynlib".to_owned(),
             Self::AlreadyLoaded => "already loaded".to_owned(),
+            Self::DisabledByConfig => "disabled by config".to_owned(),
             Self::Filtered { filter_label } => format!("filtered by {filter_label}"),
             Self::DuplicateId { winner_file } => {
                 format!("duplicate plugin id, winner='{winner_file}'")
@@ -104,6 +107,7 @@ pub(super) fn build_load_selection(
             continue;
         };
         if loaded_ids.contains(id)
+            || !crate::plugin_config_service::plugin_enabled_by_config(id)
             || !filter.allows(*phase)
             || (runtime_only && is_editor_only_plugin(*descriptor_kind))
         {
@@ -138,6 +142,8 @@ pub(super) fn build_load_selection(
             } => {
                 if loaded_ids.contains(id) {
                     SelectionDecision::AlreadyLoaded
+                } else if !crate::plugin_config_service::plugin_enabled_by_config(id) {
+                    SelectionDecision::DisabledByConfig
                 } else if runtime_only && is_editor_only_plugin(*descriptor_kind) {
                     SelectionDecision::Unsupported {
                         reason: "editor plugin disabled for runtime target",
