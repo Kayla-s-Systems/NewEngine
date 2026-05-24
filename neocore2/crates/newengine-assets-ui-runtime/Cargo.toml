@@ -1,0 +1,22 @@
+[package]
+name = "newengine-assets-ui-runtime"
+version = "0.1.0"
+edition = "2021"
+readme = "README.md"
+description = "Engine-owned semantic compiler for .neui XMLcentral UI dictionaries"
+
+[dependencies]
+abi_stable = "0.11"
+blake3 = "1"
+flate2 = "1"
+log = "0.4"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+newengine-assets = { path = "../newengine-assets" }
+newengine-assets-api = { path = "../newengine-assets-api" }
+newengine-plugin-api = { path = "../newengine-plugin-api" }
+newengine-service-api = { path = "../newengine-service-api" }
+newengine-service-kit = { path = "../newengine-service-kit" }
+newengine-ui-api = { path = "../newengine-ui-api" }
+newengine-ui-navigation-api = { path = "../newengine-ui-navigation-api" }

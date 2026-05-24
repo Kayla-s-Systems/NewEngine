@@ -2090,6 +2090,25 @@ dependencies = [
 ]
 
 [[package]]
+name = "newengine-assets-ui-runtime"
+version = "0.1.0"
+dependencies = [
+ "abi_stable",
+ "blake3",
+ "flate2",
+ "log",
+ "newengine-assets",
+ "newengine-assets-api",
+ "newengine-plugin-api",
+ "newengine-service-api",
+ "newengine-service-kit",
+ "newengine-ui-api",
+ "newengine-ui-navigation-api",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "newengine-audio-api"
 version = "0.1.0"
 dependencies = [
@@ -2251,6 +2270,7 @@ dependencies = [
  "libloading 0.9.0",
  "log",
  "newengine-assets",
+ "newengine-assets-api",
  "newengine-audio-api",
  "newengine-authored-xml",
  "newengine-bounds",
@@ -2342,6 +2362,7 @@ version = "0.1.0"
 dependencies = [
  "log",
  "newengine-assets",
+ "newengine-assets-ui-runtime",
  "newengine-core",
  "newengine-definitions-runtime",
  "newengine-ecs-runtime",

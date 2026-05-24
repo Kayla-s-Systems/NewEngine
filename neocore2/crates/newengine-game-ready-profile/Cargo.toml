@@ -9,6 +9,7 @@ description = "Game Ready FPS runtime profile composition for NewEngine"
 log = "0.4"
 
 newengine-assets = { path = "../newengine-assets" }
+newengine-assets-ui-runtime = { path = "../newengine-assets-ui-runtime" }
 newengine-core = { path = "../newengine-core", features = ["host-probe"] }
 newengine-definitions-runtime = { path = "../newengine-definitions-runtime" }
 newengine-ecs-runtime = { path = "../newengine-ecs-runtime" }
