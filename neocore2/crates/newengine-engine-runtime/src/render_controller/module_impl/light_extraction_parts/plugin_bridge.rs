@@ -103,14 +103,6 @@ fn parse_plugin_light_provider(
     push_unique_string(&mut tags, LIGHT_PROVIDER_TAG_PLUGIN);
     let mut capabilities = parsed.capabilities.unwrap_or_default();
     push_unique_string(&mut capabilities, LIGHT_PROVIDER_CAP_EXTRACTION);
-    if let Some(service_id) = parsed.service_id.as_deref().map(str::trim).filter(|it| !it.is_empty()) {
-        log::warn!(
-            "render light extraction registry: plugin='{}' provider='{}' uses deprecated service_id='{}'; runtime will route through engine.render.light_extraction only",
-            plugin_id,
-            id,
-            service_id
-        );
-    }
     let gateway_id = parsed
         .engine_gateway
         .filter(|it| !it.trim().is_empty())

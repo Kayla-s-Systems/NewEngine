@@ -32,6 +32,7 @@ pub(crate) struct ExternalLightExtractionProviderDesc {
 
 
 #[derive(Clone, Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
 struct PluginLightProviderJson {
     id: Option<String>,
     label: Option<String>,
@@ -41,8 +42,6 @@ struct PluginLightProviderJson {
     /// Engine gateway used for this provider route. Runtime never calls a
     /// provider-owned service id directly.
     engine_gateway: Option<String>,
-    /// Deprecated input accepted only to emit migration diagnostics.
-    service_id: Option<String>,
     method: Option<String>,
 }
 

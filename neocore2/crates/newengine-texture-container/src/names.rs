@@ -13,7 +13,7 @@ pub fn normalize_texture_name(name: &str) -> String {
     // old split-on-any-dot rule collapsed them all to `newengine` and produced
     // duplicate dictionary hashes.
     match ext {
-        "png" | "jpg" | "jpeg" | "bmp" | "tga" | "webp" | "dds" | "ktx" | "ktx2" | "neytd" | "ytd" => stem.to_owned(),
+        "png" | "jpg" | "jpeg" | "bmp" | "tga" | "webp" | "dds" | "ktx" | "ktx2" | "ytd" => stem.to_owned(),
         _ => lower,
     }
 }

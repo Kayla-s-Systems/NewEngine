@@ -32,14 +32,6 @@ fn parse_plugin_draw_list_provider(
             );
         }
     }
-    if let Some(service_id) = parsed.service_id.as_deref().map(str::trim).filter(|it| !it.is_empty()) {
-        log::warn!(
-            "render draw-list provider registry: plugin='{}' provider='{}' uses deprecated service_id='{}'; runtime will route through engine.render.draw_lists only",
-            plugin_id,
-            id,
-            service_id
-        );
-    }
     let gateway_id = parsed
         .engine_gateway
         .filter(|it| !it.trim().is_empty())

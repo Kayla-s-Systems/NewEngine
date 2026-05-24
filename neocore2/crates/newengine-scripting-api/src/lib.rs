@@ -1,8 +1,10 @@
 #![forbid(unsafe_op_in_unsafe_fn)]
 
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
 use std::collections::BTreeMap;
+
+mod wire;
+pub use wire::*;
 
 /// Engine-facing scripting service gateway id.
 ///
@@ -24,22 +26,17 @@ pub const SCRIPTING_SERVICE_METHOD_INFO: &str = newengine_service_api::SERVICE_M
 pub const SCRIPTING_SERVICE_METHOD_INVOKE: &str = newengine_service_api::SERVICE_METHOD_INVOKE_JSON;
 pub const SCRIPTING_SERVICE_METHOD_SHUTDOWN_V1: &str = newengine_service_api::SERVICE_METHOD_SHUTDOWN_V1;
 
-/// Primary opaque hot-path methods.
+/// Primary hot-path methods. Payloads for these methods use the binary wire
+/// helpers in `wire.rs`; JSON is reserved for control/debug surfaces only.
 pub const SCRIPTING_SERVICE_METHOD_LOAD_MODULE_BYTES_V1: &str = "scripting.load_module_bytes_v1";
 pub const SCRIPTING_SERVICE_METHOD_INVOKE_BYTES_V1: &str = "scripting.invoke_bytes_v1";
 pub const SCRIPTING_SERVICE_METHOD_FRAME_BYTES_V1: &str = "scripting.frame_bytes_v1";
+
+/// Debug/control methods. These are inspectable control surfaces, not runtime
+/// frame/module execution APIs.
 pub const SCRIPTING_SERVICE_METHOD_DUMP_STATE_JSON_V1: &str = "scripting.dump_state_json_v1";
 pub const SCRIPTING_SERVICE_METHOD_VALIDATE_MODULE_REF_JSON_V1: &str = "scripting.validate_module_ref_json_v1";
 pub const SCRIPTING_SERVICE_METHOD_UNLOAD_MODULE_JSON_V1: &str = "scripting.unload_module_json_v1";
-
-/// Deprecated compatibility methods kept so existing engine callers do not
-/// break while the scripting domain migrates to request-bytes/response-bytes.
-/// They are adapters over the same opaque boundary and must not introduce
-/// language/VM knowledge.
-pub const SCRIPTING_SERVICE_METHOD_FRAME_JSON_V1: &str = "scripting.frame_json_v1";
-pub const SCRIPTING_SERVICE_METHOD_LOAD_MODULE_JSON_V1: &str = "scripting.load_module_json_v1";
-pub const SCRIPTING_SERVICE_METHOD_MODULE_MANIFEST_JSON_V1: &str = "scripting.module_manifest_json_v1";
-pub const SCRIPTING_SERVICE_METHOD_DISPATCH_EVENT_JSON_V1: &str = "scripting.dispatch_event_json_v1";
 
 /// Generic backend-family declaration for scripting providers.
 pub const SCRIPTING_BACKEND_SERVICE_SPEC: newengine_service_api::BackendServiceSpec =
@@ -54,7 +51,7 @@ pub const SCRIPTING_BACKEND_SERVICE_SPEC: newengine_service_api::BackendServiceS
 pub const SCRIPTING_RUNTIME_CONTRACT_SPEC: newengine_service_api::RuntimeServiceContractSpec =
     newengine_service_api::RuntimeServiceContractSpec::new(
         ENGINE_SCRIPTING_SERVICE_ID,
-        "newengine.scripting-api >= 0.1.x opaque-bytes",
+        "newengine.scripting-api >= 0.2.x binary-opaque",
         newengine_service_api::JSON_CONTROL_SERVICE_METHODS_V1,
     );
 
@@ -77,10 +74,6 @@ pub const SCRIPTING_SERVICE_METHODS: &[&str] = &[
     SCRIPTING_SERVICE_METHOD_DUMP_STATE_JSON_V1,
     SCRIPTING_SERVICE_METHOD_VALIDATE_MODULE_REF_JSON_V1,
     SCRIPTING_SERVICE_METHOD_UNLOAD_MODULE_JSON_V1,
-    SCRIPTING_SERVICE_METHOD_FRAME_JSON_V1,
-    SCRIPTING_SERVICE_METHOD_LOAD_MODULE_JSON_V1,
-    SCRIPTING_SERVICE_METHOD_MODULE_MANIFEST_JSON_V1,
-    SCRIPTING_SERVICE_METHOD_DISPATCH_EVENT_JSON_V1,
 ];
 
 #[inline]
@@ -143,7 +136,7 @@ pub struct ScriptingServiceInfo {
     pub provider: String,
     /// Generic backend capability only. This must not encode language/VM names.
     pub backend_capability: String,
-    /// Compatibility/debug label for the selected provider implementation.
+    /// Debug label for the selected provider implementation.
     pub backend: String,
     pub features: Vec<String>,
     pub methods: Vec<String>,
@@ -156,18 +149,17 @@ impl Default for ScriptingServiceInfo {
     #[inline]
     fn default() -> Self {
         Self {
-            protocol: "newengine.scripting-api/opaque-bytes-v1".to_owned(),
+            protocol: "newengine.scripting-api/binary-opaque-v1".to_owned(),
             gateway: ENGINE_SCRIPTING_SERVICE_ID.to_owned(),
             provider: SCRIPTING_SERVICE_ID.to_owned(),
             backend_capability: SCRIPTING_BACKEND_CAPABILITY_ID.to_owned(),
             backend: "none".to_owned(),
             features: vec![
-                "opaque-request-response".to_owned(),
+                "binary-request-response".to_owned(),
                 "ysc-entry-bytes".to_owned(),
                 "provider-owned-interpretation".to_owned(),
                 "no-language-whitelist".to_owned(),
                 "no-direct-world-access".to_owned(),
-                "json-compat-adapters".to_owned(),
             ],
             methods: SCRIPTING_SERVICE_METHODS.iter().map(|it| (*it).to_owned()).collect(),
             provider_metadata: BTreeMap::new(),
@@ -175,21 +167,19 @@ impl Default for ScriptingServiceInfo {
     }
 }
 
+/// Control invoke envelope. Its outer shape is JSON because it is routed through
+/// the generic `invoke_json` service method, but the selected hot-path request is
+/// carried as binary bytes and decoded by `wire.rs`.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
 pub struct ScriptingInvokeEnvelope {
     pub method: String,
-    /// Primary opaque request payload used by `*_bytes_v1` methods.
     pub request_bytes: Vec<u8>,
-    /// Deprecated compatibility payload for previous JSON control callers.
-    pub request: Value,
 }
 
 impl Default for ScriptingInvokeEnvelope {
     #[inline]
-    fn default() -> Self {
-        Self { method: String::new(), request_bytes: Vec::new(), request: Value::Null }
-    }
+    fn default() -> Self { Self { method: String::new(), request_bytes: Vec::new() } }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -238,9 +228,7 @@ impl Default for ScriptPermission {
 
 impl ScriptPermission {
     #[inline]
-    pub fn new(id: impl Into<String>) -> Self {
-        Self { id: id.into(), scope: String::new() }
-    }
+    pub fn new(id: impl Into<String>) -> Self { Self { id: id.into(), scope: String::new() } }
 
     #[inline]
     pub fn scoped(id: impl Into<String>, scope: impl Into<String>) -> Self {
@@ -256,11 +244,7 @@ pub struct ScriptDiagnostic {
     pub severity: ScriptDiagnosticSeverity,
     pub code: String,
     pub message: String,
-    /// Deprecated compatibility module field. New code should prefer
-    /// `script_ref`; both remain generic `.ysc@entry` selectors.
-    pub module: String,
     pub script_ref: String,
-    pub payload: Value,
     pub payload_bytes: Vec<u8>,
 }
 
@@ -271,9 +255,7 @@ impl Default for ScriptDiagnostic {
             severity: ScriptDiagnosticSeverity::Info,
             code: String::new(),
             message: String::new(),
-            module: String::new(),
             script_ref: String::new(),
-            payload: Value::Null,
             payload_bytes: Vec::new(),
         }
     }
@@ -445,265 +427,6 @@ pub type ScriptModuleRefValidationResponse = ScriptingModuleRefValidationRespons
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
-pub struct ScriptModuleDescriptor {
-    pub schema: String,
-    pub module_ref: ScriptModuleRef,
-    pub state: ScriptModuleState,
-    pub entry_points: Vec<String>,
-    pub permissions: Vec<ScriptPermission>,
-    pub dependencies: Vec<String>,
-    pub source_hash: String,
-    pub api_version: u32,
-    pub metadata: BTreeMap<String, Value>,
-    pub diagnostics: Vec<ScriptDiagnostic>,
-}
-
-impl Default for ScriptModuleDescriptor {
-    #[inline]
-    fn default() -> Self {
-        Self {
-            schema: "newengine.scripting.module_descriptor.compat.v1".to_owned(),
-            module_ref: ScriptModuleRef::default(),
-            state: ScriptModuleState::Declared,
-            entry_points: Vec::new(),
-            permissions: Vec::new(),
-            dependencies: Vec::new(),
-            source_hash: String::new(),
-            api_version: 1,
-            metadata: BTreeMap::new(),
-            diagnostics: Vec::new(),
-        }
-    }
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(default)]
-pub struct ScriptModuleManifest {
-    pub schema: String,
-    pub gateway: String,
-    pub modules: Vec<ScriptModuleDescriptor>,
-    pub warnings: Vec<String>,
-}
-
-impl Default for ScriptModuleManifest {
-    #[inline]
-    fn default() -> Self {
-        Self {
-            schema: "newengine.scripting.module_manifest.compat.v1".to_owned(),
-            gateway: ENGINE_SCRIPTING_SERVICE_ID.to_owned(),
-            modules: Vec::new(),
-            warnings: Vec::new(),
-        }
-    }
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(default)]
-pub struct ScriptModuleLoadRequest {
-    pub module_ref: ScriptModuleRef,
-    pub permissions: Vec<ScriptPermission>,
-    pub metadata: BTreeMap<String, Value>,
-}
-
-impl Default for ScriptModuleLoadRequest {
-    #[inline]
-    fn default() -> Self { Self { module_ref: ScriptModuleRef::default(), permissions: Vec::new(), metadata: BTreeMap::new() } }
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(default)]
-pub struct ScriptModuleUnloadRequest {
-    pub module_ref: ScriptModuleRef,
-}
-
-impl Default for ScriptModuleUnloadRequest {
-    #[inline]
-    fn default() -> Self { Self { module_ref: ScriptModuleRef::default() } }
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(default)]
-pub struct ScriptModuleLoadResponse {
-    pub ok: bool,
-    pub module: ScriptModuleDescriptor,
-    pub diagnostics: Vec<ScriptDiagnostic>,
-}
-
-impl Default for ScriptModuleLoadResponse {
-    #[inline]
-    fn default() -> Self { Self { ok: false, module: ScriptModuleDescriptor::default(), diagnostics: Vec::new() } }
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(default)]
-pub struct ScriptBudget {
-    pub max_commands: u32,
-    pub max_events: u32,
-    pub max_time_ms: f32,
-    pub max_memory_bytes: u64,
-}
-
-impl Default for ScriptBudget {
-    #[inline]
-    fn default() -> Self {
-        Self { max_commands: 1024, max_events: 1024, max_time_ms: 2.0, max_memory_bytes: 8 * 1024 * 1024 }
-    }
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(default)]
-pub struct ScriptEvent {
-    pub name: String,
-    pub target: String,
-    pub source: String,
-    pub payload: Value,
-}
-
-impl Default for ScriptEvent {
-    #[inline]
-    fn default() -> Self { Self { name: String::new(), target: String::new(), source: String::new(), payload: Value::Null } }
-}
-
-impl ScriptEvent {
-    #[inline]
-    pub fn new(name: impl Into<String>) -> Self { Self { name: name.into(), ..Self::default() } }
-
-    #[inline]
-    pub fn with_payload(mut self, payload: Value) -> Self {
-        self.payload = payload;
-        self
-    }
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(default)]
-pub struct ScriptFact {
-    pub kind: String,
-    pub subject: String,
-    pub payload: Value,
-}
-
-impl Default for ScriptFact {
-    #[inline]
-    fn default() -> Self { Self { kind: String::new(), subject: String::new(), payload: Value::Null } }
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(default)]
-pub struct ScriptFrameInput {
-    pub version: u32,
-    pub frame_index: u64,
-    pub dt_sec: f32,
-    pub fixed_time_sec: f64,
-    pub deterministic_seed: u64,
-    pub modules: Vec<ScriptModuleRef>,
-    pub events: Vec<ScriptEvent>,
-    pub facts: Vec<ScriptFact>,
-    pub budget: ScriptBudget,
-}
-
-impl Default for ScriptFrameInput {
-    #[inline]
-    fn default() -> Self {
-        Self {
-            version: 1,
-            frame_index: 0,
-            dt_sec: 0.0,
-            fixed_time_sec: 0.0,
-            deterministic_seed: 0,
-            modules: Vec::new(),
-            events: Vec::new(),
-            facts: Vec::new(),
-            budget: ScriptBudget::default(),
-        }
-    }
-}
-
-impl ScriptFrameInput {
-    #[inline]
-    pub fn new(frame_index: u64, dt_sec: f32, fixed_time_sec: f64, deterministic_seed: u64) -> Self {
-        Self { frame_index, dt_sec, fixed_time_sec, deterministic_seed, ..Self::default() }
-    }
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(default)]
-pub struct ScriptCommand {
-    /// Engine-facing command kind, e.g. `entity.spawn`, `ui.emit`, `audio.play`.
-    /// Command names describe requested engine work, not provider language APIs.
-    pub kind: String,
-    pub target: String,
-    pub source_module: String,
-    pub deterministic_key: String,
-    pub payload: Value,
-}
-
-impl Default for ScriptCommand {
-    #[inline]
-    fn default() -> Self {
-        Self {
-            kind: String::new(),
-            target: String::new(),
-            source_module: String::new(),
-            deterministic_key: String::new(),
-            payload: Value::Null,
-        }
-    }
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(default)]
-pub struct ScriptTraceEvent {
-    pub phase: String,
-    pub module: String,
-    pub message: String,
-    pub payload: Value,
-}
-
-impl Default for ScriptTraceEvent {
-    #[inline]
-    fn default() -> Self { Self { phase: String::new(), module: String::new(), message: String::new(), payload: Value::Null } }
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(default)]
-pub struct ScriptFrameOutput {
-    pub version: u32,
-    pub frame_index: u64,
-    pub commands: Vec<ScriptCommand>,
-    pub events: Vec<ScriptEvent>,
-    pub diagnostics: Vec<ScriptDiagnostic>,
-    pub trace: Vec<ScriptTraceEvent>,
-}
-
-impl Default for ScriptFrameOutput {
-    #[inline]
-    fn default() -> Self {
-        Self { version: 1, frame_index: 0, commands: Vec::new(), events: Vec::new(), diagnostics: Vec::new(), trace: Vec::new() }
-    }
-}
-
-impl ScriptFrameOutput {
-    #[inline]
-    pub fn empty_for(input: &ScriptFrameInput) -> Self {
-        Self { frame_index: input.frame_index, ..Self::default() }
-    }
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(default)]
-pub struct ScriptDispatchEventRequest {
-    pub event: ScriptEvent,
-    pub modules: Vec<ScriptModuleRef>,
-}
-
-impl Default for ScriptDispatchEventRequest {
-    #[inline]
-    fn default() -> Self { Self { event: ScriptEvent::default(), modules: Vec::new() } }
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(default)]
 pub struct ScriptingStateDump {
     pub schema: String,
     pub gateway: String,
@@ -760,6 +483,7 @@ mod tests {
         assert!(info.features.iter().any(|it| it == "no-language-whitelist"));
         assert!(info.methods.iter().any(|it| it == SCRIPTING_SERVICE_METHOD_INVOKE_BYTES_V1));
         assert!(!info.features.iter().any(|it| it.contains("known-language")));
+        assert!(!info.features.iter().any(|it| it.contains("compat")));
     }
 
     #[test]
@@ -769,13 +493,5 @@ mod tests {
         assert_eq!(response.request_id, "req-1");
         assert_eq!(response.status, ScriptingResponseStatus::Empty);
         assert!(response.payload_bytes.is_empty());
-    }
-
-    #[test]
-    fn compatibility_frame_output_preserves_frame_index() {
-        let input = ScriptFrameInput::new(42, 1.0 / 60.0, 10.0, 7);
-        let output = ScriptFrameOutput::empty_for(&input);
-        assert_eq!(output.frame_index, 42);
-        assert!(output.commands.is_empty());
     }
 }

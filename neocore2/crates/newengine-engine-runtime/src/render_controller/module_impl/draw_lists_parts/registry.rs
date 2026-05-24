@@ -32,6 +32,7 @@ pub(crate) struct ExternalRenderDrawListProviderDesc {
 
 
 #[derive(Clone, Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
 struct PluginDrawListProviderJson {
     id: Option<String>,
     label: Option<String>,
@@ -41,9 +42,6 @@ struct PluginDrawListProviderJson {
     /// Engine gateway used for this provider route. This must be backed by
     /// descriptor/capability metadata, not by a direct service id in runtime.
     engine_gateway: Option<String>,
-    /// Deprecated input accepted only to emit migration diagnostics. Runtime
-    /// calls never use this value.
-    service_id: Option<String>,
     method: Option<String>,
 }
 

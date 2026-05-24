@@ -36,7 +36,10 @@ pub use mips::{generate_rgba8_mips, rgba8_len, TextureEncodedMipData, TextureMip
 pub use names::{infer_color_space_from_name, normalize_color_space, normalize_texture_name, stable_name_hash64};
 pub use selector::{TextureDictionarySelector, TextureSelectorError};
 
-pub const MAGIC: [u8; 4] = *b"NETD";
+/// Inner payload magic for TextureDictionaryPayloadV1 stored inside NEF8 .ytd bodies.
+pub const TEXTURE_DICTIONARY_PAYLOAD_MAGIC: [u8; 4] = *b"NETD";
+#[doc(hidden)]
+pub const MAGIC: [u8; 4] = TEXTURE_DICTIONARY_PAYLOAD_MAGIC;
 pub const VERSION_V2: u16 = 2;
 pub const HEADER_LEN: usize = 64;
 pub const EXTENSION: &str = "ytd";
