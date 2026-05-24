@@ -295,8 +295,6 @@ pub enum EngineServiceKind {
     AssetGraph,
     Time,
     Scripting,
-    ScriptingModules,
-    ScriptingDebug,
     Audio,
     Render,
     RenderEffects,
@@ -360,8 +358,6 @@ impl EngineServiceKind {
             Self::AssetGraph => "assets.graph",
             Self::Time => "time",
             Self::Scripting => "scripting",
-            Self::ScriptingModules => "scripting.modules",
-            Self::ScriptingDebug => "scripting.debug",
             Self::Audio => "audio",
             Self::Render => "render",
             Self::RenderEffects => "render.effects",
@@ -415,8 +411,6 @@ impl EngineServiceKind {
             "assets.graph" | "assets_graph" | "assets-graph" => Some(Self::AssetGraph),
             "time" => Some(Self::Time),
             "scripting" => Some(Self::Scripting),
-            "scripting.modules" | "scripting_modules" | "scripting-modules" => Some(Self::ScriptingModules),
-            "scripting.debug" | "scripting_debug" | "scripting-debug" => Some(Self::ScriptingDebug),
             "audio" => Some(Self::Audio),
             "render" => Some(Self::Render),
             "render.effects" | "render_effects" => Some(Self::RenderEffects),
@@ -468,7 +462,6 @@ impl EngineServiceKind {
             Self::PhysicsContacts | Self::PhysicsConstraints => Some(Self::Physics),
             Self::InputBindings | Self::InputActions | Self::InputContexts => Some(Self::Input),
             Self::UiText | Self::UiDebug => Some(Self::Ui),
-            Self::ScriptingModules | Self::ScriptingDebug => Some(Self::Scripting),
             _ => None,
         }
     }
@@ -506,8 +499,6 @@ impl EngineServiceKind {
             Self::AssetGraph => "engine.assets.graph",
             Self::Time => "engine.time",
             Self::Scripting => "engine.scripting",
-            Self::ScriptingModules => "engine.scripting.modules",
-            Self::ScriptingDebug => "engine.scripting.debug",
             Self::Audio => "engine.audio",
             Self::Render => "engine.render",
             Self::RenderEffects => "engine.render.effects",
@@ -699,8 +690,6 @@ mod tests {
             ("assets.graph", EngineServiceKind::AssetGraph, "engine.assets.graph", Some(EngineServiceKind::Assets)),
             ("time", EngineServiceKind::Time, "engine.time", None),
             ("scripting", EngineServiceKind::Scripting, "engine.scripting", None),
-            ("scripting.modules", EngineServiceKind::ScriptingModules, "engine.scripting.modules", Some(EngineServiceKind::Scripting)),
-            ("scripting.debug", EngineServiceKind::ScriptingDebug, "engine.scripting.debug", Some(EngineServiceKind::Scripting)),
             ("input.bindings", EngineServiceKind::InputBindings, "engine.input.bindings", Some(EngineServiceKind::Input)),
             ("input.actions", EngineServiceKind::InputActions, "engine.input.actions", Some(EngineServiceKind::Input)),
             ("input.contexts", EngineServiceKind::InputContexts, "engine.input.contexts", Some(EngineServiceKind::Input)),
@@ -736,7 +725,6 @@ mod tests {
         assert!(!EngineServiceKind::Model.matches_engine_gateway_id("engine.assets.models.skeletons"));
         assert!(!EngineServiceKind::Camera.matches_engine_gateway_id("engine.camera.modes"));
         assert!(!EngineServiceKind::Ui.matches_engine_gateway_id("engine.ui.text"));
-        assert!(!EngineServiceKind::Scripting.matches_engine_gateway_id("engine.scripting.modules"));
         assert!(!EngineServiceKind::Assets.matches_engine_gateway_id("engine.assets.ui"));
     }
 

@@ -2,6 +2,23 @@
 
 Runtime shell for the `engine.scripting` gateway.
 
-This crate intentionally does **not** embed Lua, visual scripting, WASM or any other VM. It provides a baseline engine-owned scripting gateway service that speaks the neutral scripting DTO contract and returns empty frame output. Real scripting backends can replace it by declaring the same `engine.scripting` gateway and the appropriate backend capability.
+This crate intentionally does not embed or name any scripting implementation. It
+registers an engine-owned baseline provider that accepts opaque `.ysc@entry`
+module bytes and opaque scripting request bytes, then returns an empty response
+until a real provider overrides the `engine.scripting` route.
 
-The runtime owns orchestration, validation-friendly DTOs and diagnostics. Script providers own language execution. ECS/entity/scene mutations must happen later through authoritative apply stages, never directly inside providers.
+The primary path is:
+
+```text
+scripting.load_module_bytes_v1
+scripting.invoke_bytes_v1
+scripting.frame_bytes_v1
+```
+
+Deprecated JSON frame/module methods are kept as compatibility adapters so
+existing engine code keeps working during migration. They do not interpret script
+payloads and do not declare a language/VM whitelist.
+
+Providers own interpretation. ECS/entity/scene/UI/audio mutation must happen via
+validated engine-facing outputs and authoritative apply stages, never through
+direct provider access to engine internals.

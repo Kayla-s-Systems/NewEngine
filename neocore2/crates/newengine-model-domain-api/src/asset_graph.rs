@@ -449,7 +449,7 @@ fn classify_ref(reference: &str) -> (&'static str, &'static str, &'static str, &
         "ymf" => ("asset_manifest", "asset_manifest", "engine.assets.graph", "asset_graph.api"),
         "ymt" | "ytf" => ("metadata", "metadata", "engine.assets.definitions", "definitions.api"),
         "ywr" => ("scene_dependency", "scene_dependency", "engine.assets.maps", "maps.api"),
-        "ysc" => ("script_module", "compiled_script", "engine.scripting", "scripting.api"),
+        "ysc" => ("script_module", "script_module", "engine.scripting", "scripting.api"),
         "nebrain" => ("ai_brain", "ai_brain_dictionary", "engine.ai", "ai.api"),
         "negoal" => ("ai_goal", "ai_goal_dictionary", "engine.ai", "ai.api"),
         "nebt" | "nebehavior" => ("ai_behavior_tree", "ai_behavior_tree", "engine.ai", "ai.api"),

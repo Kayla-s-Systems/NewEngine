@@ -395,7 +395,7 @@ pub const fn list_file_content_kind_label(kind: u32) -> &'static str {
         LIST_FILE_CONTENT_KIND_YPDB => "pose_database",
         LIST_FILE_CONTENT_KIND_YVR => "vehicle_record_list",
         LIST_FILE_CONTENT_KIND_YWR => "waypoint_record_list",
-        LIST_FILE_CONTENT_KIND_YSC => "compiled_script",
+        LIST_FILE_CONTENT_KIND_YSC => "script_module",
         LIST_FILE_CONTENT_KIND_YBD => "bounds_dictionary",
         LIST_FILE_CONTENT_KIND_YTF => "unknown_y_file",
         LIST_FILE_CONTENT_KIND_NEUI => "ui_dictionary",
@@ -433,7 +433,7 @@ pub const LIST_FILE_FORMAT_SPECS: &[ListFileFormatSpec] = &[
     ListFileFormatSpec { extension: "ypdb", content_kind: LIST_FILE_CONTENT_KIND_YPDB, asset_kind: "pose_database", purpose: "Pose Database", semantic_gateway: "engine.assets.models.skeletons", handler_service: "asset.codec.listfile.ypdb", selector_syntax: "file.ypdb@entry" },
     ListFileFormatSpec { extension: "yvr", content_kind: LIST_FILE_CONTENT_KIND_YVR, asset_kind: "vehicle_record_list", purpose: "Vehicle Record List", semantic_gateway: "engine.assets.models", handler_service: "asset.codec.listfile.yvr", selector_syntax: "file.yvr@entry" },
     ListFileFormatSpec { extension: "ywr", content_kind: LIST_FILE_CONTENT_KIND_YWR, asset_kind: "waypoint_record_list", purpose: "Waypoint Record List", semantic_gateway: "engine.assets.maps", handler_service: "asset.codec.listfile.ywr", selector_syntax: "file.ywr@entry" },
-    ListFileFormatSpec { extension: "ysc", content_kind: LIST_FILE_CONTENT_KIND_YSC, asset_kind: "compiled_script", purpose: "Compiled Script", semantic_gateway: "engine.scripting", handler_service: "asset.codec.listfile.ysc", selector_syntax: "file.ysc@entry" },
+    ListFileFormatSpec { extension: "ysc", content_kind: LIST_FILE_CONTENT_KIND_YSC, asset_kind: "script_module", purpose: "Opaque Script Module Dictionary", semantic_gateway: "engine.scripting", handler_service: "asset.codec.listfile.ysc", selector_syntax: "file.ysc@entry" },
     ListFileFormatSpec { extension: "ybd", content_kind: LIST_FILE_CONTENT_KIND_YBD, asset_kind: "bounds_dictionary", purpose: "Bounds Dictionary", semantic_gateway: "engine.assets.models.collisions", handler_service: "asset.codec.listfile.ybd", selector_syntax: "file.ybd@entry" },
     ListFileFormatSpec { extension: "ytf", content_kind: LIST_FILE_CONTENT_KIND_YTF, asset_kind: "unknown_y_file", purpose: "Rare / not fully documented Y-file", semantic_gateway: "engine.assets.definitions", handler_service: "asset.codec.listfile.ytf", selector_syntax: "file.ytf@entry" },
 ];

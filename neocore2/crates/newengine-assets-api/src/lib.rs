@@ -61,8 +61,8 @@ pub const ASSETS_UI_RUNTIME_CONTRACT: &str = "newengine.assets.ui.runtime.v1";
 /// Runtime scene gateway. It consumes resolved map/definition DTOs and mutates the world; it does not own authored map file semantics.
 pub const ENGINE_SCENE_SERVICE_ID: &str = "engine.scene";
 
-/// Runtime scripting gateway. `.ysc` compiled script entries are interpreted through
-/// this domain; AssetManager still owns VFS bytes and ListFile codec dispatch.
+/// Runtime scripting gateway. `.ysc` script module entries are opaque to core and
+/// are routed through this domain; AssetManager still owns VFS bytes and ListFile codec dispatch.
 pub const ENGINE_SCRIPTING_SERVICE_ID: &str = "engine.scripting";
 
 /// Semantic asset graph gateway id. This resolver owns declarative dependency
@@ -378,7 +378,7 @@ pub fn semantic_gateway_for_file_type(extension: &str, asset_kind: &str, codec_t
         "drawable_dictionary" | "drawable" | "frag_type" | "vehicle_record_list" | "cloth_dictionary" | "newengine.asset.drawable_dictionary" => ENGINE_ASSETS_MODELS_SERVICE_ID.to_owned(),
         "material_library" | "newengine.asset.material_library" => ENGINE_ASSETS_MATERIALS_SERVICE_ID.to_owned(),
         "archetype_dictionary" | "metadata" | "unknown_y_file" | "newengine.asset.archetype_dictionary" => ENGINE_ASSETS_DEFINITIONS_SERVICE_ID.to_owned(),
-        "compiled_script" | "newengine.asset.compiled_script" => ENGINE_SCRIPTING_SERVICE_ID.to_owned(),
+        "script_module" | "newengine.asset.script_module" | "compiled_script" | "newengine.asset.compiled_script" => ENGINE_SCRIPTING_SERVICE_ID.to_owned(),
         "map_data" | "map_definition" | "waypoint_record_list" | "newengine.asset.map_definition" => ENGINE_ASSETS_MAPS_SERVICE_ID.to_owned(),
         "ui_dictionary" | "newengine.asset.ui_dictionary" => ENGINE_ASSETS_UI_SERVICE_ID.to_owned(),
         "bounds_dictionary" => "engine.assets.models.collisions".to_owned(),
@@ -411,7 +411,7 @@ pub fn consumer_domains_for_file_type(extension: &str, asset_kind: &str, codec_t
                 "drawable_dictionary" | "drawable" | "frag_type" | "vehicle_record_list" | "newengine.asset.drawable_dictionary" => &[ENGINE_ASSETS_MODELS_SERVICE_ID, ENGINE_ASSETS_MATERIALS_SERVICE_ID, "engine.render"],
                 "material_library" | "newengine.asset.material_library" => &[ENGINE_ASSETS_MATERIALS_SERVICE_ID, ENGINE_ASSETS_MODELS_SERVICE_ID, "engine.render"],
                 "archetype_dictionary" | "metadata" | "unknown_y_file" | "newengine.asset.archetype_dictionary" => &[ENGINE_ASSETS_DEFINITIONS_SERVICE_ID, ENGINE_ASSETS_GRAPH_SERVICE_ID, "engine.scene", ENGINE_ASSETS_MODELS_SERVICE_ID, ENGINE_ASSETS_MATERIALS_SERVICE_ID, "engine.physics", "engine.ai", "engine.editor", "engine.streaming"],
-                "compiled_script" | "newengine.asset.compiled_script" => &[ENGINE_SCRIPTING_SERVICE_ID, ENGINE_SCENE_SERVICE_ID, ENGINE_ASSETS_DEFINITIONS_SERVICE_ID, ENGINE_ASSETS_GRAPH_SERVICE_ID, "engine.ui", "engine.ai", "engine.editor", "engine.streaming"],
+                "script_module" | "newengine.asset.script_module" | "compiled_script" | "newengine.asset.compiled_script" => &[ENGINE_SCRIPTING_SERVICE_ID, ENGINE_SCENE_SERVICE_ID, ENGINE_ASSETS_DEFINITIONS_SERVICE_ID, ENGINE_ASSETS_GRAPH_SERVICE_ID, "engine.ui", "engine.ai", "engine.editor", "engine.streaming"],
                 "map_data" | "map_definition" | "waypoint_record_list" | "newengine.asset.map_definition" => &[ENGINE_ASSETS_MAPS_SERVICE_ID, ENGINE_SCENE_SERVICE_ID, ENGINE_ASSETS_DEFINITIONS_SERVICE_ID, ENGINE_ASSETS_GRAPH_SERVICE_ID, ENGINE_ASSETS_MODELS_SERVICE_ID, ENGINE_ASSETS_MATERIALS_SERVICE_ID, ENGINE_ASSETS_TEXTURES_SERVICE_ID, "engine.physics", "engine.streaming", "engine.editor"],
                 "ui_dictionary" | "newengine.asset.ui_dictionary" => &[ENGINE_ASSETS_UI_SERVICE_ID, ENGINE_ASSETS_GRAPH_SERVICE_ID, "engine.ui", "engine.ui.text", ENGINE_ASSETS_TEXTURES_SERVICE_ID, "engine.render", "engine.editor"],
                 "bounds_dictionary" => &["engine.assets.models.collisions", "engine.physics", ENGINE_ASSETS_MODELS_SERVICE_ID, "engine.scene"],
@@ -1244,7 +1244,7 @@ mod file_type_layer_contract_tests {
         assert!(descriptors.iter().any(|it| it.extension == "ytd" && it.semantic_gateway == ENGINE_ASSETS_TEXTURES_SERVICE_ID));
         assert!(descriptors.iter().any(|it| it.extension == "ymap" && it.semantic_gateway == ENGINE_ASSETS_MAPS_SERVICE_ID));
         assert!(descriptors.iter().any(|it| it.extension == "neui" && it.semantic_gateway == ENGINE_ASSETS_UI_SERVICE_ID));
-        assert!(descriptors.iter().any(|it| it.extension == "ysc" && it.asset_kind == "compiled_script"));
+        assert!(descriptors.iter().any(|it| it.extension == "ysc" && it.asset_kind == "script_module"));
         assert!(descriptors.iter().any(|it| it.extension == "ypdb" && it.selector_syntax.as_deref() == Some("file.ypdb@entry")));
         assert_eq!(descriptors.len(), LIST_FILE_FORMAT_SPECS.len());
         for descriptor in descriptors {

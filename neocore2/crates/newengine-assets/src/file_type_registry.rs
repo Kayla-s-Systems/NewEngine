@@ -257,7 +257,7 @@ mod tests {
         let manifest = state.manifest();
         assert!(manifest.formats.iter().any(|it| it.extension == "ymap" && it.semantic_gateway == newengine_assets_api::ENGINE_ASSETS_MAPS_SERVICE_ID));
         assert!(manifest.formats.iter().any(|it| it.extension == "ycd" && it.semantic_gateway == "engine.assets.models.skeletons"));
-        assert!(manifest.formats.iter().any(|it| it.extension == "ysc" && it.asset_kind == "compiled_script" && it.semantic_gateway == newengine_assets_api::ENGINE_SCRIPTING_SERVICE_ID));
+        assert!(manifest.formats.iter().any(|it| it.extension == "ysc" && it.asset_kind == "script_module" && it.semantic_gateway == newengine_assets_api::ENGINE_SCRIPTING_SERVICE_ID));
     }
 
     #[test]
