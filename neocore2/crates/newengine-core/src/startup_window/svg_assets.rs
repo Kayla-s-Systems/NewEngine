@@ -1,4 +1,5 @@
 #![forbid(unsafe_op_in_unsafe_fn)]
+#![allow(dead_code)]
 
 //! SVG asset registry for the PreStart UI.
 //!

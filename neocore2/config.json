@@ -176,7 +176,7 @@
             "height": 900,
             "width": 1600
           },
-          "vsync": true,
+          "vsync": false,
           "window_mode": "borderless"
         },
         "graphics_backend": {

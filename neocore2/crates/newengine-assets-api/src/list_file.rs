@@ -376,8 +376,6 @@ impl Default for ListFileHeaderMetadata {
 }
 
 #[inline]
-
-#[inline]
 pub const fn list_file_content_kind_label(kind: u32) -> &'static str {
     if kind == LIST_FILE_CONTENT_KIND_UNKNOWN {
         "unknown"

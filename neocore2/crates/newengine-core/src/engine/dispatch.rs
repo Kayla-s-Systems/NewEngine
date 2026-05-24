@@ -6,6 +6,7 @@ use super::{Engine, ModuleFaultTolerance};
 use crate::error::{EngineError, EngineResult, ModuleStage};
 use crate::lifecycle_events::EngineLifecycleEvent;
 use crate::module::ModuleCtx;
+use newengine_loading_api::EngineTaskControlEvent;
 
 use std::any::Any;
 use std::panic::{self, AssertUnwindSafe};
@@ -34,6 +35,16 @@ impl<E: Send + 'static> Engine<E> {
             );
             self.mark_readiness_observed(lifecycle_event);
             self.start_modules_ready_by_graph(lifecycle_event.readiness_key().as_str())?;
+        }
+
+        if let Some(task_control) = (&event as &dyn Any).downcast_ref::<EngineTaskControlEvent>() {
+            let applied = self.job_system.handle().apply_control_event(task_control);
+            log::info!(
+                "dispatch: task control action='{}' task_id='{}' applied={}",
+                task_control.action.as_str(),
+                task_control.task_id.as_str(),
+                applied
+            );
         }
 
         self.dispatch_to_running_modules(&event)

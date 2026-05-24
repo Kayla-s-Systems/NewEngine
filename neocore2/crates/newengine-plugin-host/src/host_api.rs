@@ -238,7 +238,6 @@ pub extern "C" fn call_service_v1(
                 id, method, e
             ));
         }
-        _ => {}
     }
 
     res

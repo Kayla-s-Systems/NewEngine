@@ -38,6 +38,13 @@ pub struct EventHub {
     inner: Arc<Inner>,
 }
 
+impl Clone for EventHub {
+    #[inline]
+    fn clone(&self) -> Self {
+        Self { inner: Arc::clone(&self.inner) }
+    }
+}
+
 impl Default for EventHub {
     #[inline]
     fn default() -> Self {

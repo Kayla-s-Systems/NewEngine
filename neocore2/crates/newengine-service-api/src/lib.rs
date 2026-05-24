@@ -135,6 +135,22 @@ pub fn engine_gateway_depth(gateway_id: &str) -> Option<usize> {
     Some(normalize_engine_gateway_id(gateway_id)?.split('.').count())
 }
 
+/// Returns the normalized service-kind text implied by an `engine.*` gateway.
+///
+/// This is the data-driven path used by the gateway registry. It deliberately
+/// does not consult `EngineServiceKind`, so new plugin/provider domains can be
+/// introduced by descriptor metadata without editing a central enum.
+#[inline]
+pub fn service_kind_from_engine_gateway_id(gateway_id: &str) -> Option<String> {
+    engine_gateway_domain(gateway_id).and_then(|domain| normalize_service_kind(&domain))
+}
+
+#[inline]
+pub fn engine_gateway_matches_service_kind(gateway_id: &str, service_kind: &str) -> bool {
+    service_kind_from_engine_gateway_id(gateway_id).as_deref()
+        == normalize_service_kind(service_kind).as_deref()
+}
+
 /// Common declaration for a backend service family.
 ///
 /// This intentionally does not describe domain packets. Render, physics, input,
@@ -319,6 +335,7 @@ pub enum EngineServiceKind {
     UiDebug,
     Logging,
     Loading,
+    Jobs,
     Platform,
     Ecs,
     Entity,
@@ -337,6 +354,13 @@ impl Serialize for EngineServiceKind {
         S: Serializer,
     {
         serializer.serialize_str(self.as_str())
+    }
+}
+
+impl AsRef<str> for EngineServiceKind {
+    #[inline]
+    fn as_ref(&self) -> &str {
+        self.as_str()
     }
 }
 
@@ -382,6 +406,7 @@ impl EngineServiceKind {
             Self::UiDebug => "ui.debug",
             Self::Logging => "logging",
             Self::Loading => "loading",
+            Self::Jobs => "jobs",
             Self::Platform => "platform",
             Self::Ecs => "ecs",
             Self::Entity => "entity",
@@ -435,6 +460,7 @@ impl EngineServiceKind {
             "ui.debug" | "ui_debug" => Some(Self::UiDebug),
             "logging" => Some(Self::Logging),
             "loading" => Some(Self::Loading),
+            "jobs" => Some(Self::Jobs),
             "platform" => Some(Self::Platform),
             "ecs" => Some(Self::Ecs),
             "entity" => Some(Self::Entity),
@@ -523,6 +549,7 @@ impl EngineServiceKind {
             Self::UiDebug => "engine.ui.debug",
             Self::Logging => "engine.logging",
             Self::Loading => "engine.loading",
+            Self::Jobs => "engine.jobs",
             Self::Platform => "engine.platform",
             Self::Ecs => "engine.ecs",
             Self::Entity => "engine.entity",
@@ -689,6 +716,7 @@ mod tests {
             ("assets.definitions", EngineServiceKind::Definitions, "engine.assets.definitions", Some(EngineServiceKind::Assets)),
             ("assets.graph", EngineServiceKind::AssetGraph, "engine.assets.graph", Some(EngineServiceKind::Assets)),
             ("time", EngineServiceKind::Time, "engine.time", None),
+            ("jobs", EngineServiceKind::Jobs, "engine.jobs", None),
             ("scripting", EngineServiceKind::Scripting, "engine.scripting", None),
             ("input.bindings", EngineServiceKind::InputBindings, "engine.input.bindings", Some(EngineServiceKind::Input)),
             ("input.actions", EngineServiceKind::InputActions, "engine.input.actions", Some(EngineServiceKind::Input)),
@@ -726,6 +754,16 @@ mod tests {
         assert!(!EngineServiceKind::Camera.matches_engine_gateway_id("engine.camera.modes"));
         assert!(!EngineServiceKind::Ui.matches_engine_gateway_id("engine.ui.text"));
         assert!(!EngineServiceKind::Assets.matches_engine_gateway_id("engine.assets.ui"));
+    }
+
+    #[test]
+    fn engine_gateway_service_kind_is_dynamic_not_enum_bound() {
+        assert_eq!(
+            service_kind_from_engine_gateway_id("engine.assets.zzx").as_deref(),
+            Some("assets.zzx")
+        );
+        assert!(engine_gateway_matches_service_kind("engine.render.draw_lists", "render.draw_lists"));
+        assert!(EngineServiceKind::parse_engine_gateway_id("engine.assets.zzx").is_none());
     }
 
     #[test]

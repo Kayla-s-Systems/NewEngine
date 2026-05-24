@@ -32,7 +32,31 @@ fn parse_plugin_draw_list_provider(
             );
         }
     }
-    let service_id = parsed.service_id.filter(|it| !it.trim().is_empty());
+    if let Some(service_id) = parsed.service_id.as_deref().map(str::trim).filter(|it| !it.is_empty()) {
+        log::warn!(
+            "render draw-list provider registry: plugin='{}' provider='{}' uses deprecated service_id='{}'; runtime will route through engine.render.draw_lists only",
+            plugin_id,
+            id,
+            service_id
+        );
+    }
+    let gateway_id = parsed
+        .engine_gateway
+        .filter(|it| !it.trim().is_empty())
+        .unwrap_or_else(|| newengine_core::render::ENGINE_RENDER_DRAW_LISTS_SERVICE_ID.to_owned());
+    if !newengine_service_api::engine_gateway_matches_service_kind(
+        &gateway_id,
+        newengine_core::render::RENDER_DRAW_LIST_PROVIDER_SERVICE_KIND,
+    ) {
+        log::warn!(
+            "render draw-list provider registry: plugin='{}' provider='{}' declares gateway='{}' but expected service_kind='{}'",
+            plugin_id,
+            id,
+            gateway_id,
+            newengine_core::render::RENDER_DRAW_LIST_PROVIDER_SERVICE_KIND
+        );
+        return None;
+    }
     let method = parsed
         .method
         .filter(|it| !it.trim().is_empty())
@@ -45,7 +69,7 @@ fn parse_plugin_draw_list_provider(
         tags,
         capabilities,
         draw_lists,
-        service_id,
+        gateway_id,
         method,
     })
 }

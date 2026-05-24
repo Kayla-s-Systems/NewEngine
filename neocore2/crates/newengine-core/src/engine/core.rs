@@ -165,7 +165,8 @@ impl<E: Send + 'static> Engine<E> {
         let mut resources = Resources::default();
         resources.insert(PluginControlQueue::default());
 
-        let job_system = JobSystem::new(config.job_system);
+        let events = EventHub::new();
+        let job_system = JobSystem::new_with_event_hub(config.job_system, events.clone());
         resources.insert(job_system.handle());
 
         init_host_context();
@@ -185,7 +186,7 @@ impl<E: Send + 'static> Engine<E> {
 
             resources,
             bus,
-            events: EventHub::new(),
+            events,
             scheduler: Scheduler::new(),
             job_system,
             startup_graph: StartupReadinessGraph::default(),

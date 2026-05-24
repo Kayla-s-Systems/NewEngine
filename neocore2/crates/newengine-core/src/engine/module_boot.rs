@@ -642,6 +642,7 @@ impl<E: Send + 'static> Engine<E> {
 
     fn publish_startup_snapshot(&mut self, snapshot: EngineStartupSnapshot) {
         self.resources.insert(snapshot.clone());
+        let _ = self.events.publish(snapshot.clone());
         self.startup_snapshot = snapshot;
     }
 

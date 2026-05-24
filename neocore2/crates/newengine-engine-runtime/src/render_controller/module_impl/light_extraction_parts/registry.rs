@@ -1,4 +1,3 @@
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 
 use newengine_core::render::{
@@ -7,11 +6,8 @@ use newengine_core::render::{
     RenderViewSnapshot, RenderTargetId, ShadowSettingsSnapshot, TextureId,
 };
 use newengine_core::EngineResult;
-use newengine_plugin_api::{
-    Blob, CapabilityId, CapabilityKind, CapabilityRole, MethodName,
-    CAPABILITY_ID_RENDER_LIGHT_EXTRACTION_PROVIDER,
-};
-use newengine_plugin_host::{call_service_v1, has_service, PluginsSnapshot};
+use newengine_plugin_api::{CapabilityKind, CapabilityRole, CAPABILITY_ID_RENDER_LIGHT_EXTRACTION_PROVIDER};
+use newengine_plugin_host::{has_service, PluginsSnapshot};
 use newengine_lighting::ShadowMethod;
 use newengine_math::Mat4;
 use newengine_render_feature_api::{
@@ -22,8 +18,6 @@ use serde::Deserialize;
 
 pub(super) const LIGHT_PROVIDER_TAG_PLUGIN: &str = "plugin";
 
-static WARNED_PLUGIN_LIGHT_PROVIDER_BRIDGE: AtomicBool = AtomicBool::new(false);
-
 #[derive(Clone, Debug)]
 pub(crate) struct ExternalLightExtractionProviderDesc {
     pub(super) id: String,
@@ -32,7 +26,7 @@ pub(crate) struct ExternalLightExtractionProviderDesc {
     pub(super) tags: Vec<String>,
     pub(super) capabilities: Vec<String>,
     pub(super) light_kinds: Vec<String>,
-    pub(super) service_id: Option<String>,
+    pub(super) gateway_id: String,
     pub(super) method: String,
 }
 
@@ -44,6 +38,10 @@ struct PluginLightProviderJson {
     tags: Option<Vec<String>>,
     capabilities: Option<Vec<String>>,
     light_kinds: Option<Vec<String>>,
+    /// Engine gateway used for this provider route. Runtime never calls a
+    /// provider-owned service id directly.
+    engine_gateway: Option<String>,
+    /// Deprecated input accepted only to emit migration diagnostics.
     service_id: Option<String>,
     method: Option<String>,
 }
@@ -97,14 +95,14 @@ impl LightExtractionProviderRegistry {
             return;
         }
 
-        if provider.service_id.as_deref().is_none()
-            && !WARNED_PLUGIN_LIGHT_PROVIDER_BRIDGE.swap(true, Ordering::Relaxed)
-        {
+        if !newengine_service_api::is_engine_service_gateway_id(&provider.gateway_id) {
             log::warn!(
-                "render light extraction registry: plugin provider id='{}' plugin='{}' has no service_id; registered as descriptor-only",
+                "render light extraction registry: plugin provider id='{}' plugin='{}' declares invalid gateway='{}'; ignored",
                 provider.id,
-                provider.plugin_id
+                provider.plugin_id,
+                provider.gateway_id
             );
+            return;
         }
 
         self.external_providers.push(provider);
@@ -118,6 +116,7 @@ impl LightExtractionProviderRegistry {
                 }
                 if capability.kind != CapabilityKind::SceneContributionV1
                     && capability.kind != CapabilityKind::ServiceV1
+                    && capability.kind != CapabilityKind::Other
                 {
                     continue;
                 }
@@ -168,32 +167,29 @@ impl LightExtractionProviderRegistry {
         })?;
 
         for provider in &self.external_providers {
-            let Some(service_id) = provider.service_id.as_deref() else {
-                continue;
-            };
-            if !has_service(service_id) {
+            let gateway_id = provider.gateway_id.as_str();
+            if !has_service(gateway_id) {
                 log::warn!(
-                    "render light extraction registry: executable provider id='{}' plugin='{}' service='{}' is not registered yet",
+                    "render light extraction registry: provider id='{}' plugin='{}' gateway='{}' has no active registered route",
                     provider.id,
                     provider.plugin_id,
-                    service_id
+                    gateway_id
                 );
                 continue;
             }
 
-            let result = call_service_v1(
-                CapabilityId::from(service_id),
-                MethodName::from(provider.method.as_str()),
-                Blob::from(payload.clone()),
-            );
-            let bytes = match result.into_result() {
+            let bytes = match newengine_core::host_services::call_service_v1(
+                gateway_id,
+                provider.method.as_str(),
+                &payload,
+            ) {
                 Ok(bytes) => bytes,
                 Err(err) => {
                     log::warn!(
-                        "render light extraction registry: provider id='{}' plugin='{}' service='{}' call failed: {}",
+                        "render light extraction registry: provider id='{}' plugin='{}' gateway='{}' call failed: {}",
                         provider.id,
                         provider.plugin_id,
-                        service_id,
+                        gateway_id,
                         err
                     );
                     continue;

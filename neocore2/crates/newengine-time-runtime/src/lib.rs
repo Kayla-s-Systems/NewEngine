@@ -14,7 +14,7 @@ use newengine_time_api::{
     time_method, TimeAiClockV1, TimeAiContextV1, TimeBeginFrameRequestV1, TimeCancelEventRequestV1,
     TimeDueEventsV1, TimeFixedStepRequestV1, TimeGameClockSetRequestV1, TimePauseRequestV1,
     TimeRealClockV1, TimeReplayClockSetRequestV1, TimeReplayClockV1, TimeScaleRequestV1,
-    TimeScheduledEventV1, TimeServiceInfoV1, TimeSimulationClockV1, TimeSnapshotV1,
+    TimeScheduledEventV1, TimeServiceInfoV1, TimeSimulationClockV1, TimeSnapshotV1, TimeTimelineV1,
     ENGINE_TIME_SERVICE_ID, TIME_BACKEND_CAPABILITY_ID, TIME_RUNTIME_CONTRACT,
     TIME_SERVICE_ID, TIME_SERVICE_METHODS,
 };
@@ -127,6 +127,19 @@ impl EngineOwnedTimeState {
             time_of_day_phase: self.time_of_day_phase(),
             normalized_day: self.normalized_day(),
             deterministic_key: self.ai_deterministic_key(),
+        }
+    }
+
+    fn timeline(&self) -> TimeTimelineV1 {
+        TimeTimelineV1 {
+            frame_index: self.frame_index,
+            fixed_tick: self.tick,
+            game_day_index: self.day_index,
+            game_seconds_of_day: self.seconds_of_day,
+            replay_frame: self.replay_frame,
+            paused: self.paused,
+            scale: self.scale,
+            ..Default::default()
         }
     }
 
@@ -308,7 +321,7 @@ fn service() -> newengine_plugin_api::ServiceV1Dyn<'static> {
         TIME_SERVICE_METHODS.iter().copied(),
     )
     .protocol(TIME_RUNTIME_CONTRACT)
-    .features(["frame-clock", "fixed-timestep", "game-clock", "scheduler-clock", "ai-context-clock", "deterministic-replay-clock"])
+    .features(["frame-clock", "fixed-timestep", "game-clock", "pause-domain", "timeline", "scheduler-clock", "ai-context-clock", "deterministic-replay-clock"])
     .gateway("engine-owned engine.time baseline provider")
     .notes("Owns runtime clock state. Domains and AI providers consume TimeSnapshotV1/TimeAiContextV1 instead of calling Instant::now().");
 
@@ -316,8 +329,17 @@ fn service() -> newengine_plugin_api::ServiceV1Dyn<'static> {
         .describe_json(&description)
         .info(info)
         .get_json(time_method::SNAPSHOT_V1, |state| state.snapshot())
+        .get_json(time_method::FRAME_V1, |state| state.snapshot())
         .post_json::<TimeBeginFrameRequestV1, TimeSnapshotV1, _>(time_method::BEGIN_FRAME_V1, |state, request| state.begin_frame(request))
         .get_json(time_method::ADVANCE_FIXED_V1, |state| state.advance_fixed())
+        .get_json(time_method::FIXED_TICK_V1, |state| state.advance_fixed())
+        .get_json(time_method::GAME_CLOCK_V1, |state| state.snapshot().game)
+        .post_json::<TimePauseRequestV1, TimeSnapshotV1, _>(time_method::PAUSE_DOMAIN_V1, |state, request| {
+            state.paused = request.paused;
+            state.snapshot()
+        })
+        .get_json(time_method::TIMELINE_V1, |state| state.timeline())
+        .get_json(time_method::REPLAY_CLOCK_V1, |state| state.snapshot().replay)
         .post_json::<TimeScaleRequestV1, TimeSnapshotV1, _>(time_method::SET_SCALE_V1, |state, request| {
             state.scale = request.scale.clamp(0.0, 64.0);
             state.snapshot()

@@ -1,6 +1,11 @@
 #![forbid(unsafe_op_in_unsafe_fn)]
 
-use newengine_math::collections_prelude::NeVecDeque as VecDeque;
+use crate::events::EventHub;
+use newengine_loading_api::{
+    EngineTaskControlAction, EngineTaskControlEvent, EngineTaskEvent, EngineTaskPhase,
+    ENGINE_TASK_EVENT_TOPIC_V1,
+};
+use newengine_math::collections_prelude::{NeHashMap as HashMap, NeVecDeque as VecDeque};
 use parking_lot::Mutex;
 use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
@@ -8,7 +13,7 @@ use std::sync::{Arc, Condvar, Mutex as StdMutex};
 use std::thread::{self, JoinHandle};
 use std::time::Duration;
 
-type JobFn = Box<dyn FnOnce() + Send + 'static>;
+type JobFn = Box<dyn FnOnce(JobControl) + Send + 'static>;
 
 pub const JOB_LANE_COUNT: usize = 6;
 pub const JOB_PRIORITY_COUNT: usize = 4;
@@ -134,6 +139,16 @@ impl JobPriority {
             Self::Background,
         ]
     }
+
+    #[inline]
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Background => "background",
+            Self::Normal => "normal",
+            Self::Interactive => "interactive",
+            Self::Critical => "critical",
+        }
+    }
 }
 
 /// Engine-standard task envelope used by systems that submit CPU work.
@@ -142,6 +157,10 @@ pub struct JobRequest {
     pub label: &'static str,
     pub lane: JobLane,
     pub priority: JobPriority,
+    pub task_id: Option<String>,
+    pub parent_task_id: Option<String>,
+    pub can_pause: bool,
+    pub can_cancel: bool,
 }
 
 impl JobRequest {
@@ -151,6 +170,10 @@ impl JobRequest {
             label,
             lane: JobLane::Simulation,
             priority: JobPriority::Normal,
+            task_id: None,
+            parent_task_id: None,
+            can_pause: false,
+            can_cancel: true,
         }
     }
 
@@ -165,6 +188,30 @@ impl JobRequest {
         self.priority = priority;
         self
     }
+
+    #[inline]
+    pub fn with_task_id(mut self, task_id: impl Into<String>) -> Self {
+        self.task_id = Some(task_id.into());
+        self
+    }
+
+    #[inline]
+    pub fn with_parent_task_id(mut self, parent_task_id: impl Into<String>) -> Self {
+        self.parent_task_id = Some(parent_task_id.into());
+        self
+    }
+
+    #[inline]
+    pub const fn pausable(mut self, can_pause: bool) -> Self {
+        self.can_pause = can_pause;
+        self
+    }
+
+    #[inline]
+    pub const fn cancellable(mut self, can_cancel: bool) -> Self {
+        self.can_cancel = can_cancel;
+        self
+    }
 }
 
 /// Lightweight job-system snapshot for profiling and UI provider read-models.
@@ -172,8 +219,11 @@ impl JobRequest {
 pub struct JobSystemSnapshot {
     pub worker_threads: usize,
     pub pending_jobs: usize,
+    pub running_jobs: usize,
+    pub paused_jobs: usize,
     pub submitted_jobs: u64,
     pub completed_jobs: u64,
+    pub cancelled_jobs: u64,
     pub panicked_jobs: u64,
     pub pending_by_lane: [usize; JOB_LANE_COUNT],
     pub completed_by_lane: [u64; JOB_LANE_COUNT],
@@ -191,15 +241,236 @@ impl JobSystemSnapshot {
     }
 }
 
+#[derive(Clone, Debug)]
+pub struct JobTaskStatus {
+    pub task_id: String,
+    pub label: &'static str,
+    pub lane: JobLane,
+    pub priority: JobPriority,
+    pub phase: EngineTaskPhase,
+    pub can_pause: bool,
+    pub can_cancel: bool,
+    pub cancel_requested: bool,
+    pub pause_requested: bool,
+}
+
+/// Cooperative task control token.
+///
+/// Long-running jobs should periodically call `checkpoint()` or
+/// `wait_while_paused()` to honor engine-bus pause/cancel requests. Short jobs
+/// are still tracked and cancellable before they begin execution.
+#[derive(Clone)]
+pub struct JobControl {
+    inner: Arc<JobControlInner>,
+}
+
+struct JobControlInner {
+    task_id: String,
+    parent_task_id: Option<String>,
+    label: &'static str,
+    lane: JobLane,
+    priority: JobPriority,
+    can_pause: bool,
+    can_cancel: bool,
+    cancel_requested: AtomicBool,
+    pause_requested: AtomicBool,
+    phase: Mutex<EngineTaskPhase>,
+    events: Option<EventHub>,
+    pause_lock: StdMutex<()>,
+    pause_wake: Condvar,
+}
+
+impl JobControl {
+    fn new(task_id: String, request: &JobRequest, events: Option<EventHub>) -> Self {
+        Self {
+            inner: Arc::new(JobControlInner {
+                task_id,
+                parent_task_id: request.parent_task_id.clone(),
+                label: request.label,
+                lane: request.lane,
+                priority: request.priority,
+                can_pause: request.can_pause,
+                can_cancel: request.can_cancel,
+                cancel_requested: AtomicBool::new(false),
+                pause_requested: AtomicBool::new(false),
+                phase: Mutex::new(EngineTaskPhase::Scheduled),
+                events,
+                pause_lock: StdMutex::new(()),
+                pause_wake: Condvar::new(),
+            }),
+        }
+    }
+
+    #[inline]
+    pub fn task_id(&self) -> &str {
+        self.inner.task_id.as_str()
+    }
+
+    #[inline]
+    pub fn is_cancel_requested(&self) -> bool {
+        self.inner.cancel_requested.load(Ordering::Acquire)
+    }
+
+    #[inline]
+    pub fn is_pause_requested(&self) -> bool {
+        self.inner.pause_requested.load(Ordering::Acquire)
+    }
+
+    #[inline]
+    pub fn status(&self) -> JobTaskStatus {
+        JobTaskStatus {
+            task_id: self.inner.task_id.clone(),
+            label: self.inner.label,
+            lane: self.inner.lane,
+            priority: self.inner.priority,
+            phase: *self.inner.phase.lock(),
+            can_pause: self.inner.can_pause,
+            can_cancel: self.inner.can_cancel,
+            cancel_requested: self.is_cancel_requested(),
+            pause_requested: self.is_pause_requested(),
+        }
+    }
+
+    pub fn request_cancel(&self) -> bool {
+        if !self.inner.can_cancel {
+            return false;
+        }
+        self.inner.cancel_requested.store(true, Ordering::Release);
+        self.publish(EngineTaskPhase::CancelRequested, "Cancel requested", "Task cancellation was requested through engine task control.", None);
+        self.inner.pause_wake.notify_all();
+        true
+    }
+
+    pub fn request_pause(&self) -> bool {
+        if !self.inner.can_pause {
+            return false;
+        }
+        self.inner.pause_requested.store(true, Ordering::Release);
+        self.publish(EngineTaskPhase::PauseRequested, "Pause requested", "Task pause was requested through engine task control.", None);
+        true
+    }
+
+    pub fn resume(&self) -> bool {
+        if !self.inner.can_pause {
+            return false;
+        }
+        self.inner.pause_requested.store(false, Ordering::Release);
+        self.publish(EngineTaskPhase::ResumeRequested, "Resume requested", "Task resume was requested through engine task control.", None);
+        self.inner.pause_wake.notify_all();
+        true
+    }
+
+    /// Waits while pause is requested and returns `false` when cancellation wins.
+    pub fn wait_while_paused(&self) -> bool {
+        if !self.inner.can_pause {
+            return !self.is_cancel_requested();
+        }
+
+        if !self.is_pause_requested() {
+            return !self.is_cancel_requested();
+        }
+
+        self.publish(EngineTaskPhase::Paused, "Task paused", "Task is paused at a cooperative checkpoint.", None);
+        let mut guard = self.inner.pause_lock.lock().unwrap_or_else(|e| e.into_inner());
+        while self.is_pause_requested() && !self.is_cancel_requested() {
+            guard = self.inner.pause_wake.wait(guard).unwrap_or_else(|e| e.into_inner());
+        }
+        !self.is_cancel_requested()
+    }
+
+    #[inline]
+    pub fn checkpoint(&self) -> bool {
+        if self.is_cancel_requested() {
+            return false;
+        }
+        self.wait_while_paused()
+    }
+
+    pub fn publish_progress(
+        &self,
+        progress_01: f32,
+        status: impl Into<String>,
+        detail: impl Into<String>,
+    ) {
+        self.publish(EngineTaskPhase::Running, status, detail, Some(progress_01));
+    }
+
+    fn publish(
+        &self,
+        phase: EngineTaskPhase,
+        status: impl Into<String>,
+        detail: impl Into<String>,
+        progress_01: Option<f32>,
+    ) {
+        {
+            let mut current = self.inner.phase.lock();
+            *current = phase;
+        }
+
+        let mut event = EngineTaskEvent::new(
+            self.inner.task_id.clone(),
+            "newengine-core.job-system",
+            "newengine-core",
+            "cpu-job",
+            self.inner.label,
+            self.inner.lane.as_str(),
+            phase,
+            status.into(),
+            detail.into(),
+        )
+        .with_controls(self.inner.can_pause, self.inner.can_cancel);
+
+        if let Some(parent) = self.inner.parent_task_id.as_ref() {
+            event = event.with_parent_task_id(parent.clone());
+        }
+        if let Some(progress) = progress_01 {
+            event = event.with_progress(progress);
+        }
+
+        publish_task_event(self.inner.events.as_ref(), event);
+    }
+}
+
 /// Wait handle for a submitted CPU job.
 pub struct JobTicket {
     completion: Arc<JobCompletion>,
+    control: JobControl,
 }
 
 impl JobTicket {
     #[inline]
     pub fn is_complete(&self) -> bool {
         self.completion.is_complete()
+    }
+
+    #[inline]
+    pub fn task_id(&self) -> &str {
+        self.control.task_id()
+    }
+
+    #[inline]
+    pub fn control(&self) -> JobControl {
+        self.control.clone()
+    }
+
+    #[inline]
+    pub fn status(&self) -> JobTaskStatus {
+        self.control.status()
+    }
+
+    #[inline]
+    pub fn cancel(&self) -> bool {
+        self.control.request_cancel()
+    }
+
+    #[inline]
+    pub fn pause(&self) -> bool {
+        self.control.request_pause()
+    }
+
+    #[inline]
+    pub fn resume(&self) -> bool {
+        self.control.resume()
     }
 
     #[inline]
@@ -250,6 +521,7 @@ struct QueuedJob {
     request: JobRequest,
     job: Option<JobFn>,
     completion: Arc<JobCompletion>,
+    control: JobControl,
 }
 
 impl QueuedJob {
@@ -259,24 +531,50 @@ impl QueuedJob {
             self.completion.complete();
             shared.completed.fetch_add(1, Ordering::AcqRel);
             shared.completed_by_lane[lane_index].fetch_add(1, Ordering::AcqRel);
+            self.control.publish(EngineTaskPhase::Completed, "Task completed", "Task completed without a job closure.", Some(1.0));
             return;
         };
 
+        if self.control.is_cancel_requested() {
+            shared.cancelled.fetch_add(1, Ordering::AcqRel);
+            self.completion.complete();
+            self.control.publish(EngineTaskPhase::Cancelled, "Task cancelled", "Task was cancelled before worker execution.", Some(1.0));
+            return;
+        }
+
+        shared.running.fetch_add(1, Ordering::AcqRel);
+        self.control.publish(EngineTaskPhase::Running, "Task running", "Worker picked up the task from the engine queue.", None);
+        if !self.control.wait_while_paused() {
+            shared.running.fetch_sub(1, Ordering::AcqRel);
+            shared.cancelled.fetch_add(1, Ordering::AcqRel);
+            self.completion.complete();
+            self.control.publish(EngineTaskPhase::Cancelled, "Task cancelled", "Task was cancelled while paused before execution.", Some(1.0));
+            return;
+        }
+
+        let control = self.control.clone();
         let result = catch_unwind(AssertUnwindSafe(move || {
-            job();
+            job(control);
         }));
+        shared.running.fetch_sub(1, Ordering::AcqRel);
         self.completion.complete();
         shared.completed.fetch_add(1, Ordering::AcqRel);
         shared.completed_by_lane[lane_index].fetch_add(1, Ordering::AcqRel);
 
         if result.is_err() {
             shared.panicked.fetch_add(1, Ordering::AcqRel);
+            self.control.publish(EngineTaskPhase::Failed, "Task failed", "Worker job panicked; worker recovered and continues.", Some(1.0));
             log::error!(
                 "job-system: worker job panicked label='{}' lane='{}' priority={:?}; worker recovered and continues",
                 self.request.label,
                 self.request.lane.as_str(),
                 self.request.priority
             );
+        } else if self.control.is_cancel_requested() {
+            shared.cancelled.fetch_add(1, Ordering::AcqRel);
+            self.control.publish(EngineTaskPhase::Cancelled, "Task cancelled", "Task completed after observing cancellation.", Some(1.0));
+        } else {
+            self.control.publish(EngineTaskPhase::Completed, "Task completed", "Task finished on engine-owned worker thread.", Some(1.0));
         }
     }
 }
@@ -287,16 +585,22 @@ struct JobShared {
     completed_by_lane: Vec<AtomicU64>,
     worker_threads: usize,
     pending: AtomicUsize,
+    running: AtomicUsize,
+    paused: AtomicUsize,
     submitted: AtomicU64,
     completed: AtomicU64,
+    cancelled: AtomicU64,
     panicked: AtomicU64,
+    next_task_id: AtomicU64,
     shutdown: AtomicBool,
+    events: Option<EventHub>,
+    tasks: Mutex<HashMap<String, JobControl>>,
     sleep_lock: StdMutex<()>,
     sleep_wake: Condvar,
 }
 
 impl JobShared {
-    fn new(worker_threads: usize) -> Self {
+    fn new(worker_threads: usize, events: Option<EventHub>) -> Self {
         let worker_threads = worker_threads.max(1);
         let queue_count = JOB_LANE_COUNT * JOB_PRIORITY_COUNT;
         Self {
@@ -307,10 +611,16 @@ impl JobShared {
             completed_by_lane: (0..JOB_LANE_COUNT).map(|_| AtomicU64::new(0)).collect(),
             worker_threads,
             pending: AtomicUsize::new(0),
+            running: AtomicUsize::new(0),
+            paused: AtomicUsize::new(0),
             submitted: AtomicU64::new(0),
             completed: AtomicU64::new(0),
+            cancelled: AtomicU64::new(0),
             panicked: AtomicU64::new(0),
+            next_task_id: AtomicU64::new(1),
             shutdown: AtomicBool::new(false),
+            events,
+            tasks: Mutex::new(HashMap::default()),
             sleep_lock: StdMutex::new(()),
             sleep_wake: Condvar::new(),
         }
@@ -322,12 +632,18 @@ impl JobShared {
     }
 
     #[inline]
+    fn next_task_id(&self) -> String {
+        format!("engine.job.{}", self.next_task_id.fetch_add(1, Ordering::Relaxed))
+    }
+
+    #[inline]
     fn queue_index(lane: JobLane, priority: JobPriority) -> usize {
         priority.index() * JOB_LANE_COUNT + lane.index()
     }
 
     fn submit(&self, job: QueuedJob) {
         if self.shutdown.load(Ordering::Acquire) {
+            job.control.publish(EngineTaskPhase::Cancelled, "Task rejected", "Job system is shutting down; task was not queued.", Some(1.0));
             job.completion.complete();
             return;
         }
@@ -338,6 +654,7 @@ impl JobShared {
         self.submitted.fetch_add(1, Ordering::AcqRel);
         self.pending.fetch_add(1, Ordering::Release);
         self.pending_by_lane[lane_index].fetch_add(1, Ordering::Release);
+        job.control.publish(EngineTaskPhase::Scheduled, "Task scheduled", "Task was registered in the engine job queue.", Some(0.0));
         self.queues[queue_index].lock().push_back(job);
         self.sleep_wake.notify_one();
     }
@@ -371,7 +688,6 @@ impl JobShared {
     fn snapshot(&self) -> JobSystemSnapshot {
         let mut pending_by_lane = [0usize; JOB_LANE_COUNT];
         let mut completed_by_lane = [0u64; JOB_LANE_COUNT];
-
         for lane in JobLane::all() {
             pending_by_lane[lane.index()] = self.pending_by_lane[lane.index()].load(Ordering::Acquire);
             completed_by_lane[lane.index()] = self.completed_by_lane[lane.index()].load(Ordering::Acquire);
@@ -380,8 +696,11 @@ impl JobShared {
         JobSystemSnapshot {
             worker_threads: self.worker_count(),
             pending_jobs: self.pending.load(Ordering::Acquire),
+            running_jobs: self.running.load(Ordering::Acquire),
+            paused_jobs: self.paused.load(Ordering::Acquire),
             submitted_jobs: self.submitted.load(Ordering::Acquire),
             completed_jobs: self.completed.load(Ordering::Acquire),
+            cancelled_jobs: self.cancelled.load(Ordering::Acquire),
             panicked_jobs: self.panicked.load(Ordering::Acquire),
             pending_by_lane,
             completed_by_lane,
@@ -422,14 +741,26 @@ impl JobSystemHandle {
     where
         F: FnOnce() + Send + 'static,
     {
+        self.submit_controlled(request, move |_control| f())
+    }
+
+    pub fn submit_controlled<F>(&self, request: JobRequest, f: F) -> JobTicket
+    where
+        F: FnOnce(JobControl) + Send + 'static,
+    {
         let completion = Arc::new(JobCompletion::new());
+        let task_id = request.task_id.clone().unwrap_or_else(|| self.shared.next_task_id());
+        let control = JobControl::new(task_id, &request, self.shared.events.clone());
         let ticket = JobTicket {
             completion: Arc::clone(&completion),
+            control: control.clone(),
         };
+        self.shared.tasks.lock().insert(control.task_id().to_owned(), control.clone());
         self.shared.submit(QueuedJob {
             request,
             job: Some(Box::new(f)),
             completion,
+            control,
         });
         ticket
     }
@@ -461,7 +792,11 @@ impl JobSystemHandle {
         for index in 0..len {
             let f = Arc::clone(&f);
             let results = Arc::clone(&results);
-            tickets.push(self.submit_request(request.clone(), move || {
+            let request = request.clone().with_task_id(format!("indexed.{}.{}", request.label, index));
+            tickets.push(self.submit_controlled(request, move |control| {
+                if !control.checkpoint() {
+                    return;
+                }
                 let value = f(index);
                 results.lock()[index] = Some(value);
             }));
@@ -497,6 +832,45 @@ impl JobSystemHandle {
     pub fn snapshot(&self) -> JobSystemSnapshot {
         self.shared.snapshot()
     }
+
+    pub fn task_status(&self, task_id: &str) -> Option<JobTaskStatus> {
+        self.shared.tasks.lock().get(task_id).map(JobControl::status)
+    }
+
+    pub fn cancel_task(&self, task_id: &str) -> bool {
+        self.shared
+            .tasks
+            .lock()
+            .get(task_id)
+            .map(JobControl::request_cancel)
+            .unwrap_or(false)
+    }
+
+    pub fn pause_task(&self, task_id: &str) -> bool {
+        self.shared
+            .tasks
+            .lock()
+            .get(task_id)
+            .map(JobControl::request_pause)
+            .unwrap_or(false)
+    }
+
+    pub fn resume_task(&self, task_id: &str) -> bool {
+        self.shared
+            .tasks
+            .lock()
+            .get(task_id)
+            .map(JobControl::resume)
+            .unwrap_or(false)
+    }
+
+    pub fn apply_control_event(&self, event: &EngineTaskControlEvent) -> bool {
+        match event.action {
+            EngineTaskControlAction::Pause => self.pause_task(event.task_id.as_str()),
+            EngineTaskControlAction::Resume => self.resume_task(event.task_id.as_str()),
+            EngineTaskControlAction::Cancel => self.cancel_task(event.task_id.as_str()),
+        }
+    }
 }
 
 /// Persistent CPU job system with stable lanes and priority-aware queues.
@@ -511,8 +885,16 @@ pub struct JobSystem {
 
 impl JobSystem {
     pub fn new(config: JobSystemConfig) -> Self {
+        Self::new_with_events(config, None)
+    }
+
+    pub fn new_with_event_hub(config: JobSystemConfig, events: EventHub) -> Self {
+        Self::new_with_events(config, Some(events))
+    }
+
+    fn new_with_events(config: JobSystemConfig, events: Option<EventHub>) -> Self {
         let worker_threads = config.worker_threads.max(1);
-        let shared = Arc::new(JobShared::new(worker_threads));
+        let shared = Arc::new(JobShared::new(worker_threads, events));
         let handle = JobSystemHandle {
             shared: Arc::clone(&shared),
         };
@@ -561,6 +943,31 @@ impl JobSystem {
         self.handle.snapshot()
     }
 
+    #[inline]
+    pub fn task_status(&self, task_id: &str) -> Option<JobTaskStatus> {
+        self.handle.task_status(task_id)
+    }
+
+    #[inline]
+    pub fn cancel_task(&self, task_id: &str) -> bool {
+        self.handle.cancel_task(task_id)
+    }
+
+    #[inline]
+    pub fn pause_task(&self, task_id: &str) -> bool {
+        self.handle.pause_task(task_id)
+    }
+
+    #[inline]
+    pub fn resume_task(&self, task_id: &str) -> bool {
+        self.handle.resume_task(task_id)
+    }
+
+    #[inline]
+    pub fn apply_control_event(&self, event: &EngineTaskControlEvent) -> bool {
+        self.handle.apply_control_event(event)
+    }
+
     /// Requests cooperative stop and joins all engine-owned worker threads.
     ///
     /// This must run before plugin DLL/service teardown so queued jobs cannot execute
@@ -600,6 +1007,13 @@ impl JobSystem {
         F: FnOnce() + Send + 'static,
     {
         self.handle.submit_request(request, f)
+    }
+
+    pub fn submit_controlled<F>(&self, request: JobRequest, f: F) -> JobTicket
+    where
+        F: FnOnce(JobControl) + Send + 'static,
+    {
+        self.handle.submit_controlled(request, f)
     }
 
     #[inline]
@@ -647,5 +1061,14 @@ fn worker_loop(shared: Arc<JobShared>) {
         }
 
         shared.wait_for_work_or_shutdown();
+    }
+}
+
+fn publish_task_event(events: Option<&EventHub>, event: EngineTaskEvent) {
+    if let Some(events) = events {
+        let _ = events.publish(event.clone());
+    }
+    if let Ok(bytes) = serde_json::to_vec(&event) {
+        let _ = newengine_plugin_host::emit_plugin_event(ENGINE_TASK_EVENT_TOPIC_V1, &bytes);
     }
 }

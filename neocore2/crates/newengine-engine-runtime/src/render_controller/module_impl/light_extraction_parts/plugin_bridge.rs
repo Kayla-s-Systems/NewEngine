@@ -103,7 +103,31 @@ fn parse_plugin_light_provider(
     push_unique_string(&mut tags, LIGHT_PROVIDER_TAG_PLUGIN);
     let mut capabilities = parsed.capabilities.unwrap_or_default();
     push_unique_string(&mut capabilities, LIGHT_PROVIDER_CAP_EXTRACTION);
-    let service_id = parsed.service_id.filter(|it| !it.trim().is_empty());
+    if let Some(service_id) = parsed.service_id.as_deref().map(str::trim).filter(|it| !it.is_empty()) {
+        log::warn!(
+            "render light extraction registry: plugin='{}' provider='{}' uses deprecated service_id='{}'; runtime will route through engine.render.light_extraction only",
+            plugin_id,
+            id,
+            service_id
+        );
+    }
+    let gateway_id = parsed
+        .engine_gateway
+        .filter(|it| !it.trim().is_empty())
+        .unwrap_or_else(|| newengine_core::render::ENGINE_RENDER_LIGHT_EXTRACTION_SERVICE_ID.to_owned());
+    if !newengine_service_api::engine_gateway_matches_service_kind(
+        &gateway_id,
+        newengine_core::render::RENDER_LIGHT_EXTRACTION_PROVIDER_SERVICE_KIND,
+    ) {
+        log::warn!(
+            "render light extraction registry: plugin='{}' provider='{}' declares gateway='{}' but expected service_kind='{}'",
+            plugin_id,
+            id,
+            gateway_id,
+            newengine_core::render::RENDER_LIGHT_EXTRACTION_PROVIDER_SERVICE_KIND
+        );
+        return None;
+    }
     let method = parsed
         .method
         .filter(|it| !it.trim().is_empty())
@@ -116,7 +140,7 @@ fn parse_plugin_light_provider(
         tags,
         capabilities,
         light_kinds: parsed.light_kinds.unwrap_or_default(),
-        service_id,
+        gateway_id,
         method,
     })
 }

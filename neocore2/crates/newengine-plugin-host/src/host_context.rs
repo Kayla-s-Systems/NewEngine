@@ -63,7 +63,7 @@ pub struct EngineGatewayRouteSnapshot {
 #[derive(Clone, Debug)]
 struct EngineOwnedGatewayEntry {
     gateway_id: String,
-    service_kind: newengine_service_api::EngineServiceKind,
+    service_kind: String,
     provider_service_id: String,
     provider_owner_id: String,
     backend_capability_id: String,
@@ -286,13 +286,17 @@ fn build_gateway_registry_snapshot() -> crate::service_gateway::ActiveGatewayReg
         gateways
             .values()
             .map(|entry| {
-                crate::service_gateway::EngineOwnedGatewayFact::new(
+                crate::service_gateway::EngineOwnedGatewayFact::new_dynamic(
                     entry.gateway_id.clone(),
-                    entry.service_kind,
+                    entry.service_kind.clone(),
                     entry.provider_service_id.clone(),
                     entry.provider_owner_id.clone(),
                     entry.backend_capability_id.clone(),
                     entry.backend_priority,
+                    [
+                        newengine_service_api::system_tag::ENGINE_DOMAIN,
+                        newengine_service_api::system_tag::PROVIDER_BACKEND,
+                    ],
                 )
             })
             .collect::<Vec<_>>()
@@ -415,16 +419,29 @@ pub fn active_engine_gateway_route(gateway_id: &str) -> Option<EngineGatewayRout
         })
 }
 
-pub fn register_engine_owned_gateway(
+pub fn register_engine_owned_gateway<S>(
     gateway_id: &str,
-    service_kind: newengine_service_api::EngineServiceKind,
+    service_kind: S,
     provider_service_id: &str,
     backend_capability_id: &str,
     backend_priority: i32,
     provider_owner_id: &str,
-) -> Result<(), String> {
+) -> Result<(), String>
+where
+    S: AsRef<str>,
+{
     if !newengine_service_api::is_engine_service_gateway_id(gateway_id) {
         return Err(format!("engine-owned gateway id must start with 'engine.': {gateway_id}"));
+    }
+    let raw_service_kind = service_kind.as_ref();
+    let Some(service_kind) = newengine_service_api::normalize_service_kind(raw_service_kind) else {
+        return Err(format!("engine-owned gateway service_kind is invalid: '{}'", raw_service_kind));
+    };
+    if !newengine_service_api::engine_gateway_matches_service_kind(gateway_id, &service_kind) {
+        return Err(format!(
+            "engine-owned gateway service_kind/domain mismatch: gateway='{gateway_id}' service_kind='{service_kind}' expected='{}'",
+            newengine_service_api::service_kind_from_engine_gateway_id(gateway_id).unwrap_or_else(|| "<invalid>".to_owned())
+        ));
     }
     if provider_service_id.trim().is_empty() {
         return Err("engine-owned gateway provider_service_id is empty".to_owned());
@@ -467,7 +484,7 @@ pub fn register_engine_owned_gateway(
         key,
         EngineOwnedGatewayEntry {
             gateway_id: gateway_id.to_owned(),
-            service_kind,
+            service_kind: service_kind.clone(),
             provider_service_id: provider_service_id.to_owned(),
             provider_owner_id: if provider_owner_id.trim().is_empty() {
                 "engine".to_owned()
@@ -484,7 +501,7 @@ pub fn register_engine_owned_gateway(
         "gateways: registered engine-owned route gateway='{}' service='{}' kind='{}' capability='{}' priority={} owner='{}'",
         gateway_id,
         provider_service_id,
-        service_kind.as_str(),
+        service_kind,
         backend_capability_id,
         backend_priority,
         provider_owner_id

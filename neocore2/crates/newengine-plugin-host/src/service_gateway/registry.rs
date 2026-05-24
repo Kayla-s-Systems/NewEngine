@@ -3,7 +3,9 @@
 use std::path::Path;
 
 use newengine_plugin_api::PluginDescriptor;
-use newengine_service_api::{engine_gateway_domain, system_tag, EngineServiceKind};
+use newengine_service_api::{engine_gateway_domain, system_tag};
+#[cfg(test)]
+use newengine_service_api::EngineServiceKind;
 
 use super::metadata::descriptor_gateway_capabilities;
 use super::provider::gateway_provider_service_id;
@@ -51,6 +53,7 @@ pub(crate) struct EngineOwnedGatewayFact {
 }
 
 impl EngineOwnedGatewayFact {
+    #[cfg(test)]
     #[inline]
     pub(crate) fn new(
         gateway_id: String,
@@ -289,7 +292,7 @@ impl ActiveGatewayRoute {
         route_tags: Vec<String>,
         policy: Option<&GatewayPolicyFact>,
     ) -> Option<Self> {
-        if engine_gateway_domain(&gateway_id).as_deref() != Some(service_kind.as_str()) {
+        if !newengine_service_api::engine_gateway_matches_service_kind(&gateway_id, &service_kind) {
             log::warn!(
                 "gateways: ignoring route with mixed domain levels gateway='{}' service_kind='{}' gateway_domain='{}' service='{}' owner='{}'",
                 gateway_id,
@@ -669,6 +672,26 @@ mod tests {
         assert_eq!(entity_route.origin, GatewayProviderOrigin::FirstPartyPlugin);
         assert_eq!(ecs_route.active_score, 20_500);
         assert_eq!(entity_route.active_score, 20_500);
+    }
+
+    #[test]
+    fn dynamic_engine_owned_gateway_does_not_require_central_service_kind_enum() {
+        let services = vec![service("render.draw_lists.api", None)];
+        let engine_owned = vec![EngineOwnedGatewayFact::new_dynamic(
+            "engine.render.draw_lists".to_owned(),
+            "render.draw_lists".to_owned(),
+            "render.draw_lists.api".to_owned(),
+            "newengine-render-runtime.draw-lists".to_owned(),
+            "render.draw_list_provider".to_owned(),
+            0,
+            [system_tag::ENGINE_DOMAIN, system_tag::PROVIDER_BACKEND],
+        )];
+
+        let registry = ActiveGatewayRegistry::from_facts(&[], &services, &engine_owned);
+        let route = registry.resolve_route("engine.render.draw_lists").expect("dynamic draw-list route");
+
+        assert_eq!(route.service_kind, "render.draw_lists");
+        assert_eq!(route.provider_service_id, "render.draw_lists.api");
     }
 
     #[test]

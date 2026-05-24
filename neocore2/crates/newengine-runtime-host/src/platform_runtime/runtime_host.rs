@@ -47,6 +47,7 @@ use crate::platform_runtime::snapshot_service::{
 use crate::platform_runtime::loading_gateway::{
     publish_platform_step_result, register_loading_gateway_service_best_effort,
 };
+use crate::platform_runtime::jobs_gateway::register_jobs_gateway_service_best_effort;
 use crate::platform_runtime::shutdown_watchdog::ShutdownWatchdog;
 use crate::platform_runtime::types::ResolvedPlatformRuntimeConfig;
 use crate::render_runtime::ResolvedRenderBackendConfig;
@@ -251,6 +252,8 @@ impl HostPlatformRuntime {
         );
 
         self.surface = ready.surface;
+        newengine_time_runtime::register_time_gateway_best_effort();
+        register_jobs_gateway_service_best_effort(self.engine.job_system(), self.engine.events().clone());
         register_loading_gateway_service_best_effort();
         register_platform_window_service_best_effort(ready);
         let (display, window) = native_to_raw_handles(ready.handles)?;

@@ -69,8 +69,8 @@ pub use sched::{
 pub use sync::ShutdownToken;
 
 pub use jobs::{
-    JobLane, JobPriority, JobRequest, JobSystem, JobSystemConfig, JobSystemHandle,
-    JobSystemSnapshot, JobTicket, JOB_LANE_COUNT, JOB_PRIORITY_COUNT,
+    JobControl, JobLane, JobPriority, JobRequest, JobSystem, JobSystemConfig, JobSystemHandle,
+    JobSystemSnapshot, JobTaskStatus, JobTicket, JOB_LANE_COUNT, JOB_PRIORITY_COUNT,
 };
 
 pub use run_id::{init_run_id, run_id};

@@ -7,7 +7,8 @@ pub mod provider_metadata;
 
 pub use engine_owned_gateway::{
     register_engine_owned_gateway_service, register_engine_owned_gateway_service_best_effort,
-    EngineOwnedGatewayDecl,
+    register_engine_owned_gateway_service_dynamic, register_engine_owned_gateway_service_dynamic_best_effort,
+    EngineOwnedGatewayDecl, EngineOwnedGatewayDeclDynamic,
 };
 pub use json_service::{decode_json_payload, empty_payload_json, ok_empty_blob, ok_json, payload_json};
 pub use method_router::JsonServiceRouter;

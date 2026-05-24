@@ -135,9 +135,9 @@ impl FileTypeRegistryState {
 
 
 fn warn_if_semantic_gateway_unresolved(desc: &AssetFileTypeDescriptor) {
-    if newengine_service_api::EngineServiceKind::parse_engine_gateway_id(&desc.semantic_gateway).is_none() {
+    if !newengine_service_api::is_engine_service_gateway_id(&desc.semantic_gateway) {
         log::warn!(
-            "asset file type registry: unknown semantic_gateway='{}' extension='.{}' asset_kind='{}'; descriptor will remain visible but startup diagnostics should treat this as unresolved",
+            "asset file type registry: invalid semantic_gateway='{}' extension='.{}' asset_kind='{}'; descriptors must target an engine.* gateway",
             desc.semantic_gateway,
             desc.extension,
             desc.asset_kind
@@ -274,12 +274,16 @@ mod tests {
     }
 
     #[test]
-    fn registry_accepts_provider_declared_format_without_known_extension_branch() {
+    fn registry_accepts_provider_declared_format_without_known_extension_or_gateway_branch() {
         let registered = register_one(explicit_descriptor("zzx", 0, "engine.assets.zzx"));
         assert_eq!(registered.extension, "zzx");
         assert_eq!(registered.semantic_gateway, "engine.assets.zzx");
         assert_eq!(registered.gateway, "engine.assets.zzx");
         assert_eq!(registered.content_kind, Some(1000));
+        assert_eq!(
+            newengine_service_api::service_kind_from_engine_gateway_id("engine.assets.zzx").as_deref(),
+            Some("assets.zzx")
+        );
     }
 
     #[test]

@@ -1,0 +1,190 @@
+#![forbid(unsafe_op_in_unsafe_fn)]
+
+use abi_stable::std_types::{RResult, RString};
+use newengine_core::{JobSystemHandle, JobTaskStatus};
+use newengine_jobs_api::{
+    jobs_method, JobControlResponseV1, JobIdRequestV1, JobProgressEventV1, JobStartRequestV1,
+    JobsServiceInfoV1, JobsSnapshotJsonV1, JobStatusJsonV1, JobTraceJsonV1,
+    ENGINE_JOBS_SERVICE_ID, JOBS_BACKEND_CAPABILITY_ID, JOBS_RUNTIME_CONTRACT, JOBS_SERVICE_ID,
+    JOBS_SERVICE_METHODS, EngineTaskControlAction, EngineTaskEvent, EngineTaskPhase,
+};
+use newengine_plugin_api::Blob;
+use newengine_plugin_host::host_context::publish_event;
+use newengine_service_kit::{
+    engine_owned_service_description, ok_empty_blob, ok_json, payload_json,
+    register_engine_owned_gateway_service_dynamic_best_effort, EngineOwnedGatewayDeclDynamic,
+    JsonServiceRouter,
+};
+
+const OWNER: &str = "newengine-runtime-host.jobs-gateway";
+
+#[derive(Clone)]
+struct JobsGatewayState {
+    jobs: JobSystemHandle,
+    events: newengine_core::EventHub,
+}
+
+fn status_from_core(status: JobTaskStatus) -> JobStatusJsonV1 {
+    JobStatusJsonV1 {
+        job_id: status.task_id,
+        name: status.label.to_owned(),
+        lane: status.lane.as_str().to_owned(),
+        priority: status.priority.as_str().to_owned(),
+        phase: status.phase,
+        can_pause: status.can_pause,
+        can_cancel: status.can_cancel,
+        cancel_requested: status.cancel_requested,
+        pause_requested: status.pause_requested,
+        found: true,
+    }
+}
+
+fn missing_status(job_id: impl Into<String>) -> JobStatusJsonV1 {
+    JobStatusJsonV1 { job_id: job_id.into(), found: false, ..Default::default() }
+}
+
+fn publish_task_event(events: &newengine_core::EventHub, event: EngineTaskEvent) {
+    if let Ok(payload) = serde_json::to_vec(&event) {
+        publish_event(newengine_jobs_api::ENGINE_TASK_EVENT_TOPIC_V1, &payload);
+    }
+    let _ = events.publish(event);
+}
+
+fn invoke(state: &mut JobsGatewayState, payload: Blob) -> RResult<Blob, RString> {
+    let value = match payload_json(&payload) {
+        Ok(value) => value,
+        Err(e) => return RResult::RErr(RString::from(e)),
+    };
+    let method = value
+        .get("method")
+        .and_then(|v| v.as_str())
+        .unwrap_or(jobs_method::SNAPSHOT_JSON_V1);
+    match method {
+        jobs_method::SNAPSHOT_JSON_V1 => ok_json(snapshot(state)),
+        other => RResult::RErr(RString::from(format!("engine.jobs: unknown invoke method '{other}'"))),
+    }
+}
+
+fn snapshot(state: &mut JobsGatewayState) -> JobsSnapshotJsonV1 {
+    let snapshot = state.jobs.snapshot();
+    JobsSnapshotJsonV1 {
+        worker_threads: snapshot.worker_threads,
+        pending_jobs: snapshot.pending_jobs,
+        running_jobs: snapshot.running_jobs,
+        paused_jobs: snapshot.paused_jobs,
+        submitted_jobs: snapshot.submitted_jobs,
+        completed_jobs: snapshot.completed_jobs,
+        cancelled_jobs: snapshot.cancelled_jobs,
+        panicked_jobs: snapshot.panicked_jobs,
+    }
+}
+
+fn service(state: JobsGatewayState) -> newengine_plugin_api::ServiceV1Dyn<'static> {
+    let description = engine_owned_service_description(
+        JOBS_SERVICE_ID,
+        OWNER,
+        JOBS_BACKEND_CAPABILITY_ID,
+        JOBS_SERVICE_METHODS.iter().copied(),
+    )
+    .protocol(JOBS_RUNTIME_CONTRACT)
+    .features([
+        "job-lifecycle-events",
+        "cooperative-cancel",
+        "cooperative-pause-resume",
+        "job-status-read-model",
+        "event-bus-progress",
+    ])
+    .gateway("engine.jobs")
+    .notes("Runtime job/task gateway. Every long-running engine operation should have a JobId and publish progress through engine.task.event.v1.");
+
+    JsonServiceRouter::with_state(JOBS_SERVICE_ID, state)
+        .describe_json(&description)
+        .info(JobsServiceInfoV1::default)
+        .get_json(jobs_method::SNAPSHOT_JSON_V1, snapshot)
+        .post_json::<JobIdRequestV1, JobStatusJsonV1, _>(jobs_method::STATUS_JSON_V1, |state, request| {
+            state.jobs.task_status(request.job_id.trim())
+                .map(status_from_core)
+                .unwrap_or_else(|| missing_status(request.job_id))
+        })
+        .post_json::<JobIdRequestV1, JobControlResponseV1, _>(jobs_method::CANCEL_V1, |state, request| {
+            let accepted = state.jobs.cancel_task(request.job_id.trim());
+            let event = request.control_event(EngineTaskControlAction::Cancel);
+            let _ = state.events.publish(event.clone());
+            if let Ok(payload) = serde_json::to_vec(&event) {
+                publish_event(newengine_jobs_api::ENGINE_TASK_CONTROL_TOPIC_V1, &payload);
+            }
+            JobControlResponseV1 { job_id: request.job_id, action: "cancel".to_owned(), accepted }
+        })
+        .post_json::<JobIdRequestV1, JobControlResponseV1, _>(jobs_method::PAUSE_V1, |state, request| {
+            let accepted = state.jobs.pause_task(request.job_id.trim());
+            let event = request.control_event(EngineTaskControlAction::Pause);
+            let _ = state.events.publish(event.clone());
+            if let Ok(payload) = serde_json::to_vec(&event) {
+                publish_event(newengine_jobs_api::ENGINE_TASK_CONTROL_TOPIC_V1, &payload);
+            }
+            JobControlResponseV1 { job_id: request.job_id, action: "pause".to_owned(), accepted }
+        })
+        .post_json::<JobIdRequestV1, JobControlResponseV1, _>(jobs_method::RESUME_V1, |state, request| {
+            let accepted = state.jobs.resume_task(request.job_id.trim());
+            let event = request.control_event(EngineTaskControlAction::Resume);
+            let _ = state.events.publish(event.clone());
+            if let Ok(payload) = serde_json::to_vec(&event) {
+                let _ = publish_event(newengine_jobs_api::ENGINE_TASK_CONTROL_TOPIC_V1, &payload);
+            }
+            JobControlResponseV1 { job_id: request.job_id, action: "resume".to_owned(), accepted }
+        })
+        .post_json::<JobProgressEventV1, EngineTaskEvent, _>(jobs_method::PROGRESS_EVENT_V1, |state, event| {
+            let event = event.into_task_event();
+            publish_task_event(&state.events, event.clone());
+            event
+        })
+        .post_json::<JobStartRequestV1, EngineTaskEvent, _>(jobs_method::START_V1, |state, request| {
+            let mut event = EngineTaskEvent::new(
+                request.job_id,
+                "engine.jobs",
+                request.owner,
+                request.category,
+                request.name,
+                request.lane,
+                EngineTaskPhase::Scheduled,
+                "Job scheduled",
+                "External/runtime job announced through engine.jobs.",
+            ).with_controls(request.can_pause, request.can_cancel).with_progress(0.0);
+            if event.task_id.trim().is_empty() {
+                event.task_id = format!("external.job.{}", state.jobs.snapshot().submitted_jobs.saturating_add(1));
+            }
+            publish_task_event(&state.events, event.clone());
+            event
+        })
+        .post_json::<JobIdRequestV1, JobTraceJsonV1, _>(jobs_method::TRACE_JSON_V1, |state, request| {
+            let status = state.jobs.task_status(request.job_id.trim())
+                .map(status_from_core)
+                .unwrap_or_else(|| missing_status(request.job_id.clone()));
+            JobTraceJsonV1 {
+                job_id: request.job_id,
+                status,
+                note: "Trace history is event-bus owned; subscribe to engine.task.event.v1 for full live trace.".to_owned(),
+            }
+        })
+        .blob(jobs_method::INVOKE_JSON, invoke)
+        .blob(jobs_method::SHUTDOWN_V1, |_state, _payload| ok_empty_blob())
+        .into_service_v1()
+}
+
+pub(crate) fn register_jobs_gateway_service_best_effort(
+    jobs: JobSystemHandle,
+    events: newengine_core::EventHub,
+) -> bool {
+    if newengine_plugin_host::has_service(ENGINE_JOBS_SERVICE_ID) || newengine_plugin_host::has_service(JOBS_SERVICE_ID) {
+        return true;
+    }
+    register_engine_owned_gateway_service_dynamic_best_effort(EngineOwnedGatewayDeclDynamic {
+        gateway: ENGINE_JOBS_SERVICE_ID,
+        service_kind: "jobs",
+        provider_service: JOBS_SERVICE_ID,
+        capability: JOBS_BACKEND_CAPABILITY_ID,
+        priority: 0,
+        owner: OWNER,
+        service: service(JobsGatewayState { jobs, events }),
+    })
+}

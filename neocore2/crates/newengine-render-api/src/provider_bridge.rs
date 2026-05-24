@@ -3,6 +3,17 @@
 use crate::{BufferSlice, Extent2D, IndexFormat, RenderDrawListKind, RenderGraphPassKind};
 use serde::{Deserialize, Serialize};
 
+/// Engine-facing gateway for profile/plugin draw-list extraction providers.
+/// Runtime asks this gateway for draw-list data; the active provider is selected
+/// by descriptor/capability metadata, never by a provider service id embedded in
+/// scene/render code.
+pub const ENGINE_RENDER_DRAW_LISTS_SERVICE_ID: &str = "engine.render.draw_lists";
+/// Engine-facing gateway for profile/plugin light extraction providers.
+pub const ENGINE_RENDER_LIGHT_EXTRACTION_SERVICE_ID: &str = "engine.render.light_extraction";
+
+pub const RENDER_DRAW_LIST_PROVIDER_SERVICE_KIND: &str = "render.draw_lists";
+pub const RENDER_LIGHT_EXTRACTION_PROVIDER_SERVICE_KIND: &str = "render.light_extraction";
+
 pub const RENDER_DRAW_LIST_PROVIDER_CAPABILITY: &str = "render.draw_list_provider";
 pub const RENDER_LIGHT_EXTRACTION_PROVIDER_CAPABILITY: &str = "render.light_extraction_provider";
 

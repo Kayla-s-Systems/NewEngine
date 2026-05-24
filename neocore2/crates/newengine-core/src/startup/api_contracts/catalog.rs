@@ -92,6 +92,10 @@ pub(crate) const RUNTIME_SERVICE_CATALOG: &[RuntimeServiceCatalogEntry] = &[
         "native loading shell / startup compositor / progress projection",
     ),
     RuntimeServiceCatalogEntry::new(
+        newengine_jobs_api::JOBS_RUNTIME_REQUIREMENT_SPEC,
+        "runtime job/task lifecycle / pause-resume-cancel / progress event stream",
+    ),
+    RuntimeServiceCatalogEntry::new(
         newengine_scene_io::SCENE_RUNTIME_REQUIREMENT_SPEC,
         "SceneBridge / world streaming / scene asset load-save",
     ),

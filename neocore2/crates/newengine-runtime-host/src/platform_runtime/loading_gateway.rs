@@ -2,12 +2,14 @@ use std::sync::OnceLock;
 
 use abi_stable::std_types::RResult;
 use newengine_loading_api::{
-    LoadingScreenSnapshot, LoadingServiceInfo, ENGINE_LOADING_SERVICE_ID,
+    LoadingScreenSnapshot, LoadingServiceInfo, LoadingStatusEvent, ENGINE_LOADING_SERVICE_ID,
     LOADING_BACKEND_CAPABILITY_ID, LOADING_SERVICE_METHOD_INVOKE,
-    LOADING_SERVICE_METHOD_PUBLISH_JSON_V1, LOADING_SERVICE_METHOD_SNAPSHOT_JSON_V1,
+    LOADING_SERVICE_METHOD_PUBLISH_JSON_V1, LOADING_SERVICE_METHOD_PUBLISH_STATUS_JSON_V1,
+    LOADING_SERVICE_METHOD_SNAPSHOT_JSON_V1,
 };
 use newengine_loading_runtime::{
-    project_loading_snapshot_from_overlay_fields, SharedLoadingSnapshot,
+    project_loading_snapshot_from_overlay_fields, project_loading_snapshot_from_status_event,
+    SharedLoadingSnapshot,
 };
 use newengine_platform_api::{PlatformLoadingOverlayV1, PlatformStepResultV1};
 use newengine_plugin_api::Blob;
@@ -33,7 +35,8 @@ fn loading_gateway_service(state: SharedLoadingSnapshot) -> newengine_plugin_api
 
     let invoke_state = state.clone();
     let snapshot_state = state.clone();
-    let publish_state = state;
+    let publish_state = state.clone();
+    let publish_status_state = state;
 
     JsonServiceRouter::new(ENGINE_LOADING_SERVICE_ID)
         .describe_json(&description)
@@ -50,6 +53,23 @@ fn loading_gateway_service(state: SharedLoadingSnapshot) -> newengine_plugin_api
                 Err(e) => return RResult::RErr(e),
             };
             publish_state.publish(snapshot);
+            ok_json(&serde_json::json!({ "ok": true }))
+        })
+        .blob(LOADING_SERVICE_METHOD_PUBLISH_STATUS_JSON_V1, move |_unit, payload: Blob| {
+            let event = match decode_json_payload::<LoadingStatusEvent>(
+                ENGINE_LOADING_SERVICE_ID,
+                LOADING_SERVICE_METHOD_PUBLISH_STATUS_JSON_V1,
+                &payload,
+            ) {
+                Ok(event) => event,
+                Err(e) => return RResult::RErr(e),
+            };
+            let snapshot = project_loading_snapshot_from_status_event(
+                event,
+                publish_status_state.snapshot().spinner_phase.wrapping_add(1),
+                "engine-owned-native-shell",
+            );
+            publish_status_state.publish(snapshot);
             ok_json(&serde_json::json!({ "ok": true }))
         })
         .shutdown_json(|_| serde_json::json!({ "ok": true }))

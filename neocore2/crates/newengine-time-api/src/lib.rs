@@ -14,6 +14,12 @@ pub mod time_method {
     pub const SNAPSHOT_V1: &str = "time.snapshot_v1";
     pub const BEGIN_FRAME_V1: &str = "time.begin_frame_v1";
     pub const ADVANCE_FIXED_V1: &str = "time.advance_fixed_v1";
+    pub const FRAME_V1: &str = "time.frame_v1";
+    pub const FIXED_TICK_V1: &str = "time.fixed_tick_v1";
+    pub const GAME_CLOCK_V1: &str = "time.game_clock_v1";
+    pub const PAUSE_DOMAIN_V1: &str = "time.pause_domain_v1";
+    pub const TIMELINE_V1: &str = "time.timeline_v1";
+    pub const REPLAY_CLOCK_V1: &str = "time.replay_clock_v1";
     pub const SET_SCALE_V1: &str = "time.set_scale_v1";
     pub const SET_PAUSE_V1: &str = "time.set_pause_v1";
     pub const SET_GAME_CLOCK_V1: &str = "time.set_game_clock_v1";
@@ -33,6 +39,12 @@ pub const TIME_SERVICE_METHODS: &[&str] = &[
     time_method::SNAPSHOT_V1,
     time_method::BEGIN_FRAME_V1,
     time_method::ADVANCE_FIXED_V1,
+    time_method::FRAME_V1,
+    time_method::FIXED_TICK_V1,
+    time_method::GAME_CLOCK_V1,
+    time_method::PAUSE_DOMAIN_V1,
+    time_method::TIMELINE_V1,
+    time_method::REPLAY_CLOCK_V1,
     time_method::SET_SCALE_V1,
     time_method::SET_PAUSE_V1,
     time_method::SET_GAME_CLOCK_V1,
@@ -91,6 +103,35 @@ impl Default for TimeSnapshotV1 {
             game: TimeGameClockV1::default(),
             replay: TimeReplayClockV1::default(),
             ai: TimeAiClockV1::default(),
+        }
+    }
+}
+
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct TimeTimelineV1 {
+    pub schema: String,
+    pub frame_index: u64,
+    pub fixed_tick: u64,
+    pub game_day_index: u64,
+    pub game_seconds_of_day: f64,
+    pub replay_frame: u64,
+    pub paused: bool,
+    pub scale: f64,
+}
+
+impl Default for TimeTimelineV1 {
+    fn default() -> Self {
+        Self {
+            schema: "newengine.time.timeline.v1".to_owned(),
+            frame_index: 0,
+            fixed_tick: 0,
+            game_day_index: 0,
+            game_seconds_of_day: 0.0,
+            replay_frame: 0,
+            paused: false,
+            scale: 1.0,
         }
     }
 }
