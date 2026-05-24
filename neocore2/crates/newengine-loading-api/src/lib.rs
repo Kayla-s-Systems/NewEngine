@@ -217,6 +217,7 @@ pub const ENGINE_TASK_CONTROL_TOPIC_V1: &str = "engine.task.control.v1";
 pub enum EngineTaskPhase {
     Scheduled,
     Running,
+    Blocked,
     PauseRequested,
     Paused,
     ResumeRequested,
@@ -236,7 +237,7 @@ impl EngineTaskPhase {
     pub const fn loading_phase(self) -> LoadingStatusPhase {
         match self {
             Self::Scheduled | Self::PauseRequested | Self::ResumeRequested => LoadingStatusPhase::Waiting,
-            Self::Running | Self::Paused | Self::CancelRequested => LoadingStatusPhase::Running,
+            Self::Running | Self::Blocked | Self::Paused | Self::CancelRequested => LoadingStatusPhase::Running,
             Self::Completed | Self::Cancelled => LoadingStatusPhase::Ready,
             Self::Failed => LoadingStatusPhase::Failed,
         }
@@ -247,6 +248,7 @@ impl EngineTaskPhase {
         match self {
             Self::Scheduled => "QUEUED",
             Self::Running => "RUNNING",
+            Self::Blocked => "BLOCKED",
             Self::PauseRequested => "PAUSE",
             Self::Paused => "PAUSED",
             Self::ResumeRequested => "RESUME",

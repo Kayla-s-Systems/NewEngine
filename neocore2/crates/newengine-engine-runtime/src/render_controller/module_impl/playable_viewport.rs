@@ -73,6 +73,7 @@ impl RuntimeRenderController {
             r,
             physics_api.as_ref(),
             job_system.as_ref(),
+            Some(ctx.events()),
             &mut scene,
             &frame_input.input,
             frame_input.play_mode,

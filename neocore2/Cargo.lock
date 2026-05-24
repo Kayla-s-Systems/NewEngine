@@ -2507,6 +2507,7 @@ dependencies = [
  "newengine-input-api",
  "newengine-input-bindings-api",
  "newengine-input-bindings-runtime",
+ "newengine-jobs-api",
  "newengine-lighting",
  "newengine-material-domain-api",
  "newengine-materials",
@@ -2873,6 +2874,7 @@ dependencies = [
  "abi_stable",
  "libloading 0.9.0",
  "log",
+ "newengine-jobs-api",
  "newengine-loading-api",
  "newengine-math",
  "newengine-plugin-api",
@@ -3089,6 +3091,7 @@ version = "0.1.0"
 dependencies = [
  "newengine-camera",
  "newengine-ecs",
+ "newengine-jobs-api",
  "newengine-math",
  "newengine-transform",
  "newengine-transform-api",

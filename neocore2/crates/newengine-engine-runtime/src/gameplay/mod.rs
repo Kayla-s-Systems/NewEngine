@@ -24,7 +24,10 @@ pub use player::{
     is_player_controller_enabled, remove_physics_body, spawn_default_player,
     spawn_default_player_with_tuning, spawn_player_controller_with_tuning,
 };
-pub use schedule::{default_sim_schedule, run_schedule, run_schedule_with_physics_mode, PhysicsIntegrationMode};
+pub use schedule::{
+    default_sim_schedule, run_schedule, run_schedule_with_physics_mode,
+    run_schedule_with_physics_mode_and_telemetry, PhysicsIntegrationMode,
+};
 pub use snapshot::{
     capture_runtime_world_snapshot, restore_runtime_world_snapshot, RuntimeEntitySnapshot,
     RuntimeWorldSnapshot,

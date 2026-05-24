@@ -36,6 +36,9 @@ jobs:
       - name: Check formatting
         run: cargo fmt --all -- --check
 
+      - name: No hidden runtime executors
+        run: python scripts/no_hidden_thread_scan.py
+
       - name: Clippy lints
         run: cargo clippy --workspace --all-targets --all-features -- -D warnings
 

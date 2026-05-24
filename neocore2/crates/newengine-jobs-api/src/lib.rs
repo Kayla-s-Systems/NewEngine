@@ -12,6 +12,119 @@ pub const JOBS_SERVICE_ID: &str = "jobs.api";
 pub const JOBS_BACKEND_CAPABILITY_ID: &str = "jobs.backend";
 pub const JOBS_RUNTIME_CONTRACT: &str = "newengine.jobs.runtime.v1";
 
+/// Canonical topic for engine.jobs-compatible job lifecycle envelopes.
+///
+/// `ENGINE_TASK_EVENT_TOPIC_V1` remains the UI/loading projection topic. This
+/// topic carries the stricter job-authority envelope for diagnostics, profiler
+/// and CI-visible work streams.
+pub const ENGINE_JOB_EVENT_TOPIC_V1: &str = "engine.jobs.event.v1";
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum JobExecutorKind {
+    EngineWorker,
+    PluginHostBridge,
+    ToolRunner,
+    SimulationInternalParallelism,
+    RuntimeWatchdog,
+    ExternalProvider,
+}
+
+impl JobExecutorKind {
+    #[inline]
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::EngineWorker => "engine-worker",
+            Self::PluginHostBridge => "plugin-host-bridge",
+            Self::ToolRunner => "tool-runner",
+            Self::SimulationInternalParallelism => "simulation-internal-parallelism",
+            Self::RuntimeWatchdog => "runtime-watchdog",
+            Self::ExternalProvider => "external-provider",
+        }
+    }
+}
+
+impl Default for JobExecutorKind {
+    #[inline]
+    fn default() -> Self { Self::EngineWorker }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct JobAuthorityV1 {
+    pub gateway: String,
+    pub provider: String,
+    pub contract: String,
+    pub event_topic: String,
+    pub control_topic: String,
+    pub job_event_topic: String,
+    pub identity_required: bool,
+    pub invisible_work_allowed: bool,
+}
+
+impl Default for JobAuthorityV1 {
+    fn default() -> Self {
+        Self {
+            gateway: ENGINE_JOBS_SERVICE_ID.to_owned(),
+            provider: JOBS_SERVICE_ID.to_owned(),
+            contract: JOBS_RUNTIME_CONTRACT.to_owned(),
+            event_topic: ENGINE_TASK_EVENT_TOPIC_V1.to_owned(),
+            control_topic: ENGINE_TASK_CONTROL_TOPIC_V1.to_owned(),
+            job_event_topic: ENGINE_JOB_EVENT_TOPIC_V1.to_owned(),
+            identity_required: true,
+            invisible_work_allowed: false,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct EngineJobEventV1 {
+    pub schema: String,
+    pub authority: JobAuthorityV1,
+    pub executor: JobExecutorKind,
+    pub semantic_owner: String,
+    pub event: EngineTaskEvent,
+}
+
+impl Default for EngineJobEventV1 {
+    fn default() -> Self {
+        Self {
+            schema: "newengine.jobs.event.v1".to_owned(),
+            authority: JobAuthorityV1::default(),
+            executor: JobExecutorKind::EngineWorker,
+            semantic_owner: "runtime-work".to_owned(),
+            event: EngineTaskEvent::new(
+                "job.unknown",
+                ENGINE_JOBS_SERVICE_ID,
+                ENGINE_JOBS_SERVICE_ID,
+                "runtime",
+                "unknown-job",
+                "runtime",
+                EngineTaskPhase::Scheduled,
+                "Job scheduled",
+                "Job event was created without a concrete producer.",
+            ),
+        }
+    }
+}
+
+impl EngineJobEventV1 {
+    #[inline]
+    pub fn new(event: EngineTaskEvent, executor: JobExecutorKind, semantic_owner: impl Into<String>) -> Self {
+        Self {
+            executor,
+            semantic_owner: semantic_owner.into(),
+            event,
+            ..Default::default()
+        }
+    }
+
+    #[inline]
+    pub fn into_task_event(self) -> EngineTaskEvent {
+        self.event
+    }
+}
+
 pub mod jobs_method {
     pub const INFO_JSON: &str = newengine_service_api::SERVICE_METHOD_INFO_JSON;
     pub const INVOKE_JSON: &str = newengine_service_api::SERVICE_METHOD_INVOKE_JSON;
@@ -72,6 +185,8 @@ pub struct JobsServiceInfoV1 {
     pub methods: Vec<String>,
     pub event_topic: String,
     pub control_topic: String,
+    pub job_event_topic: String,
+    pub authority: JobAuthorityV1,
     pub cooperative_control: bool,
 }
 
@@ -85,6 +200,8 @@ impl Default for JobsServiceInfoV1 {
             methods: JOBS_SERVICE_METHODS.iter().map(|m| (*m).to_owned()).collect(),
             event_topic: ENGINE_TASK_EVENT_TOPIC_V1.to_owned(),
             control_topic: ENGINE_TASK_CONTROL_TOPIC_V1.to_owned(),
+            job_event_topic: ENGINE_JOB_EVENT_TOPIC_V1.to_owned(),
+            authority: JobAuthorityV1::default(),
             cooperative_control: true,
         }
     }

@@ -3,6 +3,9 @@ use super::config::{JobLane, JobPriority};
 #[derive(Clone, Debug)]
 pub struct JobRequest {
     pub label: &'static str,
+    pub source: &'static str,
+    pub owner: &'static str,
+    pub category: &'static str,
     pub lane: JobLane,
     pub priority: JobPriority,
     pub task_id: Option<String>,
@@ -16,6 +19,9 @@ impl JobRequest {
     pub const fn new(label: &'static str) -> Self {
         Self {
             label,
+            source: "newengine-core.job-system",
+            owner: "newengine-core",
+            category: "cpu-job",
             lane: JobLane::Simulation,
             priority: JobPriority::Normal,
             task_id: None,
@@ -34,6 +40,24 @@ impl JobRequest {
     #[inline]
     pub const fn with_priority(mut self, priority: JobPriority) -> Self {
         self.priority = priority;
+        self
+    }
+
+    #[inline]
+    pub const fn with_source(mut self, source: &'static str) -> Self {
+        self.source = source;
+        self
+    }
+
+    #[inline]
+    pub const fn with_owner(mut self, owner: &'static str) -> Self {
+        self.owner = owner;
+        self
+    }
+
+    #[inline]
+    pub const fn with_category(mut self, category: &'static str) -> Self {
+        self.category = category;
         self
     }
 

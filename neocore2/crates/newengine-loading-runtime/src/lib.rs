@@ -232,6 +232,7 @@ pub fn project_loading_snapshot_from_task_event(
     let progress = match event.phase {
         newengine_loading_api::EngineTaskPhase::Scheduled => 0.04,
         newengine_loading_api::EngineTaskPhase::Running
+        | newengine_loading_api::EngineTaskPhase::Blocked
         | newengine_loading_api::EngineTaskPhase::PauseRequested
         | newengine_loading_api::EngineTaskPhase::Paused
         | newengine_loading_api::EngineTaskPhase::ResumeRequested

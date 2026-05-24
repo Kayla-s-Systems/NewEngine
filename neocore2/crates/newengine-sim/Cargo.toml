@@ -14,4 +14,5 @@ newengine-transform-api = { path = "../newengine-transform-api" }
 newengine-transform = { path = "../newengine-transform", features = ["ecs"], default-features = false }
 newengine-camera = { path = "../newengine-camera" }
 newengine-math = { path = "../newengine-math" }
+newengine-jobs-api = { path = "../newengine-jobs-api" }
 rayon = { version = "1.10", optional = true }

@@ -4,7 +4,7 @@ use newengine_scene::Scene;
 
 use crate::engine_bounds::EngineBoundsSnap;
 use crate::scene_bridge::EngineViewInput;
-use crate::gameplay::{run_schedule_with_physics_mode, GameRunMode, PhysicsIntegrationMode};
+use crate::gameplay::{run_schedule_with_physics_mode_and_telemetry, GameRunMode, PhysicsIntegrationMode};
 
 use super::frame_types::WorldFrameState;
 use super::input::ViewportInputSnap;
@@ -19,6 +19,7 @@ impl RuntimeRenderController {
         r: &mut dyn RenderApi,
         physics_api: Option<&PhysicsApiRef>,
         job_system: Option<&newengine_core::JobSystemHandle>,
+        job_events: Option<&newengine_core::EventHub>,
         scene: &mut Scene,
         input: &ViewportInputSnap,
         play_mode: GameRunMode,
@@ -96,12 +97,37 @@ impl RuntimeRenderController {
                     } else {
                         PhysicsIntegrationMode::EcsFallback
                     };
-                    run_schedule_with_physics_mode(
+                    let publish_sim_job = |event: newengine_jobs_api::EngineTaskEvent| {
+                        let job_event = newengine_jobs_api::EngineJobEventV1::new(
+                            event.clone(),
+                            newengine_jobs_api::JobExecutorKind::SimulationInternalParallelism,
+                            "simulation-job-batch",
+                        );
+                        if let Ok(payload) = serde_json::to_vec(&event) {
+                            newengine_plugin_host::host_context::publish_event(
+                                newengine_jobs_api::ENGINE_TASK_EVENT_TOPIC_V1,
+                                &payload,
+                            );
+                        }
+                        if let Ok(payload) = serde_json::to_vec(&job_event) {
+                            newengine_plugin_host::host_context::publish_event(
+                                newengine_jobs_api::ENGINE_JOB_EVENT_TOPIC_V1,
+                                &payload,
+                            );
+                        }
+                        if let Some(events) = job_events {
+                            let _ = events.publish(event);
+                            let _ = events.publish(job_event);
+                        }
+                    };
+                    let sim_telemetry = newengine_sim::SimulationJobTelemetry::new(&publish_sim_job);
+                    run_schedule_with_physics_mode_and_telemetry(
                         &mut self.frame.sim_schedule,
                         world,
                         dt,
                         physics_api,
                         physics_mode,
+                        Some(&sim_telemetry),
                     );
                 } else {
                     log_physics_skip_once();

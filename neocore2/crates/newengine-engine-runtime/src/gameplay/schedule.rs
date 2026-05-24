@@ -1,5 +1,5 @@
 use newengine_ecs::World;
-use newengine_sim::{default_schedule, SimFrame, SimSchedule, SimStage};
+use newengine_sim::{default_schedule, SimFrame, SimSchedule, SimStage, SimulationJobTelemetry};
 
 use super::fps_demo::step_fps_demo_gameplay;
 use super::physics::step_service_physics;
@@ -35,6 +35,17 @@ pub fn run_schedule_with_physics_mode(
     physics_api: Option<&PhysicsApiRef>,
     physics_mode: PhysicsIntegrationMode,
 ) {
+    run_schedule_with_physics_mode_and_telemetry(schedule, world, dt, physics_api, physics_mode, None);
+}
+
+pub fn run_schedule_with_physics_mode_and_telemetry(
+    schedule: &mut SimSchedule,
+    world: &mut World,
+    dt: f32,
+    physics_api: Option<&PhysicsApiRef>,
+    physics_mode: PhysicsIntegrationMode,
+    telemetry: Option<&SimulationJobTelemetry<'_>>,
+) {
     let frame = SimFrame::new(dt.max(0.0001), 0);
 
     if let Some(authority) = current_world_authority_frame(world) {
@@ -50,9 +61,9 @@ pub fn run_schedule_with_physics_mode(
         );
     }
 
-    schedule.run_stage(world, SimStage::Input, frame);
-    schedule.run_stage(world, SimStage::Controllers, frame);
-    schedule.run_stage(world, SimStage::ApplyIntents, frame);
+    schedule.run_stage_with_telemetry(world, SimStage::Input, frame, telemetry);
+    schedule.run_stage_with_telemetry(world, SimStage::Controllers, frame, telemetry);
+    schedule.run_stage_with_telemetry(world, SimStage::ApplyIntents, frame, telemetry);
     match physics_mode {
         PhysicsIntegrationMode::ServiceBackend => {
             // Service-backed physics owns integration for PhysicsBodyDesc entities.
@@ -65,10 +76,10 @@ pub fn run_schedule_with_physics_mode(
             // Declarative safe-profile fallback: keep gameplay controls responsive
             // without entering the native physics provider path. This is a capability
             // downgrade, not a game-specific shortcut.
-            schedule.run_stage(world, SimStage::Physics, frame);
+            schedule.run_stage_with_telemetry(world, SimStage::Physics, frame, telemetry);
         }
     }
-    schedule.run_stage(world, SimStage::Derived, frame);
+    schedule.run_stage_with_telemetry(world, SimStage::Derived, frame, telemetry);
 
     step_fps_demo_gameplay(world, frame.dt);
 }

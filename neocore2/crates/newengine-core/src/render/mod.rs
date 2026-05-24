@@ -5,7 +5,7 @@ use std::sync::Arc;
 
 pub use newengine_render_api::*;
 
-pub const RENDER_API_ID: &str = "render.api";
+pub const RENDER_API_ID: &str = newengine_render_api::RENDER_SERVICE_ID;
 pub const RENDER_API_VERSION: ApiVersion = ApiVersion::new(0, 4, 0);
 pub const RENDER_API_PROVIDE: ApiProvide = ApiProvide::new(RENDER_API_ID, RENDER_API_VERSION);
 

@@ -8,6 +8,9 @@ use crate::{
     ROLE_MATERIAL_LIBRARY, ROLE_TEXTURE_DICTIONARY, TEXTURE_DICTIONARY_ASSET_KIND,
 };
 
+mod routing;
+use routing::classify_ref;
+
 pub const ASSET_GRAPH_SCHEMA: &str = "newengine.assets.graph.resolved.v2";
 pub const ASSET_GRAPH_RESOLVED_SCHEMA_V1: &str = ASSET_GRAPH_SCHEMA;
 pub const ASSET_GRAPH_RESOLVED_SCHEMA_V2: &str = ASSET_GRAPH_SCHEMA;
@@ -100,7 +103,8 @@ pub struct AssetGraphNode {
     pub asset_kind: String,
     pub byte_owner: String,
     pub semantic_gateway: String,
-    pub handler_service: String,
+    pub method: String,
+    pub semantic_owner: String,
     pub vfs_source: AssetGraphVfsSource,
     pub content_hash: Option<String>,
     pub entry_hash: Option<String>,
@@ -120,7 +124,8 @@ impl Default for AssetGraphNode {
             asset_kind: String::new(),
             byte_owner: "engine.assets".to_owned(),
             semantic_gateway: String::new(),
-            handler_service: String::new(),
+            method: String::new(),
+            semantic_owner: String::new(),
             vfs_source: AssetGraphVfsSource::default(),
             content_hash: None,
             entry_hash: None,
@@ -218,8 +223,8 @@ impl AssetGraphResolver {
             ..Default::default()
         };
         graph.debug_log.push(format!("assets.graph.resolve_v1: begin root_ref='{root_ref}' mode='classification-only'"));
-        let (role, kind, gateway, handler) = classify_ref(&root_ref);
-        push_node(&mut graph, &root_ref, role, kind, gateway, handler);
+        let (role, kind, gateway, method) = classify_ref(&root_ref);
+        push_node(&mut graph, &root_ref, role, kind, gateway, method);
         finalize_graph(&mut graph);
         graph.debug_log.push(format!("assets.graph.resolve_v1: root classified role='{role}' semantic_gateway='{gateway}'"));
         graph
@@ -236,24 +241,24 @@ impl AssetGraphResolver {
         graph.debug_log.push(format!("assets.graph.resolve_v1: begin construction_plan source='{root}' objects={}", plan.objects.len()));
         for object in &plan.objects {
             let definition_ref = normalize_asset_ref(&object.definition.logical_path);
-            push_node(&mut graph, &definition_ref, ROLE_DEFINITION_ENTRIES, &object.definition.asset_kind, "engine.assets.definitions", "definitions.api");
+            push_node(&mut graph, &definition_ref, ROLE_DEFINITION_ENTRIES, &object.definition.asset_kind, "engine.definitions", "definitions.entry_json_v1");
             if let Some(drawable) = object.drawable.as_ref() {
                 let drawable_ref = normalize_asset_ref(&drawable.logical_path);
-                push_node(&mut graph, &drawable_ref, ROLE_DRAWABLE_DICTIONARY, &drawable.asset_kind, "engine.assets.models", "model.api");
+                push_node(&mut graph, &drawable_ref, ROLE_DRAWABLE_DICTIONARY, &drawable.asset_kind, "engine.model", "model.drawable_dictionary_manifest_json_v1");
                 push_edge(&mut graph, &definition_ref, &drawable_ref, ROLE_DRAWABLE_DICTIONARY, drawable.required);
             } else {
                 graph.missing_refs.push(format!("{}: missing drawable dictionary", object.name));
             }
             if let Some(texture_dictionary) = object.texture_dictionary.as_ref() {
                 let texture_ref = normalize_asset_ref(&texture_dictionary.logical_path);
-                push_node(&mut graph, &texture_ref, ROLE_TEXTURE_DICTIONARY, &texture_dictionary.asset_kind, "engine.assets.textures", "textures.api");
+                push_node(&mut graph, &texture_ref, ROLE_TEXTURE_DICTIONARY, &texture_dictionary.asset_kind, "engine.assets", "asset.texture_dictionary_runtime_v1");
                 push_edge(&mut graph, &definition_ref, &texture_ref, ROLE_TEXTURE_DICTIONARY, texture_dictionary.required);
             } else {
                 graph.missing_refs.push(format!("{}: missing texture dictionary", object.name));
             }
             if let Some(physics) = object.physics_dictionary.as_ref() {
                 let physics_ref = normalize_asset_ref(&physics.logical_path);
-                push_node(&mut graph, &physics_ref, "physics_dictionary", &physics.asset_kind, "engine.physics", "physics.api");
+                push_node(&mut graph, &physics_ref, "physics_dictionary", &physics.asset_kind, "engine.physics", "physics.frame_json_v1");
                 push_edge(&mut graph, &definition_ref, &physics_ref, "physics_dictionary", physics.required);
             }
             for slot in &object.material_slots {
@@ -262,7 +267,7 @@ impl AssetGraphResolver {
                     continue;
                 }
                 let material_ref = normalize_asset_ref(&slot.material);
-                push_node(&mut graph, &material_ref, ROLE_MATERIAL_LIBRARY, MATERIAL_LIBRARY_ASSET_KIND, "engine.assets.materials", "materials.api");
+                push_node(&mut graph, &material_ref, ROLE_MATERIAL_LIBRARY, MATERIAL_LIBRARY_ASSET_KIND, "engine.materials", "materials.load_descriptor_v1");
                 if let Some(drawable) = object.drawable.as_ref() {
                     push_edge(&mut graph, &drawable.logical_path, &material_ref, &format!("material_slot/{}", slot.slot), true);
                 } else {
@@ -311,8 +316,8 @@ pub fn push_manifest_dependency(
         graph.metadata_warnings.push(format!("empty dependency reference from '{owner_ref}' role='{role}'"));
         return;
     }
-    let (node_role, asset_kind, gateway, handler) = classify_ref(&reference);
-    push_node(graph, &reference, node_role, asset_kind, gateway, handler);
+    let (node_role, asset_kind, gateway, method) = classify_ref(&reference);
+    push_node(graph, &reference, node_role, asset_kind, gateway, method);
     push_edge(graph, owner_ref, &reference, role, required);
 }
 
@@ -395,7 +400,7 @@ pub fn finalize_graph(graph: &mut ResolvedAssetGraphV2) {
     graph.debug_log.push(format!("assets.graph.resolve_v1: finalized schema='{}' nodes={} edges={} missing={} cycles={} cache_key='{}'", graph.schema, graph.nodes.len(), graph.edges.len(), graph.missing_refs.len(), graph.cycle_errors.len(), graph.stable_cache_key));
 }
 
-fn push_node(graph: &mut ResolvedAssetGraphV2, reference: &str, role: &str, asset_kind: &str, semantic_gateway: &str, handler_service: &str) {
+fn push_node(graph: &mut ResolvedAssetGraphV2, reference: &str, role: &str, asset_kind: &str, semantic_gateway: &str, method: &str) {
     let reference = normalize_asset_ref(reference);
     if reference.is_empty() { return; }
     graph.nodes.push(AssetGraphNode {
@@ -407,7 +412,8 @@ fn push_node(graph: &mut ResolvedAssetGraphV2, reference: &str, role: &str, asse
         asset_kind: asset_kind.to_owned(),
         byte_owner: "engine.assets".to_owned(),
         semantic_gateway: semantic_gateway.to_owned(),
-        handler_service: handler_service.to_owned(),
+        method: method.to_owned(),
+        semantic_owner: asset_kind.to_owned(),
         cache_key_parts: cache_key_parts_for_ref(&reference),
         vfs_source: AssetGraphVfsSource { logical_path: split_ref(&reference).0, ..AssetGraphVfsSource::default() },
         metadata_namespaces: Vec::new(),
@@ -432,32 +438,6 @@ fn push_edge(graph: &mut ResolvedAssetGraphV2, from: &str, to: &str, kind: &str,
 
 pub fn classify_asset_ref(reference: &str) -> (&'static str, &'static str, &'static str, &'static str) {
     classify_ref(reference)
-}
-
-fn classify_ref(reference: &str) -> (&'static str, &'static str, &'static str, &'static str) {
-    let (path, _) = split_ref(reference);
-    let ext = path.rsplit_once('.').map(|(_, ext)| ext.to_ascii_lowercase()).unwrap_or_default();
-    match ext.as_str() {
-        "ytyp" => (ROLE_DEFINITION_ENTRIES, OBJECT_TYPE_DEFINITIONS_ASSET_KIND, "engine.assets.definitions", "definitions.api"),
-        "ydd" => (ROLE_DRAWABLE_DICTIONARY, DRAWABLE_DICTIONARY_ASSET_KIND, "engine.assets.models", "model.api"),
-        "nemat" => (ROLE_MATERIAL_LIBRARY, MATERIAL_LIBRARY_ASSET_KIND, "engine.assets.materials", "materials.api"),
-        "ytd" => (ROLE_TEXTURE_DICTIONARY, TEXTURE_DICTIONARY_ASSET_KIND, "engine.assets.textures", "textures.api"),
-        "ymap" => ("map_data", "map_data", "engine.assets.maps", "maps.api"),
-        "ybn" | "ybd" | "ycol" => ("physics_dictionary", "physics_dictionary", "engine.assets.models.collisions", "model.collisions.api"),
-        "ydr" | "yft" | "yvr" | "yld" => ("model_dependency", "model_dependency", "engine.assets.models", "model.api"),
-        "ycd" | "yed" | "yfd" | "ypdb" => ("skeleton_animation_dependency", "skeleton_animation_dependency", "engine.assets.models", "model.api"),
-        "ymf" => ("asset_manifest", "asset_manifest", "engine.assets.graph", "asset_graph.api"),
-        "ymt" | "ytf" => ("metadata", "metadata", "engine.assets.definitions", "definitions.api"),
-        "ywr" => ("scene_dependency", "scene_dependency", "engine.assets.maps", "maps.api"),
-        "ysc" => ("script_module", "script_module", "engine.scripting", "scripting.api"),
-        "nebrain" => ("ai_brain", "ai_brain_dictionary", "engine.ai", "ai.api"),
-        "negoal" => ("ai_goal", "ai_goal_dictionary", "engine.ai", "ai.api"),
-        "nebt" | "nebehavior" => ("ai_behavior_tree", "ai_behavior_tree", "engine.ai", "ai.api"),
-        "neutility" => ("ai_utility", "ai_utility_dictionary", "engine.ai", "ai.api"),
-        "nebb" | "nemem" => ("ai_blackboard", "ai_blackboard_schema", "engine.ai", "ai.api"),
-        "nepat" => ("ai_pattern", "ai_pattern_dictionary", "engine.ai", "ai.api"),
-        _ => ("asset", "unknown", "engine.assets", "asset_manager.api"),
-    }
 }
 
 fn detect_cycles(edges: &[AssetGraphEdge]) -> Vec<String> {
@@ -567,43 +547,4 @@ pub fn fnv1a64(bytes: &[u8]) -> u64 {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::{DataDrivenAssetLink, DataDrivenObjectConstruction};
-
-    #[test]
-    fn root_ref_classifies_ytyp_as_definitions_not_scene() {
-        let graph = AssetGraphResolver::resolve_root_ref("world/foo.ytyp@bar");
-        let root = graph.nodes.iter().find(|node| node.reference == "world/foo.ytyp@bar").unwrap();
-        assert_eq!(root.semantic_gateway, "engine.assets.definitions");
-        assert_ne!(root.semantic_gateway, "engine.scene");
-        assert_eq!(root.role, ROLE_DEFINITION_ENTRIES);
-        assert_eq!(root.byte_owner, "engine.assets");
-    }
-
-    #[test]
-    fn construction_plan_builds_declarative_edges() {
-        let plan = DataDrivenConstructionPlan {
-            source: "world/foo.ytyp".to_owned(),
-            objects: vec![DataDrivenObjectConstruction {
-                name: "bar".to_owned(),
-                definition: DataDrivenAssetLink { logical_path: "world/foo.ytyp@bar".to_owned(), asset_kind: OBJECT_TYPE_DEFINITIONS_ASSET_KIND.to_owned(), extension: "ytyp".to_owned(), required: true, ..Default::default() },
-                drawable: Some(DataDrivenAssetLink { logical_path: "models/foo.ydd@bar".to_owned(), asset_kind: DRAWABLE_DICTIONARY_ASSET_KIND.to_owned(), extension: "ydd".to_owned(), required: true, ..Default::default() }),
-                ..Default::default()
-            }],
-            ..Default::default()
-        };
-        let graph = AssetGraphResolver::resolve_construction_plan(&plan);
-        assert!(graph.edges.iter().any(|edge| edge.kind == ROLE_DRAWABLE_DICTIONARY));
-        assert!(graph.debug_log.iter().any(|line| line.contains("assets.graph.resolve_v1")));
-    }
-
-    #[test]
-    fn cycles_are_reported_by_refs_not_internal_ids() {
-        let mut graph = AssetGraphResolver::resolve_root_ref("a.ytyp@a");
-        push_manifest_dependency(&mut graph, "a.ytyp@a", "b.ydd@b", "test", true);
-        push_manifest_dependency(&mut graph, "b.ydd@b", "a.ytyp@a", "test", true);
-        finalize_graph(&mut graph);
-        assert!(graph.cycle_errors.iter().any(|cycle| cycle.contains("a.ytyp@a")));
-    }
-}
+mod tests;

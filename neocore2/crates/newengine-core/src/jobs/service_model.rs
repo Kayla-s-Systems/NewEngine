@@ -207,6 +207,7 @@ impl JobSystem {
         for index in 0..worker_threads {
             let worker_shared = Arc::clone(&shared);
             let name = format!("newengine-job-{index}");
+            // no-hidden-thread-scan: allowed engine.jobs worker executor; every queued closure receives a JobId and lifecycle events.
             let handle = thread::Builder::new()
                 .name(name)
                 .spawn(move || worker_loop(worker_shared))

@@ -15,25 +15,25 @@ pub const ASSET_LIST_FILE_BODY_OUTPUT: &str = "asset.list_file_body_v1";
 
 /// Declarative route from an asset entry to the gateway that owns its semantic
 /// interpretation. AssetManager still owns VFS bytes/codec dispatch; domain
-/// gateways own meaning.
+/// gateways own meaning. This is semantic metadata, not a provider-service id.
 #[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[serde(default)]
 pub struct AssetGatewayRoute {
     pub gateway: String,
-    pub service: String,
     pub method: String,
+    pub semantic_owner: String,
 }
 
 impl Default for AssetGatewayRoute {
     fn default() -> Self {
-        Self { gateway: "engine.assets".to_owned(), service: "asset_manager.api".to_owned(), method: "asset.decode_v1".to_owned() }
+        Self { gateway: "engine.assets".to_owned(), method: "asset.decode_v1".to_owned(), semantic_owner: "asset".to_owned() }
     }
 }
 
 impl AssetGatewayRoute {
     #[inline]
-    pub fn new(gateway: impl Into<String>, service: impl Into<String>, method: impl Into<String>) -> Self {
-        Self { gateway: gateway.into(), service: service.into(), method: method.into() }
+    pub fn new(gateway: impl Into<String>, method: impl Into<String>, semantic_owner: impl Into<String>) -> Self {
+        Self { gateway: gateway.into(), method: method.into(), semantic_owner: semantic_owner.into() }
     }
 }
 
@@ -47,7 +47,7 @@ pub struct AssetEntryDependency {
     pub kind: String,
     /// Semantic edge role, e.g. `material_slot/head` or `texture/base_color`.
     pub role: String,
-    /// Owning semantic domain for the referenced entry, e.g. `engine.assets.materials`.
+    /// Owning semantic domain for the referenced entry, e.g. `engine.materials`.
     pub domain: String,
     pub required: bool,
 }

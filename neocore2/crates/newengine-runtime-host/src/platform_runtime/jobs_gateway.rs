@@ -3,8 +3,9 @@
 use abi_stable::std_types::{RResult, RString};
 use newengine_core::{JobSystemHandle, JobTaskStatus};
 use newengine_jobs_api::{
-    jobs_method, JobControlResponseV1, JobIdRequestV1, JobProgressEventV1, JobStartRequestV1,
-    JobsServiceInfoV1, JobsSnapshotJsonV1, JobStatusJsonV1, JobTraceJsonV1,
+    jobs_method, EngineJobEventV1, JobControlResponseV1, JobExecutorKind, JobIdRequestV1,
+    JobProgressEventV1, JobStartRequestV1, JobsServiceInfoV1, JobsSnapshotJsonV1,
+    JobStatusJsonV1, JobTraceJsonV1,
     ENGINE_JOBS_SERVICE_ID, JOBS_BACKEND_CAPABILITY_ID, JOBS_RUNTIME_CONTRACT, JOBS_SERVICE_ID,
     JOBS_SERVICE_METHODS, EngineTaskControlAction, EngineTaskEvent, EngineTaskPhase,
 };
@@ -44,10 +45,19 @@ fn missing_status(job_id: impl Into<String>) -> JobStatusJsonV1 {
 }
 
 fn publish_task_event(events: &newengine_core::EventHub, event: EngineTaskEvent) {
+    let job_event = EngineJobEventV1::new(
+        event.clone(),
+        JobExecutorKind::ExternalProvider,
+        "engine-jobs-gateway",
+    );
     if let Ok(payload) = serde_json::to_vec(&event) {
         publish_event(newengine_jobs_api::ENGINE_TASK_EVENT_TOPIC_V1, &payload);
     }
+    if let Ok(payload) = serde_json::to_vec(&job_event) {
+        publish_event(newengine_jobs_api::ENGINE_JOB_EVENT_TOPIC_V1, &payload);
+    }
     let _ = events.publish(event);
+    let _ = events.publish(job_event);
 }
 
 fn invoke(state: &mut JobsGatewayState, payload: Blob) -> RResult<Blob, RString> {

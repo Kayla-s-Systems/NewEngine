@@ -41,7 +41,7 @@ pub use intent::{
     ControllerIntentQueue, Intent, IntentBuffer, IntentCommandBufferExt, IntentSink,
 };
 
-pub use schedule::{default_schedule, SimSchedule, SimStage};
+pub use schedule::{default_schedule, SimSchedule, SimStage, SimulationJobBatch, SimulationJobTelemetry};
 pub use time::SimFrame;
 
 pub use transform_cmd::TransformCommandBufferExt;
