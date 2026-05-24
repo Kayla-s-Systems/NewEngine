@@ -39,6 +39,18 @@ jobs:
       - name: No hidden runtime executors
         run: python scripts/no_hidden_thread_scan.py
 
+      - name: No legacy runtime aliases
+        run: python scripts/no_legacy_scan.py
+
+      - name: Gateway contract scan
+        run: python scripts/gateway_contract_scan.py
+
+      - name: Asset format descriptor scan
+        run: python scripts/asset_format_boilerplate_scan.py
+
+      - name: Asset format contract tests
+        run: cargo test -p newengine-asset-format-common -p newengine-asset-format-catalog-nef8 --lib
+
       - name: Clippy lints
         run: cargo clippy --workspace --all-targets --all-features -- -D warnings
 

@@ -373,32 +373,6 @@ impl AssetFileTypeDescriptor {
 }
 
 
-/// Deprecated compatibility hook retained only so older call sites fail softly.
-///
-/// File-type semantics must come from `AssetFileTypeDescriptor` values supplied by
-/// the owning format crate/codec/provider. The asset API and registry must not
-/// infer meaning from extension names or `asset_kind` strings.
-#[deprecated(note = "file-type semantics are descriptor-owned; do not infer from extension/asset_kind")]
-pub fn semantic_gateway_for_file_type(_extension: &str, _asset_kind: &str, _codec_type: &str) -> String {
-    String::new()
-}
-
-/// Deprecated compatibility hook retained only so older call sites fail softly.
-///
-/// Consumer domains are descriptor-owned. A generic fallback may mirror the
-/// descriptor semantic gateway, but no central extension map is allowed here.
-#[deprecated(note = "file-type consumers are descriptor-owned; do not infer from extension/asset_kind")]
-pub fn consumer_domains_for_file_type(_extension: &str, _asset_kind: &str, _codec_type: &str) -> Vec<String> {
-    Vec::new()
-}
-
-/// Deprecated compatibility hook retained for old tooling. New code must collect
-/// descriptors from format crates/providers and register them with
-/// `engine.assets.file_types`.
-#[deprecated(note = "formats self-register from format crates/providers; registry has no built-in canonical list")]
-pub fn canonical_nef8_file_type_descriptors() -> Vec<AssetFileTypeDescriptor> {
-    Vec::new()
-}
 
 #[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[serde(default)]
@@ -1204,10 +1178,5 @@ mod file_type_layer_contract_tests {
         assert_eq!(descriptor.gateway, descriptor.semantic_gateway);
         assert_eq!(descriptor.content_kind, Some(9001));
         assert!(descriptor.validate_generic_rules().is_ok());
-    }
-
-    #[test]
-    fn deprecated_canonical_descriptor_list_is_empty() {
-        assert!(canonical_nef8_file_type_descriptors().is_empty());
     }
 }

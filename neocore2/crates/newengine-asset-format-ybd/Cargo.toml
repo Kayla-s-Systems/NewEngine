@@ -5,6 +5,7 @@ edition = "2021"
 readme = "README.md"
 
 [dependencies]
+newengine-asset-format-common = { path = "../newengine-asset-format-common" }
 newengine-assets-api = { path = "../newengine-assets-api" }
 
 [features]

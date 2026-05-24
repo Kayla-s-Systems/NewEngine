@@ -10,7 +10,7 @@ pub const PURPOSE: &str = "NewEngine Asset Package";
 pub const SEMANTIC_GATEWAY: &str = newengine_assets_api::ENGINE_ASSET_SERVICE_ID;
 pub const HANDLER_SERVICE: &str = "asset.codec.nepak";
 
-pub fn file_type_descriptor() -> AssetFileTypeDescriptor {
+pub fn register_format() -> AssetFileTypeDescriptor {
     let mut descriptor = AssetFileTypeDescriptor {
         extension: EXTENSION.to_owned(),
         asset_kind: ASSET_KIND.to_owned(),
@@ -34,4 +34,9 @@ pub fn file_type_descriptor() -> AssetFileTypeDescriptor {
     };
     descriptor.normalize_layer_contract();
     descriptor
+}
+
+#[inline]
+pub fn file_type_descriptor() -> AssetFileTypeDescriptor {
+    register_format()
 }

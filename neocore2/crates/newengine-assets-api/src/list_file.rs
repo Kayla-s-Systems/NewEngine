@@ -401,29 +401,6 @@ pub struct ListFileFormatSpec {
     pub selector_syntax: &'static str,
 }
 
-#[deprecated(note = "content kind lookup is descriptor-owned; use engine.assets.file_types probe/manifest")]
-#[inline]
-pub fn list_file_format_spec_for_extension(_extension: &str) -> Option<&'static ListFileFormatSpec> {
-    None
-}
-
-#[deprecated(note = "content kind lookup is descriptor-owned; use engine.assets.file_types probe/manifest")]
-#[inline]
-pub fn list_file_format_spec_for_content_kind(_content_kind: u32) -> Option<&'static ListFileFormatSpec> {
-    None
-}
-
-#[deprecated(note = "extension -> content_kind mapping is descriptor-owned; use engine.assets.file_types probe/manifest")]
-#[inline]
-pub fn list_file_content_kind_for_extension(_extension: &str) -> Option<u32> {
-    None
-}
-
-#[deprecated(note = "path -> content_kind mapping is descriptor-owned; use engine.assets.file_types probe/manifest")]
-#[inline]
-pub fn list_file_content_kind_for_path(_logical_path: &str) -> Option<u32> {
-    None
-}
 
 pub fn parse_list_file_header_v1(bytes: &[u8]) -> Result<ListFileHeaderV1, String> {
     if bytes.len() < LIST_FILE_HEADER_LEN_V1 {
