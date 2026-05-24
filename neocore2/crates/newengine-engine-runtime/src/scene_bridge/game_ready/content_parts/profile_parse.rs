@@ -176,9 +176,9 @@ fn load_profile_asset(
     assets: &newengine_assets::AssetServiceClient,
     logical_path: &str,
 ) -> Result<GameReadyMapProfile, String> {
-    if !logical_path.to_ascii_lowercase().split('@').next().unwrap_or(logical_path).ends_with(".ymap") {
+    if !logical_path.to_ascii_lowercase().split('@').next().unwrap_or(logical_path).ends_with(&format!(".{}", newengine_asset_format_ymap::EXTENSION)) {
         return Err(format!(
-            "non-canonical authored map rejected path='{logical_path}' expected='.ymap' policy='authored maps are NEF8/ListFile, not runtime plain JSON'"
+            "non-canonical authored map rejected path='{logical_path}' expected='.{}' policy='authored maps are NEF8/ListFile, not runtime plain JSON'", newengine_asset_format_ymap::EXTENSION
         ));
     }
 

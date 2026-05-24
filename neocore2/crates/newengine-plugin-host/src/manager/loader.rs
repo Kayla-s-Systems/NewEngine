@@ -31,6 +31,73 @@ fn pretty_abs_path(path: &Path) -> String {
     display_clean(&p)
 }
 
+struct LoadProfilerJob {
+    id: String,
+    path: String,
+    started: Instant,
+    completed: bool,
+}
+
+impl LoadProfilerJob {
+    fn begin(path: &str) -> Self {
+        let id = crate::diagnostics::next_job_id("host.plugin_load");
+        crate::diagnostics::begin(serde_json::json!({
+            "id": id.clone(),
+            "name": format!("plugin_load:{}", path),
+            "category": "plugin_lifecycle",
+            "source": "newengine-plugin-host",
+            "detail": "dynamic library load + ABI probe + init",
+            "metadata": {
+                "path": path,
+                "operation": "load_one"
+            }
+        }));
+        Self { id, path: path.to_owned(), started: Instant::now(), completed: false }
+    }
+
+    fn complete_ok(&mut self, plugin_id: &str, timings: &LoadTimings) {
+        self.completed = true;
+        crate::diagnostics::end(serde_json::json!({
+            "id": self.id.clone(),
+            "status": "completed",
+            "detail": format!("plugin loaded in {} ms", timings.total_ms),
+            "metadata": {
+                "plugin_id": plugin_id,
+                "path": self.path.clone(),
+                "total_ms": timings.total_ms,
+                "dlopen_ms": timings.dlopen_ms,
+                "sym_ms": timings.sym_ms,
+                "root_ms": timings.root_ms,
+                "abi_probe_ms": timings.abi_probe_ms,
+                "select_abi_ms": timings.select_abi_ms,
+                "override_lookup_ms": timings.override_lookup_ms,
+                "init_total_ms": timings.init_total_ms
+            }
+        }));
+    }
+}
+
+impl Drop for LoadProfilerJob {
+    fn drop(&mut self) {
+        if self.completed {
+            return;
+        }
+        crate::diagnostics::end(serde_json::json!({
+            "id": self.id.clone(),
+            "status": "failed",
+            "error": "plugin load exited before completion",
+            "detail": format!(
+                "plugin load failed or was skipped after {:.3} ms",
+                crate::diagnostics::elapsed_ms(self.started)
+            ),
+            "metadata": {
+                "path": self.path.clone(),
+                "operation": "load_one"
+            }
+        }));
+    }
+}
+
 #[derive(Debug, Clone, Default)]
 struct InitTimings {
     config_defaults_ms: u128,
@@ -55,6 +122,8 @@ impl PluginManager {
     pub(crate) fn load_one(&mut self, path: &Path, host: HostApiV1) -> Result<(), PluginLoadError> {
         let pretty_path = pretty_abs_path(path);
         log::info!("plugins: loading '{}'", pretty_path.as_str());
+
+        let mut load_job = LoadProfilerJob::begin(pretty_path.as_str());
 
         let t_total = Instant::now();
         let mut tm = LoadTimings::default();
@@ -218,9 +287,11 @@ impl PluginManager {
         });
 
         record_loaded_plugin_root(LoadedPluginRootSnapshot {
-            plugin_id: id_str,
+            plugin_id: id_str.clone(),
             editor_extensions_v1,
         });
+
+        load_job.complete_ok(&id_str, &tm);
 
         Ok(())
     }

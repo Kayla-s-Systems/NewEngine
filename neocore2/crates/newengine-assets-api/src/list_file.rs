@@ -376,33 +376,22 @@ impl Default for ListFileHeaderMetadata {
 }
 
 #[inline]
+
+#[inline]
 pub const fn list_file_content_kind_label(kind: u32) -> &'static str {
-    match kind {
-        LIST_FILE_CONTENT_KIND_YTYP => "archetype_dictionary",
-        LIST_FILE_CONTENT_KIND_YTD => "texture_dictionary",
-        LIST_FILE_CONTENT_KIND_YDD => "drawable_dictionary",
-        LIST_FILE_CONTENT_KIND_NEMAT => "material_library",
-        LIST_FILE_CONTENT_KIND_YMAP => "map_data",
-        LIST_FILE_CONTENT_KIND_YDR => "drawable",
-        LIST_FILE_CONTENT_KIND_YFT => "frag_type",
-        LIST_FILE_CONTENT_KIND_YBN => "bounds_dictionary",
-        LIST_FILE_CONTENT_KIND_YMF => "manifest",
-        LIST_FILE_CONTENT_KIND_YMT => "metadata",
-        LIST_FILE_CONTENT_KIND_YCD => "clip_dictionary",
-        LIST_FILE_CONTENT_KIND_YED => "expression_dictionary",
-        LIST_FILE_CONTENT_KIND_YFD => "frame_filter_dictionary",
-        LIST_FILE_CONTENT_KIND_YLD => "cloth_dictionary",
-        LIST_FILE_CONTENT_KIND_YPDB => "pose_database",
-        LIST_FILE_CONTENT_KIND_YVR => "vehicle_record_list",
-        LIST_FILE_CONTENT_KIND_YWR => "waypoint_record_list",
-        LIST_FILE_CONTENT_KIND_YSC => "script_module",
-        LIST_FILE_CONTENT_KIND_YBD => "bounds_dictionary",
-        LIST_FILE_CONTENT_KIND_YTF => "unknown_y_file",
-        LIST_FILE_CONTENT_KIND_NEUI => "ui_dictionary",
-        _ => "unknown",
+    if kind == LIST_FILE_CONTENT_KIND_UNKNOWN {
+        "unknown"
+    } else {
+        "provider_declared"
     }
 }
 
+/// Descriptor-local NEF8/ListFile format metadata.
+///
+/// This struct is retained for format crates/tools that want a compact local
+/// declaration, but the asset API no longer owns a global `LIST_FILE_FORMAT_SPECS`
+/// table. Concrete formats must publish descriptors from their own crates or
+/// providers and register them with `engine.assets.file_types`.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct ListFileFormatSpec {
     pub extension: &'static str,
@@ -414,52 +403,28 @@ pub struct ListFileFormatSpec {
     pub selector_syntax: &'static str,
 }
 
-pub const LIST_FILE_FORMAT_SPECS: &[ListFileFormatSpec] = &[
-    ListFileFormatSpec { extension: "ytd", content_kind: LIST_FILE_CONTENT_KIND_YTD, asset_kind: "texture_dictionary", purpose: "Texture Dictionary", semantic_gateway: "engine.assets.textures", handler_service: "asset.codec.listfile.ytd", selector_syntax: "file.ytd@entry" },
-    ListFileFormatSpec { extension: "ydd", content_kind: LIST_FILE_CONTENT_KIND_YDD, asset_kind: "drawable_dictionary", purpose: "Drawable/Model Dictionary", semantic_gateway: "engine.assets.models", handler_service: "asset.codec.listfile.ydd", selector_syntax: "file.ydd@drawable_entry" },
-    ListFileFormatSpec { extension: "ydr", content_kind: LIST_FILE_CONTENT_KIND_YDR, asset_kind: "drawable", purpose: "Single Drawable", semantic_gateway: "engine.assets.models", handler_service: "asset.codec.listfile.ydr", selector_syntax: "file.ydr@entry" },
-    ListFileFormatSpec { extension: "yft", content_kind: LIST_FILE_CONTENT_KIND_YFT, asset_kind: "frag_type", purpose: "Fragment / Destructible / Vehicle", semantic_gateway: "engine.assets.models", handler_service: "asset.codec.listfile.yft", selector_syntax: "file.yft@entry" },
-    ListFileFormatSpec { extension: "ybn", content_kind: LIST_FILE_CONTENT_KIND_YBN, asset_kind: "bounds_dictionary", purpose: "Bounds / Collision", semantic_gateway: "engine.assets.models.collisions", handler_service: "asset.codec.listfile.ybn", selector_syntax: "file.ybn@entry" },
-    ListFileFormatSpec { extension: "ytyp", content_kind: LIST_FILE_CONTENT_KIND_YTYP, asset_kind: "archetype_dictionary", purpose: "Archetype Definition Dictionary", semantic_gateway: "engine.assets.definitions", handler_service: "asset.codec.listfile.ytyp", selector_syntax: "file.ytyp@definition_entry" },
-    ListFileFormatSpec { extension: "nemat", content_kind: LIST_FILE_CONTENT_KIND_NEMAT, asset_kind: "material_library", purpose: "Material Library", semantic_gateway: "engine.assets.materials", handler_service: "asset.codec.listfile.nemat", selector_syntax: "file.nemat@material_entry" },
-    ListFileFormatSpec { extension: "neui", content_kind: LIST_FILE_CONTENT_KIND_NEUI, asset_kind: "ui_dictionary", purpose: "NewEngine UI Dictionary", semantic_gateway: "engine.assets.ui", handler_service: "asset.codec.listfile.neui", selector_syntax: "file.neui@entry" },
-    ListFileFormatSpec { extension: "ymap", content_kind: LIST_FILE_CONTENT_KIND_YMAP, asset_kind: "map_data", purpose: "Map Data / Placement", semantic_gateway: "engine.assets.maps", handler_service: "asset.codec.listfile.ymap", selector_syntax: "file.ymap@entry" },
-    ListFileFormatSpec { extension: "ymf", content_kind: LIST_FILE_CONTENT_KIND_YMF, asset_kind: "manifest", purpose: "Manifest / Dependencies", semantic_gateway: "engine.assets.graph", handler_service: "asset.codec.listfile.ymf", selector_syntax: "file.ymf@entry" },
-    ListFileFormatSpec { extension: "ymt", content_kind: LIST_FILE_CONTENT_KIND_YMT, asset_kind: "metadata", purpose: "Metadata Container", semantic_gateway: "engine.assets.definitions", handler_service: "asset.codec.listfile.ymt", selector_syntax: "file.ymt@entry" },
-    ListFileFormatSpec { extension: "ycd", content_kind: LIST_FILE_CONTENT_KIND_YCD, asset_kind: "clip_dictionary", purpose: "Animation Clips / Clip Dictionary", semantic_gateway: "engine.assets.models.skeletons", handler_service: "asset.codec.listfile.ycd", selector_syntax: "file.ycd@entry" },
-    ListFileFormatSpec { extension: "yed", content_kind: LIST_FILE_CONTENT_KIND_YED, asset_kind: "expression_dictionary", purpose: "Expression Dictionary", semantic_gateway: "engine.assets.models.skeletons", handler_service: "asset.codec.listfile.yed", selector_syntax: "file.yed@entry" },
-    ListFileFormatSpec { extension: "yfd", content_kind: LIST_FILE_CONTENT_KIND_YFD, asset_kind: "frame_filter_dictionary", purpose: "Frame Filter Dictionary", semantic_gateway: "engine.assets.models.skeletons", handler_service: "asset.codec.listfile.yfd", selector_syntax: "file.yfd@entry" },
-    ListFileFormatSpec { extension: "yld", content_kind: LIST_FILE_CONTENT_KIND_YLD, asset_kind: "cloth_dictionary", purpose: "Cloth Dictionary", semantic_gateway: "engine.assets.models", handler_service: "asset.codec.listfile.yld", selector_syntax: "file.yld@entry" },
-    ListFileFormatSpec { extension: "ypdb", content_kind: LIST_FILE_CONTENT_KIND_YPDB, asset_kind: "pose_database", purpose: "Pose Database", semantic_gateway: "engine.assets.models.skeletons", handler_service: "asset.codec.listfile.ypdb", selector_syntax: "file.ypdb@entry" },
-    ListFileFormatSpec { extension: "yvr", content_kind: LIST_FILE_CONTENT_KIND_YVR, asset_kind: "vehicle_record_list", purpose: "Vehicle Record List", semantic_gateway: "engine.assets.models", handler_service: "asset.codec.listfile.yvr", selector_syntax: "file.yvr@entry" },
-    ListFileFormatSpec { extension: "ywr", content_kind: LIST_FILE_CONTENT_KIND_YWR, asset_kind: "waypoint_record_list", purpose: "Waypoint Record List", semantic_gateway: "engine.assets.maps", handler_service: "asset.codec.listfile.ywr", selector_syntax: "file.ywr@entry" },
-    ListFileFormatSpec { extension: "ysc", content_kind: LIST_FILE_CONTENT_KIND_YSC, asset_kind: "script_module", purpose: "Opaque Script Module Dictionary", semantic_gateway: "engine.scripting", handler_service: "asset.codec.listfile.ysc", selector_syntax: "file.ysc@entry" },
-    ListFileFormatSpec { extension: "ybd", content_kind: LIST_FILE_CONTENT_KIND_YBD, asset_kind: "bounds_dictionary", purpose: "Bounds Dictionary", semantic_gateway: "engine.assets.models.collisions", handler_service: "asset.codec.listfile.ybd", selector_syntax: "file.ybd@entry" },
-    ListFileFormatSpec { extension: "ytf", content_kind: LIST_FILE_CONTENT_KIND_YTF, asset_kind: "unknown_y_file", purpose: "Rare / not fully documented Y-file", semantic_gateway: "engine.assets.definitions", handler_service: "asset.codec.listfile.ytf", selector_syntax: "file.ytf@entry" },
-];
-
+#[deprecated(note = "content kind lookup is descriptor-owned; use engine.assets.file_types probe/manifest")]
 #[inline]
-pub fn list_file_format_spec_for_extension(extension: &str) -> Option<&'static ListFileFormatSpec> {
-    let normalized = extension.trim().trim_start_matches('.').to_ascii_lowercase();
-    LIST_FILE_FORMAT_SPECS.iter().find(|spec| spec.extension == normalized)
+pub fn list_file_format_spec_for_extension(_extension: &str) -> Option<&'static ListFileFormatSpec> {
+    None
 }
 
+#[deprecated(note = "content kind lookup is descriptor-owned; use engine.assets.file_types probe/manifest")]
 #[inline]
-pub fn list_file_format_spec_for_content_kind(content_kind: u32) -> Option<&'static ListFileFormatSpec> {
-    LIST_FILE_FORMAT_SPECS.iter().find(|spec| spec.content_kind == content_kind)
+pub fn list_file_format_spec_for_content_kind(_content_kind: u32) -> Option<&'static ListFileFormatSpec> {
+    None
 }
 
+#[deprecated(note = "extension -> content_kind mapping is descriptor-owned; use engine.assets.file_types probe/manifest")]
 #[inline]
-pub fn list_file_content_kind_for_extension(extension: &str) -> Option<u32> {
-    list_file_format_spec_for_extension(extension).map(|spec| spec.content_kind)
+pub fn list_file_content_kind_for_extension(_extension: &str) -> Option<u32> {
+    None
 }
 
+#[deprecated(note = "path -> content_kind mapping is descriptor-owned; use engine.assets.file_types probe/manifest")]
 #[inline]
-pub fn list_file_content_kind_for_path(logical_path: &str) -> Option<u32> {
-    let path = logical_path.split('@').next().unwrap_or(logical_path);
-    let file_name = path.rsplit(|c| c == '/' || c == '\\').next().unwrap_or(path);
-    let extension = file_name.rsplit_once('.').map(|(_, ext)| ext)?;
-    list_file_content_kind_for_extension(extension)
+pub fn list_file_content_kind_for_path(_logical_path: &str) -> Option<u32> {
+    None
 }
 
 pub fn parse_list_file_header_v1(bytes: &[u8]) -> Result<ListFileHeaderV1, String> {

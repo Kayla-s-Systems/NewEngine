@@ -8,6 +8,7 @@ use newengine_plugin_api::{
 use std::cell::Cell;
 use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::sync::Arc;
+use std::time::Instant;
 
 thread_local! {
     static IN_HOST_API_LOG: Cell<bool> = const { Cell::new(false) };
@@ -141,12 +142,35 @@ pub extern "C" fn call_service_v1(
         }
     };
 
+    let method_string = method.to_string();
+    let payload_len = payload.len();
+    let job_id = crate::diagnostics::next_job_id("host.service_call");
+    let started = Instant::now();
+
+    crate::diagnostics::begin(serde_json::json!({
+        "id": job_id.clone(),
+        "name": format!("service:{}::{}", id, method_string),
+        "category": "service_call",
+        "source": "newengine-plugin-host",
+        "service_id": id.clone(),
+        "requested_service_id": requested_id.clone(),
+        "method": method_string.clone(),
+        "owner_plugin_id": owner.clone(),
+        "payload_bytes": payload_len as u64,
+        "metadata": {
+            "service_id": id.clone(),
+            "requested_service_id": requested_id.clone(),
+            "method": method_string.clone(),
+            "owner_plugin_id": owner.clone()
+        }
+    }));
+
     /*
     debug_no_recurse(format_args!(
         "services: call id='{}' method='{}' payload_len={}",
         id,
         method,
-        payload.len()
+        payload_len
     )); */
 
     let do_call = || svc.call(method.clone(), payload);
@@ -176,16 +200,44 @@ pub extern "C" fn call_service_v1(
     };
 
     match &res {
-        /* RResult::ROk(b) => debug_no_recurse(format_args!(
-            "services: call ok id='{}' method='{}' result_len={}",
-            id,
-            method,
-            b.len()
-        )),*/
-        RResult::RErr(e) => debug_no_recurse(format_args!(
-            "services: call err id='{}' method='{}' err='{}'",
-            id, method, e
-        )),
+        RResult::ROk(b) => {
+            crate::diagnostics::end(serde_json::json!({
+                "id": job_id.clone(),
+                "status": "completed",
+                "output_bytes": b.len() as u64,
+                "detail": format!(
+                    "service call completed in {:.3} ms",
+                    crate::diagnostics::elapsed_ms(started)
+                ),
+                "metadata": {
+                    "service_id": id.clone(),
+                    "requested_service_id": requested_id.clone(),
+                    "method": method_string.clone(),
+                    "owner_plugin_id": owner.clone()
+                }
+            }));
+        }
+        RResult::RErr(e) => {
+            crate::diagnostics::end(serde_json::json!({
+                "id": job_id.clone(),
+                "status": "failed",
+                "error": e.to_string(),
+                "detail": format!(
+                    "service call failed in {:.3} ms",
+                    crate::diagnostics::elapsed_ms(started)
+                ),
+                "metadata": {
+                    "service_id": id.clone(),
+                    "requested_service_id": requested_id.clone(),
+                    "method": method_string.clone(),
+                    "owner_plugin_id": owner.clone()
+                }
+            }));
+            debug_no_recurse(format_args!(
+                "services: call err id='{}' method='{}' err='{}'",
+                id, method, e
+            ));
+        }
         _ => {}
     }
 

@@ -12,6 +12,7 @@ serde_json = "1"
 
 newengine-assets = { path = "../newengine-assets" }
 newengine-assets-api = { path = "../newengine-assets-api" }
+newengine-asset-format-ytyp = { path = "../newengine-asset-format-ytyp" }
 newengine-engine-runtime = { path = "../newengine-engine-runtime" }
 newengine-plugin-api = { path = "../newengine-plugin-api" }
 newengine-plugin-host = { path = "../newengine-plugin-host" }

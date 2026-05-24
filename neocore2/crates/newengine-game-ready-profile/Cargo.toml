@@ -10,6 +10,7 @@ log = "0.4"
 
 newengine-assets = { path = "../newengine-assets" }
 newengine-assets-ui-runtime = { path = "../newengine-assets-ui-runtime" }
+newengine-asset-format-catalog-nef8 = { path = "../newengine-asset-format-catalog-nef8" }
 newengine-core = { path = "../newengine-core", features = ["host-probe"] }
 newengine-definitions-runtime = { path = "../newengine-definitions-runtime" }
 newengine-ecs-runtime = { path = "../newengine-ecs-runtime" }

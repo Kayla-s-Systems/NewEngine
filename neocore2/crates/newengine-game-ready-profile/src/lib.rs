@@ -116,6 +116,11 @@ impl GameReadyRuntimeProfile {
         newengine_assets::register_asset_file_types_gateway_best_effort();
 
         let host_api = newengine_plugin_host::default_host_api();
+        let registered_file_types = newengine_asset_format_catalog_nef8::register_all_file_types_best_effort(&host_api);
+        log::info!(
+            "asset file type descriptors: registered {} provider-owned first-party formats",
+            registered_file_types
+        );
         let asset_client = newengine_assets::AssetServiceClient::new(host_api.clone());
         newengine_textures_runtime::register_textures_gateway_best_effort(asset_client.clone());
         newengine_definitions_runtime::register_definitions_gateway_best_effort(asset_client.clone());

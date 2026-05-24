@@ -6,7 +6,7 @@ pub mod consts;
 pub mod file_type_registry;
 
 pub use asset_service_client::AssetServiceClient;
-pub use file_type_registry::{asset_file_types_gateway_service, asset_file_types_service_info, register_asset_file_types_gateway_best_effort};
+pub use file_type_registry::{asset_file_types_gateway_service, asset_file_types_service_info, register_asset_file_type_descriptor_best_effort, register_asset_file_types_gateway_best_effort};
 pub use newengine_assets_api::{
     wait_ready, AssetAccess, AssetDecodeRequest, AssetEntryDependency, AssetEntryManifest,
     AssetError, AssetErrorKind, AssetFileManifest, AssetFileTypeDescriptor,

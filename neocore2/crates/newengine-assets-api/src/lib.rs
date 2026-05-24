@@ -228,6 +228,9 @@ pub struct AssetFileTypeDescriptor {
     pub extension: String,
     pub asset_kind: String,
     pub container: String,
+    /// Optional provider-declared NEF8/ListFile content kind. The registry stores
+    /// this as descriptor data only; core must not derive semantic routing from it.
+    pub content_kind: Option<u32>,
     /// Broad codec class. AssetManager uses this only for generic restrictions:
     /// nested VFS is allowed for `containerType` and forbidden for every other kind.
     pub codec_type: String,
@@ -270,11 +273,12 @@ impl Default for AssetFileTypeDescriptor {
             extension: String::new(),
             asset_kind: String::new(),
             container: String::new(),
+            content_kind: None,
             codec_type: codec_type::SINGLE.to_owned(),
             byte_owner: ENGINE_ASSET_SERVICE_ID.to_owned(),
-            semantic_gateway: ENGINE_ASSET_SERVICE_ID.to_owned(),
-            gateway: ENGINE_ASSET_SERVICE_ID.to_owned(),
-            handler_service: ENGINE_ASSET_SERVICE_ID.to_owned(),
+            semantic_gateway: String::new(),
+            gateway: String::new(),
+            handler_service: String::new(),
             read_method: method::DECODE_V1.to_owned(),
             selector_syntax: None,
             consumer_domains: Vec::new(),
@@ -307,17 +311,20 @@ impl AssetFileTypeDescriptor {
         if self.byte_owner.trim().is_empty() {
             self.byte_owner = ENGINE_ASSET_SERVICE_ID.to_owned();
         }
-        if self.semantic_gateway.trim().is_empty() {
-            self.semantic_gateway = semantic_gateway_for_file_type(&self.extension, &self.asset_kind, &self.codec_type);
+        // File-type semantics are not inferred here. Each format crate/codec
+        // must declare its semantic gateway, handler service and consumers in
+        // its own descriptor. The registry is a generic collector/resolver, not
+        // a central table of known extensions.
+        if self.gateway.trim().is_empty() && !self.semantic_gateway.trim().is_empty() {
+            self.gateway = self.semantic_gateway.clone();
         }
         // Keep the old field as a semantic projection so existing AssetBrowser
         // consumers do not mistake `engine.assets` for the meaning owner.
-        self.gateway = self.semantic_gateway.clone();
-        if self.consumer_domains.is_empty() {
-            self.consumer_domains = consumer_domains_for_file_type(&self.extension, &self.asset_kind, &self.codec_type);
+        if self.gateway.trim() != self.semantic_gateway.trim() {
+            self.gateway = self.semantic_gateway.clone();
         }
-        if self.handler_service.trim().is_empty() {
-            self.handler_service = self.byte_owner.clone();
+        if self.consumer_domains.is_empty() && !self.semantic_gateway.trim().is_empty() {
+            self.consumer_domains = vec![self.semantic_gateway.clone()];
         }
     }
 
@@ -365,101 +372,32 @@ impl AssetFileTypeDescriptor {
     }
 }
 
-pub fn semantic_gateway_for_file_type(extension: &str, asset_kind: &str, codec_type: &str) -> String {
-    let ext = AssetFileTypeDescriptor::extension_key(extension);
-    if codec_type.trim().eq_ignore_ascii_case(codec_type::CONTAINER) || ext == "nepak" {
-        return ENGINE_ASSET_SERVICE_ID.to_owned();
-    }
-    if let Some(spec) = list_file_format_spec_for_extension(&ext) {
-        return spec.semantic_gateway.to_owned();
-    }
-    match asset_kind.trim() {
-        "texture_dictionary" | "newengine.asset.texture_dictionary" => ENGINE_ASSETS_TEXTURES_SERVICE_ID.to_owned(),
-        "drawable_dictionary" | "drawable" | "frag_type" | "vehicle_record_list" | "cloth_dictionary" | "newengine.asset.drawable_dictionary" => ENGINE_ASSETS_MODELS_SERVICE_ID.to_owned(),
-        "material_library" | "newengine.asset.material_library" => ENGINE_ASSETS_MATERIALS_SERVICE_ID.to_owned(),
-        "archetype_dictionary" | "metadata" | "unknown_y_file" | "newengine.asset.archetype_dictionary" => ENGINE_ASSETS_DEFINITIONS_SERVICE_ID.to_owned(),
-        "script_module" | "newengine.asset.script_module" | "compiled_script" | "newengine.asset.compiled_script" => ENGINE_SCRIPTING_SERVICE_ID.to_owned(),
-        "map_data" | "map_definition" | "waypoint_record_list" | "newengine.asset.map_definition" => ENGINE_ASSETS_MAPS_SERVICE_ID.to_owned(),
-        "ui_dictionary" | "newengine.asset.ui_dictionary" => ENGINE_ASSETS_UI_SERVICE_ID.to_owned(),
-        "bounds_dictionary" => "engine.assets.models.collisions".to_owned(),
-        "manifest" => ENGINE_ASSETS_GRAPH_SERVICE_ID.to_owned(),
-        "clip_dictionary" | "expression_dictionary" | "frame_filter_dictionary" | "pose_database" => "engine.assets.models.skeletons".to_owned(),
-        "asset_package" | "newengine.asset.package" => ENGINE_ASSET_SERVICE_ID.to_owned(),
-        _ => ENGINE_ASSET_SERVICE_ID.to_owned(),
-    }
+
+/// Deprecated compatibility hook retained only so older call sites fail softly.
+///
+/// File-type semantics must come from `AssetFileTypeDescriptor` values supplied by
+/// the owning format crate/codec/provider. The asset API and registry must not
+/// infer meaning from extension names or `asset_kind` strings.
+#[deprecated(note = "file-type semantics are descriptor-owned; do not infer from extension/asset_kind")]
+pub fn semantic_gateway_for_file_type(_extension: &str, _asset_kind: &str, _codec_type: &str) -> String {
+    String::new()
 }
 
-pub fn consumer_domains_for_file_type(extension: &str, asset_kind: &str, codec_type: &str) -> Vec<String> {
-    let ext = AssetFileTypeDescriptor::extension_key(extension);
-    let domains: &[&str] = if codec_type.trim().eq_ignore_ascii_case(codec_type::CONTAINER) || ext == "nepak" {
-        &[ENGINE_ASSET_SERVICE_ID]
-    } else {
-        match ext.as_str() {
-            "ytd" => &[ENGINE_ASSETS_MATERIALS_SERVICE_ID, ENGINE_ASSETS_MODELS_SERVICE_ID, "engine.ui", "engine.render"],
-            "ydd" | "ydr" => &[ENGINE_ASSETS_MODELS_SERVICE_ID, ENGINE_ASSETS_MATERIALS_SERVICE_ID, "engine.render"],
-            "yft" | "yvr" => &[ENGINE_ASSETS_MODELS_SERVICE_ID, "engine.physics", ENGINE_ASSETS_MATERIALS_SERVICE_ID, "engine.render"],
-            "ybn" | "ybd" => &["engine.assets.models.collisions", "engine.physics", ENGINE_ASSETS_MODELS_SERVICE_ID, "engine.scene"],
-            "nemat" => &[ENGINE_ASSETS_MATERIALS_SERVICE_ID, ENGINE_ASSETS_MODELS_SERVICE_ID, "engine.render"],
-            "ytyp" | "ymt" | "ytf" => &[ENGINE_ASSETS_DEFINITIONS_SERVICE_ID, ENGINE_ASSETS_GRAPH_SERVICE_ID, "engine.scene", ENGINE_ASSETS_MODELS_SERVICE_ID, ENGINE_ASSETS_MATERIALS_SERVICE_ID, "engine.physics", "engine.ai", "engine.editor", "engine.streaming"],
-            "neui" => &[ENGINE_ASSETS_UI_SERVICE_ID, ENGINE_ASSETS_GRAPH_SERVICE_ID, "engine.ui", "engine.ui.text", ENGINE_ASSETS_TEXTURES_SERVICE_ID, "engine.render", "engine.editor"],
-            "ysc" => &[ENGINE_SCRIPTING_SERVICE_ID, ENGINE_SCENE_SERVICE_ID, ENGINE_ASSETS_DEFINITIONS_SERVICE_ID, ENGINE_ASSETS_GRAPH_SERVICE_ID, "engine.ui", "engine.ai", "engine.editor", "engine.streaming"],
-            "ymap" | "ywr" => &[ENGINE_ASSETS_MAPS_SERVICE_ID, ENGINE_SCENE_SERVICE_ID, ENGINE_ASSETS_DEFINITIONS_SERVICE_ID, ENGINE_ASSETS_GRAPH_SERVICE_ID, ENGINE_ASSETS_MODELS_SERVICE_ID, ENGINE_ASSETS_MATERIALS_SERVICE_ID, ENGINE_ASSETS_TEXTURES_SERVICE_ID, "engine.physics", "engine.streaming", "engine.editor"],
-            "ymf" => &[ENGINE_ASSETS_GRAPH_SERVICE_ID, ENGINE_ASSETS_DEFINITIONS_SERVICE_ID, ENGINE_ASSETS_MAPS_SERVICE_ID, ENGINE_SCENE_SERVICE_ID, ENGINE_ASSETS_MODELS_SERVICE_ID, ENGINE_ASSETS_MATERIALS_SERVICE_ID, ENGINE_ASSETS_TEXTURES_SERVICE_ID],
-            "ycd" | "yed" | "yfd" | "yld" | "ypdb" => &["engine.assets.models.skeletons", ENGINE_ASSETS_MODELS_SERVICE_ID, "engine.scene", "engine.render"],
-            _ => match asset_kind.trim() {
-                "texture_dictionary" | "newengine.asset.texture_dictionary" => &[ENGINE_ASSETS_MATERIALS_SERVICE_ID, ENGINE_ASSETS_MODELS_SERVICE_ID, "engine.ui", "engine.render"],
-                "drawable_dictionary" | "drawable" | "frag_type" | "vehicle_record_list" | "newengine.asset.drawable_dictionary" => &[ENGINE_ASSETS_MODELS_SERVICE_ID, ENGINE_ASSETS_MATERIALS_SERVICE_ID, "engine.render"],
-                "material_library" | "newengine.asset.material_library" => &[ENGINE_ASSETS_MATERIALS_SERVICE_ID, ENGINE_ASSETS_MODELS_SERVICE_ID, "engine.render"],
-                "archetype_dictionary" | "metadata" | "unknown_y_file" | "newengine.asset.archetype_dictionary" => &[ENGINE_ASSETS_DEFINITIONS_SERVICE_ID, ENGINE_ASSETS_GRAPH_SERVICE_ID, "engine.scene", ENGINE_ASSETS_MODELS_SERVICE_ID, ENGINE_ASSETS_MATERIALS_SERVICE_ID, "engine.physics", "engine.ai", "engine.editor", "engine.streaming"],
-                "script_module" | "newengine.asset.script_module" | "compiled_script" | "newengine.asset.compiled_script" => &[ENGINE_SCRIPTING_SERVICE_ID, ENGINE_SCENE_SERVICE_ID, ENGINE_ASSETS_DEFINITIONS_SERVICE_ID, ENGINE_ASSETS_GRAPH_SERVICE_ID, "engine.ui", "engine.ai", "engine.editor", "engine.streaming"],
-                "map_data" | "map_definition" | "waypoint_record_list" | "newengine.asset.map_definition" => &[ENGINE_ASSETS_MAPS_SERVICE_ID, ENGINE_SCENE_SERVICE_ID, ENGINE_ASSETS_DEFINITIONS_SERVICE_ID, ENGINE_ASSETS_GRAPH_SERVICE_ID, ENGINE_ASSETS_MODELS_SERVICE_ID, ENGINE_ASSETS_MATERIALS_SERVICE_ID, ENGINE_ASSETS_TEXTURES_SERVICE_ID, "engine.physics", "engine.streaming", "engine.editor"],
-                "ui_dictionary" | "newengine.asset.ui_dictionary" => &[ENGINE_ASSETS_UI_SERVICE_ID, ENGINE_ASSETS_GRAPH_SERVICE_ID, "engine.ui", "engine.ui.text", ENGINE_ASSETS_TEXTURES_SERVICE_ID, "engine.render", "engine.editor"],
-                "bounds_dictionary" => &["engine.assets.models.collisions", "engine.physics", ENGINE_ASSETS_MODELS_SERVICE_ID, "engine.scene"],
-                "manifest" => &[ENGINE_ASSETS_GRAPH_SERVICE_ID, ENGINE_ASSETS_DEFINITIONS_SERVICE_ID, ENGINE_ASSETS_MAPS_SERVICE_ID, ENGINE_SCENE_SERVICE_ID, ENGINE_ASSETS_MODELS_SERVICE_ID, ENGINE_ASSETS_MATERIALS_SERVICE_ID, ENGINE_ASSETS_TEXTURES_SERVICE_ID],
-                "clip_dictionary" | "expression_dictionary" | "frame_filter_dictionary" | "cloth_dictionary" | "pose_database" => &["engine.assets.models.skeletons", ENGINE_ASSETS_MODELS_SERVICE_ID, "engine.scene", "engine.render"],
-                _ => &[ENGINE_ASSET_SERVICE_ID],
-            },
-        }
-    };
-    domains.iter().map(|it| (*it).to_owned()).collect()
+/// Deprecated compatibility hook retained only so older call sites fail softly.
+///
+/// Consumer domains are descriptor-owned. A generic fallback may mirror the
+/// descriptor semantic gateway, but no central extension map is allowed here.
+#[deprecated(note = "file-type consumers are descriptor-owned; do not infer from extension/asset_kind")]
+pub fn consumer_domains_for_file_type(_extension: &str, _asset_kind: &str, _codec_type: &str) -> Vec<String> {
+    Vec::new()
 }
 
+/// Deprecated compatibility hook retained for old tooling. New code must collect
+/// descriptors from format crates/providers and register them with
+/// `engine.assets.file_types`.
+#[deprecated(note = "formats self-register from format crates/providers; registry has no built-in canonical list")]
 pub fn canonical_nef8_file_type_descriptors() -> Vec<AssetFileTypeDescriptor> {
-    LIST_FILE_FORMAT_SPECS
-        .iter()
-        .map(|spec| {
-            let mut descriptor = AssetFileTypeDescriptor {
-                extension: spec.extension.to_owned(),
-                asset_kind: spec.asset_kind.to_owned(),
-                container: format!("newengine.listfile.nef8.{}", spec.extension),
-                codec_type: codec_type::LIST_FILE.to_owned(),
-                byte_owner: ENGINE_ASSET_SERVICE_ID.to_owned(),
-                semantic_gateway: spec.semantic_gateway.to_owned(),
-                gateway: spec.semantic_gateway.to_owned(),
-                handler_service: spec.handler_service.to_owned(),
-                read_method: method::DECODE_V1.to_owned(),
-                selector_syntax: Some(spec.selector_syntax.to_owned()),
-                consumer_domains: consumer_domains_for_file_type(spec.extension, spec.asset_kind, codec_type::LIST_FILE),
-                magic: Some("4e454638".to_owned()),
-                outputs: vec![
-                    ASSET_LIST_FILE_MANIFEST_OUTPUT.to_owned(),
-                    ASSET_LIST_FILE_HEADER_OUTPUT.to_owned(),
-                    ASSET_LIST_FILE_BODY_OUTPUT.to_owned(),
-                    "domain.manifest_json".to_owned(),
-                    "asset.blob".to_owned(),
-                ],
-                priority: -100,
-                vfs_backed: true,
-                runtime_ready: true,
-                allow_nested_assets: false,
-                native_container: true,
-                requires_magic: true,
-                notes: format!("Built-in NEF8/ListFile descriptor from canonical asset-family research: {}", spec.purpose),
-            };
-            descriptor.normalize_layer_contract();
-            descriptor
-        })
-        .collect()
+    Vec::new()
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
@@ -1222,52 +1160,54 @@ pub fn wait_ready<A: AssetAccess + ?Sized>(
 }
 
 
+
 #[cfg(test)]
 mod file_type_layer_contract_tests {
     use super::*;
 
     #[test]
-    fn canonical_semantic_gateways_are_not_asset_bucket() {
-        assert_eq!(semantic_gateway_for_file_type("ytd", "texture_dictionary", codec_type::LIST_FILE), ENGINE_ASSETS_TEXTURES_SERVICE_ID);
-        assert_eq!(semantic_gateway_for_file_type("ydd", "drawable_dictionary", codec_type::LIST_FILE), ENGINE_ASSETS_MODELS_SERVICE_ID);
-        assert_eq!(semantic_gateway_for_file_type("nemat", "material_library", codec_type::LIST_FILE), ENGINE_ASSETS_MATERIALS_SERVICE_ID);
-        assert_eq!(semantic_gateway_for_file_type("ytyp", "archetype_dictionary", codec_type::LIST_FILE), ENGINE_ASSETS_DEFINITIONS_SERVICE_ID);
-        assert_eq!(semantic_gateway_for_file_type("ymap", "map_data", codec_type::LIST_FILE), ENGINE_ASSETS_MAPS_SERVICE_ID);
-        assert_eq!(semantic_gateway_for_file_type("neui", "ui_dictionary", codec_type::LIST_FILE), ENGINE_ASSETS_UI_SERVICE_ID);
-        assert_eq!(semantic_gateway_for_file_type("ybn", "bounds_dictionary", codec_type::LIST_FILE), "engine.assets.models.collisions");
-        assert_eq!(semantic_gateway_for_file_type("nepak", "asset_package", codec_type::CONTAINER), ENGINE_ASSET_SERVICE_ID);
-    }
-
-    #[test]
-    fn canonical_nef8_descriptors_cover_researched_y_formats() {
-        let descriptors = canonical_nef8_file_type_descriptors();
-        assert!(descriptors.iter().any(|it| it.extension == "ytd" && it.semantic_gateway == ENGINE_ASSETS_TEXTURES_SERVICE_ID));
-        assert!(descriptors.iter().any(|it| it.extension == "ymap" && it.semantic_gateway == ENGINE_ASSETS_MAPS_SERVICE_ID));
-        assert!(descriptors.iter().any(|it| it.extension == "neui" && it.semantic_gateway == ENGINE_ASSETS_UI_SERVICE_ID));
-        assert!(descriptors.iter().any(|it| it.extension == "ysc" && it.asset_kind == "script_module"));
-        assert!(descriptors.iter().any(|it| it.extension == "ypdb" && it.selector_syntax.as_deref() == Some("file.ypdb@entry")));
-        assert_eq!(descriptors.len(), LIST_FILE_FORMAT_SPECS.len());
-        for descriptor in descriptors {
-            assert_eq!(descriptor.byte_owner, ENGINE_ASSET_SERVICE_ID);
-            assert!(descriptor.validate_generic_rules().is_ok(), "descriptor .{} invalid", descriptor.extension);
-        }
-    }
-
-    #[test]
-    fn descriptor_normalization_splits_byte_and_semantic_owners() {
-        let mut ytd = AssetFileTypeDescriptor {
-            extension: "ytd".to_owned(),
-            asset_kind: "texture_dictionary".to_owned(),
+    fn descriptor_normalization_does_not_infer_semantic_owner() {
+        let mut descriptor = AssetFileTypeDescriptor {
+            extension: "whatever".to_owned(),
+            asset_kind: "opaque_format".to_owned(),
             codec_type: codec_type::LIST_FILE.to_owned(),
-            handler_service: "asset.codec.listfile.ytd".to_owned(),
+            handler_service: "asset.codec.listfile.whatever".to_owned(),
             magic: Some("4e454638".to_owned()),
             ..Default::default()
         };
-        ytd.normalize_layer_contract();
-        assert_eq!(ytd.byte_owner, ENGINE_ASSET_SERVICE_ID);
-        assert_eq!(ytd.semantic_gateway, ENGINE_ASSETS_TEXTURES_SERVICE_ID);
-        assert_eq!(ytd.gateway, ENGINE_ASSETS_TEXTURES_SERVICE_ID);
-        assert!(ytd.consumer_domains.iter().any(|it| it == ENGINE_ASSETS_MATERIALS_SERVICE_ID));
-        assert!(ytd.validate_generic_rules().is_ok());
+        descriptor.normalize_layer_contract();
+        assert!(descriptor.semantic_gateway.is_empty());
+        assert!(descriptor.validate_generic_rules().is_err());
+    }
+
+    #[test]
+    fn explicit_descriptor_is_valid_without_registry_extension_knowledge() {
+        let mut descriptor = AssetFileTypeDescriptor {
+            extension: "opaque".to_owned(),
+            asset_kind: "provider_declared_asset".to_owned(),
+            container: "newengine.listfile.nef8.opaque".to_owned(),
+            content_kind: Some(9001),
+            codec_type: codec_type::LIST_FILE.to_owned(),
+            byte_owner: ENGINE_ASSET_SERVICE_ID.to_owned(),
+            semantic_gateway: "engine.assets.provider_declared".to_owned(),
+            handler_service: "asset.codec.listfile.opaque".to_owned(),
+            selector_syntax: Some("file.opaque@entry".to_owned()),
+            consumer_domains: vec!["engine.assets.provider_declared".to_owned()],
+            magic: Some("4e454638".to_owned()),
+            outputs: vec![ASSET_LIST_FILE_MANIFEST_OUTPUT.to_owned(), ASSET_LIST_FILE_BODY_OUTPUT.to_owned()],
+            runtime_ready: true,
+            native_container: true,
+            requires_magic: true,
+            ..Default::default()
+        };
+        descriptor.normalize_layer_contract();
+        assert_eq!(descriptor.gateway, descriptor.semantic_gateway);
+        assert_eq!(descriptor.content_kind, Some(9001));
+        assert!(descriptor.validate_generic_rules().is_ok());
+    }
+
+    #[test]
+    fn deprecated_canonical_descriptor_list_is_empty() {
+        assert!(canonical_nef8_file_type_descriptors().is_empty());
     }
 }

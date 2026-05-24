@@ -1,0 +1,11 @@
+[package]
+name = "newengine-asset-format-ymt"
+version = "0.1.0"
+edition = "2021"
+readme = "README.md"
+
+[dependencies]
+newengine-assets-api = { path = "../newengine-assets-api" }
+
+[features]
+default = []

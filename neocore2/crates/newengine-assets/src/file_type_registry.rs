@@ -7,7 +7,7 @@ use newengine_assets_api::{
     ASSET_FILE_TYPE_SERVICE_METHODS, ASSET_FILE_TYPES_BACKEND_CAPABILITY_ID,
     ASSET_FILE_TYPES_SERVICE_ID, ENGINE_ASSET_FILE_TYPES_SERVICE_ID,
 };
-use newengine_plugin_api::Blob;
+use newengine_plugin_api::{Blob, HostApiV1, MethodName};
 use newengine_service_api::EngineServiceKind;
 use newengine_service_kit::{
     engine_owned_service_description, ok_empty_blob, ok_json,
@@ -32,11 +32,10 @@ struct FileTypeRegistryState {
 
 impl Default for FileTypeRegistryState {
     fn default() -> Self {
-        let registry = newengine_assets_api::canonical_nef8_file_type_descriptors()
-            .into_iter()
-            .map(|descriptor| (descriptor.extension.clone(), descriptor))
-            .collect();
-        Self { registry }
+        // Empty by design: formats self-register through their own crates/providers.
+        // The registry is a generic collector/resolver, not a god table of
+        // extensions and semantic gateways.
+        Self { registry: BTreeMap::new() }
     }
 }
 
@@ -146,8 +145,8 @@ fn warn_if_semantic_gateway_unresolved(desc: &AssetFileTypeDescriptor) {
         return;
     }
 
-    let is_package = desc.extension == "nepak" || desc.is_container_codec();
-    if desc.semantic_gateway == newengine_assets_api::ENGINE_ASSET_SERVICE_ID && !is_package {
+    let is_byte_bucket_only = desc.semantic_gateway == newengine_assets_api::ENGINE_ASSET_SERVICE_ID;
+    if is_byte_bucket_only && !desc.is_container_codec() {
         log::warn!(
             "asset file type registry: semantic_gateway fell back to engine.assets for non-container extension='.{}' asset_kind='{}'; this is a byte-owner only fallback and must be replaced by a real domain gateway",
             desc.extension,
@@ -160,6 +159,31 @@ pub fn asset_file_types_service_info() -> AssetFileTypesServiceInfo {
     FileTypeRegistryState::default().service_info()
 }
 
+pub fn register_asset_file_type_descriptor_best_effort(
+    host: &HostApiV1,
+    descriptor: AssetFileTypeDescriptor,
+) -> bool {
+    let payload = match serde_json::to_vec(&AssetFileTypeRegisterRequest { descriptor }) {
+        Ok(payload) => payload,
+        Err(e) => {
+            log::warn!("asset file type registry: failed to serialize descriptor registration: {e}");
+            return false;
+        }
+    };
+    let result = (host.call_service_v1)(
+        RString::from(ENGINE_ASSET_FILE_TYPES_SERVICE_ID),
+        MethodName::from(file_type_method::REGISTER_JSON_V1),
+        Blob::from(payload),
+    );
+    match result.into_result() {
+        Ok(_) => true,
+        Err(e) => {
+            log::warn!("asset file type registry: descriptor self-registration failed: {e}");
+            false
+        }
+    }
+}
+
 pub fn asset_file_types_gateway_service() -> newengine_plugin_api::ServiceV1Dyn<'static> {
     let description = engine_owned_service_description(
         ASSET_FILE_TYPES_SERVICE_ID,
@@ -169,8 +193,8 @@ pub fn asset_file_types_gateway_service() -> newengine_plugin_api::ServiceV1Dyn<
     )
     .gateway(ENGINE_ASSET_FILE_TYPES_SERVICE_ID)
     .protocol("json")
-    .features(["codec-descriptor-registry", "self-registration", "canonical-nef8-y-file-descriptors"])
-    .notes("Descriptor registry starts with researched NEF8 .y* ListFile cells. Codec/provider descriptors may override them deterministically; the registry still does not parse payload semantics.");
+    .features(["codec-descriptor-registry", "self-registration", "provider-owned-format-descriptors"])
+    .notes("Descriptor registry starts empty. Format crates/codecs/providers self-register descriptors; the registry only stores, validates and resolves them.");
 
     JsonServiceRouter::with_state(
         ASSET_FILE_TYPES_SERVICE_ID,
@@ -208,9 +232,35 @@ pub fn register_asset_file_types_gateway_best_effort() -> bool {
     })
 }
 
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn explicit_descriptor(extension: &str, priority: i32, semantic_gateway: &str) -> AssetFileTypeDescriptor {
+        AssetFileTypeDescriptor {
+            extension: extension.to_owned(),
+            asset_kind: "provider_declared_asset".to_owned(),
+            container: format!("newengine.listfile.nef8.{extension}"),
+            content_kind: Some(1000),
+            codec_type: newengine_assets_api::codec_type::LIST_FILE.to_owned(),
+            byte_owner: newengine_assets_api::ENGINE_ASSET_SERVICE_ID.to_owned(),
+            semantic_gateway: semantic_gateway.to_owned(),
+            handler_service: format!("asset.codec.listfile.{extension}"),
+            selector_syntax: Some(format!("file.{extension}@entry")),
+            consumer_domains: vec![semantic_gateway.to_owned()],
+            magic: Some("4e454638".to_owned()),
+            outputs: vec![newengine_assets_api::ASSET_LIST_FILE_MANIFEST_OUTPUT.to_owned(), "asset.blob".to_owned()],
+            priority,
+            vfs_backed: true,
+            runtime_ready: true,
+            allow_nested_assets: false,
+            native_container: true,
+            requires_magic: true,
+            notes: "test descriptor declared by test format crate".to_owned(),
+            ..Default::default()
+        }
+    }
 
     fn register_one(descriptor: AssetFileTypeDescriptor) -> AssetFileTypeDescriptor {
         let mut state = FileTypeRegistryState::default();
@@ -218,62 +268,62 @@ mod tests {
     }
 
     #[test]
-    fn registry_exposes_layer_split_for_ytd() {
-        let registered = register_one(AssetFileTypeDescriptor {
-            extension: "ytd".to_owned(),
-            asset_kind: "texture_dictionary".to_owned(),
-            container: "newengine.listfile.nef8.ytd".to_owned(),
-            codec_type: newengine_assets_api::codec_type::LIST_FILE.to_owned(),
-            handler_service: "asset.codec.listfile.ytd".to_owned(),
-            magic: Some("4e454638".to_owned()),
-            ..Default::default()
-        });
-        assert_eq!(registered.byte_owner, newengine_assets_api::ENGINE_ASSET_SERVICE_ID);
-        assert_eq!(registered.semantic_gateway, newengine_assets_api::ENGINE_ASSETS_TEXTURES_SERVICE_ID);
-        assert_eq!(registered.gateway, newengine_assets_api::ENGINE_ASSETS_TEXTURES_SERVICE_ID);
-        assert!(registered.consumer_domains.iter().any(|it| it == newengine_assets_api::ENGINE_ASSETS_MATERIALS_SERVICE_ID));
-    }
-
-    #[test]
-    fn registry_exposes_definitions_for_ytyp_not_scene() {
-        let registered = register_one(AssetFileTypeDescriptor {
-            extension: "ytyp".to_owned(),
-            asset_kind: "archetype_dictionary".to_owned(),
-            container: "newengine.listfile.nef8.ytyp".to_owned(),
-            codec_type: newengine_assets_api::codec_type::LIST_FILE.to_owned(),
-            handler_service: "asset.codec.listfile.ytyp".to_owned(),
-            magic: Some("4e454638".to_owned()),
-            ..Default::default()
-        });
-        assert_eq!(registered.byte_owner, newengine_assets_api::ENGINE_ASSET_SERVICE_ID);
-        assert_eq!(registered.semantic_gateway, newengine_assets_api::ENGINE_ASSETS_DEFINITIONS_SERVICE_ID);
-        assert_ne!(registered.semantic_gateway, "engine.scene");
-        assert!(registered.consumer_domains.iter().any(|it| it == "engine.ai"));
-    }
-
-    #[test]
-    fn registry_preloads_researched_nef8_y_formats() {
+    fn registry_starts_empty_until_formats_self_register() {
         let state = FileTypeRegistryState::default();
-        let manifest = state.manifest();
-        assert!(manifest.formats.iter().any(|it| it.extension == "ymap" && it.semantic_gateway == newengine_assets_api::ENGINE_ASSETS_MAPS_SERVICE_ID));
-        assert!(manifest.formats.iter().any(|it| it.extension == "ycd" && it.semantic_gateway == "engine.assets.models.skeletons"));
-        assert!(manifest.formats.iter().any(|it| it.extension == "ysc" && it.asset_kind == "script_module" && it.semantic_gateway == newengine_assets_api::ENGINE_SCRIPTING_SERVICE_ID));
+        assert!(state.manifest().formats.is_empty());
     }
 
     #[test]
-    fn registry_keeps_nepak_under_engine_assets() {
+    fn registry_accepts_provider_declared_format_without_known_extension_branch() {
+        let registered = register_one(explicit_descriptor("zzx", 0, "engine.assets.zzx"));
+        assert_eq!(registered.extension, "zzx");
+        assert_eq!(registered.semantic_gateway, "engine.assets.zzx");
+        assert_eq!(registered.gateway, "engine.assets.zzx");
+        assert_eq!(registered.content_kind, Some(1000));
+    }
+
+    #[test]
+    fn registry_rejects_descriptor_without_self_declared_semantic_gateway() {
         let registered = register_one(AssetFileTypeDescriptor {
-            extension: "nepak".to_owned(),
+            extension: "bad".to_owned(),
+            asset_kind: "provider_declared_asset".to_owned(),
+            codec_type: newengine_assets_api::codec_type::LIST_FILE.to_owned(),
+            handler_service: "asset.codec.listfile.bad".to_owned(),
+            magic: Some("4e454638".to_owned()),
+            ..Default::default()
+        });
+        assert!(registered.notes.contains("descriptor rejected"));
+    }
+
+    #[test]
+    fn registry_uses_priority_for_same_extension_without_extension_specific_logic() {
+        let mut state = FileTypeRegistryState::default();
+        let low = explicit_descriptor("same", 0, "engine.assets.low");
+        let high = explicit_descriptor("same", 10, "engine.assets.high");
+        state.register(AssetFileTypeRegisterRequest { descriptor: low });
+        let registered = state.register(AssetFileTypeRegisterRequest { descriptor: high });
+        assert_eq!(registered.semantic_gateway, "engine.assets.high");
+        assert_eq!(state.probe(AssetFileTypeProbeRequest { logical_path: "foo.same@main".to_owned() }).descriptor.unwrap().semantic_gateway, "engine.assets.high");
+    }
+
+    #[test]
+    fn registry_keeps_container_semantics_generic() {
+        let registered = register_one(AssetFileTypeDescriptor {
+            extension: "pkgx".to_owned(),
             asset_kind: "asset_package".to_owned(),
-            container: "newengine.asset_package.v1".to_owned(),
+            container: "newengine.asset_package.provider_declared".to_owned(),
             codec_type: newengine_assets_api::codec_type::CONTAINER.to_owned(),
-            handler_service: "asset.codec.nepak".to_owned(),
+            byte_owner: newengine_assets_api::ENGINE_ASSET_SERVICE_ID.to_owned(),
+            semantic_gateway: newengine_assets_api::ENGINE_ASSET_SERVICE_ID.to_owned(),
+            handler_service: "asset.codec.pkgx".to_owned(),
             magic: Some("4e4550414b010000".to_owned()),
+            consumer_domains: vec![newengine_assets_api::ENGINE_ASSET_SERVICE_ID.to_owned()],
             allow_nested_assets: true,
             native_container: true,
+            runtime_ready: true,
+            requires_magic: true,
             ..Default::default()
         });
-        assert_eq!(registered.byte_owner, newengine_assets_api::ENGINE_ASSET_SERVICE_ID);
         assert_eq!(registered.semantic_gateway, newengine_assets_api::ENGINE_ASSET_SERVICE_ID);
         assert_eq!(registered.consumer_domains, vec![newengine_assets_api::ENGINE_ASSET_SERVICE_ID.to_owned()]);
         assert!(registered.selector_syntax.is_none());

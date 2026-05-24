@@ -58,7 +58,7 @@ impl ModelAssetAdapter {
             .as_deref()
             .map(|path| normalize_logical_path(path, false))
             .transpose()?
-            .filter(|path| path.ends_with(".ytd"));
+            .filter(|path| path.ends_with(&format!(".{}", newengine_asset_format_ytd::EXTENSION)));
 
         let skeleton = match request.skeleton.as_deref() {
             Some(path) => Some(self.load_skeleton_metadata(path, target_height, request.eye_height_ratio)?),
@@ -320,8 +320,8 @@ impl ModelAssetAdapter {
         eye_height_ratio: f32,
     ) -> Result<ModelSkeletonMetadata, String> {
         let path = source.split('@').next().unwrap_or(source);
-        if !path.to_ascii_lowercase().ends_with(".ymt") {
-            return Err(format!("model skeleton metadata requires NEF8 .ymt source, got '{source}'"));
+        if !path.to_ascii_lowercase().ends_with(&format!(".{}", newengine_asset_format_ymt::EXTENSION)) {
+            return Err(format!("model skeleton metadata requires provider-declared NEF8 skeleton metadata source, got '{source}'"));
         }
         let bytes = self.client.decode_v1(&AssetDecodeRequest {
             logical_path: path.to_owned(),

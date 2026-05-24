@@ -21,6 +21,7 @@ serde_json = "1"
 
 newengine-assets = { path = "../newengine-assets" }
 newengine-assets-api = { path = "../newengine-assets-api" }
+newengine-asset-format-ymap = { path = "../newengine-asset-format-ymap" }
 newengine-authored-xml = { path = "../newengine-authored-xml" }
 newengine-audio-api = { path = "../newengine-audio-api" }
 newengine-bounds = { path = "../newengine-bounds" }

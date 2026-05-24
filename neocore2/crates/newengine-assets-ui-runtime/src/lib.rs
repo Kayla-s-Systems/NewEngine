@@ -468,8 +468,8 @@ fn resolve_ui_ref(request: AssetsUiRefRequest) -> Result<ResolvedUiRef, String> 
     if path.is_empty() {
         return Err("engine.assets.ui request requires document_ref='path.neui@entry' or logical_path".to_owned());
     }
-    if !path.to_ascii_lowercase().ends_with(".neui") {
-        return Err(format!("engine.assets.ui accepts only .neui dictionaries, got '{path}'"));
+    if !path.to_ascii_lowercase().ends_with(&format!(".{}", newengine_asset_format_neui::EXTENSION)) {
+        return Err(format!("engine.assets.ui accepts only .{} dictionaries, got '{path}'", newengine_asset_format_neui::EXTENSION));
     }
     let entry = if entry.is_empty() { "surface".to_owned() } else { entry };
     Ok(ResolvedUiRef {
