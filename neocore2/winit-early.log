@@ -107,3 +107,772 @@
 [1779685432374] [pid=2612] [seq=107] handler.about_to_wait loading_active=true
 [1779685432374] [pid=2612] [seq=108] frame.begin shutting_down=false loading_active=true
 [1779685432375] [pid=2612] [seq=109] host.step.loading_inline.begin user_data=0x783c3feab0 dt=0.008864
+[1779687251112] [pid=6700] [seq=1] ffi.entry newengine_platform_runtime_run_v1 title='KAYLA FPS: Procedural Highlands' size=1600x900 user_data=0x3985bfe620
+[1779687251112] [pid=6700] [seq=2] runtime.enter title='KAYLA FPS: Procedural Highlands' size=1600x900 user_data=0x3985bfe620
+[1779687251113] [pid=6700] [seq=3] runtime.event_loop.new.begin
+[1779687251124] [pid=6700] [seq=4] runtime.event_loop.new.ok
+[1779687251124] [pid=6700] [seq=5] runtime.app.new.begin
+[1779687251124] [pid=6700] [seq=6] app.new constructing title='KAYLA FPS: Procedural Highlands' size=1600x900 user_data=0x3985bfe620
+[1779687251125] [pid=6700] [seq=7] loading.status sink subscribed topics='engine.loading.status.v1','engine.task.event.v1'
+[1779687251125] [pid=6700] [seq=8] runtime.app.new.ok
+[1779687251125] [pid=6700] [seq=9] runtime.run_app.begin
+[1779687251126] [pid=6700] [seq=10] handler.resumed.begin
+[1779687251126] [pid=6700] [seq=11] handler.resumed.device_events.always
+[1779687251126] [pid=6700] [seq=12] resume.begin
+[1779687251126] [pid=6700] [seq=13] resume.build_window_attributes.begin
+[1779687251126] [pid=6700] [seq=14] resume.build_window_attributes.ok
+[1779687251126] [pid=6700] [seq=15] resume.create_window.begin
+[1779687251141] [pid=6700] [seq=16] resume.create_window.ok
+[1779687251141] [pid=6700] [seq=17] resume.native_handles.begin
+[1779687251141] [pid=6700] [seq=18] resume.native_handles.ok backend=Win32 hwnd=0x21706da display=0x7ff802c10000 size=1600x900 ppp=1.000
+[1779687251159] [pid=6700] [seq=19] resume.initial_focus focused=true
+[1779687251159] [pid=6700] [seq=20] resume.host.on_window_ready.begin user_data=0x3985bfe620
+[1779687251161] [pid=6700] [seq=21] resume.host.on_window_ready.returned
+[1779687251162] [pid=6700] [seq=22] resume.host.on_window_focused.initial.begin user_data=0x3985bfe620 focused=true
+[1779687251162] [pid=6700] [seq=23] resume.host.on_window_focused.initial.returned
+[1779687251162] [pid=6700] [seq=24] resume.loading_compositor.owns_initial_present
+[1779687251162] [pid=6700] [seq=25] resume.end
+[1779687251163] [pid=6700] [seq=26] handler.resumed.end
+[1779687251163] [pid=6700] [seq=27] host.on_window_resized.begin user_data=0x3985bfe620 size=1600x900 ppp=1.000
+[1779687251163] [pid=6700] [seq=28] host.on_window_resized.returned
+[1779687251163] [pid=6700] [seq=29] host.on_window_focused.begin user_data=0x3985bfe620 focused=true
+[1779687251164] [pid=6700] [seq=30] host.on_window_focused.returned
+[1779687251164] [pid=6700] [seq=31] host.on_window_resized.begin user_data=0x3985bfe620 size=1600x900 ppp=1.000
+[1779687251164] [pid=6700] [seq=32] host.on_window_resized.returned
+[1779687251164] [pid=6700] [seq=33] handler.about_to_wait loading_active=true
+[1779687251165] [pid=6700] [seq=34] frame.begin shutting_down=false loading_active=true
+[1779687251165] [pid=6700] [seq=35] host.step.loading_inline.begin user_data=0x3985bfe620 dt=0.002677
+[1779687251166] [pid=6700] [seq=36] host.step.ok source='loading-inline' loading_active=true exit_requested=false
+[1779687251166] [pid=6700] [seq=37] frame.end loading_active=true
+[1779687251169] [pid=6700] [seq=38] handler.about_to_wait loading_active=true
+[1779687251170] [pid=6700] [seq=39] frame.begin shutting_down=false loading_active=true
+[1779687251170] [pid=6700] [seq=40] host.step.loading_inline.begin user_data=0x3985bfe620 dt=0.005128
+[1779687251809] [pid=6700] [seq=41] host.step.ok source='loading-inline' loading_active=true exit_requested=false
+[1779687251809] [pid=6700] [seq=42] frame.end loading_active=true
+[1779687251810] [pid=6700] [seq=43] handler.about_to_wait loading_active=true
+[1779687251810] [pid=6700] [seq=44] frame.begin shutting_down=false loading_active=true
+[1779687251811] [pid=6700] [seq=45] host.step.loading_inline.begin user_data=0x3985bfe620 dt=0.640554
+[1779687251815] [pid=6700] [seq=46] host.step.ok source='loading-inline' loading_active=true exit_requested=false
+[1779687251816] [pid=6700] [seq=47] frame.end loading_active=true
+[1779687251833] [pid=6700] [seq=48] handler.about_to_wait loading_active=true
+[1779687251833] [pid=6700] [seq=49] frame.begin shutting_down=false loading_active=true
+[1779687251833] [pid=6700] [seq=50] host.step.loading_inline.begin user_data=0x3985bfe620 dt=0.022640
+[1779687251835] [pid=6700] [seq=51] host.step.ok source='loading-inline' loading_active=true exit_requested=false
+[1779687251836] [pid=6700] [seq=52] frame.end loading_active=true
+[1779687251852] [pid=6700] [seq=53] handler.about_to_wait loading_active=true
+[1779687251853] [pid=6700] [seq=54] frame.begin shutting_down=false loading_active=true
+[1779687251853] [pid=6700] [seq=55] host.step.loading_inline.begin user_data=0x3985bfe620 dt=0.019529
+[1779687251856] [pid=6700] [seq=56] host.step.ok source='loading-inline' loading_active=true exit_requested=false
+[1779687251857] [pid=6700] [seq=57] frame.end loading_active=true
+[1779687251873] [pid=6700] [seq=58] handler.about_to_wait loading_active=true
+[1779687251874] [pid=6700] [seq=59] frame.begin shutting_down=false loading_active=true
+[1779687251874] [pid=6700] [seq=60] host.step.loading_inline.begin user_data=0x3985bfe620 dt=0.021062
+[1779687251876] [pid=6700] [seq=61] host.step.ok source='loading-inline' loading_active=true exit_requested=false
+[1779687251877] [pid=6700] [seq=62] frame.end loading_active=true
+[1779687251893] [pid=6700] [seq=63] handler.about_to_wait loading_active=true
+[1779687251894] [pid=6700] [seq=64] frame.begin shutting_down=false loading_active=true
+[1779687251894] [pid=6700] [seq=65] host.step.loading_inline.begin user_data=0x3985bfe620 dt=0.019983
+[1779687251897] [pid=6700] [seq=66] host.step.ok source='loading-inline' loading_active=true exit_requested=false
+[1779687251898] [pid=6700] [seq=67] frame.end loading_active=true
+[1779687251914] [pid=6700] [seq=68] handler.about_to_wait loading_active=true
+[1779687251915] [pid=6700] [seq=69] frame.begin shutting_down=false loading_active=true
+[1779687251915] [pid=6700] [seq=70] host.step.loading_inline.begin user_data=0x3985bfe620 dt=0.021019
+[1779687251917] [pid=6700] [seq=71] host.step.ok source='loading-inline' loading_active=true exit_requested=false
+[1779687251917] [pid=6700] [seq=72] frame.end loading_active=true
+[1779687251933] [pid=6700] [seq=73] handler.about_to_wait loading_active=true
+[1779687251934] [pid=6700] [seq=74] frame.begin shutting_down=false loading_active=true
+[1779687251934] [pid=6700] [seq=75] host.step.loading_inline.begin user_data=0x3985bfe620 dt=0.018947
+[1779687251941] [pid=6700] [seq=76] host.step.ok source='loading-inline' loading_active=true exit_requested=false
+[1779687251942] [pid=6700] [seq=77] frame.end loading_active=true
+[1779687251958] [pid=6700] [seq=78] handler.about_to_wait loading_active=true
+[1779687251959] [pid=6700] [seq=79] frame.begin shutting_down=false loading_active=true
+[1779687251959] [pid=6700] [seq=80] host.step.loading_inline.begin user_data=0x3985bfe620 dt=0.025066
+[1779687251967] [pid=6700] [seq=81] host.step.ok source='loading-inline' loading_active=true exit_requested=false
+[1779687251967] [pid=6700] [seq=82] frame.end loading_active=true
+[1779687251984] [pid=6700] [seq=83] handler.about_to_wait loading_active=true
+[1779687251985] [pid=6700] [seq=84] frame.begin shutting_down=false loading_active=true
+[1779687251985] [pid=6700] [seq=85] host.step.loading_inline.begin user_data=0x3985bfe620 dt=0.025960
+[1779687251989] [pid=6700] [seq=86] host.step.ok source='loading-inline' loading_active=true exit_requested=false
+[1779687251989] [pid=6700] [seq=87] frame.end loading_active=true
+[1779687252006] [pid=6700] [seq=88] handler.about_to_wait loading_active=true
+[1779687252007] [pid=6700] [seq=89] frame.begin shutting_down=false loading_active=true
+[1779687252007] [pid=6700] [seq=90] host.step.loading_inline.begin user_data=0x3985bfe620 dt=0.022034
+[1779687252011] [pid=6700] [seq=91] host.step.ok source='loading-inline' loading_active=true exit_requested=false
+[1779687252012] [pid=6700] [seq=92] frame.end loading_active=true
+[1779687252029] [pid=6700] [seq=93] handler.about_to_wait loading_active=true
+[1779687252029] [pid=6700] [seq=94] frame.begin shutting_down=false loading_active=true
+[1779687252029] [pid=6700] [seq=95] host.step.loading_inline.begin user_data=0x3985bfe620 dt=0.022287
+[1779687262456] [pid=6700] [seq=96] host.step.ok source='loading-inline' loading_active=true exit_requested=false
+[1779687262457] [pid=6700] [seq=97] frame.end loading_active=true
+[1779687262458] [pid=6700] [seq=98] handler.about_to_wait loading_active=true
+[1779687262459] [pid=6700] [seq=99] frame.begin shutting_down=false loading_active=true
+[1779687262459] [pid=6700] [seq=100] host.step.loading_inline.begin user_data=0x3985bfe620 dt=10.429852
+[1779687262462] [pid=6700] [seq=101] host.step.ok source='loading-inline' loading_active=true exit_requested=false
+[1779687262463] [pid=6700] [seq=102] frame.end loading_active=true
+[1779687262480] [pid=6700] [seq=103] handler.about_to_wait loading_active=true
+[1779687262480] [pid=6700] [seq=104] frame.begin shutting_down=false loading_active=true
+[1779687262480] [pid=6700] [seq=105] host.step.loading_inline.begin user_data=0x3985bfe620 dt=0.021155
+[1779687662792] [pid=1232] [seq=1] ffi.entry newengine_platform_runtime_run_v1 title='KAYLA FPS: Procedural Highlands' size=1600x900 user_data=0x4f777fe5d0
+[1779687662792] [pid=1232] [seq=2] runtime.enter title='KAYLA FPS: Procedural Highlands' size=1600x900 user_data=0x4f777fe5d0
+[1779687662792] [pid=1232] [seq=3] runtime.event_loop.new.begin
+[1779687662803] [pid=1232] [seq=4] runtime.event_loop.new.ok
+[1779687662803] [pid=1232] [seq=5] runtime.app.new.begin
+[1779687662804] [pid=1232] [seq=6] app.new constructing title='KAYLA FPS: Procedural Highlands' size=1600x900 user_data=0x4f777fe5d0
+[1779687662804] [pid=1232] [seq=7] loading.status sink subscribed topics='engine.loading.status.v1','engine.task.event.v1'
+[1779687662804] [pid=1232] [seq=8] runtime.app.new.ok
+[1779687662804] [pid=1232] [seq=9] runtime.run_app.begin
+[1779687662805] [pid=1232] [seq=10] handler.resumed.begin
+[1779687662805] [pid=1232] [seq=11] handler.resumed.device_events.always
+[1779687662805] [pid=1232] [seq=12] resume.begin
+[1779687662805] [pid=1232] [seq=13] resume.build_window_attributes.begin
+[1779687662806] [pid=1232] [seq=14] resume.build_window_attributes.ok
+[1779687662806] [pid=1232] [seq=15] resume.create_window.begin
+[1779687662819] [pid=1232] [seq=16] resume.create_window.ok
+[1779687662820] [pid=1232] [seq=17] resume.native_handles.begin
+[1779687662820] [pid=1232] [seq=18] resume.native_handles.ok backend=Win32 hwnd=0x121334 display=0x7ff802c10000 size=1600x900 ppp=1.000
+[1779687662840] [pid=1232] [seq=19] resume.initial_focus focused=true
+[1779687662840] [pid=1232] [seq=20] resume.host.on_window_ready.begin user_data=0x4f777fe5d0
+[1779687662842] [pid=1232] [seq=21] resume.host.on_window_ready.returned
+[1779687662842] [pid=1232] [seq=22] resume.host.on_window_focused.initial.begin user_data=0x4f777fe5d0 focused=true
+[1779687662843] [pid=1232] [seq=23] resume.host.on_window_focused.initial.returned
+[1779687662843] [pid=1232] [seq=24] resume.loading_compositor.owns_initial_present
+[1779687662843] [pid=1232] [seq=25] resume.end
+[1779687662843] [pid=1232] [seq=26] handler.resumed.end
+[1779687662843] [pid=1232] [seq=27] host.on_window_resized.begin user_data=0x4f777fe5d0 size=1600x900 ppp=1.000
+[1779687662844] [pid=1232] [seq=28] host.on_window_resized.returned
+[1779687662844] [pid=1232] [seq=29] host.on_window_focused.begin user_data=0x4f777fe5d0 focused=true
+[1779687662844] [pid=1232] [seq=30] host.on_window_focused.returned
+[1779687662844] [pid=1232] [seq=31] host.on_window_resized.begin user_data=0x4f777fe5d0 size=1600x900 ppp=1.000
+[1779687662845] [pid=1232] [seq=32] host.on_window_resized.returned
+[1779687662845] [pid=1232] [seq=33] handler.about_to_wait loading_active=true
+[1779687662845] [pid=1232] [seq=34] frame.begin shutting_down=false loading_active=true
+[1779687662845] [pid=1232] [seq=35] host.step.loading_inline.begin user_data=0x4f777fe5d0 dt=0.002403
+[1779687662846] [pid=1232] [seq=36] host.step.ok source='loading-inline' loading_active=true exit_requested=false
+[1779687662846] [pid=1232] [seq=37] frame.end loading_active=true
+[1779687662849] [pid=1232] [seq=38] handler.about_to_wait loading_active=true
+[1779687662850] [pid=1232] [seq=39] frame.begin shutting_down=false loading_active=true
+[1779687662850] [pid=1232] [seq=40] host.step.loading_inline.begin user_data=0x4f777fe5d0 dt=0.004745
+[1779687663460] [pid=1232] [seq=41] host.step.ok source='loading-inline' loading_active=true exit_requested=false
+[1779687663461] [pid=1232] [seq=42] frame.end loading_active=true
+[1779687663462] [pid=1232] [seq=43] handler.about_to_wait loading_active=true
+[1779687663463] [pid=1232] [seq=44] frame.begin shutting_down=false loading_active=true
+[1779687663463] [pid=1232] [seq=45] host.step.loading_inline.begin user_data=0x4f777fe5d0 dt=0.612980
+[1779687663465] [pid=1232] [seq=46] host.step.ok source='loading-inline' loading_active=true exit_requested=false
+[1779687663466] [pid=1232] [seq=47] frame.end loading_active=true
+[1779687663470] [pid=1232] [seq=48] handler.about_to_wait loading_active=true
+[1779687663471] [pid=1232] [seq=49] frame.begin shutting_down=false loading_active=true
+[1779687663471] [pid=1232] [seq=50] host.step.loading_inline.begin user_data=0x4f777fe5d0 dt=0.007846
+[1779687663473] [pid=1232] [seq=51] host.step.ok source='loading-inline' loading_active=true exit_requested=false
+[1779687663473] [pid=1232] [seq=52] frame.end loading_active=true
+[1779687663478] [pid=1232] [seq=53] handler.about_to_wait loading_active=true
+[1779687663478] [pid=1232] [seq=54] frame.begin shutting_down=false loading_active=true
+[1779687663479] [pid=1232] [seq=55] host.step.loading_inline.begin user_data=0x4f777fe5d0 dt=0.007734
+[1779687663484] [pid=1232] [seq=56] host.step.ok source='loading-inline' loading_active=true exit_requested=false
+[1779687663484] [pid=1232] [seq=57] frame.end loading_active=true
+[1779687663486] [pid=1232] [seq=58] handler.about_to_wait loading_active=true
+[1779687663487] [pid=1232] [seq=59] frame.begin shutting_down=false loading_active=true
+[1779687663487] [pid=1232] [seq=60] host.step.loading_inline.begin user_data=0x4f777fe5d0 dt=0.008600
+[1779687663490] [pid=1232] [seq=61] host.step.ok source='loading-inline' loading_active=true exit_requested=false
+[1779687663491] [pid=1232] [seq=62] frame.end loading_active=true
+[1779687663495] [pid=1232] [seq=63] handler.about_to_wait loading_active=true
+[1779687663495] [pid=1232] [seq=64] frame.begin shutting_down=false loading_active=true
+[1779687663495] [pid=1232] [seq=65] host.step.loading_inline.begin user_data=0x4f777fe5d0 dt=0.008221
+[1779687663499] [pid=1232] [seq=66] host.step.ok source='loading-inline' loading_active=true exit_requested=false
+[1779687663500] [pid=1232] [seq=67] frame.end loading_active=true
+[1779687663502] [pid=1232] [seq=68] handler.about_to_wait loading_active=true
+[1779687663503] [pid=1232] [seq=69] frame.begin shutting_down=false loading_active=true
+[1779687663503] [pid=1232] [seq=70] host.step.loading_inline.begin user_data=0x4f777fe5d0 dt=0.007602
+[1779687663505] [pid=1232] [seq=71] host.step.ok source='loading-inline' loading_active=true exit_requested=false
+[1779687663506] [pid=1232] [seq=72] frame.end loading_active=true
+[1779687663510] [pid=1232] [seq=73] handler.about_to_wait loading_active=true
+[1779687663511] [pid=1232] [seq=74] frame.begin shutting_down=false loading_active=true
+[1779687663511] [pid=1232] [seq=75] host.step.loading_inline.begin user_data=0x4f777fe5d0 dt=0.007749
+[1779687663517] [pid=1232] [seq=76] host.step.ok source='loading-inline' loading_active=true exit_requested=false
+[1779687663517] [pid=1232] [seq=77] frame.end loading_active=true
+[1779687663519] [pid=1232] [seq=78] handler.about_to_wait loading_active=true
+[1779687663519] [pid=1232] [seq=79] frame.begin shutting_down=false loading_active=true
+[1779687663519] [pid=1232] [seq=80] host.step.loading_inline.begin user_data=0x4f777fe5d0 dt=0.008540
+[1779687663524] [pid=1232] [seq=81] host.step.ok source='loading-inline' loading_active=true exit_requested=false
+[1779687663524] [pid=1232] [seq=82] frame.end loading_active=true
+[1779687663527] [pid=1232] [seq=83] handler.about_to_wait loading_active=true
+[1779687663527] [pid=1232] [seq=84] frame.begin shutting_down=false loading_active=true
+[1779687663527] [pid=1232] [seq=85] host.step.loading_inline.begin user_data=0x4f777fe5d0 dt=0.008045
+[1779687663531] [pid=1232] [seq=86] host.step.ok source='loading-inline' loading_active=true exit_requested=false
+[1779687663532] [pid=1232] [seq=87] frame.end loading_active=true
+[1779687663547] [pid=1232] [seq=88] handler.about_to_wait loading_active=true
+[1779687663548] [pid=1232] [seq=89] frame.begin shutting_down=false loading_active=true
+[1779687663548] [pid=1232] [seq=90] host.step.loading_inline.begin user_data=0x4f777fe5d0 dt=0.020649
+[1779687663551] [pid=1232] [seq=91] host.step.ok source='loading-inline' loading_active=true exit_requested=false
+[1779687663552] [pid=1232] [seq=92] frame.end loading_active=true
+[1779687663567] [pid=1232] [seq=93] handler.about_to_wait loading_active=true
+[1779687663568] [pid=1232] [seq=94] frame.begin shutting_down=false loading_active=true
+[1779687663568] [pid=1232] [seq=95] host.step.loading_inline.begin user_data=0x4f777fe5d0 dt=0.019986
+[1779687673855] [pid=1232] [seq=96] host.step.ok source='loading-inline' loading_active=true exit_requested=false
+[1779687673856] [pid=1232] [seq=97] frame.end loading_active=true
+[1779687673857] [pid=1232] [seq=98] handler.about_to_wait loading_active=true
+[1779687673857] [pid=1232] [seq=99] frame.begin shutting_down=false loading_active=true
+[1779687673857] [pid=1232] [seq=100] host.step.loading_inline.begin user_data=0x4f777fe5d0 dt=10.289226
+[1779687673860] [pid=1232] [seq=101] host.step.ok source='loading-inline' loading_active=true exit_requested=false
+[1779687673861] [pid=1232] [seq=102] frame.end loading_active=true
+[1779687673878] [pid=1232] [seq=103] handler.about_to_wait loading_active=true
+[1779687673878] [pid=1232] [seq=104] frame.begin shutting_down=false loading_active=true
+[1779687673879] [pid=1232] [seq=105] host.step.loading_inline.begin user_data=0x4f777fe5d0 dt=0.021463
+[1779687673889] [pid=1232] [seq=106] host.step.ok source='loading-inline' loading_active=true exit_requested=false
+[1779687673890] [pid=1232] [seq=107] frame.end loading_active=true
+[1779687673907] [pid=1232] [seq=108] handler.about_to_wait loading_active=true
+[1779687673907] [pid=1232] [seq=109] frame.begin shutting_down=false loading_active=true
+[1779687673908] [pid=1232] [seq=110] host.step.loading_inline.begin user_data=0x4f777fe5d0 dt=0.028896
+[1779687673943] [pid=1232] [seq=111] host.step.ok source='loading-inline' loading_active=true exit_requested=false
+[1779687673944] [pid=1232] [seq=112] frame.end loading_active=true
+[1779687673961] [pid=1232] [seq=113] handler.about_to_wait loading_active=true
+[1779687673961] [pid=1232] [seq=114] frame.begin shutting_down=false loading_active=true
+[1779687673961] [pid=1232] [seq=115] host.step.loading_inline.begin user_data=0x4f777fe5d0 dt=0.053937
+[1779687673976] [pid=1232] [seq=116] host.step.ok source='loading-inline' loading_active=true exit_requested=false
+[1779687673977] [pid=1232] [seq=117] frame.end loading_active=true
+[1779687673993] [pid=1232] [seq=118] handler.about_to_wait loading_active=true
+[1779687673993] [pid=1232] [seq=119] frame.begin shutting_down=false loading_active=true
+[1779687673993] [pid=1232] [seq=120] host.step.loading_inline.begin user_data=0x4f777fe5d0 dt=0.032001
+[1779687674000] [pid=1232] [seq=121] host.step.ok source='loading-inline' loading_active=true exit_requested=false
+[1779687674001] [pid=1232] [seq=122] frame.end loading_active=true
+[1779687674017] [pid=1232] [seq=123] handler.about_to_wait loading_active=true
+[1779687674017] [pid=1232] [seq=124] frame.begin shutting_down=false loading_active=true
+[1779687674017] [pid=1232] [seq=125] host.step.loading_inline.begin user_data=0x4f777fe5d0 dt=0.023854
+[1779687674019] [pid=1232] [seq=126] host.step.ok source='loading-inline' loading_active=true exit_requested=false
+[1779687674020] [pid=1232] [seq=127] frame.end loading_active=true
+[1779687674035] [pid=1232] [seq=128] handler.about_to_wait loading_active=true
+[1779687674036] [pid=1232] [seq=129] frame.begin shutting_down=false loading_active=true
+[1779687674036] [pid=1232] [seq=130] host.step.loading_inline.begin user_data=0x4f777fe5d0 dt=0.018567
+[1779687674039] [pid=1232] [seq=131] host.step.ok source='loading-inline' loading_active=true exit_requested=false
+[1779687674040] [pid=1232] [seq=132] frame.end loading_active=true
+[1779687674055] [pid=1232] [seq=133] handler.about_to_wait loading_active=true
+[1779687674056] [pid=1232] [seq=134] frame.begin shutting_down=false loading_active=true
+[1779687674056] [pid=1232] [seq=135] host.step.loading_inline.begin user_data=0x4f777fe5d0 dt=0.019960
+[1779687674057] [pid=1232] [seq=136] host.step.ok source='loading-inline' loading_active=true exit_requested=false
+[1779687674057] [pid=1232] [seq=137] frame.end loading_active=true
+[1779687674074] [pid=1232] [seq=138] handler.about_to_wait loading_active=true
+[1779687674074] [pid=1232] [seq=139] frame.begin shutting_down=false loading_active=true
+[1779687674074] [pid=1232] [seq=140] host.step.loading_inline.begin user_data=0x4f777fe5d0 dt=0.018309
+[1779687674075] [pid=1232] [seq=141] host.step.ok source='loading-inline' loading_active=true exit_requested=false
+[1779687674075] [pid=1232] [seq=142] frame.end loading_active=true
+[1779687674091] [pid=1232] [seq=143] handler.about_to_wait loading_active=true
+[1779687674091] [pid=1232] [seq=144] frame.begin shutting_down=false loading_active=true
+[1779687674091] [pid=1232] [seq=145] host.step.loading_inline.begin user_data=0x4f777fe5d0 dt=0.017000
+[1779687678213] [pid=1232] [seq=146] host.step.ok source='loading-inline' loading_active=true exit_requested=false
+[1779687678214] [pid=1232] [seq=147] frame.end loading_active=true
+[1779687678231] [pid=1232] [seq=148] handler.about_to_wait loading_active=true
+[1779687678231] [pid=1232] [seq=149] frame.begin shutting_down=false loading_active=true
+[1779687678231] [pid=1232] [seq=150] host.step.loading_inline.begin user_data=0x4f777fe5d0 dt=4.140036
+[1779687678291] [pid=1232] [seq=151] host.step.ok source='loading-inline' loading_active=true exit_requested=false
+[1779687678291] [pid=1232] [seq=152] frame.end loading_active=true
+[1779687678308] [pid=1232] [seq=153] handler.about_to_wait loading_active=true
+[1779687678308] [pid=1232] [seq=154] frame.begin shutting_down=false loading_active=true
+[1779687678308] [pid=1232] [seq=155] host.step.loading_inline.begin user_data=0x4f777fe5d0 dt=0.076964
+[1779687678353] [pid=1232] [seq=156] host.step.ok source='loading-inline' loading_active=true exit_requested=false
+[1779687678353] [pid=1232] [seq=157] frame.end loading_active=true
+[1779687678370] [pid=1232] [seq=158] handler.about_to_wait loading_active=true
+[1779687678370] [pid=1232] [seq=159] frame.begin shutting_down=false loading_active=true
+[1779687678371] [pid=1232] [seq=160] host.step.loading_inline.begin user_data=0x4f777fe5d0 dt=0.062488
+[1779687678417] [pid=1232] [seq=161] host.step.ok source='loading-inline' loading_active=true exit_requested=false
+[1779687678418] [pid=1232] [seq=162] frame.end loading_active=true
+[1779687678434] [pid=1232] [seq=163] handler.about_to_wait loading_active=true
+[1779687678434] [pid=1232] [seq=164] frame.begin shutting_down=false loading_active=true
+[1779687678435] [pid=1232] [seq=165] host.step.loading_inline.begin user_data=0x4f777fe5d0 dt=0.063927
+[1779687678480] [pid=1232] [seq=166] host.step.ok source='loading-inline' loading_active=true exit_requested=false
+[1779687678481] [pid=1232] [seq=167] frame.end loading_active=true
+[1779687678497] [pid=1232] [seq=168] handler.about_to_wait loading_active=true
+[1779687678497] [pid=1232] [seq=169] frame.begin shutting_down=false loading_active=true
+[1779687678498] [pid=1232] [seq=170] host.step.loading_inline.begin user_data=0x4f777fe5d0 dt=0.062996
+[1779687678537] [pid=1232] [seq=171] host.step.ok source='loading-inline' loading_active=true exit_requested=false
+[1779687678537] [pid=1232] [seq=172] frame.end loading_active=true
+[1779687678554] [pid=1232] [seq=173] handler.about_to_wait loading_active=true
+[1779687678554] [pid=1232] [seq=174] frame.begin shutting_down=false loading_active=true
+[1779687678554] [pid=1232] [seq=175] host.step.loading_inline.begin user_data=0x4f777fe5d0 dt=0.056725
+[1779687678594] [pid=1232] [seq=176] host.step.ok source='loading-inline' loading_active=true exit_requested=false
+[1779687678595] [pid=1232] [seq=177] frame.end loading_active=true
+[1779687678612] [pid=1232] [seq=178] handler.about_to_wait loading_active=true
+[1779687678612] [pid=1232] [seq=179] frame.begin shutting_down=false loading_active=true
+[1779687678612] [pid=1232] [seq=180] host.step.loading_inline.begin user_data=0x4f777fe5d0 dt=0.058022
+[1779687678653] [pid=1232] [seq=181] host.step.ok source='loading-inline' loading_active=true exit_requested=false
+[1779687678653] [pid=1232] [seq=182] frame.end loading_active=true
+[1779687678670] [pid=1232] [seq=183] handler.about_to_wait loading_active=true
+[1779687678670] [pid=1232] [seq=184] frame.begin shutting_down=false loading_active=true
+[1779687678670] [pid=1232] [seq=185] host.step.loading_inline.begin user_data=0x4f777fe5d0 dt=0.057955
+[1779687678740] [pid=1232] [seq=186] host.step.ok source='loading-inline' loading_active=true exit_requested=false
+[1779687678740] [pid=1232] [seq=187] frame.end loading_active=true
+[1779687678757] [pid=1232] [seq=188] handler.about_to_wait loading_active=true
+[1779687678757] [pid=1232] [seq=189] frame.begin shutting_down=false loading_active=true
+[1779687678757] [pid=1232] [seq=190] host.step.loading_inline.begin user_data=0x4f777fe5d0 dt=0.086911
+[1779687678801] [pid=1232] [seq=191] host.step.ok source='loading-inline' loading_active=true exit_requested=false
+[1779687678802] [pid=1232] [seq=192] frame.end loading_active=true
+[1779687678819] [pid=1232] [seq=193] handler.about_to_wait loading_active=true
+[1779687678819] [pid=1232] [seq=194] frame.begin shutting_down=false loading_active=true
+[1779687678819] [pid=1232] [seq=195] host.step.loading_inline.begin user_data=0x4f777fe5d0 dt=0.061975
+[1779687678857] [pid=1232] [seq=196] host.step.ok source='loading-inline' loading_active=true exit_requested=false
+[1779687678858] [pid=1232] [seq=197] frame.end loading_active=true
+[1779687678875] [pid=1232] [seq=198] handler.about_to_wait loading_active=true
+[1779687678875] [pid=1232] [seq=199] frame.begin shutting_down=false loading_active=true
+[1779687678875] [pid=1232] [seq=200] host.step.loading_inline.begin user_data=0x4f777fe5d0 dt=0.055942
+[1779687678913] [pid=1232] [seq=201] host.step.ok source='loading-inline' loading_active=true exit_requested=false
+[1779687678914] [pid=1232] [seq=202] frame.end loading_active=true
+[1779687678930] [pid=1232] [seq=203] handler.about_to_wait loading_active=true
+[1779687678930] [pid=1232] [seq=204] frame.begin shutting_down=false loading_active=true
+[1779687678931] [pid=1232] [seq=205] host.step.loading_inline.begin user_data=0x4f777fe5d0 dt=0.055461
+[1779687678961] [pid=1232] [seq=206] host.step.ok source='loading-inline' loading_active=true exit_requested=false
+[1779687678962] [pid=1232] [seq=207] frame.end loading_active=true
+[1779687678978] [pid=1232] [seq=208] handler.about_to_wait loading_active=true
+[1779687678979] [pid=1232] [seq=209] frame.begin shutting_down=false loading_active=true
+[1779687678979] [pid=1232] [seq=210] host.step.loading_inline.begin user_data=0x4f777fe5d0 dt=0.048274
+[1779687679009] [pid=1232] [seq=211] host.step.ok source='loading-inline' loading_active=true exit_requested=false
+[1779687679009] [pid=1232] [seq=212] frame.end loading_active=true
+[1779687679026] [pid=1232] [seq=213] handler.about_to_wait loading_active=true
+[1779687679026] [pid=1232] [seq=214] frame.begin shutting_down=false loading_active=true
+[1779687679026] [pid=1232] [seq=215] host.step.loading_inline.begin user_data=0x4f777fe5d0 dt=0.047334
+[1779687679058] [pid=1232] [seq=216] host.step.ok source='loading-inline' loading_active=true exit_requested=false
+[1779687679058] [pid=1232] [seq=217] frame.end loading_active=true
+[1779687679075] [pid=1232] [seq=218] handler.about_to_wait loading_active=true
+[1779687679075] [pid=1232] [seq=219] frame.begin shutting_down=false loading_active=true
+[1779687679075] [pid=1232] [seq=220] host.step.loading_inline.begin user_data=0x4f777fe5d0 dt=0.048958
+[1779687679101] [pid=1232] [seq=221] host.step.ok source='loading-inline' loading_active=true exit_requested=false
+[1779687679102] [pid=1232] [seq=222] frame.end loading_active=true
+[1779687679118] [pid=1232] [seq=223] handler.about_to_wait loading_active=true
+[1779687679118] [pid=1232] [seq=224] frame.begin shutting_down=false loading_active=true
+[1779687679119] [pid=1232] [seq=225] host.step.loading_inline.begin user_data=0x4f777fe5d0 dt=0.043458
+[1779687679142] [pid=1232] [seq=226] host.step.ok source='loading-inline' loading_active=true exit_requested=false
+[1779687679143] [pid=1232] [seq=227] frame.end loading_active=true
+[1779687679160] [pid=1232] [seq=228] handler.about_to_wait loading_active=true
+[1779687679160] [pid=1232] [seq=229] frame.begin shutting_down=false loading_active=true
+[1779687679160] [pid=1232] [seq=230] host.step.loading_inline.begin user_data=0x4f777fe5d0 dt=0.041736
+[1779687679185] [pid=1232] [seq=231] host.step.ok source='loading-inline' loading_active=true exit_requested=false
+[1779687679186] [pid=1232] [seq=232] frame.end loading_active=true
+[1779687679203] [pid=1232] [seq=233] handler.about_to_wait loading_active=true
+[1779687679204] [pid=1232] [seq=234] frame.begin shutting_down=false loading_active=true
+[1779687679204] [pid=1232] [seq=235] host.step.loading_inline.begin user_data=0x4f777fe5d0 dt=0.043438
+[1779687679362] [pid=1232] [seq=236] host.step.ok source='loading-inline' loading_active=true exit_requested=false
+[1779687679363] [pid=1232] [seq=237] frame.end loading_active=true
+[1779687679379] [pid=1232] [seq=238] handler.about_to_wait loading_active=true
+[1779687679379] [pid=1232] [seq=239] frame.begin shutting_down=false loading_active=true
+[1779687679380] [pid=1232] [seq=240] host.step.loading_inline.begin user_data=0x4f777fe5d0 dt=0.175911
+[1779687704340] [pid=1232] [seq=241] host.step.ok source='loading-inline' loading_active=false exit_requested=false
+[1779687704342] [pid=1232] [seq=242] frame.end loading_active=false
+[1779687704343] [pid=1232] [seq=243] host.on_window_resized.begin user_data=0x4f777fe5d0 size=1600x900 ppp=1.000
+[1779687704347] [pid=1232] [seq=244] host.on_window_resized.returned
+[1779687704348] [pid=1232] [seq=245] host.on_window_focused.begin user_data=0x4f777fe5d0 focused=false
+[1779687704349] [pid=1232] [seq=246] host.on_window_focused.returned
+[1779687704351] [pid=1232] [seq=247] frame.begin shutting_down=false loading_active=false
+[1779687704351] [pid=1232] [seq=248] host.poll_cursor_state.begin user_data=0x4f777fe5d0
+[1779687704351] [pid=1232] [seq=249] host.poll_cursor_state.returned has_value=true
+[1779687704352] [pid=1232] [seq=250] host.step.begin user_data=0x4f777fe5d0 dt=24.971920
+[1779687704397] [pid=1232] [seq=251] host.step.ok source='winit-redraw' loading_active=false exit_requested=false
+[1779687704397] [pid=1232] [seq=252] frame.end loading_active=false
+[1779687704398] [pid=1232] [seq=253] handler.about_to_wait loading_active=false
+[1779687704398] [pid=1232] [seq=254] frame.begin shutting_down=false loading_active=false
+[1779687704398] [pid=1232] [seq=255] host.poll_cursor_state.begin user_data=0x4f777fe5d0
+[1779687704398] [pid=1232] [seq=256] host.poll_cursor_state.returned has_value=false
+[1779687704398] [pid=1232] [seq=257] host.step.begin user_data=0x4f777fe5d0 dt=0.046871
+[1779687704425] [pid=1232] [seq=258] host.step.ok source='winit-redraw' loading_active=false exit_requested=false
+[1779687704425] [pid=1232] [seq=259] frame.end loading_active=false
+[1779687704425] [pid=1232] [seq=260] handler.about_to_wait loading_active=false
+[1779687704426] [pid=1232] [seq=261] frame.begin shutting_down=false loading_active=false
+[1779687704426] [pid=1232] [seq=262] host.poll_cursor_state.begin user_data=0x4f777fe5d0
+[1779687704426] [pid=1232] [seq=263] host.poll_cursor_state.returned has_value=false
+[1779687704427] [pid=1232] [seq=264] host.step.begin user_data=0x4f777fe5d0 dt=0.028054
+[1779687704453] [pid=1232] [seq=265] host.step.ok source='winit-redraw' loading_active=false exit_requested=false
+[1779687704453] [pid=1232] [seq=266] frame.end loading_active=false
+[1779687704453] [pid=1232] [seq=267] handler.about_to_wait loading_active=false
+[1779687704454] [pid=1232] [seq=268] frame.begin shutting_down=false loading_active=false
+[1779687704454] [pid=1232] [seq=269] host.poll_cursor_state.begin user_data=0x4f777fe5d0
+[1779687704454] [pid=1232] [seq=270] host.poll_cursor_state.returned has_value=false
+[1779687704454] [pid=1232] [seq=271] host.step.begin user_data=0x4f777fe5d0 dt=0.027860
+[1779687704488] [pid=1232] [seq=272] host.step.ok source='winit-redraw' loading_active=false exit_requested=false
+[1779687704489] [pid=1232] [seq=273] frame.end loading_active=false
+[1779687704489] [pid=1232] [seq=274] handler.about_to_wait loading_active=false
+[1779687704490] [pid=1232] [seq=275] frame.begin shutting_down=false loading_active=false
+[1779687704490] [pid=1232] [seq=276] host.poll_cursor_state.begin user_data=0x4f777fe5d0
+[1779687704491] [pid=1232] [seq=277] host.poll_cursor_state.returned has_value=false
+[1779687704491] [pid=1232] [seq=278] host.step.begin user_data=0x4f777fe5d0 dt=0.036836
+[1779687704556] [pid=1232] [seq=279] host.step.ok source='winit-redraw' loading_active=false exit_requested=false
+[1779687704604] [pid=1232] [seq=280] frame.end loading_active=false
+[1779687704613] [pid=1232] [seq=281] handler.about_to_wait loading_active=false
+[1779687704614] [pid=1232] [seq=282] frame.begin shutting_down=false loading_active=false
+[1779687704614] [pid=1232] [seq=283] host.poll_cursor_state.begin user_data=0x4f777fe5d0
+[1779687704614] [pid=1232] [seq=284] host.poll_cursor_state.returned has_value=false
+[1779687704615] [pid=1232] [seq=285] host.step.begin user_data=0x4f777fe5d0 dt=0.123370
+[1779687704685] [pid=1232] [seq=286] host.step.ok source='winit-redraw' loading_active=false exit_requested=false
+[1779687704685] [pid=1232] [seq=287] frame.end loading_active=false
+[1779687704686] [pid=1232] [seq=288] handler.about_to_wait loading_active=false
+[1779687704686] [pid=1232] [seq=289] frame.begin shutting_down=false loading_active=false
+[1779687704686] [pid=1232] [seq=290] host.poll_cursor_state.begin user_data=0x4f777fe5d0
+[1779687704686] [pid=1232] [seq=291] host.poll_cursor_state.returned has_value=false
+[1779687704686] [pid=1232] [seq=292] host.step.begin user_data=0x4f777fe5d0 dt=0.071887
+[1779687704719] [pid=1232] [seq=293] host.step.ok source='winit-redraw' loading_active=false exit_requested=false
+[1779687704720] [pid=1232] [seq=294] frame.end loading_active=false
+[1779687704720] [pid=1232] [seq=295] handler.about_to_wait loading_active=false
+[1779687704721] [pid=1232] [seq=296] frame.begin shutting_down=false loading_active=false
+[1779687704721] [pid=1232] [seq=297] host.poll_cursor_state.begin user_data=0x4f777fe5d0
+[1779687704721] [pid=1232] [seq=298] host.poll_cursor_state.returned has_value=false
+[1779687704721] [pid=1232] [seq=299] host.step.begin user_data=0x4f777fe5d0 dt=0.034864
+[1779687704748] [pid=1232] [seq=300] host.step.ok source='winit-redraw' loading_active=false exit_requested=false
+[1779687704749] [pid=1232] [seq=301] frame.end loading_active=false
+[1779687704749] [pid=1232] [seq=302] handler.about_to_wait loading_active=false
+[1779687704749] [pid=1232] [seq=303] frame.begin shutting_down=false loading_active=false
+[1779687704750] [pid=1232] [seq=304] host.poll_cursor_state.begin user_data=0x4f777fe5d0
+[1779687704750] [pid=1232] [seq=305] host.poll_cursor_state.returned has_value=false
+[1779687704750] [pid=1232] [seq=306] host.step.begin user_data=0x4f777fe5d0 dt=0.028732
+[1779687704777] [pid=1232] [seq=307] host.step.ok source='winit-redraw' loading_active=false exit_requested=false
+[1779687704778] [pid=1232] [seq=308] frame.end loading_active=false
+[1779687704778] [pid=1232] [seq=309] handler.about_to_wait loading_active=false
+[1779687704778] [pid=1232] [seq=310] frame.begin shutting_down=false loading_active=false
+[1779687704779] [pid=1232] [seq=311] host.poll_cursor_state.begin user_data=0x4f777fe5d0
+[1779687704779] [pid=1232] [seq=312] host.poll_cursor_state.returned has_value=false
+[1779687704779] [pid=1232] [seq=313] host.step.begin user_data=0x4f777fe5d0 dt=0.028967
+[1779687704806] [pid=1232] [seq=314] host.step.ok source='winit-redraw' loading_active=false exit_requested=false
+[1779687704807] [pid=1232] [seq=315] frame.end loading_active=false
+[1779687704807] [pid=1232] [seq=316] handler.about_to_wait loading_active=false
+[1779687704807] [pid=1232] [seq=317] frame.begin shutting_down=false loading_active=false
+[1779687704808] [pid=1232] [seq=318] host.poll_cursor_state.begin user_data=0x4f777fe5d0
+[1779687704808] [pid=1232] [seq=319] host.poll_cursor_state.returned has_value=false
+[1779687704808] [pid=1232] [seq=320] host.step.begin user_data=0x4f777fe5d0 dt=0.028943
+[1779687704832] [pid=1232] [seq=321] host.step.ok source='winit-redraw' loading_active=false exit_requested=false
+[1779687704832] [pid=1232] [seq=322] frame.end loading_active=false
+[1779687704832] [pid=1232] [seq=323] handler.about_to_wait loading_active=false
+[1779687704833] [pid=1232] [seq=324] frame.begin shutting_down=false loading_active=false
+[1779687704833] [pid=1232] [seq=325] host.poll_cursor_state.begin user_data=0x4f777fe5d0
+[1779687704833] [pid=1232] [seq=326] host.poll_cursor_state.returned has_value=false
+[1779687704833] [pid=1232] [seq=327] host.step.begin user_data=0x4f777fe5d0 dt=0.025283
+[1779687704859] [pid=1232] [seq=328] host.step.ok source='winit-redraw' loading_active=false exit_requested=false
+[1779687704859] [pid=1232] [seq=329] frame.end loading_active=false
+[1779687704860] [pid=1232] [seq=330] handler.about_to_wait loading_active=false
+[1779687704860] [pid=1232] [seq=331] frame.begin shutting_down=false loading_active=false
+[1779687704860] [pid=1232] [seq=332] host.poll_cursor_state.begin user_data=0x4f777fe5d0
+[1779687704860] [pid=1232] [seq=333] host.poll_cursor_state.returned has_value=false
+[1779687704861] [pid=1232] [seq=334] host.step.begin user_data=0x4f777fe5d0 dt=0.027305
+[1779687704887] [pid=1232] [seq=335] host.step.ok source='winit-redraw' loading_active=false exit_requested=false
+[1779687704887] [pid=1232] [seq=336] frame.end loading_active=false
+[1779687704887] [pid=1232] [seq=337] handler.about_to_wait loading_active=false
+[1779687704888] [pid=1232] [seq=338] frame.begin shutting_down=false loading_active=false
+[1779687704888] [pid=1232] [seq=339] host.poll_cursor_state.begin user_data=0x4f777fe5d0
+[1779687704888] [pid=1232] [seq=340] host.poll_cursor_state.returned has_value=false
+[1779687704889] [pid=1232] [seq=341] host.step.begin user_data=0x4f777fe5d0 dt=0.027929
+[1779687704912] [pid=1232] [seq=342] host.step.ok source='winit-redraw' loading_active=false exit_requested=false
+[1779687704912] [pid=1232] [seq=343] frame.end loading_active=false
+[1779687704912] [pid=1232] [seq=344] handler.about_to_wait loading_active=false
+[1779687704913] [pid=1232] [seq=345] frame.begin shutting_down=false loading_active=false
+[1779687704913] [pid=1232] [seq=346] host.poll_cursor_state.begin user_data=0x4f777fe5d0
+[1779687704913] [pid=1232] [seq=347] host.poll_cursor_state.returned has_value=false
+[1779687704914] [pid=1232] [seq=348] host.step.begin user_data=0x4f777fe5d0 dt=0.024990
+[1779687704938] [pid=1232] [seq=349] host.step.ok source='winit-redraw' loading_active=false exit_requested=false
+[1779687704939] [pid=1232] [seq=350] frame.end loading_active=false
+[1779687704939] [pid=1232] [seq=351] handler.about_to_wait loading_active=false
+[1779687704939] [pid=1232] [seq=352] frame.begin shutting_down=false loading_active=false
+[1779687704940] [pid=1232] [seq=353] host.poll_cursor_state.begin user_data=0x4f777fe5d0
+[1779687704940] [pid=1232] [seq=354] host.poll_cursor_state.returned has_value=false
+[1779687704940] [pid=1232] [seq=355] host.step.begin user_data=0x4f777fe5d0 dt=0.026565
+[1779687704966] [pid=1232] [seq=356] host.step.ok source='winit-redraw' loading_active=false exit_requested=false
+[1779687704966] [pid=1232] [seq=357] frame.end loading_active=false
+[1779687704967] [pid=1232] [seq=358] handler.about_to_wait loading_active=false
+[1779687704967] [pid=1232] [seq=359] frame.begin shutting_down=false loading_active=false
+[1779687704967] [pid=1232] [seq=360] host.poll_cursor_state.begin user_data=0x4f777fe5d0
+[1779687704968] [pid=1232] [seq=361] host.poll_cursor_state.returned has_value=false
+[1779687704968] [pid=1232] [seq=362] host.step.begin user_data=0x4f777fe5d0 dt=0.027799
+[1779687704990] [pid=1232] [seq=363] host.step.ok source='winit-redraw' loading_active=false exit_requested=false
+[1779687704990] [pid=1232] [seq=364] frame.end loading_active=false
+[1779687704991] [pid=1232] [seq=365] handler.about_to_wait loading_active=false
+[1779687704991] [pid=1232] [seq=366] frame.begin shutting_down=false loading_active=false
+[1779687704991] [pid=1232] [seq=367] host.poll_cursor_state.begin user_data=0x4f777fe5d0
+[1779687704991] [pid=1232] [seq=368] host.poll_cursor_state.returned has_value=false
+[1779687704992] [pid=1232] [seq=369] host.step.begin user_data=0x4f777fe5d0 dt=0.023720
+[1779687705024] [pid=1232] [seq=370] host.step.ok source='winit-redraw' loading_active=false exit_requested=false
+[1779687705028] [pid=1232] [seq=371] frame.end loading_active=false
+[1779687705030] [pid=1232] [seq=372] handler.about_to_wait loading_active=false
+[1779687705030] [pid=1232] [seq=373] frame.begin shutting_down=false loading_active=false
+[1779687705030] [pid=1232] [seq=374] host.poll_cursor_state.begin user_data=0x4f777fe5d0
+[1779687705031] [pid=1232] [seq=375] host.poll_cursor_state.returned has_value=false
+[1779687705031] [pid=1232] [seq=376] host.step.begin user_data=0x4f777fe5d0 dt=0.039136
+[1779687705058] [pid=1232] [seq=377] host.step.ok source='winit-redraw' loading_active=false exit_requested=false
+[1779687705058] [pid=1232] [seq=378] frame.end loading_active=false
+[1779687705059] [pid=1232] [seq=379] handler.about_to_wait loading_active=false
+[1779687705059] [pid=1232] [seq=380] frame.begin shutting_down=false loading_active=false
+[1779687705060] [pid=1232] [seq=381] host.poll_cursor_state.begin user_data=0x4f777fe5d0
+[1779687705060] [pid=1232] [seq=382] host.poll_cursor_state.returned has_value=false
+[1779687705061] [pid=1232] [seq=383] host.step.begin user_data=0x4f777fe5d0 dt=0.030273
+[1779687705087] [pid=1232] [seq=384] host.step.ok source='winit-redraw' loading_active=false exit_requested=false
+[1779687705087] [pid=1232] [seq=385] frame.end loading_active=false
+[1779687705087] [pid=1232] [seq=386] handler.about_to_wait loading_active=false
+[1779687705087] [pid=1232] [seq=387] frame.begin shutting_down=false loading_active=false
+[1779687705088] [pid=1232] [seq=388] host.poll_cursor_state.begin user_data=0x4f777fe5d0
+[1779687705088] [pid=1232] [seq=389] host.poll_cursor_state.returned has_value=false
+[1779687705089] [pid=1232] [seq=390] host.step.begin user_data=0x4f777fe5d0 dt=0.027605
+[1779687705116] [pid=1232] [seq=391] host.step.ok source='winit-redraw' loading_active=false exit_requested=false
+[1779687705116] [pid=1232] [seq=392] frame.end loading_active=false
+[1779687705116] [pid=1232] [seq=393] handler.about_to_wait loading_active=false
+[1779687705117] [pid=1232] [seq=394] frame.begin shutting_down=false loading_active=false
+[1779687705117] [pid=1232] [seq=395] host.poll_cursor_state.begin user_data=0x4f777fe5d0
+[1779687705117] [pid=1232] [seq=396] host.poll_cursor_state.returned has_value=false
+[1779687705117] [pid=1232] [seq=397] host.step.begin user_data=0x4f777fe5d0 dt=0.028732
+[1779687705143] [pid=1232] [seq=398] host.step.ok source='winit-redraw' loading_active=false exit_requested=false
+[1779687705144] [pid=1232] [seq=399] frame.end loading_active=false
+[1779687705144] [pid=1232] [seq=400] handler.about_to_wait loading_active=false
+[1779687705145] [pid=1232] [seq=401] host.on_window_focused.begin user_data=0x4f777fe5d0 focused=true
+[1779687705146] [pid=1232] [seq=402] host.on_window_focused.returned
+[1779687705147] [pid=1232] [seq=403] frame.begin shutting_down=false loading_active=false
+[1779687705147] [pid=1232] [seq=404] host.poll_cursor_state.begin user_data=0x4f777fe5d0
+[1779687705147] [pid=1232] [seq=405] host.poll_cursor_state.returned has_value=true
+[1779687705148] [pid=1232] [seq=406] host.step.begin user_data=0x4f777fe5d0 dt=0.030353
+[1779687705175] [pid=1232] [seq=407] host.step.ok source='winit-redraw' loading_active=false exit_requested=false
+[1779687705175] [pid=1232] [seq=408] frame.end loading_active=false
+[1779687705176] [pid=1232] [seq=409] handler.about_to_wait loading_active=false
+[1779687705176] [pid=1232] [seq=410] frame.begin shutting_down=false loading_active=false
+[1779687705176] [pid=1232] [seq=411] host.poll_cursor_state.begin user_data=0x4f777fe5d0
+[1779687705176] [pid=1232] [seq=412] host.poll_cursor_state.returned has_value=false
+[1779687705177] [pid=1232] [seq=413] host.step.begin user_data=0x4f777fe5d0 dt=0.029058
+[1779687705200] [pid=1232] [seq=414] host.step.ok source='winit-redraw' loading_active=false exit_requested=false
+[1779687705200] [pid=1232] [seq=415] frame.end loading_active=false
+[1779687705201] [pid=1232] [seq=416] handler.about_to_wait loading_active=false
+[1779687705201] [pid=1232] [seq=417] frame.begin shutting_down=false loading_active=false
+[1779687705201] [pid=1232] [seq=418] host.poll_cursor_state.begin user_data=0x4f777fe5d0
+[1779687705201] [pid=1232] [seq=419] host.poll_cursor_state.returned has_value=false
+[1779687705201] [pid=1232] [seq=420] host.step.begin user_data=0x4f777fe5d0 dt=0.024758
+[1779687705226] [pid=1232] [seq=421] host.step.ok source='winit-redraw' loading_active=false exit_requested=false
+[1779687705226] [pid=1232] [seq=422] frame.end loading_active=false
+[1779687705227] [pid=1232] [seq=423] handler.about_to_wait loading_active=false
+[1779687705227] [pid=1232] [seq=424] frame.begin shutting_down=false loading_active=false
+[1779687705228] [pid=1232] [seq=425] host.poll_cursor_state.begin user_data=0x4f777fe5d0
+[1779687705228] [pid=1232] [seq=426] host.poll_cursor_state.returned has_value=false
+[1779687705228] [pid=1232] [seq=427] host.step.begin user_data=0x4f777fe5d0 dt=0.026679
+[1779687705254] [pid=1232] [seq=428] host.step.ok source='winit-redraw' loading_active=false exit_requested=false
+[1779687705254] [pid=1232] [seq=429] frame.end loading_active=false
+[1779687705254] [pid=1232] [seq=430] handler.about_to_wait loading_active=false
+[1779687705255] [pid=1232] [seq=431] frame.begin shutting_down=false loading_active=false
+[1779687705255] [pid=1232] [seq=432] host.poll_cursor_state.begin user_data=0x4f777fe5d0
+[1779687705255] [pid=1232] [seq=433] host.poll_cursor_state.returned has_value=false
+[1779687705255] [pid=1232] [seq=434] host.step.begin user_data=0x4f777fe5d0 dt=0.027019
+[1779687705278] [pid=1232] [seq=435] host.step.ok source='winit-redraw' loading_active=false exit_requested=false
+[1779687705279] [pid=1232] [seq=436] frame.end loading_active=false
+[1779687705279] [pid=1232] [seq=437] handler.about_to_wait loading_active=false
+[1779687705279] [pid=1232] [seq=438] frame.begin shutting_down=false loading_active=false
+[1779687705280] [pid=1232] [seq=439] host.poll_cursor_state.begin user_data=0x4f777fe5d0
+[1779687705280] [pid=1232] [seq=440] host.poll_cursor_state.returned has_value=false
+[1779687705280] [pid=1232] [seq=441] host.step.begin user_data=0x4f777fe5d0 dt=0.024827
+[1779687705307] [pid=1232] [seq=442] host.step.ok source='winit-redraw' loading_active=false exit_requested=false
+[1779687705307] [pid=1232] [seq=443] frame.end loading_active=false
+[1779687705308] [pid=1232] [seq=444] handler.about_to_wait loading_active=false
+[1779687705308] [pid=1232] [seq=445] frame.begin shutting_down=false loading_active=false
+[1779687705308] [pid=1232] [seq=446] host.poll_cursor_state.begin user_data=0x4f777fe5d0
+[1779687705309] [pid=1232] [seq=447] host.poll_cursor_state.returned has_value=false
+[1779687705309] [pid=1232] [seq=448] host.step.begin user_data=0x4f777fe5d0 dt=0.028808
+[1779687705335] [pid=1232] [seq=449] host.step.ok source='winit-redraw' loading_active=false exit_requested=false
+[1779687705335] [pid=1232] [seq=450] frame.end loading_active=false
+[1779687705336] [pid=1232] [seq=451] handler.about_to_wait loading_active=false
+[1779687705336] [pid=1232] [seq=452] frame.begin shutting_down=false loading_active=false
+[1779687705336] [pid=1232] [seq=453] host.poll_cursor_state.begin user_data=0x4f777fe5d0
+[1779687705336] [pid=1232] [seq=454] host.poll_cursor_state.returned has_value=false
+[1779687705337] [pid=1232] [seq=455] host.step.begin user_data=0x4f777fe5d0 dt=0.027742
+[1779687705384] [pid=1232] [seq=456] host.step.ok source='winit-redraw' loading_active=false exit_requested=false
+[1779687705384] [pid=1232] [seq=457] frame.end loading_active=false
+[1779687705385] [pid=1232] [seq=458] handler.about_to_wait loading_active=false
+[1779687705385] [pid=1232] [seq=459] frame.begin shutting_down=false loading_active=false
+[1779687705385] [pid=1232] [seq=460] host.poll_cursor_state.begin user_data=0x4f777fe5d0
+[1779687705385] [pid=1232] [seq=461] host.poll_cursor_state.returned has_value=false
+[1779687705386] [pid=1232] [seq=462] host.step.begin user_data=0x4f777fe5d0 dt=0.048956
+[1779687705435] [pid=1232] [seq=463] host.step.ok source='winit-redraw' loading_active=false exit_requested=false
+[1779687705436] [pid=1232] [seq=464] frame.end loading_active=false
+[1779687705436] [pid=1232] [seq=465] handler.about_to_wait loading_active=false
+[1779687705436] [pid=1232] [seq=466] frame.begin shutting_down=false loading_active=false
+[1779687705436] [pid=1232] [seq=467] host.poll_cursor_state.begin user_data=0x4f777fe5d0
+[1779687705437] [pid=1232] [seq=468] host.poll_cursor_state.returned has_value=false
+[1779687705437] [pid=1232] [seq=469] host.step.begin user_data=0x4f777fe5d0 dt=0.051245
+[1779687705483] [pid=1232] [seq=470] host.step.ok source='winit-redraw' loading_active=false exit_requested=false
+[1779687705483] [pid=1232] [seq=471] frame.end loading_active=false
+[1779687705484] [pid=1232] [seq=472] handler.about_to_wait loading_active=false
+[1779687705484] [pid=1232] [seq=473] frame.begin shutting_down=false loading_active=false
+[1779687705484] [pid=1232] [seq=474] host.poll_cursor_state.begin user_data=0x4f777fe5d0
+[1779687705484] [pid=1232] [seq=475] host.poll_cursor_state.returned has_value=false
+[1779687705485] [pid=1232] [seq=476] host.step.begin user_data=0x4f777fe5d0 dt=0.047800
+[1779687705518] [pid=1232] [seq=477] host.step.ok source='winit-redraw' loading_active=false exit_requested=false
+[1779687705519] [pid=1232] [seq=478] frame.end loading_active=false
+[1779687705519] [pid=1232] [seq=479] handler.about_to_wait loading_active=false
+[1779687705519] [pid=1232] [seq=480] frame.begin shutting_down=false loading_active=false
+[1779687705519] [pid=1232] [seq=481] host.poll_cursor_state.begin user_data=0x4f777fe5d0
+[1779687705519] [pid=1232] [seq=482] host.poll_cursor_state.returned has_value=false
+[1779687705520] [pid=1232] [seq=483] host.step.begin user_data=0x4f777fe5d0 dt=0.035053
+[1779687705556] [pid=1232] [seq=484] host.step.ok source='winit-redraw' loading_active=false exit_requested=false
+[1779687705556] [pid=1232] [seq=485] frame.end loading_active=false
+[1779687705557] [pid=1232] [seq=486] handler.about_to_wait loading_active=false
+[1779687705557] [pid=1232] [seq=487] frame.begin shutting_down=false loading_active=false
+[1779687705557] [pid=1232] [seq=488] host.poll_cursor_state.begin user_data=0x4f777fe5d0
+[1779687705557] [pid=1232] [seq=489] host.poll_cursor_state.returned has_value=false
+[1779687705558] [pid=1232] [seq=490] host.step.begin user_data=0x4f777fe5d0 dt=0.037970
+[1779687705602] [pid=1232] [seq=491] host.step.ok source='winit-redraw' loading_active=false exit_requested=false
+[1779687705603] [pid=1232] [seq=492] frame.end loading_active=false
+[1779687705604] [pid=1232] [seq=493] handler.about_to_wait loading_active=false
+[1779687705604] [pid=1232] [seq=494] frame.begin shutting_down=false loading_active=false
+[1779687705605] [pid=1232] [seq=495] host.poll_cursor_state.begin user_data=0x4f777fe5d0
+[1779687705605] [pid=1232] [seq=496] host.poll_cursor_state.returned has_value=false
+[1779687705605] [pid=1232] [seq=497] host.step.begin user_data=0x4f777fe5d0 dt=0.047389
+[1779687705635] [pid=1232] [seq=498] host.step.ok source='winit-redraw' loading_active=false exit_requested=false
+[1779687705636] [pid=1232] [seq=499] frame.end loading_active=false
+[1779687705636] [pid=1232] [seq=500] handler.about_to_wait loading_active=false
+[1779687705636] [pid=1232] [seq=501] frame.begin shutting_down=false loading_active=false
+[1779687705637] [pid=1232] [seq=502] host.poll_cursor_state.begin user_data=0x4f777fe5d0
+[1779687705637] [pid=1232] [seq=503] host.poll_cursor_state.returned has_value=false
+[1779687705637] [pid=1232] [seq=504] host.step.begin user_data=0x4f777fe5d0 dt=0.032265
+[1779687705668] [pid=1232] [seq=505] host.step.ok source='winit-redraw' loading_active=false exit_requested=false
+[1779687705669] [pid=1232] [seq=506] frame.end loading_active=false
+[1779687705670] [pid=1232] [seq=507] handler.about_to_wait loading_active=false
+[1779687705670] [pid=1232] [seq=508] frame.begin shutting_down=false loading_active=false
+[1779687705670] [pid=1232] [seq=509] host.poll_cursor_state.begin user_data=0x4f777fe5d0
+[1779687705671] [pid=1232] [seq=510] host.poll_cursor_state.returned has_value=false
+[1779687705671] [pid=1232] [seq=511] host.step.begin user_data=0x4f777fe5d0 dt=0.033580
+[1779687705714] [pid=1232] [seq=512] host.step.ok source='winit-redraw' loading_active=false exit_requested=false
+[1779687705714] [pid=1232] [seq=513] frame.end loading_active=false
+[1779687705714] [pid=1232] [seq=514] handler.about_to_wait loading_active=false
+[1779687705715] [pid=1232] [seq=515] frame.begin shutting_down=false loading_active=false
+[1779687705715] [pid=1232] [seq=516] host.poll_cursor_state.begin user_data=0x4f777fe5d0
+[1779687705715] [pid=1232] [seq=517] host.poll_cursor_state.returned has_value=false
+[1779687705715] [pid=1232] [seq=518] host.step.begin user_data=0x4f777fe5d0 dt=0.044617
+[1779687705748] [pid=1232] [seq=519] host.step.ok source='winit-redraw' loading_active=false exit_requested=false
+[1779687705748] [pid=1232] [seq=520] frame.end loading_active=false
+[1779687705749] [pid=1232] [seq=521] handler.about_to_wait loading_active=false
+[1779687705749] [pid=1232] [seq=522] frame.begin shutting_down=false loading_active=false
+[1779687705750] [pid=1232] [seq=523] host.poll_cursor_state.begin user_data=0x4f777fe5d0
+[1779687705750] [pid=1232] [seq=524] host.poll_cursor_state.returned has_value=false
+[1779687705750] [pid=1232] [seq=525] host.step.begin user_data=0x4f777fe5d0 dt=0.034506
+[1779687705791] [pid=1232] [seq=526] host.step.ok source='winit-redraw' loading_active=false exit_requested=false
+[1779687705792] [pid=1232] [seq=527] frame.end loading_active=false
+[1779687705793] [pid=1232] [seq=528] handler.about_to_wait loading_active=false
+[1779687705793] [pid=1232] [seq=529] frame.begin shutting_down=false loading_active=false
+[1779687705793] [pid=1232] [seq=530] host.poll_cursor_state.begin user_data=0x4f777fe5d0
+[1779687705794] [pid=1232] [seq=531] host.poll_cursor_state.returned has_value=false
+[1779687705794] [pid=1232] [seq=532] host.step.begin user_data=0x4f777fe5d0 dt=0.043983
+[1779687705825] [pid=1232] [seq=533] host.step.ok source='winit-redraw' loading_active=false exit_requested=false
+[1779687705825] [pid=1232] [seq=534] frame.end loading_active=false
+[1779687705825] [pid=1232] [seq=535] handler.about_to_wait loading_active=false
+[1779687705826] [pid=1232] [seq=536] frame.begin shutting_down=false loading_active=false
+[1779687705826] [pid=1232] [seq=537] host.poll_cursor_state.begin user_data=0x4f777fe5d0
+[1779687705826] [pid=1232] [seq=538] host.poll_cursor_state.returned has_value=false
+[1779687705827] [pid=1232] [seq=539] host.step.begin user_data=0x4f777fe5d0 dt=0.032855
+[1779687705856] [pid=1232] [seq=540] host.step.ok source='winit-redraw' loading_active=false exit_requested=false
+[1779687705867] [pid=1232] [seq=541] frame.end loading_active=false
+[1779687705868] [pid=1232] [seq=542] handler.about_to_wait loading_active=false
+[1779687705868] [pid=1232] [seq=543] frame.begin shutting_down=false loading_active=false
+[1779687705868] [pid=1232] [seq=544] host.poll_cursor_state.begin user_data=0x4f777fe5d0
+[1779687705868] [pid=1232] [seq=545] host.poll_cursor_state.returned has_value=false
+[1779687705869] [pid=1232] [seq=546] host.step.begin user_data=0x4f777fe5d0 dt=0.041752
+[1779687705946] [pid=1232] [seq=547] host.step.ok source='winit-redraw' loading_active=false exit_requested=false
+[1779687705947] [pid=1232] [seq=548] frame.end loading_active=false
+[1779687705947] [pid=1232] [seq=549] handler.about_to_wait loading_active=false
+[1779687705947] [pid=1232] [seq=550] frame.begin shutting_down=false loading_active=false
+[1779687705948] [pid=1232] [seq=551] host.poll_cursor_state.begin user_data=0x4f777fe5d0
+[1779687705948] [pid=1232] [seq=552] host.poll_cursor_state.returned has_value=false
+[1779687705948] [pid=1232] [seq=553] host.step.begin user_data=0x4f777fe5d0 dt=0.079455
+[1779687706048] [pid=1232] [seq=554] host.step.ok source='winit-redraw' loading_active=false exit_requested=false
+[1779687706048] [pid=1232] [seq=555] frame.end loading_active=false
+[1779687706049] [pid=1232] [seq=556] handler.about_to_wait loading_active=false
+[1779687706049] [pid=1232] [seq=557] frame.begin shutting_down=false loading_active=false
+[1779687706049] [pid=1232] [seq=558] host.poll_cursor_state.begin user_data=0x4f777fe5d0
+[1779687706049] [pid=1232] [seq=559] host.poll_cursor_state.returned has_value=false
+[1779687706050] [pid=1232] [seq=560] host.step.begin user_data=0x4f777fe5d0 dt=0.101590
+[1779687706124] [pid=1232] [seq=561] host.step.ok source='winit-redraw' loading_active=false exit_requested=false
+[1779687706124] [pid=1232] [seq=562] frame.end loading_active=false
+[1779687706125] [pid=1232] [seq=563] handler.about_to_wait loading_active=false
+[1779687706125] [pid=1232] [seq=564] frame.begin shutting_down=false loading_active=false
+[1779687706125] [pid=1232] [seq=565] host.poll_cursor_state.begin user_data=0x4f777fe5d0
+[1779687706125] [pid=1232] [seq=566] host.poll_cursor_state.returned has_value=false
+[1779687706126] [pid=1232] [seq=567] host.step.begin user_data=0x4f777fe5d0 dt=0.075920
+[1779687706185] [pid=1232] [seq=568] host.step.ok source='winit-redraw' loading_active=false exit_requested=false
+[1779687706186] [pid=1232] [seq=569] frame.end loading_active=false
+[1779687706186] [pid=1232] [seq=570] handler.about_to_wait loading_active=false
+[1779687706186] [pid=1232] [seq=571] frame.begin shutting_down=false loading_active=false
+[1779687706186] [pid=1232] [seq=572] host.poll_cursor_state.begin user_data=0x4f777fe5d0
+[1779687706187] [pid=1232] [seq=573] host.poll_cursor_state.returned has_value=false
+[1779687706187] [pid=1232] [seq=574] host.step.begin user_data=0x4f777fe5d0 dt=0.061167
+[1779687706220] [pid=1232] [seq=575] host.step.ok source='winit-redraw' loading_active=false exit_requested=false
+[1779687706220] [pid=1232] [seq=576] frame.end loading_active=false
+[1779687706220] [pid=1232] [seq=577] handler.about_to_wait loading_active=false
+[1779687706221] [pid=1232] [seq=578] frame.begin shutting_down=false loading_active=false
+[1779687706222] [pid=1232] [seq=579] host.poll_cursor_state.begin user_data=0x4f777fe5d0
+[1779687706222] [pid=1232] [seq=580] host.poll_cursor_state.returned has_value=false
+[1779687706222] [pid=1232] [seq=581] host.step.begin user_data=0x4f777fe5d0 dt=0.035680
+[1779687706250] [pid=1232] [seq=582] host.step.ok source='winit-redraw' loading_active=false exit_requested=false
+[1779687706250] [pid=1232] [seq=583] frame.end loading_active=false
+[1779687706251] [pid=1232] [seq=584] handler.about_to_wait loading_active=false
+[1779687707269] [pid=1232] [seq=585] handler.about_to_wait loading_active=false
+[1779687707998] [pid=1232] [seq=586] handler.about_to_wait loading_active=false
+[1779687708731] [pid=1232] [seq=587] handler.about_to_wait loading_active=false
+[1779687709482] [pid=1232] [seq=588] handler.about_to_wait loading_active=false
+[1779687710212] [pid=1232] [seq=589] handler.about_to_wait loading_active=false
+[1779687710925] [pid=1232] [seq=590] handler.about_to_wait loading_active=false
+[1779687711669] [pid=1232] [seq=591] handler.about_to_wait loading_active=false
+[1779687712407] [pid=1232] [seq=592] handler.about_to_wait loading_active=false
+[1779687713116] [pid=1232] [seq=593] handler.about_to_wait loading_active=false
+[1779687713834] [pid=1232] [seq=594] handler.about_to_wait loading_active=false
+[1779687714543] [pid=1232] [seq=595] handler.about_to_wait loading_active=false
+[1779687715269] [pid=1232] [seq=596] handler.about_to_wait loading_active=false
+[1779687716002] [pid=1232] [seq=597] handler.about_to_wait loading_active=false
+[1779687716833] [pid=1232] [seq=598] handler.about_to_wait loading_active=false
+[1779687717612] [pid=1232] [seq=599] handler.about_to_wait loading_active=false
+[1779687718422] [pid=1232] [seq=600] handler.about_to_wait loading_active=false
+[1779687719188] [pid=1232] [seq=601] handler.about_to_wait loading_active=false
+[1779687719896] [pid=1232] [seq=602] handler.about_to_wait loading_active=false
+[1779687720890] [pid=1232] [seq=603] handler.about_to_wait loading_active=false
+[1779687721744] [pid=1232] [seq=604] handler.about_to_wait loading_active=false
+[1779687722602] [pid=1232] [seq=605] handler.about_to_wait loading_active=false
+[1779687723422] [pid=1232] [seq=606] handler.about_to_wait loading_active=false
+[1779687724432] [pid=1232] [seq=607] handler.about_to_wait loading_active=false
+[1779687724772] [pid=1232] [seq=608] host.on_window_focused.begin user_data=0x4f777fe5d0 focused=false
+[1779687724773] [pid=1232] [seq=609] host.on_window_focused.returned
+[1779687725377] [pid=1232] [seq=610] handler.about_to_wait loading_active=false
+[1779687726337] [pid=1232] [seq=611] handler.about_to_wait loading_active=false
+[1779687727107] [pid=1232] [seq=612] handler.about_to_wait loading_active=false
+[1779687727822] [pid=1232] [seq=613] handler.about_to_wait loading_active=false
+[1779687728545] [pid=1232] [seq=614] handler.about_to_wait loading_active=false
+[1779687729263] [pid=1232] [seq=615] handler.about_to_wait loading_active=false
+[1779687729981] [pid=1232] [seq=616] handler.about_to_wait loading_active=false
+[1779687730693] [pid=1232] [seq=617] handler.about_to_wait loading_active=false
+[1779687731415] [pid=1232] [seq=618] handler.about_to_wait loading_active=false
+[1779687732131] [pid=1232] [seq=619] handler.about_to_wait loading_active=false
+[1779687732840] [pid=1232] [seq=620] handler.about_to_wait loading_active=false
+[1779687733549] [pid=1232] [seq=621] handler.about_to_wait loading_active=false
+[1779687734266] [pid=1232] [seq=622] handler.about_to_wait loading_active=false
+[1779687734990] [pid=1232] [seq=623] handler.about_to_wait loading_active=false
+[1779687735707] [pid=1232] [seq=624] handler.about_to_wait loading_active=false
+[1779687736450] [pid=1232] [seq=625] handler.about_to_wait loading_active=false
+[1779687737214] [pid=1232] [seq=626] handler.about_to_wait loading_active=false
+[1779687737963] [pid=1232] [seq=627] handler.about_to_wait loading_active=false
+[1779687738724] [pid=1232] [seq=628] handler.about_to_wait loading_active=false
+[1779687739456] [pid=1232] [seq=629] handler.about_to_wait loading_active=false
+[1779687740199] [pid=1232] [seq=630] handler.about_to_wait loading_active=false
+[1779687740959] [pid=1232] [seq=631] handler.about_to_wait loading_active=false
+[1779687741710] [pid=1232] [seq=632] handler.about_to_wait loading_active=false
+[1779687742436] [pid=1232] [seq=633] handler.about_to_wait loading_active=false
+[1779687743180] [pid=1232] [seq=634] handler.about_to_wait loading_active=false
+[1779687743907] [pid=1232] [seq=635] handler.about_to_wait loading_active=false
+[1779687744665] [pid=1232] [seq=636] handler.about_to_wait loading_active=false
+[1779687745421] [pid=1232] [seq=637] handler.about_to_wait loading_active=false
+[1779687746171] [pid=1232] [seq=638] handler.about_to_wait loading_active=false
+[1779687746917] [pid=1232] [seq=639] handler.about_to_wait loading_active=false
+[1779687747669] [pid=1232] [seq=640] handler.about_to_wait loading_active=false
+[1779687748410] [pid=1232] [seq=641] handler.about_to_wait loading_active=false
+[1779687749117] [pid=1232] [seq=642] handler.about_to_wait loading_active=false
+[1779687749830] [pid=1232] [seq=643] handler.about_to_wait loading_active=false
+[1779687750569] [pid=1232] [seq=644] handler.about_to_wait loading_active=false
+[1779687751272] [pid=1232] [seq=645] handler.about_to_wait loading_active=false
+[1779687751994] [pid=1232] [seq=646] handler.about_to_wait loading_active=false
+[1779687752701] [pid=1232] [seq=647] handler.about_to_wait loading_active=false
+[1779687753461] [pid=1232] [seq=648] handler.about_to_wait loading_active=false
+[1779687754245] [pid=1232] [seq=649] handler.about_to_wait loading_active=false
+[1779687754299] [pid=1232] [seq=650] host.on_window_focused.begin user_data=0x4f777fe5d0 focused=true
+[1779687754300] [pid=1232] [seq=651] host.on_window_focused.returned
+[1779687755046] [pid=1232] [seq=652] handler.about_to_wait loading_active=false
+[1779687755763] [pid=1232] [seq=653] handler.about_to_wait loading_active=false
+[1779687756477] [pid=1232] [seq=654] handler.about_to_wait loading_active=false
+[1779687757221] [pid=1232] [seq=655] handler.about_to_wait loading_active=false
+[1779687757891] [pid=1232] [seq=656] handler.about_to_wait loading_active=false
+[1779687758558] [pid=1232] [seq=657] handler.about_to_wait loading_active=false
+[1779687759253] [pid=1232] [seq=658] window.destroy_for_exit.begin reason='user-close-request'
+[1779687759748] [pid=1232] [seq=659] window.destroy_for_exit.complete reason='user-close-request'
+[1779687759753] [pid=1232] [seq=660] host.on_window_focused.begin user_data=0x4f777fe5d0 focused=false
+[1779687759756] [pid=1232] [seq=661] host.on_window_focused.returned
+[1779687759757] [pid=1232] [seq=662] runtime.run_app.returned
+[1779687759757] [pid=1232] [seq=663] runtime.exit.ok
+[1779687759757] [pid=1232] [seq=664] ffi.exit clean
