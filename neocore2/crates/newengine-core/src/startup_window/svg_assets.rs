@@ -22,7 +22,7 @@ pub(crate) struct SvgIconAsset {
     pub source: &'static str,
 }
 
-const FALLBACK_SVG_SOURCE: &str = r##"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="#8fb8ff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3 20 7.5v9L12 21 4 16.5v-9L12 3Z"/><path d="M12 12 20 7.5"/><path d="M12 12v9"/><path d="M12 12 4 7.5"/></svg>"##;
+const FALLBACK_SVG_SOURCE: &str = r##"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" fill="none"><defs><linearGradient id="ns" x1="16" y1="3" x2="16" y2="29" gradientUnits="userSpaceOnUse"><stop stop-color="#9BE8FF"/><stop offset="1" stop-color="#406BFF"/></linearGradient></defs><path d="M16 2.5 18.8 12.7 29.5 16 18.8 19.3 16 29.5 13.2 19.3 2.5 16 13.2 12.7 16 2.5Z" fill="#4C91FF" fill-opacity=".18" stroke="url(#ns)" stroke-width="1.8" stroke-linejoin="round"/><path d="M16 5v22M5 16h22" stroke="#79DFFF" stroke-width="1.2" stroke-linecap="round"/><circle cx="16" cy="16" r="1.9" fill="#F2FBFF"/></svg>"##;
 
 #[derive(Clone, Debug)]
 pub(crate) struct RuntimeSvgIconAsset {

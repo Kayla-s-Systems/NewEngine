@@ -76,12 +76,6 @@ impl RuntimeRenderController {
             .map(|last| !shadow_frames_match_sample_space(last, plan.frame))
             .unwrap_or(true);
         if shadow_projection_changed {
-            log::debug!(
-                "render shadow cache: live refresh because shadow sample space changed frame={} frames_since_refresh={} period_frames={}",
-                self.frame.frame_index,
-                frames_since_refresh,
-                period,
-            );
             return true;
         }
 

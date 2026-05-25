@@ -132,12 +132,12 @@ pub(super) fn load_game_ready_map_profile() -> GameReadyMapProfile {
 fn load_profile_from_asset_manager() -> Result<GameReadyMapProfile, Vec<String>> {
     use newengine_assets::AssetService;
 
-    if !newengine_plugin_host::has_service(newengine_assets::consts::ASSET_SERVICE_ID) {
+    if !newengine_core::has_engine_gateway_route(newengine_assets_api::ENGINE_ASSET_SERVICE_ID) {
         log::debug!(
             "game-ready: AssetManager service '{}' unavailable while resolving authored map",
-            newengine_assets::consts::ASSET_SERVICE_ID
+            newengine_assets_api::ENGINE_ASSET_SERVICE_ID
         );
-        return Err(vec![format!("AssetManager service '{}' unavailable while resolving authored map", newengine_assets::consts::ASSET_SERVICE_ID)]);
+        return Err(vec![format!("AssetManager service '{}' unavailable while resolving authored map", newengine_assets_api::ENGINE_ASSET_SERVICE_ID)]);
     }
 
     let assets = newengine_assets::AssetServiceClient::new(newengine_plugin_host::default_host_api());

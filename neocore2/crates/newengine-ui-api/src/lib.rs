@@ -8,6 +8,87 @@ pub use newengine_ui_draw::{
 };
 use std::collections::BTreeMap;
 
+/// UI input snapshot consumed by engine UI surfaces and runtime overlays.
+///
+/// This type lives in `newengine-ui-api` so reusable runtime code can exchange
+/// input with the UI domain without depending on a concrete UI implementation
+/// crate or any provider package.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct UiInputFrame {
+    pub keys_down: std::collections::BTreeSet<u32>,
+    pub keys_pressed: std::collections::BTreeSet<u32>,
+    pub keys_released: std::collections::BTreeSet<u32>,
+
+    pub mouse_pos: Option<(f32, f32)>,
+    pub mouse_delta: (f32, f32),
+    pub mouse_wheel: (f32, f32),
+
+    pub mouse_down: std::collections::BTreeSet<u32>,
+    pub mouse_pressed: std::collections::BTreeSet<u32>,
+    pub mouse_released: std::collections::BTreeSet<u32>,
+
+    pub text: String,
+    pub ime_preedit: String,
+    pub ime_commit: String,
+
+    pub gamepad_buttons: std::collections::BTreeMap<String, f32>,
+    pub gamepad_buttons_pressed: std::collections::BTreeSet<String>,
+    pub gamepad_buttons_released: std::collections::BTreeSet<String>,
+
+    pub gamepad_axes: std::collections::BTreeMap<String, f32>,
+    pub gamepad_connected: usize,
+}
+
+impl UiInputFrame {
+    #[inline]
+    pub fn is_key_down(&self, key: u32) -> bool { self.keys_down.contains(&key) }
+
+    #[inline]
+    pub fn is_key_pressed(&self, key: u32) -> bool { self.keys_pressed.contains(&key) }
+
+    #[inline]
+    pub fn is_mouse_down(&self, btn: u32) -> bool { self.mouse_down.contains(&btn) }
+
+    #[inline]
+    pub fn is_mouse_pressed(&self, btn: u32) -> bool { self.mouse_pressed.contains(&btn) }
+
+    #[inline]
+    pub fn has_gamepad_connected(&self) -> bool { self.gamepad_connected > 0 }
+
+    #[inline]
+    pub fn has_gamepad_activity(&self) -> bool {
+        self.gamepad_buttons.values().any(|v| v.abs() > 0.5)
+            || self.gamepad_axes.values().any(|v| v.abs() > 0.05)
+            || !self.gamepad_buttons_pressed.is_empty()
+            || !self.gamepad_buttons_released.is_empty()
+    }
+
+    #[inline]
+    pub fn is_gamepad_button_down(&self, button: &str) -> bool {
+        self.gamepad_buttons.get(button).copied().unwrap_or(0.0) > 0.5
+    }
+
+    #[inline]
+    pub fn is_gamepad_button_pressed(&self, button: &str) -> bool {
+        self.gamepad_buttons_pressed.contains(button)
+    }
+
+    #[inline]
+    pub fn is_gamepad_button_released(&self, button: &str) -> bool {
+        self.gamepad_buttons_released.contains(button)
+    }
+
+    #[inline]
+    pub fn gamepad_axis(&self, axis: &str) -> f32 {
+        self.gamepad_axes.get(axis).copied().unwrap_or(0.0)
+    }
+}
+
+/// Canonical keyboard ids consumed by editor/UI code.
+pub mod keys {
+    pub use newengine_input_api::key_code::*;
+}
+
 mod frame_binary;
 pub use frame_binary::{
     decode_ui_frame_request_bin, decode_ui_frame_response_bin, encode_ui_frame_request_bin,
@@ -58,6 +139,9 @@ pub const UI_SURFACE_ENGINE_ERROR_MODAL: &str = "engine.error_modal";
 pub const UI_SURFACE_RUNTIME_OVERLAY: &str = "runtime.overlay";
 pub const UI_SURFACE_RUNTIME_DEBUG_OVERLAY: &str = "runtime.debug_overlay";
 pub const UI_SURFACE_ENGINE_PAUSE_MENU: &str = "engine.pause_menu";
+/// Editor-facing Asset Browser surface. The read model stays in `engine.assets.browser`;
+/// this id only names the live `engine.ui` projection surface.
+pub const UI_SURFACE_EDITOR_ASSET_BROWSER: &str = "editor.asset_browser";
 
 /// Generic backend-family declaration for UI providers.
 pub const UI_BACKEND_SERVICE_SPEC: newengine_service_api::BackendServiceSpec =
@@ -124,6 +208,7 @@ impl Default for UiServiceInfo {
                 UI_SURFACE_RUNTIME_OVERLAY.to_owned(),
                 UI_SURFACE_RUNTIME_DEBUG_OVERLAY.to_owned(),
                 UI_SURFACE_ENGINE_PAUSE_MENU.to_owned(),
+                UI_SURFACE_EDITOR_ASSET_BROWSER.to_owned(),
             ],
         }
     }

@@ -13,6 +13,7 @@ use std::sync::Arc;
 
 use newengine_core::{Engine, EngineResult, StartupConfig};
 use newengine_render_feature_gameready::GameReadyRenderFeaturePack;
+use newengine_render_ui_bridge::EngineUiDrawListBridgeProvider;
 use newengine_runtime_host::physics_runtime::PhysicsBackendRuntimeModule;
 use newengine_runtime_host::render_runtime::RenderBackendRuntimeModule;
 use newengine_scene_runtime::SceneGatewayAssetMounts;
@@ -81,6 +82,9 @@ impl GameReadyRuntimeProfile {
         .with_material_pipeline_provider(render_features.material_pipeline_provider())
         .with_primary_lit_material_domain(render_features.primary_lit_material_domain());
 
+        // UI is not a GameReady feature. It is the canonical engine.ui draw-list bridge,
+        // so profiling and diagnostics expose one UI path: engine.ui -> engine.render.
+        render_controller = render_controller.with_draw_list_provider(EngineUiDrawListBridgeProvider::shared());
         for provider in render_features.draw_list_providers() {
             render_controller = render_controller.with_draw_list_provider(provider);
         }

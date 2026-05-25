@@ -43,7 +43,8 @@ impl RuntimeRenderController {
 
                 self.pump_material_texture_requests(
                     r,
-                    super::super::render_quality::MATERIAL_TEXTURE_IMPORT_START_BURST,
+                    ctx.job_system(),
+                    super::super::render_quality::MATERIAL_TEXTURE_IMPORT_START_BURST.min(material_upload_jobs.max(1)),
                     material_upload_jobs,
                 );
                 let upload_desc = backend_work_budget

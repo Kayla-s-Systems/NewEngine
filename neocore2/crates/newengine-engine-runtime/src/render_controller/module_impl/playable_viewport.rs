@@ -2,8 +2,8 @@ use newengine_core::host_events::CursorState;
 use newengine_core::physics::PhysicsApiRef;
 use newengine_core::render::{Extent2D, RenderApi};
 use newengine_core::{EngineResult, ModuleCtx};
-use newengine_ui::draw::UiDrawList;
-use newengine_ui_api::{UiPauseMenuState, UiRuntimeDebugOverlayTelemetry};
+use crate::ui_gateway;
+use newengine_ui_api::{UiDrawList, UiPauseMenuState, UiRuntimeDebugOverlayTelemetry};
 
 use super::frame_types::{PlayableFrameOutcome, RenderFrameScope, ViewportFrameInput};
 use super::input::ViewportInputSnap;
@@ -28,6 +28,20 @@ impl RuntimeRenderController {
             self.frame.frame_index,
         );
         ctx.resources_mut().insert::<UiPauseMenuState>(pause_menu.state.clone());
+        let asset_browser_blocks_gameplay = self.update_asset_browser_overlay(
+            ctx,
+            &frame_input.input.actions,
+            [scope.w, scope.h],
+        );
+        let modal_blocks_gameplay = pause_menu.blocks_gameplay || asset_browser_blocks_gameplay;
+
+        self.refresh_modal_ui_draw_list(
+            ctx,
+            &mut frame_input.ui,
+            &pause_menu.state,
+            asset_browser_blocks_gameplay,
+            scope,
+        )?;
         if pause_was_open && !pause_menu.blocks_gameplay {
             self.restore_playable_view_after_menu_close();
         }
@@ -39,7 +53,7 @@ impl RuntimeRenderController {
             let mut carrier = frame_input.input.action_carrier();
             self.frame.input_systems.apply_pause_capture(
                 self.frame.frame_index,
-                pause_menu.blocks_gameplay,
+                modal_blocks_gameplay,
                 &mut carrier,
             );
         }
@@ -78,7 +92,7 @@ impl RuntimeRenderController {
             &frame_input.input,
             frame_input.play_mode,
             scope.dt,
-            pause_menu.blocks_gameplay,
+            modal_blocks_gameplay,
             scope.aspect(),
             scope.vp_w,
             scope.vp_h,
@@ -89,7 +103,7 @@ impl RuntimeRenderController {
             return Ok(PlayableFrameOutcome::EndedEarly { ui_telemetry: Some(ui_telemetry) });
         }
 
-        if pause_menu.blocks_gameplay {
+        if modal_blocks_gameplay {
             self.sync_cursor_state(ctx, CursorState::released());
         } else if self.runtime_profile().input.capture_cursor_on_play {
             self.sync_cursor_state(ctx, world_frame.view_frame.cursor);
@@ -111,21 +125,62 @@ impl RuntimeRenderController {
         Ok(outcome)
     }
 
+
+    fn refresh_modal_ui_draw_list<E: Send + 'static>(
+        &self,
+        ctx: &ModuleCtx<'_, E>,
+        ui: &mut Option<UiDrawList>,
+        pause_state: &UiPauseMenuState,
+        asset_browser_blocks_gameplay: bool,
+        scope: RenderFrameScope,
+    ) -> EngineResult<()> {
+        if pause_state.visible {
+            ui_gateway::publish_pause_menu_state(pause_state);
+        }
+
+        if asset_browser_blocks_gameplay {
+            if let Some(telemetry) = ctx.resources().get::<UiRuntimeDebugOverlayTelemetry>() {
+                if telemetry.source == "engine.assets.browser" {
+                    ui_gateway::publish_debug_overlay_telemetry(telemetry);
+                }
+            }
+        }
+
+        if !pause_state.visible && !asset_browser_blocks_gameplay {
+            return Ok(());
+        }
+
+        match ui_gateway::request_draw_list(
+            self.frame.frame_index,
+            scope.dt,
+            [scope.w, scope.h],
+            1.0,
+        ) {
+            Ok(Some(draw_list)) => {
+                *ui = Some(draw_list);
+            }
+            Ok(None) => {}
+            Err(e) => {
+                log::warn!("modal ui: same-frame draw-list refresh failed: {e}");
+            }
+        }
+
+        Ok(())
+    }
+
     fn read_viewport_frame_input<E: Send + 'static>(
         &mut self,
         ctx: &ModuleCtx<'_, E>,
         ui: Option<UiDrawList>,
         scope: RenderFrameScope,
     ) -> ViewportFrameInput {
-        let surface_input = if scope.direct_surface_viewport {
-            ctx.resources().get::<newengine_ui::UiInputFrame>().cloned()
-        } else {
-            None
-        };
+        let surface_input = ctx.resources().get::<newengine_ui_api::UiInputFrame>().cloned();
         let mut input = if scope.direct_surface_viewport {
             ViewportInputSnap::read_direct_surface(surface_input.as_ref())
         } else {
-            ViewportInputSnap::read(&self.bridges.viewport)
+            let mut input = ViewportInputSnap::read(&self.bridges.viewport);
+            input.merge_semantic_actions_from_surface(surface_input.as_ref());
+            input
         };
         {
             let mut carrier = input.action_carrier();

@@ -14,6 +14,8 @@ pub const RG_VIEWPORT_DEPTH: RenderGraphResourceId = RenderGraphResourceId(3);
 /// Linear scene color target. World shaders write lighting here without display encoding.
 pub const RG_SCENE_HDR_COLOR: RenderGraphResourceId = RenderGraphResourceId(4);
 pub const RG_SHADOW_MAP: RenderGraphResourceId = RenderGraphResourceId(10);
+/// Companion fixed-function depth attachment for color-packed shadow visibility maps.
+pub const RG_SHADOW_DEPTH: RenderGraphResourceId = RenderGraphResourceId(11);
 pub const RG_GBUFFER_ALBEDO: RenderGraphResourceId = RenderGraphResourceId(20);
 pub const RG_GBUFFER_NORMAL: RenderGraphResourceId = RenderGraphResourceId(21);
 pub const RG_GBUFFER_MATERIAL: RenderGraphResourceId = RenderGraphResourceId(22);
@@ -171,25 +173,42 @@ impl FrameGraphBuilder {
                 RG_SHADOW_MAP,
                 "shadow_map",
                 rt,
-                RenderGraphResourceUsage::DepthAttachment,
+                RenderGraphResourceUsage::ColorAttachment,
                 shadow_extent,
-                self.target.depth_format,
+                TextureFormat::R32Float,
             )
             .with_semantic(RenderGraphResourceSemantic::ShadowMap)
         } else {
             RenderGraphResourceDesc::transient_texture(
                 RG_SHADOW_MAP,
                 "shadow_map",
+                RenderGraphResourceUsage::ColorAttachment,
+                shadow_extent,
+                TextureFormat::R32Float,
+            )
+            .with_semantic(RenderGraphResourceSemantic::ShadowMap)
+        };
+        let external_shadow_rt = self.target.shadow_render_target.is_some();
+        self.graph.resources.push(shadow_resource);
+        if !external_shadow_rt {
+            self.graph.resources.push(RenderGraphResourceDesc::transient_texture(
+                RG_SHADOW_DEPTH,
+                "shadow_depth_attachment",
                 RenderGraphResourceUsage::DepthAttachment,
                 shadow_extent,
                 self.target.depth_format,
             )
-            .with_semantic(RenderGraphResourceSemantic::ShadowMap)
-        };
-        self.graph.resources.push(shadow_resource);
+            .with_semantic(RenderGraphResourceSemantic::ViewportDepth));
+        }
         self.add_phase_pass(StandardRenderPhase::ShadowMap, |pass| {
-            pass.with_domain(RenderGraphPassDomain::Render3d).writes(RG_SHADOW_MAP, RenderGraphResourceUsage::DepthAttachment)
-                .draw_list(DrawListKind::ShadowCasters)
+            let pass = pass.with_domain(RenderGraphPassDomain::Render3d)
+                .writes(RG_SHADOW_MAP, RenderGraphResourceUsage::ColorAttachment);
+            let pass = if external_shadow_rt {
+                pass
+            } else {
+                pass.writes(RG_SHADOW_DEPTH, RenderGraphResourceUsage::DepthAttachment)
+            };
+            pass.draw_list(DrawListKind::ShadowCasters)
         });
         self
     }
@@ -209,27 +228,44 @@ impl FrameGraphBuilder {
                 RG_SHADOW_MAP,
                 "shadow_cascade_atlas",
                 rt,
-                RenderGraphResourceUsage::DepthAttachment,
+                RenderGraphResourceUsage::ColorAttachment,
                 shadow_extent,
-                self.target.depth_format,
+                TextureFormat::R32Float,
             )
             .with_semantic(RenderGraphResourceSemantic::ShadowMap)
         } else {
             RenderGraphResourceDesc::transient_texture(
                 RG_SHADOW_MAP,
                 "shadow_cascade_atlas",
+                RenderGraphResourceUsage::ColorAttachment,
+                shadow_extent,
+                TextureFormat::R32Float,
+            )
+            .with_semantic(RenderGraphResourceSemantic::ShadowMap)
+        };
+        let external_shadow_rt = self.target.shadow_render_target.is_some();
+        if !self.has_resource(RG_SHADOW_MAP) {
+            self.graph.resources.push(shadow_resource);
+        }
+        if !external_shadow_rt && !self.has_resource(RG_SHADOW_DEPTH) {
+            self.graph.resources.push(RenderGraphResourceDesc::transient_texture(
+                RG_SHADOW_DEPTH,
+                "shadow_cascade_depth_attachment",
                 RenderGraphResourceUsage::DepthAttachment,
                 shadow_extent,
                 self.target.depth_format,
             )
-            .with_semantic(RenderGraphResourceSemantic::ShadowMap)
-        };
-        if !self.has_resource(RG_SHADOW_MAP) {
-            self.graph.resources.push(shadow_resource);
+            .with_semantic(RenderGraphResourceSemantic::ViewportDepth));
         }
         self.add_phase_pass(StandardRenderPhase::ShadowCascadeMap, |pass| {
-            pass.with_domain(RenderGraphPassDomain::Render3d).writes(RG_SHADOW_MAP, RenderGraphResourceUsage::DepthAttachment)
-                .draw_list(DrawListKind::ShadowCasters)
+            let pass = pass.with_domain(RenderGraphPassDomain::Render3d)
+                .writes(RG_SHADOW_MAP, RenderGraphResourceUsage::ColorAttachment);
+            let pass = if external_shadow_rt {
+                pass
+            } else {
+                pass.writes(RG_SHADOW_DEPTH, RenderGraphResourceUsage::DepthAttachment)
+            };
+            pass.draw_list(DrawListKind::ShadowCasters)
         });
         self
     }

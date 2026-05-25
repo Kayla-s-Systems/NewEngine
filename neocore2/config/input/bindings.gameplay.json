@@ -1,6 +1,6 @@
 {
   "id": "newengine.gameready.input.profile",
-  "version": 4,
+  "version": 5,
   "device_preference": "hybrid",
   "keys": [
     {
@@ -107,6 +107,16 @@
       "code": 114,
       "id": "keyboard.escape",
       "label": "ESC"
+    },
+    {
+      "code": 159,
+      "id": "keyboard.f1",
+      "label": "F1"
+    },
+    {
+      "code": 160,
+      "id": "keyboard.f2",
+      "label": "F2"
     }
   ],
   "actions": [
@@ -348,6 +358,13 @@
           "y": 0
         }
       ]
+    },
+    {
+      "id": "engine.assets.browser.toggle",
+      "label": "Toggle Asset Browser",
+      "contexts": [],
+      "dispatch": "consume_first",
+      "effects": []
     }
   ],
   "listeners": [
@@ -365,6 +382,17 @@
       ],
       "context_filter": [],
       "priority": 100,
+      "consume": true,
+      "enabled": true
+    },
+    {
+      "owner": "newengine-editor",
+      "id": "asset-browser",
+      "action_filter": [
+        "engine.assets.browser.toggle"
+      ],
+      "context_filter": [],
+      "priority": 90,
       "consume": true,
       "enabled": true
     },
@@ -631,6 +659,13 @@
       "device": "GamepadButton",
       "code": 0,
       "name": "DPadRight",
+      "phase": "Pressed"
+    },
+    {
+      "action": "engine.assets.browser.toggle",
+      "device": "Keyboard",
+      "code": 159,
+      "name": null,
       "phase": "Pressed"
     }
   ],

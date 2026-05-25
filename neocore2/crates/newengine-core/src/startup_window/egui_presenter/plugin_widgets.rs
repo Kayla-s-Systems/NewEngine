@@ -20,13 +20,14 @@ pub(super) fn plugin_module_entry(ui: &mut egui::Ui, tab: &PluginTab, selected: 
     let mut status_response: Option<egui::Response> = None;
     let response = egui::Frame::new()
         .fill(fill)
-        .corner_radius(egui::CornerRadius::same(10))
+        .corner_radius(egui::CornerRadius::same(11))
         .stroke(egui::Stroke::new(1.0, egui::Color32::from_rgb(32, 40, 55)))
-        .inner_margin(egui::Margin::symmetric(9, 7))
+        .inner_margin(egui::Margin::symmetric(10, 8))
         .show(ui, |ui| {
             ui.horizontal(|ui| {
                 icon(ui, plugin_icon(tab), 20.0, egui::Color32::from_rgb(145, 161, 187));
-                let title_width = (ui.available_width() - 112.0).max(84.0);
+                let status_width = 86.0;
+                let title_width = (ui.available_width() - status_width - 10.0).clamp(70.0, 240.0);
                 ui.add_sized(
                     [title_width, 24.0],
                     egui::Label::new(
@@ -35,9 +36,8 @@ pub(super) fn plugin_module_entry(ui: &mut egui::Ui, tab: &PluginTab, selected: 
                             .color(egui::Color32::from_rgb(219, 228, 245)),
                     ),
                 );
-                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    status_response = Some(plugin_status_toggle(ui, tab.enabled));
-                });
+                ui.add_space((ui.available_width() - status_width).max(0.0));
+                status_response = Some(plugin_status_toggle(ui, tab.enabled));
             });
         })
         .response
@@ -89,10 +89,10 @@ pub(super) fn plugin_status_toggle(ui: &mut egui::Ui, enabled: bool) -> egui::Re
         .inner_margin(egui::Margin::symmetric(8, 5))
         .show(ui, |ui| {
             ui.horizontal(|ui| {
-                let (rect, _) = ui.allocate_exact_size(egui::vec2(13.0, 13.0), egui::Sense::hover());
+                let (rect, _) = ui.allocate_exact_size(egui::vec2(12.0, 12.0), egui::Sense::hover());
                 ui.painter().circle_filled(rect.center(), 3.7, dot_color);
                 ui.painter().circle_filled(rect.center(), 7.0, egui::Color32::from_rgba_unmultiplied(dot_color.r(), dot_color.g(), dot_color.b(), 25));
-                ui.label(egui::RichText::new(status).size(11.5).strong().color(egui::Color32::from_rgb(222, 232, 246)));
+                ui.label(egui::RichText::new(status).size(10.8).strong().color(egui::Color32::from_rgb(222, 232, 246)));
             });
         })
         .response
@@ -112,7 +112,7 @@ pub(super) fn plugin_icon(tab: &PluginTab) -> IconKind {
     else if text.contains("physics") { IconKind::Physics }
     else if text.contains("audio") { IconKind::Audio }
     else if text.contains("input") { IconKind::Input }
-    else if text.contains("ui") || text.contains("aurelia") { IconKind::Ui }
+    else if text.contains("ui") { IconKind::Ui }
     else if text.contains("animation") { IconKind::Animation }
     else if text.contains("script") || text.contains("lua") { IconKind::Script }
     else if text.contains("asset") { IconKind::Folder }

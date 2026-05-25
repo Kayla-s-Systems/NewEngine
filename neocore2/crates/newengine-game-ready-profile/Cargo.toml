@@ -24,6 +24,7 @@ newengine-entity-runtime = { path = "../newengine-entity-runtime" }
 newengine-plugin-host = { path = "../newengine-plugin-host" }
 newengine-render-feature-api = { path = "../newengine-render-feature-api" }
 newengine-render-feature-gameready = { path = "../newengine-render-feature-gameready" }
+newengine-render-ui-bridge = { path = "../newengine-render-ui-bridge" }
 newengine-runtime-host = { path = "../newengine-runtime-host" }
 newengine-time-runtime = { path = "../newengine-time-runtime" }
 newengine-textures-runtime = { path = "../newengine-textures-runtime" }

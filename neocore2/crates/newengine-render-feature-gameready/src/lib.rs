@@ -17,7 +17,7 @@ use newengine_material_domain_gameready::{
     GameReadyLitMaterialDomainProvider, GAME_READY_LIT_PIPELINE_KEY,
 };
 use newengine_render_feature_api::{
-    primary_directional_light, primary_point_light, shadow_and_opaque_list, ui_list,
+    primary_directional_light, primary_point_light, shadow_and_opaque_list,
     DrawListBuildCtx, LightExtractionCommand, LightExtractionCtx, LightExtractionProvider,
     LightExtractionProviderMetadata, RenderDrawListProvider, RenderDrawListProviderMetadata,
     SceneExtractionCtx, ShadowLightKind,
@@ -25,7 +25,6 @@ use newengine_render_feature_api::{
 
 pub const GAME_READY_TERRAIN_PROVIDER_ID: &str = "gameready.terrain";
 pub const GAME_READY_PRIMITIVE_MESH_PROVIDER_ID: &str = "gameready.primitive_mesh";
-pub const GAME_READY_UI_PROVIDER_ID: &str = "gameready.ui";
 pub const GAME_READY_DIRECTIONAL_SHADOW_PROVIDER_ID: &str = "gameready.directional_shadow";
 pub const GAME_READY_POINT_CUBE_SHADOW_PROVIDER_ID: &str = "gameready.point_cube_shadow";
 pub const GAME_READY_SPOT_SHADOW_PROVIDER_ID: &str = "gameready.spot_shadow";
@@ -55,7 +54,6 @@ impl GameReadyRenderFeaturePack {
         vec![
             Arc::new(GameReadyTerrainProvider),
             Arc::new(GameReadyPrimitiveMeshProvider),
-            Arc::new(GameReadyUiProvider),
         ]
     }
 
@@ -119,29 +117,6 @@ impl RenderDrawListProvider for GameReadyPrimitiveMeshProvider {
             out.record_primitive_mesh_shadow(ctx)?;
         }
         out.record_primitive_mesh_forward(ctx)
-    }
-}
-
-struct GameReadyUiProvider;
-
-impl RenderDrawListProvider for GameReadyUiProvider {
-    #[inline]
-    fn id(&self) -> &'static str {
-        GAME_READY_UI_PROVIDER_ID
-    }
-
-    #[inline]
-    fn metadata(&self) -> RenderDrawListProviderMetadata {
-        RenderDrawListProviderMetadata::feature(self.id(), "GameReady UI draw extraction")
-    }
-
-    #[inline]
-    fn provided_draw_lists(&self, ctx: &SceneExtractionCtx<'_>) -> &'static [RenderDrawListKind] {
-        ui_list(ctx.ui.is_some())
-    }
-
-    fn extract(&self, ctx: &SceneExtractionCtx<'_>, out: &mut dyn DrawListBuildCtx) -> EngineResult<()> {
-        out.record_ui(ctx)
     }
 }
 

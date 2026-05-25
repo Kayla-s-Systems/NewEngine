@@ -45,7 +45,7 @@ impl UiProviderSelection {
 }
 
 pub(crate) fn discover_available_ui_provider() -> UiProviderKind {
-    if newengine_plugin_host::has_service(newengine_ui_api::ENGINE_UI_SERVICE_ID) {
+    if newengine_core::has_engine_gateway_route(newengine_ui_api::ENGINE_UI_SERVICE_ID) {
         UiProviderKind::Plugin {
             service_id: newengine_ui_api::ENGINE_UI_SERVICE_ID.to_owned(),
         }

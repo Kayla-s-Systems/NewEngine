@@ -55,6 +55,26 @@ pub fn apply_view_postfx(mut params: PostFxFrameParams, view: ViewPostFxFramePar
 }
 
 #[inline]
+pub(super) fn sanitize_camera_dt(dt: f32) -> f32 {
+    if !dt.is_finite() || dt <= 0.0 {
+        return 0.0;
+    }
+    // Camera navigation must not integrate a whole stall in one frame: render/asset
+    // hitch recovery should not teleport the view or explode springs.
+    dt.min(1.0 / 20.0)
+}
+
+#[inline]
+fn finite_or_zero(v: f32) -> f32 {
+    if v.is_finite() { v } else { 0.0 }
+}
+
+#[inline]
+fn finite_or_one(v: f32) -> f32 {
+    if v.is_finite() && v > 0.0 { v } else { 1.0 }
+}
+
+#[inline]
 pub(super) fn camera_runtime_service_config(world: &World, active_view: CameraViewMode) -> CameraRuntimeServiceConfig {
     let mut config = CameraRuntimeServiceConfig::default();
     if let Some(rules) = world.resource::<FpsDemoRules>() {
@@ -96,16 +116,16 @@ pub(super) fn apply_runtime_input(
 #[inline]
 pub(super) fn camera_nav_input(input: CameraGatewayInput, play_mode: GameRunMode) -> CameraNavInput {
     let mut nav_input = CameraNavInput {
-        dx_px: input.dx_px,
-        dy_px: input.dy_px,
-        wheel_y: input.wheel_y,
+        dx_px: finite_or_zero(input.dx_px).clamp(-240.0, 240.0),
+        dy_px: finite_or_zero(input.dy_px).clamp(-240.0, 240.0),
+        wheel_y: finite_or_zero(input.wheel_y).clamp(-12.0, 12.0),
         active: input.active,
         look_drag: input.look_drag,
         pan_drag: input.pan_drag,
         ui_busy: input.ui_busy,
         fly_rmb: input.fly_rmb,
         move_mask: input.move_mask,
-        speed_scalar: input.speed_scalar,
+        speed_scalar: finite_or_one(input.speed_scalar).clamp(0.05, 20.0),
     };
     if play_mode.wants_direct_player_control() {
         nav_input.wheel_y = 0.0;

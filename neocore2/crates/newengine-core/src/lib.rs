@@ -41,7 +41,10 @@ pub mod startup_window;
 pub mod sync;
 mod system_info;
 
-pub use host_services::{call_service_v1, call_service_v1_optional, describe_service, list_service_ids};
+pub use host_services::{
+    call_service_v1, call_service_v1_optional, describe_service, engine_gateway_has_capability,
+    has_engine_gateway_route, list_service_ids, resolve_service_for_engine_gateway,
+};
 
 pub use newengine_service_api::{InterfaceId, ServiceInterface, ServiceKey};
 pub use services_registry::{ErasedService, MissingServicePolicy, ServiceRegistry};

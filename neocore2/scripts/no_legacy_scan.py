@@ -48,7 +48,7 @@ DENY = [
     (re.compile(r"newengine-codec-neytd"), "retired .neytd codec worker is forbidden"),
     (re.compile(r"NETD/top-level-compat"), "NETD top-level compatibility input is forbidden"),
     (re.compile(r"top-level-compat"), "top-level compatibility input is forbidden"),
-    (re.compile(r"load_loading_background_from_neytd"), "Aurelia loading texture must load canonical .ytd, not .neytd vocabulary"),
+    (re.compile(r"load_loading_background_from_neytd"), "Loading UI texture must load canonical .ytd, not .neytd vocabulary"),
     (re.compile(r"asset\.codec\.pak"), "public .pak codec alias is forbidden"),
     (re.compile(r"newengine\.container\.pak"), "public .pak container alias is forbidden"),
     (re.compile(r"type\s*=\s*\"pak\""), "public VFS/package type='pak' alias is forbidden"),

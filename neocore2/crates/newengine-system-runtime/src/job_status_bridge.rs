@@ -19,7 +19,7 @@ pub fn overlay_from_task_status(task: &SystemTaskStatus) -> Option<ScreenOverlay
     Some(ScreenOverlayStatus::new(
         kind,
         ScreenOverlayReason::JobSystem,
-        "NEWENGINE // TASK",
+        "NORTH STAR ENGINE // TASK",
         task.label.clone(),
         task.detail.clone(),
         task.progress_01().map(ScreenOverlayProgress::percent),

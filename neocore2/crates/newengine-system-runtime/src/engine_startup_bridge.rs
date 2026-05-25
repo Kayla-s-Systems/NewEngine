@@ -34,7 +34,7 @@ pub fn overlay_from_engine_startup_snapshot(
         return ScreenOverlayStatus::new(
             ScreenOverlayStatusKind::Error,
             ScreenOverlayReason::Recovery,
-            "NEWENGINE // ERROR",
+            "NORTH STAR ENGINE // ERROR",
             snapshot.status.as_str(),
             snapshot.detail.as_str(),
             Some(ScreenOverlayProgress::percent(snapshot.progress_01)),
@@ -46,7 +46,7 @@ pub fn overlay_from_engine_startup_snapshot(
     ScreenOverlayStatus::new(
         overlay_kind_for_phase(snapshot.phase),
         reason_for_phase(snapshot.phase),
-        "NEWENGINE // BOOTSTRAP",
+        "NORTH STAR ENGINE // BOOTSTRAP",
         snapshot.status.as_str(),
         snapshot.detail.as_str(),
         Some(ScreenOverlayProgress::percent(snapshot.progress_01)),

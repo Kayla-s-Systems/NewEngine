@@ -289,7 +289,7 @@ impl Default for TimeFixedStepRequestV1 {
     fn default() -> Self {
         Self {
             fixed_delta_ns: 16_666_667,
-            max_fixed_ticks_per_frame: 8,
+            max_fixed_ticks_per_frame: 4,
             ai_decision_tick_interval: 4,
             ai_tick_budget_ns: 1_000_000,
         }

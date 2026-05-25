@@ -2,9 +2,12 @@
 
 use newengine_camera_contracts::CameraFrameSnapshot;
 use newengine_core::host_events::CursorState;
+use newengine_assets::{AssetResult, RuntimeTextureAsset};
 use newengine_core::render::{Extent2D, RenderHardwareTier, RenderTargetId, SamplerId, TextureId};
+use newengine_core::JobTicket;
 use newengine_math::collections::FxHashMap;
 use std::collections::VecDeque;
+use parking_lot::Mutex;
 use std::sync::Arc;
 
 use crate::plugin_manager::PluginManagerBridge;
@@ -195,6 +198,28 @@ impl RenderShadowRuntimeState {
     }
 }
 
+
+/// Engine.jobs-backed CPU decode job for a material texture request.
+///
+/// The render controller owns only the ticket/result bridge. The actual heavy
+/// work runs on the engine-owned job system, not on ad-hoc per-request threads.
+pub(super) struct MaterialTextureDecodeJob {
+    pub(super) ticket: JobTicket,
+    pub(super) result: Arc<Mutex<Option<AssetResult<RuntimeTextureAsset>>>>,
+}
+
+impl MaterialTextureDecodeJob {
+    #[inline]
+    pub(super) fn is_complete(&self) -> bool {
+        self.ticket.is_complete()
+    }
+
+    #[inline]
+    pub(super) fn take_result(&self) -> Option<AssetResult<RuntimeTextureAsset>> {
+        self.result.lock().take()
+    }
+}
+
 /// Material-domain GPU state owned by the render controller.
 ///
 /// This state is deliberately separate from mesh caches and transient lifetime
@@ -205,6 +230,7 @@ pub(super) struct RenderMaterialGpuState {
     pub(super) primary_lit_pipeline_key: Option<MaterialGpuPipelineKey>,
     pub(super) textures: FxHashMap<String, MaterialTextureGpuResidency>,
     pub(super) texture_queue: VecDeque<String>,
+    pub(super) texture_decode_jobs: FxHashMap<String, MaterialTextureDecodeJob>,
     pub(super) per_draw_ubo: FxHashMap<u64, PerDrawUbo>,
 }
 
@@ -216,6 +242,7 @@ impl RenderMaterialGpuState {
             primary_lit_pipeline_key: None,
             textures: FxHashMap::default(),
             texture_queue: VecDeque::new(),
+            texture_decode_jobs: FxHashMap::default(),
             per_draw_ubo: FxHashMap::default(),
         }
     }
@@ -362,6 +389,24 @@ impl RenderDiagnosticsRuntimeState {
 }
 
 
+
+
+pub(super) struct RenderEditorRuntimeState {
+    pub(super) asset_browser_open: bool,
+    pub(super) asset_browser_last_refresh_frame: u64,
+    pub(super) asset_browser_last_toggle_frame: u64,
+}
+
+impl RenderEditorRuntimeState {
+    #[inline]
+    pub(super) fn new() -> Self {
+        Self {
+            asset_browser_open: false,
+            asset_browser_last_refresh_frame: 0,
+            asset_browser_last_toggle_frame: 0,
+        }
+    }
+}
 
 pub(super) struct RenderMenuRuntimeState {
     pub(super) pause: super::module_impl::pause_menu::RenderPauseMenuRuntimeState,

@@ -12,7 +12,7 @@ mod policy;
 mod sample;
 mod system;
 
-use newengine_ui::UiInputFrame;
+use newengine_ui_api::UiInputFrame;
 
 pub use carrier::InputActionFrameCarrier;
 use carrier::{action_frame_has_activity, movement_has_activity};
@@ -21,7 +21,7 @@ use sample::RawInputSample;
 pub use system::{InputRuntimeSystem, InputRuntimeSystemState, InputRuntimeSystemsSnapshot};
 
 const SUMMARY_INTERVAL_FRAMES: u64 = 240;
-const REASON_CAPTURED_BY_PAUSE: &str = "captured by engine.pause_menu";
+const REASON_CAPTURED_BY_PAUSE: &str = "captured by engine.ui.modal";
 const REASON_RAW_RECEIVED: &str = "raw input frame received";
 const REASON_RAW_MISSING: &str = "raw input frame missing";
 const REASON_BINDINGS_READY: &str = "bindings resolver available";
@@ -242,13 +242,13 @@ impl InputRuntimeSystems {
             input.suppress_runtime_controls();
             if changed {
                 log::debug!(
-                    "input systems: runtime controls captured surface='engine.pause_menu' frame={}",
+                    "input systems: runtime controls captured surface='engine.ui.modal' frame={}",
                     frame_index
                 );
             }
         } else if changed {
             log::debug!(
-                "input systems: runtime controls released surface='engine.pause_menu' frame={}",
+                "input systems: runtime controls released surface='engine.ui.modal' frame={}",
                 frame_index
             );
         }
@@ -343,8 +343,8 @@ impl InputRuntimeSystems {
         state.reason = observed.reason.to_owned();
         state.frame_index = frame_index;
 
-        if state_changed {
-            log::debug!(
+        if state_changed && frame_index % 120 == 0 {
+            log::trace!(
                 "input systems: transition system='{}' active {}->{} captured {}->{} frame={} reason='{}'",
                 system.id(),
                 old_active,
@@ -365,7 +365,9 @@ impl InputRuntimeSystems {
         }
         self.log_state.last_frame_summary = summary.clone();
         self.log_state.last_summary_frame = frame_index;
-        log::debug!("input systems: frame={} {}", frame_index, summary);
+        if frame_index % 120 == 0 {
+            log::trace!("input systems: frame={} {}", frame_index, summary);
+        }
     }
 
     fn state(&self, system: InputRuntimeSystem) -> Option<&InputRuntimeSystemState> {

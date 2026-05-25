@@ -21,7 +21,7 @@ use crate::scene_bridge::{SkyDomeRuntime, SkyVisualKind, SkyVisualRuntime, Terra
 use self::mesh_visibility::{
     distance_sq_to_camera, forward_sphere_visible, primitive_budget, primitive_forward_max_distance,
     primitive_near_accept_distance, primitive_shadow_max_distance, scene_forward_cone_dot,
-    shadow_caster_visible, sort_by_distance_then_key, terrain_forward_max_distance,
+    shadow_caster_visible, sort_by_distance_then_key, terrain_budget, terrain_forward_max_distance,
     terrain_near_accept_distance, transform_sphere,
 };
 use newengine_procedural_noise::ProceduralTerrain;
@@ -40,6 +40,7 @@ pub(super) fn publish_camera_spawn(
 
 #[derive(Clone)]
 struct TerrainDrawEntry {
+    distance_sq: f32,
     entity_key: u64,
     mesh_key: u64,
     base_color: [f32; 4],
@@ -153,6 +154,7 @@ pub fn draw_procedural_terrain(
             }
         }
         entries.push(TerrainDrawEntry {
+            distance_sq: distance_sq_to_camera(gt.0, camera_position),
             entity_key: id.stable_u64(),
             mesh_key,
             base_color: terrain.base_color,
@@ -161,7 +163,13 @@ pub fn draw_procedural_terrain(
             surface_layers: world.get::<TerrainSurfaceLayers>(id).cloned(),
         });
     }
-    entries.sort_by(|a, b| a.entity_key.cmp(&b.entity_key));
+    entries.sort_by(|a, b| {
+        a.distance_sq
+            .partial_cmp(&b.distance_sq)
+            .unwrap_or(std::cmp::Ordering::Equal)
+            .then_with(|| a.entity_key.cmp(&b.entity_key))
+    });
+    entries.truncate(terrain_budget(runtime, false));
 
     let mut stream = BucketedIndexedDrawStream::with_capacity(entries.len());
     for entry in entries {

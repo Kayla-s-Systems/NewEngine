@@ -97,7 +97,7 @@ impl UiProvider for PluginUiProvider {
         catalog.themes = vec![UiThemeDeclaration {
             id: "newengine.dark.gold-magenta".to_owned(),
             display_name: "NewEngine Dark / Gold-Magenta".to_owned(),
-            token_document: "assets/ui/themes/aurelia_dark.neui@theme".to_owned(),
+            token_document: "assets/ui/themes/north_star_dark.neui@theme".to_owned(),
         }];
         catalog
     }

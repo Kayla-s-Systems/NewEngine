@@ -96,11 +96,6 @@ impl MaterialGpuRegistry {
     ) -> CoreResult<MaterialGpuPipeline> {
         let cache_key = material_pipeline_cache_key(key, profile);
         if let Some(pipeline) = self.resolved_pipelines.get(&cache_key).copied() {
-            log::debug!(
-                "render material registry: pipeline cache hit key='{}' cache_key='{}'",
-                key.as_str(),
-                cache_key
-            );
             return Ok(pipeline);
         }
 

@@ -688,6 +688,8 @@ pub fn key_code_label(code: u32) -> &'static str {
         key_code::ARROW_RIGHT => "RIGHT",
         key_code::ARROW_DOWN => "DOWN",
         key_code::ESCAPE => "ESC",
+        key_code::F1 => "F1",
+        key_code::F2 => "F2",
         _ => "KEY",
     }
 }

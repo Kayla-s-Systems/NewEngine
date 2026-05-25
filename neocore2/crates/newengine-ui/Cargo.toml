@@ -22,7 +22,9 @@ images = []
 newengine-plugin-api = { path = "../newengine-plugin-api" }
 newengine-assets = { path = "../newengine-assets", optional = true }
 newengine-assets-api = { path = "../newengine-assets-api" }
+newengine-input-api = { path = "../newengine-input-api" }
 newengine-ui-draw = { path = "../newengine-ui-draw" }
+newengine-ui-api = { path = "../newengine-ui-api" }
 newengine-math = { path = "../newengine-math" }
 
 roxmltree = "0.21.1"

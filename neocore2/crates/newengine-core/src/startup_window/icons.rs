@@ -68,20 +68,67 @@ fn c(rect: egui::Rect, x: f32, y: f32) -> egui::Pos2 {
     egui::pos2(egui::lerp(rect.left()..=rect.right(), x), egui::lerp(rect.top()..=rect.bottom(), y))
 }
 
-fn paint_logo(painter: &egui::Painter, rect: egui::Rect, color: egui::Color32) {
-    let stroke = egui::Stroke::new((rect.width() * 0.06).clamp(1.1, 2.4), color);
+fn paint_logo(painter: &egui::Painter, rect: egui::Rect, _color: egui::Color32) {
     let center = rect.center();
-    let r = rect.width().min(rect.height()) * 0.43;
-    let mut pts = Vec::new();
-    for i in 0..6 {
-        let angle = std::f32::consts::TAU * (i as f32) / 6.0 - std::f32::consts::FRAC_PI_2;
-        pts.push(center + egui::vec2(angle.cos() * r, angle.sin() * r));
+    let size = rect.width().min(rect.height());
+    let outer = size * 0.47;
+    let mid = size * 0.34;
+    let ring_dark = egui::Color32::from_rgb(7, 28, 73);
+    let ring_mid = egui::Color32::from_rgb(12, 61, 131);
+    let cyan = egui::Color32::from_rgb(126, 232, 255);
+    let glow = egui::Color32::from_rgba_unmultiplied(84, 193, 255, 26);
+
+    painter.circle_filled(center, mid * 0.88, glow);
+
+    for (start_deg, end_deg, radius, stroke, width) in [
+        (-135.0_f32, -45.0_f32, outer, ring_dark, size * 0.070),
+        (45.0_f32, 135.0_f32, outer, ring_dark, size * 0.070),
+        (135.0_f32, 225.0_f32, outer, ring_dark, size * 0.070),
+        (225.0_f32, 315.0_f32, outer, ring_dark, size * 0.070),
+        (-132.0_f32, -48.0_f32, outer * 0.85, ring_mid, size * 0.026),
+        (48.0_f32, 132.0_f32, outer * 0.85, ring_mid, size * 0.026),
+        (138.0_f32, 222.0_f32, outer * 0.85, ring_mid, size * 0.026),
+        (228.0_f32, 312.0_f32, outer * 0.85, ring_mid, size * 0.026),
+    ] {
+        let points = (0..=16)
+            .map(|i| {
+                let t = i as f32 / 16.0;
+                let angle = (start_deg + (end_deg - start_deg) * t).to_radians();
+                center + egui::vec2(angle.cos() * radius, angle.sin() * radius)
+            })
+            .collect::<Vec<_>>();
+        painter.add(egui::Shape::line(points, egui::Stroke::new(width.max(1.0), stroke)));
     }
-    painter.add(egui::Shape::closed_line(pts, stroke));
-    let cyan = egui::Color32::from_rgb(92, 181, 255);
-    painter.line_segment([center, c(rect, 0.5, 0.12)], egui::Stroke::new(stroke.width * 1.3, cyan));
-    painter.line_segment([center, c(rect, 0.18, 0.68)], egui::Stroke::new(stroke.width * 1.3, cyan));
-    painter.line_segment([center, c(rect, 0.82, 0.68)], egui::Stroke::new(stroke.width * 1.3, cyan));
+
+    let spike_dark = egui::Color32::from_rgb(9, 41, 99);
+    let spike_light = egui::Color32::from_rgb(126, 221, 255);
+    let spike_fill = egui::Color32::from_rgb(241, 254, 255);
+
+    let make_poly = |pts: &[(f32, f32)]| -> Vec<egui::Pos2> {
+        pts.iter().map(|(x,y)| c(rect,*x,*y)).collect()
+    };
+
+    for pts in [
+        make_poly(&[(0.50, 0.05), (0.55, 0.43), (0.50, 0.50), (0.45, 0.43)]),
+        make_poly(&[(0.95, 0.50), (0.57, 0.55), (0.50, 0.50), (0.57, 0.45)]),
+        make_poly(&[(0.50, 0.95), (0.45, 0.57), (0.50, 0.50), (0.55, 0.57)]),
+        make_poly(&[(0.05, 0.50), (0.43, 0.45), (0.50, 0.50), (0.43, 0.55)]),
+    ] {
+        painter.add(egui::Shape::convex_polygon(pts.clone(), spike_fill, egui::Stroke::new((size * 0.018).max(1.0), spike_dark)));
+    }
+
+    for pts in [
+        make_poly(&[(0.30, 0.30), (0.46, 0.46), (0.50, 0.50), (0.38, 0.42)]),
+        make_poly(&[(0.70, 0.30), (0.54, 0.46), (0.50, 0.50), (0.62, 0.42)]),
+        make_poly(&[(0.70, 0.70), (0.54, 0.54), (0.50, 0.50), (0.62, 0.58)]),
+        make_poly(&[(0.30, 0.70), (0.46, 0.54), (0.50, 0.50), (0.38, 0.58)]),
+    ] {
+        painter.add(egui::Shape::convex_polygon(pts.clone(), spike_light, egui::Stroke::new((size * 0.014).max(1.0), spike_dark)));
+    }
+
+    painter.circle_filled(center, size * 0.060, egui::Color32::WHITE);
+    painter.circle_stroke(center, size * 0.145, egui::Stroke::new((size * 0.014).max(1.0), egui::Color32::from_rgba_unmultiplied(cyan.r(), cyan.g(), cyan.b(), 96)));
+    painter.circle_stroke(center, size * 0.245, egui::Stroke::new((size * 0.012).max(1.0), egui::Color32::from_rgba_unmultiplied(spike_light.r(), spike_light.g(), spike_light.b(), 34)));
 }
 
 fn paint_cube(p: &egui::Painter, r: egui::Rect, s: egui::Stroke) {

@@ -2,6 +2,8 @@
 
 use std::time::Instant;
 
+const PROFILER_SAMPLE_TOPIC: &str = "newengine.diagnostics.profiler.sample.v1";
+
 /// Small frame-local timing collector used by render orchestration.
 ///
 /// It is intentionally allocation-light and domain-agnostic: callers decide the
@@ -102,7 +104,7 @@ fn env_u64(name: &str, default: u64, min: u64, max: u64) -> u64 {
 
 #[inline]
 pub(super) fn trace_ms_threshold() -> f32 {
-    env_f32("NEWENGINE_RENDER_TRACE_MS", 16.6, 1.0, 1000.0)
+    env_f32("NEWENGINE_RENDER_TRACE_MS", 33.3, 1.0, 1000.0)
 }
 
 #[inline]
@@ -115,6 +117,11 @@ pub(super) fn slow_profile_log_interval_frames() -> u64 {
     env_u64("NEWENGINE_RENDER_SLOW_PROFILE_INTERVAL_FRAMES", 60, 1, 6000)
 }
 
+#[inline]
+pub(super) fn profiler_sample_interval_frames() -> u64 {
+    env_u64("NEWENGINE_RENDER_PROFILER_SAMPLE_INTERVAL_FRAMES", 4, 1, 6000)
+}
+
 pub(super) fn emit_timed_profile(
     label: &'static str,
     frame_index: u64,
@@ -125,6 +132,13 @@ pub(super) fn emit_timed_profile(
 ) {
     let slow = total_ms >= warn_ms_threshold();
     let traceable = trace_frame || total_ms >= trace_ms_threshold();
+    let should_sample = trace_frame
+        || slow
+        || frame_index % profiler_sample_interval_frames() == 0;
+    if should_sample {
+        emit_profiler_sample(label, frame_index, total_ms, breakdown.as_ref(), suffix.as_ref(), slow);
+    }
+
     if !traceable && !slow {
         return;
     }
@@ -133,7 +147,7 @@ pub(super) fn emit_timed_profile(
         return;
     }
 
-    let include_breakdown = trace_frame || log::log_enabled!(log::Level::Debug);
+    let include_breakdown = trace_frame || slow || log::log_enabled!(log::Level::Debug);
     let line = if include_breakdown {
         let suffix = suffix.as_ref();
         if suffix.is_empty() {
@@ -162,5 +176,33 @@ pub(super) fn emit_timed_profile(
         log::warn!("{}", line);
     } else {
         log::debug!("{}", line);
+    }
+}
+
+fn emit_profiler_sample(
+    label: &'static str,
+    frame_index: u64,
+    total_ms: f32,
+    breakdown: &str,
+    suffix: &str,
+    slow: bool,
+) {
+    if !crate::env_config::var_bool("NEWENGINE_RENDER_PROFILER_SAMPLES", true) {
+        return;
+    }
+    let payload = serde_json::json!({
+        "schema": "newengine.diagnostics.profiler.sample.v1",
+        "category": "render",
+        "source": "render_controller",
+        "name": label,
+        "detail": suffix,
+        "frame_index": frame_index,
+        "elapsed_ms": total_ms,
+        "budget_ms": warn_ms_threshold(),
+        "slow": slow,
+        "breakdown": breakdown,
+    });
+    if let Ok(bytes) = serde_json::to_vec(&payload) {
+        let _ = newengine_plugin_host::emit_plugin_event(PROFILER_SAMPLE_TOPIC, &bytes);
     }
 }

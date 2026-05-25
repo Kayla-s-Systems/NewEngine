@@ -69,6 +69,125 @@ pub mod key_code {
     pub const ARROW_DOWN: u32 = 89;
 
     pub const ESCAPE: u32 = 114;
+
+    pub const F1: u32 = 159;
+    pub const F2: u32 = 160;
+}
+
+/// Canonical key identity strings used by input profiles, binding catalogs and platform providers.
+///
+/// Platform plugins may report their native physical key name, but the authoritative mapping to
+/// engine key codes lives here. This keeps platform backends from becoming hidden keybinding layers.
+pub mod key_identity {
+    use super::key_code;
+
+    pub const DIGIT1: &str = "keyboard.digit1";
+    pub const DIGIT2: &str = "keyboard.digit2";
+    pub const DIGIT3: &str = "keyboard.digit3";
+
+    pub const KEY_A: &str = "keyboard.key_a";
+    pub const KEY_D: &str = "keyboard.key_d";
+    pub const KEY_E: &str = "keyboard.key_e";
+    pub const KEY_F: &str = "keyboard.key_f";
+    pub const KEY_Q: &str = "keyboard.key_q";
+    pub const KEY_S: &str = "keyboard.key_s";
+    pub const KEY_W: &str = "keyboard.key_w";
+
+    pub const ENTER: &str = "keyboard.enter";
+    pub const SPACE: &str = "keyboard.space";
+    pub const SHIFT_LEFT: &str = "keyboard.shift_left";
+    pub const SHIFT_RIGHT: &str = "keyboard.shift_right";
+    pub const TAB: &str = "keyboard.tab";
+    pub const BACKSPACE: &str = "keyboard.backspace";
+
+    pub const ARROW_LEFT: &str = "keyboard.arrow_left";
+    pub const ARROW_UP: &str = "keyboard.arrow_up";
+    pub const ARROW_RIGHT: &str = "keyboard.arrow_right";
+    pub const ARROW_DOWN: &str = "keyboard.arrow_down";
+
+    pub const ESCAPE: &str = "keyboard.escape";
+    pub const F1: &str = "keyboard.f1";
+    pub const F2: &str = "keyboard.f2";
+
+    #[inline]
+    pub fn key_code_from_id(id: &str) -> Option<u32> {
+        match id.trim() {
+            DIGIT1 => Some(key_code::DIGIT1),
+            DIGIT2 => Some(key_code::DIGIT2),
+            DIGIT3 => Some(key_code::DIGIT3),
+            KEY_A => Some(key_code::KEY_A),
+            KEY_D => Some(key_code::KEY_D),
+            KEY_E => Some(key_code::KEY_E),
+            KEY_F => Some(key_code::KEY_F),
+            KEY_Q => Some(key_code::KEY_Q),
+            KEY_S => Some(key_code::KEY_S),
+            KEY_W => Some(key_code::KEY_W),
+            ENTER => Some(key_code::ENTER),
+            SPACE => Some(key_code::SPACE),
+            SHIFT_LEFT => Some(key_code::SHIFT_LEFT),
+            SHIFT_RIGHT => Some(key_code::SHIFT_RIGHT),
+            TAB => Some(key_code::TAB),
+            BACKSPACE => Some(key_code::BACKSPACE),
+            ARROW_LEFT => Some(key_code::ARROW_LEFT),
+            ARROW_UP => Some(key_code::ARROW_UP),
+            ARROW_RIGHT => Some(key_code::ARROW_RIGHT),
+            ARROW_DOWN => Some(key_code::ARROW_DOWN),
+            ESCAPE => Some(key_code::ESCAPE),
+            F1 => Some(key_code::F1),
+            F2 => Some(key_code::F2),
+            _ => None,
+        }
+    }
+
+    /// Converts native physical key names used by common platform providers into canonical engine ids.
+    ///
+    /// This function intentionally lives in `newengine-input-api`; platform plugins should not own
+    /// semantic key ids and must not assign gameplay/editor actions.
+    #[inline]
+    pub fn canonical_id_from_native_physical_name(name: &str) -> Option<&'static str> {
+        match name.trim() {
+            "Digit1" => Some(DIGIT1),
+            "Digit2" => Some(DIGIT2),
+            "Digit3" => Some(DIGIT3),
+            "KeyA" => Some(KEY_A),
+            "KeyD" => Some(KEY_D),
+            "KeyE" => Some(KEY_E),
+            "KeyF" => Some(KEY_F),
+            "KeyQ" => Some(KEY_Q),
+            "KeyS" => Some(KEY_S),
+            "KeyW" => Some(KEY_W),
+            "Enter" => Some(ENTER),
+            "Space" => Some(SPACE),
+            "ShiftLeft" => Some(SHIFT_LEFT),
+            "ShiftRight" => Some(SHIFT_RIGHT),
+            "Tab" => Some(TAB),
+            "Backspace" => Some(BACKSPACE),
+            "ArrowLeft" => Some(ARROW_LEFT),
+            "ArrowUp" => Some(ARROW_UP),
+            "ArrowRight" => Some(ARROW_RIGHT),
+            "ArrowDown" => Some(ARROW_DOWN),
+            "Escape" => Some(ESCAPE),
+            "F1" => Some(F1),
+            "F2" => Some(F2),
+            _ => None,
+        }
+    }
+
+    #[inline]
+    pub fn key_code_from_native_physical_name(name: &str) -> Option<u32> {
+        canonical_id_from_native_physical_name(name).and_then(key_code_from_id)
+    }
+}
+
+/// Engine-owned default keyboard choices for non-user gameplay tooling actions.
+///
+/// These are still normal input bindings and are installed by input profiles. They are not platform
+/// shortcuts, and platform backends must not special-case them.
+pub mod engine_default_keybind {
+    use super::key_code;
+
+    pub const PAUSE_MENU_TOGGLE: u32 = key_code::ESCAPE;
+    pub const ASSET_BROWSER_TOGGLE: u32 = key_code::F1;
 }
 
 /// Canonical gamepad button names used by raw input providers and binding profiles.

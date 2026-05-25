@@ -22,8 +22,7 @@ use parking_lot::Mutex;
 use std::sync::{Arc, OnceLock};
 
 const OWNER: &str = "newengine-time-runtime.engine-owned-provider";
-const MAX_DELTA_NS: u64 = 250_000_000;
-const MAX_FIXED_TICKS_PER_FRAME: u32 = 8;
+const MAX_FIXED_TICKS_PER_FRAME: u32 = 1;
 
 static TIME_GATEWAY: OnceLock<Arc<Mutex<EngineOwnedTimeState>>> = OnceLock::new();
 
@@ -206,22 +205,41 @@ impl EngineOwnedTimeState {
             self.fixed_delta_ns = request.fixed_delta_ns;
         }
         self.last_raw_delta_ns = raw_delta_ns;
-        self.last_clamped_delta_ns = raw_delta_ns.min(MAX_DELTA_NS);
+        let max_ticks = self.max_fixed_ticks_per_frame.max(1);
+        let accumulator_cap = self
+            .fixed_delta_ns
+            .saturating_mul(u64::from(max_ticks))
+            .max(self.fixed_delta_ns);
+        self.last_clamped_delta_ns = raw_delta_ns.min(accumulator_cap);
 
         let scaled_delta_ns = if self.paused {
             0
         } else {
             ((self.last_clamped_delta_ns as f64) * self.scale.max(0.0)) as u64
         };
-        let accumulator_cap = self
-            .fixed_delta_ns
-            .saturating_mul(u64::from(self.max_fixed_ticks_per_frame.max(1)));
-        self.accumulator_ns = self.accumulator_ns.saturating_add(scaled_delta_ns).min(accumulator_cap);
-        self.ticks_to_run = if self.fixed_delta_ns == 0 {
+
+        // Realtime frame policy: never accumulate a simulation backlog on the
+        // render thread. If a frame is slow, the engine advances at most the
+        // configured fixed-step budget and drops excess wall-clock debt instead
+        // of trying to "catch up" with multiple plugin lifecycle passes on the
+        // next visible frame. This does not cap FPS; it prevents fixed-update
+        // work from multiplying when FPS is already low.
+        self.accumulator_ns = if self.paused {
             0
         } else {
-            (self.accumulator_ns / self.fixed_delta_ns).min(u64::from(self.max_fixed_ticks_per_frame.max(1))) as u32
+            self.accumulator_ns.saturating_add(scaled_delta_ns).min(accumulator_cap)
         };
+        self.ticks_to_run = if self.fixed_delta_ns == 0 || self.paused {
+            0
+        } else if self.accumulator_ns >= self.fixed_delta_ns {
+            max_ticks
+        } else {
+            0
+        };
+
+        if self.ticks_to_run >= max_ticks && self.accumulator_ns > accumulator_cap {
+            self.accumulator_ns = accumulator_cap;
+        }
 
         if !self.paused && self.seconds_per_game_day > f64::EPSILON {
             let game_delta_seconds = (self.last_clamped_delta_ns as f64 / 1_000_000_000.0)
@@ -234,15 +252,21 @@ impl EngineOwnedTimeState {
             }
         }
         self.replay_frame = self.replay_frame.wrapping_add(1);
-        log::debug!(
-            "time gateway: begin_frame frame={} delta_ns={} clamped_ns={} ticks_to_run={} paused={} scale={:.3}",
-            self.frame_index,
-            self.last_raw_delta_ns,
-            self.last_clamped_delta_ns,
-            self.ticks_to_run,
-            self.paused,
-            self.scale
-        );
+        if self.ticks_to_run >= self.max_fixed_ticks_per_frame.max(1)
+            && self.frame_index % 120 == 0
+            && !self.paused
+        {
+            log::warn!(
+                "time gateway: realtime fixed-step debt dropped frame={} raw_delta_ns={} clamped_ns={} ticks_to_run={} max_ticks={} accumulator_ns={} scale={:.3}",
+                self.frame_index,
+                self.last_raw_delta_ns,
+                self.last_clamped_delta_ns,
+                self.ticks_to_run,
+                self.max_fixed_ticks_per_frame,
+                self.accumulator_ns,
+                self.scale
+            );
+        }
         self.snapshot()
     }
 
@@ -253,17 +277,11 @@ impl EngineOwnedTimeState {
             self.accumulator_ns = 0;
         }
         self.tick = self.tick.wrapping_add(1);
-        self.ticks_to_run = if self.fixed_delta_ns == 0 {
-            0
-        } else {
-            (self.accumulator_ns / self.fixed_delta_ns).min(u64::from(self.max_fixed_ticks_per_frame.max(1))) as u32
-        };
-        log::debug!(
-            "time gateway: advance_fixed tick={} frame={} accumulator_ns={}",
-            self.tick,
-            self.frame_index,
-            self.accumulator_ns
-        );
+        // Realtime mode drops remaining debt after the visible-frame fixed step.
+        // Separate simulation workers may later own high-frequency catch-up, but
+        // plugin lifecycle fixed_update must not multiply on the render thread.
+        self.accumulator_ns = 0;
+        self.ticks_to_run = 0;
         self.snapshot()
     }
 
@@ -361,7 +379,7 @@ fn service() -> newengine_plugin_api::ServiceV1Dyn<'static> {
             if request.fixed_delta_ns > 0 {
                 state.fixed_delta_ns = request.fixed_delta_ns;
             }
-            state.max_fixed_ticks_per_frame = request.max_fixed_ticks_per_frame.clamp(1, 64);
+            state.max_fixed_ticks_per_frame = 1;
             state.ai_decision_tick_interval = request.ai_decision_tick_interval.max(1);
             state.ai_tick_budget_ns = request.ai_tick_budget_ns.max(1_000);
             state.snapshot()

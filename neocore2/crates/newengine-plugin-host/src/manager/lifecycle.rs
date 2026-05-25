@@ -239,77 +239,45 @@ impl PluginManager {
         }
 
         let id = self.loaded[idx].info.id.to_string();
-        let job_id = crate::diagnostics::next_job_id("host.plugin_lifecycle");
         let started = Instant::now();
 
-        crate::diagnostics::begin(serde_json::json!({
-            "id": job_id.clone(),
-            "name": format!("plugin:{}::{}", id, op),
-            "category": "plugin_lifecycle",
-            "source": "newengine-plugin-host",
-            "plugin_id": id.clone(),
-            "operation": op,
-            "detail": format!("Running plugin lifecycle op '{}' for '{}'.", op, id),
-            "metadata": {
-                "plugin_id": id.clone(),
-                "operation": op
-            }
-        }));
-
+        // Hot-path rule: plugin lifecycle calls are direct ABI calls, not JSON
+        // diagnostics jobs. JSON lifecycle envelopes made fixed_update/update/render
+        // more expensive than most no-op plugin work. Slow/error paths still log a
+        // compact text diagnostic; structured profiler export must be fed by typed
+        // engine.jobs/task events, not serde_json on every plugin callback.
         let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
             with_current_plugin_id(&id, || f(&mut self.loaded[idx].module))
         }));
 
         match result {
             Ok(Ok(())) => {
-                crate::diagnostics::end(serde_json::json!({
-                    "id": job_id.clone(),
-                    "status": "completed",
-                    "detail": format!(
-                        "plugin lifecycle op completed in {:.3} ms",
-                        crate::diagnostics::elapsed_ms(started)
-                    ),
-                    "metadata": {
-                        "plugin_id": id.clone(),
-                        "operation": op
-                    }
-                }));
+                let elapsed_ms = crate::diagnostics::elapsed_ms(started);
+                if elapsed_ms >= 4.0 {
+                    log::debug!(
+                        "plugins: lifecycle slow id='{}' op='{}' elapsed_ms={:.3}",
+                        id,
+                        op,
+                        elapsed_ms
+                    );
+                }
             }
             Ok(Err(e)) => {
-                crate::diagnostics::end(serde_json::json!({
-                    "id": job_id.clone(),
-                    "status": "failed",
-                    "error": e.clone(),
-                    "detail": format!(
-                        "plugin lifecycle op failed in {:.3} ms",
-                        crate::diagnostics::elapsed_ms(started)
-                    ),
-                    "metadata": {
-                        "plugin_id": id.clone(),
-                        "operation": op
-                    }
-                }));
-                log::error!("plugins: op '{}' failed for id='{}': {}", op, id, e);
+                log::error!(
+                    "plugins: op '{}' failed for id='{}' elapsed_ms={:.3}: {}",
+                    op,
+                    id,
+                    crate::diagnostics::elapsed_ms(started),
+                    e
+                );
                 self.disable_plugin(idx, &id, format!("op '{op}' failed: {e}"));
             }
             Err(_) => {
-                crate::diagnostics::end(serde_json::json!({
-                    "id": job_id.clone(),
-                    "status": "failed",
-                    "error": "panic",
-                    "detail": format!(
-                        "plugin lifecycle op panicked in {:.3} ms",
-                        crate::diagnostics::elapsed_ms(started)
-                    ),
-                    "metadata": {
-                        "plugin_id": id.clone(),
-                        "operation": op
-                    }
-                }));
                 log::error!(
-                    "plugins: panic during op '{}' for id='{}' (plugin disabled)",
+                    "plugins: panic during op '{}' for id='{}' elapsed_ms={:.3} (plugin disabled)",
                     op,
-                    id
+                    id,
+                    crate::diagnostics::elapsed_ms(started)
                 );
                 self.disable_plugin(idx, &id, format!("panic during op '{op}'"));
             }

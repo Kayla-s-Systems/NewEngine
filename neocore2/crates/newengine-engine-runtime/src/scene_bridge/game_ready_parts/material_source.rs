@@ -32,12 +32,20 @@ fn load_material_descriptor_asset(path: &str) -> Option<NeMaterialDescriptorLoad
             return None;
         }
     };
-    let bytes = match call_service_v1(
+    let bytes = match call_service_v1_optional(
         ENGINE_ASSETS_MATERIALS_SERVICE_ID,
         material_method::LOAD_DESCRIPTOR_V1,
         &payload,
     ) {
-        Ok(bytes) => bytes,
+        Ok(Some(bytes)) => bytes,
+        Ok(None) => {
+            log::debug!(
+                "game-ready material: .nemat descriptor route absent path='{}' gateway='engine.assets.materials' method='{}'",
+                path,
+                material_method::LOAD_DESCRIPTOR_V1
+            );
+            return None;
+        },
         Err(e) => {
             log::warn!(
                 "game-ready material: .nemat descriptor unavailable path='{}' gateway='engine.assets.materials' method='{}' err='{}'",

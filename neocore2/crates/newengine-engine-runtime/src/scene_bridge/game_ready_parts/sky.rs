@@ -174,12 +174,12 @@ fn sync_game_ready_day_night_to_engine_time(day_night: &GameReadyDayNightSpec) {
         log::warn!("game-ready sky cycle: failed to encode engine.time clock request");
         return;
     };
-    match call_service_v1(
+    match call_service_v1_optional(
         newengine_core::time::ENGINE_TIME_SERVICE_ID,
         newengine_core::time::time_method::SET_GAME_CLOCK_V1,
         &payload,
     ) {
-        Ok(bytes) => match serde_json::from_slice::<newengine_core::time::TimeSnapshotV1>(&bytes) {
+        Ok(Some(bytes)) => match serde_json::from_slice::<newengine_core::time::TimeSnapshotV1>(&bytes) {
             Ok(snapshot) => log::info!(
                 "game-ready sky cycle: engine.time game clock set source='scene.day_night' tod={:.2}h day_len={:.1}s normalized_day={:.6} time_scale={:.3}",
                 day_night.time_of_day_hours,
@@ -192,6 +192,9 @@ fn sync_game_ready_day_night_to_engine_time(day_night: &GameReadyDayNightSpec) {
                 e
             ),
         },
+        Ok(None) => log::debug!(
+            "game-ready sky cycle: engine.time route absent; sky will use local scene clock projection"
+        ),
         Err(e) => log::warn!(
             "game-ready sky cycle: engine.time set_game_clock_v1 failed; sky will use local scene clock projection err='{}'",
             e
@@ -415,12 +418,7 @@ pub fn tick_game_ready_sky_cycle(world: &mut newengine_ecs::World, dt: f32) {
 
         if let Some(snapshot) = time_snapshot_for_sky_cycle() {
             cycle.time_of_day_hours = (snapshot.game.normalized_day as f32 * 24.0).rem_euclid(24.0);
-            log::trace!(
-                "game-ready sky cycle: time source='engine.time' frame={} normalized_day={:.6} tod_hours={:.3}",
-                snapshot.frame_index,
-                snapshot.game.normalized_day,
-                cycle.time_of_day_hours
-            );
+
         } else {
             let advance = if cycle.enabled && cycle.day_length_seconds > 0.0 {
                 dt.max(0.0) * 24.0 / cycle.day_length_seconds

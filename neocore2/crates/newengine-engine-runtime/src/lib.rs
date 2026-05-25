@@ -28,6 +28,7 @@ pub mod replay {
     pub use newengine_replay::*;
 }
 mod scene_bootstrap;
+mod ui_gateway;
 pub mod scene_bridge;
 pub mod viewport_bridge;
 

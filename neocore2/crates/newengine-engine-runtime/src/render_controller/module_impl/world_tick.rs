@@ -35,21 +35,10 @@ impl RuntimeRenderController {
         let selection = scene_bridge.selection();
 
         let view_frame = scene.run_frame(self.frame.frame_index, |world| {
-            let authority_frame = scene_bridge
+            let _authority_frame = scene_bridge
                 .authority_bridge()
                 .publish_frame(world, self.frame.frame_index, "render.world_tick");
-            if authority_frame.native_world_is_component_cache() {
-                let provider_entities = crate::authority::current_entity_authority_map(world)
-                    .map(|map| map.native_to_provider.len())
-                    .unwrap_or(0);
-                log::trace!(
-                    "render extraction: authority frame mode='{}' owner='{}' native_entities={} provider_entities={} source='authority-frame'",
-                    authority_frame.mode.as_str(),
-                    authority_frame.route_snapshot.authority_label(),
-                    authority_frame.native_entity_count,
-                    provider_entities
-                );
-            }
+
             let world_playable = readiness::update_game_ready_launch_gate(
                 self,
                 r,

@@ -2,10 +2,14 @@ use newengine_math::{Mat4, Vec3};
 
 /// Runtime draw budgets keep the current non-instanced Vulkan path stable.
 /// They are intentionally deterministic: nearest objects win, ties are stable-key ordered.
-pub(super) const RUNTIME_OPAQUE_PRIMITIVE_BUDGET: usize = 64;
-pub(super) const RUNTIME_SHADOW_PRIMITIVE_BUDGET: usize = 32;
+pub(super) const RUNTIME_OPAQUE_PRIMITIVE_BUDGET: usize = 32;
+pub(super) const RUNTIME_SHADOW_PRIMITIVE_BUDGET: usize = 16;
 pub(super) const EDITOR_OPAQUE_PRIMITIVE_BUDGET: usize = 256;
 pub(super) const EDITOR_SHADOW_PRIMITIVE_BUDGET: usize = 160;
+pub(super) const RUNTIME_TERRAIN_FORWARD_BUDGET: usize = 5;
+pub(super) const RUNTIME_TERRAIN_SHADOW_BUDGET: usize = 4;
+pub(super) const EDITOR_TERRAIN_FORWARD_BUDGET: usize = 64;
+pub(super) const EDITOR_TERRAIN_SHADOW_BUDGET: usize = 64;
 
 #[inline]
 pub(super) fn translation_of(model: Mat4) -> Vec3 {
@@ -37,6 +41,28 @@ pub(super) fn primitive_budget(runtime: bool, shadow_pass: bool) -> usize {
     crate::env_config::var(key)
         .and_then(|value| value.trim().parse::<usize>().ok())
         .map(|value| value.clamp(8, 512))
+        .unwrap_or(default)
+}
+
+#[inline]
+pub(super) fn terrain_budget(runtime: bool, shadow_pass: bool) -> usize {
+    let default = match (runtime, shadow_pass) {
+        (true, true) => RUNTIME_TERRAIN_SHADOW_BUDGET,
+        (true, false) => RUNTIME_TERRAIN_FORWARD_BUDGET,
+        (false, true) => EDITOR_TERRAIN_SHADOW_BUDGET,
+        (false, false) => EDITOR_TERRAIN_FORWARD_BUDGET,
+    };
+
+    let key = match (runtime, shadow_pass) {
+        (true, true) => "NEWENGINE_RUNTIME_TERRAIN_SHADOW_BUDGET",
+        (true, false) => "NEWENGINE_RUNTIME_TERRAIN_FORWARD_BUDGET",
+        (false, true) => "NEWENGINE_EDITOR_TERRAIN_SHADOW_BUDGET",
+        (false, false) => "NEWENGINE_EDITOR_TERRAIN_FORWARD_BUDGET",
+    };
+
+    crate::env_config::var(key)
+        .and_then(|value| value.trim().parse::<usize>().ok())
+        .map(|value| value.clamp(1, 256))
         .unwrap_or(default)
 }
 
@@ -169,18 +195,18 @@ pub(super) fn forward_sphere_visible(
 
 #[inline]
 pub(super) fn terrain_forward_max_distance() -> f32 {
-    env_f32("NEWENGINE_TERRAIN_RENDER_DISTANCE", 150.0, 32.0, 2048.0)
+    env_f32("NEWENGINE_TERRAIN_RENDER_DISTANCE", 96.0, 32.0, 2048.0)
 }
 
 #[inline]
 pub(super) fn primitive_forward_max_distance(runtime: bool) -> f32 {
-    let default = if runtime { 92.0 } else { 180.0 };
+    let default = if runtime { 64.0 } else { 180.0 };
     env_f32("NEWENGINE_PRIMITIVE_RENDER_DISTANCE", default, 8.0, 2048.0)
 }
 
 #[inline]
 pub(super) fn primitive_shadow_max_distance(runtime: bool) -> f32 {
-    let default = if runtime { 120.0 } else { 240.0 };
+    let default = if runtime { 80.0 } else { 240.0 };
     env_f32("NEWENGINE_PRIMITIVE_SHADOW_DISTANCE", default, 16.0, 4096.0)
 }
 
@@ -189,7 +215,7 @@ pub(super) fn scene_forward_cone_dot() -> f32 {
     // -0.25 is intentionally wider than a strict camera frustum. It keeps
     // objects around the edges alive while cutting resident cells fully behind
     // the player/camera, matching the reference scene streamer's active buckets.
-    env_f32("NEWENGINE_RENDER_FORWARD_CONE_DOT", -0.25, -0.95, 0.95)
+    env_f32("NEWENGINE_RENDER_FORWARD_CONE_DOT", -0.12, -0.95, 0.95)
 }
 
 #[inline]

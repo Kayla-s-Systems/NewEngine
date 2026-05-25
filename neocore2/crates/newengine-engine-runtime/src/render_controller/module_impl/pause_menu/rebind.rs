@@ -4,7 +4,7 @@ use newengine_audio_api::AudioFeedbackKind;
 use newengine_input_bindings_api::{
     InputBinding, InputBindingDevice, InputBindingPhase, InputBindingRegistration,
 };
-use newengine_ui::UiInputFrame;
+use newengine_ui_api::UiInputFrame;
 
 use super::super::input::ViewportInputSnap;
 use super::*;

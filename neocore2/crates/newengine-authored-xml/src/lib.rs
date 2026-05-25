@@ -289,7 +289,7 @@ static METADATA_ROOT_SNIPPETS: &[XmlSnippet] = &[
 static METADATA_CHILD_SNIPPETS: &[XmlSnippet] = DEFINITION_CHILD_SNIPPETS;
 static NEUI_ROOT_SNIPPETS: &[XmlSnippet] = &[
     XmlSnippet { label: "NeUi Surface Dictionary", insert: r##"<NeUiDictionary schema="newengine.neui.dictionary.v1" representation="xmlcentral" owner_scope="engine" document_kind="surface">
-  <Surface name="engine.loading" root="layout.main" theme="assets/ui/themes/aurelia_dark.neui@theme" bindings="bindings">
+  <Surface name="engine.loading" root="layout.main" theme="assets/ui/themes/north_star_dark.neui@theme" bindings="bindings">
     <Dependencies>
     </Dependencies>
   </Surface>
@@ -307,14 +307,14 @@ static NEUI_ROOT_SNIPPETS: &[XmlSnippet] = &[
     <SurfaceRef id="engine.loading" ref="assets/ui/engine/loading.neui@surface" />
   </Surfaces>
   <Themes>
-    <ThemeRef id="aurelia.dark" ref="assets/ui/themes/aurelia_dark.neui@theme" />
+    <ThemeRef id="north_star.dark" ref="assets/ui/themes/north_star_dark.neui@theme" />
   </Themes>
   <ComponentPacks>
   </ComponentPacks>
 </NeUiRegistry>
 "##, detail: "Registry of UI refs only; no inline layouts" },
     XmlSnippet { label: "NeUi Theme Library", insert: r##"<NeUiThemeLibrary schema="newengine.neui.theme.v1" representation="xmlcentral" owner_scope="shared" document_kind="theme">
-  <Theme name="aurelia.dark">
+  <Theme name="north_star.dark">
     <Token name="color.bg" value="#0B0D10" />
     <Token name="color.accent" value="#FF7A18" />
   </Theme>
@@ -323,7 +323,7 @@ static NEUI_ROOT_SNIPPETS: &[XmlSnippet] = &[
 ];
 static NEUI_CHILD_SNIPPETS: &[XmlSnippet] = &[
     XmlSnippet { label: "Surface", insert: r##"
-  <Surface name="engine.loading" root="layout.main" theme="assets/ui/themes/aurelia_dark.neui@theme" bindings="bindings">
+  <Surface name="engine.loading" root="layout.main" theme="assets/ui/themes/north_star_dark.neui@theme" bindings="bindings">
     <Dependencies>
       <ComponentRef ref="assets/ui/components/cards.neui@card.status" />
       <TextureRef ref="assets/ui/icons/builtin_icons.ytd@app_logo" />

@@ -1,6 +1,6 @@
 use newengine_core::render::RenderFrameDebugSnapshot;
 use crate::scene_bridge::EngineViewGatewayFrame;
-use newengine_ui::{draw::UiDrawList, UiInputFrame};
+use newengine_ui_api::{UiDrawList, UiInputFrame};
 use newengine_ui_api::UiRuntimeDebugOverlayTelemetry;
 
 use super::input::ViewportInputSnap;

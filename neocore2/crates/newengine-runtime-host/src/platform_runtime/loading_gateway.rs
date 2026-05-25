@@ -81,7 +81,7 @@ pub(crate) fn register_loading_gateway_service_best_effort() {
         .get_or_init(|| SharedLoadingSnapshot::new(LoadingScreenSnapshot::default()))
         .clone();
 
-    if newengine_plugin_host::has_service(ENGINE_LOADING_SERVICE_ID) {
+    if newengine_core::has_engine_gateway_route(ENGINE_LOADING_SERVICE_ID) {
         return;
     }
 

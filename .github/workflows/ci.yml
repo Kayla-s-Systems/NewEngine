@@ -45,6 +45,10 @@ jobs:
       - name: Gateway contract scan
         run: python scripts/gateway_contract_scan.py
 
+      - name: Provider boundary scan
+        run: python scripts/provider_boundary_scan.py
+
+
       - name: Asset format descriptor scan
         run: python scripts/asset_format_boilerplate_scan.py
 

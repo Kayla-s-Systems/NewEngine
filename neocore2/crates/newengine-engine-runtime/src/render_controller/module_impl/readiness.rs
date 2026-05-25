@@ -236,7 +236,8 @@ fn material_texture_ready_state(
         MaterialTextureGpuResidency::Ready { .. } => TextureReadyState::Ready,
         MaterialTextureGpuResidency::Failed { .. } => TextureReadyState::Failed,
         MaterialTextureGpuResidency::Requested
-        | MaterialTextureGpuResidency::AssetLoading { .. } => TextureReadyState::Waiting,
+        | MaterialTextureGpuResidency::AssetLoading { .. }
+        | MaterialTextureGpuResidency::CpuDecoding { .. } => TextureReadyState::Waiting,
         MaterialTextureGpuResidency::GpuLoading { texture, .. } => {
             match r.texture_residency(texture) {
                 Ok(snapshot) if snapshot.state == GpuResourceResidencyState::Ready => {

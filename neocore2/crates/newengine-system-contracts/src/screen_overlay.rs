@@ -280,7 +280,7 @@ impl ScreenOverlayStatus {
         Self::new(
             ScreenOverlayStatusKind::Ready,
             ScreenOverlayReason::Unknown,
-            "NEWENGINE // READY",
+            "NORTH STAR ENGINE // READY",
             status,
             detail,
             Some(ScreenOverlayProgress::percent(1.0)),
@@ -296,7 +296,7 @@ impl ScreenOverlayStatus {
         Self::new(
             ScreenOverlayStatusKind::Degraded,
             reason,
-            "NEWENGINE // DEGRADED MODE",
+            "NORTH STAR ENGINE // DEGRADED MODE",
             status,
             detail,
             None,
@@ -312,7 +312,7 @@ impl ScreenOverlayStatus {
         Self::new(
             ScreenOverlayStatusKind::Error,
             reason,
-            "NEWENGINE // ERROR",
+            "NORTH STAR ENGINE // ERROR",
             status,
             detail,
             None,
@@ -337,17 +337,17 @@ fn normalize(value: String, fallback: &'static str) -> String {
 
 fn default_title(kind: ScreenOverlayStatusKind) -> &'static str {
     match kind {
-        ScreenOverlayStatusKind::Boot => "NEWENGINE // BOOT",
-        ScreenOverlayStatusKind::Loading => "NEWENGINE // BOOTSTRAP",
-        ScreenOverlayStatusKind::Syncing => "NEWENGINE // SYNCHRONIZING",
-        ScreenOverlayStatusKind::Applying => "NEWENGINE // APPLYING",
-        ScreenOverlayStatusKind::WarmingUp => "NEWENGINE // WARMUP",
-        ScreenOverlayStatusKind::WaitingForRenderer => "NEWENGINE // RENDERER",
-        ScreenOverlayStatusKind::WaitingForAssets => "NEWENGINE // ASSETS",
-        ScreenOverlayStatusKind::Ready => "NEWENGINE // READY",
-        ScreenOverlayStatusKind::Degraded => "NEWENGINE // DEGRADED MODE",
-        ScreenOverlayStatusKind::Recovering => "NEWENGINE // RECOVERY",
-        ScreenOverlayStatusKind::Error => "NEWENGINE // ERROR",
+        ScreenOverlayStatusKind::Boot => "NORTH STAR ENGINE // BOOT",
+        ScreenOverlayStatusKind::Loading => "NORTH STAR ENGINE // BOOTSTRAP",
+        ScreenOverlayStatusKind::Syncing => "NORTH STAR ENGINE // SYNCHRONIZING",
+        ScreenOverlayStatusKind::Applying => "NORTH STAR ENGINE // APPLYING",
+        ScreenOverlayStatusKind::WarmingUp => "NORTH STAR ENGINE // WARMUP",
+        ScreenOverlayStatusKind::WaitingForRenderer => "NORTH STAR ENGINE // RENDERER",
+        ScreenOverlayStatusKind::WaitingForAssets => "NORTH STAR ENGINE // ASSETS",
+        ScreenOverlayStatusKind::Ready => "NORTH STAR ENGINE // READY",
+        ScreenOverlayStatusKind::Degraded => "NORTH STAR ENGINE // DEGRADED MODE",
+        ScreenOverlayStatusKind::Recovering => "NORTH STAR ENGINE // RECOVERY",
+        ScreenOverlayStatusKind::Error => "NORTH STAR ENGINE // ERROR",
     }
 }
 

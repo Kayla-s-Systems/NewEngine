@@ -60,7 +60,7 @@ pub(crate) fn register_platform_window_service_best_effort(initial: PlatformWind
         Err(e) => *e.into_inner() = initial,
     }
 
-    if newengine_plugin_host::has_service(ENGINE_PLATFORM_SERVICE_ID) {
+    if newengine_core::has_engine_gateway_route(ENGINE_PLATFORM_SERVICE_ID) {
         return;
     }
 

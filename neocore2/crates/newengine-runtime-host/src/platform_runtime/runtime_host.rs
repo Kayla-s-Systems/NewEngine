@@ -24,10 +24,10 @@ use newengine_system_runtime::{
     startup_status_mapper::bootstrap_loading_with_subsystems,
 };
 use newengine_ui::{
-    create_provider, UiBuildFn, UiFrameDesc, UiInputFrame, UiProvider, UiProviderKind,
+    create_provider, UiBuildFn, UiFrameDesc, UiProvider, UiProviderKind,
     UiProviderOptions, UiProviderBinding,
 };
-use newengine_ui::draw::UiDrawList;
+use newengine_ui_api::{UiDrawList, UiInputFrame};
 
 use crate::platform_input::poll_input_frame;
 use crate::platform_runtime::callbacks::{
@@ -80,7 +80,6 @@ pub struct HostPlatformRuntime {
     runtime_soft_degraded_origin: Option<&'static str>,
     runtime_soft_degraded_frames: u64,
     cached_provider_ui_draw: Option<UiDrawList>,
-    last_pause_menu_visible: bool,
 }
 
 
@@ -120,7 +119,6 @@ impl HostPlatformRuntime {
             runtime_soft_degraded_origin: None,
             runtime_soft_degraded_frames: 0,
             cached_provider_ui_draw: None,
-            last_pause_menu_visible: false,
         }
     }
 
@@ -514,14 +512,10 @@ impl HostPlatformRuntime {
         {
             crate::platform_runtime::ui_gateway_frame::publish_debug_overlay_telemetry(&telemetry);
         }
-        let pause_menu_state = self
-            .engine
-            .resources
-            .get::<newengine_ui_api::UiPauseMenuState>()
-            .cloned();
-        if let Some(state) = pause_menu_state.as_ref() {
-            crate::platform_runtime::ui_gateway_frame::publish_pause_menu_state(state);
-        }
+        // Modal UI state is produced inside engine.step() by render_controller and
+        // requires same-frame refresh. Do not publish/request the previous frame's
+        // pause menu here: that duplicates engine.ui work and forces stale UI traffic
+        // before the real modal owner has updated animation/navigation state.
 
         if let Some(input) = input_frame.clone() {
             self.engine.resources_mut().insert::<UiInputFrame>(input);
@@ -546,9 +540,6 @@ impl HostPlatformRuntime {
             .resources
             .get::<newengine_ui_api::UiRuntimeDebugOverlayTelemetry>()
             .is_some();
-        let pause_menu_visible = pause_menu_state.as_ref().map(|state| state.visible).unwrap_or(false);
-        let pause_menu_refresh = pause_menu_visible || (self.last_pause_menu_visible && !pause_menu_visible);
-        self.last_pause_menu_visible = pause_menu_visible;
         let scene_launch_active = self
             .engine
             .resources
@@ -561,10 +552,9 @@ impl HostPlatformRuntime {
         // runtime-debug telemetry was enabled, so the gameplay HUD vanished and the frame graph
         // legitimately collapsed to `ui=none`. Keep UI visible by using a cached provider draw
         // list for idle gameplay, and refresh it only when state can change.
-        let provider_ui_needed = self.ui_build.is_some() || debug_overlay_active || scene_launch_active || pause_menu_visible;
+        let provider_ui_needed = self.ui_build.is_some() || debug_overlay_active || scene_launch_active;
         let provider_gameplay_hud = provider_ui_active && !self.minimized && self.surface.width > 0 && self.surface.height > 0;
         let provider_ui_refresh = provider_ui_needed
-            || pause_menu_refresh
             || self.cached_provider_ui_draw.is_none()
             || ui_frame_index <= 4
             || ui_frame_index % 30 == 1;
@@ -617,7 +607,7 @@ impl HostPlatformRuntime {
         if let Some(draw_list) = ui_draw {
             self.engine.resources_mut().insert(draw_list);
         } else {
-            let _ = self.engine.resources_mut().remove::<newengine_ui::draw::UiDrawList>();
+            let _ = self.engine.resources_mut().remove::<newengine_ui_api::UiDrawList>();
         }
 
         match self.engine.step() {

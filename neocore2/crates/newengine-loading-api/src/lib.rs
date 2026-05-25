@@ -2,6 +2,8 @@
 
 use serde::{Deserialize, Serialize};
 
+pub mod bootstrap_ui;
+
 /// Engine-facing loading-screen gateway id.
 ///
 /// Runtime/platform code calls this stable facade. The current implementation is
@@ -407,7 +409,7 @@ impl EngineTaskEvent {
             self.category.as_str(),
             self.category.to_ascii_uppercase(),
             self.phase.loading_phase(),
-            "NEWENGINE // TASKS",
+            "NORTH STAR ENGINE // TASKS",
             self.status.as_str(),
             self.detail.as_str(),
             progress,
@@ -498,7 +500,7 @@ impl Default for LoadingScreenSnapshot {
     fn default() -> Self {
         Self {
             active: false,
-            title: "NEWENGINE // BOOTSTRAP".to_owned(),
+            title: "NORTH STAR ENGINE // BOOTSTRAP".to_owned(),
             status: "Preparing runtime...".to_owned(),
             detail: "The native loading shell is waiting for startup telemetry.".to_owned(),
             progress_01: 0.0,

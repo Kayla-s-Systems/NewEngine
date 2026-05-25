@@ -31,6 +31,7 @@ pub fn draw_procedural_terrain_shadow(
         });
     }
     entries.sort_by(|a, b| a.entity_key.cmp(&b.entity_key));
+    entries.truncate(terrain_budget(runtime, true));
 
     let mut stream = BucketedIndexedDrawStream::with_capacity(entries.len());
     for entry in entries {

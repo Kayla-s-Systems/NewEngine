@@ -1965,9 +1965,9 @@ dependencies = [
 
 [[package]]
 name = "log"
-version = "0.4.29"
+version = "0.4.30"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5e5032e24019045c762d3c0f28f5b6b8bbf38563a65908389bf7978758920897"
+checksum = "616ec5685824bcc94416c6d4a7a446eea774a31efd7062c8480ba6fd06d7a6e5"
 
 [[package]]
 name = "malloc_buf"
@@ -2642,6 +2642,7 @@ dependencies = [
  "newengine-plugin-host",
  "newengine-render-feature-api",
  "newengine-render-feature-gameready",
+ "newengine-render-ui-bridge",
  "newengine-runtime-host",
  "newengine-scene",
  "newengine-scene-runtime",
@@ -3000,6 +3001,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "newengine-render-ui-bridge"
+version = "0.1.0"
+dependencies = [
+ "newengine-core",
+ "newengine-render-feature-api",
+]
+
+[[package]]
 name = "newengine-replay"
 version = "0.1.0"
 dependencies = [
@@ -3015,6 +3024,7 @@ dependencies = [
  "libloading 0.9.0",
  "log",
  "newengine-assets",
+ "newengine-assets-api",
  "newengine-core",
  "newengine-ecs-api",
  "newengine-entity-api",
@@ -3243,8 +3253,10 @@ dependencies = [
  "base64",
  "newengine-assets",
  "newengine-assets-api",
+ "newengine-input-api",
  "newengine-math",
  "newengine-plugin-api",
+ "newengine-ui-api",
  "newengine-ui-draw",
  "roxmltree",
  "serde",
@@ -3256,6 +3268,7 @@ dependencies = [
 name = "newengine-ui-api"
 version = "0.1.0"
 dependencies = [
+ "newengine-input-api",
  "newengine-service-api",
  "newengine-ui-draw",
  "serde",
@@ -3652,9 +3665,9 @@ checksum = "9f7c3e4beb33f85d45ae3e3a1792185706c8e16d043238c593331cc7cd313b50"
 
 [[package]]
 name = "orbclient"
-version = "0.3.54"
+version = "0.3.55"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a570f6bca41d29acb2139229a7c873ec99bc9a313bd10804081d89bfac8ff329"
+checksum = "5df339f526ea9a60e371768d50efc2f2508c7203290731565d1f7a6f71d21747"
 dependencies = [
  "libc",
  "libredox",

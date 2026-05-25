@@ -117,7 +117,7 @@ fn audio_gateway_service(state: Arc<Mutex<AudioGatewayState>>) -> newengine_plug
 }
 
 pub fn register_audio_gateway_best_effort() {
-    if newengine_plugin_host::has_service(ENGINE_AUDIO_SERVICE_ID) {
+    if newengine_core::has_engine_gateway_route(ENGINE_AUDIO_SERVICE_ID) {
         return;
     }
 

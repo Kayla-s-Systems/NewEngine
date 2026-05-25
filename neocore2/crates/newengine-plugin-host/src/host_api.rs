@@ -144,27 +144,7 @@ pub extern "C" fn call_service_v1(
 
     let method_string = method.to_string();
     let payload_len = payload.len();
-    let job_id = crate::diagnostics::next_job_id("host.service_call");
     let started = Instant::now();
-
-    crate::diagnostics::begin(serde_json::json!({
-        "id": job_id.clone(),
-        "name": format!("service:{}::{}", id, method_string),
-        "category": "service_call",
-        "source": "newengine-plugin-host",
-        "service_id": id.clone(),
-        "requested_service_id": requested_id.clone(),
-        "method": method_string.clone(),
-        "owner_plugin_id": owner.clone(),
-        "payload_bytes": payload_len as u64,
-        "detail": format!("Calling service '{}' method '{}' ({} bytes).", id, method_string, payload_len),
-        "metadata": {
-            "service_id": id.clone(),
-            "requested_service_id": requested_id.clone(),
-            "method": method_string.clone(),
-            "owner_plugin_id": owner.clone()
-        }
-    }));
 
     /*
     debug_no_recurse(format_args!(
@@ -200,40 +180,33 @@ pub extern "C" fn call_service_v1(
         }),
     };
 
+    let elapsed_ms = crate::diagnostics::elapsed_ms(started);
     match &res {
         RResult::ROk(b) => {
-            crate::diagnostics::end(serde_json::json!({
-                "id": job_id.clone(),
-                "status": "completed",
-                "output_bytes": b.len() as u64,
-                "detail": format!(
-                    "service call completed in {:.3} ms",
-                    crate::diagnostics::elapsed_ms(started)
-                ),
-                "metadata": {
-                    "service_id": id.clone(),
-                    "requested_service_id": requested_id.clone(),
-                    "method": method_string.clone(),
-                    "owner_plugin_id": owner.clone()
-                }
-            }));
+            if elapsed_ms >= 8.0 {
+                log::debug!(
+                    "services: slow call id='{}' requested='{}' method='{}' owner='{}' payload_bytes={} output_bytes={} elapsed_ms={:.3}",
+                    id,
+                    requested_id,
+                    method_string,
+                    owner.as_deref().unwrap_or("<host>"),
+                    payload_len,
+                    b.len(),
+                    elapsed_ms
+                );
+            }
         }
         RResult::RErr(e) => {
-            crate::diagnostics::end(serde_json::json!({
-                "id": job_id.clone(),
-                "status": "failed",
-                "error": e.to_string(),
-                "detail": format!(
-                    "service call failed in {:.3} ms",
-                    crate::diagnostics::elapsed_ms(started)
-                ),
-                "metadata": {
-                    "service_id": id.clone(),
-                    "requested_service_id": requested_id.clone(),
-                    "method": method_string.clone(),
-                    "owner_plugin_id": owner.clone()
-                }
-            }));
+            log::error!(
+                "services: call err id='{}' requested='{}' method='{}' owner='{}' payload_bytes={} elapsed_ms={:.3} err='{}'",
+                id,
+                requested_id,
+                method_string,
+                owner.as_deref().unwrap_or("<host>"),
+                payload_len,
+                elapsed_ms,
+                e
+            );
             debug_no_recurse(format_args!(
                 "services: call err id='{}' method='{}' err='{}'",
                 id, method, e

@@ -8,24 +8,25 @@ use std::process::Command;
 use std::sync::{Arc, Mutex};
 
 use eframe::egui;
+use newengine_loading_api::bootstrap_ui::{north_star_bootstrap_ui_style, BootstrapUiRgb};
 use serde_json::{Map, Number, Value};
 
 use super::icons::{icon, IconKind};
 use super::report::StartupWindowReport;
 use super::svg_assets::SvgIconRegistry;
 
-const APP_TITLE: &str = "North Star Engine";
-const APP_SUBTITLE: &str = "PreStart launch configuration workbench";
+const APP_TITLE: &str = north_star_bootstrap_ui_style().brand.prestart_title;
+const APP_SUBTITLE: &str = north_star_bootstrap_ui_style().brand.prestart_subtitle;
 const SCHEMA_LABEL: &str = "newengine.startup_window.v1";
 const ACCENT_BLUE: egui::Color32 = egui::Color32::from_rgb(78, 153, 255);
 const ACCENT_BLUE_BRIGHT: egui::Color32 = egui::Color32::from_rgb(106, 181, 255);
 const ACCENT_GREEN: egui::Color32 = egui::Color32::from_rgb(121, 232, 123);
 const TEXT_PRIMARY: egui::Color32 = egui::Color32::from_rgb(232, 238, 250);
 const TEXT_MUTED: egui::Color32 = egui::Color32::from_rgb(146, 158, 184);
-const WINDOW_WIDTH: f32 = 1440.0;
-const WINDOW_HEIGHT: f32 = 900.0;
-const MIN_WINDOW_WIDTH: f32 = 1180.0;
-const MIN_WINDOW_HEIGHT: f32 = 760.0;
+const WINDOW_WIDTH: f32 = 1320.0;
+const WINDOW_HEIGHT: f32 = 860.0;
+const MIN_WINDOW_WIDTH: f32 = 980.0;
+const MIN_WINDOW_HEIGHT: f32 = 680.0;
 const CENTER_ATTEMPT_LIMIT: u8 = 8;
 
 mod app_lifecycle;
@@ -41,6 +42,12 @@ use self::config_store::*;
 use self::plugin_widgets::*;
 use self::shell::*;
 use self::widgets::*;
+
+#[inline]
+fn color32(rgb: BootstrapUiRgb) -> egui::Color32 {
+    egui::Color32::from_rgb(rgb.r, rgb.g, rgb.b)
+}
+
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum WindowOutcome {

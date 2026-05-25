@@ -10,9 +10,9 @@ pub(super) fn status_dot(ui: &mut egui::Ui, enabled: bool) {
 pub(super) fn ready_status_pill(ui: &mut egui::Ui) {
     egui::Frame::new()
         .fill(egui::Color32::from_rgb(13, 28, 22))
-        .corner_radius(egui::CornerRadius::same(10))
+        .corner_radius(egui::CornerRadius::same(11))
         .stroke(egui::Stroke::new(1.0, egui::Color32::from_rgb(42, 88, 55)))
-        .inner_margin(egui::Margin::symmetric(10, 7))
+        .inner_margin(egui::Margin::symmetric(12, 8))
         .show(ui, |ui| {
             ui.horizontal(|ui| {
                 status_dot(ui, true);
@@ -24,9 +24,9 @@ pub(super) fn ready_status_pill(ui: &mut egui::Ui) {
 
 pub(super) fn action_button(ui: &mut egui::Ui, kind: IconKind, text: &str, width: f32, primary: bool) -> egui::Response {
     let fill = if primary {
-        egui::Color32::from_rgb(26, 88, 185)
+        egui::Color32::from_rgb(33, 99, 212)
     } else {
-        egui::Color32::from_rgb(18, 23, 32)
+        egui::Color32::from_rgb(17, 22, 31)
     };
     let stroke = if primary {
         egui::Stroke::new(1.1, egui::Color32::from_rgb(85, 170, 255))
@@ -37,7 +37,7 @@ pub(super) fn action_button(ui: &mut egui::Ui, kind: IconKind, text: &str, width
         .fill(fill)
         .corner_radius(egui::CornerRadius::same(8))
         .stroke(stroke)
-        .inner_margin(egui::Margin::symmetric(16, 12))
+        .inner_margin(egui::Margin::symmetric(16, 11))
         .show(ui, |ui| {
             ui.set_min_width(width - 32.0);
             ui.horizontal(|ui| {
@@ -364,29 +364,37 @@ pub(super) fn paint_chevron(ui: &mut egui::Ui, rect: egui::Rect, open: bool) {
 }
 
 pub(super) fn launcher_card(ui: &mut egui::Ui, add: impl FnOnce(&mut egui::Ui)) {
+    let width = ui.available_width();
     egui::Frame::new()
         .fill(egui::Color32::from_rgb(15, 19, 27))
         .corner_radius(egui::CornerRadius::same(14))
         .stroke(egui::Stroke::new(1.0, egui::Color32::from_rgb(33, 42, 58)))
-        .inner_margin(egui::Margin::same(16))
-        .show(ui, add);
+        .inner_margin(egui::Margin::same(14))
+        .show(ui, |ui| {
+            ui.set_width(width - 28.0);
+            add(ui);
+        });
 }
 
 pub(super) fn card_title(ui: &mut egui::Ui, icon_kind: IconKind, title: &str, pill: Option<&str>) {
     ui.horizontal(|ui| {
         icon(ui, icon_kind, 22.0, egui::Color32::from_rgb(91, 167, 255));
-        ui.label(egui::RichText::new(title).size(13.0).strong().color(egui::Color32::from_rgb(91, 167, 255)));
+        let reserved = if pill.is_some() { 116.0 } else { 0.0 };
+        let title_width = (ui.available_width() - reserved).clamp(90.0, 340.0);
+        ui.add_sized(
+            [title_width, 22.0],
+            egui::Label::new(egui::RichText::new(title).size(13.0).strong().color(egui::Color32::from_rgb(91, 167, 255))),
+        );
         if let Some(pill) = pill {
-            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                egui::Frame::new()
-                    .fill(egui::Color32::from_rgb(23, 29, 40))
-                    .corner_radius(egui::CornerRadius::same(12))
-                    .stroke(egui::Stroke::new(1.0, egui::Color32::from_rgb(42, 52, 70)))
-                    .inner_margin(egui::Margin::symmetric(12, 4))
-                    .show(ui, |ui| {
-                        ui.label(egui::RichText::new(pill).size(12.0).color(egui::Color32::from_rgb(210, 220, 238)));
-                    });
-            });
+            ui.add_space((ui.available_width() - 106.0).max(0.0));
+            egui::Frame::new()
+                .fill(egui::Color32::from_rgb(23, 29, 40))
+                .corner_radius(egui::CornerRadius::same(12))
+                .stroke(egui::Stroke::new(1.0, egui::Color32::from_rgb(42, 52, 70)))
+                .inner_margin(egui::Margin::symmetric(10, 4))
+                .show(ui, |ui| {
+                    ui.label(egui::RichText::new(pill).size(11.5).color(egui::Color32::from_rgb(210, 220, 238)));
+                });
         }
     });
 }

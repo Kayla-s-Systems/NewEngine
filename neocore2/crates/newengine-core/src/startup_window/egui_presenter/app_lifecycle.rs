@@ -86,10 +86,11 @@ impl PreStartApp {
         }
         let mut style = (*ctx.style()).clone();
         style.visuals = egui::Visuals::dark();
-        style.visuals.window_fill = egui::Color32::from_rgb(5, 7, 11);
-        style.visuals.panel_fill = egui::Color32::from_rgb(7, 10, 15);
-        style.visuals.extreme_bg_color = egui::Color32::from_rgb(3, 5, 9);
-        style.visuals.faint_bg_color = egui::Color32::from_rgb(16, 20, 29);
+        style.visuals.dark_mode = true;
+        style.visuals.window_fill = color32(north_star_bootstrap_ui_style().palette.bg);
+        style.visuals.panel_fill = color32(north_star_bootstrap_ui_style().palette.bg_deep);
+        style.visuals.extreme_bg_color = color32(north_star_bootstrap_ui_style().palette.bg_deep);
+        style.visuals.faint_bg_color = color32(north_star_bootstrap_ui_style().palette.panel);
         style.visuals.override_text_color = Some(TEXT_PRIMARY);
         style.visuals.widgets.noninteractive.bg_fill = egui::Color32::from_rgb(10, 13, 20);
         style.visuals.widgets.noninteractive.fg_stroke = egui::Stroke::new(1.0, TEXT_MUTED);
@@ -97,7 +98,7 @@ impl PreStartApp {
         style.visuals.widgets.inactive.weak_bg_fill = egui::Color32::from_rgb(14, 18, 27);
         style.visuals.widgets.inactive.bg_stroke = egui::Stroke::new(1.0, egui::Color32::from_rgb(44, 56, 77));
         style.visuals.widgets.inactive.fg_stroke = egui::Stroke::new(1.0, TEXT_PRIMARY);
-        style.visuals.widgets.hovered.bg_fill = egui::Color32::from_rgb(24, 34, 52);
+        style.visuals.widgets.hovered.bg_fill = color32(north_star_bootstrap_ui_style().palette.panel_active);
         style.visuals.widgets.hovered.weak_bg_fill = egui::Color32::from_rgb(20, 28, 43);
         style.visuals.widgets.hovered.bg_stroke = egui::Stroke::new(1.0, ACCENT_BLUE_BRIGHT);
         style.visuals.widgets.hovered.fg_stroke = egui::Stroke::new(1.0, egui::Color32::WHITE);
@@ -105,13 +106,13 @@ impl PreStartApp {
         style.visuals.widgets.active.weak_bg_fill = egui::Color32::from_rgb(28, 48, 83);
         style.visuals.widgets.active.bg_stroke = egui::Stroke::new(1.0, ACCENT_BLUE_BRIGHT);
         style.visuals.widgets.active.fg_stroke = egui::Stroke::new(1.1, egui::Color32::WHITE);
-        style.visuals.selection.bg_fill = egui::Color32::from_rgb(34, 89, 176);
+        style.visuals.selection.bg_fill = color32(north_star_bootstrap_ui_style().palette.blue);
         style.visuals.selection.stroke = egui::Stroke::new(1.0, ACCENT_BLUE_BRIGHT);
         style.visuals.widgets.open.bg_fill = egui::Color32::from_rgb(24, 33, 50);
         style.visuals.widgets.open.weak_bg_fill = egui::Color32::from_rgb(18, 25, 38);
         style.visuals.widgets.open.bg_stroke = egui::Stroke::new(1.0, ACCENT_BLUE_BRIGHT);
-        style.spacing.item_spacing = egui::vec2(11.0, 9.0);
-        style.spacing.button_padding = egui::vec2(14.0, 10.0);
+        style.spacing.item_spacing = egui::vec2(10.0, 8.0);
+        style.spacing.button_padding = egui::vec2(12.0, 9.0);
         style.spacing.indent = 16.0;
         ctx.set_style(style);
         self.style_ready = true;
@@ -128,7 +129,7 @@ impl PreStartApp {
         self.fields.string("launch.startup_scene", value_string_segments(&self.config, &["plugins", "newengine", "startup_window", "startup_scene"], "MainMenu"));
         self.fields.bool("launch.remember_last_options", value_bool_segments(&self.config, &["plugins", "newengine", "startup_window", "remember_last_options"], true));
 
-        let title = first_string_segments(&self.config, &[&["plugins", "newengine", "platform.winit", "title"], &["window", "title"]], "Kayla's Editor");
+        let title = first_string_segments(&self.config, &[&["plugins", "newengine", "platform.winit", "title"], &["window", "title"]], "North Star Engine");
         let width = first_i64_segments(&self.config, &[&["plugins", "newengine", "platform.winit", "width"], &["window", "width"]], 1600);
         let height = first_i64_segments(&self.config, &[&["plugins", "newengine", "platform.winit", "height"], &["window", "height"]], 900);
 

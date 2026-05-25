@@ -41,3 +41,25 @@ pub fn list_service_ids() -> Vec<String> {
 pub fn describe_service(service_id: &str) -> Option<String> {
     host_describe_service(service_id)
 }
+
+
+/// Resolves a canonical `engine.*` gateway to the active provider service, if any.
+///
+/// Reusable runtime code should depend on this engine-owned query instead of
+/// naming concrete providers/backends or calling plugin-host internals directly.
+pub fn resolve_service_for_engine_gateway(gateway_id: &str) -> Option<String> {
+    newengine_plugin_host::resolve_service_for_engine_gateway(gateway_id)
+}
+
+/// Returns true when the active route for `gateway_id` declares `capability_id`.
+///
+/// This is the capability-as-option boundary: the engine owns the question, the
+/// provider declares availability, and callers degrade according to their policy.
+pub fn engine_gateway_has_capability(gateway_id: &str, capability_id: &str) -> bool {
+    newengine_plugin_host::engine_gateway_has_capability(gateway_id, capability_id)
+}
+
+/// Returns true when an `engine.*` gateway currently has an active route.
+pub fn has_engine_gateway_route(gateway_id: &str) -> bool {
+    resolve_service_for_engine_gateway(gateway_id).is_some()
+}

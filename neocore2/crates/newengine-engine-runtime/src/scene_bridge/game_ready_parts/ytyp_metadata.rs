@@ -173,20 +173,24 @@ fn apply_time_constants_from_ytyp(profile: &mut GameReadyMapProfile, metadata: &
 
 fn load_game_ready_definition_entry(definition_ref: &str) -> Option<serde_json::Value> {
     let payload = serde_json::to_vec(&serde_json::json!({ "definition_ref": definition_ref })).ok()?;
-    match call_service_v1(
+    match call_service_v1_optional(
         newengine_assets::ENGINE_ASSETS_DEFINITIONS_SERVICE_ID,
         newengine_assets::definitions_method::ENTRY_JSON_V1,
         &payload,
     ) {
-        Ok(bytes) => match serde_json::from_slice::<serde_json::Value>(&bytes) {
+        Ok(Some(bytes)) => match serde_json::from_slice::<serde_json::Value>(&bytes) {
             Ok(value) => Some(value),
             Err(e) => {
                 log::warn!("game-ready ytyp metadata: engine.assets.definitions returned invalid json ref='{}' err='{}'", definition_ref, e);
                 None
             }
         },
+        Ok(None) => {
+            log::debug!("game-ready ytyp metadata: engine.assets.definitions route absent ref='{}'; metadata hydration skipped", definition_ref);
+            None
+        },
         Err(e) => {
-            log::warn!("game-ready ytyp metadata: engine.assets.definitions unavailable ref='{}' err='{}'", definition_ref, e);
+            log::warn!("game-ready ytyp metadata: engine.assets.definitions call failed ref='{}' err='{}'", definition_ref, e);
             None
         }
     }
@@ -249,17 +253,21 @@ fn apply_game_ready_ytyp_metadata(profile: &mut GameReadyMapProfile) {
 
 fn resolve_game_ready_asset_graph(root_ref: &str) -> Option<newengine_model_domain_api::ResolvedAssetGraphV2> {
     let payload = serde_json::to_vec(&serde_json::json!({ "root_ref": root_ref })).ok()?;
-    match call_service_v1(
+    match call_service_v1_optional(
         newengine_model_domain_api::ENGINE_ASSETS_GRAPH_SERVICE_ID,
         newengine_model_domain_api::ASSET_GRAPH_METHOD_RESOLVE_V1,
         &payload,
     ) {
-        Ok(bytes) => match serde_json::from_slice::<newengine_model_domain_api::ResolvedAssetGraphV2>(&bytes) {
+        Ok(Some(bytes)) => match serde_json::from_slice::<newengine_model_domain_api::ResolvedAssetGraphV2>(&bytes) {
             Ok(graph) => Some(graph),
             Err(e) => {
                 log::warn!("assets.graph.resolve_v1: invalid json graph root_ref='{}' err='{}'", root_ref, e);
                 None
             }
+        },
+        Ok(None) => {
+            log::debug!("assets.graph.resolve_v1: route absent root_ref='{}'; graph hydration skipped", root_ref);
+            None
         },
         Err(e) => {
             log::warn!("assets.graph.resolve_v1: gateway call failed root_ref='{}' err='{}'", root_ref, e);

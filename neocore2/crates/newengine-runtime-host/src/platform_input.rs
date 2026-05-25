@@ -4,7 +4,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 
 use newengine_core::call_service_v1_optional;
 use newengine_math::collections_prelude::{NeBTreeMap, NeBTreeSet};
-use newengine_ui::UiInputFrame;
+use newengine_ui_api::UiInputFrame;
 
 /// Engine-facing input gateway id. Consumers call the engine facade; the host
 /// resolves it to the active input provider by descriptor metadata.

@@ -49,7 +49,7 @@ const CAMERA_GATEWAY_OWNER: &str = "newengine-engine-runtime.camera-gateway";
 mod camera_gateway_helpers;
 use self::camera_gateway_helpers::{
     camera_nav_input, camera_report_snapshot, camera_runtime_service_config,
-    apply_runtime_input, view_postfx_from_camera_snapshot,
+    apply_runtime_input, sanitize_camera_dt, view_postfx_from_camera_snapshot,
 };
 pub use self::camera_gateway_helpers::{
     apply_view_postfx, CameraRuntimeOverlayReport, CameraTransitionOverlayReport,
@@ -120,7 +120,7 @@ fn apply_camera_view_command(
 }
 
 fn register_camera_gateway_service_best_effort(state: Arc<Mutex<CameraGatewayState>>) {
-    if newengine_plugin_host::has_service(ENGINE_CAMERA_SERVICE_ID) {
+    if newengine_core::has_engine_gateway_route(ENGINE_CAMERA_SERVICE_ID) {
         return;
     }
     let service = camera_gateway_service(state);
@@ -179,6 +179,7 @@ impl CameraGatewayBridge {
         bounds: EngineBoundsSnap,
         selection_bounds: Option<EngineBoundsSnap>,
     ) -> CameraGatewayFrame {
+        let camera_dt = sanitize_camera_dt(dt);
         let mut state = self.state.lock();
         let mut nav_input = camera_nav_input(input, play_mode);
         let active_view = state.apply_input_view_request(input.camera_view);
@@ -201,7 +202,7 @@ impl CameraGatewayBridge {
             let manager = world
                 .resource_mut::<CameraManagerResource>()
                 .expect("camera manager resource inserted");
-            manager.advance(dt);
+            manager.advance(camera_dt);
             manager.sync_world_state(CameraRuntimeWorldState {
                 game_nav_mode: existing_nav_mode,
                 runtime_requested: play_mode.is_runtime(),
@@ -220,7 +221,7 @@ impl CameraGatewayBridge {
         apply_runtime_input(world, input, effective_play_mode, service_config);
 
         let params = CameraNavParams {
-            dt,
+            dt: camera_dt,
             viewport: CameraViewport::from_size(vp_w, vp_h),
             channel: CameraChannelState::dominant(if effective_play_mode.is_runtime() {
                 CameraChannel::Gameplay

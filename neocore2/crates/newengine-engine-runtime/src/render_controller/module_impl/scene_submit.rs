@@ -3,7 +3,7 @@
 use newengine_core::render::{RenderApi, RenderTargetId};
 use newengine_core::EngineResult;
 use newengine_scene::Scene;
-use newengine_ui::draw::UiDrawList;
+use newengine_ui_api::UiDrawList;
 
 use super::frame_orchestrator::RenderFrameOrchestrator;
 use super::frame_types::{PlayableFrameOutcome, RenderFrameScope, WorldFrameState};

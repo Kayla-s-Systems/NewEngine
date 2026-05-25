@@ -112,10 +112,10 @@
         },
         "sources": {
           "console": {
-            "level": "info"
+            "level": "trace"
           },
           "file": {
-            "level": "info",
+            "level": "trace",
             "mode": "truncate"
           }
         },
@@ -232,7 +232,7 @@
           },
           "show_before_engine": true
         },
-        "launch_parameters": "--windowed --devmode --log --console",
+        "launch_parameters": "--windowed --devmode --log",
         "plugin_tabs": [
           {
             "category": "Engine",

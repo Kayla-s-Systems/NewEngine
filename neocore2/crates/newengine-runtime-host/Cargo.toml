@@ -17,6 +17,7 @@ raw-window-handle = "0.6.2"
 serde_json = "1.0.149"
 
 newengine-assets = { path = "../newengine-assets" }
+newengine-assets-api = { path = "../newengine-assets-api" }
 newengine-core = { path = "../newengine-core" }
 newengine-math = { path = "../newengine-math" }
 newengine-platform-api = { path = "../newengine-platform-api" }

@@ -1,5 +1,6 @@
 #![forbid(unsafe_op_in_unsafe_fn)]
 
+mod asset_browser_overlay;
 mod draw_bucket;
 pub(crate) mod draw_lists;
 mod external_contribution_lowering;

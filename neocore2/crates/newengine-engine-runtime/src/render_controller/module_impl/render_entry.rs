@@ -6,7 +6,7 @@ use newengine_core::render::{
     require_render_api, BeginFrameDesc, Extent2D, RectI32, SceneLaunchStatus, Viewport,
 };
 use newengine_core::{EngineResult, ModuleCtx};
-use newengine_ui::draw::UiDrawList;
+use newengine_ui_api::UiDrawList;
 use newengine_ui_api::UiRuntimeDebugOverlayTelemetry;
 use crate::scene_bridge::SkyClearColorRuntime;
 
@@ -58,7 +58,13 @@ impl RuntimeRenderController {
         let material_upload_jobs = backend_work_budget
             .map(|b| b.max_upload_jobs_per_frame.max(1))
             .unwrap_or(1);
-        self.pump_material_texture_requests(&mut **r, material_upload_jobs, material_upload_jobs);
+        let job_system = ctx.job_system().cloned();
+        self.pump_material_texture_requests(
+            &mut **r,
+            job_system.as_ref(),
+            material_upload_jobs,
+            material_upload_jobs,
+        );
         self.trace_render_begin(trace_frame, w, h);
 
         if let Some(status) = self.handle_native_prelaunch_gate(

@@ -317,11 +317,11 @@ fn default_uv_offset() -> [f32; 2] { [0.0, 0.0] }
 fn default_material_roughness() -> f32 { 0.86 }
 fn default_material_normal_scale() -> f32 { 1.0 }
 fn default_material_occlusion_strength() -> f32 { 1.0 }
-fn default_ambient_color() -> ColorRgb { [0.38, 0.42, 0.50] }
-fn default_ambient_intensity() -> f32 { 0.28 }
+fn default_ambient_color() -> ColorRgb { [0.42, 0.47, 0.56] }
+fn default_ambient_intensity() -> f32 { 0.36 }
 fn default_sun_direction() -> ColorRgb { [-0.55, -0.82, -0.28] }
-fn default_sun_color() -> ColorRgb { [1.0, 0.94, 0.82] }
-fn default_sun_intensity() -> f32 { 3.20 }
+fn default_sun_color() -> ColorRgb { [1.0, 0.955, 0.86] }
+fn default_sun_intensity() -> f32 { 4.60 }
 fn default_day_night_enabled() -> bool { true }
 fn default_time_of_day_hours() -> f32 { 9.35 }
 fn default_day_length_seconds() -> f32 { 720.0 }
@@ -331,10 +331,10 @@ fn default_shadow_enabled() -> bool { true }
 fn default_shadow_resolution() -> u32 { 4096 }
 fn default_shadow_cascade_count() -> u32 { 4 }
 fn default_shadow_max_distance() -> f32 { 180.0 }
-fn default_shadow_softness() -> f32 { 0.75 }
+fn default_shadow_softness() -> f32 { 0.62 }
 fn default_shadow_bias() -> f32 { 0.0025 }
 fn default_shadow_normal_bias() -> f32 { 0.015 }
-fn default_shadow_contact_strength() -> f32 { 0.35 }
+fn default_shadow_contact_strength() -> f32 { 0.58 }
 fn default_foliage_prefab() -> String { String::new() }
 fn default_foliage_seed() -> u64 { 0x5452_4545_2026 }
 fn default_foliage_grid_min() -> i32 { -5 }

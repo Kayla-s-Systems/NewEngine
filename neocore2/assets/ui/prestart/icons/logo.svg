@@ -1,0 +1,90 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" role="img" aria-labelledby="title desc">
+  <title id="title">North Star Engine Symbol</title>
+  <desc id="desc">A transparent-background futuristic compass star symbol for North Star Engine.</desc>
+  <defs>
+    <radialGradient id="coreGlow" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#FFFFFF" stop-opacity="1"/>
+      <stop offset="18%" stop-color="#BFF5FF" stop-opacity="0.95"/>
+      <stop offset="38%" stop-color="#53C7FF" stop-opacity="0.55"/>
+      <stop offset="70%" stop-color="#0A6DFF" stop-opacity="0.18"/>
+      <stop offset="100%" stop-color="#0A6DFF" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="northFill" x1="512" y1="64" x2="512" y2="960" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#EFFFFF"/>
+      <stop offset="38%" stop-color="#79D8FF"/>
+      <stop offset="100%" stop-color="#07336F"/>
+    </linearGradient>
+    <linearGradient id="eastFill" x1="64" y1="512" x2="960" y2="512" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#0A2E68"/>
+      <stop offset="50%" stop-color="#DFFFFF"/>
+      <stop offset="100%" stop-color="#0A2E68"/>
+    </linearGradient>
+    <linearGradient id="diagonalFill" x1="242" y1="242" x2="782" y2="782" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#06306B"/>
+      <stop offset="50%" stop-color="#CFFAFF"/>
+      <stop offset="100%" stop-color="#06306B"/>
+    </linearGradient>
+    <filter id="softGlow" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="12" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+
+  <!-- transparent background intentionally omitted -->
+
+  <!-- segmented outer compass rings -->
+  <g fill="none" stroke-linecap="butt">
+    <path d="M214 312 A360 360 0 0 1 480 154" stroke="#061E49" stroke-width="28"/>
+    <path d="M544 154 A360 360 0 0 1 810 312" stroke="#061E49" stroke-width="28"/>
+    <path d="M810 712 A360 360 0 0 1 544 870" stroke="#061E49" stroke-width="28"/>
+    <path d="M480 870 A360 360 0 0 1 214 712" stroke="#061E49" stroke-width="28"/>
+
+    <path d="M254 342 A306 306 0 0 1 480 206" stroke="#0B3D83" stroke-width="10"/>
+    <path d="M544 206 A306 306 0 0 1 770 342" stroke="#0B3D83" stroke-width="10"/>
+    <path d="M770 682 A306 306 0 0 1 544 818" stroke="#0B3D83" stroke-width="10"/>
+    <path d="M480 818 A306 306 0 0 1 254 682" stroke="#0B3D83" stroke-width="10"/>
+
+    <path d="M254 512 A258 258 0 0 1 332 330" stroke="#061E49" stroke-width="22"/>
+    <path d="M692 330 A258 258 0 0 1 770 512" stroke="#061E49" stroke-width="22"/>
+    <path d="M770 512 A258 258 0 0 1 692 694" stroke="#061E49" stroke-width="22"/>
+    <path d="M332 694 A258 258 0 0 1 254 512" stroke="#061E49" stroke-width="22"/>
+  </g>
+
+  <!-- glow behind star -->
+  <circle cx="512" cy="512" r="190" fill="url(#coreGlow)" filter="url(#softGlow)"/>
+
+  <!-- primary four cardinal spikes -->
+  <g stroke="#061E49" stroke-width="12" stroke-linejoin="miter">
+    <polygon points="512,58 553,452 512,512 471,452" fill="url(#northFill)"/>
+    <polygon points="512,966 471,572 512,512 553,572" fill="url(#northFill)"/>
+    <polygon points="58,512 452,471 512,512 452,553" fill="url(#eastFill)"/>
+    <polygon points="966,512 572,553 512,512 572,471" fill="url(#eastFill)"/>
+  </g>
+
+  <!-- secondary diagonal spikes -->
+  <g stroke="#06245A" stroke-width="10" stroke-linejoin="miter">
+    <polygon points="318,318 474,474 512,512 394,428" fill="url(#diagonalFill)"/>
+    <polygon points="706,318 550,474 512,512 630,428" fill="url(#diagonalFill)"/>
+    <polygon points="706,706 550,550 512,512 630,596" fill="url(#diagonalFill)"/>
+    <polygon points="318,706 474,550 512,512 394,596" fill="url(#diagonalFill)"/>
+  </g>
+
+  <!-- inner white crystalline star -->
+  <g fill="#F5FFFF" opacity="0.96">
+    <polygon points="512,238 528,486 512,512 496,486"/>
+    <polygon points="512,786 496,538 512,512 528,538"/>
+    <polygon points="238,512 486,496 512,512 486,528"/>
+    <polygon points="786,512 538,528 512,512 538,496"/>
+    <polygon points="390,390 490,490 512,512 452,472"/>
+    <polygon points="634,390 534,490 512,512 572,472"/>
+    <polygon points="634,634 534,534 512,512 572,552"/>
+    <polygon points="390,634 490,534 512,512 452,552"/>
+  </g>
+
+  <!-- bright core -->
+  <circle cx="512" cy="512" r="34" fill="#FFFFFF"/>
+  <circle cx="512" cy="512" r="82" fill="none" stroke="#7EE7FF" stroke-opacity="0.45" stroke-width="4"/>
+</svg>

@@ -1,7 +1,7 @@
 #![forbid(unsafe_op_in_unsafe_fn)]
 
 use newengine_input_actions_api::{CameraViewRequest, InputActionFrame, InputFrameSource};
-use newengine_ui::UiInputFrame;
+use newengine_ui_api::UiInputFrame;
 use crate::input_systems::InputActionFrameCarrier;
 
 #[derive(Clone, Debug, Default)]
@@ -65,6 +65,33 @@ impl ViewportInputSnap {
             camera_view: actions.camera_view,
             actions,
         }
+    }
+
+    /// Merge semantic engine.input.bindings actions from the host/UI input frame into
+    /// a viewport-bridge snapshot.
+    ///
+    /// The viewport bridge owns camera mouse deltas for the normal playable surface,
+    /// while the InputPlugin/UiInputFrame owns keyboard/gamepad semantic actions such
+    /// as ESC pause, F1 editor tools and menu navigation. Those two streams must be
+    /// composed every frame; otherwise gameplay can run, but modal UI actions only work
+    /// in direct-surface debug paths.
+    #[inline]
+    pub(super) fn merge_semantic_actions_from_surface(&mut self, input: Option<&UiInputFrame>) {
+        let Some(input) = input else { return; };
+        let actions = newengine_input_bindings_runtime::resolve_input_actions(&UiInputSource(input));
+
+        self.dx_px += actions.look_axis[0] * 18.0;
+        self.dy_px += actions.look_axis[1] * 18.0;
+        self.wheel_y += input.mouse_wheel.1;
+        self.move_mask |= actions.move_mask;
+        if actions.look_axis != [0.0, 0.0] {
+            self.active = true;
+            self.look_drag = true;
+        }
+        if !matches!(actions.camera_view, CameraViewRequest::None) {
+            self.camera_view = actions.camera_view;
+        }
+        self.actions = actions;
     }
 
 

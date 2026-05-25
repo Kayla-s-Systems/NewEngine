@@ -1,6 +1,6 @@
 #![forbid(unsafe_op_in_unsafe_fn)]
 
-use newengine_ui::UiInputFrame;
+use newengine_ui_api::UiInputFrame;
 
 use super::{input_has_pause_menu_action, InputActionFrameCarrier};
 

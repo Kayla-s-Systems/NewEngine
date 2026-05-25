@@ -3,7 +3,7 @@
 use newengine_audio_api::AudioFeedbackKind;
 use newengine_core::render::UiBackdropPostFxParams;
 use newengine_input_bindings_api::{InputBindingsProfile, InputDevicePreference};
-use newengine_ui::UiInputFrame;
+use newengine_ui_api::UiInputFrame;
 use newengine_ui_api::{
     pause_menu_layout, UiPauseMenuItemTone, UiPauseMenuMessage,
     UiPauseMenuMessageSeverity, UiPauseMenuState,

@@ -10,7 +10,7 @@ use newengine_core::EngineResult;
 use newengine_render_feature_api::SceneExtractionCtx;
 use newengine_render_frame_graph::{standard_runtime_frame, StandardRuntimePipelineDesc};
 use newengine_scene::Scene;
-use newengine_ui::draw::UiDrawList;
+use newengine_ui_api::UiDrawList;
 
 use super::draw_lists::DrawListBuildCtx;
 use super::feature_extraction::FeatureExtractionFrame;
@@ -175,6 +175,7 @@ impl RenderFrameOrchestrator {
         };
         let draw_list_descs = features.draw_list_descs().to_vec();
         let ui_backdrop = controller.menu.pause.ui_backdrop_postfx();
+        let ui_enabled = scope.ui_enabled || ui.is_some();
         let frame_plan = standard_runtime_frame(
             StandardRuntimePipelineDesc::new(controller.frame.frame_index, Extent2D::new(scope.w, scope.h), extent)
                 .viewport_is_surface(scope.direct_surface_viewport)
@@ -185,8 +186,8 @@ impl RenderFrameOrchestrator {
                 .deferred(runtime_profile.deferred_enabled())
                 .hdr_scene(runtime_profile.hdr_scene_enabled())
                 .postfx(runtime_profile.postfx_enabled())
-                .ui(scope.ui_enabled)
-                .ui_backdrop_blur(scope.ui_enabled && ui_backdrop.enabled && ui_backdrop.blur_radius_px > 0.05)
+                .ui(ui_enabled)
+                .ui_backdrop_blur(ui_enabled && ui_backdrop.enabled && ui_backdrop.blur_radius_px > 0.05)
                 .debug_overlay(false)
                 .draw_lists(draw_list_descs.clone()),
         );
@@ -195,6 +196,15 @@ impl RenderFrameOrchestrator {
         {
             let mut build_ctx = DrawListBuildCtx::new(controller, r, features.draw_lists());
             features.extract_external_providers(&extraction, &frame_plan, &mut build_ctx)?;
+        }
+        if let Some(ui_draw_list) = ui {
+            // Stage the provider-owned UI packet directly at the renderer boundary as well as
+            // through the draw-list route. This keeps modal UI visible even when the active
+            // frame profile temporarily has no Ui draw-list provider, or when a graph compile
+            // path skips the UI composite pass while the cursor/focus policy already switched
+            // to modal mode. The call stays provider-neutral: it targets RenderApi, not Vulkan,
+            // Aurelia, or any concrete backend implementation.
+            r.set_ui_draw_list(ui_draw_list.clone());
         }
         cpu_profile.mark("frame_plan_external");
 

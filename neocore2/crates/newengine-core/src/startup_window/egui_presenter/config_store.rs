@@ -117,13 +117,16 @@ pub(super) fn collect_plugin_tabs(config: &Value) -> Vec<PluginTab> {
 }
 
 pub(super) fn plugin_field_current(config: &Value, plugin_id: &str, field: &SchemaField) -> Option<Value> {
+    // Runtime plugin values are authoritative. The startup_window schema keeps
+    // default/current labels for documentation and first-run bootstrapping, but
+    // it must never override a user-edited plugin block from config.json.
+    if let Some(actual) = get_plugin_field(config, plugin_id, &field.path) {
+        return Some(actual.clone());
+    }
     if let Some(current) = plugin_schema_field(config, plugin_id, &field.path, "current") {
         return Some(current.clone());
     }
-    if let Some(default) = plugin_schema_field(config, plugin_id, &field.path, "default") {
-        return Some(default.clone());
-    }
-    get_plugin_field(config, plugin_id, &field.path).cloned()
+    plugin_schema_field(config, plugin_id, &field.path, "default").cloned()
 }
 
 pub(super) fn plugin_schema_field<'a>(config: &'a Value, plugin_id: &str, field_path: &str, key: &str) -> Option<&'a Value> {

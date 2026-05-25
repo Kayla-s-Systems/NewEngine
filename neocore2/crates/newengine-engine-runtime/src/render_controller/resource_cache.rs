@@ -1,17 +1,22 @@
 #![forbid(unsafe_op_in_unsafe_fn)]
 
-use newengine_assets::{AssetAccess, AssetErrorKind, AssetServiceClient, RuntimeTextureFormat};
+use newengine_assets::{AssetErrorKind, AssetServiceClient, RuntimeTextureAsset, RuntimeTextureFormat};
 use newengine_core::render::{
     Extent2D, GpuResourceResidencyState, RenderTargetId, SamplerId, TextureDesc, TextureFormat,
     TextureId, TextureMipDataDesc, TextureUsage,
 };
+use newengine_core::{JobLane, JobPriority, JobRequest, JobSystemHandle};
 use newengine_plugin_host::default_host_api;
+use parking_lot::Mutex;
 use std::num::NonZeroU32;
+use std::sync::Arc;
+use std::time::Instant;
 
 use super::controller::RuntimeRenderController;
 pub use super::state::PerDrawUbo;
 use super::gpu::{LitPipeline, LIT_UBO_SIZE};
 use super::material_bindings::MaterialTextureGpuResidency;
+use super::state::MaterialTextureDecodeJob;
 
 fn render_texture_format_from_runtime(format: RuntimeTextureFormat) -> TextureFormat {
     match format {
@@ -27,49 +32,85 @@ fn render_texture_format_from_runtime(format: RuntimeTextureFormat) -> TextureFo
     }
 }
 
+fn sanitize_material_texture_task_id(path: &str) -> String {
+    let mut out = String::with_capacity(path.len().min(96));
+    for ch in path.chars().take(96) {
+        if ch.is_ascii_alphanumeric() {
+            out.push(ch.to_ascii_lowercase());
+        } else {
+            out.push('_');
+        }
+    }
+    if out.is_empty() {
+        out.push_str("unknown");
+    }
+    out
+}
+
 
 impl RuntimeRenderController {
 
-    fn request_dictionary_material_texture(
+    fn queue_dictionary_material_texture_decode(
         &mut self,
-        r: &mut dyn newengine_core::render::RenderApi,
-        assets: &AssetServiceClient,
         path: String,
+        job_system: Option<&JobSystemHandle>,
     ) {
-        let texture_asset = match assets.textures_entry_runtime_ref_v1_typed(&path) {
-            Ok(texture_asset) => texture_asset,
-            Err(e) if e.kind == AssetErrorKind::NotReady => {
-                log::debug!(
-                    "render controller: material texture packet pending path='{}' method='assets.textures.entry_runtime_v1' err='{}'",
-                    path,
-                    e
-                );
-                self.gpu.material.textures.insert(
-                    path,
-                    MaterialTextureGpuResidency::AssetLoading {
-                        id_hex32: e.id_hex32.unwrap_or_default(),
-                        requested_frame: self.frame.frame_index,
-                    },
-                );
-                return;
-            }
-            Err(e) => {
-                let message = format!("assets.textures.entry_runtime_v1 failed err='{e}'");
-                let line = format!(
-                    "render controller: material texture packet lookup failed path='{}' method='assets.textures.entry_runtime_v1' kind='{}' err='{}'",
-                    path,
-                    e.kind,
-                    e,
-                );
-                match e.kind {
-                    AssetErrorKind::DecodeFailed | AssetErrorKind::UnsupportedFormat => log::debug!("{}", line),
-                    _ => log::warn!("{}", line),
-                }
-                self.gpu.material.textures.insert(path, MaterialTextureGpuResidency::Failed { message });
-                return;
-            }
+        if self.gpu.material.texture_decode_jobs.contains_key(&path) {
+            self.gpu.material.textures.insert(
+                path,
+                MaterialTextureGpuResidency::CpuDecoding {
+                    requested_frame: self.frame.frame_index,
+                },
+            );
+            return;
+        }
+
+        let Some(job_system) = job_system else {
+            let message = "engine.jobs unavailable for material texture decode".to_owned();
+            log::warn!(
+                "render controller: material texture decode skipped path='{}' err='{}'",
+                path,
+                message
+            );
+            self.gpu.material.textures.insert(path, MaterialTextureGpuResidency::Failed { message });
+            return;
         };
 
+        let worker_path = path.clone();
+        let result = Arc::new(Mutex::new(None));
+        let result_out = Arc::clone(&result);
+        let task_path = sanitize_material_texture_task_id(&path);
+        let request = JobRequest::new("material.texture.decode")
+            .with_source("render.controller")
+            .with_owner("engine.render")
+            .with_category("asset-decode")
+            .with_lane(JobLane::AssetIo)
+            .with_priority(JobPriority::Interactive)
+            .with_task_id(format!("render.material.texture.decode.{task_path}"));
+        let ticket = job_system.submit_request(request, move || {
+            let assets = AssetServiceClient::new(default_host_api());
+            let decoded = assets.textures_entry_runtime_ref_v1_typed(&worker_path);
+            *result_out.lock() = Some(decoded);
+        });
+
+        self.gpu.material.texture_decode_jobs.insert(
+            path.clone(),
+            MaterialTextureDecodeJob { ticket, result },
+        );
+        self.gpu.material.textures.insert(
+            path,
+            MaterialTextureGpuResidency::CpuDecoding {
+                requested_frame: self.frame.frame_index,
+            },
+        );
+    }
+
+    fn upload_decoded_material_texture(
+        &mut self,
+        r: &mut dyn newengine_core::render::RenderApi,
+        path: String,
+        texture_asset: RuntimeTextureAsset,
+    ) {
         let extent = Extent2D::new(texture_asset.width, texture_asset.height);
         let mip_levels = NonZeroU32::new(texture_asset.mips.len().max(1) as u32)
             .expect("runtime texture mip count is non-zero");
@@ -116,6 +157,74 @@ impl RuntimeRenderController {
         }
     }
 
+    fn poll_material_texture_decode_jobs(
+        &mut self,
+        r: &mut dyn newengine_core::render::RenderApi,
+        max_completions: u32,
+    ) {
+        let max_completions = max_completions.max(1) as usize;
+        let ready_paths = self
+            .gpu
+            .material
+            .texture_decode_jobs
+            .iter()
+            .filter_map(|(path, job)| if job.is_complete() { Some(path.clone()) } else { None })
+            .take(max_completions)
+            .collect::<Vec<_>>();
+
+        for path in ready_paths {
+            let Some(job) = self.gpu.material.texture_decode_jobs.remove(&path) else {
+                continue;
+            };
+
+            let Some(result) = job.take_result() else {
+                let message = "material texture decode job completed without result".to_owned();
+                log::warn!(
+                    "render controller: material texture decode job completed without result path='{}'",
+                    path
+                );
+                self.gpu.material.textures.insert(path, MaterialTextureGpuResidency::Failed { message });
+                continue;
+            };
+
+            match result {
+                Ok(texture_asset) => {
+                    self.upload_decoded_material_texture(r, path, texture_asset);
+                }
+                Err(e) if e.kind == AssetErrorKind::NotReady => {
+                    if let Some(id_hex32) = e.id_hex32.clone() {
+                        self.gpu.material.textures.insert(
+                            path.clone(),
+                            MaterialTextureGpuResidency::AssetLoading {
+                                id_hex32,
+                                requested_frame: self.frame.frame_index,
+                            },
+                        );
+                    } else {
+                        self.gpu.material.textures.insert(path.clone(), MaterialTextureGpuResidency::Requested);
+                    }
+                    if !self.gpu.material.texture_queue.contains(&path) {
+                        self.gpu.material.texture_queue.push_back(path);
+                    }
+                }
+                Err(e) => {
+                    let message = format!("assets.textures.entry_runtime_v1 failed err='{e}'");
+                    let line = format!(
+                        "render controller: material texture packet lookup failed path='{}' method='assets.textures.entry_runtime_v1' kind='{}' err='{}'",
+                        path,
+                        e.kind,
+                        e,
+                    );
+                    match e.kind {
+                        AssetErrorKind::DecodeFailed | AssetErrorKind::UnsupportedFormat => log::debug!("{}", line),
+                        _ => log::warn!("{}", line),
+                    }
+                    self.gpu.material.textures.insert(path, MaterialTextureGpuResidency::Failed { message });
+                }
+            }
+        }
+    }
+
     pub(super) fn request_material_texture(&mut self, path: &str) {
         if self.gpu.material.textures.contains_key(path) {
             return;
@@ -128,13 +237,21 @@ impl RuntimeRenderController {
     pub(super) fn pump_material_texture_requests(
         &mut self,
         r: &mut dyn newengine_core::render::RenderApi,
+        job_system: Option<&JobSystemHandle>,
         max_start_jobs: u32,
         max_decode_jobs: u32,
     ) {
         let max_start_jobs = max_start_jobs.max(1);
-        let max_decode_jobs = max_decode_jobs.max(1);
-        let assets = AssetServiceClient::new(default_host_api());
-        assets.pump();
+        let max_decode_jobs = max_decode_jobs
+            .max(1)
+            .min(super::render_quality::MATERIAL_TEXTURE_MAX_ASYNC_DECODE_JOBS as u32);
+        let max_jobs_this_pump = max_start_jobs.min(max_decode_jobs).max(1);
+        let pump_started = Instant::now();
+        let decode_budget_ms = super::render_quality::MATERIAL_TEXTURE_DECODE_PUMP_BUDGET_MS.max(0.25);
+        // Progress AssetManager's own background queue, then harvest any render-owned
+        // CPU decode jobs that completed on worker threads. This function must stay
+        // bounded: it may start/poll work, but must never synchronously decode a .ytd.
+        self.poll_material_texture_decode_jobs(r, max_decode_jobs);
 
         let loading_retry_paths = self
             .gpu
@@ -157,7 +274,12 @@ impl RuntimeRenderController {
         }
 
         let mut started_jobs = 0_u32;
-        while started_jobs < max_start_jobs {
+        while started_jobs < max_jobs_this_pump {
+            let active_jobs = self.gpu.material.texture_decode_jobs.len() as u32;
+            if active_jobs >= max_decode_jobs {
+                break;
+            }
+
             let Some(path) = self.gpu.material.texture_queue.pop_front() else {
                 break;
             };
@@ -169,11 +291,23 @@ impl RuntimeRenderController {
                 continue;
             }
 
-            self.request_dictionary_material_texture(r, &assets, path);
+            self.queue_dictionary_material_texture_decode(path, job_system);
             started_jobs = started_jobs.saturating_add(1);
-        }
 
-        let _ = max_decode_jobs;
+            let elapsed_ms = pump_started.elapsed().as_secs_f32() * 1000.0;
+            if elapsed_ms >= decode_budget_ms {
+                log::debug!(
+                    "render controller: material texture pump yielded started={} active_jobs={} max_jobs={} elapsed_ms={:.2} budget_ms={:.2} remaining={}",
+                    started_jobs,
+                    self.gpu.material.texture_decode_jobs.len(),
+                    max_jobs_this_pump,
+                    elapsed_ms,
+                    decode_budget_ms,
+                    self.gpu.material.texture_queue.len(),
+                );
+                break;
+            }
+        }
     }
 
     #[inline]
@@ -248,6 +382,17 @@ impl RuntimeRenderController {
                 }
             },
             MaterialTextureGpuResidency::Requested => fallback,
+            MaterialTextureGpuResidency::CpuDecoding { requested_frame } => {
+                let waited = self.frame.frame_index.saturating_sub(requested_frame);
+                if waited > 180 && waited % 120 == 0 {
+                    log::debug!(
+                        "render controller: material texture still cpu-decoding path='{}' waited_frames={}",
+                        path,
+                        waited,
+                    );
+                }
+                fallback
+            }
             MaterialTextureGpuResidency::AssetLoading { id_hex32, requested_frame } => {
                 let waited = self.frame.frame_index.saturating_sub(requested_frame);
                 if waited > 180 && waited % 120 == 0 {

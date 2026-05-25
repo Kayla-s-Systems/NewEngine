@@ -1,7 +1,7 @@
 #![forbid(unsafe_op_in_unsafe_fn)]
 
 use newengine_input_actions_api::{move_mask, CameraViewRequest, InputActionDefinition, InputActionDispatchMode, InputActionEffect, InputActionListenerRegistration};
-use newengine_input_api::{gamepad_axis, gamepad_button, key_code};
+use newengine_input_api::{engine_default_keybind, gamepad_axis, gamepad_button, key_identity};
 use newengine_input_bindings_api::{GamepadAxisBinding, GamepadAxisTarget, InputBinding, InputBindingDevice, InputBindingPhase, InputBindingsProfile, InputDevicePreference, InputKeyRegistration};
 
 pub mod action {
@@ -19,13 +19,15 @@ pub mod action {
     pub const CAMERA_VIEW_THIRD_PERSON_FOLLOW: &str = "camera.view.third_person.follow";
     pub const CAMERA_VIEW_THIRD_PERSON_AIM: &str = "camera.view.third_person.aim";
 
-    pub const UI_MENU_TOGGLE: &str = "engine.ui.menu.toggle_pause";
+    pub const UI_MENU_TOGGLE: &str = newengine_input_actions_api::engine_action::UI_MENU_TOGGLE;
     pub const UI_MENU_ACCEPT: &str = "ui.menu.accept";
     pub const UI_MENU_BACK: &str = "ui.menu.back";
     pub const UI_MENU_UP: &str = "ui.menu.up";
     pub const UI_MENU_DOWN: &str = "ui.menu.down";
     pub const UI_MENU_LEFT: &str = "ui.menu.left";
     pub const UI_MENU_RIGHT: &str = "ui.menu.right";
+
+    pub const EDITOR_ASSET_BROWSER_TOGGLE: &str = newengine_input_actions_api::engine_action::ASSET_BROWSER_TOGGLE;
 }
 
 #[inline]
@@ -34,7 +36,7 @@ pub fn game_ready_input_profile() -> InputBindingsProfile {
     ensure_required_system_bindings(&mut bindings);
     InputBindingsProfile {
         id: "newengine.gameready.input.profile".to_owned(),
-        version: 4,
+        version: 5,
         device_preference: InputDevicePreference::Hybrid,
         keys: gameplay_default_key_registry(),
         actions: gameplay_default_actions(),
@@ -49,27 +51,29 @@ pub fn game_ready_input_profile() -> InputBindingsProfile {
 pub fn gameplay_default_key_registry() -> Vec<InputKeyRegistration> {
     use newengine_input_api::key_code as keys;
     vec![
-        InputKeyRegistration::new(keys::DIGIT1, "keyboard.digit1", "1"),
-        InputKeyRegistration::new(keys::DIGIT2, "keyboard.digit2", "2"),
-        InputKeyRegistration::new(keys::DIGIT3, "keyboard.digit3", "3"),
-        InputKeyRegistration::new(keys::KEY_A, "keyboard.key_a", "A"),
-        InputKeyRegistration::new(keys::KEY_D, "keyboard.key_d", "D"),
-        InputKeyRegistration::new(keys::KEY_E, "keyboard.key_e", "E"),
-        InputKeyRegistration::new(keys::KEY_F, "keyboard.key_f", "F"),
-        InputKeyRegistration::new(keys::KEY_Q, "keyboard.key_q", "Q"),
-        InputKeyRegistration::new(keys::KEY_S, "keyboard.key_s", "S"),
-        InputKeyRegistration::new(keys::KEY_W, "keyboard.key_w", "W"),
-        InputKeyRegistration::new(keys::ENTER, "keyboard.enter", "ENTER"),
-        InputKeyRegistration::new(keys::SPACE, "keyboard.space", "SPACE"),
-        InputKeyRegistration::new(keys::SHIFT_LEFT, "keyboard.shift_left", "LEFT SHIFT"),
-        InputKeyRegistration::new(keys::SHIFT_RIGHT, "keyboard.shift_right", "RIGHT SHIFT"),
-        InputKeyRegistration::new(keys::TAB, "keyboard.tab", "TAB"),
-        InputKeyRegistration::new(keys::BACKSPACE, "keyboard.backspace", "BACKSPACE"),
-        InputKeyRegistration::new(keys::ARROW_LEFT, "keyboard.arrow_left", "LEFT"),
-        InputKeyRegistration::new(keys::ARROW_UP, "keyboard.arrow_up", "UP"),
-        InputKeyRegistration::new(keys::ARROW_RIGHT, "keyboard.arrow_right", "RIGHT"),
-        InputKeyRegistration::new(keys::ARROW_DOWN, "keyboard.arrow_down", "DOWN"),
-        InputKeyRegistration::new(keys::ESCAPE, "keyboard.escape", "ESC"),
+        InputKeyRegistration::new(keys::DIGIT1, key_identity::DIGIT1, "1"),
+        InputKeyRegistration::new(keys::DIGIT2, key_identity::DIGIT2, "2"),
+        InputKeyRegistration::new(keys::DIGIT3, key_identity::DIGIT3, "3"),
+        InputKeyRegistration::new(keys::KEY_A, key_identity::KEY_A, "A"),
+        InputKeyRegistration::new(keys::KEY_D, key_identity::KEY_D, "D"),
+        InputKeyRegistration::new(keys::KEY_E, key_identity::KEY_E, "E"),
+        InputKeyRegistration::new(keys::KEY_F, key_identity::KEY_F, "F"),
+        InputKeyRegistration::new(keys::KEY_Q, key_identity::KEY_Q, "Q"),
+        InputKeyRegistration::new(keys::KEY_S, key_identity::KEY_S, "S"),
+        InputKeyRegistration::new(keys::KEY_W, key_identity::KEY_W, "W"),
+        InputKeyRegistration::new(keys::ENTER, key_identity::ENTER, "ENTER"),
+        InputKeyRegistration::new(keys::SPACE, key_identity::SPACE, "SPACE"),
+        InputKeyRegistration::new(keys::SHIFT_LEFT, key_identity::SHIFT_LEFT, "LEFT SHIFT"),
+        InputKeyRegistration::new(keys::SHIFT_RIGHT, key_identity::SHIFT_RIGHT, "RIGHT SHIFT"),
+        InputKeyRegistration::new(keys::TAB, key_identity::TAB, "TAB"),
+        InputKeyRegistration::new(keys::BACKSPACE, key_identity::BACKSPACE, "BACKSPACE"),
+        InputKeyRegistration::new(keys::ARROW_LEFT, key_identity::ARROW_LEFT, "LEFT"),
+        InputKeyRegistration::new(keys::ARROW_UP, key_identity::ARROW_UP, "UP"),
+        InputKeyRegistration::new(keys::ARROW_RIGHT, key_identity::ARROW_RIGHT, "RIGHT"),
+        InputKeyRegistration::new(keys::ARROW_DOWN, key_identity::ARROW_DOWN, "DOWN"),
+        InputKeyRegistration::new(keys::ESCAPE, key_identity::ESCAPE, "ESC"),
+        InputKeyRegistration::new(keys::F1, key_identity::F1, "F1"),
+        InputKeyRegistration::new(keys::F2, key_identity::F2, "F2"),
     ]
 }
 
@@ -95,6 +99,7 @@ pub fn gameplay_default_actions() -> Vec<InputActionDefinition> {
         InputActionDefinition::new(action::UI_MENU_DOWN).with_dispatch(InputActionDispatchMode::ConsumeFirst).with_label("Menu down").with_effect(InputActionEffect::MenuNav { x: 0, y: 1 }),
         InputActionDefinition::new(action::UI_MENU_LEFT).with_dispatch(InputActionDispatchMode::ConsumeFirst).with_label("Menu left").with_effect(InputActionEffect::MenuNav { x: -1, y: 0 }),
         InputActionDefinition::new(action::UI_MENU_RIGHT).with_dispatch(InputActionDispatchMode::ConsumeFirst).with_label("Menu right").with_effect(InputActionEffect::MenuNav { x: 1, y: 0 }),
+        InputActionDefinition::new(action::EDITOR_ASSET_BROWSER_TOGGLE).with_dispatch(InputActionDispatchMode::ConsumeFirst).with_label("Toggle Asset Browser"),
     ]
 }
 
@@ -112,6 +117,10 @@ pub fn gameplay_default_listeners() -> Vec<InputActionListenerRegistration> {
                 action::UI_MENU_RIGHT,
             ])
             .with_priority(100)
+            .consuming(),
+        InputActionListenerRegistration::new("newengine-editor", "asset-browser")
+            .with_actions([action::EDITOR_ASSET_BROWSER_TOGGLE])
+            .with_priority(90)
             .consuming(),
         InputActionListenerRegistration::new("newengine-camera-runtime", "camera-view")
             .with_actions([
@@ -143,7 +152,7 @@ fn ensure_required_system_bindings(bindings: &mut Vec<InputBinding>) {
             && binding.phase == InputBindingPhase::Pressed
     });
     if !has_keyboard_toggle {
-        bindings.push(InputBinding::keyboard_pressed(action::UI_MENU_TOGGLE, key_code::ESCAPE));
+        bindings.push(InputBinding::keyboard_pressed(action::UI_MENU_TOGGLE, engine_default_keybind::PAUSE_MENU_TOGGLE));
     }
 
     let has_gamepad_toggle = bindings.iter().any(|binding| {
@@ -155,10 +164,22 @@ fn ensure_required_system_bindings(bindings: &mut Vec<InputBinding>) {
         bindings.push(InputBinding::gamepad_button_pressed(action::UI_MENU_TOGGLE, gamepad_button::START));
     }
 
+    let has_asset_browser_toggle = bindings.iter().any(|binding| {
+        binding.action == action::EDITOR_ASSET_BROWSER_TOGGLE
+            && binding.device == InputBindingDevice::Keyboard
+            && binding.phase == InputBindingPhase::Pressed
+    });
+    if !has_asset_browser_toggle {
+        bindings.push(InputBinding::keyboard_pressed(
+            action::EDITOR_ASSET_BROWSER_TOGGLE,
+            engine_default_keybind::ASSET_BROWSER_TOGGLE,
+        ));
+    }
+
     bindings.retain(|binding| {
         !(binding.action == action::UI_MENU_BACK
             && binding.device == InputBindingDevice::Keyboard
-            && binding.code == key_code::ESCAPE)
+            && binding.code == engine_default_keybind::PAUSE_MENU_TOGGLE)
     });
 }
 
@@ -170,7 +191,7 @@ pub fn gameplay_default_bindings() -> Vec<InputBinding> {
     bindings
 }
 
-fn gameplay_keyboard_bindings() -> [InputBinding; 20] {
+fn gameplay_keyboard_bindings() -> [InputBinding; 19] {
     use newengine_input_api::key_code as keys;
     [
         InputBinding::keyboard_down(action::PLAYER_MOVE_FORWARD, keys::KEY_W),
@@ -185,7 +206,6 @@ fn gameplay_keyboard_bindings() -> [InputBinding; 20] {
         InputBinding::keyboard_pressed(action::CAMERA_VIEW_FIRST_PERSON, keys::DIGIT1),
         InputBinding::keyboard_pressed(action::CAMERA_VIEW_THIRD_PERSON_FOLLOW, keys::DIGIT2),
         InputBinding::keyboard_pressed(action::CAMERA_VIEW_THIRD_PERSON_AIM, keys::DIGIT3),
-        InputBinding::keyboard_pressed(action::UI_MENU_TOGGLE, keys::ESCAPE),
         InputBinding::keyboard_pressed(action::UI_MENU_ACCEPT, keys::ENTER),
         InputBinding::keyboard_pressed(action::UI_MENU_ACCEPT, keys::SPACE),
         InputBinding::keyboard_pressed(action::UI_MENU_BACK, keys::BACKSPACE),
@@ -196,7 +216,7 @@ fn gameplay_keyboard_bindings() -> [InputBinding; 20] {
     ]
 }
 
-fn gameplay_gamepad_button_bindings() -> [InputBinding; 13] {
+fn gameplay_gamepad_button_bindings() -> [InputBinding; 12] {
     [
         InputBinding::gamepad_button_down(action::PLAYER_SPRINT, gamepad_button::LEFT_THUMB),
         InputBinding::gamepad_button_pressed(action::CAMERA_VIEW_NEXT, gamepad_button::SELECT),
@@ -204,7 +224,6 @@ fn gameplay_gamepad_button_bindings() -> [InputBinding; 13] {
         InputBinding::gamepad_button_pressed(action::CAMERA_VIEW_FIRST_PERSON, gamepad_button::DPAD_UP),
         InputBinding::gamepad_button_pressed(action::CAMERA_VIEW_THIRD_PERSON_FOLLOW, gamepad_button::DPAD_LEFT),
         InputBinding::gamepad_button_pressed(action::CAMERA_VIEW_THIRD_PERSON_AIM, gamepad_button::DPAD_RIGHT),
-        InputBinding::gamepad_button_pressed(action::UI_MENU_TOGGLE, gamepad_button::START),
         InputBinding::gamepad_button_pressed(action::UI_MENU_ACCEPT, gamepad_button::SOUTH),
         InputBinding::gamepad_button_pressed(action::UI_MENU_BACK, gamepad_button::EAST),
         InputBinding::gamepad_button_pressed(action::UI_MENU_UP, gamepad_button::DPAD_UP),
@@ -231,12 +250,13 @@ mod tests {
     #[test]
     fn default_profile_has_camera_view_switching() {
         let profile = game_ready_input_profile();
-        assert!(profile.keys.iter().any(|k| k.id == "keyboard.escape" && k.code == key_code::ESCAPE));
+        assert!(profile.keys.iter().any(|k| k.id == "keyboard.escape" && k.code == engine_default_keybind::PAUSE_MENU_TOGGLE));
         assert!(profile.bindings.iter().any(|b| b.action == action::CAMERA_VIEW_NEXT));
         assert!(profile.bindings.iter().any(|b| b.action == action::PLAYER_MOVE_FORWARD));
         assert!(profile.actions.iter().any(|a| a.id == action::CAMERA_VIEW_NEXT));
         assert!(profile.listeners.iter().any(|l| l.id == "pause-menu"));
-        assert!(profile.bindings.iter().any(|b| b.action == action::UI_MENU_TOGGLE && b.code == key_code::ESCAPE));
-        assert!(!profile.bindings.iter().any(|b| b.action == action::UI_MENU_BACK && b.code == key_code::ESCAPE));
+        assert!(profile.bindings.iter().any(|b| b.action == action::UI_MENU_TOGGLE && b.code == engine_default_keybind::PAUSE_MENU_TOGGLE));
+        assert!(profile.bindings.iter().any(|b| b.action == action::EDITOR_ASSET_BROWSER_TOGGLE && b.code == engine_default_keybind::ASSET_BROWSER_TOGGLE));
+        assert!(!profile.bindings.iter().any(|b| b.action == action::UI_MENU_BACK && b.code == engine_default_keybind::PAUSE_MENU_TOGGLE));
     }
 }

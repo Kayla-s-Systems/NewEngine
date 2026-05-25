@@ -12,7 +12,7 @@ pub fn asset_wait_overlay(
     ScreenOverlayStatus::new(
         ScreenOverlayStatusKind::WaitingForAssets,
         ScreenOverlayReason::AssetImport,
-        "NEWENGINE // ASSETS",
+        "NORTH STAR ENGINE // ASSETS",
         label,
         detail,
         progress_01.map(ScreenOverlayProgress::percent),

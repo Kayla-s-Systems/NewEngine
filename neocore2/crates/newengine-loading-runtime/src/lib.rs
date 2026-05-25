@@ -206,7 +206,7 @@ pub fn project_loading_snapshot_from_overlay_fields(
     let subsystems = parse_subsystems_from_view_json(view_json.as_str());
     LoadingScreenSnapshot {
         active,
-        title: normalize_text(title.into(), "NEWENGINE // BOOTSTRAP"),
+        title: normalize_text(title.into(), "NORTH STAR ENGINE // BOOTSTRAP"),
         status: normalize_text(status.into(), "Preparing runtime..."),
         detail: normalize_text(detail.into(), "The native loading shell is waiting for startup telemetry."),
         progress_01: progress_01.clamp(0.0, 1.0),
@@ -270,7 +270,7 @@ pub fn project_loading_snapshot_from_task_event(
 
     LoadingScreenSnapshot {
         active: true,
-        title: "NEWENGINE // TASK STREAM".to_owned(),
+        title: "NORTH STAR ENGINE // TASK STREAM".to_owned(),
         status: normalize_text(event.status.clone(), "Engine task is running..."),
         detail: normalize_text(event.detail.clone(), "Task telemetry is flowing through engine.task.event.v1."),
         progress_01: progress.clamp(0.0, 1.0),
@@ -291,7 +291,7 @@ pub fn project_loading_snapshot_from_status_event(
     let subsystems = status_event_subsystems(&event);
     LoadingScreenSnapshot {
         active: true,
-        title: normalize_text(event.title.clone(), "NEWENGINE // BOOTSTRAP"),
+        title: normalize_text(event.title.clone(), "NORTH STAR ENGINE // BOOTSTRAP"),
         status: normalize_text(event.status.clone(), "Preparing runtime..."),
         detail: normalize_text(event.detail.clone(), "Runtime subsystem is publishing startup telemetry."),
         progress_01: event.progress_01.clamp(0.0, 1.0),

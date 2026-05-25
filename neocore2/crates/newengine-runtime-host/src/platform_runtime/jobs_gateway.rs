@@ -1,11 +1,11 @@
 #![forbid(unsafe_op_in_unsafe_fn)]
 
 use abi_stable::std_types::{RResult, RString};
-use newengine_core::{JobSystemHandle, JobTaskStatus};
+use newengine_core::{JobLane, JobPriority, JobRequest, JobSystemHandle, JobTaskStatus};
 use newengine_jobs_api::{
     jobs_method, EngineJobEventV1, JobControlResponseV1, JobExecutorKind, JobIdRequestV1,
-    JobProgressEventV1, JobStartRequestV1, JobsServiceInfoV1, JobsSnapshotJsonV1,
-    JobStatusJsonV1, JobTraceJsonV1,
+    JobProgressEventV1, JobServiceCallAcceptedV1, JobServiceCallRequestV1, JobStartRequestV1,
+    JobsServiceInfoV1, JobsSnapshotJsonV1, JobStatusJsonV1, JobTraceJsonV1,
     ENGINE_JOBS_SERVICE_ID, JOBS_BACKEND_CAPABILITY_ID, JOBS_RUNTIME_CONTRACT, JOBS_SERVICE_ID,
     JOBS_SERVICE_METHODS, EngineTaskControlAction, EngineTaskEvent, EngineTaskPhase,
 };
@@ -89,6 +89,131 @@ fn snapshot(state: &mut JobsGatewayState) -> JobsSnapshotJsonV1 {
     }
 }
 
+
+fn lane_from_str(value: &str) -> JobLane {
+    match value.trim().to_ascii_lowercase().as_str() {
+        "simulation" => JobLane::Simulation,
+        "render-prep" | "render_prep" | "renderprep" => JobLane::RenderPrep,
+        "streaming" => JobLane::Streaming,
+        "asset-io" | "asset_io" | "asset" => JobLane::AssetIo,
+        "plugin" | "plugins" => JobLane::Plugin,
+        "background" | "bg" => JobLane::Background,
+        _ => JobLane::Plugin,
+    }
+}
+
+fn priority_from_str(value: &str) -> JobPriority {
+    match value.trim().to_ascii_lowercase().as_str() {
+        "critical" => JobPriority::Critical,
+        "interactive" => JobPriority::Interactive,
+        "normal" => JobPriority::Normal,
+        "background" | "bg" => JobPriority::Background,
+        _ => JobPriority::Background,
+    }
+}
+
+fn profiler_job_request(request: &JobServiceCallRequestV1) -> JobRequest {
+    let label = match request.category.as_str() {
+        "profiler.report.flush" => "profiler.report.flush",
+        _ => "service.call",
+    };
+    let source = "engine.jobs.service-call";
+    let owner = match request.owner.as_str() {
+        "profiler.api" => "profiler.api",
+        _ => "engine.jobs",
+    };
+    let category = match request.category.as_str() {
+        "profiler.report.flush" => "profiler.report.flush",
+        _ => "service-call",
+    };
+
+    let mut job = JobRequest::new(label)
+        .with_source(source)
+        .with_owner(owner)
+        .with_category(category)
+        .with_lane(lane_from_str(request.lane.as_str()))
+        .with_priority(priority_from_str(request.priority.as_str()))
+        .pausable(request.can_pause)
+        .cancellable(request.can_cancel);
+    if !request.job_id.trim().is_empty() {
+        job = job.with_task_id(request.job_id.trim().to_owned());
+    }
+    job
+}
+
+fn submit_service_call_job(state: &mut JobsGatewayState, request: JobServiceCallRequestV1) -> JobServiceCallAcceptedV1 {
+    let target_gateway = request.target.gateway.trim().to_owned();
+    let target_method = request.target.method.trim().to_owned();
+    let payload_json = request.target.payload_json.clone();
+    let job = profiler_job_request(&request);
+    let requested_job_id = request.job_id.trim().to_owned();
+
+    if target_gateway.is_empty() || target_method.is_empty() {
+        return JobServiceCallAcceptedV1 {
+            job_id: requested_job_id,
+            accepted: false,
+            gateway: target_gateway,
+            method: target_method,
+            status: "rejected".to_owned(),
+            detail: "job.invoke_service_v1 requires target.gateway and target.method".to_owned(),
+        };
+    }
+
+    let ticket = state.jobs.submit_controlled(job, move |control| {
+        if !control.checkpoint() {
+            control.publish_progress(
+                1.0,
+                "Service call job cancelled",
+                "Task was cancelled before invoking the target service.",
+            );
+            return;
+        }
+
+        control.publish_progress(
+            0.20,
+            "Invoking target service",
+            format!("Calling {target_gateway}/{target_method} through engine job worker."),
+        );
+
+        let payload = match serde_json::to_vec(&payload_json) {
+            Ok(bytes) => Blob::from(bytes),
+            Err(e) => {
+                control.publish_progress(1.0, "Service call job failed", format!("Failed to serialize target payload: {e}"));
+                panic!("engine.jobs service-call payload serialization failed: {e}");
+            }
+        };
+
+        let response = newengine_plugin_host::call_service_v1(
+            newengine_plugin_api::CapabilityId::from(target_gateway.as_str()),
+            newengine_plugin_api::MethodName::from(target_method.as_str()),
+            payload,
+        );
+
+        match response.into_result() {
+            Ok(blob) => {
+                control.publish_progress(
+                    1.0,
+                    "Target service completed",
+                    format!("Service call completed output_bytes={}", blob.len()),
+                );
+            }
+            Err(e) => {
+                control.publish_progress(1.0, "Target service failed", e.to_string());
+                panic!("engine.jobs service-call target failed: {e}");
+            }
+        }
+    });
+
+    JobServiceCallAcceptedV1 {
+        job_id: ticket.task_id().to_owned(),
+        accepted: true,
+        gateway: request.target.gateway,
+        method: request.target.method,
+        status: "scheduled".to_owned(),
+        detail: "Service call scheduled on the engine-owned job system; no plugin-owned background worker was created.".to_owned(),
+    }
+}
+
 fn service(state: JobsGatewayState) -> newengine_plugin_api::ServiceV1Dyn<'static> {
     let description = engine_owned_service_description(
         JOBS_SERVICE_ID,
@@ -111,6 +236,9 @@ fn service(state: JobsGatewayState) -> newengine_plugin_api::ServiceV1Dyn<'stati
         .describe_json(&description)
         .info(JobsServiceInfoV1::default)
         .get_json(jobs_method::SNAPSHOT_JSON_V1, snapshot)
+        .post_json::<JobServiceCallRequestV1, JobServiceCallAcceptedV1, _>(jobs_method::INVOKE_SERVICE_V1, |state, request| {
+            submit_service_call_job(state, request)
+        })
         .post_json::<JobIdRequestV1, JobStatusJsonV1, _>(jobs_method::STATUS_JSON_V1, |state, request| {
             state.jobs.task_status(request.job_id.trim())
                 .map(status_from_core)
@@ -185,7 +313,7 @@ pub(crate) fn register_jobs_gateway_service_best_effort(
     jobs: JobSystemHandle,
     events: newengine_core::EventHub,
 ) -> bool {
-    if newengine_plugin_host::has_service(ENGINE_JOBS_SERVICE_ID) || newengine_plugin_host::has_service(JOBS_SERVICE_ID) {
+    if newengine_core::has_engine_gateway_route(ENGINE_JOBS_SERVICE_ID) || newengine_core::has_engine_gateway_route(JOBS_SERVICE_ID) {
         return true;
     }
     register_engine_owned_gateway_service_dynamic_best_effort(EngineOwnedGatewayDeclDynamic {

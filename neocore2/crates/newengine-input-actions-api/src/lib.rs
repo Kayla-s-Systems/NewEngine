@@ -51,6 +51,12 @@ pub mod move_mask {
     pub const SPRINT: u64 = 1 << 6;
 }
 
+/// Engine-reserved semantic action ids. These are action contracts, not platform shortcuts.
+pub mod engine_action {
+    pub const UI_MENU_TOGGLE: &str = "engine.ui.menu.toggle_pause";
+    pub const ASSET_BROWSER_TOGGLE: &str = "engine.assets.browser.toggle";
+}
+
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct InputActionListenerRegistration {
     pub owner: String,

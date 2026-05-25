@@ -1,7 +1,7 @@
 #![forbid(unsafe_op_in_unsafe_fn)]
 
 use newengine_audio_api::AudioFeedbackKind;
-use newengine_ui::UiInputFrame;
+use newengine_ui_api::UiInputFrame;
 use newengine_ui_menu_runtime::{MenuHitTestState, MenuRuntimeInput, MenuRuntimeOutput};
 
 use super::super::input::ViewportInputSnap;

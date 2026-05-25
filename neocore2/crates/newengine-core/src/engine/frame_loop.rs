@@ -5,6 +5,9 @@ use crate::frame::Frame;
 
 use std::time::Duration;
 
+const MAX_ENGINE_FIXED_STEPS_PER_FRAME: u32 = 1;
+const FIXED_CATCHUP_WARN_INTERVAL_FRAMES: u64 = 300;
+
 use newengine_time_api::{time_method, TimeBeginFrameRequestV1, TimeSnapshotV1, ENGINE_TIME_SERVICE_ID};
 
 fn variable_delta_seconds_from_time(snapshot: &TimeSnapshotV1) -> f32 {
@@ -54,13 +57,6 @@ impl<E: Send + 'static> Engine<E> {
             Ok(Some(bytes)) => match serde_json::from_slice::<TimeSnapshotV1>(&bytes) {
                 Ok(snapshot) => {
                     self.acc = snapshot.simulation.accumulator_ns as f32 / 1_000_000_000.0;
-                    log::debug!(
-                        "engine.time: begin_frame_v1 frame={} delta_ns={} fixed_ticks={} normalized_day={:.6}",
-                        snapshot.frame_index,
-                        snapshot.real.clamped_delta_ns,
-                        snapshot.simulation.ticks_to_run,
-                        snapshot.game.normalized_day
-                    );
                     Ok(snapshot)
                 }
                 Err(e) => Err(EngineError::Other(format!(
@@ -104,7 +100,19 @@ impl<E: Send + 'static> Engine<E> {
         self.expose_plugins_snapshot();
 
         let mut steps_to_run = time_snapshot.simulation.ticks_to_run;
-        steps_to_run = steps_to_run.min(8);
+        if steps_to_run > MAX_ENGINE_FIXED_STEPS_PER_FRAME {
+            if self.frame_index % FIXED_CATCHUP_WARN_INTERVAL_FRAMES == 0 {
+                log::warn!(
+                    "engine.time: realtime fixed-step debt dropped frame={} requested_ticks={} per_frame_steps={} accumulator_ns={} fixed_delta_ns={}",
+                    self.frame_index,
+                    steps_to_run,
+                    MAX_ENGINE_FIXED_STEPS_PER_FRAME,
+                    time_snapshot.simulation.accumulator_ns,
+                    time_snapshot.simulation.fixed_delta_ns,
+                );
+            }
+            steps_to_run = MAX_ENGINE_FIXED_STEPS_PER_FRAME;
+        }
 
         for step_index in 0..steps_to_run {
             self.sync_shutdown_state();

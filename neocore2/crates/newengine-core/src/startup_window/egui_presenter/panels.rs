@@ -17,7 +17,7 @@ impl PreStartApp {
                             ui.add_space(12.0);
                             ui.vertical(|ui| {
                                 ui.horizontal_wrapped(|ui| {
-                                    ui.label(egui::RichText::new("North Star Engine").size(28.0).strong().color(egui::Color32::from_rgb(241, 246, 255)));
+                                    ui.label(egui::RichText::new(APP_TITLE).size(28.0).strong().color(egui::Color32::from_rgb(241, 246, 255)));
                                     ui.label(egui::RichText::new(env!("CARGO_PKG_VERSION")).size(15.0).strong().color(egui::Color32::from_rgb(82, 169, 255)));
                                 });
                                 ui.label(egui::RichText::new(APP_SUBTITLE).size(13.0).color(egui::Color32::from_rgb(137, 148, 171)));
@@ -38,7 +38,7 @@ impl PreStartApp {
                     icon(ui, IconKind::Logo, 70.0, egui::Color32::from_rgb(108, 181, 255));
                     ui.add_space(14.0);
                     ui.vertical(|ui| {
-                        ui.label(egui::RichText::new("North Star Engine").size(34.0).strong().color(egui::Color32::from_rgb(241, 246, 255)));
+                        ui.label(egui::RichText::new(APP_TITLE).size(34.0).strong().color(egui::Color32::from_rgb(241, 246, 255)));
                         ui.label(egui::RichText::new("PreStart").size(19.0).color(egui::Color32::from_rgb(83, 159, 255)));
                     });
                     ui.add_space(30.0);
@@ -100,7 +100,7 @@ impl PreStartApp {
     pub(super) fn render_display_tab(&mut self, ui: &mut egui::Ui) {
         section_header(ui, "Display", "Monitor, resolution and screen mode. Fullscreen is a quick control that maps to the window-mode enum.");
         card(ui, |ui| {
-            text_row(ui, "Title", self.fields.string("display.title", "Kayla's Editor"));
+            text_row(ui, "Title", self.fields.string("display.title", "North Star Engine"));
             ui.horizontal(|ui| {
                 ui.label(label("Resolution"));
                 styled_text_edit(ui, self.fields.string("display.width", "1600"), 110.0, 28.0);
@@ -211,32 +211,60 @@ impl PreStartApp {
 
     pub(super) fn render_schema_field(&mut self, ui: &mut egui::Ui, plugin_id: &str, field: &SchemaField) {
         let key = plugin_field_key(plugin_id, &field.path);
+        let narrow = ui.available_width() < 390.0;
         match field.kind.as_str() {
             "bool" => {
-                ui.horizontal(|ui| {
-                    let label_width = if ui.available_width() < 330.0 { 94.0 } else { 128.0 };
-                    ui.add_sized([label_width, 22.0], egui::Label::new(label(&field.label)));
-                    switch_only(ui, self.fields.bool(&key, false));
-                    if let Some(default_label) = &field.default_label {
-                        ui.label(egui::RichText::new(format!("default: {default_label}")).size(11.0).color(TEXT_MUTED));
-                    }
-                });
+                if narrow {
+                    ui.vertical(|ui| {
+                        ui.label(label(&field.label));
+                        ui.horizontal(|ui| {
+                            switch_only(ui, self.fields.bool(&key, false));
+                            if let Some(default_label) = &field.default_label {
+                                ui.label(egui::RichText::new(format!("default: {default_label}")).size(10.5).color(TEXT_MUTED));
+                            }
+                        });
+                    });
+                } else {
+                    ui.horizontal(|ui| {
+                        let label_width = if ui.available_width() < 430.0 { 112.0 } else { 138.0 };
+                        ui.add_sized([label_width, 22.0], egui::Label::new(label(&field.label)));
+                        switch_only(ui, self.fields.bool(&key, false));
+                        if ui.available_width() > 130.0 {
+                            if let Some(default_label) = &field.default_label {
+                                ui.label(egui::RichText::new(format!("default: {default_label}")).size(10.5).color(TEXT_MUTED));
+                            }
+                        }
+                    });
+                }
             }
             "select" => {
-                ui.horizontal(|ui| {
-                    let label_width = if ui.available_width() < 330.0 { 94.0 } else { 128.0 };
-                    ui.add_sized([label_width, 22.0], egui::Label::new(label(&field.label)));
-                    let selected = self.fields.select(&key, field.options.first().map(|o| o.value.as_str()).unwrap_or(""));
-                    let width = (ui.available_width() - 4.0).clamp(120.0, 260.0);
-                    styled_select_dynamic(ui, key.clone(), selected, &field.options, width);
-                    if let Some(default_label) = &field.default_label {
-                        ui.label(egui::RichText::new(format!("default: {default_label}")).size(11.0).color(TEXT_MUTED));
-                    }
-                });
+                if narrow {
+                    ui.vertical(|ui| {
+                        ui.label(label(&field.label));
+                        let width = ui.available_width().clamp(150.0, 320.0);
+                        let selected = self.fields.select(&key, field.options.first().map(|o| o.value.as_str()).unwrap_or(""));
+                        styled_select_dynamic(ui, key.clone(), selected, &field.options, width);
+                    });
+                } else {
+                    ui.horizontal(|ui| {
+                        let label_width = if ui.available_width() < 430.0 { 112.0 } else { 138.0 };
+                        ui.add_sized([label_width, 22.0], egui::Label::new(label(&field.label)));
+                        let selected = self.fields.select(&key, field.options.first().map(|o| o.value.as_str()).unwrap_or(""));
+                        let width = (ui.available_width() - 4.0).clamp(140.0, 280.0);
+                        styled_select_dynamic(ui, key.clone(), selected, &field.options, width);
+                    });
+                }
             }
             _ => {
                 let editor = self.fields.string(&key, "");
-                text_row(ui, &field.label, editor);
+                if narrow {
+                    ui.vertical(|ui| {
+                        ui.label(label(&field.label));
+                        styled_text_edit(ui, editor, ui.available_width().clamp(150.0, 320.0), 28.0);
+                    });
+                } else {
+                    text_row(ui, &field.label, editor);
+                }
             }
         }
     }
@@ -251,20 +279,20 @@ impl PreStartApp {
         let available_width = ui.available_width();
         let gap = 14.0;
 
-        if available_width < 1040.0 {
+        if available_width < 1220.0 {
             ui.vertical(|ui| {
                 ui.set_width(available_width);
                 self.render_left_launch_panel(ui);
                 ui.add_space(gap);
-                let panel_height = ui.available_height().max(360.0);
+                let panel_height = ui.available_height().max(340.0);
                 self.render_right_modules_panel(ui, panel_height);
             });
             return;
         }
 
-        let right_width = (available_width * 0.34).clamp(370.0, 520.0);
+        let right_width = (available_width * 0.31).clamp(324.0, 408.0);
         let left_width = (available_width - right_width - gap).max(0.0);
-        let panel_height = ui.available_height().max(420.0);
+        let panel_height = ui.available_height().max(400.0);
 
         ui.horizontal_top(|ui| {
             ui.vertical(|ui| {
@@ -391,15 +419,11 @@ impl PreStartApp {
     }
 
     pub(super) fn render_right_modules_panel(&mut self, ui: &mut egui::Ui, available_height: f32) {
-        let plugin_height = (available_height * 0.40).clamp(188.0, 330.0);
-        let config_height = (available_height * 0.36).clamp(150.0, 300.0);
+        let plugin_height = (available_height * 0.46).clamp(196.0, 320.0);
+        let config_height = (available_height - plugin_height - 16.0).clamp(180.0, 420.0);
         self.render_plugins_modules_card(ui, plugin_height);
         ui.add_space(12.0);
         self.render_selected_plugin_config_card(ui, config_height);
-        if ui.available_height() > 180.0 {
-            ui.add_space(12.0);
-            self.render_recent_configs_card(ui);
-        }
     }
 
     pub(super) fn render_plugins_modules_card(&mut self, ui: &mut egui::Ui, max_height: f32) {
@@ -456,32 +480,43 @@ impl PreStartApp {
     }
 
     pub(super) fn render_selected_plugin_config_card(&mut self, ui: &mut egui::Ui, max_height: f32) {
-        let Some(selected_id) = self.selected_plugin.clone() else {
-            return;
-        };
-        let Some(tab) = self.plugin_tabs.iter().find(|tab| tab.plugin_id == selected_id).cloned() else {
-            return;
-        };
+        let selected = self
+            .selected_plugin
+            .clone()
+            .and_then(|selected_id| self.plugin_tabs.iter().find(|tab| tab.plugin_id == selected_id).cloned());
+
         launcher_card(ui, |ui| {
-            let pill = if tab.enabled { "enabled" } else { "disabled" };
-            card_title(ui, plugin_icon(&tab), &format!("{} CONFIG", tab.title.to_uppercase()), Some(pill));
-            ui.label(egui::RichText::new(format!("{} · {}", tab.plugin_id, tab.category)).size(11.0).color(egui::Color32::from_rgb(120, 132, 154)));
-            if !tab.enabled {
-                ui.label(egui::RichText::new("Disabled plugins keep editable config, but the loader will skip their DLL until re-enabled.").size(11.0).color(egui::Color32::from_rgb(255, 184, 112)));
-            }
-            ui.add_space(8.0);
-            if tab.fields.is_empty() {
-                ui.label(egui::RichText::new("No editable startup fields were published by this plugin.").color(egui::Color32::from_rgb(150, 162, 185)));
-            } else {
-                egui::ScrollArea::vertical()
-                    .id_salt(format!("plugin-config-scroll-{}", tab.plugin_id))
-                    .max_height(max_height)
-                    .auto_shrink([false, false])
-                    .show(ui, |ui| {
-                        for field in &tab.fields {
-                            self.render_schema_field(ui, &tab.plugin_id, field);
-                        }
-                    });
+            match selected {
+                Some(tab) => {
+                    let pill = if tab.enabled { "enabled" } else { "disabled" };
+                    card_title(ui, plugin_icon(&tab), &format!("{} CONFIG", tab.title.to_uppercase()), Some(pill));
+                    ui.label(egui::RichText::new(format!("{} · {}", tab.plugin_id, tab.category)).size(11.0).color(egui::Color32::from_rgb(120, 132, 154)));
+                    if !tab.enabled {
+                        ui.label(egui::RichText::new("Disabled plugins keep editable config, but the loader will skip their DLL until re-enabled.").size(11.0).color(egui::Color32::from_rgb(255, 184, 112)));
+                    }
+                    ui.add_space(8.0);
+                    if tab.fields.is_empty() {
+                        ui.label(egui::RichText::new("No editable startup fields were published by this plugin.").color(egui::Color32::from_rgb(150, 162, 185)));
+                    } else {
+                        egui::ScrollArea::vertical()
+                            .id_salt(format!("plugin-config-scroll-{}", tab.plugin_id))
+                            .max_height(max_height)
+                            .auto_shrink([false, false])
+                            .show(ui, |ui| {
+                                for field in &tab.fields {
+                                    self.render_schema_field(ui, &tab.plugin_id, field);
+                                    ui.add_space(4.0);
+                                }
+                            });
+                    }
+                }
+                None => {
+                    card_title(ui, IconKind::Settings, "MODULE CONFIG", Some("select module"));
+                    ui.add_space(8.0);
+                    ui.label(egui::RichText::new("Choose a module from the PLUGINS / MODULES card to edit its startup settings.").size(12.5).color(egui::Color32::from_rgb(150, 162, 185)));
+                    ui.add_space(10.0);
+                    ui.label(egui::RichText::new("This keeps the right column stable, avoids empty gaps, and matches the concept layout.").size(11.0).color(egui::Color32::from_rgb(118, 130, 152)));
+                }
             }
         });
     }
