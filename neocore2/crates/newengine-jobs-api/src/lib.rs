@@ -130,6 +130,7 @@ pub mod jobs_method {
     pub const INVOKE_JSON: &str = newengine_service_api::SERVICE_METHOD_INVOKE_JSON;
     pub const SHUTDOWN_V1: &str = newengine_service_api::SERVICE_METHOD_SHUTDOWN_V1;
     pub const START_V1: &str = "job.start_v1";
+    pub const INVOKE_SERVICE_V1: &str = "job.invoke_service_v1";
     pub const CANCEL_V1: &str = "job.cancel_v1";
     pub const PAUSE_V1: &str = "job.pause_v1";
     pub const RESUME_V1: &str = "job.resume_v1";
@@ -144,6 +145,7 @@ pub const JOBS_SERVICE_METHODS: &[&str] = &[
     jobs_method::INVOKE_JSON,
     jobs_method::SHUTDOWN_V1,
     jobs_method::START_V1,
+    jobs_method::INVOKE_SERVICE_V1,
     jobs_method::CANCEL_V1,
     jobs_method::PAUSE_V1,
     jobs_method::RESUME_V1,
@@ -251,6 +253,79 @@ impl Default for JobStartRequestV1 {
             lane: "external".to_owned(),
             can_pause: false,
             can_cancel: true,
+        }
+    }
+}
+
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct JobServiceCallTargetV1 {
+    pub gateway: String,
+    pub method: String,
+    pub payload_json: serde_json::Value,
+}
+
+impl Default for JobServiceCallTargetV1 {
+    fn default() -> Self {
+        Self {
+            gateway: String::new(),
+            method: String::new(),
+            payload_json: serde_json::Value::Null,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct JobServiceCallRequestV1 {
+    pub job_id: String,
+    pub name: String,
+    pub owner: String,
+    pub category: String,
+    pub lane: String,
+    pub priority: String,
+    pub can_pause: bool,
+    pub can_cancel: bool,
+    pub target: JobServiceCallTargetV1,
+}
+
+impl Default for JobServiceCallRequestV1 {
+    fn default() -> Self {
+        Self {
+            job_id: String::new(),
+            name: "service-call-job".to_owned(),
+            owner: "engine.jobs".to_owned(),
+            category: "service-call".to_owned(),
+            lane: "plugin".to_owned(),
+            priority: "background".to_owned(),
+            can_pause: false,
+            can_cancel: true,
+            target: JobServiceCallTargetV1::default(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct JobServiceCallAcceptedV1 {
+    pub job_id: String,
+    pub accepted: bool,
+    pub gateway: String,
+    pub method: String,
+    pub status: String,
+    pub detail: String,
+}
+
+impl Default for JobServiceCallAcceptedV1 {
+    fn default() -> Self {
+        Self {
+            job_id: String::new(),
+            accepted: false,
+            gateway: String::new(),
+            method: String::new(),
+            status: String::new(),
+            detail: String::new(),
         }
     }
 }
