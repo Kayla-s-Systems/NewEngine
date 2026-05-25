@@ -30,8 +30,9 @@ pub enum CommandTag {
 
 /// A command produced by a system and applied after execution.
 ///
-/// Commands are committed in deterministic order (by system `(order, seq)`),
-/// enabling safe parallel system execution while keeping gameplay deterministic.
+/// Commands are committed in deterministic order (by system `(order, seq)`).
+/// If this stage becomes parallel again, it must run through `engine.jobs` so
+/// each batch remains visible and controllable.
 pub trait Command: Send {
     /// Apply this command.
     fn apply(self: Box<Self>, world: &mut World);

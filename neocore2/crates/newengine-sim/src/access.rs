@@ -2,9 +2,8 @@
 
 /// Coarse-grained subsystem identifiers for batching.
 ///
-/// The default schedule uses these bits to allow obvious parallelism
-/// (e.g. gameplay controllers vs camera controllers) while keeping the model
-/// deterministic and easy to reason about.
+/// The schedule uses these bits to describe conflicts for deterministic ordering
+/// now, and for a future `engine.jobs`-owned parallel executor later.
 ///
 /// You are free to define your own subsystem bits in downstream code.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -18,7 +17,7 @@ pub enum Subsystem {
     Scene = 2,
 }
 
-/// Access declaration used by the parallel executor.
+/// Access declaration used by the deterministic scheduler and future jobs executor.
 ///
 /// This is intentionally coarse-grained and ABI-stable.
 ///

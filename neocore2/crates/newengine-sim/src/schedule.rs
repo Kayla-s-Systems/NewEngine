@@ -229,16 +229,7 @@ impl SimSchedule {
             return;
         }
 
-        #[cfg(feature = "parallel")]
-        {
-            run_stage_parallel(world, stage, systems, frame, telemetry);
-            return;
-        }
-
-        #[cfg(not(feature = "parallel"))]
-        {
-            run_stage_single_thread(world, stage, systems, frame, telemetry);
-        }
+        run_stage_single_thread(world, stage, systems, frame, telemetry);
     }
 
     #[inline]
@@ -292,89 +283,10 @@ fn run_stage_single_thread(
     }
 }
 
-#[cfg(feature = "parallel")]
-fn run_stage_parallel(
-    world: &mut World,
-    stage: SimStage,
-    systems: &[SystemEntry],
-    frame: SimFrame,
-    telemetry: Option<&SimulationJobTelemetry<'_>>,
-) {
-    use std::sync::mpsc;
-
-    let batches = build_batches(systems);
-
-    let batch_count = batches.len();
-    for (batch_index, batch) in batches.into_iter().enumerate() {
-        let telemetry_batch = SimulationJobBatch::new(
-            stage,
-            frame,
-            batch_index,
-            batch_count,
-            batch.len(),
-            "rayon-scope",
-        );
-        if let Some(telemetry) = telemetry {
-            telemetry.publish_batch(&telemetry_batch, EngineTaskPhase::Scheduled, "Simulation batch scheduled", "Rayon simulation batch is visible through engine.jobs telemetry.", Some(0.0));
-            telemetry.publish_batch(&telemetry_batch, EngineTaskPhase::Running, "Simulation batch running", "Rayon simulation systems are executing as provider-owned internal parallelism.", None);
-        }
-
-        // World snapshot for this batch.
-        // Systems are required to only read from `world` and write to their command buffers.
-        let wref: &World = world;
-
-        let (tx, rx) = mpsc::channel::<((i32, u32), &'static str, CommandBuffer)>();
-
-        // no-hidden-thread-scan: allowed simulation internal parallelism; SimulationJobBatch publishes engine.jobs-compatible telemetry before this executor.
-        rayon::scope(|scope| {
-            for sys in batch {
-                let tx = tx.clone();
-                scope.spawn(move |_| {
-                    let mut cb = CommandBuffer::new();
-                    (sys.f)(wref, frame, &mut cb);
-                    let _ = tx.send(((sys.order, sys.seq), sys.name, cb));
-                });
-            }
-        });
-
-        drop(tx);
-
-        let mut collected: Vec<((i32, u32), &'static str, CommandBuffer)> = rx.into_iter().collect();
-        collected.sort_by(|a, b| a.0.0.cmp(&b.0.0).then(a.0.1.cmp(&b.0.1)));
-
-        for (_key, name, cb) in collected {
-            #[cfg(debug_assertions)]
-            validate_commands(stage, name, &cb);
-            if !cb.is_empty() {
-                cb.apply_all(world);
-            }
-        }
-        if let Some(telemetry) = telemetry {
-            telemetry.publish_batch(&telemetry_batch, EngineTaskPhase::Completed, "Simulation batch completed", "Rayon simulation batch completed and command buffers were applied in deterministic order.", Some(1.0));
-        }
-    }
-}
-
-#[cfg(feature = "parallel")]
-fn build_batches<'a>(systems: &'a [SystemEntry]) -> Vec<Vec<&'a SystemEntry>> {
-    let mut batches: Vec<Vec<&'a SystemEntry>> = Vec::new();
-    let mut masks: Vec<AccessMask> = Vec::new();
-
-    'sys: for sys in systems {
-        for (i, m) in masks.iter_mut().enumerate() {
-            if !m.conflicts(sys.access) {
-                *m = m.union(sys.access);
-                batches[i].push(sys);
-                continue 'sys;
-            }
-        }
-
-        batches.push(vec![sys]);
-        masks.push(sys.access);
-    }
-
-    batches
-}
+// Parallel simulation is intentionally not implemented through `rayon` here.
+// When this scheduler grows parallel execution again, each batch must be
+// submitted through `engine.jobs` so it has a JobId, lane, priority, progress
+// events and cooperative cancellation.
 
 #[cfg(debug_assertions)]
 fn validate_commands(stage: SimStage, system: &'static str, cb: &CommandBuffer) {

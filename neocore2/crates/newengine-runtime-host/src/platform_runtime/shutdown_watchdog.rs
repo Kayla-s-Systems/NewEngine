@@ -98,6 +98,14 @@ impl ShutdownWatchdog {
             return;
         }
         if let Some(task_id) = self.task_id.as_deref() {
+            log::warn!(
+                "platform runtime: stopping shutdown watchdog thread outside engine.jobs task_id={}",
+                task_id
+            );
+            eprintln!(
+                "[WARN] platform runtime: stopping shutdown watchdog thread outside engine.jobs task_id={}",
+                task_id
+            );
             publish_watchdog_event(
                 task_id,
                 EngineTaskPhase::Completed,

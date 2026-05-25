@@ -6,7 +6,6 @@ edition = "2021"
 
 [features]
 default = []
-parallel = ["dep:rayon"]
 
 [dependencies]
 newengine-ecs = { path = "../newengine-ecs" }
@@ -15,4 +14,3 @@ newengine-transform = { path = "../newengine-transform", features = ["ecs"], def
 newengine-camera = { path = "../newengine-camera" }
 newengine-math = { path = "../newengine-math" }
 newengine-jobs-api = { path = "../newengine-jobs-api" }
-rayon = { version = "1.10", optional = true }

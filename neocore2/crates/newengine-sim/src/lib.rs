@@ -4,13 +4,12 @@
 //!
 //! This crate intentionally stays renderer/editor agnostic.
 //!
-//! # Parallel execution
+//! # Jobs policy
 //!
-//! Enable the `parallel` feature to execute non-conflicting systems in parallel.
-//! Systems declare coarse-grained access via [`AccessMask`]. The executor groups
-//! systems into deterministic batches (stable by `(order, seq)`), runs each batch
-//! in parallel, and then commits each system's [`CommandBuffer`] in deterministic
-//! order.
+//! Simulation currently executes deterministically on the caller thread. Future
+//! parallel execution must be routed through `engine.jobs`, not through a crate-
+//! local worker pool or `rayon`, so every batch is visible to diagnostics,
+//! profiler, pause/resume and cancellation control.
 
 mod access;
 mod commands;

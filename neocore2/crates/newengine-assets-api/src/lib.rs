@@ -81,6 +81,32 @@ pub const ASSET_BROWSER_SERVICE_ID: &str = "assets.browser.api";
 pub const ASSET_BROWSER_BACKEND_CAPABILITY_ID: &str = "assets.browser.backend";
 pub const ASSET_BROWSER_RUNTIME_CONTRACT: &str = "newengine.assets.browser.runtime.v1";
 
+/// Asset streaming gateway and capability ids.
+///
+/// Streaming is a first-class diagnostics/jobs-visible domain, not a hidden
+/// loader thread behind AssetManager. Providers should expose request queues,
+/// residency, defragmentation and cache loading through this capability family.
+pub const ENGINE_ASSETS_STREAMING_SERVICE_ID: &str = "engine.assets.streaming";
+pub const ASSETS_STREAMING_SERVICE_ID: &str = "assets.streaming.api";
+pub const ASSETS_STREAMING_BACKEND_CAPABILITY_ID: &str = "assets.streaming.backend";
+pub const ASSETS_STREAMING_REQUEST_QUEUE_CAPABILITY_ID: &str = "assets.streaming.request_queue";
+pub const ASSETS_STREAMING_RESIDENCY_CAPABILITY_ID: &str = "assets.streaming.residency";
+pub const ASSETS_STREAMING_DEFRAG_CAPABILITY_ID: &str = "assets.streaming.defrag";
+pub const ASSETS_STREAMING_CACHE_LOADER_CAPABILITY_ID: &str = "assets.streaming.cache_loader";
+pub const ASSETS_STREAMING_RUNTIME_CONTRACT: &str = "newengine.assets.streaming.runtime.v1";
+
+/// World streaming gateway and capability ids.
+///
+/// World streaming owns cell visibility and spatial budget decisions. It may
+/// request asset streaming work, but all loader/visibility jobs must remain on
+/// the engine job system and visible in diagnostics/profiler.
+pub const ENGINE_WORLD_STREAMING_SERVICE_ID: &str = "engine.world.streaming";
+pub const WORLD_STREAMING_SERVICE_ID: &str = "world.streaming.api";
+pub const WORLD_STREAMING_BACKEND_CAPABILITY_ID: &str = "world.streaming.backend";
+pub const WORLD_STREAMING_CELLS_CAPABILITY_ID: &str = "world.streaming.cells";
+pub const WORLD_STREAMING_VISIBILITY_BUDGET_CAPABILITY_ID: &str = "world.streaming.visibility_budget";
+pub const WORLD_STREAMING_RUNTIME_CONTRACT: &str = "newengine.world.streaming.runtime.v1";
+
 pub mod asset_graph_method {
     pub const RESOLVE_V1: &str = "assets.graph.resolve_v1";
     pub const VALIDATE_V1: &str = "assets.graph.validate_v1";
