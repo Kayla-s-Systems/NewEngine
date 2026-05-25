@@ -31,9 +31,55 @@ impl PluginManager {
             if self.loaded[i].state != PluginState::Registered {
                 continue;
             }
-            self.call_plugin(i, "start", |m| rresult_unit_to_string(m.start()));
+            self.start_plugin_inline(i);
         }
         Ok(())
+    }
+
+
+    fn start_plugin_inline(&mut self, idx: usize) {
+        if idx >= self.loaded.len() {
+            return;
+        }
+        if self.loaded[idx].state == PluginState::Disabled {
+            return;
+        }
+
+        let id = self.loaded[idx].info.id.to_string();
+        let started = Instant::now();
+        log::info!("plugins: start begin id='{}'", id);
+
+        // Startup must never depend on synchronous diagnostics/event-sink work.
+        // `start` is the transition that runs immediately after the native loading
+        // shell has already loaded engine plugins; emitting per-plugin job events
+        // here can re-enter loading/profiler sinks while the plugin manager is still
+        // mutating lifecycle state. Keep this phase direct and bounded: call the
+        // plugin, record a normal log, then mark the plugin Running. Other lifecycle
+        // operations still use the diagnostics bridge through `call_plugin`.
+        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            with_current_plugin_id(&id, || rresult_unit_to_string(self.loaded[idx].module.start()))
+        }));
+
+        match result {
+            Ok(Ok(())) => {
+                if idx < self.loaded.len() && self.loaded[idx].state == PluginState::Registered {
+                    self.loaded[idx].state = PluginState::Running;
+                }
+                log::info!(
+                    "plugins: start complete id='{}' elapsed_ms={:.3}",
+                    id,
+                    crate::diagnostics::elapsed_ms(started)
+                );
+            }
+            Ok(Err(e)) => {
+                log::error!("plugins: start failed id='{}': {}", id, e);
+                self.disable_plugin(idx, &id, format!("op 'start' failed: {e}"));
+            }
+            Err(_) => {
+                log::error!("plugins: panic during start id='{}' (plugin disabled)", id);
+                self.disable_plugin(idx, &id, "panic during op 'start'".to_owned());
+            }
+        }
     }
 
     pub fn fixed_update_all(&mut self, dt: f32) -> Result<(), String> {

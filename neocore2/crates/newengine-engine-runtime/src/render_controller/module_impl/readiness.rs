@@ -12,16 +12,17 @@ use crate::scene_bridge::TerrainSurfaceLayers;
 use super::super::material_bindings::{LitMaterialPlan, MaterialTextureGpuResidency};
 use super::RuntimeRenderController;
 
-const SCENE_TEXTURE_GATE_SOFT_TIMEOUT_FRAMES: u64 = 360;
+const SCENE_TEXTURE_GATE_SOFT_TIMEOUT_FRAMES: u64 = 120;
 
 /// Updates the standalone game launch gate and returns whether the playable world
 /// may be simulated or possessed this frame.
 ///
 /// CPU scene bootstrap can finish before GPU texture residency. We keep direct
-/// player control and simulation closed until all declared scene material
-/// textures are either resident or explicitly failed. Failed textures release the
-/// gate intentionally: at that point the runtime uses renderer fallbacks instead
-/// of waiting forever.
+/// player control and simulation closed while the renderer gets a short chance
+/// to make declared material textures resident. This gate is deliberately soft:
+/// missing optional backends or slow/failed texture uploads must never strand the
+/// application on the native loading screen. After the bounded wait expires the
+/// runtime enters public Play and lets renderer fallbacks finish the frame.
 pub(super) fn update_game_ready_launch_gate(
     this: &mut RuntimeRenderController,
     r: &mut dyn RenderApi,

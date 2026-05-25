@@ -93,7 +93,12 @@ impl RuntimeRenderController {
                 if runtime_profile.use_service_physics() || runtime_profile.use_fallback_ecs_physics() {
                     world.insert_resource(crate::gameplay::PhysicsRuntimeFrameIndex(self.frame.frame_index));
                     let physics_mode = if runtime_profile.use_service_physics() {
-                        PhysicsIntegrationMode::ServiceBackend
+                        if physics_api.is_some() {
+                            PhysicsIntegrationMode::ServiceBackend
+                        } else {
+                            log_service_physics_downgraded_once();
+                            PhysicsIntegrationMode::EcsFallback
+                        }
                     } else {
                         PhysicsIntegrationMode::EcsFallback
                     };
@@ -169,7 +174,23 @@ impl RuntimeRenderController {
 }
 
 static GPU_SAFE_PHYSICS_SKIP_LOGGED: AtomicBool = AtomicBool::new(false);
+static SERVICE_PHYSICS_DOWNGRADED_LOGGED: AtomicBool = AtomicBool::new(false);
 static GPU_SAFE_STREAMING_SKIP_LOGGED: AtomicBool = AtomicBool::new(false);
+
+
+fn log_service_physics_downgraded_once() {
+    if SERVICE_PHYSICS_DOWNGRADED_LOGGED
+        .compare_exchange(false, true, Ordering::AcqRel, Ordering::Acquire)
+        .is_ok()
+    {
+        log::warn!(
+            "render world tick: engine.physics provider unavailable; downgraded simulation to ECS fallback for this run; scene launch and public Play are not blocked by physics backend presence or type"
+        );
+        newengine_core::crash::record_breadcrumb(
+            "render world tick: missing physics backend downgraded to ECS fallback without blocking launch".to_owned(),
+        );
+    }
+}
 
 fn log_physics_skip_once() {
     if GPU_SAFE_PHYSICS_SKIP_LOGGED
