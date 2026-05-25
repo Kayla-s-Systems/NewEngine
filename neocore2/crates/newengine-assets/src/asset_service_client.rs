@@ -38,6 +38,8 @@ pub struct AssetServiceClient {
     m_resolve_trace_json_v1: MethodName,
     m_formats_json_v1: MethodName,
     m_sources_json_v1: MethodName,
+    m_vfs_list_json_v1: MethodName,
+    m_list_file_repack_json_v1: MethodName,
     m_mount_source_json_v1: MethodName,
     m_get_state_v1: MethodName,
 }
@@ -67,6 +69,8 @@ impl AssetServiceClient {
             m_resolve_trace_json_v1: MethodName::from(method::RESOLVE_TRACE_JSON_V1),
             m_formats_json_v1: MethodName::from(method::FORMATS_JSON_V1),
             m_sources_json_v1: MethodName::from(method::SOURCES_JSON_V1),
+            m_vfs_list_json_v1: MethodName::from(method::VFS_LIST_JSON_V1),
+            m_list_file_repack_json_v1: MethodName::from(method::LIST_FILE_REPACK_JSON_V1),
             m_mount_source_json_v1: MethodName::from(method::MOUNT_SOURCE_JSON_V1),
             m_get_state_v1: MethodName::from(method::GET_STATE_V1),
         }
@@ -377,6 +381,21 @@ impl AssetServiceClient {
             .map_err(|e| e.to_string())
     }
 
+    /// List a mounted VFS directory through AssetManager.
+    #[inline]
+    pub fn vfs_list_json_v1(&self, logical_path: &str) -> Result<serde_json::Value, String> {
+        let bytes = self.call_raw(self.m_vfs_list_json_v1.clone(), Self::logical_payload(logical_path))?;
+        Self::decode_ok_json(bytes)
+    }
+
+    /// Repack a NEF8 ListFile after editor-side entry mutation and write it back through AssetManager VFS.
+    #[inline]
+    pub fn list_file_repack_json_v1(&self, payload: serde_json::Value) -> Result<serde_json::Value, String> {
+        let bytes = serde_json::to_vec(&payload).map_err(|e| e.to_string())?;
+        let bytes = self.call_raw(self.m_list_file_repack_json_v1.clone(), bytes)?;
+        Self::decode_ok_json(bytes)
+    }
+
     /// Call the semantic `engine.assets.textures` gateway for `assets.textures.entry_runtime_v1`.
     ///
     /// `engine.assets` remains the byte/VFS/codec-dispatch owner, but texture semantics,
@@ -560,6 +579,15 @@ impl AssetService for AssetServiceClient {
     fn sources_json_v1(&self) -> Result<serde_json::Value, String> {
         let bytes = self.call_raw(self.m_sources_json_v1.clone(), Vec::new())?;
         Self::decode_ok_json(bytes)
+    }
+
+    fn vfs_list_json_v1(&self, logical_path: &str) -> Result<serde_json::Value, String> {
+        let bytes = self.call_raw(self.m_vfs_list_json_v1.clone(), Self::logical_payload(logical_path))?;
+        Self::decode_ok_json(bytes)
+    }
+
+    fn list_file_repack_json_v1(&self, payload: serde_json::Value) -> Result<serde_json::Value, String> {
+        AssetServiceClient::list_file_repack_json_v1(self, payload)
     }
 
     fn mount_source_json_v1(&self, payload: serde_json::Value) -> Result<(), String> {

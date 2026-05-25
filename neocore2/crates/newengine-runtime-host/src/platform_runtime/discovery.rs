@@ -123,21 +123,9 @@ fn try_read_runtime_identity(path: &Path) -> Option<(String, String)> {
         .ok()?;
     let root = unsafe { root_sym() };
 
-    if let Some(create_v3) = root.create_v3() {
-        let module = create_v3();
-        let descriptor = module.descriptor_v3();
-        return Some((descriptor.id.to_string(), descriptor.version.to_string()));
-    }
-
-    if let Some(create_v2) = root.create_v2() {
-        let module = create_v2();
-        let descriptor = module.descriptor();
-        return Some((descriptor.id.to_string(), descriptor.version.to_string()));
-    }
-
     let module = root.create()();
-    let info = module.info();
-    Some((info.id.to_string(), info.version.to_string()))
+    let descriptor = module.descriptor();
+    Some((descriptor.id.to_string(), descriptor.version.to_string()))
 }
 
 pub fn detect_platform_runtime_path(modules_dir: &Path) -> EngineResult<PathBuf> {

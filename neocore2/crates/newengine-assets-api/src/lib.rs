@@ -73,6 +73,14 @@ pub const ASSET_GRAPH_SERVICE_ID: &str = "asset_graph.api";
 pub const ASSET_GRAPH_BACKEND_CAPABILITY_ID: &str = "assets.graph.backend";
 pub const ASSET_GRAPH_RUNTIME_CONTRACT: &str = "newengine.assets.graph.runtime.v1";
 
+/// Editor/runtime asset browser gateway. This is a read-model/control surface over
+/// mounted VFS layers, FileTypeRegistry descriptors and ListFile manifests.
+/// AssetManager remains the byte owner; domain gateways remain semantic owners.
+pub const ENGINE_ASSETS_BROWSER_SERVICE_ID: &str = "engine.assets.browser";
+pub const ASSET_BROWSER_SERVICE_ID: &str = "assets.browser.api";
+pub const ASSET_BROWSER_BACKEND_CAPABILITY_ID: &str = "assets.browser.backend";
+pub const ASSET_BROWSER_RUNTIME_CONTRACT: &str = "newengine.assets.browser.runtime.v1";
+
 pub mod asset_graph_method {
     pub const RESOLVE_V1: &str = "assets.graph.resolve_v1";
     pub const VALIDATE_V1: &str = "assets.graph.validate_v1";
@@ -86,6 +94,32 @@ pub const ASSET_GRAPH_SERVICE_METHODS: &[&str] = &[
     asset_graph_method::RESOLVE_V1,
     asset_graph_method::VALIDATE_V1,
     asset_graph_method::DUMP_JSON_V1,
+];
+
+pub mod asset_browser_method {
+    pub const INFO_JSON: &str = newengine_service_api::SERVICE_METHOD_INFO_JSON;
+    pub const INVOKE_JSON: &str = newengine_service_api::SERVICE_METHOD_INVOKE_JSON;
+    pub const SHUTDOWN_V1: &str = newengine_service_api::SERVICE_METHOD_SHUTDOWN_V1;
+    pub const SNAPSHOT_V1: &str = "assets.browser.snapshot_v1";
+    pub const LIST_V1: &str = "assets.browser.list_v1";
+    pub const OPEN_V1: &str = "assets.browser.open_v1";
+    pub const REFRESH_V1: &str = "assets.browser.refresh_v1";
+    pub const ENTRY_UPDATE_V1: &str = "assets.browser.entry_update_v1";
+    pub const ENTRY_DELETE_V1: &str = "assets.browser.entry_delete_v1";
+    pub const REBUILD_V1: &str = "assets.browser.rebuild_v1";
+}
+
+pub const ASSET_BROWSER_SERVICE_METHODS: &[&str] = &[
+    asset_browser_method::INFO_JSON,
+    asset_browser_method::INVOKE_JSON,
+    asset_browser_method::SHUTDOWN_V1,
+    asset_browser_method::SNAPSHOT_V1,
+    asset_browser_method::LIST_V1,
+    asset_browser_method::OPEN_V1,
+    asset_browser_method::REFRESH_V1,
+    asset_browser_method::ENTRY_UPDATE_V1,
+    asset_browser_method::ENTRY_DELETE_V1,
+    asset_browser_method::REBUILD_V1,
 ];
 
 pub mod assets_ui_method {
@@ -121,6 +155,8 @@ pub const ASSETS_UI_SERVICE_METHODS: &[&str] = &[
 
 mod asset_ref;
 pub use asset_ref::*;
+mod asset_browser;
+pub use asset_browser::*;
 pub mod list_file;
 pub use list_file::*;
 
@@ -503,6 +539,12 @@ pub mod method {
     pub const SOURCES_JSON_V1: &str = "asset.sources_json_v1";
     pub const VERIFY_ASSETS_JSON_V1: &str = "asset.verify_assets_json_v1";
     pub const SOURCE_KINDS_JSON_V1: &str = "asset.source_kinds_json_v1";
+    /// Merged VFS directory listing by logical path. Payload accepts either a UTF-8
+    /// logical directory path or JSON { logical_path }. Response is JSON only.
+    pub const VFS_LIST_JSON_V1: &str = "asset.vfs_list_json_v1";
+    /// Rebuild/repack a NEF8 ListFile after an editor-side entry update/delete/rename.
+    /// Payload is JSON and write-back is performed only through a writable VFS source.
+    pub const LIST_FILE_REPACK_JSON_V1: &str = "asset.list_file_repack_json_v1";
     pub const MOUNT_SOURCE_JSON_V1: &str = "asset.mount_source_json_v1";
 
     // Debug/diagnostics.
@@ -665,6 +707,9 @@ pub const REQUIRED_RUNTIME_METHODS_V1: &[&str] = &[
     method::STATUS_GRAPH_JSON_V1,
     method::PROJECT_STATUS_JSON_V1,
     method::FORMATS_JSON_V1,
+    method::SOURCES_JSON_V1,
+    method::VFS_LIST_JSON_V1,
+    method::LIST_FILE_REPACK_JSON_V1,
 ];
 
 /// Startup validation contract for the engine-facing asset gateway.
@@ -1083,6 +1128,12 @@ pub trait AssetService: AssetAccess {
 
     /// List mounted sources.
     fn sources_json_v1(&self) -> Result<serde_json::Value, String>;
+
+    /// List a mounted VFS directory through AssetManager, not through direct filesystem paths.
+    fn vfs_list_json_v1(&self, logical_path: &str) -> Result<serde_json::Value, String>;
+
+    /// Rebuild/repack a NEF8 ListFile and write it back through the winning writable VFS source.
+    fn list_file_repack_json_v1(&self, payload: serde_json::Value) -> Result<serde_json::Value, String>;
 
     /// Mount one source through the strict v1 JSON source model.
     fn mount_source_json_v1(&self, payload: serde_json::Value) -> Result<(), String>;

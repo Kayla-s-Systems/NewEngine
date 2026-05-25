@@ -22,8 +22,8 @@ fn plugin_module_shutdown_enabled() -> bool {
 
 impl PluginManager {
     #[inline]
-    pub fn iter(&self) -> impl Iterator<Item=&newengine_plugin_api::PluginModuleDyn<'static>> {
-        self.loaded.iter().filter_map(|p| p.module.as_v1())
+    pub fn iter(&self) -> impl Iterator<Item = &newengine_plugin_api::PluginModuleDyn<'static>> {
+        self.loaded.iter().map(|p| p.module.module_ref())
     }
 
     pub fn start_all(&mut self) -> Result<(), String> {
@@ -203,6 +203,7 @@ impl PluginManager {
             "source": "newengine-plugin-host",
             "plugin_id": id.clone(),
             "operation": op,
+            "detail": format!("Running plugin lifecycle op '{}' for '{}'.", op, id),
             "metadata": {
                 "plugin_id": id.clone(),
                 "operation": op

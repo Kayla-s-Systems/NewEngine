@@ -5,8 +5,15 @@ use abi_stable::sabi_types::VersionStrings;
 use abi_stable::StableAbi;
 
 use crate::editor::EditorExtensionsV1;
-use crate::module::{PluginModuleDyn, PluginModuleV2Dyn, PluginModuleV3Dyn};
+use crate::module::PluginModuleDyn;
 use crate::ui::PluginUiAssetsV1;
+
+pub const PLUGIN_ROOT_SYMBOL_NAME: &str = "newengine_plugin_root_v1";
+pub const LEGACY_PLUGIN_ROOT_SYMBOL_NAME: &str = "export_plugin_root";
+pub const PLUGIN_ROOT_SYMBOL_BYTES: &[u8] = b"newengine_plugin_root_v1";
+pub const PLUGIN_ROOT_SYMBOL_BYTES_NUL: &[u8] = b"newengine_plugin_root_v1\0";
+pub const LEGACY_PLUGIN_ROOT_SYMBOL_BYTES: &[u8] = b"export_plugin_root";
+pub const LEGACY_PLUGIN_ROOT_SYMBOL_BYTES_NUL: &[u8] = b"export_plugin_root\0";
 
 #[repr(C)]
 #[derive(StableAbi)]
@@ -14,10 +21,6 @@ use crate::ui::PluginUiAssetsV1;
 pub struct PluginRootV1 {
     #[sabi(last_prefix_field)]
     pub create: extern "C" fn() -> PluginModuleDyn<'static>,
-
-    pub create_v2: extern "C" fn() -> PluginModuleV2Dyn<'static>,
-
-    pub create_v3: extern "C" fn() -> PluginModuleV3Dyn<'static>,
 
     pub ui_assets_v1: extern "C" fn() -> PluginUiAssetsV1,
 
@@ -27,8 +30,8 @@ pub struct PluginRootV1 {
 impl RootModule for PluginRootV1Ref {
     abi_stable::declare_root_module_statics! { PluginRootV1Ref }
 
-    const BASE_NAME: &'static str = "export_plugin_root";
-    const NAME: &'static str = "export_plugin_root";
+    const BASE_NAME: &'static str = PLUGIN_ROOT_SYMBOL_NAME;
+    const NAME: &'static str = PLUGIN_ROOT_SYMBOL_NAME;
     const VERSION_STRINGS: VersionStrings = abi_stable::package_version_strings!();
 }
 
@@ -43,49 +46,28 @@ pub extern "C" fn empty_editor_extensions_v1() -> EditorExtensionsV1 {
 }
 
 /// Defines the exported root module symbol.
-///
-/// Usage in a plugin crate:
-/// ```ignore
-/// use newengine_plugin_api::prelude::*;
-///
-/// extern "C" fn create_v1() -> PluginModuleDyn<'static> { /* ... */ }
-/// extern "C" fn create_v2() -> PluginModuleV2Dyn<'static> { /* ... */ }
-/// extern "C" fn create_v3() -> PluginModuleV3Dyn<'static> { /* ... */ }
-/// extern "C" fn ui_assets_v1() -> PluginUiAssetsV1 { PluginUiAssetsV1::empty() }
-/// extern "C" fn editor_extensions_v1() -> EditorExtensionsV1 { EditorExtensionsV1::empty() }
-///
-/// export_plugin_root!(create_v1, create_v2, create_v3);
-/// export_plugin_root!(create_v1, create_v2, create_v3, ui_assets_v1);
-/// export_plugin_root!(create_v1, create_v2, create_v3, ui_assets_v1, editor_extensions_v1);
-/// ```
 #[macro_export]
 macro_rules! export_plugin_root {
-    ($create_v1:path, $create_v2:path, $create_v3:path) => {
+    ($create:path) => {
         $crate::export_plugin_root!(
-            $create_v1,
-            $create_v2,
-            $create_v3,
+            $create,
             $crate::empty_plugin_ui_assets_v1,
             $crate::empty_editor_extensions_v1
         );
     };
-    ($create_v1:path, $create_v2:path, $create_v3:path, $ui_assets_v1:path) => {
+    ($create:path, $ui_assets_v1:path) => {
         $crate::export_plugin_root!(
-            $create_v1,
-            $create_v2,
-            $create_v3,
+            $create,
             $ui_assets_v1,
             $crate::empty_editor_extensions_v1
         );
     };
-    ($create_v1:path, $create_v2:path, $create_v3:path, $ui_assets_v1:path, $editor_extensions_v1:path) => {
+    ($create:path, $ui_assets_v1:path, $editor_extensions_v1:path) => {
         #[no_mangle]
-        pub extern "C" fn export_plugin_root() -> $crate::PluginRootV1Ref {
+        pub extern "C" fn newengine_plugin_root_v1() -> $crate::PluginRootV1Ref {
             < $crate::PluginRootV1 as abi_stable::prefix_type::PrefixTypeTrait >::leak_into_prefix(
                 $crate::PluginRootV1 {
-                    create: $create_v1,
-                    create_v2: $create_v2,
-                    create_v3: $create_v3,
+                    create: $create,
                     ui_assets_v1: $ui_assets_v1,
                     editor_extensions_v1: $editor_extensions_v1,
                 }

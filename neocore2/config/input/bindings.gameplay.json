@@ -348,17 +348,6 @@
           "y": 0
         }
       ]
-    },
-    {
-      "id": "engine.menu.toggle_pause",
-      "label": "Toggle menu",
-      "contexts": [],
-      "dispatch": "consume_first",
-      "effects": [
-        {
-          "kind": "menu_toggle"
-        }
-      ]
     }
   ],
   "listeners": [
@@ -366,7 +355,7 @@
       "owner": "newengine-ui",
       "id": "pause-menu",
       "action_filter": [
-        "engine.menu.toggle_pause",
+        "engine.ui.menu.toggle_pause",
         "ui.menu.accept",
         "ui.menu.back",
         "ui.menu.up",
@@ -498,7 +487,7 @@
       "phase": "Pressed"
     },
     {
-      "action": "engine.menu.toggle_pause",
+      "action": "engine.ui.menu.toggle_pause",
       "device": "Keyboard",
       "code": 114,
       "name": null,
@@ -596,7 +585,7 @@
       "phase": "Pressed"
     },
     {
-      "action": "engine.menu.toggle_pause",
+      "action": "engine.ui.menu.toggle_pause",
       "device": "GamepadButton",
       "code": 0,
       "name": "Start",
@@ -642,20 +631,6 @@
       "device": "GamepadButton",
       "code": 0,
       "name": "DPadRight",
-      "phase": "Pressed"
-    },
-    {
-      "action": "engine.ui.menu.toggle_pause",
-      "device": "Keyboard",
-      "code": 114,
-      "name": null,
-      "phase": "Pressed"
-    },
-    {
-      "action": "engine.ui.menu.toggle_pause",
-      "device": "GamepadButton",
-      "code": 0,
-      "name": "Start",
       "phase": "Pressed"
     }
   ],

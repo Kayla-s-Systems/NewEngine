@@ -11,6 +11,9 @@ pub use newengine_assets_api::{
     wait_ready, AssetAccess, AssetDecodeRequest, AssetEntryDependency, AssetEntryManifest,
     AssetError, AssetErrorKind, AssetFileManifest, AssetFileTypeDescriptor,
     AssetFileTypeManifest, AssetFileTypeProbeRequest, AssetFileTypeProbeResult,
+    AssetBrowserEntryMutationRequest, AssetBrowserListRequest, AssetBrowserListResponse,
+    AssetBrowserLocation, AssetBrowserMutationResponse, AssetBrowserNode,
+    AssetBrowserOpenRequest, AssetBrowserRebuildRequest, AssetBrowserSnapshotResponse,
     AssetFileTypeRegisterRequest, AssetGatewayRoute, AssetReference, AssetResult, require_asset_reference_extension,
     definitions_method, AssetService, AssetState, Rgba8TextureAsset, RuntimeTextureAsset,
     RuntimeTextureFormat, RuntimeTextureMip, RuntimeTextureMipLayout, WaitReadyError,
@@ -18,4 +21,6 @@ pub use newengine_assets_api::{
     ENGINE_ASSET_SERVICE_ID, ENGINE_ASSETS_DEFINITIONS_SERVICE_ID, ENGINE_ASSETS_MATERIALS_SERVICE_ID,
     ENGINE_ASSETS_MODELS_SERVICE_ID, ENGINE_ASSETS_TEXTURES_SERVICE_ID, ENGINE_ASSETS_UI_SERVICE_ID,
     ASSETS_UI_SERVICE_ID, ASSETS_UI_BACKEND_CAPABILITY_ID, ASSETS_UI_RUNTIME_CONTRACT, ASSETS_UI_SERVICE_METHODS, assets_ui_method,
+    ASSET_BROWSER_BACKEND_CAPABILITY_ID, ASSET_BROWSER_RUNTIME_CONTRACT, ASSET_BROWSER_SERVICE_ID,
+    ASSET_BROWSER_SERVICE_METHODS, ENGINE_ASSETS_BROWSER_SERVICE_ID, asset_browser_method,
 };

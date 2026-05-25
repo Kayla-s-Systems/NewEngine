@@ -16,39 +16,45 @@ pub(crate) fn write(args: fmt::Arguments<'_>) {
     let pid = std::process::id();
     let line = format!("[{unix_ms}] [pid={pid}] [seq={seq}] {args}\n");
 
+    let mut wrote = false;
     for path in candidate_paths() {
         if let Some(parent) = path.parent() {
             if create_dir_all(parent).is_err() {
                 continue;
             }
         }
+
         match OpenOptions::new().create(true).append(true).open(&path) {
             Ok(mut f) => {
                 let _ = f.write_all(line.as_bytes());
                 let _ = f.flush();
-                return;
+                wrote = true;
             }
             Err(_) => continue,
         }
     }
 
-    eprint!("{line}");
+    if !wrote {
+        eprint!("{line}");
+    }
 }
 
 fn candidate_paths() -> Vec<PathBuf> {
     let mut paths = Vec::new();
 
-    if std::env::var_os("NEWENGINE_CACHE_FILES_READY").is_some() {
-        if let Some(cache) = std::env::var_os("NEWENGINE_CACHE_FILES")
-            .or_else(|| std::env::var_os("CACHE_FILES"))
-            .filter(|v| !v.as_os_str().is_empty())
-        {
-            paths.push(PathBuf::from(cache).join("logs").join("platform-host-early.log"));
-        }
+    if let Some(path) = std::env::var_os("NEWENGINE_PLATFORM_EARLY_LOG") {
+        paths.push(PathBuf::from(path));
+    }
+
+    if let Some(cache) = std::env::var_os("NEWENGINE_CACHE_FILES")
+        .or_else(|| std::env::var_os("CACHE_FILES"))
+        .filter(|v| !v.as_os_str().is_empty())
+    {
+        paths.push(PathBuf::from(cache).join("logs").join("platform-host-early.log"));
     }
 
     paths.push(find_neocore2_root().join("cache").join("logs").join("platform-host-early.log"));
-    paths
+    dedup_paths(paths)
 }
 
 fn find_neocore2_root() -> PathBuf {
@@ -77,6 +83,16 @@ fn find_neocore2_root() -> PathBuf {
 
     std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."))
 }
+fn dedup_paths(paths: Vec<PathBuf>) -> Vec<PathBuf> {
+    let mut out = Vec::new();
+    for path in paths {
+        if !out.iter().any(|p: &PathBuf| p == &path) {
+            out.push(path);
+        }
+    }
+    out
+}
+
 #[macro_export]
 macro_rules! platform_early_log {
     ($($arg:tt)*) => {{

@@ -4,24 +4,23 @@ use std::path::Path;
 
 use libloading::Library;
 use newengine_plugin_api::{
-    PluginBootstrapPhase, PluginDescriptor, PluginInfo,
-    PluginModuleDyn, PluginRootV1Ref, PluginSignatureV1,
+    PluginBootstrapPhase, PluginDescriptor, PluginInfo, PluginRootV1Ref, PluginSignatureV1,
 };
 
 use super::graph::ScannedDynlibKind;
-use crate::manager::adapter::{ModuleAdapterAny, V1Adapter, V2Adapter, V3Adapter};
-use crate::manager::ui_assets::{extract_plugin_icon, PluginIconData};
 
 pub(super) const PLATFORM_RUNTIME_SYMBOL: &[u8] = b"newengine_platform_runtime_run_v1";
 pub(super) const PLUGIN_SIGNATURE_SYMBOL: &[u8] = b"newengine_plugin_signature_v1";
-pub(super) const PLUGIN_ROOT_SYMBOL: &[u8] = b"export_plugin_root";
+pub(super) const PLUGIN_ROOT_SYMBOL: &[u8] = newengine_plugin_api::PLUGIN_ROOT_SYMBOL_BYTES;
+pub(super) const LEGACY_PLUGIN_ROOT_SYMBOL: &[u8] = newengine_plugin_api::LEGACY_PLUGIN_ROOT_SYMBOL_BYTES;
 
 #[derive(Debug, Clone, Default)]
 pub(super) struct ScanPluginProbe {
     pub(super) signature: Option<PluginSignatureV1>,
     pub(super) info: Option<PluginInfo>,
     pub(super) descriptor: Option<PluginDescriptor>,
-    pub(super) icon_small: Option<PluginIconData>,
+    pub(super) has_canonical_root: bool,
+    pub(super) has_legacy_root: bool,
 }
 
 pub(super) fn probe_plugin_metadata(lib: &Library) -> Result<ScanPluginProbe, String> {
@@ -33,16 +32,21 @@ pub(super) fn probe_plugin_metadata(lib: &Library) -> Result<ScanPluginProbe, St
         out.signature = Some(unsafe { sym() });
     }
 
-    if let Ok(sym) =
-        unsafe { lib.get::<unsafe extern "C" fn() -> PluginRootV1Ref>(PLUGIN_ROOT_SYMBOL) }
-    {
-        let root = unsafe { sym() };
-        let (_module, info, descriptor, icon_small) = select_abi_for_scan(root);
-        out.info = Some(info);
-        out.descriptor = descriptor;
-        out.icon_small = icon_small;
+    out.has_canonical_root = unsafe { lib.get::<unsafe extern "C" fn() -> PluginRootV1Ref>(PLUGIN_ROOT_SYMBOL) }.is_ok();
+    out.has_legacy_root = unsafe { lib.get::<unsafe extern "C" fn() -> PluginRootV1Ref>(LEGACY_PLUGIN_ROOT_SYMBOL) }.is_ok();
+
+    if out.has_legacy_root && !out.has_canonical_root {
+        log::warn!(
+            "plugins: stale plugin ABI detected: found legacy root symbol '{}' but missing canonical root symbol '{}'; rebuild the plugin",
+            newengine_plugin_api::LEGACY_PLUGIN_ROOT_SYMBOL_NAME,
+            newengine_plugin_api::PLUGIN_ROOT_SYMBOL_NAME,
+        );
     }
 
+    // Discovery is intentionally signature-only. Calling root.create() or
+    // root.ui_assets_v1() during scan can execute stale ABI prefix callbacks
+    // from DLLs compiled before the canonical PluginModule cleanup. The loader
+    // performs the full canonical-root validation only after selection.
     Ok(out)
 }
 
@@ -98,6 +102,10 @@ pub(super) fn platform_runtime_identity_from_probe(
 }
 
 pub(super) fn build_scanned_plugin_kind(probe: &ScanPluginProbe) -> Option<ScannedDynlibKind> {
+    if probe.has_legacy_root && !probe.has_canonical_root {
+        return None;
+    }
+
     if probe.signature.is_none() && probe.info.is_none() && probe.descriptor.is_none() {
         return None;
     }
@@ -193,46 +201,3 @@ fn normalize_version_suffix(raw: &str) -> String {
         .to_owned()
 }
 
-fn select_abi_for_scan(
-    root: PluginRootV1Ref,
-) -> (
-    ModuleAdapterAny,
-    PluginInfo,
-    Option<PluginDescriptor>,
-    Option<PluginIconData>,
-) {
-    let icon_small = extract_plugin_icon(root.clone());
-    if let Some(create_v3) = root.create_v3() {
-        let m3 = create_v3();
-        let d = m3.descriptor_v3();
-        let info = PluginInfo {
-            id: d.id.clone(),
-            name: d.name.clone(),
-            version: d.version.clone(),
-        };
-        (
-            ModuleAdapterAny::V3(V3Adapter { module: m3 }),
-            info,
-            Some(d),
-            icon_small,
-        )
-    } else if let Some(create_v2) = root.create_v2() {
-        let m2 = create_v2();
-        let d = m2.descriptor();
-        let info = PluginInfo {
-            id: d.id.clone(),
-            name: d.name.clone(),
-            version: d.version.clone(),
-        };
-        (
-            ModuleAdapterAny::V2(V2Adapter { module: m2 }),
-            info,
-            Some(d),
-            icon_small,
-        )
-    } else {
-        let m1: PluginModuleDyn<'static> = root.create()();
-        let info = m1.info();
-        (ModuleAdapterAny::V1(V1Adapter { module: m1 }), info, None, icon_small)
-    }
-}

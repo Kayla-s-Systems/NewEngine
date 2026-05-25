@@ -92,16 +92,4 @@ impl RuntimeRenderController {
 
         Err(error)
     }
-
-    #[inline]
-    pub(crate) fn record_render_backend_result(
-        &mut self,
-        phase: &'static str,
-        result: EngineResult<()>,
-    ) -> EngineResult<()> {
-        match result {
-            Ok(()) => Ok(()),
-            Err(error) => self.record_render_backend_error(phase, error),
-        }
-    }
 }

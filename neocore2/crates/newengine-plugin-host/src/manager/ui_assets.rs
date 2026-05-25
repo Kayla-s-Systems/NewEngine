@@ -9,6 +9,7 @@ pub(crate) struct PluginIconData {
 }
 
 const MAX_PLUGIN_ICON_BYTES: usize = 512 * 1024;
+const MAX_PLUGIN_ICON_MEDIA_TYPE_BYTES: usize = 64;
 const PNG_MEDIA_TYPE: &str = "image/png";
 
 #[inline]
@@ -19,13 +20,17 @@ pub(crate) fn extract_plugin_icon(root: PluginRootV1Ref) -> Option<PluginIconDat
 }
 
 fn normalize_icon(icon: PluginBinaryAssetV1) -> Option<PluginIconData> {
-    let media_type = icon.media_type.to_string();
-    if !media_type.eq_ignore_ascii_case(PNG_MEDIA_TYPE) {
+    let bytes = icon.bytes.as_slice();
+    if bytes.is_empty() || bytes.len() > MAX_PLUGIN_ICON_BYTES {
         return None;
     }
 
-    let bytes = icon.bytes.as_slice();
-    if bytes.is_empty() || bytes.len() > MAX_PLUGIN_ICON_BYTES {
+    if icon.media_type.len() == 0 || icon.media_type.len() > MAX_PLUGIN_ICON_MEDIA_TYPE_BYTES {
+        return None;
+    }
+
+    let media_type = icon.media_type.to_string();
+    if !media_type.eq_ignore_ascii_case(PNG_MEDIA_TYPE) {
         return None;
     }
 

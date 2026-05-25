@@ -16,37 +16,20 @@ pub mod prelude {
 }
 
 /// Export a plugin root from explicitly declared create callbacks.
-///
-/// This is a thin wrapper over the central `newengine-plugin-api` export macro.
-/// It always provides empty editor extensions unless a newer overload is added.
 #[macro_export]
 macro_rules! export_newengine_plugin_root {
-    ($create_v1:path, $create_v2:path, $create_v3:path) => {
-        $crate::plugin_api::export_plugin_root!($create_v1, $create_v2, $create_v3);
+    ($create:path) => {
+        $crate::plugin_api::export_plugin_root!($create);
     };
-    ($create_v1:path, $create_v2:path, $create_v3:path, $ui_assets_v1:path) => {
-        $crate::plugin_api::export_plugin_root!($create_v1, $create_v2, $create_v3, $ui_assets_v1);
+    ($create:path, $ui_assets_v1:path) => {
+        $crate::plugin_api::export_plugin_root!($create, $ui_assets_v1);
     };
-    ($create_v1:path, $create_v2:path, $create_v3:path, $ui_assets_v1:path, $editor_extensions_v1:path) => {
-        $crate::plugin_api::export_plugin_root!(
-            $create_v1,
-            $create_v2,
-            $create_v3,
-            $ui_assets_v1,
-            $editor_extensions_v1
-        );
+    ($create:path, $ui_assets_v1:path, $editor_extensions_v1:path) => {
+        $crate::plugin_api::export_plugin_root!($create, $ui_assets_v1, $editor_extensions_v1);
     };
 }
 
-/// Export the common case where one module type implements V1, V2 and V3.
-///
-/// Example:
-/// ```ignore
-/// use newengine_plugin_kit::prelude::*;
-/// use crate::module::AssetsPlugin;
-/// // Icons should be exposed as AssetManager logical paths, not embedded binary payloads.
-/// export_newengine_plugin!(module = AssetsPlugin::default(), icon_png = PLUGIN_ICON_PNG);
-/// ```
+/// Export the common case where one module type implements `PluginModule`.
 #[macro_export]
 macro_rules! export_newengine_plugin {
     (module = $module:expr $(, icon_png = $icon:path)? $(,)?) => {
@@ -57,30 +40,11 @@ macro_rules! export_newengine_plugin {
             )
         }
 
-        extern "C" fn create_module_v2() -> $crate::plugin_api::PluginModuleV2Dyn<'static> {
-            $crate::plugin_api::PluginModuleV2_TO::from_value(
-                $module,
-                $crate::abi_stable::sabi_trait::TD_Opaque,
-            )
-        }
-
-        extern "C" fn create_module_v3() -> $crate::plugin_api::PluginModuleV3Dyn<'static> {
-            $crate::plugin_api::PluginModuleV3_TO::from_value(
-                $module,
-                $crate::abi_stable::sabi_trait::TD_Opaque,
-            )
-        }
-
         extern "C" fn ui_assets_v1() -> $crate::plugin_api::PluginUiAssetsV1 {
             $crate::export_newengine_plugin!(@ui_assets $($icon)?)
         }
 
-        $crate::plugin_api::export_plugin_root!(
-            create_module,
-            create_module_v2,
-            create_module_v3,
-            ui_assets_v1
-        );
+        $crate::plugin_api::export_plugin_root!(create_module, ui_assets_v1);
     };
 
     (@ui_assets $icon:path) => {

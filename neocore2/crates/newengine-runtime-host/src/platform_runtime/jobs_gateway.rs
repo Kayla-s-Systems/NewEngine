@@ -51,10 +51,10 @@ fn publish_task_event(events: &newengine_core::EventHub, event: EngineTaskEvent)
         "engine-jobs-gateway",
     );
     if let Ok(payload) = serde_json::to_vec(&event) {
-        publish_event(newengine_jobs_api::ENGINE_TASK_EVENT_TOPIC_V1, &payload);
+        let _ = publish_event(newengine_jobs_api::ENGINE_TASK_EVENT_TOPIC_V1, &payload);
     }
     if let Ok(payload) = serde_json::to_vec(&job_event) {
-        publish_event(newengine_jobs_api::ENGINE_JOB_EVENT_TOPIC_V1, &payload);
+        let _ = publish_event(newengine_jobs_api::ENGINE_JOB_EVENT_TOPIC_V1, &payload);
     }
     let _ = events.publish(event);
     let _ = events.publish(job_event);
@@ -121,7 +121,7 @@ fn service(state: JobsGatewayState) -> newengine_plugin_api::ServiceV1Dyn<'stati
             let event = request.control_event(EngineTaskControlAction::Cancel);
             let _ = state.events.publish(event.clone());
             if let Ok(payload) = serde_json::to_vec(&event) {
-                publish_event(newengine_jobs_api::ENGINE_TASK_CONTROL_TOPIC_V1, &payload);
+                let _ = publish_event(newengine_jobs_api::ENGINE_TASK_CONTROL_TOPIC_V1, &payload);
             }
             JobControlResponseV1 { job_id: request.job_id, action: "cancel".to_owned(), accepted }
         })
@@ -130,7 +130,7 @@ fn service(state: JobsGatewayState) -> newengine_plugin_api::ServiceV1Dyn<'stati
             let event = request.control_event(EngineTaskControlAction::Pause);
             let _ = state.events.publish(event.clone());
             if let Ok(payload) = serde_json::to_vec(&event) {
-                publish_event(newengine_jobs_api::ENGINE_TASK_CONTROL_TOPIC_V1, &payload);
+                let _ = publish_event(newengine_jobs_api::ENGINE_TASK_CONTROL_TOPIC_V1, &payload);
             }
             JobControlResponseV1 { job_id: request.job_id, action: "pause".to_owned(), accepted }
         })

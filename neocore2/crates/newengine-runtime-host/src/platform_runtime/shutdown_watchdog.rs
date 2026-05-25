@@ -139,10 +139,10 @@ fn publish_watchdog_event(
     }
     let job_event = EngineJobEventV1::new(event.clone(), JobExecutorKind::RuntimeWatchdog, "shutdown-watchdog");
     if let Ok(bytes) = serde_json::to_vec(&event) {
-        newengine_plugin_host::host_context::publish_event(newengine_jobs_api::ENGINE_TASK_EVENT_TOPIC_V1, &bytes);
+        let _ = newengine_plugin_host::host_context::publish_event(newengine_jobs_api::ENGINE_TASK_EVENT_TOPIC_V1, &bytes);
     }
     if let Ok(bytes) = serde_json::to_vec(&job_event) {
-        newengine_plugin_host::host_context::publish_event(newengine_jobs_api::ENGINE_JOB_EVENT_TOPIC_V1, &bytes);
+        let _ = newengine_plugin_host::host_context::publish_event(newengine_jobs_api::ENGINE_JOB_EVENT_TOPIC_V1, &bytes);
     }
 }
 

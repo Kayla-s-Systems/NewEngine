@@ -38,6 +38,12 @@ DENY = [
     (re.compile(r"#\[deprecated"), "deprecated attribute is forbidden"),
     (re.compile(r"#\[allow\(deprecated\)\]"), "allow(deprecated) is forbidden"),
     (re.compile(r"deprecated compatibility adapter", re.IGNORECASE), "deprecated compatibility adapter is forbidden"),
+    (re.compile(r"\bPluginModuleV2\b"), "PluginModuleV2 is forbidden; use canonical PluginModule"),
+    (re.compile(r"\bPluginModuleV3\b"), "PluginModuleV3 is forbidden; use canonical PluginModule"),
+    (re.compile(r"\bcreate_module_v2\b"), "create_module_v2 is forbidden; export create_module only"),
+    (re.compile(r"\bcreate_module_v3\b"), "create_module_v3 is forbidden; export create_module only"),
+    (re.compile(r"\bcreate_v2\b"), "create_v2 root callback is forbidden; use create"),
+    (re.compile(r"\bcreate_v3\b"), "create_v3 root callback is forbidden; use create"),
     (re.compile(r"\.neytd@"), ".neytd authored/runtime selector is forbidden"),
     (re.compile(r"newengine-codec-neytd"), "retired .neytd codec worker is forbidden"),
     (re.compile(r"NETD/top-level-compat"), "NETD top-level compatibility input is forbidden"),
@@ -73,6 +79,27 @@ def is_allowed_env_var_read(rel: pathlib.Path) -> bool:
     return any(rel == prefix or rel.is_relative_to(prefix) for prefix in ALLOW_ENV_PREFIXES)
 
 
+def is_allowed_v2_line(line: str) -> bool:
+    upper = line.upper()
+    return (
+        "WIRE_V2" in upper
+        or "SCHEMA_V2" in upper
+        or "VERSION_" in upper
+        or "TEXTUREDICTIONARYPAYLOADV2" in upper
+        or "V2" in upper and ("CONTENT_SCHEMA" in upper or "FORMAT_VERSION" in upper)
+    )
+
+
+def has_forbidden_method_v2(line: str) -> bool:
+    if "_v2" not in line:
+        return False
+    if is_allowed_v2_line(line):
+        return False
+    # Method identifiers usually appear in constants or string literals. Schema/wire
+    # versions stay allowed above; service method suffixes do not.
+    return True
+
+
 def main() -> int:
     violations: list[str] = []
     for path in iter_source_files():
@@ -82,6 +109,8 @@ def main() -> int:
             for pattern, message in DENY:
                 if pattern.search(line):
                     violations.append(f"{rel}:{line_no}: {message}: {line.strip()}")
+            if has_forbidden_method_v2(line):
+                violations.append(f"{rel}:{line_no}: _v2 service method identifiers are forbidden outside schema/wire constants: {line.strip()}")
             if ("std::env::var(" in line or "std::env::var_os(" in line) and not is_allowed_env_var_read(rel):
                 violations.append(f"{rel}:{line_no}: std::env reads are allowed only in bootstrap/config/build/tool-launcher layers: {line.strip()}")
 

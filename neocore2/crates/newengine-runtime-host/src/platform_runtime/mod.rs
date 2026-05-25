@@ -22,4 +22,6 @@ pub use config::{
 };
 pub use discovery::detect_platform_runtime_path;
 pub use runtime_host::HostPlatformRuntime;
+pub(crate) use jobs_gateway::register_jobs_gateway_service_best_effort;
+pub(crate) use loading_gateway::register_loading_gateway_service_best_effort;
 pub use types::ResolvedPlatformRuntimeConfig;

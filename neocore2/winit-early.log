@@ -1,0 +1,109 @@
+[1779685419810] [pid=2612] [seq=1] ffi.entry newengine_platform_runtime_run_v1 title='KAYLA FPS: Procedural Highlands' size=1600x900 user_data=0x783c3feab0
+[1779685419811] [pid=2612] [seq=2] runtime.enter title='KAYLA FPS: Procedural Highlands' size=1600x900 user_data=0x783c3feab0
+[1779685419811] [pid=2612] [seq=3] runtime.event_loop.new.begin
+[1779685419821] [pid=2612] [seq=4] runtime.event_loop.new.ok
+[1779685419822] [pid=2612] [seq=5] runtime.app.new.begin
+[1779685419822] [pid=2612] [seq=6] app.new constructing title='KAYLA FPS: Procedural Highlands' size=1600x900 user_data=0x783c3feab0
+[1779685419822] [pid=2612] [seq=7] loading.status sink subscribed topics='engine.loading.status.v1','engine.task.event.v1'
+[1779685419822] [pid=2612] [seq=8] runtime.app.new.ok
+[1779685419823] [pid=2612] [seq=9] runtime.run_app.begin
+[1779685419823] [pid=2612] [seq=10] handler.resumed.begin
+[1779685419823] [pid=2612] [seq=11] handler.resumed.device_events.always
+[1779685419823] [pid=2612] [seq=12] resume.begin
+[1779685419823] [pid=2612] [seq=13] resume.build_window_attributes.begin
+[1779685419824] [pid=2612] [seq=14] resume.build_window_attributes.ok
+[1779685419824] [pid=2612] [seq=15] resume.create_window.begin
+[1779685419837] [pid=2612] [seq=16] resume.create_window.ok
+[1779685419838] [pid=2612] [seq=17] resume.native_handles.begin
+[1779685419838] [pid=2612] [seq=18] resume.native_handles.ok backend=Win32 hwnd=0x10014e display=0x7ff802c10000 size=1600x900 ppp=1.000
+[1779685419855] [pid=2612] [seq=19] resume.initial_focus focused=true
+[1779685419855] [pid=2612] [seq=20] resume.host.on_window_ready.begin user_data=0x783c3feab0
+[1779685419857] [pid=2612] [seq=21] resume.host.on_window_ready.returned
+[1779685419857] [pid=2612] [seq=22] resume.host.on_window_focused.initial.begin user_data=0x783c3feab0 focused=true
+[1779685419857] [pid=2612] [seq=23] resume.host.on_window_focused.initial.returned
+[1779685419857] [pid=2612] [seq=24] resume.loading_compositor.owns_initial_present
+[1779685419858] [pid=2612] [seq=25] resume.end
+[1779685419858] [pid=2612] [seq=26] handler.resumed.end
+[1779685419858] [pid=2612] [seq=27] host.on_window_resized.begin user_data=0x783c3feab0 size=1600x900 ppp=1.000
+[1779685419858] [pid=2612] [seq=28] host.on_window_resized.returned
+[1779685419858] [pid=2612] [seq=29] host.on_window_focused.begin user_data=0x783c3feab0 focused=true
+[1779685419859] [pid=2612] [seq=30] host.on_window_focused.returned
+[1779685419859] [pid=2612] [seq=31] host.on_window_resized.begin user_data=0x783c3feab0 size=1600x900 ppp=1.000
+[1779685419859] [pid=2612] [seq=32] host.on_window_resized.returned
+[1779685419859] [pid=2612] [seq=33] handler.about_to_wait loading_active=true
+[1779685419860] [pid=2612] [seq=34] frame.begin shutting_down=false loading_active=true
+[1779685419860] [pid=2612] [seq=35] host.step.loading_inline.begin user_data=0x783c3feab0 dt=0.002260
+[1779685419861] [pid=2612] [seq=36] host.step.ok source='loading-inline' loading_active=true exit_requested=false
+[1779685419861] [pid=2612] [seq=37] frame.end loading_active=true
+[1779685419864] [pid=2612] [seq=38] handler.about_to_wait loading_active=true
+[1779685419865] [pid=2612] [seq=39] frame.begin shutting_down=false loading_active=true
+[1779685419865] [pid=2612] [seq=40] host.step.loading_inline.begin user_data=0x783c3feab0 dt=0.005092
+[1779685420561] [pid=2612] [seq=41] host.step.ok source='loading-inline' loading_active=true exit_requested=false
+[1779685420562] [pid=2612] [seq=42] frame.end loading_active=true
+[1779685420563] [pid=2612] [seq=43] handler.about_to_wait loading_active=true
+[1779685420563] [pid=2612] [seq=44] frame.begin shutting_down=false loading_active=true
+[1779685420564] [pid=2612] [seq=45] host.step.loading_inline.begin user_data=0x783c3feab0 dt=0.698708
+[1779685420576] [pid=2612] [seq=46] host.step.ok source='loading-inline' loading_active=true exit_requested=false
+[1779685420576] [pid=2612] [seq=47] frame.end loading_active=true
+[1779685420593] [pid=2612] [seq=48] handler.about_to_wait loading_active=true
+[1779685420593] [pid=2612] [seq=49] frame.begin shutting_down=false loading_active=true
+[1779685420593] [pid=2612] [seq=50] host.step.loading_inline.begin user_data=0x783c3feab0 dt=0.029694
+[1779685420596] [pid=2612] [seq=51] host.step.ok source='loading-inline' loading_active=true exit_requested=false
+[1779685420597] [pid=2612] [seq=52] frame.end loading_active=true
+[1779685420614] [pid=2612] [seq=53] handler.about_to_wait loading_active=true
+[1779685420614] [pid=2612] [seq=54] frame.begin shutting_down=false loading_active=true
+[1779685420615] [pid=2612] [seq=55] host.step.loading_inline.begin user_data=0x783c3feab0 dt=0.021261
+[1779685420625] [pid=2612] [seq=56] host.step.ok source='loading-inline' loading_active=true exit_requested=false
+[1779685420625] [pid=2612] [seq=57] frame.end loading_active=true
+[1779685420642] [pid=2612] [seq=58] handler.about_to_wait loading_active=true
+[1779685420642] [pid=2612] [seq=59] frame.begin shutting_down=false loading_active=true
+[1779685420642] [pid=2612] [seq=60] host.step.loading_inline.begin user_data=0x783c3feab0 dt=0.027705
+[1779685420654] [pid=2612] [seq=61] host.step.ok source='loading-inline' loading_active=true exit_requested=false
+[1779685420654] [pid=2612] [seq=62] frame.end loading_active=true
+[1779685420671] [pid=2612] [seq=63] handler.about_to_wait loading_active=true
+[1779685420671] [pid=2612] [seq=64] frame.begin shutting_down=false loading_active=true
+[1779685420671] [pid=2612] [seq=65] host.step.loading_inline.begin user_data=0x783c3feab0 dt=0.029095
+[1779685420701] [pid=2612] [seq=66] host.step.ok source='loading-inline' loading_active=true exit_requested=false
+[1779685420701] [pid=2612] [seq=67] frame.end loading_active=true
+[1779685420718] [pid=2612] [seq=68] handler.about_to_wait loading_active=true
+[1779685420718] [pid=2612] [seq=69] frame.begin shutting_down=false loading_active=true
+[1779685420718] [pid=2612] [seq=70] host.step.loading_inline.begin user_data=0x783c3feab0 dt=0.046897
+[1779685420723] [pid=2612] [seq=71] host.step.ok source='loading-inline' loading_active=true exit_requested=false
+[1779685420724] [pid=2612] [seq=72] frame.end loading_active=true
+[1779685420740] [pid=2612] [seq=73] handler.about_to_wait loading_active=true
+[1779685420740] [pid=2612] [seq=74] frame.begin shutting_down=false loading_active=true
+[1779685420741] [pid=2612] [seq=75] host.step.loading_inline.begin user_data=0x783c3feab0 dt=0.022556
+[1779685420766] [pid=2612] [seq=76] host.step.ok source='loading-inline' loading_active=true exit_requested=false
+[1779685420767] [pid=2612] [seq=77] frame.end loading_active=true
+[1779685420784] [pid=2612] [seq=78] handler.about_to_wait loading_active=true
+[1779685420784] [pid=2612] [seq=79] frame.begin shutting_down=false loading_active=true
+[1779685420784] [pid=2612] [seq=80] host.step.loading_inline.begin user_data=0x783c3feab0 dt=0.043377
+[1779685420797] [pid=2612] [seq=81] host.step.ok source='loading-inline' loading_active=true exit_requested=false
+[1779685420797] [pid=2612] [seq=82] frame.end loading_active=true
+[1779685420814] [pid=2612] [seq=83] handler.about_to_wait loading_active=true
+[1779685420814] [pid=2612] [seq=84] frame.begin shutting_down=false loading_active=true
+[1779685420815] [pid=2612] [seq=85] host.step.loading_inline.begin user_data=0x783c3feab0 dt=0.030465
+[1779685420819] [pid=2612] [seq=86] host.step.ok source='loading-inline' loading_active=true exit_requested=false
+[1779685420820] [pid=2612] [seq=87] frame.end loading_active=true
+[1779685420836] [pid=2612] [seq=88] handler.about_to_wait loading_active=true
+[1779685420836] [pid=2612] [seq=89] frame.begin shutting_down=false loading_active=true
+[1779685420837] [pid=2612] [seq=90] host.step.loading_inline.begin user_data=0x783c3feab0 dt=0.021911
+[1779685420841] [pid=2612] [seq=91] host.step.ok source='loading-inline' loading_active=true exit_requested=false
+[1779685420842] [pid=2612] [seq=92] frame.end loading_active=true
+[1779685420858] [pid=2612] [seq=93] handler.about_to_wait loading_active=true
+[1779685420859] [pid=2612] [seq=94] frame.begin shutting_down=false loading_active=true
+[1779685420859] [pid=2612] [seq=95] host.step.loading_inline.begin user_data=0x783c3feab0 dt=0.022559
+[1779685432354] [pid=2612] [seq=96] host.step.ok source='loading-inline' loading_active=true exit_requested=false
+[1779685432355] [pid=2612] [seq=97] frame.end loading_active=true
+[1779685432356] [pid=2612] [seq=98] host.on_window_resized.begin user_data=0x783c3feab0 size=1600x900 ppp=1.000
+[1779685432358] [pid=2612] [seq=99] host.on_window_resized.returned
+[1779685432361] [pid=2612] [seq=100] host.on_window_focused.begin user_data=0x783c3feab0 focused=false
+[1779685432363] [pid=2612] [seq=101] host.on_window_focused.returned
+[1779685432365] [pid=2612] [seq=102] handler.about_to_wait loading_active=true
+[1779685432366] [pid=2612] [seq=103] frame.begin shutting_down=false loading_active=true
+[1779685432366] [pid=2612] [seq=104] host.step.loading_inline.begin user_data=0x783c3feab0 dt=11.506742
+[1779685432373] [pid=2612] [seq=105] host.step.ok source='loading-inline' loading_active=true exit_requested=false
+[1779685432373] [pid=2612] [seq=106] frame.end loading_active=true
+[1779685432374] [pid=2612] [seq=107] handler.about_to_wait loading_active=true
+[1779685432374] [pid=2612] [seq=108] frame.begin shutting_down=false loading_active=true
+[1779685432375] [pid=2612] [seq=109] host.step.loading_inline.begin user_data=0x783c3feab0 dt=0.008864

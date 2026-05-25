@@ -104,13 +104,13 @@ impl RuntimeRenderController {
                             "simulation-job-batch",
                         );
                         if let Ok(payload) = serde_json::to_vec(&event) {
-                            newengine_plugin_host::host_context::publish_event(
+                            let _ = newengine_plugin_host::host_context::publish_event(
                                 newengine_jobs_api::ENGINE_TASK_EVENT_TOPIC_V1,
                                 &payload,
                             );
                         }
                         if let Ok(payload) = serde_json::to_vec(&job_event) {
-                            newengine_plugin_host::host_context::publish_event(
+                            let _ = newengine_plugin_host::host_context::publish_event(
                                 newengine_jobs_api::ENGINE_JOB_EVENT_TOPIC_V1,
                                 &payload,
                             );

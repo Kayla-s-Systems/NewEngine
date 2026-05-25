@@ -470,34 +470,14 @@ pub fn resolve_platform_runtime_config(
     };
 
     let root = unsafe { root_sym() };
-    let Some(create_v3) = root.create_v3() else {
-        log::info!(
-            "platform runtime: plugin metadata ABI V3 not available; using startup window config defaults"
-        );
-        let plugin_version = platform_runtime_version_from_path(runtime_path);
-        let descriptor = synthesize_platform_descriptor(
-            PLATFORM_PLUGIN_ID,
-            "NewEngine Platform Runtime",
-            &plugin_version,
-        );
-        return Ok(ResolvedPlatformRuntimeConfig {
-            plugin_id: PLATFORM_PLUGIN_ID.to_owned(),
-            plugin_name: "NewEngine Platform Runtime".to_owned(),
-            plugin_version,
-            descriptor,
-            config: startup_defaults,
-            icon_path: startup.window_icon_path.clone(),
-        });
-    };
-
-    let module = create_v3();
-    let descriptor = ensure_platform_runtime_capabilities(module.descriptor_v3());
+    let module = root.create()();
+    let descriptor = ensure_platform_runtime_capabilities(module.descriptor());
     let plugin_id = descriptor.id.to_string();
     let plugin_name = descriptor.name.to_string();
     let plugin_version = descriptor.version.to_string();
 
     let defaults = module
-        .config_defaults_v1()
+        .config_defaults()
         .into_result()
         .map_err(|e| EngineError::other(format!(
             "platform config defaults failed: {e}"
@@ -513,7 +493,7 @@ pub fn resolve_platform_runtime_config(
     }
 
     let applied = module
-        .config_apply_patches_v1(&defaults, patches)
+        .config_apply_patches(&defaults, patches)
         .into_result()
         .map_err(|e| EngineError::other(format!(
             "platform config apply failed: {e}"

@@ -1,6 +1,7 @@
 #![forbid(unsafe_op_in_unsafe_fn)]
 
 pub mod app_launcher;
+pub(crate) mod headless_cli;
 pub mod asset_bootstrap;
 pub mod ecs_runtime;
 pub mod entity_runtime;

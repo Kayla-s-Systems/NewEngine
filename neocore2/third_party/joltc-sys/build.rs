@@ -5,12 +5,15 @@ use std::path::{Path, PathBuf};
 use anyhow::Context;
 
 fn main() {
+    println!("cargo:rerun-if-changed=src/bindings_static.rs");
+    println!("cargo:rerun-if-env-changed=NEWENGINE_JOLTC_BINDGEN");
+    println!("cargo:rerun-if-env-changed=JOLTC_SYS_BINDGEN");
     let flags = build_flags();
     let target = BuildTarget::from_env();
 
     build_joltc(&target);
-    link();
-    generate_bindings(&target, &flags).unwrap();
+    link(&target);
+    emit_bindings(&target, &flags).unwrap();
 }
 
 fn build_joltc(target: &BuildTarget) {
@@ -54,9 +57,33 @@ fn build_joltc(target: &BuildTarget) {
     println!("cargo:rustc-link-search=native={}", dst.display());
 }
 
-fn link() {
-    println!("cargo:rustc-link-lib=Jolt");
-    println!("cargo:rustc-link-lib=joltc");
+fn link(target: &BuildTarget) {
+    // GNU/MinGW resolves static archives left-to-right. `joltc` references
+    // symbols from `Jolt`, and both use the C++ runtime. Emitting `Jolt`
+    // before `joltc` leaves the linker with unresolved JPH::* / operator new /
+    // __gxx_personality_seh0 symbols when the final artifact is a Rust cdylib.
+    println!("cargo:rustc-link-lib=static=joltc");
+    println!("cargo:rustc-link-lib=static=Jolt");
+
+    match target.toolchain {
+        WindowsToolchain::Gnu => {
+            // Rust's windows-gnu linker invocation does not automatically add
+            // the C++ standard library for C++ static archives pulled in by a
+            // -sys crate. Keep this explicit and ordered after Jolt.
+            println!("cargo:rustc-link-lib=dylib=stdc++");
+            // MSYS2/MinGW C++ exceptions use the SEH personality runtime. Some
+            // toolchains satisfy this through libgcc_eh, others through the
+            // libgcc_s_seh import library. Emitting it explicitly makes the
+            // vendored JoltC link deterministic for x86_64-pc-windows-gnu.
+            println!("cargo:rustc-link-lib=dylib=gcc_s_seh");
+        }
+        WindowsToolchain::Other => {
+            // Non-MSVC Unix-like targets also need the C++ runtime when linking
+            // the static JoltC/Jolt archives into Rust artifacts.
+            println!("cargo:rustc-link-lib=dylib=stdc++");
+        }
+        WindowsToolchain::Msvc => {}
+    }
 }
 
 fn build_flags() -> Vec<(&'static str, &'static str)> {
@@ -75,6 +102,78 @@ fn build_flags() -> Vec<(&'static str, &'static str)> {
     }
 
     flags
+}
+
+fn emit_bindings(
+    target: &BuildTarget,
+    flags: &[(&'static str, &'static str)],
+) -> anyhow::Result<()> {
+    // Runtime builds must not require LLVM/libclang to be installed. The C ABI
+    // for the vendored JoltC 5.0.0 wrapper is stable inside this third_party
+    // directory, so the default path uses a checked-in static binding snapshot.
+    // Developers can opt into bindgen explicitly when updating JoltC headers.
+    if env_flag("NEWENGINE_JOLTC_BINDGEN") || env_flag("JOLTC_SYS_BINDGEN") {
+        return generate_bindings(target, flags);
+    }
+
+    copy_static_bindings()
+}
+
+fn copy_static_bindings() -> anyhow::Result<()> {
+    let out_path = Path::new(&env::var("OUT_DIR").unwrap()).join("bindings.rs");
+    let static_path = Path::new("src").join("bindings_static.rs");
+    let source = fs::read_to_string(&static_path).with_context(|| {
+        format!(
+            "failed to read static JoltC bindings from '{}'",
+            static_path.display()
+        )
+    })?;
+
+    // The static body is included from `src/generated.rs`. Inner crate/module
+    // attributes are legal only at the beginning of the enclosing file/module;
+    // after `include!` they would appear inside `generated.rs` after existing
+    // attributes and produce E0753-style build errors. Keep the allow-list in
+    // `generated.rs` and make the copied body pure items.
+    let source = strip_leading_inner_allow_attributes(&source);
+
+    fs::write(&out_path, source).with_context(|| {
+        format!(
+            "failed to write static JoltC bindings to '{}'",
+            out_path.display()
+        )
+    })?;
+    println!("cargo:warning=joltc-sys: using checked-in static JoltC bindings; set NEWENGINE_JOLTC_BINDGEN=1 to regenerate with libclang");
+    Ok(())
+}
+
+fn strip_leading_inner_allow_attributes(source: &str) -> String {
+    let mut output = String::new();
+    let mut skipping_prelude = true;
+
+    for line in source.lines() {
+        let trimmed = line.trim();
+        if skipping_prelude && trimmed.starts_with("#![allow(") {
+            continue;
+        }
+        if skipping_prelude && trimmed.is_empty() {
+            continue;
+        }
+        skipping_prelude = false;
+        output.push_str(line);
+        output.push('\n');
+    }
+
+    output
+}
+
+fn env_flag(key: &str) -> bool {
+    match env::var(key) {
+        Ok(value) => {
+            let value = value.trim().to_ascii_lowercase();
+            matches!(value.as_str(), "1" | "true" | "yes" | "on")
+        }
+        Err(_) => false,
+    }
 }
 
 fn generate_bindings(
@@ -120,27 +219,64 @@ fn generate_bindings(
 
 
 fn cmake_generator_for_target(target: &BuildTarget) -> Option<String> {
-    if target.toolchain != WindowsToolchain::Msvc {
-        return None;
-    }
-
-    // `cmake` crate 0.1.58 can infer the future VS generator
-    // `Visual Studio 18 2026` on modern Windows hosts. That generator is not
-    // available on current developer machines where CMake exposes
-    // `Visual Studio 17 2022`. Keep this vendored third_party build
-    // deterministic, while still allowing explicit user/CI overrides.
-    if let Ok(generator) = env::var("NEWENGINE_JOLTC_CMAKE_GENERATOR") {
-        let generator = generator.trim();
-        if !generator.is_empty() {
-            return Some(generator.to_owned());
-        }
+    // Generator selection must follow the Rust target toolchain. A Visual Studio
+    // generator is valid for MSVC, but invalid for x86_64-pc-windows-gnu: it
+    // makes CMake look for Visual Studio even when the active Rust target is
+    // MinGW/GNU. Keep this vendored build deterministic and fail with a clear
+    // diagnostic instead of letting cmake crate panic with an opaque message.
+    if let Some(generator) = explicit_cmake_generator(target) {
+        return Some(generator);
     }
 
     if generator_env_is_set(target) {
         return None;
     }
 
-    Some("Visual Studio 17 2022".to_owned())
+    match target.toolchain {
+        WindowsToolchain::Msvc => Some("Visual Studio 17 2022".to_owned()),
+        WindowsToolchain::Gnu => detected_gnu_cmake_generator(),
+        WindowsToolchain::Other => None,
+    }
+}
+
+fn explicit_cmake_generator(target: &BuildTarget) -> Option<String> {
+    let Ok(generator) = env::var("NEWENGINE_JOLTC_CMAKE_GENERATOR") else {
+        return None;
+    };
+    let generator = generator.trim();
+    if generator.is_empty() {
+        return None;
+    }
+
+    if target.toolchain == WindowsToolchain::Gnu
+        && generator.to_ascii_lowercase().contains("visual studio")
+    {
+        panic!(
+            "NEWENGINE_JOLTC_CMAKE_GENERATOR='{}' is incompatible with target '{}'. \
+             Use Ninja or MinGW Makefiles for windows-gnu, or build with a windows-msvc Rust toolchain.",
+            generator, target.rust_triple
+        );
+    }
+
+    Some(generator.to_owned())
+}
+
+fn detected_gnu_cmake_generator() -> Option<String> {
+    if command_exists("ninja") || command_exists("ninja.exe") || command_exists("ninja-build") {
+        return Some("Ninja".to_owned());
+    }
+    if command_exists("mingw32-make") || command_exists("mingw32-make.exe") {
+        return Some("MinGW Makefiles".to_owned());
+    }
+    None
+}
+
+fn command_exists(command: &str) -> bool {
+    let Some(paths) = env::var_os("PATH") else {
+        return false;
+    };
+
+    env::split_paths(&paths).any(|dir| dir.join(command).is_file())
 }
 
 fn generator_env_is_set(target: &BuildTarget) -> bool {

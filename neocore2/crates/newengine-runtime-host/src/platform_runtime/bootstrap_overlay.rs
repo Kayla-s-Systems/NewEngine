@@ -34,7 +34,7 @@ impl Default for RuntimeBootstrapOverlayState {
     #[inline]
     fn default() -> Self {
         Self {
-            title: "NEWENGINE // BOOTSTRAP".to_owned(),
+            title: "NORTH STAR ENGINE".to_owned(),
             status: "Waiting for platform window...".to_owned(),
             detail: "The runtime shell is preparing the first visible frame.".to_owned(),
             progress_01: 0.0,

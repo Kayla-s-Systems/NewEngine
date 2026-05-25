@@ -26,6 +26,7 @@ use newengine_core::{
 use newengine_ui::{UiBuildFn, UiProviderKind};
 
 use crate::{
+    headless_cli::HeadlessCliRuntime,
     asset_bootstrap::{
         collect_app_asset_roots, mount_asset_roots_best_effort, shard_log_path_by_run_id,
         try_load_window_icon_best_effort,
@@ -209,7 +210,22 @@ where
             );
         }
 
-        let runtime_path = self.detect_platform_runtime(&startup)?;
+        let runtime_path = match self.detect_platform_runtime(&startup) {
+            Ok(path) => path,
+            Err(err) if self.platform_missing_can_fallback_to_headless(&err) => {
+                log::warn!(
+                    "{} launcher: platform runtime unavailable; falling back to headless CLI mode: {}",
+                    self.spec.app_name,
+                    err
+                );
+                newengine_core::crash::record_breadcrumb(format!(
+                    "{} launcher: platform unavailable; entering headless CLI fallback",
+                    self.spec.app_name
+                ));
+                return HeadlessCliRuntime::new(engine, self.spec.fixed_dt_ms).run(err.to_string());
+            }
+            Err(err) => return Err(err),
+        };
         let mut resolved_platform = self.resolve_platform_runtime(&startup, &runtime_path)?;
 
         log::info!(
@@ -349,6 +365,23 @@ where
         Ok(resolved)
     }
 
+    fn platform_missing_can_fallback_to_headless(&self, err: &EngineError) -> bool {
+        if std::env::var_os("NEWENGINE_PLATFORM_RUNTIME").is_some() {
+            return false;
+        }
+        if env_bool("NEWENGINE_REQUIRE_PLATFORM", false) {
+            return false;
+        }
+        if env_bool("NEWENGINE_HEADLESS", false) {
+            return true;
+        }
+
+        let text = err.to_string();
+        text.contains("platform runtime DLL not found")
+            || text.contains("No platform runtime")
+            || text.contains("platform runtime unavailable")
+    }
+
     fn early_log(&self, args: fmt::Arguments<'_>) {
         let seq = APP_LAUNCH_EARLY_SEQ.fetch_add(1, Ordering::Relaxed);
         let now_ms = SystemTime::now()
@@ -378,6 +411,13 @@ where
             .join("logs")
             .join(self.spec.early_log_file_name)]
     }
+}
+
+fn env_bool(name: &str, default: bool) -> bool {
+    std::env::var(name)
+        .ok()
+        .map(|v| matches!(v.trim().to_ascii_lowercase().as_str(), "1" | "true" | "yes" | "on"))
+        .unwrap_or(default)
 }
 
 fn cache_root_from_env_or_neocore2() -> PathBuf {

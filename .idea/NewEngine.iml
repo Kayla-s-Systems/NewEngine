@@ -148,6 +148,7 @@
       <sourceFolder url="file://$MODULE_DIR$/neocore2/crates/newengine-jobs-api/src" isTestSource="false" />
       <sourceFolder url="file://$MODULE_DIR$/neocore2/crates/newengine-scripting-api/src" isTestSource="false" />
       <sourceFolder url="file://$MODULE_DIR$/neocore2/crates/newengine-scripting-runtime/src" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/neocore2/crates/newengine-asset-browser-runtime/src" isTestSource="false" />
       <sourceFolder url="file://$MODULE_DIR$/neocore2/crates/newengine-asset-format-common/src" isTestSource="false" />
       <excludeFolder url="file://$MODULE_DIR$/neocore2/apps/editor/target" />
       <excludeFolder url="file://$MODULE_DIR$/neocore2/target" />

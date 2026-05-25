@@ -157,6 +157,7 @@ pub extern "C" fn call_service_v1(
         "method": method_string.clone(),
         "owner_plugin_id": owner.clone(),
         "payload_bytes": payload_len as u64,
+        "detail": format!("Calling service '{}' method '{}' ({} bytes).", id, method_string, payload_len),
         "metadata": {
             "service_id": id.clone(),
             "requested_service_id": requested_id.clone(),

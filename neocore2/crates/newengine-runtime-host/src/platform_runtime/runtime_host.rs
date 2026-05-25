@@ -745,21 +745,13 @@ impl HostPlatformRuntime {
     }
 
     fn loading_overlay_step_result(&self, overlay: &ScreenOverlayStatus, spinner_phase: u32) -> PlatformStepResultV1 {
-        if matches!(self.ui_selection.active(), UiProviderKind::Plugin { .. }) {
-            crate::platform_runtime::ui_gateway_frame::publish_loading_overlay(
-                overlay,
-                self.ui_provider_binding(),
-                spinner_phase as u64,
-            );
-
-            // Bootstrap may run before the renderer can composite provider draw lists.
-            // The UI provider still receives the same surface state here, while the
-            // platform compositor remains a temporary fallback presenter until normal
-            // engine frames are ticking. Scene-launch loading suppresses native overlay
-            // after `engine.step()` has produced provider UI draw data.
-        }
-
-        overlay_to_step_result_with_provider(overlay, spinner_phase, self.overlay_provider_binding())
+        // Bootstrap loading must be platform/native-shell owned until the core FSM
+        // reaches normal running. Publishing bootstrap overlays back into `engine.ui`
+        // from inside `host.step_v1` can make a newly-loaded UI provider re-enter the
+        // service gateway while the startup graph is still mutating provider routes.
+        // Keep this path as a one-way DTO to the platform compositor; scene-launch
+        // loading after `engine.step()` still publishes through `scene_launch_step_result`.
+        overlay_to_step_result_with_provider(overlay, spinner_phase, UiProviderBinding::NativeFallback)
     }
 
     fn ui_provider_binding(&self) -> UiProviderBinding {
