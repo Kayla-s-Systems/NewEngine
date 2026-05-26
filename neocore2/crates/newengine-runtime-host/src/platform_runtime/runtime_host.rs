@@ -8,11 +8,11 @@ use newengine_core::EngineStartupPhase;
 use newengine_core::host_events::{
     CursorGrabMode, CursorState, HostEvent, WindowHandles, WindowHostEvent, WindowInitSize,
 };
-use newengine_core::{Engine, EngineError, EngineResult, EngineRunState};
+use newengine_core::{Engine, EngineError, EngineResult, EngineRunState, JobLane, JobPriority, JobRequest};
 use newengine_platform_api::{
     PlatformCursorGrabModeV1, PlatformCursorPollV1, PlatformCursorStateV1,
-    PlatformHostApiV1, PlatformRuntimeRunFnV1,
-    PlatformStepResultV1, PlatformSurfaceMetricsV1, PlatformWindowReadyV1,
+    PlatformHostApiV1, PlatformHostJobCallbackV1, PlatformHostJobRequestV1, PlatformHostJobTicketV1,
+    PlatformRuntimeRunFnV1, PlatformStepResultV1, PlatformSurfaceMetricsV1, PlatformWindowReadyV1,
 };
 use newengine_plugin_api::PluginInfo;
 use newengine_system_contracts::{
@@ -32,7 +32,7 @@ use newengine_ui_api::{UiDrawList, UiInputFrame};
 use crate::platform_input::poll_input_frame;
 use crate::platform_runtime::callbacks::{
     host_on_close_requested_v1, host_on_window_focused_v1, host_on_window_ready_v1,
-    host_on_window_resized_v1, host_poll_cursor_state_v1, host_step_v1,
+    host_on_window_resized_v1, host_poll_cursor_state_v1, host_step_v1, host_submit_job_v1,
 };
 use crate::platform_runtime::bootstrap_overlay::{
     map_engine_startup_progress_to_bootstrap, subsystem_failed, subsystem_ready, subsystem_run,
@@ -173,6 +173,11 @@ impl HostPlatformRuntime {
             config.height
         );
 
+        // engine.jobs is available before the platform provider starts its
+        // native bootstrap surface. Platform plugins must submit bootstrap work
+        // through this callback instead of creating hidden threads.
+        register_jobs_gateway_service_best_effort(self.engine.job_system(), self.engine.events().clone());
+
         let host = PlatformHostApiV1 {
             user_data: (&mut self as *mut Self) as usize,
             on_window_ready_v1: host_on_window_ready_v1,
@@ -181,6 +186,7 @@ impl HostPlatformRuntime {
             on_close_requested_v1: host_on_close_requested_v1,
             step_v1: host_step_v1,
             poll_cursor_state_v1: host_poll_cursor_state_v1,
+            submit_job_v1: host_submit_job_v1,
         };
 
         let plugin_host = newengine_plugin_host::default_host_api();
@@ -200,7 +206,7 @@ impl HostPlatformRuntime {
         }
 
         let shutdown_exit_code = if result.is_ok() { 0 } else { 1 };
-        let shutdown_watchdog = ShutdownWatchdog::arm("platform runtime returned", shutdown_exit_code);
+        let shutdown_watchdog = ShutdownWatchdog::arm(self.engine.job_system(), "platform runtime returned", shutdown_exit_code);
 
         self.shutdown_engine_once("platform runtime returned");
 
@@ -214,6 +220,67 @@ impl HostPlatformRuntime {
 
         crate::platform_early_log!("host.run.exit");
         result
+    }
+
+    pub(crate) fn submit_platform_job(
+        &mut self,
+        request: PlatformHostJobRequestV1,
+        callback: PlatformHostJobCallbackV1,
+        callback_user_data: usize,
+    ) -> PlatformHostJobTicketV1 {
+        if callback.is_null() {
+            return PlatformHostJobTicketV1 {
+                accepted: false,
+                status: RString::from("rejected"),
+                detail: RString::from("platform job callback was null"),
+                ..Default::default()
+            };
+        }
+
+        let callback_addr = callback.callback_addr;
+        let label = leak_job_label(request.label.as_str(), "platform.job");
+        let source = leak_job_label(request.source.as_str(), "engine.platform");
+        let owner = leak_job_label(request.owner.as_str(), "platform-runtime");
+        let category = leak_job_label(request.category.as_str(), "platform");
+        let mut job = JobRequest::new(label)
+            .with_source(source)
+            .with_owner(owner)
+            .with_category(category)
+            .with_lane(platform_job_lane(request.lane.as_str()))
+            .with_priority(platform_job_priority(request.priority.as_str()))
+            .pausable(false)
+            .cancellable(request.can_cancel);
+        if !request.task_id.trim().is_empty() {
+            job = job.with_task_id(request.task_id.to_string());
+        }
+
+        let ticket = self.engine.job_system().submit_controlled(job, move |control| {
+            control.publish_progress(0.0, "Platform job entered", "Platform provider callback is running on engine.jobs.");
+            // SAFETY: platform providers build this handle with
+            // `PlatformHostJobCallbackV1::from_fn`. The handle crosses the ABI
+            // as a plain address because `abi_stable` does not derive
+            // `StableAbi` for function-pointer parameters nested inside another
+            // function-pointer signature. The callback is executed once by the
+            // submitted engine.jobs task.
+            let callback_fn: extern "C" fn(usize) -> abi_stable::std_types::RResult<(), RString> =
+                unsafe { std::mem::transmute(callback_addr) };
+            let result = callback_fn(callback_user_data);
+            match result {
+                abi_stable::std_types::RResult::ROk(()) => {
+                    control.publish_progress(1.0, "Platform job completed", "Platform provider callback completed normally.");
+                }
+                abi_stable::std_types::RResult::RErr(e) => {
+                    control.publish_progress(1.0, "Platform job failed", e.to_string());
+                }
+            }
+        });
+
+        PlatformHostJobTicketV1 {
+            accepted: true,
+            job_id: RString::from(ticket.task_id()),
+            status: RString::from("scheduled"),
+            detail: RString::from("Platform job submitted to engine.jobs."),
+        }
     }
 
     fn shutdown_engine_once(&mut self, origin: &'static str) {
@@ -1003,4 +1070,34 @@ fn render_backend_label_from_id(id: &str) -> String {
         .filter(|ch| ch.is_ascii_alphanumeric())
         .flat_map(|ch| ch.to_uppercase())
         .collect::<String>()
+}
+
+fn platform_job_lane(value: &str) -> JobLane {
+    match value.trim().to_ascii_lowercase().as_str() {
+        "simulation" => JobLane::Simulation,
+        "render-prep" | "render_prep" | "renderprep" => JobLane::RenderPrep,
+        "streaming" => JobLane::Streaming,
+        "asset-io" | "asset_io" | "asset" => JobLane::AssetIo,
+        "plugin" | "plugins" => JobLane::Plugin,
+        "background" | "bg" => JobLane::Background,
+        _ => JobLane::Background,
+    }
+}
+
+fn platform_job_priority(value: &str) -> JobPriority {
+    match value.trim().to_ascii_lowercase().as_str() {
+        "critical" => JobPriority::Critical,
+        "interactive" => JobPriority::Interactive,
+        "normal" => JobPriority::Normal,
+        "background" | "bg" => JobPriority::Background,
+        _ => JobPriority::Normal,
+    }
+}
+
+fn leak_job_label(value: &str, fallback: &'static str) -> &'static str {
+    let trimmed = value.trim();
+    if trimmed.is_empty() {
+        return fallback;
+    }
+    Box::leak(trimmed.to_owned().into_boxed_str())
 }

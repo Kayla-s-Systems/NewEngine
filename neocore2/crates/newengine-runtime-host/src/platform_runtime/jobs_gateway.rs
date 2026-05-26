@@ -312,6 +312,7 @@ fn submit_process_job(state: &mut JobsGatewayState, request: JobRunProcessStartR
             "Starting external process",
             format!("Launching tracked process executable='{}' args={}.", executable, args.len()),
         );
+        // no-hidden-thread-scan: engine.jobs owns ToolJobRunner process spawning; callers receive a JobId and poll result/status.
         // External process execution is intentionally centralized behind engine.jobs;
         // render/tool consumers receive a JobId and must poll instead of blocking a frame caller.
         let mut command = Command::new(&executable);

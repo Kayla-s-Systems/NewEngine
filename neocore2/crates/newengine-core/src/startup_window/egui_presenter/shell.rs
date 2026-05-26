@@ -19,6 +19,7 @@ pub(super) fn open_folder_in_shell(path: &Path) -> Result<(), String> {
         path.parent().map(Path::to_path_buf).unwrap_or_else(|| PathBuf::from("."))
     };
 
+    // no-hidden-thread-scan: explicit user action opens the project folder in the OS shell; not runtime frame work.
     #[cfg(target_os = "windows")]
     let mut command = {
         let mut command = Command::new("explorer");
@@ -26,6 +27,7 @@ pub(super) fn open_folder_in_shell(path: &Path) -> Result<(), String> {
         command
     };
 
+    // no-hidden-thread-scan: explicit user action opens the project folder in the OS shell; not runtime frame work.
     #[cfg(target_os = "macos")]
     let mut command = {
         let mut command = Command::new("open");
@@ -33,6 +35,7 @@ pub(super) fn open_folder_in_shell(path: &Path) -> Result<(), String> {
         command
     };
 
+    // no-hidden-thread-scan: explicit user action opens the project folder in the OS shell; not runtime frame work.
     #[cfg(all(unix, not(target_os = "macos")))]
     let mut command = {
         let mut command = Command::new("xdg-open");

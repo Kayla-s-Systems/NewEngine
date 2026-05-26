@@ -142,7 +142,9 @@ fn copy_static_bindings() -> anyhow::Result<()> {
             out_path.display()
         )
     })?;
-    println!("cargo:warning=joltc-sys: using checked-in static JoltC bindings; set NEWENGINE_JOLTC_BINDGEN=1 to regenerate with libclang");
+    if std::env::var_os("NEWENGINE_JOLTC_VERBOSE").is_some() {
+        println!("cargo:warning=joltc-sys: using checked-in static JoltC bindings; set NEWENGINE_JOLTC_BINDGEN=1 to regenerate with libclang");
+    }
     Ok(())
 }
 

@@ -2,7 +2,8 @@ use abi_stable::std_types::{RResult, RString};
 use std::any::Any;
 use std::panic::{catch_unwind, AssertUnwindSafe};
 use newengine_platform_api::{
-    PlatformCursorPollV1, PlatformStepResultV1, PlatformSurfaceMetricsV1,
+    PlatformCursorPollV1, PlatformHostJobCallbackV1, PlatformHostJobRequestV1,
+    PlatformHostJobTicketV1, PlatformStepResultV1, PlatformSurfaceMetricsV1,
     PlatformWindowReadyV1,
 };
 
@@ -70,6 +71,24 @@ pub(crate) extern "C" fn host_on_close_requested_v1(
         Ok(()) => RResult::ROk(()),
         Err(e) => RResult::RErr(RString::from(e.to_string())),
     }
+}
+
+
+pub(crate) extern "C" fn host_submit_job_v1(
+    user_data: usize,
+    request: PlatformHostJobRequestV1,
+    callback: PlatformHostJobCallbackV1,
+    callback_user_data: usize,
+) -> PlatformHostJobTicketV1 {
+    let Some(runtime) = runtime_state_mut(user_data) else {
+        return PlatformHostJobTicketV1 {
+            accepted: false,
+            status: RString::from("rejected"),
+            detail: RString::from("host.submit_job_v1 received null user_data"),
+            ..Default::default()
+        };
+    };
+    runtime.submit_platform_job(request, callback, callback_user_data)
 }
 
 pub(crate) extern "C" fn host_step_v1(

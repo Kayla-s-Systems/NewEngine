@@ -344,6 +344,81 @@ impl Default for PlatformStepResultV1 {
 }
 
 #[repr(C)]
+#[derive(Debug, Clone, PartialEq, StableAbi)]
+pub struct PlatformHostJobRequestV1 {
+    pub label: RString,
+    pub source: RString,
+    pub owner: RString,
+    pub category: RString,
+    pub lane: RString,
+    pub priority: RString,
+    pub task_id: RString,
+    pub can_cancel: bool,
+}
+
+impl Default for PlatformHostJobRequestV1 {
+    #[inline]
+    fn default() -> Self {
+        Self {
+            label: RString::from("platform.job"),
+            source: RString::from("engine.platform"),
+            owner: RString::from("platform-runtime"),
+            category: RString::from("platform"),
+            lane: RString::from("background"),
+            priority: RString::from("normal"),
+            task_id: RString::from(""),
+            can_cancel: true,
+        }
+    }
+}
+
+#[repr(C)]
+#[derive(Debug, Clone, PartialEq, StableAbi)]
+pub struct PlatformHostJobTicketV1 {
+    pub accepted: bool,
+    pub job_id: RString,
+    pub status: RString,
+    pub detail: RString,
+}
+
+impl Default for PlatformHostJobTicketV1 {
+    #[inline]
+    fn default() -> Self {
+        Self {
+            accepted: false,
+            job_id: RString::from(""),
+            status: RString::from("not-submitted"),
+            detail: RString::from(""),
+        }
+    }
+}
+
+#[repr(C)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, StableAbi)]
+pub struct PlatformHostJobCallbackV1 {
+    pub callback_addr: usize,
+}
+
+impl PlatformHostJobCallbackV1 {
+    #[inline]
+    pub fn from_fn(callback: extern "C" fn(usize) -> RResult<(), RString>) -> Self {
+        Self { callback_addr: callback as usize }
+    }
+
+    #[inline]
+    pub fn is_null(&self) -> bool {
+        self.callback_addr == 0
+    }
+}
+
+impl Default for PlatformHostJobCallbackV1 {
+    #[inline]
+    fn default() -> Self {
+        Self { callback_addr: 0 }
+    }
+}
+
+#[repr(C)]
 #[derive(Clone, StableAbi)]
 pub struct PlatformHostApiV1 {
     pub user_data: usize,
@@ -355,6 +430,7 @@ pub struct PlatformHostApiV1 {
     pub on_close_requested_v1: extern "C" fn(usize) -> RResult<(), RString>,
     pub step_v1: extern "C" fn(usize, f32) -> RResult<PlatformStepResultV1, RString>,
     pub poll_cursor_state_v1: extern "C" fn(usize) -> PlatformCursorPollV1,
+    pub submit_job_v1: extern "C" fn(usize, PlatformHostJobRequestV1, PlatformHostJobCallbackV1, usize) -> PlatformHostJobTicketV1,
 }
 
 pub type PlatformRunResultV1 = RResult<(), RString>;

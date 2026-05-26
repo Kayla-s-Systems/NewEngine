@@ -340,6 +340,7 @@ fn spawn_reporter(cfg: &CrashReporterConfig, report_path: &Path) -> std::io::Res
         ));
     }
 
+    // no-hidden-thread-scan: crash reporter is an explicit post-fault diagnostic child process, not runtime work.
     let mut cmd = Command::new(exe);
     cmd.env("NEWENGINE_CRASH_REPORTER_CHILD", "1");
     cmd.arg(report_path);
