@@ -120,7 +120,10 @@ impl GameReadyRuntimeProfile {
         newengine_assets::register_asset_file_types_gateway_best_effort();
 
         let host_api = newengine_plugin_host::default_host_api();
-        let registered_file_types = newengine_asset_format_catalog_nef8::register_all_file_types_best_effort(&host_api);
+        let registered_file_types = newengine_asset_format_nef8::descriptors()
+            .into_iter()
+            .filter(|descriptor| newengine_assets::register_asset_file_type_descriptor_best_effort(&host_api, descriptor.clone()))
+            .count();
         log::info!(
             "asset file type descriptors: registered {} provider-owned first-party formats",
             registered_file_types

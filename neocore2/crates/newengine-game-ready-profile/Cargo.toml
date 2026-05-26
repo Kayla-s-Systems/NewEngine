@@ -6,12 +6,12 @@ readme = "README.md"
 description = "Game Ready FPS runtime profile composition for NewEngine"
 
 [dependencies]
+newengine-asset-format-nef8 = { path = "../newengine-asset-format-nef8" }
 log = "0.4"
 
 newengine-assets = { path = "../newengine-assets" }
 newengine-assets-ui-runtime = { path = "../newengine-assets-ui-runtime" }
 newengine-asset-browser-runtime = { path = "../newengine-asset-browser-runtime" }
-newengine-asset-format-catalog-nef8 = { path = "../newengine-asset-format-catalog-nef8" }
 newengine-core = { path = "../newengine-core", features = ["host-probe"] }
 newengine-definitions-runtime = { path = "../newengine-definitions-runtime" }
 newengine-ecs-runtime = { path = "../newengine-ecs-runtime" }

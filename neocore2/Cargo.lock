@@ -2089,215 +2089,9 @@ dependencies = [
 ]
 
 [[package]]
-name = "newengine-asset-format-catalog-nef8"
+name = "newengine-asset-format-nef8"
 version = "0.1.0"
 dependencies = [
- "newengine-asset-format-nemat",
- "newengine-asset-format-nepak",
- "newengine-asset-format-neui",
- "newengine-asset-format-ybd",
- "newengine-asset-format-ybn",
- "newengine-asset-format-ycd",
- "newengine-asset-format-ydd",
- "newengine-asset-format-ydr",
- "newengine-asset-format-yed",
- "newengine-asset-format-yfd",
- "newengine-asset-format-yft",
- "newengine-asset-format-yld",
- "newengine-asset-format-ymap",
- "newengine-asset-format-ymf",
- "newengine-asset-format-ymt",
- "newengine-asset-format-ypdb",
- "newengine-asset-format-ysc",
- "newengine-asset-format-ytd",
- "newengine-asset-format-ytf",
- "newengine-asset-format-ytyp",
- "newengine-asset-format-yvr",
- "newengine-asset-format-ywr",
- "newengine-assets",
- "newengine-assets-api",
- "newengine-plugin-api",
-]
-
-[[package]]
-name = "newengine-asset-format-common"
-version = "0.1.0"
-dependencies = [
- "newengine-assets-api",
-]
-
-[[package]]
-name = "newengine-asset-format-nemat"
-version = "0.1.0"
-dependencies = [
- "newengine-asset-format-common",
- "newengine-assets-api",
-]
-
-[[package]]
-name = "newengine-asset-format-nepak"
-version = "0.1.0"
-dependencies = [
- "newengine-assets-api",
-]
-
-[[package]]
-name = "newengine-asset-format-neui"
-version = "0.1.0"
-dependencies = [
- "newengine-asset-format-common",
- "newengine-assets-api",
-]
-
-[[package]]
-name = "newengine-asset-format-ybd"
-version = "0.1.0"
-dependencies = [
- "newengine-asset-format-common",
- "newengine-assets-api",
-]
-
-[[package]]
-name = "newengine-asset-format-ybn"
-version = "0.1.0"
-dependencies = [
- "newengine-asset-format-common",
- "newengine-assets-api",
-]
-
-[[package]]
-name = "newengine-asset-format-ycd"
-version = "0.1.0"
-dependencies = [
- "newengine-asset-format-common",
- "newengine-assets-api",
-]
-
-[[package]]
-name = "newengine-asset-format-ydd"
-version = "0.1.0"
-dependencies = [
- "newengine-asset-format-common",
- "newengine-assets-api",
-]
-
-[[package]]
-name = "newengine-asset-format-ydr"
-version = "0.1.0"
-dependencies = [
- "newengine-asset-format-common",
- "newengine-assets-api",
-]
-
-[[package]]
-name = "newengine-asset-format-yed"
-version = "0.1.0"
-dependencies = [
- "newengine-asset-format-common",
- "newengine-assets-api",
-]
-
-[[package]]
-name = "newengine-asset-format-yfd"
-version = "0.1.0"
-dependencies = [
- "newengine-asset-format-common",
- "newengine-assets-api",
-]
-
-[[package]]
-name = "newengine-asset-format-yft"
-version = "0.1.0"
-dependencies = [
- "newengine-asset-format-common",
- "newengine-assets-api",
-]
-
-[[package]]
-name = "newengine-asset-format-yld"
-version = "0.1.0"
-dependencies = [
- "newengine-asset-format-common",
- "newengine-assets-api",
-]
-
-[[package]]
-name = "newengine-asset-format-ymap"
-version = "0.1.0"
-dependencies = [
- "newengine-asset-format-common",
- "newengine-assets-api",
-]
-
-[[package]]
-name = "newengine-asset-format-ymf"
-version = "0.1.0"
-dependencies = [
- "newengine-asset-format-common",
- "newengine-assets-api",
-]
-
-[[package]]
-name = "newengine-asset-format-ymt"
-version = "0.1.0"
-dependencies = [
- "newengine-asset-format-common",
- "newengine-assets-api",
-]
-
-[[package]]
-name = "newengine-asset-format-ypdb"
-version = "0.1.0"
-dependencies = [
- "newengine-asset-format-common",
- "newengine-assets-api",
-]
-
-[[package]]
-name = "newengine-asset-format-ysc"
-version = "0.1.0"
-dependencies = [
- "newengine-asset-format-common",
- "newengine-assets-api",
-]
-
-[[package]]
-name = "newengine-asset-format-ytd"
-version = "0.1.0"
-dependencies = [
- "newengine-asset-format-common",
- "newengine-assets-api",
-]
-
-[[package]]
-name = "newengine-asset-format-ytf"
-version = "0.1.0"
-dependencies = [
- "newengine-asset-format-common",
- "newengine-assets-api",
-]
-
-[[package]]
-name = "newengine-asset-format-ytyp"
-version = "0.1.0"
-dependencies = [
- "newengine-asset-format-common",
- "newengine-assets-api",
-]
-
-[[package]]
-name = "newengine-asset-format-yvr"
-version = "0.1.0"
-dependencies = [
- "newengine-asset-format-common",
- "newengine-assets-api",
-]
-
-[[package]]
-name = "newengine-asset-format-ywr"
-version = "0.1.0"
-dependencies = [
- "newengine-asset-format-common",
  "newengine-assets-api",
 ]
 
@@ -2333,7 +2127,7 @@ dependencies = [
  "blake3",
  "flate2",
  "log",
- "newengine-asset-format-neui",
+ "newengine-asset-format-nef8",
  "newengine-assets",
  "newengine-assets-api",
  "newengine-plugin-api",
@@ -2507,7 +2301,7 @@ dependencies = [
  "crossbeam-channel",
  "libloading 0.9.0",
  "log",
- "newengine-asset-format-ymap",
+ "newengine-asset-format-nef8",
  "newengine-assets",
  "newengine-assets-api",
  "newengine-audio-api",
@@ -2602,7 +2396,7 @@ version = "0.1.0"
 dependencies = [
  "log",
  "newengine-asset-browser-runtime",
- "newengine-asset-format-catalog-nef8",
+ "newengine-asset-format-nef8",
  "newengine-assets",
  "newengine-assets-ui-runtime",
  "newengine-core",
@@ -2751,7 +2545,7 @@ version = "0.1.0"
 dependencies = [
  "abi_stable",
  "log",
- "newengine-asset-format-nemat",
+ "newengine-asset-format-nef8",
  "newengine-assets",
  "newengine-assets-api",
  "newengine-authored-xml",
@@ -2825,8 +2619,7 @@ version = "0.1.0"
 dependencies = [
  "abi_stable",
  "log",
- "newengine-asset-format-ymt",
- "newengine-asset-format-ytd",
+ "newengine-asset-format-nef8",
  "newengine-assets",
  "newengine-assets-api",
  "newengine-material-runtime",
@@ -3055,7 +2848,7 @@ version = "0.1.0"
 dependencies = [
  "abi_stable",
  "log",
- "newengine-asset-format-ytyp",
+ "newengine-asset-format-nef8",
  "newengine-assets",
  "newengine-assets-api",
  "newengine-engine-runtime",
@@ -3151,7 +2944,7 @@ dependencies = [
 name = "newengine-texture-container"
 version = "0.1.0"
 dependencies = [
- "newengine-asset-format-ytd",
+ "newengine-asset-format-nef8",
  "serde",
  "serde_json",
  "thiserror 1.0.69",

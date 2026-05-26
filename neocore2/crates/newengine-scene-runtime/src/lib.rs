@@ -52,7 +52,7 @@ fn normalize_scene_path(path: &str) -> String {
 
 fn reject_ytyp_scene_path(path: &str) -> Result<(), String> {
     let lower = path.split('@').next().unwrap_or(path).to_ascii_lowercase();
-    if lower.ends_with(&format!(".{}", newengine_asset_format_ytyp::EXTENSION)) {
+    if lower.ends_with(&format!(".{}", newengine_asset_format_nef8::ytyp::EXTENSION)) {
         return Err(format!(
             "engine.scene load_json_v1 cannot load '{path}' as a scene path: definition dictionary assets are owned by engine.assets.definitions, not engine.scene"
         ));

@@ -6,6 +6,7 @@ readme = "README.md"
 description = "Gateway-backed model construction runtime for NewEngine"
 
 [dependencies]
+newengine-asset-format-nef8 = { path = "../newengine-asset-format-nef8" }
 abi_stable = "0.11"
 log = "0.4"
 serde = { version = "1", features = ["derive"] }
@@ -13,8 +14,6 @@ serde_json = "1"
 
 newengine-assets = { path = "../newengine-assets" }
 newengine-assets-api = { path = "../newengine-assets-api" }
-newengine-asset-format-ymt = { path = "../newengine-asset-format-ymt" }
-newengine-asset-format-ytd = { path = "../newengine-asset-format-ytd" }
 newengine-material-runtime = { path = "../newengine-material-runtime" }
 newengine-materials = { path = "../newengine-materials", features = ["serde"] }
 newengine-model-collision-runtime = { path = "../newengine-model-collision-runtime" }

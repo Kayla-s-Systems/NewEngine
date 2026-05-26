@@ -1,6 +1,7 @@
 #![forbid(unsafe_op_in_unsafe_fn)]
 
 use serde::{Deserialize, Serialize};
+use std::collections::BTreeMap;
 
 pub use newengine_loading_api::{
     EngineTaskControlAction, EngineTaskControlEvent, EngineTaskEvent, EngineTaskPhase,
@@ -130,6 +131,8 @@ pub mod jobs_method {
     pub const INVOKE_JSON: &str = newengine_service_api::SERVICE_METHOD_INVOKE_JSON;
     pub const SHUTDOWN_V1: &str = newengine_service_api::SERVICE_METHOD_SHUTDOWN_V1;
     pub const START_V1: &str = "job.start_v1";
+    pub const RUN_PROCESS_START_V1: &str = "job.run_process_start_v1";
+    pub const RESULT_BIN_V1: &str = "job.result_bin_v1";
     pub const INVOKE_SERVICE_V1: &str = "job.invoke_service_v1";
     pub const CANCEL_V1: &str = "job.cancel_v1";
     pub const PAUSE_V1: &str = "job.pause_v1";
@@ -145,6 +148,8 @@ pub const JOBS_SERVICE_METHODS: &[&str] = &[
     jobs_method::INVOKE_JSON,
     jobs_method::SHUTDOWN_V1,
     jobs_method::START_V1,
+    jobs_method::RUN_PROCESS_START_V1,
+    jobs_method::RESULT_BIN_V1,
     jobs_method::INVOKE_SERVICE_V1,
     jobs_method::CANCEL_V1,
     jobs_method::PAUSE_V1,
@@ -257,6 +262,65 @@ impl Default for JobStartRequestV1 {
     }
 }
 
+
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct JobRunProcessStartRequestV1 {
+    pub job_id: String,
+    pub name: String,
+    pub owner: String,
+    pub category: String,
+    pub lane: String,
+    pub priority: String,
+    pub executable: String,
+    pub args: Vec<String>,
+    pub cwd: String,
+    pub env: BTreeMap<String, String>,
+    pub result_path: String,
+    pub can_cancel: bool,
+}
+
+impl Default for JobRunProcessStartRequestV1 {
+    fn default() -> Self {
+        Self {
+            job_id: String::new(),
+            name: "external-process".to_owned(),
+            owner: "engine.jobs".to_owned(),
+            category: "tool.process".to_owned(),
+            lane: "render-prep".to_owned(),
+            priority: "background".to_owned(),
+            executable: String::new(),
+            args: Vec::new(),
+            cwd: String::new(),
+            env: BTreeMap::new(),
+            result_path: String::new(),
+            can_cancel: true,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct JobRunProcessStartedV1 {
+    pub job_id: String,
+    pub accepted: bool,
+    pub status: String,
+    pub detail: String,
+    pub result_path: String,
+}
+
+impl Default for JobRunProcessStartedV1 {
+    fn default() -> Self {
+        Self {
+            job_id: String::new(),
+            accepted: false,
+            status: "rejected".to_owned(),
+            detail: String::new(),
+            result_path: String::new(),
+        }
+    }
+}
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(default)]

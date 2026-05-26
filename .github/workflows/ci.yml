@@ -56,7 +56,7 @@ jobs:
         run: python scripts/assetmanager_codec_sync_scan.py
 
       - name: Asset format contract tests
-        run: cargo test -p newengine-asset-format-common -p newengine-asset-format-catalog-nef8 --lib
+        run: cargo test -p newengine-asset-format-nef8 --lib
 
       - name: Clippy lints
         run: cargo clippy --workspace --all-targets --all-features -- -D warnings

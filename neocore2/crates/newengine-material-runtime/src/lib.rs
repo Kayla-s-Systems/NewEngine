@@ -177,7 +177,7 @@ impl MaterialAssetGatewayAdapter {
     pub fn load_material(&self, request: &MaterialLoadRequest) -> Result<MaterialLoadResponse, String> {
         let material_ref = normalize_material_logical_path(&request.logical_path)?;
         let (source, selector) = split_nemat_selector(&material_ref, request.selector.as_deref())?;
-        if !source.to_ascii_lowercase().ends_with(&format!(".{}", newengine_asset_format_nemat::EXTENSION)) {
+        if !source.to_ascii_lowercase().ends_with(&format!(".{}", newengine_asset_format_nef8::nemat::EXTENSION)) {
             return Err(format!("materials: expected provider-declared material library path, got '{source}'"));
         }
         log::debug!(

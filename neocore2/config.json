@@ -123,7 +123,7 @@
       },
       "platform.winit": {
         "display": {
-          "borderless_fullscreen": true,
+          "borderless_fullscreen": false,
           "fullscreen": true,
           "hdr": "auto",
           "monitor": "primary",
@@ -196,7 +196,7 @@
       },
       "startup_window": {
         "display": {
-          "borderless_fullscreen": true,
+          "borderless_fullscreen": false,
           "fullscreen": true,
           "hdr": "auto",
           "monitor": "primary",
@@ -207,7 +207,7 @@
             "width": 1600
           },
           "vsync": true,
-          "window_mode": "borderless"
+          "window_mode": "exclusive_fullscreen"
         },
         "graphics_backend": {
           "debug_renderer_tools": {
@@ -1322,9 +1322,9 @@
   },
   "window": {
     "display": {
-      "borderless_fullscreen": true,
+      "borderless_fullscreen": false,
       "fullscreen": true,
-      "window_mode": "borderless"
+      "window_mode": "exclusive_fullscreen"
     },
     "height": 900,
     "title": "Kayla's Editor",

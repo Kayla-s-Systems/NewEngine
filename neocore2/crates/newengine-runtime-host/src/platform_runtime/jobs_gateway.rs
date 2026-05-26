@@ -4,12 +4,17 @@ use abi_stable::std_types::{RResult, RString};
 use newengine_core::{JobLane, JobPriority, JobRequest, JobSystemHandle, JobTaskStatus};
 use newengine_jobs_api::{
     jobs_method, EngineJobEventV1, JobControlResponseV1, JobExecutorKind, JobIdRequestV1,
-    JobProgressEventV1, JobServiceCallAcceptedV1, JobServiceCallRequestV1, JobStartRequestV1,
+    JobProgressEventV1, JobRunProcessStartRequestV1, JobRunProcessStartedV1,
+    JobServiceCallAcceptedV1, JobServiceCallRequestV1, JobStartRequestV1,
     JobsServiceInfoV1, JobsSnapshotJsonV1, JobStatusJsonV1, JobTraceJsonV1,
     ENGINE_JOBS_SERVICE_ID, JOBS_BACKEND_CAPABILITY_ID, JOBS_RUNTIME_CONTRACT, JOBS_SERVICE_ID,
     JOBS_SERVICE_METHODS, EngineTaskControlAction, EngineTaskEvent, EngineTaskPhase,
 };
 use newengine_plugin_api::Blob;
+use std::collections::HashMap;
+use std::path::PathBuf;
+use std::process::Command;
+use std::sync::{Arc, Mutex};
 use newengine_plugin_host::host_context::publish_event;
 use newengine_service_kit::{
     engine_owned_service_description, ok_empty_blob, ok_json, payload_json,
@@ -23,7 +28,32 @@ const OWNER: &str = "newengine-runtime-host.jobs-gateway";
 struct JobsGatewayState {
     jobs: JobSystemHandle,
     events: newengine_core::EventHub,
+    process_results: Arc<Mutex<HashMap<String, ProcessResultRecord>>>,
 }
+
+#[derive(Clone, Debug)]
+struct ProcessResultRecord {
+    phase: EngineTaskPhase,
+    exit_code: Option<i32>,
+    stdout: String,
+    stderr: String,
+    result_bytes: Option<Vec<u8>>,
+    error: Option<String>,
+}
+
+impl ProcessResultRecord {
+    fn running() -> Self {
+        Self {
+            phase: EngineTaskPhase::Running,
+            exit_code: None,
+            stdout: String::new(),
+            stderr: String::new(),
+            result_bytes: None,
+            error: None,
+        }
+    }
+}
+
 
 fn status_from_core(status: JobTaskStatus) -> JobStatusJsonV1 {
     JobStatusJsonV1 {
@@ -214,6 +244,166 @@ fn submit_service_call_job(state: &mut JobsGatewayState, request: JobServiceCall
     }
 }
 
+
+fn process_job_request(request: &JobRunProcessStartRequestV1) -> JobRequest {
+    let label = match request.category.as_str() {
+        "shader.compile" => "shader.compile",
+        "shader.validate" => "shader.validate",
+        "tool.process" => "tool.process",
+        _ => "external.process",
+    };
+    let owner = match request.owner.as_str() {
+        "engine.render" => "engine.render",
+        "vulkan_renderer" => "vulkan_renderer",
+        _ => "engine.jobs",
+    };
+    let category = match request.category.as_str() {
+        "shader.compile" => "shader.compile",
+        "shader.validate" => "shader.validate",
+        _ => "tool.process",
+    };
+    let mut job = JobRequest::new(label)
+        .with_source("engine.jobs.process")
+        .with_owner(owner)
+        .with_category(category)
+        .with_lane(lane_from_str(request.lane.as_str()))
+        .with_priority(priority_from_str(request.priority.as_str()))
+        .pausable(false)
+        .cancellable(request.can_cancel);
+    if !request.job_id.trim().is_empty() {
+        job = job.with_task_id(request.job_id.trim().to_owned());
+    }
+    job
+}
+
+fn submit_process_job(state: &mut JobsGatewayState, request: JobRunProcessStartRequestV1) -> JobRunProcessStartedV1 {
+    let executable = request.executable.trim().to_owned();
+    let requested_job_id = request.job_id.trim().to_owned();
+    if executable.is_empty() {
+        return JobRunProcessStartedV1 {
+            job_id: requested_job_id,
+            accepted: false,
+            status: "rejected".to_owned(),
+            detail: "job.run_process_start_v1 requires executable".to_owned(),
+            result_path: request.result_path,
+        };
+    }
+
+    let job = process_job_request(&request);
+    let args = request.args.clone();
+    let cwd = request.cwd.trim().to_owned();
+    let env = request.env.clone();
+    let result_path = request.result_path.trim().to_owned();
+    let results = state.process_results.clone();
+
+    let ticket = state.jobs.submit_controlled(job, move |control| {
+        let job_id = control.task_id().to_owned();
+        results.lock().expect("engine.jobs process_results mutex poisoned").insert(job_id.clone(), ProcessResultRecord::running());
+        if !control.checkpoint() {
+            results.lock().expect("engine.jobs process_results mutex poisoned").insert(job_id.clone(), ProcessResultRecord {
+                phase: EngineTaskPhase::Cancelled,
+                error: Some("process job cancelled before spawn".to_owned()),
+                ..ProcessResultRecord::running()
+            });
+            return;
+        }
+        control.publish_progress(
+            0.10,
+            "Starting external process",
+            format!("Launching tracked process executable='{}' args={}.", executable, args.len()),
+        );
+        // External process execution is intentionally centralized behind engine.jobs;
+        // render/tool consumers receive a JobId and must poll instead of blocking a frame caller.
+        let mut command = Command::new(&executable);
+        command.args(&args);
+        if !cwd.is_empty() {
+            command.current_dir(PathBuf::from(&cwd));
+        }
+        for (key, value) in &env {
+            command.env(key, value);
+        }
+        let output = command.output();
+        match output {
+            Ok(output) => {
+                let stdout = String::from_utf8_lossy(&output.stdout).trim().to_owned();
+                let stderr = String::from_utf8_lossy(&output.stderr).trim().to_owned();
+                let result_bytes = if !result_path.is_empty() {
+                    match std::fs::read(&result_path) {
+                        Ok(bytes) => Some(bytes),
+                        Err(e) => {
+                            results.lock().expect("engine.jobs process_results mutex poisoned").insert(job_id.clone(), ProcessResultRecord {
+                                phase: EngineTaskPhase::Failed,
+                                exit_code: output.status.code(),
+                                stdout,
+                                stderr,
+                                result_bytes: None,
+                                error: Some(format!("process result read failed path='{}' err='{e}'", result_path)),
+                            });
+                            control.publish_progress(1.0, "External process failed", "Process completed but result file could not be read.");
+                            return;
+                        }
+                    }
+                } else {
+                    Some(output.stdout.clone())
+                };
+                let phase = if output.status.success() { EngineTaskPhase::Completed } else { EngineTaskPhase::Failed };
+                let error = if output.status.success() { None } else { Some(format!("process exited with status {}", output.status)) };
+                results.lock().expect("engine.jobs process_results mutex poisoned").insert(job_id.clone(), ProcessResultRecord {
+                    phase,
+                    exit_code: output.status.code(),
+                    stdout,
+                    stderr,
+                    result_bytes,
+                    error,
+                });
+                control.publish_progress(
+                    1.0,
+                    if output.status.success() { "External process completed" } else { "External process failed" },
+                    format!("Process exited status={} result_path='{}'", output.status, result_path),
+                );
+            }
+            Err(e) => {
+                results.lock().expect("engine.jobs process_results mutex poisoned").insert(job_id.clone(), ProcessResultRecord {
+                    phase: EngineTaskPhase::Failed,
+                    error: Some(format!("process spawn failed executable='{}' err='{e}'", executable)),
+                    ..ProcessResultRecord::running()
+                });
+                control.publish_progress(1.0, "External process failed", format!("Spawn failed: {e}"));
+            }
+        }
+    });
+
+    JobRunProcessStartedV1 {
+        job_id: ticket.task_id().to_owned(),
+        accepted: true,
+        status: "scheduled".to_owned(),
+        detail: "External process scheduled on engine.jobs; caller must poll job.status_json_v1 and job.result_bin_v1.".to_owned(),
+        result_path: request.result_path,
+    }
+}
+
+fn result_bin(state: &mut JobsGatewayState, payload: Blob) -> RResult<Blob, RString> {
+    let request: JobIdRequestV1 = match serde_json::from_slice(payload.as_slice()) {
+        Ok(request) => request,
+        Err(e) => return RResult::RErr(RString::from(format!("job.result_bin_v1 invalid request json: {e}"))),
+    };
+    let job_id = request.job_id.trim();
+    let Some(record) = state.process_results.lock().expect("engine.jobs process_results mutex poisoned").get(job_id).cloned() else {
+        return RResult::RErr(RString::from(format!("job.result_bin_v1 job_id='{job_id}' has no process result")));
+    };
+    match record.phase {
+        EngineTaskPhase::Completed => RResult::ROk(Blob::from(record.result_bytes.unwrap_or_default())),
+        EngineTaskPhase::Failed => RResult::RErr(RString::from(format!(
+            "job.result_bin_v1 job_id='{job_id}' failed exit_code={:?} error='{}' stdout='{}' stderr='{}'",
+            record.exit_code,
+            record.error.unwrap_or_default(),
+            record.stdout,
+            record.stderr,
+        ))),
+        other => RResult::RErr(RString::from(format!("job.result_bin_v1 job_id='{job_id}' not ready phase={other:?}"))),
+    }
+}
+
 fn service(state: JobsGatewayState) -> newengine_plugin_api::ServiceV1Dyn<'static> {
     let description = engine_owned_service_description(
         JOBS_SERVICE_ID,
@@ -228,9 +418,11 @@ fn service(state: JobsGatewayState) -> newengine_plugin_api::ServiceV1Dyn<'stati
         "cooperative-pause-resume",
         "job-status-read-model",
         "event-bus-progress",
+        "external-process-ticket-poll",
+        "binary-result-readback",
     ])
     .gateway("engine.jobs")
-    .notes("Runtime job/task gateway. Every long-running engine operation should have a JobId and publish progress through engine.task.event.v1.");
+    .notes("Runtime job/task gateway. Every long-running engine operation should have a JobId and publish progress through engine.task.event.v1; external tool processes must use start/poll/result instead of blocking runtime callers.");
 
     JsonServiceRouter::with_state(JOBS_SERVICE_ID, state)
         .describe_json(&description)
@@ -240,10 +432,29 @@ fn service(state: JobsGatewayState) -> newengine_plugin_api::ServiceV1Dyn<'stati
             submit_service_call_job(state, request)
         })
         .post_json::<JobIdRequestV1, JobStatusJsonV1, _>(jobs_method::STATUS_JSON_V1, |state, request| {
-            state.jobs.task_status(request.job_id.trim())
-                .map(status_from_core)
-                .unwrap_or_else(|| missing_status(request.job_id))
+            let job_id = request.job_id.trim();
+            if let Some(status) = state.jobs.task_status(job_id).map(status_from_core) {
+                return status;
+            }
+            if let Some(record) = state.process_results.lock().expect("engine.jobs process_results mutex poisoned").get(job_id).cloned() {
+                return JobStatusJsonV1 {
+                    job_id: request.job_id,
+                    name: "external-process".to_owned(),
+                    lane: "render-prep".to_owned(),
+                    priority: "background".to_owned(),
+                    phase: record.phase,
+                    can_pause: false,
+                    can_cancel: false,
+                    found: true,
+                    ..Default::default()
+                };
+            }
+            missing_status(request.job_id)
         })
+        .post_json::<JobRunProcessStartRequestV1, JobRunProcessStartedV1, _>(jobs_method::RUN_PROCESS_START_V1, |state, request| {
+            submit_process_job(state, request)
+        })
+        .blob(jobs_method::RESULT_BIN_V1, result_bin)
         .post_json::<JobIdRequestV1, JobControlResponseV1, _>(jobs_method::CANCEL_V1, |state, request| {
             let accepted = state.jobs.cancel_task(request.job_id.trim());
             let event = request.control_event(EngineTaskControlAction::Cancel);
@@ -323,6 +534,6 @@ pub(crate) fn register_jobs_gateway_service_best_effort(
         capability: JOBS_BACKEND_CAPABILITY_ID,
         priority: 0,
         owner: OWNER,
-        service: service(JobsGatewayState { jobs, events }),
+        service: service(JobsGatewayState { jobs, events, process_results: Arc::new(Mutex::new(HashMap::new())) }),
     })
 }

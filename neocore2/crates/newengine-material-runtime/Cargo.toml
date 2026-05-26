@@ -5,6 +5,7 @@ edition = "2021"
 description = "Runtime material mapping for model construction"
 
 [dependencies]
+newengine-asset-format-nef8 = { path = "../newengine-asset-format-nef8" }
 log = "0.4"
 abi_stable = "0.11"
 serde = { version = "1", features = ["derive"] }
@@ -12,7 +13,6 @@ serde_json = "1"
 
 newengine-assets = { path = "../newengine-assets" }
 newengine-assets-api = { path = "../newengine-assets-api" }
-newengine-asset-format-nemat = { path = "../newengine-asset-format-nemat" }
 newengine-authored-xml = { path = "../newengine-authored-xml" }
 newengine-materials = { path = "../newengine-materials", features = ["serde"] }
 newengine-model-domain-api = { path = "../newengine-model-domain-api" }
