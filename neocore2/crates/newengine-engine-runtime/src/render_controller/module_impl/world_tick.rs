@@ -4,7 +4,7 @@ use newengine_scene::Scene;
 
 use crate::engine_bounds::EngineBoundsSnap;
 use crate::scene_bridge::EngineViewInput;
-use crate::gameplay::{run_schedule_with_physics_mode_and_telemetry, GameRunMode, PhysicsIntegrationMode};
+use crate::gameplay::{run_schedule_with_physics_mode_and_telemetry_for_frame, GameRunMode, PhysicsIntegrationMode};
 
 use super::frame_types::WorldFrameState;
 use super::input::ViewportInputSnap;
@@ -115,10 +115,11 @@ impl RuntimeRenderController {
                         }
                     };
                     let sim_telemetry = newengine_sim::SimulationJobTelemetry::new(&publish_sim_job);
-                    run_schedule_with_physics_mode_and_telemetry(
+                    run_schedule_with_physics_mode_and_telemetry_for_frame(
                         &mut self.frame.sim_schedule,
                         world,
                         dt,
+                        self.frame.frame_index,
                         physics_api,
                         physics_mode,
                         Some(&sim_telemetry),

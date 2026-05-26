@@ -26,7 +26,8 @@ pub use player::{
 };
 pub use schedule::{
     default_sim_schedule, run_schedule, run_schedule_with_physics_mode,
-    run_schedule_with_physics_mode_and_telemetry, PhysicsIntegrationMode,
+    run_schedule_with_physics_mode_and_telemetry, run_schedule_with_physics_mode_and_telemetry_for_frame,
+    PhysicsIntegrationMode,
 };
 pub use snapshot::{
     capture_runtime_world_snapshot, restore_runtime_world_snapshot, RuntimeEntitySnapshot,

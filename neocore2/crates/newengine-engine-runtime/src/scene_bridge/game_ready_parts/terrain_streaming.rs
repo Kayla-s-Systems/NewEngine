@@ -230,9 +230,15 @@ fn enqueue_streamed_terrain_chunk(
     let result = Arc::new(Mutex::new(None));
     let result_for_job = Arc::clone(&result);
     let ticket = job_system.submit_request(
-        JobRequest::new("game-ready.terrain.chunk.generate")
-            .with_lane(JobLane::Streaming)
-            .with_priority(JobPriority::Normal),
+        JobRequest::new("game-ready.terrain.chunk.render-packet")
+            .with_source("scene.streaming.terrain")
+            .with_owner("engine.render")
+            .with_category("terrain.render-packet")
+            .with_lane(JobLane::RenderPrep)
+            .with_priority(JobPriority::Interactive)
+            .with_dependency_group(format!("terrain.chunk.{}.{}.renderprep", coord.x, coord.z))
+            .with_job_domain(job_domain::ENGINE_RENDER_PREP)
+            .with_job_pass(job_pass::TERRAIN_RENDER_PACKET),
         move || {
             let generated = generate_terrain_for_chunk(&spec, coord, color);
             if let Ok(mut slot) = result_for_job.lock() {

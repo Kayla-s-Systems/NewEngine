@@ -20,9 +20,64 @@ pub const JOBS_RUNTIME_CONTRACT: &str = "newengine.jobs.runtime.v1";
 /// and CI-visible work streams.
 pub const ENGINE_JOB_EVENT_TOPIC_V1: &str = "engine.jobs.event.v1";
 
+/// Canonical domain ids used by profiler-visible job passes.
+///
+/// These strings are not scheduler implementation details. They are the public
+/// diagnostic language for the runtime spine: every heavy system should identify
+/// which domain owns the work.
+pub mod job_domain {
+    pub const ENGINE_JOBS: &str = "engine.jobs";
+    pub const ENGINE_RENDER: &str = "engine.render";
+    pub const ENGINE_RENDER_PREP: &str = "engine.render.prep";
+    pub const ENGINE_ASSETS: &str = "engine.assets";
+    pub const ENGINE_STREAMING: &str = "engine.streaming";
+    pub const ENGINE_WORLD_STREAMING: &str = "engine.world.streaming";
+    pub const ENGINE_SIMULATION: &str = "engine.simulation";
+    pub const ENGINE_VISIBILITY: &str = "engine.visibility";
+    pub const ENGINE_VEGETATION: &str = "engine.vegetation";
+    pub const ENGINE_TERRAIN: &str = "engine.terrain";
+    pub const ENGINE_ANIMATION: &str = "engine.animation";
+    pub const ENGINE_DESTRUCTION: &str = "engine.destruction";
+    pub const ENGINE_PARTICLES: &str = "engine.particles";
+    pub const ENGINE_SHADER: &str = "engine.shader";
+}
+
+/// Canonical job-pass names for production-style domain task graph slices.
+///
+/// A pass name describes *what kind of work* is happening, independently from
+/// which worker executes it. This keeps profiler reports stable when a pass
+/// moves from a main-thread barrier to an engine.jobs worker.
+pub mod job_pass {
+    pub const INPUT: &str = "input";
+    pub const CONTROLLERS: &str = "controllers";
+    pub const APPLY_INTENTS: &str = "apply-intents";
+    pub const PHYSICS: &str = "physics";
+    pub const DERIVED: &str = "derived";
+    pub const VISIBILITY: &str = "visibility";
+    pub const SCENE_SNAPSHOT: &str = "scene-snapshot";
+    pub const FEATURE_EXTRACT: &str = "feature-extract";
+    pub const RENDER_SUBMIT: &str = "render-submit";
+    pub const TERRAIN_RENDER_PACKET: &str = "terrain-render-packet";
+    pub const TERRAIN_GPU_RESIDENCY: &str = "terrain-gpu-residency";
+    pub const WORLD_STREAMING_PLAN: &str = "world-streaming-plan";
+    pub const ASSET_IO: &str = "asset-io";
+    pub const LISTFILE_DECODE: &str = "listfile-decode";
+    pub const SEMANTIC_DTO: &str = "semantic-dto";
+    pub const TEXTURE_DECODE: &str = "texture-decode";
+    pub const TEXTURE_UPLOAD: &str = "texture-upload";
+    pub const SHADER_COMPILE: &str = "shader-compile";
+    pub const VEGETATION_BUILD: &str = "vegetation-build";
+    pub const ANIMATION_SAMPLING: &str = "animation-sampling";
+    pub const DESTRUCTION_BUILD: &str = "destruction-build";
+    pub const PARTICLE_SIMULATION: &str = "particle-simulation";
+    pub const SERVICE_CALL: &str = "service-call";
+    pub const PROCESS: &str = "process";
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum JobExecutorKind {
     EngineWorker,
+    MainThreadBarrier,
     PluginHostBridge,
     ToolRunner,
     SimulationInternalParallelism,
@@ -35,6 +90,7 @@ impl JobExecutorKind {
     pub const fn as_str(self) -> &'static str {
         match self {
             Self::EngineWorker => "engine-worker",
+            Self::MainThreadBarrier => "main-thread-barrier",
             Self::PluginHostBridge => "plugin-host-bridge",
             Self::ToolRunner => "tool-runner",
             Self::SimulationInternalParallelism => "simulation-internal-parallelism",
@@ -111,7 +167,10 @@ impl Default for EngineJobEventV1 {
 
 impl EngineJobEventV1 {
     #[inline]
-    pub fn new(event: EngineTaskEvent, executor: JobExecutorKind, semantic_owner: impl Into<String>) -> Self {
+    pub fn new(mut event: EngineTaskEvent, executor: JobExecutorKind, semantic_owner: impl Into<String>) -> Self {
+        if event.executor.is_none() {
+            event = event.with_executor(executor.as_str());
+        }
         Self {
             executor,
             semantic_owner: semantic_owner.into(),
@@ -244,6 +303,11 @@ pub struct JobStartRequestV1 {
     pub owner: String,
     pub category: String,
     pub lane: String,
+    pub priority: String,
+    pub frame_id: Option<u64>,
+    pub dependency_group: String,
+    pub job_pass: String,
+    pub job_domain: String,
     pub can_pause: bool,
     pub can_cancel: bool,
 }
@@ -256,6 +320,11 @@ impl Default for JobStartRequestV1 {
             owner: "engine.jobs".to_owned(),
             category: "external".to_owned(),
             lane: "external".to_owned(),
+            priority: "normal".to_owned(),
+            frame_id: None,
+            dependency_group: String::new(),
+            job_pass: "external".to_owned(),
+            job_domain: "engine.jobs".to_owned(),
             can_pause: false,
             can_cancel: true,
         }
@@ -278,6 +347,10 @@ pub struct JobRunProcessStartRequestV1 {
     pub cwd: String,
     pub env: BTreeMap<String, String>,
     pub result_path: String,
+    pub frame_id: Option<u64>,
+    pub dependency_group: String,
+    pub job_pass: String,
+    pub job_domain: String,
     pub can_cancel: bool,
 }
 
@@ -295,6 +368,10 @@ impl Default for JobRunProcessStartRequestV1 {
             cwd: String::new(),
             env: BTreeMap::new(),
             result_path: String::new(),
+            frame_id: None,
+            dependency_group: String::new(),
+            job_pass: "process".to_owned(),
+            job_domain: "engine.jobs".to_owned(),
             can_cancel: true,
         }
     }
@@ -350,6 +427,10 @@ pub struct JobServiceCallRequestV1 {
     pub lane: String,
     pub priority: String,
     pub can_pause: bool,
+    pub frame_id: Option<u64>,
+    pub dependency_group: String,
+    pub job_pass: String,
+    pub job_domain: String,
     pub can_cancel: bool,
     pub target: JobServiceCallTargetV1,
 }
@@ -364,6 +445,10 @@ impl Default for JobServiceCallRequestV1 {
             lane: "plugin".to_owned(),
             priority: "background".to_owned(),
             can_pause: false,
+            frame_id: None,
+            dependency_group: String::new(),
+            job_pass: "service-call".to_owned(),
+            job_domain: "engine.jobs".to_owned(),
             can_cancel: true,
             target: JobServiceCallTargetV1::default(),
         }
@@ -406,6 +491,12 @@ pub struct JobProgressEventV1 {
     pub detail: String,
     pub progress_01: f32,
     pub phase: EngineTaskPhase,
+    pub frame_id: Option<u64>,
+    pub dependency_group: String,
+    pub job_pass: String,
+    pub job_domain: String,
+    pub priority: String,
+    pub executor: String,
     pub can_pause: bool,
     pub can_cancel: bool,
 }
@@ -422,6 +513,12 @@ impl Default for JobProgressEventV1 {
             detail: String::new(),
             progress_01: 0.0,
             phase: EngineTaskPhase::Running,
+            frame_id: None,
+            dependency_group: String::new(),
+            job_pass: "runtime".to_owned(),
+            job_domain: "engine.jobs".to_owned(),
+            priority: "normal".to_owned(),
+            executor: "external-provider".to_owned(),
             can_pause: false,
             can_cancel: true,
         }
@@ -430,7 +527,7 @@ impl Default for JobProgressEventV1 {
 
 impl JobProgressEventV1 {
     pub fn into_task_event(self) -> EngineTaskEvent {
-        EngineTaskEvent::new(
+        let mut event = EngineTaskEvent::new(
             self.job_id,
             "engine.jobs",
             self.owner,
@@ -443,6 +540,17 @@ impl JobProgressEventV1 {
         )
         .with_progress(self.progress_01)
         .with_controls(self.can_pause, self.can_cancel)
+        .with_job_domain(self.job_domain)
+        .with_job_pass(self.job_pass)
+        .with_priority(self.priority)
+        .with_executor(self.executor);
+        if let Some(frame_id) = self.frame_id {
+            event = event.with_frame_id(frame_id);
+        }
+        if !self.dependency_group.trim().is_empty() {
+            event = event.with_dependency_group(self.dependency_group);
+        }
+        event
     }
 }
 
@@ -453,6 +561,10 @@ pub struct JobStatusJsonV1 {
     pub name: String,
     pub lane: String,
     pub priority: String,
+    pub frame_id: Option<u64>,
+    pub dependency_group: String,
+    pub job_pass: String,
+    pub job_domain: String,
     pub phase: EngineTaskPhase,
     pub can_pause: bool,
     pub can_cancel: bool,
@@ -468,6 +580,10 @@ impl Default for JobStatusJsonV1 {
             name: String::new(),
             lane: String::new(),
             priority: String::new(),
+            frame_id: None,
+            dependency_group: String::new(),
+            job_pass: String::new(),
+            job_domain: String::new(),
             phase: EngineTaskPhase::Scheduled,
             can_pause: false,
             can_cancel: false,
@@ -501,6 +617,15 @@ pub struct JobsSnapshotJsonV1 {
     pub completed_jobs: u64,
     pub cancelled_jobs: u64,
     pub panicked_jobs: u64,
+    #[serde(default)]
+    pub lanes: BTreeMap<String, JobsLaneSnapshotJsonV1>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
+#[serde(default)]
+pub struct JobsLaneSnapshotJsonV1 {
+    pub pending_jobs: usize,
+    pub completed_jobs: u64,
 }
 
 impl Default for JobsSnapshotJsonV1 {
@@ -514,6 +639,7 @@ impl Default for JobsSnapshotJsonV1 {
             completed_jobs: 0,
             cancelled_jobs: 0,
             panicked_jobs: 0,
+            lanes: BTreeMap::new(),
         }
     }
 }

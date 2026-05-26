@@ -6,6 +6,7 @@ use newengine_core::render::{
     TextureId, TextureMipDataDesc, TextureUsage,
 };
 use newengine_core::{JobLane, JobPriority, JobRequest, JobSystemHandle};
+use newengine_jobs_api::{job_domain, job_pass};
 use newengine_plugin_host::default_host_api;
 use parking_lot::Mutex;
 use std::num::NonZeroU32;
@@ -86,6 +87,10 @@ impl RuntimeRenderController {
             .with_category("asset-decode")
             .with_lane(JobLane::AssetIo)
             .with_priority(JobPriority::Interactive)
+            .with_frame_id(self.frame.frame_index)
+            .with_dependency_group(format!("frame.{}.asset-io.texture-decode", self.frame.frame_index))
+            .with_job_domain(job_domain::ENGINE_ASSETS)
+            .with_job_pass(job_pass::TEXTURE_DECODE)
             .with_task_id(format!("render.material.texture.decode.{task_path}"));
         let ticket = job_system.submit_request(request, move || {
             let assets = AssetServiceClient::new(default_host_api());

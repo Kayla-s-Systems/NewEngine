@@ -3,7 +3,7 @@
 use core::cmp::Ordering;
 
 use newengine_ecs::World;
-use newengine_jobs_api::{EngineTaskEvent, EngineTaskPhase};
+use newengine_jobs_api::{job_domain, job_pass, EngineTaskEvent, EngineTaskPhase};
 
 use crate::{access::AccessMask, commands::CommandBuffer, systems, SimFrame};
 
@@ -34,11 +34,11 @@ impl SimStage {
     #[inline]
     pub const fn as_str(self) -> &'static str {
         match self {
-            Self::Input => "input",
-            Self::Controllers => "controllers",
-            Self::ApplyIntents => "apply-intents",
-            Self::Physics => "physics",
-            Self::Derived => "derived",
+            Self::Input => job_pass::INPUT,
+            Self::Controllers => job_pass::CONTROLLERS,
+            Self::ApplyIntents => job_pass::APPLY_INTENTS,
+            Self::Physics => job_pass::PHYSICS,
+            Self::Derived => job_pass::DERIVED,
         }
     }
 }
@@ -97,7 +97,13 @@ impl SimulationJobBatch {
             status,
             detail,
         )
-        .with_controls(false, false);
+        .with_controls(false, false)
+        .with_frame_id(self.fixed_tick)
+        .with_dependency_group(format!("simulation.frame.{}.{}", self.fixed_tick, self.stage.as_str()))
+        .with_job_domain(job_domain::ENGINE_SIMULATION)
+        .with_job_pass(self.stage.as_str())
+        .with_priority("interactive")
+        .with_executor(self.executor);
         if let Some(progress) = progress_01 {
             event = event.with_progress(progress);
         }

@@ -98,6 +98,69 @@ impl Perspective {
         ])
     }
 
+
+    /// RH perspective, Vulkan Z: reversed 1..0, Y flipped.
+    ///
+    /// This is useful for very large worlds when the render backend uses a reversed-Z
+    /// depth buffer. It is opt-in because the backend depth compare state must match it.
+    #[inline]
+    pub fn matrix_vk_reversed_z(&self) -> Mat4 {
+        let f = 1.0 / (0.5 * self.fovy).tan();
+        let aspect = self.aspect.max(1e-6);
+        let near = self.near.max(1e-6);
+        let far = self.far.max(near + 1e-3);
+        let inv = 1.0 / (far - near);
+
+        Mat4::from_cols_array(&[
+            f / aspect,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            -f,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            near * inv,
+            -1.0,
+            0.0,
+            0.0,
+            far * near * inv,
+            0.0,
+        ])
+    }
+
+    /// RH infinite-far perspective, Vulkan reversed-Z, Y flipped.
+    ///
+    /// Use only with a reversed-Z depth state. This avoids far-plane precision collapse for
+    /// streamed worlds while keeping the public `Projection` shape unchanged.
+    #[inline]
+    pub fn matrix_vk_reversed_z_infinite_far(&self) -> Mat4 {
+        let f = 1.0 / (0.5 * self.fovy).tan();
+        let aspect = self.aspect.max(1e-6);
+        let near = self.near.max(1e-6);
+
+        Mat4::from_cols_array(&[
+            f / aspect,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            -f,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            -1.0,
+            0.0,
+            0.0,
+            near,
+            0.0,
+        ])
+    }
+
     /// GL-style RH perspective, Z: -1..1, no Y flip.
     #[inline]
     pub fn matrix_gl(&self) -> Mat4 {

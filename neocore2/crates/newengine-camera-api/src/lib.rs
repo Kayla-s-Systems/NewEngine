@@ -284,6 +284,16 @@ pub struct CameraFrameSnapshot {
     pub inverse_view_projection_cols: Mat4Cols,
     #[serde(default)]
     pub position_ws: [f32; 3],
+    /// Precise authored world-space camera position. Providers that do not own a large-world
+    /// origin may mirror `position_ws` here.
+    #[serde(default)]
+    pub position_ws_f64: [f64; 3],
+    /// Camera-local world origin used to lower large worlds into renderer-safe `f32` space.
+    #[serde(default)]
+    pub world_origin_ws_f64: [f64; 3],
+    /// Camera position relative to `world_origin_ws_f64`, expressed as renderer-safe `f32`.
+    #[serde(default)]
+    pub position_origin_relative_ws: [f32; 3],
     #[serde(default)]
     pub forward_ws: [f32; 3],
     #[serde(default)]
@@ -314,6 +324,9 @@ impl Default for CameraFrameSnapshot {
             inverse_projection_cols: identity_cols(),
             inverse_view_projection_cols: identity_cols(),
             position_ws: [0.0, 0.0, 0.0],
+            position_ws_f64: [0.0, 0.0, 0.0],
+            world_origin_ws_f64: [0.0, 0.0, 0.0],
+            position_origin_relative_ws: [0.0, 0.0, 0.0],
             forward_ws: [0.0, 0.0, -1.0],
             right_ws: [1.0, 0.0, 0.0],
             up_ws: [0.0, 1.0, 0.0],
@@ -340,7 +353,11 @@ impl Default for CameraServiceInfo {
     fn default() -> Self {
         Self {
             protocol: "newengine.camera-api/v1".to_owned(),
-            features: Vec::new(),
+            features: vec![
+                "camera.frame_snapshot_v1".to_owned(),
+                "camera.large_world_origin_v1".to_owned(),
+                "camera.postfx_intent_v1".to_owned(),
+            ],
             methods: {
                 let mut methods = newengine_service_api::JSON_CONTROL_SERVICE_METHODS_V1
                     .iter()
@@ -389,6 +406,8 @@ mod tests {
         let decoded: CameraFrameSnapshot = serde_json::from_str("{}").expect("defaults must decode");
         assert!(decoded.finite);
         assert_eq!(decoded.forward_ws, [0.0, 0.0, -1.0]);
+        assert_eq!(decoded.position_ws_f64, [0.0, 0.0, 0.0]);
+        assert_eq!(decoded.world_origin_ws_f64, [0.0, 0.0, 0.0]);
     }
 
     #[test]

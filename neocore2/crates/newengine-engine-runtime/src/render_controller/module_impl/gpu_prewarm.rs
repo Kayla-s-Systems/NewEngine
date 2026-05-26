@@ -127,12 +127,13 @@ impl RuntimeRenderController {
 }
 
 fn terrain_gpu_upload_budget_per_frame() -> u32 {
-    crate::env_config::var_u32("NEWENGINE_TERRAIN_GPU_UPLOADS_PER_FRAME", 1, 0, 8)
+    crate::env_config::var_u32("NEWENGINE_TERRAIN_GPU_UPLOADS_PER_FRAME", 3, 0, 16)
 }
 
 fn terrain_gpu_upload_interval_frames() -> u64 {
-    // A single streamed terrain chunk is still a visible CPU/GPU bridge cost
-    // on the current Vulkan service path. Do not spend that cost on every
-    // consecutive frame while the player crosses a chunk boundary.
-    crate::env_config::var_u64("NEWENGINE_TERRAIN_GPU_UPLOAD_INTERVAL_FRAMES", 6, 1, 240)
+    // Terrain visibility should not lag behind streaming by several frames.
+    // Uploads are still explicitly budgeted, but the default pumps residency
+    // every frame so the player does not stare at an empty world while chunks
+    // are already CPU-prepared.
+    crate::env_config::var_u64("NEWENGINE_TERRAIN_GPU_UPLOAD_INTERVAL_FRAMES", 1, 1, 240)
 }

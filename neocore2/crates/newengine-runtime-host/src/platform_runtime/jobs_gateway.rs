@@ -6,7 +6,7 @@ use newengine_jobs_api::{
     jobs_method, EngineJobEventV1, JobControlResponseV1, JobExecutorKind, JobIdRequestV1,
     JobProgressEventV1, JobRunProcessStartRequestV1, JobRunProcessStartedV1,
     JobServiceCallAcceptedV1, JobServiceCallRequestV1, JobStartRequestV1,
-    JobsServiceInfoV1, JobsSnapshotJsonV1, JobStatusJsonV1, JobTraceJsonV1,
+    JobsLaneSnapshotJsonV1, JobsServiceInfoV1, JobsSnapshotJsonV1, JobStatusJsonV1, JobTraceJsonV1,
     ENGINE_JOBS_SERVICE_ID, JOBS_BACKEND_CAPABILITY_ID, JOBS_RUNTIME_CONTRACT, JOBS_SERVICE_ID,
     JOBS_SERVICE_METHODS, EngineTaskControlAction, EngineTaskEvent, EngineTaskPhase,
 };
@@ -61,6 +61,10 @@ fn status_from_core(status: JobTaskStatus) -> JobStatusJsonV1 {
         name: status.label.to_owned(),
         lane: status.lane.as_str().to_owned(),
         priority: status.priority.as_str().to_owned(),
+        frame_id: status.frame_id,
+        dependency_group: status.dependency_group.unwrap_or_default(),
+        job_pass: status.job_pass.to_owned(),
+        job_domain: status.job_domain.to_owned(),
         phase: status.phase,
         can_pause: status.can_pause,
         can_cancel: status.can_cancel,
@@ -107,6 +111,23 @@ fn invoke(state: &mut JobsGatewayState, payload: Blob) -> RResult<Blob, RString>
 
 fn snapshot(state: &mut JobsGatewayState) -> JobsSnapshotJsonV1 {
     let snapshot = state.jobs.snapshot();
+    let mut lanes = std::collections::BTreeMap::new();
+    for lane in [
+        JobLane::Simulation,
+        JobLane::RenderPrep,
+        JobLane::Streaming,
+        JobLane::AssetIo,
+        JobLane::Plugin,
+        JobLane::Background,
+    ] {
+        lanes.insert(
+            lane.as_str().to_owned(),
+            JobsLaneSnapshotJsonV1 {
+                pending_jobs: snapshot.pending_for_lane(lane),
+                completed_jobs: snapshot.completed_for_lane(lane),
+            },
+        );
+    }
     JobsSnapshotJsonV1 {
         worker_threads: snapshot.worker_threads,
         pending_jobs: snapshot.pending_jobs,
@@ -116,6 +137,7 @@ fn snapshot(state: &mut JobsGatewayState) -> JobsSnapshotJsonV1 {
         completed_jobs: snapshot.completed_jobs,
         cancelled_jobs: snapshot.cancelled_jobs,
         panicked_jobs: snapshot.panicked_jobs,
+        lanes,
     }
 }
 
@@ -142,6 +164,32 @@ fn priority_from_str(value: &str) -> JobPriority {
     }
 }
 
+
+fn job_domain_from_request(value: &str, fallback_owner: &str) -> &'static str {
+    match value.trim() {
+        "engine.render" | "vulkan_renderer" => "engine.render",
+        "engine.assets" | "asset_manager" => "engine.assets",
+        "engine.simulation" | "newengine-sim" => "engine.simulation",
+        "profiler.api" => "engine.profiler",
+        _ if fallback_owner == "engine.render" => "engine.render",
+        _ if fallback_owner == "profiler.api" => "engine.profiler",
+        _ => "engine.jobs",
+    }
+}
+
+fn job_pass_from_category(category: &str, fallback: &str) -> &'static str {
+    match category.trim() {
+        "shader.compile" => "shader-compile",
+        "shader.validate" => "shader-validate",
+        "texture.decode" | "asset-decode" => "texture-decode",
+        "profiler.report.flush" => "profiler-flush",
+        "service-call" => "service-call",
+        "tool.process" => "tool-process",
+        _ if fallback == "process" => "process",
+        _ => "runtime",
+    }
+}
+
 fn profiler_job_request(request: &JobServiceCallRequestV1) -> JobRequest {
     let label = match request.category.as_str() {
         "profiler.report.flush" => "profiler.report.flush",
@@ -163,8 +211,16 @@ fn profiler_job_request(request: &JobServiceCallRequestV1) -> JobRequest {
         .with_category(category)
         .with_lane(lane_from_str(request.lane.as_str()))
         .with_priority(priority_from_str(request.priority.as_str()))
+        .with_job_domain(job_domain_from_request(request.job_domain.as_str(), owner))
+        .with_job_pass(job_pass_from_category(request.category.as_str(), "service-call"))
         .pausable(request.can_pause)
         .cancellable(request.can_cancel);
+    if let Some(frame_id) = request.frame_id {
+        job = job.with_frame_id(frame_id);
+    }
+    if !request.dependency_group.trim().is_empty() {
+        job = job.with_dependency_group(request.dependency_group.trim().to_owned());
+    }
     if !request.job_id.trim().is_empty() {
         job = job.with_task_id(request.job_id.trim().to_owned());
     }
@@ -268,8 +324,16 @@ fn process_job_request(request: &JobRunProcessStartRequestV1) -> JobRequest {
         .with_category(category)
         .with_lane(lane_from_str(request.lane.as_str()))
         .with_priority(priority_from_str(request.priority.as_str()))
+        .with_job_domain(job_domain_from_request(request.job_domain.as_str(), owner))
+        .with_job_pass(job_pass_from_category(request.category.as_str(), "process"))
         .pausable(false)
         .cancellable(request.can_cancel);
+    if let Some(frame_id) = request.frame_id {
+        job = job.with_frame_id(frame_id);
+    }
+    if !request.dependency_group.trim().is_empty() {
+        job = job.with_dependency_group(request.dependency_group.trim().to_owned());
+    }
     if !request.job_id.trim().is_empty() {
         job = job.with_task_id(request.job_id.trim().to_owned());
     }
@@ -421,6 +485,9 @@ fn service(state: JobsGatewayState) -> newengine_plugin_api::ServiceV1Dyn<'stati
         "event-bus-progress",
         "external-process-ticket-poll",
         "binary-result-readback",
+        "domain-job-pass-metadata",
+        "frame-dependency-correlation",
+        "per-lane-snapshot",
     ])
     .gateway("engine.jobs")
     .notes("Runtime job/task gateway. Every long-running engine operation should have a JobId and publish progress through engine.task.event.v1; external tool processes must use start/poll/result instead of blocking runtime callers.");
@@ -443,6 +510,8 @@ fn service(state: JobsGatewayState) -> newengine_plugin_api::ServiceV1Dyn<'stati
                     name: "external-process".to_owned(),
                     lane: "render-prep".to_owned(),
                     priority: "background".to_owned(),
+                    job_domain: "engine.jobs".to_owned(),
+                    job_pass: "process".to_owned(),
                     phase: record.phase,
                     can_pause: false,
                     can_cancel: false,
@@ -499,7 +568,19 @@ fn service(state: JobsGatewayState) -> newengine_plugin_api::ServiceV1Dyn<'stati
                 EngineTaskPhase::Scheduled,
                 "Job scheduled",
                 "External/runtime job announced through engine.jobs.",
-            ).with_controls(request.can_pause, request.can_cancel).with_progress(0.0);
+            )
+            .with_controls(request.can_pause, request.can_cancel)
+            .with_progress(0.0)
+            .with_priority(request.priority)
+            .with_job_pass(request.job_pass)
+            .with_job_domain(request.job_domain)
+            .with_executor("external-provider");
+            if let Some(frame_id) = request.frame_id {
+                event = event.with_frame_id(frame_id);
+            }
+            if !request.dependency_group.trim().is_empty() {
+                event = event.with_dependency_group(request.dependency_group);
+            }
             if event.task_id.trim().is_empty() {
                 event.task_id = format!("external.job.{}", state.jobs.snapshot().submitted_jobs.saturating_add(1));
             }

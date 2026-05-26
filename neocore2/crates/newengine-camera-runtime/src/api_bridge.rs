@@ -33,6 +33,9 @@ pub fn camera_frame_snapshot_for_view(
         inverse_projection_cols: mat4_cols(frame.matrices.inv_proj),
         inverse_view_projection_cols: mat4_cols(frame.matrices.inv_view_proj),
         position_ws: vec3_arr(rig.position),
+        position_ws_f64: vec3_arr_f64(rig.position),
+        world_origin_ws_f64: [0.0, 0.0, 0.0],
+        position_origin_relative_ws: vec3_arr(rig.position),
         forward_ws: vec3_arr(rig.forward()),
         right_ws: vec3_arr(rig.right()),
         up_ws: vec3_arr(rig.up()),
@@ -96,4 +99,9 @@ fn mat4_cols(m: Mat4) -> Mat4Cols {
 #[inline]
 fn vec3_arr(v: Vec3) -> [f32; 3] {
     [v.x, v.y, v.z]
+}
+
+#[inline]
+fn vec3_arr_f64(v: Vec3) -> [f64; 3] {
+    [v.x as f64, v.y as f64, v.z as f64]
 }

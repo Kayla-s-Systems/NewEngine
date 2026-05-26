@@ -324,6 +324,33 @@ pub struct EngineTaskEvent {
     pub category: String,
     pub name: String,
     pub lane: String,
+    /// Optional frame id for frame-bound engine.jobs work.
+    ///
+    /// This is deliberately generic task metadata so profiler/loading/debug tools
+    /// can correlate CPU work without knowing the producer crate. Long-running
+    /// background jobs may leave it empty; render/simulation/streaming passes
+    /// should fill it.
+    #[serde(default)]
+    pub frame_id: Option<u64>,
+    /// Deterministic dependency group / barrier name for task-graph diagnostics.
+    #[serde(default)]
+    pub dependency_group: Option<String>,
+    /// Domain-level job pass, e.g. `visibility`, `streaming`, `terrain`,
+    /// `texture-decode`, `simulation`, `shader-compile`.
+    #[serde(default)]
+    pub job_pass: Option<String>,
+    /// Owner domain for the pass, e.g. `engine.render`, `engine.assets`,
+    /// `engine.simulation`.
+    #[serde(default)]
+    pub job_domain: Option<String>,
+    /// Stable scheduler priority as text.
+    #[serde(default)]
+    pub priority: Option<String>,
+    /// Executor identity such as `engine-worker`, `main-thread-barrier` or
+    /// `external-provider`. This makes dark work visible even when it is not
+    /// worker-pool backed yet.
+    #[serde(default)]
+    pub executor: Option<String>,
     pub phase: EngineTaskPhase,
     pub state_label: String,
     pub status: String,
@@ -357,6 +384,12 @@ impl EngineTaskEvent {
             category: category.into(),
             name: name.into(),
             lane: lane.into(),
+            frame_id: None,
+            dependency_group: None,
+            job_pass: None,
+            job_domain: None,
+            priority: None,
+            executor: None,
             phase,
             state_label: phase_label.to_owned(),
             status: status.into(),
@@ -366,6 +399,43 @@ impl EngineTaskEvent {
             can_cancel: false,
             terminal: phase.is_terminal(),
         }
+    }
+
+
+    #[inline]
+    pub fn with_frame_id(mut self, frame_id: u64) -> Self {
+        self.frame_id = Some(frame_id);
+        self
+    }
+
+    #[inline]
+    pub fn with_dependency_group(mut self, dependency_group: impl Into<String>) -> Self {
+        self.dependency_group = Some(dependency_group.into());
+        self
+    }
+
+    #[inline]
+    pub fn with_job_pass(mut self, job_pass: impl Into<String>) -> Self {
+        self.job_pass = Some(job_pass.into());
+        self
+    }
+
+    #[inline]
+    pub fn with_job_domain(mut self, job_domain: impl Into<String>) -> Self {
+        self.job_domain = Some(job_domain.into());
+        self
+    }
+
+    #[inline]
+    pub fn with_priority(mut self, priority: impl Into<String>) -> Self {
+        self.priority = Some(priority.into());
+        self
+    }
+
+    #[inline]
+    pub fn with_executor(mut self, executor: impl Into<String>) -> Self {
+        self.executor = Some(executor.into());
+        self
     }
 
     #[inline]

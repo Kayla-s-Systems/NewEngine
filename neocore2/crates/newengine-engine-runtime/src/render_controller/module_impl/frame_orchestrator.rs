@@ -145,6 +145,22 @@ impl RenderFrameOrchestrator {
             ui,
         };
 
+        Self::publish_render_job_pass_event(
+            controller.frame.frame_index,
+            newengine_jobs_api::job_pass::FEATURE_EXTRACT,
+            newengine_jobs_api::EngineTaskPhase::Scheduled,
+            "RenderPrep pass scheduled",
+            "Feature extraction is visible as a render-prep job-pass marker; the next refactor slice can move provider-safe extraction work onto engine.jobs workers.",
+            Some(0.0),
+        );
+        Self::publish_render_job_pass_event(
+            controller.frame.frame_index,
+            newengine_jobs_api::job_pass::FEATURE_EXTRACT,
+            newengine_jobs_api::EngineTaskPhase::Running,
+            "RenderPrep pass running",
+            "Feature extraction is executing on the render thread barrier because it still touches RenderApi/Scene state.",
+            None,
+        );
         let features = match FeatureExtractionFrame::extract_runtime(
             controller,
             r,
@@ -165,6 +181,14 @@ impl RenderFrameOrchestrator {
             features.profile_total_ms(),
             &features.profile_breakdown(),
             ui,
+        );
+        Self::publish_render_job_pass_event(
+            controller.frame.frame_index,
+            newengine_jobs_api::job_pass::FEATURE_EXTRACT,
+            newengine_jobs_api::EngineTaskPhase::Completed,
+            "RenderPrep pass completed",
+            format!("Feature extraction completed profile_ms={:.2} breakdown={}", features.profile_total_ms(), features.profile_breakdown()),
+            Some(1.0),
         );
         cpu_profile.mark("feature_extract");
 
@@ -226,6 +250,14 @@ impl RenderFrameOrchestrator {
         );
         cpu_profile.mark("envelope");
 
+        Self::publish_render_job_pass_event(
+            controller.frame.frame_index,
+            newengine_jobs_api::job_pass::RENDER_SUBMIT,
+            newengine_jobs_api::EngineTaskPhase::Running,
+            "Render submit consuming packets",
+            "Render submit is consuming the prepared frame envelope. Heavy world construction must happen before this point in RenderPrep/Streaming/AssetIo jobs.",
+            None,
+        );
         let submit_report = match submit_frame_envelope(r, frame_envelope, scope.trace_frame) {
             Ok(report) => report,
             Err(e) => {
@@ -245,6 +277,14 @@ impl RenderFrameOrchestrator {
             }
         };
         cpu_profile.mark("submit");
+        Self::publish_render_job_pass_event(
+            controller.frame.frame_index,
+            newengine_jobs_api::job_pass::RENDER_SUBMIT,
+            newengine_jobs_api::EngineTaskPhase::Completed,
+            "Render submit completed",
+            format!("Frame envelope submitted cpu_record_ms={:.2} gpu_submit_ms={:.2}", submit_report.cpu_record_ms, submit_report.gpu_submit_ms),
+            Some(1.0),
+        );
         Self::trace_cpu_profile(controller.frame.frame_index, scope.trace_frame, &cpu_profile);
         if render_shadow_map {
             controller.mark_shadow_map_rendered(shadow_plan);
@@ -306,6 +346,54 @@ impl RenderFrameOrchestrator {
                 notes: debug_notes,
             }),
         })
+    }
+
+    fn publish_render_job_pass_event(
+        frame_index: u64,
+        pass: &'static str,
+        phase: newengine_jobs_api::EngineTaskPhase,
+        status: impl Into<String>,
+        detail: impl Into<String>,
+        progress_01: Option<f32>,
+    ) {
+        let mut event = newengine_jobs_api::EngineTaskEvent::new(
+            format!("render.frame.{frame_index}.{pass}"),
+            "render.frame-orchestrator",
+            "engine.render",
+            "render",
+            format!("render:{pass}"),
+            "render-prep",
+            phase,
+            status.into(),
+            detail.into(),
+        )
+        .with_frame_id(frame_index)
+        .with_dependency_group(format!("frame.{frame_index}.render"))
+        .with_job_domain(newengine_jobs_api::job_domain::ENGINE_RENDER)
+        .with_job_pass(pass)
+        .with_priority("critical")
+        .with_executor("main-thread-barrier")
+        .with_controls(false, false);
+        if let Some(progress) = progress_01 {
+            event = event.with_progress(progress);
+        }
+        let job_event = newengine_jobs_api::EngineJobEventV1::new(
+            event.clone(),
+            newengine_jobs_api::JobExecutorKind::MainThreadBarrier,
+            "render-frame-job-pass",
+        );
+        if let Ok(payload) = serde_json::to_vec(&event) {
+            let _ = newengine_plugin_host::host_context::publish_event(
+                newengine_jobs_api::ENGINE_TASK_EVENT_TOPIC_V1,
+                &payload,
+            );
+        }
+        if let Ok(payload) = serde_json::to_vec(&job_event) {
+            let _ = newengine_plugin_host::host_context::publish_event(
+                newengine_jobs_api::ENGINE_JOB_EVENT_TOPIC_V1,
+                &payload,
+            );
+        }
     }
 
     fn trace_feature_extract_profile(

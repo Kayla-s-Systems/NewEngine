@@ -44,7 +44,27 @@ pub fn run_schedule_with_physics_mode_and_telemetry(
     physics_mode: PhysicsIntegrationMode,
     telemetry: Option<&SimulationJobTelemetry<'_>>,
 ) {
-    let frame = SimFrame::new(dt.max(0.0001), 0);
+    run_schedule_with_physics_mode_and_telemetry_for_frame(
+        schedule,
+        world,
+        dt,
+        0,
+        physics_api,
+        physics_mode,
+        telemetry,
+    );
+}
+
+pub fn run_schedule_with_physics_mode_and_telemetry_for_frame(
+    schedule: &mut SimSchedule,
+    world: &mut World,
+    dt: f32,
+    frame_index: u64,
+    physics_api: Option<&PhysicsApiRef>,
+    physics_mode: PhysicsIntegrationMode,
+    telemetry: Option<&SimulationJobTelemetry<'_>>,
+) {
+    let frame = SimFrame::new(dt.max(0.0001), frame_index);
 
     schedule.run_stage_with_telemetry(world, SimStage::Input, frame, telemetry);
     schedule.run_stage_with_telemetry(world, SimStage::Controllers, frame, telemetry);

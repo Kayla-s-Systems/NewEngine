@@ -9,6 +9,7 @@ use newengine_bounds::Bounds;
 use newengine_core::{call_service_v1_optional, JobLane, JobPriority, JobRequest, JobSystemHandle, JobTicket};
 use newengine_ecs::EntityId;
 use newengine_lighting::{AmbientLight, DirectionalLight, ShadowSettings};
+use newengine_jobs_api::{job_domain, job_pass};
 use newengine_materials::{MaterialFlags, MaterialId, MaterialRegistry};
 use newengine_plugin_host::default_host_api;
 use newengine_math::{EulerRot, Quat, Vec3};

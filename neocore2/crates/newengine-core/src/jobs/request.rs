@@ -10,6 +10,10 @@ pub struct JobRequest {
     pub priority: JobPriority,
     pub task_id: Option<String>,
     pub parent_task_id: Option<String>,
+    pub frame_id: Option<u64>,
+    pub dependency_group: Option<String>,
+    pub job_domain: &'static str,
+    pub job_pass: &'static str,
     pub can_pause: bool,
     pub can_cancel: bool,
 }
@@ -26,6 +30,10 @@ impl JobRequest {
             priority: JobPriority::Normal,
             task_id: None,
             parent_task_id: None,
+            frame_id: None,
+            dependency_group: None,
+            job_domain: "engine.jobs",
+            job_pass: "cpu-work",
             can_pause: false,
             can_cancel: true,
         }
@@ -58,6 +66,31 @@ impl JobRequest {
     #[inline]
     pub const fn with_category(mut self, category: &'static str) -> Self {
         self.category = category;
+        self
+    }
+
+
+    #[inline]
+    pub const fn with_frame_id(mut self, frame_id: u64) -> Self {
+        self.frame_id = Some(frame_id);
+        self
+    }
+
+    #[inline]
+    pub fn with_dependency_group(mut self, dependency_group: impl Into<String>) -> Self {
+        self.dependency_group = Some(dependency_group.into());
+        self
+    }
+
+    #[inline]
+    pub const fn with_job_domain(mut self, job_domain: &'static str) -> Self {
+        self.job_domain = job_domain;
+        self
+    }
+
+    #[inline]
+    pub const fn with_job_pass(mut self, job_pass: &'static str) -> Self {
+        self.job_pass = job_pass;
         self
     }
 

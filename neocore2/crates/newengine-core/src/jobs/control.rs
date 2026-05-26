@@ -28,6 +28,10 @@ struct JobControlInner {
     category: &'static str,
     lane: JobLane,
     priority: JobPriority,
+    frame_id: Option<u64>,
+    dependency_group: Option<String>,
+    job_domain: &'static str,
+    job_pass: &'static str,
     can_pause: bool,
     can_cancel: bool,
     cancel_requested: AtomicBool,
@@ -50,6 +54,10 @@ impl JobControl {
                 category: request.category,
                 lane: request.lane,
                 priority: request.priority,
+                frame_id: request.frame_id,
+                dependency_group: request.dependency_group.clone(),
+                job_domain: request.job_domain,
+                job_pass: request.job_pass,
                 can_pause: request.can_pause,
                 can_cancel: request.can_cancel,
                 cancel_requested: AtomicBool::new(false),
@@ -84,6 +92,10 @@ impl JobControl {
             label: self.inner.label,
             lane: self.inner.lane,
             priority: self.inner.priority,
+            frame_id: self.inner.frame_id,
+            dependency_group: self.inner.dependency_group.clone(),
+            job_domain: self.inner.job_domain,
+            job_pass: self.inner.job_pass,
             phase: *self.inner.phase.lock(),
             can_pause: self.inner.can_pause,
             can_cancel: self.inner.can_cancel,
@@ -179,8 +191,18 @@ impl JobControl {
             status.into(),
             detail.into(),
         )
-        .with_controls(self.inner.can_pause, self.inner.can_cancel);
+        .with_controls(self.inner.can_pause, self.inner.can_cancel)
+        .with_job_domain(self.inner.job_domain)
+        .with_job_pass(self.inner.job_pass)
+        .with_priority(self.inner.priority.as_str())
+        .with_executor("engine-worker");
 
+        if let Some(frame_id) = self.inner.frame_id {
+            event = event.with_frame_id(frame_id);
+        }
+        if let Some(group) = self.inner.dependency_group.as_ref() {
+            event = event.with_dependency_group(group.clone());
+        }
         if let Some(parent) = self.inner.parent_task_id.as_ref() {
             event = event.with_parent_task_id(parent.clone());
         }

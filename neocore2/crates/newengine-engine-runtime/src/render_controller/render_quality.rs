@@ -20,14 +20,18 @@ pub(crate) const SHADOW_RESOLUTION_MAX: u32 = 4096;
 /// `assets.textures.entry_runtime_v1` is a heavy semantic texture operation.
 /// Render may enqueue/poll this work, but it must not synchronously decode a
 /// dictionary on the present/submit thread.
-pub(crate) const MATERIAL_TEXTURE_IMPORT_START_BURST: u32 = 2;
-pub(crate) const MATERIAL_TEXTURE_DECODE_PUMP_BUDGET_MS: f32 = 1.0;
+pub(crate) const MATERIAL_TEXTURE_IMPORT_START_BURST: u32 = 4;
+pub(crate) const MATERIAL_TEXTURE_DECODE_PUMP_BUDGET_MS: f32 = 2.0;
 /// Maximum in-flight material texture decode jobs submitted to engine.jobs.
 ///
 /// `call_service_v1` stays synchronous inside a worker job, but the render
 /// thread no longer blocks on the asset provider. This is the first hot-path
 /// rule: heavy service work is ticketed and polled, not awaited by frame submit.
-pub(crate) const MATERIAL_TEXTURE_MAX_ASYNC_DECODE_JOBS: usize = 2;
+///
+/// Defaults intentionally bias toward fast startup/world reveal: several
+/// decode jobs may be in flight at once, but the frame thread still only pumps
+/// completion/residency work within explicit budgets.
+pub(crate) const MATERIAL_TEXTURE_MAX_ASYNC_DECODE_JOBS: usize = 6;
 
 /// The first playable frames should present quickly; expensive shadow cache
 /// population is staged immediately after initial visibility and material
