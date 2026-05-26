@@ -9,7 +9,7 @@ pub enum InputRuntimeSystem {
     Gamepad,
     CameraLook,
     GameplayMovement,
-    PauseMenu,
+    UiNavigation,
 }
 
 impl InputRuntimeSystem {
@@ -21,7 +21,7 @@ impl InputRuntimeSystem {
         InputRuntimeSystem::Gamepad,
         InputRuntimeSystem::CameraLook,
         InputRuntimeSystem::GameplayMovement,
-        InputRuntimeSystem::PauseMenu,
+        InputRuntimeSystem::UiNavigation,
     ];
 
     #[inline]
@@ -34,7 +34,7 @@ impl InputRuntimeSystem {
             Self::Gamepad => "engine.input.gamepad",
             Self::CameraLook => "engine.input.camera_look",
             Self::GameplayMovement => "engine.input.gameplay_movement",
-            Self::PauseMenu => "engine.input.pause_menu",
+            Self::UiNavigation => "engine.input.ui_navigation",
         }
     }
 
@@ -48,7 +48,7 @@ impl InputRuntimeSystem {
             Self::Gamepad => "Gamepad backend",
             Self::CameraLook => "Camera look controls",
             Self::GameplayMovement => "Gameplay movement controls",
-            Self::PauseMenu => "Pause/menu controls",
+            Self::UiNavigation => "UI navigation controls",
         }
     }
 
@@ -62,7 +62,7 @@ impl InputRuntimeSystem {
             Self::Gamepad => "newengine.input/gilrs",
             Self::CameraLook => "newengine-camera-runtime",
             Self::GameplayMovement => "newengine-gameplay.player-controller",
-            Self::PauseMenu => "newengine-ui-menu-runtime",
+            Self::UiNavigation => "engine.ui.node",
         }
     }
 

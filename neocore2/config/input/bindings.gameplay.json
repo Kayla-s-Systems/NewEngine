@@ -275,85 +275,85 @@
       ]
     },
     {
-      "id": "engine.ui.menu.toggle_pause",
-      "label": "Toggle menu",
+      "id": "engine.ui.primary.toggle",
+      "label": "Toggle UI",
       "contexts": [],
       "dispatch": "consume_first",
       "effects": [
         {
-          "kind": "menu_toggle"
+          "kind": "ui_toggle"
         }
       ]
     },
     {
-      "id": "ui.menu.accept",
+      "id": "ui.accept",
       "label": "Accept",
       "contexts": [],
       "dispatch": "consume_first",
       "effects": [
         {
-          "kind": "menu_accept"
+          "kind": "ui_accept"
         }
       ]
     },
     {
-      "id": "ui.menu.back",
+      "id": "ui.back",
       "label": "Back",
       "contexts": [],
       "dispatch": "consume_first",
       "effects": [
         {
-          "kind": "menu_back"
+          "kind": "ui_back"
         }
       ]
     },
     {
-      "id": "ui.menu.up",
-      "label": "Menu up",
+      "id": "ui.nav.up",
+      "label": "UI up",
       "contexts": [],
       "dispatch": "consume_first",
       "effects": [
         {
-          "kind": "menu_nav",
+          "kind": "ui_nav",
           "x": 0,
           "y": -1
         }
       ]
     },
     {
-      "id": "ui.menu.down",
-      "label": "Menu down",
+      "id": "ui.nav.down",
+      "label": "UI down",
       "contexts": [],
       "dispatch": "consume_first",
       "effects": [
         {
-          "kind": "menu_nav",
+          "kind": "ui_nav",
           "x": 0,
           "y": 1
         }
       ]
     },
     {
-      "id": "ui.menu.left",
-      "label": "Menu left",
+      "id": "ui.nav.left",
+      "label": "UI left",
       "contexts": [],
       "dispatch": "consume_first",
       "effects": [
         {
-          "kind": "menu_nav",
+          "kind": "ui_nav",
           "x": -1,
           "y": 0
         }
       ]
     },
     {
-      "id": "ui.menu.right",
-      "label": "Menu right",
+      "id": "ui.nav.right",
+      "label": "UI right",
       "contexts": [],
       "dispatch": "consume_first",
       "effects": [
         {
-          "kind": "menu_nav",
+          "kind": "ui_nav",
           "x": 1,
           "y": 0
         }
@@ -370,15 +370,15 @@
   "listeners": [
     {
       "owner": "newengine-ui",
-      "id": "pause-menu",
+      "id": "ui-navigation",
       "action_filter": [
-        "engine.ui.menu.toggle_pause",
-        "ui.menu.accept",
-        "ui.menu.back",
-        "ui.menu.up",
-        "ui.menu.down",
-        "ui.menu.left",
-        "ui.menu.right"
+        "engine.ui.primary.toggle",
+        "ui.accept",
+        "ui.back",
+        "ui.nav.up",
+        "ui.nav.down",
+        "ui.nav.left",
+        "ui.nav.right"
       ],
       "context_filter": [],
       "priority": 100,
@@ -515,56 +515,49 @@
       "phase": "Pressed"
     },
     {
-      "action": "engine.ui.menu.toggle_pause",
-      "device": "Keyboard",
-      "code": 114,
-      "name": null,
-      "phase": "Pressed"
-    },
-    {
-      "action": "ui.menu.accept",
+      "action": "ui.accept",
       "device": "Keyboard",
       "code": 57,
       "name": null,
       "phase": "Pressed"
     },
     {
-      "action": "ui.menu.accept",
+      "action": "ui.accept",
       "device": "Keyboard",
       "code": 58,
       "name": null,
       "phase": "Pressed"
     },
     {
-      "action": "ui.menu.back",
+      "action": "ui.back",
       "device": "Keyboard",
       "code": 70,
       "name": null,
       "phase": "Pressed"
     },
     {
-      "action": "ui.menu.up",
+      "action": "ui.nav.up",
       "device": "Keyboard",
       "code": 87,
       "name": null,
       "phase": "Pressed"
     },
     {
-      "action": "ui.menu.down",
+      "action": "ui.nav.down",
       "device": "Keyboard",
       "code": 89,
       "name": null,
       "phase": "Pressed"
     },
     {
-      "action": "ui.menu.left",
+      "action": "ui.nav.left",
       "device": "Keyboard",
       "code": 86,
       "name": null,
       "phase": "Pressed"
     },
     {
-      "action": "ui.menu.right",
+      "action": "ui.nav.right",
       "device": "Keyboard",
       "code": 88,
       "name": null,
@@ -613,52 +606,59 @@
       "phase": "Pressed"
     },
     {
-      "action": "engine.ui.menu.toggle_pause",
-      "device": "GamepadButton",
-      "code": 0,
-      "name": "Start",
-      "phase": "Pressed"
-    },
-    {
-      "action": "ui.menu.accept",
+      "action": "ui.accept",
       "device": "GamepadButton",
       "code": 0,
       "name": "South",
       "phase": "Pressed"
     },
     {
-      "action": "ui.menu.back",
+      "action": "ui.back",
       "device": "GamepadButton",
       "code": 0,
       "name": "East",
       "phase": "Pressed"
     },
     {
-      "action": "ui.menu.up",
+      "action": "ui.nav.up",
       "device": "GamepadButton",
       "code": 0,
       "name": "DPadUp",
       "phase": "Pressed"
     },
     {
-      "action": "ui.menu.down",
+      "action": "ui.nav.down",
       "device": "GamepadButton",
       "code": 0,
       "name": "DPadDown",
       "phase": "Pressed"
     },
     {
-      "action": "ui.menu.left",
+      "action": "ui.nav.left",
       "device": "GamepadButton",
       "code": 0,
       "name": "DPadLeft",
       "phase": "Pressed"
     },
     {
-      "action": "ui.menu.right",
+      "action": "ui.nav.right",
       "device": "GamepadButton",
       "code": 0,
       "name": "DPadRight",
+      "phase": "Pressed"
+    },
+    {
+      "action": "engine.ui.primary.toggle",
+      "device": "Keyboard",
+      "code": 114,
+      "name": null,
+      "phase": "Pressed"
+    },
+    {
+      "action": "engine.ui.primary.toggle",
+      "device": "GamepadButton",
+      "code": 0,
+      "name": "Start",
       "phase": "Pressed"
     },
     {

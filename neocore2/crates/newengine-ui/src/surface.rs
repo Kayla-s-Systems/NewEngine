@@ -107,10 +107,6 @@ impl UiProviderManifest {
         self.surfaces.iter().any(|surface| surface == surface_id)
     }
 
-    #[inline]
-    pub fn supports_kind(&self, kind: UiSurfaceKind) -> bool {
-        self.supports_surface(kind.id())
-    }
 
     #[inline]
     pub fn none() -> Self {
@@ -136,25 +132,6 @@ impl UiProviderManifest {
                 UI_FEATURE_KSYSTEMS_ERROR_MODAL.to_owned(),
                 UI_FEATURE_STANDARD_MODAL_SYSTEM.to_owned(),
             ],
-        }
-    }
-}
-
-/// High-level surface kind. Concrete renderers consume this as a declarative spec.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-pub enum UiSurfaceKind {
-    Loading,
-    ErrorModal,
-    Runtime,
-}
-
-impl UiSurfaceKind {
-    #[inline]
-    pub const fn id(self) -> &'static str {
-        match self {
-            Self::Loading => UI_SURFACE_ENGINE_LOADING,
-            Self::ErrorModal => UI_SURFACE_ENGINE_ERROR_MODAL,
-            Self::Runtime => UI_SURFACE_RUNTIME_OVERLAY,
         }
     }
 }
@@ -359,12 +336,13 @@ impl Default for UiErrorModalSpec {
     }
 }
 
-/// A complete UI surface projection. State comes from engine events/readiness;
-/// the provider only controls how that state should be presented.
+/// A complete UI surface projection. Every interface is identified by a
+/// surface id and represented as data; there are no hardcoded surface-kind
+/// branches in the public projection contract.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct UiSurfaceProjection<T> {
     pub version: u32,
-    pub kind: UiSurfaceKind,
+    pub surface_id: String,
     pub provider: UiProviderBinding,
     pub shell: UiShellSpec,
     pub state: T,
@@ -372,10 +350,10 @@ pub struct UiSurfaceProjection<T> {
 
 impl<T> UiSurfaceProjection<T> {
     #[inline]
-    pub fn new(kind: UiSurfaceKind, provider: UiProviderBinding, shell: UiShellSpec, state: T) -> Self {
+    pub fn new(surface_id: impl Into<String>, provider: UiProviderBinding, shell: UiShellSpec, state: T) -> Self {
         Self {
             version: 1,
-            kind,
+            surface_id: surface_id.into(),
             provider,
             shell,
             state,
@@ -384,16 +362,16 @@ impl<T> UiSurfaceProjection<T> {
 
     #[inline]
     pub fn loading(provider: UiProviderBinding, shell: UiShellSpec, state: T) -> Self {
-        Self::new(UiSurfaceKind::Loading, provider, shell, state)
+        Self::new(UI_SURFACE_ENGINE_LOADING, provider, shell, state)
     }
 
     #[inline]
     pub fn error_modal(provider: UiProviderBinding, shell: UiShellSpec, state: T) -> Self {
-        Self::new(UiSurfaceKind::ErrorModal, provider, shell, state)
+        Self::new(UI_SURFACE_ENGINE_ERROR_MODAL, provider, shell, state)
     }
 
     #[inline]
-    pub fn surface_id(&self) -> &'static str {
-        self.kind.id()
+    pub fn surface_id(&self) -> &str {
+        self.surface_id.as_str()
     }
 }

@@ -2,10 +2,9 @@
 
 use crate::provider::{UiBuildFn, UiFrameDesc, UiFrameOutput, UiProvider, UiProviderKind};
 use crate::schema::{
-    UiActionDeclaration, UiActionRoute, UiLayoutDeclaration, UiProviderCatalog, UiThemeDeclaration, UI_ACTION_CLOSE_MODAL, UI_ACTION_OPEN_LOGS, UI_ACTION_OPEN_SETTINGS,
-    UI_ACTION_PAUSE_GAME, UI_ACTION_QUIT, UI_ACTION_RESUME_GAME, UI_ACTION_START_GAME,
+    UiActionDeclaration, UiActionRoute, UiLayoutDeclaration, UiProviderCatalog, UiThemeDeclaration, UI_ACTION_CLOSE_MODAL, UI_ACTION_OPEN_LOGS,
+    UI_ACTION_TOGGLE_PRIMARY_UI, UI_ACTION_QUIT, UI_ACTION_RESUME_GAME, UI_ACTION_START_GAME,
     UI_ACTION_TOGGLE_DEBUG_OVERLAY, UI_SURFACE_DEBUG_OVERLAY, UI_SURFACE_GAME_HUD,
-    UI_SURFACE_MAIN_MENU, UI_SURFACE_PAUSE_MENU, UI_SURFACE_SETTINGS,
 };
 use crate::surface::{
     UiProviderManifest, UI_FEATURE_EXTERNAL_PLUGIN_PROVIDER, UI_SURFACE_ENGINE_ERROR_MODAL,
@@ -64,9 +63,6 @@ impl UiProvider for PluginUiProvider {
                 UI_SURFACE_ENGINE_ERROR_MODAL.to_owned(),
                 UI_SURFACE_RUNTIME_OVERLAY.to_owned(),
                 UI_SURFACE_GAME_HUD.to_owned(),
-                UI_SURFACE_MAIN_MENU.to_owned(),
-                UI_SURFACE_PAUSE_MENU.to_owned(),
-                UI_SURFACE_SETTINGS.to_owned(),
                 UI_SURFACE_DEBUG_OVERLAY.to_owned(),
             ],
             features: vec![UI_FEATURE_EXTERNAL_PLUGIN_PROVIDER.to_owned()],
@@ -82,13 +78,11 @@ impl UiProvider for PluginUiProvider {
             UiLayoutDeclaration { id: "engine.loading.subsystem_card.ksystems".to_owned(), surface_id: UI_SURFACE_ENGINE_LOADING.to_owned(), document: "assets/ui/engine/loading.neui@layout.subsystem_cards".to_owned(), hot_reload: true, fallback_document: None },
             UiLayoutDeclaration { id: "engine.error_modal.ksystems".to_owned(), surface_id: UI_SURFACE_ENGINE_ERROR_MODAL.to_owned(), document: "assets/ui/engine/error_modal.neui@surface".to_owned(), hot_reload: true, fallback_document: None },
             UiLayoutDeclaration { id: "game.hud.open_world".to_owned(), surface_id: UI_SURFACE_GAME_HUD.to_owned(), document: "assets/ui/game/hud.neui@surface".to_owned(), hot_reload: true, fallback_document: None },
-            UiLayoutDeclaration { id: "engine.pause_menu.open_world".to_owned(), surface_id: UI_SURFACE_PAUSE_MENU.to_owned(), document: "assets/ui/engine/pause_menu.neui@surface".to_owned(), hot_reload: true, fallback_document: None },
         ];
         catalog.actions = vec![
             action(UI_ACTION_START_GAME, "Start", "GameCommand"),
             action(UI_ACTION_RESUME_GAME, "Resume", "GameCommand"),
-            action(UI_ACTION_PAUSE_GAME, "Pause", "GameCommand"),
-            action(UI_ACTION_OPEN_SETTINGS, "Settings", "UiCommand"),
+            action(UI_ACTION_TOGGLE_PRIMARY_UI, "Primary UI", "GameCommand"),
             action(UI_ACTION_OPEN_LOGS, "Open Logs", "SystemCommand"),
             action(UI_ACTION_CLOSE_MODAL, "Close", "UiCommand"),
             action(UI_ACTION_TOGGLE_DEBUG_OVERLAY, "Debug", "RuntimeCommand"),

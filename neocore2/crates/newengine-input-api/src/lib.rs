@@ -186,7 +186,7 @@ pub mod key_identity {
 pub mod engine_default_keybind {
     use super::key_code;
 
-    pub const PAUSE_MENU_TOGGLE: u32 = key_code::ESCAPE;
+    pub const PRIMARY_UI_TOGGLE: u32 = key_code::ESCAPE;
     pub const ASSET_BROWSER_TOGGLE: u32 = key_code::F1;
 }
 

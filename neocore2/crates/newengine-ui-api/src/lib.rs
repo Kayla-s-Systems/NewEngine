@@ -112,8 +112,8 @@ pub const UI_SERVICE_METHOD_LAYOUT_MANIFEST_V1: &str = "layout_manifest_v1";
 pub const UI_SERVICE_METHOD_ACTION_MANIFEST_V1: &str = "action_manifest_v1";
 pub const UI_SERVICE_METHOD_LOADING_SHELL_V1: &str = "loading_shell_v1";
 pub const UI_SERVICE_METHOD_DEBUG_TELEMETRY_SCHEMA: &str = "debug_telemetry_schema";
-pub const UI_SERVICE_METHOD_DEBUG_OVERLAY_TELEMETRY_V1: &str = "debug_overlay_telemetry_v1";
-pub const UI_SERVICE_METHOD_PAUSE_MENU_STATE_V1: &str = "pause_menu_state_v1";
+/// Generic retained UI surface/node state. Runtime publishes state only; provider owns layout/rendering.
+pub const UI_SERVICE_METHOD_SURFACE_NODE_V1: &str = "ui.surface_node_v1";
 pub const UI_SERVICE_METHOD_DRAW_FRAME_V1: &str = "draw_frame_v1";
 pub const UI_SERVICE_METHOD_DRAW_FRAME_BIN_V1: &str = "draw_frame_bin_v1";
 
@@ -138,10 +138,25 @@ pub const UI_SURFACE_ENGINE_LOADING: &str = "engine.loading";
 pub const UI_SURFACE_ENGINE_ERROR_MODAL: &str = "engine.error_modal";
 pub const UI_SURFACE_RUNTIME_OVERLAY: &str = "runtime.overlay";
 pub const UI_SURFACE_RUNTIME_DEBUG_OVERLAY: &str = "runtime.debug_overlay";
-pub const UI_SURFACE_ENGINE_PAUSE_MENU: &str = "engine.pause_menu";
+pub const UI_SURFACE_ENGINE_PRIMARY: &str = "engine.ui.primary";
 /// Editor-facing Asset Browser surface. The read model stays in `engine.assets.browser`;
 /// this id only names the live `engine.ui` projection surface.
 pub const UI_SURFACE_EDITOR_ASSET_BROWSER: &str = "editor.asset_browser";
+
+/// Canonical declarative UI theme id used by first-party runtime/editor surfaces.
+/// The engine treats this as a token; the active UI provider resolves fonts,
+/// metrics and colors from its own theme registry.
+pub const UI_THEME_NORTHSTAR_DEFAULT: &str = "northstar.default";
+
+/// Generic component primitives. These are not screen types: every interface is
+/// the same retained `UiSurfaceNode` tree and may compose the same primitives.
+pub const UI_COMPONENT_SURFACE: &str = "surface";
+pub const UI_COMPONENT_PANEL: &str = "panel";
+pub const UI_COMPONENT_STACK: &str = "stack";
+pub const UI_COMPONENT_ROW: &str = "row";
+pub const UI_COMPONENT_TEXT: &str = "text";
+pub const UI_COMPONENT_ACTION: &str = "action";
+pub const UI_COMPONENT_SPACER: &str = "spacer";
 
 /// Generic backend-family declaration for UI providers.
 pub const UI_BACKEND_SERVICE_SPEC: newengine_service_api::BackendServiceSpec =
@@ -188,16 +203,21 @@ impl Default for UiServiceInfo {
             features: vec![
                 "provider-owned-layout".to_owned(),
                 "declarative-actions".to_owned(),
-                "runtime-debug-overlay".to_owned(),
-                "pause-menu-modal".to_owned(),
-                "pause-menu-feedback-v1".to_owned(),
-                "declarative-pause-menu-theme".to_owned(),
-                "declarative-menu-document-v1".to_owned(),
-                "menu-action-routes-v1".to_owned(),
+                "runtime-debug-node-projection".to_owned(),
+                "surface-node-modal-v1".to_owned(),
+                "surface-node-navigation-v1".to_owned(),
+                "surface-node-action-routes-v1".to_owned(),
                 "draw-frame-bin-v1".to_owned(),
                 "atlas-text-quads".to_owned(),
+                "ui-font-style-tokens-v1".to_owned(),
+                "ui-theme-font-tokens-v1".to_owned(),
+                "ui-component-catalog-v1".to_owned(),
+                "retained-component-node-tree-v1".to_owned(),
+                "same-foundation-ui-node-v1".to_owned(),
+                "pixel-aligned-text-v1".to_owned(),
                 "neui-compiled-document-mount-v1".to_owned(),
                 "state-patch-bindings-v1".to_owned(),
+                "retained-surface-node-v1".to_owned(),
                 "debug-tree-v1".to_owned(),
                 "debug-bindings-v1".to_owned(),
             ],
@@ -207,7 +227,7 @@ impl Default for UiServiceInfo {
                 UI_SURFACE_ENGINE_ERROR_MODAL.to_owned(),
                 UI_SURFACE_RUNTIME_OVERLAY.to_owned(),
                 UI_SURFACE_RUNTIME_DEBUG_OVERLAY.to_owned(),
-                UI_SURFACE_ENGINE_PAUSE_MENU.to_owned(),
+                UI_SURFACE_ENGINE_PRIMARY.to_owned(),
                 UI_SURFACE_EDITOR_ASSET_BROWSER.to_owned(),
             ],
         }
@@ -224,8 +244,7 @@ pub const UI_SERVICE_METHODS: &[&str] = &[
     UI_SERVICE_METHOD_ACTION_MANIFEST_V1,
     UI_SERVICE_METHOD_LOADING_SHELL_V1,
     UI_SERVICE_METHOD_DEBUG_TELEMETRY_SCHEMA,
-    UI_SERVICE_METHOD_DEBUG_OVERLAY_TELEMETRY_V1,
-    UI_SERVICE_METHOD_PAUSE_MENU_STATE_V1,
+    UI_SERVICE_METHOD_SURFACE_NODE_V1,
     UI_SERVICE_METHOD_DRAW_FRAME_V1,
     UI_SERVICE_METHOD_DRAW_FRAME_BIN_V1,
     UI_SERVICE_METHOD_DOCUMENT_XML_V1,
@@ -470,6 +489,553 @@ impl UiStatePatch {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
+pub struct UiFontStyle {
+    /// Declarative font fallback stack. Providers may resolve this through
+    /// `engine.ui.text`; the engine treats it as data, not concrete font files.
+    pub stack: Vec<String>,
+    /// Body text size in physical pixels before provider snapping.
+    pub body_px: f32,
+    /// Title text size in physical pixels before provider snapping.
+    pub title_px: f32,
+    /// Subtitle/footer text size in physical pixels before provider snapping.
+    pub secondary_px: f32,
+    /// Text baseline pitch in physical pixels. `0` means provider default.
+    pub line_height_px: f32,
+    /// Pixel-snap text quads to avoid blurred bitmap/atlas sampling.
+    pub pixel_snap: bool,
+}
+
+impl Default for UiFontStyle {
+    fn default() -> Self {
+        Self {
+            stack: vec!["AureliaSans".to_owned(), "NotoSans".to_owned(), "NotoSansSymbols".to_owned()],
+            body_px: 18.0,
+            title_px: 30.0,
+            secondary_px: 15.0,
+            line_height_px: 0.0,
+            pixel_snap: true,
+        }
+    }
+}
+
+impl UiFontStyle {
+    #[inline]
+    pub fn normalized(mut self) -> Self {
+        if self.stack.is_empty() {
+            self.stack = UiFontStyle::default().stack;
+        }
+        self.body_px = self.body_px.clamp(10.0, 48.0);
+        self.title_px = self.title_px.clamp(14.0, 72.0);
+        self.secondary_px = self.secondary_px.clamp(9.0, 36.0);
+        self.line_height_px = self.line_height_px.clamp(0.0, 96.0);
+        self
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum UiSurfaceAnchor {
+    TopLeft,
+    TopRight,
+    Center,
+    BottomLeft,
+    BottomRight,
+}
+
+impl Default for UiSurfaceAnchor {
+    #[inline]
+    fn default() -> Self { Self::TopLeft }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
+pub struct UiSurfaceStyle {
+    pub theme_id: String,
+    pub font: UiFontStyle,
+    pub accent_rgba: [u8; 4],
+    pub panel_rgba: [u8; 4],
+    pub panel_header_rgba: [u8; 4],
+    pub text_rgba: [u8; 4],
+    pub text_muted_rgba: [u8; 4],
+    pub danger_rgba: [u8; 4],
+    pub row_even_alpha: u8,
+    pub row_odd_alpha: u8,
+    pub shadow_alpha: u8,
+    pub anchor: UiSurfaceAnchor,
+    pub min_size_px: [f32; 2],
+    pub max_size_px: [f32; 2],
+    pub margin_px: [f32; 2],
+    pub padding_px: [f32; 4],
+    pub row_pitch_px: f32,
+}
+
+impl Default for UiSurfaceStyle {
+    fn default() -> Self {
+        Self {
+            theme_id: UI_THEME_NORTHSTAR_DEFAULT.to_owned(),
+            font: UiFontStyle::default(),
+            accent_rgba: [255, 203, 76, 255],
+            panel_rgba: [6, 8, 15, 248],
+            panel_header_rgba: [10, 13, 24, 255],
+            text_rgba: [236, 244, 255, 255],
+            text_muted_rgba: [188, 202, 224, 255],
+            danger_rgba: [255, 168, 122, 255],
+            row_even_alpha: 20,
+            row_odd_alpha: 10,
+            shadow_alpha: 220,
+            anchor: UiSurfaceAnchor::TopLeft,
+            min_size_px: [260.0, 120.0],
+            max_size_px: [560.0, 420.0],
+            margin_px: [12.0, 12.0],
+            padding_px: [34.0, 98.0, 34.0, 58.0],
+            row_pitch_px: 0.0,
+        }
+    }
+}
+
+impl UiSurfaceStyle {
+    #[inline]
+    pub fn normalized(mut self) -> Self {
+        self.font = self.font.normalized();
+        if self.theme_id.trim().is_empty() {
+            self.theme_id = UI_THEME_NORTHSTAR_DEFAULT.to_owned();
+        }
+        self.min_size_px[0] = self.min_size_px[0].clamp(96.0, 4096.0);
+        self.min_size_px[1] = self.min_size_px[1].clamp(64.0, 4096.0);
+        self.max_size_px[0] = self.max_size_px[0].max(self.min_size_px[0]).clamp(96.0, 4096.0);
+        self.max_size_px[1] = self.max_size_px[1].max(self.min_size_px[1]).clamp(64.0, 4096.0);
+        self.margin_px[0] = self.margin_px[0].clamp(0.0, 512.0);
+        self.margin_px[1] = self.margin_px[1].clamp(0.0, 512.0);
+        for value in self.padding_px.iter_mut() {
+            *value = value.clamp(0.0, 512.0);
+        }
+        self.row_pitch_px = self.row_pitch_px.clamp(0.0, 256.0);
+        self
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum UiFontRole {
+    Title,
+    Body,
+    Secondary,
+    Code,
+    Icon,
+}
+
+impl Default for UiFontRole {
+    #[inline]
+    fn default() -> Self { Self::Body }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
+pub struct UiThemeFontToken {
+    pub id: String,
+    pub role: UiFontRole,
+    /// Provider-neutral family stack. A provider may map these names to real
+    /// font assets through `engine.ui.text`; runtime never sees font files.
+    pub family_stack: Vec<String>,
+    pub size_px: f32,
+    pub line_height_px: f32,
+    pub weight: u16,
+    pub pixel_snap: bool,
+}
+
+impl Default for UiThemeFontToken {
+    fn default() -> Self {
+        Self {
+            id: "body".to_owned(),
+            role: UiFontRole::Body,
+            family_stack: UiFontStyle::default().stack,
+            size_px: 18.0,
+            line_height_px: 24.0,
+            weight: 500,
+            pixel_snap: true,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
+pub struct UiThemeComponentStyle {
+    pub component_id: String,
+    pub font_token: String,
+    pub min_size_px: [f32; 2],
+    pub padding_px: [f32; 4],
+    pub row_pitch_px: f32,
+    pub interactive: bool,
+    pub paint_layer: i32,
+}
+
+impl Default for UiThemeComponentStyle {
+    fn default() -> Self {
+        Self {
+            component_id: UI_COMPONENT_PANEL.to_owned(),
+            font_token: "body".to_owned(),
+            min_size_px: [260.0, 120.0],
+            padding_px: [28.0, 22.0, 28.0, 22.0],
+            row_pitch_px: 26.0,
+            interactive: false,
+            paint_layer: 0,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
+pub struct UiThemeDefinition {
+    pub id: String,
+    pub display_name: String,
+    pub default_component: String,
+    pub fonts: BTreeMap<String, UiThemeFontToken>,
+    pub components: BTreeMap<String, UiThemeComponentStyle>,
+    pub base_style: UiSurfaceStyle,
+}
+
+impl Default for UiThemeDefinition {
+    fn default() -> Self {
+        let mut fonts = BTreeMap::new();
+        fonts.insert("title".to_owned(), UiThemeFontToken {
+            id: "title".to_owned(),
+            role: UiFontRole::Title,
+            size_px: 30.0,
+            line_height_px: 36.0,
+            weight: 700,
+            ..UiThemeFontToken::default()
+        });
+        fonts.insert("body".to_owned(), UiThemeFontToken::default());
+        fonts.insert("secondary".to_owned(), UiThemeFontToken {
+            id: "secondary".to_owned(),
+            role: UiFontRole::Secondary,
+            size_px: 15.0,
+            line_height_px: 20.0,
+            weight: 500,
+            ..UiThemeFontToken::default()
+        });
+        fonts.insert("code".to_owned(), UiThemeFontToken {
+            id: "code".to_owned(),
+            role: UiFontRole::Code,
+            family_stack: vec!["AureliaMono".to_owned(), "CascadiaMono".to_owned(), "NotoSansMono".to_owned()],
+            size_px: 16.0,
+            line_height_px: 22.0,
+            weight: 500,
+            ..UiThemeFontToken::default()
+        });
+
+        let mut components = BTreeMap::new();
+        components.insert(UI_COMPONENT_PANEL.to_owned(), UiThemeComponentStyle::default());
+        components.insert(UI_COMPONENT_STACK.to_owned(), UiThemeComponentStyle {
+            component_id: UI_COMPONENT_STACK.to_owned(),
+            row_pitch_px: 26.0,
+            ..UiThemeComponentStyle::default()
+        });
+        components.insert(UI_COMPONENT_ROW.to_owned(), UiThemeComponentStyle {
+            component_id: UI_COMPONENT_ROW.to_owned(),
+            row_pitch_px: 26.0,
+            interactive: true,
+            ..UiThemeComponentStyle::default()
+        });
+        components.insert(UI_COMPONENT_TEXT.to_owned(), UiThemeComponentStyle {
+            component_id: UI_COMPONENT_TEXT.to_owned(),
+            font_token: "body".to_owned(),
+            ..UiThemeComponentStyle::default()
+        });
+        components.insert(UI_COMPONENT_ACTION.to_owned(), UiThemeComponentStyle {
+            component_id: UI_COMPONENT_ACTION.to_owned(),
+            font_token: "body".to_owned(),
+            interactive: true,
+            ..UiThemeComponentStyle::default()
+        });
+        components.insert(UI_COMPONENT_SPACER.to_owned(), UiThemeComponentStyle {
+            component_id: UI_COMPONENT_SPACER.to_owned(),
+            min_size_px: [1.0, 10.0],
+            ..UiThemeComponentStyle::default()
+        });
+
+        Self {
+            id: UI_THEME_NORTHSTAR_DEFAULT.to_owned(),
+            display_name: "North Star Default".to_owned(),
+            default_component: UI_COMPONENT_PANEL.to_owned(),
+            fonts,
+            components,
+            base_style: UiSurfaceStyle::default(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum UiNodeTone {
+    Normal,
+    Accent,
+    Danger,
+    Disabled,
+}
+
+impl Default for UiNodeTone {
+    #[inline]
+    fn default() -> Self { Self::Normal }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum UiNodeMessageSeverity {
+    Info,
+    Success,
+    Warning,
+    Danger,
+}
+
+impl Default for UiNodeMessageSeverity {
+    #[inline]
+    fn default() -> Self { Self::Info }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
+pub struct UiNodeMessage {
+    pub title: String,
+    pub detail: String,
+    pub severity: UiNodeMessageSeverity,
+    pub age_sec: f32,
+    pub ttl_sec: f32,
+}
+
+impl Default for UiNodeMessage {
+    fn default() -> Self {
+        Self {
+            title: String::new(),
+            detail: String::new(),
+            severity: UiNodeMessageSeverity::Info,
+            age_sec: 0.0,
+            ttl_sec: 2.2,
+        }
+    }
+}
+
+impl UiNodeMessage {
+    #[inline]
+    pub fn new(title: impl Into<String>, detail: impl Into<String>, severity: UiNodeMessageSeverity) -> Self {
+        Self { title: title.into(), detail: detail.into(), severity, ..Self::default() }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
+pub struct UiComponentNode {
+    pub id: String,
+    pub component_id: String,
+    pub text: String,
+    pub value: Option<String>,
+    pub detail: Option<String>,
+    pub icon: Option<String>,
+    pub font_token: Option<String>,
+    pub tone: UiNodeTone,
+    pub state_tags: Vec<String>,
+    pub action_id: Option<String>,
+    pub props: BTreeMap<String, serde_json::Value>,
+    pub children: Vec<UiComponentNode>,
+}
+
+impl Default for UiComponentNode {
+    fn default() -> Self {
+        Self {
+            id: String::new(),
+            component_id: UI_COMPONENT_TEXT.to_owned(),
+            text: String::new(),
+            value: None,
+            detail: None,
+            icon: None,
+            font_token: None,
+            tone: UiNodeTone::Normal,
+            state_tags: Vec::new(),
+            action_id: None,
+            props: BTreeMap::new(),
+            children: Vec::new(),
+        }
+    }
+}
+
+impl UiComponentNode {
+    #[inline]
+    pub fn text(id: impl Into<String>, text: impl Into<String>) -> Self {
+        Self { id: id.into(), text: text.into(), ..Self::default() }
+    }
+
+    #[inline]
+    pub fn row(id: impl Into<String>, text: impl Into<String>) -> Self {
+        Self { id: id.into(), component_id: UI_COMPONENT_ROW.to_owned(), text: text.into(), ..Self::default() }
+    }
+
+    #[inline]
+    pub fn action(id: impl Into<String>, text: impl Into<String>, action_id: impl Into<String>) -> Self {
+        Self {
+            id: id.into(),
+            component_id: UI_COMPONENT_ACTION.to_owned(),
+            text: text.into(),
+            action_id: Some(action_id.into()),
+            ..Self::default()
+        }
+    }
+
+    #[inline]
+    pub fn with_value(mut self, value: impl Into<String>) -> Self {
+        self.value = Some(value.into());
+        self
+    }
+
+    #[inline]
+    pub fn with_detail(mut self, detail: impl Into<String>) -> Self {
+        self.detail = Some(detail.into());
+        self
+    }
+
+    #[inline]
+    pub fn with_tone(mut self, tone: UiNodeTone) -> Self {
+        self.tone = tone;
+        self
+    }
+
+    #[inline]
+    pub fn tagged(mut self, tag: impl Into<String>) -> Self {
+        self.state_tags.push(tag.into());
+        self
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
+pub struct UiSurfaceNode {
+    pub version: u32,
+    pub surface_id: String,
+    pub source: String,
+    pub visible: bool,
+    pub modal: bool,
+    pub z_order: i32,
+    pub title: String,
+    pub subtitle: String,
+    pub body_lines: Vec<String>,
+    pub footer_lines: Vec<String>,
+    pub style_tags: Vec<String>,
+    pub theme_id: String,
+    pub component_id: String,
+    pub components: Vec<UiComponentNode>,
+    pub message: Option<UiNodeMessage>,
+    pub style: UiSurfaceStyle,
+    pub metrics: BTreeMap<String, serde_json::Value>,
+}
+
+impl Default for UiSurfaceNode {
+    fn default() -> Self {
+        Self {
+            version: 1,
+            surface_id: String::new(),
+            source: String::new(),
+            visible: true,
+            modal: false,
+            z_order: 0,
+            title: String::new(),
+            subtitle: String::new(),
+            body_lines: Vec::new(),
+            footer_lines: Vec::new(),
+            style_tags: Vec::new(),
+            theme_id: UI_THEME_NORTHSTAR_DEFAULT.to_owned(),
+            component_id: UI_COMPONENT_PANEL.to_owned(),
+            components: Vec::new(),
+            message: None,
+            style: UiSurfaceStyle::default(),
+            metrics: BTreeMap::new(),
+        }
+    }
+}
+
+impl UiSurfaceNode {
+    #[inline]
+    pub fn new(surface_id: impl Into<String>, source: impl Into<String>) -> Self {
+        Self {
+            surface_id: surface_id.into(),
+            source: source.into(),
+            ..Self::default()
+        }
+    }
+
+    #[inline]
+    pub fn hidden(surface_id: impl Into<String>, source: impl Into<String>) -> Self {
+        Self {
+            visible: false,
+            surface_id: surface_id.into(),
+            source: source.into(),
+            ..Self::default()
+        }
+    }
+
+    #[inline]
+    pub fn with_title(mut self, title: impl Into<String>) -> Self {
+        self.title = title.into();
+        self
+    }
+
+    #[inline]
+    pub fn with_subtitle(mut self, subtitle: impl Into<String>) -> Self {
+        self.subtitle = subtitle.into();
+        self
+    }
+
+    #[inline]
+    pub fn with_body_lines(mut self, lines: Vec<String>) -> Self {
+        self.body_lines = lines;
+        self
+    }
+
+    #[inline]
+    pub fn with_footer_lines(mut self, lines: Vec<String>) -> Self {
+        self.footer_lines = lines;
+        self
+    }
+
+    #[inline]
+    pub fn with_theme(mut self, theme_id: impl Into<String>) -> Self {
+        self.theme_id = theme_id.into();
+        self.style.theme_id = self.theme_id.clone();
+        self
+    }
+
+    #[inline]
+    pub fn with_component(mut self, component_id: impl Into<String>) -> Self {
+        self.component_id = component_id.into();
+        self
+    }
+
+    #[inline]
+    pub fn with_components(mut self, components: Vec<UiComponentNode>) -> Self {
+        self.components = components;
+        self
+    }
+
+    #[inline]
+    pub fn with_message(mut self, message: UiNodeMessage) -> Self {
+        self.message = Some(message);
+        self
+    }
+
+    #[inline]
+    pub fn with_style(mut self, style: UiSurfaceStyle) -> Self {
+        self.style = style.normalized();
+        self.theme_id = self.style.theme_id.clone();
+        self
+    }
+
+    #[inline]
+    pub fn with_metric(mut self, key: impl Into<String>, value: serde_json::Value) -> Self {
+        self.metrics.insert(key.into(), value);
+        self
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
 pub struct UiRegistryLoadRequest {
     pub registry_ref: String,
 }
@@ -544,258 +1110,91 @@ pub struct UiDebugBindingsResponse {
 }
 impl Default for UiDebugBindingsResponse { fn default() -> Self { Self { version: 1, surface_id: String::new(), bindings: Vec::new(), actions: Vec::new() } } }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum UiPauseMenuItemTone {
-    Normal,
-    Accent,
-    Danger,
-    Disabled,
-}
-
-impl Default for UiPauseMenuItemTone {
-    #[inline]
-    fn default() -> Self { Self::Normal }
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct UiPauseMenuItem {
-    pub id: String,
-    pub label: String,
-    #[serde(default)]
-    pub value: Option<String>,
-    #[serde(default)]
-    pub detail: Option<String>,
-    #[serde(default)]
-    pub emphasized: bool,
-    #[serde(default)]
-    pub tone: UiPauseMenuItemTone,
-}
-
-impl UiPauseMenuItem {
-    #[inline]
-    pub fn new(id: impl Into<String>, label: impl Into<String>) -> Self {
-        Self {
-            id: id.into(),
-            label: label.into(),
-            value: None,
-            detail: None,
-            emphasized: false,
-            tone: UiPauseMenuItemTone::Normal,
-        }
-    }
-
-    #[inline]
-    pub fn with_value(mut self, value: impl Into<String>) -> Self {
-        self.value = Some(value.into());
-        self
-    }
-
-    #[inline]
-    pub fn with_detail(mut self, detail: impl Into<String>) -> Self {
-        self.detail = Some(detail.into());
-        self
-    }
-
-    #[inline]
-    pub fn emphasized(mut self, emphasized: bool) -> Self {
-        self.emphasized = emphasized;
-        self
-    }
-
-    #[inline]
-    pub fn with_tone(mut self, tone: UiPauseMenuItemTone) -> Self {
-        self.tone = tone;
-        self
-    }
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum UiPauseMenuMessageSeverity {
-    Info,
-    Success,
-    Warning,
-    Danger,
-}
-
-impl Default for UiPauseMenuMessageSeverity {
-    #[inline]
-    fn default() -> Self { Self::Info }
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct UiPauseMenuMessage {
-    pub title: String,
-    #[serde(default)]
-    pub detail: String,
-    #[serde(default)]
-    pub severity: UiPauseMenuMessageSeverity,
-    #[serde(default)]
-    pub age_sec: f32,
-    #[serde(default)]
-    pub ttl_sec: f32,
-}
-
-impl UiPauseMenuMessage {
-    #[inline]
-    pub fn new(title: impl Into<String>, detail: impl Into<String>, severity: UiPauseMenuMessageSeverity) -> Self {
-        Self {
-            title: title.into(),
-            detail: detail.into(),
-            severity,
-            age_sec: 0.0,
-            ttl_sec: 2.2,
-        }
-    }
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct UiPauseMenuTheme {
-    pub id: String,
-    pub accent_rgba: [u8; 4],
-    pub accent_secondary_rgba: [u8; 4],
-    pub panel_rgba: [u8; 4],
-    pub panel_hot_rgba: [u8; 4],
-    pub text_rgba: [u8; 4],
-    pub text_muted_rgba: [u8; 4],
-    pub danger_rgba: [u8; 4],
-}
-
-impl Default for UiPauseMenuTheme {
-    #[inline]
-    fn default() -> Self {
-        Self {
-            id: "newengine.dark.gold-contrast".to_owned(),
-            accent_rgba: [255, 203, 76, 255],
-            accent_secondary_rgba: [255, 112, 196, 255],
-            panel_rgba: [5, 6, 10, 255],
-            panel_hot_rgba: [18, 17, 12, 255],
-            text_rgba: [246, 250, 255, 255],
-            text_muted_rgba: [188, 202, 224, 255],
-            danger_rgba: [255, 86, 98, 255],
-        }
-    }
-}
-
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
-pub struct UiPauseMenuLayout {
+pub struct UiSurfaceNodeLayout {
     pub screen_w: f32,
     pub screen_h: f32,
     pub panel_x: f32,
     pub panel_y: f32,
     pub panel_w: f32,
     pub panel_h: f32,
-    pub list_x: f32,
-    pub list_y: f32,
-    pub list_right: f32,
-    pub item_h: f32,
-    pub item_visual_h: f32,
+    pub body_x: f32,
+    pub body_y: f32,
+    pub body_w: f32,
+    pub body_line_pitch: f32,
     pub footer_y: f32,
-    pub rail_x: f32,
-    pub rail_w: f32,
+    pub large_panel: bool,
 }
 
-impl UiPauseMenuLayout {
+impl UiSurfaceNodeLayout {
     #[inline]
-    pub fn hit_item_index(self, mouse_pos: Option<(f32, f32)>, item_count: usize) -> Option<usize> {
+    pub fn hit_body_line_index(self, mouse_pos: Option<(f32, f32)>) -> Option<usize> {
         let (mx, my) = mouse_pos?;
-        if mx < self.list_x || mx > self.list_right || my < self.list_y {
+        if mx < self.body_x || mx > self.body_x + self.body_w || my < self.body_y {
             return None;
         }
-        let idx = ((my - self.list_y) / self.item_h).floor() as isize;
-        if idx < 0 || idx as usize >= item_count { None } else { Some(idx as usize) }
+        if my > self.panel_y + self.panel_h - 56.0 {
+            return None;
+        }
+        let idx = ((my - self.body_y) / self.body_line_pitch).floor() as isize;
+        if idx < 0 { None } else { Some(idx as usize) }
+    }
+
+    #[inline]
+    pub fn hit_item_index_after_header(self, mouse_pos: Option<(f32, f32)>, header_lines: usize, item_count: usize) -> Option<usize> {
+        let line = self.hit_body_line_index(mouse_pos)?;
+        let item = line.checked_sub(header_lines)?;
+        if item < item_count { Some(item) } else { None }
     }
 }
 
 #[inline]
-pub fn pause_menu_layout(surface_size_px: [u32; 2], animation_alpha: f32, item_count: usize) -> UiPauseMenuLayout {
+pub fn ui_surface_node_layout(
+    surface_size_px: [u32; 2],
+    _style_tags: &[String],
+    style: &UiSurfaceStyle,
+    body_line_count: usize,
+    footer_line_count: usize,
+) -> UiSurfaceNodeLayout {
     let w = surface_size_px[0].max(1) as f32;
     let h = surface_size_px[1].max(1) as f32;
-    let a = animation_alpha.clamp(0.0, 1.0);
-    let panel_x = 72.0 - (1.0 - a) * 58.0;
-    let panel_y = (h * 0.105).max(44.0) + (1.0 - a) * 18.0;
-    let panel_w = (w * 0.42).clamp(430.0, 720.0);
-    let panel_h = (h * 0.80).clamp(452.0, 836.0);
-    let list_x = panel_x + 36.0;
-    let list_y = panel_y + 142.0;
-    let item_h = 52.0;
-    let footer_y = (panel_y + panel_h - 110.0).max(list_y + item_count as f32 * item_h + 16.0);
-    let rail_x = panel_x + panel_w + 28.0;
-    let rail_w = (w - rail_x - 72.0).clamp(250.0, 520.0);
-    UiPauseMenuLayout {
+    let style = style.clone().normalized();
+
+    let available_w = (w - style.margin_px[0] * 2.0).max(style.min_size_px[0]);
+    let available_h = (h - style.margin_px[1] * 2.0).max(style.min_size_px[1]);
+    let line_count = body_line_count.max(1) + footer_line_count + 2;
+    let content_h = line_count as f32 * style.row_pitch_px.max(style.font.line_height_px).max(24.0)
+        + style.padding_px[1] + style.padding_px[3] + 10.0;
+    let panel_w = style.max_size_px[0].min(available_w).max(style.min_size_px[0]);
+    let panel_h = style.max_size_px[1].min(available_h).max(style.min_size_px[1]).max(content_h.min(available_h));
+
+    let panel_x = match style.anchor {
+        UiSurfaceAnchor::TopRight | UiSurfaceAnchor::BottomRight => (w - panel_w - style.margin_px[0]).max(style.margin_px[0]),
+        UiSurfaceAnchor::Center => ((w - panel_w) * 0.5).max(style.margin_px[0]),
+        UiSurfaceAnchor::TopLeft | UiSurfaceAnchor::BottomLeft => style.margin_px[0],
+    };
+    let panel_y = match style.anchor {
+        UiSurfaceAnchor::BottomLeft | UiSurfaceAnchor::BottomRight => (h - panel_h - style.margin_px[1]).max(style.margin_px[1]),
+        UiSurfaceAnchor::Center => ((h - panel_h) * 0.5).max(style.margin_px[1]),
+        UiSurfaceAnchor::TopLeft | UiSurfaceAnchor::TopRight => style.margin_px[1],
+    };
+
+    let raw_line_h = if style.font.line_height_px > 0.0 { style.font.line_height_px } else { 24.0 };
+    let line_pitch = style.row_pitch_px.max(raw_line_h + 2.0);
+    let large_panel = panel_h >= 360.0 || panel_w >= 420.0;
+    UiSurfaceNodeLayout {
         screen_w: w,
         screen_h: h,
         panel_x,
         panel_y,
         panel_w,
         panel_h,
-        list_x,
-        list_y,
-        list_right: panel_x + panel_w - 36.0,
-        item_h,
-        item_visual_h: 42.0,
-        footer_y,
-        rail_x,
-        rail_w,
-    }
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct UiPauseMenuState {
-    pub version: u32,
-    pub surface_id: String,
-    pub visible: bool,
-    pub paused: bool,
-    pub page: String,
-    pub title: String,
-    pub subtitle: String,
-    #[serde(default)]
-    pub items: Vec<UiPauseMenuItem>,
-    #[serde(default)]
-    pub selected_index: usize,
-    #[serde(default)]
-    pub hovered_index: Option<usize>,
-    #[serde(default)]
-    pub footer_lines: Vec<String>,
-    #[serde(default)]
-    pub animation_alpha: f32,
-    #[serde(default)]
-    pub backdrop_opacity: f32,
-    #[serde(default)]
-    pub blur_radius_px: f32,
-    #[serde(default)]
-    pub theme: UiPauseMenuTheme,
-    #[serde(default)]
-    pub message: Option<UiPauseMenuMessage>,
-}
-
-impl Default for UiPauseMenuState {
-    #[inline]
-    fn default() -> Self { Self::hidden() }
-}
-
-impl UiPauseMenuState {
-    #[inline]
-    pub fn hidden() -> Self {
-        Self {
-            version: 1,
-            surface_id: UI_SURFACE_ENGINE_PAUSE_MENU.to_owned(),
-            visible: false,
-            paused: false,
-            page: "hidden".to_owned(),
-            title: "PAUSE".to_owned(),
-            subtitle: String::new(),
-            items: Vec::new(),
-            selected_index: 0,
-            hovered_index: None,
-            footer_lines: Vec::new(),
-            animation_alpha: 0.0,
-            backdrop_opacity: 0.0,
-            blur_radius_px: 0.0,
-            theme: UiPauseMenuTheme::default(),
-            message: None,
-        }
+        body_x: panel_x + style.padding_px[0],
+        body_y: panel_y + style.padding_px[1],
+        body_w: (panel_w - style.padding_px[0] - style.padding_px[2]).max(32.0),
+        body_line_pitch: line_pitch,
+        footer_y: panel_y + panel_h - style.padding_px[3] + 4.0,
+        large_panel,
     }
 }
 

@@ -72,7 +72,7 @@ impl ViewportInputSnap {
     ///
     /// The viewport bridge owns camera mouse deltas for the normal playable surface,
     /// while the InputPlugin/UiInputFrame owns keyboard/gamepad semantic actions such
-    /// as ESC pause, F1 editor tools and menu navigation. Those two streams must be
+    /// as primary UI toggle, F1 editor tools and UI navigation. Those two streams must be
     /// composed every frame; otherwise gameplay can run, but modal UI actions only work
     /// in direct-surface debug paths.
     #[inline]

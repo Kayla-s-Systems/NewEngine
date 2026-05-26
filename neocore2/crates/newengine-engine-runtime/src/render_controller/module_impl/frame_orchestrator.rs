@@ -174,7 +174,7 @@ impl RenderFrameOrchestrator {
             None
         };
         let draw_list_descs = features.draw_list_descs().to_vec();
-        let ui_backdrop = controller.menu.pause.ui_backdrop_postfx();
+        let ui_backdrop = controller.ui.primary.ui_backdrop_postfx();
         let ui_enabled = scope.ui_enabled || ui.is_some();
         let frame_plan = standard_runtime_frame(
             StandardRuntimePipelineDesc::new(controller.frame.frame_index, Extent2D::new(scope.w, scope.h), extent)

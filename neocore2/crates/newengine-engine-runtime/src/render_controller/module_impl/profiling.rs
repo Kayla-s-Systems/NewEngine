@@ -104,17 +104,17 @@ fn env_u64(name: &str, default: u64, min: u64, max: u64) -> u64 {
 
 #[inline]
 pub(super) fn trace_ms_threshold() -> f32 {
-    env_f32("NEWENGINE_RENDER_TRACE_MS", 33.3, 1.0, 1000.0)
+    env_f32("NEWENGINE_RENDER_TRACE_MS", 16.67, 1.0, 1000.0)
 }
 
 #[inline]
 pub(super) fn warn_ms_threshold() -> f32 {
-    env_f32("NEWENGINE_RENDER_WARN_MS", 33.3, 1.0, 2000.0)
+    env_f32("NEWENGINE_RENDER_WARN_MS", 16.67, 1.0, 2000.0)
 }
 
 #[inline]
 pub(super) fn slow_profile_log_interval_frames() -> u64 {
-    env_u64("NEWENGINE_RENDER_SLOW_PROFILE_INTERVAL_FRAMES", 60, 1, 6000)
+    env_u64("NEWENGINE_RENDER_SLOW_PROFILE_INTERVAL_FRAMES", 120, 1, 6000)
 }
 
 #[inline]

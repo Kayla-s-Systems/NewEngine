@@ -51,11 +51,11 @@ impl InputActionFrameCarrier<'_> {
         *self.speed_scalar = 1.0;
     }
 
-    pub(super) fn suppress_pause_menu(&mut self) {
-        self.actions.menu_toggle = false;
-        self.actions.menu_accept = false;
-        self.actions.menu_back = false;
-        self.actions.menu_nav = [0, 0];
+    pub(super) fn suppress_ui_navigation(&mut self) {
+        self.actions.ui_toggle = false;
+        self.actions.ui_accept = false;
+        self.actions.ui_back = false;
+        self.actions.ui_nav = [0, 0];
     }
 
     pub(super) fn suppress_gamepad_effects(&mut self) {
@@ -90,10 +90,10 @@ pub(super) fn action_frame_has_activity(frame: &InputActionFrame) -> bool {
         || frame.look_axis != [0.0, 0.0]
         || frame.sprint
         || !matches!(frame.camera_view, CameraViewRequest::None)
-        || frame.menu_toggle
-        || frame.menu_accept
-        || frame.menu_back
-        || frame.menu_nav != [0, 0]
+        || frame.ui_toggle
+        || frame.ui_accept
+        || frame.ui_back
+        || frame.ui_nav != [0, 0]
         || !frame.actions.is_empty()
 }
 

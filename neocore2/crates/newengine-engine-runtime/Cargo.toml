@@ -67,5 +67,4 @@ newengine-texture-container = { path = "../newengine-texture-container" }
 newengine-ui = { path = "../newengine-ui", default-features = false }
 newengine-ui-api = { path = "../newengine-ui-api" }
 newengine-ui-navigation-api = { path = "../newengine-ui-navigation-api" }
-newengine-ui-menu-runtime = { path = "../newengine-ui-menu-runtime" }
 newengine-viewport = { path = "../newengine-viewport" }

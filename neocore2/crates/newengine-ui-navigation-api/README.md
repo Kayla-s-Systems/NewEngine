@@ -1,13 +1,13 @@
 # newengine-ui-navigation-api
 
-Declarative menu document and action-route DTOs shared by UI providers, menu runtimes and host command routers.
+Declarative navigation document document and action-route DTOs shared by UI providers, navigation document runtimes and host command routers.
 
-This crate contains no pause-menu behaviour and no product-specific item ids. It describes menus as data:
+This crate contains no product-specific navigation document behaviour and no product-specific item ids. It describes navigation documents as data:
 
-- `MenuDocument`
-- `MenuPage`
-- `MenuItem`
-- `MenuActionRoute`
-- `MenuSelectionState`
-- `MenuTransition`
-- `MenuFeedbackEvent`
+- `UiNodeNavigationDocument`
+- `UiNodeNavigationPage`
+- `UiNodeNavigationItem`
+- `UiNodeActionRoute`
+- `UiNodeSelectionState`
+- `UiNodeTransition`
+- `UiNodeFeedbackEvent`

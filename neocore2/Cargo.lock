@@ -2348,7 +2348,6 @@ dependencies = [
  "newengine-transform-api",
  "newengine-ui",
  "newengine-ui-api",
- "newengine-ui-menu-runtime",
  "newengine-ui-navigation-api",
  "newengine-viewport",
  "parking_lot",
@@ -3050,13 +3049,6 @@ dependencies = [
  "newengine-math",
  "serde",
  "smallvec",
-]
-
-[[package]]
-name = "newengine-ui-menu-runtime"
-version = "0.1.0"
-dependencies = [
- "newengine-ui-navigation-api",
 ]
 
 [[package]]

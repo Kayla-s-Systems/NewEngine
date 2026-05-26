@@ -80,26 +80,26 @@ impl Default for AudioServiceInfo {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum AudioFeedbackKind {
-    UiMenuOpen,
-    UiMenuClose,
-    UiMenuNavigate,
-    UiMenuConfirm,
-    UiMenuBack,
-    UiMenuRebind,
-    UiMenuError,
+    UiOpen,
+    UiClose,
+    UiNavigate,
+    UiConfirm,
+    UiBack,
+    UiRebind,
+    UiError,
 }
 
 impl AudioFeedbackKind {
     #[inline]
     pub const fn event_id(self) -> &'static str {
         match self {
-            Self::UiMenuOpen => "ui.menu.open",
-            Self::UiMenuClose => "ui.menu.close",
-            Self::UiMenuNavigate => "ui.menu.navigate",
-            Self::UiMenuConfirm => "ui.menu.confirm",
-            Self::UiMenuBack => "ui.menu.back",
-            Self::UiMenuRebind => "ui.menu.rebind",
-            Self::UiMenuError => "ui.menu.error",
+            Self::UiOpen => "ui.open",
+            Self::UiClose => "ui.close",
+            Self::UiNavigate => "ui.navigate",
+            Self::UiConfirm => "ui.confirm",
+            Self::UiBack => "ui.back",
+            Self::UiRebind => "ui.rebind",
+            Self::UiError => "ui.error",
         }
     }
 }
@@ -123,7 +123,7 @@ impl AudioFeedbackEvent {
         Self {
             version: 1,
             id: kind.event_id().to_owned(),
-            source: "engine.ui.pause_menu".to_owned(),
+            source: "engine.ui.primary".to_owned(),
             intensity: default_intensity(),
             frame_index,
             metadata: serde_json::Value::Null,

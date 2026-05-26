@@ -19,7 +19,7 @@ pub(crate) mod light_extraction;
 pub(crate) mod lights;
 pub(crate) mod passes;
 mod passes_ubo;
-pub(crate) mod pause_menu;
+pub(crate) mod ui_node_surface;
 mod profiling;
 mod picking;
 mod playable_viewport;

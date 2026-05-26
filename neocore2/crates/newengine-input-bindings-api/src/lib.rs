@@ -644,12 +644,12 @@ fn apply_action_effect(out: &mut InputActionFrame, effect: &InputActionEffect) {
         InputActionEffect::MoveMask { mask } => out.move_mask |= *mask,
         InputActionEffect::Sprint { enabled } => out.sprint |= *enabled,
         InputActionEffect::CameraView { request } => out.camera_view = *request,
-        InputActionEffect::MenuToggle => out.menu_toggle = true,
-        InputActionEffect::MenuAccept => out.menu_accept = true,
-        InputActionEffect::MenuBack => out.menu_back = true,
-        InputActionEffect::MenuNav { x, y } => {
-            out.menu_nav[0] = out.menu_nav[0].saturating_add(*x).clamp(-1, 1);
-            out.menu_nav[1] = out.menu_nav[1].saturating_add(*y).clamp(-1, 1);
+        InputActionEffect::UiToggle => out.ui_toggle = true,
+        InputActionEffect::UiAccept => out.ui_accept = true,
+        InputActionEffect::UiBack => out.ui_back = true,
+        InputActionEffect::UiNav { x, y } => {
+            out.ui_nav[0] = out.ui_nav[0].saturating_add(*x).clamp(-1, 1);
+            out.ui_nav[1] = out.ui_nav[1].saturating_add(*y).clamp(-1, 1);
         }
     }
 }

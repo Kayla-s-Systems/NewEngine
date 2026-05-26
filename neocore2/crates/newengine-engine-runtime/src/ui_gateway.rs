@@ -4,10 +4,12 @@ use std::sync::atomic::{AtomicBool, Ordering};
 
 use newengine_core::EngineResult;
 use newengine_ui_api::{
-    decode_ui_frame_response_bin, encode_ui_frame_request_bin, UiDrawList, UiFrameRequest,
-    UiFrameResponse, UiPauseMenuState, UiRuntimeDebugOverlayTelemetry, ENGINE_UI_SERVICE_ID,
-    UI_SERVICE_METHOD_DEBUG_OVERLAY_TELEMETRY_V1, UI_SERVICE_METHOD_DRAW_FRAME_BIN_V1,
-    UI_SERVICE_METHOD_DRAW_FRAME_V1, UI_SERVICE_METHOD_PAUSE_MENU_STATE_V1,
+    decode_ui_frame_response_bin, encode_ui_frame_request_bin, UiComponentNode, UiDrawList,
+    UiFrameRequest, UiFrameResponse, UiRuntimeDebugOverlayTelemetry, UiSurfaceAnchor,
+    UiSurfaceNode, UiSurfaceStyle, ENGINE_UI_SERVICE_ID, UI_COMPONENT_PANEL,
+    UI_SERVICE_METHOD_DRAW_FRAME_BIN_V1, UI_SERVICE_METHOD_DRAW_FRAME_V1,
+    UI_SERVICE_METHOD_SURFACE_NODE_V1, UI_SURFACE_RUNTIME_DEBUG_OVERLAY,
+    UI_THEME_NORTHSTAR_DEFAULT,
 };
 
 static UI_ROUTE_MISSING_LOGGED: AtomicBool = AtomicBool::new(false);
@@ -32,58 +34,98 @@ fn log_missing_ui_route_once(operation: &str) {
 /// is loaded the call degrades silently; strict profiles can require
 /// `engine.ui` through the startup contract.
 pub fn publish_debug_overlay_telemetry(telemetry: &UiRuntimeDebugOverlayTelemetry) {
-    let payload = match serde_json::to_vec(telemetry) {
-        Ok(payload) => payload,
-        Err(e) => {
-            log::warn!("ui gateway: failed to encode runtime debug overlay telemetry: {e}");
-            return;
-        }
-    };
+    let node = surface_node_from_debug_telemetry(telemetry);
+    publish_surface_node(&node);
+}
 
-    match newengine_core::call_service_v1_optional(
-        ENGINE_UI_SERVICE_ID,
-        UI_SERVICE_METHOD_DEBUG_OVERLAY_TELEMETRY_V1,
-        &payload,
-    ) {
-        Ok(Some(_)) => log::trace!(
-            "ui gateway: telemetry published surface='{}' source='{}'",
-            telemetry.surface_id,
-            telemetry.source
-        ),
-        Ok(None) => log_missing_ui_route_once("publish_debug_overlay_telemetry"),
-        Err(e) => log::warn!("ui gateway: debug overlay telemetry publish failed: {e}"),
+fn surface_node_from_debug_telemetry(telemetry: &UiRuntimeDebugOverlayTelemetry) -> UiSurfaceNode {
+    let mut lines = if telemetry.lines.is_empty() {
+        telemetry.text.lines().map(str::to_owned).collect::<Vec<_>>()
+    } else {
+        telemetry.lines.clone()
+    };
+    if lines.is_empty() {
+        lines.push(format!("frame={} source={}", telemetry.frame_index, telemetry.source));
+    }
+    UiSurfaceNode {
+        version: 1,
+        surface_id: if telemetry.surface_id.trim().is_empty() {
+            UI_SURFACE_RUNTIME_DEBUG_OVERLAY.to_owned()
+        } else {
+            telemetry.surface_id.clone()
+        },
+        source: telemetry.source.clone(),
+        visible: true,
+        modal: false,
+        z_order: 980,
+        title: "RUNTIME DEBUG".to_owned(),
+        subtitle: telemetry.source.clone(),
+        body_lines: lines.clone(),
+        footer_lines: Vec::new(),
+        style_tags: vec!["retained".to_owned()],
+        theme_id: UI_THEME_NORTHSTAR_DEFAULT.to_owned(),
+        component_id: UI_COMPONENT_PANEL.to_owned(),
+        components: lines
+            .iter()
+            .enumerate()
+            .map(|(index, line)| UiComponentNode::text(format!("debug.line.{index}"), line.clone()))
+            .collect(),
+        message: None,
+        style: UiSurfaceStyle {
+            anchor: UiSurfaceAnchor::TopLeft,
+            min_size_px: [360.0, 180.0],
+            max_size_px: [620.0, 520.0],
+            margin_px: [12.0, 12.0],
+            row_pitch_px: 22.0,
+            ..UiSurfaceStyle::default()
+        },
+        metrics: telemetry.metrics.clone(),
     }
 }
 
-pub fn publish_pause_menu_state(state: &UiPauseMenuState) {
-    let payload = match serde_json::to_vec(state) {
+
+/// Publish a retained UI surface/node to the active `engine.ui` provider.
+///
+/// Runtime code owns only the state packet. The provider owns node retention,
+/// layout, visibility and draw-list generation. This is the canonical path for
+/// editor/runtime UI surfaces that should not flicker when their data source
+/// refreshes slower than the render loop.
+pub fn publish_surface_node(node: &UiSurfaceNode) {
+    let payload = match serde_json::to_vec(node) {
         Ok(payload) => payload,
         Err(e) => {
-            log::warn!("ui gateway: failed to encode pause menu state: {e}");
+            log::warn!(
+                "ui gateway: failed to encode surface node surface='{}': {e}",
+                node.surface_id
+            );
             return;
         }
     };
 
     match newengine_core::call_service_v1_optional(
         ENGINE_UI_SERVICE_ID,
-        UI_SERVICE_METHOD_PAUSE_MENU_STATE_V1,
+        UI_SERVICE_METHOD_SURFACE_NODE_V1,
         &payload,
     ) {
         Ok(Some(_)) => log::trace!(
-            "ui gateway: pause menu state published visible={} selected={} items={}",
-            state.visible,
-            state.selected_index,
-            state.items.len()
+            "ui gateway: surface node published surface='{}' source='{}' visible={}",
+            node.surface_id,
+            node.source,
+            node.visible
         ),
-        Ok(None) => log_missing_ui_route_once("publish_pause_menu_state"),
-        Err(e) => log::warn!("ui gateway: pause menu state publish failed: {e}"),
+        Ok(None) => log_missing_ui_route_once("publish_surface_node"),
+        Err(e) => log::warn!(
+            "ui gateway: surface node publish failed surface='{}' err='{}'",
+            node.surface_id,
+            e
+        ),
     }
 }
 
 /// Request a current-frame UI draw list through the canonical `engine.ui` gateway.
 ///
 /// Runtime-host normally prepares provider UI before `engine.step()`, but modal UI
-/// state such as ESC pause menu and F1 Asset Browser is produced inside the render
+/// state such as ESC primary UI node and F1 Asset Browser is produced inside the render
 /// controller during that same step. This helper lets the render controller publish
 /// the freshly computed state and immediately request a same-frame draw packet,
 /// without depending on any concrete UI provider implementation.
@@ -152,18 +194,8 @@ fn request_draw_list_json(request: &UiFrameRequest) -> EngineResult<Option<UiDra
 }
 
 fn non_empty_draw_list(response: UiFrameResponse) -> Option<UiDrawList> {
-    if ui_draw_list_is_empty(&response.draw_list) {
-        None
-    } else {
-        Some(response.draw_list)
-    }
-}
-
-fn ui_draw_list_is_empty(draw_list: &UiDrawList) -> bool {
-    draw_list.mesh.vertices.is_empty()
-        && draw_list.mesh.indices.is_empty()
-        && draw_list.mesh.cmds.is_empty()
-        && draw_list.texture_delta.set.is_empty()
-        && draw_list.texture_delta.patches.is_empty()
-        && draw_list.texture_delta.free.is_empty()
+    // Empty draw-lists are valid clear packets. Returning None would keep the
+    // previous retained modal/menu UI alive in render backends that consume UI
+    // through RenderCommand::SetUiDrawList.
+    Some(response.draw_list)
 }

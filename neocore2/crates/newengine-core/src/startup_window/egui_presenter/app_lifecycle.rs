@@ -149,7 +149,7 @@ impl PreStartApp {
         self.fields.bool("display.vsync", first_bool_segments(&self.config, &[
             &["plugins", "newengine", "platform.winit", "display", "vsync"],
             &["plugins", "newengine", "startup_window", "display", "vsync"],
-        ], true));
+        ], false));
         self.fields.string("display.refresh_rate", first_string_segments(&self.config, &[
             &["plugins", "newengine", "platform.winit", "display", "refresh_rate"],
             &["plugins", "newengine", "startup_window", "display", "refresh_rate"],

@@ -4,19 +4,19 @@ use super::InputRuntimeSystem;
 
 #[derive(Clone, Debug, Default)]
 pub(super) struct RuntimeInputCapturePolicy {
-    pause_menu_blocks_gameplay: bool,
+    ui_navigation_blocks_gameplay: bool,
 }
 
 impl RuntimeInputCapturePolicy {
     #[inline]
     pub(super) fn captures(&self, system: InputRuntimeSystem) -> bool {
-        self.pause_menu_blocks_gameplay && system.captures_runtime_controls()
+        self.ui_navigation_blocks_gameplay && system.captures_runtime_controls()
     }
 
     #[inline]
-    pub(super) fn set_pause_menu_capture(&mut self, blocks_gameplay: bool) -> bool {
-        let changed = self.pause_menu_blocks_gameplay != blocks_gameplay;
-        self.pause_menu_blocks_gameplay = blocks_gameplay;
+    pub(super) fn set_modal_ui_capture(&mut self, blocks_gameplay: bool) -> bool {
+        let changed = self.ui_navigation_blocks_gameplay != blocks_gameplay;
+        self.ui_navigation_blocks_gameplay = blocks_gameplay;
         changed
     }
 }

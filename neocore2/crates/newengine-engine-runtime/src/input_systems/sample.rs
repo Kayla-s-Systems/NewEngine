@@ -2,7 +2,7 @@
 
 use newengine_ui_api::UiInputFrame;
 
-use super::{input_has_pause_menu_action, InputActionFrameCarrier};
+use super::{input_has_ui_navigation_action, InputActionFrameCarrier};
 
 #[derive(Clone, Copy, Debug)]
 pub(super) struct RawInputSample {
@@ -49,7 +49,7 @@ impl RawInputSample {
             input.actions.move_mask,
             input.actions.look_axis[0],
             input.actions.look_axis[1],
-            input_has_pause_menu_action(input),
+            input_has_ui_navigation_action(input),
         )
     }
 }

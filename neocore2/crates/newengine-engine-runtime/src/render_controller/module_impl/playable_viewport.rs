@@ -3,11 +3,12 @@ use newengine_core::physics::PhysicsApiRef;
 use newengine_core::render::{Extent2D, RenderApi};
 use newengine_core::{EngineResult, ModuleCtx};
 use crate::ui_gateway;
-use newengine_ui_api::{UiDrawList, UiPauseMenuState, UiRuntimeDebugOverlayTelemetry};
+use newengine_ui_api::{UiDrawList, UiRuntimeDebugOverlayTelemetry, UiSurfaceNode};
 
 use super::frame_types::{PlayableFrameOutcome, RenderFrameScope, ViewportFrameInput};
 use super::input::ViewportInputSnap;
 use super::super::controller::RuntimeRenderController;
+
 
 impl RuntimeRenderController {
     pub(super) fn render_playable_viewport_frame<E: Send + 'static>(
@@ -19,39 +20,39 @@ impl RuntimeRenderController {
         scope: RenderFrameScope,
     ) -> EngineResult<PlayableFrameOutcome> {
         let mut frame_input = self.read_viewport_frame_input(ctx, ui, scope);
-        let pause_was_open = self.menu.pause.is_open();
-        let pause_menu = self.menu.pause.update(
+        let primary_was_open = self.ui.primary.is_open();
+        let primary_ui = self.ui.primary.update(
             frame_input.surface_input.as_ref(),
             &frame_input.input,
             [scope.w, scope.h],
             scope.dt,
             self.frame.frame_index,
         );
-        ctx.resources_mut().insert::<UiPauseMenuState>(pause_menu.state.clone());
         let asset_browser_blocks_gameplay = self.update_asset_browser_overlay(
             ctx,
             &frame_input.input.actions,
             [scope.w, scope.h],
         );
-        let modal_blocks_gameplay = pause_menu.blocks_gameplay || asset_browser_blocks_gameplay;
+        let modal_blocks_gameplay = primary_ui.blocks_gameplay || asset_browser_blocks_gameplay;
 
         self.refresh_modal_ui_draw_list(
             ctx,
             &mut frame_input.ui,
-            &pause_menu.state,
+            &primary_ui.state,
+            primary_was_open,
             asset_browser_blocks_gameplay,
             scope,
         )?;
-        if pause_was_open && !pause_menu.blocks_gameplay {
-            self.restore_playable_view_after_menu_close();
+        if primary_was_open && !primary_ui.blocks_gameplay {
+            self.restore_playable_view_after_ui_close();
         }
-        if pause_menu.exit_requested {
-            log::info!("pause menu: exit requested through declarative menu action");
+        if primary_ui.exit_requested {
+            log::info!("UI surface: exit requested through declarative menu action");
             ctx.request_exit();
         }
         {
             let mut carrier = frame_input.input.action_carrier();
-            self.frame.input_systems.apply_pause_capture(
+            self.frame.input_systems.apply_modal_ui_capture(
                 self.frame.frame_index,
                 modal_blocks_gameplay,
                 &mut carrier,
@@ -128,27 +129,35 @@ impl RuntimeRenderController {
 
     fn refresh_modal_ui_draw_list<E: Send + 'static>(
         &self,
-        ctx: &ModuleCtx<'_, E>,
+        _ctx: &ModuleCtx<'_, E>,
         ui: &mut Option<UiDrawList>,
-        pause_state: &UiPauseMenuState,
+        primary_state: &UiSurfaceNode,
+        primary_was_open: bool,
         asset_browser_blocks_gameplay: bool,
         scope: RenderFrameScope,
     ) -> EngineResult<()> {
-        if pause_state.visible {
-            ui_gateway::publish_pause_menu_state(pause_state);
+        if primary_state.visible || primary_was_open {
+            // Publish both visible and hidden states. engine.ui owns retained node
+            // lifecycle; if runtime does not send the hidden node on close, the
+            // provider can legally keep the previous retained menu on screen.
+            ui_gateway::publish_surface_node(primary_state);
         }
+
+        let asset_browser_toggled_this_frame =
+            self.editor.asset_browser_last_toggle_frame == self.frame.frame_index;
 
         if asset_browser_blocks_gameplay {
-            if let Some(telemetry) = ctx.resources().get::<UiRuntimeDebugOverlayTelemetry>() {
-                if telemetry.source == "engine.assets.browser" {
-                    ui_gateway::publish_debug_overlay_telemetry(telemetry);
-                }
-            }
+            // Asset Browser is a retained UiSurfaceNode published by
+            // update_asset_browser_overlay(). The provider owns node retention and
+            // drawing; this stage only asks for the current engine.ui draw packet.
         }
 
-        if !pause_state.visible && !asset_browser_blocks_gameplay {
+        if !primary_state.visible && !primary_was_open && !asset_browser_blocks_gameplay && !asset_browser_toggled_this_frame {
             return Ok(());
         }
+
+        let needs_clear_packet = (!primary_state.visible && primary_was_open)
+            || (asset_browser_toggled_this_frame && !asset_browser_blocks_gameplay);
 
         match ui_gateway::request_draw_list(
             self.frame.frame_index,
@@ -159,9 +168,16 @@ impl RuntimeRenderController {
             Ok(Some(draw_list)) => {
                 *ui = Some(draw_list);
             }
-            Ok(None) => {}
+            Ok(None) => {
+                if needs_clear_packet {
+                    *ui = Some(clear_ui_draw_list([scope.w, scope.h]));
+                }
+            }
             Err(e) => {
                 log::warn!("modal ui: same-frame draw-list refresh failed: {e}");
+                if needs_clear_packet {
+                    *ui = Some(clear_ui_draw_list([scope.w, scope.h]));
+                }
             }
         }
 
@@ -286,4 +302,12 @@ impl RuntimeRenderController {
             );
         }
     }
+}
+
+
+fn clear_ui_draw_list(surface_size_px: [u32; 2]) -> UiDrawList {
+    let mut draw_list = UiDrawList::new();
+    draw_list.screen_size_px = surface_size_px;
+    draw_list.pixels_per_point = 1.0;
+    draw_list
 }

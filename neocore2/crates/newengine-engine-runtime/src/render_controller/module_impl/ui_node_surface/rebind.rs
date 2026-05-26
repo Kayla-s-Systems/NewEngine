@@ -9,16 +9,16 @@ use newengine_ui_api::UiInputFrame;
 use super::super::input::ViewportInputSnap;
 use super::*;
 
-impl RenderPauseMenuRuntimeState {
+impl RenderUiNodeSurfaceState {
     pub(super) fn process_rebind_capture(
         &mut self,
         surface_input: Option<&UiInputFrame>,
         input: &ViewportInputSnap,
         frame_index: u64,
     ) {
-        if input.actions.menu_back || input.actions.menu_toggle {
+        if input.actions.ui_back || input.actions.ui_toggle {
             self.awaiting_rebind = None;
-            audio(AudioFeedbackKind::UiMenuBack, frame_index);
+            audio(AudioFeedbackKind::UiBack, frame_index);
             return;
         }
         let Some(pending) = self.awaiting_rebind.clone() else { return; };
@@ -27,7 +27,7 @@ impl RenderPauseMenuRuntimeState {
         if let Some(&code) = input_frame.keys_pressed.iter().next() {
             if code == newengine_input_api::key_code::ESCAPE {
                 self.awaiting_rebind = None;
-                audio(AudioFeedbackKind::UiMenuBack, frame_index);
+                audio(AudioFeedbackKind::UiBack, frame_index);
                 return;
             }
             let registration = InputBindingRegistration {
@@ -75,18 +75,18 @@ impl RenderPauseMenuRuntimeState {
                 self.flash_feedback(
                     "Binding updated",
                     format!("{} now uses the selected {} input", pending.label, device_label),
-                    UiPauseMenuMessageSeverity::Success,
+                    UiNodeMessageSeverity::Success,
                 );
-                audio(AudioFeedbackKind::UiMenuConfirm, frame_index);
+                audio(AudioFeedbackKind::UiConfirm, frame_index);
             }
             Err(e) => {
                 log::warn!(
-                    "pause menu command router: rebind rejected action='{}' err='{}'",
+                    "UI surface ui node command router: rebind rejected action='{}' err='{}'",
                     pending.action_id,
                     e
                 );
-                self.flash_feedback("Rebind failed", e, UiPauseMenuMessageSeverity::Danger);
-                audio(AudioFeedbackKind::UiMenuError, frame_index);
+                self.flash_feedback("Rebind failed", e, UiNodeMessageSeverity::Danger);
+                audio(AudioFeedbackKind::UiError, frame_index);
             }
         }
         self.awaiting_rebind = None;

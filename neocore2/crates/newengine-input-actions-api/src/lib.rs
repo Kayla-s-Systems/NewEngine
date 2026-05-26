@@ -53,7 +53,7 @@ pub mod move_mask {
 
 /// Engine-reserved semantic action ids. These are action contracts, not platform shortcuts.
 pub mod engine_action {
-    pub const UI_MENU_TOGGLE: &str = "engine.ui.menu.toggle_pause";
+    pub const UI_NAVIGATION_TOGGLE: &str = "engine.ui.primary.toggle";
     pub const ASSET_BROWSER_TOGGLE: &str = "engine.assets.browser.toggle";
 }
 
@@ -148,10 +148,10 @@ pub enum InputActionEffect {
     MoveMask { mask: u64 },
     Sprint { enabled: bool },
     CameraView { request: CameraViewRequest },
-    MenuToggle,
-    MenuAccept,
-    MenuBack,
-    MenuNav { x: i8, y: i8 },
+    UiToggle,
+    UiAccept,
+    UiBack,
+    UiNav { x: i8, y: i8 },
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -220,13 +220,13 @@ pub struct InputActionFrame {
     #[serde(default)]
     pub camera_view: CameraViewRequest,
     #[serde(default)]
-    pub menu_toggle: bool,
+    pub ui_toggle: bool,
     #[serde(default)]
-    pub menu_accept: bool,
+    pub ui_accept: bool,
     #[serde(default)]
-    pub menu_back: bool,
+    pub ui_back: bool,
     #[serde(default)]
-    pub menu_nav: [i8; 2],
+    pub ui_nav: [i8; 2],
     #[serde(default)]
     pub actions: Vec<String>,
     #[serde(default)]
@@ -242,10 +242,10 @@ impl Default for InputActionFrame {
             sprint: false,
             look_axis: [0.0, 0.0],
             camera_view: CameraViewRequest::None,
-            menu_toggle: false,
-            menu_accept: false,
-            menu_back: false,
-            menu_nav: [0, 0],
+            ui_toggle: false,
+            ui_accept: false,
+            ui_back: false,
+            ui_nav: [0, 0],
             actions: Vec::new(),
             events: Vec::new(),
         }

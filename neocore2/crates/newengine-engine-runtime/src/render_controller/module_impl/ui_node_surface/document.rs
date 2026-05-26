@@ -2,8 +2,8 @@
 
 use newengine_assets_api::{assets_ui_method, ENGINE_ASSETS_UI_SERVICE_ID};
 use newengine_ui_api::{UiCompiledDocument, UiMountSurfaceRequest, UI_SERVICE_METHOD_MOUNT_SURFACE_V1};
-use newengine_ui_menu_runtime::MenuRuntime;
-use newengine_ui_navigation_api::{MenuDocument, ENGINE_PAUSE_MENU_SURFACE_REF};
+use newengine_ui_navigation_api::UiNodeNavigationRuntime;
+use newengine_ui_navigation_api::{UiNodeNavigationDocument, ENGINE_PRIMARY_UI_SURFACE_REF};
 use serde::Deserialize;
 
 #[derive(Debug, Deserialize)]
@@ -13,7 +13,7 @@ struct AssetsUiCompileResponse {
     document_ref: String,
     surface_id: String,
     compiled_document: UiCompiledDocument,
-    menu_document: Option<MenuDocument>,
+    navigation_document: Option<UiNodeNavigationDocument>,
     warnings: Vec<String>,
 }
 
@@ -24,25 +24,25 @@ impl Default for AssetsUiCompileResponse {
             document_ref: String::new(),
             surface_id: String::new(),
             compiled_document: UiCompiledDocument::default(),
-            menu_document: None,
+            navigation_document: None,
             warnings: Vec::new(),
         }
     }
 }
 
-/// Load the pause menu through the canonical UI asset pipeline.
+/// Load the UI surface through the canonical UI asset pipeline.
 ///
 /// Boundary rule:
 ///
 /// ```text
-/// engine.pause_menu -> engine.assets.ui::compile_document_v1(ref) -> response DTO
-/// engine.pause_menu -> engine.ui::mount_surface_v1(compiled DTO)       -> best-effort live mount
+/// engine.ui.primary -> engine.assets.ui::compile_document_v1(ref) -> response DTO
+/// engine.ui.primary -> engine.ui::mount_surface_v1(compiled DTO)       -> best-effort live mount
 /// ```
 ///
-/// The pause runtime does not parse `.neui`, NEF8, deflate, XMLcentral, VFS paths
-/// or old JSON menu assets. It only performs request/response calls.
-pub(super) fn try_load_pause_menu_document() -> Result<MenuRuntime, String> {
-    let response = compile_pause_surface()?;
+/// The UI node runtime does not parse `.neui`, NEF8, deflate, XMLcentral, VFS paths
+/// or old JSON UI assets. It only performs request/response calls.
+pub(super) fn try_load_primary_ui_document() -> Result<UiNodeNavigationRuntime, String> {
+    let response = compile_primary_surface()?;
     if !response.ok {
         return Err(format!(
             "engine.assets.ui returned ok=false for '{}' surface='{}'",
@@ -51,23 +51,23 @@ pub(super) fn try_load_pause_menu_document() -> Result<MenuRuntime, String> {
         ));
     }
     for warning in &response.warnings {
-        log::warn!("engine.pause_menu: .neui compile warning ref='{}' warning='{}'", response.document_ref, warning);
+        log::warn!("engine.ui.primary: .neui compile warning ref='{}' warning='{}'", response.document_ref, warning);
     }
 
-    mount_pause_surface_best_effort(&response.compiled_document);
+    mount_primary_surface_best_effort(&response.compiled_document);
 
-    let document = response.menu_document.ok_or_else(|| {
+    let document = response.navigation_document.ok_or_else(|| {
         format!(
-            "engine.assets.ui compiled '{}' but response did not include a MenuDocument DTO",
+            "engine.assets.ui compiled '{}' but response did not include a UiNodeNavigationDocument DTO",
             response.document_ref
         )
     })?;
-    MenuRuntime::new(document)
+    UiNodeNavigationRuntime::new(document)
 }
 
-fn compile_pause_surface() -> Result<AssetsUiCompileResponse, String> {
+fn compile_primary_surface() -> Result<AssetsUiCompileResponse, String> {
     let payload = serde_json::to_vec(&serde_json::json!({
-        "document_ref": ENGINE_PAUSE_MENU_SURFACE_REF,
+        "document_ref": ENGINE_PRIMARY_UI_SURFACE_REF,
         "mount_runtime": false
     }))
     .map_err(|e| e.to_string())?;
@@ -81,7 +81,7 @@ fn compile_pause_surface() -> Result<AssetsUiCompileResponse, String> {
         None => {
             return Err(format!(
                 "engine.assets.ui service is not registered; cannot compile '{}'",
-                ENGINE_PAUSE_MENU_SURFACE_REF
+                ENGINE_PRIMARY_UI_SURFACE_REF
             ));
         }
     };
@@ -89,12 +89,12 @@ fn compile_pause_surface() -> Result<AssetsUiCompileResponse, String> {
     serde_json::from_slice::<AssetsUiCompileResponse>(&bytes).map_err(|e| {
         format!(
             "engine.assets.ui returned non-compile response for '{}': {}",
-            ENGINE_PAUSE_MENU_SURFACE_REF, e
+            ENGINE_PRIMARY_UI_SURFACE_REF, e
         )
     })
 }
 
-fn mount_pause_surface_best_effort(compiled_document: &UiCompiledDocument) {
+fn mount_primary_surface_best_effort(compiled_document: &UiCompiledDocument) {
     if compiled_document.surface_id.trim().is_empty() {
         return;
     }
@@ -113,7 +113,7 @@ fn mount_pause_surface_best_effort(compiled_document: &UiCompiledDocument) {
     let payload = match serde_json::to_vec(&request) {
         Ok(payload) => payload,
         Err(e) => {
-            log::warn!("engine.pause_menu: failed to encode ui.mount_surface_v1 request: {e}");
+            log::warn!("engine.ui.primary: failed to encode ui.mount_surface_v1 request: {e}");
             return;
         }
     };
@@ -125,13 +125,13 @@ fn mount_pause_surface_best_effort(compiled_document: &UiCompiledDocument) {
         Ok(Some(_)) => {}
         Ok(None) => {
             log::warn!(
-                "engine.pause_menu: engine.ui service is not registered; compiled surface '{}' remains available as DTO only",
+                "engine.ui.primary: engine.ui service is not registered; compiled surface '{}' remains available as DTO only",
                 compiled_document.surface_id
             );
         }
         Err(e) => {
             log::warn!(
-                "engine.pause_menu: ui.mount_surface_v1 failed surface='{}' err='{}'",
+                "engine.ui.primary: ui.mount_surface_v1 failed surface='{}' err='{}'",
                 compiled_document.surface_id,
                 e
             );

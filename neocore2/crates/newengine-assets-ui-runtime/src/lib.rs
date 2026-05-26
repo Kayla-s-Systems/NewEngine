@@ -27,8 +27,8 @@ use newengine_ui_api::{
     UiUpdatePolicy,
 };
 use newengine_ui_navigation_api::{
-    MenuActionRoute, MenuDocument, MenuFeedbackEvent, MenuFeedbackSeverity, MenuItem, MenuItemTone,
-    MenuPage, MenuTransition, MenuTransitionKind,
+    UiNodeActionRoute, UiNodeNavigationDocument, UiNodeFeedbackEvent, UiNodeFeedbackSeverity, UiNodeNavigationItem, UiNodeNavigationTone,
+    UiNodeNavigationPage, UiNodeTransition, UiNodeTransitionKind,
 };
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, HashMap};
@@ -108,7 +108,7 @@ pub struct AssetsUiCompileResponse {
     pub surface_id: String,
     pub xmlcentral: String,
     pub compiled_document: UiCompiledDocument,
-    pub menu_document: Option<MenuDocument>,
+    pub navigation_document: Option<UiNodeNavigationDocument>,
     pub dependencies: Vec<String>,
     pub warnings: Vec<String>,
 }
@@ -126,7 +126,7 @@ impl Default for AssetsUiCompileResponse {
             surface_id: String::new(),
             xmlcentral: String::new(),
             compiled_document: UiCompiledDocument::default(),
-            menu_document: None,
+            navigation_document: None,
             dependencies: Vec::new(),
             warnings: Vec::new(),
         }
@@ -252,7 +252,7 @@ pub fn assets_ui_gateway_service(client: AssetServiceClient) -> newengine_plugin
     )
     .gateway(ENGINE_ASSETS_UI_SERVICE_ID)
     .protocol(ASSETS_UI_RUNTIME_CONTRACT)
-    .features(["neui-nef8-xmlcentral", "compile-document-v1", "menu-document-dto", "dependency-extraction"])
+    .features(["neui-nef8-xmlcentral", "compile-document-v1", "ui-node-navigation-dto", "dependency-extraction"])
     .notes("Engine UI asset semantic service. Consumers call engine.assets.ui and receive runtime DTOs; engine.ui owns only live mount/state/input/draw runtime.");
 
     JsonServiceRouter::with_state(ASSETS_UI_SERVICE_ID, AssetsUiRuntimeState::new(client))
@@ -375,7 +375,7 @@ fn compile_document(state: &mut AssetsUiRuntimeState, request: AssetsUiCompileRe
         dependencies: dependencies.clone(),
         binding_plan,
     };
-    let menu_document = parse_menu_document(&xml)?;
+    let navigation_document = parse_navigation_document(&xml)?;
 
     let response = AssetsUiCompileResponse {
         ok: true,
@@ -386,7 +386,7 @@ fn compile_document(state: &mut AssetsUiRuntimeState, request: AssetsUiCompileRe
         surface_id: surface.name,
         xmlcentral: xml,
         compiled_document,
-        menu_document,
+        navigation_document,
         dependencies,
         warnings,
         ..Default::default()
@@ -619,22 +619,22 @@ fn update_policy_from_attr(value: Option<&str>) -> UiUpdatePolicy {
     }
 }
 
-fn parse_menu_document(xml: &str) -> Result<Option<MenuDocument>, String> {
-    let Some(menu) = first_element(xml, "MenuDocument") else {
+fn parse_navigation_document(xml: &str) -> Result<Option<UiNodeNavigationDocument>, String> {
+    let Some(navigation) = first_element(xml, "UiNodeNavigationDocument") else {
         return Ok(None);
     };
-    let mut doc = MenuDocument {
-        id: attr_value(&menu.open, "id").unwrap_or_else(|| "engine.pause_menu".to_owned()),
-        version: attr_value(&menu.open, "version").and_then(|v| v.parse().ok()).unwrap_or(1),
-        surface_id: attr_value(&menu.open, "surface_id").or_else(|| attr_value(&menu.open, "surface")).unwrap_or_else(|| "engine.pause_menu".to_owned()),
-        root_page: attr_value(&menu.open, "root_page").unwrap_or_else(|| "root".to_owned()),
-        title: attr_value(&menu.open, "title").unwrap_or_default(),
-        subtitle: attr_value(&menu.open, "subtitle").unwrap_or_default(),
+    let mut doc = UiNodeNavigationDocument {
+        id: attr_value(&navigation.open, "id").unwrap_or_else(|| "engine.ui.primary".to_owned()),
+        version: attr_value(&navigation.open, "version").and_then(|v| v.parse().ok()).unwrap_or(1),
+        surface_id: attr_value(&navigation.open, "surface_id").or_else(|| attr_value(&navigation.open, "surface")).unwrap_or_else(|| "engine.ui.primary".to_owned()),
+        root_page: attr_value(&navigation.open, "root_page").unwrap_or_else(|| "root".to_owned()),
+        title: attr_value(&navigation.open, "title").unwrap_or_default(),
+        subtitle: attr_value(&navigation.open, "subtitle").unwrap_or_default(),
         footer_lines: Vec::new(),
         pages: Vec::new(),
     };
 
-    if let Some(footer) = first_element(&menu.inner, "Footer") {
+    if let Some(footer) = first_element(&navigation.inner, "Footer") {
         for line in elements(&footer.inner, "Line") {
             if let Some(value) = attr_value(&line.open, "value") {
                 if !value.trim().is_empty() {
@@ -644,8 +644,8 @@ fn parse_menu_document(xml: &str) -> Result<Option<MenuDocument>, String> {
         }
     }
 
-    for page_element in elements(&menu.inner, "Page") {
-        let mut page = MenuPage {
+    for page_element in elements(&navigation.inner, "Page") {
+        let mut page = UiNodeNavigationPage {
             id: attr_value(&page_element.open, "id").unwrap_or_default(),
             title: attr_value(&page_element.open, "title").unwrap_or_default(),
             subtitle: attr_value(&page_element.open, "subtitle").unwrap_or_default(),
@@ -662,7 +662,7 @@ fn parse_menu_document(xml: &str) -> Result<Option<MenuDocument>, String> {
             }
         }
         for item_element in elements(&page_element.inner, "Item") {
-            let item = MenuItem {
+            let item = UiNodeNavigationItem {
                 id: attr_value(&item_element.open, "id").unwrap_or_default(),
                 label: attr_value(&item_element.open, "label").unwrap_or_default(),
                 value: attr_value(&item_element.open, "value"),
@@ -683,12 +683,12 @@ fn parse_menu_document(xml: &str) -> Result<Option<MenuDocument>, String> {
     Ok(Some(doc))
 }
 
-fn first_route_element(xml: &str, name: &str) -> Option<MenuActionRoute> {
+fn first_route_element(xml: &str, name: &str) -> Option<UiNodeActionRoute> {
     let element = first_element(xml, name)?;
     Some(route_from_element(&element))
 }
 
-fn route_from_element(element: &XmlElement) -> MenuActionRoute {
+fn route_from_element(element: &XmlElement) -> UiNodeActionRoute {
     let mut payload = BTreeMap::new();
     if let Some(page) = attr_value(&element.open, "page") {
         payload.insert("page".to_owned(), serde_json::Value::String(page));
@@ -698,14 +698,14 @@ fn route_from_element(element: &XmlElement) -> MenuActionRoute {
             payload.insert(key, serde_json::Value::String(value));
         }
     }
-    MenuActionRoute {
+    UiNodeActionRoute {
         id: attr_value(&element.open, "id").unwrap_or_default(),
         source: attr_value(&element.open, "source").unwrap_or_default(),
-        target: attr_value(&element.open, "target").unwrap_or_else(|| "MenuRuntime".to_owned()),
+        target: attr_value(&element.open, "target").unwrap_or_else(|| "UiNodeNavigationRuntime".to_owned()),
         event: attr_value(&element.open, "event").unwrap_or_else(|| event_from_route_tag(&element.name).to_owned()),
         payload,
         transition: transition_from_attrs(&element.open),
-        feedback: first_element(&element.inner, "Feedback").map(|feedback| MenuFeedbackEvent {
+        feedback: first_element(&element.inner, "Feedback").map(|feedback| UiNodeFeedbackEvent {
             title: attr_value(&feedback.open, "title").unwrap_or_default(),
             detail: attr_value(&feedback.open, "detail").unwrap_or_default(),
             severity: feedback_severity_from_attr(attr_value(&feedback.open, "severity").as_deref()),
@@ -717,38 +717,38 @@ fn route_from_element(element: &XmlElement) -> MenuActionRoute {
 
 fn event_from_route_tag(name: &str) -> &'static str {
     match name {
-        "Back" => "menu.back",
-        "NavLeft" => "menu.nav_left",
-        "NavRight" => "menu.nav_right",
-        _ => "menu.activate",
+        "Back" => "ui.back",
+        "NavLeft" => "ui.nav_left",
+        "NavRight" => "ui.nav_right",
+        _ => "ui.activate",
     }
 }
 
-fn transition_from_attrs(open: &str) -> Option<MenuTransition> {
+fn transition_from_attrs(open: &str) -> Option<UiNodeTransition> {
     match attr_value(open, "transition").unwrap_or_default().trim().to_ascii_lowercase().as_str() {
-        "close" => Some(MenuTransition::close()),
-        "open_page" => attr_value(open, "page").map(MenuTransition::open_page),
-        "back" => Some(MenuTransition { kind: MenuTransitionKind::Back, page: None, reset_selection: true }),
+        "close" => Some(UiNodeTransition::close()),
+        "open_page" => attr_value(open, "page").map(UiNodeTransition::open_page),
+        "back" => Some(UiNodeTransition { kind: UiNodeTransitionKind::Back, page: None, reset_selection: true }),
         "none" | "" => None,
         _ => None,
     }
 }
 
-fn tone_from_attr(value: Option<&str>) -> MenuItemTone {
+fn tone_from_attr(value: Option<&str>) -> UiNodeNavigationTone {
     match value.unwrap_or_default().trim().to_ascii_lowercase().as_str() {
-        "accent" => MenuItemTone::Accent,
-        "danger" => MenuItemTone::Danger,
-        "disabled" => MenuItemTone::Disabled,
-        _ => MenuItemTone::Normal,
+        "accent" => UiNodeNavigationTone::Accent,
+        "danger" => UiNodeNavigationTone::Danger,
+        "disabled" => UiNodeNavigationTone::Disabled,
+        _ => UiNodeNavigationTone::Normal,
     }
 }
 
-fn feedback_severity_from_attr(value: Option<&str>) -> MenuFeedbackSeverity {
+fn feedback_severity_from_attr(value: Option<&str>) -> UiNodeFeedbackSeverity {
     match value.unwrap_or_default().trim().to_ascii_lowercase().as_str() {
-        "success" => MenuFeedbackSeverity::Success,
-        "warning" => MenuFeedbackSeverity::Warning,
-        "danger" | "error" => MenuFeedbackSeverity::Danger,
-        _ => MenuFeedbackSeverity::Info,
+        "success" => UiNodeFeedbackSeverity::Success,
+        "warning" => UiNodeFeedbackSeverity::Warning,
+        "danger" | "error" => UiNodeFeedbackSeverity::Danger,
+        _ => UiNodeFeedbackSeverity::Info,
     }
 }
 
@@ -883,10 +883,10 @@ mod tests {
     use super::*;
 
     #[test]
-    fn parses_menu_document_from_xmlcentral() {
-        let xml = r#"<NeUiDictionary><MenuDocument id="engine.pause_menu" surface_id="engine.pause_menu" root_page="root" title="PAUSE"><Page id="root"><Item id="resume" label="Resume"><Action id="resume" source="s" target="MenuRuntime" event="menu.close" transition="close" /></Item></Page></MenuDocument></NeUiDictionary>"#;
-        let doc = parse_menu_document(xml).unwrap().unwrap();
-        assert_eq!(doc.id, "engine.pause_menu");
+    fn parses_navigation_document_from_xmlcentral() {
+        let xml = r#"<NeUiDictionary><UiNodeNavigationDocument id="engine.ui.primary" surface_id="engine.ui.primary" root_page="root" title="UI"><Page id="root"><Item id="resume" label="Resume"><Action id="resume" source="s" target="UiNodeNavigationRuntime" event="ui.close" transition="close" /></Item></Page></UiNodeNavigationDocument></NeUiDictionary>"#;
+        let doc = parse_navigation_document(xml).unwrap().unwrap();
+        assert_eq!(doc.id, "engine.ui.primary");
         assert_eq!(doc.pages[0].items[0].label, "Resume");
     }
 }

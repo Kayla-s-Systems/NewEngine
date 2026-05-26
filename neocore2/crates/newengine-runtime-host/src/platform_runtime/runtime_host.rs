@@ -581,7 +581,7 @@ impl HostPlatformRuntime {
         }
         // Modal UI state is produced inside engine.step() by render_controller and
         // requires same-frame refresh. Do not publish/request the previous frame's
-        // pause menu here: that duplicates engine.ui work and forces stale UI traffic
+        // primary UI node here: that duplicates engine.ui work and forces stale UI traffic
         // before the real modal owner has updated animation/navigation state.
 
         if let Some(input) = input_frame.clone() {

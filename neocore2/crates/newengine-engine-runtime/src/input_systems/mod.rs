@@ -4,7 +4,7 @@
 //!
 //! This is intentionally engine-side runtime state, not a backend plugin API.
 //! Raw input can remain available while semantic systems are disabled or captured
-//! by gameplay state such as pause menu, cutscene, loading gate, dialogue or a
+//! by gameplay state such as UI navigation, cutscene, loading gate, dialogue or a
 //! scripted camera.
 
 mod carrier;
@@ -21,7 +21,7 @@ use sample::RawInputSample;
 pub use system::{InputRuntimeSystem, InputRuntimeSystemState, InputRuntimeSystemsSnapshot};
 
 const SUMMARY_INTERVAL_FRAMES: u64 = 240;
-const REASON_CAPTURED_BY_PAUSE: &str = "captured by engine.ui.modal";
+const REASON_CAPTURED_BY_MODAL_UI: &str = "captured by engine.ui.modal";
 const REASON_RAW_RECEIVED: &str = "raw input frame received";
 const REASON_RAW_MISSING: &str = "raw input frame missing";
 const REASON_BINDINGS_READY: &str = "bindings resolver available";
@@ -31,7 +31,7 @@ const REASON_GAMEPAD_CONNECTED: &str = "gamepad connected";
 const REASON_GAMEPAD_IDLE: &str = "gamepad idle";
 const REASON_LOOK_ACTIVE: &str = "camera look input";
 const REASON_MOVE_ACTIVE: &str = "gameplay movement input";
-const REASON_PAUSE_ACTIVE: &str = "pause/menu input";
+const REASON_UI_NAV_ACTIVE: &str = "ui navigation input";
 const REASON_IDLE: &str = "idle";
 
 #[derive(Clone, Debug, Default)]
@@ -134,7 +134,7 @@ impl InputRuntimeSystems {
         let gamepad_enabled = self.is_enabled(InputRuntimeSystem::Gamepad);
         let camera_look_enabled = self.is_enabled(InputRuntimeSystem::CameraLook);
         let gameplay_movement_enabled = self.is_enabled(InputRuntimeSystem::GameplayMovement);
-        let pause_menu_enabled = self.is_enabled(InputRuntimeSystem::PauseMenu);
+        let ui_navigation_enabled = self.is_enabled(InputRuntimeSystem::UiNavigation);
 
         self.transition(
             InputRuntimeSystem::RawInput,
@@ -179,7 +179,7 @@ impl InputRuntimeSystems {
             SystemObservation::new(
                 camera_look_enabled && !camera_captured && input_has_look(input),
                 camera_captured,
-                if camera_captured { REASON_CAPTURED_BY_PAUSE } else if input_has_look(input) { REASON_LOOK_ACTIVE } else { REASON_IDLE },
+                if camera_captured { REASON_CAPTURED_BY_MODAL_UI } else if input_has_look(input) { REASON_LOOK_ACTIVE } else { REASON_IDLE },
             ),
         );
         self.transition(
@@ -188,16 +188,16 @@ impl InputRuntimeSystems {
             SystemObservation::new(
                 gameplay_movement_enabled && !movement_captured && movement_has_activity(input.actions),
                 movement_captured,
-                if movement_captured { REASON_CAPTURED_BY_PAUSE } else if movement_has_activity(input.actions) { REASON_MOVE_ACTIVE } else { REASON_IDLE },
+                if movement_captured { REASON_CAPTURED_BY_MODAL_UI } else if movement_has_activity(input.actions) { REASON_MOVE_ACTIVE } else { REASON_IDLE },
             ),
         );
         self.transition(
-            InputRuntimeSystem::PauseMenu,
+            InputRuntimeSystem::UiNavigation,
             frame_index,
             SystemObservation::new(
-                pause_menu_enabled && input_has_pause_menu_action(input),
+                ui_navigation_enabled && input_has_ui_navigation_action(input),
                 false,
-                if input_has_pause_menu_action(input) { REASON_PAUSE_ACTIVE } else { REASON_IDLE },
+                if input_has_ui_navigation_action(input) { REASON_UI_NAV_ACTIVE } else { REASON_IDLE },
             ),
         );
 
@@ -208,23 +208,23 @@ impl InputRuntimeSystems {
             gamepad_enabled,
             camera_look_enabled,
             gameplay_movement_enabled,
-            pause_menu_enabled,
+            ui_navigation_enabled,
             input,
         );
 
         self.log_compact_summary(frame_index, raw_sample.summary(input));
     }
 
-    /// Apply modal capture after the pause menu has had first chance to read its
-    /// own actions. Capture state is persistent, so an open pause menu does not
+    /// Apply modal capture after the UI navigation has had first chance to read its
+    /// own actions. Capture state is persistent, so an open UI navigation does not
     /// generate a false->true transition every frame.
-    pub fn apply_pause_capture(
+    pub fn apply_modal_ui_capture(
         &mut self,
         frame_index: u64,
         blocks_gameplay: bool,
         input: &mut InputActionFrameCarrier,
     ) {
-        let changed = self.capture_policy.set_pause_menu_capture(blocks_gameplay);
+        let changed = self.capture_policy.set_modal_ui_capture(blocks_gameplay);
         for system in [InputRuntimeSystem::GameplayMovement, InputRuntimeSystem::CameraLook] {
             let was_active = self.state(system).map(|state| state.active).unwrap_or(false);
             self.transition(
@@ -233,7 +233,7 @@ impl InputRuntimeSystems {
                 SystemObservation::new(
                     was_active && !blocks_gameplay,
                     blocks_gameplay,
-                    if blocks_gameplay { REASON_CAPTURED_BY_PAUSE } else { REASON_IDLE },
+                    if blocks_gameplay { REASON_CAPTURED_BY_MODAL_UI } else { REASON_IDLE },
                 ),
             );
         }
@@ -276,7 +276,7 @@ impl InputRuntimeSystems {
         gamepad_enabled: bool,
         camera_look_enabled: bool,
         gameplay_movement_enabled: bool,
-        pause_menu_enabled: bool,
+        ui_navigation_enabled: bool,
         input: &mut InputActionFrameCarrier,
     ) {
         if !raw_enabled {
@@ -292,8 +292,8 @@ impl InputRuntimeSystems {
         if !gameplay_movement_enabled {
             input.suppress_gameplay_movement();
         }
-        if !pause_menu_enabled {
-            input.suppress_pause_menu();
+        if !ui_navigation_enabled {
+            input.suppress_ui_navigation();
         }
         if !gamepad_enabled {
             input.suppress_gamepad_effects();
@@ -390,9 +390,9 @@ fn input_has_look(input: &InputActionFrameCarrier<'_>) -> bool {
 }
 
 #[inline]
-fn input_has_pause_menu_action(input: &InputActionFrameCarrier<'_>) -> bool {
-    input.actions.menu_toggle
-        || input.actions.menu_accept
-        || input.actions.menu_back
-        || input.actions.menu_nav != [0, 0]
+fn input_has_ui_navigation_action(input: &InputActionFrameCarrier<'_>) -> bool {
+    input.actions.ui_toggle
+        || input.actions.ui_accept
+        || input.actions.ui_back
+        || input.actions.ui_nav != [0, 0]
 }

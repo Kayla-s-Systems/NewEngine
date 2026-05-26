@@ -9,10 +9,9 @@ use crate::surface::{
 
 /// Additional canonical surface identifiers used by full-runtime UI providers.
 pub const UI_SURFACE_MAIN_MENU: &str = "engine.main_menu";
-pub const UI_SURFACE_PAUSE_MENU: &str = "engine.pause_menu";
+pub const UI_SURFACE_PRIMARY: &str = "engine.ui.primary";
 pub const UI_SURFACE_GAME_HUD: &str = "game.hud";
 pub const UI_SURFACE_DEBUG_OVERLAY: &str = "runtime.debug_overlay";
-pub const UI_SURFACE_SETTINGS: &str = "engine.settings";
 pub const UI_SURFACE_ASSET_BROWSER: &str = "editor.asset_browser";
 pub const UI_SURFACE_INSPECTOR: &str = "editor.inspector";
 
@@ -23,8 +22,7 @@ pub const UI_ACTION_OPEN_LOGS: &str = "engine.logs.open";
 pub const UI_ACTION_RETRY_STARTUP: &str = "engine.startup.retry";
 pub const UI_ACTION_START_GAME: &str = "game.start";
 pub const UI_ACTION_RESUME_GAME: &str = "game.resume";
-pub const UI_ACTION_PAUSE_GAME: &str = "game.pause";
-pub const UI_ACTION_OPEN_SETTINGS: &str = "engine.settings.open";
+pub const UI_ACTION_TOGGLE_PRIMARY_UI: &str = "engine.ui.primary.toggle";
 pub const UI_ACTION_CLOSE_MODAL: &str = "ui.modal.close";
 pub const UI_ACTION_TOGGLE_DEBUG_OVERLAY: &str = "runtime.debug.toggle";
 
@@ -60,7 +58,7 @@ impl UiProviderCatalog {
             .iter()
             .map(|id| UiSurfaceDeclaration {
                 id: id.clone(),
-                kind: surface_kind_for_id(id).to_owned(),
+                component_id: default_component_for_id(id).to_owned(),
                 state_contract: state_contract_for_id(id).to_owned(),
                 layout_id: default_layout_for_id(id).to_owned(),
                 z_order: z_order_for_id(id),
@@ -88,7 +86,7 @@ impl UiProviderCatalog {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct UiSurfaceDeclaration {
     pub id: String,
-    pub kind: String,
+    pub component_id: String,
     pub state_contract: String,
     pub layout_id: String,
     pub z_order: i32,
@@ -160,7 +158,7 @@ impl UiDeclarativeLayout {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct UiNodeSpec {
     pub id: String,
-    pub kind: String,
+    pub component_id: String,
     pub role: String,
     pub style: String,
     pub layout: UiLayoutBoxSpec,
@@ -174,10 +172,10 @@ pub struct UiNodeSpec {
 
 impl UiNodeSpec {
     #[inline]
-    pub fn new(id: impl Into<String>, kind: impl Into<String>) -> Self {
+    pub fn new(id: impl Into<String>, component_id: impl Into<String>) -> Self {
         Self {
             id: id.into(),
-            kind: kind.into(),
+            component_id: component_id.into(),
             role: String::new(),
             style: String::new(),
             layout: UiLayoutBoxSpec::default(),
@@ -258,31 +256,14 @@ pub struct UiActionBindingRef {
     pub action: String,
 }
 
-fn surface_kind_for_id(id: &str) -> &'static str {
-    match id {
-        UI_SURFACE_ENGINE_LOADING => "Loading",
-        UI_SURFACE_ENGINE_ERROR_MODAL => "ErrorModal",
-        UI_SURFACE_RUNTIME_OVERLAY => "RuntimeOverlay",
-        UI_SURFACE_GAME_HUD => "GameHud",
-        UI_SURFACE_MAIN_MENU => "MainMenu",
-        UI_SURFACE_PAUSE_MENU => "PauseMenu",
-        UI_SURFACE_SETTINGS => "Settings",
-        UI_SURFACE_DEBUG_OVERLAY => "DebugOverlay",
-        UI_SURFACE_ASSET_BROWSER => "AssetBrowser",
-        UI_SURFACE_INSPECTOR => "Inspector",
-        _ => "Custom",
-    }
+fn default_component_for_id(_id: &str) -> &'static str {
+    // Public UI catalog entries are all the same node foundation. Providers may
+    // attach templates through component ids, not through hardcoded surface kinds.
+    "surface"
 }
 
-fn state_contract_for_id(id: &str) -> &'static str {
-    match id {
-        UI_SURFACE_ENGINE_LOADING | UI_SURFACE_ENGINE_ERROR_MODAL => "ScreenOverlayStatus",
-        UI_SURFACE_RUNTIME_OVERLAY | UI_SURFACE_DEBUG_OVERLAY => "RuntimeUiSnapshot",
-        UI_SURFACE_GAME_HUD => "GameHudSnapshot",
-        UI_SURFACE_MAIN_MENU | UI_SURFACE_PAUSE_MENU | UI_SURFACE_SETTINGS => "UiNavigationState",
-        UI_SURFACE_ASSET_BROWSER | UI_SURFACE_INSPECTOR => "EditorUiSnapshot",
-        _ => "serde_json::Value",
-    }
+fn state_contract_for_id(_id: &str) -> &'static str {
+    "UiSurfaceNode"
 }
 
 fn default_layout_for_id(id: &str) -> &'static str {
@@ -291,9 +272,6 @@ fn default_layout_for_id(id: &str) -> &'static str {
         UI_SURFACE_ENGINE_ERROR_MODAL => "assets/ui/engine/error_modal.neui@surface",
         UI_SURFACE_RUNTIME_OVERLAY => "assets/ui/runtime/overlay.neui@surface",
         UI_SURFACE_GAME_HUD => "assets/ui/game/hud.neui@surface",
-        UI_SURFACE_MAIN_MENU => "assets/ui/engine/main_menu.neui@surface",
-        UI_SURFACE_PAUSE_MENU => "assets/ui/engine/pause_menu.neui@surface",
-        UI_SURFACE_SETTINGS => "assets/ui/engine/settings.neui@surface",
         UI_SURFACE_DEBUG_OVERLAY => "assets/ui/runtime/debug_overlay.neui@surface",
         UI_SURFACE_ASSET_BROWSER => "assets/ui/editor/asset_browser.neui@surface",
         UI_SURFACE_INSPECTOR => "assets/ui/editor/inspector.neui@surface",
@@ -312,20 +290,8 @@ fn z_order_for_id(id: &str) -> i32 {
     }
 }
 
-fn default_consumes_for_id(id: &str) -> Vec<String> {
-    match id {
-        UI_SURFACE_ENGINE_LOADING | UI_SURFACE_ENGINE_ERROR_MODAL => vec![
-            "EngineLifecycleEvent".to_owned(),
-            "EngineStartupSnapshot".to_owned(),
-            "ScreenOverlayStatus".to_owned(),
-        ],
-        UI_SURFACE_RUNTIME_OVERLAY | UI_SURFACE_DEBUG_OVERLAY => vec![
-            "UiRuntimeDebugOverlayTelemetry".to_owned(),
-            "RuntimeFrameStats".to_owned(),
-        ],
-        UI_SURFACE_GAME_HUD => vec!["GameHudSnapshot".to_owned(), "PlayerRuntimeState".to_owned()],
-        _ => Vec::new(),
-    }
+fn default_consumes_for_id(_id: &str) -> Vec<String> {
+    vec!["UiSurfaceNode".to_owned()]
 }
 
 /// Native fallback exposes only safe startup diagnostics. Full UI providers must

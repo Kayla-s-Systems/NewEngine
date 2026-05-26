@@ -2,19 +2,18 @@
 
 use newengine_audio_api::AudioFeedbackKind;
 use newengine_input_bindings_api::InputDevicePreference;
-use newengine_ui_api::UiPauseMenuMessageSeverity;
-use newengine_ui_menu_runtime::MenuRouteDispatch;
-use newengine_ui_navigation_api::MenuActionRoute;
+use newengine_ui_navigation_api::UiNodeRouteDispatch;
+use newengine_ui_navigation_api::UiNodeActionRoute;
 
 use super::*;
 
-impl RenderPauseMenuRuntimeState {
-    pub(super) fn dispatch_menu_route(&mut self, dispatch: MenuRouteDispatch, frame_index: u64) {
+impl RenderUiNodeSurfaceState {
+    pub(super) fn dispatch_navigation_route(&mut self, dispatch: UiNodeRouteDispatch, frame_index: u64) {
         if let Some(audio_id) = dispatch.route.audio.as_deref() {
             audio(audio_feedback_from_route(audio_id), frame_index);
         }
 
-        let MenuRouteDispatch { route, source_label, .. } = dispatch;
+        let UiNodeRouteDispatch { route, source_label, .. } = dispatch;
         match (route.target.as_str(), route.event.as_str()) {
             (TARGET_SYSTEM_COMMAND, EVENT_ENGINE_SHUTDOWN_REQUEST) => {
                 self.exit_requested = true;
@@ -33,30 +32,30 @@ impl RenderPauseMenuRuntimeState {
                 self.begin_binding_rebind(&route, source_label);
             }
             (_, _) => {
-                if route.target != "MenuRuntime" {
+                if route.target != "UiNodeNavigationRuntime" {
                     log::warn!(
-                        "pause menu command router: unsupported route target='{}' event='{}' id='{}'",
+                        "UI surface ui node command router: unsupported route target='{}' event='{}' id='{}'",
                         route.target,
                         route.event,
                         route.id
                     );
                     self.flash_feedback(
                         "Unavailable",
-                        "This menu action has no command route",
-                        UiPauseMenuMessageSeverity::Danger,
+                        "This UI node action has no command route",
+                        UiNodeMessageSeverity::Danger,
                     );
-                    audio(AudioFeedbackKind::UiMenuError, frame_index);
+                    audio(AudioFeedbackKind::UiError, frame_index);
                 }
             }
         }
     }
 
-    fn begin_binding_rebind(&mut self, route: &MenuActionRoute, source_label: Option<String>) {
+    fn begin_binding_rebind(&mut self, route: &UiNodeActionRoute, source_label: Option<String>) {
         let Some(action_id) = route.payload_str("action_id") else {
             self.flash_feedback(
                 "Unavailable",
                 "Binding route has no action_id payload",
-                UiPauseMenuMessageSeverity::Danger,
+                UiNodeMessageSeverity::Danger,
             );
             return;
         };
@@ -68,7 +67,7 @@ impl RenderPauseMenuRuntimeState {
         self.flash_feedback(
             "Listening",
             format!("Press a key, mouse button or gamepad button for {}", label),
-            UiPauseMenuMessageSeverity::Warning,
+            UiNodeMessageSeverity::Warning,
         );
     }
 
@@ -79,12 +78,12 @@ impl RenderPauseMenuRuntimeState {
                 self.flash_feedback(
                     "Bindings reset",
                     "Default keyboard, mouse and gamepad layout restored",
-                    UiPauseMenuMessageSeverity::Success,
+                    UiNodeMessageSeverity::Success,
                 );
             }
             Err(e) => {
-                log::warn!("pause menu command router: reset bindings rejected err='{}'", e);
-                self.flash_feedback("Reset failed", e, UiPauseMenuMessageSeverity::Danger);
+                log::warn!("UI surface ui node command router: reset bindings rejected err='{}'", e);
+                self.flash_feedback("Reset failed", e, UiNodeMessageSeverity::Danger);
             }
         }
     }
@@ -104,12 +103,12 @@ impl RenderPauseMenuRuntimeState {
                 self.flash_feedback(
                     "Input device",
                     format!("Preference: {}", device_preference_label(self.profile.device_preference)),
-                    UiPauseMenuMessageSeverity::Success,
+                    UiNodeMessageSeverity::Success,
                 );
             }
             Err(e) => {
-                log::warn!("pause menu command router: device preference save failed err='{}'", e);
-                self.flash_feedback("Save failed", e, UiPauseMenuMessageSeverity::Danger);
+                log::warn!("UI surface ui node command router: device preference save failed err='{}'", e);
+                self.flash_feedback("Save failed", e, UiNodeMessageSeverity::Danger);
             }
         }
     }

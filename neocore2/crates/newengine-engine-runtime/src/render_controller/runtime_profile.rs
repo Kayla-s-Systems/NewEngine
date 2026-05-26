@@ -23,7 +23,7 @@ pub(crate) struct RenderRuntimeProfile {
     #[serde(default)]
     pub(crate) input: GameplayInputProfile,
     #[serde(default)]
-    pub(crate) menu: MenuRestoreProfile,
+    pub(crate) ui: UiRestoreProfile,
 }
 
 #[derive(Clone, Copy, Debug, Serialize, Deserialize)]
@@ -81,7 +81,7 @@ pub(crate) struct GameplayInputProfile {
 }
 
 #[derive(Clone, Copy, Debug, Serialize, Deserialize)]
-pub(crate) struct MenuRestoreProfile {
+pub(crate) struct UiRestoreProfile {
     #[serde(default = "default_true")]
     pub(crate) restore_viewport_pass_on_close: bool,
     #[serde(default = "default_true")]
@@ -120,7 +120,7 @@ impl Default for RenderRuntimeProfile {
             graphics: GraphicsProfile::default(),
             world: WorldRuntimeProfile::default(),
             input: GameplayInputProfile::default(),
-            menu: MenuRestoreProfile::default(),
+            ui: UiRestoreProfile::default(),
         }
     }
 }
@@ -171,7 +171,7 @@ impl Default for GameplayInputProfile {
     }
 }
 
-impl Default for MenuRestoreProfile {
+impl Default for UiRestoreProfile {
     #[inline]
     fn default() -> Self {
         Self {

@@ -1,8 +1,8 @@
-# NewEngine UI assets
+# North Star Engine UI assets
 
 This directory contains runtime `.neui` UI dictionaries split by ownership.
 
-Runtime `.neui` files are binary NEF8/ListFiles with `content_kind = ui_dictionary` and a deflate-compressed XMLcentral body. They are not runtime JSON layout/menu files.
+Runtime `.neui` files are binary NEF8/ListFiles with `content_kind = ui_dictionary` and a deflate-compressed XMLcentral body. They are not runtime JSON layout files and not provider-owned screen definitions.
 
 Runtime rule:
 
@@ -14,6 +14,8 @@ Runtime rule:
   -> engine.render consumes draw packets only
 ```
 
-The pause menu navigation document is authored inside `assets/ui/engine/pause_menu.neui` as XMLcentral `<MenuDocument>`, then compiled by `engine.assets.ui` into the legacy-free runtime `MenuRuntime` DTO. No runtime `.layout.json` / `.menu.json` fallback is allowed.
+A UI surface is authored as a generic node-navigation document, for example XMLcentral `<UiNodeNavigationDocument>`, then compiled by `engine.assets.ui` into the `UiNodeNavigationRuntime` DTO. The runtime does not own named product screens; it only publishes `UiSurfaceNode` state.
+
+No runtime `.layout.json`, legacy `.menu.json`, embedded provider screen, alias, or compatibility fallback is allowed.
 
 The startup window remains a bootstrap exception and must not become a second runtime UI framework.

@@ -135,7 +135,7 @@ impl PreStartApp {
                         self.set_display_window_mode("windowed".to_owned());
                     }
                 }
-                switch_chip(ui, "VSync", self.fields.bool("display.vsync", true));
+                switch_chip(ui, "VSync", self.fields.bool("display.vsync", false));
             });
             text_row(ui, "Refresh rate", self.fields.string("display.refresh_rate", "auto"));
             text_row(ui, "Render scale", self.fields.string("display.render_scale", "1.0"));
@@ -381,7 +381,7 @@ impl PreStartApp {
         });
         ui.add_space(10.0);
         card_title(ui, IconKind::Check, "VSYNC", None);
-        switch_row(ui, "Enabled", "Synchronize present rate with the selected display refresh.", self.fields.bool("display.vsync", true));
+        switch_row(ui, "Enabled", "Synchronize present rate with the selected display refresh. Disabled by default for max-FPS development runs; enable explicitly for stable presentation.", self.fields.bool("display.vsync", false));
     }
 
     pub(super) fn render_launch_controls_right(&mut self, ui: &mut egui::Ui) {

@@ -12,7 +12,7 @@ use newengine_core::render::{RenderBackendCapabilities, RenderBackendStatus};
 use newengine_render_feature_api::{LightExtractionProvider, RenderDrawListProvider};
 use super::state::{
     RenderBridgeState, RenderDiagnosticsRuntimeState, RenderFeatureProviderState,
-    RenderEditorRuntimeState, RenderFrameRuntimeState, RenderGpuSceneState, RenderMenuRuntimeState, RenderRuntimeProfileState, RenderShadowRuntimeState, RenderViewportState,
+    RenderEditorRuntimeState, RenderFrameRuntimeState, RenderGpuSceneState, RenderUiSurfaceRuntimeState, RenderRuntimeProfileState, RenderShadowRuntimeState, RenderViewportState,
 };
 
 /// Engine-side render composition root.
@@ -28,7 +28,7 @@ pub struct RuntimeRenderController {
     pub(super) gpu: RenderGpuSceneState,
     pub(super) frame: RenderFrameRuntimeState,
     pub(super) diagnostics: RenderDiagnosticsRuntimeState,
-    pub(super) menu: RenderMenuRuntimeState,
+    pub(super) ui: RenderUiSurfaceRuntimeState,
     pub(super) editor: RenderEditorRuntimeState,
     pub(super) runtime_profile: RenderRuntimeProfileState,
     pub(super) backend_failure: RenderBackendFailureState,
@@ -49,13 +49,13 @@ impl RuntimeRenderController {
         self.backend_failure.snapshot()
     }
 
-    pub(super) fn restore_playable_view_after_menu_close(&mut self) {
-        let restore_viewport = self.runtime_profile().menu.restore_viewport_pass_on_close;
-        let invalidate_shadow_cache = self.runtime_profile().menu.invalidate_shadow_cache_on_close;
-        let restore_input = self.runtime_profile().menu.restore_gameplay_input_on_close;
+    pub(super) fn restore_playable_view_after_ui_close(&mut self) {
+        let restore_viewport = self.runtime_profile().ui.restore_viewport_pass_on_close;
+        let invalidate_shadow_cache = self.runtime_profile().ui.invalidate_shadow_cache_on_close;
+        let restore_input = self.runtime_profile().ui.restore_gameplay_input_on_close;
         if restore_viewport && self.viewport.pass_disabled && !self.backend_render_disabled() {
             log::warn!(
-                "render controller: menu restore reopened viewport GPU pass after pause/settings close"
+                "render controller: UI restore reopened viewport GPU pass after UI close"
             );
             self.viewport.pass_disabled = false;
         }
@@ -66,24 +66,24 @@ impl RuntimeRenderController {
             self.frame.input_systems.set_enabled(
                 crate::input_systems::InputRuntimeSystem::Actions,
                 true,
-                "menu restore contract",
+                "UI restore contract",
                 self.frame.frame_index,
             );
             self.frame.input_systems.set_enabled(
                 crate::input_systems::InputRuntimeSystem::GameplayMovement,
                 true,
-                "menu restore contract",
+                "UI restore contract",
                 self.frame.frame_index,
             );
             self.frame.input_systems.set_enabled(
                 crate::input_systems::InputRuntimeSystem::CameraLook,
                 true,
-                "menu restore contract",
+                "UI restore contract",
                 self.frame.frame_index,
             );
         }
         newengine_core::crash::record_breadcrumb(
-            "render controller: menu restore contract applied".to_owned(),
+            "render controller: UI restore contract applied".to_owned(),
         );
     }
 
@@ -198,7 +198,7 @@ impl RuntimeRenderController {
             gpu: RenderGpuSceneState::new(),
             frame: RenderFrameRuntimeState::new(),
             diagnostics: RenderDiagnosticsRuntimeState::new(),
-            menu: RenderMenuRuntimeState::new(),
+            ui: RenderUiSurfaceRuntimeState::new(),
             editor: RenderEditorRuntimeState::new(),
             runtime_profile: RenderRuntimeProfileState::new(),
             backend_failure: RenderBackendFailureState::new(),

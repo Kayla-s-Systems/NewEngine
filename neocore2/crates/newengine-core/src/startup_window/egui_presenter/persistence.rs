@@ -50,7 +50,7 @@ impl PreStartApp {
         }
         let fullscreen = mode != "windowed";
         let borderless = mode == "borderless";
-        let vsync = self.fields.bool_value("display.vsync", true);
+        let vsync = self.fields.bool_value("display.vsync", false);
         let monitor = self.fields.string_value("display.monitor", "primary");
         let refresh_rate = self.fields.string_value("display.refresh_rate", "auto");
         let render_scale = parse_f64(&self.fields.string_value("display.render_scale", "1.0"), 1.0).clamp(0.25, 4.0);

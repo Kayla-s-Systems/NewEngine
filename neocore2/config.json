@@ -124,7 +124,7 @@
       "platform.winit": {
         "display": {
           "borderless_fullscreen": false,
-          "fullscreen": true,
+          "fullscreen": false,
           "hdr": "auto",
           "monitor": "primary",
           "monitor_index": -1,
@@ -135,7 +135,7 @@
             "height": 900,
             "width": 1600
           },
-          "vsync": true,
+          "vsync": false,
           "window_mode": "windowed"
         },
         "enabled": true,
@@ -197,7 +197,7 @@
       "startup_window": {
         "display": {
           "borderless_fullscreen": false,
-          "fullscreen": true,
+          "fullscreen": false,
           "hdr": "auto",
           "monitor": "primary",
           "refresh_rate": "auto",
@@ -206,8 +206,8 @@
             "height": 900,
             "width": 1600
           },
-          "vsync": true,
-          "window_mode": "exclusive_fullscreen"
+          "vsync": false,
+          "window_mode": "windowed"
         },
         "graphics_backend": {
           "debug_renderer_tools": {
@@ -309,7 +309,7 @@
                   "height": 900,
                   "width": 1600
                 },
-                "vsync": true,
+                "vsync": false,
                 "window_mode": "windowed"
               },
               "height": 900,
@@ -336,7 +336,7 @@
                   "height": 900,
                   "width": 1600
                 },
-                "vsync": true,
+                "vsync": false,
                 "window_mode": "windowed"
               },
               "height": 900,
@@ -491,7 +491,7 @@
                   "height": 900,
                   "width": 1600
                 },
-                "vsync": true,
+                "vsync": false,
                 "window_mode": "windowed"
               },
               "height": 900,
@@ -1323,8 +1323,8 @@
   "window": {
     "display": {
       "borderless_fullscreen": false,
-      "fullscreen": true,
-      "window_mode": "exclusive_fullscreen"
+      "fullscreen": false,
+      "window_mode": "windowed"
     },
     "height": 900,
     "title": "Kayla's Editor",

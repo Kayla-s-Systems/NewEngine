@@ -27,15 +27,15 @@ pub use schema::{
     UiActionRoute, UiAnchor, UiDataBinding, UiDataSourceBinding, UiDeclarativeLayout,
     UiLayoutBoxSpec, UiLayoutDeclaration, UiNodeSpec, UiProviderCatalog,
     UiSurfaceDeclaration, UiThemeDeclaration, UI_ACTION_CLOSE_MODAL,
-    UI_ACTION_OPEN_LOGS, UI_ACTION_OPEN_SETTINGS, UI_ACTION_PAUSE_GAME,
+    UI_ACTION_OPEN_LOGS, UI_ACTION_TOGGLE_PRIMARY_UI,
     UI_ACTION_QUIT, UI_ACTION_RESUME_GAME, UI_ACTION_RETRY_STARTUP,
     UI_ACTION_START_GAME, UI_ACTION_TOGGLE_DEBUG_OVERLAY, UI_SURFACE_ASSET_BROWSER,
     UI_SURFACE_DEBUG_OVERLAY, UI_SURFACE_GAME_HUD, UI_SURFACE_INSPECTOR,
-    UI_SURFACE_MAIN_MENU, UI_SURFACE_PAUSE_MENU, UI_SURFACE_SETTINGS,
+    UI_SURFACE_MAIN_MENU, UI_SURFACE_PRIMARY,
 };
 pub use surface::{
     UiAnimationSpec, UiErrorModalSpec, UiLoadingShellSpec, UiProviderBinding, UiSubsystemCardPaletteSpec, UiSubsystemCardSpec,
-    UiProviderManifest, UiShellSpec, UiSurfaceKind, UiSurfaceProjection,
+    UiProviderManifest, UiShellSpec, UiSurfaceProjection,
     UI_ERROR_MODAL_KSYSTEMS_ID, UI_FEATURE_EXTERNAL_PLUGIN_PROVIDER,
     UI_FEATURE_NATIVE_SAFE_STARTUP, UI_FEATURE_KSYSTEMS_ERROR_MODAL,
     UI_PROVIDER_NATIVE_FALLBACK_ID, UI_PROVIDER_NONE_ID, UI_SHELL_KSYSTEMS_LOADING_ID,

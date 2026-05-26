@@ -7,12 +7,14 @@ use std::time::Instant;
 use newengine_core::EngineResult;
 use newengine_system_contracts::ScreenOverlayStatus;
 use newengine_system_runtime::loading_surface_projection;
-use newengine_ui_api::UiDrawList;
 use newengine_ui::UiProviderBinding;
 use newengine_ui_api::{
-    decode_ui_frame_response_bin, encode_ui_frame_request_bin, UiFrameRequest, UiFrameResponse,
-    UiRuntimeDebugOverlayTelemetry, ENGINE_UI_SERVICE_ID,
-    UI_SERVICE_METHOD_DEBUG_OVERLAY_TELEMETRY_V1, UI_SERVICE_METHOD_DRAW_FRAME_BIN_V1, UI_SERVICE_METHOD_DRAW_FRAME_V1,
+    decode_ui_frame_response_bin, encode_ui_frame_request_bin, UiComponentNode, UiDrawList,
+    UiFrameRequest, UiFrameResponse, UiRuntimeDebugOverlayTelemetry, UiSurfaceAnchor,
+    UiSurfaceNode, UiSurfaceStyle, ENGINE_UI_SERVICE_ID, UI_COMPONENT_PANEL,
+    UI_SERVICE_METHOD_DRAW_FRAME_BIN_V1, UI_SERVICE_METHOD_DRAW_FRAME_V1,
+    UI_SERVICE_METHOD_SURFACE_NODE_V1, UI_SURFACE_ENGINE_LOADING,
+    UI_SURFACE_RUNTIME_DEBUG_OVERLAY, UI_THEME_NORTHSTAR_DEFAULT,
 };
 
 static TRY_BINARY_UI_FRAME: AtomicBool = AtomicBool::new(true);
@@ -78,11 +80,9 @@ fn request_ui_draw_list_bin(
     let decode_ms = decode_started.elapsed().as_secs_f32() * 1000.0;
 
     log_ui_gateway_frame("bin", request.frame_index, started, encode_ms, service_ms, decode_ms, bytes.len(), &response.draw_list);
-    if ui_draw_list_is_empty(&response.draw_list) {
-        Ok(None)
-    } else {
-        Ok(Some(response.draw_list))
-    }
+    // Empty draw-lists are valid clear packets. Provider absence is represented
+    // by Ok(None) before decode; a decoded empty packet means "clear UI".
+    Ok(Some(response.draw_list))
 }
 
 fn request_ui_draw_list_json(
@@ -110,11 +110,9 @@ fn request_ui_draw_list_json(
     let decode_ms = decode_started.elapsed().as_secs_f32() * 1000.0;
 
     log_ui_gateway_frame("json", request.frame_index, started, encode_ms, service_ms, decode_ms, bytes.len(), &response.draw_list);
-    if ui_draw_list_is_empty(&response.draw_list) {
-        Ok(None)
-    } else {
-        Ok(Some(response.draw_list))
-    }
+    // Empty draw-lists are valid clear packets. Provider absence is represented
+    // by Ok(None) before decode; a decoded empty packet means "clear UI".
+    Ok(Some(response.draw_list))
 }
 
 fn log_ui_gateway_frame(
@@ -169,26 +167,67 @@ pub(crate) fn publish_loading_overlay(
     }
 
     let projection = loading_surface_projection(status, provider);
+    let lines = vec![
+        status.title.clone(),
+        status.status.clone(),
+        status.detail.clone(),
+        format!("progress={:.0}%", status.progress_01() * 100.0),
+    ];
     let mut metrics = BTreeMap::new();
-    metrics.insert(
-        "surface_projection".to_owned(),
-        serde_json::to_value(&projection).unwrap_or(serde_json::Value::Null),
-    );
-    let telemetry = UiRuntimeDebugOverlayTelemetry {
+    metrics.insert("surface_projection".to_owned(), serde_json::to_value(&projection).unwrap_or(serde_json::Value::Null));
+    metrics.insert("frame_index".to_owned(), serde_json::json!(frame_index));
+    let node = UiSurfaceNode {
         version: 1,
-        surface_id: projection.surface_id().to_owned(),
+        surface_id: if projection.surface_id().trim().is_empty() {
+            UI_SURFACE_ENGINE_LOADING.to_owned()
+        } else {
+            projection.surface_id().to_owned()
+        },
         source: "engine.loading".to_owned(),
-        frame_index,
-        text: format!("{}\n{}\n{}", status.title, status.status, status.detail),
-        lines: vec![
-            status.title.clone(),
-            status.status.clone(),
-            status.detail.clone(),
-            format!("progress={:.0}%", status.progress_01() * 100.0),
-        ],
+        visible: true,
+        modal: false,
+        z_order: 900,
+        title: status.title.clone(),
+        subtitle: status.status.clone(),
+        body_lines: lines.clone(),
+        footer_lines: Vec::new(),
+        style_tags: vec!["retained".to_owned()],
+        theme_id: UI_THEME_NORTHSTAR_DEFAULT.to_owned(),
+        component_id: UI_COMPONENT_PANEL.to_owned(),
+        components: lines
+            .iter()
+            .enumerate()
+            .map(|(index, line)| UiComponentNode::text(format!("loading.line.{index}"), line.clone()))
+            .collect(),
+        message: None,
+        style: UiSurfaceStyle {
+            anchor: UiSurfaceAnchor::Center,
+            min_size_px: [460.0, 220.0],
+            max_size_px: [760.0, 360.0],
+            row_pitch_px: 24.0,
+            ..UiSurfaceStyle::default()
+        },
         metrics,
     };
-    publish_debug_overlay_telemetry(&telemetry);
+    publish_surface_node(&node);
+}
+
+fn publish_surface_node(node: &UiSurfaceNode) {
+    let payload = match serde_json::to_vec(node) {
+        Ok(payload) => payload,
+        Err(e) => {
+            log::warn!("ui gateway: failed to encode surface node surface='{}': {e}", node.surface_id);
+            return;
+        }
+    };
+    match newengine_core::call_service_v1_optional(
+        ENGINE_UI_SERVICE_ID,
+        UI_SERVICE_METHOD_SURFACE_NODE_V1,
+        &payload,
+    ) {
+        Ok(Some(_)) | Ok(None) => {}
+        Err(e) => log::warn!("ui gateway: surface node publish failed surface='{}' err='{e}'", node.surface_id),
+    }
 }
 
 /// Publishes provider-neutral runtime debug telemetry through `engine.ui`.
@@ -199,33 +238,51 @@ pub(crate) fn publish_debug_overlay_telemetry(telemetry: &UiRuntimeDebugOverlayT
     if !newengine_core::has_engine_gateway_route(ENGINE_UI_SERVICE_ID) {
         return;
     }
-
-    let payload = match serde_json::to_vec(telemetry) {
-        Ok(payload) => payload,
-        Err(e) => {
-            log::warn!("ui gateway: failed to encode debug overlay telemetry: {e}");
-            return;
-        }
+    let mut lines = if telemetry.lines.is_empty() {
+        telemetry.text.lines().map(str::to_owned).collect::<Vec<_>>()
+    } else {
+        telemetry.lines.clone()
     };
-
-    match newengine_core::call_service_v1_optional(
-        ENGINE_UI_SERVICE_ID,
-        UI_SERVICE_METHOD_DEBUG_OVERLAY_TELEMETRY_V1,
-        &payload,
-    ) {
-        Ok(Some(_)) | Ok(None) => {}
-        Err(e) => log::warn!("ui gateway: debug overlay telemetry publish failed: {e}"),
+    if lines.is_empty() {
+        lines.push(format!("frame={} source={}", telemetry.frame_index, telemetry.source));
     }
+    let node = UiSurfaceNode {
+        version: 1,
+        surface_id: if telemetry.surface_id.trim().is_empty() {
+            UI_SURFACE_RUNTIME_DEBUG_OVERLAY.to_owned()
+        } else {
+            telemetry.surface_id.clone()
+        },
+        source: telemetry.source.clone(),
+        visible: true,
+        modal: false,
+        z_order: 980,
+        title: "RUNTIME DEBUG".to_owned(),
+        subtitle: telemetry.source.clone(),
+        body_lines: lines.clone(),
+        footer_lines: Vec::new(),
+        style_tags: vec!["retained".to_owned()],
+        theme_id: UI_THEME_NORTHSTAR_DEFAULT.to_owned(),
+        component_id: UI_COMPONENT_PANEL.to_owned(),
+        components: lines
+            .iter()
+            .enumerate()
+            .map(|(index, line)| UiComponentNode::text(format!("debug.line.{index}"), line.clone()))
+            .collect(),
+        message: None,
+        style: UiSurfaceStyle {
+            anchor: UiSurfaceAnchor::TopLeft,
+            min_size_px: [360.0, 180.0],
+            max_size_px: [620.0, 520.0],
+            margin_px: [12.0, 12.0],
+            row_pitch_px: 22.0,
+            ..UiSurfaceStyle::default()
+        },
+        metrics: telemetry.metrics.clone(),
+    };
+    publish_surface_node(&node);
 }
 
-fn ui_draw_list_is_empty(draw_list: &UiDrawList) -> bool {
-    draw_list.mesh.vertices.is_empty()
-        && draw_list.mesh.indices.is_empty()
-        && draw_list.mesh.cmds.is_empty()
-        && draw_list.texture_delta.set.is_empty()
-        && draw_list.texture_delta.patches.is_empty()
-        && draw_list.texture_delta.free.is_empty()
-}
 
 fn ui_draw_list_stats(draw_list: &UiDrawList) -> String {
     let texture_set_bytes: usize = draw_list
