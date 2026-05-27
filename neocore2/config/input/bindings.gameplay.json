@@ -106,7 +106,7 @@
     {
       "code": 114,
       "id": "keyboard.escape",
-      "label": "ESC"
+      "label": "Escape"
     },
     {
       "code": 159,
@@ -659,6 +659,48 @@
       "device": "GamepadButton",
       "code": 0,
       "name": "Start",
+      "phase": "Pressed"
+    },
+    {
+      "action": "ui.assets.catalog.toggle",
+      "device": "Keyboard",
+      "code": 159,
+      "name": null,
+      "phase": "Pressed"
+    },
+    {
+      "action": "ui.assets.catalog.toggle",
+      "device": "Keyboard",
+      "code": 159,
+      "name": null,
+      "phase": "Pressed"
+    },
+    {
+      "action": "ui.assets.catalog.toggle",
+      "device": "Keyboard",
+      "code": 159,
+      "name": null,
+      "phase": "Pressed"
+    },
+    {
+      "action": "ui.assets.catalog.toggle",
+      "device": "Keyboard",
+      "code": 159,
+      "name": null,
+      "phase": "Pressed"
+    },
+    {
+      "action": "ui.assets.catalog.toggle",
+      "device": "Keyboard",
+      "code": 159,
+      "name": null,
+      "phase": "Pressed"
+    },
+    {
+      "action": "ui.assets.catalog.toggle",
+      "device": "Keyboard",
+      "code": 159,
+      "name": null,
       "phase": "Pressed"
     },
     {

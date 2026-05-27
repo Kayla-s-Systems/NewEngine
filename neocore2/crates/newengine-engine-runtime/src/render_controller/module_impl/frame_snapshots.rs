@@ -18,7 +18,6 @@ use super::scene;
 pub(super) struct SceneRenderSnapshot {
     pub frame_index: u64,
     pub bounds: BoundsSnap,
-    pub viewproj: Mat4,
     pub camera_position: Vec3,
     pub camera_forward: Vec3,
     pub viewport_extent: Extent2D,
@@ -32,7 +31,7 @@ impl SceneRenderSnapshot {
     pub(super) fn capture(
         frame_index: u64,
         scene: &Scene,
-        viewproj: Mat4,
+        _viewproj: Mat4,
         camera_position: Vec3,
         camera_forward: Vec3,
         viewport_extent: Extent2D,
@@ -43,7 +42,6 @@ impl SceneRenderSnapshot {
         Self {
             frame_index,
             bounds: scene::scene_bounds(scene).unwrap_or_else(scene::default_bounds),
-            viewproj,
             camera_position,
             camera_forward,
             viewport_extent,

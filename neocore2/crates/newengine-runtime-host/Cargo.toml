@@ -21,8 +21,6 @@ newengine-assets-api = { path = "../newengine-assets-api" }
 newengine-core = { path = "../newengine-core" }
 newengine-math = { path = "../newengine-math" }
 newengine-platform-api = { path = "../newengine-platform-api" }
-newengine-loading-api = { path = "../newengine-loading-api" }
-newengine-loading-runtime = { path = "../newengine-loading-runtime" }
 newengine-jobs-api = { path = "../newengine-jobs-api" }
 newengine-time-runtime = { path = "../newengine-time-runtime" }
 newengine-input-api = { path = "../newengine-input-api" }

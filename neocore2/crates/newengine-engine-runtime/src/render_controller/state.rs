@@ -23,7 +23,7 @@ use super::metrics::RuntimeOverlayMetrics;
 use super::module_impl::instancing::InstanceBufferUploader;
 use super::module_impl::draw_lists::RenderDrawListProviderRegistry;
 use super::module_impl::light_extraction::LightExtractionProviderRegistry;
-use super::resource_lifetime::RenderTargetLifetimeQueue;
+use super::resource_lifetime::RenderGpuLifetimeQueue;
 use super::runtime_profile::RenderRuntimeProfile;
 
 type PrimGpuCache = FxHashMap<newengine_primitives::PrimitiveId, PrimitiveGpu>;
@@ -270,14 +270,14 @@ impl RenderMeshGpuState {
 
 /// Deferred native resource destruction queues.
 pub(super) struct RenderGpuLifetimeState {
-    pub(super) render_target_lifetimes: RenderTargetLifetimeQueue,
+    pub(super) resources: RenderGpuLifetimeQueue,
 }
 
 impl RenderGpuLifetimeState {
     #[inline]
     pub(super) fn new() -> Self {
         Self {
-            render_target_lifetimes: RenderTargetLifetimeQueue::new(),
+            resources: RenderGpuLifetimeQueue::new(),
         }
     }
 }
@@ -305,8 +305,16 @@ impl RenderGpuSceneState {
 
     #[inline]
     pub(super) fn material_pipeline_profile(&self) -> MaterialPipelineBuildProfile {
+        self.material_pipeline_profile_for(super::render_quality::SCENE_HDR_COLOR_FORMAT)
+    }
+
+    #[inline]
+    pub(super) fn material_pipeline_profile_for(
+        &self,
+        scene_color_format: newengine_core::render::TextureFormat,
+    ) -> MaterialPipelineBuildProfile {
         MaterialPipelineBuildProfile::new(
-            super::render_quality::SCENE_HDR_COLOR_FORMAT,
+            scene_color_format,
             super::render_quality::SHADOW_MAP_COLOR_FORMAT,
         )
     }
@@ -331,12 +339,37 @@ impl RenderGpuSceneState {
         self.material.registry.require_pipeline(key, profile, r)
     }
 
+    #[inline]
+    pub(super) fn require_material_pipeline_for(
+        &mut self,
+        key: MaterialGpuPipelineKey,
+        scene_color_format: newengine_core::render::TextureFormat,
+        r: &mut dyn newengine_core::render::RenderApi,
+    ) -> newengine_core::EngineResult<MaterialGpuPipeline> {
+        let profile = self.material_pipeline_profile_for(scene_color_format);
+        self.material.registry.require_pipeline(key, profile, r)
+    }
+
     pub(super) fn require_primary_lit_pipeline(
         &mut self,
         r: &mut dyn newengine_core::render::RenderApi,
     ) -> newengine_core::EngineResult<LitPipeline> {
         let key = self.primary_lit_pipeline_key()?;
         self.require_material_pipeline(key, r)?.lit().ok_or_else(|| {
+            newengine_core::EngineError::other(format!(
+                "render material registry: primary material domain produced no lit pipeline key={:?}",
+                key
+            ))
+        })
+    }
+
+    pub(super) fn require_primary_lit_pipeline_for(
+        &mut self,
+        scene_color_format: newengine_core::render::TextureFormat,
+        r: &mut dyn newengine_core::render::RenderApi,
+    ) -> newengine_core::EngineResult<LitPipeline> {
+        let key = self.primary_lit_pipeline_key()?;
+        self.require_material_pipeline_for(key, scene_color_format, r)?.lit().ok_or_else(|| {
             newengine_core::EngineError::other(format!(
                 "render material registry: selected material domain is not a lit pipeline key='{}'",
                 key.as_str()

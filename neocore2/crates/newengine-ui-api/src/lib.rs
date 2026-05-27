@@ -206,7 +206,7 @@ pub const UI_SERVICE_METHOD_NAVIGATE_V1: &str = "ui.navigate_v1";
 pub const UI_SERVICE_METHOD_DEBUG_TREE_V1: &str = "ui.debug_tree_v1";
 pub const UI_SERVICE_METHOD_DEBUG_BINDINGS_V1: &str = "ui.debug_bindings_v1";
 
-pub const UI_SURFACE_ENGINE_LOADING: &str = "engine.loading";
+pub const UI_SURFACE_ENGINE_LOADING: &str = "engine.ui.loading";
 pub const UI_SURFACE_ENGINE_ERROR_MODAL: &str = "engine.error_modal";
 pub const UI_SURFACE_RUNTIME_OVERLAY: &str = "runtime.overlay";
 pub const UI_SURFACE_RUNTIME_DEBUG_OVERLAY: &str = "runtime.debug_overlay";

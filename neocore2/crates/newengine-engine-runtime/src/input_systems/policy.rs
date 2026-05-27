@@ -80,11 +80,13 @@ impl RuntimeInputCapturePolicy {
     }
 
     #[inline]
+    #[allow(dead_code)]
     pub(super) fn set_modal_ui_capture(&mut self, blocks_gameplay: bool) -> bool {
         self.set_capture_state(InputCaptureState::modal_ui(blocks_gameplay))
     }
 
     #[inline]
+    #[allow(dead_code)]
     pub(super) fn state(&self) -> InputCaptureState {
         self.state
     }

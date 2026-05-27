@@ -12,10 +12,7 @@ use std::time::{Duration, Instant};
 use newengine_core::host_events::{HostEvent, WindowHostEvent, WindowInitSize};
 use newengine_core::{Engine, EngineError, EngineResult, EngineRunState};
 
-use crate::platform_runtime::{
-    register_jobs_gateway_service_best_effort,
-    register_loading_gateway_service_best_effort,
-};
+use crate::platform_runtime::register_jobs_gateway_service_best_effort;
 
 const DEFAULT_HEADLESS_WIDTH: u32 = 1;
 const DEFAULT_HEADLESS_HEIGHT: u32 = 1;
@@ -71,8 +68,7 @@ impl HeadlessCliRuntime {
     fn install_headless_services(&mut self) {
         newengine_time_runtime::register_time_gateway_best_effort();
         register_jobs_gateway_service_best_effort(self.engine.job_system(), self.engine.events().clone());
-        register_loading_gateway_service_best_effort();
-        log::info!("headless runtime: engine.time, engine.jobs and engine.loading gateways registered");
+        log::info!("headless runtime: engine.time and engine.jobs gateways registered; loading/status stays an engine.ui projection");
     }
 
     fn publish_headless_window_contract(&mut self) -> EngineResult<()> {

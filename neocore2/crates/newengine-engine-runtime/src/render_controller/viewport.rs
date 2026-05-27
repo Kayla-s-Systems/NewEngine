@@ -26,9 +26,14 @@ impl RuntimeRenderController {
             self.viewport.render_target = None;
         }
 
+        let color_format = if self.runtime_profile().hdr_scene_enabled() {
+            super::render_quality::SCENE_HDR_COLOR_FORMAT
+        } else {
+            TextureFormat::Bgra8Unorm
+        };
         let rt = r.create_render_target(
-            RenderTargetDesc::new(extent, TextureFormat::Bgra8Unorm)
-                // Depth is critical for an game viewport: correct occlusion, stable gizmo/grid.
+            RenderTargetDesc::new(extent, color_format)
+                // Depth is critical for a game viewport: correct occlusion, stable gizmo/grid.
                 .with_depth(TextureFormat::Depth32Float)
                 .with_label("game_viewport_rt"),
         )?;

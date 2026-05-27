@@ -100,6 +100,7 @@ impl RuntimeRenderController {
                     "render controller: backend disabled after fatal GPU error phase='{}' err='{}'",
                     phase, error
                 ));
+                crate::ui_gateway::publish_render_backend_error_modal(phase, &error.to_string());
             }
 
             // Device loss is fatal for the backend, but not for the process. Keep the

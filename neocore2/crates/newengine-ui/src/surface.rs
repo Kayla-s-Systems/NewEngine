@@ -9,7 +9,7 @@ use serde::{Deserialize, Serialize};
 /// logical surfaces.
 pub const UI_PROVIDER_NONE_ID: &str = "none";
 pub const UI_FEATURE_STANDARD_MODAL_SYSTEM: &str = "standard-modal-system";
-pub const UI_SURFACE_ENGINE_LOADING: &str = "engine.loading";
+pub const UI_SURFACE_ENGINE_LOADING: &str = "engine.ui.loading";
 pub const UI_SURFACE_ENGINE_ERROR_MODAL: &str = "engine.error_modal";
 pub const UI_SURFACE_RUNTIME_OVERLAY: &str = "runtime.overlay";
 pub const UI_FEATURE_ENGINE_UI_ONLY_STARTUP: &str = "engine-ui-only-startup";
@@ -241,7 +241,7 @@ impl Default for UiSubsystemCardSpec {
     #[inline]
     fn default() -> Self {
         Self {
-            id: "engine.loading.subsystem_card.ksystems.v1".to_owned(),
+            id: "engine.ui.loading.subsystem_card.ksystems.v1".to_owned(),
             height_px: 136,
             icon_y_px: 34,
             title_y_px: 70,

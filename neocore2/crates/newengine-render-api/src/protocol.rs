@@ -5,7 +5,7 @@ use crate::{
     RectI32, RenderBackendCapabilities, RenderDiagnosticsSnapshot, RenderDrawListKind, RenderEffectStack,
     RenderFeature, RenderGraphCompileReport, RenderGraphDesc, RenderGraphPassKind,
     RenderGraphSubmitReport, RenderGraphValidationReport, RenderTargetDesc, RenderTargetId,
-    RenderWorkBudget, SamplerDesc, SamplerId, ShaderDesc, ShaderId, ShaderRuntimeCacheStats,
+    RenderBackendEvent, RenderWorkBudget, SamplerDesc, SamplerId, ShaderDesc, ShaderId, ShaderRuntimeCacheStats,
     TextureDesc, TextureId, TextureResidencySnapshot, UiDrawList, UiTexId, UploadPumpDesc,
     UploadPumpReport, Viewport,
 };
@@ -741,6 +741,7 @@ pub enum RenderServiceRequest {
     SubmitFrame(RenderFrameEnvelope),
     SetWorkBudget(RenderWorkBudget),
     PumpUploads(UploadPumpDesc),
+    DrainBackendEvents,
     DiagnosticsSnapshot,
 }
 
@@ -755,6 +756,7 @@ pub enum RenderServiceResponse {
     GraphSubmitReport(RenderGraphSubmitReport),
     UploadPumpReport(UploadPumpReport),
     DiagnosticsSnapshot(RenderDiagnosticsSnapshot),
+    BackendEvents(Vec<RenderBackendEvent>),
     Problem(RenderProblemDetails),
 }
 

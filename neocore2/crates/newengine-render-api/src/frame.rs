@@ -5,12 +5,22 @@ use serde::{Deserialize, Serialize};
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct BeginFrameDesc {
     pub clear_color: Color4,
+    /// Engine frame id supplied by the host/controller. Backends use this to
+    /// publish precise frame-completion events for resource lifetime.
+    #[serde(default)]
+    pub frame_index: u64,
 }
 
 impl BeginFrameDesc {
     #[inline]
     pub const fn new(clear_color: Color4) -> Self {
-        Self { clear_color }
+        Self { clear_color, frame_index: 0 }
+    }
+
+    #[inline]
+    pub const fn with_frame_index(mut self, frame_index: u64) -> Self {
+        self.frame_index = frame_index;
+        self
     }
 }
 

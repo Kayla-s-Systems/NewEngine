@@ -13,7 +13,8 @@ use newengine_procedural_noise::ProceduralTerrain;
 use super::super::material_bindings::{LitMaterialPlan, MaterialTextureGpuResidency};
 use super::RuntimeRenderController;
 
-const SCENE_TEXTURE_GATE_SOFT_TIMEOUT_FRAMES: u64 = 120;
+const SCENE_TEXTURE_GATE_SOFT_TIMEOUT_FRAMES: u64 = 1_800;
+const SCENE_TEXTURE_LAUNCH_MIN_RATIO_DEFAULT: f32 = 0.85;
 
 /// Updates the standalone game launch gate and returns whether the playable world
 /// may be simulated or possessed this frame.
@@ -68,21 +69,15 @@ pub(super) fn update_game_ready_launch_gate(
             gate.update_texture_counts(readiness.waiting, readiness.total, readiness.failed);
             let waited_frames = frame_index.saturating_sub(gate.requested_frame);
 
-            if waited_frames >= SCENE_TEXTURE_GATE_SOFT_TIMEOUT_FRAMES {
-                let reason = format!(
-                    "scene residency soft timeout after {waited_frames} frames; continuing with renderer fallbacks waiting={} total={} failed={}",
-                    readiness.waiting,
-                    readiness.total,
-                    readiness.failed
-                );
-                gate.release(frame_index, reason.clone());
+            if waited_frames >= scene_texture_gate_soft_timeout_frames()
+                && frame_index % 120 == 0
+            {
                 log::warn!(
-                    "game-ready launch gate: soft-released frame={} waited_frames={} reason='{}'",
+                    "game-ready launch gate: still waiting for visual completeness frame={} waited_frames={} reason='{}'",
                     frame_index,
                     waited_frames,
-                    reason
+                    readiness.reason
                 );
-                return true;
             }
 
             gate.reason = readiness.reason;
@@ -277,13 +272,15 @@ fn critical_scene_materials_ready(
     }
 
     let ready_count = total.saturating_sub(waiting).saturating_sub(failed);
-    let min_ready = crate::env_config::var_u32(
+    let configured_min_ready = crate::env_config::var_u32(
         "NEWENGINE_SCENE_TEXTURE_LAUNCH_MIN_READY",
         total,
         0,
         total.max(1),
     )
     .min(total);
+    let visual_floor = scene_texture_launch_visual_floor(total);
+    let min_ready = configured_min_ready.max(visual_floor).min(total);
 
     if waiting == 0 {
         let suffix = if failed == 0 {
@@ -338,6 +335,28 @@ fn is_launch_gate_optional_texture(path: &str) -> bool {
     LAUNCH_OPTIONAL_TEXTURE_TAGS
         .iter()
         .any(|tag| lower.contains(tag))
+}
+
+fn scene_texture_gate_soft_timeout_frames() -> u64 {
+    crate::env_config::var_u64(
+        "NEWENGINE_SCENE_TEXTURE_GATE_SOFT_TIMEOUT_FRAMES",
+        SCENE_TEXTURE_GATE_SOFT_TIMEOUT_FRAMES,
+        300,
+        18_000,
+    )
+}
+
+fn scene_texture_launch_visual_floor(total: u32) -> u32 {
+    if total <= 1 {
+        return total;
+    }
+    let ratio = crate::env_config::var_f32(
+        "NEWENGINE_SCENE_TEXTURE_LAUNCH_MIN_RATIO",
+        SCENE_TEXTURE_LAUNCH_MIN_RATIO_DEFAULT,
+        0.50,
+        1.00,
+    );
+    ((total as f32) * ratio).ceil() as u32
 }
 
 fn material_texture_ready_state(

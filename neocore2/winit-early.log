@@ -286,3 +286,244 @@
 [1779889542668] [pid=10004] [seq=35] runtime.run_app.returned
 [1779889542669] [pid=10004] [seq=36] runtime.exit.ok
 [1779889542669] [pid=10004] [seq=37] ffi.exit clean
+[1779893722815] [pid=9988] [seq=1] ffi.entry newengine_platform_runtime_run_v1 title='KAYLA FPS: Procedural Highlands' size=1600x900 user_data=0xe5c0afe450
+[1779893722815] [pid=9988] [seq=2] runtime.enter title='KAYLA FPS: Procedural Highlands' size=1600x900 user_data=0xe5c0afe450
+[1779893722816] [pid=9988] [seq=3] runtime.event_loop.new.begin
+[1779893722840] [pid=9988] [seq=4] runtime.event_loop.new.ok
+[1779893722840] [pid=9988] [seq=5] runtime.app.new.begin
+[1779893722841] [pid=9988] [seq=6] app.new constructing title='KAYLA FPS: Procedural Highlands' size=1600x900 user_data=0xe5c0afe450
+[1779893722841] [pid=9988] [seq=7] loading.status sink subscribed topics='engine.ui.loading.status.v1','engine.task.event.v1'
+[1779893722843] [pid=9988] [seq=8] runtime.app.new.ok
+[1779893722844] [pid=9988] [seq=9] runtime.run_app.begin
+[1779893722844] [pid=9988] [seq=10] handler.resumed.begin
+[1779893722844] [pid=9988] [seq=11] handler.resumed.device_events.always
+[1779893722844] [pid=9988] [seq=12] resume.begin
+[1779893722844] [pid=9988] [seq=13] resume.build_window_attributes.begin
+[1779893722845] [pid=9988] [seq=14] resume.build_window_attributes.ok
+[1779893722845] [pid=9988] [seq=15] resume.create_window.begin
+[1779893722863] [pid=9988] [seq=16] resume.create_window.ok
+[1779893722864] [pid=9988] [seq=17] resume.native_handles.begin
+[1779893722864] [pid=9988] [seq=18] resume.native_handles.ok backend=Win32 hwnd=0x1d712ea display=0x7ffd9c800000 size=1600x900 ppp=1.000
+[1779893722892] [pid=9988] [seq=19] resume.initial_focus focused=false
+[1779893722892] [pid=9988] [seq=20] resume.host.on_window_ready.begin user_data=0xe5c0afe450
+[1779893722893] [pid=9988] [seq=21] resume.host.on_window_ready.returned
+[1779893722894] [pid=9988] [seq=22] resume.engine_ui_owns_initial_present
+[1779893722894] [pid=9988] [seq=23] resume.end
+[1779893722894] [pid=9988] [seq=24] handler.resumed.end
+[1779893722894] [pid=9988] [seq=25] host.on_window_resized.begin user_data=0xe5c0afe450 size=1600x900 ppp=1.000
+[1779893722895] [pid=9988] [seq=26] host.on_window_resized.returned
+[1779893722895] [pid=9988] [seq=27] host.on_window_resized.begin user_data=0xe5c0afe450 size=1600x900 ppp=1.000
+[1779893722895] [pid=9988] [seq=28] host.on_window_resized.returned
+[1779893732215] [pid=9988] [seq=29] host.on_window_focused.begin user_data=0xe5c0afe450 focused=true
+[1779893732216] [pid=9988] [seq=30] host.on_window_focused.returned
+[1779893745304] [pid=9988] [seq=31] host.on_window_focused.begin user_data=0xe5c0afe450 focused=false
+[1779893745305] [pid=9988] [seq=32] host.on_window_focused.returned
+[1779893784639] [pid=9988] [seq=33] host.on_window_focused.begin user_data=0xe5c0afe450 focused=true
+[1779893784655] [pid=9988] [seq=34] host.on_window_focused.returned
+[1779893789657] [pid=9988] [seq=35] window.destroy_for_exit.begin reason='user-close-request'
+[1779893789666] [pid=9988] [seq=36] window.destroy_for_exit.complete reason='user-close-request'
+[1779893789667] [pid=9988] [seq=37] host.on_window_focused.begin user_data=0xe5c0afe450 focused=false
+[1779893789668] [pid=9988] [seq=38] host.on_window_focused.returned
+[1779893789668] [pid=9988] [seq=39] runtime.run_app.returned
+[1779893789669] [pid=9988] [seq=40] runtime.exit.ok
+[1779893789669] [pid=9988] [seq=41] ffi.exit clean
+[1779893834340] [pid=528] [seq=1] ffi.entry newengine_platform_runtime_run_v1 title='KAYLA FPS: Procedural Highlands' size=1600x900 user_data=0xc563cfe470
+[1779893834340] [pid=528] [seq=2] runtime.enter title='KAYLA FPS: Procedural Highlands' size=1600x900 user_data=0xc563cfe470
+[1779893834340] [pid=528] [seq=3] runtime.event_loop.new.begin
+[1779893834364] [pid=528] [seq=4] runtime.event_loop.new.ok
+[1779893834364] [pid=528] [seq=5] runtime.app.new.begin
+[1779893834365] [pid=528] [seq=6] app.new constructing title='KAYLA FPS: Procedural Highlands' size=1600x900 user_data=0xc563cfe470
+[1779893834365] [pid=528] [seq=7] loading.status sink subscribed topics='engine.ui.loading.status.v1','engine.task.event.v1'
+[1779893834365] [pid=528] [seq=8] runtime.app.new.ok
+[1779893834365] [pid=528] [seq=9] runtime.run_app.begin
+[1779893834365] [pid=528] [seq=10] handler.resumed.begin
+[1779893834366] [pid=528] [seq=11] handler.resumed.device_events.always
+[1779893834366] [pid=528] [seq=12] resume.begin
+[1779893834366] [pid=528] [seq=13] resume.build_window_attributes.begin
+[1779893834366] [pid=528] [seq=14] resume.build_window_attributes.ok
+[1779893834366] [pid=528] [seq=15] resume.create_window.begin
+[1779893834385] [pid=528] [seq=16] resume.create_window.ok
+[1779893834385] [pid=528] [seq=17] resume.native_handles.begin
+[1779893834386] [pid=528] [seq=18] resume.native_handles.ok backend=Win32 hwnd=0x2bd09c8 display=0x7ffd9c800000 size=1600x900 ppp=1.000
+[1779893834414] [pid=528] [seq=19] resume.initial_focus focused=true
+[1779893834414] [pid=528] [seq=20] resume.host.on_window_ready.begin user_data=0xc563cfe470
+[1779893834415] [pid=528] [seq=21] resume.host.on_window_ready.returned
+[1779893834416] [pid=528] [seq=22] resume.host.on_window_focused.initial.begin user_data=0xc563cfe470 focused=true
+[1779893834416] [pid=528] [seq=23] resume.host.on_window_focused.initial.returned
+[1779893834416] [pid=528] [seq=24] resume.engine_ui_owns_initial_present
+[1779893834416] [pid=528] [seq=25] resume.end
+[1779893834417] [pid=528] [seq=26] handler.resumed.end
+[1779893834417] [pid=528] [seq=27] host.on_window_resized.begin user_data=0xc563cfe470 size=1600x900 ppp=1.000
+[1779893834417] [pid=528] [seq=28] host.on_window_resized.returned
+[1779893834417] [pid=528] [seq=29] host.on_window_focused.begin user_data=0xc563cfe470 focused=true
+[1779893834418] [pid=528] [seq=30] host.on_window_focused.returned
+[1779893834418] [pid=528] [seq=31] host.on_window_resized.begin user_data=0xc563cfe470 size=1600x900 ppp=1.000
+[1779893834418] [pid=528] [seq=32] host.on_window_resized.returned
+[1779893858772] [pid=528] [seq=33] host.on_window_focused.begin user_data=0xc563cfe470 focused=false
+[1779893858773] [pid=528] [seq=34] host.on_window_focused.returned
+[1779893860484] [pid=528] [seq=35] host.on_window_focused.begin user_data=0xc563cfe470 focused=true
+[1779893860485] [pid=528] [seq=36] host.on_window_focused.returned
+[1779893863626] [pid=528] [seq=37] host.on_window_focused.begin user_data=0xc563cfe470 focused=false
+[1779893863627] [pid=528] [seq=38] host.on_window_focused.returned
+[1779893865338] [pid=528] [seq=39] host.on_window_focused.begin user_data=0xc563cfe470 focused=true
+[1779893865339] [pid=528] [seq=40] host.on_window_focused.returned
+[1779893865474] [pid=528] [seq=41] window.destroy_for_exit.begin reason='user-close-request'
+[1779893865479] [pid=528] [seq=42] window.destroy_for_exit.complete reason='user-close-request'
+[1779893865480] [pid=528] [seq=43] host.on_window_focused.begin user_data=0xc563cfe470 focused=false
+[1779893865481] [pid=528] [seq=44] host.on_window_focused.returned
+[1779893865484] [pid=528] [seq=45] runtime.run_app.returned
+[1779893865484] [pid=528] [seq=46] runtime.exit.ok
+[1779893865484] [pid=528] [seq=47] ffi.exit clean
+[1779894336444] [pid=16164] [seq=1] ffi.entry newengine_platform_runtime_run_v1 title='KAYLA FPS: Procedural Highlands' size=1600x900 user_data=0xe4c76fe690
+[1779894336444] [pid=16164] [seq=2] runtime.enter title='KAYLA FPS: Procedural Highlands' size=1600x900 user_data=0xe4c76fe690
+[1779894336444] [pid=16164] [seq=3] runtime.event_loop.new.begin
+[1779894336469] [pid=16164] [seq=4] runtime.event_loop.new.ok
+[1779894336469] [pid=16164] [seq=5] runtime.app.new.begin
+[1779894336469] [pid=16164] [seq=6] app.new constructing title='KAYLA FPS: Procedural Highlands' size=1600x900 user_data=0xe4c76fe690
+[1779894336469] [pid=16164] [seq=7] loading.status sink subscribed topics='engine.ui.loading.status.v1','engine.task.event.v1'
+[1779894336469] [pid=16164] [seq=8] runtime.app.new.ok
+[1779894336470] [pid=16164] [seq=9] runtime.run_app.begin
+[1779894336470] [pid=16164] [seq=10] handler.resumed.begin
+[1779894336470] [pid=16164] [seq=11] handler.resumed.device_events.always
+[1779894336470] [pid=16164] [seq=12] resume.begin
+[1779894336470] [pid=16164] [seq=13] resume.build_window_attributes.begin
+[1779894336471] [pid=16164] [seq=14] resume.build_window_attributes.ok
+[1779894336471] [pid=16164] [seq=15] resume.create_window.begin
+[1779894336489] [pid=16164] [seq=16] resume.create_window.ok
+[1779894336489] [pid=16164] [seq=17] resume.native_handles.begin
+[1779894336489] [pid=16164] [seq=18] resume.native_handles.ok backend=Win32 hwnd=0x1a30ade display=0x7ffd9c050000 size=1600x900 ppp=1.000
+[1779894336513] [pid=16164] [seq=19] resume.initial_focus focused=false
+[1779894336513] [pid=16164] [seq=20] resume.host.on_window_ready.begin user_data=0xe4c76fe690
+[1779894336514] [pid=16164] [seq=21] resume.host.on_window_ready.returned
+[1779894336515] [pid=16164] [seq=22] resume.engine_ui_owns_initial_present
+[1779894336515] [pid=16164] [seq=23] resume.end
+[1779894336515] [pid=16164] [seq=24] handler.resumed.end
+[1779894336515] [pid=16164] [seq=25] host.on_window_resized.begin user_data=0xe4c76fe690 size=1600x900 ppp=1.000
+[1779894336516] [pid=16164] [seq=26] host.on_window_resized.returned
+[1779894336516] [pid=16164] [seq=27] host.on_window_resized.begin user_data=0xe4c76fe690 size=1600x900 ppp=1.000
+[1779894336516] [pid=16164] [seq=28] host.on_window_resized.returned
+[1779894341234] [pid=16164] [seq=29] host.on_window_focused.begin user_data=0xe4c76fe690 focused=true
+[1779894341234] [pid=16164] [seq=30] host.on_window_focused.returned
+[1779894341839] [pid=16164] [seq=31] host.on_window_focused.begin user_data=0xe4c76fe690 focused=false
+[1779894341840] [pid=16164] [seq=32] host.on_window_focused.returned
+[1779894387962] [pid=16164] [seq=33] host.on_window_focused.begin user_data=0xe4c76fe690 focused=true
+[1779894387963] [pid=16164] [seq=34] host.on_window_focused.returned
+[1779894406975] [pid=16164] [seq=35] host.on_window_focused.begin user_data=0xe4c76fe690 focused=false
+[1779894406975] [pid=16164] [seq=36] host.on_window_focused.returned
+[1779895917761] [pid=6428] [seq=1] ffi.entry newengine_platform_runtime_run_v1 title='KAYLA FPS: Procedural Highlands' size=1600x900 user_data=0x111b50e900
+[1779895917761] [pid=6428] [seq=2] runtime.enter title='KAYLA FPS: Procedural Highlands' size=1600x900 user_data=0x111b50e900
+[1779895917761] [pid=6428] [seq=3] runtime.event_loop.new.begin
+[1779895917787] [pid=6428] [seq=4] runtime.event_loop.new.ok
+[1779895917787] [pid=6428] [seq=5] runtime.app.new.begin
+[1779895917787] [pid=6428] [seq=6] app.new constructing title='KAYLA FPS: Procedural Highlands' size=1600x900 user_data=0x111b50e900
+[1779895917788] [pid=6428] [seq=7] loading.status sink subscribed topics='engine.ui.loading.status.v1','engine.task.event.v1'
+[1779895917788] [pid=6428] [seq=8] runtime.app.new.ok
+[1779895917788] [pid=6428] [seq=9] runtime.run_app.begin
+[1779895917788] [pid=6428] [seq=10] handler.resumed.begin
+[1779895917788] [pid=6428] [seq=11] handler.resumed.device_events.always
+[1779895917788] [pid=6428] [seq=12] resume.begin
+[1779895917789] [pid=6428] [seq=13] resume.build_window_attributes.begin
+[1779895917789] [pid=6428] [seq=14] resume.build_window_attributes.ok
+[1779895917789] [pid=6428] [seq=15] resume.create_window.begin
+[1779895917808] [pid=6428] [seq=16] resume.create_window.ok
+[1779895917808] [pid=6428] [seq=17] resume.native_handles.begin
+[1779895917808] [pid=6428] [seq=18] resume.native_handles.ok backend=Win32 hwnd=0x1fc12f0 display=0x7ffd9c2f0000 size=1600x900 ppp=1.000
+[1779895917836] [pid=6428] [seq=19] resume.initial_focus focused=true
+[1779895917837] [pid=6428] [seq=20] resume.host.on_window_ready.begin user_data=0x111b50e900
+[1779895917838] [pid=6428] [seq=21] resume.host.on_window_ready.returned
+[1779895917839] [pid=6428] [seq=22] resume.host.on_window_focused.initial.begin user_data=0x111b50e900 focused=true
+[1779895917839] [pid=6428] [seq=23] resume.host.on_window_focused.initial.returned
+[1779895917839] [pid=6428] [seq=24] resume.engine_ui_owns_initial_present
+[1779895917840] [pid=6428] [seq=25] resume.end
+[1779895917840] [pid=6428] [seq=26] handler.resumed.end
+[1779895917840] [pid=6428] [seq=27] host.on_window_resized.begin user_data=0x111b50e900 size=1600x900 ppp=1.000
+[1779895917841] [pid=6428] [seq=28] host.on_window_resized.returned
+[1779895917841] [pid=6428] [seq=29] host.on_window_focused.begin user_data=0x111b50e900 focused=true
+[1779895917841] [pid=6428] [seq=30] host.on_window_focused.returned
+[1779895917842] [pid=6428] [seq=31] host.on_window_resized.begin user_data=0x111b50e900 size=1600x900 ppp=1.000
+[1779895917842] [pid=6428] [seq=32] host.on_window_resized.returned
+[1779895971963] [pid=6428] [seq=33] window.destroy_for_exit.begin reason='user-close-request'
+[1779895971968] [pid=6428] [seq=34] window.destroy_for_exit.complete reason='user-close-request'
+[1779895971969] [pid=6428] [seq=35] host.on_window_focused.begin user_data=0x111b50e900 focused=false
+[1779895971970] [pid=6428] [seq=36] host.on_window_focused.returned
+[1779895971971] [pid=6428] [seq=37] runtime.run_app.returned
+[1779895971971] [pid=6428] [seq=38] runtime.exit.ok
+[1779895971971] [pid=6428] [seq=39] ffi.exit clean
+[1779896770859] [pid=7220] [seq=1] ffi.entry newengine_platform_runtime_run_v1 title='KAYLA FPS: Procedural Highlands' size=1600x900 user_data=0x9f0314ea90
+[1779896770859] [pid=7220] [seq=2] runtime.enter title='KAYLA FPS: Procedural Highlands' size=1600x900 user_data=0x9f0314ea90
+[1779896770859] [pid=7220] [seq=3] runtime.event_loop.new.begin
+[1779896770885] [pid=7220] [seq=4] runtime.event_loop.new.ok
+[1779896770886] [pid=7220] [seq=5] runtime.app.new.begin
+[1779896770886] [pid=7220] [seq=6] app.new constructing title='KAYLA FPS: Procedural Highlands' size=1600x900 user_data=0x9f0314ea90
+[1779896770886] [pid=7220] [seq=7] loading.status sink subscribed topics='engine.ui.loading.status.v1','engine.task.event.v1'
+[1779896770886] [pid=7220] [seq=8] runtime.app.new.ok
+[1779896770886] [pid=7220] [seq=9] runtime.run_app.begin
+[1779896770887] [pid=7220] [seq=10] handler.resumed.begin
+[1779896770887] [pid=7220] [seq=11] handler.resumed.device_events.always
+[1779896770887] [pid=7220] [seq=12] resume.begin
+[1779896770887] [pid=7220] [seq=13] resume.build_window_attributes.begin
+[1779896770888] [pid=7220] [seq=14] resume.build_window_attributes.ok
+[1779896770888] [pid=7220] [seq=15] resume.create_window.begin
+[1779896770922] [pid=7220] [seq=16] resume.create_window.ok
+[1779896770922] [pid=7220] [seq=17] resume.native_handles.begin
+[1779896770922] [pid=7220] [seq=18] resume.native_handles.ok backend=Win32 hwnd=0x303059c display=0x7ffddcaf0000 size=1600x900 ppp=1.000
+[1779896770955] [pid=7220] [seq=19] resume.initial_focus focused=true
+[1779896770955] [pid=7220] [seq=20] resume.host.on_window_ready.begin user_data=0x9f0314ea90
+[1779896770957] [pid=7220] [seq=21] resume.host.on_window_ready.returned
+[1779896770957] [pid=7220] [seq=22] resume.host.on_window_focused.initial.begin user_data=0x9f0314ea90 focused=true
+[1779896770957] [pid=7220] [seq=23] resume.host.on_window_focused.initial.returned
+[1779896770957] [pid=7220] [seq=24] resume.engine_ui_owns_initial_present
+[1779896770958] [pid=7220] [seq=25] resume.end
+[1779896770958] [pid=7220] [seq=26] handler.resumed.end
+[1779896770958] [pid=7220] [seq=27] host.on_window_resized.begin user_data=0x9f0314ea90 size=1600x900 ppp=1.000
+[1779896770958] [pid=7220] [seq=28] host.on_window_resized.returned
+[1779896770958] [pid=7220] [seq=29] host.on_window_focused.begin user_data=0x9f0314ea90 focused=true
+[1779896770959] [pid=7220] [seq=30] host.on_window_focused.returned
+[1779896770959] [pid=7220] [seq=31] host.on_window_resized.begin user_data=0x9f0314ea90 size=1600x900 ppp=1.000
+[1779896770959] [pid=7220] [seq=32] host.on_window_resized.returned
+[1779896875904] [pid=7220] [seq=33] window.destroy_for_exit.begin reason='user-close-request'
+[1779896875909] [pid=7220] [seq=34] window.destroy_for_exit.complete reason='user-close-request'
+[1779896875910] [pid=7220] [seq=35] host.on_window_focused.begin user_data=0x9f0314ea90 focused=false
+[1779896875910] [pid=7220] [seq=36] host.on_window_focused.returned
+[1779896875913] [pid=7220] [seq=37] runtime.run_app.returned
+[1779896875913] [pid=7220] [seq=38] runtime.exit.ok
+[1779896875913] [pid=7220] [seq=39] ffi.exit clean
+[1779898027327] [pid=14584] [seq=1] ffi.entry newengine_platform_runtime_run_v1 title='KAYLA FPS: Procedural Highlands' size=1600x900 user_data=0x83255ceb80
+[1779898027327] [pid=14584] [seq=2] runtime.enter title='KAYLA FPS: Procedural Highlands' size=1600x900 user_data=0x83255ceb80
+[1779898027328] [pid=14584] [seq=3] runtime.event_loop.new.begin
+[1779898027356] [pid=14584] [seq=4] runtime.event_loop.new.ok
+[1779898027356] [pid=14584] [seq=5] runtime.app.new.begin
+[1779898027357] [pid=14584] [seq=6] app.new constructing title='KAYLA FPS: Procedural Highlands' size=1600x900 user_data=0x83255ceb80
+[1779898027357] [pid=14584] [seq=7] loading.status sink subscribed topics='engine.ui.loading.status.v1','engine.task.event.v1'
+[1779898027357] [pid=14584] [seq=8] runtime.app.new.ok
+[1779898027358] [pid=14584] [seq=9] runtime.run_app.begin
+[1779898027358] [pid=14584] [seq=10] handler.resumed.begin
+[1779898027358] [pid=14584] [seq=11] handler.resumed.device_events.always
+[1779898027359] [pid=14584] [seq=12] resume.begin
+[1779898027359] [pid=14584] [seq=13] resume.build_window_attributes.begin
+[1779898027359] [pid=14584] [seq=14] resume.build_window_attributes.ok
+[1779898027360] [pid=14584] [seq=15] resume.create_window.begin
+[1779898027381] [pid=14584] [seq=16] resume.create_window.ok
+[1779898027381] [pid=14584] [seq=17] resume.native_handles.begin
+[1779898027382] [pid=14584] [seq=18] resume.native_handles.ok backend=Win32 hwnd=0x1650a66 display=0x7ffd9c800000 size=1600x900 ppp=1.000
+[1779898027412] [pid=14584] [seq=19] resume.initial_focus focused=true
+[1779898027412] [pid=14584] [seq=20] resume.host.on_window_ready.begin user_data=0x83255ceb80
+[1779898027414] [pid=14584] [seq=21] resume.host.on_window_ready.returned
+[1779898027414] [pid=14584] [seq=22] resume.host.on_window_focused.initial.begin user_data=0x83255ceb80 focused=true
+[1779898027414] [pid=14584] [seq=23] resume.host.on_window_focused.initial.returned
+[1779898027414] [pid=14584] [seq=24] resume.engine_ui_owns_initial_present
+[1779898027414] [pid=14584] [seq=25] resume.end
+[1779898027415] [pid=14584] [seq=26] handler.resumed.end
+[1779898027415] [pid=14584] [seq=27] host.on_window_resized.begin user_data=0x83255ceb80 size=1600x900 ppp=1.000
+[1779898027415] [pid=14584] [seq=28] host.on_window_resized.returned
+[1779898027415] [pid=14584] [seq=29] host.on_window_focused.begin user_data=0x83255ceb80 focused=true
+[1779898027416] [pid=14584] [seq=30] host.on_window_focused.returned
+[1779898027416] [pid=14584] [seq=31] host.on_window_resized.begin user_data=0x83255ceb80 size=1600x900 ppp=1.000
+[1779898027416] [pid=14584] [seq=32] host.on_window_resized.returned
+[1779898063151] [pid=14584] [seq=33] window.destroy_for_exit.begin reason='user-close-request'
+[1779898063158] [pid=14584] [seq=34] window.destroy_for_exit.complete reason='user-close-request'
+[1779898063159] [pid=14584] [seq=35] host.on_window_focused.begin user_data=0x83255ceb80 focused=false
+[1779898063160] [pid=14584] [seq=36] host.on_window_focused.returned
+[1779898063162] [pid=14584] [seq=37] runtime.run_app.returned
+[1779898063162] [pid=14584] [seq=38] runtime.exit.ok
+[1779898063162] [pid=14584] [seq=39] ffi.exit clean

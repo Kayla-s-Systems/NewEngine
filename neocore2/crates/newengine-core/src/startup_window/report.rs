@@ -20,6 +20,7 @@ pub struct StartupWindowReport {
 }
 
 impl StartupWindowReport {
+    #[allow(dead_code)]
     pub(crate) fn presented(config_path: PathBuf, details: impl Into<String>, warnings: Vec<String>) -> Self {
         Self {
             decision: StartupWindowDecision::Presented,
@@ -41,6 +42,7 @@ impl StartupWindowReport {
         }
     }
 
+    #[allow(dead_code)]
     pub(crate) fn cancelled(config_path: PathBuf, details: impl Into<String>) -> Self {
         Self {
             decision: StartupWindowDecision::Cancelled,

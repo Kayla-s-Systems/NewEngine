@@ -34,10 +34,12 @@ const GAME_READY_ENV_DEFAULTS: &[(&str, &str)] = &[
     // Users can override this env value before launch; it is still reported in
     // shader diagnostics as an explicit degraded policy.
     ("NEWENGINE_SHADER_ASYNC_PREBAKED_UNTIL_READY", "1"),
-    // Release the playable world once enough material textures are resident for
-    // the first frame. Remaining textures continue through normal streaming;
-    // this is profile-owned policy, not an AssetManager or renderer fallback.
-    ("NEWENGINE_SCENE_TEXTURE_LAUNCH_MIN_READY", "4"),
+    // Keep the loading projection visible until the first playable frame is
+    // visually coherent. Heavy .ytd dictionaries may continue streaming later,
+    // but the profile must not reveal a mostly untextured world.
+    ("NEWENGINE_SCENE_TEXTURE_LAUNCH_MIN_READY", "24"),
+    ("NEWENGINE_SCENE_TEXTURE_LAUNCH_MIN_RATIO", "1.0"),
+    ("NEWENGINE_SCENE_TEXTURE_GATE_SOFT_TIMEOUT_FRAMES", "1800"),
 ];
 
 pub const GAME_READY_PROFILE_ENV: &str = "NEWENGINE_SCENE_PROFILE";

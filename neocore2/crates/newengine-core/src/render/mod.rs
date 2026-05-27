@@ -277,6 +277,16 @@ pub trait RenderApi: Send {
         Ok(ShaderRuntimeCacheStats::default())
     }
 
+    /// Drains renderer-owned lifecycle events such as fence-completed frames.
+    ///
+    /// Resource lifetime must be driven from this stream, not from guessed frame
+    /// grace windows. Service-backed renderers bridge this to render.api; in-process
+    /// renderers may publish directly.
+    #[inline]
+    fn drain_backend_events(&mut self) -> EngineResult<Vec<RenderBackendEvent>> {
+        Ok(Vec::new())
+    }
+
     /// Returns a backend-neutral diagnostics snapshot for frame pacing, upload
     /// queues and live GPU resource counts.
     #[inline]

@@ -619,7 +619,7 @@ impl EngineServiceKind {
             Self::UiText => "engine.ui.text",
             Self::UiDebug => "engine.ui.debug",
             Self::Logging => "engine.logging",
-            Self::Loading => "engine.loading",
+            Self::Loading => "engine.ui.loading",
             Self::Jobs => "engine.jobs",
             Self::Platform => "engine.platform",
             Self::Ecs => "engine.ecs",

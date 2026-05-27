@@ -738,7 +738,7 @@ fn derive_navigation_document_from_surface_layout(xml: &str, surface: &SurfaceIn
         .or_else(|| attr_value(&layout.open, "title"))
         .unwrap_or_else(|| surface.name.clone());
 
-    let mut doc = UiNodeNavigationDocument {
+    let doc = UiNodeNavigationDocument {
         id: "engine.ui.primary".to_owned(),
         version: 1,
         surface_id: surface.name.clone(),

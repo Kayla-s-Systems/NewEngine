@@ -430,15 +430,21 @@ impl RuntimeRenderController {
         sampler: SamplerId,
     ) -> newengine_core::EngineResult<PerDrawUbo> {
         if let Some(mut e) = self.gpu.material.per_draw_ubo.get(&key).copied() {
+            e.last_seen_frame = self.frame.frame_index;
             if e.base_texture == base_texture
                 && e.normal_texture == normal_texture
                 && e.roughness_texture == roughness_texture
                 && e.shadow_texture == shadow_texture
                 && e.sampler == sampler
             {
+                self.gpu.material.per_draw_ubo.insert(key, e);
                 return Ok(e);
             }
-            r.destroy_bind_group(e.bg);
+            // Do not destroy the previous bind group immediately. The last
+            // submitted frame may still reference it through an in-flight command
+            // buffer. Queue it against the current engine frame and let renderer
+            // fence-completion events retire it. No guessed frame grace window.
+            let old_bg = e.bg;
             let bg = r.create_bind_group(
                 newengine_core::render::BindGroupDesc::new(lit.bgl)
                     .with_label("material_lit_entity_bg")
@@ -449,6 +455,7 @@ impl RuntimeRenderController {
                     .with_texture3(shadow_texture)
                     .with_sampler0(sampler),
             )?;
+            self.gpu.lifetimes.resources.retire_bind_group_after_frame(old_bg, self.frame.frame_index);
             e.bg = bg;
             e.base_texture = base_texture;
             e.normal_texture = normal_texture;
@@ -493,30 +500,44 @@ impl RuntimeRenderController {
         Ok(entry)
     }
 
-    pub(super) fn gc_per_draw_ubos(&mut self, r: &mut dyn newengine_core::render::RenderApi) {
-        let now = self.frame.frame_index;
-        let grace = 8_u64;
-
-        let mut dead: Vec<u64> = Vec::new();
-        for (k, v) in &self.gpu.material.per_draw_ubo {
-            if now.saturating_sub(v.last_seen_frame) > grace {
-                dead.push(*k);
-            }
-        }
-        for k in dead {
-            if let Some(v) = self.gpu.material.per_draw_ubo.remove(&k) {
-                r.destroy_bind_group(v.bg);
-                r.destroy_buffer(v.ubo);
-            }
-        }
+    pub(super) fn collect_render_lifetime_events(&mut self, r: &mut dyn newengine_core::render::RenderApi) {
+        self.gpu.lifetimes.resources.collect(r);
     }
 
     pub(super) fn retire_render_target(&mut self, rt: RenderTargetId) {
-        self.gpu.lifetimes.render_target_lifetimes
-            .retire_after_frames(rt, self.frame.frame_index, 8);
+        self.gpu
+            .lifetimes
+            .resources
+            .retire_render_target_after_frame(rt, self.frame.frame_index);
+    }
+
+    pub(super) fn gc_per_draw_ubos(&mut self, r: &mut dyn newengine_core::render::RenderApi) {
+        self.collect_render_lifetime_events(r);
     }
 
     pub(super) fn gc_deferred_rts(&mut self, r: &mut dyn newengine_core::render::RenderApi) {
-        self.gpu.lifetimes.render_target_lifetimes.collect(r, self.frame.frame_index);
+        self.collect_render_lifetime_events(r);
     }
+    pub(super) fn bridge_render_backend_events<E: Send + 'static>(
+        &mut self,
+        ctx: &mut newengine_core::ModuleCtx<'_, E>,
+        r: &mut dyn newengine_core::render::RenderApi,
+    ) {
+        self.gpu.lifetimes.resources.subscribe(ctx.events());
+        match r.drain_backend_events() {
+            Ok(events) => {
+                for event in events {
+                    let _ = ctx.events().publish(event);
+                }
+            }
+            Err(err) => {
+                log::warn!(
+                    "render controller: failed to drain renderer backend events err='{}'",
+                    err
+                );
+            }
+        }
+        self.collect_render_lifetime_events(r);
+    }
+
 }

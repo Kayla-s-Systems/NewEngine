@@ -6,7 +6,7 @@ use newengine_core::render::{
     IndexFormat, PipelineDesc, PipelineId, PipelineWarmupDesc, PipelineWarmupReport, RectI32, RenderApi,
     RenderDrawListKind, RenderFrameEnvelope, RenderGraphCompileReport, RenderGraphDesc, RenderGraphPassKind,
     RenderGraphSubmitReport, RenderGraphValidationReport, RenderTargetDesc, RenderDiagnosticsSnapshot,
-    RenderTargetId, RenderWorkBudget, SamplerDesc,
+    RenderBackendEvent, RenderTargetId, RenderWorkBudget, SamplerDesc,
     SamplerId, ShaderDesc, ShaderId, ShaderRuntimeCacheStats, TextureDesc, TextureId,
     TextureResidencySnapshot, UiDrawList, UiTexId, UploadPumpDesc, UploadPumpReport, Viewport,
 };
@@ -431,6 +431,16 @@ impl RenderApi for ServiceBackedRenderApi {
             RenderCommandResponse::ShaderCacheStats(stats) => Ok(stats),
             other => Err(EngineError::other(format!(
                 "render service protocol error: expected ShaderCacheStats, got {:?}",
+                other
+            ))),
+        }
+    }
+
+    fn drain_backend_events(&mut self) -> EngineResult<Vec<RenderBackendEvent>> {
+        match self.invoke_service(RenderServiceRequest::DrainBackendEvents)? {
+            RenderServiceResponse::BackendEvents(events) => Ok(events),
+            other => Err(EngineError::other(format!(
+                "render service protocol error: expected BackendEvents, got {:?}",
                 other
             ))),
         }

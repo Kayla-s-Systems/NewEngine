@@ -88,10 +88,6 @@ pub(crate) const RUNTIME_SERVICE_CATALOG: &[RuntimeServiceCatalogEntry] = &[
         "platform UI bridge / overlays / HUD",
     ),
     RuntimeServiceCatalogEntry::new(
-        newengine_loading_api::LOADING_RUNTIME_REQUIREMENT_SPEC,
-        "engine.loading snapshots / engine.ui progress projection",
-    ),
-    RuntimeServiceCatalogEntry::new(
         newengine_jobs_api::JOBS_RUNTIME_REQUIREMENT_SPEC,
         "runtime job/task lifecycle / pause-resume-cancel / progress event stream",
     ),

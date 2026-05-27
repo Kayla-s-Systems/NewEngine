@@ -11,6 +11,7 @@ impl RuntimeRenderController {
         &mut self,
         ctx: &mut ModuleCtx<'_, E>,
     ) -> EngineResult<()> {
+        self.gpu.lifetimes.resources.subscribe(ctx.events());
         if let Ok(api) = require_render_api(ctx) {
             let started_at = Instant::now();
             log::info!("render controller: loading-screen pipeline warmup begin");

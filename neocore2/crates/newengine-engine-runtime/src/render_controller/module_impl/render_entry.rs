@@ -54,6 +54,7 @@ impl RuntimeRenderController {
         if let Some(budget) = backend_work_budget {
             let _ = r.set_work_budget(budget);
         }
+        self.bridge_render_backend_events(ctx, &mut **r);
 
         let material_upload_jobs = backend_work_budget
             .map(|b| b.max_upload_jobs_per_frame.max(1))
@@ -206,8 +207,6 @@ impl RuntimeRenderController {
                 }
             }
 
-            self.gc_per_draw_ubos(&mut **r);
-            self.gc_deferred_rts(&mut **r);
             if trace_frame {
                 newengine_core::crash::record_breadcrumb(format!(
                     "render controller: end_frame frame={}",
@@ -224,6 +223,7 @@ impl RuntimeRenderController {
                 }
                 return Err(e);
             }
+            self.bridge_render_backend_events(ctx, &mut **r);
 
             if let Some(snapshot) = frame_debug_snapshot.take() {
                 self.diagnostics.overlay_metrics.publish_debug_snapshot(snapshot);
@@ -305,7 +305,7 @@ impl RuntimeRenderController {
             .map(|sky| sky.color)
             .unwrap_or_else(|| self.runtime_profile().configured_clear_color());
         self.trace_begin_frame(trace_frame, vp_w, vp_h);
-        r.begin_frame(BeginFrameDesc::new(self.viewport.clear_color))?;
+        r.begin_frame(BeginFrameDesc::new(self.viewport.clear_color).with_frame_index(self.frame.frame_index.saturating_add(1).max(1)))?;
         self.trace_begin_frame_done(trace_frame);
 
         Ok(Some(RenderFrameScope {

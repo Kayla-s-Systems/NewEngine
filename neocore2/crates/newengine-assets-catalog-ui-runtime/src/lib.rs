@@ -58,6 +58,7 @@ pub struct AssetsCatalogUiRuntimeModule {
     last_input_registration_frame: Option<u64>,
     cached_snapshot: Option<AssetsCatalogSnapshot>,
     cached_node: Option<UiSurfaceNode>,
+    view_mode: CatalogViewMode,
 }
 
 impl AssetsCatalogUiRuntimeModule {
@@ -82,6 +83,7 @@ impl AssetsCatalogUiRuntimeModule {
             last_input_registration_frame: None,
             cached_snapshot: None,
             cached_node: None,
+            view_mode: CatalogViewMode::Grid,
         }
     }
 
@@ -124,7 +126,7 @@ impl AssetsCatalogUiRuntimeModule {
                 } else if self.selected_index >= snapshot.entries.len() {
                     self.selected_index = snapshot.entries.len().saturating_sub(1);
                 }
-                let node = assets_catalog_node(frame_index, &snapshot, self.selected_index);
+                let node = assets_catalog_node(frame_index, &snapshot, self.selected_index, self.view_mode);
                 self.cached_snapshot = Some(snapshot);
                 self.cached_node = Some(node);
             }
@@ -140,6 +142,11 @@ impl AssetsCatalogUiRuntimeModule {
         let entry_count = self.cached_snapshot.as_ref().map(|snapshot| snapshot.entries.len()).unwrap_or(0);
         let mut changed = false;
 
+        if key_pressed(input, key_code::ESCAPE) {
+            self.view_mode = CatalogViewMode::Grid;
+            changed = true;
+        }
+
         if key_pressed(input, key_code::ARROW_UP) {
             self.selected_index = self.selected_index.saturating_sub(1);
             changed = true;
@@ -153,6 +160,7 @@ impl AssetsCatalogUiRuntimeModule {
             if parent != self.current_path {
                 self.current_path = parent;
                 self.selected_index = 0;
+                self.view_mode = CatalogViewMode::Grid;
                 self.cached_snapshot = None;
                 changed = true;
                 log::info!("assets catalog UI: navigate parent path='{}'", display_path(&self.current_path));
@@ -172,6 +180,8 @@ impl AssetsCatalogUiRuntimeModule {
                     changed = true;
                     log::info!("assets catalog UI: open directory path='{}'", display_path(&self.current_path));
                 } else {
+                    self.view_mode = CatalogViewMode::Inspector;
+                    changed = true;
                     log::info!(
                         "assets catalog UI: selected asset path='{}' kind='{}' gateway='{}'",
                         entry.logical_path,
@@ -315,6 +325,7 @@ fn ensure_assets_catalog_input_registration() -> bool {
         (key_code::ARROW_DOWN, key_identity::ARROW_DOWN, "Arrow Down"),
         (key_code::ENTER, key_identity::ENTER, "Enter"),
         (key_code::BACKSPACE, key_identity::BACKSPACE, "Backspace"),
+        (key_code::ESCAPE, key_identity::ESCAPE, "Escape"),
     ] {
         if let Err(error) = newengine_input_bindings_runtime::register_input_key(
             InputKeyRegistration::new(code, identity, label),
@@ -355,6 +366,25 @@ fn ensure_assets_catalog_input_registration() -> bool {
     ok
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum CatalogViewMode {
+    Tree,
+    List,
+    Grid,
+    Inspector,
+}
+
+impl CatalogViewMode {
+    fn as_str(self) -> &'static str {
+        match self {
+            Self::Tree => "tree",
+            Self::List => "list",
+            Self::Grid => "grid",
+            Self::Inspector => "inspector",
+        }
+    }
+}
+
 #[derive(Clone, Debug, Default)]
 struct AssetsCatalogSnapshot {
     logical_path: String,
@@ -362,6 +392,10 @@ struct AssetsCatalogSnapshot {
     sources: Vec<String>,
     formats: Vec<String>,
     warnings: Vec<String>,
+    import_summary: String,
+    import_queue_summary: String,
+    package_writer_summary: String,
+    route_diagnostics: String,
 }
 
 #[derive(Clone, Debug, Default)]
@@ -372,6 +406,11 @@ struct AssetsCatalogEntry {
     extension: String,
     semantic_gateway: String,
     asset_kind: String,
+    import_stage: String,
+    import_action: String,
+    dirty: bool,
+    uid: String,
+    thumbnail: String,
 }
 
 impl AssetsCatalogEntry {
@@ -396,6 +435,8 @@ fn snapshot(state: &mut AssetsCatalogRuntimeState, logical_path: &str) -> Result
             .then_with(|| a.name.to_ascii_lowercase().cmp(&b.name.to_ascii_lowercase()))
     });
 
+    apply_import_lifecycle_rows(state, &logical_path, &mut entries, &mut warnings);
+
     let sources = match state.client.sources_json_v1() {
         Ok(value) => source_labels(&value),
         Err(error) => {
@@ -411,12 +452,29 @@ fn snapshot(state: &mut AssetsCatalogRuntimeState, logical_path: &str) -> Result
         }
     };
 
+    let package_writer_summary = package_writer_summary(state).unwrap_or_else(|error| {
+        warnings.push(format!("engine.assets.package_writer unavailable: {error}"));
+        "package writer unavailable".to_owned()
+    });
+    let import_queue_summary = import_queue_summary(state).unwrap_or_else(|error| {
+        warnings.push(format!("engine.assets.import_queue unavailable: {error}"));
+        "import queue unavailable".to_owned()
+    });
+    let import_summary = import_summary_for_entries(&entries);
+    let route_diagnostics = format!(
+        "routes: engine.assets.uid · dependencies · import_queue · package_writer · engine.ui surface node"
+    );
+
     Ok(AssetsCatalogSnapshot {
         logical_path,
         entries,
         sources,
         formats,
         warnings,
+        import_summary,
+        import_queue_summary,
+        package_writer_summary,
+        route_diagnostics,
     })
 }
 
@@ -439,13 +497,19 @@ fn entry_from_vfs_value(value: &Value) -> AssetsCatalogEntry {
             .unwrap_or_else(|| "engine.assets".to_owned()),
         asset_kind: string_field(value, &["asset_kind", "content_kind", "type"])
             .unwrap_or_else(|| "asset".to_owned()),
+        import_stage: "unknown".to_owned(),
+        import_action: "scan".to_owned(),
+        dirty: false,
+        uid: String::new(),
+        thumbnail: String::new(),
     }
 }
 
-fn assets_catalog_node(frame_index: u64, snapshot: &AssetsCatalogSnapshot, selected_index: usize) -> UiSurfaceNode {
+fn assets_catalog_node(frame_index: u64, snapshot: &AssetsCatalogSnapshot, selected_index: usize, view_mode: CatalogViewMode) -> UiSurfaceNode {
     let folder_count = snapshot.entries.iter().filter(|entry| entry.is_directory()).count();
     let asset_count = snapshot.entries.len().saturating_sub(folder_count);
     let selected_entry = snapshot.entries.get(selected_index).or_else(|| snapshot.entries.first());
+    let _available_views = [CatalogViewMode::Tree, CatalogViewMode::List, CatalogViewMode::Grid, CatalogViewMode::Inspector];
 
     let mut body_lines = Vec::new();
     body_lines.push(format!(
@@ -457,27 +521,29 @@ fn assets_catalog_node(frame_index: u64, snapshot: &AssetsCatalogSnapshot, selec
     ));
     body_lines.push(format!("Path: {}", display_path(&snapshot.logical_path)));
     body_lines.push("Content Browser is an engine.ui application node over engine.assets data.".to_owned());
+    body_lines.push(snapshot.import_summary.clone());
 
     let mut components = Vec::new();
     components.push(
         UiComponentNode::row("content_browser.tab.browser", "Content Browser")
             .with_icon("◈")
             .with_detail("Assets")
-            .with_tone(UiNodeTone::Accent)
+            .with_tone(if view_mode == CatalogViewMode::Grid { UiNodeTone::Accent } else { UiNodeTone::Normal })
             .tagged("tab")
-            .tagged("active"),
+            .tagged(if view_mode == CatalogViewMode::Grid { "active" } else { "inactive" }),
     );
     components.push(
-        UiComponentNode::row("content_browser.tab.materials", "Materials")
+        UiComponentNode::row("content_browser.tab.inspector", "Inspector")
             .with_icon("◇")
-            .with_detail("Pinned workspace")
-            .with_tone(UiNodeTone::Normal)
-            .tagged("tab"),
+            .with_detail("Schema DTO · settings · providers")
+            .with_tone(if view_mode == CatalogViewMode::Inspector { UiNodeTone::Accent } else { UiNodeTone::Normal })
+            .tagged("tab")
+            .tagged(if view_mode == CatalogViewMode::Inspector { "active" } else { "inactive" }),
     );
     components.push(
-        UiComponentNode::row("content_browser.toolbar", "+ Add    Import    Save All    Refresh")
+        UiComponentNode::row("content_browser.toolbar", "+ Add    Import    Reimport    Save All    Refresh")
             .with_icon("TB")
-            .with_detail("Filters · All Types · All Platforms · Grid View")
+            .with_detail(format!("Tree/List/Grid selection · active view={} · actions dispatch through engine.ui", view_mode.as_str()))
             .with_tone(UiNodeTone::Normal)
             .tagged("toolbar"),
     );
@@ -547,7 +613,7 @@ fn assets_catalog_node(frame_index: u64, snapshot: &AssetsCatalogSnapshot, selec
         let mut card = UiComponentNode::row(format!("content_browser.asset_card.{visible_idx:03}"), entry.name.clone())
             .with_icon(icon_for_extension(&entry.extension))
             .with_value(asset_type_label(entry))
-            .with_detail(entry.logical_path.clone())
+            .with_detail(format!("{} · {}", entry.import_stage, entry.import_action))
             .with_tone(if selected { UiNodeTone::Accent } else { UiNodeTone::Normal })
             .tagged("asset-card")
             .tagged(entry.kind.clone());
@@ -571,6 +637,13 @@ fn assets_catalog_node(frame_index: u64, snapshot: &AssetsCatalogSnapshot, selec
             ("type", "Type", asset_type_label(entry)),
             ("extension", "Extension", if entry.extension.is_empty() { "directory".to_owned() } else { entry.extension.clone() }),
             ("gateway", "Gateway", entry.semantic_gateway.clone()),
+            ("uid", "UID", if entry.uid.is_empty() { "pending".to_owned() } else { entry.uid.clone() }),
+            ("import", "Import", format!("{} / {}", entry.import_stage, entry.import_action)),
+            ("thumbnail", "Thumbnail", if entry.thumbnail.is_empty() { "preview plan pending".to_owned() } else { entry.thumbnail.clone() }),
+            ("readonly_dto", "Readonly DTO", "available in details panel".to_owned()),
+            ("settings", "Settings", "schema-driven editor placeholder".to_owned()),
+            ("providers", "Providers", snapshot.route_diagnostics.clone()),
+            ("package_writer", "Package Writer", snapshot.package_writer_summary.clone()),
             ("ownership", "UI Role", "visualization only".to_owned()),
         ] {
             components.push(
@@ -585,7 +658,7 @@ fn assets_catalog_node(frame_index: u64, snapshot: &AssetsCatalogSnapshot, selec
     components.push(
         UiComponentNode::row("content_browser.status", format!("Showing {} of {} assets", asset_count.min(36), asset_count))
             .with_icon("●")
-            .with_detail(format!("{} folders · Page 1 · F1 close · arrows navigate", folder_count))
+            .with_detail(format!("{} folders · {} · {} · F1 close · arrows navigate", folder_count, snapshot.import_queue_summary, snapshot.package_writer_summary))
             .with_tone(UiNodeTone::Accent)
             .tagged("status"),
     );
@@ -604,7 +677,7 @@ fn assets_catalog_node(frame_index: u64, snapshot: &AssetsCatalogSnapshot, selec
         .with_subtitle("Explorer-style UI composition over engine.assets")
         .with_body_lines(body_lines)
         .with_footer_lines(vec![
-            "F1 Close · ↑/↓ Select · Enter Open Folder · Backspace Parent".to_owned(),
+            "F1 Close · ↑/↓ Select · Enter Open Folder · Esc Grid · Backspace Parent".to_owned(),
             "This is not a backend domain; it consumes engine.assets and publishes engine.ui nodes".to_owned(),
         ])
         .with_theme(ASSETS_CATALOG_THEME_ID)
@@ -614,6 +687,9 @@ fn assets_catalog_node(frame_index: u64, snapshot: &AssetsCatalogSnapshot, selec
         .with_metric("frame_index", json!(frame_index))
         .with_metric("current_path", json!(snapshot.logical_path.as_str()))
         .with_metric("selected_index", json!(selected_index))
+        .with_metric("view_mode", json!(view_mode.as_str()))
+        .with_metric("import_summary", json!(snapshot.import_summary.as_str()))
+        .with_metric("package_writer", json!(snapshot.package_writer_summary.as_str()))
         .with_metric("folder_count", json!(folder_count))
         .with_metric("asset_count", json!(asset_count))
         .with_metric("source_count", json!(snapshot.sources.len()))
@@ -769,6 +845,68 @@ fn format_labels(value: &Value) -> Vec<String> {
         .filter_map(|item| string_field(item, &["extension", "id", "asset_kind", "content_kind"]))
         .take(64)
         .collect()
+}
+
+
+fn apply_import_lifecycle_rows(
+    state: &mut AssetsCatalogRuntimeState,
+    logical_path: &str,
+    entries: &mut [AssetsCatalogEntry],
+    warnings: &mut Vec<String>,
+) {
+    let response = match state.client.dirty_scan_json_v1(json!({
+        "root": logical_path,
+        "recursive": false,
+        "max_entries": 256,
+    })) {
+        Ok(value) => value,
+        Err(error) => {
+            warnings.push(format!("engine.assets.dirty_scan_v1 unavailable: {error}"));
+            return;
+        }
+    };
+    let rows = response.get("rows").and_then(Value::as_array).cloned().unwrap_or_default();
+    for row in rows {
+        let Some(path) = string_field(&row, &["logical_path", "path"]) else { continue; };
+        let normalized = normalize_catalog_path(&path);
+        if let Some(entry) = entries.iter_mut().find(|entry| entry.logical_path == normalized) {
+            entry.import_stage = string_field(&row, &["stage"]).unwrap_or_else(|| "unknown".to_owned());
+            entry.import_action = string_field(&row, &["recommended_action"]).unwrap_or_else(|| "none".to_owned());
+            entry.dirty = row.get("dirty").and_then(Value::as_bool).unwrap_or(false);
+            entry.uid = string_field(&row, &["uid"]).unwrap_or_default();
+            entry.thumbnail = row
+                .get("thumbnail")
+                .and_then(|thumbnail| string_field(thumbnail, &["kind", "strategy", "label"]))
+                .unwrap_or_default();
+        }
+    }
+}
+
+fn package_writer_summary(state: &mut AssetsCatalogRuntimeState) -> Result<String, String> {
+    let value = state.client.package_writer_info_json_v1(json!({}))?;
+    let ops = value.get("operations").and_then(Value::as_object);
+    let loose = ops.and_then(|o| o.get("loose_vfs_write_back")).and_then(Value::as_bool).unwrap_or(false);
+    let listfile = ops.and_then(|o| o.get("nef8_listfile_repack")).and_then(Value::as_bool).unwrap_or(false);
+    let nepak = ops.and_then(|o| o.get("nepak_container_write_back")).and_then(Value::as_bool).unwrap_or(false);
+    Ok(format!("package writer: loose={} listfile={} nepak={}", loose, listfile, nepak))
+}
+
+fn import_queue_summary(state: &mut AssetsCatalogRuntimeState) -> Result<String, String> {
+    let value = state.client.import_queue_json_v1(json!({}))?;
+    if let Some(summary) = value.get("summary") {
+        let queued = summary.get("queued").or_else(|| summary.get("queue_len")).and_then(Value::as_u64).unwrap_or(0);
+        let active = summary.get("active").and_then(Value::as_u64).unwrap_or(0);
+        return Ok(format!("import queue: queued={} active={}", queued, active));
+    }
+    let queued = value.get("queued").and_then(Value::as_array).map(|v| v.len()).unwrap_or(0);
+    Ok(format!("import queue: queued={} active=0", queued))
+}
+
+fn import_summary_for_entries(entries: &[AssetsCatalogEntry]) -> String {
+    let dirty = entries.iter().filter(|entry| entry.dirty).count();
+    let reimport = entries.iter().filter(|entry| entry.import_action == "reimport").count();
+    let import = entries.iter().filter(|entry| entry.import_action == "import").count();
+    format!("Import status: {} dirty · {} reimport · {} new import", dirty, reimport, import)
 }
 
 fn value_warnings(value: &Value) -> Vec<String> {

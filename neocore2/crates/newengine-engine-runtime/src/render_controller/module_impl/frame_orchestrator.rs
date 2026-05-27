@@ -3,7 +3,7 @@
 use std::sync::atomic::{AtomicBool, Ordering};
 
 use newengine_core::render::{
-    Extent2D, RectI32, RenderApi, RenderFrameDebugSnapshot, RenderTargetId, Viewport,
+    Extent2D, RectI32, RenderApi, RenderFrameDebugSnapshot, RenderTargetId, TextureFormat, Viewport,
 };
 use crate::gameplay::GameRunMode;
 use newengine_core::EngineResult;
@@ -73,7 +73,13 @@ impl RenderFrameOrchestrator {
             Some(1.0),
         );
         let bounds = snapshot.bounds;
-        let lit = match controller.gpu.require_primary_lit_pipeline(r) {
+        let runtime_profile = controller.runtime_profile().clone();
+        let scene_color_format = if runtime_profile.hdr_scene_enabled() {
+            super::super::render_quality::SCENE_HDR_COLOR_FORMAT
+        } else {
+            TextureFormat::Bgra8Unorm
+        };
+        let lit = match controller.gpu.require_primary_lit_pipeline_for(scene_color_format, r) {
             Ok(lit) => lit,
             Err(e) if is_transient_shader_pipeline_error(&e) => {
                 Self::end_viewport_after_transient_pipeline_wait(
@@ -100,7 +106,6 @@ impl RenderFrameOrchestrator {
         let camera_position = [snapshot.camera_position.x, snapshot.camera_position.y, snapshot.camera_position.z];
         let base_lights = lights::collect_lights(scene.world()).with_camera_position(camera_position);
         let extent = Extent2D::new(scope.vp_w, scope.vp_h);
-        let runtime_profile = controller.runtime_profile().clone();
         let gpu_safe_profile = runtime_profile.gpu_safe_enabled();
         if gpu_safe_profile {
             log_gpu_safe_profile_once();
@@ -606,10 +611,10 @@ fn log_gpu_safe_profile_once() {
         .is_ok()
     {
         log::warn!(
-            "render controller: conservative GPU profile active; preserving original renderer path for capable GPUs, but disabling risky shadows/HDR/postfx/deferred graph branches on this device"
+            "render controller: legacy conservative GPU profile active; high-cost feature branches are disabled only by explicit runtime profile policy"
         );
         newengine_core::crash::record_breadcrumb(
-            "render controller: conservative GPU profile active".to_owned(),
+            "render controller: legacy conservative GPU profile active".to_owned(),
         );
     }
 }

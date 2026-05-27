@@ -8,8 +8,8 @@ pub mod bootstrap_ui;
 ///
 /// Runtime/platform code calls this stable facade. The current implementation is
 /// an engine-owned loading data bridge. UI presentation is rendered only by
-/// `engine.ui` providers; `engine.loading` is data/status, not a renderer.
-pub const ENGINE_LOADING_SERVICE_ID: &str = "engine.loading";
+/// `engine.ui` providers; `engine.ui.loading` is data/status, not a renderer.
+pub const ENGINE_LOADING_SERVICE_ID: &str = "engine.ui.loading";
 
 /// First-party provider service id for loading shell providers.
 pub const LOADING_SERVICE_ID: &str = "loading.api";
@@ -21,7 +21,7 @@ pub const LOADING_SERVICE_METHOD_SHUTDOWN_V1: &str = newengine_service_api::SERV
 pub const LOADING_SERVICE_METHOD_SNAPSHOT_JSON_V1: &str = "snapshot_json_v1";
 pub const LOADING_SERVICE_METHOD_PUBLISH_JSON_V1: &str = "publish_json_v1";
 pub const LOADING_SERVICE_METHOD_PUBLISH_STATUS_JSON_V1: &str = "publish_status_json_v1";
-pub const ENGINE_LOADING_STATUS_TOPIC_V1: &str = "engine.loading.status.v1";
+pub const ENGINE_LOADING_STATUS_TOPIC_V1: &str = "engine.ui.loading.status.v1";
 
 pub const LOADING_REQUIRED_METHODS_V1: &[&str] = &[
     LOADING_SERVICE_METHOD_INFO,
@@ -41,7 +41,7 @@ pub const LOADING_BACKEND_SERVICE_SPEC: newengine_service_api::BackendServiceSpe
 pub const LOADING_RUNTIME_CONTRACT_SPEC: newengine_service_api::RuntimeServiceContractSpec =
     newengine_service_api::RuntimeServiceContractSpec::new(
         ENGINE_LOADING_SERVICE_ID,
-        "newengine.loading-api >= 0.1.x",
+        "newengine.ui.loading-api >= 0.1.x",
         LOADING_REQUIRED_METHODS_V1,
     );
 
@@ -67,7 +67,7 @@ impl Default for LoadingServiceInfo {
     #[inline]
     fn default() -> Self {
         Self {
-            protocol: "newengine.loading-api/v1".to_owned(),
+            protocol: "newengine.ui.loading-api/v1".to_owned(),
             features: vec![
                 "engine-owned-engine-loading-data".to_owned(),
                 "shared-snapshot".to_owned(),
@@ -128,7 +128,7 @@ impl Default for LoadingStatusPhase {
 /// Generic loading/status event published through the engine bus.
 ///
 /// Producers describe what they are doing; renderers, asset providers and
-/// runtime gates do not paint UI directly. `engine.loading` projects this DTO
+/// runtime gates do not paint UI directly. `engine.ui.loading` projects this DTO
 /// into the current loading surface snapshot.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct LoadingStatusEvent {
@@ -575,7 +575,7 @@ impl Default for LoadingScreenSnapshot {
             detail: "The loading status bridge is waiting for startup telemetry.".to_owned(),
             progress_01: 0.0,
             spinner_phase: 0,
-            source: "engine.loading".to_owned(),
+            source: "engine.ui.loading".to_owned(),
             provider: "engine-loading-data".to_owned(),
             view_json: String::new(),
             subsystems: Vec::new(),

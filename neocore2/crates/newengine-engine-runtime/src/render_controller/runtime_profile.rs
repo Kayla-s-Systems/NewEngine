@@ -293,11 +293,11 @@ impl RenderRuntimeProfile {
             }
             RenderHardwareTier::Gtx => {
                 self.id = tier.profile_id().to_owned();
-                self.gpu_safe = true;
-                self.graphics.shadows = FeatureSwitch::Disabled;
-                self.graphics.hdr_scene = FeatureSwitch::Disabled;
-                self.graphics.postfx = FeatureSwitch::Disabled;
-                self.graphics.deferred = FeatureSwitch::Disabled;
+                // GTX 10-series class hardware is still a capable renderer tier.
+                // Do not turn off authored features here: the launch policy and
+                // upload queue own startup pressure, while feature availability
+                // remains controlled by the declarative runtime profile.
+                self.gpu_safe = false;
             }
             RenderHardwareTier::Rtx => {
                 self.id = tier.profile_id().to_owned();

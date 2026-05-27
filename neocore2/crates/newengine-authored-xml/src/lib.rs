@@ -289,12 +289,12 @@ static METADATA_ROOT_SNIPPETS: &[XmlSnippet] = &[
 static METADATA_CHILD_SNIPPETS: &[XmlSnippet] = DEFINITION_CHILD_SNIPPETS;
 static NEUI_ROOT_SNIPPETS: &[XmlSnippet] = &[
     XmlSnippet { label: "NeUi Surface Dictionary", insert: r##"<NeUiDictionary schema="newengine.neui.dictionary.v1" representation="xmlcentral" owner_scope="engine" document_kind="surface">
-  <Surface name="engine.loading" root="layout.main" theme="assets/ui/themes/north_star_dark.neui@theme" bindings="bindings">
+  <Surface name="engine.ui.loading" root="layout.main" theme="assets/ui/themes/north_star_dark.neui@theme" bindings="bindings">
     <Dependencies>
     </Dependencies>
   </Surface>
 
-  <Layout name="layout.main" surface="engine.loading">
+  <Layout name="layout.main" surface="engine.ui.loading">
     <Panel id="root" class="surface-shell" />
   </Layout>
 
@@ -304,7 +304,7 @@ static NEUI_ROOT_SNIPPETS: &[XmlSnippet] = &[
 "##, detail: "Root .neui surface dictionary" },
     XmlSnippet { label: "NeUi Registry", insert: r##"<NeUiRegistry schema="newengine.neui.registry.v1">
   <Surfaces>
-    <SurfaceRef id="engine.loading" ref="assets/ui/engine/loading.neui@surface" />
+    <SurfaceRef id="engine.ui.loading" ref="assets/ui/engine/loading.neui@surface" />
   </Surfaces>
   <Themes>
     <ThemeRef id="north_star.dark" ref="assets/ui/themes/north_star_dark.neui@theme" />
@@ -323,19 +323,19 @@ static NEUI_ROOT_SNIPPETS: &[XmlSnippet] = &[
 ];
 static NEUI_CHILD_SNIPPETS: &[XmlSnippet] = &[
     XmlSnippet { label: "Surface", insert: r##"
-  <Surface name="engine.loading" root="layout.main" theme="assets/ui/themes/north_star_dark.neui@theme" bindings="bindings">
+  <Surface name="engine.ui.loading" root="layout.main" theme="assets/ui/themes/north_star_dark.neui@theme" bindings="bindings">
     <Dependencies>
       <ComponentRef ref="assets/ui/components/cards.neui@card.status" />
       <TextureRef ref="assets/ui/icons/builtin_icons.ytd@app_logo" />
     </Dependencies>
   </Surface>"##, detail: "Addressable UI surface entry" },
     XmlSnippet { label: "Layout", insert: r##"
-  <Layout name="layout.main" surface="engine.loading">
+  <Layout name="layout.main" surface="engine.ui.loading">
     <Panel id="root" class="surface-shell" />
   </Layout>"##, detail: "UI layout tree" },
     XmlSnippet { label: "BindingGraph", insert: r##"
   <BindingGraph name="bindings">
-    <StateSource id="loading" source="engine.loading.status" contract="LoadingStatusSnapshot" update="event" />
+    <StateSource id="loading" source="engine.ui.loading.status" contract="LoadingStatusSnapshot" update="event" />
     <Bind element="loading.progress" property="value" source="loading.progress" />
   </BindingGraph>"##, detail: "Declarative state binding plan" },
     XmlSnippet { label: "ActionMap", insert: r##"
