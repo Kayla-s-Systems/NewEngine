@@ -57,6 +57,24 @@ pub(crate) fn is_backend_device_lost_error(error: &EngineError) -> bool {
         || text.contains("vulkan device lost")
 }
 
+
+/// Returns true for a transient render-material failure caused by an async
+/// shader compile job that has been queued through `engine.jobs` but has not
+/// admitted SPIR-V into the renderer cache yet.
+///
+/// This is not a fatal GPU/backend error: the next frames must keep pumping
+/// jobs and retry pipeline admission instead of permanently disabling the
+/// playable viewport.
+pub(crate) fn is_transient_shader_pipeline_error(error: &EngineError) -> bool {
+    let mut text = error.to_string();
+    text.make_ascii_lowercase();
+    (text.contains("shader compile queued")
+        || text.contains("shader is not ready yet")
+        || text.contains("engine.jobs shader admission timeout")
+        || text.contains("leave_pending_and_retry_later"))
+        && !is_backend_device_lost_error(error)
+}
+
 impl RuntimeRenderController {
     #[inline]
     pub(crate) fn backend_render_disabled(&self) -> bool {

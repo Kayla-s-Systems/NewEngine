@@ -7,7 +7,8 @@ use newengine_math::collections::FxHashSet;
 use newengine_plugin_host::default_host_api;
 
 use crate::gameplay::{clear_player_input, first_player, GameRunMode, GameReadyWorldLaunchGate};
-use crate::scene_bridge::TerrainSurfaceLayers;
+use crate::scene_bridge::{PreparedTerrainPrimitiveMesh, TerrainSurfaceLayers};
+use newengine_procedural_noise::ProceduralTerrain;
 
 use super::super::material_bindings::{LitMaterialPlan, MaterialTextureGpuResidency};
 use super::RuntimeRenderController;
@@ -21,7 +22,7 @@ const SCENE_TEXTURE_GATE_SOFT_TIMEOUT_FRAMES: u64 = 120;
 /// player control and simulation closed while the renderer gets a short chance
 /// to make declared material textures resident. This gate is deliberately soft:
 /// missing optional backends or slow/failed texture uploads must never strand the
-/// application on the native loading screen. After the bounded wait expires the
+/// application on the loading projection. After the bounded wait expires the
 /// runtime enters public Play and lets renderer fallbacks finish the frame.
 pub(super) fn update_game_ready_launch_gate(
     this: &mut RuntimeRenderController,
@@ -39,7 +40,7 @@ pub(super) fn update_game_ready_launch_gate(
     }
 
 
-    let readiness = critical_scene_materials_ready(this, r, world);
+    let readiness = critical_scene_residency_ready(this, r, world);
     if readiness.ready {
         let (waited_frames, reason) = {
             let Some(gate) = world.resource_mut::<GameReadyWorldLaunchGate>() else {
@@ -69,7 +70,7 @@ pub(super) fn update_game_ready_launch_gate(
 
             if waited_frames >= SCENE_TEXTURE_GATE_SOFT_TIMEOUT_FRAMES {
                 let reason = format!(
-                    "scene texture residency soft timeout after {waited_frames} frames; continuing with renderer fallbacks waiting={} total={} failed={}",
+                    "scene residency soft timeout after {waited_frames} frames; continuing with renderer fallbacks waiting={} total={} failed={}",
                     readiness.waiting,
                     readiness.total,
                     readiness.failed
@@ -114,6 +115,103 @@ struct LaunchReadiness {
     waiting: u32,
     total: u32,
     failed: u32,
+}
+
+
+fn critical_scene_residency_ready(
+    this: &mut RuntimeRenderController,
+    r: &mut dyn RenderApi,
+    world: &newengine_ecs::World,
+) -> LaunchReadiness {
+    let materials = critical_scene_materials_ready(this, r, world);
+    let terrain = critical_terrain_gpu_ready(this, world);
+
+    LaunchReadiness {
+        ready: materials.ready && terrain.ready,
+        reason: if materials.ready && terrain.ready {
+            format!("{} · {}", materials.reason, terrain.reason)
+        } else if !materials.ready && !terrain.ready {
+            format!("{} · {}", materials.reason, terrain.reason)
+        } else if !materials.ready {
+            materials.reason
+        } else {
+            terrain.reason
+        },
+        waiting: materials.waiting.saturating_add(terrain.waiting),
+        total: materials.total.saturating_add(terrain.total),
+        failed: materials.failed.saturating_add(terrain.failed),
+    }
+}
+
+fn critical_terrain_gpu_ready(
+    this: &RuntimeRenderController,
+    world: &newengine_ecs::World,
+) -> LaunchReadiness {
+    let mut prepared_total = 0_u32;
+    let mut resident = 0_u32;
+    let mut waiting = 0_u32;
+    let mut declared_total = 0_u32;
+
+    for (entity, terrain) in world.query::<ProceduralTerrain>() {
+        declared_total = declared_total.saturating_add(1);
+        // Launch readiness must not wait on every future/prospective streamed
+        // chunk. Only terrain that has crossed the CPU RenderPrep boundary is
+        // launch-critical; the rest remains normal streaming work.
+        if world.get::<PreparedTerrainPrimitiveMesh>(entity).is_none() {
+            continue;
+        }
+
+        prepared_total = prepared_total.saturating_add(1);
+        if this.gpu.meshes.terrain_cache.contains_key(&terrain.mesh_key()) {
+            resident = resident.saturating_add(1);
+        } else {
+            waiting = waiting.saturating_add(1);
+        }
+    }
+
+    if prepared_total == 0 {
+        return LaunchReadiness {
+            ready: declared_total == 0,
+            reason: if declared_total == 0 {
+                "no terrain packets declared".to_owned()
+            } else {
+                format!("waiting for terrain RenderPrep packets declared={declared_total}")
+            },
+            waiting: declared_total,
+            total: declared_total,
+            failed: 0,
+        };
+    }
+
+    let min_ready = crate::env_config::var_u32(
+        "NEWENGINE_TERRAIN_LAUNCH_MIN_READY_PACKETS",
+        1,
+        1,
+        64,
+    )
+    .min(prepared_total);
+
+    if resident >= min_ready {
+        LaunchReadiness {
+            ready: true,
+            reason: format!(
+                "terrain launch packets resident ready={resident}/{prepared_total} declared={declared_total} min_ready={min_ready}"
+            ),
+            waiting,
+            total: prepared_total,
+            failed: 0,
+        }
+    } else {
+        LaunchReadiness {
+            ready: false,
+            reason: format!(
+                "waiting for first terrain GPU packets resident={resident}/{prepared_total} declared={declared_total} min_ready={min_ready}"
+            ),
+            waiting,
+            total: prepared_total,
+            failed: 0,
+        }
+    }
 }
 
 fn critical_scene_materials_ready(
@@ -178,6 +276,15 @@ fn critical_scene_materials_ready(
         };
     }
 
+    let ready_count = total.saturating_sub(waiting).saturating_sub(failed);
+    let min_ready = crate::env_config::var_u32(
+        "NEWENGINE_SCENE_TEXTURE_LAUNCH_MIN_READY",
+        total,
+        0,
+        total.max(1),
+    )
+    .min(total);
+
     if waiting == 0 {
         let suffix = if failed == 0 {
             format!("scene material textures ready total={total}")
@@ -193,11 +300,21 @@ fn critical_scene_materials_ready(
             total,
             failed,
         }
+    } else if min_ready > 0 && ready_count >= min_ready {
+        LaunchReadiness {
+            ready: true,
+            reason: format!(
+                "scene material textures partially resident ready={ready_count}/{total} waiting={waiting} failed={failed} min_ready={min_ready} policy='NEWENGINE_SCENE_TEXTURE_LAUNCH_MIN_READY'"
+            ),
+            waiting,
+            total,
+            failed,
+        }
     } else {
         LaunchReadiness {
             ready: false,
             reason: format!(
-                "waiting for scene texture residency waiting={waiting} total={total} failed={failed}"
+                "waiting for scene texture residency ready={ready_count}/{total} waiting={waiting} failed={failed} min_ready={min_ready}"
             ),
             waiting,
             total,

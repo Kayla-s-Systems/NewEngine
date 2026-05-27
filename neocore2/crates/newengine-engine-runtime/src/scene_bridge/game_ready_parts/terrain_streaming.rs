@@ -341,6 +341,43 @@ fn spawn_procedural_terrain(
     terrain_entity
 }
 
+
+#[derive(Clone, Copy, Debug, Default)]
+pub(crate) struct TerrainStreamingStatus {
+    pub loaded: usize,
+    pub pending: usize,
+    pub desired: usize,
+}
+
+impl TerrainStreamingStatus {
+    #[inline]
+    pub(crate) fn ready_for_launch(self) -> bool {
+        self.desired == 0 || self.loaded >= self.desired
+    }
+}
+
+pub(crate) fn game_ready_terrain_streaming_status(world: &newengine_ecs::World) -> TerrainStreamingStatus {
+    let Some(state) = world.resource::<GameReadyTerrainStreamingState>() else {
+        return TerrainStreamingStatus::default();
+    };
+    let desired = SceneResidencySet::desired_cells(
+        TerrainChunkCoord::from_world_pos(
+            crate::gameplay::first_player(world)
+                .and_then(|player| world.get::<Transform>(player).map(|t| t.position))
+                .unwrap_or(Vec3::ZERO),
+            state.spec.size_x,
+            state.spec.size_z,
+        ),
+        state.chunk_radius,
+    )
+    .len();
+    TerrainStreamingStatus {
+        loaded: state.loaded.len(),
+        pending: state.pending.len(),
+        desired,
+    }
+}
+
 pub(crate) fn tick_game_ready_streaming_terrain(
     world: &mut newengine_ecs::World,
     mats: &MaterialRegistry,

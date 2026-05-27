@@ -40,6 +40,19 @@ pub struct AssetServiceClient {
     m_sources_json_v1: MethodName,
     m_vfs_list_json_v1: MethodName,
     m_list_file_repack_json_v1: MethodName,
+    m_uid_json_v1: MethodName,
+    m_import_cache_json_v1: MethodName,
+    m_import_dirty_json_v1: MethodName,
+    m_import_scan_json_v1: MethodName,
+    m_import_graph_json_v1: MethodName,
+    m_import_diagnostics_json_v1: MethodName,
+    m_import_thumbnails_json_v1: MethodName,
+    m_import_dependencies_json_v1: MethodName,
+    m_import_queue_json_v1: MethodName,
+    m_reimport_v1: MethodName,
+    m_thumbnail_json_v1: MethodName,
+    m_dirty_scan_json_v1: MethodName,
+    m_package_writer_info_json_v1: MethodName,
     m_mount_source_json_v1: MethodName,
     m_get_state_v1: MethodName,
 }
@@ -71,6 +84,19 @@ impl AssetServiceClient {
             m_sources_json_v1: MethodName::from(method::SOURCES_JSON_V1),
             m_vfs_list_json_v1: MethodName::from(method::VFS_LIST_JSON_V1),
             m_list_file_repack_json_v1: MethodName::from(method::LIST_FILE_REPACK_JSON_V1),
+            m_uid_json_v1: MethodName::from(method::UID_JSON_V1),
+            m_import_cache_json_v1: MethodName::from(method::IMPORT_CACHE_JSON_V1),
+            m_import_dirty_json_v1: MethodName::from(method::IMPORT_DIRTY_JSON_V1),
+            m_import_scan_json_v1: MethodName::from(method::IMPORT_SCAN_JSON_V1),
+            m_import_graph_json_v1: MethodName::from(method::IMPORT_GRAPH_JSON_V1),
+            m_import_diagnostics_json_v1: MethodName::from(method::IMPORT_DIAGNOSTICS_JSON_V1),
+            m_import_thumbnails_json_v1: MethodName::from(method::IMPORT_THUMBNAILS_JSON_V1),
+            m_import_dependencies_json_v1: MethodName::from(method::IMPORT_DEPENDENCIES_JSON_V1),
+            m_import_queue_json_v1: MethodName::from(method::IMPORT_QUEUE_JSON_V1),
+            m_reimport_v1: MethodName::from(method::REIMPORT_V1),
+            m_thumbnail_json_v1: MethodName::from(method::THUMBNAIL_JSON_V1),
+            m_dirty_scan_json_v1: MethodName::from(method::DIRTY_SCAN_JSON_V1),
+            m_package_writer_info_json_v1: MethodName::from(method::PACKAGE_WRITER_INFO_JSON_V1),
             m_mount_source_json_v1: MethodName::from(method::MOUNT_SOURCE_JSON_V1),
             m_get_state_v1: MethodName::from(method::GET_STATE_V1),
         }
@@ -588,6 +614,83 @@ impl AssetService for AssetServiceClient {
 
     fn list_file_repack_json_v1(&self, payload: serde_json::Value) -> Result<serde_json::Value, String> {
         AssetServiceClient::list_file_repack_json_v1(self, payload)
+    }
+
+    fn uid_json_v1(&self, logical_path: &str) -> Result<serde_json::Value, String> {
+        let bytes = self.call_raw(self.m_uid_json_v1.clone(), Self::logical_payload(logical_path))?;
+        Self::decode_ok_json(bytes)
+    }
+
+    fn import_cache_json_v1(&self, payload: serde_json::Value) -> Result<serde_json::Value, String> {
+        let bytes = serde_json::to_vec(&payload).map_err(|e| e.to_string())?;
+        let bytes = self.call_raw(self.m_import_cache_json_v1.clone(), bytes)?;
+        Self::decode_ok_json(bytes)
+    }
+
+    fn import_dirty_json_v1(&self, payload: serde_json::Value) -> Result<serde_json::Value, String> {
+        let bytes = serde_json::to_vec(&payload).map_err(|e| e.to_string())?;
+        let bytes = self.call_raw(self.m_import_dirty_json_v1.clone(), bytes)?;
+        Self::decode_ok_json(bytes)
+    }
+
+    fn import_scan_json_v1(&self, payload: serde_json::Value) -> Result<serde_json::Value, String> {
+        let bytes = serde_json::to_vec(&payload).map_err(|e| e.to_string())?;
+        let bytes = self.call_raw(self.m_import_scan_json_v1.clone(), bytes)?;
+        Self::decode_ok_json(bytes)
+    }
+
+    fn import_graph_json_v1(&self, payload: serde_json::Value) -> Result<serde_json::Value, String> {
+        let bytes = serde_json::to_vec(&payload).map_err(|e| e.to_string())?;
+        let bytes = self.call_raw(self.m_import_graph_json_v1.clone(), bytes)?;
+        Self::decode_ok_json(bytes)
+    }
+
+    fn import_diagnostics_json_v1(&self, payload: serde_json::Value) -> Result<serde_json::Value, String> {
+        let bytes = serde_json::to_vec(&payload).map_err(|e| e.to_string())?;
+        let bytes = self.call_raw(self.m_import_diagnostics_json_v1.clone(), bytes)?;
+        Self::decode_ok_json(bytes)
+    }
+
+    fn import_thumbnails_json_v1(&self, payload: serde_json::Value) -> Result<serde_json::Value, String> {
+        let bytes = serde_json::to_vec(&payload).map_err(|e| e.to_string())?;
+        let bytes = self.call_raw(self.m_import_thumbnails_json_v1.clone(), bytes)?;
+        Self::decode_ok_json(bytes)
+    }
+
+    fn import_dependencies_json_v1(&self, payload: serde_json::Value) -> Result<serde_json::Value, String> {
+        let bytes = serde_json::to_vec(&payload).map_err(|e| e.to_string())?;
+        let bytes = self.call_raw(self.m_import_dependencies_json_v1.clone(), bytes)?;
+        Self::decode_ok_json(bytes)
+    }
+
+    fn import_queue_json_v1(&self, payload: serde_json::Value) -> Result<serde_json::Value, String> {
+        let bytes = serde_json::to_vec(&payload).map_err(|e| e.to_string())?;
+        let bytes = self.call_raw(self.m_import_queue_json_v1.clone(), bytes)?;
+        Self::decode_ok_json(bytes)
+    }
+
+    fn reimport_v1(&self, payload: serde_json::Value) -> Result<serde_json::Value, String> {
+        let bytes = serde_json::to_vec(&payload).map_err(|e| e.to_string())?;
+        let bytes = self.call_raw(self.m_reimport_v1.clone(), bytes)?;
+        Self::decode_ok_json(bytes)
+    }
+
+    fn thumbnail_json_v1(&self, payload: serde_json::Value) -> Result<serde_json::Value, String> {
+        let bytes = serde_json::to_vec(&payload).map_err(|e| e.to_string())?;
+        let bytes = self.call_raw(self.m_thumbnail_json_v1.clone(), bytes)?;
+        Self::decode_ok_json(bytes)
+    }
+
+    fn dirty_scan_json_v1(&self, payload: serde_json::Value) -> Result<serde_json::Value, String> {
+        let bytes = serde_json::to_vec(&payload).map_err(|e| e.to_string())?;
+        let bytes = self.call_raw(self.m_dirty_scan_json_v1.clone(), bytes)?;
+        Self::decode_ok_json(bytes)
+    }
+
+    fn package_writer_info_json_v1(&self, payload: serde_json::Value) -> Result<serde_json::Value, String> {
+        let bytes = serde_json::to_vec(&payload).map_err(|e| e.to_string())?;
+        let bytes = self.call_raw(self.m_package_writer_info_json_v1.clone(), bytes)?;
+        Self::decode_ok_json(bytes)
     }
 
     fn mount_source_json_v1(&self, payload: serde_json::Value) -> Result<(), String> {

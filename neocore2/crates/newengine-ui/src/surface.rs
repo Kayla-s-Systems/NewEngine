@@ -5,19 +5,17 @@ use serde::{Deserialize, Serialize};
 /// Canonical UI provider and surface identifiers.
 ///
 /// These constants are intentionally owned by `newengine-ui` so runtime hosts,
-/// plugins and native adapters do not duplicate string literals for the same
+/// plugins and runtime adapters do not duplicate string literals for the same
 /// logical surfaces.
 pub const UI_PROVIDER_NONE_ID: &str = "none";
 pub const UI_FEATURE_STANDARD_MODAL_SYSTEM: &str = "standard-modal-system";
-pub const UI_PROVIDER_NATIVE_FALLBACK_ID: &str = "newengine.ui.provider.native-fallback";
 pub const UI_SURFACE_ENGINE_LOADING: &str = "engine.loading";
 pub const UI_SURFACE_ENGINE_ERROR_MODAL: &str = "engine.error_modal";
 pub const UI_SURFACE_RUNTIME_OVERLAY: &str = "runtime.overlay";
-pub const UI_FEATURE_NATIVE_SAFE_STARTUP: &str = "native-safe-startup";
+pub const UI_FEATURE_ENGINE_UI_ONLY_STARTUP: &str = "engine-ui-only-startup";
 pub const UI_FEATURE_KSYSTEMS_ERROR_MODAL: &str = "ksystems-error-modal";
 pub const UI_FEATURE_EXTERNAL_PLUGIN_PROVIDER: &str = "external-plugin-provider";
 pub const UI_SHELL_KSYSTEMS_LOADING_ID: &str = "newengine.shell.ksystems.loading.v1";
-pub const UI_SHELL_MINIMAL_FALLBACK_LOADING_ID: &str = "newengine.shell.minimal-fallback.loading.v1";
 pub const UI_THEME_DARK_GOLD_MAGENTA: &str = "newengine.dark.gold-magenta";
 pub const UI_STYLE_KSYSTEMS_INDUSTRIAL: &str = "ksystems-industrial";
 pub const UI_ERROR_MODAL_KSYSTEMS_ID: &str = "engine.error_modal.ksystems.v1";
@@ -25,14 +23,11 @@ pub const UI_ERROR_MODAL_KSYSTEMS_ID: &str = "engine.error_modal.ksystems.v1";
 /// Stable identity for the UI provider selected by startup config/plugin discovery.
 ///
 /// This is intentionally serializable and renderer-agnostic. Runtime systems can
-/// project UI surfaces without knowing whether the final presentation is native,
-/// a provider backend or intentionally disabled.
+/// project UI surfaces without knowing whether the final presentation is provided by a plugin or intentionally disabled.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum UiProviderBinding {
-    /// No user interface provider is active. This is a valid headless/minimal mode.
+    /// No user interface provider route is active.
     None,
-    /// Built-in native fallback adapter used before an external UI provider is ready.
-    NativeFallback,
     /// External provider selected by service id.
     Plugin { service_id: String },
 }
@@ -43,10 +38,6 @@ impl UiProviderBinding {
         Self::None
     }
 
-    #[inline]
-    pub fn native_fallback() -> Self {
-        Self::NativeFallback
-    }
 
     #[inline]
     pub fn plugin(service_id: impl Into<String>) -> Self {
@@ -59,7 +50,6 @@ impl UiProviderBinding {
     pub fn id(&self) -> &str {
         match self {
             Self::None => UI_PROVIDER_NONE_ID,
-            Self::NativeFallback => UI_PROVIDER_NATIVE_FALLBACK_ID,
             Self::Plugin { service_id } => service_id.as_str(),
         }
     }
@@ -69,10 +59,6 @@ impl UiProviderBinding {
         matches!(self, Self::None)
     }
 
-    #[inline]
-    pub fn is_native_fallback(&self) -> bool {
-        matches!(self, Self::NativeFallback)
-    }
 
     #[inline]
     pub fn is_plugin(&self) -> bool {
@@ -117,23 +103,6 @@ impl UiProviderManifest {
             features: Vec::new(),
         }
     }
-
-    #[inline]
-    pub fn native_fallback() -> Self {
-        Self {
-            provider: UiProviderBinding::NativeFallback,
-            version: 1,
-            surfaces: vec![
-                UI_SURFACE_ENGINE_LOADING.to_owned(),
-                UI_SURFACE_ENGINE_ERROR_MODAL.to_owned(),
-            ],
-            features: vec![
-                UI_FEATURE_NATIVE_SAFE_STARTUP.to_owned(),
-                UI_FEATURE_KSYSTEMS_ERROR_MODAL.to_owned(),
-                UI_FEATURE_STANDARD_MODAL_SYSTEM.to_owned(),
-            ],
-        }
-    }
 }
 
 /// Shell layout and animation policy for loading-style surfaces.
@@ -161,19 +130,6 @@ impl UiShellSpec {
             subsystem_cards: UiSubsystemCardSpec::default(),
             error_modal: UiErrorModalSpec::default(),
         }
-    }
-
-    pub fn minimal_fallback_loading() -> Self {
-        let mut shell = Self::ksystems_loading();
-        shell.id = UI_SHELL_MINIMAL_FALLBACK_LOADING_ID.to_owned();
-        shell.style = "minimal-native-fallback".to_owned();
-        shell.loading.footer_template = "{percent}%".to_owned();
-        shell.loading.show_subsystems = false;
-        shell.loading.max_subsystems = 0;
-        shell.subsystem_cards.show_detail = false;
-        shell.subsystem_cards.show_progress = false;
-        shell.subsystem_cards.pulse_glow = false;
-        shell
     }
 }
 

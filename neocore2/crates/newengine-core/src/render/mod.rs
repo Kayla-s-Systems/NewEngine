@@ -38,7 +38,7 @@ impl RenderBackendStatus {
 /// before the platform hands visual ownership to the playable world.
 ///
 /// This resource is intentionally hosted in `newengine-core`, not in the game
-/// runtime crate, so the platform host can keep the native loading surface alive
+/// runtime crate, so the platform host can publish engine.ui loading state
 /// without depending on a concrete scene/game module.
 #[derive(Debug, Clone)]
 pub struct SceneLaunchStatus {

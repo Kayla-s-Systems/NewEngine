@@ -3,7 +3,8 @@ use newengine_core::physics::PhysicsApiRef;
 use newengine_core::render::{Extent2D, RenderApi};
 use newengine_core::{EngineResult, ModuleCtx};
 use crate::ui_gateway;
-use newengine_ui_api::{UiDrawList, UiRuntimeDebugOverlayTelemetry, UiSurfaceNode};
+use crate::input_systems::InputCaptureState;
+use newengine_ui_api::{UiDrawList, UiInputCaptureState, UiRuntimeDebugOverlayTelemetry, UiSurfaceNode};
 
 use super::frame_types::{PlayableFrameOutcome, RenderFrameScope, ViewportFrameInput};
 use super::input::ViewportInputSnap;
@@ -28,19 +29,19 @@ impl RuntimeRenderController {
             scope.dt,
             self.frame.frame_index,
         );
-        let asset_browser_blocks_gameplay = self.update_asset_browser_overlay(
-            ctx,
-            &frame_input.input.actions,
-            [scope.w, scope.h],
-        );
-        let modal_blocks_gameplay = primary_ui.blocks_gameplay || asset_browser_blocks_gameplay;
+        let external_ui_capture = ctx
+            .resources()
+            .get::<UiInputCaptureState>()
+            .cloned()
+            .unwrap_or_else(UiInputCaptureState::none);
+        let modal_blocks_gameplay = primary_ui.blocks_gameplay || external_ui_capture.requests_capture();
 
         self.refresh_modal_ui_draw_list(
             ctx,
             &mut frame_input.ui,
             &primary_ui.state,
             primary_was_open,
-            asset_browser_blocks_gameplay,
+            &external_ui_capture,
             scope,
         )?;
         if primary_was_open && !primary_ui.blocks_gameplay {
@@ -52,9 +53,10 @@ impl RuntimeRenderController {
         }
         {
             let mut carrier = frame_input.input.action_carrier();
-            self.frame.input_systems.apply_modal_ui_capture(
+            let published_capture = external_ui_capture.merged_with_primary_modal(primary_ui.blocks_gameplay);
+            self.frame.input_systems.publish_input_capture_state(
                 self.frame.frame_index,
-                modal_blocks_gameplay,
+                InputCaptureState::modal_ui(published_capture.requests_capture()),
                 &mut carrier,
             );
         }
@@ -105,7 +107,10 @@ impl RuntimeRenderController {
         }
 
         if modal_blocks_gameplay {
-            self.sync_cursor_state(ctx, CursorState::released());
+            // Modal UI must visibly release the OS cursor even if runtime-side
+            // state already believes it is released. Platform grabs can be lost
+            // or retained across focus/UI transitions, so force a release event.
+            self.force_cursor_state(ctx, CursorState::released());
         } else if self.runtime_profile().input.capture_cursor_on_play {
             self.sync_cursor_state(ctx, world_frame.view_frame.cursor);
         } else {
@@ -133,7 +138,7 @@ impl RuntimeRenderController {
         ui: &mut Option<UiDrawList>,
         primary_state: &UiSurfaceNode,
         primary_was_open: bool,
-        asset_browser_blocks_gameplay: bool,
+        external_capture: &UiInputCaptureState,
         scope: RenderFrameScope,
     ) -> EngineResult<()> {
         if primary_state.visible || primary_was_open {
@@ -143,21 +148,14 @@ impl RuntimeRenderController {
             ui_gateway::publish_surface_node(primary_state);
         }
 
-        let asset_browser_toggled_this_frame =
-            self.editor.asset_browser_last_toggle_frame == self.frame.frame_index;
+        let external_refresh = external_capture.draw_refresh_requested || external_capture.requests_capture();
 
-        if asset_browser_blocks_gameplay {
-            // Asset Browser is a retained UiSurfaceNode published by
-            // update_asset_browser_overlay(). The provider owns node retention and
-            // drawing; this stage only asks for the current engine.ui draw packet.
-        }
-
-        if !primary_state.visible && !primary_was_open && !asset_browser_blocks_gameplay && !asset_browser_toggled_this_frame {
+        if !primary_state.visible && !primary_was_open && !external_refresh {
             return Ok(());
         }
 
         let needs_clear_packet = (!primary_state.visible && primary_was_open)
-            || (asset_browser_toggled_this_frame && !asset_browser_blocks_gameplay);
+            || (external_capture.draw_refresh_requested && !external_capture.requests_capture());
 
         match ui_gateway::request_draw_list(
             self.frame.frame_index,

@@ -48,7 +48,7 @@ pub fn auto_near_far_from_sphere(distance: f32, radius: f32) -> (f32, f32) {
     // but not too tiny to avoid catastrophic depth precision.
     //
     // IMPORTANT: a `max(near_by_dist, near_by_sphere)` heuristic can make `near` extremely
-    // large when the camera is far from a small sphere (d >> r), causing aggressive near clipping.
+    // too high when the camera is far from a small sphere (d >> r), causing aggressive near clipping.
     let near_by_dist = d * 0.01; // 1% of distance (stable, keeps good precision at scale)
     let near_by_sphere = (d - r * 1.2).max(0.01);
     let near = near_by_dist.min(near_by_sphere).max(0.01);

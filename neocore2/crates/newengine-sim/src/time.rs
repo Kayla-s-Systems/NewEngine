@@ -1,7 +1,9 @@
 #![forbid(unsafe_op_in_unsafe_fn)]
 
+use serde::{Deserialize, Serialize};
+
 /// Simulation frame data.
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
 pub struct SimFrame {
     pub dt: f32,
     pub fixed_tick: u64,

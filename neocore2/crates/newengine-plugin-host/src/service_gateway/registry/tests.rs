@@ -389,3 +389,83 @@ fn mixed_parent_and_child_domain_route_is_ignored() {
 
     assert!(registry.resolve_route("engine.input.bindings").is_none());
 }
+
+#[test]
+fn root_gateway_keeps_provider_implementation_identity_as_metadata() {
+    let descriptor = PluginDescriptor::builder("newengine.ui.aurelia", "Aurelia", "1.0.0", PluginKind::Runtime)
+        .provides_service("aurelia.ui.api", 1, r#"{"methods":["draw_frame_v1"]}"#)
+        .push(
+            CapabilityDesc::new(
+                "ui.backend",
+                CapabilityRole::Provides,
+                CapabilityKind::Other,
+                1,
+            )
+            .with_json(r#"{"service_kind":"ui","engine_gateway":"engine.ui","provider_route":"engine.ui.aurelia","contract":"aurelia.ui.api","backend_priority":250,"system_tags":["provider.implementation_route"]}"#),
+        )
+        .build();
+    let descriptors = vec![PluginDescriptorFact::new(
+        "newengine.ui.aurelia".to_owned(),
+        descriptor,
+        GatewayProviderOrigin::FirstPartyPlugin,
+    )];
+    let services = vec![service("aurelia.ui.api", Some("newengine.ui.aurelia"))];
+
+    let registry = ActiveGatewayRegistry::from_facts(&descriptors, &services, &[]);
+    let root_route = registry.resolve_route("engine.ui").expect("engine.ui route");
+
+    assert_eq!(root_route.gateway_id, "engine.ui");
+    assert_eq!(root_route.service_kind, "ui");
+    assert_eq!(root_route.provider_service_id, "aurelia.ui.api");
+    assert!(registry.resolve_route("engine.ui.aurelia").is_none());
+    assert!(registry.has_gateway_capability("engine.ui", "ui.backend"));
+}
+
+#[test]
+fn provider_implementation_child_route_does_not_become_api_domain() {
+    let descriptor = PluginDescriptor::builder("bad.ui.aurelia", "Bad Aurelia", "1.0.0", PluginKind::Runtime)
+        .provides_service("bad.aurelia.ui.api", 1, r#"{"methods":["draw_frame_v1"]}"#)
+        .push(
+            CapabilityDesc::new(
+                "ui.backend",
+                CapabilityRole::Provides,
+                CapabilityKind::Other,
+                1,
+            )
+            .with_json(r#"{"service_kind":"ui","engine_gateway":"engine.ui.aurelia","contract":"bad.aurelia.ui.api","backend_priority":250,"system_tags":["provider.implementation_route"]}"#),
+        )
+        .build();
+    let descriptors = vec![PluginDescriptorFact::new(
+        "bad.ui.aurelia".to_owned(),
+        descriptor,
+        GatewayProviderOrigin::FirstPartyPlugin,
+    )];
+    let services = vec![service("bad.aurelia.ui.api", Some("bad.ui.aurelia"))];
+
+    let registry = ActiveGatewayRegistry::from_facts(&descriptors, &services, &[]);
+
+    assert!(registry.resolve_route("engine.ui").is_none());
+    assert!(registry.resolve_route("engine.ui.aurelia").is_none());
+}
+
+#[test]
+fn child_domain_route_still_requires_matching_child_kind_without_named_provider_tag() {
+    let descriptors = vec![PluginDescriptorFact::new(
+        "bad.input".to_owned(),
+        descriptor(
+            "bad.input",
+            "bad.input.api",
+            "engine.input.bindings",
+            "input.bindings.backend",
+            "input",
+            100,
+        ),
+        GatewayProviderOrigin::UserMod,
+    )];
+    let services = vec![service("bad.input.api", Some("bad.input"))];
+
+    let registry = ActiveGatewayRegistry::from_facts(&descriptors, &services, &[]);
+
+    assert!(registry.resolve_route("engine.input.bindings").is_none());
+    assert!(registry.resolve_route("engine.input").is_none());
+}

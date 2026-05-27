@@ -11,8 +11,7 @@ use super::super::gpu::{ensure_primitive_gpu, upload_primitive_mesh};
 use super::RuntimeRenderController;
 
 impl RuntimeRenderController {
-    /// Builds the expensive immutable GPU resources while the native loading
-    /// screen is still active.
+    /// Builds the expensive immutable GPU resources while the loading projection is still active.
     ///
     /// The reference renderer keeps draw-list population and resource residency
     /// ahead of presentation. This small warmup step follows the same principle:
@@ -25,7 +24,12 @@ impl RuntimeRenderController {
         scene: &Scene,
     ) -> EngineResult<()> {
         let started = std::time::Instant::now();
-        let _lit = self.gpu.require_primary_lit_pipeline(r)?;
+        if let Err(e) = self.gpu.require_primary_lit_pipeline(r) {
+            log::warn!(
+                "render prewarm: material pipeline is not ready; continuing mesh residency and retrying pipeline on later frames err='{}'",
+                e
+            );
+        }
 
         let world = scene.world();
         let mut terrain_uploaded = 0_u32;
@@ -127,7 +131,7 @@ impl RuntimeRenderController {
 }
 
 fn terrain_gpu_upload_budget_per_frame() -> u32 {
-    crate::env_config::var_u32("NEWENGINE_TERRAIN_GPU_UPLOADS_PER_FRAME", 3, 0, 16)
+    crate::env_config::var_u32("NEWENGINE_TERRAIN_GPU_UPLOADS_PER_FRAME", 8, 0, 32)
 }
 
 fn terrain_gpu_upload_interval_frames() -> u64 {

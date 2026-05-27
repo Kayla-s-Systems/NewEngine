@@ -7,8 +7,8 @@ pub mod bootstrap_ui;
 /// Engine-facing loading-screen gateway id.
 ///
 /// Runtime/platform code calls this stable facade. The current implementation is
-/// an engine-owned native loading shell bridge, while future profile/plugin
-/// providers may expose their own `loading.api` backend behind the same gateway.
+/// an engine-owned loading data bridge. UI presentation is rendered only by
+/// `engine.ui` providers; `engine.loading` is data/status, not a renderer.
 pub const ENGINE_LOADING_SERVICE_ID: &str = "engine.loading";
 
 /// First-party provider service id for loading shell providers.
@@ -69,7 +69,7 @@ impl Default for LoadingServiceInfo {
         Self {
             protocol: "newengine.loading-api/v1".to_owned(),
             features: vec![
-                "engine-owned-native-shell".to_owned(),
+                "engine-owned-engine-loading-data".to_owned(),
                 "shared-snapshot".to_owned(),
                 "independent-visual-clock".to_owned(),
                 "subsystem-stage-projection".to_owned(),
@@ -572,11 +572,11 @@ impl Default for LoadingScreenSnapshot {
             active: false,
             title: "NORTH STAR ENGINE // BOOTSTRAP".to_owned(),
             status: "Preparing runtime...".to_owned(),
-            detail: "The native loading shell is waiting for startup telemetry.".to_owned(),
+            detail: "The loading status bridge is waiting for startup telemetry.".to_owned(),
             progress_01: 0.0,
             spinner_phase: 0,
             source: "engine.loading".to_owned(),
-            provider: "native-shell".to_owned(),
+            provider: "engine-loading-data".to_owned(),
             view_json: String::new(),
             subsystems: Vec::new(),
         }

@@ -33,7 +33,7 @@ pub fn overlay_to_platform_overlay(
     status: &ScreenOverlayStatus,
     spinner_phase: u32,
 ) -> PlatformLoadingOverlayV1 {
-    overlay_to_platform_overlay_with_provider(status, spinner_phase, UiProviderBinding::NativeFallback)
+    overlay_to_platform_overlay_with_provider(status, spinner_phase, UiProviderBinding::None)
 }
 
 pub fn overlay_to_platform_overlay_with_provider(
@@ -43,7 +43,7 @@ pub fn overlay_to_platform_overlay_with_provider(
 ) -> PlatformLoadingOverlayV1 {
     let view_json = serde_json::to_string(&loading_surface_projection(status, provider))
         .or_else(|projection_err| {
-            log::warn!("loading UI surface projection serialization failed: {projection_err}; falling back to raw screen overlay status");
+            log::warn!("loading UI surface projection serialization failed: {projection_err}; serializing raw screen overlay status for diagnostics only");
             serde_json::to_string(status)
         })
         .unwrap_or_else(|e| {
@@ -66,7 +66,7 @@ pub fn overlay_to_step_result(
     status: &ScreenOverlayStatus,
     spinner_phase: u32,
 ) -> PlatformStepResultV1 {
-    overlay_to_step_result_with_provider(status, spinner_phase, UiProviderBinding::NativeFallback)
+    overlay_to_step_result_with_provider(status, spinner_phase, UiProviderBinding::None)
 }
 
 pub fn overlay_to_step_result_with_provider(
@@ -84,11 +84,7 @@ pub fn loading_surface_projection(
     status: &ScreenOverlayStatus,
     provider: UiProviderBinding,
 ) -> UiSurfaceProjection<ScreenOverlayStatus> {
-    let shell = if provider.is_native_fallback() {
-        UiShellSpec::minimal_fallback_loading()
-    } else {
-        UiShellSpec::ksystems_loading()
-    };
+    let shell = UiShellSpec::ksystems_loading();
     if status.kind == ScreenOverlayStatusKind::Error {
         UiSurfaceProjection::error_modal(provider, shell, status.clone())
     } else {

@@ -350,6 +350,7 @@ impl RuntimeNavController {
     /// - first-frame synthetic deltas (pointer lock) are suppressed
     #[inline]
     pub fn step(&mut self, rig: &mut CameraRig, mut input: CameraControlInput, dt: f32) {
+        input = input.sanitized();
         if !(dt.is_finite() && dt > 0.0) {
             return;
         }

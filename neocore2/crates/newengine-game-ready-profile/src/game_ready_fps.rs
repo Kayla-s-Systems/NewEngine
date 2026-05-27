@@ -29,6 +29,15 @@ const GAME_READY_ENV_DEFAULTS: &[(&str, &str)] = &[
     // engine phase; stale DLLs can otherwise terminate the process with SEH
     // STATUS_ACCESS_VIOLATION before Rust can report an error.
     ("NEWENGINE_BOOTSTRAP_PLUGIN_PRELOAD", "deferred"),
+    // Profile-owned render startup policy: keep the viewport alive while the
+    // real authored GLSL is being compiled asynchronously by engine.jobs.
+    // Users can override this env value before launch; it is still reported in
+    // shader diagnostics as an explicit degraded policy.
+    ("NEWENGINE_SHADER_ASYNC_PREBAKED_UNTIL_READY", "1"),
+    // Release the playable world once enough material textures are resident for
+    // the first frame. Remaining textures continue through normal streaming;
+    // this is profile-owned policy, not an AssetManager or renderer fallback.
+    ("NEWENGINE_SCENE_TEXTURE_LAUNCH_MIN_READY", "4"),
 ];
 
 pub const GAME_READY_PROFILE_ENV: &str = "NEWENGINE_SCENE_PROFILE";

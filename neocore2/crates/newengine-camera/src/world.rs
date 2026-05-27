@@ -11,8 +11,8 @@ use serde::{Deserialize, Serialize};
 /// renderer-local `f32` coordinates.
 ///
 /// The render path should receive positions relative to a nearby origin. This keeps
-/// matrices and shader inputs stable even when the authored world lives many kilometers
-/// away from `(0, 0, 0)`.
+/// matrices and shader inputs stable when authored coordinates drift away
+/// from `(0, 0, 0)`.
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct CameraWorldPoint {
@@ -27,6 +27,29 @@ impl CameraWorldPoint {
     #[inline]
     pub const fn new(x: f64, y: f64, z: f64) -> Self {
         Self { x, y, z }
+    }
+
+    #[inline]
+    pub const fn from_array(v: [f64; 3]) -> Self {
+        Self::new(v[0], v[1], v[2])
+    }
+
+    #[inline]
+    pub const fn to_array(self) -> [f64; 3] {
+        [self.x, self.y, self.z]
+    }
+
+    #[inline]
+    pub fn translated(self, delta: Vec3) -> Self {
+        if delta.is_finite() {
+            Self::new(
+                self.x + delta.x as f64,
+                self.y + delta.y as f64,
+                self.z + delta.z as f64,
+            )
+        } else {
+            self
+        }
     }
 
     #[inline]
@@ -68,7 +91,7 @@ impl CameraWorldPoint {
     }
 }
 
-/// Quantized camera-local origin for large worlds.
+/// Quantized camera-local origin for precision-safe rendering.
 ///
 /// The origin is intentionally explicit data, not a hidden singleton. Streaming,
 /// render-prep and debug tooling can inspect it and decide which packets need to be
@@ -77,8 +100,7 @@ impl CameraWorldPoint {
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct CameraWorldOrigin {
     pub origin: CameraWorldPoint,
-    /// Quantization grid in world units. A 1024m cell is a safe default for open worlds:
-    /// it keeps camera-relative coordinates small while avoiding constant rebases.
+    /// Quantization grid in world units. A 1024-unit cell keeps camera-relative coordinates small while avoiding constant rebases.
     pub cell_size: f64,
 }
 
@@ -112,6 +134,11 @@ impl CameraWorldOrigin {
     }
 
     #[inline]
+    pub fn local_to_world(self, local: Vec3) -> CameraWorldPoint {
+        self.origin.translated(local)
+    }
+
+    #[inline]
     pub fn should_rebase(self, camera_position: CameraWorldPoint) -> bool {
         let half = sanitize_cell_size(self.cell_size) * 0.5;
         let dx = (camera_position.x - self.origin.x).abs();
@@ -133,20 +160,20 @@ impl CameraWorldOrigin {
 /// Double-precision camera pose plus explicit render origin.
 #[derive(Clone, Copy, Debug, PartialEq)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
-pub struct CameraLargeWorldRig {
+pub struct CameraWorldRig {
     pub position: CameraWorldPoint,
     pub rotation: Quat,
     pub origin: CameraWorldOrigin,
 }
 
-impl Default for CameraLargeWorldRig {
+impl Default for CameraWorldRig {
     #[inline]
     fn default() -> Self {
         Self::new(CameraWorldPoint::ZERO, Quat::IDENTITY)
     }
 }
 
-impl CameraLargeWorldRig {
+impl CameraWorldRig {
     #[inline]
     pub fn new(position: CameraWorldPoint, rotation: Quat) -> Self {
         let origin = CameraWorldOrigin::for_camera(position, 1024.0);
@@ -181,23 +208,22 @@ impl CameraLargeWorldRig {
     }
 }
 
-/// Fully resolved large-world camera frame.
+/// Fully resolved world-space camera frame.
 ///
 /// `frame` is renderer-ready and uses camera-origin-relative `f32` coordinates.
-/// `camera_ws` and `origin` preserve the precise world-space authority for
-/// streaming, diagnostics, culling and future render packets.
+/// `camera_ws` and `origin` preserve precise world-space authority for streaming, diagnostics, culling and render packets.
 #[derive(Clone, Copy, Debug)]
-pub struct CameraLargeWorldFrame {
+pub struct CameraWorldFrame {
     pub frame: CameraFrame,
     pub camera_ws: CameraWorldPoint,
     pub origin: CameraWorldOrigin,
 }
 
-impl CameraLargeWorldFrame {
+impl CameraWorldFrame {
     #[inline]
     pub fn build(
         channel: CameraChannelState,
-        mut rig: CameraLargeWorldRig,
+        mut rig: CameraWorldRig,
         projection: Projection,
         viewport: CameraViewport,
         jitter_px: newengine_math::Vec2,
@@ -244,7 +270,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn origin_keeps_large_camera_local_position_small() {
+    fn origin_keeps_camera_local_position_small() {
         let p = CameraWorldPoint::new(1_000_123.0, 42.0, -2_000_900.0);
         let origin = CameraWorldOrigin::for_camera(p, 1024.0);
         let local = origin.camera_relative(p);

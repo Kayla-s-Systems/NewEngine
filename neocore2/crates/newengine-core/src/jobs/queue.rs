@@ -25,11 +25,16 @@ pub(super) struct QueuedJob {
 impl QueuedJob {
     pub(super) fn run(mut self, shared: &JobShared) {
         let lane_index = self.request.lane.index();
+        let release_lane = || {
+            shared.running_by_lane[lane_index].fetch_sub(1, Ordering::AcqRel);
+            shared.sleep_wake.notify_one();
+        };
         let Some(job) = self.job.take() else {
             self.completion.complete();
             shared.completed.fetch_add(1, Ordering::AcqRel);
             shared.completed_by_lane[lane_index].fetch_add(1, Ordering::AcqRel);
             self.control.publish(EngineTaskPhase::Completed, "Task completed", "Task completed without a job closure.", Some(1.0));
+            release_lane();
             return;
         };
 
@@ -37,6 +42,7 @@ impl QueuedJob {
             shared.cancelled.fetch_add(1, Ordering::AcqRel);
             self.completion.complete();
             self.control.publish(EngineTaskPhase::Cancelled, "Task cancelled", "Task was cancelled before worker execution.", Some(1.0));
+            release_lane();
             return;
         }
 
@@ -47,6 +53,7 @@ impl QueuedJob {
             shared.cancelled.fetch_add(1, Ordering::AcqRel);
             self.completion.complete();
             self.control.publish(EngineTaskPhase::Cancelled, "Task cancelled", "Task was cancelled while paused before execution.", Some(1.0));
+            release_lane();
             return;
         }
 
@@ -74,12 +81,14 @@ impl QueuedJob {
         } else {
             self.control.publish(EngineTaskPhase::Completed, "Task completed", "Task finished on engine-owned worker thread.", Some(1.0));
         }
+        release_lane();
     }
 }
 
 pub(super) struct JobShared {
     pub(super) queues: Vec<Mutex<VecDeque<QueuedJob>>>,
     pub(super) pending_by_lane: Vec<AtomicUsize>,
+    pub(super) running_by_lane: Vec<AtomicUsize>,
     pub(super) completed_by_lane: Vec<AtomicU64>,
     pub(super) worker_threads: usize,
     pub(super) pending: AtomicUsize,
@@ -106,6 +115,7 @@ impl JobShared {
                 .map(|_| Mutex::new(VecDeque::new()))
                 .collect(),
             pending_by_lane: (0..JOB_LANE_COUNT).map(|_| AtomicUsize::new(0)).collect(),
+            running_by_lane: (0..JOB_LANE_COUNT).map(|_| AtomicUsize::new(0)).collect(),
             completed_by_lane: (0..JOB_LANE_COUNT).map(|_| AtomicU64::new(0)).collect(),
             worker_threads,
             pending: AtomicUsize::new(0),
@@ -157,12 +167,37 @@ impl JobShared {
         self.sleep_wake.notify_one();
     }
 
+    fn lane_active_limit(&self, lane: JobLane) -> usize {
+        let workers = self.worker_count().max(1);
+        match lane {
+            JobLane::Simulation => workers,
+            JobLane::RenderPrep => workers.saturating_sub(1).max(1),
+            JobLane::Streaming => (workers / 2).max(1),
+            JobLane::AssetIo => (workers / 3).max(1),
+            JobLane::Plugin => 1,
+            // Background work includes external compiler/tool processes. Keep it visible,
+            // but never let it occupy the whole worker pool while frame-critical lanes wait.
+            JobLane::Background => (workers / 4).max(1),
+        }
+    }
+
+    #[inline]
+    fn lane_has_capacity(&self, lane: JobLane) -> bool {
+        self.running_by_lane[lane.index()].load(Ordering::Acquire) < self.lane_active_limit(lane)
+    }
+
     pub(super) fn pop_next(&self) -> Option<QueuedJob> {
         for priority in JobPriority::service_order() {
             for lane in JobLane::all() {
+                if !self.lane_has_capacity(lane) {
+                    continue;
+                }
                 let idx = Self::queue_index(lane, priority);
                 if let Some(job) = self.queues[idx].lock().pop_front() {
-                    self.pending_by_lane[job.request.lane.index()].fetch_sub(1, Ordering::AcqRel);
+                    let lane_index = job.request.lane.index();
+                    self.pending_by_lane[lane_index].fetch_sub(1, Ordering::AcqRel);
+                    self.pending.fetch_sub(1, Ordering::AcqRel);
+                    self.running_by_lane[lane_index].fetch_add(1, Ordering::AcqRel);
                     return Some(job);
                 }
             }
@@ -172,7 +207,7 @@ impl JobShared {
     }
 
     pub(super) fn wait_for_work_or_shutdown(&self) {
-        if self.shutdown.load(Ordering::Acquire) || self.pending.load(Ordering::Acquire) > 0 {
+        if self.shutdown.load(Ordering::Acquire) {
             return;
         }
 
@@ -185,9 +220,11 @@ impl JobShared {
 
     pub(super) fn snapshot(&self) -> JobSystemSnapshot {
         let mut pending_by_lane = [0usize; JOB_LANE_COUNT];
+        let mut running_by_lane = [0usize; JOB_LANE_COUNT];
         let mut completed_by_lane = [0u64; JOB_LANE_COUNT];
         for lane in JobLane::all() {
             pending_by_lane[lane.index()] = self.pending_by_lane[lane.index()].load(Ordering::Acquire);
+            running_by_lane[lane.index()] = self.running_by_lane[lane.index()].load(Ordering::Acquire);
             completed_by_lane[lane.index()] = self.completed_by_lane[lane.index()].load(Ordering::Acquire);
         }
 
@@ -201,6 +238,7 @@ impl JobShared {
             cancelled_jobs: self.cancelled.load(Ordering::Acquire),
             panicked_jobs: self.panicked.load(Ordering::Acquire),
             pending_by_lane,
+            running_by_lane,
             completed_by_lane,
         }
     }

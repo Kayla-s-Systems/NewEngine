@@ -73,13 +73,68 @@ pub const ASSET_GRAPH_SERVICE_ID: &str = "asset_graph.api";
 pub const ASSET_GRAPH_BACKEND_CAPABILITY_ID: &str = "assets.graph.backend";
 pub const ASSET_GRAPH_RUNTIME_CONTRACT: &str = "newengine.assets.graph.runtime.v1";
 
-/// Editor/runtime asset browser gateway. This is a read-model/control surface over
-/// mounted VFS layers, FileTypeRegistry descriptors and ListFile manifests.
-/// AssetManager remains the byte owner; domain gateways remain semantic owners.
-pub const ENGINE_ASSETS_BROWSER_SERVICE_ID: &str = "engine.assets.browser";
-pub const ASSET_BROWSER_SERVICE_ID: &str = "assets.browser.api";
-pub const ASSET_BROWSER_BACKEND_CAPABILITY_ID: &str = "assets.browser.backend";
-pub const ASSET_BROWSER_RUNTIME_CONTRACT: &str = "newengine.assets.browser.runtime.v1";
+
+/// Editor/import lifecycle sub-gateways and capability ids.
+///
+/// These are Godot-inspired lifecycle surfaces, but they do not adopt Godot's
+/// `.tres/.res` resource model. `engine.assets` remains the byte/VFS/codec host;
+/// these sub-gateways expose inspectable editor/import read-model slices.
+pub const ENGINE_ASSETS_UID_SERVICE_ID: &str = "engine.assets.uid";
+pub const ASSETS_UID_SERVICE_ID: &str = "assets.uid.api";
+pub const ASSETS_UID_BACKEND_CAPABILITY_ID: &str = "assets.uid.backend";
+pub const ASSETS_UID_RUNTIME_CONTRACT: &str = "newengine.assets.uid.v1";
+
+pub const ENGINE_ASSETS_DEPENDENCIES_SERVICE_ID: &str = "engine.assets.dependencies";
+pub const ASSETS_DEPENDENCIES_SERVICE_ID: &str = "assets.dependencies.api";
+pub const ASSETS_DEPENDENCIES_BACKEND_CAPABILITY_ID: &str = "assets.dependencies.backend";
+pub const ASSETS_DEPENDENCIES_RUNTIME_CONTRACT: &str = "newengine.assets.dependencies.v1";
+
+pub const ENGINE_ASSETS_IMPORT_QUEUE_SERVICE_ID: &str = "engine.assets.import_queue";
+pub const ASSETS_IMPORT_QUEUE_SERVICE_ID: &str = "assets.import_queue.api";
+pub const ASSETS_IMPORT_QUEUE_BACKEND_CAPABILITY_ID: &str = "assets.import_queue.backend";
+pub const ASSETS_IMPORT_QUEUE_RUNTIME_CONTRACT: &str = "newengine.assets.import_queue.v1";
+
+pub const ENGINE_ASSETS_PACKAGE_WRITER_SERVICE_ID: &str = "engine.assets.package_writer";
+pub const ASSETS_PACKAGE_WRITER_SERVICE_ID: &str = "assets.package_writer.api";
+pub const ASSETS_PACKAGE_WRITER_CAPABILITY_ID: &str = "assets.package_writer";
+pub const ASSETS_PACKAGE_WRITER_RUNTIME_CONTRACT: &str = "newengine.assets.package_writer.v1";
+
+pub const ASSETS_REIMPORT_CAPABILITY_ID: &str = "assets.reimport";
+pub const ASSETS_THUMBNAIL_CAPABILITY_ID: &str = "assets.thumbnail";
+pub const ASSETS_DIRTY_SCAN_CAPABILITY_ID: &str = "assets.dirty_scan";
+pub const ASSETS_IMPORT_LIFECYCLE_CAPABILITY_ID: &str = "assets.import_lifecycle";
+
+pub const ASSETS_UID_BACKEND_SERVICE_SPEC: newengine_service_api::BackendServiceSpec =
+    newengine_service_api::BackendServiceSpec::new(
+        "assets.uid",
+        ENGINE_ASSETS_UID_SERVICE_ID,
+        ASSET_PROVIDER_SERVICE_ID,
+        ASSETS_UID_BACKEND_CAPABILITY_ID,
+    );
+
+pub const ASSETS_DEPENDENCIES_BACKEND_SERVICE_SPEC: newengine_service_api::BackendServiceSpec =
+    newengine_service_api::BackendServiceSpec::new(
+        "assets.dependencies",
+        ENGINE_ASSETS_DEPENDENCIES_SERVICE_ID,
+        ASSET_PROVIDER_SERVICE_ID,
+        ASSETS_DEPENDENCIES_BACKEND_CAPABILITY_ID,
+    );
+
+pub const ASSETS_IMPORT_QUEUE_BACKEND_SERVICE_SPEC: newengine_service_api::BackendServiceSpec =
+    newengine_service_api::BackendServiceSpec::new(
+        "assets.import_queue",
+        ENGINE_ASSETS_IMPORT_QUEUE_SERVICE_ID,
+        ASSET_PROVIDER_SERVICE_ID,
+        ASSETS_IMPORT_QUEUE_BACKEND_CAPABILITY_ID,
+    );
+
+pub const ASSETS_PACKAGE_WRITER_BACKEND_SERVICE_SPEC: newengine_service_api::BackendServiceSpec =
+    newengine_service_api::BackendServiceSpec::new(
+        "assets.package_writer",
+        ENGINE_ASSETS_PACKAGE_WRITER_SERVICE_ID,
+        ASSET_PROVIDER_SERVICE_ID,
+        ASSETS_PACKAGE_WRITER_CAPABILITY_ID,
+    );
 
 /// Asset streaming gateway and capability ids.
 ///
@@ -122,32 +177,6 @@ pub const ASSET_GRAPH_SERVICE_METHODS: &[&str] = &[
     asset_graph_method::DUMP_JSON_V1,
 ];
 
-pub mod asset_browser_method {
-    pub const INFO_JSON: &str = newengine_service_api::SERVICE_METHOD_INFO_JSON;
-    pub const INVOKE_JSON: &str = newengine_service_api::SERVICE_METHOD_INVOKE_JSON;
-    pub const SHUTDOWN_V1: &str = newengine_service_api::SERVICE_METHOD_SHUTDOWN_V1;
-    pub const SNAPSHOT_V1: &str = "assets.browser.snapshot_v1";
-    pub const LIST_V1: &str = "assets.browser.list_v1";
-    pub const OPEN_V1: &str = "assets.browser.open_v1";
-    pub const REFRESH_V1: &str = "assets.browser.refresh_v1";
-    pub const ENTRY_UPDATE_V1: &str = "assets.browser.entry_update_v1";
-    pub const ENTRY_DELETE_V1: &str = "assets.browser.entry_delete_v1";
-    pub const REBUILD_V1: &str = "assets.browser.rebuild_v1";
-}
-
-pub const ASSET_BROWSER_SERVICE_METHODS: &[&str] = &[
-    asset_browser_method::INFO_JSON,
-    asset_browser_method::INVOKE_JSON,
-    asset_browser_method::SHUTDOWN_V1,
-    asset_browser_method::SNAPSHOT_V1,
-    asset_browser_method::LIST_V1,
-    asset_browser_method::OPEN_V1,
-    asset_browser_method::REFRESH_V1,
-    asset_browser_method::ENTRY_UPDATE_V1,
-    asset_browser_method::ENTRY_DELETE_V1,
-    asset_browser_method::REBUILD_V1,
-];
-
 pub mod assets_ui_method {
     pub const INFO_JSON: &str = newengine_service_api::SERVICE_METHOD_INFO_JSON;
     pub const INVOKE_JSON: &str = newengine_service_api::SERVICE_METHOD_INVOKE_JSON;
@@ -178,11 +207,8 @@ pub const ASSETS_UI_SERVICE_METHODS: &[&str] = &[
     assets_ui_method::DUMP_XMLCENTRAL_V1,
 ];
 
-
 mod asset_ref;
 pub use asset_ref::*;
-mod asset_browser;
-pub use asset_browser::*;
 pub mod list_file;
 pub use list_file::*;
 
@@ -194,7 +220,6 @@ pub const ASSET_BACKEND_SERVICE_SPEC: newengine_service_api::BackendServiceSpec 
         ASSET_PROVIDER_SERVICE_ID,
         ASSET_BACKEND_CAPABILITY_ID,
     );
-
 
 /// Engine-facing file-type registry gateway id.
 ///
@@ -246,7 +271,6 @@ pub const ASSET_FILE_TYPES_RUNTIME_REQUIREMENT_SPEC: newengine_service_api::Runt
         Some(ASSET_FILE_TYPES_BACKEND_CAPABILITY_ID),
         Some("NEWENGINE_REQUIRE_ASSET_FILE_TYPES"),
     );
-
 
 /// Asset codec classification used by AssetManager to apply generic host rules.
 ///
@@ -380,8 +404,8 @@ impl AssetFileTypeDescriptor {
         if self.gateway.trim().is_empty() && !self.semantic_gateway.trim().is_empty() {
             self.gateway = self.semantic_gateway.clone();
         }
-        // Keep the old field as a semantic projection so existing AssetBrowser
-        // consumers do not mistake `engine.assets` for the meaning owner.
+        // Keep `gateway` as a semantic projection for descriptor consumers.
+        // It must not be used as the byte/VFS owner.
         if self.gateway.trim() != self.semantic_gateway.trim() {
             self.gateway = self.semantic_gateway.clone();
         }
@@ -434,8 +458,6 @@ impl AssetFileTypeDescriptor {
     }
 }
 
-
-
 #[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[serde(default)]
 pub struct AssetFileTypeManifest {
@@ -465,7 +487,6 @@ impl Default for AssetFileTypeProbeRequest {
         Self { logical_path: String::new() }
     }
 }
-
 
 #[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[serde(default)]
@@ -577,6 +598,26 @@ pub mod method {
     pub const RESOLVE_TRACE_JSON_V1: &str = "asset.resolve_trace_json_v1";
     /// Standard listFiles manifest for any dictionary/container asset. Codec-defined output; not a raw VFS read.
     pub const LIST_FILE_MANIFEST_V1: &str = "asset.list_file_manifest_v1";
+
+    // Editor/import lifecycle read-model.
+    //
+    // These methods deliberately stay under `engine.assets`: the asset backend owns
+    // source discovery, UID/cache rows, dirty/reimport state and human-readable
+    // diagnostics. Format meaning still belongs to codec/domain gateways, and final
+    // editor panels/thumbnails remain UI composition over this data.
+    pub const UID_JSON_V1: &str = "asset.uid_json_v1";
+    pub const IMPORT_CACHE_JSON_V1: &str = "asset.import_cache_json_v1";
+    pub const IMPORT_DIRTY_JSON_V1: &str = "asset.import_dirty_json_v1";
+    pub const IMPORT_SCAN_JSON_V1: &str = "asset.import_scan_json_v1";
+    pub const IMPORT_GRAPH_JSON_V1: &str = "asset.import_graph_json_v1";
+    pub const IMPORT_DIAGNOSTICS_JSON_V1: &str = "asset.import_diagnostics_json_v1";
+    pub const IMPORT_THUMBNAILS_JSON_V1: &str = "asset.import_thumbnails_json_v1";
+    pub const IMPORT_DEPENDENCIES_JSON_V1: &str = "asset.import_dependencies_json_v1";
+    pub const IMPORT_QUEUE_JSON_V1: &str = "asset.import_queue_json_v1";
+    pub const REIMPORT_V1: &str = "asset.reimport_v1";
+    pub const THUMBNAIL_JSON_V1: &str = "asset.thumbnail_json_v1";
+    pub const DIRTY_SCAN_JSON_V1: &str = "asset.dirty_scan_json_v1";
+    pub const PACKAGE_WRITER_INFO_JSON_V1: &str = "asset.package_writer_info_json_v1";
 
     // Generic lifecycle hook understood by the plugin host.
     pub const SHUTDOWN_V1: &str = newengine_service_api::SERVICE_METHOD_SHUTDOWN_V1;
@@ -736,6 +777,19 @@ pub const REQUIRED_RUNTIME_METHODS_V1: &[&str] = &[
     method::SOURCES_JSON_V1,
     method::VFS_LIST_JSON_V1,
     method::LIST_FILE_REPACK_JSON_V1,
+    method::UID_JSON_V1,
+    method::IMPORT_CACHE_JSON_V1,
+    method::IMPORT_DIRTY_JSON_V1,
+    method::IMPORT_SCAN_JSON_V1,
+    method::IMPORT_GRAPH_JSON_V1,
+    method::IMPORT_DIAGNOSTICS_JSON_V1,
+    method::IMPORT_THUMBNAILS_JSON_V1,
+    method::IMPORT_DEPENDENCIES_JSON_V1,
+    method::IMPORT_QUEUE_JSON_V1,
+    method::REIMPORT_V1,
+    method::THUMBNAIL_JSON_V1,
+    method::DIRTY_SCAN_JSON_V1,
+    method::PACKAGE_WRITER_INFO_JSON_V1,
 ];
 
 /// Startup validation contract for the engine-facing asset gateway.
@@ -793,7 +847,6 @@ impl Rgba8TextureAsset {
         Ok(Self { width, height, rgba })
     }
 }
-
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum RuntimeTextureFormat {
@@ -963,7 +1016,6 @@ impl core::fmt::Display for AssetResidencyDomain {
         f.write_str(self.as_str())
     }
 }
-
 
 /// Stable, high-resolution asset lifecycle stage used by tooling, loading screens and render gates.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -1161,12 +1213,50 @@ pub trait AssetService: AssetAccess {
     /// Rebuild/repack a NEF8 ListFile and write it back through the winning writable VFS source.
     fn list_file_repack_json_v1(&self, payload: serde_json::Value) -> Result<serde_json::Value, String>;
 
+    /// Return the engine.assets UID row for a logical asset.
+    fn uid_json_v1(&self, logical_path: &str) -> Result<serde_json::Value, String>;
+
+    /// Return the editor/import cache projection over status, codec metadata and dirty flags.
+    fn import_cache_json_v1(&self, payload: serde_json::Value) -> Result<serde_json::Value, String>;
+
+    /// Mark one logical asset dirty/stale; file watchers should use this before reload/reimport.
+    fn import_dirty_json_v1(&self, payload: serde_json::Value) -> Result<serde_json::Value, String>;
+
+    /// Bounded VFS scan for editor/import discovery.
+    fn import_scan_json_v1(&self, payload: serde_json::Value) -> Result<serde_json::Value, String>;
+
+    /// Import dependency graph projection for one asset.
+    fn import_graph_json_v1(&self, payload: serde_json::Value) -> Result<serde_json::Value, String>;
+
+    /// Human-readable import diagnostics.
+    fn import_diagnostics_json_v1(&self, payload: serde_json::Value) -> Result<serde_json::Value, String>;
+
+    /// Editor thumbnail metadata/cache-key plan. Final pixels belong to render/UI providers.
+    fn import_thumbnails_json_v1(&self, payload: serde_json::Value) -> Result<serde_json::Value, String>;
+
+    /// Direct dependency/dependent list for one asset.
+    fn import_dependencies_json_v1(&self, payload: serde_json::Value) -> Result<serde_json::Value, String>;
+
+    /// Queue read-model for background import work.
+    fn import_queue_json_v1(&self, payload: serde_json::Value) -> Result<serde_json::Value, String>;
+
+    /// Explicit dirty+reload lifecycle command.
+    fn reimport_v1(&self, payload: serde_json::Value) -> Result<serde_json::Value, String>;
+
+    /// Single asset thumbnail metadata/cache-key plan.
+    fn thumbnail_json_v1(&self, payload: serde_json::Value) -> Result<serde_json::Value, String>;
+
+    /// Bounded scan that classifies missing/dirty/stale rows for editor reimport.
+    fn dirty_scan_json_v1(&self, payload: serde_json::Value) -> Result<serde_json::Value, String>;
+
+    /// Package/listFile writer capability diagnostics.
+    fn package_writer_info_json_v1(&self, payload: serde_json::Value) -> Result<serde_json::Value, String>;
+
     /// Mount one source through the strict v1 JSON source model.
     fn mount_source_json_v1(&self, payload: serde_json::Value) -> Result<(), String>;
 
     /// Returns a deterministic trace describing which sources contain the asset.
     fn resolve_trace_json_v1(&self, logical_path: &str) -> Result<serde_json::Value, String>;
-
 
 }
 
@@ -1209,8 +1299,6 @@ pub fn wait_ready<A: AssetAccess + ?Sized>(
         std::thread::sleep(Duration::from_millis(SLEEP_MS));
     }
 }
-
-
 
 #[cfg(test)]
 mod file_type_layer_contract_tests {

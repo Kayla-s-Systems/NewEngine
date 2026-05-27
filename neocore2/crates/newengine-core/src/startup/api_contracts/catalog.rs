@@ -89,7 +89,7 @@ pub(crate) const RUNTIME_SERVICE_CATALOG: &[RuntimeServiceCatalogEntry] = &[
     ),
     RuntimeServiceCatalogEntry::new(
         newengine_loading_api::LOADING_RUNTIME_REQUIREMENT_SPEC,
-        "native loading shell / startup compositor / progress projection",
+        "engine.loading snapshots / engine.ui progress projection",
     ),
     RuntimeServiceCatalogEntry::new(
         newengine_jobs_api::JOBS_RUNTIME_REQUIREMENT_SPEC,

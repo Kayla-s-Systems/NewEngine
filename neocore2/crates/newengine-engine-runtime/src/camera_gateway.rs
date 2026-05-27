@@ -240,13 +240,8 @@ impl CameraGatewayBridge {
             all: viewport.read_frame_all(),
         };
 
-        if suppress_game_nav || effective_play_mode.wants_direct_player_control() {
-            nav_input.active = false;
-            nav_input.look_drag = false;
-            nav_input.pan_drag = false;
-            nav_input.fly_rmb = false;
-            nav_input.move_mask = 0;
-            nav_input.wheel_y = 0.0;
+        if suppress_game_nav || effective_play_mode.wants_direct_player_control() || nav_input.navigation_gated {
+            nav_input.gate_navigation();
         }
 
         let out = step_camera_nav(
@@ -270,7 +265,7 @@ impl CameraGatewayBridge {
 
         state.last_snapshot = Some(snapshot);
         let view = EngineViewFrame::from_camera_snapshot(snapshot);
-        let cursor = if effective_play_mode.wants_direct_player_control() && input.active {
+        let cursor = if effective_play_mode.wants_direct_player_control() && input.active && !input.camera_navigation_gated {
             CursorState::captured_locked()
         } else {
             cursor_state_for_nav(&nav_input)
@@ -401,6 +396,9 @@ pub struct CameraGatewayInput {
     pub pan_drag: bool,
     pub ui_busy: bool,
     pub fly_rmb: bool,
+    pub sampling_alive: bool,
+    pub camera_navigation_gated: bool,
+    pub gameplay_movement_gated: bool,
     pub move_mask: u64,
     pub speed_scalar: f32,
     pub camera_view: CameraViewRequest,

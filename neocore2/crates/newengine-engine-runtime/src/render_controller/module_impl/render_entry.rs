@@ -12,7 +12,7 @@ use crate::scene_bridge::SkyClearColorRuntime;
 
 use super::frame_types::{PlayableFrameOutcome, RenderFrameScope};
 use super::super::controller::RuntimeRenderController;
-use super::super::error_policy::is_backend_device_lost_error;
+use super::super::error_policy::{is_backend_device_lost_error, is_transient_shader_pipeline_error};
 
 impl RuntimeRenderController {
     pub(super) fn render_runtime_module<E: Send + 'static>(
@@ -67,7 +67,7 @@ impl RuntimeRenderController {
         );
         self.trace_render_begin(trace_frame, w, h);
 
-        if let Some(status) = self.handle_native_prelaunch_gate(
+        if let Some(status) = self.handle_prelaunch_gate(
             ctx,
             &mut **r,
             backend_work_budget,
@@ -122,6 +122,17 @@ impl RuntimeRenderController {
                     self.record_render_backend_error("render.playable_frame.error", e)?;
                     drop(r);
                     ctx.resources_mut().insert(self.backend_status_snapshot());
+                    ctx.resources_mut().insert(SceneLaunchStatus::inactive());
+                    return Ok(());
+                }
+                if is_transient_shader_pipeline_error(&e) {
+                    log::warn!(
+                        "render controller: playable frame yielded while shader pipeline is pending; keeping viewport pass retryable: {}",
+                        message
+                    );
+                    let _ = r.discard_recorded_commands();
+                    let _ = r.end_frame();
+                    drop(r);
                     ctx.resources_mut().insert(SceneLaunchStatus::inactive());
                     return Ok(());
                 }

@@ -174,6 +174,10 @@ impl RenderUiNodeSurfaceState {
         // is authoritative and must not stay true during the close animation.
         let visual_visible = self.open;
         UiNodeSurfaceFrameResult {
+            // Open UI is always an input-owning surface. The camera/input listener
+            // remains alive, but navigation/gameplay are gated even when the
+            // declarative .neui document is temporarily unavailable. Otherwise the
+            // user sees a modal warning while the camera continues to move behind it.
             blocks_gameplay: self.open,
             exit_requested: self.exit_requested,
             state: self.build_ui_state(visual_visible),
@@ -248,7 +252,7 @@ impl RenderUiNodeSurfaceState {
 
         let should_attempt = self
             .document_last_attempt_frame
-            .map(|last| frame_index.saturating_sub(last) >= 30)
+            .map(|last| frame_index.saturating_sub(last) >= 120)
             .unwrap_or(true);
         if !should_attempt {
             return false;
@@ -283,7 +287,7 @@ impl RenderUiNodeSurfaceState {
         UiBackdropPostFxParams {
             enabled: self.open || a > 0.01,
             alpha: a,
-            dim_opacity: 0.94 * a,
+            dim_opacity: 0.98 * a,
             blur_radius_px: 22.0 * a,
         }
     }
@@ -299,7 +303,7 @@ fn hovered_item_index(
     // therefore use the same surface-node layout contract as the provider draw path,
     // not a special interface layout. Body line 0 is the page/status header;
     // UI items start at line 1.
-    ui_surface_node_layout(surface_size_px, &[], &ui_surface_style(), item_count + 1, 0)
+    ui_surface_node_layout(surface_size_px, &["retained".to_owned(), "modern".to_owned(), "rounded".to_owned()], &ui_surface_style(), item_count + 1, 0)
         .hit_item_index_after_header(mouse_pos, 1, item_count)
 }
 
@@ -334,14 +338,28 @@ fn tone_from_navigation(tone: UiNodeNavigationTone) -> UiNodeTone {
 }
 
 fn ui_surface_style() -> UiSurfaceStyle {
-    UiSurfaceStyle {
-        anchor: UiSurfaceAnchor::TopLeft,
-        min_size_px: [430.0, 420.0],
-        max_size_px: [720.0, 720.0],
-        margin_px: [72.0, 24.0],
-        row_pitch_px: 28.0,
-        ..UiSurfaceStyle::default()
-    }
+    let mut style = UiSurfaceStyle::default();
+    style.anchor = UiSurfaceAnchor::TopLeft;
+    style.min_size_px = [520.0, 430.0];
+    style.max_size_px = [760.0, 760.0];
+    style.margin_px = [72.0, 28.0];
+    style.padding_px = [38.0, 106.0, 38.0, 62.0];
+    style.row_pitch_px = 30.0;
+    style.panel_rgba = [6, 9, 17, 244];
+    style.panel_header_rgba = [14, 19, 34, 246];
+    style.accent_rgba = [108, 204, 255, 255];
+    style.text_rgba = [238, 245, 255, 255];
+    style.text_muted_rgba = [162, 178, 204, 255];
+    style.border_rgba = [116, 190, 255, 70];
+    style.backdrop_rgba = [0, 0, 0, 190];
+    style.corner_radius_px = 22.0;
+    style.border_px = 1.0;
+    style.shadow_alpha = 0;
+    style.font.stack = vec!["AureliaSans".to_owned(), "Inter".to_owned(), "Segoe UI".to_owned(), "NotoSans".to_owned()];
+    style.font.title_px = 30.0;
+    style.font.body_px = 17.0;
+    style.font.secondary_px = 14.0;
+    style.normalized()
 }
 
 #[inline]

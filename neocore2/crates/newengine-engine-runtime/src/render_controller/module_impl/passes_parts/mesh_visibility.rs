@@ -143,7 +143,12 @@ pub(super) fn shadow_caster_visible(
 
 #[inline]
 pub(super) fn render_scene_culling_enabled() -> bool {
-    crate::env_config::var_bool("NEWENGINE_RENDER_SCENE_CULLING", true)
+    // Do not hide world objects on the CPU extraction path by default. The
+    // renderer/backend owns actual frustum clipping; the streaming system owns
+    // residency. A cheap forward-cone cull is useful as an opt-in stress knob,
+    // but as a default it causes visible pop/disappearance while the camera
+    // turns, which is not acceptable for gameplay/world presentation.
+    crate::env_config::var_bool("NEWENGINE_RENDER_SCENE_CULLING", false)
 }
 
 #[inline]

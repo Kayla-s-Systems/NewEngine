@@ -115,7 +115,7 @@ impl AssetDependencyRecordV1 {
 /// Common addressable entry record for every NEF8/ListFile asset dictionary.
 ///
 /// Domain bodies may keep their own compact tables, but they should project this
-/// shape for AssetBrowser, AssetGraphResolver and conformance tests. Payload
+/// shape for asset catalog UI projections, AssetGraphResolver and conformance tests. Payload
 /// ranges are relative to the inflated NEF8 body, never to a filesystem path.
 #[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[serde(default)]

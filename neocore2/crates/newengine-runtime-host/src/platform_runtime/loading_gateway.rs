@@ -31,7 +31,7 @@ fn loading_gateway_service(state: SharedLoadingSnapshot) -> newengine_plugin_api
     )
     .protocol(info.protocol.clone())
     .features(info.features.clone())
-    .notes("Engine-facing loading shell gateway for startup overlay snapshots and native compositor state.");
+    .notes("Engine-facing loading gateway for startup overlay snapshots and UI projection state.");
 
     let invoke_state = state.clone();
     let snapshot_state = state.clone();
@@ -67,7 +67,7 @@ fn loading_gateway_service(state: SharedLoadingSnapshot) -> newengine_plugin_api
             let snapshot = project_loading_snapshot_from_status_event(
                 event,
                 publish_status_state.snapshot().spinner_phase.wrapping_add(1),
-                "engine-owned-native-shell",
+                "engine-owned-engine-loading-data",
             );
             publish_status_state.publish(snapshot);
             ok_json(&serde_json::json!({ "ok": true }))
@@ -125,7 +125,7 @@ pub(crate) fn publish_platform_loading_overlay(overlay: &PlatformLoadingOverlayV
         overlay.spinner_phase,
         overlay.view_json.as_str(),
         source,
-        "engine-owned-native-shell",
+        "engine-owned-engine-loading-data",
     );
     state.publish(snapshot);
 }

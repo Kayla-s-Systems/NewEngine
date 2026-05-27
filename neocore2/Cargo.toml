@@ -5,7 +5,7 @@ members = [
     "apps/game-ready-fps",
     "crates/newengine-assets",
     "crates/newengine-assets-api",
-    "crates/newengine-asset-browser-runtime",
+    "crates/newengine-assets-catalog-ui-runtime",
     "crates/newengine-asset-format-nef8",
     "crates/newengine-authored-xml",
     "crates/newengine-audio-api",

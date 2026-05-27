@@ -101,7 +101,9 @@ pub(super) fn apply_runtime_input(
     let Some(player) = first_player(world) else {
         return;
     };
-    if effective_play_mode.wants_direct_player_control() && is_player_controller_enabled(world, player) {
+    if input.gameplay_movement_gated {
+        CameraRuntimeService::clear_player_input(world, player);
+    } else if effective_play_mode.wants_direct_player_control() && is_player_controller_enabled(world, player) {
         CameraRuntimeService::apply_player_input(
             world,
             player,
@@ -127,12 +129,16 @@ pub(super) fn camera_nav_input(input: CameraGatewayInput, play_mode: GameRunMode
         pan_drag: input.pan_drag,
         ui_busy: input.ui_busy,
         fly_rmb: input.fly_rmb,
+        navigation_gated: input.camera_navigation_gated,
         move_mask: input.move_mask,
         speed_scalar: finite_or_one(input.speed_scalar).clamp(0.05, 20.0),
     };
     if play_mode.wants_direct_player_control() {
         nav_input.wheel_y = 0.0;
         nav_input.pan_drag = false;
+    }
+    if nav_input.navigation_gated {
+        nav_input.gate_navigation();
     }
     nav_input
 }

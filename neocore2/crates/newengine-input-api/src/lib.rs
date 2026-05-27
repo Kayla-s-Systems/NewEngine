@@ -187,7 +187,7 @@ pub mod engine_default_keybind {
     use super::key_code;
 
     pub const PRIMARY_UI_TOGGLE: u32 = key_code::ESCAPE;
-    pub const ASSET_BROWSER_TOGGLE: u32 = key_code::F1;
+    pub const ASSET_CATALOG_UI_TOGGLE: u32 = key_code::F1;
 }
 
 /// Canonical gamepad button names used by raw input providers and binding profiles.

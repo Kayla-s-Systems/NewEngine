@@ -3,7 +3,9 @@
 use std::path::Path;
 
 use newengine_plugin_api::PluginDescriptor;
-use newengine_service_api::{engine_gateway_domain, system_tag};
+use newengine_service_api::{
+    engine_gateway_domain, engine_gateway_matches_service_kind, system_tag,
+};
 #[cfg(test)]
 use newengine_service_api::EngineServiceKind;
 
@@ -265,11 +267,29 @@ fn merge_system_tags(
     route_tags
 }
 
+#[inline]
+fn route_gateway_matches_declared_kind(
+    gateway_id: &str,
+    service_kind: &str,
+    _system_tags: &[String],
+) -> bool {
+    // Provider implementation names are metadata, not API domains.
+    // A render provider may publish `provider_route = engine.render.vulkan`,
+    // but the service route consumed by the engine remains `engine.render`.
+    engine_gateway_matches_service_kind(gateway_id, service_kind)
+}
+
+#[inline]
+fn route_matches_query(route: &ActiveGatewayRoute, requested_gateway_id: &str) -> bool {
+    route.gateway_id == requested_gateway_id
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct ActiveGatewayRoute {
     pub(crate) gateway_id: String,
     pub(crate) service_kind: String,
     pub(crate) provider_service_id: String,
+    pub(crate) provider_route_id: Option<String>,
     pub(crate) provider_owner_id: String,
     pub(crate) backend_capability_id: String,
     pub(crate) backend_priority: i32,
@@ -285,6 +305,7 @@ impl ActiveGatewayRoute {
         gateway_id: String,
         service_kind: String,
         provider_service_id: String,
+        provider_route_id: Option<String>,
         provider_owner_id: String,
         backend_capability_id: String,
         backend_priority: i32,
@@ -292,7 +313,7 @@ impl ActiveGatewayRoute {
         route_tags: Vec<String>,
         policy: Option<&GatewayPolicyFact>,
     ) -> Option<Self> {
-        if !newengine_service_api::engine_gateway_matches_service_kind(&gateway_id, &service_kind) {
+        if !route_gateway_matches_declared_kind(&gateway_id, &service_kind, &route_tags) {
             log::warn!(
                 "gateways: ignoring route with mixed domain levels gateway='{}' service_kind='{}' gateway_domain='{}' service='{}' owner='{}'",
                 gateway_id,
@@ -329,6 +350,7 @@ impl ActiveGatewayRoute {
             gateway_id,
             service_kind,
             provider_service_id,
+            provider_route_id,
             provider_owner_id,
             backend_capability_id,
             backend_priority,
@@ -393,6 +415,7 @@ impl ActiveGatewayRegistry {
                     gateway.gateway_id,
                     gateway.service_kind,
                     provider_service_id,
+                    gateway.provider_route_id,
                     descriptor_fact.plugin_id.clone(),
                     gateway.backend_capability_id,
                     gateway.backend_priority,
@@ -425,6 +448,7 @@ impl ActiveGatewayRegistry {
                 gateway.gateway_id.clone(),
                 gateway.service_kind.clone(),
                 gateway.provider_service_id.clone(),
+                None,
                 gateway.provider_owner_id.clone(),
                 gateway.backend_capability_id.clone(),
                 gateway.backend_priority,
@@ -460,9 +484,10 @@ impl ActiveGatewayRegistry {
         for gateway_id in registry.gateway_ids() {
             if let Some(route) = registry.resolve_route(&gateway_id) {
                 log::trace!(
-                    "gateways: active route gateway='{}' service='{}' owner='{}' kind='{}' origin='{}' mode='{}' prio={} score={} tags='{}'",
+                    "gateways: active route gateway='{}' service='{}' provider_route='{}' owner='{}' kind='{}' origin='{}' mode='{}' prio={} score={} tags='{}'",
                     route.gateway_id,
                     route.provider_service_id,
+                    route.provider_route_id.as_deref().unwrap_or("<provider-route-unset>"),
                     route.provider_owner_id,
                     route.service_kind,
                     route.origin.as_str(),
@@ -496,7 +521,7 @@ impl ActiveGatewayRegistry {
     pub(crate) fn resolve_route(&self, gateway_id: &str) -> Option<&ActiveGatewayRoute> {
         self.routes
             .iter()
-            .filter(|route| route.gateway_id == gateway_id)
+            .filter(|route| route_matches_query(route, gateway_id))
             .max_by(|a, b| {
                 a.active_score
                     .cmp(&b.active_score)
@@ -509,7 +534,7 @@ impl ActiveGatewayRegistry {
 
     pub(crate) fn has_gateway_capability(&self, gateway_id: &str, capability_id: &str) -> bool {
         self.routes.iter().any(|route| {
-            route.gateway_id == gateway_id && route.backend_capability_id == capability_id
+            route_matches_query(route, gateway_id) && route.backend_capability_id == capability_id
         })
     }
 }

@@ -64,6 +64,7 @@ fn surface_node_from_debug_telemetry(telemetry: &UiRuntimeDebugOverlayTelemetry)
         footer_lines: Vec::new(),
         style_tags: vec!["retained".to_owned()],
         theme_id: UI_THEME_NORTHSTAR_DEFAULT.to_owned(),
+        style_ref: None,
         component_id: UI_COMPONENT_PANEL.to_owned(),
         components: lines
             .iter()
@@ -79,6 +80,7 @@ fn surface_node_from_debug_telemetry(telemetry: &UiRuntimeDebugOverlayTelemetry)
             row_pitch_px: 22.0,
             ..UiSurfaceStyle::default()
         },
+        admission_policy: Default::default(),
         metrics: telemetry.metrics.clone(),
     }
 }
@@ -124,11 +126,10 @@ pub fn publish_surface_node(node: &UiSurfaceNode) {
 
 /// Request a current-frame UI draw list through the canonical `engine.ui` gateway.
 ///
-/// Runtime-host normally prepares provider UI before `engine.step()`, but modal UI
-/// state such as ESC primary UI node and F1 Asset Browser is produced inside the render
-/// controller during that same step. This helper lets the render controller publish
-/// the freshly computed state and immediately request a same-frame draw packet,
-/// without depending on any concrete UI provider implementation.
+/// Runtime-host normally prepares provider UI before `engine.step()`, but retained
+/// UI nodes may be published during that same step. This helper lets a runtime
+/// module publish freshly computed state and immediately request a same-frame draw
+/// packet without depending on any concrete UI provider implementation.
 pub fn request_draw_list(
     frame_index: u64,
     dt_sec: f32,

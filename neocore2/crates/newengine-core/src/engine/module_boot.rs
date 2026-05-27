@@ -16,7 +16,7 @@ use crate::startup_status::{
 impl<E: Send + 'static> Engine<E> {
     /// Compatibility entry point: drives the real incremental startup pump to
     /// completion in the current thread. Platform hosts should prefer
-    /// `start_incremental_step()` so the native loading surface can repaint
+    /// `start_incremental_step()` so the engine.ui loading projection can be published
     /// between expensive systems/modules.
     pub fn start(&mut self) -> EngineResult<()> {
         loop {

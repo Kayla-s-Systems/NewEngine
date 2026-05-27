@@ -93,7 +93,7 @@ impl<'a> TextureDictionary<'a> {
 
 /// Parse only the texture dictionary header + directory manifest.
 ///
-/// This is the fast metadata path used by AssetBrowser, material validation and
+/// This is the fast metadata path used by asset catalog UI projections, material validation and
 /// launch-gate dependency checks. It deliberately does not inflate/decode the
 /// texture data region. Runtime texture packet selection still uses `parse()` so
 /// payload validation and GPU upload bytes remain strict.

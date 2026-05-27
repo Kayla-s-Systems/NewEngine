@@ -110,7 +110,9 @@ impl RenderApi for ServiceBackedRenderApi {
     }
 
     fn set_debug_text(&mut self, text: String) {
-        let _ = self.unit(RenderCommand::SetDebugText(text));
+        if !text.trim().is_empty() {
+            log::warn!("engine.render: SetDebugText ignored; UI presentation must be published through engine.ui");
+        }
     }
 
     fn end_frame(&mut self) -> EngineResult<()> {

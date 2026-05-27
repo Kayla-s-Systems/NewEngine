@@ -16,6 +16,7 @@ use newengine_ui_api::UiInputFrame;
 
 pub use carrier::InputActionFrameCarrier;
 use carrier::{action_frame_has_activity, movement_has_activity};
+pub use policy::InputCaptureState;
 use policy::{RuntimeInputCapturePolicy, SystemObservation};
 use sample::RawInputSample;
 pub use system::{InputRuntimeSystem, InputRuntimeSystemState, InputRuntimeSystemsSnapshot};
@@ -215,43 +216,66 @@ impl InputRuntimeSystems {
         self.log_compact_summary(frame_index, raw_sample.summary(input));
     }
 
+    /// Publish the per-frame UI capture contract.
+    ///
+    /// UI/tools may gate navigation and gameplay movement, but raw sampling/listeners
+    /// stay alive. The carrier is updated every frame so camera/input consumers can
+    /// decide whether to apply deltas without relying on subscription side effects.
+    pub fn publish_input_capture_state(
+        &mut self,
+        frame_index: u64,
+        capture: InputCaptureState,
+        input: &mut InputActionFrameCarrier,
+    ) {
+        let capture = InputCaptureState { sampling_alive: true, ..capture };
+        let changed = self.capture_policy.set_capture_state(capture);
+        *input.sampling_alive = true;
+        *input.camera_navigation_gated = capture.camera_navigation_gated;
+        *input.gameplay_movement_gated = capture.gameplay_movement_gated;
+
+        for system in [InputRuntimeSystem::GameplayMovement, InputRuntimeSystem::CameraLook] {
+            let was_active = self.state(system).map(|state| state.active).unwrap_or(false);
+            let captured = capture.gates(system);
+            self.transition(
+                system,
+                frame_index,
+                SystemObservation::new(
+                    // Listener stays alive under UI capture; only navigation is gated.
+                    was_active,
+                    captured,
+                    if captured { capture.reason } else { REASON_IDLE },
+                ),
+            );
+        }
+
+        if capture.has_runtime_gate() {
+            input.gate_runtime_navigation_by_ui();
+            if changed {
+                log::debug!(
+                    "input systems: runtime navigation gated frame={} reason='{}' contract='listener-alive/navigation-gated'",
+                    frame_index,
+                    capture.reason,
+                );
+            }
+        } else if changed {
+            log::debug!(
+                "input systems: runtime controls released frame={} reason='{}'",
+                frame_index,
+                capture.reason,
+            );
+        }
+    }
+
     /// Apply modal capture after the UI navigation has had first chance to read its
-    /// own actions. Capture state is persistent, so an open UI navigation does not
-    /// generate a false->true transition every frame.
+    /// own actions. Kept as a thin compatibility-free internal wrapper around the
+    /// explicit capture-state publisher.
     pub fn apply_modal_ui_capture(
         &mut self,
         frame_index: u64,
         blocks_gameplay: bool,
         input: &mut InputActionFrameCarrier,
     ) {
-        let changed = self.capture_policy.set_modal_ui_capture(blocks_gameplay);
-        for system in [InputRuntimeSystem::GameplayMovement, InputRuntimeSystem::CameraLook] {
-            let was_active = self.state(system).map(|state| state.active).unwrap_or(false);
-            self.transition(
-                system,
-                frame_index,
-                SystemObservation::new(
-                    was_active && !blocks_gameplay,
-                    blocks_gameplay,
-                    if blocks_gameplay { REASON_CAPTURED_BY_MODAL_UI } else { REASON_IDLE },
-                ),
-            );
-        }
-
-        if blocks_gameplay {
-            input.suppress_runtime_controls();
-            if changed {
-                log::debug!(
-                    "input systems: runtime controls captured surface='engine.ui.modal' frame={}",
-                    frame_index
-                );
-            }
-        } else if changed {
-            log::debug!(
-                "input systems: runtime controls released surface='engine.ui.modal' frame={}",
-                frame_index
-            );
-        }
+        self.publish_input_capture_state(frame_index, InputCaptureState::modal_ui(blocks_gameplay), input);
     }
 
     pub fn log_explicit_snapshot(&self, frame_index: u64, reason: &str) {

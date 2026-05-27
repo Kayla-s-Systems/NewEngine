@@ -101,6 +101,7 @@ impl CameraFrame {
         jitter_px: Vec2,
     ) -> Self {
         let viewport = viewport.sanitized();
+        let rig = rig.sanitized();
         projection.set_viewport(viewport.width, viewport.height);
 
         let view = rig.view_matrix();

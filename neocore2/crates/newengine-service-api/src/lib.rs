@@ -71,6 +71,13 @@ pub mod system_tag {
     pub const ENGINE_DOMAIN: &str = "engine.domain";
     /// Route points at a backend provider implementation.
     pub const PROVIDER_BACKEND: &str = "provider.backend";
+    /// Route belongs to a concrete provider implementation.
+    ///
+    /// Important: this tag does not make `engine.<domain>.<name>` a backend API.
+    /// Provider names such as `engine.ui.aurelia` and `engine.render.vulkan` are
+    /// implementation identities published as descriptor metadata while the
+    /// actual routed API remains the root gateway (`engine.ui`, `engine.render`, ...).
+    pub const PROVIDER_IMPLEMENTATION_ROUTE: &str = "provider.implementation_route";
     /// Gateway can be overridden by compatible providers.
     pub const OVERRIDE_OPEN: &str = "override.open";
     /// Gateway participates in profile-controlled provider selection.
@@ -151,6 +158,28 @@ pub fn engine_gateway_matches_service_kind(gateway_id: &str, service_kind: &str)
         == normalize_service_kind(service_kind).as_deref()
 }
 
+#[inline]
+pub fn engine_gateway_is_direct_child_of_service_kind(
+    gateway_id: &str,
+    service_kind: &str,
+) -> bool {
+    let Some(domain) = engine_gateway_domain(gateway_id) else {
+        return false;
+    };
+    let Some(kind) = normalize_service_kind(service_kind) else {
+        return false;
+    };
+
+    let domain_parts = domain.split('.').collect::<Vec<_>>();
+    let kind_parts = kind.split('.').collect::<Vec<_>>();
+
+    domain_parts.len() == kind_parts.len() + 1
+        && domain_parts
+            .iter()
+            .zip(kind_parts.iter())
+            .all(|(domain, kind)| domain == kind)
+}
+
 /// Common declaration for a backend service family.
 ///
 /// This intentionally does not describe domain packets. Render, physics, input,
@@ -198,6 +227,8 @@ pub struct BackendRouteDescriptor {
     pub contract: &'static str,
     pub backend_priority: i32,
     #[serde(skip_serializing_if = "Option::is_none")]
+    pub provider_route: Option<&'static str>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub backend: Option<&'static str>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub mode: Option<&'static str>,
@@ -222,6 +253,7 @@ impl BackendRouteDescriptor {
             engine_gateway: spec.engine_gateway_id,
             contract: spec.provider_service_id,
             backend_priority: 0,
+            provider_route: None,
             backend: None,
             mode: None,
             features: Vec::new(),
@@ -233,6 +265,29 @@ impl BackendRouteDescriptor {
     #[inline]
     pub fn contract(mut self, contract: &'static str) -> Self {
         self.contract = contract;
+        self
+    }
+
+    #[inline]
+    pub fn engine_gateway(mut self, engine_gateway: &'static str) -> Self {
+        self.engine_gateway = engine_gateway;
+        self
+    }
+
+    #[inline]
+    pub fn provider_route(mut self, provider_route: &'static str) -> Self {
+        self.provider_route = Some(provider_route);
+        self.system_tags.push(system_tag::PROVIDER_IMPLEMENTATION_ROUTE);
+        self
+    }
+
+    /// Marks this backend route as a concrete provider implementation.
+    ///
+    /// This is intentionally metadata only. The `engine_gateway` field must remain
+    /// the root engine API gateway (for example `engine.ui`), while the personal
+    /// implementation identity should be stored with `provider_route()`.
+    pub fn provider_implementation_route(mut self) -> Self {
+        self.system_tags.push(system_tag::PROVIDER_IMPLEMENTATION_ROUTE);
         self
     }
 
@@ -302,6 +357,10 @@ pub enum EngineServiceKind {
     AssetFileTypes,
     AssetPackages,
     AssetListFiles,
+    AssetUid,
+    AssetDependencies,
+    AssetImportQueue,
+    AssetPackageWriter,
     AssetMaps,
     AssetValidation,
     AssetUi,
@@ -373,6 +432,10 @@ impl EngineServiceKind {
             Self::AssetFileTypes => "assets.file_types",
             Self::AssetPackages => "assets.packages",
             Self::AssetListFiles => "assets.listfiles",
+            Self::AssetUid => "assets.uid",
+            Self::AssetDependencies => "assets.dependencies",
+            Self::AssetImportQueue => "assets.import_queue",
+            Self::AssetPackageWriter => "assets.package_writer",
             Self::AssetMaps => "assets.maps",
             Self::AssetValidation => "assets.validation",
             Self::AssetUi => "assets.ui",
@@ -427,6 +490,10 @@ impl EngineServiceKind {
             "assets.file_types" | "assets_file_types" => Some(Self::AssetFileTypes),
             "assets.packages" | "assets_packages" => Some(Self::AssetPackages),
             "assets.listfiles" | "assets_listfiles" | "assets.list_files" | "assets_list_files" => Some(Self::AssetListFiles),
+            "assets.uid" | "assets_uid" => Some(Self::AssetUid),
+            "assets.dependencies" | "assets_dependencies" => Some(Self::AssetDependencies),
+            "assets.import_queue" | "assets_import_queue" | "assets.import-queue" => Some(Self::AssetImportQueue),
+            "assets.package_writer" | "assets_package_writer" | "assets.package-writer" => Some(Self::AssetPackageWriter),
             "assets.maps" | "assets_maps" => Some(Self::AssetMaps),
             "assets.validation" | "assets_validation" => Some(Self::AssetValidation),
             "assets.ui" | "assets_ui" => Some(Self::AssetUi),
@@ -481,7 +548,7 @@ impl EngineServiceKind {
     #[inline]
     pub const fn parent(self) -> Option<Self> {
         match self {
-            Self::AssetVfs | Self::AssetFileTypes | Self::AssetPackages | Self::AssetListFiles | Self::AssetMaps | Self::AssetValidation | Self::AssetUi | Self::Materials | Self::Textures | Self::Definitions | Self::AssetGraph | Self::Model => Some(Self::Assets),
+            Self::AssetVfs | Self::AssetFileTypes | Self::AssetPackages | Self::AssetListFiles | Self::AssetUid | Self::AssetDependencies | Self::AssetImportQueue | Self::AssetPackageWriter | Self::AssetMaps | Self::AssetValidation | Self::AssetUi | Self::Materials | Self::Textures | Self::Definitions | Self::AssetGraph | Self::Model => Some(Self::Assets),
             Self::RenderEffects | Self::RenderMaterials => Some(Self::Render),
             Self::ModelSkeletons | Self::ModelMaterials | Self::ModelCollisions => Some(Self::Model),
             Self::CameraModes | Self::CameraAnimations => Some(Self::Camera),
@@ -516,6 +583,10 @@ impl EngineServiceKind {
             Self::AssetFileTypes => "engine.assets.file_types",
             Self::AssetPackages => "engine.assets.packages",
             Self::AssetListFiles => "engine.assets.listfiles",
+            Self::AssetUid => "engine.assets.uid",
+            Self::AssetDependencies => "engine.assets.dependencies",
+            Self::AssetImportQueue => "engine.assets.import_queue",
+            Self::AssetPackageWriter => "engine.assets.package_writer",
             Self::AssetMaps => "engine.assets.maps",
             Self::AssetValidation => "engine.assets.validation",
             Self::AssetUi => "engine.assets.ui",
@@ -764,6 +835,27 @@ mod tests {
         );
         assert!(engine_gateway_matches_service_kind("engine.render.draw_lists", "render.draw_lists"));
         assert!(EngineServiceKind::parse_engine_gateway_id("engine.assets.zzx").is_none());
+    }
+
+
+    #[test]
+    fn backend_route_descriptor_can_serialize_named_provider_route() {
+        let json = BackendRouteDescriptor::new(BackendServiceSpec::new(
+            "render",
+            "engine.render",
+            "render.api",
+            "render.backend",
+        ))
+        .provider_route("engine.render.vulkan")
+        .backend("vulkan")
+        .to_json_string();
+
+        let value: serde_json::Value = serde_json::from_str(&json).unwrap();
+        assert_eq!(value["service_kind"], "render");
+        assert_eq!(value["engine_gateway"], "engine.render");
+        assert_eq!(value["provider_route"], "engine.render.vulkan");
+        assert_eq!(value["system_tags"][0], "provider.implementation_route");
+        assert!(engine_gateway_is_direct_child_of_service_kind("engine.render.vulkan", "render"));
     }
 
     #[test]

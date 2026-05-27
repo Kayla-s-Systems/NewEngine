@@ -1,5 +1,6 @@
 #![forbid(unsafe_op_in_unsafe_fn)]
 
+use newengine_ui_api::UiDocumentSourceKind;
 use serde::{Deserialize, Serialize};
 
 use crate::surface::{
@@ -12,8 +13,6 @@ pub const UI_SURFACE_MAIN_MENU: &str = "engine.main_menu";
 pub const UI_SURFACE_PRIMARY: &str = "engine.ui.primary";
 pub const UI_SURFACE_GAME_HUD: &str = "game.hud";
 pub const UI_SURFACE_DEBUG_OVERLAY: &str = "runtime.debug_overlay";
-pub const UI_SURFACE_ASSET_BROWSER: &str = "editor.asset_browser";
-pub const UI_SURFACE_INSPECTOR: &str = "editor.inspector";
 
 /// Canonical action identifiers. Providers bind widgets to these ids; runtime
 /// systems decide what the commands do through command/event routers.
@@ -99,6 +98,10 @@ pub struct UiLayoutDeclaration {
     pub id: String,
     pub surface_id: String,
     pub document: String,
+    #[serde(default)]
+    pub style_document: Option<String>,
+    #[serde(default)]
+    pub document_source: UiDocumentSourceKind,
     pub hot_reload: bool,
     pub fallback_document: Option<String>,
 }
@@ -127,8 +130,8 @@ pub struct UiThemeDeclaration {
 }
 
 /// Full declarative layout document. This is intentionally provider-neutral:
-/// native fallback, WebGPU UI or future Scaleform-like adapters can map
-/// the same tree into their own renderer.
+/// any provider implementation can map
+/// the same tree into its own renderer.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct UiDeclarativeLayout {
     pub version: u32,
@@ -273,8 +276,6 @@ fn default_layout_for_id(id: &str) -> &'static str {
         UI_SURFACE_RUNTIME_OVERLAY => "assets/ui/runtime/overlay.neui@surface",
         UI_SURFACE_GAME_HUD => "assets/ui/game/hud.neui@surface",
         UI_SURFACE_DEBUG_OVERLAY => "assets/ui/runtime/debug_overlay.neui@surface",
-        UI_SURFACE_ASSET_BROWSER => "assets/ui/editor/asset_browser.neui@surface",
-        UI_SURFACE_INSPECTOR => "assets/ui/editor/inspector.neui@surface",
         _ => "",
     }
 }
@@ -292,19 +293,4 @@ fn z_order_for_id(id: &str) -> i32 {
 
 fn default_consumes_for_id(_id: &str) -> Vec<String> {
     vec!["UiSurfaceNode".to_owned()]
-}
-
-/// Native fallback exposes only safe startup diagnostics. Full UI providers must
-/// return a catalog with all runtime/editor surfaces they own.
-#[inline]
-pub fn native_fallback_catalog() -> UiProviderCatalog {
-    UiProviderCatalog::from_manifest(UiProviderManifest {
-        provider: UiProviderBinding::NativeFallback,
-        version: 1,
-        surfaces: vec![
-            UI_SURFACE_ENGINE_LOADING.to_owned(),
-            UI_SURFACE_ENGINE_ERROR_MODAL.to_owned(),
-        ],
-        features: vec!["startup-diagnostics-only".to_owned()],
-    })
 }

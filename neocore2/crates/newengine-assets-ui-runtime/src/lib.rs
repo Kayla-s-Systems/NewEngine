@@ -23,8 +23,8 @@ use newengine_service_kit::{
     register_engine_owned_gateway_service_best_effort, EngineOwnedGatewayDecl, JsonServiceRouter,
 };
 use newengine_ui_api::{
-    UiActionEdge, UiBindingEdge, UiBindingMode, UiBindingPlan, UiCompiledDocument, UiStateSource,
-    UiUpdatePolicy,
+    UiActionEdge, UiBindingEdge, UiBindingMode, UiBindingPlan, UiCompiledDocument, UiDocumentSource,
+    UiDocumentSourceKind, UiStateSource, UiUpdatePolicy,
 };
 use newengine_ui_navigation_api::{
     UiNodeActionRoute, UiNodeNavigationDocument, UiNodeFeedbackEvent, UiNodeFeedbackSeverity, UiNodeNavigationItem, UiNodeNavigationTone,
@@ -86,13 +86,27 @@ pub struct AssetsUiCompileRequest {
     pub ui_ref: String,
     pub logical_path: String,
     pub entry: String,
+    pub style_ref: Option<String>,
+    pub source_kind: UiDocumentSourceKind,
+    pub stream_id: Option<String>,
+    pub generator_id: Option<String>,
     pub mount_runtime: bool,
 }
 
 impl Default for AssetsUiCompileRequest {
     #[inline]
     fn default() -> Self {
-        Self { document_ref: String::new(), ui_ref: String::new(), logical_path: String::new(), entry: String::new(), mount_runtime: false }
+        Self {
+            document_ref: String::new(),
+            ui_ref: String::new(),
+            logical_path: String::new(),
+            entry: String::new(),
+            style_ref: None,
+            source_kind: UiDocumentSourceKind::Asset,
+            stream_id: None,
+            generator_id: None,
+            mount_runtime: false,
+        }
     }
 }
 
@@ -109,7 +123,10 @@ pub struct AssetsUiCompileResponse {
     pub xmlcentral: String,
     pub compiled_document: UiCompiledDocument,
     pub navigation_document: Option<UiNodeNavigationDocument>,
+    pub source_kind: UiDocumentSourceKind,
+    pub style_ref: Option<String>,
     pub dependencies: Vec<String>,
+    pub style_dependencies: Vec<String>,
     pub warnings: Vec<String>,
 }
 
@@ -127,7 +144,10 @@ impl Default for AssetsUiCompileResponse {
             xmlcentral: String::new(),
             compiled_document: UiCompiledDocument::default(),
             navigation_document: None,
+            source_kind: UiDocumentSourceKind::Asset,
+            style_ref: None,
             dependencies: Vec::new(),
+            style_dependencies: Vec::new(),
             warnings: Vec::new(),
         }
     }
@@ -333,6 +353,7 @@ fn compile_request_from_ref(request: AssetsUiRefRequest) -> AssetsUiCompileReque
         logical_path: request.logical_path,
         entry: request.entry,
         mount_runtime: false,
+        ..Default::default()
     }
 }
 
@@ -364,18 +385,45 @@ fn compile_document(state: &mut AssetsUiRuntimeState, request: AssetsUiCompileRe
     validate_requested_entry(&xml, &resolved.entry)?;
 
     let surface = parse_surface(&xml).ok_or_else(|| format!(".neui '{}' has no <Surface> entry", resolved.document_ref))?;
-    let dependencies = extract_dependencies(&xml);
+    let mut dependencies = extract_dependencies(&xml);
+    let inferred_style_ref = request
+        .style_ref
+        .clone()
+        .or_else(|| surface.theme.clone())
+        .or_else(|| first_dependency_with_suffix(&dependencies, ".neuis"))
+        .or_else(|| first_dependency_with_suffix(&dependencies, ".neui@theme"));
+    if let Some(style_ref) = &inferred_style_ref {
+        if !dependencies.iter().any(|dep| dep == style_ref) {
+            dependencies.push(style_ref.clone());
+            dependencies.sort();
+            dependencies.dedup();
+        }
+    }
+    let style_dependencies = inferred_style_ref.iter().cloned().collect::<Vec<_>>();
     let binding_plan = parse_binding_plan(&xml, &resolved.document_ref, &surface.name);
+    let source = UiDocumentSource {
+        kind: request.source_kind,
+        document_ref: resolved.document_ref.clone(),
+        style_ref: inferred_style_ref.clone(),
+        stream_id: request.stream_id.clone(),
+        generator_id: request.generator_id.clone(),
+    };
     let compiled_document = UiCompiledDocument {
         version: 1,
+        source: source.clone(),
         document_ref: resolved.document_ref.clone(),
         surface_id: surface.name.clone(),
         root_id: surface.root.clone(),
         theme_ref: surface.theme.clone(),
+        style_ref: inferred_style_ref.clone(),
         dependencies: dependencies.clone(),
+        style_dependencies: style_dependencies.clone(),
         binding_plan,
     };
-    let navigation_document = parse_navigation_document(&xml)?;
+    let navigation_document = match parse_navigation_document(&xml)? {
+        Some(document) => Some(document),
+        None => derive_navigation_document_from_surface_layout(&xml, &surface)?,
+    };
 
     let response = AssetsUiCompileResponse {
         ok: true,
@@ -387,7 +435,10 @@ fn compile_document(state: &mut AssetsUiRuntimeState, request: AssetsUiCompileRe
         xmlcentral: xml,
         compiled_document,
         navigation_document,
+        source_kind: request.source_kind,
+        style_ref: inferred_style_ref,
         dependencies,
+        style_dependencies,
         warnings,
         ..Default::default()
     };
@@ -571,6 +622,13 @@ fn extract_dependencies(xml: &str) -> Vec<String> {
     deps
 }
 
+fn first_dependency_with_suffix(dependencies: &[String], suffix: &str) -> Option<String> {
+    dependencies
+        .iter()
+        .find(|dep| dep.to_ascii_lowercase().contains(&suffix.to_ascii_lowercase()))
+        .cloned()
+}
+
 fn parse_binding_plan(xml: &str, document_ref: &str, surface_id: &str) -> UiBindingPlan {
     let mut plan = UiBindingPlan { document_ref: document_ref.to_owned(), surface_id: surface_id.to_owned(), ..Default::default() };
     if let Some(graph) = first_element(xml, "BindingGraph") {
@@ -617,6 +675,170 @@ fn update_policy_from_attr(value: Option<&str>) -> UiUpdatePolicy {
         "manual" => UiUpdatePolicy::Manual,
         _ => UiUpdatePolicy::OnChange,
     }
+}
+
+
+fn derive_navigation_document_from_surface_layout(xml: &str, surface: &SurfaceInfo) -> Result<Option<UiNodeNavigationDocument>, String> {
+    let Some(layout) = elements(xml, "Layout")
+        .into_iter()
+        .find(|layout| attr_value(&layout.open, "name").as_deref() == Some(surface.root.as_str()))
+        .or_else(|| first_element(xml, "Layout"))
+    else {
+        return Ok(None);
+    };
+
+    let buttons = elements(&layout.inner, "Button");
+    if buttons.is_empty() {
+        return Ok(None);
+    }
+
+    let routes = action_map_routes(xml);
+    let mut items = Vec::new();
+    for (idx, button) in buttons.into_iter().enumerate() {
+        let id = attr_value(&button.open, "id").unwrap_or_else(|| format!("ui.item.{idx}"));
+        let label = attr_value(&button.open, "label")
+            .or_else(|| first_element(&button.inner, "Text").and_then(|text| attr_value(&text.open, "value")))
+            .unwrap_or_else(|| id.clone());
+        if label.trim().is_empty() {
+            continue;
+        }
+
+        let action_id = first_element(&button.inner, "Event")
+            .and_then(|event| attr_value(&event.open, "action"));
+        let action = action_id
+            .as_deref()
+            .and_then(|id| routes.get(id).cloned())
+            .or_else(|| action_id.as_deref().map(default_route_for_action_id));
+        let class = attr_value(&button.open, "class").unwrap_or_default().to_ascii_lowercase();
+        let tone = if class.contains("primary") || idx == 0 {
+            UiNodeNavigationTone::Accent
+        } else {
+            UiNodeNavigationTone::Normal
+        };
+
+        items.push(UiNodeNavigationItem {
+            id,
+            label,
+            value: None,
+            detail: None,
+            emphasized: class.contains("primary"),
+            tone,
+            dynamic_value: None,
+            action,
+            nav_left: None,
+            nav_right: None,
+        });
+    }
+
+    if items.is_empty() {
+        return Ok(None);
+    }
+
+    let title = first_text_with_class(&layout.inner, "title")
+        .or_else(|| attr_value(&layout.open, "title"))
+        .unwrap_or_else(|| surface.name.clone());
+
+    let mut doc = UiNodeNavigationDocument {
+        id: "engine.ui.primary".to_owned(),
+        version: 1,
+        surface_id: surface.name.clone(),
+        root_page: "root".to_owned(),
+        title,
+        subtitle: "Declarative .neui layout projected as a navigation document".to_owned(),
+        footer_lines: vec![
+            "ESC / START - Close menu".to_owned(),
+            "ARROWS / DPAD - Navigate".to_owned(),
+            "ENTER / A - Confirm".to_owned(),
+        ],
+        pages: vec![UiNodeNavigationPage {
+            id: "root".to_owned(),
+            title: "Main Menu".to_owned(),
+            subtitle: String::new(),
+            parent_page: None,
+            footer_lines: Vec::new(),
+            items,
+            back_route: Some(UiNodeActionRoute {
+                id: "ui.close".to_owned(),
+                source: "engine.assets.ui".to_owned(),
+                target: "UiNodeNavigationRuntime".to_owned(),
+                event: "ui.close".to_owned(),
+                payload: BTreeMap::new(),
+                transition: Some(UiNodeTransition::close()),
+                feedback: None,
+                audio: Some("ui.close".to_owned()),
+            }),
+        }],
+    }
+    .canonicalized();
+    doc.validate()?;
+    Ok(Some(doc))
+}
+
+fn action_map_routes(xml: &str) -> BTreeMap<String, UiNodeActionRoute> {
+    let mut out = BTreeMap::new();
+    for action in elements(xml, "Action") {
+        let Some(id) = attr_value(&action.open, "id") else {
+            continue;
+        };
+        out.insert(id.clone(), route_from_action_map_element(&id, &action));
+    }
+    out
+}
+
+fn route_from_action_map_element(id: &str, element: &XmlElement) -> UiNodeActionRoute {
+    let target = attr_value(&element.open, "target").unwrap_or_else(|| "UiNodeNavigationRuntime".to_owned());
+    let command = attr_value(&element.open, "command")
+        .or_else(|| attr_value(&element.open, "event"))
+        .unwrap_or_else(|| "ui.activate".to_owned());
+    let mut payload = BTreeMap::new();
+    if let Some(payload_element) = first_element(&element.inner, "Payload") {
+        for (key, value) in parse_attrs(&payload_element.open) {
+            payload.insert(key, serde_json::Value::String(value));
+        }
+    }
+    let transition = match command.as_str() {
+        "ui.close" | "menu.close" | "engine.ui.close" => Some(UiNodeTransition::close()),
+        "menu.open_page" | "ui.open_page" => payload
+            .get("page")
+            .and_then(serde_json::Value::as_str)
+            .map(UiNodeTransition::open_page),
+        _ => None,
+    };
+    UiNodeActionRoute {
+        id: id.to_owned(),
+        source: "engine.assets.ui".to_owned(),
+        target,
+        event: command,
+        payload,
+        transition,
+        feedback: None,
+        audio: Some("ui.select".to_owned()),
+    }
+}
+
+fn default_route_for_action_id(id: &str) -> UiNodeActionRoute {
+    UiNodeActionRoute {
+        id: id.to_owned(),
+        source: "engine.assets.ui".to_owned(),
+        target: "UiNodeNavigationRuntime".to_owned(),
+        event: id.to_owned(),
+        payload: BTreeMap::new(),
+        transition: None,
+        feedback: None,
+        audio: Some("ui.select".to_owned()),
+    }
+}
+
+fn first_text_with_class(xml: &str, class_name: &str) -> Option<String> {
+    elements(xml, "Text")
+        .into_iter()
+        .find(|text| {
+            attr_value(&text.open, "class")
+                .map(|class| class.split_whitespace().any(|token| token == class_name))
+                .unwrap_or(false)
+        })
+        .and_then(|text| attr_value(&text.open, "value"))
+        .filter(|value| !value.trim().is_empty())
 }
 
 fn parse_navigation_document(xml: &str) -> Result<Option<UiNodeNavigationDocument>, String> {
@@ -888,5 +1110,33 @@ mod tests {
         let doc = parse_navigation_document(xml).unwrap().unwrap();
         assert_eq!(doc.id, "engine.ui.primary");
         assert_eq!(doc.pages[0].items[0].label, "Resume");
+    }
+
+    #[test]
+    fn derives_navigation_document_from_surface_layout_buttons() {
+        let xml = r#"
+<NeUiDictionary document_kind="surface">
+  <Surface name="engine.main_menu" kind="main_menu" modal="true" z_order="700" root="layout.main" />
+  <Layout name="layout.main" surface="engine.main_menu">
+    <Panel id="main.root" class="menu-shell">
+      <Text id="main.title" class="title" value="NewEngine" />
+      <Button id="main.start" class="button button-primary"><Text value="Start" /><Event trigger="click" action="game.start" /></Button>
+      <Button id="main.settings" class="button button-secondary"><Text value="Settings" /><Event trigger="click" action="engine.settings.open" /></Button>
+    </Panel>
+  </Layout>
+  <ActionMap name="actions">
+    <Action id="engine.settings.open" target="engine.ui.navigation" command="menu.open_page"><Payload page="settings" /></Action>
+  </ActionMap>
+</NeUiDictionary>
+"#;
+        let surface = SurfaceInfo {
+            name: "engine.main_menu".to_owned(),
+            root: "layout.main".to_owned(),
+            theme: None,
+        };
+        let doc = derive_navigation_document_from_surface_layout(xml, &surface).unwrap().unwrap();
+        assert_eq!(doc.surface_id, "engine.main_menu");
+        assert_eq!(doc.pages[0].items[0].label, "Start");
+        assert_eq!(doc.pages[0].items[1].label, "Settings");
     }
 }

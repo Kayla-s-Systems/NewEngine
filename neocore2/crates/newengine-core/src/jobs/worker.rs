@@ -7,7 +7,6 @@ pub(super) fn worker_loop(shared: Arc<JobShared>) {
     loop {
         if let Some(job) = shared.pop_next() {
             job.run(&shared);
-            shared.pending.fetch_sub(1, Ordering::AcqRel);
             continue;
         }
 

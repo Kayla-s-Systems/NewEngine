@@ -38,6 +38,22 @@ impl Projection {
         }
     }
 
+    #[inline]
+    pub fn set_near_far(&mut self, near: f32, far: f32) {
+        let near = if near.is_finite() && near > 0.0 { near } else { 0.01 };
+        let far = if far.is_finite() && far > near { far } else { near + 1000.0 };
+        match self {
+            Self::Perspective(p) => {
+                p.near = near;
+                p.far = far.max(near + 0.001);
+            }
+            Self::Orthographic(o) => {
+                o.near = near;
+                o.far = far.max(near + 0.001);
+            }
+        }
+    }
+
     /// Vulkan-ready projection matrix.
     #[inline]
     pub fn matrix(&self) -> Mat4 {
@@ -61,12 +77,15 @@ pub struct Perspective {
 impl Perspective {
     #[inline]
     pub fn new(fovy: f32, aspect: f32, near: f32, far: f32) -> Self {
-        Self {
-            fovy,
-            aspect: aspect.max(1e-6),
-            near: near.max(1e-6),
-            far: far.max(near + 1e-3),
-        }
+        let fovy = if fovy.is_finite() {
+            fovy.clamp(1.0_f32.to_radians(), 170.0_f32.to_radians())
+        } else {
+            60.0_f32.to_radians()
+        };
+        let aspect = if aspect.is_finite() && aspect > 0.0 { aspect } else { 16.0 / 9.0 };
+        let near = if near.is_finite() && near > 0.0 { near } else { 0.01 };
+        let far = if far.is_finite() && far > near { far } else { near + 1000.0 };
+        Self { fovy, aspect: aspect.max(1e-6), near, far: far.max(near + 1e-3) }
     }
 
     /// RH perspective, Vulkan Z: 0..1, Y flipped.
@@ -101,7 +120,7 @@ impl Perspective {
 
     /// RH perspective, Vulkan Z: reversed 1..0, Y flipped.
     ///
-    /// This is useful for very large worlds when the render backend uses a reversed-Z
+    /// This is useful when the render backend uses a reversed-Z
     /// depth buffer. It is opt-in because the backend depth compare state must match it.
     #[inline]
     pub fn matrix_vk_reversed_z(&self) -> Mat4 {
@@ -160,12 +179,6 @@ impl Perspective {
             0.0,
         ])
     }
-
-    /// GL-style RH perspective, Z: -1..1, no Y flip.
-    #[inline]
-    pub fn matrix_gl(&self) -> Mat4 {
-        Mat4::perspective_rh(self.fovy, self.aspect, self.near, self.far)
-    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -181,10 +194,14 @@ pub struct Orthographic {
 impl Orthographic {
     #[inline]
     pub fn new(half_height: f32, aspect: f32, near: f32, far: f32) -> Self {
+        let half_height = if half_height.is_finite() && half_height > 0.0 { half_height } else { 1.0 };
+        let aspect = if aspect.is_finite() && aspect > 0.0 { aspect } else { 16.0 / 9.0 };
+        let near = if near.is_finite() && near > 0.0 { near } else { 0.01 };
+        let far = if far.is_finite() && far > near { far } else { near + 1000.0 };
         Self {
             half_height: half_height.max(1e-6),
             aspect: aspect.max(1e-6),
-            near: near.max(1e-6),
+            near,
             far: far.max(near + 1e-3),
         }
     }
@@ -205,14 +222,6 @@ impl Orthographic {
         Mat4::from_cols_array(&[
             m00, 0.0, 0.0, 0.0, 0.0, m11, 0.0, 0.0, 0.0, 0.0, m22, 0.0, 0.0, 0.0, m32, 1.0,
         ])
-    }
-
-    /// GL-style RH orthographic, Z: -1..1, no Y flip.
-    #[inline]
-    pub fn matrix_gl(&self) -> Mat4 {
-        let hh = self.half_height;
-        let hw = hh * self.aspect;
-        Mat4::orthographic_rh(-hw, hw, -hh, hh, self.near, self.far)
     }
 }
 

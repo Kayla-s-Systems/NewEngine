@@ -5,11 +5,9 @@ readme = "README.md"
 edition = "2021"
 
 [features]
-# Desktop default includes the core-owned egui PreStart configuration window.
-# CI/headless builds can disable it with `--no-default-features`.
-default = ["startup-window-egui"]
-startup-window-egui = ["dep:eframe"]
-
+# UI rendering is owned by engine.ui. The core crate must not enable a native
+# startup-window renderer as a default or fallback path.
+default = []
 
 # Optional host diagnostics. Keep disabled by default: diagnostics are explicit.
 host-probe = ["dep:sysinfo", "dep:windows"]
@@ -46,7 +44,6 @@ newengine-ui-draw = { path = "../newengine-ui-draw" }
 serde = { version = "1.0.228", features = ["derive"] }
 serde_json = "1.0.149"
 parking_lot = "0.12.5"
-eframe = { version = "0.31", optional = true, default-features = true }
 sysinfo = { version = "0.38.3", default-features = true, optional = true }
 
 # Windows-only GPU/DX probe

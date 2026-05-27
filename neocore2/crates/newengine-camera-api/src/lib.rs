@@ -5,16 +5,10 @@ use serde::{Deserialize, Serialize};
 /// Engine-facing camera service gateway id. Runtime consumers call this facade;
 /// the host resolves it to the active camera provider by descriptor metadata.
 pub const ENGINE_CAMERA_SERVICE_ID: &str = "engine.camera";
-pub const ENGINE_CAMERA_MODES_SERVICE_ID: &str = "engine.camera.modes";
-pub const ENGINE_CAMERA_ANIMATIONS_SERVICE_ID: &str = "engine.camera.animations";
 
 /// Default/first-party provider service id for camera runtime backends.
 pub const CAMERA_SERVICE_ID: &str = "camera.api";
 pub const CAMERA_BACKEND_CAPABILITY_ID: &str = "camera.backend";
-pub const CAMERA_MODES_SERVICE_ID: &str = "camera.modes.api";
-pub const CAMERA_MODES_BACKEND_CAPABILITY_ID: &str = "camera.modes.backend";
-pub const CAMERA_ANIMATIONS_SERVICE_ID: &str = "camera.animations.api";
-pub const CAMERA_ANIMATIONS_BACKEND_CAPABILITY_ID: &str = "camera.animations.backend";
 pub const CAMERA_SERVICE_METHOD_INVOKE: &str = newengine_service_api::SERVICE_METHOD_INVOKE_JSON;
 pub const CAMERA_SERVICE_METHOD_INFO: &str = newengine_service_api::SERVICE_METHOD_INFO_JSON;
 pub const CAMERA_SERVICE_METHOD_SHUTDOWN_V1: &str = newengine_service_api::SERVICE_METHOD_SHUTDOWN_V1;
@@ -29,22 +23,6 @@ pub const CAMERA_BACKEND_SERVICE_SPEC: newengine_service_api::BackendServiceSpec
         ENGINE_CAMERA_SERVICE_ID,
         CAMERA_SERVICE_ID,
         CAMERA_BACKEND_CAPABILITY_ID,
-    );
-
-pub const CAMERA_MODES_BACKEND_SERVICE_SPEC: newengine_service_api::BackendServiceSpec =
-    newengine_service_api::BackendServiceSpec::new(
-        "camera.modes",
-        ENGINE_CAMERA_MODES_SERVICE_ID,
-        CAMERA_MODES_SERVICE_ID,
-        CAMERA_MODES_BACKEND_CAPABILITY_ID,
-    );
-
-pub const CAMERA_ANIMATIONS_BACKEND_SERVICE_SPEC: newengine_service_api::BackendServiceSpec =
-    newengine_service_api::BackendServiceSpec::new(
-        "camera.animations",
-        ENGINE_CAMERA_ANIMATIONS_SERVICE_ID,
-        CAMERA_ANIMATIONS_SERVICE_ID,
-        CAMERA_ANIMATIONS_BACKEND_CAPABILITY_ID,
     );
 
 /// Startup validation contract for the engine-facing camera gateway.
@@ -127,7 +105,6 @@ pub struct CameraViewCommandResponse {
 pub enum CameraProjectionKind {
     Perspective,
     Orthographic,
-    Custom,
 }
 
 impl Default for CameraProjectionKind {
@@ -284,11 +261,11 @@ pub struct CameraFrameSnapshot {
     pub inverse_view_projection_cols: Mat4Cols,
     #[serde(default)]
     pub position_ws: [f32; 3],
-    /// Precise authored world-space camera position. Providers that do not own a large-world
-    /// origin may mirror `position_ws` here.
+    /// Precise authored world-space camera position. Providers that do not use an explicit
+    /// world origin may mirror `position_ws` here.
     #[serde(default)]
     pub position_ws_f64: [f64; 3],
-    /// Camera-local world origin used to lower large worlds into renderer-safe `f32` space.
+    /// Camera-local world origin used to lower authored coordinates into renderer-safe `f32` space.
     #[serde(default)]
     pub world_origin_ws_f64: [f64; 3],
     /// Camera position relative to `world_origin_ws_f64`, expressed as renderer-safe `f32`.
@@ -355,7 +332,7 @@ impl Default for CameraServiceInfo {
             protocol: "newengine.camera-api/v1".to_owned(),
             features: vec![
                 "camera.frame_snapshot_v1".to_owned(),
-                "camera.large_world_origin_v1".to_owned(),
+                "camera.world_origin_v1".to_owned(),
                 "camera.postfx_intent_v1".to_owned(),
             ],
             methods: {

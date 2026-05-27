@@ -80,7 +80,7 @@ pub(crate) fn compute_user_busy(
 pub(crate) fn compute_projection(rig: &CameraRig, bounds: BoundsSphere, aspect: f32) -> Projection {
     let fovy = 60.0f32.to_radians();
     let cam_dist = (rig.position - bounds.center).length().max(0.01);
-    let policy = CameraClipPolicy::large_world();
+    let policy = CameraClipPolicy::world_space();
     let dynamic_far_limit = (bounds.radius * 24.0).clamp(10_000.0, 250_000.0);
     let (near, far) = policy.near_far(cam_dist, bounds.radius, dynamic_far_limit);
     Projection::Perspective(Perspective::new(fovy, aspect, near, far))

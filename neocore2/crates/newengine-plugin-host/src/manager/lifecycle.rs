@@ -50,8 +50,8 @@ impl PluginManager {
         log::info!("plugins: start begin id='{}'", id);
 
         // Startup must never depend on synchronous diagnostics/event-sink work.
-        // `start` is the transition that runs immediately after the native loading
-        // shell has already loaded engine plugins; emitting per-plugin job events
+        // `start` is the transition that runs immediately after loading
+        // state has already loaded engine plugins; emitting per-plugin job events
         // here can re-enter loading/profiler sinks while the plugin manager is still
         // mutating lifecycle state. Keep this phase direct and bounded: call the
         // plugin, record a normal log, then mark the plugin Running. Other lifecycle

@@ -73,6 +73,8 @@ impl GameReadyRuntimeProfile {
             startup.modules_dir.clone(),
         )))?;
 
+        engine.register_module(Box::new(newengine_assets_catalog_ui_runtime::AssetsCatalogUiRuntimeModule::new()))?;
+
         let render_features = GameReadyRenderFeaturePack::new();
         let mut render_controller = newengine_engine_runtime::RuntimeRenderController::new(
             Arc::clone(&self.viewport),
@@ -132,7 +134,6 @@ impl GameReadyRuntimeProfile {
         newengine_textures_runtime::register_textures_gateway_best_effort(asset_client.clone());
         newengine_definitions_runtime::register_definitions_gateway_best_effort(asset_client.clone());
         newengine_assets_ui_runtime::register_assets_ui_gateway_best_effort(asset_client.clone());
-        newengine_asset_browser_runtime::register_asset_browser_gateway_best_effort(host_api.clone(), asset_client.clone());
         newengine_material_runtime::register_materials_gateway_best_effort_with_host(Some(host_api.clone()), asset_client.clone());
         newengine_model_runtime::register_model_gateway_best_effort_with_host(host_api.clone(), asset_client.clone());
         newengine_model_runtime::register_asset_graph_gateway_best_effort(host_api, asset_client);

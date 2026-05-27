@@ -4,10 +4,11 @@ use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 
 pub const ENGINE_PRIMARY_UI_DOCUMENT_ID: &str = "engine.ui.primary";
-/// Canonical runtime UI source. The primary retained UI surface is authored as `.neui` and must be
-/// compiled by `engine.assets.ui` before `engine.ui` mounts it. Runtime JSON navigation
-/// assets are intentionally not supported as compatibility fallback.
-pub const ENGINE_PRIMARY_UI_SURFACE_REF: &str = "assets/ui/engine/primary.neui@surface";
+/// Canonical authored primary UI source. The preferred path is asset-backed `.neui`
+/// compiled by `engine.assets.ui`; runtime may also provide a generated/streamed
+/// `UiNodeNavigationDocument` through the same DTO contract when the asset is absent.
+/// Runtime JSON navigation assets are intentionally not supported as compatibility fallback.
+pub const ENGINE_PRIMARY_UI_SURFACE_REF: &str = "assets/ui/engine/main_menu.neui@surface";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]

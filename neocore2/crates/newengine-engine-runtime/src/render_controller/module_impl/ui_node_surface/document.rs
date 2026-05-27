@@ -2,8 +2,9 @@
 
 use newengine_assets_api::{assets_ui_method, ENGINE_ASSETS_UI_SERVICE_ID};
 use newengine_ui_api::{UiCompiledDocument, UiMountSurfaceRequest, UI_SERVICE_METHOD_MOUNT_SURFACE_V1};
-use newengine_ui_navigation_api::UiNodeNavigationRuntime;
-use newengine_ui_navigation_api::{UiNodeNavigationDocument, ENGINE_PRIMARY_UI_SURFACE_REF};
+use newengine_ui_navigation_api::{
+    UiNodeNavigationDocument, UiNodeNavigationRuntime, ENGINE_PRIMARY_UI_SURFACE_REF,
+};
 use serde::Deserialize;
 
 #[derive(Debug, Deserialize)]
@@ -35,19 +36,27 @@ impl Default for AssetsUiCompileResponse {
 /// Boundary rule:
 ///
 /// ```text
-/// engine.ui.primary -> engine.assets.ui::compile_document_v1(ref) -> response DTO
-/// engine.ui.primary -> engine.ui::mount_surface_v1(compiled DTO)       -> best-effort live mount
+/// engine.ui.primary -> engine.assets.ui::compile_document_v1(ref/style/source) -> response DTO
+/// engine.ui.primary -> engine.ui::mount_surface_v1(compiled DTO)              -> best-effort live mount
 /// ```
 ///
-/// The UI node runtime does not parse `.neui`, NEF8, deflate, XMLcentral, VFS paths
-/// or old JSON UI assets. It only performs request/response calls.
+/// If the authored `.neui` is not present, the runtime emits diagnostics and
+/// leaves the surface unavailable. It must not invent a hardcoded UI document.
 pub(super) fn try_load_primary_ui_document() -> Result<UiNodeNavigationRuntime, String> {
-    let response = compile_primary_surface()?;
+    let response = compile_primary_surface().map_err(|err| {
+        log::warn!(
+            "engine.ui.primary: authored .neui document unavailable; no generated or special UI renderer will be used: {err}"
+        );
+        err
+    })?;
+    navigation_from_compiled_response(response)
+}
+
+fn navigation_from_compiled_response(response: AssetsUiCompileResponse) -> Result<UiNodeNavigationRuntime, String> {
     if !response.ok {
         return Err(format!(
             "engine.assets.ui returned ok=false for '{}' surface='{}'",
-            response.document_ref,
-            response.surface_id
+            response.document_ref, response.surface_id
         ));
     }
     for warning in &response.warnings {
@@ -68,6 +77,7 @@ pub(super) fn try_load_primary_ui_document() -> Result<UiNodeNavigationRuntime, 
 fn compile_primary_surface() -> Result<AssetsUiCompileResponse, String> {
     let payload = serde_json::to_vec(&serde_json::json!({
         "document_ref": ENGINE_PRIMARY_UI_SURFACE_REF,
+        "source_kind": "asset",
         "mount_runtime": false
     }))
     .map_err(|e| e.to_string())?;

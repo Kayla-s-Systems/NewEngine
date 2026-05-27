@@ -4,7 +4,7 @@ use newengine_math::{Quat, Vec2, Vec3};
 
 use crate::{
     CameraChannel, CameraChannelState, CameraClipPolicy, CameraControlInput, CameraFrame,
-    CameraLens, CameraLargeWorldFrame, CameraLargeWorldRig, CameraRig, CameraViewport,
+    CameraLens, CameraWorldFrame, CameraWorldRig, CameraRig, CameraViewport,
     CameraWorldPoint, FreeFlyController, OrbitController, Projection,
 };
 
@@ -82,6 +82,12 @@ impl Camera {
     }
 
     #[inline]
+    pub fn update_clip_for_focus(&mut self, policy: CameraClipPolicy, distance: f32, radius: f32, max_far: f32) {
+        let (near, far) = policy.near_far(distance, radius, max_far);
+        self.projection.set_near_far(near, far);
+    }
+
+    #[inline]
     pub fn frame(&self) -> CameraFrame {
         CameraFrame::build(self.channel, self.rig, self.projection, self.viewport, self.jitter_px)
     }
@@ -139,12 +145,12 @@ impl CameraController {
     }
 }
 
-/// Large-world version of the simple camera facade.
+/// World-space version of the simple camera facade.
 ///
 /// The public position is `f64`; `frame()` emits camera-origin-relative `f32` data.
 #[derive(Clone, Debug)]
-pub struct LargeWorldCamera {
-    pub rig: CameraLargeWorldRig,
+pub struct WorldCamera {
+    pub rig: CameraWorldRig,
     pub projection: Projection,
     pub viewport: CameraViewport,
     pub channel: CameraChannelState,
@@ -152,17 +158,17 @@ pub struct LargeWorldCamera {
     pub clip_policy: CameraClipPolicy,
 }
 
-impl LargeWorldCamera {
+impl WorldCamera {
     #[inline]
     pub fn new(position: CameraWorldPoint, viewport: CameraViewport, lens: CameraLens) -> Self {
         let viewport = viewport.sanitized();
         Self {
-            rig: CameraLargeWorldRig::new(position, Quat::IDENTITY),
+            rig: CameraWorldRig::new(position, Quat::IDENTITY),
             projection: lens.projection(viewport.aspect()),
             viewport,
             channel: CameraChannelState::dominant(CameraChannel::Gameplay),
             jitter_px: Vec2::ZERO,
-            clip_policy: CameraClipPolicy::large_world(),
+            clip_policy: CameraClipPolicy::world_space(),
         }
     }
 
@@ -193,8 +199,38 @@ impl LargeWorldCamera {
     }
 
     #[inline]
-    pub fn frame(&self) -> CameraLargeWorldFrame {
-        CameraLargeWorldFrame::build(self.channel, self.rig, self.projection, self.viewport, self.jitter_px)
+    pub fn with_channel(mut self, channel: CameraChannel) -> Self {
+        self.channel = CameraChannelState::dominant(channel);
+        self
+    }
+
+    #[inline]
+    pub fn set_lens(&mut self, lens: CameraLens) {
+        self.projection = lens.projection(self.viewport.aspect());
+    }
+
+    #[inline]
+    pub fn set_origin_cell_size(&mut self, cell_size: f64) {
+        self.rig = self.rig.with_cell_size(cell_size);
+    }
+
+    #[inline]
+    pub fn translate_world(&mut self, delta: Vec3) {
+        if delta.is_finite() {
+            self.rig.position = self.rig.position.translated(delta);
+            self.rig.rebase_if_needed();
+        }
+    }
+
+    #[inline]
+    pub fn update_clip_for_focus(&mut self, distance: f32, radius: f32, max_far: f32) {
+        let (near, far) = self.clip_policy.near_far(distance, radius, max_far);
+        self.projection.set_near_far(near, far);
+    }
+
+    #[inline]
+    pub fn frame(&self) -> CameraWorldFrame {
+        CameraWorldFrame::build(self.channel, self.rig, self.projection, self.viewport, self.jitter_px)
     }
 }
 
@@ -212,8 +248,8 @@ mod tests {
     }
 
     #[test]
-    fn large_world_camera_emits_local_frame() {
-        let camera = LargeWorldCamera::new(
+    fn world_camera_emits_local_frame() {
+        let camera = WorldCamera::new(
             CameraWorldPoint::new(10_000_000.0, 10.0, -10_000_000.0),
             CameraViewport::from_size(1920, 1080),
             CameraLens::default(),

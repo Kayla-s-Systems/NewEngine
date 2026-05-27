@@ -1,0 +1,20 @@
+[package]
+name = "newengine-content-browser-ui-runtime"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+abi_stable = "0.11"
+log = "0.4"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+newengine-assets = { path = "../newengine-assets" }
+newengine-assets-api = { path = "../newengine-assets-api" }
+newengine-plugin-api = { path = "../newengine-plugin-api" }
+newengine-core = { path = "../newengine-core" }
+newengine-input-actions-api = { path = "../newengine-input-actions-api" }
+newengine-input-api = { path = "../newengine-input-api" }
+newengine-input-bindings-api = { path = "../newengine-input-bindings-api" }
+newengine-input-bindings-runtime = { path = "../newengine-input-bindings-runtime" }
+newengine-plugin-host = { path = "../newengine-plugin-host" }
+newengine-ui-api = { path = "../newengine-ui-api" }

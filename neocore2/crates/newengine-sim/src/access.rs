@@ -1,12 +1,14 @@
 #![forbid(unsafe_op_in_unsafe_fn)]
 
+use serde::{Deserialize, Serialize};
+
 /// Coarse-grained subsystem identifiers for batching.
 ///
 /// The schedule uses these bits to describe conflicts for deterministic ordering
 /// now, and for a future `engine.jobs`-owned parallel executor later.
 ///
 /// You are free to define your own subsystem bits in downstream code.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[repr(u32)]
 pub enum Subsystem {
     /// Gameplay/world simulation.
@@ -27,7 +29,7 @@ pub enum Subsystem {
 /// Conflict rule:
 /// - write/write conflicts
 /// - write/read conflicts
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct AccessMask {
     pub read: u128,
     pub write: u128,

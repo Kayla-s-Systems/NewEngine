@@ -13,7 +13,8 @@ use newengine_jobs_api::{
 use newengine_plugin_api::Blob;
 use std::collections::HashMap;
 use std::path::PathBuf;
-use std::process::Command;
+use std::process::{Command, Stdio};
+use std::time::{Duration, Instant};
 use std::sync::{Arc, Mutex};
 use newengine_plugin_host::host_context::publish_event;
 use newengine_service_kit::{
@@ -39,10 +40,23 @@ struct ProcessResultRecord {
     stderr: String,
     result_bytes: Option<Vec<u8>>,
     error: Option<String>,
+    lane: String,
+    priority: String,
+    frame_id: Option<u64>,
+    dependency_group: String,
+    job_domain: String,
+    job_pass: String,
+    can_cancel: bool,
 }
 
 impl ProcessResultRecord {
-    fn running() -> Self {
+    fn running_from_process_request(request: &JobRunProcessStartRequestV1) -> Self {
+        let owner = match request.owner.as_str() {
+            "engine.render" => "engine.render",
+            "vulkan_renderer" => "vulkan_renderer",
+            _ => "engine.jobs",
+        };
+        let job_pass = job_pass_from_category(request.category.as_str(), "process").to_owned();
         Self {
             phase: EngineTaskPhase::Running,
             exit_code: None,
@@ -50,6 +64,17 @@ impl ProcessResultRecord {
             stderr: String::new(),
             result_bytes: None,
             error: None,
+            lane: lane_from_str(request.lane.as_str()).as_str().to_owned(),
+            priority: priority_from_str(request.priority.as_str()).as_str().to_owned(),
+            frame_id: request.frame_id,
+            dependency_group: if request.dependency_group.trim().is_empty() {
+                format!("{}.process", job_pass)
+            } else {
+                request.dependency_group.trim().to_owned()
+            },
+            job_domain: job_domain_from_request(request.job_domain.as_str(), owner).to_owned(),
+            job_pass,
+            can_cancel: request.can_cancel,
         }
     }
 }
@@ -124,6 +149,7 @@ fn snapshot(state: &mut JobsGatewayState) -> JobsSnapshotJsonV1 {
             lane.as_str().to_owned(),
             JobsLaneSnapshotJsonV1 {
                 pending_jobs: snapshot.pending_for_lane(lane),
+                running_jobs: snapshot.running_for_lane(lane),
                 completed_jobs: snapshot.completed_for_lane(lane),
             },
         );
@@ -359,15 +385,16 @@ fn submit_process_job(state: &mut JobsGatewayState, request: JobRunProcessStartR
     let env = request.env.clone();
     let result_path = request.result_path.trim().to_owned();
     let results = state.process_results.clone();
+    let base_record = ProcessResultRecord::running_from_process_request(&request);
 
     let ticket = state.jobs.submit_controlled(job, move |control| {
         let job_id = control.task_id().to_owned();
-        results.lock().expect("engine.jobs process_results mutex poisoned").insert(job_id.clone(), ProcessResultRecord::running());
+        results.lock().expect("engine.jobs process_results mutex poisoned").insert(job_id.clone(), base_record.clone());
         if !control.checkpoint() {
             results.lock().expect("engine.jobs process_results mutex poisoned").insert(job_id.clone(), ProcessResultRecord {
                 phase: EngineTaskPhase::Cancelled,
                 error: Some("process job cancelled before spawn".to_owned()),
-                ..ProcessResultRecord::running()
+                ..base_record.clone()
             });
             return;
         }
@@ -387,53 +414,111 @@ fn submit_process_job(state: &mut JobsGatewayState, request: JobRunProcessStartR
         for (key, value) in &env {
             command.env(key, value);
         }
-        let output = command.output();
-        match output {
-            Ok(output) => {
-                let stdout = String::from_utf8_lossy(&output.stdout).trim().to_owned();
-                let stderr = String::from_utf8_lossy(&output.stderr).trim().to_owned();
-                let result_bytes = if !result_path.is_empty() {
-                    match std::fs::read(&result_path) {
-                        Ok(bytes) => Some(bytes),
-                        Err(e) => {
-                            results.lock().expect("engine.jobs process_results mutex poisoned").insert(job_id.clone(), ProcessResultRecord {
-                                phase: EngineTaskPhase::Failed,
-                                exit_code: output.status.code(),
-                                stdout,
-                                stderr,
-                                result_bytes: None,
-                                error: Some(format!("process result read failed path='{}' err='{e}'", result_path)),
-                            });
-                            control.publish_progress(1.0, "External process failed", "Process completed but result file could not be read.");
-                            return;
-                        }
-                    }
-                } else {
-                    Some(output.stdout.clone())
-                };
-                let phase = if output.status.success() { EngineTaskPhase::Completed } else { EngineTaskPhase::Failed };
-                let error = if output.status.success() { None } else { Some(format!("process exited with status {}", output.status)) };
-                results.lock().expect("engine.jobs process_results mutex poisoned").insert(job_id.clone(), ProcessResultRecord {
-                    phase,
-                    exit_code: output.status.code(),
-                    stdout,
-                    stderr,
-                    result_bytes,
-                    error,
-                });
-                control.publish_progress(
-                    1.0,
-                    if output.status.success() { "External process completed" } else { "External process failed" },
-                    format!("Process exited status={} result_path='{}'", output.status, result_path),
-                );
-            }
+        command.stdout(Stdio::piped()).stderr(Stdio::piped());
+        let mut child = match command.spawn() {
+            Ok(child) => child,
             Err(e) => {
                 results.lock().expect("engine.jobs process_results mutex poisoned").insert(job_id.clone(), ProcessResultRecord {
                     phase: EngineTaskPhase::Failed,
                     error: Some(format!("process spawn failed executable='{}' err='{e}'", executable)),
-                    ..ProcessResultRecord::running()
+                    ..base_record.clone()
                 });
                 control.publish_progress(1.0, "External process failed", format!("Spawn failed: {e}"));
+                return;
+            }
+        };
+
+        let started = Instant::now();
+        let mut last_progress = Instant::now();
+        loop {
+            if !control.checkpoint() {
+                let _ = child.kill();
+                let _ = child.wait();
+                results.lock().expect("engine.jobs process_results mutex poisoned").insert(job_id.clone(), ProcessResultRecord {
+                    phase: EngineTaskPhase::Cancelled,
+                    error: Some(format!("process job cancelled executable='{}' elapsed_ms={}", executable, started.elapsed().as_millis())),
+                    ..base_record.clone()
+                });
+                control.publish_progress(1.0, "External process cancelled", "Child process was killed by engine.jobs cooperative cancellation.");
+                return;
+            }
+
+            match child.try_wait() {
+                Ok(Some(_status)) => {
+                    let output = match child.wait_with_output() {
+                        Ok(output) => output,
+                        Err(e) => {
+                            results.lock().expect("engine.jobs process_results mutex poisoned").insert(job_id.clone(), ProcessResultRecord {
+                                phase: EngineTaskPhase::Failed,
+                                error: Some(format!("process wait/read failed executable='{}' err='{e}'", executable)),
+                                ..base_record.clone()
+                            });
+                            control.publish_progress(1.0, "External process failed", format!("Wait/read failed: {e}"));
+                            return;
+                        }
+                    };
+                    let stdout = String::from_utf8_lossy(&output.stdout).trim().to_owned();
+                    let stderr = String::from_utf8_lossy(&output.stderr).trim().to_owned();
+                    let result_bytes = if !result_path.is_empty() {
+                        match std::fs::read(&result_path) {
+                            Ok(bytes) => Some(bytes),
+                            Err(e) => {
+                                results.lock().expect("engine.jobs process_results mutex poisoned").insert(job_id.clone(), ProcessResultRecord {
+                                    phase: EngineTaskPhase::Failed,
+                                    exit_code: output.status.code(),
+                                    stdout,
+                                    stderr,
+                                    result_bytes: None,
+                                    error: Some(format!("process result read failed path='{}' err='{e}'", result_path)),
+                                    ..base_record.clone()
+                                });
+                                control.publish_progress(1.0, "External process failed", "Process completed but result file could not be read.");
+                                return;
+                            }
+                        }
+                    } else {
+                        Some(output.stdout.clone())
+                    };
+                    let phase = if output.status.success() { EngineTaskPhase::Completed } else { EngineTaskPhase::Failed };
+                    let error = if output.status.success() { None } else { Some(format!("process exited with status {}", output.status)) };
+                    results.lock().expect("engine.jobs process_results mutex poisoned").insert(job_id.clone(), ProcessResultRecord {
+                        phase,
+                        exit_code: output.status.code(),
+                        stdout,
+                        stderr,
+                        result_bytes,
+                        error,
+                        ..base_record.clone()
+                    });
+                    control.publish_progress(
+                        1.0,
+                        if output.status.success() { "External process completed" } else { "External process failed" },
+                        format!("Process exited status={} result_path='{}' elapsed_ms={}", output.status, result_path, started.elapsed().as_millis()),
+                    );
+                    return;
+                }
+                Ok(None) => {
+                    if last_progress.elapsed() >= Duration::from_millis(500) {
+                        control.publish_progress(
+                            0.50,
+                            "External process running",
+                            format!("Process still running executable='{}' elapsed_ms={} policy='engine.jobs-cancellable-child'", executable, started.elapsed().as_millis()),
+                        );
+                        last_progress = Instant::now();
+                    }
+                    std::thread::sleep(Duration::from_millis(10));
+                }
+                Err(e) => {
+                    let _ = child.kill();
+                    let _ = child.wait();
+                    results.lock().expect("engine.jobs process_results mutex poisoned").insert(job_id.clone(), ProcessResultRecord {
+                        phase: EngineTaskPhase::Failed,
+                        error: Some(format!("process poll failed executable='{}' err='{e}'", executable)),
+                        ..base_record.clone()
+                    });
+                    control.publish_progress(1.0, "External process failed", format!("Poll failed: {e}"));
+                    return;
+                }
             }
         }
     });
@@ -508,13 +593,15 @@ fn service(state: JobsGatewayState) -> newengine_plugin_api::ServiceV1Dyn<'stati
                 return JobStatusJsonV1 {
                     job_id: request.job_id,
                     name: "external-process".to_owned(),
-                    lane: "render-prep".to_owned(),
-                    priority: "background".to_owned(),
-                    job_domain: "engine.jobs".to_owned(),
-                    job_pass: "process".to_owned(),
+                    lane: record.lane,
+                    priority: record.priority,
+                    frame_id: record.frame_id,
+                    dependency_group: record.dependency_group,
+                    job_domain: record.job_domain,
+                    job_pass: record.job_pass,
                     phase: record.phase,
                     can_pause: false,
-                    can_cancel: false,
+                    can_cancel: record.can_cancel,
                     found: true,
                     ..Default::default()
                 };

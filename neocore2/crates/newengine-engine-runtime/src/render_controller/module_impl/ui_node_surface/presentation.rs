@@ -1,7 +1,7 @@
 #![forbid(unsafe_op_in_unsafe_fn)]
 
 use newengine_ui_api::{
-    UiComponentNode, UiNodeMessage, UiSurfaceNode, UI_COMPONENT_PANEL,
+    UiComponentNode, UiNodeMessage, UiSurfaceAdmissionPolicy, UiSurfaceNode, UI_COMPONENT_PANEL,
     UI_THEME_NORTHSTAR_DEFAULT,
 };
 use newengine_ui_navigation_api::UiNodeNavigationItem;
@@ -82,17 +82,19 @@ impl RenderUiNodeSurfaceState {
             source: "engine.ui.primary".to_owned(),
             visible: visual_visible,
             modal: true,
-            z_order: 950,
+            z_order: 10_000,
             title: page_title.to_owned(),
             subtitle: page_subtitle.to_owned(),
             body_lines,
             footer_lines,
-            style_tags: vec!["retained".to_owned(), "node".to_owned()],
+            style_tags: vec!["retained".to_owned(), "node".to_owned(), "modern".to_owned(), "rounded".to_owned()],
             theme_id: UI_THEME_NORTHSTAR_DEFAULT.to_owned(),
+            style_ref: None,
             component_id: UI_COMPONENT_PANEL.to_owned(),
             components,
             message: self.feedback.as_ref().map(UiNodeSurfaceEventFeedback::to_ui_message),
             style: ui_surface_style(),
+            admission_policy: UiSurfaceAdmissionPolicy::AcceptAllButThis,
             metrics,
         }
     }
@@ -111,10 +113,10 @@ impl RenderUiNodeSurfaceState {
             ))
         });
         let lines = vec![
-            "UI document unavailable".to_owned(),
+            "UI document is not mounted yet".to_owned(),
             detail.clone(),
-            "No embedded fallback is allowed for runtime UI assets".to_owned(),
-            "Check AssetManager mount roots and package/VFS configuration".to_owned(),
+            "Gameplay navigation is gated while this modal is open; raw sampling remains alive".to_owned(),
+            "Check engine.assets.ui route, AssetManager mount roots and package/VFS configuration".to_owned(),
         ];
         UiSurfaceNode {
             version: 1,
@@ -122,13 +124,14 @@ impl RenderUiNodeSurfaceState {
             source: "engine.ui.primary".to_owned(),
             visible: visual_visible,
             modal: true,
-            z_order: 950,
-            title: "UI".to_owned(),
-            subtitle: "Declarative UI document is loaded through engine.assets/VFS".to_owned(),
+            z_order: 10_000,
+            title: "UI loading".to_owned(),
+            subtitle: "Waiting for declarative engine.ui surface from engine.assets/VFS".to_owned(),
             body_lines: lines.clone(),
-            footer_lines: vec!["ESC closes".to_owned()],
-            style_tags: vec!["retained".to_owned(), "error".to_owned()],
+            footer_lines: vec!["ESC closes diagnostic overlay".to_owned()],
+            style_tags: vec!["retained".to_owned(), "error".to_owned(), "modern".to_owned(), "rounded".to_owned()],
             theme_id: UI_THEME_NORTHSTAR_DEFAULT.to_owned(),
+            style_ref: None,
             component_id: UI_COMPONENT_PANEL.to_owned(),
             components: lines
                 .iter()
@@ -137,6 +140,7 @@ impl RenderUiNodeSurfaceState {
                 .collect(),
             message,
             style: ui_surface_style(),
+            admission_policy: UiSurfaceAdmissionPolicy::AcceptAllButThis,
             metrics: std::collections::BTreeMap::from([("error".to_owned(), serde_json::json!(detail))]),
         }
     }

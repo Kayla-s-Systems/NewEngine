@@ -27,7 +27,7 @@ pub mod action {
     pub const UI_NAVIGATION_LEFT: &str = "ui.nav.left";
     pub const UI_NAVIGATION_RIGHT: &str = "ui.nav.right";
 
-    pub const EDITOR_ASSET_BROWSER_TOGGLE: &str = newengine_input_actions_api::engine_action::ASSET_BROWSER_TOGGLE;
+    pub const ASSET_CATALOG_UI_TOGGLE: &str = newengine_input_actions_api::engine_action::ASSET_CATALOG_UI_TOGGLE;
 }
 
 #[inline]
@@ -99,7 +99,7 @@ pub fn gameplay_default_actions() -> Vec<InputActionDefinition> {
         InputActionDefinition::new(action::UI_NAVIGATION_DOWN).with_dispatch(InputActionDispatchMode::ConsumeFirst).with_label("UI down").with_effect(InputActionEffect::UiNav { x: 0, y: 1 }),
         InputActionDefinition::new(action::UI_NAVIGATION_LEFT).with_dispatch(InputActionDispatchMode::ConsumeFirst).with_label("UI left").with_effect(InputActionEffect::UiNav { x: -1, y: 0 }),
         InputActionDefinition::new(action::UI_NAVIGATION_RIGHT).with_dispatch(InputActionDispatchMode::ConsumeFirst).with_label("UI right").with_effect(InputActionEffect::UiNav { x: 1, y: 0 }),
-        InputActionDefinition::new(action::EDITOR_ASSET_BROWSER_TOGGLE).with_dispatch(InputActionDispatchMode::ConsumeFirst).with_label("Toggle Asset Browser"),
+        InputActionDefinition::new(action::ASSET_CATALOG_UI_TOGGLE).with_dispatch(InputActionDispatchMode::ConsumeFirst).with_label("Toggle assets catalog UI"),
     ]
 }
 
@@ -118,8 +118,8 @@ pub fn gameplay_default_listeners() -> Vec<InputActionListenerRegistration> {
             ])
             .with_priority(100)
             .consuming(),
-        InputActionListenerRegistration::new("newengine-editor", "asset-browser")
-            .with_actions([action::EDITOR_ASSET_BROWSER_TOGGLE])
+        InputActionListenerRegistration::new("newengine.assets_catalog_ui", "assets-catalog-ui")
+            .with_actions([action::ASSET_CATALOG_UI_TOGGLE])
             .with_priority(90)
             .consuming(),
         InputActionListenerRegistration::new("newengine-camera-runtime", "camera-view")
@@ -164,15 +164,15 @@ fn ensure_required_system_bindings(bindings: &mut Vec<InputBinding>) {
         bindings.push(InputBinding::gamepad_button_pressed(action::UI_NAVIGATION_TOGGLE, gamepad_button::START));
     }
 
-    let has_asset_browser_toggle = bindings.iter().any(|binding| {
-        binding.action == action::EDITOR_ASSET_BROWSER_TOGGLE
+    let has_asset_catalog_toggle = bindings.iter().any(|binding| {
+        binding.action == action::ASSET_CATALOG_UI_TOGGLE
             && binding.device == InputBindingDevice::Keyboard
             && binding.phase == InputBindingPhase::Pressed
     });
-    if !has_asset_browser_toggle {
+    if !has_asset_catalog_toggle {
         bindings.push(InputBinding::keyboard_pressed(
-            action::EDITOR_ASSET_BROWSER_TOGGLE,
-            engine_default_keybind::ASSET_BROWSER_TOGGLE,
+            action::ASSET_CATALOG_UI_TOGGLE,
+            engine_default_keybind::ASSET_CATALOG_UI_TOGGLE,
         ));
     }
 
@@ -256,7 +256,7 @@ mod tests {
         assert!(profile.actions.iter().any(|a| a.id == action::CAMERA_VIEW_NEXT));
         assert!(profile.listeners.iter().any(|l| l.id == "ui-navigation"));
         assert!(profile.bindings.iter().any(|b| b.action == action::UI_NAVIGATION_TOGGLE && b.code == engine_default_keybind::PRIMARY_UI_TOGGLE));
-        assert!(profile.bindings.iter().any(|b| b.action == action::EDITOR_ASSET_BROWSER_TOGGLE && b.code == engine_default_keybind::ASSET_BROWSER_TOGGLE));
+        assert!(profile.bindings.iter().any(|b| b.action == action::ASSET_CATALOG_UI_TOGGLE && b.code == engine_default_keybind::ASSET_CATALOG_UI_TOGGLE));
         assert!(!profile.bindings.iter().any(|b| b.action == action::UI_NAVIGATION_BACK && b.code == engine_default_keybind::PRIMARY_UI_TOGGLE));
     }
 }

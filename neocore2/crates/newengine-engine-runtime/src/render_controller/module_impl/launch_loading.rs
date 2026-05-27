@@ -28,7 +28,7 @@ pub(super) fn scene_launch_loading_status(
         gate.reason.clone()
     } else {
         format!(
-            "{} · textures ready {}/{} · failed {}",
+            "{} · resources ready {}/{} · failed {}",
             gate.reason,
             gate.total_textures.saturating_sub(gate.waiting_textures),
             gate.total_textures,

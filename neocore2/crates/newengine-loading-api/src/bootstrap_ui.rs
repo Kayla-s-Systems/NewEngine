@@ -1,9 +1,8 @@
 #![forbid(unsafe_op_in_unsafe_fn)]
 
-/// Shared visual contract for every engine bootstrap surface that exists before the selected engine.ui
-/// provider is available. The Rust/egui PreStart window and the native platform
-/// PreLoad compositor both consume this data shape so brand, asset names and
-/// startup steps do not drift into two separate hard-coded skins.
+/// Shared bootstrap data palette for engine.ui projections. This module does not
+/// render UI and must not be consumed by a out-of-band compositor; it only
+/// keeps brand/status data stable for providers that implement `engine.ui`.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct BootstrapUiRgb {
     pub r: u8,

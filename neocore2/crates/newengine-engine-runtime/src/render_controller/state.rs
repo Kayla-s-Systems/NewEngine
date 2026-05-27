@@ -391,25 +391,6 @@ impl RenderDiagnosticsRuntimeState {
 
 
 
-pub(super) struct RenderEditorRuntimeState {
-    pub(super) asset_browser_open: bool,
-    pub(super) asset_browser_last_refresh_frame: u64,
-    pub(super) asset_browser_last_toggle_frame: u64,
-    pub(super) asset_browser_node: Option<newengine_ui_api::UiSurfaceNode>,
-}
-
-impl RenderEditorRuntimeState {
-    #[inline]
-    pub(super) fn new() -> Self {
-        Self {
-            asset_browser_open: false,
-            asset_browser_last_refresh_frame: 0,
-            asset_browser_last_toggle_frame: u64::MAX,
-            asset_browser_node: None,
-        }
-    }
-}
-
 pub(super) struct RenderUiSurfaceRuntimeState {
     pub(super) primary: super::module_impl::ui_node_surface::RenderUiNodeSurfaceState,
 }

@@ -1,9 +1,45 @@
 use newengine_ecs::World;
-use newengine_sim::{default_schedule, SimFrame, SimSchedule, SimStage, SimulationJobTelemetry};
+use newengine_sim::{default_schedule, SimFrame, SimReadBatchExecutor, SimReadBatchReport, SimReadSnapshot, SimSchedule, SimStage, SimulationJobBatch, SimulationJobTelemetry};
 
 use super::fps_demo::step_fps_demo_gameplay;
 use super::physics::step_service_physics;
 use newengine_core::physics::PhysicsApiRef;
+use newengine_core::{JobLane, JobPriority, JobRequest, JobSystemHandle};
+
+struct EngineJobsSimReadExecutor<'a> {
+    jobs: &'a JobSystemHandle,
+}
+
+impl SimReadBatchExecutor for EngineJobsSimReadExecutor<'_> {
+    fn run_read_batch(
+        &self,
+        batch: &SimulationJobBatch,
+        snapshot: SimReadSnapshot,
+        job: Box<dyn FnOnce(SimReadSnapshot) -> SimReadBatchReport + Send + 'static>,
+    ) -> SimReadBatchReport {
+        let fallback = SimReadBatchReport::from_snapshot(&snapshot, batch.batch_index);
+        let result = std::sync::Arc::new(parking_lot::Mutex::new(None::<SimReadBatchReport>));
+        let result_for_job = std::sync::Arc::clone(&result);
+        let request = JobRequest::new("simulation.read-snapshot")
+            .with_source("newengine-engine-runtime.sim")
+            .with_owner("newengine-engine-runtime")
+            .with_category("simulation-read-batch")
+            .with_lane(JobLane::Simulation)
+            .with_priority(JobPriority::Interactive)
+            .with_task_id(batch.task_id.clone())
+            .with_frame_id(batch.fixed_tick)
+            .with_dependency_group(batch.event_dependency_group())
+            .with_job_domain(newengine_jobs_api::job_domain::ENGINE_SIMULATION)
+            .with_job_pass(batch.stage.as_str());
+        let ticket = self.jobs.submit_request(request, move || {
+            *result_for_job.lock() = Some(job(snapshot));
+        });
+        ticket.wait();
+        let mut guard = result.lock();
+        guard.take().unwrap_or(fallback)
+    }
+}
+
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum PhysicsIntegrationMode {
@@ -52,6 +88,7 @@ pub fn run_schedule_with_physics_mode_and_telemetry(
         physics_api,
         physics_mode,
         telemetry,
+        None,
     );
 }
 
@@ -63,11 +100,14 @@ pub fn run_schedule_with_physics_mode_and_telemetry_for_frame(
     physics_api: Option<&PhysicsApiRef>,
     physics_mode: PhysicsIntegrationMode,
     telemetry: Option<&SimulationJobTelemetry<'_>>,
+    job_system: Option<&JobSystemHandle>,
 ) {
     let frame = SimFrame::new(dt.max(0.0001), frame_index);
+    let sim_executor = job_system.map(|jobs| EngineJobsSimReadExecutor { jobs });
+    let sim_executor_ref = sim_executor.as_ref().map(|executor| executor as &dyn SimReadBatchExecutor);
 
-    schedule.run_stage_with_telemetry(world, SimStage::Input, frame, telemetry);
-    schedule.run_stage_with_telemetry(world, SimStage::Controllers, frame, telemetry);
+    schedule.run_stage_with_telemetry_and_executor(world, SimStage::Input, frame, telemetry, sim_executor_ref);
+    schedule.run_stage_with_telemetry_and_executor(world, SimStage::Controllers, frame, telemetry, sim_executor_ref);
     schedule.run_stage_with_telemetry(world, SimStage::ApplyIntents, frame, telemetry);
     match physics_mode {
         PhysicsIntegrationMode::ServiceBackend => {
@@ -81,10 +121,10 @@ pub fn run_schedule_with_physics_mode_and_telemetry_for_frame(
             // Declarative safe-profile fallback: keep gameplay controls responsive
             // without entering the native physics provider path. This is a capability
             // downgrade, not a game-specific shortcut.
-            schedule.run_stage_with_telemetry(world, SimStage::Physics, frame, telemetry);
+            schedule.run_stage_with_telemetry_and_executor(world, SimStage::Physics, frame, telemetry, sim_executor_ref);
         }
     }
-    schedule.run_stage_with_telemetry(world, SimStage::Derived, frame, telemetry);
+    schedule.run_stage_with_telemetry_and_executor(world, SimStage::Derived, frame, telemetry, sim_executor_ref);
 
     step_fps_demo_gameplay(world, frame.dt);
 }

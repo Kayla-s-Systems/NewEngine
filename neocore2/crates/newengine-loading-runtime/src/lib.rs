@@ -10,7 +10,7 @@ pub use newengine_loading_api::{
 };
 
 #[derive(Debug, Clone)]
-pub struct LoadingCompositorFrame {
+pub struct LoadingProjectionFrame {
     pub snapshot: LoadingScreenSnapshot,
     pub visual_progress_01: f32,
     pub spinner_angle_rad: f32,
@@ -53,7 +53,7 @@ impl Default for LoadingAnimator {
 }
 
 impl LoadingAnimator {
-    pub fn present(&mut self, snapshot: &LoadingScreenSnapshot) -> LoadingCompositorFrame {
+    pub fn present(&mut self, snapshot: &LoadingScreenSnapshot) -> LoadingProjectionFrame {
         let now = Instant::now();
         let dt = now
             .saturating_duration_since(self.last_present_at)
@@ -89,7 +89,7 @@ impl LoadingAnimator {
         self.visual_progress_01 = self.visual_progress_01.clamp(0.0, 1.0);
 
         let age = now.saturating_duration_since(self.created_at).as_secs_f32();
-        // Spinner animation must be driven by compositor-local monotonic time,
+        // Spinner animation must be driven by loading-projection monotonic time,
         // not by task/status events. Event-driven phases arrive irregularly during
         // heavy startup work, which made the spinner advance in visible bursts.
         // The bus-provided phase is kept only as a tiny deterministic offset so
@@ -98,7 +98,7 @@ impl LoadingAnimator {
         let spinner_angle_rad = (spinner_phase_offset + age * 1.35 * TAU) % TAU;
         let pulse_01 = ((age * 1.25 * TAU).sin() * 0.5 + 0.5).clamp(0.0, 1.0);
 
-        LoadingCompositorFrame {
+        LoadingProjectionFrame {
             snapshot: next,
             visual_progress_01: self.visual_progress_01,
             spinner_angle_rad,
@@ -208,11 +208,11 @@ pub fn project_loading_snapshot_from_overlay_fields(
         active,
         title: normalize_text(title.into(), "NORTH STAR ENGINE // BOOTSTRAP"),
         status: normalize_text(status.into(), "Preparing runtime..."),
-        detail: normalize_text(detail.into(), "The native loading shell is waiting for startup telemetry."),
+        detail: normalize_text(detail.into(), "The loading status bridge is waiting for startup telemetry."),
         progress_01: progress_01.clamp(0.0, 1.0),
         spinner_phase,
         source: normalize_text(source.into(), "engine.loading"),
-        provider: normalize_text(provider.into(), "native-shell"),
+        provider: normalize_text(provider.into(), "engine-loading-data"),
         view_json,
         subsystems,
     }
@@ -276,7 +276,7 @@ pub fn project_loading_snapshot_from_task_event(
         progress_01: progress.clamp(0.0, 1.0),
         spinner_phase,
         source: normalize_text(event.source.clone(), "engine.task.event"),
-        provider: normalize_text(provider.into(), "engine-owned-native-shell"),
+        provider: normalize_text(provider.into(), "engine-owned-engine-loading-data"),
         view_json: String::new(),
         subsystems: cards,
     }
@@ -297,7 +297,7 @@ pub fn project_loading_snapshot_from_status_event(
         progress_01: event.progress_01.clamp(0.0, 1.0),
         spinner_phase,
         source: normalize_text(event.source.clone(), "engine.loading.status"),
-        provider: normalize_text(provider.into(), "engine-owned-native-shell"),
+        provider: normalize_text(provider.into(), "engine-owned-engine-loading-data"),
         view_json: String::new(),
         subsystems,
     }

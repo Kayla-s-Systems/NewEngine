@@ -12,6 +12,7 @@ pub struct JobSystemSnapshot {
     pub cancelled_jobs: u64,
     pub panicked_jobs: u64,
     pub pending_by_lane: [usize; JOB_LANE_COUNT],
+    pub running_by_lane: [usize; JOB_LANE_COUNT],
     pub completed_by_lane: [u64; JOB_LANE_COUNT],
 }
 
@@ -19,6 +20,11 @@ impl JobSystemSnapshot {
     #[inline]
     pub fn pending_for_lane(&self, lane: JobLane) -> usize {
         self.pending_by_lane[lane.index()]
+    }
+
+    #[inline]
+    pub fn running_for_lane(&self, lane: JobLane) -> usize {
+        self.running_by_lane[lane.index()]
     }
 
     #[inline]

@@ -1,23 +1,14 @@
 #![forbid(unsafe_op_in_unsafe_fn)]
 
-//! Core-owned PreStart configuration workbench.
+//! PreStart configuration diagnostics.
 //!
-//! The startup window is a host/startup concern: it opens before plugin loading,
-//! renderer creation and platform window creation, edits canonical `config.json`,
-//! then lets `StartupLoader` read the saved configuration. It is intentionally
-//! not a `tools/` script and does not depend on the current working directory.
+//! North Star UI rendering is owned by `engine.ui`; core must not open a
+//! separate native configuration window before the UI provider route exists.
+//! This module resolves the config path and records an unavailable report so
+//! startup can continue with explicit diagnostics instead of drawing a bypass UI.
 
 mod args;
 mod config_path;
-#[cfg(feature = "startup-window-egui")]
-mod prestart_asset_resolver;
-#[cfg(feature = "startup-window-egui")]
-mod icons;
-#[cfg(feature = "startup-window-egui")]
-mod svg_assets;
-#[cfg(feature = "startup-window-egui")]
-mod egui_presenter;
-#[cfg(not(feature = "startup-window-egui"))]
 mod unavailable_presenter;
 mod report;
 
@@ -25,11 +16,9 @@ pub use report::{StartupWindowDecision, StartupWindowReport};
 
 use crate::startup::ConfigPaths;
 
-/// Presents the PreStart configuration workbench before `StartupLoader`
-/// consumes `config.json`, unless the process args explicitly disable it.
-///
-/// Disable flags are intentionally process-level switches because the default
-/// behavior for desktop launches is to show the configuration window.
+/// Resolves PreStart configuration state before `StartupLoader` consumes
+/// `config.json`, unless the process args explicitly disable it. UI drawing is
+/// intentionally not performed here; `engine.ui` is the only UI render path.
 pub fn present_before_startup_if_needed(paths: &ConfigPaths) -> StartupWindowReport {
     if let Some(disabled_by) = args::disabled_by_process_args_or_env() {
         return StartupWindowReport::skipped(disabled_by);
@@ -44,13 +33,5 @@ pub fn present_before_startup_if_needed(paths: &ConfigPaths) -> StartupWindowRep
         }
     };
 
-    #[cfg(feature = "startup-window-egui")]
-    {
-        egui_presenter::present(&config_path)
-    }
-
-    #[cfg(not(feature = "startup-window-egui"))]
-    {
-        unavailable_presenter::present(&config_path)
-    }
+    unavailable_presenter::present(&config_path)
 }

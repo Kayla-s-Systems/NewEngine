@@ -145,7 +145,7 @@ impl Default for CameraClipPolicy {
 
 impl CameraClipPolicy {
     #[inline]
-    pub fn large_world() -> Self {
+    pub fn world_space() -> Self {
         Self {
             min_near: 0.03,
             near_distance_ratio: 0.0005,
@@ -189,7 +189,7 @@ mod tests {
 
     #[test]
     fn clip_policy_never_inverts_planes() {
-        let (near, far) = CameraClipPolicy::large_world().near_far(1_000_000.0, 10.0, 100_000.0);
+        let (near, far) = CameraClipPolicy::world_space().near_far(1_000_000.0, 10.0, 100_000.0);
         assert!(near > 0.0);
         assert!(far > near);
         assert!(far <= 100_000.0);

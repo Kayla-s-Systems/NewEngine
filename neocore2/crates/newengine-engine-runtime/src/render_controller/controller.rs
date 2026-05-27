@@ -12,7 +12,7 @@ use newengine_core::render::{RenderBackendCapabilities, RenderBackendStatus};
 use newengine_render_feature_api::{LightExtractionProvider, RenderDrawListProvider};
 use super::state::{
     RenderBridgeState, RenderDiagnosticsRuntimeState, RenderFeatureProviderState,
-    RenderEditorRuntimeState, RenderFrameRuntimeState, RenderGpuSceneState, RenderUiSurfaceRuntimeState, RenderRuntimeProfileState, RenderShadowRuntimeState, RenderViewportState,
+    RenderFrameRuntimeState, RenderGpuSceneState, RenderUiSurfaceRuntimeState, RenderRuntimeProfileState, RenderShadowRuntimeState, RenderViewportState,
 };
 
 /// Engine-side render composition root.
@@ -29,7 +29,6 @@ pub struct RuntimeRenderController {
     pub(super) frame: RenderFrameRuntimeState,
     pub(super) diagnostics: RenderDiagnosticsRuntimeState,
     pub(super) ui: RenderUiSurfaceRuntimeState,
-    pub(super) editor: RenderEditorRuntimeState,
     pub(super) runtime_profile: RenderRuntimeProfileState,
     pub(super) backend_failure: RenderBackendFailureState,
 }
@@ -199,7 +198,6 @@ impl RuntimeRenderController {
             frame: RenderFrameRuntimeState::new(),
             diagnostics: RenderDiagnosticsRuntimeState::new(),
             ui: RenderUiSurfaceRuntimeState::new(),
-            editor: RenderEditorRuntimeState::new(),
             runtime_profile: RenderRuntimeProfileState::new(),
             backend_failure: RenderBackendFailureState::new(),
         }

@@ -102,9 +102,9 @@ fn platform_subsystem(platform_ready: bool) -> ScreenOverlaySubsystem {
         },
         if platform_ready { "READY" } else { "WINDOW" },
         if platform_ready {
-            "Native window and surface metrics are available."
+            "Platform window and surface metrics are available."
         } else {
-            "Waiting for native platform window callback."
+            "Waiting for platform window callback."
         },
         Some(ScreenOverlayProgress::percent(if platform_ready { 1.0 } else { 0.2 })),
     )

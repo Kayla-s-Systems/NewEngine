@@ -17,6 +17,13 @@ pub(super) struct ViewportInputSnap {
     pub ui_busy: bool,
     pub fly_rmb: bool,
 
+    /// Raw input listener/sampler was kept alive for this frame. UI capture must not turn this off.
+    pub sampling_alive: bool,
+    /// Policy gate: sampled camera deltas/actions are visible but must not drive navigation.
+    pub camera_navigation_gated: bool,
+    /// Policy gate: sampled movement actions are visible but must not drive gameplay locomotion.
+    pub gameplay_movement_gated: bool,
+
     pub move_mask: u64,
     pub speed_scalar: f32,
     pub camera_view: CameraViewRequest,
@@ -37,6 +44,9 @@ impl ViewportInputSnap {
             pan_drag,
             ui_busy,
             fly_rmb,
+            sampling_alive: true,
+            camera_navigation_gated: false,
+            gameplay_movement_gated: false,
             move_mask,
             speed_scalar,
             camera_view: CameraViewRequest::None,
@@ -60,6 +70,9 @@ impl ViewportInputSnap {
             pan_drag: false,
             ui_busy: false,
             fly_rmb: false,
+            sampling_alive: true,
+            camera_navigation_gated: false,
+            gameplay_movement_gated: false,
             move_mask: actions.move_mask,
             speed_scalar: 1.0,
             camera_view: actions.camera_view,
@@ -122,6 +135,9 @@ impl ViewportInputSnap {
             pan_drag: &mut self.pan_drag,
             ui_busy: &mut self.ui_busy,
             fly_rmb: &mut self.fly_rmb,
+            sampling_alive: &mut self.sampling_alive,
+            camera_navigation_gated: &mut self.camera_navigation_gated,
+            gameplay_movement_gated: &mut self.gameplay_movement_gated,
             move_mask: &mut self.move_mask,
             speed_scalar: &mut self.speed_scalar,
             camera_view: &mut self.camera_view,

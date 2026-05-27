@@ -75,8 +75,8 @@ pub enum UiProviderKind {
     /// Built-in no-UI provider. This is the only provider compiled into engine crates.
     ///
     /// This is a valid, explicit UI mode: the engine keeps running and UI
-    /// surfaces project to provider=`none`. Native startup/error fallback may
-    /// still be used before provider handoff to keep fatal diagnostics visible.
+    /// surfaces project to provider=`none`. Missing provider means diagnostics
+    /// and no draw packet; core must not open a native/special UI path.
     Null,
 
     /// Runtime UI provider requested by plugin service/capability id.
@@ -165,7 +165,7 @@ pub trait UiProvider: Send {
     /// Full provider-owned catalog. This is the canonical declaration of what
     /// UI exists, which layout document owns it, what state it consumes and
     /// which actions it can emit. Engines must not hardcode runtime UI outside
-    /// this catalog unless running the native startup/fatal fallback.
+    /// this catalog; if no provider route exists, UI rendering is skipped with diagnostics.
     fn catalog(&self) -> UiProviderCatalog {
         UiProviderCatalog::from_manifest(self.manifest())
     }

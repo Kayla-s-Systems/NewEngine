@@ -59,50 +59,6 @@ impl GameReadyLitMaterialDomainProvider {
         );
         let manifest = self.require_manifest()?;
         log::info!(
-            "gameready material domain: creating bind resources key='{}'",
-            GAME_READY_LIT_PIPELINE_KEY.as_str()
-        );
-
-        let bgl = r.create_bind_group_layout(
-            BindGroupLayoutDesc::new(vec![
-                BindingKind::UniformBuffer,
-                BindingKind::Texture2D,
-                BindingKind::Texture2D,
-                BindingKind::Texture2D,
-                BindingKind::Texture2D,
-                BindingKind::Sampler,
-            ])
-            .with_label("gameready_lit_bgl"),
-        )?;
-        let white_texture = r.create_texture(
-            TextureDesc::new(Extent2D::new(1, 1), TextureFormat::Rgba8Unorm, TextureUsage::Sampled)
-                .with_label("gameready_white_tex")
-                .with_data(vec![255, 255, 255, 255]),
-        )?;
-        let flat_normal_texture = r.create_texture(
-            TextureDesc::new(Extent2D::new(1, 1), TextureFormat::Rgba8Unorm, TextureUsage::Sampled)
-                .with_label("gameready_flat_normal_tex")
-                .with_data(vec![128, 128, 255, 255]),
-        )?;
-        let repeat_sampler = r.create_sampler(
-            SamplerDesc::default()
-                .with_label("gameready_repeat_sampler")
-                .with_repeat(),
-        )?;
-        let clamp_sampler = r.create_sampler(
-            SamplerDesc::default()
-                .with_label("gameready_clamp_sampler")
-                .with_address_u(AddressMode::ClampToEdge)
-                .with_address_v(AddressMode::ClampToEdge)
-                .with_address_w(AddressMode::ClampToEdge),
-        )?;
-        log::info!(
-            "gameready material domain: bind resources created key='{}' elapsed_ms={:.2}",
-            GAME_READY_LIT_PIPELINE_KEY.as_str(),
-            started_at.elapsed().as_secs_f64() * 1000.0
-        );
-
-        log::info!(
             "gameready material domain: requesting renderer-owned shader builds key='{}' shader_count=8",
             GAME_READY_LIT_PIPELINE_KEY.as_str()
         );
@@ -146,6 +102,50 @@ impl GameReadyLitMaterialDomainProvider {
         )?;
         log::info!(
             "gameready material domain: renderer-owned shader handles ready key='{}' elapsed_ms={:.2}",
+            GAME_READY_LIT_PIPELINE_KEY.as_str(),
+            started_at.elapsed().as_secs_f64() * 1000.0
+        );
+
+        log::info!(
+            "gameready material domain: creating bind resources key='{}'",
+            GAME_READY_LIT_PIPELINE_KEY.as_str()
+        );
+
+        let bgl = r.create_bind_group_layout(
+            BindGroupLayoutDesc::new(vec![
+                BindingKind::UniformBuffer,
+                BindingKind::Texture2D,
+                BindingKind::Texture2D,
+                BindingKind::Texture2D,
+                BindingKind::Texture2D,
+                BindingKind::Sampler,
+            ])
+            .with_label("gameready_lit_bgl"),
+        )?;
+        let white_texture = r.create_texture(
+            TextureDesc::new(Extent2D::new(1, 1), TextureFormat::Rgba8Unorm, TextureUsage::Sampled)
+                .with_label("gameready_white_tex")
+                .with_data(vec![255, 255, 255, 255]),
+        )?;
+        let flat_normal_texture = r.create_texture(
+            TextureDesc::new(Extent2D::new(1, 1), TextureFormat::Rgba8Unorm, TextureUsage::Sampled)
+                .with_label("gameready_flat_normal_tex")
+                .with_data(vec![128, 128, 255, 255]),
+        )?;
+        let repeat_sampler = r.create_sampler(
+            SamplerDesc::default()
+                .with_label("gameready_repeat_sampler")
+                .with_repeat(),
+        )?;
+        let clamp_sampler = r.create_sampler(
+            SamplerDesc::default()
+                .with_label("gameready_clamp_sampler")
+                .with_address_u(AddressMode::ClampToEdge)
+                .with_address_v(AddressMode::ClampToEdge)
+                .with_address_w(AddressMode::ClampToEdge),
+        )?;
+        log::info!(
+            "gameready material domain: bind resources created key='{}' elapsed_ms={:.2}",
             GAME_READY_LIT_PIPELINE_KEY.as_str(),
             started_at.elapsed().as_secs_f64() * 1000.0
         );

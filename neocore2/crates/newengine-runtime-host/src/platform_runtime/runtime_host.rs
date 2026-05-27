@@ -679,9 +679,25 @@ impl HostPlatformRuntime {
 
         match self.engine.step() {
             Ok(()) => {
+                // ModuleCtx::request_exit() may be raised during the frame and
+                // converted into the shared shutdown token after Engine::step().
+                // Do not wait for a later redraw/input event: return an explicit
+                // platform exit now so winit tears down the window and engine.shutdown
+                // runs, allowing profiler plugins to flush final reports.
+                if self.engine.shutdown_token().is_requested() {
+                    log::info!("platform runtime: shutdown requested by engine module; requesting native exit");
+                    return Ok(PlatformStepResultV1 {
+                        exit_requested: true,
+                        ..PlatformStepResultV1::default()
+                    });
+                }
+
                 if let Some(status) = self.engine.resources.get::<SceneLaunchStatus>().cloned() {
                     if status.active {
                         return Ok(self.scene_launch_step_result(&status));
+                    }
+                    if matches!(self.ui_selection.active(), UiProviderKind::Plugin { .. }) {
+                        crate::platform_runtime::ui_gateway_frame::publish_loading_overlay_inactive(ui_frame_index);
                     }
                 }
 
@@ -764,19 +780,19 @@ impl HostPlatformRuntime {
             );
             if self.bootstrap_spinner_phase % 120 == 1 {
                 log::info!(
-                    "platform loading overlay: source=engine.ui provider='{}' native_overlay=suppressed",
+                    "platform loading overlay: source=engine.ui provider='{}' platform_overlay_state_only=true",
                     self.ui_provider_binding().id()
                 );
             }
-            return PlatformStepResultV1::default();
+            return overlay_to_step_result_with_provider(&overlay, self.bootstrap_spinner_phase, self.ui_provider_binding());
         }
 
         if self.bootstrap_spinner_phase % 120 == 1 {
             log::warn!(
-                "platform loading overlay: source=minimal_native_fallback reason='engine.ui provider unavailable'"
+                "platform loading overlay: engine.ui provider unavailable; no platform-native UI renderer will be used"
             );
         }
-        overlay_to_step_result_with_provider(&overlay, self.bootstrap_spinner_phase, UiProviderBinding::NativeFallback)
+        overlay_to_step_result_with_provider(&overlay, self.bootstrap_spinner_phase, UiProviderBinding::None)
     }
 
     fn scene_launch_overlay(&self, status: &SceneLaunchStatus) -> ScreenOverlayStatus {
@@ -802,13 +818,21 @@ impl HostPlatformRuntime {
     }
 
     fn loading_overlay_step_result(&self, overlay: &ScreenOverlayStatus, spinner_phase: u32) -> PlatformStepResultV1 {
-        // Bootstrap loading must be platform/native-shell owned until the core FSM
-        // reaches normal running. Publishing bootstrap overlays back into `engine.ui`
-        // from inside `host.step_v1` can make a newly-loaded UI provider re-enter the
-        // service gateway while the startup graph is still mutating provider routes.
-        // Keep this path as a one-way DTO to the platform compositor; scene-launch
-        // loading after `engine.step()` still publishes through `scene_launch_step_result`.
-        overlay_to_step_result_with_provider(overlay, spinner_phase, UiProviderBinding::NativeFallback)
+        // Bootstrap loading remains data-only at the platform boundary. Visual UI
+        // must be rendered through engine.ui when a provider route exists; otherwise
+        // the platform keeps stepping startup and logs diagnostics without drawing.
+        if newengine_core::has_engine_gateway_route(newengine_ui_api::ENGINE_UI_SERVICE_ID) {
+            crate::platform_runtime::ui_gateway_frame::publish_loading_overlay(
+                overlay,
+                self.overlay_provider_binding(),
+                spinner_phase as u64,
+            );
+        } else if spinner_phase % 120 == 1 {
+            log::warn!(
+                "bootstrap loading overlay: engine.ui unavailable; no special/native UI renderer will be used"
+            );
+        }
+        overlay_to_step_result_with_provider(overlay, spinner_phase, self.overlay_provider_binding())
     }
 
     fn ui_provider_binding(&self) -> UiProviderBinding {
@@ -818,7 +842,7 @@ impl HostPlatformRuntime {
     fn overlay_provider_binding(&self) -> UiProviderBinding {
         match self.ui_selection.active() {
             UiProviderKind::Plugin { .. } => self.ui_provider_binding(),
-            UiProviderKind::Null => UiProviderBinding::NativeFallback,
+            UiProviderKind::Null => UiProviderBinding::None,
         }
     }
 

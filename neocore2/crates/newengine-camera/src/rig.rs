@@ -27,7 +27,13 @@ impl Default for CameraRig {
 impl CameraRig {
     #[inline]
     pub fn new(position: Vec3, rotation: Quat) -> Self {
-        Self { position, rotation }
+        Self { position, rotation }.sanitized()
+    }
+
+    #[inline]
+    pub fn sanitized(self) -> Self {
+        let position = if self.position.is_finite() { self.position } else { Vec3::ZERO };
+        Self { position, rotation: self.rotation.normalize_or_identity() }
     }
 
     #[inline]
@@ -63,13 +69,19 @@ impl CameraRig {
     /// Adds a local-space translation (relative to the current rotation).
     #[inline]
     pub fn translate_local(&mut self, delta_local: Vec3) {
-        self.position += self.rotation * delta_local;
+        if delta_local.is_finite() {
+            self.position += self.rotation * delta_local;
+        }
+        *self = self.sanitized();
     }
 
     /// Adds a world-space translation.
     #[inline]
     pub fn translate_world(&mut self, delta_world: Vec3) {
-        self.position += delta_world;
+        if delta_world.is_finite() {
+            self.position += delta_world;
+        }
+        *self = self.sanitized();
     }
 
     /// Sets the rig transform from a look-at target.
@@ -77,8 +89,9 @@ impl CameraRig {
     /// Convention: camera forward is -Z.
     #[inline]
     pub fn set_look_at(&mut self, position: Vec3, target: Vec3, up: Vec3) {
-        self.position = position;
+        self.position = if position.is_finite() { position } else { Vec3::ZERO };
         self.rotation = look_at_rotation(position, target, up);
+        *self = self.sanitized();
     }
 
     /// Creates a rig from a look-at target.
@@ -86,10 +99,7 @@ impl CameraRig {
     /// Convention: camera forward is -Z.
     #[inline]
     pub fn from_look_at(position: Vec3, target: Vec3, up: Vec3) -> Self {
-        Self {
-            position,
-            rotation: look_at_rotation(position, target, up),
-        }
+        Self::new(position, look_at_rotation(position, target, up))
     }
 }
 

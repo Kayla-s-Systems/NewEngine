@@ -1,5 +1,5 @@
 use newengine_camera::{
-    CameraChannel, CameraDirectorId, CameraDirectorOutput, CameraFrame, CameraPostEffects,
+    CameraDirectorId, CameraDirectorOutput, CameraFrame, CameraPostEffects,
     CameraRenderState, CameraResolvedFrame, RuntimeNavMode,
 };
 use newengine_camera_api::CameraViewMode;
@@ -286,7 +286,7 @@ impl CameraManagerResource {
 
         let blended_frame = self.frame_blend.resolve(mixed.frame.frame, dt);
         let final_frame = apply_effect_jitter(blended_frame, mixed.frame.effects);
-        let final_frame = self.viewport_manager.present_frame(final_frame);
+        let final_frame = self.viewport_manager.present_frame(final_frame, dt);
         if self.viewport_manager.changed_this_update() {
             self.push_event(
                 CameraRuntimeEvent::new(CameraRuntimeEventKind::ViewportChanged, mixed.dominant_director)
@@ -529,20 +529,3 @@ fn director_id(kind: CameraDirectorKind) -> u64 {
     }
 }
 
-#[inline]
-#[allow(dead_code)]
-fn channel_for_director(kind: CameraDirectorKind) -> CameraChannel {
-    match kind {
-        CameraDirectorKind::Runtime => CameraChannel::Runtime,
-        CameraDirectorKind::Gameplay => CameraChannel::Gameplay,
-        CameraDirectorKind::Cinematic => CameraChannel::Cinematic,
-        CameraDirectorKind::Scripted => CameraChannel::Scripted,
-        CameraDirectorKind::Replay => CameraChannel::Replay,
-        CameraDirectorKind::Cutscene => CameraChannel::Cutscene,
-        CameraDirectorKind::Switch
-        | CameraDirectorKind::SyncedScene
-        | CameraDirectorKind::AnimScene
-        | CameraDirectorKind::Marketing => CameraChannel::Cinematic,
-        CameraDirectorKind::Debug => CameraChannel::Debug,
-    }
-}

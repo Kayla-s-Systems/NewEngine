@@ -125,12 +125,21 @@ impl MaterialGpuRegistry {
                 Ok(pipeline)
             }
             Err(e) => {
-                log::error!(
-                    "render material registry: pipeline request failed key='{}' err='{}' elapsed_ms={:.2}",
-                    key.as_str(),
-                    e,
-                    started_at.elapsed().as_secs_f64() * 1000.0
-                );
+                if is_transient_material_pipeline_error(&e) {
+                    log::warn!(
+                        "render material registry: pipeline request pending key='{}' err='{}' elapsed_ms={:.2} action='retry_next_frame_without_disabling_viewport'",
+                        key.as_str(),
+                        e,
+                        started_at.elapsed().as_secs_f64() * 1000.0
+                    );
+                } else {
+                    log::error!(
+                        "render material registry: pipeline request failed key='{}' err='{}' elapsed_ms={:.2}",
+                        key.as_str(),
+                        e,
+                        started_at.elapsed().as_secs_f64() * 1000.0
+                    );
+                }
                 Err(EngineError::other(format!("render material registry: {}", e)))
             }
         }
@@ -147,4 +156,13 @@ fn material_pipeline_cache_key(
         profile.scene_hdr_color_format,
         profile.shadow_map_color_format
     )
+}
+
+fn is_transient_material_pipeline_error(error: &MaterialDomainError) -> bool {
+    let mut text = error.to_string();
+    text.make_ascii_lowercase();
+    text.contains("shader compile queued")
+        || text.contains("shader is not ready yet")
+        || text.contains("engine.jobs shader admission timeout")
+        || text.contains("leave_pending_and_retry_later")
 }

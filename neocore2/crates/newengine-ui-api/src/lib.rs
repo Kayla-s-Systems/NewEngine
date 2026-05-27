@@ -39,6 +39,78 @@ pub struct UiInputFrame {
     pub gamepad_connected: usize,
 }
 
+/// Tool/UI capture state published through Resources.
+///
+/// UI surfaces may gate camera navigation or gameplay movement, but they must not
+/// stop raw input sampling/listeners. Runtime consumes this generic DTO without
+/// knowing which tool or panel requested capture.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
+pub struct UiInputCaptureState {
+    pub sampling_alive: bool,
+    pub camera_navigation_gated: bool,
+    pub gameplay_movement_gated: bool,
+    pub modal: bool,
+    pub draw_refresh_requested: bool,
+    pub reason: String,
+    pub surfaces: Vec<String>,
+}
+
+impl Default for UiInputCaptureState {
+    fn default() -> Self { Self::none() }
+}
+
+impl UiInputCaptureState {
+    #[inline]
+    pub fn none() -> Self {
+        Self {
+            sampling_alive: true,
+            camera_navigation_gated: false,
+            gameplay_movement_gated: false,
+            modal: false,
+            draw_refresh_requested: false,
+            reason: "none".to_owned(),
+            surfaces: Vec::new(),
+        }
+    }
+
+    #[inline]
+    pub fn modal(surface_id: impl Into<String>, reason: impl Into<String>) -> Self {
+        Self {
+            sampling_alive: true,
+            camera_navigation_gated: true,
+            gameplay_movement_gated: true,
+            modal: true,
+            draw_refresh_requested: true,
+            reason: reason.into(),
+            surfaces: vec![surface_id.into()],
+        }
+    }
+
+    #[inline]
+    pub fn requests_capture(&self) -> bool {
+        self.modal || self.camera_navigation_gated || self.gameplay_movement_gated
+    }
+
+    #[inline]
+    pub fn merged_with_primary_modal(mut self, primary_modal: bool) -> Self {
+        self.sampling_alive = true;
+        if primary_modal {
+            self.modal = true;
+            self.camera_navigation_gated = true;
+            self.gameplay_movement_gated = true;
+            if !self.surfaces.iter().any(|surface| surface == UI_SURFACE_ENGINE_PRIMARY) {
+                self.surfaces.push(UI_SURFACE_ENGINE_PRIMARY.to_owned());
+            }
+            if self.reason == "none" || self.reason.trim().is_empty() {
+                self.reason = "primary UI modal capture".to_owned();
+            }
+        }
+        self
+    }
+}
+
+
 impl UiInputFrame {
     #[inline]
     pub fn is_key_down(&self, key: u32) -> bool { self.keys_down.contains(&key) }
@@ -139,10 +211,6 @@ pub const UI_SURFACE_ENGINE_ERROR_MODAL: &str = "engine.error_modal";
 pub const UI_SURFACE_RUNTIME_OVERLAY: &str = "runtime.overlay";
 pub const UI_SURFACE_RUNTIME_DEBUG_OVERLAY: &str = "runtime.debug_overlay";
 pub const UI_SURFACE_ENGINE_PRIMARY: &str = "engine.ui.primary";
-/// Editor-facing Asset Browser surface. The read model stays in `engine.assets.browser`;
-/// this id only names the live `engine.ui` projection surface.
-pub const UI_SURFACE_EDITOR_ASSET_BROWSER: &str = "editor.asset_browser";
-
 /// Canonical declarative UI theme id used by first-party runtime/editor surfaces.
 /// The engine treats this as a token; the active UI provider resolves fonts,
 /// metrics and colors from its own theme registry.
@@ -228,7 +296,6 @@ impl Default for UiServiceInfo {
                 UI_SURFACE_RUNTIME_OVERLAY.to_owned(),
                 UI_SURFACE_RUNTIME_DEBUG_OVERLAY.to_owned(),
                 UI_SURFACE_ENGINE_PRIMARY.to_owned(),
-                UI_SURFACE_EDITOR_ASSET_BROWSER.to_owned(),
             ],
         }
     }
@@ -430,21 +497,76 @@ impl Default for UiBindingPlan {
     }
 }
 
+
+/// Runtime source kind for UI documents.
+///
+/// UI may come from compiled `.neui` assets, a runtime stream, or a generated
+/// document, but all paths must end in the same compiled DTO/mount contract.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum UiDocumentSourceKind {
+    Asset,
+    Stream,
+    Generated,
+}
+
+impl Default for UiDocumentSourceKind {
+    #[inline]
+    fn default() -> Self { Self::Asset }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct UiDocumentSource {
+    pub kind: UiDocumentSourceKind,
+    pub document_ref: String,
+    pub style_ref: Option<String>,
+    pub stream_id: Option<String>,
+    pub generator_id: Option<String>,
+}
+
+impl Default for UiDocumentSource {
+    #[inline]
+    fn default() -> Self {
+        Self {
+            kind: UiDocumentSourceKind::Asset,
+            document_ref: String::new(),
+            style_ref: None,
+            stream_id: None,
+            generator_id: None,
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
 pub struct UiCompiledDocument {
     pub version: u32,
+    pub source: UiDocumentSource,
     pub document_ref: String,
     pub surface_id: String,
     pub root_id: String,
     pub theme_ref: Option<String>,
+    pub style_ref: Option<String>,
     pub dependencies: Vec<String>,
+    pub style_dependencies: Vec<String>,
     pub binding_plan: UiBindingPlan,
 }
 
 impl Default for UiCompiledDocument {
     fn default() -> Self {
-        Self { version: 1, document_ref: String::new(), surface_id: String::new(), root_id: String::new(), theme_ref: None, dependencies: Vec::new(), binding_plan: UiBindingPlan::default() }
+        Self {
+            version: 1,
+            source: UiDocumentSource::default(),
+            document_ref: String::new(),
+            surface_id: String::new(),
+            root_id: String::new(),
+            theme_ref: None,
+            style_ref: None,
+            dependencies: Vec::new(),
+            style_dependencies: Vec::new(),
+            binding_plan: UiBindingPlan::default(),
+        }
     }
 }
 
@@ -508,7 +630,7 @@ pub struct UiFontStyle {
 impl Default for UiFontStyle {
     fn default() -> Self {
         Self {
-            stack: vec!["AureliaSans".to_owned(), "NotoSans".to_owned(), "NotoSansSymbols".to_owned()],
+            stack: vec!["AureliaSans".to_owned(), "Inter".to_owned(), "Segoe UI".to_owned(), "NotoSans".to_owned(), "NotoSansSymbols".to_owned()],
             body_px: 18.0,
             title_px: 30.0,
             secondary_px: 15.0,
@@ -561,6 +683,14 @@ pub struct UiSurfaceStyle {
     pub row_even_alpha: u8,
     pub row_odd_alpha: u8,
     pub shadow_alpha: u8,
+    /// Rounded surface radius in physical pixels. Providers may approximate it
+    /// when the active renderer has no signed-distance/AA UI shader yet.
+    pub corner_radius_px: f32,
+    /// Thin modern surface outline. This is a style token, not a hardcoded provider color.
+    pub border_rgba: [u8; 4],
+    pub border_px: f32,
+    /// Modal backdrop tint. UI state owns whether it is active; provider only paints it.
+    pub backdrop_rgba: [u8; 4],
     pub anchor: UiSurfaceAnchor,
     pub min_size_px: [f32; 2],
     pub max_size_px: [f32; 2],
@@ -580,9 +710,13 @@ impl Default for UiSurfaceStyle {
             text_rgba: [236, 244, 255, 255],
             text_muted_rgba: [188, 202, 224, 255],
             danger_rgba: [255, 168, 122, 255],
-            row_even_alpha: 20,
-            row_odd_alpha: 10,
-            shadow_alpha: 220,
+            row_even_alpha: 18,
+            row_odd_alpha: 8,
+            shadow_alpha: 180,
+            corner_radius_px: 18.0,
+            border_rgba: [122, 157, 210, 54],
+            border_px: 1.0,
+            backdrop_rgba: [1, 3, 8, 118],
             anchor: UiSurfaceAnchor::TopLeft,
             min_size_px: [260.0, 120.0],
             max_size_px: [560.0, 420.0],
@@ -610,6 +744,8 @@ impl UiSurfaceStyle {
             *value = value.clamp(0.0, 512.0);
         }
         self.row_pitch_px = self.row_pitch_px.clamp(0.0, 256.0);
+        self.corner_radius_px = self.corner_radius_px.clamp(0.0, 64.0);
+        self.border_px = self.border_px.clamp(0.0, 8.0);
         self
     }
 }
@@ -893,6 +1029,12 @@ impl UiComponentNode {
     }
 
     #[inline]
+    pub fn with_icon(mut self, icon: impl Into<String>) -> Self {
+        self.icon = Some(icon.into());
+        self
+    }
+
+    #[inline]
     pub fn with_tone(mut self, tone: UiNodeTone) -> Self {
         self.tone = tone;
         self
@@ -903,6 +1045,24 @@ impl UiComponentNode {
         self.state_tags.push(tag.into());
         self
     }
+}
+
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum UiSurfaceAdmissionPolicy {
+    /// Default retained-UI behavior: this surface does not block other surfaces
+    /// from being created or opened.
+    AcceptAll,
+    /// While this surface is visible, the active UI provider must reject new
+    /// visible surfaces with a different surface id. This is an explicit UI-node
+    /// policy, not a provider-specific hardcoded branch.
+    AcceptAllButThis,
+}
+
+impl Default for UiSurfaceAdmissionPolicy {
+    #[inline]
+    fn default() -> Self { Self::AcceptAll }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -920,10 +1080,12 @@ pub struct UiSurfaceNode {
     pub footer_lines: Vec<String>,
     pub style_tags: Vec<String>,
     pub theme_id: String,
+    pub style_ref: Option<String>,
     pub component_id: String,
     pub components: Vec<UiComponentNode>,
     pub message: Option<UiNodeMessage>,
     pub style: UiSurfaceStyle,
+    pub admission_policy: UiSurfaceAdmissionPolicy,
     pub metrics: BTreeMap<String, serde_json::Value>,
 }
 
@@ -942,10 +1104,12 @@ impl Default for UiSurfaceNode {
             footer_lines: Vec::new(),
             style_tags: Vec::new(),
             theme_id: UI_THEME_NORTHSTAR_DEFAULT.to_owned(),
+            style_ref: None,
             component_id: UI_COMPONENT_PANEL.to_owned(),
             components: Vec::new(),
             message: None,
             style: UiSurfaceStyle::default(),
+            admission_policy: UiSurfaceAdmissionPolicy::default(),
             metrics: BTreeMap::new(),
         }
     }
@@ -1009,6 +1173,12 @@ impl UiSurfaceNode {
     }
 
     #[inline]
+    pub fn with_style_ref(mut self, style_ref: impl Into<String>) -> Self {
+        self.style_ref = Some(style_ref.into());
+        self
+    }
+
+    #[inline]
     pub fn with_components(mut self, components: Vec<UiComponentNode>) -> Self {
         self.components = components;
         self
@@ -1024,6 +1194,12 @@ impl UiSurfaceNode {
     pub fn with_style(mut self, style: UiSurfaceStyle) -> Self {
         self.style = style.normalized();
         self.theme_id = self.style.theme_id.clone();
+        self
+    }
+
+    #[inline]
+    pub fn with_admission_policy(mut self, policy: UiSurfaceAdmissionPolicy) -> Self {
+        self.admission_policy = policy;
         self
     }
 
@@ -1151,7 +1327,7 @@ impl UiSurfaceNodeLayout {
 #[inline]
 pub fn ui_surface_node_layout(
     surface_size_px: [u32; 2],
-    _style_tags: &[String],
+    style_tags: &[String],
     style: &UiSurfaceStyle,
     body_line_count: usize,
     footer_line_count: usize,
@@ -1160,13 +1336,22 @@ pub fn ui_surface_node_layout(
     let h = surface_size_px[1].max(1) as f32;
     let style = style.clone().normalized();
 
+    let workspace = style_tags.iter().any(|tag| tag == "workspace" || tag == "fullscreen");
     let available_w = (w - style.margin_px[0] * 2.0).max(style.min_size_px[0]);
     let available_h = (h - style.margin_px[1] * 2.0).max(style.min_size_px[1]);
     let line_count = body_line_count.max(1) + footer_line_count + 2;
     let content_h = line_count as f32 * style.row_pitch_px.max(style.font.line_height_px).max(24.0)
         + style.padding_px[1] + style.padding_px[3] + 10.0;
-    let panel_w = style.max_size_px[0].min(available_w).max(style.min_size_px[0]);
-    let panel_h = style.max_size_px[1].min(available_h).max(style.min_size_px[1]).max(content_h.min(available_h));
+    let panel_w = if workspace {
+        available_w
+    } else {
+        style.max_size_px[0].min(available_w).max(style.min_size_px[0])
+    };
+    let panel_h = if workspace {
+        available_h
+    } else {
+        style.max_size_px[1].min(available_h).max(style.min_size_px[1]).max(content_h.min(available_h))
+    };
 
     let panel_x = match style.anchor {
         UiSurfaceAnchor::TopRight | UiSurfaceAnchor::BottomRight => (w - panel_w - style.margin_px[0]).max(style.margin_px[0]),

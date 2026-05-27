@@ -4,25 +4,27 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::BTreeMap;
 
-/// VFS/listFile address currently shown by Asset Browser.
+/// UI-local VFS/ListFile address shown by the Content Browser node.
+///
+/// This is not an engine gateway DTO; it is private retained UI state over `engine.assets`.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default)]
-pub struct AssetBrowserLocation {
+pub struct ContentBrowserLocation {
     pub logical_path: String,
     pub entry: Option<String>,
     pub location_kind: String,
 }
 
-impl Default for AssetBrowserLocation {
+impl Default for ContentBrowserLocation {
     fn default() -> Self {
         Self { logical_path: String::new(), entry: None, location_kind: "vfs_directory".to_owned() }
     }
 }
 
-impl AssetBrowserLocation {
+impl ContentBrowserLocation {
     #[inline]
     pub fn from_ref(reference: &str) -> Self {
-        let normalized = normalize_browser_path(reference);
+        let normalized = normalize_content_browser_path(reference);
         if let Some((path, entry)) = normalized.split_once('@') {
             Self { logical_path: path.to_owned(), entry: Some(entry.to_owned()), location_kind: "listfile_entry".to_owned() }
         } else {
@@ -33,15 +35,15 @@ impl AssetBrowserLocation {
     #[inline]
     pub fn canonical_ref(&self) -> String {
         match self.entry.as_deref().map(str::trim).filter(|v| !v.is_empty()) {
-            Some(entry) => format!("{}@{}", normalize_browser_path(&self.logical_path), entry),
-            None => normalize_browser_path(&self.logical_path),
+            Some(entry) => format!("{}@{}", normalize_content_browser_path(&self.logical_path), entry),
+            None => normalize_content_browser_path(&self.logical_path),
         }
     }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default)]
-pub struct AssetBrowserListRequest {
+pub struct ContentBrowserListRequest {
     pub logical_path: String,
     pub entry: Option<String>,
     pub query: String,
@@ -49,7 +51,7 @@ pub struct AssetBrowserListRequest {
     pub include_listfile_entries: bool,
 }
 
-impl Default for AssetBrowserListRequest {
+impl Default for ContentBrowserListRequest {
     fn default() -> Self {
         Self { logical_path: String::new(), entry: None, query: String::new(), include_hidden: false, include_listfile_entries: true }
     }
@@ -57,18 +59,18 @@ impl Default for AssetBrowserListRequest {
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default)]
-pub struct AssetBrowserOpenRequest {
+pub struct ContentBrowserOpenRequest {
     pub target_ref: String,
     pub mode: String,
 }
 
-impl Default for AssetBrowserOpenRequest {
+impl Default for ContentBrowserOpenRequest {
     fn default() -> Self { Self { target_ref: String::new(), mode: "auto".to_owned() } }
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
-pub struct AssetBrowserNode {
+pub struct ContentBrowserNode {
     pub name: String,
     pub logical_path: String,
     pub entry_ref: Option<String>,
@@ -95,7 +97,7 @@ pub struct AssetBrowserNode {
     pub warnings: Vec<String>,
 }
 
-impl Default for AssetBrowserNode {
+impl Default for ContentBrowserNode {
     fn default() -> Self {
         Self {
             name: String::new(),
@@ -128,24 +130,24 @@ impl Default for AssetBrowserNode {
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
-pub struct AssetBrowserListResponse {
+pub struct ContentBrowserListResponse {
     pub ok: bool,
     pub schema: String,
-    pub location: AssetBrowserLocation,
-    pub breadcrumbs: Vec<AssetBrowserLocation>,
-    pub folders: Vec<AssetBrowserNode>,
-    pub assets: Vec<AssetBrowserNode>,
-    pub entries: Vec<AssetBrowserNode>,
+    pub location: ContentBrowserLocation,
+    pub breadcrumbs: Vec<ContentBrowserLocation>,
+    pub folders: Vec<ContentBrowserNode>,
+    pub assets: Vec<ContentBrowserNode>,
+    pub entries: Vec<ContentBrowserNode>,
     pub sources: Vec<Value>,
     pub warnings: Vec<String>,
 }
 
-impl Default for AssetBrowserListResponse {
+impl Default for ContentBrowserListResponse {
     fn default() -> Self {
         Self {
             ok: false,
-            schema: "newengine.assets.browser.list.response.v1".to_owned(),
-            location: AssetBrowserLocation::default(),
+            schema: "newengine.ui.content_browser.list.response.v1".to_owned(),
+            location: ContentBrowserLocation::default(),
             breadcrumbs: Vec::new(),
             folders: Vec::new(),
             assets: Vec::new(),
@@ -158,22 +160,22 @@ impl Default for AssetBrowserListResponse {
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
-pub struct AssetBrowserSnapshotResponse {
+pub struct ContentBrowserSnapshotResponse {
     pub ok: bool,
     pub schema: String,
-    pub root: AssetBrowserListResponse,
+    pub root: ContentBrowserListResponse,
     pub sources: Vec<Value>,
     pub file_type_manifest: Value,
     pub formats: Value,
     pub warnings: Vec<String>,
 }
 
-impl Default for AssetBrowserSnapshotResponse {
+impl Default for ContentBrowserSnapshotResponse {
     fn default() -> Self {
         Self {
             ok: false,
-            schema: "newengine.assets.browser.snapshot.response.v1".to_owned(),
-            root: AssetBrowserListResponse::default(),
+            schema: "newengine.ui.content_browser.snapshot.response.v1".to_owned(),
+            root: ContentBrowserListResponse::default(),
             sources: Vec::new(),
             file_type_manifest: Value::Null,
             formats: Value::Null,
@@ -184,7 +186,7 @@ impl Default for AssetBrowserSnapshotResponse {
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
-pub struct AssetBrowserEntryMutationRequest {
+pub struct ContentBrowserEntryMutationRequest {
     pub target_ref: String,
     pub operation: String,
     pub new_name: Option<String>,
@@ -193,7 +195,7 @@ pub struct AssetBrowserEntryMutationRequest {
     pub dry_run: bool,
 }
 
-impl Default for AssetBrowserEntryMutationRequest {
+impl Default for ContentBrowserEntryMutationRequest {
     fn default() -> Self {
         Self { target_ref: String::new(), operation: String::new(), new_name: None, payload_base64: None, payload_json: None, dry_run: false }
     }
@@ -201,19 +203,19 @@ impl Default for AssetBrowserEntryMutationRequest {
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
-pub struct AssetBrowserRebuildRequest {
+pub struct ContentBrowserRebuildRequest {
     pub logical_path: String,
     pub dry_run: bool,
     pub verify_after_build: bool,
 }
 
-impl Default for AssetBrowserRebuildRequest {
+impl Default for ContentBrowserRebuildRequest {
     fn default() -> Self { Self { logical_path: String::new(), dry_run: false, verify_after_build: true } }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default)]
-pub struct AssetBrowserMutationResponse {
+pub struct ContentBrowserMutationResponse {
     pub ok: bool,
     pub accepted: bool,
     pub applied: bool,
@@ -234,13 +236,13 @@ pub struct AssetBrowserMutationResponse {
     pub listfile_manifest: Value,
 }
 
-impl Default for AssetBrowserMutationResponse {
+impl Default for ContentBrowserMutationResponse {
     fn default() -> Self {
         Self {
             ok: false,
             accepted: false,
             applied: false,
-            schema: "newengine.assets.browser.mutation.response.v1".to_owned(),
+            schema: "newengine.ui.content_browser.mutation.response.v1".to_owned(),
             target_ref: String::new(),
             logical_path: String::new(),
             entry: None,
@@ -260,7 +262,7 @@ impl Default for AssetBrowserMutationResponse {
 }
 
 #[inline]
-pub fn normalize_browser_path(value: &str) -> String {
+pub fn normalize_content_browser_path(value: &str) -> String {
     let mut out = value.trim().replace('\\', "/");
     while let Some(rest) = out.strip_prefix("./") {
         out = rest.to_owned();

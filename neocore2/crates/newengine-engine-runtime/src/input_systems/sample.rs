@@ -38,13 +38,16 @@ impl RawInputSample {
 
     pub(super) fn summary(self, input: &InputActionFrameCarrier<'_>) -> String {
         format!(
-            "raw={} keys_down={} keys_pressed={} mouse_motion={} gamepads={} gamepad_activity={} actions={} move=0x{:X} look=({:.2},{:.2}) menu={}",
+            "raw={} keys_down={} keys_pressed={} mouse_motion={} gamepads={} gamepad_activity={} sampling_alive={} nav_gated={} move_gated={} actions={} move=0x{:X} look=({:.2},{:.2}) menu={}",
             self.present,
             self.keys_down,
             self.keys_pressed,
             self.mouse_motion,
             self.gamepad_connected,
             self.gamepad_activity,
+            *input.sampling_alive,
+            *input.camera_navigation_gated,
+            *input.gameplay_movement_gated,
             input.actions.actions.len(),
             input.actions.move_mask,
             input.actions.look_axis[0],

@@ -54,7 +54,7 @@ pub mod move_mask {
 /// Engine-reserved semantic action ids. These are action contracts, not platform shortcuts.
 pub mod engine_action {
     pub const UI_NAVIGATION_TOGGLE: &str = "engine.ui.primary.toggle";
-    pub const ASSET_BROWSER_TOGGLE: &str = "engine.assets.browser.toggle";
+    pub const ASSET_CATALOG_UI_TOGGLE: &str = "ui.assets.catalog.toggle";
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]

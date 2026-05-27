@@ -1,11 +1,11 @@
 #![forbid(unsafe_op_in_unsafe_fn)]
 
-mod asset_browser_overlay;
 mod draw_bucket;
 pub(crate) mod draw_lists;
 mod external_contribution_lowering;
 mod frame_submit;
 mod frame_orchestrator;
+mod frame_snapshots;
 mod feature_extraction;
 mod postfx;
 mod frame_envelope_builder;

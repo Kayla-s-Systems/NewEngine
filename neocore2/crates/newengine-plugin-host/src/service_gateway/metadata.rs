@@ -2,12 +2,14 @@
 
 use newengine_plugin_api::{CapabilityDesc, CapabilityKind, CapabilityRole, PluginDescriptor};
 use newengine_service_api::{
-    engine_gateway_domain, is_engine_service_gateway_id, normalize_service_kind, normalize_system_tag,
+    engine_gateway_domain, engine_gateway_matches_service_kind, is_engine_service_gateway_id,
+    normalize_service_kind, normalize_system_tag,
 };
 
 pub(crate) const ENGINE_GATEWAY_FIELD: &str = "engine_gateway";
 pub(crate) const SERVICE_KIND_FIELD: &str = "service_kind";
 pub(crate) const CONTRACT_FIELD: &str = "contract";
+pub(crate) const PROVIDER_ROUTE_FIELD: &str = "provider_route";
 pub(crate) const BACKEND_PRIORITY_FIELD: &str = "backend_priority";
 pub(crate) const SYSTEM_TAGS_FIELD: &str = "system_tags";
 pub(crate) const TAGS_FIELD: &str = "tags";
@@ -17,6 +19,7 @@ pub(crate) struct EngineGatewayCapability {
     pub(crate) gateway_id: String,
     pub(crate) service_kind: String,
     pub(crate) provider_service_id: Option<String>,
+    pub(crate) provider_route_id: Option<String>,
     pub(crate) backend_capability_id: String,
     pub(crate) backend_priority: i32,
     pub(crate) system_tags: Vec<String>,
@@ -61,8 +64,15 @@ fn json_system_tags(value: &serde_json::Value) -> Vec<String> {
 }
 
 #[inline]
-fn service_kind_matches_gateway(service_kind: &str, gateway_id: &str) -> bool {
-    engine_gateway_domain(gateway_id).as_deref() == Some(service_kind)
+fn service_kind_matches_gateway(
+    service_kind: &str,
+    gateway_id: &str,
+    _system_tags: &[String],
+) -> bool {
+    // `engine_gateway` is the actual backend API route. Provider personal
+    // identities such as `engine.ui.aurelia` belong in descriptor metadata
+    // (`provider_route`), not in the gateway tree.
+    engine_gateway_matches_service_kind(gateway_id, service_kind)
 }
 
 pub(crate) fn gateway_capability_from_capability(
@@ -126,7 +136,9 @@ pub(crate) fn gateway_capability_from_capability(
         return None;
     };
 
-    if !service_kind_matches_gateway(&service_kind, &gateway_id) {
+    let system_tags = json_system_tags(&value);
+
+    if !service_kind_matches_gateway(&service_kind, &gateway_id, &system_tags) {
         log::warn!(
             "plugins: ignoring service gateway with mixed domain levels plugin='{}' capability='{}' service_kind='{}' engine_gateway='{}' gateway_domain='{}'",
             plugin_id,
@@ -142,9 +154,10 @@ pub(crate) fn gateway_capability_from_capability(
         gateway_id,
         service_kind,
         provider_service_id: json_field_string(&value, CONTRACT_FIELD),
+        provider_route_id: json_field_string(&value, PROVIDER_ROUTE_FIELD),
         backend_capability_id: capability.id.to_string(),
         backend_priority: json_field_i32(&value, BACKEND_PRIORITY_FIELD).unwrap_or(0),
-        system_tags: json_system_tags(&value),
+        system_tags,
     })
 }
 

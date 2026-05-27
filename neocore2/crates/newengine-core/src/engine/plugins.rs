@@ -271,6 +271,7 @@ impl<E: Send + 'static> Engine<E> {
                         attach.to_owned(),
                         if route.active { "active".to_owned() } else { "shadowed".to_owned() },
                         route.service_kind.clone(),
+                        ellipsize(route.provider_route_id.as_deref().unwrap_or("-"), 32),
                         ellipsize(&route.provider_service_id, 28),
                     ]
                 })
@@ -278,7 +279,7 @@ impl<E: Send + 'static> Engine<E> {
             emit_prefixed_table(
                 "",
                 &format!("Plugins :: Gateway Hierarchy [{}]", tag),
-                &["root", "parent", "gateway", "attach", "state", "kind", "provider_service"],
+                &["root", "parent", "gateway", "attach", "state", "kind", "provider_route", "provider_service"],
                 &hierarchy_rows,
             );
 
@@ -290,6 +291,7 @@ impl<E: Send + 'static> Engine<E> {
                             ellipsize(&route.gateway_id, 28),
                             if route.active { "active".to_owned() } else { "shadowed".to_owned() },
                             route.origin.clone(),
+                            ellipsize(route.provider_route_id.as_deref().unwrap_or("-"), 28),
                             ellipsize(&route.provider_service_id, 28),
                             ellipsize(&route.provider_owner_id, 32),
                             route.service_kind.clone(),
@@ -303,6 +305,7 @@ impl<E: Send + 'static> Engine<E> {
                             ellipsize(&route.gateway_id, 28),
                             if route.active { "active".to_owned() } else { "shadowed".to_owned() },
                             route.origin.clone(),
+                            ellipsize(route.provider_route_id.as_deref().unwrap_or("-"), 28),
                             ellipsize(&route.provider_service_id, 28),
                             route.backend_priority.to_string(),
                         ]
@@ -311,9 +314,9 @@ impl<E: Send + 'static> Engine<E> {
                 .collect::<Vec<_>>();
 
             let route_headers: &[&str] = if debug_tables {
-                &["gateway", "state", "source", "provider_service", "owner", "kind", "capability", "mode", "prio", "score"]
+                &["gateway", "state", "source", "provider_route", "provider_service", "owner", "kind", "capability", "mode", "prio", "score"]
             } else {
-                &["gateway", "state", "source", "provider_service", "prio"]
+                &["gateway", "state", "source", "provider_route", "provider_service", "prio"]
             };
             emit_prefixed_table(
                 "",

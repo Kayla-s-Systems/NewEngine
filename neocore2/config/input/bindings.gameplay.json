@@ -56,7 +56,7 @@
     {
       "code": 57,
       "id": "keyboard.enter",
-      "label": "ENTER"
+      "label": "Enter"
     },
     {
       "code": 58,
@@ -81,7 +81,7 @@
     {
       "code": 70,
       "id": "keyboard.backspace",
-      "label": "BACKSPACE"
+      "label": "Backspace"
     },
     {
       "code": 86,
@@ -91,7 +91,7 @@
     {
       "code": 87,
       "id": "keyboard.arrow_up",
-      "label": "UP"
+      "label": "Arrow Up"
     },
     {
       "code": 88,
@@ -101,7 +101,7 @@
     {
       "code": 89,
       "id": "keyboard.arrow_down",
-      "label": "DOWN"
+      "label": "Arrow Down"
     },
     {
       "code": 114,
@@ -360,8 +360,8 @@
       ]
     },
     {
-      "id": "engine.assets.browser.toggle",
-      "label": "Toggle Asset Browser",
+      "id": "ui.assets.catalog.toggle",
+      "label": "Toggle assets catalog UI",
       "contexts": [],
       "dispatch": "consume_first",
       "effects": []
@@ -386,10 +386,10 @@
       "enabled": true
     },
     {
-      "owner": "newengine-editor",
-      "id": "asset-browser",
+      "owner": "newengine.assets_catalog_ui",
+      "id": "assets-catalog-ui",
       "action_filter": [
-        "engine.assets.browser.toggle"
+        "ui.assets.catalog.toggle"
       ],
       "context_filter": [],
       "priority": 90,
@@ -662,7 +662,49 @@
       "phase": "Pressed"
     },
     {
-      "action": "engine.assets.browser.toggle",
+      "action": "ui.assets.catalog.toggle",
+      "device": "Keyboard",
+      "code": 159,
+      "name": null,
+      "phase": "Pressed"
+    },
+    {
+      "action": "ui.assets.catalog.toggle",
+      "device": "Keyboard",
+      "code": 159,
+      "name": null,
+      "phase": "Pressed"
+    },
+    {
+      "action": "ui.assets.catalog.toggle",
+      "device": "Keyboard",
+      "code": 159,
+      "name": null,
+      "phase": "Pressed"
+    },
+    {
+      "action": "ui.assets.catalog.toggle",
+      "device": "Keyboard",
+      "code": 159,
+      "name": null,
+      "phase": "Pressed"
+    },
+    {
+      "action": "ui.assets.catalog.toggle",
+      "device": "Keyboard",
+      "code": 159,
+      "name": null,
+      "phase": "Pressed"
+    },
+    {
+      "action": "ui.assets.catalog.toggle",
+      "device": "Keyboard",
+      "code": 159,
+      "name": null,
+      "phase": "Pressed"
+    },
+    {
+      "action": "ui.assets.catalog.toggle",
       "device": "Keyboard",
       "code": 159,
       "name": null,

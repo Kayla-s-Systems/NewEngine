@@ -15,13 +15,14 @@ use newengine_ui_api::UiDrawList;
 use super::draw_lists::DrawListBuildCtx;
 use super::feature_extraction::FeatureExtractionFrame;
 use super::frame_envelope_builder::build_runtime_frame_envelope;
+use super::frame_snapshots::SceneRenderSnapshot;
 use super::frame_submit::submit_frame_envelope;
 use super::profiling::{emit_timed_profile, FrameCpuProfile};
 use super::frame_types::{PlayableFrameOutcome, RenderFrameScope, WorldFrameState};
-use super::{lights, passes, picking, postfx, scene, shadows};
+use super::{lights, passes, picking, postfx, shadows};
 use crate::scene_bridge::{apply_engine_view_postfx, EngineViewTransitionPhase};
 use super::super::controller::RuntimeRenderController;
-use super::super::error_policy::is_backend_device_lost_error;
+use super::super::error_policy::{is_backend_device_lost_error, is_transient_shader_pipeline_error};
 
 pub(super) struct RenderFrameOrchestrator;
 
@@ -52,9 +53,38 @@ impl RenderFrameOrchestrator {
         picking::handle_picking(controller, scene, viewproj, scope.vp_w, scope.vp_h);
         cpu_profile.mark("view");
 
-        let bounds = scene::scene_bounds(scene).unwrap_or_else(scene::default_bounds);
+        let snapshot = SceneRenderSnapshot::capture(
+            controller.frame.frame_index,
+            scene,
+            viewproj,
+            view.position_ws,
+            view.forward_ws,
+            Extent2D::new(scope.vp_w, scope.vp_h),
+            Extent2D::new(scope.w, scope.h),
+            ui.is_some(),
+            plugin_snapshot.is_some(),
+        );
+        Self::publish_render_job_pass_event(
+            controller.frame.frame_index,
+            newengine_jobs_api::job_pass::SCENE_RENDER_SNAPSHOT,
+            newengine_jobs_api::EngineTaskPhase::Completed,
+            "SceneRenderSnapshot captured",
+            snapshot.diagnostic_detail(),
+            Some(1.0),
+        );
+        let bounds = snapshot.bounds;
         let lit = match controller.gpu.require_primary_lit_pipeline(r) {
             Ok(lit) => lit,
+            Err(e) if is_transient_shader_pipeline_error(&e) => {
+                Self::end_viewport_after_transient_pipeline_wait(
+                    controller,
+                    r,
+                    ui.cloned(),
+                    scope,
+                    e,
+                )?;
+                return Ok(PlayableFrameOutcome::EndedEarly { ui_telemetry: None });
+            }
             Err(e) => {
                 Self::end_viewport_after_pipeline_failure(controller, r, ui.cloned(), scope, e)?;
                 return Ok(PlayableFrameOutcome::EndedEarly { ui_telemetry: None });
@@ -67,7 +97,7 @@ impl RenderFrameOrchestrator {
         }
         cpu_profile.mark("gpu_residency");
 
-        let camera_position = [view.position_ws.x, view.position_ws.y, view.position_ws.z];
+        let camera_position = [snapshot.camera_position.x, snapshot.camera_position.y, snapshot.camera_position.z];
         let base_lights = lights::collect_lights(scene.world()).with_camera_position(camera_position);
         let extent = Extent2D::new(scope.vp_w, scope.vp_h);
         let runtime_profile = controller.runtime_profile().clone();
@@ -86,9 +116,9 @@ impl RenderFrameOrchestrator {
                 lit,
                 viewproj,
                 camera_position,
-                [view.forward_ws.x, view.forward_ws.y, view.forward_ws.z],
+                [snapshot.camera_forward.x, snapshot.camera_forward.y, snapshot.camera_forward.z],
                 extent,
-                Extent2D::new(scope.w, scope.h),
+                snapshot.surface_extent,
                 plugin_snapshot,
             ) {
                 Ok(plan) => plan,
@@ -138,8 +168,8 @@ impl RenderFrameOrchestrator {
             shadow_plan,
             shadow_frame,
             render_shadow_map,
-            viewport_extent: extent,
-            surface_extent: Extent2D::new(scope.w, scope.h),
+            viewport_extent: snapshot.viewport_extent,
+            surface_extent: snapshot.surface_extent,
             runtime: view_frame.effective_play_mode.is_runtime(),
             debug_overlays: false,
             ui,
@@ -237,6 +267,14 @@ impl RenderFrameOrchestrator {
             view_frame.postfx,
         );
         postfx.ui_backdrop = ui_backdrop;
+        Self::publish_render_job_pass_event(
+            controller.frame.frame_index,
+            newengine_jobs_api::job_pass::FRAME_ENVELOPE,
+            newengine_jobs_api::EngineTaskPhase::Scheduled,
+            "FrameEnvelope staging scheduled",
+            "FrameEnvelope packet staging is the render-thread handoff boundary: RenderPrep produces packets, RenderApi recording consumes only the envelope.",
+            Some(0.0),
+        );
         let frame_envelope = build_runtime_frame_envelope(
             controller.frame.frame_index,
             controller.viewport.clear_color,
@@ -247,6 +285,14 @@ impl RenderFrameOrchestrator {
             &draw_list_descs,
             postfx,
             scope.trace_frame,
+        );
+        Self::publish_render_job_pass_event(
+            controller.frame.frame_index,
+            newengine_jobs_api::job_pass::FRAME_ENVELOPE,
+            newengine_jobs_api::EngineTaskPhase::Completed,
+            "FrameEnvelope packet staged",
+            "RenderApi submit is now consuming a staged FrameEnvelope instead of constructing world packets inside submit.",
+            Some(1.0),
         );
         cpu_profile.mark("envelope");
 
@@ -455,6 +501,34 @@ impl RenderFrameOrchestrator {
         );
     }
 
+    fn end_viewport_after_transient_pipeline_wait(
+        controller: &mut RuntimeRenderController,
+        r: &mut dyn RenderApi,
+        ui: Option<UiDrawList>,
+        scope: RenderFrameScope,
+        error: impl std::fmt::Display,
+    ) -> EngineResult<()> {
+        log_transient_pipeline_wait_once(
+            controller.frame.frame_index,
+            &format!("{}", error),
+        );
+        let _ = r.discard_recorded_commands();
+        r.set_viewport(Viewport::full(Extent2D::new(scope.w, scope.h)))?;
+        r.set_scissor(RectI32::new(0, 0, scope.w as i32, scope.h as i32))?;
+        if let Some(ui) = ui {
+            r.set_ui_draw_list(ui);
+        }
+        controller.gc_per_draw_ubos(r);
+        controller.gc_deferred_rts(r);
+        if scope.trace_frame {
+            newengine_core::crash::record_breadcrumb(format!(
+                "render controller: end_frame frame={} while material shader pipeline is pending",
+                controller.frame.frame_index
+            ));
+        }
+        r.end_frame()
+    }
+
     fn end_viewport_after_pipeline_failure(
         controller: &mut RuntimeRenderController,
         r: &mut dyn RenderApi,
@@ -536,6 +610,31 @@ fn log_gpu_safe_profile_once() {
         );
         newengine_core::crash::record_breadcrumb(
             "render controller: conservative GPU profile active".to_owned(),
+        );
+    }
+}
+
+static TRANSIENT_SHADER_PIPELINE_WAIT_LOGGED: AtomicBool = AtomicBool::new(false);
+
+fn log_transient_pipeline_wait_once(frame_index: u64, error: &str) {
+    if TRANSIENT_SHADER_PIPELINE_WAIT_LOGGED
+        .compare_exchange(false, true, Ordering::AcqRel, Ordering::Acquire)
+        .is_ok()
+    {
+        log::warn!(
+            "render controller: material pipeline not ready yet; shader compile remains async and viewport will retry next frame frame={} err='{}'",
+            frame_index,
+            error
+        );
+        newengine_core::crash::record_breadcrumb(format!(
+            "render controller: transient material shader pipeline wait frame={} err='{}'",
+            frame_index, error
+        ));
+    } else {
+        log::debug!(
+            "render controller: material pipeline still pending; retrying next frame frame={} err='{}'",
+            frame_index,
+            error
         );
     }
 }

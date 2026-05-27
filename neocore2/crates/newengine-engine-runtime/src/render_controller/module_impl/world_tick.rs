@@ -123,6 +123,7 @@ impl RuntimeRenderController {
                         physics_api,
                         physics_mode,
                         Some(&sim_telemetry),
+                        job_system,
                     );
                 } else {
                     log_physics_skip_once();
@@ -222,6 +223,9 @@ impl From<&ViewportInputSnap> for EngineViewInput {
             pan_drag: input.pan_drag,
             ui_busy: input.ui_busy,
             fly_rmb: input.fly_rmb,
+            sampling_alive: input.sampling_alive,
+            camera_navigation_gated: input.camera_navigation_gated,
+            gameplay_movement_gated: input.gameplay_movement_gated,
             move_mask: input.move_mask,
             speed_scalar: input.speed_scalar,
             camera_view: input.camera_view,

@@ -32,6 +32,29 @@ impl CameraControlInput {
             zoom_delta: 0.0,
         }
     }
+
+    #[inline]
+    pub fn sanitized(self) -> Self {
+        let look_delta = Vec2::new(finite_or_zero(self.look_delta.x), finite_or_zero(self.look_delta.y));
+        let move_axis = Vec3::new(
+            finite_or_zero(self.move_axis.x),
+            finite_or_zero(self.move_axis.y),
+            finite_or_zero(self.move_axis.z),
+        );
+        let speed_mul = if self.speed_mul.is_finite() && self.speed_mul > 0.0 {
+            self.speed_mul
+        } else {
+            1.0
+        };
+        let zoom_delta = finite_or_zero(self.zoom_delta);
+        Self {
+            look_active: self.look_active,
+            look_delta,
+            move_axis,
+            speed_mul,
+            zoom_delta,
+        }
+    }
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -83,11 +106,8 @@ impl FreeFlyController {
 
     #[inline]
     pub fn apply(&mut self, rig: &mut CameraRig, input: CameraControlInput, dt: f32) {
-        let speed_mul = if input.speed_mul.is_finite() && input.speed_mul > 0.0 {
-            input.speed_mul
-        } else {
-            1.0
-        };
+        let input = input.sanitized();
+        let speed_mul = input.speed_mul;
 
         if input.look_active {
             let dx = input.look_delta.x;
@@ -194,11 +214,8 @@ impl OrbitController {
 
     #[inline]
     pub fn apply(&mut self, rig: &mut CameraRig, input: CameraControlInput, dt: f32) {
-        let speed_mul = if input.speed_mul.is_finite() && input.speed_mul > 0.0 {
-            input.speed_mul
-        } else {
-            1.0
-        };
+        let input = input.sanitized();
+        let speed_mul = input.speed_mul;
 
         if input.look_active {
             let dx = input.look_delta.x;
@@ -219,7 +236,7 @@ impl OrbitController {
 
         // Wheel zoom must stay predictable across tiny props and huge scenes alike.
         // The previous implementation multiplied distance by an unclamped scene-scaled step,
-        // which could collapse the orbit radius in a single wheel tick on large levels.
+        // which could collapse the orbit radius in a single wheel tick across broad scene scales.
         //
         // Policy:
         // - exponential zoom response (stable near zero, no sign-flip / overshoot);
@@ -261,4 +278,10 @@ impl OrbitController {
         rig.position = self.target + back * self.distance;
         rig.rotation = rot;
     }
+}
+
+
+#[inline]
+fn finite_or_zero(value: f32) -> f32 {
+    if value.is_finite() { value } else { 0.0 }
 }

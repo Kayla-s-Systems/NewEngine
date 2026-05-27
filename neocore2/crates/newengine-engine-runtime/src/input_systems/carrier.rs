@@ -13,6 +13,12 @@ pub struct InputActionFrameCarrier<'a> {
     pub pan_drag: &'a mut bool,
     pub ui_busy: &'a mut bool,
     pub fly_rmb: &'a mut bool,
+    /// Listener/sampler liveness invariant: UI may gate navigation, never kill sampling.
+    pub sampling_alive: &'a mut bool,
+    /// Per-frame policy gate for camera look/navigation application.
+    pub camera_navigation_gated: &'a mut bool,
+    /// Per-frame policy gate for gameplay movement application.
+    pub gameplay_movement_gated: &'a mut bool,
     pub move_mask: &'a mut u64,
     pub speed_scalar: &'a mut f32,
     pub camera_view: &'a mut CameraViewRequest,
@@ -64,12 +70,26 @@ impl InputActionFrameCarrier<'_> {
     }
 
     pub(super) fn suppress_runtime_controls(&mut self) {
-        *self.dx_px = 0.0;
-        *self.dy_px = 0.0;
-        *self.wheel_y = 0.0;
+        self.gate_runtime_navigation_by_ui();
         *self.active = false;
         *self.look_drag = false;
         *self.pan_drag = false;
+    }
+
+    /// Gate gameplay/camera navigation while keeping the camera listener alive.
+    ///
+    /// UI may consume pointer/text/navigation intent, but it must not unsubscribe
+    /// camera sampling. The camera receives an input-state frame every tick and
+    /// decides from `ui_busy` plus zeroed navigation deltas whether to apply
+    /// movement. This prevents the old modal path where opening UI made camera
+    /// listeners look dead until another UI toggle accidentally woke input again.
+    pub(super) fn gate_runtime_navigation_by_ui(&mut self) {
+        *self.sampling_alive = true;
+        *self.camera_navigation_gated = true;
+        *self.gameplay_movement_gated = true;
+        *self.dx_px = 0.0;
+        *self.dy_px = 0.0;
+        *self.wheel_y = 0.0;
         *self.ui_busy = true;
         *self.fly_rmb = false;
         *self.move_mask = 0;

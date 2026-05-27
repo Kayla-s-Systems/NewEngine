@@ -53,10 +53,14 @@ pub mod job_pass {
     pub const APPLY_INTENTS: &str = "apply-intents";
     pub const PHYSICS: &str = "physics";
     pub const DERIVED: &str = "derived";
+    pub const SIM_READ_SNAPSHOT: &str = "sim-read-snapshot";
+    pub const SIM_COMMAND_BATCH: &str = "sim-command-batch";
     pub const VISIBILITY: &str = "visibility";
     pub const SCENE_SNAPSHOT: &str = "scene-snapshot";
+    pub const SCENE_RENDER_SNAPSHOT: &str = "scene-render-snapshot";
     pub const FEATURE_EXTRACT: &str = "feature-extract";
     pub const RENDER_SUBMIT: &str = "render-submit";
+    pub const FRAME_ENVELOPE: &str = "frame-envelope";
     pub const TERRAIN_RENDER_PACKET: &str = "terrain-render-packet";
     pub const TERRAIN_GPU_RESIDENCY: &str = "terrain-gpu-residency";
     pub const WORLD_STREAMING_PLAN: &str = "world-streaming-plan";
@@ -71,6 +75,7 @@ pub mod job_pass {
     pub const DESTRUCTION_BUILD: &str = "destruction-build";
     pub const PARTICLE_SIMULATION: &str = "particle-simulation";
     pub const SERVICE_CALL: &str = "service-call";
+    pub const INPUT_CAPTURE: &str = "input-capture";
     pub const PROCESS: &str = "process";
 }
 
@@ -625,6 +630,7 @@ pub struct JobsSnapshotJsonV1 {
 #[serde(default)]
 pub struct JobsLaneSnapshotJsonV1 {
     pub pending_jobs: usize,
+    pub running_jobs: usize,
     pub completed_jobs: u64,
 }
 

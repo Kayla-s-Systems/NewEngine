@@ -63,6 +63,11 @@ impl CommandBuffer {
     }
 
     #[inline]
+    pub fn len(&self) -> usize {
+        self.cmds.len()
+    }
+
+    #[inline]
     pub fn push(&mut self, cmd: Box<dyn Command>) {
         self.cmds.push(cmd);
     }

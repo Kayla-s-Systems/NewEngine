@@ -7,7 +7,7 @@ use super::readiness;
 use super::super::controller::RuntimeRenderController;
 
 impl RuntimeRenderController {
-    pub(super) fn handle_native_prelaunch_gate<E: Send + 'static>(
+    pub(super) fn handle_prelaunch_gate<E: Send + 'static>(
         &mut self,
         ctx: &ModuleCtx<'_, E>,
         r: &mut dyn RenderApi,
@@ -31,7 +31,18 @@ impl RuntimeRenderController {
 
             if has_pending_gate {
                 let requested_play_mode = self.bridges.scene.play_mode();
+                let runtime_profile = self.runtime_profile().clone();
+                let job_system = ctx.job_system().cloned();
                 let world_playable = scene.run_frame(next_frame, |world| {
+                    if runtime_profile.use_runtime_terrain_streaming() {
+                        let mats_lock = self.bridges.scene.materials();
+                        let mats = mats_lock.read();
+                        crate::scene_bridge::tick_game_ready_streaming_terrain(
+                            world,
+                            &mats,
+                            job_system.as_ref(),
+                        );
+                    }
                     readiness::update_game_ready_launch_gate(
                         self,
                         r,
@@ -40,6 +51,14 @@ impl RuntimeRenderController {
                         next_frame,
                     )
                 });
+
+                // Launch gate must pump world/terrain residency too. Otherwise
+                // `Loading World` can reach texture 100% while the world still has
+                // CPU-prepared terrain chunks waiting for GPU packets, and redraws
+                // may only advance again after unrelated UI input.
+                if let Err(e) = self.pump_scene_gpu_residency(r, &scene) {
+                    log::warn!("render prelaunch: terrain GPU residency pump failed: {}", e);
+                }
 
                 self.pump_material_texture_requests(
                     r,
@@ -97,7 +116,7 @@ impl RuntimeRenderController {
         } else {
             if trace_frame {
                 log::debug!(
-                    "render controller: native loading frame={} reason='{}'",
+                    "render controller: loading gate frame={} reason='{}'",
                     self.frame.frame_index,
                     gate.reason
                 );

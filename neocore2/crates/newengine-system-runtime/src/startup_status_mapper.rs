@@ -8,7 +8,7 @@ use newengine_system_contracts::{
 /// Canonical bootstrap overlay builder.
 ///
 /// The runtime host and scene-launch gate both publish loading overlays through
-/// this single helper so the native platform shell renders one declarative model
+/// this single helper so engine.ui renders one declarative model
 /// instead of drifting across multiple ad-hoc status constructors.
 pub fn bootstrap_loading_with_subsystems(
     title: impl Into<String>,

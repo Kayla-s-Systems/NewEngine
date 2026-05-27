@@ -43,6 +43,7 @@ pub struct EngineGatewayRouteSnapshot {
     pub gateway_id: String,
     pub service_kind: String,
     pub provider_service_id: String,
+    pub provider_route_id: Option<String>,
     pub provider_owner_id: String,
     pub backend_capability_id: String,
     pub backend_priority: i32,

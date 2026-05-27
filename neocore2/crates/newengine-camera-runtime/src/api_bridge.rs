@@ -1,6 +1,6 @@
 #![forbid(unsafe_op_in_unsafe_fn)]
 
-use newengine_camera::{CameraFrame, CameraPostEffects, Projection};
+use newengine_camera::{CameraFrame, CameraWorldFrame, CameraPostEffects, Projection};
 use newengine_camera_api::{
     CameraFrameSnapshot, CameraPostFxDofIntent, CameraPostFxIntent,
     CameraViewMode,
@@ -15,6 +15,22 @@ pub fn camera_frame_snapshot(frame: CameraFrame, effects: CameraPostEffects) -> 
 }
 
 #[inline]
+pub fn camera_world_frame_snapshot(
+    frame: CameraWorldFrame,
+    effects: CameraPostEffects,
+    view_mode: CameraViewMode,
+) -> CameraFrameSnapshot {
+    let mut snapshot = camera_frame_snapshot_for_view(frame.frame, effects, view_mode);
+    snapshot.position_ws_f64 = [frame.camera_ws.x, frame.camera_ws.y, frame.camera_ws.z];
+    snapshot.world_origin_ws_f64 = [
+        frame.origin.origin.x,
+        frame.origin.origin.y,
+        frame.origin.origin.z,
+    ];
+    snapshot.position_origin_relative_ws = vec3_arr(frame.frame.rig.position);
+    snapshot
+}
+
 pub fn camera_frame_snapshot_for_view(
     frame: CameraFrame,
     effects: CameraPostEffects,

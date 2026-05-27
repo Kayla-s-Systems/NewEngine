@@ -26,6 +26,9 @@ pub struct CameraNavInput {
     /// Latched free-fly intent (e.g. RMB capture).
     pub fly_rmb: bool,
 
+    /// Policy gate: listener/sampling is alive, but navigation must not apply deltas/actions.
+    pub navigation_gated: bool,
+
     /// Semantic movement bitmask (`newengine-input-actions-api::move_mask::*`).
     pub move_mask: u64,
 
@@ -40,11 +43,21 @@ impl CameraNavInput {
         self.dy_px = 0.0;
         self.wheel_y = 0.0;
     }
+
+    #[inline]
+    pub fn gate_navigation(&mut self) {
+        self.look_drag = false;
+        self.pan_drag = false;
+        self.fly_rmb = false;
+        self.move_mask = 0;
+        self.wheel_y = 0.0;
+        self.ui_busy = true;
+    }
 }
 
 #[inline]
 pub fn cursor_state_for_nav(input: &CameraNavInput) -> CursorState {
-    if input.active && input.fly_rmb {
+    if input.active && input.fly_rmb && !input.navigation_gated {
         CursorState::captured_locked()
     } else {
         CursorState::released()
@@ -53,6 +66,10 @@ pub fn cursor_state_for_nav(input: &CameraNavInput) -> CursorState {
 
 #[inline]
 pub(crate) fn build_camera_input(input: &CameraNavInput, mode: RuntimeNavMode) -> CameraControlInput {
+    if input.navigation_gated {
+        return CameraControlInput::idle();
+    }
+
     let shift = (input.move_mask & move_mask::SPRINT) != 0;
 
     let fwd = ((input.move_mask & move_mask::FORWARD) != 0) as i32 - ((input.move_mask & move_mask::BACK) != 0) as i32;

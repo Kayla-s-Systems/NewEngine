@@ -1,6 +1,6 @@
 #![forbid(unsafe_op_in_unsafe_fn)]
 
-use newengine_camera::{CameraFrame, CameraViewport};
+use newengine_camera::{CameraFrame, CameraFrameHistory, CameraViewport};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct CameraViewportLayerId(pub u64);
@@ -104,6 +104,7 @@ pub struct CameraViewportLayer {
     pub enabled: bool,
     pub fade: CameraViewportFade,
     pub last_frame: Option<CameraFrame>,
+    pub history: CameraFrameHistory,
 }
 
 impl Default for CameraViewportLayer {
@@ -116,6 +117,7 @@ impl Default for CameraViewportLayer {
             enabled: true,
             fade: CameraViewportFade::default(),
             last_frame: None,
+            history: CameraFrameHistory::new(),
         }
     }
 }
@@ -184,7 +186,7 @@ impl CameraViewportManagerResource {
         }
     }
 
-    pub fn present_frame(&mut self, frame: CameraFrame) -> CameraFrame {
+    pub fn present_frame(&mut self, frame: CameraFrame, dt: f32) -> CameraFrame {
         let active_index = self
             .layers
             .iter()
@@ -203,6 +205,7 @@ impl CameraViewportManagerResource {
         }
         active.viewport = viewport;
         active.last_frame = Some(frame);
+        active.history.push(frame, dt);
         self.last_active_viewport = Some(viewport);
         frame
     }
@@ -212,6 +215,14 @@ impl CameraViewportManagerResource {
         self.last_active_viewport
             .unwrap_or_else(|| self.layers.last().map(|it| it.viewport).unwrap_or_default())
             .sanitized()
+    }
+
+    #[inline]
+    pub fn active_history(&self) -> Option<CameraFrameHistory> {
+        self.layers
+            .iter()
+            .find(|layer| layer.id == self.active_layer)
+            .map(|layer| layer.history)
     }
 }
 
