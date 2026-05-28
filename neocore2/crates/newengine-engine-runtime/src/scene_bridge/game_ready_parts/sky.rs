@@ -32,10 +32,11 @@ pub(crate) struct SkyAtmosphereRuntime {
     pub profile: GameReadySkyAtmosphereSpec,
 }
 
-pub(super) const SKY_VISUAL_SPAWN_ORDER: [SkyVisualKind; 3] = [
+pub(super) const SKY_VISUAL_SPAWN_ORDER: [SkyVisualKind; 1] = [
+    // The procedural sky shader already renders sun and moon from engine.time / sky-cycle data.
+    // Do not spawn extra follow-camera disc meshes: they behave like frame-attached
+    // sprites and can be mistaken for incomplete loading or UI leakage.
     SkyVisualKind::Dome,
-    SkyVisualKind::SunDisk,
-    SkyVisualKind::MoonDisk,
 ];
 
 impl SkyVisualKind {

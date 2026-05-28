@@ -420,7 +420,9 @@ dependencies = [
 name = "newengine-assets-api"
 version = "0.1.0"
 dependencies = [
+ "abi_stable",
  "log",
+ "newengine-plugin-api",
  "newengine-service-api",
  "serde",
  "serde_json",

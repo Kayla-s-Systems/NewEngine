@@ -119,7 +119,12 @@ pub(super) fn slow_profile_log_interval_frames() -> u64 {
 
 #[inline]
 pub(super) fn profiler_sample_interval_frames() -> u64 {
-    env_u64("NEWENGINE_RENDER_PROFILER_SAMPLE_INTERVAL_FRAMES", 4, 1, 6000)
+    // Profiling must not become the thing that makes gameplay heavy. The old
+    // default sampled every fourth frame and every slow frame; on the current
+    // render path that meant JSON/event traffic every frame. Keep regular
+    // telemetry visible, but sample it at a diagnostics cadence unless the user
+    // explicitly asks for denser profiling.
+    env_u64("NEWENGINE_RENDER_PROFILER_SAMPLE_INTERVAL_FRAMES", 120, 1, 6000)
 }
 
 pub(super) fn emit_timed_profile(
@@ -132,9 +137,10 @@ pub(super) fn emit_timed_profile(
 ) {
     let slow = total_ms >= warn_ms_threshold();
     let traceable = trace_frame || total_ms >= trace_ms_threshold();
+    let sample_interval = profiler_sample_interval_frames();
     let should_sample = trace_frame
-        || slow
-        || frame_index % profiler_sample_interval_frames() == 0;
+        || frame_index % sample_interval == 0
+        || (slow && frame_index % slow_profile_log_interval_frames() == 0);
     if should_sample {
         emit_profiler_sample(label, frame_index, total_ms, breakdown.as_ref(), suffix.as_ref(), slow);
     }

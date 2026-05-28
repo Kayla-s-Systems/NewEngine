@@ -155,8 +155,8 @@ fn apply_root(cfg: &mut StartupConfig, report: &mut StartupLoadReport, mut src: 
     if let Some(mut plugins) = src.plugins {
         // Deterministic merge: config.json plugins override defaults (plugin-owned).
         // Raw roots are preserved so the config service can resolve either:
-        // - flat ids: plugins["newengine.logging"]
-        // - wrapped domains: plugins.newengine.logging
+        // - flat ids: plugins["engine.logging.chronicle"]
+        // - wrapped domains: plugins.engine.logging.chronicle
         let mut ids: Vec<String> = plugins.keys().cloned().collect();
         ids.sort();
 

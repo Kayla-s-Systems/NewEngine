@@ -250,6 +250,12 @@ impl Default for PlatformSurfaceMetricsV1 {
 pub struct PlatformWindowReadyV1 {
     pub handles: NativeWindowHandlesV1,
     pub surface: PlatformSurfaceMetricsV1,
+    /// Display/presentation policy selected by the platform provider.
+    ///
+    /// Renderer providers use this as the engine-owned presentation contract instead
+    /// of guessing present mode from backend-local environment variables.
+    #[serde(default)]
+    pub display: PlatformDisplayConfigV1,
 }
 
 #[repr(u8)]

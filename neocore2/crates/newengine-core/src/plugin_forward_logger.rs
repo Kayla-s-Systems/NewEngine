@@ -13,7 +13,7 @@ pub const ENGINE_LOG_SERVICE_ID: &str = "engine.logging";
 
 /// First-party provider service id exposed by the logging plugin.
 #[allow(dead_code)]
-pub const LOGGING_SINK_SERVICE_ID: &str = "newengine.logging.sink.v1";
+pub const LOGGING_SINK_SERVICE_ID: &str = "chronicle.logging.sink.v1";
 
 const METHOD_WRITE_JSON: &str = "write_json";
 const METHOD_FLUSH: &str = "flush";

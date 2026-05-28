@@ -351,7 +351,7 @@
             },
             "enabled": true,
             "live_update_supported": false,
-            "plugin_id": "newengine.platform.winit",
+            "plugin_id": "engine.platform.winit",
             "schema": {
               "category": "Display",
               "fields": [
@@ -469,7 +469,7 @@
                 }
               ],
               "mode": "schema_editor",
-              "plugin_id": "newengine.platform.winit",
+              "plugin_id": "engine.platform.winit",
               "policy": "plugin-owned schema; default is the no-window startup value",
               "schema": "newengine.startup_config_schema.v1",
               "title": "Platform Window"
@@ -636,7 +636,7 @@
             },
             "enabled": true,
             "live_update_supported": false,
-            "plugin_id": "newengine.renderer.vulkan",
+            "plugin_id": "engine.render.vulkan",
             "schema": {
               "category": "Render",
               "fields": [
@@ -726,7 +726,7 @@
                 }
               ],
               "mode": "schema_editor",
-              "plugin_id": "newengine.renderer.vulkan",
+              "plugin_id": "engine.render.vulkan",
               "policy": "plugin-owned schema; default is the no-window startup value",
               "schema": "newengine.startup_config_schema.v1",
               "title": "Vulkan Renderer"
@@ -1185,7 +1185,7 @@
             },
             "enabled": true,
             "live_update_supported": false,
-            "plugin_id": "newengine.logging",
+            "plugin_id": "engine.logging.chronicle",
             "schema": {
               "category": "Diagnostics",
               "fields": [
@@ -1299,7 +1299,7 @@
                 }
               ],
               "mode": "schema_editor",
-              "plugin_id": "newengine.logging",
+              "plugin_id": "engine.logging.chronicle",
               "policy": "plugin-owned schema; default is the no-window startup value",
               "schema": "newengine.startup_config_schema.v1",
               "title": "Logging"

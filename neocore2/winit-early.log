@@ -851,3 +851,262 @@
 [1779933685847] [pid=14688] [seq=41] runtime.run_app.returned
 [1779933685847] [pid=14688] [seq=42] runtime.exit.ok
 [1779933685848] [pid=14688] [seq=43] ffi.exit clean
+[1779939245005] [pid=13940] [seq=1] ffi.entry newengine_platform_runtime_run_v1 title='KAYLA FPS: Procedural Highlands' size=1600x900 user_data=0xf35defe810
+[1779939245006] [pid=13940] [seq=2] runtime.enter title='KAYLA FPS: Procedural Highlands' size=1600x900 user_data=0xf35defe810
+[1779939245006] [pid=13940] [seq=3] runtime.event_loop.new.begin
+[1779939245038] [pid=13940] [seq=4] runtime.event_loop.new.ok
+[1779939245038] [pid=13940] [seq=5] runtime.app.new.begin
+[1779939245038] [pid=13940] [seq=6] app.new constructing title='KAYLA FPS: Procedural Highlands' size=1600x900 user_data=0xf35defe810
+[1779939245038] [pid=13940] [seq=7] loading.status sink subscribed topics='engine.ui.loading.status.v1','engine.task.event.v1'
+[1779939245039] [pid=13940] [seq=8] runtime.app.new.ok
+[1779939245039] [pid=13940] [seq=9] runtime.run_app.begin
+[1779939245039] [pid=13940] [seq=10] handler.resumed.begin
+[1779939245039] [pid=13940] [seq=11] handler.resumed.device_events.always
+[1779939245040] [pid=13940] [seq=12] resume.begin
+[1779939245040] [pid=13940] [seq=13] resume.build_window_attributes.begin
+[1779939245040] [pid=13940] [seq=14] resume.build_window_attributes.ok
+[1779939245041] [pid=13940] [seq=15] resume.create_window.begin
+[1779939245069] [pid=13940] [seq=16] resume.create_window.ok
+[1779939245069] [pid=13940] [seq=17] resume.native_handles.begin
+[1779939245069] [pid=13940] [seq=18] resume.native_handles.ok backend=Win32 hwnd=0x159094c display=0x7ffd9b180000 size=1600x900 ppp=1.000
+[1779939245071] [pid=13940] [seq=19] loading.assets.warn dictionary='loading/loaderWindow.ytd' entry='north_star_preload_background' error='service not found: engine.assets'
+[1779939245071] [pid=13940] [seq=20] loading.assets.warn dictionary='loading/loaderWindow.ytd' entry='north_star_engine_logo' error='service not found: engine.assets'
+[1779939245071] [pid=13940] [seq=21] loading.assets.warn dictionary='loading/loaderWindow.ytd' entry='north_star_loading_spinner' error='service not found: engine.assets'
+[1779939245072] [pid=13940] [seq=22] loading.assets.warn dictionary='loading/loaderWindow.ytd' entry='north_star_engine_symbol' error='service not found: engine.assets'
+[1779939245144] [pid=13940] [seq=23] resume.initial_focus focused=true
+[1779939245144] [pid=13940] [seq=24] resume.host.on_window_ready.begin user_data=0xf35defe810
+[1779939245145] [pid=13940] [seq=25] resume.host.on_window_ready.returned
+[1779939245145] [pid=13940] [seq=26] resume.host.on_window_focused.initial.begin user_data=0xf35defe810 focused=true
+[1779939245146] [pid=13940] [seq=27] resume.host.on_window_focused.initial.returned
+[1779939245146] [pid=13940] [seq=28] resume.engine_ui_owns_initial_present
+[1779939245146] [pid=13940] [seq=29] resume.end
+[1779939245146] [pid=13940] [seq=30] handler.resumed.end
+[1779939245147] [pid=13940] [seq=31] host.on_window_resized.begin user_data=0xf35defe810 size=1600x900 ppp=1.000
+[1779939245147] [pid=13940] [seq=32] host.on_window_resized.returned
+[1779939245147] [pid=13940] [seq=33] host.on_window_focused.begin user_data=0xf35defe810 focused=true
+[1779939245148] [pid=13940] [seq=34] host.on_window_focused.returned
+[1779939245148] [pid=13940] [seq=35] host.on_window_resized.begin user_data=0xf35defe810 size=1600x900 ppp=1.000
+[1779939245149] [pid=13940] [seq=36] host.on_window_resized.returned
+[1779939248812] [pid=13940] [seq=37] host.on_window_focused.begin user_data=0xf35defe810 focused=false
+[1779939248813] [pid=13940] [seq=38] host.on_window_focused.returned
+[1779939253229] [pid=13940] [seq=39] host.on_window_focused.begin user_data=0xf35defe810 focused=true
+[1779939253230] [pid=13940] [seq=40] host.on_window_focused.returned
+[1779939294447] [pid=13940] [seq=41] host.on_window_focused.begin user_data=0xf35defe810 focused=false
+[1779939294448] [pid=13940] [seq=42] host.on_window_focused.returned
+[1779939538315] [pid=10972] [seq=1] ffi.entry newengine_platform_runtime_run_v1 title='KAYLA FPS: Procedural Highlands' size=1600x900 user_data=0xa2438feac0
+[1779939538316] [pid=10972] [seq=2] runtime.enter title='KAYLA FPS: Procedural Highlands' size=1600x900 user_data=0xa2438feac0
+[1779939538316] [pid=10972] [seq=3] runtime.event_loop.new.begin
+[1779939538346] [pid=10972] [seq=4] runtime.event_loop.new.ok
+[1779939538346] [pid=10972] [seq=5] runtime.app.new.begin
+[1779939538346] [pid=10972] [seq=6] app.new constructing title='KAYLA FPS: Procedural Highlands' size=1600x900 user_data=0xa2438feac0
+[1779939538346] [pid=10972] [seq=7] loading.status sink subscribed topics='engine.ui.loading.status.v1','engine.task.event.v1'
+[1779939538347] [pid=10972] [seq=8] runtime.app.new.ok
+[1779939538347] [pid=10972] [seq=9] runtime.run_app.begin
+[1779939538347] [pid=10972] [seq=10] handler.resumed.begin
+[1779939538347] [pid=10972] [seq=11] handler.resumed.device_events.always
+[1779939538347] [pid=10972] [seq=12] resume.begin
+[1779939538348] [pid=10972] [seq=13] resume.build_window_attributes.begin
+[1779939538348] [pid=10972] [seq=14] resume.build_window_attributes.ok
+[1779939538348] [pid=10972] [seq=15] resume.create_window.begin
+[1779939538369] [pid=10972] [seq=16] resume.create_window.ok
+[1779939538370] [pid=10972] [seq=17] resume.native_handles.begin
+[1779939538370] [pid=10972] [seq=18] resume.native_handles.ok backend=Win32 hwnd=0x15d094c display=0x7ffd9d3c0000 size=1600x900 ppp=1.000
+[1779939538371] [pid=10972] [seq=19] loading.assets.warn dictionary='loading/loaderWindow.ytd' entry='north_star_preload_background' error='service not found: engine.assets'
+[1779939538371] [pid=10972] [seq=20] loading.assets.warn dictionary='loading/loaderWindow.ytd' entry='north_star_engine_logo' error='service not found: engine.assets'
+[1779939538371] [pid=10972] [seq=21] loading.assets.warn dictionary='loading/loaderWindow.ytd' entry='north_star_loading_spinner' error='service not found: engine.assets'
+[1779939538371] [pid=10972] [seq=22] loading.assets.warn dictionary='loading/loaderWindow.ytd' entry='north_star_engine_symbol' error='service not found: engine.assets'
+[1779939538409] [pid=10972] [seq=23] resume.initial_focus focused=true
+[1779939538409] [pid=10972] [seq=24] resume.host.on_window_ready.begin user_data=0xa2438feac0
+[1779939538410] [pid=10972] [seq=25] resume.host.on_window_ready.returned
+[1779939538410] [pid=10972] [seq=26] resume.host.on_window_focused.initial.begin user_data=0xa2438feac0 focused=true
+[1779939538410] [pid=10972] [seq=27] resume.host.on_window_focused.initial.returned
+[1779939538411] [pid=10972] [seq=28] resume.engine_ui_owns_initial_present
+[1779939538411] [pid=10972] [seq=29] resume.end
+[1779939538411] [pid=10972] [seq=30] handler.resumed.end
+[1779939538411] [pid=10972] [seq=31] host.on_window_resized.begin user_data=0xa2438feac0 size=1600x900 ppp=1.000
+[1779939538411] [pid=10972] [seq=32] host.on_window_resized.returned
+[1779939538412] [pid=10972] [seq=33] host.on_window_focused.begin user_data=0xa2438feac0 focused=true
+[1779939538412] [pid=10972] [seq=34] host.on_window_focused.returned
+[1779939538412] [pid=10972] [seq=35] host.on_window_resized.begin user_data=0xa2438feac0 size=1600x900 ppp=1.000
+[1779939538412] [pid=10972] [seq=36] host.on_window_resized.returned
+[1779939556842] [pid=10972] [seq=37] host.on_window_focused.begin user_data=0xa2438feac0 focused=false
+[1779939556842] [pid=10972] [seq=38] host.on_window_focused.returned
+[1779939563699] [pid=10972] [seq=39] host.on_window_focused.begin user_data=0xa2438feac0 focused=true
+[1779939563699] [pid=10972] [seq=40] host.on_window_focused.returned
+[1779939566594] [pid=10972] [seq=41] window.destroy_for_exit.begin reason='user-close-request'
+[1779939566599] [pid=10972] [seq=42] window.destroy_for_exit.complete reason='user-close-request'
+[1779939566600] [pid=10972] [seq=43] host.on_window_focused.begin user_data=0xa2438feac0 focused=false
+[1779939566601] [pid=10972] [seq=44] host.on_window_focused.returned
+[1779939566602] [pid=10972] [seq=45] runtime.run_app.returned
+[1779939566602] [pid=10972] [seq=46] runtime.exit.ok
+[1779939566603] [pid=10972] [seq=47] ffi.exit clean
+[1779940399586] [pid=12260] [seq=1] ffi.entry newengine_platform_runtime_run_v1 title='KAYLA FPS: Procedural Highlands' size=1600x900 user_data=0x32370fe940
+[1779940399587] [pid=12260] [seq=2] runtime.enter title='KAYLA FPS: Procedural Highlands' size=1600x900 user_data=0x32370fe940
+[1779940399587] [pid=12260] [seq=3] runtime.event_loop.new.begin
+[1779940399618] [pid=12260] [seq=4] runtime.event_loop.new.ok
+[1779940399619] [pid=12260] [seq=5] runtime.app.new.begin
+[1779940399619] [pid=12260] [seq=6] app.new constructing title='KAYLA FPS: Procedural Highlands' size=1600x900 user_data=0x32370fe940
+[1779940399619] [pid=12260] [seq=7] loading.status sink subscribed topics='engine.ui.loading.status.v1','engine.task.event.v1'
+[1779940399619] [pid=12260] [seq=8] runtime.app.new.ok
+[1779940399620] [pid=12260] [seq=9] runtime.run_app.begin
+[1779940399620] [pid=12260] [seq=10] handler.resumed.begin
+[1779940399620] [pid=12260] [seq=11] handler.resumed.device_events.always
+[1779940399620] [pid=12260] [seq=12] resume.begin
+[1779940399620] [pid=12260] [seq=13] resume.build_window_attributes.begin
+[1779940399621] [pid=12260] [seq=14] resume.build_window_attributes.ok
+[1779940399621] [pid=12260] [seq=15] resume.create_window.begin
+[1779940399643] [pid=12260] [seq=16] resume.create_window.ok
+[1779940399643] [pid=12260] [seq=17] resume.native_handles.begin
+[1779940399643] [pid=12260] [seq=18] resume.native_handles.ok backend=Win32 hwnd=0x15d09ce display=0x7ffd98f70000 size=1600x900 ppp=1.000
+[1779940399644] [pid=12260] [seq=19] loading.assets.warn dictionary='loading/loaderWindow.ytd' entry='north_star_preload_background' error='service not found: engine.assets'
+[1779940399644] [pid=12260] [seq=20] loading.assets.warn dictionary='loading/loaderWindow.ytd' entry='north_star_engine_logo' error='service not found: engine.assets'
+[1779940399645] [pid=12260] [seq=21] loading.assets.warn dictionary='loading/loaderWindow.ytd' entry='north_star_loading_spinner' error='service not found: engine.assets'
+[1779940399645] [pid=12260] [seq=22] loading.assets.warn dictionary='loading/loaderWindow.ytd' entry='north_star_engine_symbol' error='service not found: engine.assets'
+[1779940399685] [pid=12260] [seq=23] resume.initial_focus focused=false
+[1779940399686] [pid=12260] [seq=24] resume.host.on_window_ready.begin user_data=0x32370fe940
+[1779940399687] [pid=12260] [seq=25] resume.host.on_window_ready.returned
+[1779940399687] [pid=12260] [seq=26] resume.engine_ui_owns_initial_present
+[1779940399687] [pid=12260] [seq=27] resume.end
+[1779940399687] [pid=12260] [seq=28] handler.resumed.end
+[1779940399687] [pid=12260] [seq=29] host.on_window_resized.begin user_data=0x32370fe940 size=1600x900 ppp=1.000
+[1779940399688] [pid=12260] [seq=30] host.on_window_resized.returned
+[1779940399688] [pid=12260] [seq=31] host.on_window_resized.begin user_data=0x32370fe940 size=1600x900 ppp=1.000
+[1779940399688] [pid=12260] [seq=32] host.on_window_resized.returned
+[1779940405280] [pid=12260] [seq=33] host.on_window_focused.begin user_data=0x32370fe940 focused=true
+[1779940405281] [pid=12260] [seq=34] host.on_window_focused.returned
+[1779940502444] [pid=12260] [seq=35] window.destroy_for_exit.begin reason='user-close-request'
+[1779940502451] [pid=12260] [seq=36] window.destroy_for_exit.complete reason='user-close-request'
+[1779940502452] [pid=12260] [seq=37] host.on_window_focused.begin user_data=0x32370fe940 focused=false
+[1779940502452] [pid=12260] [seq=38] host.on_window_focused.returned
+[1779940502453] [pid=12260] [seq=39] runtime.run_app.returned
+[1779940502454] [pid=12260] [seq=40] runtime.exit.ok
+[1779940502454] [pid=12260] [seq=41] ffi.exit clean
+[1779941618409] [pid=3860] [seq=1] ffi.entry newengine_platform_runtime_run_v1 title='KAYLA FPS: Procedural Highlands' size=1600x900 user_data=0x89f3efe850
+[1779941618409] [pid=3860] [seq=2] runtime.enter title='KAYLA FPS: Procedural Highlands' size=1600x900 user_data=0x89f3efe850
+[1779941618409] [pid=3860] [seq=3] runtime.event_loop.new.begin
+[1779941618440] [pid=3860] [seq=4] runtime.event_loop.new.ok
+[1779941618440] [pid=3860] [seq=5] runtime.app.new.begin
+[1779941618440] [pid=3860] [seq=6] app.new constructing title='KAYLA FPS: Procedural Highlands' size=1600x900 user_data=0x89f3efe850
+[1779941618441] [pid=3860] [seq=7] loading.status sink subscribed topics='engine.ui.loading.status.v1','engine.task.event.v1'
+[1779941618441] [pid=3860] [seq=8] runtime.app.new.ok
+[1779941618441] [pid=3860] [seq=9] runtime.run_app.begin
+[1779941618441] [pid=3860] [seq=10] handler.resumed.begin
+[1779941618441] [pid=3860] [seq=11] handler.resumed.device_events.always
+[1779941618442] [pid=3860] [seq=12] resume.begin
+[1779941618442] [pid=3860] [seq=13] resume.build_window_attributes.begin
+[1779941618442] [pid=3860] [seq=14] resume.build_window_attributes.ok
+[1779941618442] [pid=3860] [seq=15] resume.create_window.begin
+[1779941618464] [pid=3860] [seq=16] resume.create_window.ok
+[1779941618464] [pid=3860] [seq=17] resume.native_handles.begin
+[1779941618464] [pid=3860] [seq=18] resume.native_handles.ok backend=Win32 hwnd=0x1d400c2 display=0x7ffd9b010000 size=1600x900 ppp=1.000
+[1779941618465] [pid=3860] [seq=19] loading.assets.warn dictionary='loading/loaderWindow.ytd' entry='north_star_preload_background' error='service not found: engine.assets'
+[1779941618465] [pid=3860] [seq=20] loading.assets.warn dictionary='loading/loaderWindow.ytd' entry='north_star_engine_logo' error='service not found: engine.assets'
+[1779941618466] [pid=3860] [seq=21] loading.assets.warn dictionary='loading/loaderWindow.ytd' entry='north_star_loading_spinner' error='service not found: engine.assets'
+[1779941618466] [pid=3860] [seq=22] loading.assets.warn dictionary='loading/loaderWindow.ytd' entry='north_star_engine_symbol' error='service not found: engine.assets'
+[1779941618502] [pid=3860] [seq=23] resume.initial_focus focused=true
+[1779941618503] [pid=3860] [seq=24] resume.host.on_window_ready.begin user_data=0x89f3efe850
+[1779941618503] [pid=3860] [seq=25] resume.host.on_window_ready.returned
+[1779941618504] [pid=3860] [seq=26] resume.host.on_window_focused.initial.begin user_data=0x89f3efe850 focused=true
+[1779941618504] [pid=3860] [seq=27] resume.host.on_window_focused.initial.returned
+[1779941618504] [pid=3860] [seq=28] resume.engine_ui_owns_initial_present
+[1779941618504] [pid=3860] [seq=29] resume.end
+[1779941618504] [pid=3860] [seq=30] handler.resumed.end
+[1779941618505] [pid=3860] [seq=31] host.on_window_resized.begin user_data=0x89f3efe850 size=1600x900 ppp=1.000
+[1779941618505] [pid=3860] [seq=32] host.on_window_resized.returned
+[1779941618505] [pid=3860] [seq=33] host.on_window_focused.begin user_data=0x89f3efe850 focused=true
+[1779941618505] [pid=3860] [seq=34] host.on_window_focused.returned
+[1779941618505] [pid=3860] [seq=35] host.on_window_resized.begin user_data=0x89f3efe850 size=1600x900 ppp=1.000
+[1779941618506] [pid=3860] [seq=36] host.on_window_resized.returned
+[1779941665109] [pid=3860] [seq=37] window.destroy_for_exit.begin reason='user-close-request'
+[1779941665114] [pid=3860] [seq=38] window.destroy_for_exit.complete reason='user-close-request'
+[1779941665115] [pid=3860] [seq=39] host.on_window_focused.begin user_data=0x89f3efe850 focused=false
+[1779941665116] [pid=3860] [seq=40] host.on_window_focused.returned
+[1779941665117] [pid=3860] [seq=41] runtime.run_app.returned
+[1779941665117] [pid=3860] [seq=42] runtime.exit.ok
+[1779941665117] [pid=3860] [seq=43] ffi.exit clean
+[1779942404515] [pid=16460] [seq=1] ffi.entry newengine_platform_runtime_run_v1 title='KAYLA FPS: Procedural Highlands' size=1600x900 user_data=0x3a2bafe810
+[1779942404516] [pid=16460] [seq=2] runtime.enter title='KAYLA FPS: Procedural Highlands' size=1600x900 user_data=0x3a2bafe810
+[1779942404516] [pid=16460] [seq=3] runtime.event_loop.new.begin
+[1779942404548] [pid=16460] [seq=4] runtime.event_loop.new.ok
+[1779942404548] [pid=16460] [seq=5] runtime.app.new.begin
+[1779942404548] [pid=16460] [seq=6] app.new constructing title='KAYLA FPS: Procedural Highlands' size=1600x900 user_data=0x3a2bafe810
+[1779942404548] [pid=16460] [seq=7] loading.status sink subscribed topics='engine.ui.loading.status.v1','engine.task.event.v1'
+[1779942404549] [pid=16460] [seq=8] runtime.app.new.ok
+[1779942404549] [pid=16460] [seq=9] runtime.run_app.begin
+[1779942404549] [pid=16460] [seq=10] handler.resumed.begin
+[1779942404549] [pid=16460] [seq=11] handler.resumed.device_events.always
+[1779942404550] [pid=16460] [seq=12] resume.begin
+[1779942404550] [pid=16460] [seq=13] resume.build_window_attributes.begin
+[1779942404550] [pid=16460] [seq=14] resume.build_window_attributes.ok
+[1779942404550] [pid=16460] [seq=15] resume.create_window.begin
+[1779942404573] [pid=16460] [seq=16] resume.create_window.ok
+[1779942404573] [pid=16460] [seq=17] resume.native_handles.begin
+[1779942404573] [pid=16460] [seq=18] resume.native_handles.ok backend=Win32 hwnd=0x1050afa display=0x7ffd9cdd0000 size=1600x900 ppp=1.000
+[1779942404574] [pid=16460] [seq=19] loading.assets.warn dictionary='loading/loaderWindow.ytd' entry='north_star_preload_background' error='service not found: engine.assets'
+[1779942404574] [pid=16460] [seq=20] loading.assets.warn dictionary='loading/loaderWindow.ytd' entry='north_star_engine_logo' error='service not found: engine.assets'
+[1779942404574] [pid=16460] [seq=21] loading.assets.warn dictionary='loading/loaderWindow.ytd' entry='north_star_loading_spinner' error='service not found: engine.assets'
+[1779942404575] [pid=16460] [seq=22] loading.assets.warn dictionary='loading/loaderWindow.ytd' entry='north_star_engine_symbol' error='service not found: engine.assets'
+[1779942404617] [pid=16460] [seq=23] resume.initial_focus focused=true
+[1779942404617] [pid=16460] [seq=24] resume.host.on_window_ready.begin user_data=0x3a2bafe810
+[1779942404618] [pid=16460] [seq=25] resume.host.on_window_ready.returned
+[1779942404618] [pid=16460] [seq=26] resume.host.on_window_focused.initial.begin user_data=0x3a2bafe810 focused=true
+[1779942404618] [pid=16460] [seq=27] resume.host.on_window_focused.initial.returned
+[1779942404619] [pid=16460] [seq=28] resume.engine_ui_owns_initial_present
+[1779942404619] [pid=16460] [seq=29] resume.end
+[1779942404619] [pid=16460] [seq=30] handler.resumed.end
+[1779942404619] [pid=16460] [seq=31] host.on_window_resized.begin user_data=0x3a2bafe810 size=1600x900 ppp=1.000
+[1779942404619] [pid=16460] [seq=32] host.on_window_resized.returned
+[1779942404620] [pid=16460] [seq=33] host.on_window_focused.begin user_data=0x3a2bafe810 focused=true
+[1779942404620] [pid=16460] [seq=34] host.on_window_focused.returned
+[1779942404620] [pid=16460] [seq=35] host.on_window_resized.begin user_data=0x3a2bafe810 size=1600x900 ppp=1.000
+[1779942404621] [pid=16460] [seq=36] host.on_window_resized.returned
+[1779942441852] [pid=16460] [seq=37] window.destroy_for_exit.begin reason='user-close-request'
+[1779942441858] [pid=16460] [seq=38] window.destroy_for_exit.complete reason='user-close-request'
+[1779942441860] [pid=16460] [seq=39] host.on_window_focused.begin user_data=0x3a2bafe810 focused=false
+[1779942441860] [pid=16460] [seq=40] host.on_window_focused.returned
+[1779942441861] [pid=16460] [seq=41] runtime.run_app.returned
+[1779942441862] [pid=16460] [seq=42] runtime.exit.ok
+[1779942441862] [pid=16460] [seq=43] ffi.exit clean
+[1779943617171] [pid=14032] [seq=1] ffi.entry newengine_platform_runtime_run_v1 title='KAYLA FPS: Procedural Highlands' size=1600x900 user_data=0x3fb2fe5b8
+[1779943617172] [pid=14032] [seq=2] runtime.enter title='KAYLA FPS: Procedural Highlands' size=1600x900 user_data=0x3fb2fe5b8
+[1779943617172] [pid=14032] [seq=3] runtime.event_loop.new.begin
+[1779943617208] [pid=14032] [seq=4] runtime.event_loop.new.ok
+[1779943617208] [pid=14032] [seq=5] runtime.app.new.begin
+[1779943617209] [pid=14032] [seq=6] app.new constructing title='KAYLA FPS: Procedural Highlands' size=1600x900 user_data=0x3fb2fe5b8
+[1779943617209] [pid=14032] [seq=7] loading.status sink subscribed topics='engine.ui.loading.status.v1','engine.task.event.v1'
+[1779943617209] [pid=14032] [seq=8] runtime.app.new.ok
+[1779943617209] [pid=14032] [seq=9] runtime.run_app.begin
+[1779943617209] [pid=14032] [seq=10] handler.resumed.begin
+[1779943617209] [pid=14032] [seq=11] handler.resumed.device_events.always
+[1779943617210] [pid=14032] [seq=12] resume.begin
+[1779943617210] [pid=14032] [seq=13] resume.build_window_attributes.begin
+[1779943617210] [pid=14032] [seq=14] resume.build_window_attributes.ok
+[1779943617210] [pid=14032] [seq=15] resume.create_window.begin
+[1779943617233] [pid=14032] [seq=16] resume.create_window.ok
+[1779943617233] [pid=14032] [seq=17] resume.native_handles.begin
+[1779943617233] [pid=14032] [seq=18] resume.native_handles.ok backend=Win32 hwnd=0x1510bf8 display=0x7ffd9c280000 size=1600x900 ppp=1.000
+[1779943617234] [pid=14032] [seq=19] loading.assets.warn dictionary='loading/loaderWindow.ytd' entry='north_star_preload_background' error='service not found: engine.assets'
+[1779943617234] [pid=14032] [seq=20] loading.assets.warn dictionary='loading/loaderWindow.ytd' entry='north_star_engine_logo' error='service not found: engine.assets'
+[1779943617234] [pid=14032] [seq=21] loading.assets.warn dictionary='loading/loaderWindow.ytd' entry='north_star_loading_spinner' error='service not found: engine.assets'
+[1779943617235] [pid=14032] [seq=22] loading.assets.warn dictionary='loading/loaderWindow.ytd' entry='north_star_engine_symbol' error='service not found: engine.assets'
+[1779943617272] [pid=14032] [seq=23] resume.initial_focus focused=true
+[1779943617272] [pid=14032] [seq=24] resume.host.on_window_ready.begin user_data=0x3fb2fe5b8
+[1779943617273] [pid=14032] [seq=25] resume.host.on_window_ready.returned
+[1779943617274] [pid=14032] [seq=26] resume.host.on_window_focused.initial.begin user_data=0x3fb2fe5b8 focused=true
+[1779943617274] [pid=14032] [seq=27] resume.host.on_window_focused.initial.returned
+[1779943617274] [pid=14032] [seq=28] resume.engine_ui_owns_initial_present
+[1779943617274] [pid=14032] [seq=29] resume.end
+[1779943617274] [pid=14032] [seq=30] handler.resumed.end
+[1779943617275] [pid=14032] [seq=31] host.on_window_resized.begin user_data=0x3fb2fe5b8 size=1600x900 ppp=1.000
+[1779943617275] [pid=14032] [seq=32] host.on_window_resized.returned
+[1779943617275] [pid=14032] [seq=33] host.on_window_focused.begin user_data=0x3fb2fe5b8 focused=true
+[1779943617275] [pid=14032] [seq=34] host.on_window_focused.returned
+[1779943617276] [pid=14032] [seq=35] host.on_window_resized.begin user_data=0x3fb2fe5b8 size=1600x900 ppp=1.000
+[1779943617276] [pid=14032] [seq=36] host.on_window_resized.returned
+[1779943664053] [pid=14032] [seq=37] window.destroy_for_exit.begin reason='user-close-request'
+[1779943664060] [pid=14032] [seq=38] window.destroy_for_exit.complete reason='user-close-request'
+[1779943664061] [pid=14032] [seq=39] host.on_window_focused.begin user_data=0x3fb2fe5b8 focused=false
+[1779943664062] [pid=14032] [seq=40] host.on_window_focused.returned
+[1779943664062] [pid=14032] [seq=41] runtime.run_app.returned
+[1779943664063] [pid=14032] [seq=42] runtime.exit.ok
+[1779943664063] [pid=14032] [seq=43] ffi.exit clean

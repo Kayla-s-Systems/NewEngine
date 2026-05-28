@@ -5,6 +5,9 @@ use core::time::Duration;
 mod asset_error;
 pub use asset_error::*;
 
+mod asset_service_client;
+pub use asset_service_client::AssetServiceClient;
+
 /// Engine-facing asset service gateway id.
 ///
 /// Runtime and provider plugins must request assets through this stable host-owned

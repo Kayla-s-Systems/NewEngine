@@ -76,6 +76,36 @@ fn runtime_symbol_validation_enabled() -> bool {
 }
 
 #[inline]
+fn legacy_platform_runtime_name_allowed() -> bool {
+    std::env::var("NEWENGINE_ALLOW_LEGACY_PLATFORM_RUNTIME_NAME")
+        .ok()
+        .map(|v| matches!(v.trim().to_ascii_lowercase().as_str(), "1" | "true" | "yes" | "on"))
+        .unwrap_or(false)
+}
+
+#[inline]
+fn is_legacy_platform_runtime_filename(path: &Path) -> bool {
+    let lower = path
+        .file_name()
+        .and_then(|s| s.to_str())
+        .unwrap_or("")
+        .to_ascii_lowercase();
+    [
+        "platform-winit-",
+        "winit-platform-plugin-",
+        "engine.platform.winit-",
+        "engine-platform-winit-",
+        "winit-",
+    ]
+    .iter()
+    .any(|prefix| {
+        lower.strip_prefix(prefix).is_some_and(|rest| {
+            rest.chars().next().is_some_and(|ch| ch.is_ascii_digit())
+        })
+    })
+}
+
+#[inline]
 fn is_platform_runtime_filename_candidate(path: &Path) -> bool {
     if !path.is_file() {
         return false;
@@ -145,6 +175,14 @@ pub fn detect_platform_runtime_path(modules_dir: &Path) -> EngineResult<PathBuf>
         for ent in rd.flatten() {
             let path = ent.path();
             if !is_platform_runtime_filename_candidate(&path) {
+                continue;
+            }
+
+            if is_legacy_platform_runtime_filename(&path) && !legacy_platform_runtime_name_allowed() {
+                crate::platform_early_log!(
+                    "host.discovery.skip_legacy_platform_name path='{}'",
+                    path.display()
+                );
                 continue;
             }
 
@@ -286,7 +324,7 @@ pub fn detect_platform_runtime_path(modules_dir: &Path) -> EngineResult<PathBuf>
         .find(|path| {
             path.file_name()
                 .and_then(|s| s.to_str())
-                .map(|name| name.to_ascii_lowercase().contains("platform-winit"))
+                .map(|name| name.to_ascii_lowercase().contains("winit-platform"))
                 .unwrap_or(false)
         })
         .cloned()
@@ -370,7 +408,7 @@ fn runtime_candidate_rank(path: &Path, desired_profile: &'static str) -> (u8, u8
         "bench" => 5,
         _ => 9,
     };
-    let name_rank = if name.contains("platform-winit") { 0 } else { 1 };
+    let name_rank = if name.contains("winit-platform") { 0 } else { 1 };
     (profile_rank, name_rank, name)
 }
 

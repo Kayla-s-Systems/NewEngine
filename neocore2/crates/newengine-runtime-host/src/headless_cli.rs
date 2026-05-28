@@ -39,12 +39,13 @@ impl HeadlessCliRuntime {
     pub(crate) fn run(mut self, reason: impl AsRef<str>) -> EngineResult<()> {
         let reason = reason.as_ref();
         log::warn!(
-            "headless runtime: entering CLI fallback reason='{}' startup_step_limit={} frame_limit={}",
+            "headless runtime: entering CLI fallback reason='{}' startup_step_limit={} frame_limit={} fixed_dt_sec={:.4}",
             reason,
             self.startup_step_limit,
             self.frame_limit
                 .map(|v| v.to_string())
-                .unwrap_or_else(|| "forever".to_owned())
+                .unwrap_or_else(|| "forever".to_owned()),
+            self.fixed_dt_sec
         );
         newengine_core::crash::record_breadcrumb(format!(
             "headless runtime: entering CLI fallback reason='{reason}'"

@@ -11,7 +11,7 @@ use newengine_core::host_events::{
 use newengine_core::{Engine, EngineError, EngineResult, EngineRunState, JobLane, JobPriority, JobRequest};
 use newengine_platform_api::{
     PlatformCursorGrabModeV1, PlatformCursorPollV1, PlatformCursorStateV1,
-    PlatformHostApiV1, PlatformHostJobCallbackV1, PlatformHostJobRequestV1, PlatformHostJobTicketV1,
+    PlatformDisplayConfigV1, PlatformHostApiV1, PlatformHostJobCallbackV1, PlatformHostJobRequestV1, PlatformHostJobTicketV1,
     PlatformRuntimeRunFnV1, PlatformStepResultV1, PlatformSurfaceMetricsV1, PlatformWindowReadyV1,
 };
 use newengine_plugin_api::PluginInfo;
@@ -59,6 +59,7 @@ pub struct HostPlatformRuntime {
     ui_selection: UiProviderSelection,
     host_events: EventSub<HostEvent>,
     surface: PlatformSurfaceMetricsV1,
+    display: PlatformDisplayConfigV1,
     minimized: bool,
     started: bool,
     shutting_down: bool,
@@ -98,6 +99,7 @@ impl HostPlatformRuntime {
             ui_selection,
             host_events,
             surface: PlatformSurfaceMetricsV1::default(),
+            display: PlatformDisplayConfigV1::default(),
             minimized: false,
             started: false,
             shutting_down: false,
@@ -306,14 +308,18 @@ impl HostPlatformRuntime {
 
     pub(crate) fn on_window_ready(&mut self, ready: PlatformWindowReadyV1) -> EngineResult<()> {
         log::info!(
-            "platform runtime: window ready backend={:?} size={}x{} ppp={:.3}",
+            "platform runtime: window ready backend={:?} size={}x{} ppp={:.3} vsync={} refresh_millihz={} mode={:?}",
             ready.handles.backend,
             ready.surface.width,
             ready.surface.height,
-            ready.surface.pixels_per_point
+            ready.surface.pixels_per_point,
+            ready.display.vsync,
+            ready.display.refresh_rate_millihz,
+            ready.display.window_mode
         );
 
         self.surface = ready.surface;
+        self.display = ready.display;
         newengine_time_runtime::register_time_gateway_best_effort();
         register_jobs_gateway_service_best_effort(self.engine.job_system(), self.engine.events().clone());
         register_platform_window_service_best_effort(ready);
@@ -358,6 +364,9 @@ impl HostPlatformRuntime {
             update_platform_window_snapshot(PlatformWindowReadyV1 {
                 handles: raw_to_native_handles(handles.window, handles.display)?,
                 surface: metrics,
+                // Resize callbacks do not carry a new display policy; keep the
+                // presentation policy selected during the initial window-ready event.
+                display: self.display,
             });
         }
 

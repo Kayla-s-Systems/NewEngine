@@ -98,6 +98,19 @@ pub(super) fn scan_plugins_dir(dir: &Path) -> Result<DiscoveryGraph, PluginLoadE
 fn scan_dynamic_lib(path: &Path) -> Result<ScannedDynlib, String> {
     let file_name = file_name_only(path);
 
+    if let Some(stem) = deprecated_runtime_artifact_stem(&file_name) {
+        log::warn!(
+            "plugins: skipping deprecated runtime DLL name '{}' stem='{}'; rebuild plugins so discovery uses implementation-purpose artifacts instead of stale ABI binaries",
+            file_name,
+            stem
+        );
+        return Ok(ScannedDynlib {
+            path: path.to_path_buf(),
+            file_name,
+            kind: ScannedDynlibKind::Unknown,
+        });
+    }
+
     if !metadata_probe_enabled() {
         log::warn!(
             "plugins: ABI metadata probe disabled; '{}' cannot be classified without opening its descriptor",
@@ -146,6 +159,59 @@ fn metadata_probe_enabled() -> bool {
 }
 
 
+
+
+fn deprecated_runtime_artifact_stem(file_name: &str) -> Option<&'static str> {
+    let lower = file_name.to_ascii_lowercase();
+    let deprecated_stems: &[&str] = &[
+        "aurelia",
+        "engine.ui.aurelia",
+        "engine-ui-aurelia",
+        "vulkan",
+        "engine.render.vulkan",
+        "engine-render-vulkan",
+        "starvault",
+        "engine.assets.starvault",
+        "engine-assets-starvault",
+        "assetmanager",
+        "compass",
+        "engine.input.compass",
+        "engine-input-compass",
+        "constellation",
+        "engine.ecs.constellation",
+        "engine-ecs-constellation",
+        "gravitas",
+        "engine.physics.gravitas",
+        "engine-physics-gravitas",
+        "chronicle",
+        "engine.logging.chronicle",
+        "engine-logging-chronicle",
+        "starprofiler",
+        "engine.profiler.starprofiler",
+        "engine-profiler-starprofiler",
+        "winit",
+        "platform-winit",
+        "winit-platform-plugin",
+        "engine.platform.winit",
+        "engine-platform-winit",
+    ];
+
+    for &stem in deprecated_stems {
+        let prefix = format!("{stem}-");
+        let Some(rest) = lower.strip_prefix(&prefix) else {
+            continue;
+        };
+        if rest
+            .chars()
+            .next()
+            .is_some_and(|ch| ch.is_ascii_digit())
+        {
+            return Some(stem);
+        }
+    }
+
+    None
+}
 
 #[inline]
 fn file_name_only(path: &Path) -> String {

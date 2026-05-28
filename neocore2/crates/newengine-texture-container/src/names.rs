@@ -9,7 +9,7 @@ pub fn normalize_texture_name(name: &str) -> String {
     };
 
     // Strip only real source/runtime texture extensions. Plugin ids and logical
-    // entry names such as `newengine.renderer.vulkan` must remain intact; the
+    // entry names such as `engine.render.vulkan` must remain intact; the
     // old split-on-any-dot rule collapsed them all to `newengine` and produced
     // duplicate dictionary hashes.
     match ext {

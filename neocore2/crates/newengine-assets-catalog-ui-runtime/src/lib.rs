@@ -26,7 +26,7 @@ use newengine_ui_api::{
 };
 use serde_json::{json, Value};
 
-pub const ASSETS_CATALOG_UI_OWNER: &str = "newengine.assets_catalog_ui";
+pub const ASSETS_CATALOG_UI_OWNER: &str = "app.asset_browser";
 const ASSETS_CATALOG_SURFACE_ID: &str = "ui.assets.catalog";
 const ASSETS_CATALOG_INPUT_LISTENER: &str = "asset-browser-ui";
 const ASSETS_CATALOG_THEME_ID: &str = "northstar.assets.browser.noir";
@@ -229,7 +229,7 @@ impl Default for AssetsCatalogUiRuntimeModule {
 
 impl<E: Send + 'static> Module<E> for AssetsCatalogUiRuntimeModule {
     fn id(&self) -> &'static str {
-        "newengine.assets_catalog_ui.node"
+        "app.asset_browser.ui_node"
     }
 
     fn startup_requires(&self) -> &'static [EngineReadinessKey] {

@@ -118,11 +118,11 @@ pub fn gameplay_default_listeners() -> Vec<InputActionListenerRegistration> {
             ])
             .with_priority(100)
             .consuming(),
-        InputActionListenerRegistration::new("newengine.assets_catalog_ui", "asset-browser-ui")
+        InputActionListenerRegistration::new("app.asset_browser", "asset-browser-ui")
             .with_actions([action::ASSET_CATALOG_UI_TOGGLE])
             .with_priority(110)
             .consuming(),
-        InputActionListenerRegistration::new("newengine.assets_catalog_ui", "assets-browser-navigation")
+        InputActionListenerRegistration::new("app.asset_browser", "assets-browser-navigation")
             .with_actions([
                 action::UI_NAVIGATION_ACCEPT,
                 action::UI_NAVIGATION_BACK,

@@ -666,15 +666,12 @@ fn spawn_skydome(
     tick_game_ready_sky_cycle(world, 0.0);
 
     log::info!(
-        "game-ready skydome: follow_camera={} radius={:.1} mesh='{}' clouds='{}' profile='{}' sun_radius={:.1} moon_radius={:.1} moon_texture='{}'",
+        "game-ready skydome: follow_camera={} radius={:.1} mesh='{}' clouds='{}' profile='{}' celestial_visuals='procedural_in_sky_shader'",
         spec.follow_camera,
         spec.radius,
         spec.mesh,
         spec.cloud_dictionary,
         spec.cloud_profile,
-        spec.sun_radius,
-        spec.moon_radius,
-        spec.moon_texture,
     );
 }
 

@@ -380,7 +380,34 @@
       "enabled": true
     },
     {
+      "owner": "app.asset_browser",
+      "id": "asset-browser-ui",
+      "action_filter": [
+        "ui.assets.catalog.toggle"
+      ],
+      "context_filter": [],
+      "priority": 110,
+      "consume": true,
+      "enabled": true
+    },
+    {
       "owner": "newengine.assets_catalog_ui",
+      "id": "assets-browser-navigation",
+      "action_filter": [
+        "ui.accept",
+        "ui.back",
+        "ui.nav.up",
+        "ui.nav.down",
+        "ui.nav.left",
+        "ui.nav.right"
+      ],
+      "context_filter": [],
+      "priority": 110,
+      "consume": false,
+      "enabled": true
+    },
+    {
+      "owner": "app.asset_browser",
       "id": "assets-browser-navigation",
       "action_filter": [
         "ui.accept",

@@ -92,8 +92,8 @@ pub struct StartupConfig {
     /// Raw plugin override roots from the `plugins` object in `config.json`.
     ///
     /// Supported forms:
-    /// - flat plugin ids: `plugins["newengine.logging"]`
-    /// - nested domain wrappers: `plugins.newengine.logging`
+    /// - flat plugin ids: `plugins["engine.logging.chronicle"]`
+    /// - nested domain wrappers: `plugins.engine.logging.chronicle`
     ///
     /// Resolution is performed by the plugin config service at query time.
     /// Exact flat ids take precedence, while nested domain wrappers fill missing keys.

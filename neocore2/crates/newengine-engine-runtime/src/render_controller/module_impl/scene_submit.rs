@@ -1,7 +1,7 @@
 #![forbid(unsafe_op_in_unsafe_fn)]
 
 use newengine_core::render::{RenderApi, RenderTargetId};
-use newengine_core::EngineResult;
+use newengine_core::{EngineResult, JobSystemHandle};
 use newengine_scene::Scene;
 use newengine_ui_api::UiDrawList;
 
@@ -21,6 +21,7 @@ impl RuntimeRenderController {
         rt: Option<RenderTargetId>,
         scope: RenderFrameScope,
         world_frame: &WorldFrameState,
+        job_system: Option<&JobSystemHandle>,
     ) -> EngineResult<PlayableFrameOutcome> {
         RenderFrameOrchestrator::submit_scene_viewport_frame(
             self,
@@ -32,6 +33,7 @@ impl RuntimeRenderController {
             rt,
             scope,
             world_frame,
+            job_system,
         )
     }
 }

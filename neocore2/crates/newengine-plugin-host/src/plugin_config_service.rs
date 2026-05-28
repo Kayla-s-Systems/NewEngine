@@ -237,8 +237,8 @@ pub fn plugin_enabled_by_config(plugin_id: &str) -> bool {
 /// Registers a core service that exposes per-plugin override objects.
 ///
 /// Resolution order:
-/// 1. exact flat plugin id: `plugins["newengine.logging"]`
-/// 2. nested domain path: `plugins.newengine.logging`
+/// 1. exact flat plugin id: `plugins["engine.logging.chronicle"]`
+/// 2. nested domain path: `plugins.engine.logging.chronicle`
 /// 3. dotted leaf under a domain root: `plugins.newengine["platform.winit"]`
 /// 4. environment overrides
 pub fn init_plugin_config_service(overrides: HashMap<String, Value>) {
@@ -411,7 +411,7 @@ mod tests {
     fn resolves_exact_flat_plugin_override() {
         let mut overrides = HashMap::default();
         overrides.insert(
-            "newengine.logging".to_owned(),
+            "engine.logging.chronicle".to_owned(),
             json!({
                 "timestamp": "millis",
                 "format": { "preset": "aaa" }
@@ -419,7 +419,7 @@ mod tests {
         );
 
         let store = make_store(overrides);
-        let got = store.resolve_plugin_overrides("newengine.logging");
+        let got = store.resolve_plugin_overrides("engine.logging.chronicle");
 
         assert_eq!(got["timestamp"], json!("millis"));
         assert_eq!(got["format"]["preset"], json!("aaa"));
@@ -445,7 +445,7 @@ mod tests {
         );
 
         let store = make_store(overrides);
-        let got = store.resolve_plugin_overrides("newengine.platform.winit");
+        let got = store.resolve_plugin_overrides("engine.platform.winit");
 
         assert_eq!(got["title"], json!("NewEngine Editor"));
         assert_eq!(got["placement"]["mode"], json!("centered"));
@@ -476,7 +476,7 @@ mod tests {
         );
 
         overrides.insert(
-            "newengine.logging".to_owned(),
+            "engine.logging.chronicle".to_owned(),
             json!({
                 "sources": {
                     "file": {
@@ -488,7 +488,7 @@ mod tests {
         );
 
         let store = make_store(overrides);
-        let got = store.resolve_plugin_overrides("newengine.logging");
+        let got = store.resolve_plugin_overrides("engine.logging.chronicle");
 
         assert_eq!(got["timestamp"], json!("millis"));
         assert_eq!(got["sources"]["console"]["enabled"], json!(true));
@@ -520,7 +520,7 @@ mod tests {
         );
 
         let store = make_store(overrides);
-        let got = store.resolve_plugin_overrides("newengine.platform.winit");
+        let got = store.resolve_plugin_overrides("engine.platform.winit");
 
         assert_eq!(got["title"], json!("Editor"));
         assert_eq!(got["width"], json!(1600));
@@ -545,7 +545,7 @@ mod tests {
         );
 
         let store = make_store(overrides);
-        let got = store.resolve_plugin_overrides("newengine.renderer.vulkan");
+        let got = store.resolve_plugin_overrides("engine.render.vulkan");
 
         assert_eq!(got["clear_color"], json!([0.02, 0.025, 0.035, 1.0]));
         assert_eq!(got["debug_text"], json!("NewEngine | Vulkan"));
@@ -564,14 +564,14 @@ mod tests {
             }),
         );
         overrides.insert(
-            "newengine.renderer.vulkan".to_owned(),
+            "engine.render.vulkan".to_owned(),
             json!({
                 "debug_text": "Exact"
             }),
         );
 
         let store = make_store(overrides);
-        let got = store.resolve_plugin_overrides("newengine.renderer.vulkan");
+        let got = store.resolve_plugin_overrides("engine.render.vulkan");
 
         assert_eq!(got["clear_color"], json!([0.02, 0.025, 0.035, 1.0]));
         assert_eq!(got["debug_text"], json!("Exact"));

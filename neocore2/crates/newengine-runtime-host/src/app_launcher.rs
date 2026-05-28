@@ -308,7 +308,7 @@ where
             return;
         }
 
-        let Some(path) = startup.plugins.get("newengine.logging").and_then(|v| {
+        let Some(path) = startup.plugins.get("engine.logging.chronicle").and_then(|v| {
             v.get("file")
                 .and_then(|x| x.as_str())
                 .or_else(|| v.get("file_path").and_then(|x| x.as_str()))

@@ -1,6 +1,7 @@
 #![forbid(unsafe_op_in_unsafe_fn)]
 
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::OnceLock;
 
 use newengine_core::render::{
     Extent2D, RectI32, RenderApi, RenderFrameDebugSnapshot, RenderTargetId, TextureFormat, Viewport,
@@ -23,6 +24,9 @@ use super::{lights, passes, picking, postfx, shadows};
 use crate::scene_bridge::{apply_engine_view_postfx, EngineViewTransitionPhase};
 use super::super::controller::RuntimeRenderController;
 use super::super::error_policy::{is_backend_device_lost_error, is_transient_shader_pipeline_error};
+
+static RENDER_JOB_EVENT_MODE: OnceLock<String> = OnceLock::new();
+static RENDER_JOB_EVENT_INTERVAL: OnceLock<u64> = OnceLock::new();
 
 pub(super) struct RenderFrameOrchestrator;
 
@@ -433,6 +437,30 @@ impl RenderFrameOrchestrator {
         }
     }
 
+    fn should_publish_render_job_pass_event(frame_index: u64) -> bool {
+        let mode = RENDER_JOB_EVENT_MODE.get_or_init(|| {
+            crate::env_config::var("NEWENGINE_RENDER_JOB_EVENT_MODE")
+                .unwrap_or_else(|| "sampled".to_owned())
+                .trim()
+                .to_ascii_lowercase()
+        });
+        match mode.as_str() {
+            "off" | "none" | "disabled" => false,
+            "full" | "all" | "trace" => true,
+            _ => {
+                let interval = *RENDER_JOB_EVENT_INTERVAL.get_or_init(|| {
+                    crate::env_config::var_u64(
+                        "NEWENGINE_RENDER_JOB_EVENT_INTERVAL_FRAMES",
+                        120,
+                        1,
+                        6000,
+                    )
+                });
+                frame_index <= 3 || frame_index % interval == 0
+            }
+        }
+    }
+
     fn publish_render_job_pass_event(
         frame_index: u64,
         pass: &'static str,
@@ -441,6 +469,10 @@ impl RenderFrameOrchestrator {
         detail: impl Into<String>,
         progress_01: Option<f32>,
     ) {
+        if !Self::should_publish_render_job_pass_event(frame_index) {
+            return;
+        }
+
         let mut event = newengine_jobs_api::EngineTaskEvent::new(
             format!("render.frame.{frame_index}.{pass}"),
             "render.frame-orchestrator",
