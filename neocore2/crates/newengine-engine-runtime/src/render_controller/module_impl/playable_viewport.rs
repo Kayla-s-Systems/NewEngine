@@ -126,6 +126,7 @@ impl RuntimeRenderController {
             rt,
             scope,
             &world_frame,
+            job_system.as_ref(),
         )?;
         drop(scene);
         Ok(outcome)

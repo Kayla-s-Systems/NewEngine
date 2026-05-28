@@ -3,7 +3,7 @@
 
 AssetManager is only the VFS/bytes/dispatch host. NEF8/ListFile and NEPAK
 identity live in provider-owned codec workers. A selected AssetManager build that
-installs only assetManager-*.dll but leaves plugins/codecs stale can boot with an
+installs only engine.assets.starvault-*.dll but leaves plugins/codecs stale can boot with an
 empty codec registry and then fail strict data-driven startup at .ymap/.ytyp
 resolution time.
 """

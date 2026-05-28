@@ -6,7 +6,7 @@ use newengine_core::render::{
     Extent2D, RectI32, RenderApi, RenderFrameDebugSnapshot, RenderTargetId, TextureFormat, Viewport,
 };
 use crate::gameplay::GameRunMode;
-use newengine_core::EngineResult;
+use newengine_core::{EngineResult, JobSystemHandle};
 use newengine_render_feature_api::SceneExtractionCtx;
 use newengine_render_frame_graph::{standard_runtime_frame, StandardRuntimePipelineDesc};
 use newengine_scene::Scene;
@@ -37,6 +37,7 @@ impl RenderFrameOrchestrator {
         rt: Option<RenderTargetId>,
         scope: RenderFrameScope,
         world_frame: &WorldFrameState,
+        job_system: Option<&JobSystemHandle>,
     ) -> EngineResult<PlayableFrameOutcome> {
         let mut cpu_profile = FrameCpuProfile::new();
 
@@ -53,6 +54,22 @@ impl RenderFrameOrchestrator {
         picking::handle_picking(controller, scene, viewproj, scope.vp_w, scope.vp_h);
         cpu_profile.mark("view");
 
+        Self::publish_render_job_pass_event(
+            controller.frame.frame_index,
+            newengine_jobs_api::job_pass::SCENE_RENDER_SNAPSHOT,
+            newengine_jobs_api::EngineTaskPhase::Scheduled,
+            "SceneRenderSnapshot scheduled",
+            Self::render_prep_executor_detail(job_system, "SceneRenderSnapshot still borrows Scene; capture is a visible render-prep barrier until the scene read model is Send + 'static."),
+            Some(0.0),
+        );
+        Self::publish_render_job_pass_event(
+            controller.frame.frame_index,
+            newengine_jobs_api::job_pass::SCENE_RENDER_SNAPSHOT,
+            newengine_jobs_api::EngineTaskPhase::Running,
+            "SceneRenderSnapshot running",
+            "Capturing DTO-like render read model before feature extraction.",
+            None,
+        );
         let snapshot = SceneRenderSnapshot::capture(
             controller.frame.frame_index,
             scene,
@@ -185,7 +202,7 @@ impl RenderFrameOrchestrator {
             newengine_jobs_api::job_pass::FEATURE_EXTRACT,
             newengine_jobs_api::EngineTaskPhase::Scheduled,
             "RenderPrep pass scheduled",
-            "Feature extraction is visible as a render-prep job-pass marker; the next refactor slice can move provider-safe extraction work onto engine.jobs workers.",
+            Self::render_prep_executor_detail(job_system, "Feature extraction is the profiler hotspot. Provider-safe DTO building should move to engine.jobs; RenderApi command recording stays on the render thread."),
             Some(0.0),
         );
         Self::publish_render_job_pass_event(
@@ -193,7 +210,7 @@ impl RenderFrameOrchestrator {
             newengine_jobs_api::job_pass::FEATURE_EXTRACT,
             newengine_jobs_api::EngineTaskPhase::Running,
             "RenderPrep pass running",
-            "Feature extraction is executing on the render thread barrier because it still touches RenderApi/Scene state.",
+            "Feature extraction is executing on the render-thread barrier because current providers still record RenderApi command lists. Treat this as the synchronous fallback path, not the target architecture.",
             None,
         );
         let features = match FeatureExtractionFrame::extract_runtime(
@@ -397,6 +414,23 @@ impl RenderFrameOrchestrator {
                 notes: debug_notes,
             }),
         })
+    }
+
+
+    fn render_prep_executor_detail(
+        job_system: Option<&JobSystemHandle>,
+        detail: &'static str,
+    ) -> String {
+        match job_system {
+            Some(jobs) => format!(
+                "{detail} engine.jobs available worker_threads={} pending_render_prep={}; target split: jobs build provider-safe packets, render thread submits GPU/backend envelope.",
+                jobs.worker_threads(),
+                jobs.pending_for_lane(newengine_core::JobLane::RenderPrep),
+            ),
+            None => format!(
+                "{detail} engine.jobs handle unavailable for this frame; render-prep remains a main-thread barrier."
+            ),
+        }
     }
 
     fn publish_render_job_pass_event(

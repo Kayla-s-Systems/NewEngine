@@ -52,8 +52,7 @@ struct ProcessResultRecord {
 impl ProcessResultRecord {
     fn running_from_process_request(request: &JobRunProcessStartRequestV1) -> Self {
         let owner = match request.owner.as_str() {
-            "engine.render" => "engine.render",
-            "vulkan_renderer" => "vulkan_renderer",
+            "engine.render" | "engine.render.vulkan" => "engine.render",
             _ => "engine.jobs",
         };
         let job_pass = job_pass_from_category(request.category.as_str(), "process").to_owned();
@@ -193,8 +192,8 @@ fn priority_from_str(value: &str) -> JobPriority {
 
 fn job_domain_from_request(value: &str, fallback_owner: &str) -> &'static str {
     match value.trim() {
-        "engine.render" | "vulkan_renderer" => "engine.render",
-        "engine.assets" | "asset_manager" => "engine.assets",
+        "engine.render" | "engine.render.vulkan" => "engine.render",
+        "engine.assets" | "engine.assets.starvault" => "engine.assets",
         "engine.simulation" | "newengine-sim" => "engine.simulation",
         "profiler.api" => "engine.profiler",
         _ if fallback_owner == "engine.render" => "engine.render",
@@ -335,8 +334,7 @@ fn process_job_request(request: &JobRunProcessStartRequestV1) -> JobRequest {
         _ => "external.process",
     };
     let owner = match request.owner.as_str() {
-        "engine.render" => "engine.render",
-        "vulkan_renderer" => "vulkan_renderer",
+        "engine.render" | "engine.render.vulkan" => "engine.render",
         _ => "engine.jobs",
     };
     let category = match request.category.as_str() {

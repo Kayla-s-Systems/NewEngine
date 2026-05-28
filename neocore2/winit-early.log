@@ -808,3 +808,46 @@
 [1779932978289] [pid=11968] [seq=41] runtime.run_app.returned
 [1779932978289] [pid=11968] [seq=42] runtime.exit.ok
 [1779932978289] [pid=11968] [seq=43] ffi.exit clean
+[1779933653515] [pid=14688] [seq=1] ffi.entry newengine_platform_runtime_run_v1 title='KAYLA FPS: Procedural Highlands' size=1600x900 user_data=0x3a95afe5b0
+[1779933653515] [pid=14688] [seq=2] runtime.enter title='KAYLA FPS: Procedural Highlands' size=1600x900 user_data=0x3a95afe5b0
+[1779933653516] [pid=14688] [seq=3] runtime.event_loop.new.begin
+[1779933653543] [pid=14688] [seq=4] runtime.event_loop.new.ok
+[1779933653543] [pid=14688] [seq=5] runtime.app.new.begin
+[1779933653543] [pid=14688] [seq=6] app.new constructing title='KAYLA FPS: Procedural Highlands' size=1600x900 user_data=0x3a95afe5b0
+[1779933653544] [pid=14688] [seq=7] loading.status sink subscribed topics='engine.ui.loading.status.v1','engine.task.event.v1'
+[1779933653544] [pid=14688] [seq=8] runtime.app.new.ok
+[1779933653544] [pid=14688] [seq=9] runtime.run_app.begin
+[1779933653544] [pid=14688] [seq=10] handler.resumed.begin
+[1779933653544] [pid=14688] [seq=11] handler.resumed.device_events.always
+[1779933653545] [pid=14688] [seq=12] resume.begin
+[1779933653545] [pid=14688] [seq=13] resume.build_window_attributes.begin
+[1779933653545] [pid=14688] [seq=14] resume.build_window_attributes.ok
+[1779933653545] [pid=14688] [seq=15] resume.create_window.begin
+[1779933653564] [pid=14688] [seq=16] resume.create_window.ok
+[1779933653565] [pid=14688] [seq=17] resume.native_handles.begin
+[1779933653565] [pid=14688] [seq=18] resume.native_handles.ok backend=Win32 hwnd=0x2251550 display=0x7ffd9da10000 size=1600x900 ppp=1.000
+[1779933653566] [pid=14688] [seq=19] loading.assets.warn dictionary='loading/loaderWindow.ytd' entry='north_star_preload_background' error='service not found: engine.assets'
+[1779933653566] [pid=14688] [seq=20] loading.assets.warn dictionary='loading/loaderWindow.ytd' entry='north_star_engine_logo' error='service not found: engine.assets'
+[1779933653566] [pid=14688] [seq=21] loading.assets.warn dictionary='loading/loaderWindow.ytd' entry='north_star_loading_spinner' error='service not found: engine.assets'
+[1779933653566] [pid=14688] [seq=22] loading.assets.warn dictionary='loading/loaderWindow.ytd' entry='north_star_engine_symbol' error='service not found: engine.assets'
+[1779933653603] [pid=14688] [seq=23] resume.initial_focus focused=true
+[1779933653603] [pid=14688] [seq=24] resume.host.on_window_ready.begin user_data=0x3a95afe5b0
+[1779933653604] [pid=14688] [seq=25] resume.host.on_window_ready.returned
+[1779933653604] [pid=14688] [seq=26] resume.host.on_window_focused.initial.begin user_data=0x3a95afe5b0 focused=true
+[1779933653604] [pid=14688] [seq=27] resume.host.on_window_focused.initial.returned
+[1779933653605] [pid=14688] [seq=28] resume.engine_ui_owns_initial_present
+[1779933653605] [pid=14688] [seq=29] resume.end
+[1779933653605] [pid=14688] [seq=30] handler.resumed.end
+[1779933653605] [pid=14688] [seq=31] host.on_window_resized.begin user_data=0x3a95afe5b0 size=1600x900 ppp=1.000
+[1779933653605] [pid=14688] [seq=32] host.on_window_resized.returned
+[1779933653606] [pid=14688] [seq=33] host.on_window_focused.begin user_data=0x3a95afe5b0 focused=true
+[1779933653606] [pid=14688] [seq=34] host.on_window_focused.returned
+[1779933653606] [pid=14688] [seq=35] host.on_window_resized.begin user_data=0x3a95afe5b0 size=1600x900 ppp=1.000
+[1779933653607] [pid=14688] [seq=36] host.on_window_resized.returned
+[1779933685838] [pid=14688] [seq=37] window.destroy_for_exit.begin reason='user-close-request'
+[1779933685844] [pid=14688] [seq=38] window.destroy_for_exit.complete reason='user-close-request'
+[1779933685844] [pid=14688] [seq=39] host.on_window_focused.begin user_data=0x3a95afe5b0 focused=false
+[1779933685845] [pid=14688] [seq=40] host.on_window_focused.returned
+[1779933685847] [pid=14688] [seq=41] runtime.run_app.returned
+[1779933685847] [pid=14688] [seq=42] runtime.exit.ok
+[1779933685848] [pid=14688] [seq=43] ffi.exit clean
