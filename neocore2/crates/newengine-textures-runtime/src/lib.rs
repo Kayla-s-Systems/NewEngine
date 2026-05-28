@@ -1,6 +1,6 @@
 #![forbid(unsafe_op_in_unsafe_fn)]
 
-//! Engine-owned `engine.assets.textures` runtime service.
+//! Runtime-hosted `engine.assets.textures` runtime service.
 //!
 //! `.ytd` semantic ownership lives here. The service deliberately uses
 //! `engine.assets` only as the byte/VFS/codec owner, then returns texture-domain
@@ -16,13 +16,13 @@ use newengine_assets_api::{
 use newengine_plugin_api::Blob;
 use newengine_service_api::EngineServiceKind;
 use newengine_service_kit::{
-    engine_owned_service_description, ok_empty_blob, ok_json, payload_json,
-    register_engine_owned_gateway_service_best_effort, EngineOwnedGatewayDecl, JsonServiceRouter,
+    engine_gateway_provider_service_description, ok_empty_blob, ok_json, payload_json,
+    register_engine_gateway_provider_service_best_effort, EngineGatewayProviderDecl, JsonServiceRouter,
 };
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
-pub const TEXTURES_GATEWAY_OWNER: &str = "newengine-textures-runtime.engine-owned-provider";
+pub const TEXTURES_GATEWAY_OWNER: &str = "newengine-textures-runtime.engine-runtime-provider";
 
 #[derive(Clone)]
 pub struct TextureRuntimeState {
@@ -134,7 +134,7 @@ pub fn textures_service_info() -> TexturesServiceInfo {
     TexturesServiceInfo {
         id: TEXTURES_SERVICE_ID,
         gateway: ENGINE_ASSETS_TEXTURES_SERVICE_ID,
-        provider: "EngineOwnedTexturesRuntimeProvider",
+        provider: "StarVaultTexturesRuntimeProvider",
         contract: TEXTURES_RUNTIME_CONTRACT,
         byte_owner: ENGINE_ASSET_SERVICE_ID,
         semantic_owner: ENGINE_ASSETS_TEXTURES_SERVICE_ID,
@@ -614,7 +614,7 @@ fn manifest_blob(state: &mut TextureRuntimeState, payload: Blob) -> RResult<Blob
         return ok_json(serde_json::json!({
             "schema": "newengine.assets.textures.service_manifest.v1",
             "gateway": ENGINE_ASSETS_TEXTURES_SERVICE_ID,
-            "provider": "EngineOwnedTexturesRuntimeProvider",
+            "provider": "StarVaultTexturesRuntimeProvider",
             "byte_owner": ENGINE_ASSET_SERVICE_ID,
             "semantic_owner": ENGINE_ASSETS_TEXTURES_SERVICE_ID,
             "methods": TEXTURES_SERVICE_METHODS,
@@ -661,7 +661,7 @@ fn invoke_json(state: &mut TextureRuntimeState, payload: Blob) -> RResult<Blob, 
 }
 
 pub fn textures_gateway_service(client: AssetServiceClient) -> newengine_plugin_api::ServiceV1Dyn<'static> {
-    let description = engine_owned_service_description(
+    let description = engine_gateway_provider_service_description(
         TEXTURES_SERVICE_ID,
         TEXTURES_GATEWAY_OWNER,
         TEXTURES_BACKEND_CAPABILITY_ID,
@@ -686,10 +686,11 @@ pub fn textures_gateway_service(client: AssetServiceClient) -> newengine_plugin_
 }
 
 pub fn register_textures_gateway_best_effort(client: AssetServiceClient) -> bool {
-    register_engine_owned_gateway_service_best_effort(EngineOwnedGatewayDecl {
+    register_engine_gateway_provider_service_best_effort(EngineGatewayProviderDecl {
         gateway: ENGINE_ASSETS_TEXTURES_SERVICE_ID,
         service_kind: EngineServiceKind::Textures,
         provider_service: TEXTURES_SERVICE_ID,
+        provider_route: "engine.assets.starvault.textures",
         capability: TEXTURES_BACKEND_CAPABILITY_ID,
         priority: 0,
         owner: TEXTURES_GATEWAY_OWNER,

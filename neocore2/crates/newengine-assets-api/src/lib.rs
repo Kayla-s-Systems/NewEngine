@@ -1,7 +1,6 @@
 #![forbid(unsafe_op_in_unsafe_fn)]
 
 use core::time::Duration;
-use std::time::Instant;
 
 mod asset_error;
 pub use asset_error::*;
@@ -1267,36 +1266,32 @@ pub enum WaitReadyError {
     Transport(String),
 }
 
-/// Wait until the asset reaches `Ready` or `Failed`, periodically calling `pump()`.
+/// Progress the asset lifecycle once and return readiness.
 ///
-/// Polling interval is intentionally conservative to avoid busy-waiting.
+/// This function deliberately does not sleep or spin. Runtime/editor callers must
+/// call it from a frame, job, or asset-event callback and retry after the asset
+/// pipeline publishes more work. `timeout` is retained as a compatibility guard
+/// for callers that pass an already-expired deadline budget.
 pub fn wait_ready<A: AssetAccess + ?Sized>(
     assets: &A,
     id_hex32: &str,
     timeout: Duration,
 ) -> Result<(), WaitReadyError> {
-    const SLEEP_MS: u64 = 8;
+    if timeout.is_zero() {
+        return Err(WaitReadyError::Timeout);
+    }
 
-    let deadline = Instant::now() + timeout;
+    assets.pump();
 
-    loop {
-        assets.pump();
-
-        match assets.state(id_hex32) {
-            Ok(AssetState::Ready) => return Ok(()),
-            Ok(AssetState::Failed) => return Err(WaitReadyError::Failed(id_hex32.to_string())),
-            Ok(AssetState::Loading) | Ok(AssetState::Unloaded) => {}
-            Ok(AssetState::Unknown) => {
-                log::warn!("Unknown asset state id='{}'", id_hex32);
-            }
-            Err(e) => return Err(WaitReadyError::Transport(e)),
+    match assets.state(id_hex32) {
+        Ok(AssetState::Ready) => Ok(()),
+        Ok(AssetState::Failed) => Err(WaitReadyError::Failed(id_hex32.to_string())),
+        Ok(AssetState::Loading) | Ok(AssetState::Unloaded) => Err(WaitReadyError::Timeout),
+        Ok(AssetState::Unknown) => {
+            log::warn!("Unknown asset state id='{}'", id_hex32);
+            Err(WaitReadyError::Timeout)
         }
-
-        if Instant::now() >= deadline {
-            return Err(WaitReadyError::Timeout);
-        }
-
-        std::thread::sleep(Duration::from_millis(SLEEP_MS));
+        Err(e) => Err(WaitReadyError::Transport(e)),
     }
 }
 

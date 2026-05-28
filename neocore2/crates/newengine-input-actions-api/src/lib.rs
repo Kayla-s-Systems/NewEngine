@@ -54,6 +54,12 @@ pub mod move_mask {
 /// Engine-reserved semantic action ids. These are action contracts, not platform shortcuts.
 pub mod engine_action {
     pub const UI_NAVIGATION_TOGGLE: &str = "engine.ui.primary.toggle";
+    pub const UI_NAVIGATION_ACCEPT: &str = "ui.accept";
+    pub const UI_NAVIGATION_BACK: &str = "ui.back";
+    pub const UI_NAVIGATION_UP: &str = "ui.nav.up";
+    pub const UI_NAVIGATION_DOWN: &str = "ui.nav.down";
+    pub const UI_NAVIGATION_LEFT: &str = "ui.nav.left";
+    pub const UI_NAVIGATION_RIGHT: &str = "ui.nav.right";
     pub const ASSET_CATALOG_UI_TOGGLE: &str = "ui.assets.catalog.toggle";
 }
 

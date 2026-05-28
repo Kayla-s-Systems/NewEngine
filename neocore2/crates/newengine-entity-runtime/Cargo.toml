@@ -3,7 +3,7 @@ name = "newengine-entity-runtime"
 version = "0.1.0"
 edition = "2021"
 readme = "README.md"
-description = "Engine-owned entity gateway runtime service for NewEngine"
+description = "Runtime-hosted entity gateway runtime service for NewEngine"
 
 [dependencies]
 abi_stable = "0.11"

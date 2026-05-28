@@ -43,7 +43,7 @@ Key invariants:
 
 ## Gateway Service Layer
 
-The Gateway Service Layer is the engine-owned facade over plugin services.
+The Gateway Service Layer is the runtime-hosted facade over plugin services.
 A provider may register `render.api`, `vendor.render.api`, or another private service id.
 Consumers still call `engine.render`; the host resolves that gateway to the active provider.
 

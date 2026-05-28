@@ -1,6 +1,6 @@
 # newengine-assets-ui-runtime
 
-Engine-owned semantic compiler for `.neui` UI dictionaries.
+Runtime-hosted semantic compiler for `.neui` UI dictionaries.
 
 Boundary:
 

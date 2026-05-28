@@ -1,6 +1,6 @@
 #![forbid(unsafe_op_in_unsafe_fn)]
 
-//! Engine-owned `engine.ecs` gateway runtime service.
+//! Runtime-hosted `engine.ecs` gateway runtime service.
 //!
 //! The ECS gateway lives outside game profile composition. It exposes stable DTOs
 //! from `newengine-ecs-api` and operates through the shared runtime scene bridge.
@@ -15,8 +15,8 @@ use newengine_ecs_api::{
 };
 use newengine_plugin_api::Blob;
 use newengine_service_kit::{
-    engine_owned_service_description, ok_empty_blob, ok_json, payload_json,
-    register_engine_owned_gateway_service, EngineOwnedGatewayDecl, JsonServiceRouter,
+    engine_gateway_provider_service_description, ok_empty_blob, ok_json, payload_json,
+    register_engine_gateway_provider_service, EngineGatewayProviderDecl, JsonServiceRouter,
 };
 
 pub const ECS_GATEWAY_OWNER: &str = "newengine-ecs-runtime.ecs-gateway";
@@ -182,7 +182,7 @@ pub fn ecs_gateway_service(
 ) -> newengine_plugin_api::ServiceV1Dyn<'static> {
     let service = EngineEcsGatewayService::new(scene);
     let info = EcsServiceInfo::default();
-    let description = engine_owned_service_description(
+    let description = engine_gateway_provider_service_description(
         ENGINE_ECS_SERVICE_ID,
         ECS_GATEWAY_OWNER,
         ECS_BACKEND_CAPABILITY_ID,
@@ -214,17 +214,18 @@ pub fn register_ecs_gateway_best_effort(scene: Arc<newengine_scene_runtime::Scen
     }
 
     let service = ecs_gateway_service(scene);
-    match register_engine_owned_gateway_service(EngineOwnedGatewayDecl {
+    match register_engine_gateway_provider_service(EngineGatewayProviderDecl {
         gateway: ENGINE_ECS_SERVICE_ID,
         service_kind: newengine_service_api::EngineServiceKind::Ecs,
         provider_service: ENGINE_ECS_SERVICE_ID,
+        provider_route: "engine.ecs.foundation",
         capability: ECS_BACKEND_CAPABILITY_ID,
         priority: 0,
         owner: ECS_GATEWAY_OWNER,
         service,
     }) {
         Ok(()) => log::info!(
-            "engine.ecs gateway registered source=engine-owned service='{}' capability='{}' owner='{}'",
+            "engine.ecs gateway registered source=engine-runtime service='{}' capability='{}' owner='{}'",
             ENGINE_ECS_SERVICE_ID,
             ECS_BACKEND_CAPABILITY_ID,
             ECS_GATEWAY_OWNER

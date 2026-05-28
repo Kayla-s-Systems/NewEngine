@@ -3,7 +3,7 @@ name = "newengine-textures-runtime"
 version = "0.1.0"
 edition = "2021"
 readme = "README.md"
-description = "Engine-owned runtime texture gateway for NewEngine .ytd dictionaries"
+description = "Runtime-hosted runtime texture gateway for NewEngine .ytd dictionaries"
 
 [dependencies]
 abi_stable = "0.11"

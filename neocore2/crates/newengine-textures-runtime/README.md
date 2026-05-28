@@ -1,6 +1,6 @@
 # newengine-textures-runtime
 
-Engine-owned `engine.assets.textures` runtime service for `.ytd` texture dictionaries.
+Runtime-hosted `engine.assets.textures` runtime service for `.ytd` texture dictionaries.
 
 Boundary rule:
 

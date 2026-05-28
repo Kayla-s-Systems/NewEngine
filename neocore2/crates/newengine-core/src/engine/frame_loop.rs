@@ -64,7 +64,7 @@ impl<E: Send + 'static> Engine<E> {
                 ))),
             },
             Ok(None) => Err(EngineError::Other(
-                "engine.time: required gateway missing; register EngineOwnedTimeProvider or another time.backend provider before frame loop".to_owned(),
+                "engine.time: required gateway missing; register AstrolabeTimeProvider or another time.backend provider before frame loop".to_owned(),
             )),
             Err(e) => Err(EngineError::Other(format!(
                 "engine.time: begin_frame_v1 failed: {e}"

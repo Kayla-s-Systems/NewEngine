@@ -262,7 +262,7 @@ impl RenderFrameOrchestrator {
             // frame profile temporarily has no Ui draw-list provider, or when a graph compile
             // path skips the UI composite pass while the cursor/focus policy already switched
             // to modal mode. The call stays provider-neutral: it targets RenderApi, not Vulkan,
-            // Aurelia, or any concrete backend implementation.
+            // a concrete UI provider, or any other backend implementation.
             r.set_ui_draw_list(ui_draw_list.clone());
         }
         cpu_profile.mark("frame_plan_external");

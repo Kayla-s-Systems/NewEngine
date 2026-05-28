@@ -202,7 +202,7 @@ impl RenderShadowRuntimeState {
 /// Engine.jobs-backed CPU decode job for a material texture request.
 ///
 /// The render controller owns only the ticket/result bridge. The actual heavy
-/// work runs on the engine-owned job system, not on ad-hoc per-request threads.
+/// work runs on the engine-runtime job system, not on ad-hoc per-request threads.
 pub(super) struct MaterialTextureDecodeJob {
     pub(super) ticket: JobTicket,
     pub(super) result: Arc<Mutex<Option<AssetResult<RuntimeTextureAsset>>>>,

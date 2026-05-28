@@ -76,7 +76,7 @@ impl RuntimeHostLaunchSpec {
 /// Game/profile-specific hooks used by the generic runtime-host launcher.
 ///
 /// The launcher owns startup orchestration. The profile owns game/runtime
-/// composition: modules, engine-owned gateway bridges, UI projection and scene
+/// composition: modules, engine-runtime route bridges, UI projection and scene
 /// bootstrap policy.
 pub trait RuntimeHostAppProfile {
     fn register_modules(
@@ -86,7 +86,7 @@ pub trait RuntimeHostAppProfile {
     ) -> EngineResult<()>;
 
     #[inline]
-    fn register_engine_owned_gateways_best_effort(&self) {}
+    fn register_engine_provider_routes_best_effort(&self) {}
 
     #[inline]
     fn bootstrap_content_best_effort(&self) {}
@@ -189,7 +189,7 @@ where
         self.profile.register_modules(&mut engine, &startup)?;
         engine.preload_bootstrap_plugins()?;
 
-        self.profile.register_engine_owned_gateways_best_effort();
+        self.profile.register_engine_provider_routes_best_effort();
         self.profile.bootstrap_content_best_effort();
         newengine_core::crash::record_breadcrumb(format!(
             "{} launcher: profile registered and bootstrap plugins preloaded",

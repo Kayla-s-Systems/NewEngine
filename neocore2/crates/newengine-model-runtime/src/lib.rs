@@ -4,7 +4,7 @@
 //!
 //! `engine.assets.models` owns only drawable/model semantics. Definition metadata is read
 //! through `engine.assets.definitions`; dependency graph expansion is read through
-//! `engine.assets.graph`. This crate still hosts the current engine-owned graph
+//! `engine.assets.graph`. This crate still hosts the current engine-runtime graph
 //! provider implementation; definition decoding is not part of model API.
 
 use abi_stable::std_types::{RResult, RString};
@@ -28,8 +28,8 @@ use newengine_primitives::{PrimitiveMesh, PrimitiveVertex};
 use newengine_math::Vec3;
 use newengine_service_api::EngineServiceKind;
 use newengine_service_kit::{
-    engine_owned_service_description, ok_empty_blob, ok_json, payload_json,
-    register_engine_owned_gateway_service_best_effort, EngineOwnedGatewayDecl, JsonServiceRouter,
+    engine_gateway_provider_service_description, ok_empty_blob, ok_json, payload_json,
+    register_engine_gateway_provider_service_best_effort, EngineGatewayProviderDecl, JsonServiceRouter,
 };
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 
@@ -576,13 +576,13 @@ pub fn model_runtime_service_info() -> ModelRuntimeServiceInfo {
         id: MODEL_SERVICE_ID,
         gateway: ENGINE_ASSETS_MODELS_SERVICE_ID,
         methods: MODEL_SERVICE_METHODS,
-        backend: "engine-owned.model-runtime",
+        backend: "engine.assets.starvault.models-runtime",
         feature_domains: MODEL_FEATURE_DOMAINS,
     }
 }
 
 pub fn model_gateway_service(adapter: ModelAssetAdapter) -> newengine_plugin_api::ServiceV1Dyn<'static> {
-    let description = engine_owned_service_description(
+    let description = engine_gateway_provider_service_description(
         MODEL_SERVICE_ID,
         "newengine-model-runtime.model-gateway",
         MODEL_BACKEND_CAPABILITY_ID,
@@ -618,10 +618,11 @@ fn register_model_gateway_service(client: AssetServiceClient, host: Option<HostA
         Some(host) => ModelAssetAdapter::with_client_and_host(client, host),
         None => ModelAssetAdapter::with_client(client),
     };
-    register_engine_owned_gateway_service_best_effort(EngineOwnedGatewayDecl {
+    register_engine_gateway_provider_service_best_effort(EngineGatewayProviderDecl {
         gateway: ENGINE_ASSETS_MODELS_SERVICE_ID,
         service_kind: EngineServiceKind::Model,
         provider_service: MODEL_SERVICE_ID,
+        provider_route: "engine.assets.starvault.models",
         capability: MODEL_BACKEND_CAPABILITY_ID,
         priority: 0,
         owner: "newengine-model-runtime.model-gateway",
@@ -983,7 +984,7 @@ fn asset_graph_gateway_info() -> serde_json::Value {
     serde_json::json!({
         "service_id": newengine_model_domain_api::ASSET_GRAPH_SERVICE_ID,
         "gateway": newengine_model_domain_api::ENGINE_ASSETS_GRAPH_SERVICE_ID,
-        "provider": "EngineOwnedAssetGraphResolverProviderV2",
+        "provider": "StarVaultAssetGraphResolverProviderV2",
         "contract": "newengine.assets.graph.runtime.v1",
         "methods": newengine_model_domain_api::ASSET_GRAPH_METHODS,
         "schema": newengine_model_domain_api::ASSET_GRAPH_RESOLVED_SCHEMA_V2,
@@ -1010,7 +1011,7 @@ fn asset_graph_invoke(state: &mut AssetGraphGatewayState, payload: Blob) -> RRes
 }
 
 fn asset_graph_service(host: HostApiV1, client: AssetServiceClient) -> newengine_plugin_api::ServiceV1Dyn<'static> {
-    let description = newengine_service_kit::engine_owned_service_description(
+    let description = newengine_service_kit::engine_gateway_provider_service_description(
         newengine_model_domain_api::ASSET_GRAPH_SERVICE_ID,
         "newengine-asset-graph-runtime.hydrated-resolver-v2",
         newengine_model_domain_api::ASSET_GRAPH_BACKEND_CAPABILITY_ID,
@@ -1018,7 +1019,7 @@ fn asset_graph_service(host: HostApiV1, client: AssetServiceClient) -> newengine
     )
     .protocol("newengine.assets.graph.runtime.v1")
     .features(["assets-graph-resolver-v2", "hydrated-dependencies", "vfs-source-trace", "stable-cache-key"])
-    .gateway("engine-owned engine.assets.graph resolver")
+    .gateway("engine.assets.starvault.graph resolver")
     .notes("Hydrates dependency graphs through engine.assets.definitions, engine.assets.models, engine.assets.materials, engine.assets.textures and engine.assets/VFS diagnostics.");
 
     newengine_service_kit::JsonServiceRouter::with_state(
@@ -1048,11 +1049,12 @@ fn asset_graph_service(host: HostApiV1, client: AssetServiceClient) -> newengine
 }
 
 pub fn register_asset_graph_gateway_best_effort(host: HostApiV1, client: AssetServiceClient) -> bool {
-    newengine_service_kit::register_engine_owned_gateway_service_best_effort(
-        newengine_service_kit::EngineOwnedGatewayDecl {
+    newengine_service_kit::register_engine_gateway_provider_service_best_effort(
+        newengine_service_kit::EngineGatewayProviderDecl {
             gateway: newengine_model_domain_api::ENGINE_ASSETS_GRAPH_SERVICE_ID,
             service_kind: newengine_service_api::EngineServiceKind::AssetGraph,
             provider_service: newengine_model_domain_api::ASSET_GRAPH_SERVICE_ID,
+            provider_route: "engine.assets.starvault.graph",
             capability: newengine_model_domain_api::ASSET_GRAPH_BACKEND_CAPABILITY_ID,
             priority: 0,
             owner: "newengine-asset-graph-runtime.hydrated-resolver-v2",

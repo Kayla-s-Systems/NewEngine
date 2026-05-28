@@ -31,7 +31,7 @@ pub use host_context::{
     active_engine_gateway_route, describe_service, engine_gateway_has_capability,
     has_service, init_host_context, list_engine_gateway_routes,
     list_external_runtime_descriptors, list_external_runtime_plugins, list_services,
-    register_engine_owned_gateway, register_external_runtime_plugin,
+    register_engine_gateway_provider_route, register_external_runtime_plugin,
     resolve_service_for_backend_capability, resolve_service_for_engine_gateway,
     services_generation, EngineGatewayRouteSnapshot,
 };

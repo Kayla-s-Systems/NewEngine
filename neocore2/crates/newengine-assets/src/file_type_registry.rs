@@ -10,8 +10,8 @@ use newengine_assets_api::{
 use newengine_plugin_api::{Blob, HostApiV1, MethodName};
 use newengine_service_api::EngineServiceKind;
 use newengine_service_kit::{
-    engine_owned_service_description, ok_empty_blob, ok_json,
-    register_engine_owned_gateway_service_best_effort, EngineOwnedGatewayDecl, JsonServiceRouter,
+    engine_gateway_provider_service_description, ok_empty_blob, ok_json,
+    register_engine_gateway_provider_service_best_effort, EngineGatewayProviderDecl, JsonServiceRouter,
 };
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
@@ -45,7 +45,7 @@ impl FileTypeRegistryState {
             id: ASSET_FILE_TYPES_SERVICE_ID,
             gateway: ENGINE_ASSET_FILE_TYPES_SERVICE_ID,
             methods: ASSET_FILE_TYPE_SERVICE_METHODS,
-            backend: "engine-owned.asset-file-type-registry",
+            backend: "engine.assets.starvault.file-type-registry",
             registered_extensions: self.registry.keys().cloned().collect(),
         }
     }
@@ -185,7 +185,7 @@ pub fn register_asset_file_type_descriptor_best_effort(
 }
 
 pub fn asset_file_types_gateway_service() -> newengine_plugin_api::ServiceV1Dyn<'static> {
-    let description = engine_owned_service_description(
+    let description = engine_gateway_provider_service_description(
         ASSET_FILE_TYPES_SERVICE_ID,
         "newengine-assets.file-type-registry",
         ASSET_FILE_TYPES_BACKEND_CAPABILITY_ID,
@@ -221,10 +221,11 @@ pub fn asset_file_types_gateway_service() -> newengine_plugin_api::ServiceV1Dyn<
 }
 
 pub fn register_asset_file_types_gateway_best_effort() -> bool {
-    register_engine_owned_gateway_service_best_effort(EngineOwnedGatewayDecl {
+    register_engine_gateway_provider_service_best_effort(EngineGatewayProviderDecl {
         gateway: ENGINE_ASSET_FILE_TYPES_SERVICE_ID,
         service_kind: EngineServiceKind::AssetFileTypes,
         provider_service: ASSET_FILE_TYPES_SERVICE_ID,
+        provider_route: "engine.assets.starvault.file_types",
         capability: ASSET_FILE_TYPES_BACKEND_CAPABILITY_ID,
         priority: 0,
         owner: "newengine-assets.file-type-registry",

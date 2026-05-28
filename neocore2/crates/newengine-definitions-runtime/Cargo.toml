@@ -3,7 +3,7 @@ name = "newengine-definitions-runtime"
 version = "0.1.0"
 edition = "2021"
 readme = "README.md"
-description = "Engine-owned runtime definitions gateway for NewEngine .ytyp Definition Entry dictionaries"
+description = "Runtime-hosted runtime definitions gateway for NewEngine .ytyp Definition Entry dictionaries"
 
 [dependencies]
 abi_stable = "0.11"

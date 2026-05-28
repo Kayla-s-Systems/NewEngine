@@ -19,6 +19,12 @@ pub struct LoadingProjectionFrame {
     pub detail_age_secs: f32,
 }
 
+/// Backward-compatible type name for platform-native loading projection frames.
+///
+/// The data remains owned by `engine.loading`; platform code only presents the
+/// already-projected DTO during native startup handoff.
+pub type LoadingCompositorFrame = LoadingProjectionFrame;
+
 #[derive(Debug, Clone)]
 pub struct LoadingAnimator {
     created_at: Instant,
@@ -276,7 +282,7 @@ pub fn project_loading_snapshot_from_task_event(
         progress_01: progress.clamp(0.0, 1.0),
         spinner_phase,
         source: normalize_text(event.source.clone(), "engine.task.event"),
-        provider: normalize_text(provider.into(), "engine-owned-engine-loading-data"),
+        provider: normalize_text(provider.into(), "engine.ui.loading-projection"),
         view_json: String::new(),
         subsystems: cards,
     }
@@ -297,7 +303,7 @@ pub fn project_loading_snapshot_from_status_event(
         progress_01: event.progress_01.clamp(0.0, 1.0),
         spinner_phase,
         source: normalize_text(event.source.clone(), "engine.ui.loading.status"),
-        provider: normalize_text(provider.into(), "engine-owned-engine-loading-data"),
+        provider: normalize_text(provider.into(), "engine.ui.loading-projection"),
         view_json: String::new(),
         subsystems,
     }

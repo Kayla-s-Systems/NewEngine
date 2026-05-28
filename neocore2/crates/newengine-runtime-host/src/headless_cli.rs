@@ -7,7 +7,7 @@
 //! plugins, validate contracts, run the startup graph, perform content/bootstrap
 //! work and produce logs/diagnostics from a CLI session.
 
-use std::time::{Duration, Instant};
+use std::time::Instant;
 
 use newengine_core::host_events::{HostEvent, WindowHostEvent, WindowInitSize};
 use newengine_core::{Engine, EngineError, EngineResult, EngineRunState};
@@ -121,7 +121,7 @@ impl HeadlessCliRuntime {
                 )));
             }
 
-            std::thread::sleep(Duration::from_millis(1));
+            // No sleep-loop here: startup is advanced by explicit engine.step() calls.
         }
 
         Err(EngineError::other(format!(
@@ -144,7 +144,7 @@ impl HeadlessCliRuntime {
                 if frames % 300 == 0 {
                     log::info!("headless runtime: frames={} run_state='{}'", frames, self.engine.run_state().as_str());
                 }
-                std::thread::sleep(Duration::from_secs_f32(self.fixed_dt_sec));
+                // Headless pacing is owned by engine.time / caller event pump, not by a local sleep loop.
             }
             return Ok(());
         };
@@ -168,7 +168,7 @@ impl HeadlessCliRuntime {
                     self.engine.run_state().as_str()
                 );
             }
-            std::thread::sleep(Duration::from_secs_f32(self.fixed_dt_sec));
+            // Headless pacing is owned by engine.time / caller event pump, not by a local sleep loop.
         }
         Ok(())
     }

@@ -54,10 +54,11 @@ pub struct EngineGatewayRouteSnapshot {
 }
 
 #[derive(Clone, Debug)]
-pub(crate) struct EngineOwnedGatewayEntry {
+pub(crate) struct GatewayProviderRouteEntry {
     pub(crate) gateway_id: String,
     pub(crate) service_kind: String,
     pub(crate) provider_service_id: String,
+    pub(crate) provider_route_id: String,
     pub(crate) provider_owner_id: String,
     pub(crate) backend_capability_id: String,
     pub(crate) backend_priority: i32,
@@ -118,10 +119,10 @@ pub(crate) struct HostContext {
     /// (currently platform runtime units only).
     pub(crate) external_runtime_plugins: Mutex<NeHashMap<String, ExternalRuntimePluginEntry>>,
 
-    /// Engine-owned routes for facade ids backed by host/runtime services rather
-    /// than plugin descriptors. These entries participate in the same gateway
-    /// registry and priority rules as plugin routes.
-    pub(crate) engine_owned_gateways: Mutex<NeHashMap<String, EngineOwnedGatewayEntry>>,
+    /// Host-registered provider routes for facade ids backed by in-process runtime
+    /// services rather than plugin descriptors. These entries participate in the
+    /// same gateway registry and priority rules as plugin routes.
+    pub(crate) gateway_provider_routes: Mutex<NeHashMap<String, GatewayProviderRouteEntry>>,
 
     /// Cached active gateway registry. Routing is on the service hot path, so
     /// descriptor/fact folding must happen only when the gateway fact generation
@@ -143,7 +144,7 @@ fn make_default_ctx() -> Arc<HostContext> {
         plugin_descriptors: Mutex::new(NeHashMap::default()),
         plugin_origins: Mutex::new(NeHashMap::default()),
         external_runtime_plugins: Mutex::new(NeHashMap::default()),
-        engine_owned_gateways: Mutex::new(NeHashMap::default()),
+        gateway_provider_routes: Mutex::new(NeHashMap::default()),
         gateway_registry_cache: Mutex::new(None),
     })
 }

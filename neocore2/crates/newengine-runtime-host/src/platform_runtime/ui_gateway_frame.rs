@@ -10,7 +10,7 @@ use newengine_system_runtime::loading_surface_projection;
 use newengine_ui::UiProviderBinding;
 use newengine_ui_api::{
     decode_ui_frame_response_bin, encode_ui_frame_request_bin, UiComponentNode, UiDrawList,
-    UiFrameRequest, UiFrameResponse, UiRuntimeDebugOverlayTelemetry, UiSurfaceAnchor,
+    UiFrameRequest, UiFrameResponse, UiNodeTone, UiRuntimeDebugOverlayTelemetry, UiSurfaceAnchor,
     UiSurfaceNode, UiSurfaceStyle, ENGINE_UI_SERVICE_ID, UI_COMPONENT_PANEL,
     UI_SERVICE_METHOD_DRAW_FRAME_BIN_V1, UI_SERVICE_METHOD_DRAW_FRAME_V1,
     UI_SERVICE_METHOD_SURFACE_NODE_V1, UI_SURFACE_ENGINE_LOADING,
@@ -335,23 +335,31 @@ pub(crate) fn publish_debug_overlay_telemetry(telemetry: &UiRuntimeDebugOverlayT
         source: telemetry.source.clone(),
         visible: true,
         modal: false,
-        z_order: 980,
+        z_order: -10_000,
         title: "RUNTIME DEBUG".to_owned(),
         subtitle: telemetry.source.clone(),
         body_lines: lines.clone(),
-        footer_lines: Vec::new(),
-        style_tags: vec!["retained".to_owned()],
+        footer_lines: vec!["Runtime Debug is a bottom-layer surface; other UI may cover it.".to_owned()],
+        style_tags: vec!["retained".to_owned(), "runtime-debug".to_owned(), "bottom-layer".to_owned()],
         theme_id: UI_THEME_NORTHSTAR_DEFAULT.to_owned(),
         style_ref: None,
         component_id: UI_COMPONENT_PANEL.to_owned(),
-        components: lines
-            .iter()
-            .enumerate()
-            .map(|(index, line)| UiComponentNode::text(format!("debug.line.{index}"), line.clone()))
-            .collect(),
+        components: std::iter::once(
+            UiComponentNode::action("debug.toggle", "Show/Hide", "runtime.debug.toggle")
+                .with_detail("Toggle Runtime Debug visibility")
+                .with_tone(UiNodeTone::Accent)
+                .tagged("debug-toggle"),
+        )
+        .chain(
+            lines
+                .iter()
+                .enumerate()
+                .map(|(index, line)| UiComponentNode::text(format!("debug.line.{index}"), line.clone())),
+        )
+        .collect(),
         message: None,
         style: UiSurfaceStyle {
-            anchor: UiSurfaceAnchor::TopLeft,
+            anchor: UiSurfaceAnchor::BottomLeft,
             min_size_px: [360.0, 180.0],
             max_size_px: [620.0, 520.0],
             margin_px: [12.0, 12.0],

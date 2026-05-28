@@ -8,8 +8,8 @@ use newengine_audio_api::{
     AUDIO_SERVICE_METHOD_SHUTDOWN_V1, ENGINE_AUDIO_SERVICE_ID,
 };
 use newengine_service_kit::{
-    decode_json_payload, engine_owned_service_description, ok_empty_blob, ok_json,
-    register_engine_owned_gateway_service, EngineOwnedGatewayDecl, JsonServiceRouter,
+    decode_json_payload, engine_gateway_provider_service_description, ok_empty_blob, ok_json,
+    register_engine_gateway_provider_service, EngineGatewayProviderDecl, JsonServiceRouter,
 };
 use parking_lot::Mutex;
 use std::collections::VecDeque;
@@ -40,7 +40,7 @@ impl AudioGatewayState {
         self.events.push_back(event);
         AudioFeedbackAck {
             accepted: true,
-            provider: "engine-owned.audio-event-queue".to_owned(),
+            provider: "engine.audio.echo-event-queue".to_owned(),
             queued_events: self.events.len(),
         }
     }
@@ -58,7 +58,7 @@ fn gateway_state() -> Arc<Mutex<AudioGatewayState>> {
 
 fn audio_gateway_service(state: Arc<Mutex<AudioGatewayState>>) -> newengine_plugin_api::ServiceV1Dyn<'static> {
     let info = AudioServiceInfo::default();
-    let description = engine_owned_service_description(
+    let description = engine_gateway_provider_service_description(
         ENGINE_AUDIO_SERVICE_ID,
         AUDIO_GATEWAY_OWNER,
         AUDIO_BACKEND_CAPABILITY_ID,
@@ -66,7 +66,7 @@ fn audio_gateway_service(state: Arc<Mutex<AudioGatewayState>>) -> newengine_plug
     )
     .protocol(info.protocol.clone())
     .features(info.features.clone())
-    .gateway("engine-owned engine.audio semantic event queue")
+    .gateway("engine.audio.echo semantic event queue")
     .notes("Null/queue provider until a mixer plugin overrides engine.audio");
 
     JsonServiceRouter::with_shared_state(ENGINE_AUDIO_SERVICE_ID, state)
@@ -76,7 +76,7 @@ fn audio_gateway_service(state: Arc<Mutex<AudioGatewayState>>) -> newengine_plug
             if payload.is_empty() {
                 return ok_json(&AudioFeedbackAck {
                     accepted: true,
-                    provider: "engine-owned.audio-event-queue".to_owned(),
+                    provider: "engine.audio.echo-event-queue".to_owned(),
                     queued_events: state.events.len(),
                 });
             }
@@ -94,7 +94,7 @@ fn audio_gateway_service(state: Arc<Mutex<AudioGatewayState>>) -> newengine_plug
             if payload.is_empty() {
                 return ok_json(&AudioFeedbackAck {
                     accepted: true,
-                    provider: "engine-owned.audio-event-queue".to_owned(),
+                    provider: "engine.audio.echo-event-queue".to_owned(),
                     queued_events: state.events.len(),
                 });
             }
@@ -122,17 +122,18 @@ pub fn register_audio_gateway_best_effort() {
     }
 
     let service = audio_gateway_service(gateway_state());
-    match register_engine_owned_gateway_service(EngineOwnedGatewayDecl {
+    match register_engine_gateway_provider_service(EngineGatewayProviderDecl {
         gateway: ENGINE_AUDIO_SERVICE_ID,
         service_kind: newengine_service_api::EngineServiceKind::Audio,
         provider_service: ENGINE_AUDIO_SERVICE_ID,
+        provider_route: "engine.audio.echo",
         capability: AUDIO_BACKEND_CAPABILITY_ID,
         priority: 0,
         owner: AUDIO_GATEWAY_OWNER,
         service,
     }) {
         Ok(()) => log::info!(
-            "audio gateway: engine-owned route registered id='{}' capability='{}'",
+            "audio gateway: engine-runtime route registered id='{}' capability='{}'",
             ENGINE_AUDIO_SERVICE_ID,
             AUDIO_BACKEND_CAPABILITY_ID
         ),

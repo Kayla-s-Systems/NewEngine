@@ -1,6 +1,6 @@
 #![forbid(unsafe_op_in_unsafe_fn)]
 
-//! Engine-owned `engine.scene` gateway runtime service.
+//! Runtime-hosted `engine.scene` gateway runtime service.
 //!
 //! This crate hosts the current scene IO gateway candidate. It is intentionally
 //! separate from product profiles: profiles choose to register it, but do not own
@@ -16,7 +16,7 @@ use newengine_scene_io::{method as scene_method, ENGINE_SCENE_SERVICE_ID, SCENE_
 pub use newengine_engine_runtime::SceneBridge;
 
 use newengine_service_kit::{
-    ok_json, payload_json, register_engine_owned_gateway_service, EngineOwnedGatewayDecl,
+    ok_json, payload_json, register_engine_gateway_provider_service, EngineGatewayProviderDecl,
     JsonServiceRouter,
 };
 
@@ -151,7 +151,7 @@ impl EngineSceneGatewayService {
     fn formats_json(&self) -> RResult<Blob, RString> {
         ok_json(serde_json::json!({
             "id": ENGINE_SCENE_SERVICE_ID,
-            "origin": "engine-owned",
+            "origin": "engine-runtime",
             "owner": SCENE_GATEWAY_OWNER,
             "version": 1,
             "formats": [
@@ -341,7 +341,7 @@ pub fn scene_gateway_service(
         "id": ENGINE_SCENE_SERVICE_ID,
         "version": 1,
         "contract": "newengine.scene gateway >= 0.1.x",
-        "origin": "engine-owned",
+        "origin": "engine-runtime",
         "owner": SCENE_GATEWAY_OWNER,
         "capability": SCENE_BACKEND_CAPABILITY_ID,
         "methods": [
@@ -375,17 +375,18 @@ pub fn register_scene_gateway_best_effort(
     }
 
     let service = scene_gateway_service(scene, asset_mounts);
-    match register_engine_owned_gateway_service(EngineOwnedGatewayDecl {
+    match register_engine_gateway_provider_service(EngineGatewayProviderDecl {
         gateway: ENGINE_SCENE_SERVICE_ID,
         service_kind: newengine_service_api::EngineServiceKind::Scene,
         provider_service: ENGINE_SCENE_SERVICE_ID,
+        provider_route: "engine.scene.foundation",
         capability: SCENE_BACKEND_CAPABILITY_ID,
         priority: 0,
         owner: SCENE_GATEWAY_OWNER,
         service,
     }) {
         Ok(()) => log::info!(
-            "engine.scene gateway registered source=engine-owned service='{}' capability='{}' owner='{}'",
+            "engine.scene gateway registered source=engine-runtime service='{}' capability='{}' owner='{}'",
             ENGINE_SCENE_SERVICE_ID,
             SCENE_BACKEND_CAPABILITY_ID,
             SCENE_GATEWAY_OWNER

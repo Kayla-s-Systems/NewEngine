@@ -1,6 +1,6 @@
 #![forbid(unsafe_op_in_unsafe_fn)]
 
-//! Engine-owned `engine.assets.definitions` runtime service.
+//! Runtime-hosted `engine.assets.definitions` runtime service.
 //!
 //! `.ytyp` ownership lives here. The service uses `engine.assets` only as the
 //! VFS/raw-bytes/NEF8-envelope owner and returns Definition Entry DTOs to tools,
@@ -20,12 +20,12 @@ use newengine_assets_api::{
 use newengine_plugin_api::Blob;
 use newengine_service_api::EngineServiceKind;
 use newengine_service_kit::{
-    engine_owned_service_description, ok_empty_blob, ok_json, payload_json,
-    register_engine_owned_gateway_service_best_effort, EngineOwnedGatewayDecl, JsonServiceRouter,
+    engine_gateway_provider_service_description, ok_empty_blob, ok_json, payload_json,
+    register_engine_gateway_provider_service_best_effort, EngineGatewayProviderDecl, JsonServiceRouter,
 };
 use serde::{Deserialize, Serialize};
 
-pub const DEFINITIONS_GATEWAY_OWNER: &str = "newengine-definitions-runtime.engine-owned-provider";
+pub const DEFINITIONS_GATEWAY_OWNER: &str = "newengine-definitions-runtime.engine-runtime-provider";
 
 #[derive(Clone)]
 pub struct DefinitionsRuntimeState {
@@ -246,7 +246,7 @@ pub fn definitions_service_info() -> DefinitionsServiceInfo {
     DefinitionsServiceInfo {
         id: DEFINITIONS_SERVICE_ID,
         gateway: ENGINE_ASSETS_DEFINITIONS_SERVICE_ID,
-        provider: "EngineOwnedDefinitionsRuntimeProvider",
+        provider: "StarVaultDefinitionsRuntimeProvider",
         contract: DEFINITIONS_RUNTIME_CONTRACT,
         byte_owner: ENGINE_ASSET_SERVICE_ID,
         semantic_owner: ENGINE_ASSETS_DEFINITIONS_SERVICE_ID,
@@ -761,7 +761,7 @@ fn manifest_blob(state: &mut DefinitionsRuntimeState, payload: Blob) -> RResult<
         return ok_json(serde_json::json!({
             "schema": "newengine.assets.definitions.service_manifest.v1",
             "gateway": ENGINE_ASSETS_DEFINITIONS_SERVICE_ID,
-            "provider": "EngineOwnedDefinitionsRuntimeProvider",
+            "provider": "StarVaultDefinitionsRuntimeProvider",
             "byte_owner": ENGINE_ASSET_SERVICE_ID,
             "semantic_owner": ENGINE_ASSETS_DEFINITIONS_SERVICE_ID,
             "methods": DEFINITIONS_SERVICE_METHODS,
@@ -860,7 +860,7 @@ fn invoke_json(state: &mut DefinitionsRuntimeState, payload: Blob) -> RResult<Bl
 }
 
 pub fn definitions_gateway_service(client: AssetServiceClient) -> newengine_plugin_api::ServiceV1Dyn<'static> {
-    let description = engine_owned_service_description(
+    let description = engine_gateway_provider_service_description(
         DEFINITIONS_SERVICE_ID,
         DEFINITIONS_GATEWAY_OWNER,
         DEFINITIONS_BACKEND_CAPABILITY_ID,
@@ -911,10 +911,11 @@ pub fn definitions_gateway_service(client: AssetServiceClient) -> newengine_plug
 }
 
 pub fn register_definitions_gateway_best_effort(client: AssetServiceClient) -> bool {
-    register_engine_owned_gateway_service_best_effort(EngineOwnedGatewayDecl {
+    register_engine_gateway_provider_service_best_effort(EngineGatewayProviderDecl {
         gateway: ENGINE_ASSETS_DEFINITIONS_SERVICE_ID,
         service_kind: EngineServiceKind::Definitions,
         provider_service: DEFINITIONS_SERVICE_ID,
+        provider_route: "engine.assets.starvault.definitions",
         capability: DEFINITIONS_BACKEND_CAPABILITY_ID,
         priority: 0,
         owner: DEFINITIONS_GATEWAY_OWNER,

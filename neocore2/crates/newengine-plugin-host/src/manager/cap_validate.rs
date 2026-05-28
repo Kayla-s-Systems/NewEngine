@@ -36,7 +36,7 @@ fn collect_providers(loaded: &[LoadedPlugin]) -> HashMap<CapKey, u32> {
     out.insert(cap_key("host.events.v1", CapabilityKind::EventsV1 as u8), 1);
 
     // Registered services and active engine gateways are first-class providers too.
-    // This is critical for engine-owned routes such as engine.platform: those routes
+    // This is critical for engine-runtime routes such as engine.platform: those routes
     // are not plugin descriptors, but plugin descriptors may legitimately require
     // them before they initialize native resources.
     for service_id in crate::host_context::list_services() {

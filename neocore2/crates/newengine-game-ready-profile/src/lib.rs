@@ -4,7 +4,7 @@
 //!
 //! This crate is product/profile composition only: it installs reusable runtime
 //! modules, the GameReady render feature pack, the game-ready scene bootstrap
-//! module and the selected engine-owned gateway services.
+//! module and the selected engine-runtime route services.
 
 mod game_ready_fps;
 mod scene_bootstrap;
@@ -103,7 +103,7 @@ impl GameReadyRuntimeProfile {
     }
 
     #[inline]
-    pub fn register_engine_owned_gateways_best_effort(&self) {
+    pub fn register_engine_provider_routes_best_effort(&self) {
         let asset_mounts = SceneGatewayAssetMounts::new(
             GAME_READY_APP_DIR_NAME,
             GAME_APP_ASSETS_DIR_ENV,

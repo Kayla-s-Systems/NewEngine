@@ -3,7 +3,7 @@ name = "newengine-input-bindings-runtime"
 version = "0.1.0"
 edition = "2021"
 readme = "README.md"
-description = "Engine-owned runtime service for engine.input.bindings"
+description = "Runtime-hosted runtime service for engine.input.bindings"
 
 [dependencies]
 abi_stable = { version = "0.11" }

@@ -2,14 +2,14 @@
 
 use newengine_service_api::{RuntimeServiceContractSpec, RuntimeServiceRequirementSpec};
 
-/// Engine-owned facade id for the scene service.
+/// Runtime-hosted facade id for the scene service.
 ///
 /// `engine.scene` is the only consumer-facing scene gateway. Providers and
-/// engine-owned implementations route through the same gateway registry; there
+/// engine-runtime implementations route through the same gateway registry; there
 /// is no secondary scene service id.
 pub const ENGINE_SCENE_SERVICE_ID: &str = "engine.scene";
 
-/// Capability id used by scene providers or engine-owned scene gateway sources.
+/// Capability id used by scene providers or engine-runtime scene gateway sources.
 pub const SCENE_BACKEND_CAPABILITY_ID: &str = "scene.backend";
 
 /// Default provider service id for replaceable scene backends.

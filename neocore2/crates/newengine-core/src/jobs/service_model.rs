@@ -273,7 +273,7 @@ impl JobSystem {
         self.handle.apply_control_event(event)
     }
 
-    /// Requests cooperative stop and joins all engine-owned worker threads.
+    /// Requests cooperative stop and joins all engine-runtime worker threads.
     ///
     /// This must run before plugin DLL/service teardown so queued jobs cannot execute
     /// against unloaded plugin-owned state during shutdown.

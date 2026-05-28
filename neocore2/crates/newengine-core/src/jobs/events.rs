@@ -6,7 +6,7 @@ pub(super) fn publish_task_event(events: Option<&EventHub>, event: EngineTaskEve
     let job_event = EngineJobEventV1::new(
         event.clone(),
         JobExecutorKind::EngineWorker,
-        "engine-owned-cpu-work",
+        "engine.jobs.forge-cpu-work",
     );
 
     if let Some(events) = events {

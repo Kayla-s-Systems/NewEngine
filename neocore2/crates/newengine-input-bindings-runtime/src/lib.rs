@@ -14,8 +14,8 @@ use newengine_input_bindings_api::{
 };
 use newengine_plugin_api::Blob;
 use newengine_service_kit::{
-    decode_json_payload, engine_owned_service_description, ok_empty_blob, ok_json,
-    register_engine_owned_gateway_service, EngineOwnedGatewayDecl, JsonServiceRouter,
+    decode_json_payload, engine_gateway_provider_service_description, ok_empty_blob, ok_json,
+    register_engine_gateway_provider_service, EngineGatewayProviderDecl, JsonServiceRouter,
 };
 use parking_lot::Mutex;
 use std::path::PathBuf;
@@ -75,7 +75,7 @@ fn input_bindings_gateway_service(
     state: Arc<Mutex<InputBindingsGatewayState>>,
 ) -> newengine_plugin_api::ServiceV1Dyn<'static> {
     let info = InputBindingsServiceInfo::default();
-    let description = engine_owned_service_description(
+    let description = engine_gateway_provider_service_description(
         ENGINE_INPUT_BINDINGS_SERVICE_ID,
         INPUT_BINDINGS_GATEWAY_OWNER,
         INPUT_BINDINGS_BACKEND_CAPABILITY_ID,
@@ -84,7 +84,7 @@ fn input_bindings_gateway_service(
     .version(2)
     .protocol(info.protocol.clone())
     .features(info.features.clone())
-    .gateway("engine-owned engine.input.bindings profile service");
+    .gateway("engine.input.compass.bindings profile service");
 
     JsonServiceRouter::with_shared_state(ENGINE_INPUT_BINDINGS_SERVICE_ID, state)
         .describe_json(&description)
@@ -336,10 +336,11 @@ pub fn register_input_bindings_gateway_best_effort(default_profile: InputBinding
     }
 
     let service = input_bindings_gateway_service(state_ref);
-    match register_engine_owned_gateway_service(EngineOwnedGatewayDecl {
+    match register_engine_gateway_provider_service(EngineGatewayProviderDecl {
         gateway: ENGINE_INPUT_BINDINGS_SERVICE_ID,
         service_kind: newengine_service_api::EngineServiceKind::InputBindings,
         provider_service: ENGINE_INPUT_BINDINGS_SERVICE_ID,
+        provider_route: "engine.input.compass.bindings",
         capability: INPUT_BINDINGS_BACKEND_CAPABILITY_ID,
         priority: 0,
         owner: INPUT_BINDINGS_GATEWAY_OWNER,
@@ -351,7 +352,7 @@ pub fn register_input_bindings_gateway_best_effort(default_profile: InputBinding
                 .map(|s| s.lock().profile_path.clone())
                 .unwrap_or_else(profile_path);
             log::info!(
-                "input bindings gateway: engine-owned route registered id='{}' capability='{}' config='{}'",
+                "input bindings gateway: engine-runtime route registered id='{}' capability='{}' config='{}'",
                 ENGINE_INPUT_BINDINGS_SERVICE_ID,
                 INPUT_BINDINGS_BACKEND_CAPABILITY_ID,
                 path.display()

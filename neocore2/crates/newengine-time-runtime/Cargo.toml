@@ -3,7 +3,7 @@ name = "newengine-time-runtime"
 version = "0.1.0"
 edition = "2021"
 readme = "README.md"
-description = "Engine-owned baseline time provider for NewEngine"
+description = "Runtime-hosted baseline time provider for NewEngine"
 
 [dependencies]
 abi_stable = "0.11"

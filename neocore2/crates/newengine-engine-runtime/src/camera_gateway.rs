@@ -29,8 +29,8 @@ use newengine_input_actions_api::CameraViewRequest;
 use newengine_math::{Mat4, Vec2, Vec3};
 use newengine_plugin_api::Blob;
 use newengine_service_kit::{
-    decode_json_payload, engine_owned_service_description, ok_empty_blob, ok_json,
-    register_engine_owned_gateway_service, EngineOwnedGatewayDecl, JsonServiceRouter,
+    decode_json_payload, engine_gateway_provider_service_description, ok_empty_blob, ok_json,
+    register_engine_gateway_provider_service, EngineGatewayProviderDecl, JsonServiceRouter,
 };
 use newengine_transform::Transform;
 
@@ -58,14 +58,14 @@ pub use self::camera_gateway_helpers::{
 
 fn camera_gateway_service(state: Arc<Mutex<CameraGatewayState>>) -> newengine_plugin_api::ServiceV1Dyn<'static> {
     let info = CameraServiceInfo::default();
-    let description = engine_owned_service_description(
+    let description = engine_gateway_provider_service_description(
         ENGINE_CAMERA_SERVICE_ID,
         CAMERA_GATEWAY_OWNER,
         CAMERA_BACKEND_CAPABILITY_ID,
         info.methods.clone(),
     )
     .protocol(info.protocol.clone())
-    .gateway("engine-owned engine.camera in-process bridge");
+    .gateway("engine.camera.stargazer in-process bridge");
 
     JsonServiceRouter::with_shared_state(ENGINE_CAMERA_SERVICE_ID, state)
         .describe_json(&description)
@@ -124,17 +124,18 @@ fn register_camera_gateway_service_best_effort(state: Arc<Mutex<CameraGatewaySta
         return;
     }
     let service = camera_gateway_service(state);
-    match register_engine_owned_gateway_service(EngineOwnedGatewayDecl {
+    match register_engine_gateway_provider_service(EngineGatewayProviderDecl {
         gateway: ENGINE_CAMERA_SERVICE_ID,
         service_kind: newengine_service_api::EngineServiceKind::Camera,
         provider_service: ENGINE_CAMERA_SERVICE_ID,
+        provider_route: "engine.camera.stargazer",
         capability: CAMERA_BACKEND_CAPABILITY_ID,
         priority: 0,
         owner: CAMERA_GATEWAY_OWNER,
         service,
     }) {
         Ok(()) => log::info!(
-            "camera gateway: engine-owned route registered id='{}' capability='{}'",
+            "camera gateway: engine-runtime route registered id='{}' capability='{}'",
             ENGINE_CAMERA_SERVICE_ID,
             CAMERA_BACKEND_CAPABILITY_ID
         ),
@@ -146,7 +147,7 @@ fn register_camera_gateway_service_best_effort(state: Arc<Mutex<CameraGatewaySta
     }
 }
 
-/// Engine-owned camera gateway bridge.
+/// Runtime-hosted camera gateway bridge.
 ///
 /// This is the in-process runtime implementation of the `engine.camera` boundary
 /// until camera providers are moved behind `camera.api` service plugins. Render

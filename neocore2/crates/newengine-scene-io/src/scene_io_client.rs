@@ -7,7 +7,7 @@ use crate::consts::{method, ENGINE_SCENE_SERVICE_ID};
 
 /// Thin client over the engine scene gateway.
 ///
-/// The scene gateway can be backed by a plugin provider or by an engine-owned
+/// The scene gateway can be backed by a plugin provider or by an engine-runtime
 /// service source. This client performs calls through `HostApiV1` and does not
 /// link against a concrete implementation.
 #[derive(Clone)]

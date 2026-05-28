@@ -44,23 +44,25 @@ impl PluginDescriptorFact {
 }
 
 #[derive(Debug, Clone)]
-pub(crate) struct EngineOwnedGatewayFact {
+pub(crate) struct GatewayProviderRouteFact {
     pub(crate) gateway_id: String,
     pub(crate) service_kind: String,
     pub(crate) provider_service_id: String,
+    pub(crate) provider_route_id: String,
     pub(crate) provider_owner_id: String,
     pub(crate) backend_capability_id: String,
     pub(crate) backend_priority: i32,
     pub(crate) system_tags: Vec<String>,
 }
 
-impl EngineOwnedGatewayFact {
+impl GatewayProviderRouteFact {
     #[cfg(test)]
     #[inline]
     pub(crate) fn new(
         gateway_id: String,
         service_kind: EngineServiceKind,
         provider_service_id: String,
+        provider_route_id: String,
         provider_owner_id: String,
         backend_capability_id: String,
         backend_priority: i32,
@@ -69,6 +71,7 @@ impl EngineOwnedGatewayFact {
             gateway_id,
             service_kind.as_str().to_owned(),
             provider_service_id,
+            provider_route_id,
             provider_owner_id,
             backend_capability_id,
             backend_priority,
@@ -81,6 +84,7 @@ impl EngineOwnedGatewayFact {
         gateway_id: String,
         service_kind: String,
         provider_service_id: String,
+        provider_route_id: String,
         provider_owner_id: String,
         backend_capability_id: String,
         backend_priority: i32,
@@ -100,6 +104,7 @@ impl EngineOwnedGatewayFact {
             gateway_id,
             service_kind,
             provider_service_id,
+            provider_route_id,
             provider_owner_id,
             backend_capability_id,
             backend_priority,
@@ -147,7 +152,7 @@ impl GatewayPolicyFact {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub(crate) enum GatewayProviderOrigin {
     NullProvider,
-    EngineOwned,
+    EngineRuntime,
     FirstPartyPlugin,
     GamePlugin,
     UserMod,
@@ -159,7 +164,7 @@ impl GatewayProviderOrigin {
     pub(crate) const fn as_str(self) -> &'static str {
         match self {
             Self::NullProvider => "null-provider",
-            Self::EngineOwned => "engine-owned",
+            Self::EngineRuntime => "engine-runtime",
             Self::FirstPartyPlugin => "first-party-plugin",
             Self::GamePlugin => "game-plugin",
             Self::UserMod => "user-mod",
@@ -174,7 +179,7 @@ impl GatewayProviderOrigin {
             Self::UserMod => 40_000,
             Self::GamePlugin => 30_000,
             Self::FirstPartyPlugin => 20_000,
-            Self::EngineOwned => 10_000,
+            Self::EngineRuntime => 10_000,
             Self::NullProvider => 0,
         }
     }
@@ -251,7 +256,7 @@ impl GatewayOverrideMode {
 fn route_allowed_by_policy(override_mode: GatewayOverrideMode, origin: GatewayProviderOrigin) -> bool {
     match override_mode {
         GatewayOverrideMode::Open | GatewayOverrideMode::ProfileControlled => true,
-        GatewayOverrideMode::Locked => matches!(origin, GatewayProviderOrigin::EngineOwned),
+        GatewayOverrideMode::Locked => matches!(origin, GatewayProviderOrigin::EngineRuntime),
     }
 }
 
@@ -371,15 +376,15 @@ impl ActiveGatewayRegistry {
     pub(crate) fn from_facts(
         descriptors: &[PluginDescriptorFact],
         services: &[RegisteredServiceFact],
-        engine_owned_gateways: &[EngineOwnedGatewayFact],
+        gateway_provider_routes: &[GatewayProviderRouteFact],
     ) -> Self {
-        Self::from_facts_with_policy(descriptors, services, engine_owned_gateways, &[])
+        Self::from_facts_with_policy(descriptors, services, gateway_provider_routes, &[])
     }
 
     pub(crate) fn from_facts_with_policy(
         descriptors: &[PluginDescriptorFact],
         services: &[RegisteredServiceFact],
-        engine_owned_gateways: &[EngineOwnedGatewayFact],
+        gateway_provider_routes: &[GatewayProviderRouteFact],
         policy_facts: &[GatewayPolicyFact],
     ) -> Self {
         let mut routes = Vec::new();
@@ -428,14 +433,14 @@ impl ActiveGatewayRegistry {
             }
         }
 
-        for gateway in engine_owned_gateways {
+        for gateway in gateway_provider_routes {
             let registered = services.iter().any(|service| {
                 service.service_id == gateway.provider_service_id && service.owner_plugin_id.is_none()
             });
             if !registered {
                 skipped_unregistered += 1;
                 log::trace!(
-                    "gateways: engine-owned route skipped because service is not registered gateway='{}' service='{}' owner='{}'",
+                    "gateways: engine-runtime route skipped because service is not registered gateway='{}' service='{}' owner='{}'",
                     gateway.gateway_id,
                     gateway.provider_service_id,
                     gateway.provider_owner_id
@@ -448,11 +453,11 @@ impl ActiveGatewayRegistry {
                 gateway.gateway_id.clone(),
                 gateway.service_kind.clone(),
                 gateway.provider_service_id.clone(),
-                None,
+                Some(gateway.provider_route_id.clone()),
                 gateway.provider_owner_id.clone(),
                 gateway.backend_capability_id.clone(),
                 gateway.backend_priority,
-                GatewayProviderOrigin::EngineOwned,
+                GatewayProviderOrigin::EngineRuntime,
                 gateway.system_tags.clone(),
                 policy,
             ) {
@@ -473,10 +478,10 @@ impl ActiveGatewayRegistry {
 
         let registry = Self { routes };
         log::debug!(
-            "gateways: registry rebuilt descriptors={} services={} engine_owned={} policy_facts={} routes={} skipped_unregistered={}",
+            "gateways: registry rebuilt descriptors={} services={} host_routes={} policy_facts={} routes={} skipped_unregistered={}",
             descriptors.len(),
             services.len(),
-            engine_owned_gateways.len(),
+            gateway_provider_routes.len(),
             policy_facts.len(),
             registry.routes.len(),
             skipped_unregistered

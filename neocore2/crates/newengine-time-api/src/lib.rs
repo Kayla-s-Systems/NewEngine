@@ -96,7 +96,7 @@ impl Default for TimeSnapshotV1 {
     fn default() -> Self {
         Self {
             schema: TIME_RUNTIME_CONTRACT.to_owned(),
-            provider: "EngineOwnedTimeProvider".to_owned(),
+            provider: "AstrolabeTimeProvider".to_owned(),
             frame_index: 0,
             real: TimeRealClockV1::default(),
             simulation: TimeSimulationClockV1::default(),
@@ -405,7 +405,7 @@ impl Default for TimeServiceInfoV1 {
         Self {
             service_id: TIME_SERVICE_ID.to_owned(),
             gateway: ENGINE_TIME_SERVICE_ID.to_owned(),
-            provider: "EngineOwnedTimeProvider".to_owned(),
+            provider: "AstrolabeTimeProvider".to_owned(),
             contract: TIME_RUNTIME_CONTRACT.to_owned(),
             methods: TIME_SERVICE_METHODS.iter().map(|m| (*m).to_owned()).collect(),
             deterministic: false,

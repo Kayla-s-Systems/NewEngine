@@ -171,7 +171,7 @@ pub fn unregister_by_owner(owner_plugin_id: &str) {
     }
 
     {
-        let mut g = match c.engine_owned_gateways.lock() {
+        let mut g = match c.gateway_provider_routes.lock() {
             Ok(v) => v,
             Err(e) => e.into_inner(),
         };

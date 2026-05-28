@@ -147,8 +147,8 @@ use newengine_materials::{
 use newengine_plugin_api::{Blob, HostApiV1, MethodName};
 use newengine_service_api::EngineServiceKind;
 use newengine_service_kit::{
-    engine_owned_service_description, ok_empty_blob, ok_json,
-    register_engine_owned_gateway_service_best_effort, EngineOwnedGatewayDecl, JsonServiceRouter,
+    engine_gateway_provider_service_description, ok_empty_blob, ok_json,
+    register_engine_gateway_provider_service_best_effort, EngineGatewayProviderDecl, JsonServiceRouter,
 };
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -462,7 +462,7 @@ pub fn materials_service_info() -> MaterialsServiceInfo {
         id: MATERIALS_SERVICE_ID,
         gateway: ENGINE_ASSETS_MATERIALS_SERVICE_ID,
         methods: MATERIALS_SERVICE_METHODS,
-        backend: "engine-owned.material-runtime",
+        backend: "engine.assets.starvault.materials-runtime",
         native_formats: &[".nemat"],
         texture_reference_policy: ".ytd@entry dictionary selectors only for authored/runtime material graphs",
     }
@@ -476,7 +476,7 @@ pub fn materials_gateway_service_with_host(
     client: AssetServiceClient,
     host: Option<HostApiV1>,
 ) -> newengine_plugin_api::ServiceV1Dyn<'static> {
-    let description = engine_owned_service_description(
+    let description = engine_gateway_provider_service_description(
         MATERIALS_SERVICE_ID,
         "newengine-material-runtime.material-gateway",
         MATERIALS_BACKEND_CAPABILITY_ID,
@@ -532,10 +532,11 @@ pub fn register_materials_gateway_best_effort(client: AssetServiceClient) -> boo
 }
 
 pub fn register_materials_gateway_best_effort_with_host(host: Option<HostApiV1>, client: AssetServiceClient) -> bool {
-    register_engine_owned_gateway_service_best_effort(EngineOwnedGatewayDecl {
+    register_engine_gateway_provider_service_best_effort(EngineGatewayProviderDecl {
         gateway: ENGINE_ASSETS_MATERIALS_SERVICE_ID,
         service_kind: EngineServiceKind::Materials,
         provider_service: MATERIALS_SERVICE_ID,
+        provider_route: "engine.assets.starvault.materials",
         capability: MATERIALS_BACKEND_CAPABILITY_ID,
         priority: 0,
         owner: "newengine-material-runtime.material-gateway",

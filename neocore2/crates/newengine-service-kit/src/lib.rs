@@ -1,15 +1,15 @@
 #![forbid(unsafe_op_in_unsafe_fn)]
 
-pub mod engine_owned_gateway;
+pub mod gateway_provider_route;
 pub mod json_service;
 pub mod method_router;
 pub mod provider_metadata;
 
-pub use engine_owned_gateway::{
-    register_engine_owned_gateway_service, register_engine_owned_gateway_service_best_effort,
-    register_engine_owned_gateway_service_dynamic, register_engine_owned_gateway_service_dynamic_best_effort,
-    EngineOwnedGatewayDecl, EngineOwnedGatewayDeclDynamic,
+pub use gateway_provider_route::{
+    register_engine_gateway_provider_service, register_engine_gateway_provider_service_best_effort,
+    register_engine_gateway_provider_service_dynamic, register_engine_gateway_provider_service_dynamic_best_effort,
+    EngineGatewayProviderDecl, EngineGatewayProviderDeclDynamic,
 };
 pub use json_service::{decode_json_payload, empty_payload_json, ok_empty_blob, ok_json, payload_json};
 pub use method_router::JsonServiceRouter;
-pub use provider_metadata::{engine_owned_service_description, EngineOwnedServiceDescription};
+pub use provider_metadata::{engine_gateway_provider_service_description, EngineGatewayProviderServiceDescription};

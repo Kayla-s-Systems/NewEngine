@@ -4,4 +4,4 @@ Stable plugin ABI definitions: plugin roots, modules, host API, services, descri
 
 ## Architecture notes
 
-This crate is part of the CoreEngine host/plugin architecture. Runtime-facing code should prefer engine gateways and typed adapters over concrete provider implementation crates.
+This crate is part of the North Star Engine host/plugin architecture. Runtime-facing code should prefer engine gateways and typed adapters over concrete provider implementation crates.

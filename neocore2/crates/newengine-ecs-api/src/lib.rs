@@ -10,7 +10,7 @@
 use serde::{Deserialize, Serialize};
 
 /// Engine-facing ECS service gateway id. Consumers call this facade; the host
-/// resolves it to the active provider by descriptor metadata / engine-owned facts.
+/// resolves it to the active provider by descriptor metadata / engine-runtime facts.
 pub const ENGINE_ECS_SERVICE_ID: &str = "engine.ecs";
 
 /// Default/first-party provider service id for ECS backends.

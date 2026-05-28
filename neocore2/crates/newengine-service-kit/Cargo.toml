@@ -3,7 +3,7 @@ name = "newengine-service-kit"
 version = "0.1.0"
 edition = "2021"
 readme = "README.md"
-description = "Common ServiceV1 JSON router and engine-owned gateway registration helpers for NewEngine"
+description = "Common ServiceV1 JSON router and engine-runtime provider-route registration helpers for NewEngine"
 
 [dependencies]
 abi_stable = "0.11"

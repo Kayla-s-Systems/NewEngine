@@ -266,7 +266,7 @@ impl Default for JobsServiceInfoV1 {
         Self {
             service_id: JOBS_SERVICE_ID.to_owned(),
             gateway: ENGINE_JOBS_SERVICE_ID.to_owned(),
-            provider: "EngineOwnedJobsProvider".to_owned(),
+            provider: "ForgeJobsProvider".to_owned(),
             contract: JOBS_RUNTIME_CONTRACT.to_owned(),
             methods: JOBS_SERVICE_METHODS.iter().map(|m| (*m).to_owned()).collect(),
             event_topic: ENGINE_TASK_EVENT_TOPIC_V1.to_owned(),

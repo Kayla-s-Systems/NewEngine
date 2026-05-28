@@ -355,7 +355,7 @@ fn ui_surface_style() -> UiSurfaceStyle {
     style.corner_radius_px = 22.0;
     style.border_px = 1.0;
     style.shadow_alpha = 0;
-    style.font.stack = vec!["AureliaSans".to_owned(), "Inter".to_owned(), "Segoe UI".to_owned(), "NotoSans".to_owned()];
+    style.font.stack = vec!["NorthStarSans".to_owned(), "Inter".to_owned(), "Segoe UI".to_owned(), "NotoSans".to_owned()];
     style.font.title_px = 30.0;
     style.font.body_px = 17.0;
     style.font.secondary_px = 14.0;

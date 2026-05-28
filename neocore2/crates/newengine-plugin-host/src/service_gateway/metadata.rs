@@ -70,9 +70,35 @@ fn service_kind_matches_gateway(
     _system_tags: &[String],
 ) -> bool {
     // `engine_gateway` is the actual backend API route. Provider personal
-    // identities such as `engine.ui.aurelia` belong in descriptor metadata
+    // identities such as `engine.ui.<provider>` belong in descriptor metadata
     // (`provider_route`), not in the gateway tree.
     engine_gateway_matches_service_kind(gateway_id, service_kind)
+}
+
+#[inline]
+fn provider_route_extends_gateway_parent(gateway_id: &str, provider_route_id: &str) -> bool {
+    if provider_route_id == gateway_id {
+        return false;
+    }
+    let gateway_parts = gateway_id.split('.').collect::<Vec<_>>();
+    let provider_parts = provider_route_id.split('.').collect::<Vec<_>>();
+    if gateway_parts.len() < 2 || provider_parts.len() <= gateway_parts.len() {
+        return false;
+    }
+    if gateway_parts.get(0) != Some(&"engine") || provider_parts.get(0) != Some(&"engine") {
+        return false;
+    }
+    if gateway_parts.get(1) != provider_parts.get(1) {
+        return false;
+    }
+    if gateway_parts.len() == 2 {
+        return provider_parts.starts_with(&gateway_parts);
+    }
+    let child_tail = &gateway_parts[2..];
+    let Some(provider_tail) = provider_parts.get(3..) else {
+        return false;
+    };
+    provider_tail.starts_with(child_tail)
 }
 
 pub(crate) fn gateway_capability_from_capability(
@@ -137,6 +163,21 @@ pub(crate) fn gateway_capability_from_capability(
     };
 
     let system_tags = json_system_tags(&value);
+    let provider_route_id = json_field_string(&value, PROVIDER_ROUTE_FIELD);
+    if let Some(provider_route_id) = provider_route_id.as_deref() {
+        if !is_engine_service_gateway_id(provider_route_id)
+            || !provider_route_extends_gateway_parent(&gateway_id, provider_route_id)
+        {
+            log::warn!(
+                "plugins: ignoring service gateway with invalid provider_route plugin='{}' capability='{}' engine_gateway='{}' provider_route='{}'",
+                plugin_id,
+                capability.id,
+                gateway_id,
+                provider_route_id
+            );
+            return None;
+        }
+    }
 
     if !service_kind_matches_gateway(&service_kind, &gateway_id, &system_tags) {
         log::warn!(
@@ -154,7 +195,7 @@ pub(crate) fn gateway_capability_from_capability(
         gateway_id,
         service_kind,
         provider_service_id: json_field_string(&value, CONTRACT_FIELD),
-        provider_route_id: json_field_string(&value, PROVIDER_ROUTE_FIELD),
+        provider_route_id,
         backend_capability_id: capability.id.to_string(),
         backend_priority: json_field_i32(&value, BACKEND_PRIORITY_FIELD).unwrap_or(0),
         system_tags,

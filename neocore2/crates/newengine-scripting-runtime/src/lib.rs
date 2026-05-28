@@ -19,8 +19,8 @@ use newengine_scripting_api::{
 };
 use newengine_service_api::EngineServiceKind;
 use newengine_service_kit::{
-    engine_owned_service_description, ok_empty_blob, ok_json,
-    register_engine_owned_gateway_service_best_effort, EngineOwnedGatewayDecl, JsonServiceRouter,
+    engine_gateway_provider_service_description, ok_empty_blob, ok_json,
+    register_engine_gateway_provider_service_best_effort, EngineGatewayProviderDecl, JsonServiceRouter,
 };
 use serde::Serialize;
 
@@ -46,7 +46,7 @@ impl ScriptingRuntimeState {
     pub fn service_info(&self) -> ScriptingServiceInfo {
         let mut info = ScriptingServiceInfo::default();
         info.provider = SCRIPTING_SERVICE_ID.to_owned();
-        info.backend = "engine-owned.null-scripting".to_owned();
+        info.backend = "engine.scripting.nullstar".to_owned();
         info.features.push("null-provider-empty-response".to_owned());
         info
     }
@@ -57,7 +57,7 @@ impl ScriptingRuntimeState {
             id: SCRIPTING_SERVICE_ID,
             gateway: ENGINE_SCRIPTING_SERVICE_ID,
             backend_capability: SCRIPTING_BACKEND_CAPABILITY_ID,
-            provider_label: "engine-owned.null-scripting",
+            provider_label: "engine.scripting.nullstar",
             methods: newengine_scripting_api::SCRIPTING_SERVICE_METHODS.iter().map(|it| (*it).to_owned()).collect(),
             loaded_module_count: self.modules.len(),
         }
@@ -134,7 +134,7 @@ impl ScriptingRuntimeState {
         counters.insert("requests_processed".to_owned(), self.request_count);
         counters.insert("frames_processed".to_owned(), self.frame_count);
         ScriptingStateDump {
-            backend: "engine-owned.null-scripting".to_owned(),
+            backend: "engine.scripting.nullstar".to_owned(),
             loaded_modules: self.modules.values().cloned().collect(),
             counters,
             notes: vec![
@@ -226,7 +226,7 @@ fn decode_request_blob(payload: Blob) -> RResult<ScriptingRequestBytes, RString>
 }
 
 pub fn scripting_gateway_service() -> newengine_plugin_api::ServiceV1Dyn<'static> {
-    let description = engine_owned_service_description(
+    let description = engine_gateway_provider_service_description(
         SCRIPTING_SERVICE_ID,
         "newengine-scripting-runtime.null-provider",
         SCRIPTING_BACKEND_CAPABILITY_ID,
@@ -274,10 +274,11 @@ pub fn scripting_gateway_service() -> newengine_plugin_api::ServiceV1Dyn<'static
 }
 
 pub fn register_scripting_gateway_best_effort() -> bool {
-    register_engine_owned_gateway_service_best_effort(EngineOwnedGatewayDecl {
+    register_engine_gateway_provider_service_best_effort(EngineGatewayProviderDecl {
         gateway: ENGINE_SCRIPTING_SERVICE_ID,
         service_kind: EngineServiceKind::Scripting,
         provider_service: SCRIPTING_SERVICE_ID,
+        provider_route: "engine.scripting.nullstar",
         capability: SCRIPTING_BACKEND_CAPABILITY_ID,
         priority: -100,
         owner: "newengine-scripting-runtime.null-provider",

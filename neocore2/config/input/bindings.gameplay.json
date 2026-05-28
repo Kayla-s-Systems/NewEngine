@@ -86,7 +86,7 @@
     {
       "code": 86,
       "id": "keyboard.arrow_left",
-      "label": "LEFT"
+      "label": "Arrow Left"
     },
     {
       "code": 87,
@@ -96,7 +96,7 @@
     {
       "code": 88,
       "id": "keyboard.arrow_right",
-      "label": "RIGHT"
+      "label": "Arrow Right"
     },
     {
       "code": 89,
@@ -287,7 +287,7 @@
     },
     {
       "id": "ui.accept",
-      "label": "Accept",
+      "label": "Asset Browser accept",
       "contexts": [],
       "dispatch": "consume_first",
       "effects": [
@@ -298,7 +298,7 @@
     },
     {
       "id": "ui.back",
-      "label": "Back",
+      "label": "Asset Browser back",
       "contexts": [],
       "dispatch": "consume_first",
       "effects": [
@@ -309,7 +309,7 @@
     },
     {
       "id": "ui.nav.up",
-      "label": "UI up",
+      "label": "Asset Browser up",
       "contexts": [],
       "dispatch": "consume_first",
       "effects": [
@@ -322,7 +322,7 @@
     },
     {
       "id": "ui.nav.down",
-      "label": "UI down",
+      "label": "Asset Browser down",
       "contexts": [],
       "dispatch": "consume_first",
       "effects": [
@@ -335,7 +335,7 @@
     },
     {
       "id": "ui.nav.left",
-      "label": "UI left",
+      "label": "Asset Browser previous view",
       "contexts": [],
       "dispatch": "consume_first",
       "effects": [
@@ -348,7 +348,7 @@
     },
     {
       "id": "ui.nav.right",
-      "label": "UI right",
+      "label": "Asset Browser next view",
       "contexts": [],
       "dispatch": "consume_first",
       "effects": [
@@ -361,13 +361,40 @@
     },
     {
       "id": "ui.assets.catalog.toggle",
-      "label": "Toggle assets catalog UI",
+      "label": "Toggle Asset Browser",
       "contexts": [],
       "dispatch": "consume_first",
       "effects": []
     }
   ],
   "listeners": [
+    {
+      "owner": "newengine.assets_catalog_ui",
+      "id": "asset-browser-ui",
+      "action_filter": [
+        "ui.assets.catalog.toggle"
+      ],
+      "context_filter": [],
+      "priority": 110,
+      "consume": true,
+      "enabled": true
+    },
+    {
+      "owner": "newengine.assets_catalog_ui",
+      "id": "assets-browser-navigation",
+      "action_filter": [
+        "ui.accept",
+        "ui.back",
+        "ui.nav.up",
+        "ui.nav.down",
+        "ui.nav.left",
+        "ui.nav.right"
+      ],
+      "context_filter": [],
+      "priority": 110,
+      "consume": false,
+      "enabled": true
+    },
     {
       "owner": "newengine-ui",
       "id": "ui-navigation",
@@ -382,17 +409,6 @@
       ],
       "context_filter": [],
       "priority": 100,
-      "consume": true,
-      "enabled": true
-    },
-    {
-      "owner": "newengine.assets_catalog_ui",
-      "id": "assets-catalog-ui",
-      "action_filter": [
-        "ui.assets.catalog.toggle"
-      ],
-      "context_filter": [],
-      "priority": 90,
       "consume": true,
       "enabled": true
     },
@@ -659,90 +675,6 @@
       "device": "GamepadButton",
       "code": 0,
       "name": "Start",
-      "phase": "Pressed"
-    },
-    {
-      "action": "ui.assets.catalog.toggle",
-      "device": "Keyboard",
-      "code": 159,
-      "name": null,
-      "phase": "Pressed"
-    },
-    {
-      "action": "ui.assets.catalog.toggle",
-      "device": "Keyboard",
-      "code": 159,
-      "name": null,
-      "phase": "Pressed"
-    },
-    {
-      "action": "ui.assets.catalog.toggle",
-      "device": "Keyboard",
-      "code": 159,
-      "name": null,
-      "phase": "Pressed"
-    },
-    {
-      "action": "ui.assets.catalog.toggle",
-      "device": "Keyboard",
-      "code": 159,
-      "name": null,
-      "phase": "Pressed"
-    },
-    {
-      "action": "ui.assets.catalog.toggle",
-      "device": "Keyboard",
-      "code": 159,
-      "name": null,
-      "phase": "Pressed"
-    },
-    {
-      "action": "ui.assets.catalog.toggle",
-      "device": "Keyboard",
-      "code": 159,
-      "name": null,
-      "phase": "Pressed"
-    },
-    {
-      "action": "ui.assets.catalog.toggle",
-      "device": "Keyboard",
-      "code": 159,
-      "name": null,
-      "phase": "Pressed"
-    },
-    {
-      "action": "ui.assets.catalog.toggle",
-      "device": "Keyboard",
-      "code": 159,
-      "name": null,
-      "phase": "Pressed"
-    },
-    {
-      "action": "ui.assets.catalog.toggle",
-      "device": "Keyboard",
-      "code": 159,
-      "name": null,
-      "phase": "Pressed"
-    },
-    {
-      "action": "ui.assets.catalog.toggle",
-      "device": "Keyboard",
-      "code": 159,
-      "name": null,
-      "phase": "Pressed"
-    },
-    {
-      "action": "ui.assets.catalog.toggle",
-      "device": "Keyboard",
-      "code": 159,
-      "name": null,
-      "phase": "Pressed"
-    },
-    {
-      "action": "ui.assets.catalog.toggle",
-      "device": "Keyboard",
-      "code": 159,
-      "name": null,
       "phase": "Pressed"
     },
     {

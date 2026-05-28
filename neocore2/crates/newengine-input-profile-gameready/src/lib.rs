@@ -20,12 +20,12 @@ pub mod action {
     pub const CAMERA_VIEW_THIRD_PERSON_AIM: &str = "camera.view.third_person.aim";
 
     pub const UI_NAVIGATION_TOGGLE: &str = newengine_input_actions_api::engine_action::UI_NAVIGATION_TOGGLE;
-    pub const UI_NAVIGATION_ACCEPT: &str = "ui.accept";
-    pub const UI_NAVIGATION_BACK: &str = "ui.back";
-    pub const UI_NAVIGATION_UP: &str = "ui.nav.up";
-    pub const UI_NAVIGATION_DOWN: &str = "ui.nav.down";
-    pub const UI_NAVIGATION_LEFT: &str = "ui.nav.left";
-    pub const UI_NAVIGATION_RIGHT: &str = "ui.nav.right";
+    pub const UI_NAVIGATION_ACCEPT: &str = newengine_input_actions_api::engine_action::UI_NAVIGATION_ACCEPT;
+    pub const UI_NAVIGATION_BACK: &str = newengine_input_actions_api::engine_action::UI_NAVIGATION_BACK;
+    pub const UI_NAVIGATION_UP: &str = newengine_input_actions_api::engine_action::UI_NAVIGATION_UP;
+    pub const UI_NAVIGATION_DOWN: &str = newengine_input_actions_api::engine_action::UI_NAVIGATION_DOWN;
+    pub const UI_NAVIGATION_LEFT: &str = newengine_input_actions_api::engine_action::UI_NAVIGATION_LEFT;
+    pub const UI_NAVIGATION_RIGHT: &str = newengine_input_actions_api::engine_action::UI_NAVIGATION_RIGHT;
 
     pub const ASSET_CATALOG_UI_TOGGLE: &str = newengine_input_actions_api::engine_action::ASSET_CATALOG_UI_TOGGLE;
 }
@@ -118,10 +118,20 @@ pub fn gameplay_default_listeners() -> Vec<InputActionListenerRegistration> {
             ])
             .with_priority(100)
             .consuming(),
-        InputActionListenerRegistration::new("newengine.assets_catalog_ui", "assets-catalog-ui")
+        InputActionListenerRegistration::new("newengine.assets_catalog_ui", "asset-browser-ui")
             .with_actions([action::ASSET_CATALOG_UI_TOGGLE])
-            .with_priority(90)
+            .with_priority(110)
             .consuming(),
+        InputActionListenerRegistration::new("newengine.assets_catalog_ui", "assets-browser-navigation")
+            .with_actions([
+                action::UI_NAVIGATION_ACCEPT,
+                action::UI_NAVIGATION_BACK,
+                action::UI_NAVIGATION_UP,
+                action::UI_NAVIGATION_DOWN,
+                action::UI_NAVIGATION_LEFT,
+                action::UI_NAVIGATION_RIGHT,
+            ])
+            .with_priority(110),
         InputActionListenerRegistration::new("newengine-camera-runtime", "camera-view")
             .with_actions([
                 action::CAMERA_VIEW_NEXT,
@@ -255,6 +265,8 @@ mod tests {
         assert!(profile.bindings.iter().any(|b| b.action == action::PLAYER_MOVE_FORWARD));
         assert!(profile.actions.iter().any(|a| a.id == action::CAMERA_VIEW_NEXT));
         assert!(profile.listeners.iter().any(|l| l.id == "ui-navigation"));
+        assert!(profile.listeners.iter().any(|l| l.id == "asset-browser-ui"));
+        assert!(profile.listeners.iter().any(|l| l.id == "assets-browser-navigation"));
         assert!(profile.bindings.iter().any(|b| b.action == action::UI_NAVIGATION_TOGGLE && b.code == engine_default_keybind::PRIMARY_UI_TOGGLE));
         assert!(profile.bindings.iter().any(|b| b.action == action::ASSET_CATALOG_UI_TOGGLE && b.code == engine_default_keybind::ASSET_CATALOG_UI_TOGGLE));
         assert!(!profile.bindings.iter().any(|b| b.action == action::UI_NAVIGATION_BACK && b.code == engine_default_keybind::PRIMARY_UI_TOGGLE));

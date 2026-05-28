@@ -6,8 +6,8 @@ use newengine_platform_api::{
     PLATFORM_SERVICE_METHOD_WINDOW_SNAPSHOT_JSON_V1,
 };
 use newengine_service_kit::{
-    engine_owned_service_description, ok_json, register_engine_owned_gateway_service,
-    EngineOwnedGatewayDecl, JsonServiceRouter,
+    engine_gateway_provider_service_description, ok_json, register_engine_gateway_provider_service,
+    EngineGatewayProviderDecl, JsonServiceRouter,
 };
 
 static PLATFORM_WINDOW_SNAPSHOT: OnceLock<Arc<Mutex<PlatformWindowReadyV1>>> = OnceLock::new();
@@ -22,7 +22,7 @@ fn read_platform_window_snapshot(snapshot: &Arc<Mutex<PlatformWindowReadyV1>>) -
 
 fn platform_window_service(snapshot: Arc<Mutex<PlatformWindowReadyV1>>) -> newengine_plugin_api::ServiceV1Dyn<'static> {
     let info = PlatformServiceInfo::default();
-    let description = engine_owned_service_description(
+    let description = engine_gateway_provider_service_description(
         ENGINE_PLATFORM_SERVICE_ID,
         PLATFORM_GATEWAY_OWNER,
         PLATFORM_BACKEND_CAPABILITY_ID,
@@ -65,17 +65,18 @@ pub(crate) fn register_platform_window_service_best_effort(initial: PlatformWind
     }
 
     let service = platform_window_service(snapshot);
-    match register_engine_owned_gateway_service(EngineOwnedGatewayDecl {
+    match register_engine_gateway_provider_service(EngineGatewayProviderDecl {
         gateway: ENGINE_PLATFORM_SERVICE_ID,
         service_kind: newengine_service_api::EngineServiceKind::Platform,
         provider_service: ENGINE_PLATFORM_SERVICE_ID,
+        provider_route: "engine.platform.harbor",
         capability: PLATFORM_BACKEND_CAPABILITY_ID,
         priority: 0,
         owner: PLATFORM_GATEWAY_OWNER,
         service,
     }) {
         Ok(()) => log::info!(
-            "engine.platform gateway registered source=engine-owned service='{}' capability='{}'",
+            "engine.platform gateway registered source=engine-runtime service='{}' capability='{}'",
             ENGINE_PLATFORM_SERVICE_ID,
             PLATFORM_BACKEND_CAPABILITY_ID
         ),

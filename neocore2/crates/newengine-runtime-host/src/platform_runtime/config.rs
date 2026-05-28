@@ -570,7 +570,7 @@ fn ensure_platform_runtime_capabilities(mut descriptor: PluginDescriptor) -> Plu
 
     // The platform runtime is an external event-loop entrypoint, not a plugin-owned
     // `platform.api` ServiceV1 provider. `engine.platform` is registered later as an
-    // engine-owned snapshot gateway by `snapshot_service.rs`; advertising a backend
+    // engine-runtime snapshot gateway by `snapshot_service.rs`; advertising a backend
     // route here makes the gateway registry try to bind `platform.api` every frame.
     let required = vec![
         CapabilityDesc::new(

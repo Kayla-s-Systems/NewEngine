@@ -1,6 +1,6 @@
 #![forbid(unsafe_op_in_unsafe_fn)]
 
-//! Engine-owned `engine.entity` gateway runtime service.
+//! Runtime-hosted `engine.entity` gateway runtime service.
 //!
 //! Entity lifecycle calls are exposed through stable DTOs from
 //! `newengine-entity-api` and operate against the shared runtime scene bridge.
@@ -16,8 +16,8 @@ use newengine_entity_api::{
 };
 use newengine_plugin_api::Blob;
 use newengine_service_kit::{
-    engine_owned_service_description, ok_empty_blob, ok_json, payload_json,
-    register_engine_owned_gateway_service, EngineOwnedGatewayDecl, JsonServiceRouter,
+    engine_gateway_provider_service_description, ok_empty_blob, ok_json, payload_json,
+    register_engine_gateway_provider_service, EngineGatewayProviderDecl, JsonServiceRouter,
 };
 
 pub const ENTITY_GATEWAY_OWNER: &str = "newengine-entity-runtime.entity-gateway";
@@ -179,7 +179,7 @@ pub fn entity_gateway_service(
 ) -> newengine_plugin_api::ServiceV1Dyn<'static> {
     let service = EngineEntityGatewayService::new(scene);
     let info = EntityServiceInfo::default();
-    let description = engine_owned_service_description(
+    let description = engine_gateway_provider_service_description(
         ENGINE_ENTITY_SERVICE_ID,
         ENTITY_GATEWAY_OWNER,
         ENTITY_BACKEND_CAPABILITY_ID,
@@ -213,17 +213,18 @@ pub fn register_entity_gateway_best_effort(scene: Arc<newengine_scene_runtime::S
     }
 
     let service = entity_gateway_service(scene);
-    match register_engine_owned_gateway_service(EngineOwnedGatewayDecl {
+    match register_engine_gateway_provider_service(EngineGatewayProviderDecl {
         gateway: ENGINE_ENTITY_SERVICE_ID,
         service_kind: newengine_service_api::EngineServiceKind::Entity,
         provider_service: ENGINE_ENTITY_SERVICE_ID,
+        provider_route: "engine.entity.foundation",
         capability: ENTITY_BACKEND_CAPABILITY_ID,
         priority: 0,
         owner: ENTITY_GATEWAY_OWNER,
         service,
     }) {
         Ok(()) => log::info!(
-            "engine.entity gateway registered source=engine-owned service='{}' capability='{}' owner='{}'",
+            "engine.entity gateway registered source=engine-runtime service='{}' capability='{}' owner='{}'",
             ENGINE_ENTITY_SERVICE_ID,
             ENTITY_BACKEND_CAPABILITY_ID,
             ENTITY_GATEWAY_OWNER

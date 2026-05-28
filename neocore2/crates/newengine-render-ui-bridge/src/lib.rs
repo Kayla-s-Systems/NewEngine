@@ -1,8 +1,8 @@
 #![forbid(unsafe_op_in_unsafe_fn)]
 
-//! Renderer-neutral bridge from `engine.ui` to render draw-list extraction.
+//! Renderer-neutral packet bridge from `engine.ui` to render draw-list extraction.
 //!
-//! Aurelia owns UI tree/layout/input/text. The renderer bridge owns only the
+//! The active engine.ui provider owns UI tree/layout/input/text. The renderer bridge owns only the
 //! packet boundary: if the runtime frame contains a `UiDrawList`, route it to
 //! `RenderDrawListKind::Ui`. Concrete backends such as Vulkan consume that
 //! draw list through their backend-local UI composite implementation.

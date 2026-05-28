@@ -1,6 +1,6 @@
 #![forbid(unsafe_op_in_unsafe_fn)]
 
-/// Real, engine-owned startup phase used by loading diagnostics and engine.ui projections.
+/// Real, engine-runtime startup phase used by loading diagnostics and engine.ui projections.
 ///
 /// This is deliberately hosted in `newengine-core`: platform/runtime/editor layers
 /// may observe it, but they must not create a second lifecycle truth beside the

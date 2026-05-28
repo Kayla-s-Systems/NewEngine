@@ -179,7 +179,7 @@ pub mod key_identity {
     }
 }
 
-/// Engine-owned default keyboard choices for non-user gameplay tooling actions.
+/// Runtime-hosted default keyboard choices for non-user gameplay tooling actions.
 ///
 /// These are still normal input bindings and are installed by input profiles. They are not platform
 /// shortcuts, and platform backends must not special-case them.

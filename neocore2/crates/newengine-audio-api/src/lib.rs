@@ -39,7 +39,7 @@ pub const AUDIO_RUNTIME_CONTRACT_SPEC: newengine_service_api::RuntimeServiceCont
     );
 
 /// Audio is optional for headless/dev runs unless a strict profile explicitly
-/// requires it. The engine-owned queue provider gives UI/gameplay systems a
+/// requires it. The engine-runtime queue provider gives UI/gameplay systems a
 /// stable semantic event sink before a real mixer plugin exists.
 pub const AUDIO_RUNTIME_REQUIREMENT_SPEC: newengine_service_api::RuntimeServiceRequirementSpec =
     newengine_service_api::RuntimeServiceRequirementSpec::new(
@@ -65,7 +65,7 @@ impl Default for AudioServiceInfo {
             features: vec![
                 "semantic-feedback-events".to_owned(),
                 "ui-feedback".to_owned(),
-                "engine-owned-event-queue".to_owned(),
+                "engine.audio.echo-event-queue".to_owned(),
                 "plugin-override-ready".to_owned(),
             ],
             methods: AUDIO_REQUIRED_METHODS_V1

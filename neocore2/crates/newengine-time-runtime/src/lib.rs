@@ -6,8 +6,8 @@ use std::time::Instant;
 use abi_stable::std_types::{RResult, RString};
 use newengine_plugin_api::Blob;
 use newengine_service_kit::{
-    engine_owned_service_description, ok_empty_blob, ok_json,
-    payload_json, register_engine_owned_gateway_service_best_effort, EngineOwnedGatewayDecl,
+    engine_gateway_provider_service_description, ok_empty_blob, ok_json,
+    payload_json, register_engine_gateway_provider_service_best_effort, EngineGatewayProviderDecl,
     JsonServiceRouter,
 };
 use newengine_time_api::{
@@ -21,13 +21,13 @@ use newengine_time_api::{
 use parking_lot::Mutex;
 use std::sync::{Arc, OnceLock};
 
-const OWNER: &str = "newengine-time-runtime.engine-owned-provider";
+const OWNER: &str = "newengine-time-runtime.engine-runtime-provider";
 const MAX_FIXED_TICKS_PER_FRAME: u32 = 1;
 
-static TIME_GATEWAY: OnceLock<Arc<Mutex<EngineOwnedTimeState>>> = OnceLock::new();
+static TIME_GATEWAY: OnceLock<Arc<Mutex<RuntimeHostedTimeState>>> = OnceLock::new();
 
 #[derive(Debug)]
-struct EngineOwnedTimeState {
+struct RuntimeHostedTimeState {
     start: Instant,
     last: Instant,
     frame_index: u64,
@@ -52,7 +52,7 @@ struct EngineOwnedTimeState {
     scheduled_events: BTreeMap<String, TimeScheduledEventV1>,
 }
 
-impl Default for EngineOwnedTimeState {
+impl Default for RuntimeHostedTimeState {
     fn default() -> Self {
         let now = Instant::now();
         Self {
@@ -82,7 +82,7 @@ impl Default for EngineOwnedTimeState {
     }
 }
 
-impl EngineOwnedTimeState {
+impl RuntimeHostedTimeState {
     fn normalized_day(&self) -> f64 {
         if self.seconds_per_game_day <= f64::EPSILON {
             0.0
@@ -165,7 +165,7 @@ impl EngineOwnedTimeState {
         let normalized_day = self.normalized_day();
         TimeSnapshotV1 {
             schema: TIME_RUNTIME_CONTRACT.to_owned(),
-            provider: "EngineOwnedTimeProvider".to_owned(),
+            provider: "AstrolabeTimeProvider".to_owned(),
             frame_index: self.frame_index,
             real: TimeRealClockV1 {
                 monotonic_ns: self.start.elapsed().as_nanos().min(u128::from(u64::MAX)) as u64,
@@ -306,15 +306,15 @@ impl EngineOwnedTimeState {
     }
 }
 
-fn state() -> Arc<Mutex<EngineOwnedTimeState>> {
-    Arc::clone(TIME_GATEWAY.get_or_init(|| Arc::new(Mutex::new(EngineOwnedTimeState::default()))))
+fn state() -> Arc<Mutex<RuntimeHostedTimeState>> {
+    Arc::clone(TIME_GATEWAY.get_or_init(|| Arc::new(Mutex::new(RuntimeHostedTimeState::default()))))
 }
 
 fn info() -> TimeServiceInfoV1 {
     TimeServiceInfoV1::default()
 }
 
-fn invoke(state: &mut EngineOwnedTimeState, payload: Blob) -> RResult<Blob, RString> {
+fn invoke(state: &mut RuntimeHostedTimeState, payload: Blob) -> RResult<Blob, RString> {
     let value = match payload_json(&payload) {
         Ok(value) => value,
         Err(e) => return RResult::RErr(RString::from(e)),
@@ -332,7 +332,7 @@ fn invoke(state: &mut EngineOwnedTimeState, payload: Blob) -> RResult<Blob, RStr
 }
 
 fn service() -> newengine_plugin_api::ServiceV1Dyn<'static> {
-    let description = engine_owned_service_description(
+    let description = engine_gateway_provider_service_description(
         TIME_SERVICE_ID,
         OWNER,
         TIME_BACKEND_CAPABILITY_ID,
@@ -340,7 +340,7 @@ fn service() -> newengine_plugin_api::ServiceV1Dyn<'static> {
     )
     .protocol(TIME_RUNTIME_CONTRACT)
     .features(["frame-clock", "fixed-timestep", "game-clock", "pause-domain", "timeline", "scheduler-clock", "ai-context-clock", "deterministic-replay-clock"])
-    .gateway("engine-owned engine.time baseline provider")
+    .gateway("engine.time.astrolabe baseline provider")
     .notes("Owns runtime clock state. Domains and AI providers consume TimeSnapshotV1/TimeAiContextV1 instead of calling Instant::now().");
 
     JsonServiceRouter::with_shared_state(TIME_SERVICE_ID, state())
@@ -414,10 +414,11 @@ fn service() -> newengine_plugin_api::ServiceV1Dyn<'static> {
 }
 
 pub fn register_time_gateway_best_effort() -> bool {
-    register_engine_owned_gateway_service_best_effort(EngineOwnedGatewayDecl {
+    register_engine_gateway_provider_service_best_effort(EngineGatewayProviderDecl {
         gateway: ENGINE_TIME_SERVICE_ID,
         service_kind: newengine_service_api::EngineServiceKind::Time,
         provider_service: TIME_SERVICE_ID,
+        provider_route: "engine.time.astrolabe",
         capability: TIME_BACKEND_CAPABILITY_ID,
         priority: 0,
         owner: OWNER,

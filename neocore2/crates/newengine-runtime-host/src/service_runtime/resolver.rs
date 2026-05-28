@@ -41,7 +41,7 @@ pub(crate) fn resolve_backend_provider(
         ));
     }
 
-    if route.origin == "engine-owned" || route.origin == "null-provider" {
+    if route.origin == "engine-runtime" || route.origin == "null-provider" {
         return Ok(BackendSelection {
             provider_plugin_id: route.provider_owner_id.clone(),
             provider_state: route.origin.clone(),

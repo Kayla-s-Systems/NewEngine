@@ -74,7 +74,7 @@ pub mod system_tag {
     /// Route belongs to a concrete provider implementation.
     ///
     /// Important: this tag does not make `engine.<domain>.<name>` a backend API.
-    /// Provider names such as `engine.ui.aurelia` and `engine.render.vulkan` are
+    /// Provider names such as `engine.ui.<provider>` and `engine.render.<provider>` are
     /// implementation identities published as descriptor metadata while the
     /// actual routed API remains the root gateway (`engine.ui`, `engine.render`, ...).
     pub const PROVIDER_IMPLEMENTATION_ROUTE: &str = "provider.implementation_route";

@@ -1,6 +1,6 @@
 #![forbid(unsafe_op_in_unsafe_fn)]
 
-//! Content Browser retained UI projection over engine.assets data.
+//! Asset Browser retained UI projection over engine.assets data.
 //!
 //! This crate is deliberately not a backend domain, gateway or capability. It is
 //! a product/profile UI composition module: it reads reusable backend data from
@@ -9,8 +9,10 @@
 
 use newengine_assets::{AssetService, AssetServiceClient};
 use newengine_core::{EngineResult, Module, ModuleCtx};
+use newengine_core::lifecycle_events::EngineReadinessKey;
 use newengine_input_actions_api::{
-    engine_action, InputActionDispatchMode, InputActionFrame, InputFrameSource,
+    engine_action, InputActionDefinition, InputActionDispatchMode, InputActionEffect,
+    InputActionFrame, InputFrameSource,
 };
 use newengine_input_api::{engine_default_keybind, key_code, key_identity};
 use newengine_input_bindings_api::{
@@ -26,8 +28,19 @@ use serde_json::{json, Value};
 
 pub const ASSETS_CATALOG_UI_OWNER: &str = "newengine.assets_catalog_ui";
 const ASSETS_CATALOG_SURFACE_ID: &str = "ui.assets.catalog";
-const ASSETS_CATALOG_INPUT_LISTENER: &str = "assets-catalog-ui";
-const ASSETS_CATALOG_THEME_ID: &str = "northstar.assets.catalog";
+const ASSETS_CATALOG_INPUT_LISTENER: &str = "asset-browser-ui";
+const ASSETS_CATALOG_THEME_ID: &str = "northstar.assets.browser.noir";
+const ASSET_BROWSER_ICON_FOLDER: &str = "ui/icons/assetBrowser.ytd@folder";
+const ASSET_BROWSER_ICON_TEXTURE: &str = "ui/icons/assetBrowser.ytd@texture";
+const ASSET_BROWSER_ICON_MATERIAL: &str = "ui/icons/assetBrowser.ytd@material";
+const ASSET_BROWSER_ICON_MODEL: &str = "ui/icons/assetBrowser.ytd@model";
+const ASSET_BROWSER_ICON_WORLD: &str = "ui/icons/assetBrowser.ytd@world";
+const ASSET_BROWSER_ICON_UI: &str = "ui/icons/assetBrowser.ytd@ui";
+const ASSET_BROWSER_ICON_PACKAGE: &str = "ui/icons/assetBrowser.ytd@package";
+const ASSET_BROWSER_ICON_SCRIPT: &str = "ui/icons/assetBrowser.ytd@script";
+const ASSET_BROWSER_ICON_SHADER: &str = "ui/icons/assetBrowser.ytd@shader";
+const ASSET_BROWSER_ICON_AUDIO: &str = "ui/icons/assetBrowser.ytd@audio";
+const ASSET_BROWSER_ICON_GENERIC: &str = "ui/icons/assetBrowser.ytd@generic";
 const MAX_VISIBLE_ENTRIES: usize = 64;
 
 #[derive(Clone)]
@@ -55,7 +68,6 @@ pub struct AssetsCatalogUiRuntimeModule {
     last_toggle_frame: u64,
     last_published_open: bool,
     input_registered: bool,
-    last_input_registration_frame: Option<u64>,
     cached_snapshot: Option<AssetsCatalogSnapshot>,
     cached_node: Option<UiSurfaceNode>,
     view_mode: CatalogViewMode,
@@ -80,7 +92,6 @@ impl AssetsCatalogUiRuntimeModule {
             last_toggle_frame: u64::MAX,
             last_published_open: false,
             input_registered: false,
-            last_input_registration_frame: None,
             cached_snapshot: None,
             cached_node: None,
             view_mode: CatalogViewMode::Grid,
@@ -91,7 +102,7 @@ impl AssetsCatalogUiRuntimeModule {
         let payload = match serde_json::to_vec(&node) {
             Ok(payload) => payload,
             Err(error) => {
-                log::warn!("assets catalog UI: surface serialization failed: {error}");
+                log::warn!("asset browser UI: surface serialization failed: {error}");
                 return;
             }
         };
@@ -103,12 +114,12 @@ impl AssetsCatalogUiRuntimeModule {
             Ok(Some(_)) => {}
             Ok(None) => {
                 log::warn!(
-                    "assets catalog UI: engine.ui is unavailable; surface='{}' skipped instead of using a native/special renderer",
+                    "asset browser UI: engine.ui is unavailable; surface='{}' skipped instead of using a native/special renderer",
                     node.surface_id,
                 );
             }
             Err(error) => {
-                log::warn!("assets catalog UI: engine.ui surface publish failed: {error}");
+                log::warn!("asset browser UI: engine.ui surface publish failed: {error}");
             }
         }
     }
@@ -138,24 +149,29 @@ impl AssetsCatalogUiRuntimeModule {
         self.last_refresh_frame = frame_index;
     }
 
-    fn handle_navigation_input(&mut self, input: &UiInputFrame, frame_index: u64) {
+    fn handle_navigation_input(&mut self, actions: &InputActionFrame, frame_index: u64) {
         let entry_count = self.cached_snapshot.as_ref().map(|snapshot| snapshot.entries.len()).unwrap_or(0);
         let mut changed = false;
 
-        if key_pressed(input, key_code::ESCAPE) {
-            self.view_mode = CatalogViewMode::Grid;
+        if actions.ui_nav[0] < 0 || action_frame_contains(actions, engine_action::UI_NAVIGATION_LEFT) {
+            self.view_mode = self.view_mode.previous();
             changed = true;
         }
 
-        if key_pressed(input, key_code::ARROW_UP) {
+        if actions.ui_nav[0] > 0 || action_frame_contains(actions, engine_action::UI_NAVIGATION_RIGHT) {
+            self.view_mode = self.view_mode.next();
+            changed = true;
+        }
+
+        if actions.ui_nav[1] < 0 || action_frame_contains(actions, engine_action::UI_NAVIGATION_UP) {
             self.selected_index = self.selected_index.saturating_sub(1);
             changed = true;
         }
-        if key_pressed(input, key_code::ARROW_DOWN) && entry_count > 0 {
+        if (actions.ui_nav[1] > 0 || action_frame_contains(actions, engine_action::UI_NAVIGATION_DOWN)) && entry_count > 0 {
             self.selected_index = (self.selected_index + 1).min(entry_count.saturating_sub(1));
             changed = true;
         }
-        if key_pressed(input, key_code::BACKSPACE) {
+        if actions.ui_back || action_frame_contains(actions, engine_action::UI_NAVIGATION_BACK) {
             let parent = parent_path(&self.current_path);
             if parent != self.current_path {
                 self.current_path = parent;
@@ -163,10 +179,13 @@ impl AssetsCatalogUiRuntimeModule {
                 self.view_mode = CatalogViewMode::Grid;
                 self.cached_snapshot = None;
                 changed = true;
-                log::info!("assets catalog UI: navigate parent path='{}'", display_path(&self.current_path));
+                log::info!("asset browser UI: navigate parent path='{}'", display_path(&self.current_path));
+            } else {
+                self.view_mode = CatalogViewMode::Grid;
+                changed = true;
             }
         }
-        if key_pressed(input, key_code::ENTER) {
+        if actions.ui_accept || action_frame_contains(actions, engine_action::UI_NAVIGATION_ACCEPT) {
             if let Some(entry) = self
                 .cached_snapshot
                 .as_ref()
@@ -178,12 +197,12 @@ impl AssetsCatalogUiRuntimeModule {
                     self.selected_index = 0;
                     self.cached_snapshot = None;
                     changed = true;
-                    log::info!("assets catalog UI: open directory path='{}'", display_path(&self.current_path));
+                    log::info!("asset browser UI: open directory path='{}'", display_path(&self.current_path));
                 } else {
                     self.view_mode = CatalogViewMode::Inspector;
                     changed = true;
                     log::info!(
-                        "assets catalog UI: selected asset path='{}' kind='{}' gateway='{}'",
+                        "asset browser UI: selected asset path='{}' kind='{}' gateway='{}'",
                         entry.logical_path,
                         entry.asset_kind,
                         entry.semantic_gateway
@@ -213,18 +232,23 @@ impl<E: Send + 'static> Module<E> for AssetsCatalogUiRuntimeModule {
         "newengine.assets_catalog_ui.node"
     }
 
+    fn startup_requires(&self) -> &'static [EngineReadinessKey] {
+        const REQUIRES: &[EngineReadinessKey] = &[EngineReadinessKey::EnginePluginsReady];
+        REQUIRES
+    }
+
+    fn start(&mut self, _ctx: &mut ModuleCtx<'_, E>) -> EngineResult<()> {
+        self.input_registered = ensure_assets_catalog_input_registration();
+        if !self.input_registered {
+            log::warn!(
+                "asset browser UI: semantic input listener registration incomplete; will continue through engine.input snapshot but F1 may be unavailable"
+            );
+        }
+        Ok(())
+    }
+
     fn update(&mut self, ctx: &mut ModuleCtx<'_, E>) -> EngineResult<()> {
         let frame_index = ctx.frame().map(|frame| frame.frame_index).unwrap_or(0);
-        if !self.input_registered {
-            let should_attempt = self
-                .last_input_registration_frame
-                .map(|last| frame_index.saturating_sub(last) >= 60)
-                .unwrap_or(true);
-            if should_attempt {
-                self.last_input_registration_frame = Some(frame_index);
-                self.input_registered = ensure_assets_catalog_input_registration();
-            }
-        }
 
         let input = ctx.resources().get::<UiInputFrame>().cloned().unwrap_or_default();
         let actions = resolve_actions(&input);
@@ -238,7 +262,7 @@ impl<E: Send + 'static> Module<E> for AssetsCatalogUiRuntimeModule {
                 self.current_path.clear();
                 self.selected_index = 0;
             }
-            log::info!("assets catalog UI: visibility changed open={}", self.open);
+            log::info!("asset browser UI: visibility changed open={}", self.open);
         }
 
         if self.open {
@@ -246,7 +270,7 @@ impl<E: Send + 'static> Module<E> for AssetsCatalogUiRuntimeModule {
             if stale || self.cached_node.is_none() || self.last_toggle_frame == frame_index {
                 self.refresh_cache(frame_index);
             }
-            self.handle_navigation_input(&input, frame_index);
+            self.handle_navigation_input(&actions, frame_index);
             if self.cached_node.is_none() {
                 self.refresh_cache(frame_index);
             }
@@ -255,7 +279,7 @@ impl<E: Send + 'static> Module<E> for AssetsCatalogUiRuntimeModule {
             }
             ctx.resources_mut().insert(UiInputCaptureState::modal(
                 ASSETS_CATALOG_SURFACE_ID,
-                "assets catalog UI modal capture",
+                "asset browser UI modal capture",
             ));
         } else {
             if self.last_published_open || self.last_toggle_frame == frame_index {
@@ -313,55 +337,116 @@ fn action_frame_contains(actions: &InputActionFrame, action: &str) -> bool {
         || actions.events.iter().any(|event| event.action == action)
 }
 
-fn key_pressed(input: &UiInputFrame, key: u32) -> bool {
-    input.keys_pressed.contains(&key)
-}
-
 fn ensure_assets_catalog_input_registration() -> bool {
     let mut ok = true;
     for (code, identity, label) in [
         (engine_default_keybind::ASSET_CATALOG_UI_TOGGLE, key_identity::F1, "F1"),
         (key_code::ARROW_UP, key_identity::ARROW_UP, "Arrow Up"),
         (key_code::ARROW_DOWN, key_identity::ARROW_DOWN, "Arrow Down"),
+        (key_code::ARROW_LEFT, key_identity::ARROW_LEFT, "Arrow Left"),
+        (key_code::ARROW_RIGHT, key_identity::ARROW_RIGHT, "Arrow Right"),
         (key_code::ENTER, key_identity::ENTER, "Enter"),
         (key_code::BACKSPACE, key_identity::BACKSPACE, "Backspace"),
-        (key_code::ESCAPE, key_identity::ESCAPE, "Escape"),
     ] {
         if let Err(error) = newengine_input_bindings_runtime::register_input_key(
             InputKeyRegistration::new(code, identity, label),
         ) {
-            log::warn!("assets catalog UI: key registration failed key='{label}': {error}");
+            log::warn!("asset browser UI: key registration failed key='{label}': {error}");
             ok = false;
         }
     }
-    if let Err(error) = newengine_input_bindings_runtime::register_input_action(
-        newengine_input_actions_api::InputActionDefinition::new(engine_action::ASSET_CATALOG_UI_TOGGLE)
+
+    for action in [
+        InputActionDefinition::new(engine_action::ASSET_CATALOG_UI_TOGGLE)
             .with_dispatch(InputActionDispatchMode::ConsumeFirst)
-            .with_label("Toggle assets catalog UI"),
-    ) {
-        log::warn!("assets catalog UI: action registration failed: {error}");
-        ok = false;
+            .with_label("Toggle Asset Browser"),
+        InputActionDefinition::new(engine_action::UI_NAVIGATION_ACCEPT)
+            .with_dispatch(InputActionDispatchMode::ConsumeFirst)
+            .with_label("Asset Browser accept")
+            .with_effect(InputActionEffect::UiAccept),
+        InputActionDefinition::new(engine_action::UI_NAVIGATION_BACK)
+            .with_dispatch(InputActionDispatchMode::ConsumeFirst)
+            .with_label("Asset Browser back")
+            .with_effect(InputActionEffect::UiBack),
+        InputActionDefinition::new(engine_action::UI_NAVIGATION_UP)
+            .with_dispatch(InputActionDispatchMode::ConsumeFirst)
+            .with_label("Asset Browser up")
+            .with_effect(InputActionEffect::UiNav { x: 0, y: -1 }),
+        InputActionDefinition::new(engine_action::UI_NAVIGATION_DOWN)
+            .with_dispatch(InputActionDispatchMode::ConsumeFirst)
+            .with_label("Asset Browser down")
+            .with_effect(InputActionEffect::UiNav { x: 0, y: 1 }),
+        InputActionDefinition::new(engine_action::UI_NAVIGATION_LEFT)
+            .with_dispatch(InputActionDispatchMode::ConsumeFirst)
+            .with_label("Asset Browser previous view")
+            .with_effect(InputActionEffect::UiNav { x: -1, y: 0 }),
+        InputActionDefinition::new(engine_action::UI_NAVIGATION_RIGHT)
+            .with_dispatch(InputActionDispatchMode::ConsumeFirst)
+            .with_label("Asset Browser next view")
+            .with_effect(InputActionEffect::UiNav { x: 1, y: 0 }),
+    ] {
+        if let Err(error) = newengine_input_bindings_runtime::register_input_action(action) {
+            log::warn!("asset browser UI: action registration failed: {error}");
+            ok = false;
+        }
     }
-    if let Err(error) = newengine_input_bindings_runtime::register_input_binding(
+
+    for registration in [
         InputBindingRegistration::new(InputBinding::keyboard_pressed(
             engine_action::ASSET_CATALOG_UI_TOGGLE,
             engine_default_keybind::ASSET_CATALOG_UI_TOGGLE,
         )),
-    ) {
-        log::warn!("assets catalog UI: binding registration failed: {error}");
-        ok = false;
+        InputBindingRegistration::new(InputBinding::keyboard_pressed(engine_action::UI_NAVIGATION_ACCEPT, key_code::ENTER)),
+        InputBindingRegistration::new(InputBinding::keyboard_pressed(engine_action::UI_NAVIGATION_BACK, key_code::BACKSPACE)),
+        InputBindingRegistration::new(InputBinding::keyboard_pressed(engine_action::UI_NAVIGATION_UP, key_code::ARROW_UP)),
+        InputBindingRegistration::new(InputBinding::keyboard_pressed(engine_action::UI_NAVIGATION_DOWN, key_code::ARROW_DOWN)),
+        InputBindingRegistration::new(InputBinding::keyboard_pressed(engine_action::UI_NAVIGATION_LEFT, key_code::ARROW_LEFT)),
+        InputBindingRegistration::new(InputBinding::keyboard_pressed(engine_action::UI_NAVIGATION_RIGHT, key_code::ARROW_RIGHT)),
+    ] {
+        if let Err(error) = newengine_input_bindings_runtime::register_input_binding(registration) {
+            log::warn!("asset browser UI: binding registration failed: {error}");
+            ok = false;
+        }
     }
+
     if let Err(error) = newengine_input_bindings_runtime::register_input_listener(
         newengine_input_actions_api::InputActionListenerRegistration::new(
             ASSETS_CATALOG_UI_OWNER,
             ASSETS_CATALOG_INPUT_LISTENER,
         )
         .with_actions([engine_action::ASSET_CATALOG_UI_TOGGLE])
-        .with_priority(90)
+        .with_priority(110)
         .consuming(),
     ) {
-        log::warn!("assets catalog UI: listener registration failed: {error}");
+        log::warn!("asset browser UI: toggle listener registration failed: {error}");
         ok = false;
+    }
+
+    if let Err(error) = newengine_input_bindings_runtime::register_input_listener(
+        newengine_input_actions_api::InputActionListenerRegistration::new(
+            ASSETS_CATALOG_UI_OWNER,
+            "assets-browser-navigation",
+        )
+        .with_actions([
+            engine_action::UI_NAVIGATION_ACCEPT,
+            engine_action::UI_NAVIGATION_BACK,
+            engine_action::UI_NAVIGATION_UP,
+            engine_action::UI_NAVIGATION_DOWN,
+            engine_action::UI_NAVIGATION_LEFT,
+            engine_action::UI_NAVIGATION_RIGHT,
+        ])
+        .with_priority(110),
+    ) {
+        log::warn!("asset browser UI: navigation listener registration failed: {error}");
+        ok = false;
+    }
+
+    if ok {
+        log::info!(
+            "asset browser UI: input listeners registered owner='{}' toggle_listener='{}' nav_listener='assets-browser-navigation'",
+            ASSETS_CATALOG_UI_OWNER,
+            ASSETS_CATALOG_INPUT_LISTENER,
+        );
     }
     ok
 }
@@ -381,6 +466,24 @@ impl CatalogViewMode {
             Self::List => "list",
             Self::Grid => "grid",
             Self::Inspector => "inspector",
+        }
+    }
+
+    fn previous(self) -> Self {
+        match self {
+            Self::Tree => Self::Inspector,
+            Self::List => Self::Tree,
+            Self::Grid => Self::List,
+            Self::Inspector => Self::Grid,
+        }
+    }
+
+    fn next(self) -> Self {
+        match self {
+            Self::Tree => Self::List,
+            Self::List => Self::Grid,
+            Self::Grid => Self::Inspector,
+            Self::Inspector => Self::Tree,
         }
     }
 }
@@ -436,6 +539,7 @@ fn snapshot(state: &mut AssetsCatalogRuntimeState, logical_path: &str) -> Result
     });
 
     apply_import_lifecycle_rows(state, &logical_path, &mut entries, &mut warnings);
+    hydrate_preview_plans_for_entries(state, &mut entries, &mut warnings);
 
     let sources = match state.client.sources_json_v1() {
         Ok(value) => source_labels(&value),
@@ -520,57 +624,53 @@ fn assets_catalog_node(frame_index: u64, snapshot: &AssetsCatalogSnapshot, selec
         snapshot.formats.len(),
     ));
     body_lines.push(format!("Path: {}", display_path(&snapshot.logical_path)));
-    body_lines.push("Content Browser is an engine.ui application node over engine.assets data.".to_owned());
+    body_lines.push("Asset Browser is a retained engine.ui workspace over engine.assets data.".to_owned());
     body_lines.push(snapshot.import_summary.clone());
 
     let mut components = Vec::new();
     components.push(
-        UiComponentNode::row("content_browser.tab.browser", "Content Browser")
-            .with_icon("◈")
+        UiComponentNode::row("asset_browser.tab.browser", "Asset Browser")
+            .with_icon(ASSET_BROWSER_ICON_FOLDER)
             .with_detail("Assets")
             .with_tone(if view_mode == CatalogViewMode::Grid { UiNodeTone::Accent } else { UiNodeTone::Normal })
             .tagged("tab")
             .tagged(if view_mode == CatalogViewMode::Grid { "active" } else { "inactive" }),
     );
     components.push(
-        UiComponentNode::row("content_browser.tab.inspector", "Inspector")
-            .with_icon("◇")
+        UiComponentNode::row("asset_browser.tab.inspector", "Inspector")
+            .with_icon(ASSET_BROWSER_ICON_GENERIC)
             .with_detail("Schema DTO · settings · providers")
             .with_tone(if view_mode == CatalogViewMode::Inspector { UiNodeTone::Accent } else { UiNodeTone::Normal })
             .tagged("tab")
             .tagged(if view_mode == CatalogViewMode::Inspector { "active" } else { "inactive" }),
     );
     components.push(
-        UiComponentNode::row("content_browser.toolbar", "+ Add    Import    Reimport    Save All    Refresh")
-            .with_icon("TB")
+        UiComponentNode::row("asset_browser.toolbar", "+ Add    Import    Reimport    Save All    Refresh")
             .with_detail(format!("Tree/List/Grid selection · active view={} · actions dispatch through engine.ui", view_mode.as_str()))
             .with_tone(UiNodeTone::Normal)
             .tagged("toolbar"),
     );
     components.push(
-        UiComponentNode::row("content_browser.breadcrumb", format!("Content  ›  {}", display_path(&snapshot.logical_path)))
-            .with_icon("PATH")
+        UiComponentNode::row("asset_browser.breadcrumb", format!("Content  /  {}", display_path(&snapshot.logical_path)))
             .with_detail("engine.assets.vfs_list_json_v1")
             .with_tone(UiNodeTone::Accent)
             .tagged("breadcrumb"),
     );
     components.push(
-        UiComponentNode::row("content_browser.search", format!("Search {}...", browser_folder_label(&snapshot.logical_path)))
-            .with_icon("⌕")
+        UiComponentNode::row("asset_browser.search", format!("Search {}...", browser_folder_label(&snapshot.logical_path)))
             .with_detail("Search UI is local to this node; backend remains engine.assets")
             .with_tone(UiNodeTone::Disabled)
             .tagged("search"),
     );
 
     components.push(
-        UiComponentNode::row("content_browser.sidebar.favorites", "Favorites")
-            .with_icon("▸")
+        UiComponentNode::row("asset_browser.sidebar.favorites", "Favorites")
             .with_tone(UiNodeTone::Normal)
             .tagged("sidebar"),
     );
     components.push(
-        UiComponentNode::row("content_browser.sidebar.root", "All Content")
-            .with_icon("▾")
+        UiComponentNode::row("asset_browser.sidebar.root", "All Content")
+            .with_icon(ASSET_BROWSER_ICON_FOLDER)
             .with_detail("root")
             .with_tone(if snapshot.logical_path.is_empty() { UiNodeTone::Accent } else { UiNodeTone::Normal })
             .tagged("sidebar")
@@ -580,8 +680,8 @@ fn assets_catalog_node(frame_index: u64, snapshot: &AssetsCatalogSnapshot, selec
         let depth = entry.logical_path.split('/').count().saturating_sub(1).min(3);
         let label = format!("{}{}", "  ".repeat(depth), entry.name);
         components.push(
-            UiComponentNode::row(format!("content_browser.sidebar.folder.{idx:02}"), label)
-                .with_icon("▸")
+            UiComponentNode::row(format!("asset_browser.sidebar.folder.{idx:02}"), label)
+                .with_icon(ASSET_BROWSER_ICON_FOLDER)
                 .with_detail(display_path(&entry.logical_path))
                 .with_tone(if snapshot.logical_path == entry.logical_path { UiNodeTone::Accent } else { UiNodeTone::Normal })
                 .tagged("sidebar")
@@ -591,8 +691,8 @@ fn assets_catalog_node(frame_index: u64, snapshot: &AssetsCatalogSnapshot, selec
 
     for (idx, entry) in snapshot.entries.iter().filter(|entry| entry.is_directory()).take(10).enumerate() {
         components.push(
-            UiComponentNode::row(format!("content_browser.folder_card.{idx:02}"), entry.name.clone())
-                .with_icon("▰")
+            UiComponentNode::row(format!("asset_browser.folder_card.{idx:02}"), entry.name.clone())
+                .with_icon(ASSET_BROWSER_ICON_FOLDER)
                 .with_value("Folder")
                 .with_detail(entry.logical_path.clone())
                 .with_tone(UiNodeTone::Accent)
@@ -610,7 +710,7 @@ fn assets_catalog_node(frame_index: u64, snapshot: &AssetsCatalogSnapshot, selec
         .take(36)
     {
         let selected = visible_idx == selected_index;
-        let mut card = UiComponentNode::row(format!("content_browser.asset_card.{visible_idx:03}"), entry.name.clone())
+        let mut card = UiComponentNode::row(format!("asset_browser.asset_card.{visible_idx:03}"), entry.name.clone())
             .with_icon(icon_for_extension(&entry.extension))
             .with_value(asset_type_label(entry))
             .with_detail(format!("{} · {}", entry.import_stage, entry.import_action))
@@ -625,7 +725,7 @@ fn assets_catalog_node(frame_index: u64, snapshot: &AssetsCatalogSnapshot, selec
 
     if let Some(entry) = selected_entry {
         components.push(
-            UiComponentNode::row("content_browser.details.title", entry.name.clone())
+            UiComponentNode::row("asset_browser.details.title", entry.name.clone())
                 .with_icon(icon_for_entry(entry))
                 .with_value(asset_type_label(entry))
                 .with_tone(UiNodeTone::Accent)
@@ -639,7 +739,7 @@ fn assets_catalog_node(frame_index: u64, snapshot: &AssetsCatalogSnapshot, selec
             ("gateway", "Gateway", entry.semantic_gateway.clone()),
             ("uid", "UID", if entry.uid.is_empty() { "pending".to_owned() } else { entry.uid.clone() }),
             ("import", "Import", format!("{} / {}", entry.import_stage, entry.import_action)),
-            ("thumbnail", "Thumbnail", if entry.thumbnail.is_empty() { "preview plan pending".to_owned() } else { entry.thumbnail.clone() }),
+            ("thumbnail", "Preview", if entry.thumbnail.is_empty() { preview_plan_label(entry).to_owned() } else { entry.thumbnail.clone() }),
             ("readonly_dto", "Readonly DTO", "available in details panel".to_owned()),
             ("settings", "Settings", "schema-driven editor placeholder".to_owned()),
             ("providers", "Providers", snapshot.route_diagnostics.clone()),
@@ -647,7 +747,7 @@ fn assets_catalog_node(frame_index: u64, snapshot: &AssetsCatalogSnapshot, selec
             ("ownership", "UI Role", "visualization only".to_owned()),
         ] {
             components.push(
-                UiComponentNode::row(format!("content_browser.details.{id}"), label)
+                UiComponentNode::row(format!("asset_browser.details.{id}"), label)
                     .with_value(value)
                     .with_tone(UiNodeTone::Normal)
                     .tagged("details"),
@@ -656,16 +756,15 @@ fn assets_catalog_node(frame_index: u64, snapshot: &AssetsCatalogSnapshot, selec
     }
 
     components.push(
-        UiComponentNode::row("content_browser.status", format!("Showing {} of {} assets", asset_count.min(36), asset_count))
-            .with_icon("●")
+        UiComponentNode::row("asset_browser.status", format!("Showing {} of {} assets", asset_count.min(36), asset_count))
             .with_detail(format!("{} folders · {} · {} · F1 close · arrows navigate", folder_count, snapshot.import_queue_summary, snapshot.package_writer_summary))
             .with_tone(UiNodeTone::Accent)
             .tagged("status"),
     );
     for (idx, warning) in snapshot.warnings.iter().take(4).enumerate() {
         components.push(
-            UiComponentNode::row(format!("content_browser.warning.{idx}"), warning.clone())
-                .with_icon("WARN")
+            UiComponentNode::row(format!("asset_browser.warning.{idx}"), warning.clone())
+                .with_icon(ASSET_BROWSER_ICON_GENERIC)
                 .with_tone(UiNodeTone::Danger)
                 .tagged("status")
                 .tagged("warning"),
@@ -673,12 +772,12 @@ fn assets_catalog_node(frame_index: u64, snapshot: &AssetsCatalogSnapshot, selec
     }
 
     let mut node = UiSurfaceNode::new(ASSETS_CATALOG_SURFACE_ID, ASSETS_CATALOG_UI_OWNER)
-        .with_title("Content Browser")
-        .with_subtitle("Explorer-style UI composition over engine.assets")
+        .with_title("Asset Browser")
+        .with_subtitle("adult editor workspace over engine.assets")
         .with_body_lines(body_lines)
         .with_footer_lines(vec![
-            "F1 Close · ↑/↓ Select · Enter Open Folder · Esc Grid · Backspace Parent".to_owned(),
-            "This is not a backend domain; it consumes engine.assets and publishes engine.ui nodes".to_owned(),
+            "F1 Close · ↑/↓ Select · ←/→ View · Enter Open/Inspect · Backspace Parent".to_owned(),
+            "Preview plans come from engine.assets; final pixels stay provider-owned".to_owned(),
         ])
         .with_theme(ASSETS_CATALOG_THEME_ID)
         .with_style(assets_catalog_surface_style())
@@ -700,16 +799,16 @@ fn assets_catalog_node(frame_index: u64, snapshot: &AssetsCatalogSnapshot, selec
         "workspace".to_owned(),
         "content-browser".to_owned(),
         "explorer-grid".to_owned(),
-        "assets-catalog".to_owned(),
+        "asset-browser".to_owned(),
         "engine-ui-node".to_owned(),
-        "modern".to_owned(),
+        "noir-editor".to_owned(),
     ];
     node
 }
 
 fn assets_catalog_error_node(frame_index: u64, error: String) -> UiSurfaceNode {
     let mut node = UiSurfaceNode::new(ASSETS_CATALOG_SURFACE_ID, ASSETS_CATALOG_UI_OWNER)
-        .with_title("Content Browser")
+        .with_title("Asset Browser")
         .with_subtitle("engine.assets data unavailable")
         .with_body_lines(vec![
             "The UI projection could not read backend asset data.".to_owned(),
@@ -727,7 +826,7 @@ fn assets_catalog_error_node(frame_index: u64, error: String) -> UiSurfaceNode {
         .with_metric("frame_index", json!(frame_index));
     node.modal = true;
     node.z_order = 970;
-    node.style_tags = vec!["tool".to_owned(), "assets-catalog".to_owned(), "warning".to_owned()];
+    node.style_tags = vec!["tool".to_owned(), "asset-browser".to_owned(), "warning".to_owned()];
     node
 }
 
@@ -768,26 +867,27 @@ fn display_path(path: &str) -> String {
 fn assets_catalog_surface_style() -> UiSurfaceStyle {
     let mut style = UiSurfaceStyle::default();
     style.anchor = UiSurfaceAnchor::TopLeft;
-    style.min_size_px = [1440.0, 860.0];
+    style.min_size_px = [1500.0, 875.0];
     style.max_size_px = [4096.0, 4096.0];
-    style.margin_px = [8.0, 8.0];
-    style.padding_px = [22.0, 108.0, 22.0, 48.0];
+    style.margin_px = [10.0, 10.0];
+    style.padding_px = [22.0, 96.0, 22.0, 44.0];
     style.row_pitch_px = 24.0;
-    style.panel_rgba = [6, 11, 18, 252];
-    style.panel_header_rgba = [11, 18, 30, 252];
-    style.accent_rgba = [82, 154, 255, 255];
-    style.text_rgba = [229, 236, 247, 255];
-    style.text_muted_rgba = [150, 163, 184, 255];
-    style.danger_rgba = [255, 142, 110, 255];
-    style.border_rgba = [71, 87, 112, 140];
-    style.backdrop_rgba = [0, 0, 0, 0];
-    style.shadow_alpha = 0;
-    style.corner_radius_px = 8.0;
+    style.panel_rgba = [5, 5, 6, 252];
+    style.panel_header_rgba = [17, 15, 12, 252];
+    style.accent_rgba = [213, 171, 82, 255];
+    style.text_rgba = [239, 236, 226, 255];
+    style.text_muted_rgba = [151, 143, 128, 255];
+    style.danger_rgba = [235, 108, 82, 255];
+    style.border_rgba = [178, 137, 57, 150];
+    style.backdrop_rgba = [0, 0, 0, 42];
+    style.shadow_alpha = 118;
+    style.corner_radius_px = 10.0;
     style.border_px = 1.0;
-    style.font.title_px = 22.0;
+    style.font.stack = vec!["NorthStarSans".to_owned(), "Inter".to_owned(), "Segoe UI".to_owned(), "NotoSans".to_owned()];
+    style.font.title_px = 24.0;
     style.font.body_px = 14.0;
     style.font.secondary_px = 12.0;
-    style.row_even_alpha = 8;
+    style.row_even_alpha = 10;
     style.row_odd_alpha = 4;
     style.normalized()
 }
@@ -804,13 +904,13 @@ fn asset_type_label(entry: &AssetsCatalogEntry) -> String {
     let kind = entry.asset_kind.trim();
     if kind.is_empty() || kind == "asset" {
         match entry.extension.as_str() {
-            "neui" => "Widget/UI".to_owned(),
-            "nemat" => "Material".to_owned(),
+            "neui" => "UI Dictionary".to_owned(),
+            "nemat" => "Material Library".to_owned(),
             "ytd" => "Texture Dictionary".to_owned(),
-            "ydd" => "Drawable Dictionary".to_owned(),
+            "ydd" | "ydr" | "obj" | "gltf" | "glb" => "Model / Drawable".to_owned(),
             "ytyp" => "Scene Definition".to_owned(),
             "ymap" => "Map".to_owned(),
-            "wav" | "ogg" => "Sound Wave".to_owned(),
+            "wav" | "ogg" => "Audio".to_owned(),
             _ => "Asset".to_owned(),
         }
     } else {
@@ -819,7 +919,22 @@ fn asset_type_label(entry: &AssetsCatalogEntry) -> String {
 }
 
 fn icon_for_entry(entry: &AssetsCatalogEntry) -> &'static str {
-    if entry.is_directory() { "DIR" } else { icon_for_extension(&entry.extension) }
+    if entry.is_directory() { ASSET_BROWSER_ICON_FOLDER } else { icon_for_extension(&entry.extension) }
+}
+
+fn preview_plan_label(entry: &AssetsCatalogEntry) -> &'static str {
+    if entry.is_directory() {
+        "folder preview"
+    } else {
+        match entry.extension.as_str() {
+            "ytd" | "png" | "jpg" | "jpeg" | "dds" => "texture preview planned",
+            "nemat" => "material preview planned",
+            "ydd" | "ydr" | "obj" | "gltf" | "glb" => "model preview planned",
+            "ytyp" | "ymap" => "world metadata preview planned",
+            "neui" => "UI preview planned",
+            _ => "generic asset preview planned",
+        }
+    }
 }
 
 fn source_labels(value: &Value) -> Vec<String> {
@@ -847,6 +962,49 @@ fn format_labels(value: &Value) -> Vec<String> {
         .collect()
 }
 
+
+fn hydrate_preview_plans_for_entries(
+    state: &mut AssetsCatalogRuntimeState,
+    entries: &mut [AssetsCatalogEntry],
+    warnings: &mut Vec<String>,
+) {
+    let mut failures = 0usize;
+    for entry in entries.iter_mut().filter(|entry| !entry.is_directory()).take(MAX_VISIBLE_ENTRIES) {
+        if !entry.thumbnail.trim().is_empty() {
+            continue;
+        }
+        match state.client.thumbnail_json_v1(json!({ "logical_path": entry.logical_path.as_str() })) {
+            Ok(value) => {
+                entry.thumbnail = thumbnail_label_from_value(&value)
+                    .unwrap_or_else(|| preview_plan_label(entry).to_owned());
+            }
+            Err(error) => {
+                failures += 1;
+                if failures <= 2 {
+                    warnings.push(format!("engine.assets.thumbnail_v1 unavailable for '{}': {error}", entry.logical_path));
+                }
+                entry.thumbnail = preview_plan_label(entry).to_owned();
+            }
+        }
+    }
+    if failures > 2 {
+        warnings.push(format!("engine.assets.thumbnail_v1 unavailable for {} additional assets", failures - 2));
+    }
+}
+
+fn thumbnail_label_from_value(value: &Value) -> Option<String> {
+    let thumbnail = value.get("thumbnail")?;
+    let kind = string_field(thumbnail, &["kind", "strategy", "label"])?;
+    let state = string_field(thumbnail, &["state"]).unwrap_or_else(|| "planned".to_owned());
+    let icon = string_field(thumbnail, &["icon_ref", "icon", "asset_icon"]);
+    let cache_key = string_field(thumbnail, &["cache_key"]);
+    Some(match (icon, cache_key) {
+        (Some(icon), Some(cache_key)) => format!("{kind} / {state} / {icon} / {cache_key}"),
+        (Some(icon), None) => format!("{kind} / {state} / {icon}"),
+        (None, Some(cache_key)) => format!("{kind} / {state} / {cache_key}"),
+        (None, None) => format!("{kind} / {state}"),
+    })
+}
 
 fn apply_import_lifecycle_rows(
     state: &mut AssetsCatalogRuntimeState,
@@ -943,18 +1101,17 @@ fn extension_from(name: &str, value: &Value) -> String {
 
 fn icon_for_extension(ext: &str) -> &'static str {
     match ext.trim_start_matches('.').to_ascii_lowercase().as_str() {
-        "neui" => "UI",
-        "ytd" => "TX",
-        "ydd" => "MD",
-        "ytyp" => "SC",
-        "nemat" => "MT",
-        "nepak" => "PK",
-        "nepat" => "AI",
-        "lua" | "ron" | "json" | "toml" => "CFG",
-        "png" | "jpg" | "jpeg" | "dds" => "IMG",
-        "vert" | "frag" | "wgsl" | "glsl" => "SH",
-        "rs" | "py" | "bat" | "cmd" => "SRC",
-        "" => "AS",
-        _ => "AS",
+        "neui" => ASSET_BROWSER_ICON_UI,
+        "ytd" | "png" | "jpg" | "jpeg" | "dds" => ASSET_BROWSER_ICON_TEXTURE,
+        "ydd" | "ydr" | "obj" | "gltf" | "glb" => ASSET_BROWSER_ICON_MODEL,
+        "ytyp" | "ymap" => ASSET_BROWSER_ICON_WORLD,
+        "nemat" => ASSET_BROWSER_ICON_MATERIAL,
+        "nepak" => ASSET_BROWSER_ICON_PACKAGE,
+        "nepat" => ASSET_BROWSER_ICON_GENERIC,
+        "lua" | "ron" | "json" | "toml" | "rs" | "py" | "bat" | "cmd" => ASSET_BROWSER_ICON_SCRIPT,
+        "vert" | "frag" | "wgsl" | "glsl" => ASSET_BROWSER_ICON_SHADER,
+        "wav" | "ogg" => ASSET_BROWSER_ICON_AUDIO,
+        "" => ASSET_BROWSER_ICON_GENERIC,
+        _ => ASSET_BROWSER_ICON_GENERIC,
     }
 }

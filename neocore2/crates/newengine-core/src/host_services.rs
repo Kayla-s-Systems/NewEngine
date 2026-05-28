@@ -45,7 +45,7 @@ pub fn describe_service(service_id: &str) -> Option<String> {
 
 /// Resolves a canonical `engine.*` gateway to the active provider service, if any.
 ///
-/// Reusable runtime code should depend on this engine-owned query instead of
+/// Reusable runtime code should depend on this engine-runtime query instead of
 /// naming concrete providers/backends or calling plugin-host internals directly.
 pub fn resolve_service_for_engine_gateway(gateway_id: &str) -> Option<String> {
     newengine_plugin_host::resolve_service_for_engine_gateway(gateway_id)

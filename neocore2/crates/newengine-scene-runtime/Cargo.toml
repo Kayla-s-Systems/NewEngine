@@ -3,7 +3,7 @@ name = "newengine-scene-runtime"
 version = "0.1.0"
 edition = "2021"
 readme = "README.md"
-description = "Engine-owned scene gateway runtime service for NewEngine"
+description = "Runtime-hosted scene gateway runtime service for NewEngine"
 
 [dependencies]
 newengine-asset-format-nef8 = { path = "../newengine-asset-format-nef8" }

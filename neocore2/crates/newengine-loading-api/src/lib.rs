@@ -7,7 +7,7 @@ pub mod bootstrap_ui;
 /// Engine-facing loading-screen gateway id.
 ///
 /// Runtime/platform code calls this stable facade. The current implementation is
-/// an engine-owned loading data bridge. UI presentation is rendered only by
+/// an engine-runtime loading data bridge. UI presentation is rendered only by
 /// `engine.ui` providers; `engine.ui.loading` is data/status, not a renderer.
 pub const ENGINE_LOADING_SERVICE_ID: &str = "engine.ui.loading";
 
@@ -69,7 +69,7 @@ impl Default for LoadingServiceInfo {
         Self {
             protocol: "newengine.ui.loading-api/v1".to_owned(),
             features: vec![
-                "engine-owned-engine-loading-data".to_owned(),
+                "engine.ui.loading-projection".to_owned(),
                 "shared-snapshot".to_owned(),
                 "independent-visual-clock".to_owned(),
                 "subsystem-stage-projection".to_owned(),

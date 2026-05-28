@@ -22,9 +22,9 @@ use newengine_runtime_host::world_authority::{WorldAuthorityClient, WorldAuthori
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum RuntimeWorldAuthorityMode {
-    /// The selected ECS/entity gateways are both engine-owned or missing; the
+    /// The selected ECS/entity gateways are both engine-runtime or missing; the
     /// in-process world is the baseline authority.
-    EngineOwnedWorld,
+    EngineRuntimeWorld,
     /// `engine.ecs` and `engine.entity` are both plugin-owned by the same
     /// provider. The in-process world is a typed cache/hot-path staging surface.
     PluginEcsEntityAuthority,
@@ -37,7 +37,7 @@ impl RuntimeWorldAuthorityMode {
     #[inline]
     pub const fn as_str(self) -> &'static str {
         match self {
-            Self::EngineOwnedWorld => "engine-owned-world",
+            Self::EngineRuntimeWorld => "engine-runtime-world",
             Self::PluginEcsEntityAuthority => "plugin-ecs-entity-authority",
             Self::SplitAuthority => "split-authority",
         }
@@ -140,7 +140,7 @@ impl RuntimeWorldAuthorityBridge {
         } else if snapshot.ecs_entity_are_plugin_authority() {
             RuntimeWorldAuthorityMode::PluginEcsEntityAuthority
         } else {
-            RuntimeWorldAuthorityMode::EngineOwnedWorld
+            RuntimeWorldAuthorityMode::EngineRuntimeWorld
         }
     }
 
@@ -282,7 +282,7 @@ impl RuntimeWorldAuthorityBridge {
 
     fn log_frame_boundary(&self, frame: &RuntimeWorldAuthorityFrame) {
         match frame.mode {
-            RuntimeWorldAuthorityMode::EngineOwnedWorld => {}
+            RuntimeWorldAuthorityMode::EngineRuntimeWorld => {}
             RuntimeWorldAuthorityMode::PluginEcsEntityAuthority => {
                 if !self.logged_plugin_authority.swap(true, Ordering::Relaxed) {
                     log::info!(
@@ -357,7 +357,7 @@ mod tests {
         let snapshot = WorldAuthoritySnapshot {
             ecs: Some(route("engine.ecs", "newengine.ecs.flecs", "first-party-plugin")),
             entity: Some(route("engine.entity", "newengine.ecs.flecs", "first-party-plugin")),
-            scene: Some(route("engine.scene", "newengine-scene-runtime.scene-gateway", "engine-owned")),
+            scene: Some(route("engine.scene", "newengine-scene-runtime.scene-gateway", "engine-runtime")),
             ..Default::default()
         };
         assert_eq!(

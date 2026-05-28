@@ -3,7 +3,7 @@
 use std::ffi::OsString;
 use std::path::{Path, PathBuf};
 
-/// Declarative specification for an engine-owned filesystem root.
+/// Declarative specification for an engine-runtime filesystem root.
 ///
 /// Roots are intentionally small data records: callers describe semantics once
 /// and reuse the same resolver/publisher/child-path behavior. This keeps

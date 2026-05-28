@@ -79,7 +79,7 @@ impl QueuedJob {
             shared.cancelled.fetch_add(1, Ordering::AcqRel);
             self.control.publish(EngineTaskPhase::Cancelled, "Task cancelled", "Task completed after observing cancellation.", Some(1.0));
         } else {
-            self.control.publish(EngineTaskPhase::Completed, "Task completed", "Task finished on engine-owned worker thread.", Some(1.0));
+            self.control.publish(EngineTaskPhase::Completed, "Task completed", "Task finished on engine-runtime worker thread.", Some(1.0));
         }
         release_lane();
     }

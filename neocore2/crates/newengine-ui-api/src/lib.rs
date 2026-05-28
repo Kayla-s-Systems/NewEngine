@@ -630,7 +630,7 @@ pub struct UiFontStyle {
 impl Default for UiFontStyle {
     fn default() -> Self {
         Self {
-            stack: vec!["AureliaSans".to_owned(), "Inter".to_owned(), "Segoe UI".to_owned(), "NotoSans".to_owned(), "NotoSansSymbols".to_owned()],
+            stack: vec!["NorthStarSans".to_owned(), "Inter".to_owned(), "Segoe UI".to_owned(), "NotoSans".to_owned(), "NotoSansSymbols".to_owned()],
             body_px: 18.0,
             title_px: 30.0,
             secondary_px: 15.0,
@@ -853,7 +853,7 @@ impl Default for UiThemeDefinition {
         fonts.insert("code".to_owned(), UiThemeFontToken {
             id: "code".to_owned(),
             role: UiFontRole::Code,
-            family_stack: vec!["AureliaMono".to_owned(), "CascadiaMono".to_owned(), "NotoSansMono".to_owned()],
+            family_stack: vec!["NorthStarMono".to_owned(), "CascadiaMono".to_owned(), "NotoSansMono".to_owned()],
             size_px: 16.0,
             line_height_px: 22.0,
             weight: 500,

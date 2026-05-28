@@ -284,7 +284,7 @@ fn z_order_for_id(id: &str) -> i32 {
     match id {
         UI_SURFACE_ENGINE_LOADING => 900,
         UI_SURFACE_ENGINE_ERROR_MODAL => 1000,
-        UI_SURFACE_DEBUG_OVERLAY => 850,
+        UI_SURFACE_DEBUG_OVERLAY => -10_000,
         UI_SURFACE_RUNTIME_OVERLAY => 700,
         UI_SURFACE_GAME_HUD => 500,
         _ => 100,

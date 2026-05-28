@@ -4,7 +4,7 @@ Runtime camera manager and blend-runner logic. Produces camera snapshots for dow
 
 ## Architecture notes
 
-This crate is part of the CoreEngine host/plugin architecture. Runtime-facing code should prefer engine gateways and typed adapters over concrete provider implementation crates.
+This crate is part of the North Star Engine host/plugin architecture. Runtime-facing code should prefer engine gateways and typed adapters over concrete provider implementation crates.
 
 
 ## 2026-05-17 completion pass

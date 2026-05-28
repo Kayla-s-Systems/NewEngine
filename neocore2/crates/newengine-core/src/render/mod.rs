@@ -34,7 +34,7 @@ impl RenderBackendStatus {
 }
 
 
-/// Engine-owned launch/loading status for scenes that must warm resources
+/// Runtime-hosted launch/loading status for scenes that must warm resources
 /// before the platform hands visual ownership to the playable world.
 ///
 /// This resource is intentionally hosted in `newengine-core`, not in the game
@@ -82,7 +82,7 @@ pub trait RenderApi: Send {
     fn begin_frame(&mut self, desc: BeginFrameDesc) -> EngineResult<()>;
     fn set_ui_draw_list(&mut self, ui: UiDrawList);
 
-    /// Sets a tiny engine-owned debug overlay string. This is deliberately not
+    /// Sets a tiny engine-runtime debug overlay string. This is deliberately not
     /// game-side UI: applications publish metrics, the renderer owns drawing.
     #[inline]
     fn set_debug_text(&mut self, _text: String) {}

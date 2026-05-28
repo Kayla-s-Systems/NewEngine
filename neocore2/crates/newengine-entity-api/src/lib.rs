@@ -31,7 +31,7 @@ impl EntityId {
 }
 
 /// Engine-facing entity service gateway id. Consumers call this facade; the host
-/// resolves it to the active provider by descriptor metadata / engine-owned facts.
+/// resolves it to the active provider by descriptor metadata / engine-runtime facts.
 pub const ENGINE_ENTITY_SERVICE_ID: &str = "engine.entity";
 
 /// Default/first-party provider service id for future entity backends.

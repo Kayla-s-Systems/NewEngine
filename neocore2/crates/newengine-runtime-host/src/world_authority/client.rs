@@ -44,13 +44,13 @@ impl WorldAuthorityGatewayRoute {
     }
 
     #[inline]
-    pub fn is_engine_owned(&self) -> bool {
-        self.origin == "engine-owned"
+    pub fn is_engine_runtime(&self) -> bool {
+        self.origin == "engine-runtime"
     }
 
     #[inline]
-    pub fn is_plugin_owned(&self) -> bool {
-        !self.is_engine_owned()
+    pub fn is_external_provider(&self) -> bool {
+        !self.is_engine_runtime()
     }
 }
 
@@ -81,7 +81,7 @@ impl WorldAuthoritySnapshot {
     pub fn ecs_entity_are_plugin_authority(&self) -> bool {
         match (&self.ecs, &self.entity) {
             (Some(ecs), Some(entity)) => {
-                ecs.is_plugin_owned() && entity.is_plugin_owned() && ecs.provider_owner_id == entity.provider_owner_id
+                ecs.is_external_provider() && entity.is_external_provider() && ecs.provider_owner_id == entity.provider_owner_id
             }
             _ => false,
         }
@@ -266,7 +266,7 @@ mod tests {
         let snap = WorldAuthoritySnapshot {
             ecs: Some(route("engine.ecs", "newengine.ecs.flecs", "first-party-plugin")),
             entity: Some(route("engine.entity", "newengine.ecs.flecs", "first-party-plugin")),
-            scene: Some(route("engine.scene", "newengine-scene-runtime.scene-gateway", "engine-owned")),
+            scene: Some(route("engine.scene", "newengine-scene-runtime.scene-gateway", "engine-runtime")),
             ..Default::default()
         };
         assert!(snap.has_split_world_authority());

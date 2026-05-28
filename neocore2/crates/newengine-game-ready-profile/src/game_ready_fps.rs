@@ -99,8 +99,8 @@ impl RuntimeHostAppProfile for GameReadyFpsApp {
     }
 
     #[inline]
-    fn register_engine_owned_gateways_best_effort(&self) {
-        self.profile.register_engine_owned_gateways_best_effort();
+    fn register_engine_provider_routes_best_effort(&self) {
+        self.profile.register_engine_provider_routes_best_effort();
     }
 
     #[inline]

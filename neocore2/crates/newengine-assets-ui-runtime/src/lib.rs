@@ -1,6 +1,6 @@
 #![forbid(unsafe_op_in_unsafe_fn)]
 
-//! Engine-owned `engine.assets.ui` semantic service.
+//! Runtime-hosted `engine.assets.ui` semantic service.
 //!
 //! `.neui` is a NEF8/ListFile UI dictionary. This crate owns the UI-domain
 //! meaning of that dictionary: XMLcentral validation, surface/document selection,
@@ -19,8 +19,8 @@ use newengine_assets_api::{
 use newengine_plugin_api::Blob;
 use newengine_service_api::EngineServiceKind;
 use newengine_service_kit::{
-    engine_owned_service_description, ok_empty_blob, ok_json, payload_json,
-    register_engine_owned_gateway_service_best_effort, EngineOwnedGatewayDecl, JsonServiceRouter,
+    engine_gateway_provider_service_description, ok_empty_blob, ok_json, payload_json,
+    register_engine_gateway_provider_service_best_effort, EngineGatewayProviderDecl, JsonServiceRouter,
 };
 use newengine_ui_api::{
     UiActionEdge, UiBindingEdge, UiBindingMode, UiBindingPlan, UiCompiledDocument, UiDocumentSource,
@@ -34,7 +34,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, HashMap};
 use std::io::Read;
 
-pub const ASSETS_UI_GATEWAY_OWNER: &str = "newengine-assets-ui-runtime.engine-owned-provider";
+pub const ASSETS_UI_GATEWAY_OWNER: &str = "newengine-assets-ui-runtime.engine-runtime-provider";
 
 #[derive(Clone)]
 pub struct AssetsUiRuntimeState {
@@ -184,7 +184,7 @@ pub fn assets_ui_service_info() -> AssetsUiServiceInfo {
     AssetsUiServiceInfo {
         id: ASSETS_UI_SERVICE_ID,
         gateway: ENGINE_ASSETS_UI_SERVICE_ID,
-        provider: "EngineOwnedAssetsUiRuntimeProvider",
+        provider: "StarVaultAssetsUiRuntimeProvider",
         contract: ASSETS_UI_RUNTIME_CONTRACT,
         byte_owner: ENGINE_ASSET_SERVICE_ID,
         semantic_owner: ENGINE_ASSETS_UI_SERVICE_ID,
@@ -264,7 +264,7 @@ fn invoke_json(state: &mut AssetsUiRuntimeState, payload: Blob) -> RResult<Blob,
 }
 
 pub fn assets_ui_gateway_service(client: AssetServiceClient) -> newengine_plugin_api::ServiceV1Dyn<'static> {
-    let description = engine_owned_service_description(
+    let description = engine_gateway_provider_service_description(
         ASSETS_UI_SERVICE_ID,
         ASSETS_UI_GATEWAY_OWNER,
         ASSETS_UI_BACKEND_CAPABILITY_ID,
@@ -335,10 +335,11 @@ pub fn assets_ui_gateway_service(client: AssetServiceClient) -> newengine_plugin
 }
 
 pub fn register_assets_ui_gateway_best_effort(client: AssetServiceClient) -> bool {
-    register_engine_owned_gateway_service_best_effort(EngineOwnedGatewayDecl {
+    register_engine_gateway_provider_service_best_effort(EngineGatewayProviderDecl {
         gateway: ENGINE_ASSETS_UI_SERVICE_ID,
         service_kind: EngineServiceKind::AssetUi,
         provider_service: ASSETS_UI_SERVICE_ID,
+        provider_route: "engine.assets.starvault.ui",
         capability: ASSETS_UI_BACKEND_CAPABILITY_ID,
         priority: 0,
         owner: ASSETS_UI_GATEWAY_OWNER,

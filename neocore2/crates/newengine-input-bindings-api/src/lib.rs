@@ -324,7 +324,12 @@ impl InputBindingsProfile {
         }
         self.actions = actions;
 
-        let mut bindings: Vec<_> = self.bindings.into_iter().filter_map(InputBinding::normalized).collect();
+        let mut bindings = Vec::new();
+        for binding in self.bindings.into_iter().filter_map(InputBinding::normalized) {
+            if !bindings.iter().any(|existing| bindings_equivalent(existing, &binding)) {
+                bindings.push(binding);
+            }
+        }
         for binding in defaults.bindings.clone().into_iter().filter_map(InputBinding::normalized) {
             if !bindings.iter().any(|existing| bindings_equivalent(existing, &binding)) {
                 bindings.push(binding);
@@ -369,6 +374,8 @@ impl InputBindingsProfile {
         }
         if registration.replace_existing_for_action_device {
             self.bindings.retain(|existing| !(existing.action == binding.action && existing.device == binding.device));
+        } else if self.bindings.iter().any(|existing| bindings_equivalent(existing, &binding)) {
+            return Ok(());
         }
         self.bindings.push(binding);
         Ok(())

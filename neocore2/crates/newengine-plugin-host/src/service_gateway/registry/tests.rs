@@ -21,8 +21,8 @@ fn descriptor(
                 1,
             )
             .with_json(format!(
-                r#"{{"service_kind":"{}","engine_gateway":"{}","contract":"{}","backend_priority":{}}}"#,
-                service_kind, gateway_id, provider_service_id, backend_priority
+                r#"{{"service_kind":"{}","engine_gateway":"{}","provider_route":"{}.provider","contract":"{}","backend_priority":{}}}"#,
+                service_kind, gateway_id, gateway_id, provider_service_id, backend_priority
             )),
         )
         .build()
@@ -36,7 +36,7 @@ fn service(service_id: &str, owner: Option<&str>) -> RegisteredServiceFact {
 }
 
 #[test]
-fn plugin_origin_tier_overrides_engine_owned_even_with_lower_backend_priority() {
+fn plugin_origin_tier_overrides_engine_runtime_even_with_lower_backend_priority() {
     let descriptors = vec![PluginDescriptorFact::new(
         "mod.camera".to_owned(),
         descriptor(
@@ -53,16 +53,17 @@ fn plugin_origin_tier_overrides_engine_owned_even_with_lower_backend_priority() 
         service("mod.camera.api", Some("mod.camera")),
         service("engine.camera", None),
     ];
-    let engine_owned = vec![EngineOwnedGatewayFact::new(
+    let engine_runtime = vec![GatewayProviderRouteFact::new(
         "engine.camera".to_owned(),
         EngineServiceKind::Camera,
         "engine.camera".to_owned(),
+        "engine.camera.stargazer".to_owned(),
         "newengine-engine-runtime.camera-gateway".to_owned(),
         "camera.backend".to_owned(),
         5_000,
     )];
 
-    let registry = ActiveGatewayRegistry::from_facts(&descriptors, &services, &engine_owned);
+    let registry = ActiveGatewayRegistry::from_facts(&descriptors, &services, &engine_runtime);
     let route = registry.resolve_route("engine.camera").expect("engine.camera route");
 
     assert_eq!(route.provider_service_id, "mod.camera.api");
@@ -82,7 +83,7 @@ fn one_plugin_can_override_multiple_authority_gateways() {
                 CapabilityKind::Other,
                 1,
             )
-            .with_json(r#"{"service_kind":"ecs","engine_gateway":"engine.ecs","contract":"ecs.api","backend_priority":500}"#),
+            .with_json(r#"{"service_kind":"ecs","engine_gateway":"engine.ecs","provider_route":"engine.ecs.constellation","contract":"ecs.api","backend_priority":500}"#),
         )
         .push(
             CapabilityDesc::new(
@@ -91,7 +92,7 @@ fn one_plugin_can_override_multiple_authority_gateways() {
                 CapabilityKind::Other,
                 1,
             )
-            .with_json(r#"{"service_kind":"entity","engine_gateway":"engine.entity","contract":"entity.api","backend_priority":500}"#),
+            .with_json(r#"{"service_kind":"entity","engine_gateway":"engine.entity","provider_route":"engine.entity.constellation","contract":"entity.api","backend_priority":500}"#),
         )
         .build();
     let descriptors = vec![PluginDescriptorFact::new(
@@ -105,26 +106,28 @@ fn one_plugin_can_override_multiple_authority_gateways() {
         service("engine.ecs", None),
         service("engine.entity", None),
     ];
-    let engine_owned = vec![
-        EngineOwnedGatewayFact::new(
+    let engine_runtime = vec![
+        GatewayProviderRouteFact::new(
             "engine.ecs".to_owned(),
             EngineServiceKind::Ecs,
             "engine.ecs".to_owned(),
+            "engine.ecs.foundation".to_owned(),
             "newengine-ecs-runtime.ecs-gateway".to_owned(),
             "ecs.backend".to_owned(),
             0,
         ),
-        EngineOwnedGatewayFact::new(
+        GatewayProviderRouteFact::new(
             "engine.entity".to_owned(),
             EngineServiceKind::Entity,
             "engine.entity".to_owned(),
+            "engine.entity.foundation".to_owned(),
             "newengine-entity-runtime.entity-gateway".to_owned(),
             "entity.backend".to_owned(),
             0,
         ),
     ];
 
-    let registry = ActiveGatewayRegistry::from_facts(&descriptors, &services, &engine_owned);
+    let registry = ActiveGatewayRegistry::from_facts(&descriptors, &services, &engine_runtime);
     let ecs_route = registry.resolve_route("engine.ecs").expect("engine.ecs route");
     let entity_route = registry.resolve_route("engine.entity").expect("engine.entity route");
 
@@ -139,19 +142,20 @@ fn one_plugin_can_override_multiple_authority_gateways() {
 }
 
 #[test]
-fn dynamic_engine_owned_gateway_does_not_require_central_service_kind_enum() {
+fn dynamic_engine_runtime_gateway_does_not_require_central_service_kind_enum() {
     let services = vec![service("render.draw_lists.api", None)];
-    let engine_owned = vec![EngineOwnedGatewayFact::new_dynamic(
+    let engine_runtime = vec![GatewayProviderRouteFact::new_dynamic(
         "engine.render.draw_lists".to_owned(),
         "render.draw_lists".to_owned(),
         "render.draw_lists.api".to_owned(),
+        "engine.render.foundation.draw_lists".to_owned(),
         "newengine-render-runtime.draw-lists".to_owned(),
         "render.draw_list_provider".to_owned(),
         0,
         [system_tag::ENGINE_DOMAIN, system_tag::PROVIDER_BACKEND],
     )];
 
-    let registry = ActiveGatewayRegistry::from_facts(&[], &services, &engine_owned);
+    let registry = ActiveGatewayRegistry::from_facts(&[], &services, &engine_runtime);
     let route = registry.resolve_route("engine.render.draw_lists").expect("dynamic draw-list route");
 
     assert_eq!(route.service_kind, "render.draw_lists");
@@ -159,22 +163,23 @@ fn dynamic_engine_owned_gateway_does_not_require_central_service_kind_enum() {
 }
 
 #[test]
-fn engine_owned_is_used_when_no_plugin_provider_exists() {
+fn engine_runtime_is_used_when_no_plugin_provider_exists() {
     let services = vec![service("engine.camera", None)];
-    let engine_owned = vec![EngineOwnedGatewayFact::new(
+    let engine_runtime = vec![GatewayProviderRouteFact::new(
         "engine.camera".to_owned(),
         EngineServiceKind::Camera,
         "engine.camera".to_owned(),
+        "engine.camera.stargazer".to_owned(),
         "newengine-engine-runtime.camera-gateway".to_owned(),
         "camera.backend".to_owned(),
         0,
     )];
 
-    let registry = ActiveGatewayRegistry::from_facts(&[], &services, &engine_owned);
+    let registry = ActiveGatewayRegistry::from_facts(&[], &services, &engine_runtime);
     let route = registry.resolve_route("engine.camera").expect("engine.camera route");
 
     assert_eq!(route.provider_service_id, "engine.camera");
-    assert_eq!(route.origin, GatewayProviderOrigin::EngineOwned);
+    assert_eq!(route.origin, GatewayProviderOrigin::EngineRuntime);
     assert_eq!(route.active_score, 10_000);
 }
 
@@ -236,10 +241,11 @@ fn locked_gateway_rejects_plugin_route() {
         service("mod.security.api", Some("mod.security")),
         service("engine.security", None),
     ];
-    let engine_owned = vec![EngineOwnedGatewayFact::new(
+    let engine_runtime = vec![GatewayProviderRouteFact::new(
         "engine.security".to_owned(),
         EngineServiceKind::Security,
         "engine.security".to_owned(),
+        "engine.security.foundation".to_owned(),
         "newengine.security".to_owned(),
         "security.backend".to_owned(),
         0,
@@ -254,13 +260,13 @@ fn locked_gateway_rejects_plugin_route() {
     let registry = ActiveGatewayRegistry::from_facts_with_policy(
         &descriptors,
         &services,
-        &engine_owned,
+        &engine_runtime,
         &policies,
     );
     let route = registry.resolve_route("engine.security").expect("engine.security route");
 
     assert_eq!(route.provider_service_id, "engine.security");
-    assert_eq!(route.origin, GatewayProviderOrigin::EngineOwned);
+    assert_eq!(route.origin, GatewayProviderOrigin::EngineRuntime);
 }
 
 #[test]
@@ -392,8 +398,8 @@ fn mixed_parent_and_child_domain_route_is_ignored() {
 
 #[test]
 fn root_gateway_keeps_provider_implementation_identity_as_metadata() {
-    let descriptor = PluginDescriptor::builder("newengine.ui.aurelia", "Aurelia", "1.0.0", PluginKind::Runtime)
-        .provides_service("aurelia.ui.api", 1, r#"{"methods":["draw_frame_v1"]}"#)
+    let descriptor = PluginDescriptor::builder("provider.ui.primary", "Primary UI Provider", "1.0.0", PluginKind::Runtime)
+        .provides_service("primary.ui.api", 1, r#"{"methods":["draw_frame_v1"]}"#)
         .push(
             CapabilityDesc::new(
                 "ui.backend",
@@ -401,30 +407,30 @@ fn root_gateway_keeps_provider_implementation_identity_as_metadata() {
                 CapabilityKind::Other,
                 1,
             )
-            .with_json(r#"{"service_kind":"ui","engine_gateway":"engine.ui","provider_route":"engine.ui.aurelia","contract":"aurelia.ui.api","backend_priority":250,"system_tags":["provider.implementation_route"]}"#),
+            .with_json(r#"{"service_kind":"ui","engine_gateway":"engine.ui","provider_route":"engine.ui.provider_primary","contract":"primary.ui.api","backend_priority":250,"system_tags":["provider.implementation_route"]}"#),
         )
         .build();
     let descriptors = vec![PluginDescriptorFact::new(
-        "newengine.ui.aurelia".to_owned(),
+        "provider.ui.primary".to_owned(),
         descriptor,
         GatewayProviderOrigin::FirstPartyPlugin,
     )];
-    let services = vec![service("aurelia.ui.api", Some("newengine.ui.aurelia"))];
+    let services = vec![service("primary.ui.api", Some("provider.ui.primary"))];
 
     let registry = ActiveGatewayRegistry::from_facts(&descriptors, &services, &[]);
     let root_route = registry.resolve_route("engine.ui").expect("engine.ui route");
 
     assert_eq!(root_route.gateway_id, "engine.ui");
     assert_eq!(root_route.service_kind, "ui");
-    assert_eq!(root_route.provider_service_id, "aurelia.ui.api");
-    assert!(registry.resolve_route("engine.ui.aurelia").is_none());
+    assert_eq!(root_route.provider_service_id, "primary.ui.api");
+    assert!(registry.resolve_route("engine.ui.provider_primary").is_none());
     assert!(registry.has_gateway_capability("engine.ui", "ui.backend"));
 }
 
 #[test]
 fn provider_implementation_child_route_does_not_become_api_domain() {
-    let descriptor = PluginDescriptor::builder("bad.ui.aurelia", "Bad Aurelia", "1.0.0", PluginKind::Runtime)
-        .provides_service("bad.aurelia.ui.api", 1, r#"{"methods":["draw_frame_v1"]}"#)
+    let descriptor = PluginDescriptor::builder("bad.ui.provider_child", "Bad UI Provider", "1.0.0", PluginKind::Runtime)
+        .provides_service("bad.primary.ui.api", 1, r#"{"methods":["draw_frame_v1"]}"#)
         .push(
             CapabilityDesc::new(
                 "ui.backend",
@@ -432,20 +438,20 @@ fn provider_implementation_child_route_does_not_become_api_domain() {
                 CapabilityKind::Other,
                 1,
             )
-            .with_json(r#"{"service_kind":"ui","engine_gateway":"engine.ui.aurelia","contract":"bad.aurelia.ui.api","backend_priority":250,"system_tags":["provider.implementation_route"]}"#),
+            .with_json(r#"{"service_kind":"ui","engine_gateway":"engine.ui.provider_primary","contract":"bad.primary.ui.api","backend_priority":250,"system_tags":["provider.implementation_route"]}"#),
         )
         .build();
     let descriptors = vec![PluginDescriptorFact::new(
-        "bad.ui.aurelia".to_owned(),
+        "bad.ui.provider_child".to_owned(),
         descriptor,
         GatewayProviderOrigin::FirstPartyPlugin,
     )];
-    let services = vec![service("bad.aurelia.ui.api", Some("bad.ui.aurelia"))];
+    let services = vec![service("bad.primary.ui.api", Some("bad.ui.provider_child"))];
 
     let registry = ActiveGatewayRegistry::from_facts(&descriptors, &services, &[]);
 
     assert!(registry.resolve_route("engine.ui").is_none());
-    assert!(registry.resolve_route("engine.ui.aurelia").is_none());
+    assert!(registry.resolve_route("engine.ui.provider_primary").is_none());
 }
 
 #[test]

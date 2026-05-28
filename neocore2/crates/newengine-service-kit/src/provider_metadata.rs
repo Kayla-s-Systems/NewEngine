@@ -3,7 +3,7 @@
 use serde::Serialize;
 
 #[derive(Debug, Clone, Serialize)]
-pub struct EngineOwnedServiceDescription {
+pub struct EngineGatewayProviderServiceDescription {
     pub id: String,
     pub version: u32,
     pub origin: &'static str,
@@ -20,7 +20,7 @@ pub struct EngineOwnedServiceDescription {
     pub notes: Option<String>,
 }
 
-impl EngineOwnedServiceDescription {
+impl EngineGatewayProviderServiceDescription {
     #[inline]
     pub fn new<I, M>(
         id: impl Into<String>,
@@ -35,7 +35,7 @@ impl EngineOwnedServiceDescription {
         Self {
             id: id.into(),
             version: 1,
-            origin: "engine-owned",
+            origin: "engine-runtime",
             owner: owner.into(),
             capability: capability.into(),
             methods: methods.into_iter().map(Into::into).collect(),
@@ -82,15 +82,15 @@ impl EngineOwnedServiceDescription {
 }
 
 #[inline]
-pub fn engine_owned_service_description<I, M>(
+pub fn engine_gateway_provider_service_description<I, M>(
     id: impl Into<String>,
     owner: impl Into<String>,
     capability: impl Into<String>,
     methods: I,
-) -> EngineOwnedServiceDescription
+) -> EngineGatewayProviderServiceDescription
 where
     I: IntoIterator<Item = M>,
     M: Into<String>,
 {
-    EngineOwnedServiceDescription::new(id, owner, capability, methods)
+    EngineGatewayProviderServiceDescription::new(id, owner, capability, methods)
 }

@@ -107,7 +107,7 @@ def classify(path: pathlib.Path, line: str, lines: list[str], index: int) -> Fin
         return Finding("WARN", "hidden-process", rel, index + 1, stripped)
 
     if any(pattern.search(line) for pattern in QUEUE_PATTERNS):
-        # Queues are allowed for engine-owned event/job buses and local bounded
+        # Queues are allowed for engine-runtime event/job buses and local bounded
         # bootstrap handoff only when annotated. Unannotated runtime queues can
         # become dark work pipelines, so they are warnings now and can be
         # promoted to errors once all local queues are audited.

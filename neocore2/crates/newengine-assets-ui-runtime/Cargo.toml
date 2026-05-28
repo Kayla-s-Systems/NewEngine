@@ -3,7 +3,7 @@ name = "newengine-assets-ui-runtime"
 version = "0.1.0"
 edition = "2021"
 readme = "README.md"
-description = "Engine-owned semantic compiler for .neui XMLcentral UI dictionaries"
+description = "Runtime-hosted semantic compiler for .neui XMLcentral UI dictionaries"
 
 [dependencies]
 newengine-asset-format-nef8 = { path = "../newengine-asset-format-nef8" }
