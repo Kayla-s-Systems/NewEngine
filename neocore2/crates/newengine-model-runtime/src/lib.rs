@@ -8,7 +8,7 @@
 //! provider implementation; definition decoding is not part of model API.
 
 use abi_stable::std_types::{RResult, RString};
-use newengine_assets::{AssetDecodeRequest, AssetService, AssetServiceClient};
+use newengine_assets_api::{AssetDecodeRequest, AssetService, AssetServiceClient};
 use newengine_model_domain_api::{
     attach_content_hash, attach_metadata_namespace, attach_node_warning, attach_vfs_source,
     finalize_graph, fnv1a64, normalize_asset_ref, push_manifest_dependency, split_asset_ref,

@@ -2,6 +2,7 @@ fn ensure_runtime_prefab_parts(
     prims: &mut PrimitiveRegistry,
     prefab: &GameReadyPrefabSpec,
     materials: DemoMaterials,
+    material_specs: &GameReadyMaterialSetSpec,
     palette: &GameReadyPaletteSpec,
 ) -> Result<Vec<RuntimePrefabMeshPart>, String> {
     let logical_asset = canonical_ydd_prefab_ref(prefab)?;
@@ -14,6 +15,7 @@ fn ensure_runtime_prefab_parts(
         let primitive_id = part.primitive_id;
         let name = part.name;
         let material_slot = part.material_slot;
+        let material_ref = part.material_ref;
         let mesh = part.mesh;
         let vertex_count = mesh.vertices.len();
         let index_count = mesh.indices.len();
@@ -23,19 +25,21 @@ fn ensure_runtime_prefab_parts(
             registered_vertices += vertex_count;
             registered_indices += index_count;
             log::debug!(
-                "game-ready: ydd drawable mesh registered source='{}' asset='{}' part='{}' material='{}' vertices={} indices={}",
+                "game-ready: ydd drawable mesh registered source='{}' asset='{}' part='{}' material='{}' material_ref={:?} vertices={} indices={}",
                 prefab.source,
                 logical_asset,
                 name,
                 material_slot,
+                material_ref,
                 vertex_count,
                 index_count
             );
         }
-        let (material_id, color) = material_for_slot(&material_slot, materials, palette);
+        let (material_id, color) = material_for_slot(&material_slot, material_ref.as_deref(), materials, material_specs, palette);
         out.push(RuntimePrefabMeshPart {
             primitive_id,
             material_slot,
+            material_ref,
             material_id,
             color,
         });
@@ -91,6 +95,7 @@ fn spawn_foliage_prefabs(
     root: EntityId,
     terrain: EntityId,
     materials: DemoMaterials,
+    material_specs: &GameReadyMaterialSetSpec,
     palette: &GameReadyPaletteSpec,
     foliage: &GameReadyFoliageSpec,
     prefabs: &[GameReadyPrefabSpec],
@@ -106,7 +111,7 @@ fn spawn_foliage_prefabs(
         return;
     };
 
-    let runtime_parts = match ensure_runtime_prefab_parts(prims, prefab, materials, palette) {
+    let runtime_parts = match ensure_runtime_prefab_parts(prims, prefab, materials, material_specs, palette) {
         Ok(parts) => parts,
         Err(e) => {
             log::error!(

@@ -7,6 +7,7 @@ use crate::{ecs_runtime::EcsServiceClient, entity_runtime::EntityServiceClient};
 pub const WORLD_AUTHORITY_GATEWAY_ECS: &str = newengine_ecs_api::ENGINE_ECS_SERVICE_ID;
 pub const WORLD_AUTHORITY_GATEWAY_ENTITY: &str = newengine_entity_api::ENGINE_ENTITY_SERVICE_ID;
 pub const WORLD_AUTHORITY_GATEWAY_SCENE: &str = newengine_scene_io::ENGINE_SCENE_SERVICE_ID;
+pub const WORLD_AUTHORITY_GATEWAY_WORLD: &str = "engine.world";
 pub const WORLD_AUTHORITY_GATEWAY_PHYSICS: &str = newengine_physics_api::ENGINE_PHYSICS_SERVICE_ID;
 pub const WORLD_AUTHORITY_GATEWAY_RENDER: &str = newengine_render_api::ENGINE_RENDER_SERVICE_ID;
 
@@ -63,6 +64,7 @@ pub struct WorldAuthoritySnapshot {
     pub ecs: Option<WorldAuthorityGatewayRoute>,
     pub entity: Option<WorldAuthorityGatewayRoute>,
     pub scene: Option<WorldAuthorityGatewayRoute>,
+    pub world: Option<WorldAuthorityGatewayRoute>,
     pub physics: Option<WorldAuthorityGatewayRoute>,
     pub render: Option<WorldAuthorityGatewayRoute>,
     pub notes: Vec<String>,
@@ -158,6 +160,7 @@ impl WorldAuthorityClient {
             ecs: active_route(WORLD_AUTHORITY_GATEWAY_ECS),
             entity: active_route(WORLD_AUTHORITY_GATEWAY_ENTITY),
             scene: active_route(WORLD_AUTHORITY_GATEWAY_SCENE),
+            world: active_route(WORLD_AUTHORITY_GATEWAY_WORLD),
             physics: active_route(WORLD_AUTHORITY_GATEWAY_PHYSICS),
             render: active_route(WORLD_AUTHORITY_GATEWAY_RENDER),
             notes: Vec::new(),
@@ -168,6 +171,9 @@ impl WorldAuthorityClient {
         }
         if out.entity.is_none() {
             out.notes.push("engine.entity has no active route".to_owned());
+        }
+        if out.world.is_none() {
+            out.notes.push("engine.world has no active route; runtime world coordination is degraded".to_owned());
         }
         if let (Some(ecs), Some(entity)) = (&out.ecs, &out.entity) {
             if ecs.provider_owner_id != entity.provider_owner_id {

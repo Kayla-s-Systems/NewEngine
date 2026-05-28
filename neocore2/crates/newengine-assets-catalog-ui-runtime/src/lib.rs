@@ -7,7 +7,7 @@
 //! `engine.assets` and publishes a generic `UiSurfaceNode` through `engine.ui`.
 //! Rendering remains owned by the selected `engine.ui` provider.
 
-use newengine_assets::{AssetService, AssetServiceClient};
+use newengine_assets_api::{AssetService, AssetServiceClient};
 use newengine_core::{EngineResult, Module, ModuleCtx};
 use newengine_core::host_events::WindowInitSize;
 use newengine_core::lifecycle_events::EngineReadinessKey;
@@ -20,6 +20,8 @@ use newengine_input_bindings_api::{
     InputBinding, InputBindingRegistration, InputKeyRegistration,
 };
 use newengine_plugin_api::HostApiV1;
+use std::collections::BTreeSet;
+
 use newengine_ui_api::{
     ui_surface_node_layout, UiComponentNode, UiInputCaptureState, UiInputFrame, UiNodeMessage,
     UiNodeMessageSeverity, UiNodeTone, UiSurfaceAnchor, UiSurfaceNode, UiSurfaceStyle,
@@ -27,28 +29,38 @@ use newengine_ui_api::{
 };
 use serde_json::{json, Value};
 
+mod entry_presentation;
+mod path;
+mod pipeline_status;
+mod value_helpers;
+
+use entry_presentation::*;
+use path::*;
+use pipeline_status::*;
+use value_helpers::*;
+
 pub const ASSETS_CATALOG_UI_OWNER: &str = "app.asset_browser";
 const ASSETS_CATALOG_SURFACE_ID: &str = "ui.assets.catalog";
 const ASSETS_CATALOG_INPUT_LISTENER: &str = "asset-browser-ui";
 const ASSETS_CATALOG_THEME_ID: &str = "northstar.assets.browser.editor_dark";
-const ASSET_BROWSER_ICON_FOLDER: &str = "ui/icons/assetBrowser.ytd@folder";
-const ASSET_BROWSER_ICON_TEXTURE: &str = "ui/icons/assetBrowser.ytd@texture";
-const ASSET_BROWSER_ICON_MATERIAL: &str = "ui/icons/assetBrowser.ytd@material";
-const ASSET_BROWSER_ICON_MODEL: &str = "ui/icons/assetBrowser.ytd@model";
-const ASSET_BROWSER_ICON_WORLD: &str = "ui/icons/assetBrowser.ytd@world";
-const ASSET_BROWSER_ICON_UI: &str = "ui/icons/assetBrowser.ytd@ui";
-const ASSET_BROWSER_ICON_PACKAGE: &str = "ui/icons/assetBrowser.ytd@package";
-const ASSET_BROWSER_ICON_SCRIPT: &str = "ui/icons/assetBrowser.ytd@script";
-const ASSET_BROWSER_ICON_SHADER: &str = "ui/icons/assetBrowser.ytd@shader";
-const ASSET_BROWSER_ICON_AUDIO: &str = "ui/icons/assetBrowser.ytd@audio";
-const ASSET_BROWSER_ICON_GENERIC: &str = "ui/icons/assetBrowser.ytd@generic";
-const MAX_VISIBLE_ENTRIES: usize = 64;
+pub(crate) const ASSET_BROWSER_ICON_FOLDER: &str = "ui/icons/assetBrowser.ytd@folder";
+pub(crate) const ASSET_BROWSER_ICON_TEXTURE: &str = "ui/icons/assetBrowser.ytd@texture";
+pub(crate) const ASSET_BROWSER_ICON_MATERIAL: &str = "ui/icons/assetBrowser.ytd@material";
+pub(crate) const ASSET_BROWSER_ICON_MODEL: &str = "ui/icons/assetBrowser.ytd@model";
+pub(crate) const ASSET_BROWSER_ICON_WORLD: &str = "ui/icons/assetBrowser.ytd@world";
+pub(crate) const ASSET_BROWSER_ICON_UI: &str = "ui/icons/assetBrowser.ytd@ui";
+pub(crate) const ASSET_BROWSER_ICON_PACKAGE: &str = "ui/icons/assetBrowser.ytd@package";
+pub(crate) const ASSET_BROWSER_ICON_SCRIPT: &str = "ui/icons/assetBrowser.ytd@script";
+pub(crate) const ASSET_BROWSER_ICON_SHADER: &str = "ui/icons/assetBrowser.ytd@shader";
+pub(crate) const ASSET_BROWSER_ICON_AUDIO: &str = "ui/icons/assetBrowser.ytd@audio";
+pub(crate) const ASSET_BROWSER_ICON_GENERIC: &str = "ui/icons/assetBrowser.ytd@generic";
+pub(crate) const MAX_VISIBLE_ENTRIES: usize = 64;
 const MOUSE_PRIMARY_BUTTON: u32 = 1;
 const DEFAULT_SURFACE_SIZE_PX: [u32; 2] = [1600, 900];
 
 #[derive(Clone)]
 pub struct AssetsCatalogRuntimeState {
-    client: AssetServiceClient,
+    pub(crate) client: AssetServiceClient,
 }
 
 impl AssetsCatalogRuntimeState {
@@ -75,6 +87,10 @@ pub struct AssetsCatalogUiRuntimeModule {
     cached_snapshot: Option<AssetsCatalogSnapshot>,
     cached_node: Option<UiSurfaceNode>,
     view_mode: CatalogViewMode,
+    search_query: String,
+    collapsed_paths: BTreeSet<String>,
+    hovered_entry_index: Option<usize>,
+    focus_scope: CatalogFocusScope,
 }
 
 impl AssetsCatalogUiRuntimeModule {
@@ -100,6 +116,10 @@ impl AssetsCatalogUiRuntimeModule {
             cached_snapshot: None,
             cached_node: None,
             view_mode: CatalogViewMode::Grid,
+            search_query: String::new(),
+            collapsed_paths: BTreeSet::new(),
+            hovered_entry_index: None,
+            focus_scope: CatalogFocusScope::Grid,
         }
     }
 
@@ -142,7 +162,16 @@ impl AssetsCatalogUiRuntimeModule {
                 } else if self.selected_index >= snapshot.entries.len() {
                     self.selected_index = snapshot.entries.len().saturating_sub(1);
                 }
-                let node = assets_catalog_node(frame_index, &snapshot, self.selected_index, self.view_mode);
+                let node = assets_catalog_node(
+                    frame_index,
+                    &snapshot,
+                    self.selected_index,
+                    self.hovered_entry_index,
+                    self.view_mode,
+                    &self.search_query,
+                    &self.collapsed_paths,
+                    self.focus_scope,
+                );
                 self.cached_snapshot = Some(snapshot);
                 self.cached_node = Some(node);
             }
@@ -155,15 +184,42 @@ impl AssetsCatalogUiRuntimeModule {
     }
 
     fn handle_pointer_input(&mut self, input: &UiInputFrame, surface_size_px: [u32; 2], frame_index: u64) {
+        let pointer_target = self.cached_snapshot.as_ref().and_then(|snapshot| {
+            catalog_hit_test(
+                snapshot,
+                self.selected_index,
+                surface_size_px,
+                input.mouse_pos,
+                self.view_mode,
+                &self.search_query,
+                &self.collapsed_paths,
+            )
+        });
+        let previous_hover = self.hovered_entry_index;
+        self.hovered_entry_index = match pointer_target.as_ref() {
+            Some(CatalogPointerTarget::Folder(entry_index))
+            | Some(CatalogPointerTarget::Asset(entry_index))
+            | Some(CatalogPointerTarget::Inspector(entry_index)) => Some(*entry_index),
+            _ => None,
+        };
+        if self.hovered_entry_index != previous_hover {
+            self.invalidate_node();
+        }
+
         if input.mouse_wheel.1.abs() > f32::EPSILON {
-            let entry_count = self.cached_snapshot.as_ref().map(|snapshot| snapshot.entries.len()).unwrap_or(0);
-            if entry_count > 0 {
-                if input.mouse_wheel.1 > 0.0 {
-                    self.selected_index = self.selected_index.saturating_sub(1);
-                } else {
-                    self.selected_index = (self.selected_index + 1).min(entry_count.saturating_sub(1));
+            if let Some(snapshot) = self.cached_snapshot.as_ref() {
+                let visible = filtered_entry_indices(snapshot, self.view_mode, &self.search_query, &self.collapsed_paths);
+                if !visible.is_empty() {
+                    let slot = visible.iter().position(|idx| *idx == self.selected_index).unwrap_or(0);
+                    let next_slot = if input.mouse_wheel.1 > 0.0 {
+                        slot.saturating_sub(1)
+                    } else {
+                        (slot + 1).min(visible.len().saturating_sub(1))
+                    };
+                    self.selected_index = visible[next_slot];
+                    self.focus_scope = CatalogFocusScope::Grid;
+                    self.invalidate_node();
                 }
-                self.invalidate_node();
             }
         }
 
@@ -173,23 +229,47 @@ impl AssetsCatalogUiRuntimeModule {
         self.last_pointer_frame = frame_index;
 
         let Some(snapshot) = self.cached_snapshot.clone() else { return; };
-        let Some(target) = catalog_hit_test(&snapshot, self.selected_index, surface_size_px, input.mouse_pos) else { return; };
+        let Some(target) = pointer_target else { return; };
 
         match target {
             CatalogPointerTarget::Root => {
                 self.current_path.clear();
                 self.selected_index = 0;
                 self.view_mode = CatalogViewMode::Grid;
+                self.search_query.clear();
+                self.focus_scope = CatalogFocusScope::Tree;
                 self.cached_snapshot = None;
                 self.invalidate_node();
                 self.refresh_cache(frame_index);
                 log::info!("asset browser UI: mouse open root");
+            }
+            CatalogPointerTarget::SearchBox => {
+                self.focus_scope = CatalogFocusScope::Search;
+                self.invalidate_node();
+            }
+            CatalogPointerTarget::Breadcrumb(path) => {
+                self.current_path = normalize_catalog_path(&path);
+                self.selected_index = 0;
+                self.focus_scope = CatalogFocusScope::Breadcrumb;
+                self.cached_snapshot = None;
+                self.invalidate_node();
+                self.refresh_cache(frame_index);
+                log::info!("asset browser UI: breadcrumb open path='{}'", display_path(&self.current_path));
+            }
+            CatalogPointerTarget::Collapse(path) => {
+                let normalized = normalize_catalog_path(&path);
+                if !self.collapsed_paths.insert(normalized.clone()) {
+                    self.collapsed_paths.remove(&normalized);
+                }
+                self.focus_scope = CatalogFocusScope::Tree;
+                self.invalidate_node();
             }
             CatalogPointerTarget::Folder(entry_index) => {
                 if let Some(entry) = snapshot.entries.get(entry_index).filter(|entry| entry.is_directory()) {
                     self.current_path = normalize_catalog_path(&entry.logical_path);
                     self.selected_index = 0;
                     self.view_mode = CatalogViewMode::Grid;
+                    self.focus_scope = CatalogFocusScope::Grid;
                     self.cached_snapshot = None;
                     self.invalidate_node();
                     self.refresh_cache(frame_index);
@@ -199,7 +279,7 @@ impl AssetsCatalogUiRuntimeModule {
             CatalogPointerTarget::Asset(entry_index) => {
                 if entry_index < snapshot.entries.len() {
                     self.selected_index = entry_index;
-                    self.view_mode = CatalogViewMode::Grid;
+                    self.focus_scope = CatalogFocusScope::Grid;
                     self.invalidate_node();
                     if let Some(entry) = snapshot.entries.get(entry_index) {
                         log::info!(
@@ -215,62 +295,142 @@ impl AssetsCatalogUiRuntimeModule {
                 if entry_index < snapshot.entries.len() {
                     self.selected_index = entry_index;
                     self.view_mode = CatalogViewMode::Inspector;
+                    self.focus_scope = CatalogFocusScope::Inspector;
                     self.invalidate_node();
                 }
             }
             CatalogPointerTarget::Tab(view_mode) => {
                 self.view_mode = view_mode;
+                self.focus_scope = match view_mode {
+                    CatalogViewMode::Tree => CatalogFocusScope::Tree,
+                    CatalogViewMode::List | CatalogViewMode::Grid => CatalogFocusScope::Grid,
+                    CatalogViewMode::Inspector => CatalogFocusScope::Inspector,
+                };
                 self.invalidate_node();
             }
-            CatalogPointerTarget::Toolbar(action) => {
-                match action {
-                    CatalogToolbarAction::Refresh => {
-                        self.cached_snapshot = None;
-                        self.invalidate_node();
-                        self.refresh_cache(frame_index);
-                    }
-                    CatalogToolbarAction::Add | CatalogToolbarAction::Import | CatalogToolbarAction::Reimport | CatalogToolbarAction::SaveAll => {
-                        log::info!("asset browser UI: toolbar action '{}' routed as UI intent placeholder", action.as_str());
-                    }
+            CatalogPointerTarget::Toolbar(action) => match action {
+                CatalogToolbarAction::Refresh => {
+                    self.cached_snapshot = None;
+                    self.invalidate_node();
+                    self.refresh_cache(frame_index);
                 }
-            }
+                CatalogToolbarAction::Tree => {
+                    self.view_mode = CatalogViewMode::Tree;
+                    self.focus_scope = CatalogFocusScope::Tree;
+                    self.invalidate_node();
+                }
+                CatalogToolbarAction::List => {
+                    self.view_mode = CatalogViewMode::List;
+                    self.focus_scope = CatalogFocusScope::Grid;
+                    self.invalidate_node();
+                }
+                CatalogToolbarAction::Grid => {
+                    self.view_mode = CatalogViewMode::Grid;
+                    self.focus_scope = CatalogFocusScope::Grid;
+                    self.invalidate_node();
+                }
+                CatalogToolbarAction::Add
+                | CatalogToolbarAction::Import
+                | CatalogToolbarAction::Reimport
+                | CatalogToolbarAction::SaveAll => {
+                    log::info!("asset browser UI: toolbar action '{}' routed as UI intent placeholder", action.as_str());
+                }
+            },
         }
     }
 
+    fn handle_text_input(&mut self, input: &UiInputFrame) -> bool {
+        let mut changed = false;
+        if self.focus_scope == CatalogFocusScope::Search {
+            if input.is_key_pressed(key_code::BACKSPACE) {
+                changed |= self.search_query.pop().is_some();
+            }
+            if input.is_key_pressed(key_code::ESCAPE) && !self.search_query.is_empty() {
+                self.search_query.clear();
+                changed = true;
+            }
+        }
+        if !input.text.is_empty() {
+            for ch in input.text.chars().filter(|ch| !ch.is_control()) {
+                self.search_query.push(ch);
+                changed = true;
+            }
+            self.focus_scope = CatalogFocusScope::Search;
+        }
+        if changed {
+            if let Some(snapshot) = self.cached_snapshot.as_ref() {
+                self.selected_index = filtered_entry_indices(snapshot, self.view_mode, &self.search_query, &self.collapsed_paths)
+                    .first()
+                    .copied()
+                    .unwrap_or(0);
+            } else {
+                self.selected_index = 0;
+            }
+            self.invalidate_node();
+        }
+        changed
+    }
+
     fn handle_navigation_input(&mut self, actions: &InputActionFrame, frame_index: u64) {
-        let entry_count = self.cached_snapshot.as_ref().map(|snapshot| snapshot.entries.len()).unwrap_or(0);
+        let visible_indices = self
+            .cached_snapshot
+            .as_ref()
+            .map(|snapshot| filtered_entry_indices(snapshot, self.view_mode, &self.search_query, &self.collapsed_paths))
+            .unwrap_or_default();
         let mut changed = false;
 
         if actions.ui_nav[0] < 0 || action_frame_contains(actions, engine_action::UI_NAVIGATION_LEFT) {
             self.view_mode = self.view_mode.previous();
+            self.focus_scope = match self.view_mode {
+                CatalogViewMode::Tree => CatalogFocusScope::Tree,
+                CatalogViewMode::List | CatalogViewMode::Grid => CatalogFocusScope::Grid,
+                CatalogViewMode::Inspector => CatalogFocusScope::Inspector,
+            };
             changed = true;
         }
 
         if actions.ui_nav[0] > 0 || action_frame_contains(actions, engine_action::UI_NAVIGATION_RIGHT) {
             self.view_mode = self.view_mode.next();
+            self.focus_scope = match self.view_mode {
+                CatalogViewMode::Tree => CatalogFocusScope::Tree,
+                CatalogViewMode::List | CatalogViewMode::Grid => CatalogFocusScope::Grid,
+                CatalogViewMode::Inspector => CatalogFocusScope::Inspector,
+            };
             changed = true;
         }
 
-        if actions.ui_nav[1] < 0 || action_frame_contains(actions, engine_action::UI_NAVIGATION_UP) {
-            self.selected_index = self.selected_index.saturating_sub(1);
-            changed = true;
-        }
-        if (actions.ui_nav[1] > 0 || action_frame_contains(actions, engine_action::UI_NAVIGATION_DOWN)) && entry_count > 0 {
-            self.selected_index = (self.selected_index + 1).min(entry_count.saturating_sub(1));
-            changed = true;
+        if !visible_indices.is_empty() {
+            let slot = visible_indices.iter().position(|idx| *idx == self.selected_index).unwrap_or(0);
+            if actions.ui_nav[1] < 0 || action_frame_contains(actions, engine_action::UI_NAVIGATION_UP) {
+                self.selected_index = visible_indices[slot.saturating_sub(1)];
+                self.focus_scope = CatalogFocusScope::Grid;
+                changed = true;
+            }
+            if actions.ui_nav[1] > 0 || action_frame_contains(actions, engine_action::UI_NAVIGATION_DOWN) {
+                self.selected_index = visible_indices[(slot + 1).min(visible_indices.len().saturating_sub(1))];
+                self.focus_scope = CatalogFocusScope::Grid;
+                changed = true;
+            }
         }
         if actions.ui_back || action_frame_contains(actions, engine_action::UI_NAVIGATION_BACK) {
-            let parent = parent_path(&self.current_path);
-            if parent != self.current_path {
-                self.current_path = parent;
-                self.selected_index = 0;
-                self.view_mode = CatalogViewMode::Grid;
-                self.cached_snapshot = None;
+            if self.focus_scope == CatalogFocusScope::Search && !self.search_query.is_empty() {
+                self.search_query.clear();
                 changed = true;
-                log::info!("asset browser UI: navigate parent path='{}'", display_path(&self.current_path));
             } else {
-                self.view_mode = CatalogViewMode::Grid;
-                changed = true;
+                let parent = parent_path(&self.current_path);
+                if parent != self.current_path {
+                    self.current_path = parent;
+                    self.selected_index = 0;
+                    self.view_mode = CatalogViewMode::Grid;
+                    self.focus_scope = CatalogFocusScope::Breadcrumb;
+                    self.cached_snapshot = None;
+                    changed = true;
+                    log::info!("asset browser UI: navigate parent path='{}'", display_path(&self.current_path));
+                } else {
+                    self.view_mode = CatalogViewMode::Grid;
+                    self.focus_scope = CatalogFocusScope::Grid;
+                    changed = true;
+                }
             }
         }
         if actions.ui_accept || action_frame_contains(actions, engine_action::UI_NAVIGATION_ACCEPT) {
@@ -284,10 +444,13 @@ impl AssetsCatalogUiRuntimeModule {
                     self.current_path = normalize_catalog_path(&entry.logical_path);
                     self.selected_index = 0;
                     self.cached_snapshot = None;
+                    self.view_mode = CatalogViewMode::Grid;
+                    self.focus_scope = CatalogFocusScope::Grid;
                     changed = true;
                     log::info!("asset browser UI: open directory path='{}'", display_path(&self.current_path));
                 } else {
                     self.view_mode = CatalogViewMode::Inspector;
+                    self.focus_scope = CatalogFocusScope::Inspector;
                     changed = true;
                     log::info!(
                         "asset browser UI: selected asset path='{}' kind='{}' gateway='{}'",
@@ -362,6 +525,7 @@ impl<E: Send + 'static> Module<E> for AssetsCatalogUiRuntimeModule {
             if stale || self.cached_node.is_none() || self.last_toggle_frame == frame_index {
                 self.refresh_cache(frame_index);
             }
+            self.handle_text_input(&input);
             self.handle_pointer_input(&input, surface_size_px, frame_index);
             self.handle_navigation_input(&actions, frame_index);
             if self.cached_node.is_none() {
@@ -544,9 +708,12 @@ fn ensure_assets_catalog_input_registration() -> bool {
     ok
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 enum CatalogPointerTarget {
     Root,
+    SearchBox,
+    Breadcrumb(String),
+    Collapse(String),
     Folder(usize),
     Asset(usize),
     Inspector(usize),
@@ -561,6 +728,9 @@ enum CatalogToolbarAction {
     Reimport,
     SaveAll,
     Refresh,
+    Tree,
+    List,
+    Grid,
 }
 
 impl CatalogToolbarAction {
@@ -571,6 +741,30 @@ impl CatalogToolbarAction {
             Self::Reimport => "reimport",
             Self::SaveAll => "save_all",
             Self::Refresh => "refresh",
+            Self::Tree => "tree",
+            Self::List => "list",
+            Self::Grid => "grid",
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum CatalogFocusScope {
+    Tree,
+    Breadcrumb,
+    Search,
+    Grid,
+    Inspector,
+}
+
+impl CatalogFocusScope {
+    fn as_str(self) -> &'static str {
+        match self {
+            Self::Tree => "tree",
+            Self::Breadcrumb => "breadcrumb",
+            Self::Search => "search",
+            Self::Grid => "grid",
+            Self::Inspector => "inspector",
         }
     }
 }
@@ -623,6 +817,9 @@ fn catalog_hit_test(
     selected_index: usize,
     surface_size_px: [u32; 2],
     mouse_pos: Option<(f32, f32)>,
+    view_mode: CatalogViewMode,
+    search_query: &str,
+    collapsed_paths: &BTreeSet<String>,
 ) -> Option<CatalogPointerTarget> {
     let (mx, my) = mouse_pos?;
     let g = catalog_workspace_geometry(surface_size_px);
@@ -632,7 +829,7 @@ fn catalog_hit_test(
 
     if my >= g.panel_y && my <= g.panel_y + g.tab_h {
         let mut tx = g.panel_x + 10.0;
-        let tabs = [("Asset Browser", CatalogViewMode::Grid), ("Inspector", CatalogViewMode::Inspector)];
+        let tabs = [("Tree", CatalogViewMode::Tree), ("List", CatalogViewMode::List), ("Grid", CatalogViewMode::Grid), ("Inspector", CatalogViewMode::Inspector)];
         for (label, mode) in tabs {
             let tw = (label.chars().count() as f32 * 9.0 + 76.0).clamp(118.0, 220.0);
             if point_in_rect(mx, my, tx, g.panel_y + 4.0, tw, g.tab_h - 5.0) {
@@ -650,6 +847,9 @@ fn catalog_hit_test(
             ("Import", CatalogToolbarAction::Import),
             ("Reimport", CatalogToolbarAction::Reimport),
             ("Save All", CatalogToolbarAction::SaveAll),
+            ("Tree", CatalogToolbarAction::Tree),
+            ("List", CatalogToolbarAction::List),
+            ("Grid", CatalogToolbarAction::Grid),
             ("Refresh", CatalogToolbarAction::Refresh),
         ] {
             let bw = (label.chars().count() as f32 * 9.0 + 32.0).clamp(58.0, 118.0);
@@ -658,6 +858,14 @@ fn catalog_hit_test(
             }
             bx += bw + 8.0;
         }
+    }
+
+    let breadcrumb_y = g.panel_y + g.tab_h + g.toolbar_h;
+    if point_in_rect(mx, my, g.panel_x + 18.0, breadcrumb_y + 8.0, g.panel_w * 0.34, 22.0) {
+        return Some(CatalogPointerTarget::Breadcrumb(hit_breadcrumb_path(snapshot, mx, g.panel_x + 34.0, g.panel_w * 0.34)));
+    }
+    if point_in_rect(mx, my, g.panel_x + g.panel_w * 0.37, breadcrumb_y + 8.0, g.panel_w * 0.30, 22.0) {
+        return Some(CatalogPointerTarget::SearchBox);
     }
 
     if point_in_rect(mx, my, g.sidebar_x, g.content_top, g.sidebar_w, g.content_h) {
@@ -670,8 +878,11 @@ fn catalog_hit_test(
             return Some(CatalogPointerTarget::Root);
         }
         cy += 23.0;
-        for (entry_index, _entry) in snapshot.entries.iter().enumerate().filter(|(_, entry)| entry.is_directory()).take(18) {
-            if point_in_rect(mx, my, g.sidebar_x + 8.0, cy - 5.0, g.sidebar_w - 16.0, 24.0) {
+        for (entry_index, entry) in snapshot.entries.iter().enumerate().filter(|(_, entry)| entry.is_directory()).take(18) {
+            if point_in_rect(mx, my, g.sidebar_x + 8.0, cy - 5.0, 22.0, 24.0) {
+                return Some(CatalogPointerTarget::Collapse(entry.logical_path.clone()));
+            }
+            if point_in_rect(mx, my, g.sidebar_x + 32.0, cy - 5.0, g.sidebar_w - 40.0, 24.0) {
                 return Some(CatalogPointerTarget::Folder(entry_index));
             }
             cy += 23.0;
@@ -680,10 +891,10 @@ fn catalog_hit_test(
     }
 
     if point_in_rect(mx, my, g.main_x, g.content_top, g.main_w, g.content_h) {
-        if let Some(folder_index) = hit_folder_card(snapshot, mx, my, &g) {
+        if let Some(folder_index) = hit_folder_card(snapshot, mx, my, &g, view_mode, search_query, collapsed_paths) {
             return Some(CatalogPointerTarget::Folder(folder_index));
         }
-        if let Some(asset_index) = hit_asset_card(snapshot, selected_index, mx, my, &g) {
+        if let Some(asset_index) = hit_asset_card(snapshot, selected_index, mx, my, &g, view_mode, search_query, collapsed_paths) {
             return Some(CatalogPointerTarget::Asset(asset_index));
         }
     }
@@ -697,18 +908,36 @@ fn catalog_hit_test(
     None
 }
 
-fn hit_folder_card(snapshot: &AssetsCatalogSnapshot, mx: f32, my: f32, g: &CatalogWorkspaceGeometry) -> Option<usize> {
+fn hit_folder_card(
+    snapshot: &AssetsCatalogSnapshot,
+    mx: f32,
+    my: f32,
+    g: &CatalogWorkspaceGeometry,
+    view_mode: CatalogViewMode,
+    search_query: &str,
+    collapsed_paths: &BTreeSet<String>,
+) -> Option<usize> {
+    if view_mode == CatalogViewMode::List || view_mode == CatalogViewMode::Tree {
+        return hit_list_row(snapshot, mx, my, g, view_mode, search_query, collapsed_paths);
+    }
     let cy = g.content_top + 14.0 + 30.0;
     let card_gap = 12.0;
     let folder_w = 126.0;
     let folder_h = 66.0;
     let columns = ((g.main_w - 28.0 + card_gap) / (folder_w + card_gap)).floor().max(1.0) as usize;
-    for (slot, (entry_index, _entry)) in snapshot.entries.iter().enumerate().filter(|(_, entry)| entry.is_directory()).take(10).enumerate() {
+    for (slot, entry_index) in filtered_entry_indices(snapshot, CatalogViewMode::Grid, search_query, collapsed_paths)
+        .into_iter()
+        .filter(|entry_index| snapshot.entries.get(*entry_index).map(AssetsCatalogEntry::is_directory).unwrap_or(false))
+        .take(10)
+        .enumerate()
+    {
         let col = slot % columns;
         let row = slot / columns;
         let cx = g.main_x + 16.0 + col as f32 * (folder_w + card_gap);
         let fy = cy + row as f32 * (folder_h + card_gap);
-        if fy + folder_h > g.content_top + g.content_h * 0.42 { break; }
+        if fy + folder_h > g.content_top + g.content_h * 0.42 {
+            break;
+        }
         if point_in_rect(mx, my, cx, fy, folder_w, folder_h) {
             return Some(entry_index);
         }
@@ -716,8 +945,23 @@ fn hit_folder_card(snapshot: &AssetsCatalogSnapshot, mx: f32, my: f32, g: &Catal
     None
 }
 
-fn hit_asset_card(snapshot: &AssetsCatalogSnapshot, selected_index: usize, mx: f32, my: f32, g: &CatalogWorkspaceGeometry) -> Option<usize> {
-    let folder_count = snapshot.entries.iter().filter(|entry| entry.is_directory()).count();
+fn hit_asset_card(
+    snapshot: &AssetsCatalogSnapshot,
+    selected_index: usize,
+    mx: f32,
+    my: f32,
+    g: &CatalogWorkspaceGeometry,
+    view_mode: CatalogViewMode,
+    search_query: &str,
+    collapsed_paths: &BTreeSet<String>,
+) -> Option<usize> {
+    if view_mode == CatalogViewMode::List || view_mode == CatalogViewMode::Tree {
+        return hit_list_row(snapshot, mx, my, g, view_mode, search_query, collapsed_paths);
+    }
+    let folder_count = filtered_entry_indices(snapshot, CatalogViewMode::Grid, search_query, collapsed_paths)
+        .into_iter()
+        .filter(|entry_index| snapshot.entries.get(*entry_index).map(AssetsCatalogEntry::is_directory).unwrap_or(false))
+        .count();
     let card_gap = 12.0;
     let folder_w = 126.0;
     let folder_h = 66.0;
@@ -728,13 +972,13 @@ fn hit_asset_card(snapshot: &AssetsCatalogSnapshot, selected_index: usize, mx: f
     let asset_w = 124.0;
     let asset_h = 122.0;
     let asset_cols = ((g.main_w - 28.0 + card_gap) / (asset_w + card_gap)).floor().max(1.0) as usize;
-    let window_start = visible_window_start(snapshot.entries.len(), selected_index, MAX_VISIBLE_ENTRIES);
-    for (slot, (entry_index, _entry)) in snapshot
-        .entries
-        .iter()
-        .enumerate()
+    let visible = filtered_entry_indices(snapshot, CatalogViewMode::Grid, search_query, collapsed_paths);
+    let selected_slot = visible.iter().position(|idx| *idx == selected_index).unwrap_or(0);
+    let window_start = visible_window_start(visible.len(), selected_slot, MAX_VISIBLE_ENTRIES);
+    for (slot, entry_index) in visible
+        .into_iter()
         .skip(window_start)
-        .filter(|(_, entry)| !entry.is_directory())
+        .filter(|entry_index| snapshot.entries.get(*entry_index).map(|entry| !entry.is_directory()).unwrap_or(false))
         .take(36)
         .enumerate()
     {
@@ -742,12 +986,53 @@ fn hit_asset_card(snapshot: &AssetsCatalogSnapshot, selected_index: usize, mx: f
         let row = slot / asset_cols;
         let cx = g.main_x + 16.0 + col as f32 * (asset_w + card_gap);
         let ay = cy + row as f32 * (asset_h + card_gap);
-        if ay + asset_h > g.content_top + g.content_h - 18.0 { break; }
+        if ay + asset_h > g.content_top + g.content_h - 18.0 {
+            break;
+        }
         if point_in_rect(mx, my, cx, ay, asset_w, asset_h) {
             return Some(entry_index);
         }
     }
     None
+}
+
+fn hit_list_row(
+    snapshot: &AssetsCatalogSnapshot,
+    mx: f32,
+    my: f32,
+    g: &CatalogWorkspaceGeometry,
+    view_mode: CatalogViewMode,
+    search_query: &str,
+    collapsed_paths: &BTreeSet<String>,
+) -> Option<usize> {
+    let row_h = 28.0;
+    let list_y = g.content_top + 46.0;
+    if !point_in_rect(mx, my, g.main_x + 14.0, list_y, g.main_w - 28.0, g.content_h - 64.0) {
+        return None;
+    }
+    let row = ((my - list_y) / row_h).floor().max(0.0) as usize;
+    filtered_entry_indices(snapshot, view_mode, search_query, collapsed_paths).get(row).copied()
+}
+
+fn hit_breadcrumb_path(snapshot: &AssetsCatalogSnapshot, mx: f32, start_x: f32, max_w: f32) -> String {
+    let normalized = normalize_catalog_path(&snapshot.logical_path);
+    if normalized.is_empty() {
+        return String::new();
+    }
+    let mut x = start_x;
+    let mut path = String::new();
+    for segment in normalized.split('/') {
+        if !path.is_empty() {
+            path.push('/');
+        }
+        path.push_str(segment);
+        let w = (segment.chars().count() as f32 * 8.0 + 24.0).clamp(34.0, 160.0);
+        if mx >= x && mx <= x + w && x - start_x < max_w {
+            return path.clone();
+        }
+        x += w + 6.0;
+    }
+    normalized
 }
 
 #[inline]
@@ -794,7 +1079,7 @@ impl CatalogViewMode {
 
 #[derive(Clone, Debug, Default)]
 struct AssetsCatalogSnapshot {
-    logical_path: String,
+    pub(crate) logical_path: String,
     entries: Vec<AssetsCatalogEntry>,
     sources: Vec<String>,
     formats: Vec<String>,
@@ -806,22 +1091,22 @@ struct AssetsCatalogSnapshot {
 }
 
 #[derive(Clone, Debug, Default)]
-struct AssetsCatalogEntry {
-    name: String,
-    kind: String,
-    logical_path: String,
-    extension: String,
-    semantic_gateway: String,
-    asset_kind: String,
-    import_stage: String,
-    import_action: String,
-    dirty: bool,
-    uid: String,
-    thumbnail: String,
+pub(crate) struct AssetsCatalogEntry {
+    pub(crate) name: String,
+    pub(crate) kind: String,
+    pub(crate) logical_path: String,
+    pub(crate) extension: String,
+    pub(crate) semantic_gateway: String,
+    pub(crate) asset_kind: String,
+    pub(crate) import_stage: String,
+    pub(crate) import_action: String,
+    pub(crate) dirty: bool,
+    pub(crate) uid: String,
+    pub(crate) thumbnail: String,
 }
 
 impl AssetsCatalogEntry {
-    fn is_directory(&self) -> bool {
+    pub(crate) fn is_directory(&self) -> bool {
         let kind = self.kind.trim().to_ascii_lowercase();
         kind == "directory" || kind == "dir" || kind == "folder" || kind == "mount"
     }
@@ -913,11 +1198,24 @@ fn entry_from_vfs_value(value: &Value) -> AssetsCatalogEntry {
     }
 }
 
-fn assets_catalog_node(frame_index: u64, snapshot: &AssetsCatalogSnapshot, selected_index: usize, view_mode: CatalogViewMode) -> UiSurfaceNode {
+fn assets_catalog_node(
+    frame_index: u64,
+    snapshot: &AssetsCatalogSnapshot,
+    selected_index: usize,
+    hovered_entry_index: Option<usize>,
+    view_mode: CatalogViewMode,
+    search_query: &str,
+    collapsed_paths: &BTreeSet<String>,
+    focus_scope: CatalogFocusScope,
+) -> UiSurfaceNode {
     let folder_count = snapshot.entries.iter().filter(|entry| entry.is_directory()).count();
     let asset_count = snapshot.entries.len().saturating_sub(folder_count);
-    let selected_entry = snapshot.entries.get(selected_index).or_else(|| snapshot.entries.first());
-    let _available_views = [CatalogViewMode::Tree, CatalogViewMode::List, CatalogViewMode::Grid, CatalogViewMode::Inspector];
+    let visible_indices = filtered_entry_indices(snapshot, view_mode, search_query, collapsed_paths);
+    let selected_entry = snapshot
+        .entries
+        .get(selected_index)
+        .or_else(|| visible_indices.first().and_then(|idx| snapshot.entries.get(*idx)))
+        .or_else(|| snapshot.entries.first());
 
     let mut body_lines = Vec::new();
     body_lines.push(format!(
@@ -930,26 +1228,31 @@ fn assets_catalog_node(frame_index: u64, snapshot: &AssetsCatalogSnapshot, selec
     body_lines.push(format!("Path: {}", display_path(&snapshot.logical_path)));
     body_lines.push("Asset Browser is a retained engine.ui workspace over engine.assets data.".to_owned());
     body_lines.push(snapshot.import_summary.clone());
+    body_lines.push(format!(
+        "UI focus={} · query='{}' · visible={}",
+        focus_scope.as_str(),
+        search_query,
+        visible_indices.len()
+    ));
 
     let mut components = Vec::new();
+    for (id, label, icon, mode, detail) in [
+        ("tree", "Tree", ASSET_BROWSER_ICON_FOLDER, CatalogViewMode::Tree, "hierarchy"),
+        ("list", "List", ASSET_BROWSER_ICON_GENERIC, CatalogViewMode::List, "dense rows"),
+        ("grid", "Grid", ASSET_BROWSER_ICON_TEXTURE, CatalogViewMode::Grid, "previews"),
+        ("inspector", "Inspector", ASSET_BROWSER_ICON_GENERIC, CatalogViewMode::Inspector, "schema DTO · providers"),
+    ] {
+        components.push(
+            UiComponentNode::row(format!("asset_browser.tab.{id}"), label)
+                .with_icon(icon)
+                .with_detail(detail)
+                .with_tone(if view_mode == mode { UiNodeTone::Accent } else { UiNodeTone::Normal })
+                .tagged("tab")
+                .tagged(if view_mode == mode { "active" } else { "inactive" }),
+        );
+    }
     components.push(
-        UiComponentNode::row("asset_browser.tab.browser", "Asset Browser")
-            .with_icon(ASSET_BROWSER_ICON_FOLDER)
-            .with_detail("Assets")
-            .with_tone(if view_mode == CatalogViewMode::Grid { UiNodeTone::Accent } else { UiNodeTone::Normal })
-            .tagged("tab")
-            .tagged(if view_mode == CatalogViewMode::Grid { "active" } else { "inactive" }),
-    );
-    components.push(
-        UiComponentNode::row("asset_browser.tab.inspector", "Inspector")
-            .with_icon(ASSET_BROWSER_ICON_GENERIC)
-            .with_detail("Schema DTO · settings · providers")
-            .with_tone(if view_mode == CatalogViewMode::Inspector { UiNodeTone::Accent } else { UiNodeTone::Normal })
-            .tagged("tab")
-            .tagged(if view_mode == CatalogViewMode::Inspector { "active" } else { "inactive" }),
-    );
-    components.push(
-        UiComponentNode::row("asset_browser.toolbar", "+ Add    Import    Reimport    Save All    Refresh")
+        UiComponentNode::row("asset_browser.toolbar", "+ Add    Import    Reimport    Save All    Tree    List    Grid    Refresh")
             .with_detail(format!("Tree/List/Grid selection · active view={} · actions dispatch through engine.ui", view_mode.as_str()))
             .with_tone(UiNodeTone::Normal)
             .tagged("toolbar"),
@@ -961,10 +1264,18 @@ fn assets_catalog_node(frame_index: u64, snapshot: &AssetsCatalogSnapshot, selec
             .tagged("breadcrumb"),
     );
     components.push(
-        UiComponentNode::row("asset_browser.search", format!("Search {}...", browser_folder_label(&snapshot.logical_path)))
-            .with_detail("Search UI is local to this node; backend remains engine.assets")
-            .with_tone(UiNodeTone::Disabled)
-            .tagged("search"),
+        UiComponentNode::row(
+            "asset_browser.search",
+            if search_query.is_empty() {
+                format!("Search {}...", browser_folder_label(&snapshot.logical_path))
+            } else {
+                format!("Search: {}", search_query)
+            },
+        )
+        .with_detail("Search/filter is local UI state; backend remains engine.assets")
+        .with_tone(if focus_scope == CatalogFocusScope::Search { UiNodeTone::Accent } else { UiNodeTone::Disabled })
+        .tagged("search")
+        .tagged(if focus_scope == CatalogFocusScope::Search { "focused" } else { "idle" }),
     );
 
     components.push(
@@ -980,50 +1291,67 @@ fn assets_catalog_node(frame_index: u64, snapshot: &AssetsCatalogSnapshot, selec
             .tagged("sidebar")
             .tagged("folder"),
     );
-    for (idx, entry) in snapshot.entries.iter().filter(|entry| entry.is_directory()).take(18).enumerate() {
-        let depth = entry.logical_path.split('/').count().saturating_sub(1).min(3);
-        let label = format!("{}{}", "  ".repeat(depth), entry.name);
-        components.push(
-            UiComponentNode::row(format!("asset_browser.sidebar.folder.{idx:02}"), label)
-                .with_icon(ASSET_BROWSER_ICON_FOLDER)
-                .with_detail(display_path(&entry.logical_path))
-                .with_tone(if snapshot.logical_path == entry.logical_path { UiNodeTone::Accent } else { UiNodeTone::Normal })
-                .tagged("sidebar")
-                .tagged("folder"),
-        );
-    }
-
-    for (idx, entry) in snapshot.entries.iter().filter(|entry| entry.is_directory()).take(10).enumerate() {
-        components.push(
-            UiComponentNode::row(format!("asset_browser.folder_card.{idx:02}"), entry.name.clone())
-                .with_icon(ASSET_BROWSER_ICON_FOLDER)
-                .with_value("Folder")
-                .with_detail(entry.logical_path.clone())
-                .with_tone(UiNodeTone::Accent)
-                .tagged("folder-card"),
-        );
-    }
-
-    let window_start = visible_window_start(snapshot.entries.len(), selected_index, MAX_VISIBLE_ENTRIES);
-    for (visible_idx, entry) in snapshot
-        .entries
+    for (idx, entry_index) in visible_indices
         .iter()
+        .copied()
+        .filter(|entry_index| snapshot.entries.get(*entry_index).map(AssetsCatalogEntry::is_directory).unwrap_or(false))
+        .take(18)
         .enumerate()
+    {
+        let Some(entry) = snapshot.entries.get(entry_index) else { continue; };
+        let depth = entry.logical_path.split('/').count().saturating_sub(1).min(3);
+        let collapsed = collapsed_paths.contains(&normalize_catalog_path(&entry.logical_path));
+        let label = format!("{}{} {}", "  ".repeat(depth), if collapsed { "▸" } else { "▾" }, entry.name);
+        let mut row = UiComponentNode::row(format!("asset_browser.sidebar.folder.{idx:02}"), label)
+            .with_icon(ASSET_BROWSER_ICON_FOLDER)
+            .with_detail(display_path(&entry.logical_path))
+            .with_tone(if snapshot.logical_path == entry.logical_path { UiNodeTone::Accent } else { UiNodeTone::Normal })
+            .tagged("sidebar")
+            .tagged("folder");
+        if hovered_entry_index == Some(entry_index) { row = row.tagged("hovered"); }
+        components.push(row);
+    }
+
+    for (idx, entry_index) in visible_indices
+        .iter()
+        .copied()
+        .filter(|entry_index| snapshot.entries.get(*entry_index).map(AssetsCatalogEntry::is_directory).unwrap_or(false))
+        .take(10)
+        .enumerate()
+    {
+        let Some(entry) = snapshot.entries.get(entry_index) else { continue; };
+        let mut card = UiComponentNode::row(format!("asset_browser.folder_card.{idx:02}"), entry.name.clone())
+            .with_icon(ASSET_BROWSER_ICON_FOLDER)
+            .with_value("Folder")
+            .with_detail(entry.logical_path.clone())
+            .with_tone(UiNodeTone::Accent)
+            .tagged("folder-card");
+        if hovered_entry_index == Some(entry_index) { card = card.tagged("hovered"); }
+        components.push(card);
+    }
+
+    let selected_slot = visible_indices.iter().position(|idx| *idx == selected_index).unwrap_or(0);
+    let window_start = visible_window_start(visible_indices.len(), selected_slot, MAX_VISIBLE_ENTRIES);
+    for visible_idx in visible_indices
+        .iter()
+        .copied()
         .skip(window_start)
-        .filter(|(_, entry)| !entry.is_directory())
+        .filter(|entry_index| snapshot.entries.get(*entry_index).map(|entry| !entry.is_directory()).unwrap_or(false))
         .take(36)
     {
+        let Some(entry) = snapshot.entries.get(visible_idx) else { continue; };
         let selected = visible_idx == selected_index;
+        let hovered = hovered_entry_index == Some(visible_idx);
         let mut card = UiComponentNode::row(format!("asset_browser.asset_card.{visible_idx:03}"), entry.name.clone())
             .with_icon(icon_for_extension(&entry.extension))
             .with_value(asset_type_label(entry))
             .with_detail(format!("{} · {}", entry.import_stage, entry.import_action))
             .with_tone(if selected { UiNodeTone::Accent } else { UiNodeTone::Normal })
             .tagged("asset-card")
-            .tagged(entry.kind.clone());
-        if selected {
-            card = card.tagged("selected");
-        }
+            .tagged(entry.kind.clone())
+            .tagged(match view_mode { CatalogViewMode::List => "list-row", CatalogViewMode::Tree => "tree-row", _ => "grid-card" });
+        if selected { card = card.tagged("selected"); }
+        if hovered { card = card.tagged("hovered"); }
         components.push(card);
     }
 
@@ -1049,6 +1377,8 @@ fn assets_catalog_node(frame_index: u64, snapshot: &AssetsCatalogSnapshot, selec
             ("providers", "Providers", snapshot.route_diagnostics.clone()),
             ("package_writer", "Package Writer", snapshot.package_writer_summary.clone()),
             ("ownership", "UI Role", "visualization only".to_owned()),
+            ("focus", "Focus Graph", format!("scope={} modal=false z=970", focus_scope.as_str())),
+            ("routes", "Route Diagnostics", snapshot.route_diagnostics.clone()),
         ] {
             components.push(
                 UiComponentNode::row(format!("asset_browser.details.{id}"), label)
@@ -1080,7 +1410,7 @@ fn assets_catalog_node(frame_index: u64, snapshot: &AssetsCatalogSnapshot, selec
         .with_subtitle("clean editor workspace over engine.assets")
         .with_body_lines(body_lines)
         .with_footer_lines(vec![
-            "F1 Close · mouse select/open · wheel select · arrows navigate · Enter Open/Inspect".to_owned(),
+            "F1 Close · mouse hover/click/wheel · type to search · arrows/gamepad navigate · Enter Open/Inspect".to_owned(),
             "Every asset format declares a provider preview contract; UI only composes it".to_owned(),
         ])
         .with_theme(ASSETS_CATALOG_THEME_ID)
@@ -1091,6 +1421,10 @@ fn assets_catalog_node(frame_index: u64, snapshot: &AssetsCatalogSnapshot, selec
         .with_metric("current_path", json!(snapshot.logical_path.as_str()))
         .with_metric("selected_index", json!(selected_index))
         .with_metric("view_mode", json!(view_mode.as_str()))
+        .with_metric("search_query", json!(search_query))
+        .with_metric("focus_scope", json!(focus_scope.as_str()))
+        .with_metric("modal_stack", json!([ASSETS_CATALOG_SURFACE_ID]))
+        .with_metric("hovered_entry_index", json!(hovered_entry_index))
         .with_metric("import_summary", json!(snapshot.import_summary.as_str()))
         .with_metric("package_writer", json!(snapshot.package_writer_summary.as_str()))
         .with_metric("folder_count", json!(folder_count))
@@ -1133,38 +1467,51 @@ fn assets_catalog_error_node(frame_index: u64, error: String) -> UiSurfaceNode {
     node
 }
 
+fn filtered_entry_indices(
+    snapshot: &AssetsCatalogSnapshot,
+    view_mode: CatalogViewMode,
+    search_query: &str,
+    collapsed_paths: &BTreeSet<String>,
+) -> Vec<usize> {
+    let query = search_query.trim().to_ascii_lowercase();
+    snapshot
+        .entries
+        .iter()
+        .enumerate()
+        .filter(|(_, entry)| {
+            if view_mode == CatalogViewMode::Tree && !entry.is_directory() {
+                return false;
+            }
+            if entry.is_directory() && is_hidden_by_collapsed_parent(entry, collapsed_paths) {
+                return false;
+            }
+            if query.is_empty() {
+                return true;
+            }
+            entry.name.to_ascii_lowercase().contains(&query)
+                || entry.logical_path.to_ascii_lowercase().contains(&query)
+                || entry.asset_kind.to_ascii_lowercase().contains(&query)
+                || entry.semantic_gateway.to_ascii_lowercase().contains(&query)
+                || entry.extension.to_ascii_lowercase().contains(&query)
+        })
+        .map(|(index, _)| index)
+        .collect()
+}
+
+fn is_hidden_by_collapsed_parent(entry: &AssetsCatalogEntry, collapsed_paths: &BTreeSet<String>) -> bool {
+    let path = normalize_catalog_path(&entry.logical_path);
+    collapsed_paths.iter().any(|collapsed| {
+        let collapsed = normalize_catalog_path(collapsed);
+        !collapsed.is_empty() && path != collapsed && path.starts_with(&(collapsed + "/"))
+    })
+}
+
 fn visible_window_start(total: usize, selected_index: usize, window: usize) -> usize {
     if total <= window {
         return 0;
     }
     let half = window / 2;
     selected_index.saturating_sub(half).min(total.saturating_sub(window))
-}
-
-fn parent_path(path: &str) -> String {
-    let normalized = normalize_catalog_path(path);
-    let trimmed = normalized.trim_matches('/');
-    if trimmed.is_empty() {
-        return String::new();
-    }
-    trimmed
-        .rsplit_once('/')
-        .map(|(parent, _)| parent.to_owned())
-        .unwrap_or_default()
-}
-
-fn normalize_catalog_path(path: &str) -> String {
-    path.replace('\\', "/")
-        .trim()
-        .trim_start_matches("assets://")
-        .trim_start_matches('/')
-        .trim_end_matches('/')
-        .to_owned()
-}
-
-fn display_path(path: &str) -> String {
-    let path = normalize_catalog_path(path);
-    if path.is_empty() { "/".to_owned() } else { format!("/{path}") }
 }
 
 fn assets_catalog_surface_style() -> UiSurfaceStyle {
@@ -1193,228 +1540,4 @@ fn assets_catalog_surface_style() -> UiSurfaceStyle {
     style.row_even_alpha = 8;
     style.row_odd_alpha = 3;
     style.normalized()
-}
-
-fn browser_folder_label(path: &str) -> String {
-    let path = normalize_catalog_path(path);
-    path.rsplit('/').next().filter(|value| !value.is_empty()).unwrap_or("Content").to_owned()
-}
-
-fn asset_type_label(entry: &AssetsCatalogEntry) -> String {
-    if entry.is_directory() {
-        return "Folder".to_owned();
-    }
-    let kind = entry.asset_kind.trim();
-    if kind.is_empty() || kind == "asset" {
-        match entry.extension.as_str() {
-            "neui" => "UI Dictionary".to_owned(),
-            "nemat" => "Material Library".to_owned(),
-            "ytd" => "Texture Dictionary".to_owned(),
-            "ydd" | "ydr" | "obj" | "gltf" | "glb" => "Model / Drawable".to_owned(),
-            "ytyp" => "Scene Definition".to_owned(),
-            "ymap" => "Map".to_owned(),
-            "wav" | "ogg" => "Audio".to_owned(),
-            _ => "Asset".to_owned(),
-        }
-    } else {
-        kind.to_owned()
-    }
-}
-
-fn icon_for_entry(entry: &AssetsCatalogEntry) -> &'static str {
-    if entry.is_directory() { ASSET_BROWSER_ICON_FOLDER } else { icon_for_extension(&entry.extension) }
-}
-
-fn preview_plan_label(entry: &AssetsCatalogEntry) -> &'static str {
-    if entry.is_directory() {
-        "folder preview"
-    } else {
-        match entry.extension.as_str() {
-            "ytd" | "png" | "jpg" | "jpeg" | "dds" => "texture preview provider",
-            "nemat" => "material preview provider",
-            "ydd" | "ydr" | "obj" | "gltf" | "glb" => "model preview provider",
-            "ytyp" | "ymap" => "world metadata preview provider",
-            "neui" => "UI preview provider",
-            _ => "metadata preview provider",
-        }
-    }
-}
-
-fn source_labels(value: &Value) -> Vec<String> {
-    value
-        .get("sources")
-        .and_then(Value::as_array)
-        .or_else(|| value.as_array())
-        .into_iter()
-        .flatten()
-        .filter_map(|item| string_field(item, &["id", "name", "root", "logical_root"]))
-        .take(64)
-        .collect()
-}
-
-fn format_labels(value: &Value) -> Vec<String> {
-    value
-        .get("formats")
-        .and_then(Value::as_array)
-        .or_else(|| value.get("descriptors").and_then(Value::as_array))
-        .or_else(|| value.as_array())
-        .into_iter()
-        .flatten()
-        .filter_map(|item| string_field(item, &["extension", "id", "asset_kind", "content_kind"]))
-        .take(64)
-        .collect()
-}
-
-
-fn hydrate_preview_plans_for_entries(
-    state: &mut AssetsCatalogRuntimeState,
-    entries: &mut [AssetsCatalogEntry],
-    warnings: &mut Vec<String>,
-) {
-    let mut failures = 0usize;
-    for entry in entries.iter_mut().filter(|entry| !entry.is_directory()).take(MAX_VISIBLE_ENTRIES) {
-        if !entry.thumbnail.trim().is_empty() {
-            continue;
-        }
-        match state.client.thumbnail_json_v1(json!({ "logical_path": entry.logical_path.as_str() })) {
-            Ok(value) => {
-                entry.thumbnail = thumbnail_label_from_value(&value)
-                    .unwrap_or_else(|| preview_plan_label(entry).to_owned());
-            }
-            Err(error) => {
-                failures += 1;
-                if failures <= 2 {
-                    warnings.push(format!("engine.assets.thumbnail_v1 unavailable for '{}': {error}", entry.logical_path));
-                }
-                entry.thumbnail = preview_plan_label(entry).to_owned();
-            }
-        }
-    }
-    if failures > 2 {
-        warnings.push(format!("engine.assets.thumbnail_v1 unavailable for {} additional assets", failures - 2));
-    }
-}
-
-fn thumbnail_label_from_value(value: &Value) -> Option<String> {
-    let thumbnail = value.get("thumbnail")?;
-    let kind = string_field(thumbnail, &["kind", "strategy", "label"])?;
-    let state = string_field(thumbnail, &["state"]).unwrap_or_else(|| "planned".to_owned());
-    let icon = string_field(thumbnail, &["icon_ref", "icon", "asset_icon"]);
-    let cache_key = string_field(thumbnail, &["cache_key"]);
-    Some(match (icon, cache_key) {
-        (Some(icon), Some(cache_key)) => format!("{kind} / {state} / {icon} / {cache_key}"),
-        (Some(icon), None) => format!("{kind} / {state} / {icon}"),
-        (None, Some(cache_key)) => format!("{kind} / {state} / {cache_key}"),
-        (None, None) => format!("{kind} / {state}"),
-    })
-}
-
-fn apply_import_lifecycle_rows(
-    state: &mut AssetsCatalogRuntimeState,
-    logical_path: &str,
-    entries: &mut [AssetsCatalogEntry],
-    warnings: &mut Vec<String>,
-) {
-    let response = match state.client.dirty_scan_json_v1(json!({
-        "root": logical_path,
-        "recursive": false,
-        "max_entries": 256,
-    })) {
-        Ok(value) => value,
-        Err(error) => {
-            warnings.push(format!("engine.assets.dirty_scan_v1 unavailable: {error}"));
-            return;
-        }
-    };
-    let rows = response.get("rows").and_then(Value::as_array).cloned().unwrap_or_default();
-    for row in rows {
-        let Some(path) = string_field(&row, &["logical_path", "path"]) else { continue; };
-        let normalized = normalize_catalog_path(&path);
-        if let Some(entry) = entries.iter_mut().find(|entry| entry.logical_path == normalized) {
-            entry.import_stage = string_field(&row, &["stage"]).unwrap_or_else(|| "unknown".to_owned());
-            entry.import_action = string_field(&row, &["recommended_action"]).unwrap_or_else(|| "none".to_owned());
-            entry.dirty = row.get("dirty").and_then(Value::as_bool).unwrap_or(false);
-            entry.uid = string_field(&row, &["uid"]).unwrap_or_default();
-            entry.thumbnail = row
-                .get("thumbnail")
-                .and_then(|thumbnail| string_field(thumbnail, &["kind", "strategy", "label"]))
-                .unwrap_or_default();
-        }
-    }
-}
-
-fn package_writer_summary(state: &mut AssetsCatalogRuntimeState) -> Result<String, String> {
-    let value = state.client.package_writer_info_json_v1(json!({}))?;
-    let ops = value.get("operations").and_then(Value::as_object);
-    let loose = ops.and_then(|o| o.get("loose_vfs_write_back")).and_then(Value::as_bool).unwrap_or(false);
-    let listfile = ops.and_then(|o| o.get("nef8_listfile_repack")).and_then(Value::as_bool).unwrap_or(false);
-    let nepak = ops.and_then(|o| o.get("nepak_container_write_back")).and_then(Value::as_bool).unwrap_or(false);
-    Ok(format!("package writer: loose={} listfile={} nepak={}", loose, listfile, nepak))
-}
-
-fn import_queue_summary(state: &mut AssetsCatalogRuntimeState) -> Result<String, String> {
-    let value = state.client.import_queue_json_v1(json!({}))?;
-    if let Some(summary) = value.get("summary") {
-        let queued = summary.get("queued").or_else(|| summary.get("queue_len")).and_then(Value::as_u64).unwrap_or(0);
-        let active = summary.get("active").and_then(Value::as_u64).unwrap_or(0);
-        return Ok(format!("import queue: queued={} active={}", queued, active));
-    }
-    let queued = value.get("queued").and_then(Value::as_array).map(|v| v.len()).unwrap_or(0);
-    Ok(format!("import queue: queued={} active=0", queued))
-}
-
-fn import_summary_for_entries(entries: &[AssetsCatalogEntry]) -> String {
-    let dirty = entries.iter().filter(|entry| entry.dirty).count();
-    let reimport = entries.iter().filter(|entry| entry.import_action == "reimport").count();
-    let import = entries.iter().filter(|entry| entry.import_action == "import").count();
-    format!("Import status: {} dirty · {} reimport · {} new import", dirty, reimport, import)
-}
-
-fn value_warnings(value: &Value) -> Vec<String> {
-    value
-        .get("warnings")
-        .and_then(Value::as_array)
-        .into_iter()
-        .flatten()
-        .filter_map(Value::as_str)
-        .map(str::to_owned)
-        .collect()
-}
-
-fn string_field(value: &Value, keys: &[&str]) -> Option<String> {
-    keys.iter()
-        .find_map(|key| value.get(*key).and_then(Value::as_str))
-        .map(str::trim)
-        .filter(|value| !value.is_empty())
-        .map(str::to_owned)
-}
-
-fn bool_field(value: &Value, keys: &[&str]) -> bool {
-    keys.iter().any(|key| value.get(*key).and_then(Value::as_bool).unwrap_or(false))
-}
-
-fn extension_from(name: &str, value: &Value) -> String {
-    if let Some(ext) = string_field(value, &["extension", "ext"]) {
-        return ext.trim_start_matches('.').to_ascii_lowercase();
-    }
-    name.rsplit_once('.')
-        .map(|(_, ext)| ext.to_ascii_lowercase())
-        .unwrap_or_default()
-}
-
-fn icon_for_extension(ext: &str) -> &'static str {
-    match ext.trim_start_matches('.').to_ascii_lowercase().as_str() {
-        "neui" => ASSET_BROWSER_ICON_UI,
-        "ytd" | "png" | "jpg" | "jpeg" | "dds" => ASSET_BROWSER_ICON_TEXTURE,
-        "ydd" | "ydr" | "obj" | "gltf" | "glb" => ASSET_BROWSER_ICON_MODEL,
-        "ytyp" | "ymap" => ASSET_BROWSER_ICON_WORLD,
-        "nemat" => ASSET_BROWSER_ICON_MATERIAL,
-        "nepak" => ASSET_BROWSER_ICON_PACKAGE,
-        "nepat" => ASSET_BROWSER_ICON_GENERIC,
-        "lua" | "ron" | "json" | "toml" | "rs" | "py" | "bat" | "cmd" => ASSET_BROWSER_ICON_SCRIPT,
-        "vert" | "frag" | "wgsl" | "glsl" => ASSET_BROWSER_ICON_SHADER,
-        "wav" | "ogg" => ASSET_BROWSER_ICON_AUDIO,
-        "" => ASSET_BROWSER_ICON_GENERIC,
-        _ => ASSET_BROWSER_ICON_GENERIC,
-    }
 }

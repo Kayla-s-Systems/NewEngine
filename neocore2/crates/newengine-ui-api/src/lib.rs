@@ -60,6 +60,122 @@ impl Default for UiInputCaptureState {
     fn default() -> Self { Self::none() }
 }
 
+/// Generic UI event model emitted by `engine.ui` hit-testing/focus logic.
+///
+/// This is not tied to a concrete UI provider. Product/UI compositions can use
+/// the same DTO shape for hover/click/drag/wheel, focus routing, modal stack
+/// diagnostics and z-order visibility.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum UiPointerEventKind {
+    Hover,
+    Press,
+    Release,
+    Click,
+    DoubleClick,
+    DragStart,
+    DragMove,
+    DragEnd,
+    Wheel,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
+pub struct UiHitTestTarget {
+    pub surface_id: String,
+    pub node_id: String,
+    pub action_id: Option<String>,
+    pub z_order: i32,
+    pub rect_px: [f32; 4],
+    pub tags: Vec<String>,
+}
+
+impl Default for UiHitTestTarget {
+    fn default() -> Self {
+        Self {
+            surface_id: String::new(),
+            node_id: String::new(),
+            action_id: None,
+            z_order: 0,
+            rect_px: [0.0, 0.0, 0.0, 0.0],
+            tags: Vec::new(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
+pub struct UiPointerEvent {
+    pub kind: UiPointerEventKind,
+    pub target: Option<UiHitTestTarget>,
+    pub position_px: Option<(f32, f32)>,
+    pub delta_px: (f32, f32),
+    pub wheel_delta: (f32, f32),
+    pub button: Option<u32>,
+}
+
+impl Default for UiPointerEvent {
+    fn default() -> Self {
+        Self {
+            kind: UiPointerEventKind::Hover,
+            target: None,
+            position_px: None,
+            delta_px: (0.0, 0.0),
+            wheel_delta: (0.0, 0.0),
+            button: None,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
+pub struct UiFocusGraphState {
+    pub active_surface: Option<String>,
+    pub focused_node: Option<String>,
+    pub hovered_node: Option<String>,
+    pub capture_reason: String,
+}
+
+impl Default for UiFocusGraphState {
+    fn default() -> Self {
+        Self {
+            active_surface: None,
+            focused_node: None,
+            hovered_node: None,
+            capture_reason: "none".to_owned(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
+pub struct UiModalStackEntry {
+    pub surface_id: String,
+    pub modal: bool,
+    pub z_order: i32,
+    pub reason: String,
+}
+
+impl Default for UiModalStackEntry {
+    fn default() -> Self {
+        Self {
+            surface_id: String::new(),
+            modal: false,
+            z_order: 0,
+            reason: String::new(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[serde(default)]
+pub struct UiEventModelFrame {
+    pub focus: UiFocusGraphState,
+    pub modal_stack: Vec<UiModalStackEntry>,
+    pub pointer_events: Vec<UiPointerEvent>,
+    pub hit_test: Option<UiHitTestTarget>,
+}
+
 impl UiInputCaptureState {
     #[inline]
     pub fn none() -> Self {

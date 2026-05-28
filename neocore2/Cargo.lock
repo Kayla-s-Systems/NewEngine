@@ -433,7 +433,7 @@ name = "newengine-assets-catalog-ui-runtime"
 version = "0.1.0"
 dependencies = [
  "log",
- "newengine-assets",
+ "newengine-assets-api",
  "newengine-core",
  "newengine-input-actions-api",
  "newengine-input-api",
@@ -454,7 +454,6 @@ dependencies = [
  "flate2",
  "log",
  "newengine-asset-format-nef8",
- "newengine-assets",
  "newengine-assets-api",
  "newengine-plugin-api",
  "newengine-service-api",
@@ -560,6 +559,7 @@ dependencies = [
  "newengine-time-api",
  "newengine-ui-api",
  "newengine-ui-draw",
+ "newengine-world-api",
  "parking_lot",
  "raw-window-handle",
  "serde",
@@ -596,6 +596,7 @@ dependencies = [
 name = "newengine-ecs-api"
 version = "0.1.0"
 dependencies = [
+ "newengine-entity-api",
  "newengine-service-api",
  "serde",
  "serde_json",
@@ -609,6 +610,7 @@ dependencies = [
  "log",
  "newengine-ecs",
  "newengine-ecs-api",
+ "newengine-entity-api",
  "newengine-plugin-api",
  "newengine-plugin-host",
  "newengine-scene-runtime",
@@ -743,6 +745,8 @@ dependencies = [
  "newengine-textures-runtime",
  "newengine-time-runtime",
  "newengine-ui",
+ "newengine-world-environment-runtime",
+ "newengine-world-runtime",
 ]
 
 [[package]]
@@ -944,7 +948,6 @@ dependencies = [
  "abi_stable",
  "log",
  "newengine-asset-format-nef8",
- "newengine-assets",
  "newengine-assets-api",
  "newengine-material-runtime",
  "newengine-materials",
@@ -1389,6 +1392,64 @@ version = "0.1.0"
 dependencies = [
  "newengine-core",
  "newengine-ecs",
+]
+
+[[package]]
+name = "newengine-world-api"
+version = "0.1.0"
+dependencies = [
+ "abi_stable",
+ "newengine-entity-api",
+ "newengine-plugin-api",
+ "newengine-service-api",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "newengine-world-environment-api"
+version = "0.1.0"
+dependencies = [
+ "abi_stable",
+ "newengine-plugin-api",
+ "newengine-service-api",
+ "newengine-time-api",
+ "newengine-world-api",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "newengine-world-environment-runtime"
+version = "0.1.0"
+dependencies = [
+ "abi_stable",
+ "log",
+ "newengine-plugin-api",
+ "newengine-plugin-host",
+ "newengine-service-api",
+ "newengine-service-kit",
+ "newengine-world-environment-api",
+ "parking_lot",
+ "serde_json",
+]
+
+[[package]]
+name = "newengine-world-runtime"
+version = "0.1.0"
+dependencies = [
+ "abi_stable",
+ "log",
+ "newengine-plugin-api",
+ "newengine-plugin-host",
+ "newengine-runtime-host",
+ "newengine-scene",
+ "newengine-scene-runtime",
+ "newengine-service-api",
+ "newengine-service-kit",
+ "newengine-world-api",
+ "parking_lot",
+ "serde_json",
 ]
 
 [[package]]

@@ -12,6 +12,7 @@ serde_json = "1"
 
 newengine-ecs = { path = "../newengine-ecs" }
 newengine-ecs-api = { path = "../newengine-ecs-api" }
+newengine-entity-api = { path = "../newengine-entity-api" }
 newengine-scene-runtime = { path = "../newengine-scene-runtime" }
 newengine-plugin-api = { path = "../newengine-plugin-api" }
 newengine-plugin-host = { path = "../newengine-plugin-host" }

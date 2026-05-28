@@ -13,6 +13,15 @@ use newengine_assets::AssetServiceClient;
 use newengine_plugin_api::{Blob, MethodName};
 use newengine_scene::{SceneAsset, SceneAssetOptions, SCENE_ASSET_SCHEMA_V1, SCENE_ASSET_STATUS_TRANSITIONAL_JSON};
 use newengine_scene_io::{method as scene_method, ENGINE_SCENE_SERVICE_ID, SCENE_BACKEND_CAPABILITY_ID};
+
+mod authored_scene_method {
+    // Local bridge constants keep new engine.scene authored-structure methods buildable even
+    // when the scene-io crate artifact in an incremental workspace is still stale.
+    // The canonical names are also declared in newengine-scene-io/src/consts.rs.
+    pub(crate) const GRAPH_JSON_V1: &str = "scene.graph_json_v1";
+    pub(crate) const ARCHETYPE_GRAPH_JSON_V1: &str = "scene.archetype_graph_json_v1";
+    pub(crate) const PLACEMENTS_JSON_V1: &str = "scene.placements_json_v1";
+}
 pub use newengine_engine_runtime::SceneBridge;
 
 use newengine_service_kit::{
@@ -154,6 +163,11 @@ impl EngineSceneGatewayService {
             "origin": "engine-runtime",
             "owner": SCENE_GATEWAY_OWNER,
             "version": 1,
+            "semantics": {
+                "scene": "authored structure",
+                "world": "living runtime world handled by engine.world",
+                "ecs": "storage only behind engine.ecs coarse commands/snapshots"
+            },
             "formats": [
                 {
                     "id": "newengine.scene.asset.v1",
@@ -162,6 +176,11 @@ impl EngineSceneGatewayService {
                     "media_type": "application/json",
                     "load": true,
                     "save": true,
+                    "scene_graph": true,
+                    "archetype_graph": true,
+                    "placement_declarations": true,
+                    "prefab_archetype_instances": true,
+                    "not_world_runtime_snapshot": true,
                     "not_ytyp": true,
                     "not_definition_dictionary": true,
                     "allowed_definition_ref_field": "entities[].definition_ref",
@@ -176,6 +195,9 @@ impl EngineSceneGatewayService {
                 scene_method::FORMATS_JSON,
                 scene_method::LOAD_JSON_V1,
                 scene_method::SAVE_JSON_V1,
+                authored_scene_method::GRAPH_JSON_V1,
+                authored_scene_method::ARCHETYPE_GRAPH_JSON_V1,
+                authored_scene_method::PLACEMENTS_JSON_V1,
                 scene_method::SHUTDOWN_V1
             ]
         }))
@@ -280,6 +302,82 @@ impl EngineSceneGatewayService {
         }))
     }
 
+    fn current_scene_asset(&self, include_empty_entities: bool) -> Result<SceneAsset, String> {
+        let scene_lock = self.scene.scene();
+        let mut scene = scene_lock.write();
+        Ok(scene.to_asset(SceneAssetOptions { include_empty_entities }))
+    }
+
+    fn graph_json_v1(&self) -> RResult<Blob, RString> {
+        let asset = match self.current_scene_asset(true) {
+            Ok(asset) => asset,
+            Err(e) => return RResult::RErr(RString::from(e)),
+        };
+        let nodes = asset.entities.iter().map(|entity| {
+            serde_json::json!({
+                "guid": entity.guid.to_string(),
+                "name": entity.name.clone(),
+                "parent": entity.parent.map(|v| v.to_string()),
+                "has_transform": entity.transform.is_some(),
+                "definition_ref": entity.definition_ref.clone(),
+            })
+        }).collect::<Vec<_>>();
+        ok_json(serde_json::json!({
+            "schema": asset.schema,
+            "semantics": "authored_scene_graph",
+            "world_runtime": "engine.world",
+            "root": asset.root.map(|v| v.to_string()),
+            "active_camera": asset.active_camera.map(|v| v.to_string()),
+            "nodes": nodes,
+            "node_count": asset.entities.len(),
+        }))
+    }
+
+    fn archetype_graph_json_v1(&self) -> RResult<Blob, RString> {
+        let asset = match self.current_scene_asset(true) {
+            Ok(asset) => asset,
+            Err(e) => return RResult::RErr(RString::from(e)),
+        };
+        let mut refs = asset.entities.iter()
+            .filter_map(|entity| entity.definition_ref.as_ref().map(|definition_ref| (entity.guid, definition_ref.clone())))
+            .collect::<Vec<_>>();
+        refs.sort_by(|a, b| a.1.cmp(&b.1).then_with(|| a.0.cmp(&b.0)));
+        let entries = refs.into_iter().map(|(guid, definition_ref)| {
+            serde_json::json!({
+                "instance_guid": guid.to_string(),
+                "definition_ref": definition_ref,
+                "definition_domain": newengine_assets_api::ENGINE_ASSETS_DEFINITIONS_SERVICE_ID,
+                "dependency_graph_domain": newengine_assets_api::ENGINE_ASSETS_GRAPH_SERVICE_ID,
+            })
+        }).collect::<Vec<_>>();
+        ok_json(serde_json::json!({
+            "semantics": "authored_archetype_graph",
+            "not_runtime_spawn_state": true,
+            "entries": entries,
+        }))
+    }
+
+    fn placements_json_v1(&self) -> RResult<Blob, RString> {
+        let asset = match self.current_scene_asset(true) {
+            Ok(asset) => asset,
+            Err(e) => return RResult::RErr(RString::from(e)),
+        };
+        let placements = asset.entities.iter().filter_map(|entity| {
+            entity.transform.map(|transform| serde_json::json!({
+                "guid": entity.guid.to_string(),
+                "name": entity.name.clone(),
+                "parent": entity.parent.map(|v| v.to_string()),
+                "definition_ref": entity.definition_ref.clone(),
+                "transform": transform,
+            }))
+        }).collect::<Vec<_>>();
+        ok_json(serde_json::json!({
+            "semantics": "authored_placement_declarations",
+            "world_runtime": "engine.world",
+            "placements": placements,
+        }))
+    }
+
     fn save_json_v1(&self, payload: Blob) -> RResult<Blob, RString> {
         let req = match payload_json(&payload) {
             Ok(v) => v,
@@ -348,19 +446,28 @@ pub fn scene_gateway_service(
             scene_method::FORMATS_JSON,
             scene_method::LOAD_JSON_V1,
             scene_method::SAVE_JSON_V1,
+            authored_scene_method::GRAPH_JSON_V1,
+            authored_scene_method::ARCHETYPE_GRAPH_JSON_V1,
+            authored_scene_method::PLACEMENTS_JSON_V1,
             scene_method::SHUTDOWN_V1
         ]
     });
 
     let formats_service = service.clone();
     let load_service = service.clone();
-    let save_service = service;
+    let save_service = service.clone();
+    let graph_service = service.clone();
+    let archetype_service = service.clone();
+    let placement_service = service;
 
     JsonServiceRouter::new(ENGINE_SCENE_SERVICE_ID)
         .describe_json(&description)
         .blob(scene_method::FORMATS_JSON, move |_unit, _payload| formats_service.formats_json())
         .blob(scene_method::LOAD_JSON_V1, move |_unit, payload| load_service.load_json_v1(payload))
         .blob(scene_method::SAVE_JSON_V1, move |_unit, payload| save_service.save_json_v1(payload))
+        .blob(authored_scene_method::GRAPH_JSON_V1, move |_unit, _payload| graph_service.graph_json_v1())
+        .blob(authored_scene_method::ARCHETYPE_GRAPH_JSON_V1, move |_unit, _payload| archetype_service.archetype_graph_json_v1())
+        .blob(authored_scene_method::PLACEMENTS_JSON_V1, move |_unit, _payload| placement_service.placements_json_v1())
         .blob(scene_method::SHUTDOWN_V1, move |_unit, _payload| RResult::ROk(Blob::from(Vec::new())))
         .into_service_v1()
 }

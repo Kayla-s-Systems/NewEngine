@@ -112,6 +112,8 @@ impl GameReadyRuntimeProfile {
             Arc::clone(&self.scene),
             Some(asset_mounts),
         );
+        newengine_world_runtime::register_world_gateway_best_effort(Arc::clone(&self.scene));
+        newengine_world_environment_runtime::register_world_environment_gateway_best_effort();
         newengine_ecs_runtime::register_ecs_gateway_best_effort(Arc::clone(&self.scene));
         newengine_entity_runtime::register_entity_gateway_best_effort(Arc::clone(&self.scene));
         newengine_input_bindings_runtime::register_input_bindings_gateway_best_effort(

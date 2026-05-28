@@ -75,6 +75,10 @@ members = [
     "crates/newengine-ui-draw",
     "crates/newengine-ui-navigation-api",
     "crates/newengine-viewport",
+    "crates/newengine-world-api",
+    "crates/newengine-world-environment-api",
+    "crates/newengine-world-environment-runtime",
+    "crates/newengine-world-runtime",
 ]
 # GameFirst workspace: editor/preview/gizmo crates are intentionally not members.
 # Editor tooling will return later as a separate product layer, not as runtime ballast.

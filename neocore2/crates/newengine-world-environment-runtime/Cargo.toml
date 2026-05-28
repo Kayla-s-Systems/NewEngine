@@ -1,0 +1,19 @@
+[package]
+name = "newengine-world-environment-runtime"
+version = "0.1.0"
+edition = "2021"
+readme = "README.md"
+description = "Runtime-hosted baseline providers for engine.world.environment"
+license = "Proprietary"
+
+[dependencies]
+abi_stable = "0.11"
+log = "0.4"
+parking_lot = "0.12"
+serde_json = "1"
+
+newengine-plugin-api = { path = "../newengine-plugin-api" }
+newengine-plugin-host = { path = "../newengine-plugin-host" }
+newengine-service-api = { path = "../newengine-service-api" }
+newengine-service-kit = { path = "../newengine-service-kit" }
+newengine-world-environment-api = { path = "../newengine-world-environment-api" }

@@ -93,7 +93,11 @@ pub(crate) const RUNTIME_SERVICE_CATALOG: &[RuntimeServiceCatalogEntry] = &[
     ),
     RuntimeServiceCatalogEntry::new(
         newengine_scene_io::SCENE_RUNTIME_REQUIREMENT_SPEC,
-        "SceneBridge / world streaming / scene asset load-save",
+        "engine.scene authored structure / scene graph / archetype placement declarations",
+    ),
+    RuntimeServiceCatalogEntry::new(
+        newengine_world_api::WORLD_RUNTIME_REQUIREMENT_SPEC,
+        "engine.world living runtime instance / boot / partition / active cells / snapshots",
     ),
     RuntimeServiceCatalogEntry::new(
         newengine_ecs_api::ECS_RUNTIME_REQUIREMENT_SPEC,

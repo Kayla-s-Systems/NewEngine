@@ -18,6 +18,9 @@ pub struct SceneIoClient {
     m_formats_json: MethodName,
     m_load_json_v1: MethodName,
     m_save_json_v1: MethodName,
+    m_graph_json_v1: MethodName,
+    m_archetype_graph_json_v1: MethodName,
+    m_placements_json_v1: MethodName,
 }
 
 impl SceneIoClient {
@@ -35,6 +38,9 @@ impl SceneIoClient {
             m_formats_json: MethodName::from(method::FORMATS_JSON),
             m_load_json_v1: MethodName::from(method::LOAD_JSON_V1),
             m_save_json_v1: MethodName::from(method::SAVE_JSON_V1),
+            m_graph_json_v1: MethodName::from(method::GRAPH_JSON_V1),
+            m_archetype_graph_json_v1: MethodName::from(method::ARCHETYPE_GRAPH_JSON_V1),
+            m_placements_json_v1: MethodName::from(method::PLACEMENTS_JSON_V1),
         }
     }
 
@@ -76,6 +82,21 @@ impl SceneIoClient {
     #[inline]
     pub fn formats_json(&self) -> Result<serde_json::Value, String> {
         Self::decode_ok_json(self.call(self.m_formats_json.clone(), Vec::new())?)
+    }
+
+    #[inline]
+    pub fn graph_json_v1(&self) -> Result<serde_json::Value, String> {
+        Self::decode_ok_json(self.call(self.m_graph_json_v1.clone(), Vec::new())?)
+    }
+
+    #[inline]
+    pub fn archetype_graph_json_v1(&self) -> Result<serde_json::Value, String> {
+        Self::decode_ok_json(self.call(self.m_archetype_graph_json_v1.clone(), Vec::new())?)
+    }
+
+    #[inline]
+    pub fn placements_json_v1(&self) -> Result<serde_json::Value, String> {
+        Self::decode_ok_json(self.call(self.m_placements_json_v1.clone(), Vec::new())?)
     }
 
     #[inline]

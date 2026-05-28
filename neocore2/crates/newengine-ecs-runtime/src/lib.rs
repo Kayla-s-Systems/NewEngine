@@ -70,7 +70,7 @@ impl EngineEcsGatewayService {
                     break;
                 }
                 entities.push(newengine_ecs_api::EcsEntitySnapshot {
-                    stable_id: id.stable_u64(),
+                    handle: newengine_entity_api::EntityHandle::new(id.stable_u64()),
                 });
             }
         }

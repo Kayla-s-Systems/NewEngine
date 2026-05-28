@@ -9,6 +9,7 @@ struct TreePlacement {
 struct RuntimePrefabMeshPart {
     primitive_id: PrimitiveId,
     material_slot: String,
+    material_ref: Option<String>,
     material_id: MaterialId,
     color: [f32; 4],
 }
@@ -18,6 +19,7 @@ struct DecodedPrefabMeshPart {
     primitive_id: PrimitiveId,
     name: String,
     material_slot: String,
+    material_ref: Option<String>,
     mesh: PrimitiveMesh,
 }
 

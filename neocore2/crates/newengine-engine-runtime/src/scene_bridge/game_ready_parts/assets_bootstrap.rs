@@ -812,6 +812,7 @@ pub(super) fn bootstrap_fps_game_ready_scene(
         root,
         terrain,
         materials,
+        &map.materials,
         &map.palette,
         &map.foliage,
         &map.prefabs,

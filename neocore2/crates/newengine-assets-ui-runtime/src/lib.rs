@@ -9,7 +9,7 @@
 
 use abi_stable::std_types::{RResult, RString};
 use flate2::read::DeflateDecoder;
-use newengine_assets::AssetServiceClient;
+use newengine_assets_api::AssetServiceClient;
 use newengine_assets_api::{
     assets_ui_method, list_file_content_kind_label as content_kind_label,
     parse_list_file_header_v1, ASSETS_UI_BACKEND_CAPABILITY_ID, ASSETS_UI_RUNTIME_CONTRACT,

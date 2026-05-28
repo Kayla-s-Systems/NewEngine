@@ -44,6 +44,15 @@ pub mod method {
     /// Request payload: json `{ path, pretty, options }`.
     pub const SAVE_JSON_V1: &str = "scene.save_json_v1";
 
+    /// Returns authored scene graph diagnostics: stable GUID nodes, parent links and root/camera refs.
+    pub const GRAPH_JSON_V1: &str = "scene.graph_json_v1";
+
+    /// Returns authored archetype/definition references declared by placements.
+    pub const ARCHETYPE_GRAPH_JSON_V1: &str = "scene.archetype_graph_json_v1";
+
+    /// Returns placement declarations only; runtime spawn/world state belongs to engine.world.
+    pub const PLACEMENTS_JSON_V1: &str = "scene.placements_json_v1";
+
     /// Idempotent service shutdown hook used by the plugin manager.
     pub const SHUTDOWN_V1: &str = "shutdown_v1";
 }
@@ -52,6 +61,9 @@ pub const SCENE_REQUIRED_METHODS: &[&str] = &[
     method::FORMATS_JSON,
     method::LOAD_JSON_V1,
     method::SAVE_JSON_V1,
+    method::GRAPH_JSON_V1,
+    method::ARCHETYPE_GRAPH_JSON_V1,
+    method::PLACEMENTS_JSON_V1,
     method::SHUTDOWN_V1,
 ];
 

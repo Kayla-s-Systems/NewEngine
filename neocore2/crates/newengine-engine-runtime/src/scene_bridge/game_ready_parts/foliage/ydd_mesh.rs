@@ -82,6 +82,7 @@ fn decode_ydd_runtime_mesh_part(
     logical_ref: &str,
     index: usize,
     part: &serde_json::Value,
+    material_ref: Option<String>,
 ) -> Result<DecodedPrefabMeshPart, String> {
     let name = part
         .get("name")
@@ -151,8 +152,17 @@ fn decode_ydd_runtime_mesh_part(
         primitive_id,
         name,
         material_slot,
+        material_ref,
         mesh,
     })
+}
+
+fn ydd_material_ref_for_runtime_part(body: &serde_json::Value, index: usize) -> Option<String> {
+    let mesh_part = body.get("mesh_parts")?.as_array()?.get(index)?;
+    let slot_index = mesh_part.get("material_slot_index")?.as_u64()? as usize;
+    let slot = body.get("material_slots")?.as_array()?.get(slot_index)?;
+    let reference = slot.get("material_ref")?.as_str()?.trim().replace('\\', "/");
+    (!reference.is_empty()).then_some(reference)
 }
 
 fn decode_runtime_ydd_prefab(logical_ref: &str) -> Result<Vec<DecodedPrefabMeshPart>, String> {
@@ -169,7 +179,8 @@ fn decode_runtime_ydd_prefab(logical_ref: &str) -> Result<Vec<DecodedPrefabMeshP
     let parts_json = ydd_array(&body, "runtime_mesh_parts")?;
     let mut parts = Vec::with_capacity(parts_json.len());
     for (index, part) in parts_json.iter().enumerate() {
-        parts.push(decode_ydd_runtime_mesh_part(logical_ref, index, part)?);
+        let material_ref = ydd_material_ref_for_runtime_part(&body, index);
+        parts.push(decode_ydd_runtime_mesh_part(logical_ref, index, part, material_ref)?);
     }
     if parts.is_empty() {
         return Err(format!("ydd drawable has no runtime mesh parts path='{logical_ref}'"));

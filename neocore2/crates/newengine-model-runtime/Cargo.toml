@@ -12,7 +12,6 @@ log = "0.4"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 
-newengine-assets = { path = "../newengine-assets" }
 newengine-assets-api = { path = "../newengine-assets-api" }
 newengine-material-runtime = { path = "../newengine-material-runtime" }
 newengine-materials = { path = "../newengine-materials", features = ["serde"] }

@@ -37,6 +37,7 @@ newengine-time-api = { path = "../newengine-time-api" }
 newengine-input-api = { path = "../newengine-input-api" }
 newengine-input-bindings-api = { path = "../newengine-input-bindings-api" }
 newengine-scene-io = { path = "../newengine-scene-io" }
+newengine-world-api = { path = "../newengine-world-api" }
 newengine-materials = { path = "../newengine-materials" }
 newengine-ui-draw = { path = "../newengine-ui-draw" }
 

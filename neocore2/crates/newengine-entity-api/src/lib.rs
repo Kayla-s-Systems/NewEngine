@@ -100,6 +100,9 @@ impl Default for EntityServiceInfo {
                 "entity-list".to_owned(),
                 "entity-exists".to_owned(),
                 "entity-lifecycle".to_owned(),
+                "entity-tags".to_owned(),
+                "ownership".to_owned(),
+                "debug-identity".to_owned(),
             ],
             methods: ENTITY_REQUIRED_METHODS_V1
                 .iter()
@@ -145,9 +148,30 @@ impl Default for EntityListRequest {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct EntityRecord {
     pub handle: EntityHandle,
+    #[serde(default)]
+    pub lifecycle: String,
+    #[serde(default)]
+    pub tags: Vec<String>,
+    #[serde(default)]
+    pub owner: Option<String>,
+    #[serde(default)]
+    pub debug_identity: String,
+}
+
+impl EntityRecord {
+    #[inline]
+    pub fn alive(handle: EntityHandle) -> Self {
+        Self {
+            handle,
+            lifecycle: "alive".to_owned(),
+            tags: Vec::new(),
+            owner: None,
+            debug_identity: format!("entity:{}", handle.stable_id),
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]

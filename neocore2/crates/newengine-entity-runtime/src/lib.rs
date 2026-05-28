@@ -39,6 +39,10 @@ impl EngineEntityGatewayService {
         EntityHandle::new(id.stable_u64())
     }
 
+    fn live_record(handle: EntityHandle) -> EntityRecord {
+        EntityRecord { handle, lifecycle: "".to_string(), tags: vec![], owner: None, debug_identity: "".to_string() }
+    }
+
     fn find_entity_by_handle(
         world: &newengine_ecs::World,
         handle: EntityHandle,
@@ -65,7 +69,7 @@ impl EngineEntityGatewayService {
                 truncated = true;
                 break;
             }
-            entities.push(EntityRecord { handle: Self::handle(id) });
+            entities.push(Self::live_record(Self::handle(id)));
         }
 
         ok_json(&EntityListResponse {
@@ -107,7 +111,7 @@ impl EngineEntityGatewayService {
 
         for _ in 0..count {
             let id = world.spawn();
-            entities.push(EntityRecord { handle: Self::handle(id) });
+            entities.push(Self::live_record(Self::handle(id)));
         }
 
         ok_json(&EntitySpawnResponse {

@@ -6,6 +6,7 @@
 //! Shader source paths are declared in a data asset and are compiled/validated on
 //! demand by the active renderer backend through `ShaderDesc::from_asset`.
 
+use std::collections::HashMap;
 use std::time::Instant;
 
 use newengine_assets::AssetServiceClient;
@@ -27,7 +28,7 @@ const DEFAULT_SHADER_MANIFEST_PATH: &str = "shaders/pipelines/gameready_lit.pipe
 #[derive(Default)]
 pub struct GameReadyLitMaterialDomainProvider {
     manifest: Option<GameReadyLitShaderManifest>,
-    pipeline: Option<LitPipeline>,
+    pipelines: HashMap<String, LitPipeline>,
 }
 
 impl GameReadyLitMaterialDomainProvider {
@@ -331,14 +332,24 @@ impl MaterialGpuPipelineProvider for GameReadyLitMaterialDomainProvider {
         profile: MaterialPipelineBuildProfile,
         r: &mut dyn MaterialRenderDevice,
     ) -> MaterialDomainResult<MaterialGpuPipeline> {
-        if let Some(pipeline) = self.pipeline {
+        let cache_key = profile_pipeline_cache_key(profile);
+        if let Some(pipeline) = self.pipelines.get(&cache_key).copied() {
             return Ok(MaterialGpuPipeline::Lit(pipeline));
         }
 
         let pipeline = self.build_pipeline(profile, r)?;
-        self.pipeline = Some(pipeline);
+        self.pipelines.insert(cache_key, pipeline);
         Ok(MaterialGpuPipeline::Lit(pipeline))
     }
+}
+
+#[inline]
+fn profile_pipeline_cache_key(profile: MaterialPipelineBuildProfile) -> String {
+    format!(
+        "scene={:?}|shadow={:?}",
+        profile.scene_hdr_color_format,
+        profile.shadow_map_color_format
+    )
 }
 
 #[derive(Clone, Deserialize)]

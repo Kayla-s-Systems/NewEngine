@@ -27,10 +27,11 @@ fn choose_foliage_prefab<'a>(
     prefabs: &'a [GameReadyPrefabSpec],
     id: &str,
 ) -> Option<&'a GameReadyPrefabSpec> {
-    prefabs
-        .iter()
-        .find(|p| p.enabled && p.id == id)
-        .or_else(|| prefabs.iter().find(|p| p.enabled && p.proxy == "ydd_runtime_mesh"))
+    let id = id.trim();
+    if id.is_empty() {
+        return None;
+    }
+    prefabs.iter().find(|p| p.enabled && p.id == id)
 }
 
 fn collect_tree_placements(

@@ -8,6 +8,7 @@
 //! internals, but service/runtime boundaries should call `engine.ecs`.
 
 use serde::{Deserialize, Serialize};
+use newengine_entity_api::EntityHandle;
 
 /// Engine-facing ECS service gateway id. Consumers call this facade; the host
 /// resolves it to the active provider by descriptor metadata / engine-runtime facts.
@@ -75,6 +76,7 @@ impl Default for EcsServiceInfo {
             features: vec![
                 "gateway-summary".to_owned(),
                 "entity-snapshot".to_owned(),
+                "opaque-entity-handles".to_owned(),
                 "command-envelope".to_owned(),
                 "semantic-component-packets".to_owned(),
             ],
@@ -115,8 +117,8 @@ impl Default for EcsSnapshotRequest {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub struct EcsEntitySnapshot {
-    /// Stable engine-wide entity representation; opaque to service consumers.
-    pub stable_id: u64,
+    /// Opaque engine-wide entity handle; never a native ECS EntityId.
+    pub handle: EntityHandle,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
