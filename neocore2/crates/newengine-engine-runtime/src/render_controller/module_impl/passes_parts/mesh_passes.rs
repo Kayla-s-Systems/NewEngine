@@ -30,6 +30,12 @@ use newengine_math::collections::FxHashMap;
 mod mesh_passes_shadow;
 pub use self::mesh_passes_shadow::{draw_primitives_shadow, draw_procedural_terrain_shadow};
 
+
+#[inline]
+fn draw_authored_sky_background_mesh() -> bool {
+    crate::env_config::var_bool("NEWENGINE_RENDER_DRAW_SKY_MESH", false)
+}
+
 pub(super) fn publish_camera_spawn(
     bridge: &crate::viewport_bridge::ViewportBridge,
     camera_position: Vec3,
@@ -366,12 +372,24 @@ pub fn draw_primitives(
         if follow_camera_sky {
             sky_seen += 1;
         }
-        // Data-driven sky uses an authored Dome mesh again. It remains in the
-        // sky bucket and is replayed before world geometry with sky-depth policy;
-        // the clear color is only a fallback background, not a replacement for
-        // `.ytyp -> .ydd -> .nemat -> .ytd` sky assets.
-        if follow_camera_sky && !this.runtime_profile().draw_sky_visuals() {
+        // Diagnostics as Truth: the authored sky dome is a valid scene asset,
+        // but it must not be replayed through the generic lit primitive path by
+        // default. When the camera sits inside a follow-camera dome, any depth,
+        // winding or pipeline-state mismatch turns the whole frame into a
+        // camera-dependent single-color sky sample. Until a dedicated sky pass
+        // owns this draw explicitly, the runtime uses SkyClearColorRuntime as
+        // the background and leaves the world draw list authoritative.
+        let authored_sky_background_mesh_enabled = draw_authored_sky_background_mesh();
+        if follow_camera_sky
+            && (!this.runtime_profile().draw_sky_visuals()
+                || (background_sky && !authored_sky_background_mesh_enabled))
+        {
             sky_profile_culled += 1;
+            if background_sky && this.frame.frame_index <= 2 {
+                log::info!(
+                    "sky.draw_list: authored background dome skipped policy='clear-color-background until dedicated sky pass' reason='prevents follow-camera dome from covering world frame' env='NEWENGINE_RENDER_DRAW_SKY_MESH=1 to opt in'"
+                );
+            }
             continue;
         }
         if runtime && !follow_camera_sky {

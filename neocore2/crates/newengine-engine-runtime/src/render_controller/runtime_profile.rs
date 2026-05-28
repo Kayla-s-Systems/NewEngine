@@ -155,7 +155,7 @@ impl Default for WorldRuntimeProfile {
         Self {
             runtime_terrain_streaming: FeatureSwitch::Enabled,
             service_physics: FeatureSwitch::Enabled,
-            fallback_ecs_physics: true,
+            fallback_ecs_physics: false,
         }
     }
 }
@@ -184,7 +184,7 @@ impl Default for UiRestoreProfile {
 
 impl RenderRuntimeProfile {
     pub(crate) fn load() -> Self {
-        let raw = newengine_plugin_host::get_plugin_overrides_with_env("newengine.engine_runtime");
+        let raw = newengine_plugin_host::get_plugin_overrides_with_env("engine.runtime");
         let Some(render_value) = raw.get("render") else {
             return Self::default();
         };

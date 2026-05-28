@@ -19,6 +19,49 @@ const DEFAULT_HEADLESS_HEIGHT: u32 = 1;
 const DEFAULT_STARTUP_STEP_LIMIT: u32 = 4_096;
 const DEFAULT_HEADLESS_FRAMES: u64 = 0;
 
+#[cfg(target_os = "windows")]
+mod console_window {
+    use std::ffi::c_void;
+
+    const ATTACH_PARENT_PROCESS: u32 = u32::MAX;
+
+    #[link(name = "kernel32")]
+    unsafe extern "system" {
+        fn GetConsoleWindow() -> *mut c_void;
+        fn AttachConsole(dw_process_id: u32) -> i32;
+        fn AllocConsole() -> i32;
+        fn SetConsoleTitleW(title: *const u16) -> i32;
+    }
+
+    pub(super) fn ensure_open(_reason: &str) {
+        let has_console = unsafe { !GetConsoleWindow().is_null() };
+        if !has_console {
+            let attached = unsafe { AttachConsole(ATTACH_PARENT_PROCESS) != 0 };
+            if !attached {
+                let _ = unsafe { AllocConsole() };
+            }
+        }
+
+        let mut title: Vec<u16> = "North Star Engine - Headless Console"
+            .encode_utf16()
+            .chain(std::iter::once(0))
+            .collect();
+        let _ = unsafe { SetConsoleTitleW(title.as_mut_ptr()) };
+        eprintln!(
+            "[HEADLESS] Diagnostics: active platform route = engine.platform.headless; native platform is optional by profile policy."
+        );
+    }
+}
+
+#[cfg(not(target_os = "windows"))]
+mod console_window {
+    pub(super) fn ensure_open(_reason: &str) {
+        eprintln!(
+            "[HEADLESS] Diagnostics: active platform route = engine.platform.headless; native platform is optional by profile policy."
+        );
+    }
+}
+
 pub(crate) struct HeadlessCliRuntime {
     engine: Engine<()>,
     fixed_dt_sec: f32,
@@ -38,8 +81,10 @@ impl HeadlessCliRuntime {
 
     pub(crate) fn run(mut self, reason: impl AsRef<str>) -> EngineResult<()> {
         let reason = reason.as_ref();
+        std::env::set_var("NEWENGINE_HEADLESS", "1");
+        console_window::ensure_open(reason);
         log::warn!(
-            "headless runtime: entering CLI fallback reason='{}' startup_step_limit={} frame_limit={} fixed_dt_sec={:.4}",
+            "headless runtime: entering CLI fallback route='engine.platform.headless' reason='{}' startup_step_limit={} frame_limit={} fixed_dt_sec={:.4}",
             reason,
             self.startup_step_limit,
             self.frame_limit
@@ -67,9 +112,10 @@ impl HeadlessCliRuntime {
     }
 
     fn install_headless_services(&mut self) {
+        crate::null_providers::register_null_provider_routes_best_effort();
         newengine_time_runtime::register_time_gateway_best_effort();
         register_jobs_gateway_service_best_effort(self.engine.job_system(), self.engine.events().clone());
-        log::info!("headless runtime: engine.time and engine.jobs gateways registered; loading/status stays an engine.ui projection");
+        log::info!("headless runtime: engine.time, engine.jobs, synthetic engine.platform.headless and visible NullProvider routes registered; loading/status stays an engine.ui projection");
     }
 
     fn publish_headless_window_contract(&mut self) -> EngineResult<()> {

@@ -9,6 +9,7 @@
 
 use newengine_assets::{AssetService, AssetServiceClient};
 use newengine_core::{EngineResult, Module, ModuleCtx};
+use newengine_core::host_events::WindowInitSize;
 use newengine_core::lifecycle_events::EngineReadinessKey;
 use newengine_input_actions_api::{
     engine_action, InputActionDefinition, InputActionDispatchMode, InputActionEffect,
@@ -20,7 +21,7 @@ use newengine_input_bindings_api::{
 };
 use newengine_plugin_api::HostApiV1;
 use newengine_ui_api::{
-    UiComponentNode, UiInputCaptureState, UiInputFrame, UiNodeMessage,
+    ui_surface_node_layout, UiComponentNode, UiInputCaptureState, UiInputFrame, UiNodeMessage,
     UiNodeMessageSeverity, UiNodeTone, UiSurfaceAnchor, UiSurfaceNode, UiSurfaceStyle,
     ENGINE_UI_SERVICE_ID, UI_COMPONENT_PANEL, UI_SERVICE_METHOD_SURFACE_NODE_V1,
 };
@@ -29,7 +30,7 @@ use serde_json::{json, Value};
 pub const ASSETS_CATALOG_UI_OWNER: &str = "app.asset_browser";
 const ASSETS_CATALOG_SURFACE_ID: &str = "ui.assets.catalog";
 const ASSETS_CATALOG_INPUT_LISTENER: &str = "asset-browser-ui";
-const ASSETS_CATALOG_THEME_ID: &str = "northstar.assets.browser.noir";
+const ASSETS_CATALOG_THEME_ID: &str = "northstar.assets.browser.editor_dark";
 const ASSET_BROWSER_ICON_FOLDER: &str = "ui/icons/assetBrowser.ytd@folder";
 const ASSET_BROWSER_ICON_TEXTURE: &str = "ui/icons/assetBrowser.ytd@texture";
 const ASSET_BROWSER_ICON_MATERIAL: &str = "ui/icons/assetBrowser.ytd@material";
@@ -42,6 +43,8 @@ const ASSET_BROWSER_ICON_SHADER: &str = "ui/icons/assetBrowser.ytd@shader";
 const ASSET_BROWSER_ICON_AUDIO: &str = "ui/icons/assetBrowser.ytd@audio";
 const ASSET_BROWSER_ICON_GENERIC: &str = "ui/icons/assetBrowser.ytd@generic";
 const MAX_VISIBLE_ENTRIES: usize = 64;
+const MOUSE_PRIMARY_BUTTON: u32 = 1;
+const DEFAULT_SURFACE_SIZE_PX: [u32; 2] = [1600, 900];
 
 #[derive(Clone)]
 pub struct AssetsCatalogRuntimeState {
@@ -67,6 +70,7 @@ pub struct AssetsCatalogUiRuntimeModule {
     last_refresh_frame: u64,
     last_toggle_frame: u64,
     last_published_open: bool,
+    last_pointer_frame: u64,
     input_registered: bool,
     cached_snapshot: Option<AssetsCatalogSnapshot>,
     cached_node: Option<UiSurfaceNode>,
@@ -91,6 +95,7 @@ impl AssetsCatalogUiRuntimeModule {
             last_refresh_frame: 0,
             last_toggle_frame: u64::MAX,
             last_published_open: false,
+            last_pointer_frame: u64::MAX,
             input_registered: false,
             cached_snapshot: None,
             cached_node: None,
@@ -147,6 +152,89 @@ impl AssetsCatalogUiRuntimeModule {
             }
         }
         self.last_refresh_frame = frame_index;
+    }
+
+    fn handle_pointer_input(&mut self, input: &UiInputFrame, surface_size_px: [u32; 2], frame_index: u64) {
+        if input.mouse_wheel.1.abs() > f32::EPSILON {
+            let entry_count = self.cached_snapshot.as_ref().map(|snapshot| snapshot.entries.len()).unwrap_or(0);
+            if entry_count > 0 {
+                if input.mouse_wheel.1 > 0.0 {
+                    self.selected_index = self.selected_index.saturating_sub(1);
+                } else {
+                    self.selected_index = (self.selected_index + 1).min(entry_count.saturating_sub(1));
+                }
+                self.invalidate_node();
+            }
+        }
+
+        if !input.is_mouse_pressed(MOUSE_PRIMARY_BUTTON) || self.last_pointer_frame == frame_index {
+            return;
+        }
+        self.last_pointer_frame = frame_index;
+
+        let Some(snapshot) = self.cached_snapshot.clone() else { return; };
+        let Some(target) = catalog_hit_test(&snapshot, self.selected_index, surface_size_px, input.mouse_pos) else { return; };
+
+        match target {
+            CatalogPointerTarget::Root => {
+                self.current_path.clear();
+                self.selected_index = 0;
+                self.view_mode = CatalogViewMode::Grid;
+                self.cached_snapshot = None;
+                self.invalidate_node();
+                self.refresh_cache(frame_index);
+                log::info!("asset browser UI: mouse open root");
+            }
+            CatalogPointerTarget::Folder(entry_index) => {
+                if let Some(entry) = snapshot.entries.get(entry_index).filter(|entry| entry.is_directory()) {
+                    self.current_path = normalize_catalog_path(&entry.logical_path);
+                    self.selected_index = 0;
+                    self.view_mode = CatalogViewMode::Grid;
+                    self.cached_snapshot = None;
+                    self.invalidate_node();
+                    self.refresh_cache(frame_index);
+                    log::info!("asset browser UI: mouse open directory path='{}'", display_path(&self.current_path));
+                }
+            }
+            CatalogPointerTarget::Asset(entry_index) => {
+                if entry_index < snapshot.entries.len() {
+                    self.selected_index = entry_index;
+                    self.view_mode = CatalogViewMode::Grid;
+                    self.invalidate_node();
+                    if let Some(entry) = snapshot.entries.get(entry_index) {
+                        log::info!(
+                            "asset browser UI: mouse selected asset path='{}' kind='{}' gateway='{}'",
+                            entry.logical_path,
+                            entry.asset_kind,
+                            entry.semantic_gateway,
+                        );
+                    }
+                }
+            }
+            CatalogPointerTarget::Inspector(entry_index) => {
+                if entry_index < snapshot.entries.len() {
+                    self.selected_index = entry_index;
+                    self.view_mode = CatalogViewMode::Inspector;
+                    self.invalidate_node();
+                }
+            }
+            CatalogPointerTarget::Tab(view_mode) => {
+                self.view_mode = view_mode;
+                self.invalidate_node();
+            }
+            CatalogPointerTarget::Toolbar(action) => {
+                match action {
+                    CatalogToolbarAction::Refresh => {
+                        self.cached_snapshot = None;
+                        self.invalidate_node();
+                        self.refresh_cache(frame_index);
+                    }
+                    CatalogToolbarAction::Add | CatalogToolbarAction::Import | CatalogToolbarAction::Reimport | CatalogToolbarAction::SaveAll => {
+                        log::info!("asset browser UI: toolbar action '{}' routed as UI intent placeholder", action.as_str());
+                    }
+                }
+            }
+        }
     }
 
     fn handle_navigation_input(&mut self, actions: &InputActionFrame, frame_index: u64) {
@@ -252,6 +340,10 @@ impl<E: Send + 'static> Module<E> for AssetsCatalogUiRuntimeModule {
 
         let input = ctx.resources().get::<UiInputFrame>().cloned().unwrap_or_default();
         let actions = resolve_actions(&input);
+        let surface_size_px = ctx.resources()
+            .get::<WindowInitSize>()
+            .map(|size| [size.width.max(1), size.height.max(1)])
+            .unwrap_or(DEFAULT_SURFACE_SIZE_PX);
         let toggled = action_frame_contains(&actions, engine_action::ASSET_CATALOG_UI_TOGGLE);
 
         if toggled && self.last_toggle_frame != frame_index {
@@ -270,6 +362,7 @@ impl<E: Send + 'static> Module<E> for AssetsCatalogUiRuntimeModule {
             if stale || self.cached_node.is_none() || self.last_toggle_frame == frame_index {
                 self.refresh_cache(frame_index);
             }
+            self.handle_pointer_input(&input, surface_size_px, frame_index);
             self.handle_navigation_input(&actions, frame_index);
             if self.cached_node.is_none() {
                 self.refresh_cache(frame_index);
@@ -362,27 +455,27 @@ fn ensure_assets_catalog_input_registration() -> bool {
             .with_label("Toggle Asset Browser"),
         InputActionDefinition::new(engine_action::UI_NAVIGATION_ACCEPT)
             .with_dispatch(InputActionDispatchMode::ConsumeFirst)
-            .with_label("Asset Browser accept")
+            .with_label("Asset catalog accept")
             .with_effect(InputActionEffect::UiAccept),
         InputActionDefinition::new(engine_action::UI_NAVIGATION_BACK)
             .with_dispatch(InputActionDispatchMode::ConsumeFirst)
-            .with_label("Asset Browser back")
+            .with_label("Asset catalog back")
             .with_effect(InputActionEffect::UiBack),
         InputActionDefinition::new(engine_action::UI_NAVIGATION_UP)
             .with_dispatch(InputActionDispatchMode::ConsumeFirst)
-            .with_label("Asset Browser up")
+            .with_label("Asset catalog up")
             .with_effect(InputActionEffect::UiNav { x: 0, y: -1 }),
         InputActionDefinition::new(engine_action::UI_NAVIGATION_DOWN)
             .with_dispatch(InputActionDispatchMode::ConsumeFirst)
-            .with_label("Asset Browser down")
+            .with_label("Asset catalog down")
             .with_effect(InputActionEffect::UiNav { x: 0, y: 1 }),
         InputActionDefinition::new(engine_action::UI_NAVIGATION_LEFT)
             .with_dispatch(InputActionDispatchMode::ConsumeFirst)
-            .with_label("Asset Browser previous view")
+            .with_label("Asset catalog previous view")
             .with_effect(InputActionEffect::UiNav { x: -1, y: 0 }),
         InputActionDefinition::new(engine_action::UI_NAVIGATION_RIGHT)
             .with_dispatch(InputActionDispatchMode::ConsumeFirst)
-            .with_label("Asset Browser next view")
+            .with_label("Asset catalog next view")
             .with_effect(InputActionEffect::UiNav { x: 1, y: 0 }),
     ] {
         if let Err(error) = newengine_input_bindings_runtime::register_input_action(action) {
@@ -449,6 +542,217 @@ fn ensure_assets_catalog_input_registration() -> bool {
         );
     }
     ok
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum CatalogPointerTarget {
+    Root,
+    Folder(usize),
+    Asset(usize),
+    Inspector(usize),
+    Tab(CatalogViewMode),
+    Toolbar(CatalogToolbarAction),
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum CatalogToolbarAction {
+    Add,
+    Import,
+    Reimport,
+    SaveAll,
+    Refresh,
+}
+
+impl CatalogToolbarAction {
+    fn as_str(self) -> &'static str {
+        match self {
+            Self::Add => "add",
+            Self::Import => "import",
+            Self::Reimport => "reimport",
+            Self::SaveAll => "save_all",
+            Self::Refresh => "refresh",
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug)]
+struct CatalogWorkspaceGeometry {
+    panel_x: f32,
+    panel_y: f32,
+    panel_w: f32,
+    panel_h: f32,
+    sidebar_x: f32,
+    sidebar_w: f32,
+    main_x: f32,
+    main_w: f32,
+    details_x: f32,
+    details_w: f32,
+    content_top: f32,
+    content_h: f32,
+    tab_h: f32,
+    toolbar_h: f32,
+}
+
+fn catalog_workspace_geometry(surface_size_px: [u32; 2]) -> CatalogWorkspaceGeometry {
+    let style = assets_catalog_surface_style();
+    let style_tags = vec!["workspace".to_owned(), "explorer-grid".to_owned()];
+    let layout = ui_surface_node_layout(surface_size_px, &style_tags, &style, 1, 0);
+    let panel_x = layout.panel_x;
+    let panel_y = layout.panel_y;
+    let panel_w = layout.panel_w;
+    let panel_h = layout.panel_h;
+    let tab_h = 34.0;
+    let toolbar_h = 44.0;
+    let breadcrumb_h = 38.0;
+    let status_h = 30.0;
+    let sidebar_w = (panel_w * 0.165).clamp(210.0, 280.0);
+    let details_w = (panel_w * 0.165).clamp(230.0, 300.0);
+    let gap = 8.0;
+    let content_top = panel_y + tab_h + toolbar_h + breadcrumb_h + gap;
+    let content_bottom = panel_y + panel_h - status_h - gap;
+    let content_h = (content_bottom - content_top).max(120.0);
+    let sidebar_x = panel_x + gap;
+    let main_x = sidebar_x + sidebar_w + gap;
+    let details_x = panel_x + panel_w - details_w - gap;
+    let main_w = (details_x - main_x - gap).max(320.0);
+    CatalogWorkspaceGeometry { panel_x, panel_y, panel_w, panel_h, sidebar_x, sidebar_w, main_x, main_w, details_x, details_w, content_top, content_h, tab_h, toolbar_h }
+}
+
+fn catalog_hit_test(
+    snapshot: &AssetsCatalogSnapshot,
+    selected_index: usize,
+    surface_size_px: [u32; 2],
+    mouse_pos: Option<(f32, f32)>,
+) -> Option<CatalogPointerTarget> {
+    let (mx, my) = mouse_pos?;
+    let g = catalog_workspace_geometry(surface_size_px);
+    if !point_in_rect(mx, my, g.panel_x, g.panel_y, g.panel_w, g.panel_h) {
+        return None;
+    }
+
+    if my >= g.panel_y && my <= g.panel_y + g.tab_h {
+        let mut tx = g.panel_x + 10.0;
+        let tabs = [("Asset Browser", CatalogViewMode::Grid), ("Inspector", CatalogViewMode::Inspector)];
+        for (label, mode) in tabs {
+            let tw = (label.chars().count() as f32 * 9.0 + 76.0).clamp(118.0, 220.0);
+            if point_in_rect(mx, my, tx, g.panel_y + 4.0, tw, g.tab_h - 5.0) {
+                return Some(CatalogPointerTarget::Tab(mode));
+            }
+            tx += tw + 4.0;
+        }
+    }
+
+    let toolbar_y = g.panel_y + g.tab_h;
+    if my >= toolbar_y && my <= toolbar_y + g.toolbar_h {
+        let mut bx = g.panel_x + 18.0;
+        for (label, action) in [
+            ("+ Add", CatalogToolbarAction::Add),
+            ("Import", CatalogToolbarAction::Import),
+            ("Reimport", CatalogToolbarAction::Reimport),
+            ("Save All", CatalogToolbarAction::SaveAll),
+            ("Refresh", CatalogToolbarAction::Refresh),
+        ] {
+            let bw = (label.chars().count() as f32 * 9.0 + 32.0).clamp(58.0, 118.0);
+            if point_in_rect(mx, my, bx, toolbar_y + 9.0, bw, g.toolbar_h - 18.0) {
+                return Some(CatalogPointerTarget::Toolbar(action));
+            }
+            bx += bw + 8.0;
+        }
+    }
+
+    if point_in_rect(mx, my, g.sidebar_x, g.content_top, g.sidebar_w, g.content_h) {
+        let mut cy = g.content_top + 42.0;
+        if point_in_rect(mx, my, g.sidebar_x + 8.0, cy - 5.0, g.sidebar_w - 16.0, 24.0) {
+            return None;
+        }
+        cy += 23.0;
+        if point_in_rect(mx, my, g.sidebar_x + 8.0, cy - 5.0, g.sidebar_w - 16.0, 24.0) {
+            return Some(CatalogPointerTarget::Root);
+        }
+        cy += 23.0;
+        for (entry_index, _entry) in snapshot.entries.iter().enumerate().filter(|(_, entry)| entry.is_directory()).take(18) {
+            if point_in_rect(mx, my, g.sidebar_x + 8.0, cy - 5.0, g.sidebar_w - 16.0, 24.0) {
+                return Some(CatalogPointerTarget::Folder(entry_index));
+            }
+            cy += 23.0;
+            if cy > g.content_top + g.content_h - 22.0 { break; }
+        }
+    }
+
+    if point_in_rect(mx, my, g.main_x, g.content_top, g.main_w, g.content_h) {
+        if let Some(folder_index) = hit_folder_card(snapshot, mx, my, &g) {
+            return Some(CatalogPointerTarget::Folder(folder_index));
+        }
+        if let Some(asset_index) = hit_asset_card(snapshot, selected_index, mx, my, &g) {
+            return Some(CatalogPointerTarget::Asset(asset_index));
+        }
+    }
+
+    if point_in_rect(mx, my, g.details_x, g.content_top, g.details_w, g.content_h) {
+        if point_in_rect(mx, my, g.details_x + 14.0, g.content_top + 48.0, g.details_w - 28.0, 104.0) {
+            return Some(CatalogPointerTarget::Inspector(selected_index));
+        }
+    }
+
+    None
+}
+
+fn hit_folder_card(snapshot: &AssetsCatalogSnapshot, mx: f32, my: f32, g: &CatalogWorkspaceGeometry) -> Option<usize> {
+    let cy = g.content_top + 14.0 + 30.0;
+    let card_gap = 12.0;
+    let folder_w = 126.0;
+    let folder_h = 66.0;
+    let columns = ((g.main_w - 28.0 + card_gap) / (folder_w + card_gap)).floor().max(1.0) as usize;
+    for (slot, (entry_index, _entry)) in snapshot.entries.iter().enumerate().filter(|(_, entry)| entry.is_directory()).take(10).enumerate() {
+        let col = slot % columns;
+        let row = slot / columns;
+        let cx = g.main_x + 16.0 + col as f32 * (folder_w + card_gap);
+        let fy = cy + row as f32 * (folder_h + card_gap);
+        if fy + folder_h > g.content_top + g.content_h * 0.42 { break; }
+        if point_in_rect(mx, my, cx, fy, folder_w, folder_h) {
+            return Some(entry_index);
+        }
+    }
+    None
+}
+
+fn hit_asset_card(snapshot: &AssetsCatalogSnapshot, selected_index: usize, mx: f32, my: f32, g: &CatalogWorkspaceGeometry) -> Option<usize> {
+    let folder_count = snapshot.entries.iter().filter(|entry| entry.is_directory()).count();
+    let card_gap = 12.0;
+    let folder_w = 126.0;
+    let folder_h = 66.0;
+    let folder_columns = ((g.main_w - 28.0 + card_gap) / (folder_w + card_gap)).floor().max(1.0) as usize;
+    let folder_rows = ((folder_count.min(10) + folder_columns - 1) / folder_columns).max(1);
+    let cy = g.content_top + 14.0 + 30.0 + folder_rows as f32 * (folder_h + card_gap) + 24.0 + 32.0;
+
+    let asset_w = 124.0;
+    let asset_h = 122.0;
+    let asset_cols = ((g.main_w - 28.0 + card_gap) / (asset_w + card_gap)).floor().max(1.0) as usize;
+    let window_start = visible_window_start(snapshot.entries.len(), selected_index, MAX_VISIBLE_ENTRIES);
+    for (slot, (entry_index, _entry)) in snapshot
+        .entries
+        .iter()
+        .enumerate()
+        .skip(window_start)
+        .filter(|(_, entry)| !entry.is_directory())
+        .take(36)
+        .enumerate()
+    {
+        let col = slot % asset_cols;
+        let row = slot / asset_cols;
+        let cx = g.main_x + 16.0 + col as f32 * (asset_w + card_gap);
+        let ay = cy + row as f32 * (asset_h + card_gap);
+        if ay + asset_h > g.content_top + g.content_h - 18.0 { break; }
+        if point_in_rect(mx, my, cx, ay, asset_w, asset_h) {
+            return Some(entry_index);
+        }
+    }
+    None
+}
+
+#[inline]
+fn point_in_rect(px: f32, py: f32, x: f32, y: f32, w: f32, h: f32) -> bool {
+    px >= x && px <= x + w && py >= y && py <= y + h
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -773,11 +1077,11 @@ fn assets_catalog_node(frame_index: u64, snapshot: &AssetsCatalogSnapshot, selec
 
     let mut node = UiSurfaceNode::new(ASSETS_CATALOG_SURFACE_ID, ASSETS_CATALOG_UI_OWNER)
         .with_title("Asset Browser")
-        .with_subtitle("adult editor workspace over engine.assets")
+        .with_subtitle("clean editor workspace over engine.assets")
         .with_body_lines(body_lines)
         .with_footer_lines(vec![
-            "F1 Close · ↑/↓ Select · ←/→ View · Enter Open/Inspect · Backspace Parent".to_owned(),
-            "Preview plans come from engine.assets; final pixels stay provider-owned".to_owned(),
+            "F1 Close · mouse select/open · wheel select · arrows navigate · Enter Open/Inspect".to_owned(),
+            "Every asset format declares a provider preview contract; UI only composes it".to_owned(),
         ])
         .with_theme(ASSETS_CATALOG_THEME_ID)
         .with_style(assets_catalog_surface_style())
@@ -797,9 +1101,8 @@ fn assets_catalog_node(frame_index: u64, snapshot: &AssetsCatalogSnapshot, selec
     node.z_order = 970;
     node.style_tags = vec![
         "workspace".to_owned(),
-        "content-browser".to_owned(),
         "explorer-grid".to_owned(),
-        "asset-browser".to_owned(),
+        "asset-catalog".to_owned(),
         "engine-ui-node".to_owned(),
         "noir-editor".to_owned(),
     ];
@@ -826,7 +1129,7 @@ fn assets_catalog_error_node(frame_index: u64, error: String) -> UiSurfaceNode {
         .with_metric("frame_index", json!(frame_index));
     node.modal = true;
     node.z_order = 970;
-    node.style_tags = vec!["tool".to_owned(), "asset-browser".to_owned(), "warning".to_owned()];
+    node.style_tags = vec!["workspace".to_owned(), "explorer-grid".to_owned(), "asset-catalog".to_owned(), "warning".to_owned()];
     node
 }
 
@@ -867,28 +1170,28 @@ fn display_path(path: &str) -> String {
 fn assets_catalog_surface_style() -> UiSurfaceStyle {
     let mut style = UiSurfaceStyle::default();
     style.anchor = UiSurfaceAnchor::TopLeft;
-    style.min_size_px = [1500.0, 875.0];
+    style.min_size_px = [1480.0, 850.0];
     style.max_size_px = [4096.0, 4096.0];
-    style.margin_px = [10.0, 10.0];
-    style.padding_px = [22.0, 96.0, 22.0, 44.0];
-    style.row_pitch_px = 24.0;
-    style.panel_rgba = [5, 5, 6, 252];
-    style.panel_header_rgba = [17, 15, 12, 252];
-    style.accent_rgba = [213, 171, 82, 255];
-    style.text_rgba = [239, 236, 226, 255];
-    style.text_muted_rgba = [151, 143, 128, 255];
-    style.danger_rgba = [235, 108, 82, 255];
-    style.border_rgba = [178, 137, 57, 150];
-    style.backdrop_rgba = [0, 0, 0, 42];
-    style.shadow_alpha = 118;
-    style.corner_radius_px = 10.0;
+    style.margin_px = [8.0, 8.0];
+    style.padding_px = [18.0, 84.0, 18.0, 36.0];
+    style.row_pitch_px = 20.0;
+    style.panel_rgba = [6, 10, 16, 252];
+    style.panel_header_rgba = [9, 15, 24, 252];
+    style.accent_rgba = [89, 164, 255, 255];
+    style.text_rgba = [225, 232, 242, 255];
+    style.text_muted_rgba = [137, 150, 168, 255];
+    style.danger_rgba = [238, 110, 88, 255];
+    style.border_rgba = [72, 91, 116, 135];
+    style.backdrop_rgba = [0, 0, 0, 36];
+    style.shadow_alpha = 82;
+    style.corner_radius_px = 7.0;
     style.border_px = 1.0;
     style.font.stack = vec!["NorthStarSans".to_owned(), "Inter".to_owned(), "Segoe UI".to_owned(), "NotoSans".to_owned()];
-    style.font.title_px = 24.0;
-    style.font.body_px = 14.0;
-    style.font.secondary_px = 12.0;
-    style.row_even_alpha = 10;
-    style.row_odd_alpha = 4;
+    style.font.title_px = 14.0;
+    style.font.body_px = 10.0;
+    style.font.secondary_px = 9.0;
+    style.row_even_alpha = 8;
+    style.row_odd_alpha = 3;
     style.normalized()
 }
 
@@ -927,12 +1230,12 @@ fn preview_plan_label(entry: &AssetsCatalogEntry) -> &'static str {
         "folder preview"
     } else {
         match entry.extension.as_str() {
-            "ytd" | "png" | "jpg" | "jpeg" | "dds" => "texture preview planned",
-            "nemat" => "material preview planned",
-            "ydd" | "ydr" | "obj" | "gltf" | "glb" => "model preview planned",
-            "ytyp" | "ymap" => "world metadata preview planned",
-            "neui" => "UI preview planned",
-            _ => "generic asset preview planned",
+            "ytd" | "png" | "jpg" | "jpeg" | "dds" => "texture preview provider",
+            "nemat" => "material preview provider",
+            "ydd" | "ydr" | "obj" | "gltf" | "glb" => "model preview provider",
+            "ytyp" | "ymap" => "world metadata preview provider",
+            "neui" => "UI preview provider",
+            _ => "metadata preview provider",
         }
     }
 }

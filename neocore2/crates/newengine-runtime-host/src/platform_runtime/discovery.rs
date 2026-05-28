@@ -72,7 +72,7 @@ fn runtime_symbol_validation_enabled() -> bool {
     std::env::var("NEWENGINE_PLATFORM_RUNTIME_VALIDATE_SYMBOL")
         .ok()
         .map(|v| matches!(v.trim().to_ascii_lowercase().as_str(), "1" | "true" | "yes" | "on"))
-        .unwrap_or(false)
+        .unwrap_or(true)
 }
 
 #[inline]

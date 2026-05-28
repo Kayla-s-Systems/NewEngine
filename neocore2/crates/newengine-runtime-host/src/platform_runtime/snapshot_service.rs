@@ -1,7 +1,7 @@
 use std::sync::{Arc, Mutex, OnceLock};
 
 use newengine_platform_api::{
-    PlatformServiceInfo, PlatformWindowReadyV1, ENGINE_PLATFORM_SERVICE_ID,
+    NativeWindowBackendV1, PlatformServiceInfo, PlatformWindowReadyV1, ENGINE_PLATFORM_SERVICE_ID,
     PLATFORM_BACKEND_CAPABILITY_ID, PLATFORM_SERVICE_METHOD_INVOKE,
     PLATFORM_SERVICE_METHOD_WINDOW_SNAPSHOT_JSON_V1,
 };
@@ -11,7 +11,35 @@ use newengine_service_kit::{
 };
 
 static PLATFORM_WINDOW_SNAPSHOT: OnceLock<Arc<Mutex<PlatformWindowReadyV1>>> = OnceLock::new();
-const PLATFORM_GATEWAY_OWNER: &str = "newengine-runtime-host.platform-gateway";
+const PLATFORM_WINDOW_GATEWAY_OWNER: &str = "newengine-runtime-host.platform-window-gateway";
+const PLATFORM_HEADLESS_GATEWAY_OWNER: &str = "newengine-runtime-host.platform-headless-gateway";
+const PLATFORM_WINDOW_PROVIDER_ROUTE: &str = "engine.platform.winit";
+const PLATFORM_HEADLESS_PROVIDER_ROUTE: &str = "engine.platform.headless";
+
+#[derive(Debug, Clone, Copy)]
+struct PlatformRouteIdentity {
+    owner: &'static str,
+    provider_route: &'static str,
+    feature: &'static str,
+    note: &'static str,
+}
+
+fn platform_route_identity(initial: PlatformWindowReadyV1) -> PlatformRouteIdentity {
+    match (initial.handles.backend, initial.handles.window) {
+        (NativeWindowBackendV1::Unknown, _) | (_, 0) => PlatformRouteIdentity {
+            owner: PLATFORM_HEADLESS_GATEWAY_OWNER,
+            provider_route: PLATFORM_HEADLESS_PROVIDER_ROUTE,
+            feature: "headless-platform-snapshot",
+            note: "Headless platform route with synthetic surface metrics; no native window handles are available.",
+        },
+        _ => PlatformRouteIdentity {
+            owner: PLATFORM_WINDOW_GATEWAY_OWNER,
+            provider_route: PLATFORM_WINDOW_PROVIDER_ROUTE,
+            feature: "native-window-snapshot",
+            note: "Window-backed platform route with native handles and surface metrics.",
+        },
+    }
+}
 
 fn read_platform_window_snapshot(snapshot: &Arc<Mutex<PlatformWindowReadyV1>>) -> PlatformWindowReadyV1 {
     match snapshot.lock() {
@@ -20,17 +48,23 @@ fn read_platform_window_snapshot(snapshot: &Arc<Mutex<PlatformWindowReadyV1>>) -
     }
 }
 
-fn platform_window_service(snapshot: Arc<Mutex<PlatformWindowReadyV1>>) -> newengine_plugin_api::ServiceV1Dyn<'static> {
+fn platform_window_service(
+    snapshot: Arc<Mutex<PlatformWindowReadyV1>>,
+    identity: PlatformRouteIdentity,
+) -> newengine_plugin_api::ServiceV1Dyn<'static> {
     let info = PlatformServiceInfo::default();
+    let mut features = info.features.clone();
+    features.push(identity.feature.to_owned());
     let description = engine_gateway_provider_service_description(
         ENGINE_PLATFORM_SERVICE_ID,
-        PLATFORM_GATEWAY_OWNER,
+        identity.owner,
         PLATFORM_BACKEND_CAPABILITY_ID,
         info.methods.clone(),
     )
+    .gateway(ENGINE_PLATFORM_SERVICE_ID)
     .protocol(info.protocol.clone())
-    .features(info.features.clone())
-    .notes("Engine-facing platform gateway for native window handles and surface metrics.");
+    .features(features)
+    .notes(identity.note);
 
     let window_snapshot = snapshot.clone();
     JsonServiceRouter::new(ENGINE_PLATFORM_SERVICE_ID)
@@ -64,19 +98,21 @@ pub(crate) fn register_platform_window_service_best_effort(initial: PlatformWind
         return;
     }
 
-    let service = platform_window_service(snapshot);
+    let identity = platform_route_identity(initial);
+    let service = platform_window_service(snapshot, identity);
     match register_engine_gateway_provider_service(EngineGatewayProviderDecl {
         gateway: ENGINE_PLATFORM_SERVICE_ID,
         service_kind: newengine_service_api::EngineServiceKind::Platform,
         provider_service: ENGINE_PLATFORM_SERVICE_ID,
-        provider_route: "engine.platform.harbor",
+        provider_route: identity.provider_route,
         capability: PLATFORM_BACKEND_CAPABILITY_ID,
         priority: 0,
-        owner: PLATFORM_GATEWAY_OWNER,
+        owner: identity.owner,
         service,
     }) {
         Ok(()) => log::info!(
-            "engine.platform gateway registered source=engine-runtime service='{}' capability='{}'",
+            "engine.platform gateway registered source=engine-runtime route='{}' service='{}' capability='{}'",
+            identity.provider_route,
             ENGINE_PLATFORM_SERVICE_ID,
             PLATFORM_BACKEND_CAPABILITY_ID
         ),

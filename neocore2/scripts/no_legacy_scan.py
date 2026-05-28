@@ -25,6 +25,7 @@ ALLOW_ENV_PREFIXES = (
     pathlib.Path("crates/newengine-runtime-host/src/platform_runtime/early_log.rs"),
     pathlib.Path("crates/newengine-runtime-host/src/platform_runtime/shutdown_watchdog.rs"),
     pathlib.Path("crates/newengine-runtime-host/src/app_launcher.rs"),
+    pathlib.Path("crates/newengine-runtime-host/src/headless_cli.rs"),
     pathlib.Path("crates/newengine-runtime-host/src/asset_bootstrap.rs"),
     pathlib.Path("crates/newengine-plugin-host/src/paths.rs"),
     pathlib.Path("crates/newengine-plugin-host/src/manager/lifecycle.rs"),
@@ -55,6 +56,19 @@ DENY = [
     (re.compile(r"SCRIPTING_SERVICE_METHOD_(FRAME|LOAD_MODULE|MODULE_MANIFEST|DISPATCH_EVENT)_JSON_V1"), "scripting JSON compatibility method is forbidden"),
     (re.compile(r"\bScript(FrameInput|FrameOutput|ModuleDescriptor|ModuleManifest|ModuleLoadRequest|ModuleLoadResponse|DispatchEventRequest)\b"), "scripting JSON compatibility DTO is forbidden"),
     (re.compile(r"uses deprecated service_id"), "provider route metadata must reject service_id instead of accepting it for migration"),
+
+    # Retired provider route aliases. Concrete implementations must publish
+    # route identity through descriptor metadata (`engine.render.vulkan` etc.)
+    # and install artifacts through the canonical implementation label.
+    (re.compile(r'"newengine\.renderer(?:\.|"|$)'), "retired renderer provider route alias is forbidden; use engine.render.<provider>"),
+    (re.compile(r'"newengine\.physics(?:\.|"|$)'), "retired physics provider route alias is forbidden; use engine.physics.<provider>"),
+    (re.compile(r'"newengine\.platform(?:\.|"|$)'), "retired platform provider route alias is forbidden; use engine.platform.<provider>"),
+    (re.compile(r'"newengine\.logging(?:\.|"|$)'), "retired logging provider route alias is forbidden; use engine.logging.<provider>"),
+    (re.compile(r'newengine\.assets_catalog_ui'), "Asset Browser is an app/UI composition, not a backend API/domain"),
+    (re.compile(r'assetManager-[0-9].*\.dll'), "retired AssetManager DLL name is forbidden; use provider install name starVault-assetManager-{version}"),
+    (re.compile(r'engine\.ui\.aurelia-[0-9].*\.dll'), "route id must not be used as DLL stem; use aurelia-ui-{version}"),
+    (re.compile(r'engine\.render\.vulkan-[0-9].*\.dll'), "route id must not be used as DLL stem; use vulkan-renderer-{version}"),
+    (re.compile(r'unwrap_or_else\s*\([^\n]*(?:Null|Fallback|fallback)'), "hidden fallback construction is forbidden; use profile policy or real NullProvider route"),
 ]
 
 

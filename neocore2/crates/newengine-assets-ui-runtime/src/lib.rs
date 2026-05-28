@@ -568,13 +568,14 @@ fn normalize_entry(value: &str) -> String {
 
 fn vfs_candidates(path: &str) -> Vec<String> {
     let normalized = normalize_logical_path(path);
-    let mut out = vec![normalized.clone()];
+    let mut out = Vec::with_capacity(2);
     if let Some(stripped) = normalized.strip_prefix("assets/") {
         out.push(stripped.to_owned());
+        out.push(normalized);
     } else {
+        out.push(normalized.clone());
         out.push(format!("assets/{normalized}"));
     }
-    out.sort();
     out.dedup();
     out
 }

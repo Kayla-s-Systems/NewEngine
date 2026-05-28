@@ -4,8 +4,6 @@
 enum DemoMaterialRole {
     Terrain,
     Sky,
-    Sun,
-    Moon,
     TreeBark,
     TreeLeaf,
     TreeBranch,
@@ -26,8 +24,6 @@ struct DemoMaterialDefinition<'a> {
 struct DemoMaterials {
     terrain: MaterialId,
     sky: MaterialId,
-    sun: MaterialId,
-    moon: MaterialId,
     tree_bark: MaterialId,
     tree_leaf: MaterialId,
     tree_branch: MaterialId,
@@ -45,8 +41,6 @@ impl DemoMaterials {
         Self {
             terrain: find(ids, DemoMaterialRole::Terrain),
             sky: find(ids, DemoMaterialRole::Sky),
-            sun: find(ids, DemoMaterialRole::Sun),
-            moon: find(ids, DemoMaterialRole::Moon),
             tree_bark: find(ids, DemoMaterialRole::TreeBark),
             tree_leaf: find(ids, DemoMaterialRole::TreeLeaf),
             tree_branch: find(ids, DemoMaterialRole::TreeBranch),
@@ -57,8 +51,6 @@ impl DemoMaterials {
     fn sky_visual_material(self, kind: SkyVisualKind) -> MaterialId {
         match kind {
             SkyVisualKind::Dome => self.sky,
-            SkyVisualKind::SunDisk => self.sun,
-            SkyVisualKind::MoonDisk => self.moon,
         }
     }
 }
@@ -123,13 +115,7 @@ fn register_demo_materials(
     mats: &MaterialRegistry,
     palette: &GameReadyPaletteSpec,
     materials: &GameReadyMaterialSetSpec,
-    sky: &GameReadySkySpec,
 ) -> DemoMaterials {
-    let mut moon_material = materials.moon.clone();
-    if moon_material.base_color_texture.is_none() {
-        moon_material.base_color_texture = Some(sky.moon_texture.clone());
-    }
-
     let definitions = [
         DemoMaterialDefinition {
             role: DemoMaterialRole::Terrain,
@@ -148,24 +134,6 @@ fn register_demo_materials(
             emissive_strength: 2.6,
             flags: MaterialFlags::DOUBLE_SIDED,
             spec: &materials.sky,
-        },
-        DemoMaterialDefinition {
-            role: DemoMaterialRole::Sun,
-            name: "FPS/Sky/SunDisk",
-            base_color: [1.0, 0.86, 0.45, 1.0],
-            emissive: [1.0, 0.72, 0.30],
-            emissive_strength: 0.68,
-            flags: MaterialFlags::DOUBLE_SIDED,
-            spec: &materials.sun,
-        },
-        DemoMaterialDefinition {
-            role: DemoMaterialRole::Moon,
-            name: "FPS/Sky/MoonDisk",
-            base_color: [0.82, 0.86, 1.0, 1.0],
-            emissive: [0.30, 0.36, 0.58],
-            emissive_strength: 0.55,
-            flags: MaterialFlags::DOUBLE_SIDED,
-            spec: &moon_material,
         },
         DemoMaterialDefinition {
             role: DemoMaterialRole::TreeBark,

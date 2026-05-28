@@ -58,7 +58,7 @@ fn build_gateway_registry_snapshot() -> crate::service_gateway::ActiveGatewayReg
         gateways
             .values()
             .map(|entry| {
-                crate::service_gateway::GatewayProviderRouteFact::new_dynamic(
+                crate::service_gateway::GatewayProviderRouteFact::new_dynamic_with_origin(
                     entry.gateway_id.clone(),
                     entry.service_kind.clone(),
                     entry.provider_service_id.clone(),
@@ -66,6 +66,7 @@ fn build_gateway_registry_snapshot() -> crate::service_gateway::ActiveGatewayReg
                     entry.provider_owner_id.clone(),
                     entry.backend_capability_id.clone(),
                     entry.backend_priority,
+                    entry.origin,
                     [
                         newengine_service_api::system_tag::ENGINE_DOMAIN,
                         newengine_service_api::system_tag::PROVIDER_BACKEND,
@@ -194,7 +195,7 @@ pub fn active_engine_gateway_route(gateway_id: &str) -> Option<EngineGatewayRout
         })
 }
 
-pub fn register_engine_gateway_provider_route<S>(
+fn register_engine_gateway_provider_route_with_origin<S>(
     gateway_id: &str,
     service_kind: S,
     provider_service_id: &str,
@@ -202,6 +203,7 @@ pub fn register_engine_gateway_provider_route<S>(
     backend_capability_id: &str,
     backend_priority: i32,
     provider_owner_id: &str,
+    origin: crate::service_gateway::GatewayProviderOrigin,
 ) -> Result<(), String>
 where
     S: AsRef<str>,
@@ -281,21 +283,70 @@ where
             },
             backend_capability_id: backend_capability_id.to_owned(),
             backend_priority,
+            origin,
         },
     );
 
     bump_services_generation();
     log::info!(
-        "gateways: registered provider route gateway='{}' service='{}' provider_route='{}' kind='{}' capability='{}' priority={} owner='{}'",
+        "gateways: registered provider route gateway='{}' service='{}' provider_route='{}' kind='{}' capability='{}' priority={} owner='{}' origin='{}'",
         gateway_id,
         provider_service_id,
         provider_route_id,
         service_kind,
         backend_capability_id,
         backend_priority,
-        provider_owner_id
+        provider_owner_id,
+        origin.as_str(),
     );
     Ok(())
+}
+
+pub fn register_engine_gateway_provider_route<S>(
+    gateway_id: &str,
+    service_kind: S,
+    provider_service_id: &str,
+    provider_route_id: &str,
+    backend_capability_id: &str,
+    backend_priority: i32,
+    provider_owner_id: &str,
+) -> Result<(), String>
+where
+    S: AsRef<str>,
+{
+    register_engine_gateway_provider_route_with_origin(
+        gateway_id,
+        service_kind,
+        provider_service_id,
+        provider_route_id,
+        backend_capability_id,
+        backend_priority,
+        provider_owner_id,
+        crate::service_gateway::GatewayProviderOrigin::EngineRuntime,
+    )
+}
+
+pub fn register_null_engine_gateway_provider_route<S>(
+    gateway_id: &str,
+    service_kind: S,
+    provider_service_id: &str,
+    provider_route_id: &str,
+    backend_capability_id: &str,
+    provider_owner_id: &str,
+) -> Result<(), String>
+where
+    S: AsRef<str>,
+{
+    register_engine_gateway_provider_route_with_origin(
+        gateway_id,
+        service_kind,
+        provider_service_id,
+        provider_route_id,
+        backend_capability_id,
+        -10_000,
+        provider_owner_id,
+        crate::service_gateway::GatewayProviderOrigin::NullProvider,
+    )
 }
 
 #[inline]

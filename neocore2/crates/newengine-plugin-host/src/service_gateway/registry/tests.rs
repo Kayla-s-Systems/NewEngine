@@ -475,3 +475,99 @@ fn child_domain_route_still_requires_matching_child_kind_without_named_provider_
     assert!(registry.resolve_route("engine.input.bindings").is_none());
     assert!(registry.resolve_route("engine.input").is_none());
 }
+
+#[test]
+fn null_provider_route_is_real_visible_and_shadowed_by_concrete_provider() {
+    let descriptor = PluginDescriptor::builder("engine.render.vulkan", "Vulkan Renderer", "1.0.0", PluginKind::Runtime)
+        .provides_service("render.api", 1, r#"{"methods":["info_json","invoke_json","shutdown_v1"]}"#)
+        .push(
+            CapabilityDesc::new(
+                "render.backend",
+                CapabilityRole::Provides,
+                CapabilityKind::Other,
+                1,
+            )
+            .with_json(r#"{"service_kind":"render","engine_gateway":"engine.render","provider_route":"engine.render.vulkan","contract":"render.api","backend_priority":100}"#),
+        )
+        .build();
+    let descriptors = vec![PluginDescriptorFact::new(
+        "engine.render.vulkan".to_owned(),
+        descriptor,
+        GatewayProviderOrigin::FirstPartyPlugin,
+    )];
+    let services = vec![
+        service("render.api", Some("engine.render.vulkan")),
+        service("null.render.api", None),
+    ];
+    let null_routes = vec![GatewayProviderRouteFact::new_dynamic_with_origin(
+        "engine.render".to_owned(),
+        "render".to_owned(),
+        "null.render.api".to_owned(),
+        "engine.render.null".to_owned(),
+        "engine.render.null".to_owned(),
+        "render.backend".to_owned(),
+        -10_000,
+        GatewayProviderOrigin::NullProvider,
+        [system_tag::ENGINE_DOMAIN, system_tag::PROVIDER_BACKEND],
+    )];
+
+    let registry = ActiveGatewayRegistry::from_facts(&descriptors, &services, &null_routes);
+    let active = registry.resolve_route("engine.render").expect("engine.render route");
+
+    assert_eq!(active.provider_service_id, "render.api");
+    assert_eq!(active.provider_route_id.as_deref(), Some("engine.render.vulkan"));
+    assert_eq!(active.origin, GatewayProviderOrigin::FirstPartyPlugin);
+    assert_eq!(registry.routes().iter().filter(|route| route.gateway_id == "engine.render").count(), 2);
+    assert!(registry.routes().iter().any(|route| {
+        route.gateway_id == "engine.render"
+            && route.provider_service_id == "null.render.api"
+            && route.provider_route_id.as_deref() == Some("engine.render.null")
+            && route.origin == GatewayProviderOrigin::NullProvider
+    }));
+}
+
+#[test]
+fn missing_gateway_route_degrades_to_none_instead_of_panic() {
+    let registry = ActiveGatewayRegistry::from_facts(&[], &[], &[]);
+
+    assert!(registry.resolve_route("engine.render").is_none());
+    assert!(registry.resolve_gateway("engine.render").is_none());
+    assert!(!registry.has_gateway_capability("engine.render", "render.backend"));
+}
+
+#[test]
+fn active_and_shadowed_routes_are_diagnostic_visible() {
+    let services = vec![
+        service("engine.camera", None),
+        service("null.camera.api", None),
+    ];
+    let routes = vec![
+        GatewayProviderRouteFact::new(
+            "engine.camera".to_owned(),
+            EngineServiceKind::Camera,
+            "engine.camera".to_owned(),
+            "engine.camera.stargazer".to_owned(),
+            "engine.camera.stargazer".to_owned(),
+            "camera.backend".to_owned(),
+            0,
+        ),
+        GatewayProviderRouteFact::new_dynamic_with_origin(
+            "engine.camera".to_owned(),
+            "camera".to_owned(),
+            "null.camera.api".to_owned(),
+            "engine.camera.null".to_owned(),
+            "engine.camera.null".to_owned(),
+            "camera.backend".to_owned(),
+            -10_000,
+            GatewayProviderOrigin::NullProvider,
+            [system_tag::ENGINE_DOMAIN, system_tag::PROVIDER_BACKEND],
+        ),
+    ];
+
+    let registry = ActiveGatewayRegistry::from_facts(&[], &services, &routes);
+    let active = registry.resolve_route("engine.camera").expect("engine.camera active route");
+
+    assert_eq!(active.provider_route_id.as_deref(), Some("engine.camera.stargazer"));
+    assert_eq!(registry.routes().len(), 2);
+    assert!(registry.routes().iter().any(|route| route.provider_route_id.as_deref() == Some("engine.camera.null")));
+}

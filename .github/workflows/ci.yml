@@ -48,6 +48,8 @@ jobs:
       - name: Provider boundary scan
         run: python scripts/provider_boundary_scan.py
 
+      - name: Provider gateway conformance tests
+        run: cargo test -p newengine-plugin-host service_gateway::registry --lib
 
       - name: Asset format descriptor scan
         run: python scripts/asset_format_boilerplate_scan.py

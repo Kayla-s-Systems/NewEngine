@@ -6,192 +6,10 @@
   },
   "plugins": {
     "newengine": {
-      "assets": {
-        "codecs_dir": "codecs",
-        "container_scan": {
-          "extensions": [
-            "nepak"
-          ],
-          "follow_symlinks": false,
-          "max_depth": 64,
-          "recursive": true,
-          "rescan_interval_ms": 0
-        },
-        "enabled": true,
-        "host": {
-          "enabled": true
-        },
-        "layers": [
-          {
-            "dir": null,
-            "mount": "",
-            "path": "assets/",
-            "pattern": null,
-            "priority": 100,
-            "type": "dir"
-          },
-          {
-            "dir": "assets/",
-            "mount": "",
-            "path": null,
-            "pattern": "*",
-            "priority": 80,
-            "type": "container_glob"
-          },
-          {
-            "dir": "content/",
-            "mount": "",
-            "path": null,
-            "pattern": "*",
-            "priority": 60,
-            "type": "container_glob"
-          }
-        ],
-        "pump_steps": 16
-      },
       "engine": {
         "enabled": true,
         "host": {
           "enabled": true
-        }
-      },
-      "engine_runtime": {
-        "render": {
-          "runtime_profile": {
-            "gpu_safe": false,
-            "graphics": {
-              "clear_color": [
-                0.02,
-                0.025,
-                0.035,
-                1.0
-              ],
-              "deferred": "disabled",
-              "hdr_scene": "disabled",
-              "postfx": "disabled",
-              "shadows": "enabled",
-              "sky": {
-                "mode": "native",
-                "tick_cycle": "enabled"
-              }
-            },
-            "id": "newengine.render.runtime.tier.auto",
-            "input": {
-              "capture_cursor_on_play": true,
-              "force_gameplay_actions": true,
-              "force_gameplay_look": true
-            },
-            "menu": {
-              "invalidate_shadow_cache_on_close": true,
-              "restore_gameplay_input_on_close": true,
-              "restore_viewport_pass_on_close": true
-            },
-            "world": {
-              "fallback_ecs_physics": true,
-              "runtime_terrain_streaming": "enabled",
-              "service_physics": "disabled"
-            }
-          }
-        }
-      },
-      "input": {
-        "device_mode": "hybrid",
-        "enabled": true,
-        "gamepad": true,
-        "gamepad_backend": "xinput",
-        "host": {
-          "enabled": true
-        },
-        "keyboard": true,
-        "mouse": true
-      },
-      "logging": {
-        "enabled": true,
-        "host": {
-          "enabled": true
-        },
-        "sources": {
-          "console": {
-            "level": "trace"
-          },
-          "file": {
-            "level": "trace",
-            "mode": "truncate"
-          }
-        },
-        "timestamp": "millis"
-      },
-      "platform.winit": {
-        "display": {
-          "borderless_fullscreen": false,
-          "fullscreen": false,
-          "hdr": "auto",
-          "monitor": "primary",
-          "monitor_index": -1,
-          "refresh_rate": "auto",
-          "refresh_rate_millihz": 0,
-          "render_scale": 1.0,
-          "resolution": {
-            "height": 900,
-            "width": 1600
-          },
-          "vsync": false,
-          "window_mode": "windowed"
-        },
-        "enabled": true,
-        "height": 900,
-        "host": {
-          "enabled": true
-        },
-        "icon": "ui/engine.ico",
-        "placement": {
-          "mode": "centered",
-          "x": 0,
-          "y": -24
-        },
-        "title": "Kayla's Editor",
-        "width": 1600
-      },
-      "renderer": {
-        "enabled": true,
-        "host": {
-          "enabled": true
-        },
-        "selection": {
-          "backend": "auto",
-          "backend_label": "Auto",
-          "debug_renderer_tools": {
-            "enabled": false,
-            "gbuffer_viewer": false,
-            "gpu_timing": false,
-            "phase_viewer": false,
-            "renderdoc_capture": false,
-            "shadow_cascade_viewer": false,
-            "target_viewer": false
-          },
-          "gpu_device": "auto",
-          "graphics_profile": "auto",
-          "graphics_profile_id": "newengine.render.runtime.tier.auto",
-          "policy": "startup_window_selected; backend still validates capabilities before activation",
-          "shader_cache_mode": "auto"
-        },
-        "vulkan": {
-          "debug_tools": {
-            "enabled": false,
-            "gbuffer_viewer": false,
-            "gpu_timing": false,
-            "phase_viewer": false,
-            "renderdoc_capture": false,
-            "shadow_cascade_viewer": false,
-            "target_viewer": false
-          },
-          "enabled": true,
-          "host": {
-            "enabled": true
-          },
-          "shader_cache": {
-            "mode": "auto"
-          }
         }
       },
       "startup_window": {
@@ -249,7 +67,7 @@
             },
             "enabled": true,
             "live_update_supported": false,
-            "plugin_id": "newengine.engine",
+            "plugin_id": "engine.runtime",
             "schema": {
               "category": "Engine",
               "fields": [
@@ -279,7 +97,7 @@
                 }
               ],
               "mode": "schema_editor",
-              "plugin_id": "newengine.engine",
+              "plugin_id": "engine.runtime",
               "policy": "host-owned engine startup settings; writes to root config.engine",
               "schema": "newengine.startup_config_schema.v1",
               "title": "Engine"
@@ -545,11 +363,11 @@
             },
             "enabled": true,
             "live_update_supported": false,
-            "plugin_id": "newengine.renderer",
+            "plugin_id": "engine.render.vulkan",
             "schema": {
               "fields": [],
               "mode": "json_object_editor",
-              "plugin_id": "newengine.renderer",
+              "plugin_id": "engine.render.vulkan",
               "policy": "plugin-owned defaults; StartUpWindow edits user_overrides only",
               "schema": "newengine.startup_config_schema.v1"
             },
@@ -1008,7 +826,7 @@
             },
             "enabled": true,
             "live_update_supported": false,
-            "plugin_id": "newengine.input",
+            "plugin_id": "engine.input.compass",
             "schema": {
               "category": "Input",
               "fields": [
@@ -1086,7 +904,7 @@
                 }
               ],
               "mode": "schema_editor",
-              "plugin_id": "newengine.input",
+              "plugin_id": "engine.input.compass",
               "policy": "plugin-owned schema; default is the no-window startup value",
               "schema": "newengine.startup_config_schema.v1",
               "title": "Input"
@@ -1317,6 +1135,188 @@
         "remember_last_options": true,
         "schema": "newengine.startup_window.v1",
         "startup_scene": "MainMenu"
+      }
+    },
+    "engine.logging.chronicle": {
+      "enabled": true,
+      "host": {
+        "enabled": true
+      },
+      "sources": {
+        "console": {
+          "level": "trace"
+        },
+        "file": {
+          "level": "trace",
+          "mode": "truncate"
+        }
+      },
+      "timestamp": "millis"
+    },
+    "engine.assets.starvault": {
+      "codecs_dir": "codecs",
+      "container_scan": {
+        "extensions": [
+          "nepak"
+        ],
+        "follow_symlinks": false,
+        "max_depth": 64,
+        "recursive": true,
+        "rescan_interval_ms": 0
+      },
+      "enabled": true,
+      "host": {
+        "enabled": true
+      },
+      "layers": [
+        {
+          "dir": null,
+          "mount": "",
+          "path": "assets/",
+          "pattern": null,
+          "priority": 100,
+          "type": "dir"
+        },
+        {
+          "dir": "assets/",
+          "mount": "",
+          "path": null,
+          "pattern": "*",
+          "priority": 80,
+          "type": "container_glob"
+        },
+        {
+          "dir": "content/",
+          "mount": "",
+          "path": null,
+          "pattern": "*",
+          "priority": 60,
+          "type": "container_glob"
+        }
+      ],
+      "pump_steps": 16
+    },
+    "engine.input.compass": {
+      "device_mode": "hybrid",
+      "enabled": true,
+      "gamepad": true,
+      "gamepad_backend": "xinput",
+      "host": {
+        "enabled": true
+      },
+      "keyboard": true,
+      "mouse": true
+    },
+    "engine.platform.winit": {
+      "display": {
+        "borderless_fullscreen": false,
+        "fullscreen": false,
+        "hdr": "auto",
+        "monitor": "primary",
+        "monitor_index": -1,
+        "refresh_rate": "auto",
+        "refresh_rate_millihz": 0,
+        "render_scale": 1.0,
+        "resolution": {
+          "height": 900,
+          "width": 1600
+        },
+        "vsync": false,
+        "window_mode": "windowed"
+      },
+      "enabled": true,
+      "height": 900,
+      "host": {
+        "enabled": true
+      },
+      "icon": "ui/engine.ico",
+      "placement": {
+        "mode": "centered",
+        "x": 0,
+        "y": -24
+      },
+      "title": "Kayla's Editor",
+      "width": 1600
+    },
+    "engine.render.vulkan": {
+      "enabled": true,
+      "host": {
+        "enabled": true
+      },
+      "selection": {
+        "backend": "auto",
+        "backend_label": "Auto",
+        "debug_renderer_tools": {
+          "enabled": false,
+          "gbuffer_viewer": false,
+          "gpu_timing": false,
+          "phase_viewer": false,
+          "renderdoc_capture": false,
+          "shadow_cascade_viewer": false,
+          "target_viewer": false
+        },
+        "gpu_device": "auto",
+        "graphics_profile": "auto",
+        "graphics_profile_id": "newengine.render.runtime.tier.auto",
+        "policy": "startup_window_selected; backend still validates capabilities before activation",
+        "shader_cache_mode": "auto"
+      },
+      "vulkan": {
+        "debug_tools": {
+          "enabled": false,
+          "gbuffer_viewer": false,
+          "gpu_timing": false,
+          "phase_viewer": false,
+          "renderdoc_capture": false,
+          "shadow_cascade_viewer": false,
+          "target_viewer": false
+        },
+        "enabled": true,
+        "host": {
+          "enabled": true
+        },
+        "shader_cache": {
+          "mode": "auto"
+        }
+      }
+    },
+    "engine.runtime": {
+      "render": {
+        "runtime_profile": {
+          "gpu_safe": false,
+          "graphics": {
+            "clear_color": [
+              0.02,
+              0.025,
+              0.035,
+              1.0
+            ],
+            "deferred": "disabled",
+            "hdr_scene": "disabled",
+            "postfx": "disabled",
+            "shadows": "enabled",
+            "sky": {
+              "mode": "native",
+              "tick_cycle": "enabled"
+            }
+          },
+          "id": "newengine.render.runtime.tier.auto",
+          "input": {
+            "capture_cursor_on_play": true,
+            "force_gameplay_actions": true,
+            "force_gameplay_look": true
+          },
+          "menu": {
+            "invalidate_shadow_cache_on_close": true,
+            "restore_gameplay_input_on_close": true,
+            "restore_viewport_pass_on_close": true
+          },
+          "world": {
+            "fallback_ecs_physics": true,
+            "runtime_terrain_streaming": "enabled",
+            "service_physics": "disabled"
+          }
+        }
       }
     }
   },

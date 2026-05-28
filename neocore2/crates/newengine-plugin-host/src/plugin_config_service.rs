@@ -535,7 +535,7 @@ mod tests {
     fn resolves_grouped_exact_prefix_override_for_renderer_backend() {
         let mut overrides = HashMap::default();
         overrides.insert(
-            "newengine.renderer".to_owned(),
+            "engine.render".to_owned(),
             json!({
                 "vulkan": {
                     "clear_color": [0.02, 0.025, 0.035, 1.0],
@@ -555,7 +555,7 @@ mod tests {
     fn exact_renderer_backend_override_wins_over_group_prefix() {
         let mut overrides = HashMap::default();
         overrides.insert(
-            "newengine.renderer".to_owned(),
+            "engine.render".to_owned(),
             json!({
                 "vulkan": {
                     "clear_color": [0.02, 0.025, 0.035, 1.0],

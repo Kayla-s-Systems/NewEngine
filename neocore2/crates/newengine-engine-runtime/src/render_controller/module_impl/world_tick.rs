@@ -79,18 +79,21 @@ impl RuntimeRenderController {
             }
 
             if effective_play_mode.runs_physics() && !pause_world {
-                if runtime_profile.use_service_physics() || runtime_profile.use_fallback_ecs_physics() {
-                    world.insert_resource(crate::gameplay::PhysicsRuntimeFrameIndex(self.frame.frame_index));
-                    let physics_mode = if runtime_profile.use_service_physics() {
-                        if physics_api.is_some() {
-                            PhysicsIntegrationMode::ServiceBackend
-                        } else {
-                            log_service_physics_downgraded_once();
-                            PhysicsIntegrationMode::EcsFallback
-                        }
+                let physics_mode = if runtime_profile.use_service_physics() {
+                    if physics_api.is_some() {
+                        Some(PhysicsIntegrationMode::ServiceBackend)
                     } else {
-                        PhysicsIntegrationMode::EcsFallback
-                    };
+                        log_service_physics_unavailable_once();
+                        None
+                    }
+                } else if runtime_profile.use_fallback_ecs_physics() {
+                    // This is an explicit profile policy path, not a hidden fallback.
+                    Some(PhysicsIntegrationMode::EcsFallback)
+                } else {
+                    None
+                };
+                if let Some(physics_mode) = physics_mode {
+                    world.insert_resource(crate::gameplay::PhysicsRuntimeFrameIndex(self.frame.frame_index));
                     let publish_sim_job = |event: newengine_jobs_api::EngineTaskEvent| {
                         let job_event = newengine_jobs_api::EngineJobEventV1::new(
                             event.clone(),
@@ -165,20 +168,20 @@ impl RuntimeRenderController {
 }
 
 static GPU_SAFE_PHYSICS_SKIP_LOGGED: AtomicBool = AtomicBool::new(false);
-static SERVICE_PHYSICS_DOWNGRADED_LOGGED: AtomicBool = AtomicBool::new(false);
+static SERVICE_PHYSICS_UNAVAILABLE_LOGGED: AtomicBool = AtomicBool::new(false);
 static GPU_SAFE_STREAMING_SKIP_LOGGED: AtomicBool = AtomicBool::new(false);
 
 
-fn log_service_physics_downgraded_once() {
-    if SERVICE_PHYSICS_DOWNGRADED_LOGGED
+fn log_service_physics_unavailable_once() {
+    if SERVICE_PHYSICS_UNAVAILABLE_LOGGED
         .compare_exchange(false, true, Ordering::AcqRel, Ordering::Acquire)
         .is_ok()
     {
         log::warn!(
-            "render world tick: engine.physics provider unavailable; downgraded simulation to ECS fallback for this run; scene launch and public Play are not blocked by physics backend presence or type"
+            "render world tick: engine.physics provider unavailable; physics step skipped because no explicit ECS fallback profile policy is active"
         );
         newengine_core::crash::record_breadcrumb(
-            "render world tick: missing physics backend downgraded to ECS fallback without blocking launch".to_owned(),
+            "render world tick: missing physics backend skipped; no hidden fallback constructed".to_owned(),
         );
     }
 }
@@ -189,10 +192,10 @@ fn log_physics_skip_once() {
         .is_ok()
     {
         log::warn!(
-            "render world tick: native physics schedule skipped by conservative GPU profile; change plugins.newengine.engine_runtime.render.runtime_profile.world.service_physics to 'enabled' to test the original physics path"
+            "render world tick: physics schedule skipped by explicit profile policy or missing provider; no hidden ECS fallback constructed"
         );
         newengine_core::crash::record_breadcrumb(
-            "render world tick: conservative profile skipped native physics schedule".to_owned(),
+            "render world tick: physics schedule skipped without hidden fallback".to_owned(),
         );
     }
 }
@@ -203,7 +206,7 @@ fn log_streaming_skip_once() {
         .is_ok()
     {
         log::warn!(
-            "render world tick: runtime terrain streaming skipped by conservative GPU profile; change plugins.newengine.engine_runtime.render.runtime_profile.world.runtime_terrain_streaming to 'enabled' to test the original streaming path"
+            "render world tick: runtime terrain streaming skipped by conservative GPU profile; change plugins.engine.runtime.render.runtime_profile.world.runtime_terrain_streaming to 'enabled' to test the original streaming path"
         );
         newengine_core::crash::record_breadcrumb(
             "render world tick: conservative profile skipped runtime terrain streaming".to_owned(),

@@ -52,6 +52,7 @@ pub(crate) struct GatewayProviderRouteFact {
     pub(crate) provider_owner_id: String,
     pub(crate) backend_capability_id: String,
     pub(crate) backend_priority: i32,
+    pub(crate) origin: GatewayProviderOrigin,
     pub(crate) system_tags: Vec<String>,
 }
 
@@ -79,6 +80,8 @@ impl GatewayProviderRouteFact {
         )
     }
 
+    #[cfg(test)]
+    #[allow(dead_code)]
     #[inline]
     pub(crate) fn new_dynamic<I, S>(
         gateway_id: String,
@@ -88,6 +91,35 @@ impl GatewayProviderRouteFact {
         provider_owner_id: String,
         backend_capability_id: String,
         backend_priority: i32,
+        system_tags: I,
+    ) -> Self
+    where
+        I: IntoIterator<Item = S>,
+        S: AsRef<str>,
+    {
+        Self::new_dynamic_with_origin(
+            gateway_id,
+            service_kind,
+            provider_service_id,
+            provider_route_id,
+            provider_owner_id,
+            backend_capability_id,
+            backend_priority,
+            GatewayProviderOrigin::EngineRuntime,
+            system_tags,
+        )
+    }
+
+    #[inline]
+    pub(crate) fn new_dynamic_with_origin<I, S>(
+        gateway_id: String,
+        service_kind: String,
+        provider_service_id: String,
+        provider_route_id: String,
+        provider_owner_id: String,
+        backend_capability_id: String,
+        backend_priority: i32,
+        origin: GatewayProviderOrigin,
         system_tags: I,
     ) -> Self
     where
@@ -108,6 +140,7 @@ impl GatewayProviderRouteFact {
             provider_owner_id,
             backend_capability_id,
             backend_priority,
+            origin,
             system_tags,
         }
     }
@@ -457,7 +490,7 @@ impl ActiveGatewayRegistry {
                 gateway.provider_owner_id.clone(),
                 gateway.backend_capability_id.clone(),
                 gateway.backend_priority,
-                GatewayProviderOrigin::EngineRuntime,
+                gateway.origin,
                 gateway.system_tags.clone(),
                 policy,
             ) {

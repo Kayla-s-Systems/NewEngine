@@ -10,8 +10,6 @@ pub(crate) struct SkyDomeRuntime {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum SkyVisualKind {
     Dome,
-    SunDisk,
-    MoonDisk,
 }
 
 #[derive(Clone, Debug)]
@@ -27,8 +25,6 @@ pub(crate) struct SkyClearColorRuntime {
 #[derive(Clone, Debug)]
 pub(crate) struct SkyAtmosphereRuntime {
     pub radius: f32,
-    pub sun_radius: f32,
-    pub moon_radius: f32,
     pub profile: GameReadySkyAtmosphereSpec,
 }
 
@@ -44,8 +40,6 @@ impl SkyVisualKind {
     pub(super) fn entity_name(self) -> &'static str {
         match self {
             SkyVisualKind::Dome => "Sky/Imported-SkyDome",
-            SkyVisualKind::SunDisk => "Sky/Sun-Disk",
-            SkyVisualKind::MoonDisk => "Sky/Moon-Disk",
         }
     }
 
@@ -53,8 +47,6 @@ impl SkyVisualKind {
     pub(super) fn initial_color(self, dome_color: [f32; 4]) -> [f32; 4] {
         match self {
             SkyVisualKind::Dome => dome_color,
-            SkyVisualKind::SunDisk => [1.0, 0.82, 0.36, 1.0],
-            SkyVisualKind::MoonDisk => [0.70, 0.76, 1.0, 1.0],
         }
     }
 
@@ -62,8 +54,6 @@ impl SkyVisualKind {
     pub(super) fn initial_radius(self, spec: &GameReadySkySpec) -> f32 {
         match self {
             SkyVisualKind::Dome => spec.radius,
-            SkyVisualKind::SunDisk => spec.sun_radius,
-            SkyVisualKind::MoonDisk => spec.moon_radius,
         }
     }
 
@@ -71,7 +61,6 @@ impl SkyVisualKind {
     pub(super) fn follows_camera(self, spec: &GameReadySkySpec) -> bool {
         match self {
             SkyVisualKind::Dome => spec.follow_camera,
-            SkyVisualKind::SunDisk | SkyVisualKind::MoonDisk => true,
         }
     }
 
@@ -79,7 +68,6 @@ impl SkyVisualKind {
     pub(super) fn primitive_id(self, dome_primitive_id: PrimitiveId) -> PrimitiveId {
         match self {
             SkyVisualKind::Dome => dome_primitive_id,
-            SkyVisualKind::SunDisk | SkyVisualKind::MoonDisk => newengine_primitives::builtins::ID_DISC,
         }
     }
 }
@@ -88,8 +76,6 @@ impl SkyVisualKind {
 pub(super) fn sky_atmosphere_from_spec(spec: &GameReadySkySpec) -> SkyAtmosphereRuntime {
     SkyAtmosphereRuntime {
         radius: spec.radius,
-        sun_radius: spec.sun_radius,
-        moon_radius: spec.moon_radius,
         profile: spec.atmosphere.clone(),
     }
 }
@@ -113,16 +99,10 @@ pub(super) fn attach_sky_visual_runtime(
 #[derive(Clone, Copy, Debug)]
 struct SkyFrameSample {
     to_sun: Vec3,
-    to_moon: Vec3,
-    day: f32,
-    twilight: f32,
-    night: f32,
     sky_tint: [f32; 4],
     cloud_tint: [f32; 4],
     sun_color: [f32; 3],
     sun_intensity: f32,
-    moon_color: [f32; 3],
-    moon_intensity: f32,
     ambient_color: [f32; 3],
     ambient_intensity: f32,
 }
@@ -257,9 +237,7 @@ fn sky_safe_dir(v: Vec3, fallback: Vec3) -> Vec3 {
 
 fn sample_sky_frame(cycle: &SkyCycleRuntime, atmosphere: Option<&SkyAtmosphereRuntime>, to_sun: Vec3) -> SkyFrameSample {
     let to_sun = sky_safe_dir(to_sun, Vec3::new(0.0, 1.0, 0.0));
-    let to_moon = -to_sun;
     let elevation = to_sun.y;
-    let moon_elevation = to_moon.y;
 
     // A single time-of-day curve drives both light and sky. This prevents the
     // old bug where the terrain was already night-lit but the sky stayed bright.
@@ -308,9 +286,6 @@ fn sample_sky_frame(cycle: &SkyCycleRuntime, atmosphere: Option<&SkyAtmosphereRu
         + 0.18 * cycle.base_sun_intensity * twilight
         + 0.025 * night;
 
-    let moon_above_horizon = sky_smoothstep(-0.08, 0.22, moon_elevation);
-    let moon_intensity = (0.34 * night * moon_above_horizon + 0.06 * twilight * moon_above_horizon).clamp(0.0, 0.45);
-    let moon_color = [0.50, 0.56, 0.76];
 
     let ambient_color = sky_lerp3(
         sky_lerp3([0.018, 0.024, 0.056], cycle.base_ambient_color, day),
@@ -323,32 +298,18 @@ fn sample_sky_frame(cycle: &SkyCycleRuntime, atmosphere: Option<&SkyAtmosphereRu
 
     SkyFrameSample {
         to_sun,
-        to_moon,
-        day,
-        twilight,
-        night,
         sky_tint: sky_color_to_rgba(sky_clamp3(sky_rgb, 0.0, 1.0)),
         cloud_tint: sky_color_to_rgba(sky_clamp3(cloud_rgb, 0.0, 1.0)),
         sun_color: sky_clamp3(sun_color, 0.0, 1.0),
         sun_intensity: sun_intensity.max(0.0),
-        moon_color,
-        moon_intensity,
         ambient_color: sky_clamp3(ambient_color, 0.0, 1.0),
         ambient_intensity: ambient_intensity.max(0.0),
     }
 }
 
-fn orient_disc_towards(direction: Vec3) -> Quat {
-    let normal = sky_safe_dir(-direction, Vec3::new(0.0, -1.0, 0.0));
-    Quat::from_rotation_arc(Vec3::Y, normal)
-}
 
 fn apply_sky_visuals(world: &mut newengine_ecs::World, frame: SkyFrameSample, atmosphere: Option<SkyAtmosphereRuntime>) {
     let radius = atmosphere.as_ref().map(|a| a.radius).unwrap_or(220.0).max(16.0);
-    let sun_radius = atmosphere.as_ref().map(|a| a.sun_radius).unwrap_or(18.0).clamp(1.0, 64.0);
-    let moon_radius = atmosphere.as_ref().map(|a| a.moon_radius).unwrap_or(13.5).clamp(1.0, 64.0);
-    let sky_distance = radius * 0.82;
-    let moon_distance = radius * 0.78;
 
     let entities = world
         .query::<SkyVisualRuntime>()
@@ -369,41 +330,6 @@ fn apply_sky_visuals(world: &mut newengine_ecs::World, frame: SkyFrameSample, at
                 if let Some(t) = world.get_mut_tracked::<Transform>(entity) {
                     t.position = Vec3::ZERO;
                     t.scale = Vec3::splat(radius);
-                }
-            }
-            SkyVisualKind::SunDisk => {
-                let visibility = (frame.day + frame.twilight * 0.72).clamp(0.0, 1.0);
-                let bloom = (0.28 + frame.sun_intensity * 0.16).clamp(0.0, 1.0);
-                let color = [
-                    (frame.sun_color[0] * visibility * bloom).clamp(0.0, 1.0),
-                    (frame.sun_color[1] * visibility * bloom).clamp(0.0, 1.0),
-                    (frame.sun_color[2] * visibility * bloom).clamp(0.0, 1.0),
-                    visibility.clamp(0.0, 1.0),
-                ];
-                if let Some(primitive) = world.get_mut_tracked::<Primitive>(entity) {
-                    primitive.color = color;
-                }
-                if let Some(t) = world.get_mut_tracked::<Transform>(entity) {
-                    t.position = frame.to_sun * sky_distance;
-                    t.rotation = orient_disc_towards(frame.to_sun);
-                    t.scale = Vec3::splat(sun_radius * (0.82 + frame.twilight * 0.26));
-                }
-            }
-            SkyVisualKind::MoonDisk => {
-                let visibility = (frame.night + frame.twilight * 0.28).clamp(0.0, 1.0);
-                let color = [
-                    (frame.moon_color[0] * (0.18 + frame.moon_intensity * 1.85) * visibility).clamp(0.0, 1.0),
-                    (frame.moon_color[1] * (0.18 + frame.moon_intensity * 1.85) * visibility).clamp(0.0, 1.0),
-                    (frame.moon_color[2] * (0.18 + frame.moon_intensity * 1.85) * visibility).clamp(0.0, 1.0),
-                    visibility,
-                ];
-                if let Some(primitive) = world.get_mut_tracked::<Primitive>(entity) {
-                    primitive.color = color;
-                }
-                if let Some(t) = world.get_mut_tracked::<Transform>(entity) {
-                    t.position = frame.to_moon * moon_distance;
-                    t.rotation = orient_disc_towards(frame.to_moon);
-                    t.scale = Vec3::splat(moon_radius);
                 }
             }
         }

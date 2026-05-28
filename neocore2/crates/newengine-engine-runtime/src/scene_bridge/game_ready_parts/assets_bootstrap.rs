@@ -774,7 +774,7 @@ pub(super) fn bootstrap_fps_game_ready_scene(
     let active_camera = scene.active_camera();
     let mut map = load_game_ready_map_profile();
     apply_game_ready_ytyp_metadata(&mut map);
-    let materials = register_demo_materials(mats, &map.palette, &map.materials, &map.sky);
+    let materials = register_demo_materials(mats, &map.palette, &map.materials);
     let world = scene.world_mut();
 
     let rules = to_fps_demo_rules(&map.gameplay, &map.player.model);

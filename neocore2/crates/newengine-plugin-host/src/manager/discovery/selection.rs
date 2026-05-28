@@ -2,6 +2,7 @@
 
 use newengine_math::collections_prelude::NeHashMap as HashMap;
 use std::path::PathBuf;
+use std::sync::atomic::{AtomicBool, Ordering};
 
 use newengine_math::collections::prelude::NeHashSet;
 
@@ -85,11 +86,94 @@ fn is_editor_only_plugin(kind: Option<newengine_plugin_api::PluginKind>) -> bool
     matches!(kind, Some(newengine_plugin_api::PluginKind::Editor))
 }
 
+fn headless_mode_enabled() -> bool {
+    std::env::var("NEWENGINE_HEADLESS")
+        .ok()
+        .map(|v| matches!(v.trim().to_ascii_lowercase().as_str(), "1" | "true" | "yes" | "on"))
+        .unwrap_or(false)
+}
+
+static HEADLESS_RENDER_SKIP_MESSAGE_PRINTED: AtomicBool = AtomicBool::new(false);
+static HEADLESS_UI_SKIP_MESSAGE_PRINTED: AtomicBool = AtomicBool::new(false);
+static HEADLESS_RENDER_UI_SKIP_MESSAGE_PRINTED: AtomicBool = AtomicBool::new(false);
+
+#[inline]
+fn is_concrete_provider_id(id: &str) -> bool {
+    let id = id.to_ascii_lowercase();
+    !(id.contains(".null") || id.contains("null"))
+}
+
+fn emit_headless_skip_summary_once(graph: &DiscoveryGraph) {
+    if !headless_mode_enabled() {
+        return;
+    }
+
+    let mut render_found = false;
+    let mut ui_found = false;
+    for item in &graph.items {
+        let ScannedDynlibKind::Plugin {
+            id,
+            service_gateways,
+            ..
+        } = &item.kind else {
+            continue;
+        };
+        if !is_concrete_provider_id(id) {
+            continue;
+        }
+        render_found |= service_gateways.iter().any(|gateway| gateway == "engine.render");
+        ui_found |= service_gateways
+            .iter()
+            .any(|gateway| matches!(gateway.as_str(), "engine.ui" | "engine.ui.text"));
+    }
+
+    if render_found && ui_found {
+        if !HEADLESS_RENDER_UI_SKIP_MESSAGE_PRINTED.swap(true, Ordering::AcqRel) {
+            HEADLESS_RENDER_SKIP_MESSAGE_PRINTED.store(true, Ordering::Release);
+            HEADLESS_UI_SKIP_MESSAGE_PRINTED.store(true, Ordering::Release);
+            eprintln!(
+                "Awwwww, headless mode detected. Renderer found, UI found, but today North Star runs on pure console magic."
+            );
+        }
+        return;
+    }
+
+    if render_found && !HEADLESS_RENDER_SKIP_MESSAGE_PRINTED.swap(true, Ordering::AcqRel) {
+        eprintln!(
+            "Awwwww, seems you're using a headless mode, so looks like you're not gonna use renderer today. Poor GPU, it dressed up for nothing."
+        );
+    }
+    if ui_found && !HEADLESS_UI_SKIP_MESSAGE_PRINTED.swap(true, Ordering::AcqRel) {
+        eprintln!(
+            "Awwwww, seems you're using a headless mode, so looks like you're not gonna use ui today. The buttons have been sent home."
+        );
+    }
+}
+
+fn headless_skips_concrete_provider(id: &str, service_gateways: &[String]) -> bool {
+    if !headless_mode_enabled() {
+        return false;
+    }
+
+    if !is_concrete_provider_id(id) {
+        return false;
+    }
+
+    service_gateways.iter().any(|gateway| {
+        matches!(
+            gateway.as_str(),
+            "engine.render" | "engine.ui" | "engine.ui.text"
+        )
+    })
+}
+
 pub(super) fn build_load_selection(
     graph: &DiscoveryGraph,
     filter: LoadPhaseFilter,
     loaded_ids: &NeHashSet<String>,
 ) -> LoadSelection {
+    emit_headless_skip_summary_once(graph);
+
     let mut out = LoadSelection::default();
     let runtime_only = runtime_target_plugins_only();
     let mut winners_by_id: HashMap<&str, &super::graph::ScannedDynlib> = HashMap::default();
@@ -102,6 +186,7 @@ pub(super) fn build_load_selection(
             id,
             phase,
             descriptor_kind,
+            service_gateways,
             ..
         } = &item.kind else {
             continue;
@@ -110,6 +195,7 @@ pub(super) fn build_load_selection(
             || !crate::plugin_config_service::plugin_enabled_by_config(id)
             || !filter.allows(*phase)
             || (runtime_only && is_editor_only_plugin(*descriptor_kind))
+            || headless_skips_concrete_provider(id, service_gateways)
         {
             continue;
         }
@@ -147,6 +233,10 @@ pub(super) fn build_load_selection(
                 } else if runtime_only && is_editor_only_plugin(*descriptor_kind) {
                     SelectionDecision::Unsupported {
                         reason: "editor plugin disabled for runtime target",
+                    }
+                } else if headless_skips_concrete_provider(id, service_gateways) {
+                    SelectionDecision::Unsupported {
+                        reason: "headless mode uses visible NullProvider routes for render/ui",
                     }
                 } else if !filter.allows(*phase) {
                     SelectionDecision::Filtered {

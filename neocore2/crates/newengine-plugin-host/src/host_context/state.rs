@@ -62,6 +62,7 @@ pub(crate) struct GatewayProviderRouteEntry {
     pub(crate) provider_owner_id: String,
     pub(crate) backend_capability_id: String,
     pub(crate) backend_priority: i32,
+    pub(crate) origin: crate::service_gateway::GatewayProviderOrigin,
 }
 
 #[derive(Clone)]

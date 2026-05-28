@@ -121,7 +121,7 @@ pub(crate) const RUNTIME_SERVICE_CATALOG: &[RuntimeServiceCatalogEntry] = &[
     ),
     RuntimeServiceCatalogEntry::new(
         newengine_platform_api::PLATFORM_RUNTIME_REQUIREMENT_SPEC,
-        "platform runtime / native window surface",
+        "platform route / native window or headless surface snapshot",
     ),
 ];
 

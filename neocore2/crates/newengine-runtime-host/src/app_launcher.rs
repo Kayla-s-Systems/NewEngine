@@ -210,6 +210,18 @@ where
             );
         }
 
+        if self.headless_mode_requested() {
+            log::warn!(
+                "{} launcher: headless mode requested; skipping platform runtime discovery and entering CLI host",
+                self.spec.app_name
+            );
+            newengine_core::crash::record_breadcrumb(format!(
+                "{} launcher: explicit headless mode requested",
+                self.spec.app_name
+            ));
+            return HeadlessCliRuntime::new(engine, self.spec.fixed_dt_ms).run("NEWENGINE_HEADLESS requested");
+        }
+
         let runtime_path = match self.detect_platform_runtime(&startup) {
             Ok(path) => path,
             Err(err) if self.platform_missing_can_fallback_to_headless(&err) => {
@@ -226,7 +238,22 @@ where
             }
             Err(err) => return Err(err),
         };
-        let mut resolved_platform = self.resolve_platform_runtime(&startup, &runtime_path)?;
+        let mut resolved_platform = match self.resolve_platform_runtime(&startup, &runtime_path) {
+            Ok(resolved) => resolved,
+            Err(err) if self.platform_missing_can_fallback_to_headless(&err) => {
+                log::warn!(
+                    "{} launcher: platform runtime could not be resolved; falling back to headless CLI mode: {}",
+                    self.spec.app_name,
+                    err
+                );
+                newengine_core::crash::record_breadcrumb(format!(
+                    "{} launcher: platform metadata/ABI unavailable; entering headless CLI fallback",
+                    self.spec.app_name
+                ));
+                return HeadlessCliRuntime::new(engine, self.spec.fixed_dt_ms).run(err.to_string());
+            }
+            Err(err) => return Err(err),
+        };
 
         log::info!(
             "{} launcher: platform runtime plugin id='{}' path='{}'",
@@ -365,14 +392,26 @@ where
         Ok(resolved)
     }
 
+    fn headless_mode_requested(&self) -> bool {
+        if env_bool("NEWENGINE_REQUIRE_PLATFORM", false)
+            || env_bool("NEWENGINE_REQUIRE_PLATFORM_BACKEND", false)
+        {
+            return false;
+        }
+        env_bool("NEWENGINE_HEADLESS", false)
+    }
+
     fn platform_missing_can_fallback_to_headless(&self, err: &EngineError) -> bool {
-        if std::env::var_os("NEWENGINE_PLATFORM_RUNTIME").is_some() {
+        let headless_requested = env_bool("NEWENGINE_HEADLESS", false);
+        if env_bool("NEWENGINE_REQUIRE_PLATFORM", false)
+            || env_bool("NEWENGINE_REQUIRE_PLATFORM_BACKEND", false)
+        {
             return false;
         }
-        if env_bool("NEWENGINE_REQUIRE_PLATFORM", false) {
+        if std::env::var_os("NEWENGINE_PLATFORM_RUNTIME").is_some() && !headless_requested {
             return false;
         }
-        if env_bool("NEWENGINE_HEADLESS", false) {
+        if headless_requested {
             return true;
         }
 
@@ -380,6 +419,12 @@ where
         text.contains("platform runtime DLL not found")
             || text.contains("No platform runtime")
             || text.contains("platform runtime unavailable")
+            || text.contains("platform runtime metadata load failed")
+            || text.contains("platform config defaults failed")
+            || text.contains("platform config apply failed")
+            || text.contains("platform config decode failed")
+            || text.contains("platform runtime symbol missing")
+            || text.contains("platform runtime load failed")
     }
 
     fn early_log(&self, args: fmt::Arguments<'_>) {

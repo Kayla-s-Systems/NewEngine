@@ -287,7 +287,7 @@
     },
     {
       "id": "ui.accept",
-      "label": "Asset Browser accept",
+      "label": "Asset catalog accept",
       "contexts": [],
       "dispatch": "consume_first",
       "effects": [
@@ -298,7 +298,7 @@
     },
     {
       "id": "ui.back",
-      "label": "Asset Browser back",
+      "label": "Asset catalog back",
       "contexts": [],
       "dispatch": "consume_first",
       "effects": [
@@ -309,7 +309,7 @@
     },
     {
       "id": "ui.nav.up",
-      "label": "Asset Browser up",
+      "label": "Asset catalog up",
       "contexts": [],
       "dispatch": "consume_first",
       "effects": [
@@ -322,7 +322,7 @@
     },
     {
       "id": "ui.nav.down",
-      "label": "Asset Browser down",
+      "label": "Asset catalog down",
       "contexts": [],
       "dispatch": "consume_first",
       "effects": [
@@ -335,7 +335,7 @@
     },
     {
       "id": "ui.nav.left",
-      "label": "Asset Browser previous view",
+      "label": "Asset catalog previous view",
       "contexts": [],
       "dispatch": "consume_first",
       "effects": [
@@ -348,7 +348,7 @@
     },
     {
       "id": "ui.nav.right",
-      "label": "Asset Browser next view",
+      "label": "Asset catalog next view",
       "contexts": [],
       "dispatch": "consume_first",
       "effects": [
@@ -369,17 +369,6 @@
   ],
   "listeners": [
     {
-      "owner": "newengine.assets_catalog_ui",
-      "id": "asset-browser-ui",
-      "action_filter": [
-        "ui.assets.catalog.toggle"
-      ],
-      "context_filter": [],
-      "priority": 110,
-      "consume": true,
-      "enabled": true
-    },
-    {
       "owner": "app.asset_browser",
       "id": "asset-browser-ui",
       "action_filter": [
@@ -388,22 +377,6 @@
       "context_filter": [],
       "priority": 110,
       "consume": true,
-      "enabled": true
-    },
-    {
-      "owner": "newengine.assets_catalog_ui",
-      "id": "assets-browser-navigation",
-      "action_filter": [
-        "ui.accept",
-        "ui.back",
-        "ui.nav.up",
-        "ui.nav.down",
-        "ui.nav.left",
-        "ui.nav.right"
-      ],
-      "context_filter": [],
-      "priority": 110,
-      "consume": false,
       "enabled": true
     },
     {
