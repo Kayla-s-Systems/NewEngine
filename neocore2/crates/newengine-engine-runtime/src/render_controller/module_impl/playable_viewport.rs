@@ -4,12 +4,57 @@ use newengine_core::render::{Extent2D, RenderApi};
 use newengine_core::{EngineResult, ModuleCtx};
 use crate::ui_gateway;
 use crate::input_systems::InputCaptureState;
-use newengine_ui_api::{UiDrawList, UiInputCaptureState, UiRuntimeDebugOverlayTelemetry, UiSurfaceNode};
+use newengine_ui_api::{
+    UiDrawCmd, UiDrawList, UiEditorRuntimeMode, UiEditorRuntimeState, UiInputCaptureState,
+    UiRect, UiRuntimeDebugOverlayTelemetry, UiScreenProfile, UiScreenProfileState, UiSurfaceNode,
+    UiTexId, UiVertex, UiViewportSlot,
+};
 
 use super::frame_types::{PlayableFrameOutcome, RenderFrameScope, ViewportFrameInput};
 use super::input::ViewportInputSnap;
 use super::super::controller::RuntimeRenderController;
 
+
+#[inline]
+fn viewport_texture_color() -> u32 {
+    255 | (255 << 8) | (255 << 16) | (255 << 24)
+}
+
+fn prepend_viewport_slot_quad(ui: &mut UiDrawList, slot: &UiViewportSlot, texture_id: u32) {
+    if texture_id == 0 || slot.w_px <= 1.0 || slot.h_px <= 1.0 {
+        return;
+    }
+    let old_vertices = core::mem::take(&mut ui.mesh.vertices);
+    let old_indices = core::mem::take(&mut ui.mesh.indices);
+    let old_cmds: Vec<UiDrawCmd> = ui.mesh.cmds.drain(..).collect();
+
+    let x = slot.x_px.round();
+    let y = slot.y_px.round();
+    let w = slot.w_px.round().max(1.0);
+    let h = slot.h_px.round().max(1.0);
+    let color = viewport_texture_color();
+    ui.mesh.vertices.extend_from_slice(&[
+        UiVertex { pos: [x, y], uv: [0.0, 0.0], color },
+        UiVertex { pos: [x + w, y], uv: [1.0, 0.0], color },
+        UiVertex { pos: [x + w, y + h], uv: [1.0, 1.0], color },
+        UiVertex { pos: [x, y + h], uv: [0.0, 1.0], color },
+    ]);
+    ui.mesh.indices.extend_from_slice(&[0, 1, 2, 0, 2, 3]);
+    ui.mesh.cmds.push(UiDrawCmd {
+        texture: UiTexId(texture_id),
+        clip_rect: UiRect { min_x: x, min_y: y, max_x: x + w, max_y: y + h },
+        index_range: 0..6,
+    });
+
+    let vertex_offset = 4u32;
+    let index_offset = 6u32;
+    ui.mesh.vertices.extend(old_vertices);
+    ui.mesh.indices.extend(old_indices.into_iter().map(|idx| idx + vertex_offset));
+    for mut cmd in old_cmds {
+        cmd.index_range = (cmd.index_range.start + index_offset)..(cmd.index_range.end + index_offset);
+        ui.mesh.cmds.push(cmd);
+    }
+}
 
 impl RuntimeRenderController {
     pub(super) fn render_playable_viewport_frame<E: Send + 'static>(
@@ -61,6 +106,17 @@ impl RuntimeRenderController {
             );
         }
 
+        if editor_viewport_runtime_mode(ctx) == Some(UiEditorRuntimeMode::Edit) {
+            // Editor/Edit is a tooling state, not a playable-world frame. Keep the
+            // viewport slot as UI chrome only and do not tick scene/world, build
+            // game pipelines, run shadow planning, or submit gameplay draw-list
+            // providers. Simulate/Play explicitly re-enable the world path.
+            self.render_ui_only_frame(ctx, r, frame_input.ui, scope)?;
+            return Ok(PlayableFrameOutcome::Continue {
+                frame_debug_snapshot: None,
+            });
+        }
+
         if scope.vp_w == 0 || scope.vp_h == 0 || self.viewport.pass_disabled {
             self.render_ui_only_frame(ctx, r, frame_input.ui, scope)?;
             return Ok(PlayableFrameOutcome::Continue {
@@ -80,6 +136,14 @@ impl RuntimeRenderController {
                 }
             }
         };
+
+        if rt.is_some() {
+            let slot = ctx.resources().get::<UiViewportSlot>().cloned();
+            let viewport_tex = self.bridges.viewport.read_tex_user() as u32;
+            if let (Some(slot), Some(ui)) = (slot.as_ref(), frame_input.ui.as_mut()) {
+                prepend_viewport_slot_quad(ui, slot, viewport_tex);
+            }
+        }
 
         self.bridges.scene.apply_commands();
         let scene_lock = self.bridges.scene.scene();
@@ -205,7 +269,7 @@ impl RuntimeRenderController {
                 &mut carrier,
             );
         }
-        let play_mode = self.bridges.scene.play_mode();
+        let play_mode = editor_viewport_play_mode(ctx).unwrap_or_else(|| self.bridges.scene.play_mode());
         if play_mode.wants_direct_player_control() {
             input.apply_gameplay_input_handoff(&self.runtime_profile().input);
         }
@@ -309,4 +373,31 @@ fn clear_ui_draw_list(surface_size_px: [u32; 2]) -> UiDrawList {
     draw_list.screen_size_px = surface_size_px;
     draw_list.pixels_per_point = 1.0;
     draw_list
+}
+
+
+fn editor_viewport_runtime_mode<E: Send + 'static>(ctx: &ModuleCtx<'_, E>) -> Option<UiEditorRuntimeMode> {
+    let profile = ctx
+        .resources()
+        .get::<UiScreenProfileState>()
+        .map(|state| state.descriptor.profile)
+        .unwrap_or_default();
+    if profile != UiScreenProfile::Editor {
+        return None;
+    }
+    Some(
+        ctx.resources()
+            .get::<UiEditorRuntimeState>()
+            .map(|state| state.mode)
+            .unwrap_or(UiEditorRuntimeMode::Edit),
+    )
+}
+
+fn editor_viewport_play_mode<E: Send + 'static>(ctx: &ModuleCtx<'_, E>) -> Option<crate::gameplay::GameRunMode> {
+    let mode = editor_viewport_runtime_mode(ctx)?;
+    Some(match mode {
+        UiEditorRuntimeMode::Edit => crate::gameplay::GameRunMode::Staging,
+        UiEditorRuntimeMode::Simulate => crate::gameplay::GameRunMode::Simulate,
+        UiEditorRuntimeMode::Play => crate::gameplay::GameRunMode::Play,
+    })
 }

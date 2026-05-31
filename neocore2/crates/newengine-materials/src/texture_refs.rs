@@ -8,7 +8,7 @@
 //! material graphs. 
 
 use newengine_assets_api::{
-    is_rejected_neytd_reference, is_raw_source_image_reference, require_asset_reference_extension,
+    is_raw_source_image_reference, is_retired_texture_dictionary_reference, require_asset_reference_extension,
     AssetReference,
 };
 
@@ -26,7 +26,7 @@ impl MaterialTextureReference {
     pub fn parse(value: &str) -> Option<Self> { Self::parse_strict(value).ok() }
 
     pub fn parse_strict(value: &str) -> Result<Self, String> {
-        if is_rejected_neytd_reference(value) {
+        if is_retired_texture_dictionary_reference(value) {
             return Err("material texture references must use .ytd@entry; non-canonical texture dictionaries are not public material texture references".to_owned());
         }
         if is_raw_source_image_reference(value) {

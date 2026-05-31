@@ -21,12 +21,14 @@ newengine-input-profile-gameready = { path = "../newengine-input-profile-gamerea
 newengine-material-runtime = { path = "../newengine-material-runtime" }
 newengine-model-runtime = { path = "../newengine-model-runtime" }
 newengine-entity-runtime = { path = "../newengine-entity-runtime" }
+newengine-gameplay-runtime = { path = "../newengine-gameplay-runtime" }
 newengine-plugin-host = { path = "../newengine-plugin-host" }
 newengine-render-feature-api = { path = "../newengine-render-feature-api" }
 newengine-render-feature-gameready = { path = "../newengine-render-feature-gameready" }
 newengine-render-ui-bridge = { path = "../newengine-render-ui-bridge" }
 newengine-runtime-host = { path = "../newengine-runtime-host" }
 newengine-time-runtime = { path = "../newengine-time-runtime" }
+newengine-schema-runtime = { path = "../newengine-schema-runtime" }
 newengine-textures-runtime = { path = "../newengine-textures-runtime" }
 newengine-scene = { path = "../newengine-scene", features = ["runtime"] }
 newengine-scene-runtime = { path = "../newengine-scene-runtime" }
@@ -34,3 +36,4 @@ newengine-world-runtime = { path = "../newengine-world-runtime" }
 newengine-world-environment-runtime = { path = "../newengine-world-environment-runtime" }
 newengine-scripting-runtime = { path = "../newengine-scripting-runtime" }
 newengine-ui = { path = "../newengine-ui", default-features = false }
+newengine-ui-api = { path = "../newengine-ui-api" }

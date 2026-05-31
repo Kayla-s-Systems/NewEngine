@@ -8,6 +8,9 @@ pub use asset_error::*;
 mod asset_service_client;
 pub use asset_service_client::AssetServiceClient;
 
+mod asset_document;
+pub use asset_document::*;
+
 mod pipeline;
 pub use pipeline::*;
 
@@ -231,29 +234,29 @@ pub const ASSET_BACKEND_SERVICE_SPEC: newengine_service_api::BackendServiceSpec 
 /// This is a descriptor/navigation surface over runtime asset containers. It does
 /// not replace `engine.assets`; registered file-type handlers still read payloads
 /// through the AssetManager/VFS gateway.
-pub const ENGINE_ASSET_FILE_TYPES_SERVICE_ID: &str = "engine.assets.file_types";
-pub const ASSET_FILE_TYPES_SERVICE_ID: &str = "asset.file_types.api";
-pub const ASSET_FILE_TYPES_BACKEND_CAPABILITY_ID: &str = "assets.file_types.backend";
+pub const ENGINE_ASSET_TYPES_SERVICE_ID: &str = "engine.assets.types";
+pub const ASSET_TYPES_SERVICE_ID: &str = "asset.types.api";
+pub const ASSET_TYPES_BACKEND_CAPABILITY_ID: &str = "assets.types.backend";
 
-pub const ASSET_FILE_TYPES_BACKEND_SERVICE_SPEC: newengine_service_api::BackendServiceSpec =
+pub const ASSET_TYPES_BACKEND_SERVICE_SPEC: newengine_service_api::BackendServiceSpec =
     newengine_service_api::BackendServiceSpec::new(
-        "assets.file_types",
-        ENGINE_ASSET_FILE_TYPES_SERVICE_ID,
-        ASSET_FILE_TYPES_SERVICE_ID,
-        ASSET_FILE_TYPES_BACKEND_CAPABILITY_ID,
+        "assets.types",
+        ENGINE_ASSET_TYPES_SERVICE_ID,
+        ASSET_TYPES_SERVICE_ID,
+        ASSET_TYPES_BACKEND_CAPABILITY_ID,
     );
 
 pub mod file_type_method {
     pub const INFO_JSON: &str = newengine_service_api::SERVICE_METHOD_INFO_JSON;
     pub const INVOKE_JSON: &str = newengine_service_api::SERVICE_METHOD_INVOKE_JSON;
     pub const SHUTDOWN_V1: &str = newengine_service_api::SERVICE_METHOD_SHUTDOWN_V1;
-    pub const MANIFEST_JSON_V1: &str = "asset.file_types.manifest_json_v1";
-    pub const REGISTER_JSON_V1: &str = "asset.file_types.register_json_v1";
-    pub const PROBE_JSON_V1: &str = "asset.file_types.probe_json_v1";
-    pub const RESOLVE_JSON_V1: &str = "asset.file_types.resolve_json_v1";
+    pub const MANIFEST_JSON_V1: &str = "asset.types.manifest_json_v1";
+    pub const REGISTER_JSON_V1: &str = "asset.types.register_json_v1";
+    pub const PROBE_JSON_V1: &str = "asset.types.probe_json_v1";
+    pub const RESOLVE_JSON_V1: &str = "asset.types.resolve_json_v1";
 }
 
-pub const ASSET_FILE_TYPE_SERVICE_METHODS: &[&str] = &[
+pub const ASSET_TYPES_SERVICE_METHODS: &[&str] = &[
     file_type_method::INFO_JSON,
     file_type_method::INVOKE_JSON,
     file_type_method::SHUTDOWN_V1,
@@ -263,18 +266,18 @@ pub const ASSET_FILE_TYPE_SERVICE_METHODS: &[&str] = &[
     file_type_method::RESOLVE_JSON_V1,
 ];
 
-pub const ASSET_FILE_TYPES_RUNTIME_CONTRACT_SPEC: newengine_service_api::RuntimeServiceContractSpec =
+pub const ASSET_TYPES_RUNTIME_CONTRACT_SPEC: newengine_service_api::RuntimeServiceContractSpec =
     newengine_service_api::RuntimeServiceContractSpec::new(
-        ENGINE_ASSET_FILE_TYPES_SERVICE_ID,
-        "newengine.assets-file-types-api >= 0.1.x",
-        ASSET_FILE_TYPE_SERVICE_METHODS,
+        ENGINE_ASSET_TYPES_SERVICE_ID,
+        "newengine.assets-types-api >= 0.1.x",
+        ASSET_TYPES_SERVICE_METHODS,
     );
 
-pub const ASSET_FILE_TYPES_RUNTIME_REQUIREMENT_SPEC: newengine_service_api::RuntimeServiceRequirementSpec =
+pub const ASSET_TYPES_RUNTIME_REQUIREMENT_SPEC: newengine_service_api::RuntimeServiceRequirementSpec =
     newengine_service_api::RuntimeServiceRequirementSpec::new(
-        ASSET_FILE_TYPES_RUNTIME_CONTRACT_SPEC,
-        Some(ASSET_FILE_TYPES_BACKEND_CAPABILITY_ID),
-        Some("NEWENGINE_REQUIRE_ASSET_FILE_TYPES"),
+        ASSET_TYPES_RUNTIME_CONTRACT_SPEC,
+        Some(ASSET_TYPES_BACKEND_CAPABILITY_ID),
+        Some("NEWENGINE_REQUIRE_ASSET_TYPES"),
     );
 
 /// Asset codec classification used by AssetManager to apply generic host rules.
@@ -345,6 +348,22 @@ pub struct AssetFileTypeDescriptor {
     pub priority: i32,
     pub vfs_backed: bool,
     pub runtime_ready: bool,
+    /// Provider declares that `engine.assets.inspect` can return a preview DTO for this type.
+    pub preview_provider: bool,
+    /// Compatibility projection: provider declares schema-editable fields.
+    /// New UI should prefer `schema_editable` and `write_back_available`.
+    pub editable: bool,
+    /// Provider declares that `engine.assets.inspect` can return editable field schema.
+    /// This does not imply save/write-back availability.
+    pub schema_editable: bool,
+    /// True only when a concrete format/package writer capability is registered or declared.
+    pub write_back_available: bool,
+    /// Explicit capability id required for provider write-back. Empty means missing.
+    pub writer_capability: String,
+    /// Provider-owned inspect contract id, for example `asset.inspect.ytyp.v1`.
+    pub inspect_contract: String,
+    /// Provider-owned edit contract id, for example `asset.edit.ytyp.v1`. Empty means read-only transport.
+    pub edit_contract: String,
     /// True only for codecs that may expose nested VFS entries. This must match
     /// `codec_type == containerType`; mismatches are rejected by the registry.
     pub allow_nested_assets: bool,
@@ -378,6 +397,13 @@ impl Default for AssetFileTypeDescriptor {
             priority: 0,
             vfs_backed: true,
             runtime_ready: false,
+            preview_provider: false,
+            editable: false,
+            schema_editable: false,
+            write_back_available: false,
+            writer_capability: String::new(),
+            inspect_contract: String::new(),
+            edit_contract: String::new(),
             allow_nested_assets: false,
             native_container: false,
             requires_magic: true,
@@ -416,6 +442,18 @@ impl AssetFileTypeDescriptor {
         }
         if self.consumer_domains.is_empty() && !self.semantic_gateway.trim().is_empty() {
             self.consumer_domains = vec![self.semantic_gateway.clone()];
+        }
+        if self.preview_provider && self.inspect_contract.trim().is_empty() {
+            self.inspect_contract = format!("asset.inspect.{}.v1", self.extension);
+        }
+        if self.editable && !self.schema_editable {
+            self.schema_editable = true;
+        }
+        if self.schema_editable && self.edit_contract.trim().is_empty() {
+            self.edit_contract = format!("asset.edit.{}.v1", self.extension);
+        }
+        if self.write_back_available && self.writer_capability.trim().is_empty() {
+            self.write_back_available = false;
         }
     }
 
@@ -474,8 +512,8 @@ pub struct AssetFileTypeManifest {
 impl Default for AssetFileTypeManifest {
     fn default() -> Self {
         Self {
-            schema: "newengine.asset_file_types.v2".to_owned(),
-            gateway: ENGINE_ASSET_FILE_TYPES_SERVICE_ID.to_owned(),
+            schema: "newengine.asset_types.v2".to_owned(),
+            gateway: ENGINE_ASSET_TYPES_SERVICE_ID.to_owned(),
             formats: Vec::new(),
         }
     }
@@ -623,6 +661,8 @@ pub mod method {
     pub const THUMBNAIL_JSON_V1: &str = "asset.thumbnail_json_v1";
     pub const DIRTY_SCAN_JSON_V1: &str = "asset.dirty_scan_json_v1";
     pub const PACKAGE_WRITER_INFO_JSON_V1: &str = "asset.package_writer_info_json_v1";
+    /// Explicit .nepak package writer execution. Payload is NepakPackageWriteRequestV1.
+    pub const PACKAGE_WRITE_NEPAK_JSON_V1: &str = "asset.package_write_nepak_json_v1";
 
     // Generic lifecycle hook understood by the plugin host.
     pub const SHUTDOWN_V1: &str = newengine_service_api::SERVICE_METHOD_SHUTDOWN_V1;
@@ -795,6 +835,7 @@ pub const REQUIRED_RUNTIME_METHODS_V1: &[&str] = &[
     method::THUMBNAIL_JSON_V1,
     method::DIRTY_SCAN_JSON_V1,
     method::PACKAGE_WRITER_INFO_JSON_V1,
+    method::PACKAGE_WRITE_NEPAK_JSON_V1,
 ];
 
 /// Startup validation contract for the engine-facing asset gateway.
@@ -1256,6 +1297,9 @@ pub trait AssetService: AssetAccess {
 
     /// Package/listFile writer capability diagnostics.
     fn package_writer_info_json_v1(&self, payload: serde_json::Value) -> Result<serde_json::Value, String>;
+
+    /// Explicit .nepak package writer execution through engine.assets.package_writer.
+    fn package_write_nepak_json_v1(&self, payload: NepakPackageWriteRequestV1) -> Result<NepakPackageWriteResponseV1, String>;
 
     /// Mount one source through the strict v1 JSON source model.
     fn mount_source_json_v1(&self, payload: serde_json::Value) -> Result<(), String>;

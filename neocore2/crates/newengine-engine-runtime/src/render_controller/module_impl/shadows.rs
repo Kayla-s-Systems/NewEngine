@@ -56,8 +56,9 @@ pub(super) fn build_light_shadow_plan(
         );
     }
 
+    let light_snapshot = super::lights::collect_light_scene_snapshot(world);
     let ctx = LightExtractionCtx::new(
-        world,
+        &light_snapshot,
         bounds,
         lit,
         settings,

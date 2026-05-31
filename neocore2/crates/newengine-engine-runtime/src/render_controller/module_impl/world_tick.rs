@@ -48,7 +48,7 @@ impl RuntimeRenderController {
             );
             let gate_released_waiting_activation = world
                 .resource::<crate::gameplay::GameReadyWorldLaunchGate>()
-                .map(|gate| gate.is_released() && !gate.is_play_activated())
+                .map(|gate| gate.is_released() && !gate.is_play_activated() && !gate.is_editor_preview_ready())
                 .unwrap_or(false);
 
             let effective_play_mode = if gate_released_waiting_activation {

@@ -1,7 +1,4 @@
-use std::time::Instant;
-
 use newengine_core::host_events::CursorState;
-use newengine_core::render::require_render_api;
 use newengine_core::{EngineResult, Module, ModuleCtx};
 
 use super::super::controller::RuntimeRenderController;
@@ -12,28 +9,14 @@ impl RuntimeRenderController {
         ctx: &mut ModuleCtx<'_, E>,
     ) -> EngineResult<()> {
         self.gpu.lifetimes.resources.subscribe(ctx.events());
-        if let Ok(api) = require_render_api(ctx) {
-            let started_at = Instant::now();
-            log::info!("render controller: loading-screen pipeline warmup begin");
-            let mut r = api.lock();
-            if let Err(e) = self.gpu.require_primary_lit_pipeline(&mut **r) {
-                log::warn!(
-                    "render controller: loading-screen pipeline warmup skipped err='{}' elapsed_ms={:.2}",
-                    e,
-                    started_at.elapsed().as_secs_f64() * 1000.0
-                );
-            } else {
-                let _ = r.pump_uploads(
-                    newengine_core::render::UploadPumpDesc::loading_screen_warmup(),
-                );
-                log::info!(
-                    "render controller: loading-screen pipeline warmup completed elapsed_ms={:.2}",
-                    started_at.elapsed().as_secs_f64() * 1000.0
-                );
-            }
-        } else {
-            log::warn!("render controller: loading-screen pipeline warmup skipped because engine.render gateway is unavailable");
-        }
+        // Do not build the GameReady lit pipeline at module start. In Editor/Edit
+        // this was the first visible hitch and it initialized gameplay render work
+        // before the user pressed Simulate or Play. The pipeline provider remains
+        // lazy: render_controller builds it only when a real scene viewport frame is
+        // submitted.
+        log::info!(
+            "render controller: scene pipeline warmup deferred until Simulate/Play or game profile viewport"
+        );
         Ok(())
     }
 

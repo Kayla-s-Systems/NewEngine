@@ -396,6 +396,32 @@ dependencies = [
 ]
 
 [[package]]
+name = "newengine-ai-api"
+version = "0.1.0"
+dependencies = [
+ "newengine-animation-api",
+ "newengine-entity-api",
+ "newengine-navigation-api",
+ "newengine-service-api",
+ "newengine-tags-api",
+ "newengine-tasks-api",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "newengine-animation-api"
+version = "0.1.0"
+dependencies = [
+ "newengine-entity-api",
+ "newengine-service-api",
+ "newengine-tags-api",
+ "newengine-tasks-api",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "newengine-asset-format-nef8"
 version = "0.1.0"
 dependencies = [
@@ -410,6 +436,7 @@ dependencies = [
  "log",
  "newengine-assets-api",
  "newengine-plugin-api",
+ "newengine-schema-api",
  "newengine-service-api",
  "newengine-service-kit",
  "serde",
@@ -423,6 +450,7 @@ dependencies = [
  "abi_stable",
  "log",
  "newengine-plugin-api",
+ "newengine-schema-api",
  "newengine-service-api",
  "serde",
  "serde_json",
@@ -677,6 +705,7 @@ dependencies = [
  "newengine-ui-api",
  "newengine-ui-navigation-api",
  "newengine-viewport",
+ "newengine-world-environment-api",
  "parking_lot",
  "raw-window-handle",
  "serde",
@@ -730,6 +759,7 @@ dependencies = [
  "newengine-ecs-runtime",
  "newengine-engine-runtime",
  "newengine-entity-runtime",
+ "newengine-gameplay-runtime",
  "newengine-input-bindings-runtime",
  "newengine-input-profile-gameready",
  "newengine-material-runtime",
@@ -741,12 +771,33 @@ dependencies = [
  "newengine-runtime-host",
  "newengine-scene",
  "newengine-scene-runtime",
+ "newengine-schema-runtime",
  "newengine-scripting-runtime",
  "newengine-textures-runtime",
  "newengine-time-runtime",
  "newengine-ui",
+ "newengine-ui-api",
  "newengine-world-environment-runtime",
  "newengine-world-runtime",
+]
+
+[[package]]
+name = "newengine-gameplay-runtime"
+version = "0.1.0"
+dependencies = [
+ "abi_stable",
+ "newengine-ai-api",
+ "newengine-animation-api",
+ "newengine-navigation-api",
+ "newengine-plugin-api",
+ "newengine-plugin-host",
+ "newengine-service-api",
+ "newengine-service-kit",
+ "newengine-tags-api",
+ "newengine-tasks-api",
+ "parking_lot",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]
@@ -972,6 +1023,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "newengine-navigation-api"
+version = "0.1.0"
+dependencies = [
+ "newengine-entity-api",
+ "newengine-service-api",
+ "newengine-tags-api",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "newengine-physics-api"
 version = "0.1.0"
 dependencies = [
@@ -1123,6 +1185,7 @@ dependencies = [
  "newengine-core",
  "newengine-ecs-api",
  "newengine-entity-api",
+ "newengine-gameplay-runtime",
  "newengine-input-api",
  "newengine-jobs-api",
  "newengine-math",
@@ -1132,6 +1195,8 @@ dependencies = [
  "newengine-plugin-host",
  "newengine-render-api",
  "newengine-scene-io",
+ "newengine-schema-api",
+ "newengine-schema-runtime",
  "newengine-service-api",
  "newengine-service-kit",
  "newengine-system-contracts",
@@ -1184,6 +1249,32 @@ dependencies = [
  "newengine-scene-io",
  "newengine-service-api",
  "newengine-service-kit",
+ "newengine-world-api",
+ "serde_json",
+]
+
+[[package]]
+name = "newengine-schema-api"
+version = "0.1.0"
+dependencies = [
+ "newengine-service-api",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "newengine-schema-runtime"
+version = "0.1.0"
+dependencies = [
+ "abi_stable",
+ "log",
+ "newengine-plugin-api",
+ "newengine-plugin-host",
+ "newengine-schema-api",
+ "newengine-service-api",
+ "newengine-service-kit",
+ "parking_lot",
+ "serde",
  "serde_json",
 ]
 
@@ -1191,6 +1282,7 @@ dependencies = [
 name = "newengine-scripting-api"
 version = "0.1.0"
 dependencies = [
+ "newengine-schema-api",
  "newengine-service-api",
  "serde",
  "serde_json",
@@ -1263,6 +1355,36 @@ dependencies = [
  "newengine-system-contracts",
  "newengine-ui",
  "parking_lot",
+ "serde_json",
+]
+
+[[package]]
+name = "newengine-tags-api"
+version = "0.1.0"
+dependencies = [
+ "newengine-entity-api",
+ "newengine-service-api",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "newengine-tasks-api"
+version = "0.1.0"
+dependencies = [
+ "newengine-entity-api",
+ "newengine-service-api",
+ "newengine-tags-api",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "newengine-text-api"
+version = "0.1.0"
+dependencies = [
+ "newengine-service-api",
+ "serde",
  "serde_json",
 ]
 
@@ -1429,6 +1551,7 @@ dependencies = [
  "newengine-plugin-host",
  "newengine-service-api",
  "newengine-service-kit",
+ "newengine-world-api",
  "newengine-world-environment-api",
  "parking_lot",
  "serde_json",

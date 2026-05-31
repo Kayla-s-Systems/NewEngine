@@ -1,0 +1,141 @@
+{
+  "schema": "newengine.editor_chrome.import.v1",
+  "target_asset": "ui/editor/editor_shell.neui",
+  "theme_ref": "ui/themes/northstar_editor.neui@editor_light",
+  "font_dictionary": "ui/fonts/editor.yft",
+  "surface_id": "engine.ui.editor.shell",
+  "composition_role": "editor_shell",
+  "menus": [
+    {
+      "id": "file",
+      "label": "File",
+      "tooltip": "Project, scene and source operations"
+    },
+    {
+      "id": "edit",
+      "label": "Edit",
+      "tooltip": "Undo, redo and selection operations"
+    },
+    {
+      "id": "create",
+      "label": "Create",
+      "tooltip": "Create entities, assets and authored data"
+    },
+    {
+      "id": "scene",
+      "label": "Scene",
+      "tooltip": "Scene/world commands and placement tools"
+    },
+    {
+      "id": "assets",
+      "label": "Assets",
+      "tooltip": "Import, reimport and inspect content"
+    },
+    {
+      "id": "tools",
+      "label": "Tools",
+      "tooltip": "Editor tools and diagnostics"
+    },
+    {
+      "id": "window",
+      "label": "Window",
+      "tooltip": "Show, hide and dock editor panels"
+    },
+    {
+      "id": "help",
+      "label": "Help",
+      "tooltip": "Documentation and runtime diagnostics"
+    }
+  ],
+  "runtime_actions": [
+    {
+      "id": "edit",
+      "label": "Stop",
+      "action_id": "editor.runtime.edit",
+      "hotkey": "1",
+      "tooltip": "Stop simulation and keep the viewport as an editor preview"
+    },
+    {
+      "id": "simulate",
+      "label": "Simulate",
+      "action_id": "editor.runtime.simulate",
+      "hotkey": "2",
+      "tooltip": "Run world simulation without direct player possession"
+    },
+    {
+      "id": "play",
+      "label": "Play",
+      "action_id": "editor.runtime.play",
+      "hotkey": "3",
+      "tooltip": "Play in editor through the contained viewport"
+    }
+  ],
+  "docks": [
+    {
+      "slot_id": "left.scene_tree",
+      "short_label": "Scene",
+      "surface_id": "engine.ui.editor.scene_tree",
+      "source_gateway": "engine.scene",
+      "neui_ref": "assets/ui/editor/scene_tree.neui@surface"
+    },
+    {
+      "slot_id": "right.inspector",
+      "short_label": "Inspector",
+      "surface_id": "engine.ui.editor.inspector",
+      "source_gateway": "engine.schema",
+      "neui_ref": "assets/ui/editor/inspector.neui@surface"
+    },
+    {
+      "slot_id": "bottom.asset_browser",
+      "short_label": "Assets",
+      "surface_id": "ui.assets.catalog",
+      "source_gateway": "engine.assets",
+      "neui_ref": "assets/ui/editor/content_browser.neui@editor.asset_browser"
+    },
+    {
+      "slot_id": "bottom.import_queue",
+      "short_label": "Import",
+      "surface_id": "engine.ui.editor.import_queue",
+      "source_gateway": "engine.assets",
+      "neui_ref": "assets/ui/editor/import_queue.neui@surface"
+    },
+    {
+      "slot_id": "bottom.output_log",
+      "short_label": "Log",
+      "surface_id": "engine.ui.editor.output_log",
+      "source_gateway": "engine.diagnostics",
+      "neui_ref": "assets/ui/editor/output_log.neui@surface"
+    },
+    {
+      "slot_id": "bottom.profiler_diagnostics",
+      "short_label": "Diagnostics",
+      "surface_id": "engine.ui.editor.profiler_diagnostics",
+      "source_gateway": "engine.diagnostics",
+      "neui_ref": "assets/ui/editor/profiler_diagnostics.neui@surface"
+    },
+    {
+      "slot_id": "center.viewport_gizmos",
+      "short_label": "Gizmos",
+      "surface_id": "engine.ui.editor.viewport_gizmos",
+      "source_gateway": "engine.ui",
+      "neui_ref": "assets/ui/editor/viewport_gizmos.neui@surface"
+    }
+  ],
+  "empty_states": {
+    "outliner": {
+      "title": "No scene snapshot",
+      "detail": "Scene / World Outliner waits for engine.scene or engine.world snapshot DTO"
+    },
+    "inspector": {
+      "title": "No selection",
+      "detail": "Right Edit Window follows EditorSelectionContext from viewport, outliner or Content Browser"
+    }
+  },
+  "policy": [
+    "Editor shell is mounted/generated as UiNodeTreeRequest through engine.ui; provider owns layout/hit-test/rendering.",
+    "Panel contracts are data descriptors; Aurelia must not special-case editor product semantics.",
+    "Inspector consumes engine.schema property DTOs and emits transaction patches.",
+    "Asset Browser consumes engine.assets document/catalog DTOs, not file extension branches.",
+    "Viewport gizmos consume UiViewportSlot + selection DTO and never mutate renderer directly."
+  ]
+}

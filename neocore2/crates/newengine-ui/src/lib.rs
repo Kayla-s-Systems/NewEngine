@@ -8,6 +8,7 @@ pub mod providers;
 pub mod schema;
 pub mod surface;
 pub mod texture;
+pub mod screen_profile;
 
 pub mod asset;
 
@@ -33,6 +34,11 @@ pub use schema::{
     UI_SURFACE_DEBUG_OVERLAY, UI_SURFACE_GAME_HUD,
     UI_SURFACE_MAIN_MENU, UI_SURFACE_PRIMARY,
 };
+pub use screen_profile::{
+    editor_screen_descriptor, game_screen_descriptor, headless_screen_descriptor,
+    screen_profile_descriptor, EditorScreen, GameScreen,
+};
+
 pub use surface::{
     UiAnimationSpec, UiErrorModalSpec, UiLoadingShellSpec, UiProviderBinding, UiSubsystemCardPaletteSpec, UiSubsystemCardSpec,
     UiProviderManifest, UiShellSpec, UiSurfaceProjection,

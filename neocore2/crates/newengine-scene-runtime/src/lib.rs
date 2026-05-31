@@ -21,8 +21,12 @@ mod authored_scene_method {
     pub(crate) const GRAPH_JSON_V1: &str = "scene.graph_json_v1";
     pub(crate) const ARCHETYPE_GRAPH_JSON_V1: &str = "scene.archetype_graph_json_v1";
     pub(crate) const PLACEMENTS_JSON_V1: &str = "scene.placements_json_v1";
+    pub(crate) const INSTANTIATE_PREFAB_JSON_V1: &str = "scene.instantiate_prefab_json_v1";
+    pub(crate) const INSTANTIATE_ARCHETYPE_JSON_V1: &str = "scene.instantiate_archetype_json_v1";
 }
 pub use newengine_engine_runtime::SceneBridge;
+
+mod instantiation;
 
 use newengine_service_kit::{
     ok_json, payload_json, register_engine_gateway_provider_service, EngineGatewayProviderDecl,
@@ -129,6 +133,7 @@ fn validate_scene_definition_refs(asset: &SceneAsset) -> Result<(), String> {
     }
     Ok(())
 }
+
 
 impl EngineSceneGatewayService {
     #[inline]
@@ -449,6 +454,8 @@ pub fn scene_gateway_service(
             authored_scene_method::GRAPH_JSON_V1,
             authored_scene_method::ARCHETYPE_GRAPH_JSON_V1,
             authored_scene_method::PLACEMENTS_JSON_V1,
+            authored_scene_method::INSTANTIATE_PREFAB_JSON_V1,
+            authored_scene_method::INSTANTIATE_ARCHETYPE_JSON_V1,
             scene_method::SHUTDOWN_V1
         ]
     });
@@ -458,7 +465,9 @@ pub fn scene_gateway_service(
     let save_service = service.clone();
     let graph_service = service.clone();
     let archetype_service = service.clone();
-    let placement_service = service;
+    let placement_service = service.clone();
+    let prefab_service = service.clone();
+    let archetype_instantiate_service = service;
 
     JsonServiceRouter::new(ENGINE_SCENE_SERVICE_ID)
         .describe_json(&description)
@@ -468,6 +477,8 @@ pub fn scene_gateway_service(
         .blob(authored_scene_method::GRAPH_JSON_V1, move |_unit, _payload| graph_service.graph_json_v1())
         .blob(authored_scene_method::ARCHETYPE_GRAPH_JSON_V1, move |_unit, _payload| archetype_service.archetype_graph_json_v1())
         .blob(authored_scene_method::PLACEMENTS_JSON_V1, move |_unit, _payload| placement_service.placements_json_v1())
+        .blob(authored_scene_method::INSTANTIATE_PREFAB_JSON_V1, move |_unit, payload| prefab_service.instantiate_prefab_json_v1(payload))
+        .blob(authored_scene_method::INSTANTIATE_ARCHETYPE_JSON_V1, move |_unit, payload| archetype_instantiate_service.instantiate_archetype_json_v1(payload))
         .blob(scene_method::SHUTDOWN_V1, move |_unit, _payload| RResult::ROk(Blob::from(Vec::new())))
         .into_service_v1()
 }

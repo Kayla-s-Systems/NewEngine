@@ -157,6 +157,14 @@
       <sourceFolder url="file://$MODULE_DIR$/neocore2/crates/newengine-world-environment-api/src" isTestSource="false" />
       <sourceFolder url="file://$MODULE_DIR$/neocore2/crates/newengine-world-environment-runtime/src" isTestSource="false" />
       <sourceFolder url="file://$MODULE_DIR$/neocore2/crates/newengine-world-runtime/src" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/neocore2/crates/newengine-ai-api/src" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/neocore2/crates/newengine-animation-api/src" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/neocore2/crates/newengine-gameplay-runtime/src" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/neocore2/crates/newengine-navigation-api/src" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/neocore2/crates/newengine-schema-api/src" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/neocore2/crates/newengine-schema-runtime/src" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/neocore2/crates/newengine-tags-api/src" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/neocore2/crates/newengine-tasks-api/src" isTestSource="false" />
       <excludeFolder url="file://$MODULE_DIR$/neocore2/apps/editor/target" />
       <excludeFolder url="file://$MODULE_DIR$/neocore2/target" />
       <excludeFolder url="file://$MODULE_DIR$/neocore2/crates/newengine-sim/target" />

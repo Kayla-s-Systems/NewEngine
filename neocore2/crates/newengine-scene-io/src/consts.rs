@@ -53,6 +53,14 @@ pub mod method {
     /// Returns placement declarations only; runtime spawn/world state belongs to engine.world.
     pub const PLACEMENTS_JSON_V1: &str = "scene.placements_json_v1";
 
+    /// Builds a prefab instantiation plan. This method does not mutate runtime state;
+    /// apply the returned commands through `engine.world/world.apply_stage_json_v1`.
+    pub const INSTANTIATE_PREFAB_JSON_V1: &str = "scene.instantiate_prefab_json_v1";
+
+    /// Builds an archetype/definition instantiation plan. This method does not mutate runtime state;
+    /// apply the returned commands through `engine.world/world.apply_stage_json_v1`.
+    pub const INSTANTIATE_ARCHETYPE_JSON_V1: &str = "scene.instantiate_archetype_json_v1";
+
     /// Idempotent service shutdown hook used by the plugin manager.
     pub const SHUTDOWN_V1: &str = "shutdown_v1";
 }
@@ -64,6 +72,8 @@ pub const SCENE_REQUIRED_METHODS: &[&str] = &[
     method::GRAPH_JSON_V1,
     method::ARCHETYPE_GRAPH_JSON_V1,
     method::PLACEMENTS_JSON_V1,
+    method::INSTANTIATE_PREFAB_JSON_V1,
+    method::INSTANTIATE_ARCHETYPE_JSON_V1,
     method::SHUTDOWN_V1,
 ];
 

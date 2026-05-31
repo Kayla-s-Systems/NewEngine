@@ -51,6 +51,23 @@ impl Nef8FormatSpec {
             priority: 0,
             vfs_backed: true,
             runtime_ready: true,
+            preview_provider: true,
+            // Generic inspect providers may expose editable field schema, but
+            // write-back requires a concrete format/package writer capability.
+            editable: false,
+            schema_editable: matches!(extension.as_str(), "ytyp" | "ydd" | "ytd" | "nemat" | "yft"),
+            write_back_available: matches!(extension.as_str(), "ytyp" | "ydd" | "ytd" | "nemat" | "yft"),
+            writer_capability: if matches!(extension.as_str(), "ytyp" | "ydd" | "ytd" | "nemat" | "yft") {
+                newengine_assets_api::ASSETS_PACKAGE_WRITER_CAPABILITY_ID.to_owned()
+            } else {
+                String::new()
+            },
+            inspect_contract: format!("asset.inspect.{extension}.v1"),
+            edit_contract: if matches!(extension.as_str(), "ytyp" | "ydd" | "ytd" | "nemat" | "yft") {
+                format!("asset.edit.{extension}.v1")
+            } else {
+                String::new()
+            },
             allow_nested_assets: false,
             native_container: true,
             requires_magic: true,
@@ -78,6 +95,13 @@ fn package_descriptor(spec: Nef8FormatSpec) -> AssetFileTypeDescriptor {
         priority: 0,
         vfs_backed: true,
         runtime_ready: true,
+        preview_provider: true,
+        editable: false,
+        schema_editable: false,
+        write_back_available: false,
+        writer_capability: String::new(),
+        inspect_contract: "asset.inspect.nepak.v1".to_owned(),
+        edit_contract: String::new(),
         allow_nested_assets: true,
         native_container: true,
         requires_magic: true,
@@ -93,10 +117,10 @@ pub mod nemat {
     pub const ASSET_KIND: &str = "material_library";
     pub const CONTENT_KIND: u32 = newengine_assets_api::LIST_FILE_CONTENT_KIND_NEMAT;
     pub const PURPOSE: &str = "Material Library";
-    pub const SEMANTIC_GATEWAY: &str = "engine.assets.materials";
+    pub const SEMANTIC_GATEWAY: &str = "engine.materials";
     pub const HANDLER_SERVICE: &str = "asset.codec.listfile.nemat";
     pub const SELECTOR_SYNTAX: &str = "file.nemat@material_entry";
-    pub const CONSUMER_DOMAINS: &[&str] = &["engine.assets.materials", "engine.assets.models", "engine.render"];
+    pub const CONSUMER_DOMAINS: &[&str] = &["engine.materials", "engine.model", "engine.render"];
 }
 
 pub mod nepak {
@@ -157,10 +181,10 @@ pub mod ydd {
     pub const ASSET_KIND: &str = "drawable_dictionary";
     pub const CONTENT_KIND: u32 = newengine_assets_api::LIST_FILE_CONTENT_KIND_YDD;
     pub const PURPOSE: &str = "Drawable/Model Dictionary";
-    pub const SEMANTIC_GATEWAY: &str = "engine.assets.models";
+    pub const SEMANTIC_GATEWAY: &str = "engine.model";
     pub const HANDLER_SERVICE: &str = "asset.codec.listfile.ydd";
     pub const SELECTOR_SYNTAX: &str = "file.ydd@drawable_entry";
-    pub const CONSUMER_DOMAINS: &[&str] = &["engine.assets.models", "engine.assets.materials", "engine.render"];
+    pub const CONSUMER_DOMAINS: &[&str] = &["engine.model", "engine.materials", "engine.render"];
 }
 
 pub mod ydr {
@@ -198,13 +222,13 @@ pub mod yfd {
 
 pub mod yft {
     pub const EXTENSION: &str = "yft";
-    pub const ASSET_KIND: &str = "frag_type";
+    pub const ASSET_KIND: &str = "font_dictionary";
     pub const CONTENT_KIND: u32 = newengine_assets_api::LIST_FILE_CONTENT_KIND_YFT;
-    pub const PURPOSE: &str = "Fragment / Destructible / Vehicle";
-    pub const SEMANTIC_GATEWAY: &str = "engine.assets.models";
+    pub const PURPOSE: &str = "Font Dictionary / Typeface Family";
+    pub const SEMANTIC_GATEWAY: &str = "engine.ui.text";
     pub const HANDLER_SERVICE: &str = "asset.codec.listfile.yft";
-    pub const SELECTOR_SYNTAX: &str = "file.yft@entry";
-    pub const CONSUMER_DOMAINS: &[&str] = &["engine.assets.models", "engine.physics", "engine.assets.materials", "engine.render"];
+    pub const SELECTOR_SYNTAX: &str = "file.yft@font_face";
+    pub const CONSUMER_DOMAINS: &[&str] = &["engine.ui.text", "engine.ui", "engine.assets.ui", "engine.render", "engine.editor"];
 }
 
 pub mod yld {
@@ -278,10 +302,10 @@ pub mod ytd {
     pub const ASSET_KIND: &str = "texture_dictionary";
     pub const CONTENT_KIND: u32 = newengine_assets_api::LIST_FILE_CONTENT_KIND_YTD;
     pub const PURPOSE: &str = "Texture Dictionary";
-    pub const SEMANTIC_GATEWAY: &str = "engine.assets.textures";
+    pub const SEMANTIC_GATEWAY: &str = "engine.assets";
     pub const HANDLER_SERVICE: &str = "asset.codec.listfile.ytd";
     pub const SELECTOR_SYNTAX: &str = "file.ytd@entry";
-    pub const CONSUMER_DOMAINS: &[&str] = &["engine.assets.textures", "engine.assets.materials", "engine.assets.models", "engine.ui", "engine.render"];
+    pub const CONSUMER_DOMAINS: &[&str] = &["engine.assets", "engine.materials", "engine.model", "engine.ui", "engine.render"];
 }
 
 pub mod ytf {
@@ -300,10 +324,10 @@ pub mod ytyp {
     pub const ASSET_KIND: &str = "archetype_dictionary";
     pub const CONTENT_KIND: u32 = newengine_assets_api::LIST_FILE_CONTENT_KIND_YTYP;
     pub const PURPOSE: &str = "Archetype Definition Dictionary";
-    pub const SEMANTIC_GATEWAY: &str = "engine.assets.definitions";
+    pub const SEMANTIC_GATEWAY: &str = "engine.world";
     pub const HANDLER_SERVICE: &str = "asset.codec.listfile.ytyp";
     pub const SELECTOR_SYNTAX: &str = "file.ytyp@definition_entry";
-    pub const CONSUMER_DOMAINS: &[&str] = &["engine.assets.definitions", "engine.assets.graph", "engine.scene", "engine.assets.models", "engine.assets.materials", "engine.physics", "engine.ai", "engine.editor", "engine.streaming"];
+    pub const CONSUMER_DOMAINS: &[&str] = &["engine.world", "engine.scene", "engine.model", "engine.materials", "engine.physics", "engine.ai", "engine.editor", "engine.streaming"];
 }
 
 pub mod yvr {

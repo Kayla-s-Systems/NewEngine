@@ -1,6 +1,6 @@
-// Sky lifecycle owns the canonical runtime model for atmospheric state,
-// celestial visuals and scene lighting. Other GameReady modules spawn or
-// read these components; they do not recalculate time-of-day colors locally.
+// Sky lifecycle applies resolved world-environment frames to the scene.
+// engine.world.environment owns atmospheric meaning, celestial math, weather and clouds;
+// this file only keeps the legacy dome/light bridge alive while render packets mature.
 
 #[derive(Clone, Debug)]
 pub(crate) struct SkyDomeRuntime {
@@ -20,6 +20,16 @@ pub(crate) struct SkyVisualRuntime {
 #[derive(Clone, Copy, Debug)]
 pub(crate) struct SkyClearColorRuntime {
     pub color: [f32; 4],
+}
+
+#[derive(Clone, Debug)]
+pub(crate) struct GameReadyEnvironmentFrameRuntime {
+    pub frame: newengine_world_environment_api::EnvironmentFrameDto,
+}
+
+#[derive(Clone, Debug)]
+pub(crate) struct GameReadyEnvironmentVisualAssetsRuntime {
+    pub visual_assets: newengine_world_environment_api::EnvironmentVisualAssetRefsDto,
 }
 
 #[derive(Clone, Debug)]
@@ -130,13 +140,68 @@ fn time_snapshot_for_sky_cycle() -> Option<newengine_core::time::TimeSnapshotV1>
         Ok(Some(bytes)) => match serde_json::from_slice::<newengine_core::time::TimeSnapshotV1>(&bytes) {
             Ok(snapshot) => Some(snapshot),
             Err(e) => {
-                log::warn!("game-ready sky cycle: engine.time snapshot invalid; using frame dt projection for this tick err='{e}'");
+                log::warn!("game-ready sky cycle: engine.time snapshot invalid; keeping authored scene.day_night time for this tick err='{e}'");
                 None
             }
         },
         Ok(None) => None,
         Err(e) => {
-            log::warn!("game-ready sky cycle: engine.time snapshot unavailable; using frame dt projection for this tick err='{e}'");
+            log::warn!("game-ready sky cycle: engine.time snapshot unavailable; keeping authored scene.day_night time for this tick err='{e}'");
+            None
+        }
+    }
+}
+
+
+fn authored_time_snapshot_for_sky_cycle(cycle: &SkyCycleRuntime) -> newengine_core::time::TimeSnapshotV1 {
+    let mut snapshot = newengine_core::time::TimeSnapshotV1::default();
+    snapshot.game.seconds_per_game_day = (cycle.day_length_seconds as f64).max(1.0);
+    snapshot.game.normalized_day = (cycle.time_of_day_hours as f64 / 24.0).rem_euclid(1.0);
+    snapshot.game.seconds_of_day = snapshot.game.normalized_day * snapshot.game.seconds_per_game_day;
+    snapshot.game.time_scale = if cycle.enabled { 1.0 } else { 0.0 };
+    snapshot
+}
+
+fn environment_frame_for_sky_cycle(
+    cycle: &SkyCycleRuntime,
+    snapshot: newengine_core::time::TimeSnapshotV1,
+) -> Option<newengine_world_environment_api::EnvironmentFrameDto> {
+    let request = newengine_world_environment_api::EnvironmentFrameRequest {
+        frame_id: snapshot.frame_index,
+        world_instance_id: "game-ready-fps.world".to_owned(),
+        time: snapshot,
+        observer_position: newengine_world_environment_api::Vec3Dto::zero(),
+        observer_cell: None,
+        active_region: Some("game_ready.highlands".to_owned()),
+        active_biome: Some("highlands".to_owned()),
+        resident_cells: Vec::new(),
+        environment_profile: newengine_world_environment_api::EnvironmentProfileRefDto {
+            profile_id: "environment.game_ready_highlands".to_owned(),
+        },
+        seed: 0x4752_4541_4459u64 ^ u64::from(cycle.day_length_seconds.to_bits()),
+    };
+    let payload = match serde_json::to_vec(&request) {
+        Ok(payload) => payload,
+        Err(e) => {
+            log::warn!("game-ready environment bridge: failed to encode EnvironmentFrameRequest err='{e}'");
+            return None;
+        }
+    };
+    match call_service_v1_optional(
+        newengine_world_environment_api::ENGINE_WORLD_ENVIRONMENT_SERVICE_ID,
+        newengine_world_environment_api::WORLD_ENVIRONMENT_SERVICE_METHOD_FRAME_JSON_V1,
+        &payload,
+    ) {
+        Ok(Some(bytes)) => match serde_json::from_slice::<newengine_world_environment_api::EnvironmentFrameDto>(&bytes) {
+            Ok(frame) => Some(frame),
+            Err(e) => {
+                log::warn!("game-ready environment bridge: EnvironmentFrameDto decode failed; using explicit degraded authored sky frame err='{e}'");
+                None
+            }
+        },
+        Ok(None) => None,
+        Err(e) => {
+            log::warn!("game-ready environment bridge: engine.world.environment unavailable; using explicit degraded authored sky frame err='{e}'");
             None
         }
     }
@@ -174,10 +239,10 @@ fn sync_game_ready_day_night_to_engine_time(day_night: &GameReadyDayNightSpec) {
             ),
         },
         Ok(None) => log::debug!(
-            "game-ready sky cycle: engine.time route absent; sky will use local scene clock projection"
+            "game-ready sky cycle: engine.time route absent; authored scene.day_night time remains fixed until a time provider is active"
         ),
         Err(e) => log::warn!(
-            "game-ready sky cycle: engine.time set_game_clock_v1 failed; sky will use local scene clock projection err='{}'",
+            "game-ready sky cycle: engine.time set_game_clock_v1 failed; authored scene.day_night time remains fixed err='{}'",
             e
         ),
     }
@@ -308,6 +373,67 @@ fn sample_sky_frame(cycle: &SkyCycleRuntime, atmosphere: Option<&SkyAtmosphereRu
 }
 
 
+fn env_vec_to_vec3(v: newengine_world_environment_api::Vec3Dto, fallback: Vec3) -> Vec3 {
+    sky_safe_dir(Vec3::new(v.x, v.y, v.z), fallback)
+}
+
+#[inline]
+fn env_color_to_rgb(c: newengine_world_environment_api::Color3Dto) -> [f32; 3] {
+    [c.r.clamp(0.0, 1.0), c.g.clamp(0.0, 1.0), c.b.clamp(0.0, 1.0)]
+}
+
+fn sample_sky_frame_from_environment(
+    cycle: &SkyCycleRuntime,
+    environment: &newengine_world_environment_api::EnvironmentFrameDto,
+) -> SkyFrameSample {
+    let to_sun = env_vec_to_vec3(environment.celestial.sun.direction_world, Vec3::new(0.0, 1.0, 0.0));
+    let render = &environment.consumer_packets.render;
+    let day_strength = (render.sun_intensity_hint / 105_000.0).clamp(0.0, 1.0);
+    let moon_strength = (render.moon_intensity_hint / 0.25).clamp(0.0, 1.0);
+    let overcast_loss = 1.0 - environment.sky.overcast_blend.clamp(0.0, 1.0) * 0.32;
+    let sky_rgb = sky_mul3(
+        sky_lerp3(
+            env_color_to_rgb(environment.sky.zenith_color_linear),
+            env_color_to_rgb(environment.sky.horizon_color_linear),
+            0.42 + environment.sky.dusk_dawn_blend.clamp(0.0, 1.0) * 0.24,
+        ),
+        overcast_loss,
+    );
+    let cloud_rgb = sky_mul3(
+        sky_lerp3(
+            env_color_to_rgb(environment.sky.horizon_color_linear),
+            env_color_to_rgb(environment.sky.sun_horizon_color_linear),
+            environment.sky.dusk_dawn_blend.clamp(0.0, 1.0) * 0.45,
+        ),
+        (0.70 + day_strength * 0.45 - environment.clouds.light_absorption * 0.25).clamp(0.06, 1.20),
+    );
+    let sun_color = sky_lerp3(
+        env_color_to_rgb(environment.celestial.moon.color_linear),
+        env_color_to_rgb(environment.celestial.sun.color_linear),
+        day_strength.max(environment.sky.dusk_dawn_blend * 0.25),
+    );
+    let sun_intensity = cycle.base_sun_intensity * day_strength * overcast_loss
+        + cycle.base_sun_intensity * 0.025 * moon_strength
+        + cycle.base_sun_intensity * 0.08 * environment.sky.dusk_dawn_blend;
+    let ambient_color = sky_lerp3(
+        [0.018, 0.024, 0.056],
+        cycle.base_ambient_color,
+        (day_strength + environment.sky.dusk_dawn_blend * 0.28).clamp(0.0, 1.0),
+    );
+    let ambient_intensity = cycle.base_ambient_intensity
+        * (0.08 + environment.lighting_intent.sky_light_intensity.clamp(0.0, 1.0))
+        * (1.0 - environment.exposure_intent.storm_darkening.clamp(0.0, 0.75));
+    SkyFrameSample {
+        to_sun,
+        sky_tint: sky_color_to_rgba(sky_clamp3(sky_rgb, 0.0, 1.0)),
+        cloud_tint: sky_color_to_rgba(sky_clamp3(cloud_rgb, 0.0, 1.0)),
+        sun_color: sky_clamp3(sun_color, 0.0, 1.0),
+        sun_intensity: sun_intensity.max(0.0),
+        ambient_color: sky_clamp3(ambient_color, 0.0, 1.0),
+        ambient_intensity: ambient_intensity.max(0.0),
+    }
+}
+
 fn apply_sky_visuals(world: &mut newengine_ecs::World, frame: SkyFrameSample, atmosphere: Option<SkyAtmosphereRuntime>) {
     let radius = atmosphere.as_ref().map(|a| a.radius).unwrap_or(220.0).max(16.0);
 
@@ -337,32 +463,57 @@ fn apply_sky_visuals(world: &mut newengine_ecs::World, frame: SkyFrameSample, at
 }
 
 pub fn tick_game_ready_sky_cycle(world: &mut newengine_ecs::World, dt: f32) {
-    let (frame, atmosphere) = {
+    let (frame, atmosphere, environment_frame) = {
         let atmosphere = world.resource::<SkyAtmosphereRuntime>().cloned();
         let Some(cycle) = world.resource_mut::<SkyCycleRuntime>() else {
             return;
         };
 
-        if let Some(snapshot) = time_snapshot_for_sky_cycle() {
+        let time_snapshot = time_snapshot_for_sky_cycle();
+        if let Some(snapshot) = &time_snapshot {
             cycle.time_of_day_hours = (snapshot.game.normalized_day as f32 * 24.0).rem_euclid(24.0);
-
-        } else {
-            let advance = if cycle.enabled && cycle.day_length_seconds > 0.0 {
-                dt.max(0.0) * 24.0 / cycle.day_length_seconds
-            } else {
-                0.0
-            };
-            cycle.time_of_day_hours = (cycle.time_of_day_hours + advance).rem_euclid(24.0);
+        } else if dt > 0.0 {
+            log::debug!(
+                "game-ready sky cycle: engine.time route required for animated time; authored scene.day_night time remains fixed while degraded"
+            );
         }
 
-        let to_sun = solar_direction_from_cycle(
-            cycle.time_of_day_hours,
-            cycle.latitude_degrees,
-            cycle.axial_tilt_degrees,
-        );
-        let frame = sample_sky_frame(cycle, atmosphere.as_ref(), to_sun);
-        (frame, atmosphere)
+        let snapshot = time_snapshot.unwrap_or_else(|| authored_time_snapshot_for_sky_cycle(cycle));
+        let environment_frame = environment_frame_for_sky_cycle(cycle, snapshot);
+        let frame = if let Some(environment) = environment_frame.as_ref() {
+            sample_sky_frame_from_environment(cycle, environment)
+        } else {
+            let to_sun = solar_direction_from_cycle(
+                cycle.time_of_day_hours,
+                cycle.latitude_degrees,
+                cycle.axial_tilt_degrees,
+            );
+            sample_sky_frame(cycle, atmosphere.as_ref(), to_sun)
+        };
+        (frame, atmosphere, environment_frame)
     };
+
+    if let Some(environment_frame) = environment_frame {
+        let visual_assets = environment_frame.visual_assets.clone();
+        let changed = world
+            .resource::<GameReadyEnvironmentVisualAssetsRuntime>()
+            .map(|current| current.visual_assets != visual_assets)
+            .unwrap_or(true);
+        if changed {
+            log::debug!(
+                "game-ready environment bridge: visual asset group='{}' dictionary='{}' sky='{}' sun='{}' moon='{}' cloud_density='{}' weather='{}'",
+                visual_assets.visual_group_id,
+                visual_assets.texture_dictionary_ref,
+                visual_assets.sky_texture_ref,
+                visual_assets.sun_disk_texture_ref,
+                visual_assets.moon_disk_texture_ref,
+                visual_assets.cloud_density_texture_ref,
+                visual_assets.weather_visual_ref
+            );
+        }
+        world.insert_resource(GameReadyEnvironmentVisualAssetsRuntime { visual_assets });
+        world.insert_resource(GameReadyEnvironmentFrameRuntime { frame: environment_frame });
+    }
 
     if let Some(ambient) = world.resource_mut::<AmbientLight>() {
         ambient.color = frame.ambient_color;
@@ -382,6 +533,7 @@ pub fn tick_game_ready_sky_cycle(world: &mut newengine_ecs::World, dt: f32) {
     world.insert_resource(SkyClearColorRuntime { color: frame.sky_tint });
     apply_sky_visuals(world, frame, atmosphere);
 }
+
 
 #[inline]
 fn configure_game_ready_lighting(world: &mut newengine_ecs::World, spec: &GameReadyLightingSpec) {

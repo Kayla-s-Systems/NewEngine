@@ -120,17 +120,24 @@ impl GameReadyRuntimeProfile {
             newengine_input_profile_gameready::game_ready_input_profile(),
         );
         newengine_time_runtime::register_time_gateway_best_effort();
+        newengine_schema_runtime::register_schema_gateway_best_effort();
         newengine_scripting_runtime::register_scripting_gateway_best_effort();
-        newengine_assets::register_asset_file_types_gateway_best_effort();
+        newengine_gameplay_runtime::register_gameplay_foundation_gateways_best_effort();
+        newengine_assets::register_asset_types_gateway_best_effort();
 
         let host_api = newengine_plugin_host::default_host_api();
         let registered_file_types = newengine_asset_format_nef8::descriptors()
             .into_iter()
-            .filter(|descriptor| newengine_assets::register_asset_file_type_descriptor_best_effort(&host_api, descriptor.clone()))
+            .filter(|descriptor| newengine_assets::register_asset_type_descriptor_best_effort(&host_api, descriptor.clone()))
             .count();
         log::info!(
-            "asset file type descriptors: registered {} provider-owned first-party formats",
+            "asset type descriptors: registered {} provider-owned first-party formats",
             registered_file_types
+        );
+        let asset_document_routes_ok = newengine_assets::register_asset_document_gateways_best_effort(host_api.clone());
+        log::info!(
+            "asset document gateways: registered={} routes='engine.assets.inspect,engine.assets.edit'",
+            asset_document_routes_ok
         );
         let asset_client = newengine_assets::AssetServiceClient::new(host_api.clone());
         newengine_textures_runtime::register_textures_gateway_best_effort(asset_client.clone());

@@ -1,5 +1,6 @@
 #![forbid(unsafe_op_in_unsafe_fn)]
 
+use newengine_schema_api::SchemaBindingManifestV1;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 
@@ -37,6 +38,8 @@ pub const SCRIPTING_SERVICE_METHOD_FRAME_BYTES_V1: &str = "scripting.frame_bytes
 pub const SCRIPTING_SERVICE_METHOD_DUMP_STATE_JSON_V1: &str = "scripting.dump_state_json_v1";
 pub const SCRIPTING_SERVICE_METHOD_VALIDATE_MODULE_REF_JSON_V1: &str = "scripting.validate_module_ref_json_v1";
 pub const SCRIPTING_SERVICE_METHOD_UNLOAD_MODULE_JSON_V1: &str = "scripting.unload_module_json_v1";
+/// Generates provider-facing scripting binding modules from engine.schema manifests.
+pub const SCRIPTING_SERVICE_METHOD_BINDING_MANIFEST_JSON_V1: &str = "scripting.binding_manifest_json_v1";
 
 /// Generic backend-family declaration for scripting providers.
 pub const SCRIPTING_BACKEND_SERVICE_SPEC: newengine_service_api::BackendServiceSpec =
@@ -74,6 +77,7 @@ pub const SCRIPTING_SERVICE_METHODS: &[&str] = &[
     SCRIPTING_SERVICE_METHOD_DUMP_STATE_JSON_V1,
     SCRIPTING_SERVICE_METHOD_VALIDATE_MODULE_REF_JSON_V1,
     SCRIPTING_SERVICE_METHOD_UNLOAD_MODULE_JSON_V1,
+    SCRIPTING_SERVICE_METHOD_BINDING_MANIFEST_JSON_V1,
 ];
 
 #[inline]
@@ -493,5 +497,57 @@ mod tests {
         assert_eq!(response.request_id, "req-1");
         assert_eq!(response.status, ScriptingResponseStatus::Empty);
         assert!(response.payload_bytes.is_empty());
+    }
+}
+
+/// Request used by scripting providers/tools to generate bindings from the shared schema registry.
+///
+/// The schema manifest is the source of truth. Scripting providers may choose a
+/// target language or bytecode surface, but they must not invent a separate
+/// reflection/type model for engine objects.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct ScriptingBindingGenerationRequest {
+    pub schema: String,
+    pub target_language: String,
+    pub module_id: String,
+    pub manifest: SchemaBindingManifestV1,
+    pub requester: String,
+}
+
+impl Default for ScriptingBindingGenerationRequest {
+    #[inline]
+    fn default() -> Self {
+        Self {
+            schema: "newengine.scripting.binding_generation.request.v1".to_owned(),
+            target_language: String::new(),
+            module_id: String::new(),
+            manifest: SchemaBindingManifestV1::default(),
+            requester: "engine.scripting".to_owned(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct ScriptingBindingGenerationResponse {
+    pub schema: String,
+    pub accepted: bool,
+    /// Generated source/module payloads keyed by provider-owned module path.
+    pub generated_modules: BTreeMap<String, String>,
+    pub manifest: SchemaBindingManifestV1,
+    pub diagnostics: Vec<String>,
+}
+
+impl Default for ScriptingBindingGenerationResponse {
+    #[inline]
+    fn default() -> Self {
+        Self {
+            schema: "newengine.scripting.binding_generation.response.v1".to_owned(),
+            accepted: false,
+            generated_modules: BTreeMap::new(),
+            manifest: SchemaBindingManifestV1::default(),
+            diagnostics: Vec::new(),
+        }
     }
 }

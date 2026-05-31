@@ -1,10 +1,10 @@
-use newengine_entity_api::EntityId;
+use newengine_entity_api::EntityHandle;
 use newengine_math::Vec3;
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct PhysicsContactEvent {
-    pub a: EntityId,
-    pub b: EntityId,
+    pub a: EntityHandle,
+    pub b: EntityHandle,
     pub point: Vec3,
     pub normal: Vec3,
     pub impulse: f32,
@@ -14,9 +14,9 @@ pub struct PhysicsContactEvent {
 pub enum PhysicsEvent {
     ContactBegin(PhysicsContactEvent),
     ContactPersist(PhysicsContactEvent),
-    ContactEnd { a: EntityId, b: EntityId },
-    BodyCreated { entity: EntityId },
-    BodyDestroyed { entity: EntityId },
+    ContactEnd { a: EntityHandle, b: EntityHandle },
+    BodyCreated { entity: EntityHandle },
+    BodyDestroyed { entity: EntityHandle },
 }
 
 #[derive(Clone, Debug, Default, PartialEq)]

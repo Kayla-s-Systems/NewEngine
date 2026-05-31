@@ -1,0 +1,534 @@
+{
+  "schema": "northstar.p0.large_module_debt.v1",
+  "limit": 550,
+  "policy": "tracked debt is visible and blocks new unregistered >550 LOC modules; use --fail-tracked-large-debt to make every entry fatal",
+  "entries": [
+    {
+      "path": "NewEngine/neocore2/crates/newengine-assets-api/src/asset_service_client.rs",
+      "loc": 764,
+      "limit": 550,
+      "owner_wave": "P4.asset_pipeline_split",
+      "status": "tracked_debt",
+      "rule": "split_by_ownership_before_strict_removal"
+    },
+    {
+      "path": "NewEngine/neocore2/crates/newengine-assets-api/src/lib.rs",
+      "loc": 1386,
+      "limit": 550,
+      "owner_wave": "P4.asset_pipeline_split",
+      "status": "tracked_debt",
+      "rule": "split_by_ownership_before_strict_removal"
+    },
+    {
+      "path": "NewEngine/neocore2/crates/newengine-assets-catalog-ui-runtime/src/lib.rs",
+      "loc": 2100,
+      "limit": 550,
+      "owner_wave": "P4.asset_pipeline_split",
+      "status": "tracked_debt",
+      "rule": "split_by_ownership_before_strict_removal"
+    },
+    {
+      "path": "NewEngine/neocore2/crates/newengine-assets-ui-runtime/src/lib.rs",
+      "loc": 2006,
+      "limit": 550,
+      "owner_wave": "P4.asset_pipeline_split",
+      "status": "tracked_debt",
+      "rule": "split_by_ownership_before_strict_removal"
+    },
+    {
+      "path": "NewEngine/neocore2/crates/newengine-assets/src/asset_document_service.rs",
+      "loc": 902,
+      "limit": 550,
+      "owner_wave": "P4.asset_pipeline_split",
+      "status": "tracked_debt",
+      "rule": "split_by_ownership_before_strict_removal"
+    },
+    {
+      "path": "NewEngine/neocore2/crates/newengine-core/src/console/runtime.rs",
+      "loc": 588,
+      "limit": 550,
+      "owner_wave": "P0.ownership_split_backlog",
+      "status": "tracked_debt",
+      "rule": "split_by_ownership_before_strict_removal"
+    },
+    {
+      "path": "NewEngine/neocore2/crates/newengine-core/src/engine/module_boot.rs",
+      "loc": 922,
+      "limit": 550,
+      "owner_wave": "P0.ownership_split_backlog",
+      "status": "tracked_debt",
+      "rule": "split_by_ownership_before_strict_removal"
+    },
+    {
+      "path": "NewEngine/neocore2/crates/newengine-definitions-runtime/src/lib.rs",
+      "loc": 973,
+      "limit": 550,
+      "owner_wave": "P0.ownership_split_backlog",
+      "status": "tracked_debt",
+      "rule": "split_by_ownership_before_strict_removal"
+    },
+    {
+      "path": "NewEngine/neocore2/crates/newengine-engine-runtime/src/render_controller/module_impl/frame_orchestrator.rs",
+      "loc": 711,
+      "limit": 550,
+      "owner_wave": "P5.render_split",
+      "status": "tracked_debt",
+      "rule": "split_by_ownership_before_strict_removal"
+    },
+    {
+      "path": "NewEngine/neocore2/crates/newengine-engine-runtime/src/render_controller/module_impl/passes_parts/mesh_passes.rs",
+      "loc": 606,
+      "limit": 550,
+      "owner_wave": "P5.render_split",
+      "status": "tracked_debt",
+      "rule": "split_by_ownership_before_strict_removal"
+    },
+    {
+      "path": "NewEngine/neocore2/crates/newengine-engine-runtime/src/scene_bridge/game_ready_parts/assets_bootstrap.rs",
+      "loc": 864,
+      "limit": 550,
+      "owner_wave": "P0.ownership_split_backlog",
+      "status": "tracked_debt",
+      "rule": "split_by_ownership_before_strict_removal"
+    },
+    {
+      "path": "NewEngine/neocore2/crates/newengine-engine-runtime/src/scene_bridge/game_ready_parts/sky.rs",
+      "loc": 614,
+      "limit": 550,
+      "owner_wave": "P0.ownership_split_backlog",
+      "status": "tracked_debt",
+      "rule": "split_by_ownership_before_strict_removal"
+    },
+    {
+      "path": "NewEngine/neocore2/crates/newengine-input-bindings-api/src/lib.rs",
+      "loc": 734,
+      "limit": 550,
+      "owner_wave": "P0.ownership_split_backlog",
+      "status": "tracked_debt",
+      "rule": "split_by_ownership_before_strict_removal"
+    },
+    {
+      "path": "NewEngine/neocore2/crates/newengine-jobs-api/src/lib.rs",
+      "loc": 663,
+      "limit": 550,
+      "owner_wave": "P0.ownership_split_backlog",
+      "status": "tracked_debt",
+      "rule": "split_by_ownership_before_strict_removal"
+    },
+    {
+      "path": "NewEngine/neocore2/crates/newengine-loading-api/src/lib.rs",
+      "loc": 600,
+      "limit": 550,
+      "owner_wave": "P0.ownership_split_backlog",
+      "status": "tracked_debt",
+      "rule": "split_by_ownership_before_strict_removal"
+    },
+    {
+      "path": "NewEngine/neocore2/crates/newengine-material-runtime/src/lib.rs",
+      "loc": 818,
+      "limit": 550,
+      "owner_wave": "P0.ownership_split_backlog",
+      "status": "tracked_debt",
+      "rule": "split_by_ownership_before_strict_removal"
+    },
+    {
+      "path": "NewEngine/neocore2/crates/newengine-model-runtime/src/lib.rs",
+      "loc": 1064,
+      "limit": 550,
+      "owner_wave": "P0.ownership_split_backlog",
+      "status": "tracked_debt",
+      "rule": "split_by_ownership_before_strict_removal"
+    },
+    {
+      "path": "NewEngine/neocore2/crates/newengine-physics-api/src/lib.rs",
+      "loc": 566,
+      "limit": 550,
+      "owner_wave": "P0.ownership_split_backlog",
+      "status": "tracked_debt",
+      "rule": "split_by_ownership_before_strict_removal"
+    },
+    {
+      "path": "NewEngine/neocore2/crates/newengine-plugin-host/src/plugin_config_service.rs",
+      "loc": 587,
+      "limit": 550,
+      "owner_wave": "P0.ownership_split_backlog",
+      "status": "tracked_debt",
+      "rule": "split_by_ownership_before_strict_removal"
+    },
+    {
+      "path": "NewEngine/neocore2/crates/newengine-plugin-host/src/service_gateway/registry.rs",
+      "loc": 600,
+      "limit": 550,
+      "owner_wave": "P0.ownership_split_backlog",
+      "status": "tracked_debt",
+      "rule": "split_by_ownership_before_strict_removal"
+    },
+    {
+      "path": "NewEngine/neocore2/crates/newengine-procedural-noise/src/graph.rs",
+      "loc": 571,
+      "limit": 550,
+      "owner_wave": "P0.ownership_split_backlog",
+      "status": "tracked_debt",
+      "rule": "split_by_ownership_before_strict_removal"
+    },
+    {
+      "path": "NewEngine/neocore2/crates/newengine-render-api/src/effects.rs",
+      "loc": 570,
+      "limit": 550,
+      "owner_wave": "P5.render_split",
+      "status": "tracked_debt",
+      "rule": "split_by_ownership_before_strict_removal"
+    },
+    {
+      "path": "NewEngine/neocore2/crates/newengine-render-api/src/postfx.rs",
+      "loc": 562,
+      "limit": 550,
+      "owner_wave": "P5.render_split",
+      "status": "tracked_debt",
+      "rule": "split_by_ownership_before_strict_removal"
+    },
+    {
+      "path": "NewEngine/neocore2/crates/newengine-render-api/src/protocol.rs",
+      "loc": 802,
+      "limit": 550,
+      "owner_wave": "P5.render_split",
+      "status": "tracked_debt",
+      "rule": "split_by_ownership_before_strict_removal"
+    },
+    {
+      "path": "NewEngine/neocore2/crates/newengine-render-api/src/render_graph.rs",
+      "loc": 860,
+      "limit": 550,
+      "owner_wave": "P5.render_split",
+      "status": "tracked_debt",
+      "rule": "split_by_ownership_before_strict_removal"
+    },
+    {
+      "path": "NewEngine/neocore2/crates/newengine-render-frame-graph/src/graph_builder.rs",
+      "loc": 653,
+      "limit": 550,
+      "owner_wave": "P5.render_split",
+      "status": "tracked_debt",
+      "rule": "split_by_ownership_before_strict_removal"
+    },
+    {
+      "path": "NewEngine/neocore2/crates/newengine-runtime-host/src/platform_runtime/config.rs",
+      "loc": 645,
+      "limit": 550,
+      "owner_wave": "P0.ownership_split_backlog",
+      "status": "tracked_debt",
+      "rule": "split_by_ownership_before_strict_removal"
+    },
+    {
+      "path": "NewEngine/neocore2/crates/newengine-runtime-host/src/platform_runtime/jobs_gateway.rs",
+      "loc": 683,
+      "limit": 550,
+      "owner_wave": "P0.ownership_split_backlog",
+      "status": "tracked_debt",
+      "rule": "split_by_ownership_before_strict_removal"
+    },
+    {
+      "path": "NewEngine/neocore2/crates/newengine-runtime-host/src/platform_runtime/runtime_host.rs",
+      "loc": 1174,
+      "limit": 550,
+      "owner_wave": "P0.ownership_split_backlog",
+      "status": "tracked_debt",
+      "rule": "split_by_ownership_before_strict_removal"
+    },
+    {
+      "path": "NewEngine/neocore2/crates/newengine-scripting-api/src/lib.rs",
+      "loc": 553,
+      "limit": 550,
+      "owner_wave": "P0.ownership_split_backlog",
+      "status": "tracked_debt",
+      "rule": "split_by_ownership_before_strict_removal"
+    },
+    {
+      "path": "NewEngine/neocore2/crates/newengine-service-api/src/lib.rs",
+      "loc": 901,
+      "limit": 550,
+      "owner_wave": "P0.ownership_split_backlog",
+      "status": "tracked_debt",
+      "rule": "split_by_ownership_before_strict_removal"
+    },
+    {
+      "path": "NewEngine/neocore2/crates/newengine-sim/src/schedule.rs",
+      "loc": 572,
+      "limit": 550,
+      "owner_wave": "P0.ownership_split_backlog",
+      "status": "tracked_debt",
+      "rule": "split_by_ownership_before_strict_removal"
+    },
+    {
+      "path": "NewEngine/neocore2/crates/newengine-text-api/src/lib.rs",
+      "loc": 570,
+      "limit": 550,
+      "owner_wave": "P0.ownership_split_backlog",
+      "status": "tracked_debt",
+      "rule": "split_by_ownership_before_strict_removal"
+    },
+    {
+      "path": "NewEngine/neocore2/crates/newengine-textures-runtime/src/lib.rs",
+      "loc": 731,
+      "limit": 550,
+      "owner_wave": "P0.ownership_split_backlog",
+      "status": "tracked_debt",
+      "rule": "split_by_ownership_before_strict_removal"
+    },
+    {
+      "path": "NewEngine/neocore2/crates/newengine-ui-api/src/node.rs",
+      "loc": 610,
+      "limit": 550,
+      "owner_wave": "P6.ui_split",
+      "status": "tracked_debt",
+      "rule": "split_by_ownership_before_strict_removal"
+    },
+    {
+      "path": "NewEngine/neocore2/crates/newengine-ui-navigation-api/src/lib.rs",
+      "loc": 652,
+      "limit": 550,
+      "owner_wave": "P6.ui_split",
+      "status": "tracked_debt",
+      "rule": "split_by_ownership_before_strict_removal"
+    },
+    {
+      "path": "NewEngine/neocore2/crates/newengine-world-environment-api/src/lib.rs",
+      "loc": 1192,
+      "limit": 550,
+      "owner_wave": "P0.ownership_split_backlog",
+      "status": "tracked_debt",
+      "rule": "split_by_ownership_before_strict_removal"
+    },
+    {
+      "path": "Plugins/AssetManager/codecs/newengine-codec-listfile/src/lib.rs",
+      "loc": 654,
+      "limit": 550,
+      "owner_wave": "P4.asset_pipeline_split",
+      "status": "tracked_debt",
+      "rule": "split_by_ownership_before_strict_removal"
+    },
+    {
+      "path": "Plugins/AssetManager/newengine-AssetManager/src/asset_store/store.rs",
+      "loc": 1358,
+      "limit": 550,
+      "owner_wave": "P4.asset_pipeline_split",
+      "status": "tracked_debt",
+      "rule": "split_by_ownership_before_strict_removal"
+    },
+    {
+      "path": "Plugins/AssetManager/newengine-AssetManager/src/module/service/listfile_writer.rs",
+      "loc": 751,
+      "limit": 550,
+      "owner_wave": "P4.asset_pipeline_split",
+      "status": "tracked_debt",
+      "rule": "split_by_ownership_before_strict_removal"
+    },
+    {
+      "path": "Plugins/AureliaUI/newengine-ui-provider-aurelia/src/draw.rs",
+      "loc": 825,
+      "limit": 550,
+      "owner_wave": "P6.ui_split",
+      "status": "tracked_debt",
+      "rule": "split_by_ownership_before_strict_removal"
+    },
+    {
+      "path": "Plugins/AureliaUI/newengine-ui-provider-aurelia/src/service.rs",
+      "loc": 960,
+      "limit": 550,
+      "owner_wave": "P6.ui_split",
+      "status": "tracked_debt",
+      "rule": "split_by_ownership_before_strict_removal"
+    },
+    {
+      "path": "Plugins/AureliaUI/newengine-ui-provider-aurelia/src/text/shaping.rs",
+      "loc": 630,
+      "limit": 550,
+      "owner_wave": "P6.ui_split",
+      "status": "tracked_debt",
+      "rule": "split_by_ownership_before_strict_removal"
+    },
+    {
+      "path": "Plugins/FlecsECS/newengine-ecs-flecs/src/lib.rs",
+      "loc": 1393,
+      "limit": 550,
+      "owner_wave": "P0.ownership_split_backlog",
+      "status": "tracked_debt",
+      "rule": "split_by_ownership_before_strict_removal"
+    },
+    {
+      "path": "Plugins/InputPlugin/newengine-modules-input/src/module.rs",
+      "loc": 931,
+      "limit": 550,
+      "owner_wave": "P0.ownership_split_backlog",
+      "status": "tracked_debt",
+      "rule": "split_by_ownership_before_strict_removal"
+    },
+    {
+      "path": "Plugins/LoggingPlugin/newengine-modules-logging/src/logger/config.rs",
+      "loc": 838,
+      "limit": 550,
+      "owner_wave": "P0.ownership_split_backlog",
+      "status": "tracked_debt",
+      "rule": "split_by_ownership_before_strict_removal"
+    },
+    {
+      "path": "Plugins/LoggingPlugin/newengine-modules-logging/src/module.rs",
+      "loc": 619,
+      "limit": 550,
+      "owner_wave": "P0.ownership_split_backlog",
+      "status": "tracked_debt",
+      "rule": "split_by_ownership_before_strict_removal"
+    },
+    {
+      "path": "Plugins/ProfilerPlugin/newengine-profiler-plugin/src/report.rs",
+      "loc": 1450,
+      "limit": 550,
+      "owner_wave": "P7.diagnostics_split",
+      "status": "tracked_debt",
+      "rule": "split_by_ownership_before_strict_removal"
+    },
+    {
+      "path": "Plugins/ProfilerPlugin/newengine-profiler-plugin/src/runtime.rs",
+      "loc": 1291,
+      "limit": 550,
+      "owner_wave": "P7.diagnostics_split",
+      "status": "tracked_debt",
+      "rule": "split_by_ownership_before_strict_removal"
+    },
+    {
+      "path": "Plugins/VulkanRenderer/newengine-modules-render-vulkan-ash/src/lib.rs",
+      "loc": 1466,
+      "limit": 550,
+      "owner_wave": "P5.render_split",
+      "status": "tracked_debt",
+      "rule": "split_by_ownership_before_strict_removal"
+    },
+    {
+      "path": "Plugins/VulkanRenderer/newengine-modules-render-vulkan-ash/src/render_api/deferred/gpu.rs",
+      "loc": 662,
+      "limit": 550,
+      "owner_wave": "P5.render_split",
+      "status": "tracked_debt",
+      "rule": "split_by_ownership_before_strict_removal"
+    },
+    {
+      "path": "Plugins/VulkanRenderer/newengine-modules-render-vulkan-ash/src/render_api/frame_plan/phase_catalog.rs",
+      "loc": 760,
+      "limit": 550,
+      "owner_wave": "P5.render_split",
+      "status": "tracked_debt",
+      "rule": "split_by_ownership_before_strict_removal"
+    },
+    {
+      "path": "Plugins/VulkanRenderer/newengine-modules-render-vulkan-ash/src/render_api/graph_executor/execution_registry.rs",
+      "loc": 860,
+      "limit": 550,
+      "owner_wave": "P5.render_split",
+      "status": "tracked_debt",
+      "rule": "split_by_ownership_before_strict_removal"
+    },
+    {
+      "path": "Plugins/VulkanRenderer/newengine-modules-render-vulkan-ash/src/render_api/graph_executor/native_pass_dispatch.rs",
+      "loc": 1165,
+      "limit": 550,
+      "owner_wave": "P5.render_split",
+      "status": "tracked_debt",
+      "rule": "split_by_ownership_before_strict_removal"
+    },
+    {
+      "path": "Plugins/VulkanRenderer/newengine-modules-render-vulkan-ash/src/render_api/lights/gpu.rs",
+      "loc": 632,
+      "limit": 550,
+      "owner_wave": "P5.render_split",
+      "status": "tracked_debt",
+      "rule": "split_by_ownership_before_strict_removal"
+    },
+    {
+      "path": "Plugins/VulkanRenderer/newengine-modules-render-vulkan-ash/src/render_api/postfx.rs",
+      "loc": 817,
+      "limit": 550,
+      "owner_wave": "P5.render_split",
+      "status": "tracked_debt",
+      "rule": "split_by_ownership_before_strict_removal"
+    },
+    {
+      "path": "Plugins/VulkanRenderer/newengine-modules-render-vulkan-ash/src/render_api/resources.rs",
+      "loc": 972,
+      "limit": 550,
+      "owner_wave": "P5.render_split",
+      "status": "tracked_debt",
+      "rule": "split_by_ownership_before_strict_removal"
+    },
+    {
+      "path": "Plugins/VulkanRenderer/newengine-modules-render-vulkan-ash/src/render_api/visibility/gpu.rs",
+      "loc": 768,
+      "limit": 550,
+      "owner_wave": "P5.render_split",
+      "status": "tracked_debt",
+      "rule": "split_by_ownership_before_strict_removal"
+    },
+    {
+      "path": "Plugins/VulkanRenderer/newengine-modules-render-vulkan-ash/src/vulkan/renderer/init.rs",
+      "loc": 577,
+      "limit": 550,
+      "owner_wave": "P5.render_split",
+      "status": "tracked_debt",
+      "rule": "split_by_ownership_before_strict_removal"
+    },
+    {
+      "path": "Plugins/VulkanRenderer/newengine-modules-render-vulkan-ash/src/vulkan/shader_registry/stage_loader.rs",
+      "loc": 800,
+      "limit": 550,
+      "owner_wave": "P5.render_split",
+      "status": "tracked_debt",
+      "rule": "split_by_ownership_before_strict_removal"
+    },
+    {
+      "path": "Plugins/VulkanRenderer/newengine-modules-render-vulkan-ash/src/vulkan/ui/overlay.rs",
+      "loc": 727,
+      "limit": 550,
+      "owner_wave": "P5.render_split",
+      "status": "tracked_debt",
+      "rule": "split_by_ownership_before_strict_removal"
+    },
+    {
+      "path": "Plugins/winit-platform-plugin/newengine-platform-winit/src/runtime_app/loading/north_star_compositor.rs",
+      "loc": 585,
+      "limit": 550,
+      "owner_wave": "P0.ownership_split_backlog",
+      "status": "tracked_debt",
+      "rule": "split_by_ownership_before_strict_removal"
+    },
+    {
+      "path": "tools/scripts/takesome/suite/patches/workflow.py",
+      "loc": 604,
+      "limit": 550,
+      "owner_wave": "P6.ui_split",
+      "status": "tracked_debt",
+      "rule": "split_by_ownership_before_strict_removal"
+    },
+    {
+      "path": "tools/scripts/takesome/tools/collect.py",
+      "loc": 746,
+      "limit": 550,
+      "owner_wave": "P0.ownership_split_backlog",
+      "status": "tracked_debt",
+      "rule": "split_by_ownership_before_strict_removal"
+    },
+    {
+      "path": "tools/scripts/takesome/tools/run_report.py",
+      "loc": 633,
+      "limit": 550,
+      "owner_wave": "P0.ownership_split_backlog",
+      "status": "tracked_debt",
+      "rule": "split_by_ownership_before_strict_removal"
+    }
+  ],
+  "resolved_in_this_pass": [
+    {
+      "path": "NewEngine/neocore2/crates/newengine-runtime-host/src/platform_runtime/screen_profile.rs",
+      "resolution": "split into screen_profile_parts/*.rs same-scope owner files",
+      "pass": "P4.1.debt_burn"
+    }
+  ]
+}

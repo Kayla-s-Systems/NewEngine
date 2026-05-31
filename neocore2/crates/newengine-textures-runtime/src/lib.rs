@@ -710,7 +710,7 @@ mod tests {
     }
 
     #[test]
-    fn rejects_neytd_ref_before_vfs() {
+    fn rejects_retired_texture_dictionary_ref_before_vfs() {
         assert!(parse_texture_reference("textures/foo.rawtex@bar").is_err());
     }
 

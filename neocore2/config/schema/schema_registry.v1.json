@@ -1,0 +1,51 @@
+{
+  "$schema": "northstar.engine.schema_registry.v1",
+  "policy": "Schema is the property authority for editor, assets, components, settings and scripting binding generation. UI renders properties; providers validate patches.",
+  "records": [
+    {
+      "type_id": "newengine.assets.document.asset_document",
+      "domain": "assets",
+      "kind": "resource",
+      "owner_gateway": "engine.assets.inspect",
+      "source_contract": "newengine.assets.inspect.v1",
+      "properties": [
+        { "property_id": "display_name", "label": "Display Name", "value_kind": "string", "editable": true, "required": true, "json_pointer": "/display_name" },
+        { "property_id": "editor_tags", "label": "Editor Tags", "value_kind": "string_list", "editable": true, "required": false, "json_pointer": "/editor_tags" },
+        { "property_id": "import_notes", "label": "Import Notes", "value_kind": "string", "editable": true, "required": false, "json_pointer": "/import_notes" }
+      ],
+      "consumers": ["inspector", "asset_edit_window", "scripting_bindings"],
+      "patch_validation": "schema.validate_patch_v1",
+      "transaction_dto": "newengine.schema.transaction.v1"
+    },
+    {
+      "type_id": "newengine.component.transform.v1",
+      "domain": "components",
+      "kind": "component",
+      "owner_gateway": "engine.entity",
+      "source_contract": "newengine.entity.component_snapshot.v1",
+      "properties": [
+        { "property_id": "translation", "label": "Translation", "value_kind": "vec3", "editable": true, "required": true, "json_pointer": "/translation" },
+        { "property_id": "rotation", "label": "Rotation", "value_kind": "vec4", "editable": true, "required": true, "json_pointer": "/rotation" },
+        { "property_id": "scale", "label": "Scale", "value_kind": "vec3", "editable": true, "required": true, "json_pointer": "/scale" }
+      ],
+      "consumers": ["inspector", "component_editor", "scripting_bindings"],
+      "patch_validation": "schema.validate_patch_v1",
+      "transaction_dto": "newengine.schema.transaction.v1"
+    },
+    {
+      "type_id": "newengine.settings.world_environment.v1",
+      "domain": "settings",
+      "kind": "settings",
+      "owner_gateway": "engine.world.environment",
+      "source_contract": "newengine.world.environment.settings.v1",
+      "properties": [
+        { "property_id": "time_of_day", "label": "Time Of Day", "value_kind": "float", "editable": true, "required": true, "json_pointer": "/time_of_day", "min": 0.0, "max": 1.0 },
+        { "property_id": "weather_profile", "label": "Weather Profile", "value_kind": "asset_ref", "editable": true, "required": false, "json_pointer": "/weather_profile" },
+        { "property_id": "sky_profile", "label": "Sky Profile", "value_kind": "asset_ref", "editable": true, "required": false, "json_pointer": "/sky_profile" }
+      ],
+      "consumers": ["settings_editor", "inspector", "scripting_bindings"],
+      "patch_validation": "schema.validate_patch_v1",
+      "transaction_dto": "newengine.schema.transaction.v1"
+    }
+  ]
+}

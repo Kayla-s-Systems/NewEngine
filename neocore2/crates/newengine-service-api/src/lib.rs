@@ -354,7 +354,9 @@ impl BackendRouteDescriptor {
 pub enum EngineServiceKind {
     Assets,
     AssetVfs,
-    AssetFileTypes,
+    AssetTypes,
+    AssetInspect,
+    AssetEdit,
     AssetPackages,
     AssetListFiles,
     AssetUid,
@@ -369,6 +371,12 @@ pub enum EngineServiceKind {
     Definitions,
     AssetGraph,
     Time,
+    Schema,
+    Animation,
+    Navigation,
+    Ai,
+    Tags,
+    Tasks,
     Scripting,
     Audio,
     Render,
@@ -429,7 +437,9 @@ impl EngineServiceKind {
         match self {
             Self::Assets => "assets",
             Self::AssetVfs => "assets.vfs",
-            Self::AssetFileTypes => "assets.file_types",
+            Self::AssetTypes => "assets.types",
+            Self::AssetInspect => "assets.inspect",
+            Self::AssetEdit => "assets.edit",
             Self::AssetPackages => "assets.packages",
             Self::AssetListFiles => "assets.listfiles",
             Self::AssetUid => "assets.uid",
@@ -444,6 +454,12 @@ impl EngineServiceKind {
             Self::Definitions => "assets.definitions",
             Self::AssetGraph => "assets.graph",
             Self::Time => "time",
+            Self::Schema => "schema",
+            Self::Animation => "animation",
+            Self::Navigation => "navigation",
+            Self::Ai => "ai",
+            Self::Tags => "tags",
+            Self::Tasks => "tasks",
             Self::Scripting => "scripting",
             Self::Audio => "audio",
             Self::Render => "render",
@@ -487,7 +503,9 @@ impl EngineServiceKind {
         match value.trim().to_ascii_lowercase().as_str() {
             "assets" => Some(Self::Assets),
             "assets.vfs" | "assets_vfs" => Some(Self::AssetVfs),
-            "assets.file_types" | "assets_file_types" => Some(Self::AssetFileTypes),
+            "assets.types" | "assets_types" => Some(Self::AssetTypes),
+            "assets.inspect" | "assets_inspect" => Some(Self::AssetInspect),
+            "assets.edit" | "assets_edit" => Some(Self::AssetEdit),
             "assets.packages" | "assets_packages" => Some(Self::AssetPackages),
             "assets.listfiles" | "assets_listfiles" | "assets.list_files" | "assets_list_files" => Some(Self::AssetListFiles),
             "assets.uid" | "assets_uid" => Some(Self::AssetUid),
@@ -502,6 +520,12 @@ impl EngineServiceKind {
             "assets.definitions" | "assets_definitions" => Some(Self::Definitions),
             "assets.graph" | "assets_graph" | "assets-graph" => Some(Self::AssetGraph),
             "time" => Some(Self::Time),
+            "schema" => Some(Self::Schema),
+            "animation" => Some(Self::Animation),
+            "navigation" => Some(Self::Navigation),
+            "ai" => Some(Self::Ai),
+            "tags" => Some(Self::Tags),
+            "tasks" => Some(Self::Tasks),
             "scripting" => Some(Self::Scripting),
             "audio" => Some(Self::Audio),
             "render" => Some(Self::Render),
@@ -548,7 +572,7 @@ impl EngineServiceKind {
     #[inline]
     pub const fn parent(self) -> Option<Self> {
         match self {
-            Self::AssetVfs | Self::AssetFileTypes | Self::AssetPackages | Self::AssetListFiles | Self::AssetUid | Self::AssetDependencies | Self::AssetImportQueue | Self::AssetPackageWriter | Self::AssetMaps | Self::AssetValidation | Self::AssetUi | Self::Materials | Self::Textures | Self::Definitions | Self::AssetGraph | Self::Model => Some(Self::Assets),
+            Self::AssetVfs | Self::AssetTypes | Self::AssetInspect | Self::AssetEdit | Self::AssetPackages | Self::AssetListFiles | Self::AssetUid | Self::AssetDependencies | Self::AssetImportQueue | Self::AssetPackageWriter | Self::AssetMaps | Self::AssetValidation | Self::AssetUi | Self::Materials | Self::Textures | Self::Definitions | Self::AssetGraph | Self::Model => Some(Self::Assets),
             Self::RenderEffects | Self::RenderMaterials => Some(Self::Render),
             Self::ModelSkeletons | Self::ModelMaterials | Self::ModelCollisions => Some(Self::Model),
             Self::CameraModes | Self::CameraAnimations => Some(Self::Camera),
@@ -580,7 +604,9 @@ impl EngineServiceKind {
         match self {
             Self::Assets => "engine.assets",
             Self::AssetVfs => "engine.assets.vfs",
-            Self::AssetFileTypes => "engine.assets.file_types",
+            Self::AssetTypes => "engine.assets.types",
+            Self::AssetInspect => "engine.assets.inspect",
+            Self::AssetEdit => "engine.assets.edit",
             Self::AssetPackages => "engine.assets.packages",
             Self::AssetListFiles => "engine.assets.listfiles",
             Self::AssetUid => "engine.assets.uid",
@@ -595,6 +621,12 @@ impl EngineServiceKind {
             Self::Definitions => "engine.assets.definitions",
             Self::AssetGraph => "engine.assets.graph",
             Self::Time => "engine.time",
+            Self::Schema => "engine.schema",
+            Self::Animation => "engine.animation",
+            Self::Navigation => "engine.navigation",
+            Self::Ai => "engine.ai",
+            Self::Tags => "engine.tags",
+            Self::Tasks => "engine.tasks",
             Self::Scripting => "engine.scripting",
             Self::Audio => "engine.audio",
             Self::Render => "engine.render",
@@ -776,7 +808,9 @@ mod tests {
     fn child_domains_parse_with_canonical_gateways() {
         let cases = [
             ("assets.vfs", EngineServiceKind::AssetVfs, "engine.assets.vfs", Some(EngineServiceKind::Assets)),
-            ("assets.file_types", EngineServiceKind::AssetFileTypes, "engine.assets.file_types", Some(EngineServiceKind::Assets)),
+            ("assets.types", EngineServiceKind::AssetTypes, "engine.assets.types", Some(EngineServiceKind::Assets)),
+            ("assets.inspect", EngineServiceKind::AssetInspect, "engine.assets.inspect", Some(EngineServiceKind::Assets)),
+            ("assets.edit", EngineServiceKind::AssetEdit, "engine.assets.edit", Some(EngineServiceKind::Assets)),
             ("assets.packages", EngineServiceKind::AssetPackages, "engine.assets.packages", Some(EngineServiceKind::Assets)),
             ("assets.listfiles", EngineServiceKind::AssetListFiles, "engine.assets.listfiles", Some(EngineServiceKind::Assets)),
             ("assets.maps", EngineServiceKind::AssetMaps, "engine.assets.maps", Some(EngineServiceKind::Assets)),
@@ -787,6 +821,12 @@ mod tests {
             ("assets.definitions", EngineServiceKind::Definitions, "engine.assets.definitions", Some(EngineServiceKind::Assets)),
             ("assets.graph", EngineServiceKind::AssetGraph, "engine.assets.graph", Some(EngineServiceKind::Assets)),
             ("time", EngineServiceKind::Time, "engine.time", None),
+            ("schema", EngineServiceKind::Schema, "engine.schema", None),
+            ("animation", EngineServiceKind::Animation, "engine.animation", None),
+            ("navigation", EngineServiceKind::Navigation, "engine.navigation", None),
+            ("ai", EngineServiceKind::Ai, "engine.ai", None),
+            ("tags", EngineServiceKind::Tags, "engine.tags", None),
+            ("tasks", EngineServiceKind::Tasks, "engine.tasks", None),
             ("jobs", EngineServiceKind::Jobs, "engine.jobs", None),
             ("scripting", EngineServiceKind::Scripting, "engine.scripting", None),
             ("input.bindings", EngineServiceKind::InputBindings, "engine.input.bindings", Some(EngineServiceKind::Input)),
@@ -817,7 +857,7 @@ mod tests {
 
     #[test]
     fn parent_domain_does_not_match_child_gateway() {
-        assert!(!EngineServiceKind::Assets.matches_engine_gateway_id("engine.assets.file_types"));
+        assert!(!EngineServiceKind::Assets.matches_engine_gateway_id("engine.assets.types"));
         assert!(!EngineServiceKind::Input.matches_engine_gateway_id("engine.input.bindings"));
         assert!(!EngineServiceKind::Render.matches_engine_gateway_id("engine.render.effects"));
         assert!(!EngineServiceKind::Physics.matches_engine_gateway_id("engine.physics.contacts"));

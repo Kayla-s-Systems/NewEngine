@@ -48,6 +48,9 @@ jobs:
       - name: Provider boundary scan
         run: python scripts/provider_boundary_scan.py
 
+      - name: No product-specific UI provider branches
+        run: python scripts/no_product_ui_provider_branches_scan.py
+
       - name: Provider gateway conformance tests
         run: cargo test -p newengine-plugin-host service_gateway::registry --lib
 

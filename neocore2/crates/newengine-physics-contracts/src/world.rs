@@ -1,4 +1,4 @@
-use newengine_entity_api::EntityId;
+use newengine_entity_api::EntityHandle;
 use newengine_math::{Quat, Vec3};
 
 use crate::{PhysicsBodyDesc, PhysicsHandle};
@@ -40,8 +40,8 @@ impl PhysicsWorldDesc {
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum PhysicsCommandKind {
-    CreateBody { entity: EntityId, desc: PhysicsBodyDesc, position: Vec3, rotation: Quat },
-    DestroyBody { entity: EntityId },
+    CreateBody { entity: EntityHandle, desc: PhysicsBodyDesc, position: Vec3, rotation: Quat },
+    DestroyBody { entity: EntityHandle },
     SetBodyPose { handle: PhysicsHandle, position: Vec3, rotation: Quat },
     SetLinearVelocity { handle: PhysicsHandle, velocity: Vec3 },
 }

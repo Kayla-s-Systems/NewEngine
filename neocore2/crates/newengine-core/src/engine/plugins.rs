@@ -269,7 +269,7 @@ impl<E: Send + 'static> Engine<E> {
                         ellipsize(&parent, 32),
                         ellipsize(&route.gateway_id, 36),
                         attach.to_owned(),
-                        if route.active { "active".to_owned() } else { "shadowed".to_owned() },
+                        route.selection_state.clone(),
                         route.service_kind.clone(),
                         ellipsize(route.provider_route_id.as_deref().unwrap_or("-"), 32),
                         ellipsize(&route.provider_service_id, 28),
@@ -289,7 +289,7 @@ impl<E: Send + 'static> Engine<E> {
                     if debug_tables {
                         vec![
                             ellipsize(&route.gateway_id, 28),
-                            if route.active { "active".to_owned() } else { "shadowed".to_owned() },
+                            route.selection_state.clone(),
                             route.origin.clone(),
                             ellipsize(route.provider_route_id.as_deref().unwrap_or("-"), 28),
                             ellipsize(&route.provider_service_id, 28),
@@ -299,24 +299,26 @@ impl<E: Send + 'static> Engine<E> {
                             route.override_mode.clone(),
                             route.backend_priority.to_string(),
                             route.active_score.to_string(),
+                            ellipsize(&route.selection_reason, 48),
                         ]
                     } else {
                         vec![
                             ellipsize(&route.gateway_id, 28),
-                            if route.active { "active".to_owned() } else { "shadowed".to_owned() },
+                            route.selection_state.clone(),
                             route.origin.clone(),
                             ellipsize(route.provider_route_id.as_deref().unwrap_or("-"), 28),
                             ellipsize(&route.provider_service_id, 28),
                             route.backend_priority.to_string(),
+                            ellipsize(&route.selection_reason, 42),
                         ]
                     }
                 })
                 .collect::<Vec<_>>();
 
             let route_headers: &[&str] = if debug_tables {
-                &["gateway", "state", "source", "provider_route", "provider_service", "owner", "kind", "capability", "mode", "prio", "score"]
+                &["gateway", "state", "source", "provider_route", "provider_service", "owner", "kind", "capability", "mode", "prio", "score", "selection_reason"]
             } else {
-                &["gateway", "state", "source", "provider_route", "provider_service", "prio"]
+                &["gateway", "state", "source", "provider_route", "provider_service", "prio", "selection_reason"]
             };
             emit_prefixed_table(
                 "",

@@ -1,0 +1,1486 @@
+{
+  "$schema": "northstar.engine.capability_matrix.v1",
+  "policy": "Capability as Option: no engine.* domain is valid without a descriptor and diagnostics visibility.",
+  "records": [
+    {
+      "domain": "assets",
+      "capability_id": "asset_manager.backend",
+      "owner_service": "asset_manager.api",
+      "engine_gateway": "engine.assets",
+      "contract": "asset_manager.api",
+      "quality_tier": "production",
+      "backend_priority": 0,
+      "requires": [],
+      "conflicts": [],
+      "fallback_policy": "explicit_profile_only",
+      "diagnostics": {
+        "must_show_active_route": true,
+        "must_show_shadowed_routes": true,
+        "must_show_capability_id": true
+      }
+    },
+    {
+      "domain": "assets.vfs",
+      "capability_id": "assets.vfs.backend",
+      "owner_service": "asset_manager.api",
+      "engine_gateway": "engine.assets.vfs",
+      "contract": "asset_manager.api",
+      "quality_tier": "planned",
+      "backend_priority": 0,
+      "requires": [
+        "asset_manager.backend"
+      ],
+      "conflicts": [],
+      "fallback_policy": "explicit_profile_only",
+      "diagnostics": {
+        "must_show_active_route": true,
+        "must_show_shadowed_routes": true,
+        "must_show_capability_id": true
+      }
+    },
+    {
+      "domain": "assets.types",
+      "capability_id": "assets.types.backend",
+      "owner_service": "asset.types.api",
+      "engine_gateway": "engine.assets.types",
+      "contract": "asset.types.api",
+      "quality_tier": "production",
+      "backend_priority": 0,
+      "requires": [
+        "asset_manager.backend"
+      ],
+      "conflicts": [],
+      "fallback_policy": "explicit_profile_only",
+      "diagnostics": {
+        "must_show_active_route": true,
+        "must_show_shadowed_routes": true,
+        "must_show_capability_id": true
+      }
+    },
+    {
+      "domain": "assets.inspect",
+      "capability_id": "assets.inspect.backend",
+      "owner_service": "assets.inspect.api",
+      "engine_gateway": "engine.assets.inspect",
+      "contract": "assets.inspect.api",
+      "quality_tier": "production",
+      "backend_priority": 0,
+      "requires": [
+        "asset_manager.backend"
+      ],
+      "conflicts": [],
+      "fallback_policy": "explicit_profile_only",
+      "diagnostics": {
+        "must_show_active_route": true,
+        "must_show_shadowed_routes": true,
+        "must_show_capability_id": true
+      }
+    },
+    {
+      "domain": "assets.edit",
+      "capability_id": "assets.edit.backend",
+      "owner_service": "assets.edit.api",
+      "engine_gateway": "engine.assets.edit",
+      "contract": "assets.edit.api",
+      "quality_tier": "production",
+      "backend_priority": 0,
+      "requires": [
+        "asset_manager.backend"
+      ],
+      "conflicts": [],
+      "fallback_policy": "explicit_profile_only",
+      "diagnostics": {
+        "must_show_active_route": true,
+        "must_show_shadowed_routes": true,
+        "must_show_capability_id": true
+      }
+    },
+    {
+      "domain": "assets.packages",
+      "capability_id": "assets.packages.backend",
+      "owner_service": "asset_manager.api",
+      "engine_gateway": "engine.assets.packages",
+      "contract": "asset_manager.api",
+      "quality_tier": "planned",
+      "backend_priority": 0,
+      "requires": [
+        "asset_manager.backend"
+      ],
+      "conflicts": [],
+      "fallback_policy": "explicit_profile_only",
+      "diagnostics": {
+        "must_show_active_route": true,
+        "must_show_shadowed_routes": true,
+        "must_show_capability_id": true
+      }
+    },
+    {
+      "domain": "assets.listfiles",
+      "capability_id": "assets.listfiles.backend",
+      "owner_service": "asset_manager.api",
+      "engine_gateway": "engine.assets.listfiles",
+      "contract": "asset_manager.api",
+      "quality_tier": "planned",
+      "backend_priority": 0,
+      "requires": [
+        "asset_manager.backend"
+      ],
+      "conflicts": [],
+      "fallback_policy": "explicit_profile_only",
+      "diagnostics": {
+        "must_show_active_route": true,
+        "must_show_shadowed_routes": true,
+        "must_show_capability_id": true
+      }
+    },
+    {
+      "domain": "assets.uid",
+      "capability_id": "assets.uid.backend",
+      "owner_service": "assets.uid.api",
+      "engine_gateway": "engine.assets.uid",
+      "contract": "assets.uid.api",
+      "quality_tier": "production",
+      "backend_priority": 0,
+      "requires": [
+        "asset_manager.backend"
+      ],
+      "conflicts": [],
+      "fallback_policy": "explicit_profile_only",
+      "diagnostics": {
+        "must_show_active_route": true,
+        "must_show_shadowed_routes": true,
+        "must_show_capability_id": true
+      }
+    },
+    {
+      "domain": "assets.dependencies",
+      "capability_id": "assets.dependencies.backend",
+      "owner_service": "assets.dependencies.api",
+      "engine_gateway": "engine.assets.dependencies",
+      "contract": "assets.dependencies.api",
+      "quality_tier": "production",
+      "backend_priority": 0,
+      "requires": [
+        "asset_manager.backend"
+      ],
+      "conflicts": [],
+      "fallback_policy": "explicit_profile_only",
+      "diagnostics": {
+        "must_show_active_route": true,
+        "must_show_shadowed_routes": true,
+        "must_show_capability_id": true
+      }
+    },
+    {
+      "domain": "assets.import_queue",
+      "capability_id": "assets.import_queue.backend",
+      "owner_service": "assets.import_queue.api",
+      "engine_gateway": "engine.assets.import_queue",
+      "contract": "assets.import_queue.api",
+      "quality_tier": "production",
+      "backend_priority": 0,
+      "requires": [
+        "asset_manager.backend"
+      ],
+      "conflicts": [],
+      "fallback_policy": "explicit_profile_only",
+      "diagnostics": {
+        "must_show_active_route": true,
+        "must_show_shadowed_routes": true,
+        "must_show_capability_id": true
+      }
+    },
+    {
+      "domain": "assets.package_writer.nepak",
+      "capability_id": "assets.package_writer.nepak",
+      "owner_service": "assets.package_writer.api",
+      "engine_gateway": "engine.assets.package_writer",
+      "contract": "assets.package_writer.api",
+      "quality_tier": "foundation",
+      "backend_priority": 0,
+      "requires": [
+        "asset_manager.backend"
+      ],
+      "conflicts": [],
+      "fallback_policy": "explicit_profile_only",
+      "diagnostics": {
+        "must_show_active_route": true,
+        "must_show_shadowed_routes": true,
+        "must_show_capability_id": true
+      }
+    },
+    {
+      "domain": "assets.maps",
+      "capability_id": "assets.maps.backend",
+      "owner_service": "asset_manager.api",
+      "engine_gateway": "engine.assets.maps",
+      "contract": "asset_manager.api",
+      "quality_tier": "planned",
+      "backend_priority": 0,
+      "requires": [
+        "asset_manager.backend"
+      ],
+      "conflicts": [],
+      "fallback_policy": "explicit_profile_only",
+      "diagnostics": {
+        "must_show_active_route": true,
+        "must_show_shadowed_routes": true,
+        "must_show_capability_id": true
+      }
+    },
+    {
+      "domain": "assets.validation",
+      "capability_id": "assets.validation.backend",
+      "owner_service": "asset_manager.api",
+      "engine_gateway": "engine.assets.validation",
+      "contract": "asset_manager.api",
+      "quality_tier": "planned",
+      "backend_priority": 0,
+      "requires": [
+        "asset_manager.backend"
+      ],
+      "conflicts": [],
+      "fallback_policy": "explicit_profile_only",
+      "diagnostics": {
+        "must_show_active_route": true,
+        "must_show_shadowed_routes": true,
+        "must_show_capability_id": true
+      }
+    },
+    {
+      "domain": "assets.ui",
+      "capability_id": "assets.ui.backend",
+      "owner_service": "assets.ui.api",
+      "engine_gateway": "engine.assets.ui",
+      "contract": "assets.ui.api",
+      "quality_tier": "production",
+      "backend_priority": 0,
+      "requires": [
+        "asset_manager.backend",
+        "ui.backend"
+      ],
+      "conflicts": [],
+      "fallback_policy": "explicit_profile_only",
+      "diagnostics": {
+        "must_show_active_route": true,
+        "must_show_shadowed_routes": true,
+        "must_show_capability_id": true
+      }
+    },
+    {
+      "domain": "assets.textures",
+      "capability_id": "assets.textures.backend",
+      "owner_service": "textures.api",
+      "engine_gateway": "engine.assets.textures",
+      "contract": "textures.api",
+      "quality_tier": "production",
+      "backend_priority": 0,
+      "requires": [
+        "asset_manager.backend"
+      ],
+      "conflicts": [],
+      "fallback_policy": "explicit_profile_only",
+      "diagnostics": {
+        "must_show_active_route": true,
+        "must_show_shadowed_routes": true,
+        "must_show_capability_id": true
+      }
+    },
+    {
+      "domain": "assets.definitions",
+      "capability_id": "assets.definitions.backend",
+      "owner_service": "definitions.api",
+      "engine_gateway": "engine.assets.definitions",
+      "contract": "definitions.api",
+      "quality_tier": "production",
+      "backend_priority": 0,
+      "requires": [
+        "asset_manager.backend"
+      ],
+      "conflicts": [],
+      "fallback_policy": "explicit_profile_only",
+      "diagnostics": {
+        "must_show_active_route": true,
+        "must_show_shadowed_routes": true,
+        "must_show_capability_id": true
+      }
+    },
+    {
+      "domain": "assets.graph",
+      "capability_id": "assets.graph.backend",
+      "owner_service": "asset_graph.api",
+      "engine_gateway": "engine.assets.graph",
+      "contract": "asset_graph.api",
+      "quality_tier": "production",
+      "backend_priority": 0,
+      "requires": [
+        "asset_manager.backend"
+      ],
+      "conflicts": [],
+      "fallback_policy": "explicit_profile_only",
+      "diagnostics": {
+        "must_show_active_route": true,
+        "must_show_shadowed_routes": true,
+        "must_show_capability_id": true
+      }
+    },
+    {
+      "domain": "assets.models",
+      "capability_id": "model.backend",
+      "owner_service": "model.api",
+      "engine_gateway": "engine.assets.models",
+      "contract": "model.api",
+      "quality_tier": "production",
+      "backend_priority": 0,
+      "requires": [
+        "asset_manager.backend"
+      ],
+      "conflicts": [],
+      "fallback_policy": "explicit_profile_only",
+      "diagnostics": {
+        "must_show_active_route": true,
+        "must_show_shadowed_routes": true,
+        "must_show_capability_id": true
+      }
+    },
+    {
+      "domain": "assets.models.skeletons",
+      "capability_id": "model.skeletons.backend",
+      "owner_service": "model.skeletons.api",
+      "engine_gateway": "engine.assets.models.skeletons",
+      "contract": "model.skeletons.api",
+      "quality_tier": "planned",
+      "backend_priority": 0,
+      "requires": [
+        "model.backend"
+      ],
+      "conflicts": [],
+      "fallback_policy": "explicit_profile_only",
+      "diagnostics": {
+        "must_show_active_route": true,
+        "must_show_shadowed_routes": true,
+        "must_show_capability_id": true
+      }
+    },
+    {
+      "domain": "assets.models.materials",
+      "capability_id": "model.materials.backend",
+      "owner_service": "model.materials.api",
+      "engine_gateway": "engine.assets.models.materials",
+      "contract": "model.materials.api",
+      "quality_tier": "planned",
+      "backend_priority": 0,
+      "requires": [
+        "model.backend",
+        "assets.materials.backend"
+      ],
+      "conflicts": [],
+      "fallback_policy": "explicit_profile_only",
+      "diagnostics": {
+        "must_show_active_route": true,
+        "must_show_shadowed_routes": true,
+        "must_show_capability_id": true
+      }
+    },
+    {
+      "domain": "assets.models.collisions",
+      "capability_id": "model.collisions.backend",
+      "owner_service": "model.collisions.api",
+      "engine_gateway": "engine.assets.models.collisions",
+      "contract": "model.collisions.api",
+      "quality_tier": "production",
+      "backend_priority": 0,
+      "requires": [
+        "model.backend"
+      ],
+      "conflicts": [],
+      "fallback_policy": "explicit_profile_only",
+      "diagnostics": {
+        "must_show_active_route": true,
+        "must_show_shadowed_routes": true,
+        "must_show_capability_id": true
+      }
+    },
+    {
+      "domain": "assets.materials",
+      "capability_id": "assets.materials.backend",
+      "owner_service": "materials.api",
+      "engine_gateway": "engine.assets.materials",
+      "contract": "materials.api",
+      "quality_tier": "production",
+      "backend_priority": 0,
+      "requires": [
+        "asset_manager.backend"
+      ],
+      "conflicts": [],
+      "fallback_policy": "explicit_profile_only",
+      "diagnostics": {
+        "must_show_active_route": true,
+        "must_show_shadowed_routes": true,
+        "must_show_capability_id": true
+      }
+    },
+    {
+      "domain": "audio",
+      "capability_id": "audio.backend",
+      "owner_service": "audio.api",
+      "engine_gateway": "engine.audio",
+      "contract": "audio.api",
+      "quality_tier": "baseline-null",
+      "backend_priority": 0,
+      "requires": [],
+      "conflicts": [],
+      "fallback_policy": "explicit_profile_only",
+      "diagnostics": {
+        "must_show_active_route": true,
+        "must_show_shadowed_routes": true,
+        "must_show_capability_id": true
+      }
+    },
+    {
+      "domain": "camera",
+      "capability_id": "camera.backend",
+      "owner_service": "engine.camera",
+      "engine_gateway": "engine.camera",
+      "contract": "engine.camera",
+      "quality_tier": "production",
+      "backend_priority": 0,
+      "requires": [],
+      "conflicts": [],
+      "fallback_policy": "explicit_profile_only",
+      "diagnostics": {
+        "must_show_active_route": true,
+        "must_show_shadowed_routes": true,
+        "must_show_capability_id": true
+      }
+    },
+    {
+      "domain": "camera.modes",
+      "capability_id": "camera.modes.backend",
+      "owner_service": "camera.modes.api",
+      "engine_gateway": "engine.camera.modes",
+      "contract": "camera.modes.api",
+      "quality_tier": "planned",
+      "backend_priority": 0,
+      "requires": [
+        "camera.backend"
+      ],
+      "conflicts": [],
+      "fallback_policy": "explicit_profile_only",
+      "diagnostics": {
+        "must_show_active_route": true,
+        "must_show_shadowed_routes": true,
+        "must_show_capability_id": true
+      }
+    },
+    {
+      "domain": "camera.animations",
+      "capability_id": "camera.animations.backend",
+      "owner_service": "camera.animations.api",
+      "engine_gateway": "engine.camera.animations",
+      "contract": "camera.animations.api",
+      "quality_tier": "planned",
+      "backend_priority": 0,
+      "requires": [
+        "camera.backend"
+      ],
+      "conflicts": [],
+      "fallback_policy": "explicit_profile_only",
+      "diagnostics": {
+        "must_show_active_route": true,
+        "must_show_shadowed_routes": true,
+        "must_show_capability_id": true
+      }
+    },
+    {
+      "domain": "scene",
+      "capability_id": "scene.backend",
+      "owner_service": "scene.api",
+      "engine_gateway": "engine.scene",
+      "contract": "scene.api",
+      "quality_tier": "production",
+      "backend_priority": 0,
+      "requires": [
+        "entity.backend"
+      ],
+      "conflicts": [],
+      "fallback_policy": "explicit_profile_only",
+      "diagnostics": {
+        "must_show_active_route": true,
+        "must_show_shadowed_routes": true,
+        "must_show_capability_id": true
+      }
+    },
+    {
+      "domain": "world",
+      "capability_id": "world.backend",
+      "owner_service": "world.api",
+      "engine_gateway": "engine.world",
+      "contract": "world.api",
+      "quality_tier": "production",
+      "backend_priority": 0,
+      "requires": [
+        "scene.backend",
+        "entity.backend"
+      ],
+      "conflicts": [],
+      "fallback_policy": "explicit_profile_only",
+      "diagnostics": {
+        "must_show_active_route": true,
+        "must_show_shadowed_routes": true,
+        "must_show_capability_id": true
+      }
+    },
+    {
+      "domain": "world.environment",
+      "capability_id": "world.environment.backend",
+      "owner_service": "world.environment.api",
+      "engine_gateway": "engine.world.environment",
+      "contract": "world.environment.api",
+      "quality_tier": "production",
+      "backend_priority": 0,
+      "requires": [
+        "world.backend",
+        "time.backend"
+      ],
+      "conflicts": [],
+      "fallback_policy": "explicit_profile_only",
+      "null_provider_route": "engine.world.null.environment",
+      "diagnostics": {
+        "must_show_active_route": true,
+        "must_show_shadowed_routes": true,
+        "must_show_capability_id": true
+      }
+    },
+    {
+      "domain": "world.streaming",
+      "capability_id": "world.streaming.backend",
+      "owner_service": "world.streaming.api",
+      "engine_gateway": "engine.world.streaming",
+      "contract": "world.streaming.api",
+      "quality_tier": "foundation",
+      "backend_priority": 0,
+      "requires": [
+        "world.backend",
+        "asset_manager.backend"
+      ],
+      "conflicts": [],
+      "fallback_policy": "explicit_profile_only",
+      "diagnostics": {
+        "must_show_active_route": true,
+        "must_show_shadowed_routes": true,
+        "must_show_capability_id": true
+      }
+    },
+    {
+      "domain": "physics",
+      "capability_id": "physics.backend",
+      "owner_service": "physics.api",
+      "engine_gateway": "engine.physics",
+      "contract": "physics.api",
+      "quality_tier": "production",
+      "backend_priority": 0,
+      "requires": [],
+      "conflicts": [],
+      "fallback_policy": "explicit_profile_only",
+      "null_provider_route": "engine.physics.null",
+      "diagnostics": {
+        "must_show_active_route": true,
+        "must_show_shadowed_routes": true,
+        "must_show_capability_id": true
+      }
+    },
+    {
+      "domain": "physics.contacts",
+      "capability_id": "physics.contacts.backend",
+      "owner_service": "physics.contacts.api",
+      "engine_gateway": "engine.physics.contacts",
+      "contract": "physics.contacts.api",
+      "quality_tier": "planned",
+      "backend_priority": 0,
+      "requires": [
+        "physics.backend"
+      ],
+      "conflicts": [],
+      "fallback_policy": "explicit_profile_only",
+      "diagnostics": {
+        "must_show_active_route": true,
+        "must_show_shadowed_routes": true,
+        "must_show_capability_id": true
+      }
+    },
+    {
+      "domain": "physics.constraints",
+      "capability_id": "physics.constraints.backend",
+      "owner_service": "physics.constraints.api",
+      "engine_gateway": "engine.physics.constraints",
+      "contract": "physics.constraints.api",
+      "quality_tier": "planned",
+      "backend_priority": 0,
+      "requires": [
+        "physics.backend"
+      ],
+      "conflicts": [],
+      "fallback_policy": "explicit_profile_only",
+      "diagnostics": {
+        "must_show_active_route": true,
+        "must_show_shadowed_routes": true,
+        "must_show_capability_id": true
+      }
+    },
+    {
+      "domain": "input",
+      "capability_id": "input.backend",
+      "owner_service": "newengine.input.v1",
+      "engine_gateway": "engine.input",
+      "contract": "newengine.input.v1",
+      "quality_tier": "production",
+      "backend_priority": 0,
+      "requires": [],
+      "conflicts": [],
+      "fallback_policy": "explicit_profile_only",
+      "diagnostics": {
+        "must_show_active_route": true,
+        "must_show_shadowed_routes": true,
+        "must_show_capability_id": true
+      }
+    },
+    {
+      "domain": "input.bindings",
+      "capability_id": "input.bindings.backend",
+      "owner_service": "input.bindings.api",
+      "engine_gateway": "engine.input.bindings",
+      "contract": "input.bindings.api",
+      "quality_tier": "production",
+      "backend_priority": 0,
+      "requires": [
+        "input.backend"
+      ],
+      "conflicts": [],
+      "fallback_policy": "explicit_profile_only",
+      "diagnostics": {
+        "must_show_active_route": true,
+        "must_show_shadowed_routes": true,
+        "must_show_capability_id": true
+      }
+    },
+    {
+      "domain": "input.actions",
+      "capability_id": "input.actions.backend",
+      "owner_service": "input.actions.api",
+      "engine_gateway": "engine.input.actions",
+      "contract": "input.actions.api",
+      "quality_tier": "planned",
+      "backend_priority": 0,
+      "requires": [
+        "input.backend"
+      ],
+      "conflicts": [],
+      "fallback_policy": "explicit_profile_only",
+      "diagnostics": {
+        "must_show_active_route": true,
+        "must_show_shadowed_routes": true,
+        "must_show_capability_id": true
+      }
+    },
+    {
+      "domain": "input.contexts",
+      "capability_id": "input.contexts.backend",
+      "owner_service": "input.contexts.api",
+      "engine_gateway": "engine.input.contexts",
+      "contract": "input.contexts.api",
+      "quality_tier": "planned",
+      "backend_priority": 0,
+      "requires": [
+        "input.backend"
+      ],
+      "conflicts": [],
+      "fallback_policy": "explicit_profile_only",
+      "diagnostics": {
+        "must_show_active_route": true,
+        "must_show_shadowed_routes": true,
+        "must_show_capability_id": true
+      }
+    },
+    {
+      "domain": "render",
+      "capability_id": "render.backend",
+      "owner_service": "render.api",
+      "engine_gateway": "engine.render",
+      "contract": "render.api",
+      "quality_tier": "production",
+      "backend_priority": 0,
+      "requires": [],
+      "conflicts": [],
+      "fallback_policy": "explicit_profile_only",
+      "null_provider_route": "engine.render.null",
+      "diagnostics": {
+        "must_show_active_route": true,
+        "must_show_shadowed_routes": true,
+        "must_show_capability_id": true
+      }
+    },
+    {
+      "domain": "render.effects",
+      "capability_id": "render.effects.backend",
+      "owner_service": "render.effects.api",
+      "engine_gateway": "engine.render.effects",
+      "contract": "render.effects.api",
+      "quality_tier": "planned",
+      "backend_priority": 0,
+      "requires": [
+        "render.backend"
+      ],
+      "conflicts": [],
+      "fallback_policy": "explicit_profile_only",
+      "diagnostics": {
+        "must_show_active_route": true,
+        "must_show_shadowed_routes": true,
+        "must_show_capability_id": true
+      }
+    },
+    {
+      "domain": "render.materials",
+      "capability_id": "render.materials.backend",
+      "owner_service": "render.materials.api",
+      "engine_gateway": "engine.render.materials",
+      "contract": "render.materials.api",
+      "quality_tier": "planned",
+      "backend_priority": 0,
+      "requires": [
+        "render.backend",
+        "assets.materials.backend"
+      ],
+      "conflicts": [],
+      "fallback_policy": "explicit_profile_only",
+      "diagnostics": {
+        "must_show_active_route": true,
+        "must_show_shadowed_routes": true,
+        "must_show_capability_id": true
+      }
+    },
+    {
+      "domain": "ui",
+      "capability_id": "ui.backend",
+      "owner_service": "ui.api",
+      "engine_gateway": "engine.ui",
+      "contract": "ui.api",
+      "quality_tier": "production",
+      "backend_priority": 0,
+      "requires": [],
+      "conflicts": [],
+      "fallback_policy": "explicit_profile_only",
+      "null_provider_route": "engine.ui.null",
+      "diagnostics": {
+        "must_show_active_route": true,
+        "must_show_shadowed_routes": true,
+        "must_show_capability_id": true
+      }
+    },
+    {
+      "domain": "ui.text",
+      "capability_id": "ui.text.shaping",
+      "owner_service": "ui.text.api",
+      "engine_gateway": "engine.ui.text",
+      "contract": "ui.text.api",
+      "quality_tier": "production",
+      "backend_priority": 0,
+      "requires": [
+        "ui.backend"
+      ],
+      "conflicts": [],
+      "fallback_policy": "explicit_profile_only",
+      "diagnostics": {
+        "must_show_active_route": true,
+        "must_show_shadowed_routes": true,
+        "must_show_capability_id": true
+      }
+    },
+    {
+      "domain": "ui.debug",
+      "capability_id": "ui.debug.overlay",
+      "owner_service": "ui.debug.api",
+      "engine_gateway": "engine.ui.debug",
+      "contract": "ui.debug.api",
+      "quality_tier": "planned",
+      "backend_priority": 0,
+      "requires": [
+        "ui.backend"
+      ],
+      "conflicts": [],
+      "fallback_policy": "explicit_profile_only",
+      "diagnostics": {
+        "must_show_active_route": true,
+        "must_show_shadowed_routes": true,
+        "must_show_capability_id": true
+      }
+    },
+    {
+      "domain": "time",
+      "capability_id": "time.backend",
+      "owner_service": "time.api",
+      "engine_gateway": "engine.time",
+      "contract": "time.api",
+      "quality_tier": "production",
+      "backend_priority": 0,
+      "requires": [],
+      "conflicts": [],
+      "fallback_policy": "explicit_profile_only",
+      "diagnostics": {
+        "must_show_active_route": true,
+        "must_show_shadowed_routes": true,
+        "must_show_capability_id": true
+      }
+    },
+    {
+      "domain": "schema",
+      "capability_id": "schema.registry",
+      "owner_service": "schema.api",
+      "engine_gateway": "engine.schema",
+      "contract": "newengine.schema.registry.v1",
+      "quality_tier": "core-baseline",
+      "backend_priority": 0,
+      "requires": [],
+      "conflicts": [],
+      "fallback_policy": "explicit_profile_only",
+      "diagnostics": {
+        "must_show_active_route": true,
+        "must_show_shadowed_routes": true,
+        "must_show_capability_id": true
+      }
+    },
+    {
+      "domain": "scripting",
+      "capability_id": "scripting.backend",
+      "owner_service": "scripting.api",
+      "engine_gateway": "engine.scripting",
+      "contract": "scripting.api",
+      "quality_tier": "baseline-null",
+      "backend_priority": 0,
+      "requires": [
+        "asset_manager.backend"
+      ],
+      "conflicts": [],
+      "fallback_policy": "explicit_profile_only",
+      "diagnostics": {
+        "must_show_active_route": true,
+        "must_show_shadowed_routes": true,
+        "must_show_capability_id": true
+      }
+    },
+    {
+      "domain": "jobs",
+      "capability_id": "jobs.backend",
+      "owner_service": "jobs.api",
+      "engine_gateway": "engine.jobs",
+      "contract": "jobs.api",
+      "quality_tier": "production",
+      "backend_priority": 0,
+      "requires": [],
+      "conflicts": [],
+      "fallback_policy": "explicit_profile_only",
+      "diagnostics": {
+        "must_show_active_route": true,
+        "must_show_shadowed_routes": true,
+        "must_show_capability_id": true
+      }
+    },
+    {
+      "domain": "platform",
+      "capability_id": "platform.backend",
+      "owner_service": "platform.api",
+      "engine_gateway": "engine.platform",
+      "contract": "platform.api",
+      "quality_tier": "production",
+      "backend_priority": 0,
+      "requires": [],
+      "conflicts": [],
+      "fallback_policy": "explicit_profile_only",
+      "diagnostics": {
+        "must_show_active_route": true,
+        "must_show_shadowed_routes": true,
+        "must_show_capability_id": true
+      }
+    },
+    {
+      "domain": "ecs",
+      "capability_id": "ecs.backend",
+      "owner_service": "ecs.api",
+      "engine_gateway": "engine.ecs",
+      "contract": "ecs.api",
+      "quality_tier": "production",
+      "backend_priority": 0,
+      "requires": [],
+      "conflicts": [],
+      "fallback_policy": "explicit_profile_only",
+      "diagnostics": {
+        "must_show_active_route": true,
+        "must_show_shadowed_routes": true,
+        "must_show_capability_id": true
+      }
+    },
+    {
+      "domain": "entity",
+      "capability_id": "entity.backend",
+      "owner_service": "entity.api",
+      "engine_gateway": "engine.entity",
+      "contract": "entity.api",
+      "quality_tier": "production",
+      "backend_priority": 0,
+      "requires": [],
+      "conflicts": [],
+      "fallback_policy": "explicit_profile_only",
+      "diagnostics": {
+        "must_show_active_route": true,
+        "must_show_shadowed_routes": true,
+        "must_show_capability_id": true
+      }
+    },
+    {
+      "domain": "logging",
+      "capability_id": "logging.backend",
+      "owner_service": "logging.api",
+      "engine_gateway": "engine.logging",
+      "contract": "logging.api",
+      "quality_tier": "production",
+      "backend_priority": 0,
+      "requires": [],
+      "conflicts": [],
+      "fallback_policy": "explicit_profile_only",
+      "diagnostics": {
+        "must_show_active_route": true,
+        "must_show_shadowed_routes": true,
+        "must_show_capability_id": true
+      }
+    },
+    {
+      "domain": "loading",
+      "capability_id": "ui.loading.backend",
+      "owner_service": "ui.loading.api",
+      "engine_gateway": "engine.ui.loading",
+      "contract": "ui.loading.api",
+      "quality_tier": "planned",
+      "backend_priority": 0,
+      "requires": [
+        "ui.backend"
+      ],
+      "conflicts": [],
+      "fallback_policy": "explicit_profile_only",
+      "diagnostics": {
+        "must_show_active_route": true,
+        "must_show_shadowed_routes": true,
+        "must_show_capability_id": true
+      }
+    },
+    {
+      "domain": "plugin_host",
+      "capability_id": "plugin_host.backend",
+      "owner_service": "engine.plugin_host",
+      "engine_gateway": "engine.plugin_host",
+      "contract": "engine.plugin_host",
+      "quality_tier": "locked",
+      "backend_priority": 0,
+      "requires": [],
+      "conflicts": [],
+      "fallback_policy": "required",
+      "diagnostics": {
+        "must_show_active_route": true,
+        "must_show_shadowed_routes": true,
+        "must_show_capability_id": true
+      }
+    },
+    {
+      "domain": "abi",
+      "capability_id": "abi.backend",
+      "owner_service": "engine.abi",
+      "engine_gateway": "engine.abi",
+      "contract": "engine.abi",
+      "quality_tier": "locked",
+      "backend_priority": 0,
+      "requires": [],
+      "conflicts": [],
+      "fallback_policy": "required",
+      "diagnostics": {
+        "must_show_active_route": true,
+        "must_show_shadowed_routes": true,
+        "must_show_capability_id": true
+      }
+    },
+    {
+      "domain": "gateway_registry",
+      "capability_id": "gateway_registry.backend",
+      "owner_service": "engine.gateway_registry",
+      "engine_gateway": "engine.gateway_registry",
+      "contract": "engine.gateway_registry",
+      "quality_tier": "locked",
+      "backend_priority": 0,
+      "requires": [],
+      "conflicts": [],
+      "fallback_policy": "required",
+      "diagnostics": {
+        "must_show_active_route": true,
+        "must_show_shadowed_routes": true,
+        "must_show_capability_id": true
+      }
+    },
+    {
+      "domain": "security",
+      "capability_id": "security.backend",
+      "owner_service": "engine.security",
+      "engine_gateway": "engine.security",
+      "contract": "engine.security",
+      "quality_tier": "locked",
+      "backend_priority": 0,
+      "requires": [],
+      "conflicts": [],
+      "fallback_policy": "required",
+      "diagnostics": {
+        "must_show_active_route": true,
+        "must_show_shadowed_routes": true,
+        "must_show_capability_id": true
+      }
+    },
+    {
+      "domain": "scheduler.core",
+      "capability_id": "scheduler.core.backend",
+      "owner_service": "engine.scheduler.core",
+      "engine_gateway": "engine.scheduler.core",
+      "contract": "engine.scheduler.core",
+      "quality_tier": "locked",
+      "backend_priority": 0,
+      "requires": [],
+      "conflicts": [],
+      "fallback_policy": "required",
+      "diagnostics": {
+        "must_show_active_route": true,
+        "must_show_shadowed_routes": true,
+        "must_show_capability_id": true
+      }
+    },
+    {
+      "domain": "capability_validator",
+      "capability_id": "capability_validator.backend",
+      "owner_service": "engine.capability_validator",
+      "engine_gateway": "engine.capability_validator",
+      "contract": "engine.capability_validator",
+      "quality_tier": "locked",
+      "backend_priority": 0,
+      "requires": [],
+      "conflicts": [],
+      "fallback_policy": "required",
+      "diagnostics": {
+        "must_show_active_route": true,
+        "must_show_shadowed_routes": true,
+        "must_show_capability_id": true
+      }
+    },
+    {
+      "domain": "ai",
+      "capability_id": "ai.backend",
+      "owner_service": "ai.api",
+      "engine_gateway": "engine.ai",
+      "contract": "ai.api",
+      "quality_tier": "foundation",
+      "backend_priority": 0,
+      "requires": [
+        "tags.registry",
+        "tasks.backend",
+        "navigation.backend"
+      ],
+      "conflicts": [],
+      "fallback_policy": "explicit_profile_only",
+      "diagnostics": {
+        "must_show_active_route": true,
+        "must_show_shadowed_routes": true,
+        "must_show_capability_id": true
+      },
+      "null_provider_route": "engine.ai.null"
+    },
+    {
+      "domain": "scene.instantiation",
+      "capability_id": "scene.instantiation.backend",
+      "owner_service": "scene.api",
+      "engine_gateway": "engine.scene.instantiation",
+      "contract": "scene.api",
+      "quality_tier": "foundation",
+      "backend_priority": 0,
+      "requires": [
+        "scene.backend",
+        "world.apply_stage"
+      ],
+      "conflicts": [],
+      "fallback_policy": "explicit_profile_only",
+      "diagnostics": {
+        "must_show_active_route": true,
+        "must_show_shadowed_routes": true,
+        "must_show_capability_id": true
+      }
+    },
+    {
+      "domain": "world.streaming_cells",
+      "capability_id": "world.streaming.cells",
+      "owner_service": "world.api",
+      "engine_gateway": "engine.world.streaming.cells",
+      "contract": "world.api",
+      "quality_tier": "foundation",
+      "backend_priority": 0,
+      "requires": [
+        "world.backend"
+      ],
+      "conflicts": [],
+      "fallback_policy": "explicit_profile_only",
+      "diagnostics": {
+        "must_show_active_route": true,
+        "must_show_shadowed_routes": true,
+        "must_show_capability_id": true
+      }
+    },
+    {
+      "domain": "world.apply_stage",
+      "capability_id": "world.apply_stage",
+      "owner_service": "world.api",
+      "engine_gateway": "engine.world.apply",
+      "contract": "world.api",
+      "quality_tier": "foundation",
+      "backend_priority": 0,
+      "requires": [
+        "world.backend",
+        "scene.backend"
+      ],
+      "conflicts": [],
+      "fallback_policy": "explicit_profile_only",
+      "diagnostics": {
+        "must_show_active_route": true,
+        "must_show_shadowed_routes": true,
+        "must_show_capability_id": true
+      }
+    },
+    {
+      "domain": "world.save_load",
+      "capability_id": "world.save_load.snapshots",
+      "owner_service": "world.api",
+      "engine_gateway": "engine.world.snapshot",
+      "contract": "world.api",
+      "quality_tier": "foundation",
+      "backend_priority": 0,
+      "requires": [
+        "world.backend",
+        "scene.backend"
+      ],
+      "conflicts": [],
+      "fallback_policy": "explicit_profile_only",
+      "diagnostics": {
+        "must_show_active_route": true,
+        "must_show_shadowed_routes": true,
+        "must_show_capability_id": true
+      }
+    },
+    {
+      "domain": "animation",
+      "capability_id": "animation.backend",
+      "owner_service": "animation.api",
+      "engine_gateway": "engine.animation",
+      "contract": "animation.api",
+      "quality_tier": "foundation",
+      "backend_priority": 0,
+      "requires": [],
+      "conflicts": [],
+      "fallback_policy": "explicit_profile_only",
+      "diagnostics": {
+        "must_show_active_route": true,
+        "must_show_shadowed_routes": true,
+        "must_show_capability_id": true
+      }
+    },
+    {
+      "domain": "navigation",
+      "capability_id": "navigation.backend",
+      "owner_service": "navigation.api",
+      "engine_gateway": "engine.navigation",
+      "contract": "navigation.api",
+      "quality_tier": "foundation",
+      "backend_priority": 0,
+      "requires": [],
+      "conflicts": [],
+      "fallback_policy": "explicit_profile_only",
+      "diagnostics": {
+        "must_show_active_route": true,
+        "must_show_shadowed_routes": true,
+        "must_show_capability_id": true
+      }
+    },
+    {
+      "domain": "tags",
+      "capability_id": "tags.registry",
+      "owner_service": "tags.api",
+      "engine_gateway": "engine.tags",
+      "contract": "tags.api",
+      "quality_tier": "foundation",
+      "backend_priority": 0,
+      "requires": [],
+      "conflicts": [],
+      "fallback_policy": "explicit_profile_only",
+      "diagnostics": {
+        "must_show_active_route": true,
+        "must_show_shadowed_routes": true,
+        "must_show_capability_id": true
+      }
+    },
+    {
+      "domain": "tasks",
+      "capability_id": "tasks.backend",
+      "owner_service": "tasks.api",
+      "engine_gateway": "engine.tasks",
+      "contract": "tasks.api",
+      "quality_tier": [
+        "tags.registry"
+      ],
+      "backend_priority": 0,
+      "requires": [],
+      "conflicts": [],
+      "fallback_policy": "explicit_profile_only",
+      "diagnostics": {
+        "must_show_active_route": true,
+        "must_show_shadowed_routes": true,
+        "must_show_capability_id": true
+      }
+    },
+    {
+      "domain": "render.material_shader_graph",
+      "capability_id": "render.material_shader_graph",
+      "owner_service": "render.material_graph.api",
+      "engine_gateway": "engine.render.material_shader_graph",
+      "contract": "render.material_graph.api",
+      "quality_tier": "foundation",
+      "backend_priority": 0,
+      "requires": [
+        "render.backend",
+        "assets.materials.backend"
+      ],
+      "conflicts": [],
+      "fallback_policy": "explicit_profile_only",
+      "diagnostics": {
+        "must_show_active_route": true,
+        "must_show_shadowed_routes": true,
+        "must_show_capability_id": true
+      }
+    },
+    {
+      "domain": "render.shader_variants",
+      "capability_id": "render.shader_variant_registry",
+      "owner_service": "render.shader_variants.api",
+      "engine_gateway": "engine.render.shader_variants",
+      "contract": "render.shader_variants.api",
+      "quality_tier": "foundation",
+      "backend_priority": 0,
+      "requires": [
+        "render.backend",
+        "render.material_shader_graph"
+      ],
+      "conflicts": [],
+      "fallback_policy": "explicit_profile_only",
+      "diagnostics": {
+        "must_show_active_route": true,
+        "must_show_shadowed_routes": true,
+        "must_show_capability_id": true
+      }
+    },
+    {
+      "domain": "render.lighting",
+      "capability_id": "render.lighting_stack",
+      "owner_service": "render.lighting.api",
+      "engine_gateway": "engine.render.lighting",
+      "contract": "render.lighting.api",
+      "quality_tier": "foundation",
+      "backend_priority": 0,
+      "requires": [
+        "render.backend"
+      ],
+      "conflicts": [],
+      "fallback_policy": "explicit_profile_only",
+      "diagnostics": {
+        "must_show_active_route": true,
+        "must_show_shadowed_routes": true,
+        "must_show_capability_id": true
+      }
+    },
+    {
+      "domain": "render.shadows",
+      "capability_id": "render.shadow_system",
+      "owner_service": "render.shadows.api",
+      "engine_gateway": "engine.render.shadows",
+      "contract": "render.shadows.api",
+      "quality_tier": "foundation",
+      "backend_priority": 0,
+      "requires": [
+        "render.backend",
+        "render.lighting_stack"
+      ],
+      "conflicts": [],
+      "fallback_policy": "explicit_profile_only",
+      "diagnostics": {
+        "must_show_active_route": true,
+        "must_show_shadowed_routes": true,
+        "must_show_capability_id": true
+      }
+    },
+    {
+      "domain": "render.postfx",
+      "capability_id": "render.postfx_stack",
+      "owner_service": "render.postfx.api",
+      "engine_gateway": "engine.render.postfx",
+      "contract": "render.postfx.api",
+      "quality_tier": "foundation",
+      "backend_priority": 0,
+      "requires": [
+        "render.backend"
+      ],
+      "conflicts": [],
+      "fallback_policy": "explicit_profile_only",
+      "diagnostics": {
+        "must_show_active_route": true,
+        "must_show_shadowed_routes": true,
+        "must_show_capability_id": true
+      }
+    },
+    {
+      "domain": "render.probes",
+      "capability_id": "render.probes.reflection",
+      "owner_service": "render.probes.api",
+      "engine_gateway": "engine.render.probes",
+      "contract": "render.probes.api",
+      "quality_tier": "foundation",
+      "backend_priority": 0,
+      "requires": [
+        "render.backend",
+        "world.backend"
+      ],
+      "conflicts": [],
+      "fallback_policy": "explicit_profile_only",
+      "diagnostics": {
+        "must_show_active_route": true,
+        "must_show_shadowed_routes": true,
+        "must_show_capability_id": true
+      }
+    },
+    {
+      "domain": "render.vfx",
+      "capability_id": "render.vfx.particles",
+      "owner_service": "render.vfx.api",
+      "engine_gateway": "engine.render.vfx",
+      "contract": "render.vfx.api",
+      "quality_tier": "foundation",
+      "backend_priority": 0,
+      "requires": [
+        "render.backend",
+        "jobs.backend"
+      ],
+      "conflicts": [],
+      "fallback_policy": "explicit_profile_only",
+      "diagnostics": {
+        "must_show_active_route": true,
+        "must_show_shadowed_routes": true,
+        "must_show_capability_id": true
+      }
+    },
+    {
+      "domain": "render.terrain",
+      "capability_id": "render.terrain",
+      "owner_service": "render.terrain.api",
+      "engine_gateway": "engine.render.terrain",
+      "contract": "render.terrain.api",
+      "quality_tier": "foundation",
+      "backend_priority": 0,
+      "requires": [
+        "render.backend",
+        "world.backend"
+      ],
+      "conflicts": [],
+      "fallback_policy": "explicit_profile_only",
+      "diagnostics": {
+        "must_show_active_route": true,
+        "must_show_shadowed_routes": true,
+        "must_show_capability_id": true
+      }
+    },
+    {
+      "domain": "render.foliage",
+      "capability_id": "render.foliage",
+      "owner_service": "render.foliage.api",
+      "engine_gateway": "engine.render.foliage",
+      "contract": "render.foliage.api",
+      "quality_tier": "foundation",
+      "backend_priority": 0,
+      "requires": [
+        "render.backend",
+        "world.backend",
+        "render.terrain"
+      ],
+      "conflicts": [],
+      "fallback_policy": "explicit_profile_only",
+      "diagnostics": {
+        "must_show_active_route": true,
+        "must_show_shadowed_routes": true,
+        "must_show_capability_id": true
+      }
+    },
+    {
+      "domain": "render.lod",
+      "capability_id": "render.lod",
+      "owner_service": "render.lod.api",
+      "engine_gateway": "engine.render.lod",
+      "contract": "render.lod.api",
+      "quality_tier": "foundation",
+      "backend_priority": 0,
+      "requires": [
+        "render.backend"
+      ],
+      "conflicts": [],
+      "fallback_policy": "explicit_profile_only",
+      "diagnostics": {
+        "must_show_active_route": true,
+        "must_show_shadowed_routes": true,
+        "must_show_capability_id": true
+      }
+    },
+    {
+      "domain": "render.occlusion",
+      "capability_id": "render.occlusion",
+      "owner_service": "render.occlusion.api",
+      "engine_gateway": "engine.render.occlusion",
+      "contract": "render.occlusion.api",
+      "quality_tier": "foundation",
+      "backend_priority": 0,
+      "requires": [
+        "render.backend",
+        "render.lod"
+      ],
+      "conflicts": [],
+      "fallback_policy": "explicit_profile_only",
+      "diagnostics": {
+        "must_show_active_route": true,
+        "must_show_shadowed_routes": true,
+        "must_show_capability_id": true
+      }
+    },
+    {
+      "domain": "render.debug",
+      "capability_id": "render.debug.overlays",
+      "owner_service": "render.debug.api",
+      "engine_gateway": "engine.render.debug",
+      "contract": "render.debug.api",
+      "quality_tier": "foundation",
+      "backend_priority": 0,
+      "requires": [
+        "render.backend"
+      ],
+      "conflicts": [],
+      "fallback_policy": "explicit_profile_only",
+      "diagnostics": {
+        "must_show_active_route": true,
+        "must_show_shadowed_routes": true,
+        "must_show_capability_id": true
+      }
+    }
+  ]
+}

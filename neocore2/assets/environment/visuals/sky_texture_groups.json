@@ -1,0 +1,30 @@
+{
+  "schema": "newengine.world.environment.visual_asset_groups.v1",
+  "policy": [
+    "Environment profiles select visual_asset_group_id; they must not repeat individual ytd refs.",
+    "Renderer consumes resolved refs; it does not decide world environment meaning.",
+    "The current inventory has no authored ytd sun_disk entry, so sun disk remains an explicit procedural ref until imported."
+  ],
+  "groups": [
+    {
+      "id": "environment.visuals.game_ready_skydome.v1",
+      "texture_dictionary_ref": "textures/fps/skydome.ytd",
+      "entries": {
+        "sky_texture_ref": "textures/fps/skydome.ytd@starfield",
+        "starfield_texture_ref": "textures/fps/skydome.ytd@starfield",
+        "cloud_density_texture_ref": "textures/fps/skydome.ytd@baseperlinnoise3channel",
+        "cloud_detail_texture_ref": "textures/fps/skydome.ytd@noise16_p",
+        "cloud_dither_texture_ref": "textures/fps/skydome.ytd@dither",
+        "moon_disk_texture_ref": "textures/fps/skydome.ytd@moon_new",
+        "sun_disk_texture_ref": "procedural://engine.world.environment/celestial/sun_disk"
+      },
+      "source_inventory": [
+        "assets/textures/fps/skydome.ytd@baseperlinnoise3channel",
+        "assets/textures/fps/skydome.ytd@dither",
+        "assets/textures/fps/skydome.ytd@moon_new",
+        "assets/textures/fps/skydome.ytd@noise16_p",
+        "assets/textures/fps/skydome.ytd@starfield"
+      ]
+    }
+  ]
+}

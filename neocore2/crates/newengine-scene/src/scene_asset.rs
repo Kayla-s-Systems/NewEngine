@@ -8,7 +8,7 @@ use newengine_ecs::{EntityId, World};
 use newengine_transform::set_parent;
 use newengine_transform_api::{Parent, Transform};
 
-use crate::components::{ActiveCamera, EntityGuid, Name, SceneRoot};
+use crate::components::{ActiveCamera, DefinitionRef, EntityGuid, Name, SceneRoot};
 use crate::guid::{ensure_entity_guid, GuidAllocator};
 use crate::settings::SceneSettings;
 use crate::Scene;
@@ -138,11 +138,14 @@ impl Scene {
             let _ = ensure_entity_guid(world, id);
         }
 
-        // Helper map EntityId -> guid.
+        // Helper maps: native EntityId stays local to the scene runtime; parent links
+        // cross the component boundary as opaque EntityHandle stable ids.
         let mut id_to_guid: newengine_math::collections::FxHashMap<EntityId, u128> = Default::default();
+        let mut handle_to_guid: newengine_math::collections::FxHashMap<u64, u128> = Default::default();
         for id in world.iter_entities() {
             if let Some(g) = world.get::<EntityGuid>(id) {
                 id_to_guid.insert(id, g.0);
+                handle_to_guid.insert(id.stable_u64(), g.0);
             }
         }
 
@@ -174,9 +177,11 @@ impl Scene {
 
             let parent = world
                 .get::<Parent>(id)
-                .and_then(|p| id_to_guid.get(&p.0).copied());
+                .and_then(|p| handle_to_guid.get(&p.0.stable_id).copied());
 
-            if !opts.include_empty_entities && name.is_none() && transform.is_none() {
+            let definition_ref = world.get::<DefinitionRef>(id).map(|r| r.0.clone());
+
+            if !opts.include_empty_entities && name.is_none() && transform.is_none() && definition_ref.is_none() {
                 // Skip entities that carry no authoring signal.
                 continue;
             }
@@ -186,7 +191,7 @@ impl Scene {
                 name,
                 parent,
                 transform,
-                definition_ref: None,
+                definition_ref,
             });
         }
 
@@ -229,6 +234,9 @@ impl Scene {
             }
             if let Some(t) = e.transform {
                 let _ = world.insert(id, t.into_transform());
+            }
+            if let Some(definition_ref) = e.definition_ref.as_ref().map(|it| it.trim()).filter(|it| !it.is_empty()) {
+                let _ = world.insert(id, DefinitionRef(definition_ref.to_owned()));
             }
         }
 

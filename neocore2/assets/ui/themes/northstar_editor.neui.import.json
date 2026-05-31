@@ -1,0 +1,41 @@
+{
+  "schema": "newengine.ui_theme.import.v1",
+  "target_asset": "ui/themes/northstar_editor.neui",
+  "theme_id": "northstar.editor.light",
+  "entry": "editor_light",
+  "style_ref": "ui/themes/northstar_editor.neui@editor_light",
+  "font_dictionary": "ui/fonts/editor.yft",
+  "font_tokens": {
+    "editor.body": "ui/fonts/editor.yft@inter_variable",
+    "editor.title": "ui/fonts/editor.yft@granic_slab_medium",
+    "editor.button": "ui/fonts/editor.yft@inter_variable",
+    "editor.tooltip": "ui/fonts/editor.yft@inter_variable",
+    "brand.display": "ui/fonts/editor.yft@pricedown_display"
+  },
+  "metrics": {
+    "body_px": 11.0,
+    "title_px": 13.0,
+    "secondary_px": 9.5,
+    "row_pitch_px": 18.0,
+    "toolbar_height_px": 34.0,
+    "menu_height_px": 28.0,
+    "status_height_px": 20.0,
+    "panel_radius_px": 7.0
+  },
+  "states": {
+    "normal": { "alpha": 1.0 },
+    "hovered": { "brightness_delta": 0.08, "underline": true },
+    "active": { "accent": true, "brightness_delta": 0.14 },
+    "disabled": { "alpha": 0.38 }
+  },
+  "tooltips": {
+    "delay_ms": 350,
+    "placement": "near_pointer",
+    "max_width_px": 360
+  },
+  "policy": [
+    "theme and interaction states are data tokens resolved by engine.ui",
+    "editor surfaces must not bake provider-specific font names into draw branches",
+    "dock panels publish hover/active/disabled state through UiComponentNode tags"
+  ]
+}

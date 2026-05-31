@@ -23,8 +23,16 @@ use newengine_service_kit::{
     register_engine_gateway_provider_service_best_effort, EngineGatewayProviderDecl, JsonServiceRouter,
 };
 use newengine_ui_api::{
-    UiActionEdge, UiBindingEdge, UiBindingMode, UiBindingPlan, UiCompiledDocument, UiDocumentSource,
-    UiDocumentSourceKind, UiStateSource, UiUpdatePolicy,
+    UiActionEdge, UiBindingEdge, UiBindingMode, UiBindingPlan, UiCompiledDocument,
+    UiComponentLibraryRef, UiComponentTemplate, UiDocumentSource, UiDocumentSourceKind,
+    UiNodeBindingRequest, UiNodeEventRoute, UiNodeEventTrigger, UiNodeRequest,
+    UiNodeTone, UiRuntimeNodeKind, UiSourceSpan, UiStateSource, UiThemeLibraryRef,
+    UiUpdatePolicy, UI_COMPONENT_ACTION, UI_COMPONENT_BUTTON, UI_COMPONENT_CHECKBOX,
+    UI_COMPONENT_EXTERNAL_TEXTURE, UI_COMPONENT_GRID, UI_COMPONENT_INPUT, UI_COMPONENT_LIST,
+    UI_COMPONENT_ROW, UI_COMPONENT_SCROLL_BAR, UI_COMPONENT_SELECT,
+    UI_COMPONENT_SEPARATOR, UI_COMPONENT_SLIDER, UI_COMPONENT_SPACER, UI_COMPONENT_STACK,
+    UI_COMPONENT_SURFACE, UI_COMPONENT_TEXT, UI_COMPONENT_TOGGLE, UI_COMPONENT_TREE,
+    UI_COMPONENT_VIEWPORT,
 };
 use newengine_ui_navigation_api::{
     UiNodeActionRoute, UiNodeNavigationDocument, UiNodeFeedbackEvent, UiNodeFeedbackSeverity, UiNodeNavigationItem, UiNodeNavigationTone,
@@ -161,6 +169,8 @@ pub struct AssetsUiDiagnosticResponse {
     pub document_ref: String,
     pub logical_path: String,
     pub entry: String,
+    pub entry_id: String,
+    pub source_span: UiSourceSpan,
     pub message: String,
     pub warnings: Vec<String>,
 }
@@ -174,6 +184,8 @@ impl Default for AssetsUiDiagnosticResponse {
             document_ref: String::new(),
             logical_path: String::new(),
             entry: String::new(),
+            entry_id: String::new(),
+            source_span: UiSourceSpan::default(),
             message: String::new(),
             warnings: Vec::new(),
         }
@@ -190,7 +202,7 @@ pub fn assets_ui_service_info() -> AssetsUiServiceInfo {
         semantic_owner: ENGINE_ASSETS_UI_SERVICE_ID,
         runtime_owner: newengine_ui_api::ENGINE_UI_SERVICE_ID,
         methods: ASSETS_UI_SERVICE_METHODS,
-        policy: ".neui is NEF8/ListFile with deflate XMLcentral body; consumers receive compiled DTOs by request/response and never parse bytes directly",
+        policy: ".neui is a binary NEF8/ListFile envelope with no raw JSON metadata payload; engine.assets.ui owns semantic decode and consumers receive compiled DTOs",
     }
 }
 
@@ -204,9 +216,9 @@ fn invoke_json(state: &mut AssetsUiRuntimeState, payload: Blob) -> RResult<Blob,
     match method {
         assets_ui_method::COMPILE_DOCUMENT_V1 => {
             let request = serde_json::from_value::<AssetsUiCompileRequest>(request_value).unwrap_or_default();
-            match compile_document(state, request) {
+            match compile_document(state, request.clone()) {
                 Ok(response) => ok_json(response),
-                Err(e) => ok_json(error_response_from_message(e)),
+                Err(e) => ok_json(error_response_from_compile_error(e, &request)),
             }
         }
         assets_ui_method::DOCUMENT_V1 | assets_ui_method::DUMP_XMLCENTRAL_V1 => {
@@ -227,14 +239,19 @@ fn invoke_json(state: &mut AssetsUiRuntimeState, payload: Blob) -> RResult<Blob,
         assets_ui_method::VALIDATE_V1 => {
             let request = serde_json::from_value::<AssetsUiRefRequest>(request_value).unwrap_or_default();
             match load_xmlcentral(state, request) {
-                Ok((xml, _, resolved)) => ok_json(AssetsUiDiagnosticResponse {
-                    ok: true,
-                    document_ref: resolved.document_ref,
-                    logical_path: resolved.logical_path,
-                    entry: resolved.entry,
-                    message: format!("valid .neui XMLcentral bytes={} root={}", xml.len(), root_name(&xml).unwrap_or("unknown")),
-                    ..Default::default()
-                }),
+                Ok((xml, _, resolved)) => {
+                    let source_span = source_span_for_offset(&xml, 0, &resolved.document_ref);
+                    ok_json(AssetsUiDiagnosticResponse {
+                        ok: true,
+                        document_ref: resolved.document_ref,
+                        logical_path: resolved.logical_path,
+                        entry_id: resolved.entry.clone(),
+                        entry: resolved.entry,
+                        source_span,
+                        message: format!("valid binary .neui decoded to XMLcentral bytes={} root={}", xml.len(), root_name(&xml).unwrap_or("unknown")),
+                        ..Default::default()
+                    })
+                },
                 Err(e) => ok_json(error_response_from_message(e)),
             }
         }
@@ -272,7 +289,7 @@ pub fn assets_ui_gateway_service(client: AssetServiceClient) -> newengine_plugin
     )
     .gateway(ENGINE_ASSETS_UI_SERVICE_ID)
     .protocol(ASSETS_UI_RUNTIME_CONTRACT)
-    .features(["neui-nef8-xmlcentral", "compile-document-v1", "ui-node-navigation-dto", "dependency-extraction"])
+    .features(["neui-nef8-binary-envelope", "neui-no-json-runtime-metadata", "compile-document-v1", "ui-node-navigation-dto", "dependency-extraction"])
     .notes("Engine UI asset semantic service. Consumers call engine.assets.ui and receive runtime DTOs; engine.ui owns only live mount/state/input/draw runtime.");
 
     JsonServiceRouter::with_state(ASSETS_UI_SERVICE_ID, AssetsUiRuntimeState::new(client))
@@ -310,7 +327,7 @@ pub fn assets_ui_gateway_service(client: AssetServiceClient) -> newengine_plugin
                 document_ref: resolved.document_ref,
                 logical_path: resolved.logical_path,
                 entry: resolved.entry,
-                message: format!("valid .neui XMLcentral bytes={} root={}", xml.len(), root_name(&xml).unwrap_or("unknown")),
+                message: format!("valid binary .neui decoded to XMLcentral bytes={} root={}", xml.len(), root_name(&xml).unwrap_or("unknown")),
                 ..Default::default()
             })
         })
@@ -362,6 +379,25 @@ fn error_response_from_message(message: String) -> AssetsUiDiagnosticResponse {
     AssetsUiDiagnosticResponse { message, ..Default::default() }
 }
 
+fn error_response_from_compile_error(message: String, request: &AssetsUiCompileRequest) -> AssetsUiDiagnosticResponse {
+    let combined = first_non_empty([request.document_ref.as_str(), request.ui_ref.as_str()]);
+    let (path, entry) = if !combined.trim().is_empty() {
+        split_ref(&combined)
+    } else {
+        (normalize_logical_path(&request.logical_path), normalize_entry(&request.entry))
+    };
+    let entry = if entry.trim().is_empty() { "surface".to_owned() } else { entry };
+    AssetsUiDiagnosticResponse {
+        document_ref: if path.trim().is_empty() { String::new() } else { format!("{}@{}", path, entry) },
+        logical_path: path.clone(),
+        entry: entry.clone(),
+        entry_id: entry,
+        source_span: UiSourceSpan { source_ref: path, line: 0, column: 0 },
+        message,
+        ..Default::default()
+    }
+}
+
 #[derive(Clone, Debug)]
 struct ResolvedUiRef {
     document_ref: String,
@@ -382,10 +418,22 @@ fn compile_document(state: &mut AssetsUiRuntimeState, request: AssetsUiCompileRe
         logical_path: request.logical_path.clone(),
         entry: request.entry.clone(),
     };
-    let (xml, warnings, resolved) = load_xmlcentral(state, ref_request)?;
-    validate_requested_entry(&xml, &resolved.entry)?;
+    let (xml, mut warnings, resolved) = load_xmlcentral(state, ref_request)?;
+    validate_requested_entry(&xml, &resolved.entry).map_err(|err| {
+        let span = source_span_for_named_element(&xml, "Entries", &resolved.document_ref);
+        format!(
+            "{} entry='@{}' {}: {}",
+            resolved.document_ref,
+            resolved.entry,
+            span.display(&resolved.document_ref),
+            err
+        )
+    })?;
 
-    let surface = parse_surface(&xml).ok_or_else(|| format!(".neui '{}' has no <Surface> entry", resolved.document_ref))?;
+    let surface = parse_surface(&xml).ok_or_else(|| {
+        let span = source_span_for_offset(&xml, 0, &resolved.document_ref);
+        format!("{} entry='@{}' {}: .neui document has no <Surface> entry", resolved.document_ref, resolved.entry, span.display(&resolved.document_ref))
+    })?;
     let mut dependencies = extract_dependencies(&xml);
     let inferred_style_ref = request
         .style_ref
@@ -402,6 +450,31 @@ fn compile_document(state: &mut AssetsUiRuntimeState, request: AssetsUiCompileRe
     }
     let style_dependencies = inferred_style_ref.iter().cloned().collect::<Vec<_>>();
     let binding_plan = parse_binding_plan(&xml, &resolved.document_ref, &surface.name);
+    let component_libraries = parse_component_libraries(&xml);
+    let theme_libraries = parse_theme_libraries(&xml, surface.theme.as_deref());
+    let local_component_templates = parse_component_templates(&xml, &resolved.document_ref);
+    let imported_component_templates = resolve_imported_component_templates(state, &component_libraries, &mut warnings);
+    let component_templates = merge_component_templates(imported_component_templates, local_component_templates);
+    let theme_tokens = resolve_theme_token_bundle(state, &theme_libraries, inferred_style_ref.as_deref(), &mut warnings);
+    let mut root = compile_surface_root(&xml, &surface, &resolved.document_ref, inferred_style_ref.as_deref())?;
+    if let Some(tokens) = theme_tokens.as_ref() {
+        root.props.insert("theme_tokens".to_owned(), serde_json::to_value(tokens).unwrap_or(serde_json::Value::Null));
+        root.style_tags.push(format!("density:{}", sanitize_tag(&tokens.density)));
+        root.style_tags.sort();
+        root.style_tags.dedup();
+    }
+    warnings.push(format!(
+        ".neui live root compiled source='{}' entry='@{}' surface='{}' root_node='{}' children={} component_libraries={} theme_libraries={} component_templates={} theme_tokens={}",
+        resolved.document_ref,
+        resolved.entry,
+        surface.name,
+        root.id,
+        root.children.len(),
+        component_libraries.len(),
+        theme_libraries.len(),
+        component_templates.len(),
+        theme_tokens.as_ref().map(|tokens| tokens.theme_id.as_str()).unwrap_or("<none>")
+    ));
     let source = UiDocumentSource {
         kind: request.source_kind,
         document_ref: resolved.document_ref.clone(),
@@ -419,7 +492,13 @@ fn compile_document(state: &mut AssetsUiRuntimeState, request: AssetsUiCompileRe
         style_ref: inferred_style_ref.clone(),
         dependencies: dependencies.clone(),
         style_dependencies: style_dependencies.clone(),
+        component_libraries,
+        theme_libraries,
+        component_templates,
+        root: Some(root),
         binding_plan,
+        validation: Default::default(),
+        dependency_report: Default::default(),
     };
     let navigation_document = match parse_navigation_document(&xml)? {
         Some(document) => Some(document),
@@ -596,16 +675,37 @@ fn validate_requested_entry(xml: &str, entry: &str) -> Result<(), String> {
 #[derive(Clone, Debug)]
 struct SurfaceInfo {
     name: String,
+    kind: String,
     root: String,
     theme: Option<String>,
+    modal: bool,
+    z_order: i32,
+}
+
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+#[serde(default)]
+struct ThemeTokenBundle {
+    theme_ref: String,
+    theme_id: String,
+    density: String,
+    tokens: BTreeMap<String, String>,
+    colors: BTreeMap<String, [u8; 4]>,
+    metrics: BTreeMap<String, f32>,
+    font_tokens: BTreeMap<String, String>,
 }
 
 fn parse_surface(xml: &str) -> Option<SurfaceInfo> {
     let element = first_element(xml, "Surface")?;
     let name = attr_value(&element.open, "name").unwrap_or_else(|| "engine.unknown".to_owned());
+    let kind = attr_value(&element.open, "kind").unwrap_or_else(|| "surface".to_owned());
     let root = attr_value(&element.open, "root").unwrap_or_else(|| "layout.main".to_owned());
     let theme = attr_value(&element.open, "theme").filter(|value| !value.trim().is_empty());
-    Some(SurfaceInfo { name, root, theme })
+    let modal = bool_attr(&element.open, "modal");
+    let z_order = attr_value(&element.open, "z_order")
+        .or_else(|| attr_value(&element.open, "z"))
+        .and_then(|value| value.parse().ok())
+        .unwrap_or(50);
+    Some(SurfaceInfo { name, kind, root, theme, modal, z_order })
 }
 
 fn extract_dependencies(xml: &str) -> Vec<String> {
@@ -677,6 +777,654 @@ fn update_policy_from_attr(value: Option<&str>) -> UiUpdatePolicy {
         "manual" => UiUpdatePolicy::Manual,
         _ => UiUpdatePolicy::OnChange,
     }
+}
+
+fn parse_component_libraries(xml: &str) -> Vec<UiComponentLibraryRef> {
+    let mut libraries = BTreeMap::<String, Vec<String>>::new();
+    for element in elements(xml, "ComponentRef") {
+        let Some(reference) = attr_value(&element.open, "ref").filter(|it| !it.trim().is_empty()) else {
+            continue;
+        };
+        let (library_ref, entry) = split_ref(&reference);
+        if entry.trim().is_empty() {
+            libraries.entry(library_ref).or_default();
+        } else {
+            libraries.entry(library_ref).or_default().push(entry);
+        }
+    }
+    libraries
+        .into_iter()
+        .map(|(library_ref, mut entries)| {
+            entries.sort();
+            entries.dedup();
+            UiComponentLibraryRef { library_ref, entries }
+        })
+        .collect()
+}
+
+fn parse_theme_libraries(xml: &str, surface_theme: Option<&str>) -> Vec<UiThemeLibraryRef> {
+    let mut themes = BTreeMap::<String, Vec<String>>::new();
+    if let Some(theme) = surface_theme.filter(|it| !it.trim().is_empty()) {
+        let (theme_ref, entry) = split_ref(theme);
+        if entry.trim().is_empty() {
+            themes.entry(theme_ref).or_default();
+        } else {
+            themes.entry(theme_ref).or_default().push(entry);
+        }
+    }
+    for element in elements(xml, "ThemeRef") {
+        let Some(reference) = attr_value(&element.open, "ref").filter(|it| !it.trim().is_empty()) else {
+            continue;
+        };
+        let (theme_ref, entry) = split_ref(&reference);
+        if entry.trim().is_empty() {
+            themes.entry(theme_ref).or_default();
+        } else {
+            themes.entry(theme_ref).or_default().push(entry);
+        }
+    }
+    themes
+        .into_iter()
+        .map(|(theme_ref, mut entries)| {
+            entries.sort();
+            entries.dedup();
+            UiThemeLibraryRef { theme_ref, entries }
+        })
+        .collect()
+}
+
+fn parse_component_templates(xml: &str, source_ref: &str) -> Vec<UiComponentTemplate> {
+    let mut templates = Vec::new();
+    for component in elements(xml, "Component") {
+        let id = attr_value(&component.open, "id")
+            .or_else(|| attr_value(&component.open, "name"))
+            .unwrap_or_default();
+        if id.trim().is_empty() {
+            continue;
+        }
+        let Some(root_element) = direct_child_elements(&component.inner).into_iter().find(|child| !is_metadata_element(&child.name)) else {
+            continue;
+        };
+        let root = parse_ui_node_element(xml, &root_element, source_ref, 0, 0)
+            .unwrap_or_else(|| UiNodeRequest::new(format!("{id}.root"), UiRuntimeNodeKind::Panel));
+        let required_props = attr_value(&component.open, "required_props")
+            .unwrap_or_default()
+            .split(|ch: char| ch == ',' || ch.is_ascii_whitespace())
+            .filter(|it| !it.trim().is_empty())
+            .map(str::to_owned)
+            .collect();
+        templates.push(UiComponentTemplate { id, source_ref: source_ref.to_owned(), required_props, root });
+    }
+    templates
+}
+
+fn resolve_imported_component_templates(
+    state: &mut AssetsUiRuntimeState,
+    libraries: &[UiComponentLibraryRef],
+    warnings: &mut Vec<String>,
+) -> Vec<UiComponentTemplate> {
+    let mut out = Vec::new();
+    for library in libraries {
+        if library.library_ref.trim().is_empty() {
+            continue;
+        }
+        let request = AssetsUiRefRequest {
+            document_ref: library.library_ref.clone(),
+            ..Default::default()
+        };
+        match load_xmlcentral(state, request) {
+            Ok((xml, _, resolved)) => {
+                let mut templates = parse_component_templates(&xml, &resolved.document_ref);
+                if !library.entries.is_empty() {
+                    templates.retain(|template| library.entries.iter().any(|entry| entry == &template.id));
+                }
+                warnings.push(format!(
+                    ".neui component library resolved ref='{}' templates={}",
+                    resolved.document_ref,
+                    templates.len()
+                ));
+                out.extend(templates);
+            }
+            Err(err) => warnings.push(format!(
+                ".neui component library unresolved ref='{}' err='{}'",
+                library.library_ref, err
+            )),
+        }
+    }
+    out
+}
+
+fn merge_component_templates(
+    imported: Vec<UiComponentTemplate>,
+    local: Vec<UiComponentTemplate>,
+) -> Vec<UiComponentTemplate> {
+    let mut by_id = BTreeMap::<String, UiComponentTemplate>::new();
+    for template in imported.into_iter().chain(local.into_iter()) {
+        if template.id.trim().is_empty() {
+            continue;
+        }
+        by_id.insert(template.id.clone(), template);
+    }
+    by_id.into_values().collect()
+}
+
+fn resolve_theme_token_bundle(
+    state: &mut AssetsUiRuntimeState,
+    libraries: &[UiThemeLibraryRef],
+    fallback_ref: Option<&str>,
+    warnings: &mut Vec<String>,
+) -> Option<ThemeTokenBundle> {
+    let mut resolved = ThemeTokenBundle::default();
+    for library in libraries {
+        if library.theme_ref.trim().is_empty() {
+            continue;
+        }
+        let request = AssetsUiRefRequest {
+            document_ref: library.theme_ref.clone(),
+            ..Default::default()
+        };
+        match load_xmlcentral(state, request) {
+            Ok((xml, _, resolved_ref)) => {
+                let bundle = parse_theme_tokens(&xml, &resolved_ref.document_ref, &library.entries);
+                if let Some(bundle) = bundle {
+                    merge_theme_tokens(&mut resolved, bundle);
+                    warnings.push(format!(
+                        ".neui theme library resolved ref='{}' density='{}' tokens={}",
+                        resolved_ref.document_ref,
+                        resolved.density,
+                        resolved.tokens.len()
+                    ));
+                } else {
+                    warnings.push(format!(".neui theme library contains no Theme entry ref='{}'", resolved_ref.document_ref));
+                }
+            }
+            Err(err) => warnings.push(format!(
+                ".neui theme library unresolved ref='{}' err='{}'",
+                library.theme_ref, err
+            )),
+        }
+    }
+    if resolved.theme_ref.trim().is_empty() {
+        if let Some(reference) = fallback_ref.filter(|it| !it.trim().is_empty()) {
+            resolved.theme_ref = reference.to_owned();
+            resolved.theme_id = reference.to_owned();
+            resolved.density = "normal".to_owned();
+            return Some(resolved);
+        }
+        return None;
+    }
+    Some(resolved)
+}
+
+fn parse_theme_tokens(xml: &str, source_ref: &str, entries: &[String]) -> Option<ThemeTokenBundle> {
+    let themes = elements(xml, "Theme");
+    let selected = if entries.is_empty() {
+        themes.into_iter().next()
+    } else {
+        themes
+            .into_iter()
+            .find(|theme| attr_value(&theme.open, "name").map(|name| entries.iter().any(|entry| entry == &name)).unwrap_or(false))
+    }?;
+
+    let mut bundle = ThemeTokenBundle {
+        theme_ref: source_ref.to_owned(),
+        theme_id: attr_value(&selected.open, "id")
+            .or_else(|| attr_value(&selected.open, "theme_id"))
+            .or_else(|| attr_value(&selected.open, "name"))
+            .unwrap_or_else(|| source_ref.to_owned()),
+        density: attr_value(&selected.open, "density").unwrap_or_else(|| "normal".to_owned()),
+        ..Default::default()
+    };
+
+    for token in elements(&selected.inner, "Token") {
+        let Some(name) = attr_value(&token.open, "name").filter(|it| !it.trim().is_empty()) else { continue; };
+        let value = attr_value(&token.open, "value")
+            .or_else(|| attr_value(&token.open, "ref"))
+            .unwrap_or_default();
+        insert_theme_token(&mut bundle, &name, &value);
+    }
+    for color in elements(&selected.inner, "Color") {
+        if let (Some(name), Some(value)) = (attr_value(&color.open, "name"), attr_value(&color.open, "value")) {
+            insert_theme_token(&mut bundle, &format!("color.{name}"), &value);
+        }
+    }
+    for metric in elements(&selected.inner, "Metric") {
+        if let (Some(name), Some(value)) = (attr_value(&metric.open, "name"), attr_value(&metric.open, "value")) {
+            insert_theme_token(&mut bundle, &format!("metric.{name}"), &value);
+        }
+    }
+    for font in elements(&selected.inner, "FontToken") {
+        if let (Some(name), Some(value)) = (attr_value(&font.open, "name"), attr_value(&font.open, "ref").or_else(|| attr_value(&font.open, "value"))) {
+            insert_theme_token(&mut bundle, &format!("font.{name}"), &value);
+        }
+    }
+    Some(bundle)
+}
+
+fn insert_theme_token(bundle: &mut ThemeTokenBundle, name: &str, value: &str) {
+    let name = name.trim().to_owned();
+    let value = value.trim().to_owned();
+    if name.is_empty() {
+        return;
+    }
+    if name == "density" || name == "density.mode" {
+        if !value.is_empty() { bundle.density = value.clone(); }
+    }
+    if let Some(color) = parse_hex_rgba(&value) {
+        if name.starts_with("color.") {
+            bundle.colors.insert(name.clone(), color);
+        }
+    }
+    if name.starts_with("metric.") {
+        if let Ok(number) = value.parse::<f32>() {
+            bundle.metrics.insert(name.trim_start_matches("metric.").to_owned(), number);
+        }
+    }
+    if name.starts_with("font.") && !value.is_empty() {
+        bundle.font_tokens.insert(name.trim_start_matches("font.").to_owned(), value.clone());
+    }
+    bundle.tokens.insert(name, value);
+}
+
+fn merge_theme_tokens(target: &mut ThemeTokenBundle, source: ThemeTokenBundle) {
+    if !source.theme_ref.trim().is_empty() { target.theme_ref = source.theme_ref; }
+    if !source.theme_id.trim().is_empty() { target.theme_id = source.theme_id; }
+    if !source.density.trim().is_empty() { target.density = source.density; }
+    target.tokens.extend(source.tokens);
+    target.colors.extend(source.colors);
+    target.metrics.extend(source.metrics);
+    target.font_tokens.extend(source.font_tokens);
+}
+
+fn parse_hex_rgba(value: &str) -> Option<[u8; 4]> {
+    let hex = value.trim().trim_start_matches('#');
+    let read = |range: std::ops::Range<usize>| u8::from_str_radix(hex.get(range)?, 16).ok();
+    match hex.len() {
+        6 => Some([read(0..2)?, read(2..4)?, read(4..6)?, 255]),
+        8 => Some([read(0..2)?, read(2..4)?, read(4..6)?, read(6..8)?]),
+        _ => None,
+    }
+}
+
+fn compile_surface_root(xml: &str, surface: &SurfaceInfo, source_ref: &str, style_ref: Option<&str>) -> Result<UiNodeRequest, String> {
+    let layout = layout_by_name(xml, &surface.root)
+        .or_else(|| first_element(xml, "Layout"))
+        .ok_or_else(|| {
+            let span = source_span_for_named_element(xml, "Surface", source_ref);
+            format!(
+                "{} entry='@{}' {}: .neui surface '{}' points to missing layout '{}'",
+                source_ref,
+                surface.root,
+                span.display(source_ref),
+                surface.name,
+                surface.root
+            )
+        })?;
+
+    let mut root = UiNodeRequest::new(surface.name.clone(), UiRuntimeNodeKind::Surface);
+    root.component_id = UI_COMPONENT_SURFACE.to_owned();
+    root.role = attr_value(&layout.open, "role").unwrap_or_else(|| "surface".to_owned());
+    root.text = attr_value(&layout.open, "title").unwrap_or_else(|| surface.name.clone());
+    root.visible = !bool_attr(&layout.open, "hidden");
+    root.interactive = false;
+    root.source_span = Some(source_span_for_open(xml, &layout.open, source_ref));
+    root.style_tags.extend(["surface-root".to_owned(), format!("surface:{}", sanitize_tag(&surface.name))]);
+    if !surface.kind.trim().is_empty() {
+        root.style_tags.push(format!("surface-kind:{}", sanitize_tag(&surface.kind)));
+    }
+    root.props.insert("surface_id".to_owned(), serde_json::Value::String(surface.name.clone()));
+    root.props.insert("surface_kind".to_owned(), serde_json::Value::String(surface.kind.clone()));
+    root.props.insert("root_layout".to_owned(), serde_json::Value::String(surface.root.clone()));
+    root.props.insert("modal".to_owned(), serde_json::Value::Bool(surface.modal));
+    root.props.insert("z_order".to_owned(), serde_json::json!(surface.z_order));
+    if let Some(theme) = surface.theme.as_ref().filter(|it| !it.trim().is_empty()) {
+        root.props.insert("theme_ref".to_owned(), serde_json::Value::String(theme.clone()));
+    }
+    if let Some(style_ref) = style_ref.filter(|it| !it.trim().is_empty()) {
+        root.props.insert("style_ref".to_owned(), serde_json::Value::String(style_ref.to_owned()));
+    }
+    root.children = parse_layout_children(xml, &layout, source_ref, 0);
+    if root.children.is_empty() {
+        let span = source_span_for_open(xml, &layout.open, source_ref);
+        return Err(format!(
+            "{} entry='@{}' {}: .neui surface '{}' layout '{}' compiled to an empty root",
+            source_ref,
+            surface.root,
+            span.display(source_ref),
+            surface.name,
+            surface.root
+        ));
+    }
+    Ok(root)
+}
+
+fn parse_layout_children(xml: &str, layout: &XmlElement, source_ref: &str, depth: usize) -> Vec<UiNodeRequest> {
+    direct_child_elements(&layout.inner)
+        .into_iter()
+        .enumerate()
+        .filter_map(|(idx, child)| parse_ui_node_element(xml, &child, source_ref, idx, depth + 1))
+        .collect()
+}
+
+fn parse_ui_node_element(xml: &str, element: &XmlElement, source_ref: &str, generated_index: usize, depth: usize) -> Option<UiNodeRequest> {
+    if is_metadata_element(&element.name) || depth > 48 {
+        return None;
+    }
+
+    let (kind, mut implicit_tags) = kind_for_neui_tag(&element.name);
+    let id = attr_value(&element.open, "id")
+        .or_else(|| attr_value(&element.open, "name"))
+        .unwrap_or_else(|| format!("{}.{}", sanitize_tag(&element.name), generated_index));
+    let mut node = UiNodeRequest::new(id.clone(), kind);
+    node.component_id = attr_value(&element.open, "component")
+        .or_else(|| attr_value(&element.open, "template"))
+        .unwrap_or_else(|| kind.default_component_id().to_owned());
+    node.role = attr_value(&element.open, "role").unwrap_or_else(|| sanitize_tag(&element.name));
+    node.source_span = Some(source_span_for_open(xml, &element.open, source_ref));
+    node.text = attr_value(&element.open, "text")
+        .or_else(|| attr_value(&element.open, "label"))
+        .or_else(|| attr_value(&element.open, "title"))
+        .or_else(|| attr_value(&element.open, "value").filter(|_| kind == UiRuntimeNodeKind::Text))
+        .unwrap_or_default();
+    node.value = attr_value(&element.open, "value").filter(|_| kind != UiRuntimeNodeKind::Text);
+    node.detail = attr_value(&element.open, "detail").or_else(|| attr_value(&element.open, "subtitle"));
+    node.icon = attr_value(&element.open, "icon").or_else(|| attr_value(&element.open, "texture"));
+    node.font_token = attr_value(&element.open, "font").or_else(|| attr_value(&element.open, "font_token"));
+    node.tooltip = attr_value(&element.open, "tooltip");
+    node.visible = !bool_attr(&element.open, "hidden") && !matches!(attr_value(&element.open, "visible").as_deref(), Some("false") | Some("0") | Some("no"));
+    node.enabled = !matches!(attr_value(&element.open, "enabled").as_deref(), Some("false") | Some("0") | Some("no"));
+    node.interactive = bool_attr(&element.open, "interactive") || is_intrinsically_interactive(kind);
+    node.tone = tone_from_node_attrs(&element.open);
+
+    node.style_tags.extend(class_tags(&element.open));
+    node.style_tags.push(sanitize_tag(&element.name));
+    node.style_tags.append(&mut implicit_tags);
+    node.style_tags.sort();
+    node.style_tags.dedup();
+
+    for (key, value) in parse_attrs(&element.open) {
+        if is_structural_attr(&key) {
+            continue;
+        }
+        node.props.insert(key, serde_json::Value::String(xml_unescape(&value)));
+    }
+
+    for (idx, child) in direct_child_elements(&element.inner).into_iter().enumerate() {
+        match child.name.as_str() {
+            "Bind" => {
+                let binding = binding_from_element(&child);
+                if node.text.trim().is_empty() && binding.property == "text" {
+                    if let Some(value) = binding.fallback.as_str().filter(|it| !it.trim().is_empty()) {
+                        node.text = value.to_owned();
+                    }
+                }
+                if node.value.is_none() && binding.property == "value" {
+                    if let Some(value) = binding.fallback.as_str().filter(|it| !it.trim().is_empty()) {
+                        node.value = Some(value.to_owned());
+                    }
+                }
+                node.bindings.push(binding);
+            }
+            "Event" => {
+                let route = event_route_from_element(&child);
+                if node.action_id.is_none() && route.trigger == UiNodeEventTrigger::Click && !route.action_id.trim().is_empty() {
+                    node.action_id = Some(route.action_id.clone());
+                    node.interactive = true;
+                }
+                node.events.push(route);
+            }
+            "Text" if matches!(kind, UiRuntimeNodeKind::Button | UiRuntimeNodeKind::Action) && attr_value(&child.open, "id").is_none() => {
+                if node.text.trim().is_empty() {
+                    node.text = attr_value(&child.open, "value")
+                        .or_else(|| attr_value(&child.open, "text"))
+                        .or_else(|| attr_value(&child.open, "label"))
+                        .unwrap_or_default();
+                }
+            }
+            _ => {
+                if let Some(child_node) = parse_ui_node_element(xml, &child, source_ref, idx, depth + 1) {
+                    node.children.push(child_node);
+                }
+            }
+        }
+    }
+
+    if let Some(use_layout) = attr_value(&element.open, "use").filter(|it| !it.trim().is_empty()) {
+        if let Some(layout) = layout_by_name(xml, &use_layout) {
+            node.children.extend(parse_layout_children(xml, &layout, source_ref, depth + 1));
+            node.props.insert("use".to_owned(), serde_json::Value::String(use_layout));
+        }
+    }
+
+    if node.action_id.is_none() {
+        node.action_id = attr_value(&element.open, "action")
+            .or_else(|| attr_value(&element.open, "action_id"))
+            .or_else(|| attr_value(&element.open, "command"));
+        if node.action_id.is_some() {
+            node.interactive = true;
+        }
+    }
+    if matches!(kind, UiRuntimeNodeKind::Action) && node.action_id.is_none() {
+        let value = node.value.clone().unwrap_or_else(|| id.clone());
+        node.action_id = Some(format!("ui.select.{value}"));
+        node.interactive = true;
+    }
+    if node.text.trim().is_empty() && matches!(kind, UiRuntimeNodeKind::Action | UiRuntimeNodeKind::Button) {
+        node.text = id.clone();
+    }
+
+    Some(node)
+}
+
+fn layout_by_name(xml: &str, name: &str) -> Option<XmlElement> {
+    elements(xml, "Layout")
+        .into_iter()
+        .find(|layout| attr_value(&layout.open, "name").as_deref() == Some(name))
+}
+
+fn is_metadata_element(name: &str) -> bool {
+    matches!(
+        name,
+        "Entries" | "Entry" | "Surface" | "Dependencies" | "ThemeRef" | "ComponentRef" | "TextureRef" | "FontRef"
+            | "SoundRef" | "BindingGraph" | "StateSource" | "Bind" | "ActionMap" | "Action" | "Event" | "Payload" | "Slot"
+            | "UiNodeNavigationDocument" | "Page" | "Footer" | "Line" | "NavLeft" | "NavRight" | "Back"
+    )
+}
+
+fn kind_for_neui_tag(name: &str) -> (UiRuntimeNodeKind, Vec<String>) {
+    let normalized = sanitize_tag(name).replace('-', "");
+    match normalized.as_str() {
+        "surface" => (UiRuntimeNodeKind::Surface, vec![UI_COMPONENT_SURFACE.to_owned()]),
+        "panel" | "card" | "statuscard" | "metriccard" | "warningcard" | "plugincard" | "propertycard" => {
+            (UiRuntimeNodeKind::Panel, vec![sanitize_tag(name)])
+        }
+        "stack" => (UiRuntimeNodeKind::Stack, vec![UI_COMPONENT_STACK.to_owned()]),
+        "row" => (UiRuntimeNodeKind::Row, vec![UI_COMPONENT_ROW.to_owned()]),
+        "column" | "col" => (UiRuntimeNodeKind::Column, vec!["column".to_owned()]),
+        "grid" => (UiRuntimeNodeKind::Grid, vec![UI_COMPONENT_GRID.to_owned()]),
+        "text" | "label" => (UiRuntimeNodeKind::Text, vec![UI_COMPONENT_TEXT.to_owned()]),
+        "button" => (UiRuntimeNodeKind::Button, vec![UI_COMPONENT_BUTTON.to_owned()]),
+        "action" | "option" | "item" | "selectitem" | "dropdownitem" | "menuitem" => {
+            (UiRuntimeNodeKind::Action, vec![UI_COMPONENT_ACTION.to_owned(), "select-option".to_owned(), "option".to_owned()])
+        }
+        "input" | "textinput" | "field" | "search" => (UiRuntimeNodeKind::Input, vec![UI_COMPONENT_INPUT.to_owned()]),
+        "checkbox" | "check" => (UiRuntimeNodeKind::Checkbox, vec![UI_COMPONENT_CHECKBOX.to_owned()]),
+        "toggle" | "switch" => (UiRuntimeNodeKind::Toggle, vec![UI_COMPONENT_TOGGLE.to_owned()]),
+        "slider" | "progress" | "progressbar" => (UiRuntimeNodeKind::Slider, vec![UI_COMPONENT_SLIDER.to_owned(), normalized]),
+        "scrollbar" => (UiRuntimeNodeKind::ScrollBar, vec![UI_COMPONENT_SCROLL_BAR.to_owned()]),
+        "select" | "dropdown" | "combobox" => (UiRuntimeNodeKind::Select, vec![UI_COMPONENT_SELECT.to_owned()]),
+        "separator" | "divider" => (UiRuntimeNodeKind::Separator, vec![UI_COMPONENT_SEPARATOR.to_owned()]),
+        "list" | "propertygrid" => (UiRuntimeNodeKind::List, vec![UI_COMPONENT_LIST.to_owned(), sanitize_tag(name)]),
+        "tree" => (UiRuntimeNodeKind::Tree, vec![UI_COMPONENT_TREE.to_owned()]),
+        "split" | "splitter" => (UiRuntimeNodeKind::Split, vec!["split".to_owned()]),
+        "viewport" => (UiRuntimeNodeKind::Viewport, vec![UI_COMPONENT_VIEWPORT.to_owned()]),
+        "image" | "texture" | "externaltexture" | "icon" => (UiRuntimeNodeKind::ExternalTexture, vec![UI_COMPONENT_EXTERNAL_TEXTURE.to_owned()]),
+        "spacer" => (UiRuntimeNodeKind::Spacer, vec![UI_COMPONENT_SPACER.to_owned()]),
+        _ => (UiRuntimeNodeKind::Panel, vec!["custom".to_owned(), sanitize_tag(name)]),
+    }
+}
+
+fn is_intrinsically_interactive(kind: UiRuntimeNodeKind) -> bool {
+    matches!(
+        kind,
+        UiRuntimeNodeKind::Action
+            | UiRuntimeNodeKind::Button
+            | UiRuntimeNodeKind::Input
+            | UiRuntimeNodeKind::Checkbox
+            | UiRuntimeNodeKind::Toggle
+            | UiRuntimeNodeKind::Slider
+            | UiRuntimeNodeKind::ScrollBar
+            | UiRuntimeNodeKind::Select
+            | UiRuntimeNodeKind::List
+            | UiRuntimeNodeKind::Tree
+            | UiRuntimeNodeKind::Split
+            | UiRuntimeNodeKind::Viewport
+    )
+}
+
+fn binding_from_element(element: &XmlElement) -> UiNodeBindingRequest {
+    let source = attr_value(&element.open, "source").unwrap_or_default();
+    let (source_id, path) = if let Some((source_id, path)) = source.split_once('.') {
+        (source_id.to_owned(), path.to_owned())
+    } else {
+        (String::new(), source.clone())
+    };
+    UiNodeBindingRequest {
+        property: attr_value(&element.open, "property").unwrap_or_else(|| "value".to_owned()),
+        source: source_id,
+        path,
+        mode: attr_value(&element.open, "mode").unwrap_or_else(|| "read".to_owned()),
+        fallback: attr_value(&element.open, "fallback").map(json_value_from_attr).unwrap_or(serde_json::Value::Null),
+    }
+}
+
+fn event_route_from_element(element: &XmlElement) -> UiNodeEventRoute {
+    let mut payload = serde_json::Map::new();
+    if let Some(payload_element) = first_element(&element.inner, "Payload") {
+        for (key, value) in parse_attrs(&payload_element.open) {
+            payload.insert(key, serde_json::Value::String(xml_unescape(&value)));
+        }
+    }
+    UiNodeEventRoute {
+        trigger: trigger_from_attr(attr_value(&element.open, "trigger").as_deref()),
+        action_id: attr_value(&element.open, "action")
+            .or_else(|| attr_value(&element.open, "action_id"))
+            .or_else(|| attr_value(&element.open, "id"))
+            .unwrap_or_default(),
+        target_gateway: attr_value(&element.open, "target").unwrap_or_else(|| newengine_ui_api::ENGINE_UI_SERVICE_ID.to_owned()),
+        method: attr_value(&element.open, "method").unwrap_or_else(|| newengine_ui_api::UI_SERVICE_METHOD_DISPATCH_ACTION_V1.to_owned()),
+        payload: serde_json::Value::Object(payload),
+    }
+}
+
+fn trigger_from_attr(value: Option<&str>) -> UiNodeEventTrigger {
+    match value.unwrap_or_default().trim().to_ascii_lowercase().as_str() {
+        "hover_enter" | "mouseenter" => UiNodeEventTrigger::HoverEnter,
+        "hover_exit" | "mouseleave" => UiNodeEventTrigger::HoverExit,
+        "press" | "pointer_down" => UiNodeEventTrigger::Press,
+        "release" | "pointer_up" => UiNodeEventTrigger::Release,
+        "double_click" | "dblclick" => UiNodeEventTrigger::DoubleClick,
+        "focus" => UiNodeEventTrigger::Focus,
+        "blur" => UiNodeEventTrigger::Blur,
+        "value_changed" | "change" => UiNodeEventTrigger::ValueChanged,
+        "drag_start" => UiNodeEventTrigger::DragStart,
+        "drag_move" => UiNodeEventTrigger::DragMove,
+        "drag_end" => UiNodeEventTrigger::DragEnd,
+        "context_menu" => UiNodeEventTrigger::ContextMenu,
+        _ => UiNodeEventTrigger::Click,
+    }
+}
+
+fn tone_from_node_attrs(open: &str) -> UiNodeTone {
+    let tone = attr_value(open, "tone").unwrap_or_default().to_ascii_lowercase();
+    let classes = attr_value(open, "class").unwrap_or_default().to_ascii_lowercase();
+    if tone == "danger" || classes.contains("danger") {
+        UiNodeTone::Danger
+    } else if tone == "accent" || tone == "primary" || classes.contains("primary") || classes.contains("accent") {
+        UiNodeTone::Accent
+    } else if tone == "disabled" || classes.contains("disabled") {
+        UiNodeTone::Disabled
+    } else {
+        UiNodeTone::Normal
+    }
+}
+
+fn class_tags(open: &str) -> Vec<String> {
+    let mut tags = Vec::new();
+    for token in attr_value(open, "class").unwrap_or_default().split_whitespace() {
+        let tag = sanitize_tag(token);
+        if tag.is_empty() {
+            continue;
+        }
+        tags.push(tag.clone());
+        for prefix in ["button-", "ui-", "aurelia-", "dark-", "light-"] {
+            if let Some(rest) = tag.strip_prefix(prefix).filter(|it| !it.is_empty()) {
+                tags.push(rest.to_owned());
+            }
+        }
+    }
+    tags.sort();
+    tags.dedup();
+    tags
+}
+
+fn sanitize_tag(value: &str) -> String {
+    value
+        .trim()
+        .chars()
+        .map(|ch| if ch.is_ascii_alphanumeric() { ch.to_ascii_lowercase() } else { '-' })
+        .collect::<String>()
+        .trim_matches('-')
+        .to_owned()
+}
+
+fn source_span_for_named_element(xml: &str, name: &str, source_ref: &str) -> UiSourceSpan {
+    first_element(xml, name)
+        .map(|element| source_span_for_open(xml, &element.open, source_ref))
+        .unwrap_or_else(|| source_span_for_offset(xml, 0, source_ref))
+}
+
+fn source_span_for_open(xml: &str, open: &str, source_ref: &str) -> UiSourceSpan {
+    let offset = xml.find(open).unwrap_or(0);
+    source_span_for_offset(xml, offset, source_ref)
+}
+
+fn source_span_for_offset(xml: &str, offset: usize, source_ref: &str) -> UiSourceSpan {
+    let mut line = 1u32;
+    let mut column = 1u32;
+    for ch in xml[..offset.min(xml.len())].chars() {
+        if ch == '\n' {
+            line = line.saturating_add(1);
+            column = 1;
+        } else {
+            column = column.saturating_add(1);
+        }
+    }
+    UiSourceSpan { source_ref: source_ref.to_owned(), line, column }
+}
+
+fn json_value_from_attr(value: String) -> serde_json::Value {
+    let trimmed = value.trim();
+    if trimmed.eq_ignore_ascii_case("true") {
+        serde_json::Value::Bool(true)
+    } else if trimmed.eq_ignore_ascii_case("false") {
+        serde_json::Value::Bool(false)
+    } else if let Ok(number) = trimmed.parse::<i64>() {
+        serde_json::Value::Number(number.into())
+    } else if let Ok(number) = trimmed.parse::<f64>() {
+        serde_json::Number::from_f64(number).map(serde_json::Value::Number).unwrap_or_else(|| serde_json::Value::String(value))
+    } else {
+        serde_json::Value::String(value)
+    }
+}
+
+fn is_structural_attr(key: &str) -> bool {
+    matches!(
+        key,
+        "id" | "name" | "class" | "role" | "text" | "label" | "title" | "detail" | "subtitle" | "value" | "icon" | "texture"
+            | "font" | "font_token" | "tooltip" | "hidden" | "visible" | "enabled" | "interactive" | "tone" | "action"
+            | "action_id" | "command" | "use" | "component" | "template"
+    )
 }
 
 
@@ -1035,6 +1783,81 @@ fn elements(xml: &str, name: &str) -> Vec<XmlElement> {
     out
 }
 
+fn direct_child_elements(xml: &str) -> Vec<XmlElement> {
+    let mut out = Vec::new();
+    let mut offset = 0usize;
+    while let Some(start_rel) = xml[offset..].find('<') {
+        let start = offset + start_rel;
+        let Some(next) = xml.as_bytes().get(start + 1).copied() else { break; };
+        if matches!(next, b'/' | b'!' | b'?') {
+            offset = xml[start..].find('>').map(|end| start + end + 1).unwrap_or(xml.len());
+            continue;
+        }
+        let Some(open_end_rel) = xml[start..].find('>') else { break; };
+        let open_end = start + open_end_rel;
+        let open = &xml[start..=open_end];
+        let Some(name) = element_name_from_open(open) else {
+            offset = open_end + 1;
+            continue;
+        };
+        let self_closing = open.trim_end().ends_with("/>");
+        if self_closing {
+            out.push(XmlElement { name, open: open.to_owned(), inner: String::new() });
+            offset = open_end + 1;
+            continue;
+        }
+        let Some((close_start, close_end)) = matching_close_tag(xml, &name, open_end + 1) else { break; };
+        out.push(XmlElement {
+            name,
+            open: open.to_owned(),
+            inner: xml[open_end + 1..close_start].to_owned(),
+        });
+        offset = close_end;
+    }
+    out
+}
+
+fn element_name_from_open(open: &str) -> Option<String> {
+    let rest = open.trim_start().strip_prefix('<')?.trim_start();
+    let name_end = rest.find(|c: char| c.is_ascii_whitespace() || c == '>' || c == '/')?;
+    Some(rest[..name_end].to_owned())
+}
+
+fn matching_close_tag(xml: &str, name: &str, from: usize) -> Option<(usize, usize)> {
+    let open_token = format!("<{}", name);
+    let close_token = format!("</{}>", name);
+    let mut depth = 1usize;
+    let mut offset = from;
+    loop {
+        let next_open = xml[offset..].find(&open_token).map(|pos| offset + pos);
+        let next_close = xml[offset..].find(&close_token).map(|pos| offset + pos);
+        match (next_open, next_close) {
+            (Some(open_pos), Some(close_pos)) if open_pos < close_pos => {
+                let next = xml.as_bytes().get(open_pos + open_token.len()).copied();
+                if matches!(next, Some(b' ') | Some(b'\t') | Some(b'\n') | Some(b'\r') | Some(b'>') | Some(b'/')) {
+                    let Some(open_end_rel) = xml[open_pos..].find('>') else { return None; };
+                    let open_end = open_pos + open_end_rel;
+                    if !xml[open_pos..=open_end].trim_end().ends_with("/>") {
+                        depth += 1;
+                    }
+                    offset = open_end + 1;
+                } else {
+                    offset = open_pos + open_token.len();
+                }
+            }
+            (_, Some(close_pos)) => {
+                depth = depth.saturating_sub(1);
+                let close_end = close_pos + close_token.len();
+                if depth == 0 {
+                    return Some((close_pos, close_end));
+                }
+                offset = close_end;
+            }
+            _ => return None,
+        }
+    }
+}
+
 fn find_open_tag(haystack: &str, name: &str) -> Option<usize> {
     let needle = format!("<{}", name);
     let mut search = 0usize;
@@ -1133,12 +1956,51 @@ mod tests {
 "#;
         let surface = SurfaceInfo {
             name: "engine.main_menu".to_owned(),
+            kind: "main_menu".to_owned(),
             root: "layout.main".to_owned(),
             theme: None,
+            modal: true,
+            z_order: 700,
         };
         let doc = derive_navigation_document_from_surface_layout(xml, &surface).unwrap().unwrap();
         assert_eq!(doc.surface_id, "engine.main_menu");
         assert_eq!(doc.pages[0].items[0].label, "Start");
         assert_eq!(doc.pages[0].items[1].label, "Settings");
+    }
+
+    #[test]
+    fn compiles_neui_surface_layout_into_root_node_request() {
+        let xml = r#"
+<NeUiDictionary document_kind="surface">
+  <Surface name="engine.main_menu" kind="main_menu" modal="true" z_order="700" root="layout.main" theme="assets/ui/themes/northstar_editor.neui@editor_light" />
+  <Layout name="layout.main" surface="engine.main_menu">
+    <Panel id="main.root" class="menu-shell">
+      <Text id="main.title" class="title" value="NewEngine" />
+      <Button id="main.start" class="button button-primary"><Text value="Start" /><Event trigger="click" action="game.start" /></Button>
+      <Select id="graphics.quality"><Option id="graphics.high" label="High" value="high" /></Select>
+    </Panel>
+  </Layout>
+</NeUiDictionary>
+"#;
+        let surface = SurfaceInfo {
+            name: "engine.main_menu".to_owned(),
+            kind: "main_menu".to_owned(),
+            root: "layout.main".to_owned(),
+            theme: Some("assets/ui/themes/northstar_editor.neui@editor_light".to_owned()),
+            modal: true,
+            z_order: 700,
+        };
+
+        let root = compile_surface_root(xml, &surface, "assets/ui/engine/main_menu.neui@surface", surface.theme.as_deref()).unwrap();
+        assert_eq!(root.kind, UiRuntimeNodeKind::Surface);
+        assert_eq!(root.children.len(), 1);
+        let panel = &root.children[0];
+        assert_eq!(panel.id, "main.root");
+        let button = panel.children.iter().find(|node| node.id == "main.start").unwrap();
+        assert_eq!(button.action_id.as_deref(), Some("game.start"));
+        assert!(button.interactive);
+        let select = panel.children.iter().find(|node| node.id == "graphics.quality").unwrap();
+        assert!(select.interactive);
+        assert_eq!(select.children[0].action_id.as_deref(), Some("ui.select.high"));
     }
 }

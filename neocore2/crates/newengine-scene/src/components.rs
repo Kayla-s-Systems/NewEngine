@@ -25,6 +25,21 @@ impl EntityGuid {
     }
 }
 
+
+/// Authored definition/archetype reference attached to a scene entity.
+///
+/// This is deliberately a stable asset reference string (for example
+/// `world/city.ytyp@street_lamp_a`) and not a renderer/model/material object.
+/// Runtime instantiation can carry it through snapshots without letting render
+/// or model domains parse source scene files directly.
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub struct DefinitionRef(pub String);
+
+impl DefinitionRef {
+    #[inline]
+    pub fn as_str(&self) -> &str { self.0.as_str() }
+}
+
 /// Human-readable name of an entity.
 #[derive(Clone, Debug)]
 pub struct Name(pub String);

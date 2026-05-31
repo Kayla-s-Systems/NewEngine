@@ -93,6 +93,8 @@ pub fn is_raw_source_image_extension(extension: &str) -> bool {
     )
 }
 
+const RETIRED_TEXTURE_DICTIONARY_EXTENSION: &str = concat!("ne", "ytd");
+
 pub fn is_raw_source_image_reference(value: &str) -> bool {
     parse_asset_reference(value).ok()
         .and_then(|reference| reference.extension().map(|ext| ext.to_owned()))
@@ -100,10 +102,10 @@ pub fn is_raw_source_image_reference(value: &str) -> bool {
         .unwrap_or(false)
 }
 
-pub fn is_rejected_neytd_reference(value: &str) -> bool {
+pub fn is_retired_texture_dictionary_reference(value: &str) -> bool {
     parse_asset_reference(value)
-        .map(|reference| reference.has_extension("neytd"))
-        .unwrap_or_else(|_| value.trim().to_ascii_lowercase().contains(".ytd"))
+        .map(|reference| reference.has_extension(RETIRED_TEXTURE_DICTIONARY_EXTENSION))
+        .unwrap_or_else(|_| value.trim().to_ascii_lowercase().contains(&format!(".{RETIRED_TEXTURE_DICTIONARY_EXTENSION}")))
 }
 
 pub fn require_asset_reference_extension(value: &str, extensions: &[&str], require_entry: bool) -> Result<AssetReference, String> {

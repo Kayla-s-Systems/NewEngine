@@ -19,7 +19,7 @@ use newengine_service_kit::{
 };
 use newengine_ui_api::{
     encode_ui_frame_response_bin, UiAck, UiDrawList, UiFrameResponse, UiServiceInfo,
-    UI_SERVICE_METHOD_ACTION_MANIFEST_V1, UI_SERVICE_METHOD_APPLY_STATE_PATCH_V1,
+    UI_SERVICE_METHOD_ACTION_MANIFEST_V1, UI_SERVICE_METHOD_APPLY_NODE_REQUEST_V1, UI_SERVICE_METHOD_APPLY_STATE_PATCH_V1,
     UI_SERVICE_METHOD_DEBUG_BINDINGS_V1, UI_SERVICE_METHOD_DEBUG_TELEMETRY_SCHEMA,
     UI_SERVICE_METHOD_DEBUG_TREE_V1, UI_SERVICE_METHOD_DISPATCH_ACTION_V1,
     UI_SERVICE_METHOD_DISPATCH_INPUT_V1, UI_SERVICE_METHOD_DOCUMENT_XML_V1,
@@ -306,6 +306,7 @@ fn register_null_ui_provider() {
         .json_value_result(UI_SERVICE_METHOD_SURFACE_NODE_V1, null_ui_ack)
         .json_value_result(UI_SERVICE_METHOD_REGISTRY_LOAD_V1, null_ui_ack)
         .json_value_result(UI_SERVICE_METHOD_MOUNT_SURFACE_V1, null_ui_ack)
+        .json_value_result(UI_SERVICE_METHOD_APPLY_NODE_REQUEST_V1, null_ui_ack)
         .json_value_result(UI_SERVICE_METHOD_UNMOUNT_SURFACE_V1, null_ui_ack)
         .json_value_result(UI_SERVICE_METHOD_SET_SURFACE_VISIBLE_V1, null_ui_ack)
         .json_value_result(UI_SERVICE_METHOD_APPLY_STATE_PATCH_V1, null_ui_ack)

@@ -1,11 +1,21 @@
 #![forbid(unsafe_op_in_unsafe_fn)]
 
 use newengine_ecs::{EntityId, World};
+use newengine_transform_api::EntityHandle;
 use newengine_math::{Mat4, Quat, Vec3};
 
 use newengine_transform_api::{GlobalTransform, Parent, Transform};
 
 const MAX_CHAIN: usize = 64;
+
+#[inline]
+fn resolve_transform_entity(world: &World, entity: EntityHandle) -> Option<EntityId> {
+    world
+        .query::<Transform>()
+        .find(|(id, _)| id.stable_u64() == entity.stable_id)
+        .map(|(id, _)| id)
+}
+
 
 #[inline]
 fn world_matrix_from_local_chain(world: &World, id: EntityId) -> Option<Mat4> {
@@ -30,12 +40,12 @@ fn world_matrix_from_local_chain(world: &World, id: EntityId) -> Option<Mat4> {
             break;
         };
 
-        // Degrade: if parent entity is missing or has no Transform, treat current as root.
-        if !world.exists(p.0) || world.get::<Transform>(p.0).is_none() {
+        // Degrade: if parent handle cannot be resolved to a transform entity, treat current as root.
+        let Some(parent_id) = resolve_transform_entity(world, p.0) else {
             break;
-        }
+        };
 
-        cur = p.0;
+        cur = parent_id;
     }
 
     // Compose from root -> leaf.
@@ -115,7 +125,8 @@ pub fn write_entity_local_from_world_pose_local_chain(
     let world_m = Mat4::from_scale_rotation_translation(Vec3::ONE, world_rot, world_pos);
 
     if let Some(p) = world.get::<Parent>(id).copied() {
-        if let Some(pm) = world_matrix_from_local_chain(world, p.0) {
+        if let Some(parent_id) = resolve_transform_entity(world, p.0) {
+            if let Some(pm) = world_matrix_from_local_chain(world, parent_id) {
             let local = pm.inverse() * world_m;
             let (_s, rot, trans) = local.to_scale_rotation_translation();
             t.position = trans;
@@ -123,6 +134,7 @@ pub fn write_entity_local_from_world_pose_local_chain(
             t.scale = preserve_scale;
             let _ = world.insert(id, t);
             return;
+            }
         }
     }
 

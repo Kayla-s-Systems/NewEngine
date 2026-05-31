@@ -149,12 +149,40 @@ pub fn list_engine_gateway_routes() -> Vec<EngineGatewayRouteSnapshot> {
         .routes()
         .iter()
         .map(|route| {
-            let active = match registry.resolve_route(&route.gateway_id) {
+            let active_route = registry.resolve_route(&route.gateway_id);
+            let active = match active_route {
                 Some(active_route) => {
                     active_route.provider_service_id == route.provider_service_id
                         && active_route.provider_owner_id == route.provider_owner_id
                 }
                 None => false,
+            };
+            let (selection_state, selection_reason) = if active {
+                (
+                    "active".to_owned(),
+                    format!(
+                        "selected_by_registry score={} origin='{}' priority={}",
+                        route.active_score,
+                        route.origin.as_str(),
+                        route.backend_priority
+                    ),
+                )
+            } else if let Some(active_route) = active_route {
+                (
+                    "shadowed".to_owned(),
+                    format!(
+                        "shadowed_by service='{}' provider_route='{}' owner='{}' score={}",
+                        active_route.provider_service_id,
+                        active_route.provider_route_id.as_deref().unwrap_or("<provider-route-unset>"),
+                        active_route.provider_owner_id,
+                        active_route.active_score
+                    ),
+                )
+            } else {
+                (
+                    "unavailable".to_owned(),
+                    "no active route for gateway after registry resolution".to_owned(),
+                )
             };
             let override_mode: crate::service_gateway::GatewayOverrideMode = route.override_mode;
             EngineGatewayRouteSnapshot {
@@ -169,6 +197,8 @@ pub fn list_engine_gateway_routes() -> Vec<EngineGatewayRouteSnapshot> {
                 override_mode: override_mode.as_str().to_owned(),
                 active_score: route.active_score,
                 active,
+                selection_state,
+                selection_reason,
             }
         })
         .collect()
@@ -191,6 +221,13 @@ pub fn active_engine_gateway_route(gateway_id: &str) -> Option<EngineGatewayRout
                 override_mode: override_mode.as_str().to_owned(),
                 active_score: route.active_score,
                 active: true,
+                selection_state: "active".to_owned(),
+                selection_reason: format!(
+                    "selected_by_registry score={} origin='{}' priority={}",
+                    route.active_score,
+                    route.origin.as_str(),
+                    route.backend_priority
+                ),
             }
         })
 }

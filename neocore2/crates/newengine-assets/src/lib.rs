@@ -3,10 +3,12 @@
 pub mod asset_access;
 pub mod asset_service_client;
 pub mod consts;
-pub mod file_type_registry;
+pub mod asset_type_registry;
+pub mod asset_document_service;
 
 pub use asset_service_client::AssetServiceClient;
-pub use file_type_registry::{asset_file_types_gateway_service, asset_file_types_service_info, register_asset_file_type_descriptor_best_effort, register_asset_file_types_gateway_best_effort};
+pub use asset_type_registry::{asset_types_gateway_service, asset_types_service_info, register_asset_type_descriptor_best_effort, register_asset_types_gateway_best_effort};
+pub use asset_document_service::{asset_document_edit_gateway_service, asset_document_inspect_gateway_service, register_asset_document_gateways_best_effort};
 pub use newengine_assets_api::{
     wait_ready,
     AssetAccess,

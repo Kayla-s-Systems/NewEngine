@@ -1,0 +1,164 @@
+{
+  "schema": "newengine.font_dictionary.import.v1",
+  "target_asset": "ui/fonts/editor.yft",
+  "format": "newengine.listfile.nef8.yft",
+  "content_kind": "font_dictionary",
+  "semantic_gateway": "engine.ui.text",
+  "service_contract": "newengine.ui.text.font_manifest.v1",
+  "policy": [
+    ".yft is a NEF8/ListFile font dictionary",
+    "font binaries are importer inputs, not UI provider hardcode",
+    "runtime surfaces reference font faces by file@entry",
+    "the active text provider owns shaping and atlas generation"
+  ],
+  "faces": [
+    {
+      "id": "inter_variable",
+      "family": "Inter",
+      "display_name": "Inter Variable",
+      "source": "assets/ui/fonts/source/Inter-VariableFont_opsz,wght.ttf",
+      "source_kind": "local_import_input",
+      "roles": [
+        "editor.body",
+        "editor.list",
+        "editor.tooltip",
+        "editor.status"
+      ],
+      "weight_range": [
+        100,
+        900
+      ],
+      "default_weight": 450,
+      "style": "normal"
+    },
+    {
+      "id": "granic_slab_medium",
+      "family": "Granic Slab",
+      "display_name": "Granic Slab Medium",
+      "source": "assets/ui/fonts/source/GranicSlab-Medium.ttf",
+      "source_kind": "local_import_input",
+      "roles": [
+        "editor.title",
+        "editor.section"
+      ],
+      "weight": 500,
+      "style": "normal"
+    },
+    {
+      "id": "granic_sans_bold",
+      "family": "Granic Sans",
+      "display_name": "Granic Sans Bold",
+      "source": "assets/ui/fonts/source/GranicSans-Bold.ttf",
+      "source_kind": "local_import_input",
+      "roles": [
+        "editor.button.strong",
+        "editor.badge"
+      ],
+      "weight": 700,
+      "style": "normal"
+    },
+    {
+      "id": "pricedown_display",
+      "family": "Pricedown",
+      "display_name": "Pricedown Display",
+      "source": "assets/ui/fonts/source/pricedown_bl.otf",
+      "source_kind": "local_import_input",
+      "roles": [
+        "brand.display"
+      ],
+      "weight": 700,
+      "style": "normal",
+      "usage_policy": "brand_only_not_body_text"
+    },
+    {
+      "id": "noto_sans_cjk",
+      "family": "Noto Sans CJK",
+      "display_name": "Noto Sans CJK Fallback",
+      "source": "assets/ui/fonts/source/NotoSansCJK-Regular.otf",
+      "source_kind": "local_import_input",
+      "optional": true,
+      "roles": [
+        "editor.fallback.cjk"
+      ],
+      "unicode_ranges": [
+        "cjk",
+        "kana",
+        "hangul"
+      ],
+      "weight": 400,
+      "style": "normal"
+    },
+    {
+      "id": "noto_naskh_arabic",
+      "family": "Noto Naskh Arabic",
+      "display_name": "Noto Naskh Arabic RTL Fallback",
+      "source": "assets/ui/fonts/source/NotoNaskhArabic-Regular.ttf",
+      "source_kind": "local_import_input",
+      "optional": true,
+      "roles": [
+        "editor.fallback.rtl"
+      ],
+      "unicode_ranges": [
+        "arabic",
+        "hebrew",
+        "rtl"
+      ],
+      "features": [
+        "kern",
+        "liga",
+        "mark",
+        "mkmk",
+        "calt"
+      ],
+      "weight": 400,
+      "style": "normal"
+    },
+    {
+      "id": "noto_symbols",
+      "family": "Noto Symbols",
+      "display_name": "Noto Symbols Fallback",
+      "source": "assets/ui/fonts/source/NotoSansSymbols-Regular.ttf",
+      "source_kind": "local_import_input",
+      "optional": true,
+      "roles": [
+        "editor.fallback.symbols"
+      ],
+      "unicode_ranges": [
+        "symbols"
+      ],
+      "weight": 400,
+      "style": "normal"
+    },
+    {
+      "id": "noto_color_emoji",
+      "family": "Noto Color Emoji",
+      "display_name": "Noto Color Emoji Fallback",
+      "source": "assets/ui/fonts/source/NotoColorEmoji.ttf",
+      "source_kind": "local_import_input",
+      "optional": true,
+      "roles": [
+        "editor.fallback.emoji"
+      ],
+      "unicode_ranges": [
+        "emoji"
+      ],
+      "atlas_policy": "provider_owned_color_glyph_or_icon_fallback",
+      "weight": 400,
+      "style": "normal"
+    }
+  ],
+  "runtime": {
+    "atlas_policy": "provider_owned_msdf_or_sdf",
+    "fallback_stack": [
+      "ui/fonts/editor.yft@inter_variable",
+      "Segoe UI",
+      "NotoSans",
+      "NotoSansSymbols",
+      "ui/fonts/editor.yft@noto_sans_cjk",
+      "ui/fonts/editor.yft@noto_naskh_arabic",
+      "ui/fonts/editor.yft@noto_symbols",
+      "ui/fonts/editor.yft@noto_color_emoji"
+    ],
+    "default_face": "ui/fonts/editor.yft@inter_variable"
+  }
+}

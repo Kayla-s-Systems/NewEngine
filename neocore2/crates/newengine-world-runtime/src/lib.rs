@@ -10,29 +10,37 @@ use std::sync::Arc;
 
 use abi_stable::std_types::{RResult, RString};
 use newengine_plugin_api::Blob;
-use newengine_scene::{SceneAsset, SceneAssetOptions};
+use newengine_scene::{SceneAsset, SceneAssetOptions, SceneEntityAsset, TransformAsset};
 use newengine_service_kit::{
     engine_gateway_provider_service_description, ok_empty_blob, ok_json, payload_json,
     register_engine_gateway_provider_service_dynamic, EngineGatewayProviderDeclDynamic,
     JsonServiceRouter,
 };
 use newengine_world_api::{
-    WorldActiveCellsRequest, WorldActiveCellsResponse, WorldBootPhase, WorldBootRequest,
-    WorldBootResponse, WorldCellCoord, WorldCellRecord, WorldCellResidency, WorldInvokeRequest,
-    WorldPartitionResponse, WorldPartitionState, WorldRestoreSnapshotRequest,
-    WorldRestoreSnapshotResponse, WorldRuntimeState, WorldServiceInfo, WorldSnapshotRequest,
-    WorldSnapshotResponse, WorldStateRequest, WorldStateResponse, ENGINE_WORLD_SERVICE_ID,
-    WORLD_BACKEND_CAPABILITY_ID, WORLD_SERVICE_ID,
-    WORLD_SERVICE_METHOD_ACTIVE_CELLS_JSON_V1, WORLD_SERVICE_METHOD_BOOT_JSON_V1,
+    WorldActiveCellsRequest, WorldActiveCellsResponse, WorldApplyStageRequest,
+    WorldApplyStageResponse, WorldBootPhase, WorldBootRequest, WorldBootResponse,
+    WorldCellCoord, WorldCellRecord, WorldCellResidency, WorldInvokeRequest,
+    WorldLoadSnapshotRequest, WorldLoadSnapshotResponse, WorldPartitionResponse,
+    WorldPartitionState, WorldRestoreSnapshotRequest, WorldRestoreSnapshotResponse,
+    WorldRuntimeState, WorldSaveSnapshotRequest, WorldSaveSnapshotResponse, WorldServiceInfo,
+    WorldSnapshotRequest, WorldSnapshotResponse, WorldStateRequest, WorldStateResponse,
+    WorldStreamingCellDto, WorldStreamingCellsRequest, WorldStreamingCellsResponse,
+    WorldStreamingPlanDto, ENGINE_WORLD_SERVICE_ID, WORLD_BACKEND_CAPABILITY_ID,
+    WORLD_SERVICE_ID, WORLD_SERVICE_METHOD_ACTIVE_CELLS_JSON_V1,
+    WORLD_SERVICE_METHOD_APPLY_STAGE_JSON_V1, WORLD_SERVICE_METHOD_BOOT_JSON_V1,
     WORLD_SERVICE_METHOD_INFO, WORLD_SERVICE_METHOD_INVOKE,
-    WORLD_SERVICE_METHOD_PARTITION_JSON_V1, WORLD_SERVICE_METHOD_RESTORE_SNAPSHOT_JSON_V1,
+    WORLD_SERVICE_METHOD_LOAD_SNAPSHOT_JSON_V1, WORLD_SERVICE_METHOD_PARTITION_JSON_V1,
+    WORLD_SERVICE_METHOD_RESTORE_SNAPSHOT_JSON_V1, WORLD_SERVICE_METHOD_SAVE_SNAPSHOT_JSON_V1,
     WORLD_SERVICE_METHOD_SHUTDOWN_V1, WORLD_SERVICE_METHOD_SNAPSHOT_JSON_V1,
-    WORLD_SERVICE_METHOD_STATE_JSON_V1,
+    WORLD_SERVICE_METHOD_STATE_JSON_V1, WORLD_SERVICE_METHOD_STREAMING_CELLS_JSON_V1,
 };
 
 pub const WORLD_GATEWAY_OWNER: &str = "newengine-world-runtime.world-gateway";
 pub const WORLD_FOUNDATION_PROVIDER_ROUTE: &str = "engine.world.foundation";
 const WORLD_SNAPSHOT_SCHEMA_V1: &str = "newengine.world.snapshot.v1";
+
+mod streaming_cells;
+mod apply_stage;
 
 #[derive(Clone, Debug)]
 struct WorldRuntimeBookkeeping {
@@ -138,6 +146,7 @@ impl EngineWorldGatewayService {
         });
         cells
     }
+
 
     fn runtime_state(&self, include_cells: bool) -> WorldRuntimeState {
         let bookkeeping = self.state.lock().clone();
@@ -309,9 +318,13 @@ impl EngineWorldGatewayService {
             WORLD_SERVICE_METHOD_BOOT_JSON_V1 => self.boot_json_v1(payload),
             WORLD_SERVICE_METHOD_STATE_JSON_V1 => self.state_json_v1(payload),
             WORLD_SERVICE_METHOD_ACTIVE_CELLS_JSON_V1 => self.active_cells_json_v1(payload),
+            WORLD_SERVICE_METHOD_STREAMING_CELLS_JSON_V1 => self.streaming_cells_json_v1(payload),
             WORLD_SERVICE_METHOD_PARTITION_JSON_V1 => self.partition_json_v1(),
             WORLD_SERVICE_METHOD_SNAPSHOT_JSON_V1 => self.snapshot_json_v1(payload),
             WORLD_SERVICE_METHOD_RESTORE_SNAPSHOT_JSON_V1 => self.restore_snapshot_json_v1(payload),
+            WORLD_SERVICE_METHOD_APPLY_STAGE_JSON_V1 => self.apply_stage_json_v1(payload),
+            WORLD_SERVICE_METHOD_SAVE_SNAPSHOT_JSON_V1 => self.save_snapshot_json_v1(payload),
+            WORLD_SERVICE_METHOD_LOAD_SNAPSHOT_JSON_V1 => self.load_snapshot_json_v1(payload),
             other => RResult::RErr(RString::from(format!("engine.world invoke_json unknown target method '{other}'"))),
         }
     }
@@ -337,8 +350,12 @@ pub fn world_gateway_service(scene: Arc<newengine_scene_runtime::SceneBridge>) -
     let state_service = service.clone();
     let cells_service = service.clone();
     let partition_service = service.clone();
+    let streaming_service = service.clone();
     let snapshot_service = service.clone();
-    let restore_service = service;
+    let restore_service = service.clone();
+    let apply_service = service.clone();
+    let save_snapshot_service = service.clone();
+    let load_snapshot_service = service;
 
     JsonServiceRouter::new(WORLD_SERVICE_ID)
         .describe_json(&description)
@@ -347,9 +364,13 @@ pub fn world_gateway_service(scene: Arc<newengine_scene_runtime::SceneBridge>) -
         .blob(WORLD_SERVICE_METHOD_BOOT_JSON_V1, move |_unit, payload| boot_service.boot_json_v1(payload))
         .blob(WORLD_SERVICE_METHOD_STATE_JSON_V1, move |_unit, payload| state_service.state_json_v1(payload))
         .blob(WORLD_SERVICE_METHOD_ACTIVE_CELLS_JSON_V1, move |_unit, payload| cells_service.active_cells_json_v1(payload))
+        .blob(WORLD_SERVICE_METHOD_STREAMING_CELLS_JSON_V1, move |_unit, payload| streaming_service.streaming_cells_json_v1(payload))
         .blob(WORLD_SERVICE_METHOD_PARTITION_JSON_V1, move |_unit, _payload| partition_service.partition_json_v1())
         .blob(WORLD_SERVICE_METHOD_SNAPSHOT_JSON_V1, move |_unit, payload| snapshot_service.snapshot_json_v1(payload))
         .blob(WORLD_SERVICE_METHOD_RESTORE_SNAPSHOT_JSON_V1, move |_unit, payload| restore_service.restore_snapshot_json_v1(payload))
+        .blob(WORLD_SERVICE_METHOD_APPLY_STAGE_JSON_V1, move |_unit, payload| apply_service.apply_stage_json_v1(payload))
+        .blob(WORLD_SERVICE_METHOD_SAVE_SNAPSHOT_JSON_V1, move |_unit, payload| save_snapshot_service.save_snapshot_json_v1(payload))
+        .blob(WORLD_SERVICE_METHOD_LOAD_SNAPSHOT_JSON_V1, move |_unit, payload| load_snapshot_service.load_snapshot_json_v1(payload))
         .blob(WORLD_SERVICE_METHOD_SHUTDOWN_V1, |_unit, _payload| ok_empty_blob())
         .into_service_v1()
 }

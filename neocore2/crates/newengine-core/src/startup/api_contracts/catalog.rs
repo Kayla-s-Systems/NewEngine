@@ -48,8 +48,16 @@ pub(crate) const RUNTIME_SERVICE_CATALOG: &[RuntimeServiceCatalogEntry] = &[
         "engine.assets root / VFS bytes / codec dispatch",
     ),
     RuntimeServiceCatalogEntry::new(
-        newengine_assets_api::ASSET_FILE_TYPES_RUNTIME_REQUIREMENT_SPEC,
-        "engine.assets.file_types descriptor registry / VFS navigation",
+        newengine_assets_api::ASSET_TYPES_RUNTIME_REQUIREMENT_SPEC,
+        "engine.assets.types descriptor registry / VFS navigation",
+    ),
+    RuntimeServiceCatalogEntry::new(
+        newengine_assets_api::ASSETS_INSPECT_RUNTIME_REQUIREMENT_SPEC,
+        "engine.assets.inspect schema-driven AssetDocument DTO / preview / diagnostics",
+    ),
+    RuntimeServiceCatalogEntry::new(
+        newengine_assets_api::ASSETS_EDIT_RUNTIME_REQUIREMENT_SPEC,
+        "engine.assets.edit AssetPatch DTO validation / save / repack routing",
     ),
     RuntimeServiceCatalogEntry::new(
         newengine_assets_api::TEXTURES_RUNTIME_REQUIREMENT_SPEC,

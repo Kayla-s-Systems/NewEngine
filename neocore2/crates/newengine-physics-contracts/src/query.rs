@@ -1,4 +1,4 @@
-use newengine_entity_api::EntityId;
+use newengine_entity_api::EntityHandle;
 use newengine_math::Vec3;
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -16,7 +16,7 @@ pub struct PhysicsQuery {
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct PhysicsQueryHit {
-    pub entity: EntityId,
+    pub entity: EntityHandle,
     pub position: Vec3,
     pub normal: Vec3,
     pub distance: f32,

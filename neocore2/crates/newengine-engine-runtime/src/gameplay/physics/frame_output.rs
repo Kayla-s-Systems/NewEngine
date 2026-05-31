@@ -76,12 +76,12 @@ fn report_from_dto(
         match event {
             newengine_physics_api::PhysicsEventDto::BodyCreated { entity } => {
                 if let Some(entity) = key_to_entity.get(&entity).copied() {
-                    converted_events.push(PhysicsEvent::BodyCreated { entity });
+                    converted_events.push(PhysicsEvent::BodyCreated { entity: entity.into() });
                 }
             }
             newengine_physics_api::PhysicsEventDto::BodyDestroyed { entity } => {
                 if let Some(entity) = key_to_entity.get(&entity).copied() {
-                    converted_events.push(PhysicsEvent::BodyDestroyed { entity });
+                    converted_events.push(PhysicsEvent::BodyDestroyed { entity: entity.into() });
                 }
             }
             _ => {}

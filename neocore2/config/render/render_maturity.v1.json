@@ -1,0 +1,431 @@
+{
+  "$schema": "northstar.render_maturity.v1",
+  "policy": "Rendering maturity is a descriptor-driven feature graph: renderer executes resolved packets and feature descriptors; it must not parse source model/material/texture formats.",
+  "reference_corpus": [
+    {
+      "archive": "renderer.zip",
+      "used_for": [
+        "draw lists",
+        "render phases",
+        "lights",
+        "postfx",
+        "occlusion",
+        "plants/grass",
+        "debug overlays"
+      ]
+    },
+    {
+      "archive": "Core.zip",
+      "used_for": [
+        "host-owned runtime/service discipline"
+      ]
+    },
+    {
+      "archive": "game.zip",
+      "used_for": [
+        "gameplay-visible render feature demands"
+      ]
+    },
+    {
+      "archive": "replaycoordinator.zip",
+      "used_for": [
+        "deterministic debug/replay trace thinking"
+      ]
+    },
+    {
+      "archive": "SaveLoad.zip",
+      "used_for": [
+        "serializable render state descriptors"
+      ]
+    },
+    {
+      "archive": "scene.zip",
+      "used_for": [
+        "scene/world render packet extraction boundaries"
+      ]
+    },
+    {
+      "archive": "streaming.zip",
+      "used_for": [
+        "streaming-driven terrain/foliage/probe residency"
+      ]
+    }
+  ],
+  "feature_capabilities": [
+    {
+      "feature": "material_shader_graph",
+      "capability_id": "render.material_shader_graph",
+      "engine_gateway": "engine.render.material_shader_graph",
+      "owner_service": "render.material_graph.api",
+      "contract": "render.material_graph.api",
+      "quality_tier": "foundation",
+      "requires": [
+        "render.backend",
+        "assets.materials.backend"
+      ],
+      "execution_stages": [
+        "import_resolve",
+        "render_prep",
+        "frame_graph_build"
+      ],
+      "debug_overlays": [
+        "material_graph",
+        "shader_variants"
+      ]
+    },
+    {
+      "feature": "shader_variant_registry",
+      "capability_id": "render.shader_variant_registry",
+      "engine_gateway": "engine.render.shader_variants",
+      "owner_service": "render.shader_variants.api",
+      "contract": "render.shader_variants.api",
+      "quality_tier": "foundation",
+      "requires": [
+        "render.backend",
+        "render.material_shader_graph"
+      ],
+      "execution_stages": [
+        "import_resolve",
+        "render_prep"
+      ],
+      "debug_overlays": [
+        "shader_variants"
+      ]
+    },
+    {
+      "feature": "lighting_stack",
+      "capability_id": "render.lighting_stack",
+      "engine_gateway": "engine.render.lighting",
+      "owner_service": "render.lighting.api",
+      "contract": "render.lighting.api",
+      "quality_tier": "foundation",
+      "requires": [
+        "render.backend"
+      ],
+      "execution_stages": [
+        "render_prep",
+        "frame_graph_build",
+        "gpu_execution"
+      ],
+      "debug_overlays": [
+        "light_tiles",
+        "gbuffer"
+      ]
+    },
+    {
+      "feature": "shadow_system",
+      "capability_id": "render.shadow_system",
+      "engine_gateway": "engine.render.shadows",
+      "owner_service": "render.shadows.api",
+      "contract": "render.shadows.api",
+      "quality_tier": "foundation",
+      "requires": [
+        "render.backend",
+        "render.lighting_stack"
+      ],
+      "execution_stages": [
+        "render_prep",
+        "frame_graph_build",
+        "gpu_execution"
+      ],
+      "debug_overlays": [
+        "shadow_cascades",
+        "frame_graph"
+      ]
+    },
+    {
+      "feature": "postfx_stack",
+      "capability_id": "render.postfx_stack",
+      "engine_gateway": "engine.render.postfx",
+      "owner_service": "render.postfx.api",
+      "contract": "render.postfx.api",
+      "quality_tier": "foundation",
+      "requires": [
+        "render.backend"
+      ],
+      "execution_stages": [
+        "frame_graph_build",
+        "gpu_execution"
+      ],
+      "debug_overlays": [
+        "frame_graph"
+      ]
+    },
+    {
+      "feature": "reflection_probes",
+      "capability_id": "render.probes.reflection",
+      "engine_gateway": "engine.render.probes",
+      "owner_service": "render.probes.api",
+      "contract": "render.probes.api",
+      "quality_tier": "foundation",
+      "requires": [
+        "render.backend",
+        "world.backend"
+      ],
+      "execution_stages": [
+        "render_prep",
+        "gpu_execution",
+        "debug_extract"
+      ],
+      "debug_overlays": [
+        "reflection_probes"
+      ]
+    },
+    {
+      "feature": "particles_vfx",
+      "capability_id": "render.vfx.particles",
+      "engine_gateway": "engine.render.vfx",
+      "owner_service": "render.vfx.api",
+      "contract": "render.vfx.api",
+      "quality_tier": "foundation",
+      "requires": [
+        "render.backend",
+        "jobs.backend"
+      ],
+      "execution_stages": [
+        "render_prep",
+        "frame_graph_build",
+        "gpu_execution"
+      ],
+      "debug_overlays": [
+        "particle_bounds"
+      ]
+    },
+    {
+      "feature": "terrain_rendering",
+      "capability_id": "render.terrain",
+      "engine_gateway": "engine.render.terrain",
+      "owner_service": "render.terrain.api",
+      "contract": "render.terrain.api",
+      "quality_tier": "foundation",
+      "requires": [
+        "render.backend",
+        "world.backend"
+      ],
+      "execution_stages": [
+        "render_prep",
+        "frame_graph_build",
+        "gpu_execution"
+      ],
+      "debug_overlays": [
+        "terrain_cells",
+        "lod_ranges"
+      ]
+    },
+    {
+      "feature": "foliage_rendering",
+      "capability_id": "render.foliage",
+      "engine_gateway": "engine.render.foliage",
+      "owner_service": "render.foliage.api",
+      "contract": "render.foliage.api",
+      "quality_tier": "foundation",
+      "requires": [
+        "render.backend",
+        "world.backend",
+        "render.terrain"
+      ],
+      "execution_stages": [
+        "render_prep",
+        "frame_graph_build",
+        "gpu_execution"
+      ],
+      "debug_overlays": [
+        "foliage_density",
+        "lod_ranges"
+      ]
+    },
+    {
+      "feature": "lod_system",
+      "capability_id": "render.lod",
+      "engine_gateway": "engine.render.lod",
+      "owner_service": "render.lod.api",
+      "contract": "render.lod.api",
+      "quality_tier": "foundation",
+      "requires": [
+        "render.backend"
+      ],
+      "execution_stages": [
+        "render_prep"
+      ],
+      "debug_overlays": [
+        "lod_ranges"
+      ]
+    },
+    {
+      "feature": "occlusion_culling",
+      "capability_id": "render.occlusion",
+      "engine_gateway": "engine.render.occlusion",
+      "owner_service": "render.occlusion.api",
+      "contract": "render.occlusion.api",
+      "quality_tier": "foundation",
+      "requires": [
+        "render.backend",
+        "render.lod"
+      ],
+      "execution_stages": [
+        "render_prep",
+        "gpu_execution"
+      ],
+      "debug_overlays": [
+        "occlusion"
+      ]
+    },
+    {
+      "feature": "debug_overlays",
+      "capability_id": "render.debug.overlays",
+      "engine_gateway": "engine.render.debug",
+      "owner_service": "render.debug.api",
+      "contract": "render.debug.api",
+      "quality_tier": "foundation",
+      "requires": [
+        "render.backend"
+      ],
+      "execution_stages": [
+        "debug_extract"
+      ],
+      "debug_overlays": [
+        "frame_graph",
+        "gbuffer",
+        "shadow_cascades",
+        "light_tiles",
+        "reflection_probes",
+        "occlusion",
+        "lod_ranges",
+        "terrain_cells",
+        "foliage_density",
+        "particle_bounds",
+        "material_graph",
+        "shader_variants"
+      ]
+    }
+  ],
+  "material_shader_graph": {
+    "schema": "newengine.render.material_shader_graph.v1",
+    "canonical_nodes": [
+      "constant",
+      "texture_sample",
+      "parameter",
+      "multiply",
+      "add",
+      "normal_map",
+      "fresnel",
+      "output_surface"
+    ],
+    "source_policy": "authored .nemat/ListFile descriptors are resolved by engine.assets.materials; renderer receives MaterialShaderGraphDto and RenderMaterialPacket only"
+  },
+  "shader_variant_registry": {
+    "schema": "newengine.render.shader_variant_registry.v1",
+    "deterministic": true,
+    "cache_key_inputs": [
+      "shader_family",
+      "variant_id",
+      "pass",
+      "stage",
+      "defines",
+      "target_profile",
+      "source_hash"
+    ],
+    "variants": [
+      {
+        "shader_family": "gameready.lit",
+        "variant_id": "lit.forward.opaque",
+        "pass": "forward_opaque",
+        "stage": "fragment",
+        "defines": [
+          {
+            "key": "MATERIAL_MODEL",
+            "value": "pbr_lit"
+          }
+        ],
+        "source_ref": "shaders/gameready/lit.neshader@forward_opaque",
+        "entry_point": "fs_main",
+        "target_profile": "vulkan_spirv_1_5",
+        "cache_key": "shader:gameready.lit:lit.forward.opaque:fragment:pbr_lit",
+        "capabilities": [
+          "render.shader_variant_registry",
+          "render.material_shader_graph"
+        ]
+      },
+      {
+        "shader_family": "gameready.shadow",
+        "variant_id": "shadow.csm.depth",
+        "pass": "shadow_cascade",
+        "stage": "vertex",
+        "defines": [
+          {
+            "key": "SHADOW_MODE",
+            "value": "csm"
+          }
+        ],
+        "source_ref": "shaders/gameready/shadow.neshader@csm_depth",
+        "entry_point": "vs_main",
+        "target_profile": "vulkan_spirv_1_5",
+        "cache_key": "shader:gameready.shadow:shadow.csm.depth:vertex:csm",
+        "capabilities": [
+          "render.shadow_system"
+        ]
+      }
+    ]
+  },
+  "lighting_shadows_postfx_probes": {
+    "lighting": {
+      "clustered_lighting": true,
+      "tiled_lighting": true,
+      "direct_lights": 256,
+      "probe_count": 64
+    },
+    "shadows": {
+      "cascades": 4,
+      "atlas_size": 4096,
+      "supports_pcss": true,
+      "supports_contact_shadows": true
+    },
+    "postfx": [
+      "tonemap",
+      "bloom",
+      "fxaa",
+      "taa",
+      "ssao",
+      "depth_of_field",
+      "motion_blur",
+      "color_grade"
+    ],
+    "probes": {
+      "reflection_probe_count": 32,
+      "irradiance_probe_count": 32,
+      "update_policy": "streaming_cell_resident"
+    }
+  },
+  "particles_vfx": {
+    "gpu_particles": true,
+    "max_emitters": 512,
+    "max_particles": 262144,
+    "simulation_stage": "engine.jobs -> render_prep -> engine.render.vfx"
+  },
+  "terrain_foliage_lod_occlusion": {
+    "terrain_cells": 256,
+    "foliage_batches": 4096,
+    "lod_levels": 5,
+    "occlusion_policy": "hiz_then_provider_visibility_query"
+  },
+  "debug_overlays": [
+    "frame_graph",
+    "gbuffer",
+    "shadow_cascades",
+    "light_tiles",
+    "reflection_probes",
+    "occlusion",
+    "lod_ranges",
+    "terrain_cells",
+    "foliage_density",
+    "particle_bounds",
+    "material_graph",
+    "shader_variants"
+  ],
+  "forbidden_bypasses": [
+    "renderer parses .nemat",
+    "renderer parses .ydd/.ytd/.ytyp",
+    "model/runtime parses source image/model formats",
+    "material runtime reads source textures directly"
+  ]
+}

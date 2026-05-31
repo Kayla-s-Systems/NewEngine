@@ -21,6 +21,8 @@ pub struct SceneIoClient {
     m_graph_json_v1: MethodName,
     m_archetype_graph_json_v1: MethodName,
     m_placements_json_v1: MethodName,
+    m_instantiate_prefab_json_v1: MethodName,
+    m_instantiate_archetype_json_v1: MethodName,
 }
 
 impl SceneIoClient {
@@ -41,6 +43,8 @@ impl SceneIoClient {
             m_graph_json_v1: MethodName::from(method::GRAPH_JSON_V1),
             m_archetype_graph_json_v1: MethodName::from(method::ARCHETYPE_GRAPH_JSON_V1),
             m_placements_json_v1: MethodName::from(method::PLACEMENTS_JSON_V1),
+            m_instantiate_prefab_json_v1: MethodName::from(method::INSTANTIATE_PREFAB_JSON_V1),
+            m_instantiate_archetype_json_v1: MethodName::from(method::INSTANTIATE_ARCHETYPE_JSON_V1),
         }
     }
 
@@ -97,6 +101,18 @@ impl SceneIoClient {
     #[inline]
     pub fn placements_json_v1(&self) -> Result<serde_json::Value, String> {
         Self::decode_ok_json(self.call(self.m_placements_json_v1.clone(), Vec::new())?)
+    }
+
+    #[inline]
+    pub fn instantiate_prefab_json_v1(&self, request: serde_json::Value) -> Result<serde_json::Value, String> {
+        let payload = serde_json::to_vec(&request).map_err(|e| e.to_string())?;
+        Self::decode_ok_json(self.call(self.m_instantiate_prefab_json_v1.clone(), payload)?)
+    }
+
+    #[inline]
+    pub fn instantiate_archetype_json_v1(&self, request: serde_json::Value) -> Result<serde_json::Value, String> {
+        let payload = serde_json::to_vec(&request).map_err(|e| e.to_string())?;
+        Self::decode_ok_json(self.call(self.m_instantiate_archetype_json_v1.clone(), payload)?)
     }
 
     #[inline]

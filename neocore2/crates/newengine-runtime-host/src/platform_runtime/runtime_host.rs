@@ -27,7 +27,7 @@ use newengine_ui::{
     create_provider, UiBuildFn, UiFrameDesc, UiProvider, UiProviderKind,
     UiProviderOptions, UiProviderBinding,
 };
-use newengine_ui_api::{UiDrawList, UiInputFrame};
+use newengine_ui_api::{UiDrawList, UiEventDispatchFrame, UiInputFrame};
 
 use crate::platform_input::poll_input_frame;
 use crate::platform_runtime::callbacks::{
@@ -46,6 +46,7 @@ use crate::platform_runtime::snapshot_service::{
 };
 use crate::platform_runtime::jobs_gateway::register_jobs_gateway_service_best_effort;
 use crate::platform_runtime::shutdown_watchdog::ShutdownWatchdog;
+use crate::platform_runtime::screen_profile::ScreenProfileRuntimeState;
 use crate::platform_runtime::types::ResolvedPlatformRuntimeConfig;
 use crate::render_runtime::ResolvedRenderBackendConfig;
 use crate::platform_runtime::ui_provider_selection::{
@@ -57,6 +58,7 @@ pub struct HostPlatformRuntime {
     ui: Box<dyn UiProvider>,
     ui_build: Option<Box<dyn UiBuildFn>>,
     ui_selection: UiProviderSelection,
+    screen_profile: ScreenProfileRuntimeState,
     host_events: EventSub<HostEvent>,
     surface: PlatformSurfaceMetricsV1,
     display: PlatformDisplayConfigV1,
@@ -97,6 +99,7 @@ impl HostPlatformRuntime {
             ui: create_provider(UiProviderOptions { kind: active_ui_kind }),
             ui_build,
             ui_selection,
+            screen_profile: ScreenProfileRuntimeState::load(),
             host_events,
             surface: PlatformSurfaceMetricsV1::default(),
             display: PlatformDisplayConfigV1::default(),
@@ -327,6 +330,8 @@ impl HostPlatformRuntime {
         self.display = ready.display;
         crate::null_providers::register_null_provider_routes_best_effort();
         newengine_time_runtime::register_time_gateway_best_effort();
+        newengine_schema_runtime::register_schema_gateway_best_effort();
+        newengine_gameplay_runtime::register_gameplay_foundation_gateways_best_effort();
         register_jobs_gateway_service_best_effort(self.engine.job_system(), self.engine.events().clone());
         register_platform_window_service_best_effort(ready);
         let (display, window) = native_to_raw_handles(ready.handles)?;
@@ -594,11 +599,32 @@ impl HostPlatformRuntime {
         // primary UI node here: that duplicates engine.ui work and forces stale UI traffic
         // before the real modal owner has updated animation/navigation state.
 
-        if let Some(input) = input_frame.clone() {
-            self.engine.resources_mut().insert::<UiInputFrame>(input);
+        let ui_dispatch_frame = if let Some(input) = input_frame.clone() {
+            self.engine.resources_mut().insert::<UiInputFrame>(input.clone());
+            match crate::platform_runtime::ui_gateway_frame::dispatch_input_frame(
+                ui_frame_index,
+                &input,
+                [self.surface.width, self.surface.height],
+                self.surface.pixels_per_point,
+            )? {
+                Some(frame) => {
+                    self.engine.resources_mut().insert::<UiEventDispatchFrame>(frame.clone());
+                    Some(frame)
+                }
+                None => {
+                    let _ = self.engine.resources_mut().remove::<UiEventDispatchFrame>();
+                    None
+                }
+            }
         } else {
             let _ = self.engine.resources_mut().remove::<UiInputFrame>();
-        }
+            let _ = self.engine.resources_mut().remove::<UiEventDispatchFrame>();
+            None
+        };
+        let ui_dispatch_refresh = ui_dispatch_frame
+            .as_ref()
+            .map(|frame| !frame.actions.is_empty() || !frame.state_patches.is_empty())
+            .unwrap_or(false);
 
         if let Some(status) = self.engine.resources.get::<SceneLaunchStatus>().cloned() {
             if status.active && matches!(self.ui_selection.active(), UiProviderKind::Plugin { .. }) {
@@ -610,6 +636,12 @@ impl HostPlatformRuntime {
                 );
             }
         }
+
+        let screen_profile_refresh = {
+            let screen_profile = &mut self.screen_profile;
+            let resources = self.engine.resources_mut();
+            screen_profile.prepare_frame(resources, ui_frame_index)
+        };
 
         let provider_ui_active = matches!(self.ui_selection.active(), UiProviderKind::Plugin { .. });
         let debug_overlay_active = self
@@ -629,9 +661,15 @@ impl HostPlatformRuntime {
         // runtime-debug telemetry was enabled, so the gameplay HUD vanished and the frame graph
         // legitimately collapsed to `ui=none`. Keep UI visible by using a cached provider draw
         // list for idle gameplay, and refresh it only when state can change.
-        let provider_ui_needed = self.ui_build.is_some() || debug_overlay_active || scene_launch_active;
+        let provider_ui_needed = self.ui_build.is_some()
+            || debug_overlay_active
+            || scene_launch_active
+            || screen_profile_refresh
+            || ui_dispatch_refresh;
         let provider_gameplay_hud = provider_ui_active && !self.minimized && self.surface.width > 0 && self.surface.height > 0;
         let provider_ui_refresh = provider_ui_needed
+            || screen_profile_refresh
+            || ui_dispatch_refresh
             || self.cached_provider_ui_draw.is_none()
             || ui_frame_index <= 4
             || ui_frame_index % 30 == 1;

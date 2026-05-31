@@ -9,6 +9,7 @@ mod early_log;
 mod handles;
 mod jobs_gateway;
 mod runtime_host;
+mod screen_profile;
 mod snapshot_service;
 mod shutdown_watchdog;
 mod types;

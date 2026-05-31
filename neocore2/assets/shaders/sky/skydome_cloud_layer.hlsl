@@ -1,6 +1,9 @@
 // NewEngine SkyDome cloud layer helper (HLSL source contract)
-// Cloud sources are packed in textures/fps/skydome.ytd and selected as
-// textures/fps/skydome.ytd@cloud_<profile>__<entry>.
+// Cloud sources are grouped through environment.visuals.* and currently come from
+// textures/fps/skydome.ytd entries:
+//   @baseperlinnoise3channel  density / coverage
+//   @noise16_p                detail / breakup
+//   @dither                   temporal/threshold dither
 #ifndef NEWENGINE_SKYDOME_CLOUD_LAYER_HLSL
 #define NEWENGINE_SKYDOME_CLOUD_LAYER_HLSL
 

@@ -2,6 +2,7 @@
 
 use crate::{GlobalTransform, Parent, Transform, TransformDirty, WorldPose};
 use newengine_ecs::{EntityId, World};
+use newengine_transform_api::EntityHandle;
 use newengine_math::collections_prelude::NeKey;
 use newengine_math::{EulerRot, Mat4};
 
@@ -12,7 +13,7 @@ use newengine_math::{EulerRot, Mat4};
 pub struct TransformPropagationScratch {
     pub ids: Vec<EntityId>,
     pub locals: Vec<Mat4>,
-    pub parents: Vec<Option<EntityId>>,
+    pub parents: Vec<Option<EntityHandle>>,
     pub vis: Vec<u8>,
     pub out: Vec<Mat4>,
     pub stack: Vec<(usize, u8)>,
@@ -129,7 +130,7 @@ pub fn propagate_transforms(world: &mut World) {
                     scratch.stack.push((i, 1));
 
                     if let Some(pid) = scratch.parents[i] {
-                        if let Ok(pidx) = scratch.ids.binary_search(&pid) {
+                        if let Ok(pidx) = scratch.ids.binary_search_by_key(&pid.stable_id, |id| id.stable_u64()) {
                             if scratch.vis[pidx] != 2 {
                                 scratch.stack.push((pidx, 0));
                             }
@@ -139,7 +140,7 @@ pub fn propagate_transforms(world: &mut World) {
                 _ => {
                     let local = scratch.locals[i];
                     let composed = if let Some(pid) = scratch.parents[i] {
-                        if let Ok(pidx) = scratch.ids.binary_search(&pid) {
+                        if let Ok(pidx) = scratch.ids.binary_search_by_key(&pid.stable_id, |id| id.stable_u64()) {
                             if scratch.vis[pidx] == 2 {
                                 scratch.out[pidx] * local
                             } else {

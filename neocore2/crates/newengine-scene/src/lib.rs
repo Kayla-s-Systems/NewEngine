@@ -22,14 +22,14 @@ pub use bounds::{
     scene_bounds_cached, scene_world_bounds, selection_world_bounds, update_scene_world, SceneBounds,
 };
 pub use components::{
-    ActiveCamera, Controller, EntityGuid, Name, PropertyBag, PropertyValue, SceneRoot,
+    ActiveCamera, Controller, DefinitionRef, EntityGuid, Name, PropertyBag, PropertyValue, SceneRoot,
 };
 #[cfg(feature = "runtime")]
 pub use guid::{ensure_entity_guid, GuidAllocator};
 #[cfg(feature = "runtime")]
 pub use scene::Scene;
 #[cfg(feature = "runtime")]
-pub use scene_asset::{SceneAsset, SceneAssetError, SceneAssetOptions, SCENE_ASSET_SCHEMA_V1, SCENE_ASSET_STATUS_TRANSITIONAL_JSON};
+pub use scene_asset::{SceneAsset, SceneAssetError, SceneAssetOptions, SceneEntityAsset, TransformAsset, SCENE_ASSET_SCHEMA_V1, SCENE_ASSET_STATUS_TRANSITIONAL_JSON};
 pub use settings::{ForwardAxis, SceneSettings, UnitScaleMeters, UpAxis};
 pub use streaming::{
     SceneBucketedCell, SceneBucketedCellPlan, SceneCellCoord, SceneLayeredStreamingPlan,

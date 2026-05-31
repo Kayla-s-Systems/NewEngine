@@ -17,8 +17,8 @@ use newengine_material_domain_gameready::{
     GameReadyLitMaterialDomainProvider, GAME_READY_LIT_PIPELINE_KEY,
 };
 use newengine_render_feature_api::{
-    primary_directional_light, primary_point_light, shadow_and_opaque_list,
-    DrawListBuildCtx, LightExtractionCommand, LightExtractionCtx, LightExtractionProvider,
+    shadow_and_opaque_list, DrawListBuildCtx, LightExtractionCommand, LightExtractionCtx,
+    LightExtractionProvider,
     LightExtractionProviderMetadata, RenderDrawListProvider, RenderDrawListProviderMetadata,
     SceneExtractionCtx, ShadowLightKind,
 };
@@ -138,7 +138,7 @@ impl LightExtractionProvider for GameReadyDirectionalShadowProvider {
         matches!(
             ctx.settings.method,
             ShadowMethod::DirectionalDepthMap | ShadowMethod::CascadedShadowMaps
-        ) && primary_directional_light(ctx.world).is_some()
+        ) && ctx.lights.has_directional_light()
     }
 
     #[inline]
@@ -163,7 +163,7 @@ impl LightExtractionProvider for GameReadyPointCubeShadowProvider {
     #[inline]
     fn supports(&self, ctx: &LightExtractionCtx<'_>) -> bool {
         matches!(ctx.settings.method, ShadowMethod::PointCubeMap)
-            && primary_point_light(ctx.world).is_some()
+            && ctx.lights.primary_point_light().is_some()
     }
 
     #[inline]

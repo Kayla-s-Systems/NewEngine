@@ -4,9 +4,10 @@ use abi_stable::std_types::RString;
 use newengine_plugin_api::{Blob, HostApiV1, MethodName};
 
 use crate::{
-    method, require_asset_reference_extension, textures_method, AssetAccess, AssetDecodeRequest,
-    AssetError, AssetResult, AssetService, AssetState, Rgba8TextureAsset, RuntimeTextureAsset,
-    RuntimeTextureFormat, RuntimeTextureMip, ASSET_SERVICE_ID, ENGINE_ASSETS_TEXTURES_SERVICE_ID,
+    asset_edit_method, asset_inspect_method, method, require_asset_reference_extension, textures_method, AssetAccess,
+    AssetDecodeRequest, AssetDocument, AssetDocumentRequest, AssetError, AssetPatch, AssetPatchResult,
+    AssetResult, AssetService, AssetState, NepakPackageWriteRequestV1, NepakPackageWriteResponseV1, Rgba8TextureAsset, RuntimeTextureAsset, RuntimeTextureFormat, RuntimeTextureMip,
+    ASSET_SERVICE_ID, ENGINE_ASSETS_EDIT_SERVICE_ID, ENGINE_ASSETS_INSPECT_SERVICE_ID, ENGINE_ASSETS_TEXTURES_SERVICE_ID,
 };
 
 /// Thin client over the engine AssetManager service.
@@ -52,6 +53,7 @@ pub struct AssetServiceClient {
     m_thumbnail_json_v1: MethodName,
     m_dirty_scan_json_v1: MethodName,
     m_package_writer_info_json_v1: MethodName,
+    m_package_write_nepak_json_v1: MethodName,
     m_mount_source_json_v1: MethodName,
     m_get_state_v1: MethodName,
 }
@@ -96,9 +98,50 @@ impl AssetServiceClient {
             m_thumbnail_json_v1: MethodName::from(method::THUMBNAIL_JSON_V1),
             m_dirty_scan_json_v1: MethodName::from(method::DIRTY_SCAN_JSON_V1),
             m_package_writer_info_json_v1: MethodName::from(method::PACKAGE_WRITER_INFO_JSON_V1),
+            m_package_write_nepak_json_v1: MethodName::from(method::PACKAGE_WRITE_NEPAK_JSON_V1),
             m_mount_source_json_v1: MethodName::from(method::MOUNT_SOURCE_JSON_V1),
             m_get_state_v1: MethodName::from(method::GET_STATE_V1),
         }
+    }
+
+    /// Inspect an asset document through the dedicated `engine.assets.inspect` gateway.
+    ///
+    /// This keeps editor UI callers away from format parsing and away from the
+    /// root `engine.assets` byte/VFS surface: the selected inspect provider owns
+    /// the normalized `AssetDocument` DTO.
+    pub fn inspect_document_json_v1(&self, request: AssetDocumentRequest) -> Result<AssetDocument, String> {
+        let payload = serde_json::to_vec(&request)
+            .map_err(|e| format!("inspect_document_json_v1: invalid request: {e}"))?;
+        let bytes = self.call_service(
+            ENGINE_ASSETS_INSPECT_SERVICE_ID,
+            MethodName::from(asset_inspect_method::INSPECT_DOCUMENT_JSON_V1),
+            payload,
+        )?;
+        Self::decode_json::<AssetDocument>(bytes, "inspect_document_json_v1")
+    }
+
+    /// Validate an editor-produced asset patch through `engine.assets.edit`.
+    pub fn validate_patch_json_v1(&self, patch: AssetPatch) -> Result<AssetPatchResult, String> {
+        let payload = serde_json::to_vec(&patch)
+            .map_err(|e| format!("validate_patch_json_v1: invalid patch: {e}"))?;
+        let bytes = self.call_service(
+            ENGINE_ASSETS_EDIT_SERVICE_ID,
+            MethodName::from(asset_edit_method::VALIDATE_PATCH_JSON_V1),
+            payload,
+        )?;
+        Self::decode_json::<AssetPatchResult>(bytes, "validate_patch_json_v1")
+    }
+
+    /// Apply an editor-produced asset patch through `engine.assets.edit`.
+    pub fn apply_patch_json_v1(&self, patch: AssetPatch) -> Result<AssetPatchResult, String> {
+        let payload = serde_json::to_vec(&patch)
+            .map_err(|e| format!("apply_patch_json_v1: invalid patch: {e}"))?;
+        let bytes = self.call_service(
+            ENGINE_ASSETS_EDIT_SERVICE_ID,
+            MethodName::from(asset_edit_method::APPLY_PATCH_JSON_V1),
+            payload,
+        )?;
+        Self::decode_json::<AssetPatchResult>(bytes, "apply_patch_json_v1")
     }
 
     #[inline]
@@ -131,8 +174,18 @@ impl AssetServiceClient {
 
     #[inline]
     fn call_typed(&self, method_name: MethodName, payload: Vec<u8>) -> AssetResult<Vec<u8>> {
-        let res =
-            (self.host.call_service_v1)(self.service_id.clone(), method_name, Blob::from(payload));
+        self.call_service_typed(self.service_id.clone(), method_name, payload)
+    }
+
+    #[inline]
+    fn call_service(&self, service_id: &'static str, method_name: MethodName, payload: Vec<u8>) -> Result<Vec<u8>, String> {
+        self.call_service_typed(RString::from(service_id), method_name, payload)
+            .map_err(|e| e.to_string())
+    }
+
+    #[inline]
+    fn call_service_typed(&self, service_id: RString, method_name: MethodName, payload: Vec<u8>) -> AssetResult<Vec<u8>> {
+        let res = (self.host.call_service_v1)(service_id, method_name, Blob::from(payload));
 
         res.into_result()
             .map(|v| v.into_vec())
@@ -157,6 +210,11 @@ impl AssetServiceClient {
     #[inline]
     fn parse_json(s: &str) -> Result<serde_json::Value, String> {
         serde_json::from_str::<serde_json::Value>(s).map_err(|e| e.to_string())
+    }
+
+    fn decode_json<T: serde::de::DeserializeOwned>(bytes: Vec<u8>, op: &'static str) -> Result<T, String> {
+        let s = Self::decode_utf8(bytes)?;
+        serde_json::from_str::<T>(&s).map_err(|e| format!("{op}: invalid json response: {e}"))
     }
 
     fn decode_ok_json(bytes: Vec<u8>) -> Result<serde_json::Value, String> {
@@ -690,6 +748,12 @@ impl AssetService for AssetServiceClient {
         let bytes = serde_json::to_vec(&payload).map_err(|e| e.to_string())?;
         let bytes = self.call_raw(self.m_package_writer_info_json_v1.clone(), bytes)?;
         Self::decode_ok_json(bytes)
+    }
+
+    fn package_write_nepak_json_v1(&self, payload: NepakPackageWriteRequestV1) -> Result<NepakPackageWriteResponseV1, String> {
+        let bytes = serde_json::to_vec(&payload).map_err(|e| e.to_string())?;
+        let bytes = self.call_raw(self.m_package_write_nepak_json_v1.clone(), bytes)?;
+        Self::decode_json::<NepakPackageWriteResponseV1>(bytes, "package_write_nepak_json_v1")
     }
 
     fn mount_source_json_v1(&self, payload: serde_json::Value) -> Result<(), String> {

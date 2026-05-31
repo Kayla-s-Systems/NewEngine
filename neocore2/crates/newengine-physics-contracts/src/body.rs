@@ -1,5 +1,5 @@
 use newengine_bounds::Bounds;
-use newengine_entity_api::EntityId;
+use newengine_entity_api::EntityHandle;
 
 use crate::{CollisionShapeDesc, PhysicsMaterialDesc};
 
@@ -94,7 +94,7 @@ impl PhysicsBodyDesc {
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct CharacterControllerDesc {
-    pub entity: EntityId,
+    pub entity: EntityHandle,
     pub radius: f32,
     pub half_height: f32,
     pub contact_skin: f32,

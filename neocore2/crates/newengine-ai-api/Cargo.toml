@@ -1,0 +1,17 @@
+[package]
+name = "newengine-ai-api"
+version = "0.1.0"
+edition = "2021"
+readme = "README.md"
+description = "AI gateway DTO contract for North Star Engine"
+license = "Proprietary"
+
+[dependencies]
+serde = { version = "1.0.228", features = ["derive"] }
+serde_json = "1.0.149"
+newengine-animation-api = { path = "../newengine-animation-api" }
+newengine-entity-api = { path = "../newengine-entity-api" }
+newengine-navigation-api = { path = "../newengine-navigation-api" }
+newengine-service-api = { path = "../newengine-service-api" }
+newengine-tags-api = { path = "../newengine-tags-api" }
+newengine-tasks-api = { path = "../newengine-tasks-api" }

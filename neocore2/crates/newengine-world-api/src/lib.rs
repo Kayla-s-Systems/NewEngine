@@ -26,6 +26,10 @@ pub const WORLD_SERVICE_METHOD_PARTITION_JSON_V1: &str = "world.partition_json_v
 pub const WORLD_SERVICE_METHOD_ACTIVE_CELLS_JSON_V1: &str = "world.active_cells_json_v1";
 pub const WORLD_SERVICE_METHOD_SNAPSHOT_JSON_V1: &str = "world.snapshot_json_v1";
 pub const WORLD_SERVICE_METHOD_RESTORE_SNAPSHOT_JSON_V1: &str = "world.restore_snapshot_json_v1";
+pub const WORLD_SERVICE_METHOD_STREAMING_CELLS_JSON_V1: &str = "world.streaming_cells_json_v1";
+pub const WORLD_SERVICE_METHOD_APPLY_STAGE_JSON_V1: &str = "world.apply_stage_json_v1";
+pub const WORLD_SERVICE_METHOD_SAVE_SNAPSHOT_JSON_V1: &str = "world.save_snapshot_json_v1";
+pub const WORLD_SERVICE_METHOD_LOAD_SNAPSHOT_JSON_V1: &str = "world.load_snapshot_json_v1";
 
 pub const WORLD_REQUIRED_METHODS_V1: &[&str] = &[
     WORLD_SERVICE_METHOD_INFO,
@@ -37,6 +41,10 @@ pub const WORLD_REQUIRED_METHODS_V1: &[&str] = &[
     WORLD_SERVICE_METHOD_ACTIVE_CELLS_JSON_V1,
     WORLD_SERVICE_METHOD_SNAPSHOT_JSON_V1,
     WORLD_SERVICE_METHOD_RESTORE_SNAPSHOT_JSON_V1,
+    WORLD_SERVICE_METHOD_STREAMING_CELLS_JSON_V1,
+    WORLD_SERVICE_METHOD_APPLY_STAGE_JSON_V1,
+    WORLD_SERVICE_METHOD_SAVE_SNAPSHOT_JSON_V1,
+    WORLD_SERVICE_METHOD_LOAD_SNAPSHOT_JSON_V1,
 ];
 
 pub const WORLD_BACKEND_SERVICE_SPEC: newengine_service_api::BackendServiceSpec =
@@ -82,6 +90,9 @@ impl Default for WorldServiceInfo {
                 "world-partition".to_owned(),
                 "active-cells".to_owned(),
                 "world-state-snapshot".to_owned(),
+                "streaming-cells".to_owned(),
+                "runtime-apply-stage".to_owned(),
+                "save-load-snapshots".to_owned(),
                 "opaque-entity-handles".to_owned(),
                 "scene-world-separation".to_owned(),
             ],
@@ -267,6 +278,122 @@ pub struct WorldRestoreSnapshotResponse {
     pub state: WorldRuntimeState,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
+pub struct WorldStreamingCellsRequest {
+    #[serde(default)]
+    pub include_unloaded: bool,
+    #[serde(default)]
+    pub include_reasons: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct WorldStreamingCellDto {
+    pub coord: WorldCellCoord,
+    pub residency: WorldCellResidency,
+    #[serde(default)]
+    pub dirty: bool,
+    #[serde(default)]
+    pub reason: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct WorldStreamingPlanDto {
+    pub center: WorldCellCoord,
+    pub render_radius: i32,
+    pub simulation_radius: i32,
+    #[serde(default)]
+    pub desired_cells: Vec<WorldCellCoord>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct WorldStreamingCellsResponse {
+    pub partition: WorldPartitionState,
+    pub plan: WorldStreamingPlanDto,
+    #[serde(default)]
+    pub cells: Vec<WorldStreamingCellDto>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct WorldApplyStageCommand {
+    pub command: String,
+    #[serde(default)]
+    pub guid: Option<u128>,
+    #[serde(default)]
+    pub name: Option<String>,
+    #[serde(default)]
+    pub parent: Option<u128>,
+    #[serde(default)]
+    pub transform: Option<serde_json::Value>,
+    #[serde(default)]
+    pub definition_ref: Option<String>,
+    #[serde(default)]
+    pub source_ref: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct WorldApplyStageRequest {
+    pub stage: String,
+    #[serde(default)]
+    pub transaction_id: String,
+    #[serde(default)]
+    pub commands: Vec<WorldApplyStageCommand>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct WorldApplyStageResponse {
+    pub ok: bool,
+    pub stage: String,
+    #[serde(default)]
+    pub transaction_id: String,
+    pub applied_count: usize,
+    pub state: WorldRuntimeState,
+    #[serde(default)]
+    pub undo_commands: Vec<WorldApplyStageCommand>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct WorldSaveSnapshotRequest {
+    #[serde(default = "default_true")]
+    pub include_scene_payload: bool,
+    #[serde(default = "default_true")]
+    pub include_cells: bool,
+    #[serde(default)]
+    pub target_ref: Option<String>,
+}
+
+impl Default for WorldSaveSnapshotRequest {
+    #[inline]
+    fn default() -> Self {
+        Self { include_scene_payload: true, include_cells: true, target_ref: None }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct WorldSaveSnapshotResponse {
+    pub ok: bool,
+    pub storage: String,
+    #[serde(default)]
+    pub target_ref: Option<String>,
+    pub snapshot: WorldSnapshotResponse,
+    pub payload_text: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct WorldLoadSnapshotRequest {
+    #[serde(default)]
+    pub snapshot: Option<WorldSnapshotResponse>,
+    #[serde(default)]
+    pub payload: Option<serde_json::Value>,
+    #[serde(default = "default_true")]
+    pub replace_scene: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct WorldLoadSnapshotResponse {
+    pub ok: bool,
+    pub state: WorldRuntimeState,
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct WorldInvokeRequest {
     pub method: String,
@@ -315,6 +442,16 @@ impl WorldClient {
     #[inline]
     pub fn snapshot_json_v1(&self) -> Result<serde_json::Value, String> {
         self.call_json(WORLD_SERVICE_METHOD_SNAPSHOT_JSON_V1, serde_json::json!({ "include_scene_payload": true, "include_cells": true }))
+    }
+
+    #[inline]
+    pub fn streaming_cells_json_v1(&self) -> Result<serde_json::Value, String> {
+        self.call_json(WORLD_SERVICE_METHOD_STREAMING_CELLS_JSON_V1, serde_json::json!({ "include_unloaded": false, "include_reasons": true }))
+    }
+
+    #[inline]
+    pub fn apply_stage_json_v1(&self, request: serde_json::Value) -> Result<serde_json::Value, String> {
+        self.call_json(WORLD_SERVICE_METHOD_APPLY_STAGE_JSON_V1, request)
     }
 }
 

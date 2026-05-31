@@ -1,0 +1,538 @@
+{
+  "$schema": "northstar.provider_conformance_matrix.v1",
+  "policy": "A provider family is P1-ready only when it can be tested by contract without knowing its implementation.",
+  "required_test_cases": [
+    "registers_expected_service",
+    "declares_expected_capability",
+    "declares_expected_engine_gateway",
+    "accepts_valid_input_dto",
+    "rejects_invalid_input_dto_cleanly",
+    "returns_stable_error_payload",
+    "shutdown_is_idempotent",
+    "does_not_require_concrete_runtime_internals",
+    "route_is_descriptor_driven",
+    "active_and_shadowed_routes_visible_in_diagnostics"
+  ],
+  "families": [
+    {
+      "family": "ai",
+      "gateway": "engine.ai",
+      "capability": "ai.backend",
+      "service": "ai.api",
+      "methods": [
+        "info_json",
+        "invoke_json",
+        "shutdown_v1",
+        "ai.frame_json_v1",
+        "ai.validate_intents_json_v1"
+      ],
+      "test_cases": [
+        "registers_expected_service",
+        "declares_expected_capability",
+        "declares_expected_engine_gateway",
+        "accepts_valid_input_dto",
+        "rejects_invalid_input_dto_cleanly",
+        "returns_stable_error_payload",
+        "shutdown_is_idempotent",
+        "does_not_require_concrete_runtime_internals",
+        "route_is_descriptor_driven",
+        "active_and_shadowed_routes_visible_in_diagnostics",
+        "ai_emits_intents_not_mutations",
+        "ai_provider_never_receives_world",
+        "decision_trace_is_deterministic"
+      ],
+      "null": "engine.ai.null"
+    },
+    {
+      "family": "animation",
+      "gateway": "engine.animation",
+      "capability": "animation.backend",
+      "service": "animation.api",
+      "methods": [
+        "info_json",
+        "invoke_json",
+        "shutdown_v1",
+        "animation.describe_graphs_json_v1",
+        "animation.plan_json_v1"
+      ],
+      "test_cases": [
+        "registers_expected_service",
+        "declares_expected_capability",
+        "declares_expected_engine_gateway",
+        "accepts_valid_input_dto",
+        "rejects_invalid_input_dto_cleanly",
+        "returns_stable_error_payload",
+        "shutdown_is_idempotent",
+        "does_not_require_concrete_runtime_internals",
+        "route_is_descriptor_driven",
+        "active_and_shadowed_routes_visible_in_diagnostics",
+        "animation_requests_are_intents"
+      ]
+    },
+    {
+      "family": "assets",
+      "gateway": "engine.assets",
+      "capability": "asset_manager.backend",
+      "service": "asset_manager.api",
+      "methods": [
+        "info_json",
+        "invoke_json",
+        "shutdown_v1",
+        "asset.package_writer_info_json_v1",
+        "asset.package_write_nepak_json_v1"
+      ],
+      "test_cases": [
+        "registers_expected_service",
+        "declares_expected_capability",
+        "declares_expected_engine_gateway",
+        "accepts_valid_input_dto",
+        "rejects_invalid_input_dto_cleanly",
+        "returns_stable_error_payload",
+        "shutdown_is_idempotent",
+        "does_not_require_concrete_runtime_internals",
+        "route_is_descriptor_driven",
+        "active_and_shadowed_routes_visible_in_diagnostics",
+        "package_writer_explicit_capability_required",
+        "package_write_is_deterministic",
+        "package_write_returns_stable_diagnostics"
+      ]
+    },
+    {
+      "family": "camera",
+      "gateway": "engine.camera",
+      "capability": "camera.backend",
+      "service": "camera.api",
+      "methods": [
+        "info_json",
+        "invoke_json",
+        "shutdown_v1",
+        "snapshot_json_v1",
+        "view_set_json_v1",
+        "view_next_json_v1"
+      ],
+      "test_cases": [
+        "registers_expected_service",
+        "declares_expected_capability",
+        "declares_expected_engine_gateway",
+        "accepts_valid_input_dto",
+        "rejects_invalid_input_dto_cleanly",
+        "returns_stable_error_payload",
+        "shutdown_is_idempotent",
+        "does_not_require_concrete_runtime_internals",
+        "route_is_descriptor_driven",
+        "active_and_shadowed_routes_visible_in_diagnostics",
+        "camera_frame_snapshot_is_dto_only",
+        "camera_mode_switch_is_gateway_routed",
+        "cinematic_camera_provider_is_replaceable"
+      ]
+    },
+    {
+      "family": "input",
+      "gateway": "engine.input",
+      "capability": "input.backend",
+      "service": "newengine.input.v1",
+      "methods": [
+        "state_json",
+        "text_take_json",
+        "ime_commit_take_json"
+      ],
+      "test_cases": [
+        "registers_expected_service",
+        "declares_expected_capability",
+        "declares_expected_engine_gateway",
+        "accepts_valid_input_dto",
+        "rejects_invalid_input_dto_cleanly",
+        "returns_stable_error_payload",
+        "shutdown_is_idempotent",
+        "does_not_require_concrete_runtime_internals",
+        "route_is_descriptor_driven",
+        "active_and_shadowed_routes_visible_in_diagnostics"
+      ]
+    },
+    {
+      "family": "jobs",
+      "gateway": "engine.jobs",
+      "capability": "jobs.backend",
+      "service": "jobs.api",
+      "methods": [
+        "info_json",
+        "invoke_json",
+        "shutdown_v1"
+      ],
+      "test_cases": [
+        "registers_expected_service",
+        "declares_expected_capability",
+        "declares_expected_engine_gateway",
+        "accepts_valid_input_dto",
+        "rejects_invalid_input_dto_cleanly",
+        "returns_stable_error_payload",
+        "shutdown_is_idempotent",
+        "does_not_require_concrete_runtime_internals",
+        "route_is_descriptor_driven",
+        "active_and_shadowed_routes_visible_in_diagnostics"
+      ]
+    },
+    {
+      "family": "navigation",
+      "gateway": "engine.navigation",
+      "capability": "navigation.backend",
+      "service": "navigation.api",
+      "methods": [
+        "info_json",
+        "invoke_json",
+        "shutdown_v1",
+        "navigation.plan_path_json_v1"
+      ],
+      "test_cases": [
+        "registers_expected_service",
+        "declares_expected_capability",
+        "declares_expected_engine_gateway",
+        "accepts_valid_input_dto",
+        "rejects_invalid_input_dto_cleanly",
+        "returns_stable_error_payload",
+        "shutdown_is_idempotent",
+        "does_not_require_concrete_runtime_internals",
+        "route_is_descriptor_driven",
+        "active_and_shadowed_routes_visible_in_diagnostics",
+        "navigation_returns_path_dtos"
+      ]
+    },
+    {
+      "family": "physics",
+      "gateway": "engine.physics",
+      "capability": "physics.backend",
+      "service": "physics.api",
+      "null": "engine.physics.null",
+      "methods": [
+        "info_json",
+        "invoke_json",
+        "shutdown_v1"
+      ],
+      "test_cases": [
+        "registers_expected_service",
+        "declares_expected_capability",
+        "declares_expected_engine_gateway",
+        "accepts_valid_input_dto",
+        "rejects_invalid_input_dto_cleanly",
+        "returns_stable_error_payload",
+        "shutdown_is_idempotent",
+        "does_not_require_concrete_runtime_internals",
+        "route_is_descriptor_driven",
+        "active_and_shadowed_routes_visible_in_diagnostics"
+      ]
+    },
+    {
+      "family": "render",
+      "gateway": "engine.render",
+      "capability": "render.backend",
+      "service": "render.api",
+      "null": "engine.render.null",
+      "methods": [
+        "info_json",
+        "invoke_json",
+        "shutdown_v1",
+        "command_batch_bin_v1"
+      ],
+      "test_cases": [
+        "registers_expected_service",
+        "declares_expected_capability",
+        "declares_expected_engine_gateway",
+        "accepts_valid_input_dto",
+        "rejects_invalid_input_dto_cleanly",
+        "returns_stable_error_payload",
+        "shutdown_is_idempotent",
+        "does_not_require_concrete_runtime_internals",
+        "route_is_descriptor_driven",
+        "active_and_shadowed_routes_visible_in_diagnostics"
+      ]
+    },
+    {
+      "family": "render.maturity",
+      "gateway": "engine.render",
+      "capability": "render.material_shader_graph",
+      "service": "render.api",
+      "methods": [
+        "info_json",
+        "invoke_json",
+        "shutdown_v1",
+        "render.describe_features_json_v1",
+        "render.shader_variants_json_v1",
+        "render.material_graph_validate_json_v1",
+        "render.debug_overlays_json_v1"
+      ],
+      "test_cases": [
+        "registers_expected_service",
+        "declares_expected_capability",
+        "declares_expected_engine_gateway",
+        "accepts_valid_input_dto",
+        "rejects_invalid_input_dto_cleanly",
+        "returns_stable_error_payload",
+        "shutdown_is_idempotent",
+        "does_not_require_concrete_runtime_internals",
+        "route_is_descriptor_driven",
+        "active_and_shadowed_routes_visible_in_diagnostics",
+        "material_graph_is_descriptor_driven",
+        "shader_variants_are_deterministic",
+        "render_debug_overlays_are_dto_only",
+        "renderer_does_not_parse_source_assets"
+      ]
+    },
+    {
+      "family": "scene",
+      "gateway": "engine.scene",
+      "capability": "scene.backend",
+      "service": "scene.api",
+      "methods": [
+        "scene.formats_json",
+        "scene.graph_json_v1",
+        "scene.archetype_graph_json_v1",
+        "scene.placements_json_v1",
+        "scene.instantiate_prefab_json_v1",
+        "scene.instantiate_archetype_json_v1",
+        "shutdown_v1"
+      ],
+      "test_cases": [
+        "registers_expected_service",
+        "declares_expected_capability",
+        "declares_expected_engine_gateway",
+        "accepts_valid_input_dto",
+        "rejects_invalid_input_dto_cleanly",
+        "returns_stable_error_payload",
+        "shutdown_is_idempotent",
+        "does_not_require_concrete_runtime_internals",
+        "route_is_descriptor_driven",
+        "active_and_shadowed_routes_visible_in_diagnostics",
+        "instantiation_plan_is_non_mutating",
+        "instantiation_applies_through_engine_world"
+      ]
+    },
+    {
+      "family": "schema",
+      "gateway": "engine.schema",
+      "capability": "schema.registry",
+      "service": "schema.api",
+      "methods": [
+        "info_json",
+        "invoke_json",
+        "shutdown_v1",
+        "schema.describe_type_v1",
+        "schema.describe_properties_v1",
+        "schema.validate_patch_v1",
+        "schema.default_value_v1",
+        "schema.binding_manifest_v1",
+        "schema.transaction_plan_v1"
+      ],
+      "test_cases": [
+        "registers_expected_service",
+        "declares_expected_capability",
+        "declares_expected_engine_gateway",
+        "accepts_valid_input_dto",
+        "rejects_invalid_input_dto_cleanly",
+        "returns_stable_error_payload",
+        "shutdown_is_idempotent",
+        "does_not_require_concrete_runtime_internals",
+        "route_is_descriptor_driven",
+        "active_and_shadowed_routes_visible_in_diagnostics",
+        "core_owned_baseline_route_is_replaceable",
+        "describe_type_reads_config_schema",
+        "describe_properties_reads_config_schema",
+        "validate_patch_returns_normalized_patch_and_undo",
+        "default_value_served_from_registry",
+        "binding_manifest_generated_from_registry",
+        "transaction_plan_preserves_domain_apply_boundary"
+      ]
+    },
+    {
+      "family": "scripting",
+      "gateway": "engine.scripting",
+      "capability": "scripting.backend",
+      "service": "scripting.api",
+      "methods": [
+        "info_json",
+        "invoke_json",
+        "shutdown_v1",
+        "scripting.load_module_bytes_v1",
+        "scripting.invoke_bytes_v1",
+        "scripting.frame_bytes_v1"
+      ],
+      "test_cases": [
+        "registers_expected_service",
+        "declares_expected_capability",
+        "declares_expected_engine_gateway",
+        "accepts_valid_input_dto",
+        "rejects_invalid_input_dto_cleanly",
+        "returns_stable_error_payload",
+        "shutdown_is_idempotent",
+        "does_not_require_concrete_runtime_internals",
+        "route_is_descriptor_driven",
+        "active_and_shadowed_routes_visible_in_diagnostics"
+      ]
+    },
+    {
+      "family": "tags",
+      "gateway": "engine.tags",
+      "capability": "tags.registry",
+      "service": "tags.api",
+      "methods": [
+        "info_json",
+        "invoke_json",
+        "shutdown_v1",
+        "tags.describe_tags_json_v1",
+        "tags.validate_tag_set_json_v1"
+      ],
+      "test_cases": [
+        "registers_expected_service",
+        "declares_expected_capability",
+        "declares_expected_engine_gateway",
+        "accepts_valid_input_dto",
+        "rejects_invalid_input_dto_cleanly",
+        "returns_stable_error_payload",
+        "shutdown_is_idempotent",
+        "does_not_require_concrete_runtime_internals",
+        "route_is_descriptor_driven",
+        "active_and_shadowed_routes_visible_in_diagnostics",
+        "tags_are_data_driven"
+      ]
+    },
+    {
+      "family": "tasks",
+      "gateway": "engine.tasks",
+      "capability": "tasks.backend",
+      "service": "tasks.api",
+      "methods": [
+        "info_json",
+        "invoke_json",
+        "shutdown_v1",
+        "tasks.describe_tasks_json_v1",
+        "tasks.plan_queue_json_v1"
+      ],
+      "test_cases": [
+        "registers_expected_service",
+        "declares_expected_capability",
+        "declares_expected_engine_gateway",
+        "accepts_valid_input_dto",
+        "rejects_invalid_input_dto_cleanly",
+        "returns_stable_error_payload",
+        "shutdown_is_idempotent",
+        "does_not_require_concrete_runtime_internals",
+        "route_is_descriptor_driven",
+        "active_and_shadowed_routes_visible_in_diagnostics",
+        "tasks_are_declarative"
+      ]
+    },
+    {
+      "family": "time",
+      "gateway": "engine.time",
+      "capability": "time.backend",
+      "service": "time.api",
+      "methods": [
+        "info_json",
+        "invoke_json",
+        "shutdown_v1",
+        "time.begin_frame_v1",
+        "time.fixed_tick_v1"
+      ],
+      "test_cases": [
+        "registers_expected_service",
+        "declares_expected_capability",
+        "declares_expected_engine_gateway",
+        "accepts_valid_input_dto",
+        "rejects_invalid_input_dto_cleanly",
+        "returns_stable_error_payload",
+        "shutdown_is_idempotent",
+        "does_not_require_concrete_runtime_internals",
+        "route_is_descriptor_driven",
+        "active_and_shadowed_routes_visible_in_diagnostics"
+      ]
+    },
+    {
+      "family": "ui",
+      "gateway": "engine.ui",
+      "capability": "ui.backend",
+      "service": "ui.api",
+      "null": "engine.ui.null",
+      "methods": [
+        "info_json",
+        "invoke_json",
+        "shutdown_v1",
+        "draw_frame_v1",
+        "draw_frame_bin_v1"
+      ],
+      "test_cases": [
+        "registers_expected_service",
+        "declares_expected_capability",
+        "declares_expected_engine_gateway",
+        "accepts_valid_input_dto",
+        "rejects_invalid_input_dto_cleanly",
+        "returns_stable_error_payload",
+        "shutdown_is_idempotent",
+        "does_not_require_concrete_runtime_internals",
+        "route_is_descriptor_driven",
+        "active_and_shadowed_routes_visible_in_diagnostics"
+      ]
+    },
+    {
+      "family": "ui.text",
+      "gateway": "engine.ui.text",
+      "capability": "ui.text.shaping",
+      "service": "ui.text.api",
+      "methods": [
+        "info_json",
+        "invoke_json",
+        "shutdown_v1",
+        "text.shape_run_v1",
+        "text.layout_paragraph_v1",
+        "text.font_fallback_v1",
+        "text.font_manifest_v1",
+        "text.atlas_plan_v1",
+        "text.measure_text_v1",
+        "text.localize_v1"
+      ],
+      "test_cases": [
+        "registers_expected_service",
+        "declares_expected_capability",
+        "declares_expected_engine_gateway",
+        "accepts_valid_input_dto",
+        "rejects_invalid_input_dto_cleanly",
+        "returns_stable_error_payload",
+        "shutdown_is_idempotent",
+        "does_not_require_concrete_runtime_internals",
+        "route_is_descriptor_driven",
+        "active_and_shadowed_routes_visible_in_diagnostics",
+        "font_dictionary_comes_from_yft_asset",
+        "shaping_uses_text_dto_not_ui_provider_state",
+        "atlas_pages_are_dto_outputs"
+      ]
+    },
+    {
+      "family": "world",
+      "gateway": "engine.world",
+      "capability": "world.backend",
+      "service": "world.api",
+      "methods": [
+        "info_json",
+        "invoke_json",
+        "shutdown_v1",
+        "world.streaming_cells_json_v1",
+        "world.apply_stage_json_v1",
+        "world.save_snapshot_json_v1",
+        "world.load_snapshot_json_v1"
+      ],
+      "test_cases": [
+        "registers_expected_service",
+        "declares_expected_capability",
+        "declares_expected_engine_gateway",
+        "accepts_valid_input_dto",
+        "rejects_invalid_input_dto_cleanly",
+        "returns_stable_error_payload",
+        "shutdown_is_idempotent",
+        "does_not_require_concrete_runtime_internals",
+        "route_is_descriptor_driven",
+        "active_and_shadowed_routes_visible_in_diagnostics",
+        "streaming_cells_are_dto_only",
+        "apply_stage_owns_mutation",
+        "save_load_snapshot_roundtrip"
+      ]
+    }
+  ]
+}

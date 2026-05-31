@@ -22,10 +22,13 @@ newengine-core = { path = "../newengine-core" }
 newengine-math = { path = "../newengine-math" }
 newengine-platform-api = { path = "../newengine-platform-api" }
 newengine-jobs-api = { path = "../newengine-jobs-api" }
+newengine-gameplay-runtime = { path = "../newengine-gameplay-runtime" }
 newengine-time-runtime = { path = "../newengine-time-runtime" }
 newengine-input-api = { path = "../newengine-input-api" }
 newengine-plugin-api = { path = "../newengine-plugin-api" }
 newengine-service-api = { path = "../newengine-service-api" }
+newengine-schema-api = { path = "../newengine-schema-api" }
+newengine-schema-runtime = { path = "../newengine-schema-runtime" }
 newengine-service-kit = { path = "../newengine-service-kit" }
 newengine-scene-io = { path = "../newengine-scene-io" }
 newengine-ecs-api = { path = "../newengine-ecs-api" }

@@ -101,7 +101,7 @@ Start here:
 - [`Architecture overview`](NewEngine/neocore2/docs/CoreEngine_Documentation/01_ARCHITECTURE_OVERVIEW.md)
 - [`Provider/adapter guide`](NewEngine/neocore2/docs/CoreEngine_Documentation/03_PROVIDER_ADAPTER_SYSTEM_GUIDE.md)
 - [`Gateway Service Layer`](NewEngine/neocore2/docs/CoreEngine_Documentation/15_GATEWAY_SERVICE_LAYER.md)
-- [`.neytd texture dictionary`](NewEngine/neocore2/docs/CoreEngine_Documentation/12_NEYTD_CODEC_SPEC.md)
+- [`.ytd texture dictionary`](NewEngine/neocore2/docs/codecs/YTD_TEXTURE_DICTIONARY.md)
 - [`.nepak asset package`](NewEngine/neocore2/docs/CoreEngine_Documentation/13_NEPAK_CODEC_SPEC.md)
 
 ## Project status

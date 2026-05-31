@@ -1,0 +1,20 @@
+{
+  "schema": "newengine.editor_panel.import.v1",
+  "target_asset": "ui/editor/profiler_diagnostics.neui",
+  "surface_id": "engine.ui.editor.profiler_diagnostics",
+  "entry_ref": "assets/ui/editor/profiler_diagnostics.neui@surface",
+  "label": "Profiler / Diagnostics",
+  "theme_ref": "assets/ui/themes/northstar_editor.neui@editor_light",
+  "component_libraries": [
+    "assets/ui/components/common.neui",
+    "assets/ui/components/editor_controls.neui"
+  ],
+  "source_gateway": "engine.diagnostics",
+  "data_contract": "newengine.diagnostics.profiler_route_snapshot.v1",
+  "transport": "UiNodeTreeRequest",
+  "policy": [
+    "This panel is a UI composition descriptor, not a backend domain.",
+    "Runtime data must arrive as DTO/snapshot from source_gateway.",
+    "Provider renders generic node requests; no product-specific renderer branch."
+  ]
+}

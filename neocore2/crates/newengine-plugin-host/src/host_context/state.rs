@@ -51,6 +51,11 @@ pub struct EngineGatewayRouteSnapshot {
     pub override_mode: String,
     pub active_score: i64,
     pub active: bool,
+    /// Diagnostic state computed by the host registry: `active` or `shadowed`.
+    /// Consumers must not infer this by provider id or filename.
+    pub selection_state: String,
+    /// Human-readable deterministic reason for active/shadowed diagnostics.
+    pub selection_reason: String,
 }
 
 #[derive(Clone, Debug)]

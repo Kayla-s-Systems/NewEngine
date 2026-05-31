@@ -1,0 +1,46 @@
+{
+  "schema": "northstar.assets.import_pipeline.v1",
+  "source_to_runtime_graph": {
+    "sources": [],
+    "runtime_assets": [],
+    "dependencies": []
+  },
+  "cache_key_policy": {
+    "algorithm": "sha256",
+    "inputs": [
+      "source_ref",
+      "source_hash",
+      "importer_id",
+      "importer_version",
+      "settings_hash",
+      "target_platform"
+    ],
+    "deterministic": true,
+    "namespace": "northstar.assets.import.cache_key.v1"
+  },
+  "dependency_invalidation": {
+    "strategy": "reverse_dependency_walk",
+    "output": "AssetInvalidationPlanV1",
+    "generated_index": "invalidation_index",
+    "planner": "tools/scripts/takesome/import_pipeline.py::plan_invalidation"
+  },
+  "package_writer": {
+    "capability_id": "assets.package_writer.nepak",
+    "gateway": "engine.assets.package_writer",
+    "method": "asset.package_write_nepak_json_v1",
+    "explicit_only": true
+  },
+  "workers": {
+    "script_entrypoint": "python tools/scripts/takesome.py import-ui-assets",
+    "descriptor_driven": true,
+    "supported_importers": [
+      "northstar.importer.neui.v1",
+      "northstar.importer.yft_font.v1"
+    ],
+    "writes": [
+      "NewEngine/neocore2/config/assets/import_pipeline.generated_graph.v1.json",
+      "NewEngine/neocore2/config/assets/import_pipeline.invalidation_plan.v1.json when --changed-source is provided",
+      "runtime .neui assets through northstar.neui_packer unless --skip-neui is provided"
+    ]
+  }
+}

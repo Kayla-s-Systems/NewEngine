@@ -9,6 +9,7 @@ use newengine_core::{
 use newengine_runtime_host::asset_bootstrap::{
     collect_app_asset_roots, mount_asset_roots_best_effort,
 };
+use newengine_ui_api::{UiEditorRuntimeMode, UiEditorRuntimeState, UiScreenProfile, UiScreenProfileState};
 
 use crate::{GAME_APP_ASSETS_DIR_ENV, GAME_READY_APP_DIR_NAME};
 
@@ -20,6 +21,7 @@ pub(crate) struct GameReadySceneBootstrapModule {
     scene: Arc<newengine_scene_runtime::SceneBridge>,
     bootstrapped: bool,
     waiting_logged: bool,
+    editor_deferred_logged: bool,
 }
 
 impl GameReadySceneBootstrapModule {
@@ -29,6 +31,7 @@ impl GameReadySceneBootstrapModule {
             scene,
             bootstrapped: false,
             waiting_logged: false,
+            editor_deferred_logged: false,
         }
     }
 
@@ -42,6 +45,41 @@ impl GameReadySceneBootstrapModule {
             "game-ready runtime: waiting for AssetManager/geometryImporter readiness before scene bootstrap origin='{}'",
             origin
         );
+    }
+
+    #[inline]
+    fn editor_bootstrap_allowed<E: Send + 'static>(&mut self, ctx: &ModuleCtx<'_, E>, origin: &'static str) -> bool {
+        let profile = ctx
+            .resources()
+            .get::<UiScreenProfileState>()
+            .map(|state| state.descriptor.profile)
+            .unwrap_or(UiScreenProfile::Editor);
+        if profile != UiScreenProfile::Editor {
+            return true;
+        }
+        let mode = ctx
+            .resources()
+            .get::<UiEditorRuntimeState>()
+            .map(|state| state.mode)
+            .unwrap_or(UiEditorRuntimeMode::Edit);
+        let allowed = matches!(mode, UiEditorRuntimeMode::Simulate | UiEditorRuntimeMode::Play);
+        if !allowed && !self.editor_deferred_logged {
+            self.editor_deferred_logged = true;
+            log::info!(
+                "game-ready runtime: scene bootstrap deferred by editor profile origin='{}' mode='{}' policy='no game/world load before Simulate or Play'",
+                origin,
+                mode.id(),
+            );
+        }
+        allowed
+    }
+
+    #[inline]
+    fn try_bootstrap_if_allowed<E: Send + 'static>(&mut self, ctx: &mut ModuleCtx<'_, E>, origin: &'static str) -> EngineResult<()> {
+        if !self.editor_bootstrap_allowed(ctx, origin) {
+            return Ok(());
+        }
+        self.try_bootstrap(origin)
     }
 
     #[inline]
@@ -105,21 +143,23 @@ impl<E: Send + 'static> Module<E> for GameReadySceneBootstrapModule {
         } else {
             "startup-graph-unexpected-early-start"
         };
-        self.try_bootstrap(origin)
+        self.try_bootstrap_if_allowed(ctx, origin)
     }
 
     #[inline]
-    fn on_event(&mut self, _ctx: &mut ModuleCtx<'_, E>, event: &dyn Any) -> EngineResult<()> {
+    fn on_event(&mut self, ctx: &mut ModuleCtx<'_, E>, event: &dyn Any) -> EngineResult<()> {
         let Some(event) = event.downcast_ref::<EngineLifecycleEvent>() else {
             return Ok(());
         };
 
         match event {
             EngineLifecycleEvent::EnginePluginsReady { origin, .. } => {
-                self.try_bootstrap(origin)
+                self.try_bootstrap_if_allowed(ctx, origin)
             }
             EngineLifecycleEvent::EngineStartCompleted { .. } => {
                 if self.bootstrapped {
+                    Ok(())
+                } else if !self.editor_bootstrap_allowed(ctx, "engine-start-completed") {
                     Ok(())
                 } else {
                     self.log_waiting_once("engine-start-completed");
@@ -130,11 +170,11 @@ impl<E: Send + 'static> Module<E> for GameReadySceneBootstrapModule {
     }
 
     #[inline]
-    fn update(&mut self, _ctx: &mut ModuleCtx<'_, E>) -> EngineResult<()> {
+    fn update(&mut self, ctx: &mut ModuleCtx<'_, E>) -> EngineResult<()> {
         if !self.bootstrapped
             && newengine_plugin_host::has_service(newengine_assets::consts::ASSET_SERVICE_ID)
         {
-            self.try_bootstrap("update-readiness-fallback")?;
+            self.try_bootstrap_if_allowed(ctx, "update-readiness-fallback")?;
         }
         Ok(())
     }

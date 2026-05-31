@@ -125,3 +125,200 @@ pub fn canonical_asset_format_ownership() -> Vec<AssetFormatOwnership> {
         },
     ]
 }
+
+
+pub const ASSET_IMPORTER_DESCRIPTOR_SCHEMA: &str = "northstar.assets.importer_descriptor.v1";
+pub const ASSET_RUNTIME_GRAPH_SCHEMA: &str = "northstar.assets.runtime_graph.v1";
+pub const ASSET_INVALIDATION_PLAN_SCHEMA: &str = "northstar.assets.invalidation_plan.v1";
+pub const ASSET_CACHE_KEY_SCHEMA: &str = "northstar.assets.cache_key.v1";
+pub const NEPAK_PACKAGE_WRITER_CAPABILITY_ID: &str = "assets.package_writer.nepak";
+pub const ASSET_PACKAGE_WRITE_NEPAK_JSON_V1: &str = "asset.package_write_nepak_json_v1";
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct ImporterDescriptorV1 {
+    pub importer_id: String,
+    pub label: String,
+    pub source_extensions: Vec<String>,
+    pub source_content_kinds: Vec<String>,
+    pub runtime_outputs: Vec<String>,
+    pub owner_gateway: String,
+    pub cache_key_inputs: Vec<String>,
+    pub deterministic: bool,
+}
+
+impl Default for ImporterDescriptorV1 {
+    fn default() -> Self {
+        Self {
+            importer_id: String::new(),
+            label: String::new(),
+            source_extensions: Vec::new(),
+            source_content_kinds: Vec::new(),
+            runtime_outputs: Vec::new(),
+            owner_gateway: crate::ENGINE_ASSET_SERVICE_ID.to_owned(),
+            cache_key_inputs: vec![
+                "source_path".to_owned(),
+                "source_content_hash".to_owned(),
+                "importer_id".to_owned(),
+                "importer_version".to_owned(),
+                "settings_hash".to_owned(),
+            ],
+            deterministic: true,
+        }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct AssetCacheKeyV1 {
+    pub schema: String,
+    pub source_ref: String,
+    pub source_hash: String,
+    pub importer_id: String,
+    pub importer_version: String,
+    pub settings_hash: String,
+    pub platform: String,
+    pub cache_key: String,
+}
+
+impl Default for AssetCacheKeyV1 {
+    fn default() -> Self {
+        Self {
+            schema: ASSET_CACHE_KEY_SCHEMA.to_owned(),
+            source_ref: String::new(),
+            source_hash: String::new(),
+            importer_id: String::new(),
+            importer_version: String::new(),
+            settings_hash: String::new(),
+            platform: "any".to_owned(),
+            cache_key: String::new(),
+        }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(default)]
+pub struct SourceAssetNodeV1 {
+    pub source_ref: String,
+    pub content_hash: String,
+    pub content_kind: String,
+    pub importer_id: String,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(default)]
+pub struct RuntimeAssetNodeV1 {
+    pub asset_ref: String,
+    pub content_kind: String,
+    pub owner_gateway: String,
+    pub cache_key: String,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(default)]
+pub struct AssetDependencyEdgeV1 {
+    pub from_ref: String,
+    pub to_ref: String,
+    pub reason: String,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct AssetRuntimeGraphV1 {
+    pub schema: String,
+    pub sources: Vec<SourceAssetNodeV1>,
+    pub runtime_assets: Vec<RuntimeAssetNodeV1>,
+    pub dependencies: Vec<AssetDependencyEdgeV1>,
+}
+
+impl Default for AssetRuntimeGraphV1 {
+    fn default() -> Self {
+        Self {
+            schema: ASSET_RUNTIME_GRAPH_SCHEMA.to_owned(),
+            sources: Vec::new(),
+            runtime_assets: Vec::new(),
+            dependencies: Vec::new(),
+        }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct AssetInvalidationPlanV1 {
+    pub schema: String,
+    pub changed_sources: Vec<String>,
+    pub invalidated_cache_keys: Vec<String>,
+    pub affected_runtime_assets: Vec<String>,
+    pub reason: String,
+}
+
+impl Default for AssetInvalidationPlanV1 {
+    fn default() -> Self {
+        Self {
+            schema: ASSET_INVALIDATION_PLAN_SCHEMA.to_owned(),
+            changed_sources: Vec::new(),
+            invalidated_cache_keys: Vec::new(),
+            affected_runtime_assets: Vec::new(),
+            reason: String::new(),
+        }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct NepakPackageWriteEntryV1 {
+    pub target_path: String,
+    pub source_ref: String,
+    pub payload_base64: String,
+    pub content_kind: String,
+    pub cache_key: String,
+}
+
+impl Default for NepakPackageWriteEntryV1 {
+    fn default() -> Self {
+        Self {
+            target_path: String::new(),
+            source_ref: String::new(),
+            payload_base64: String::new(),
+            content_kind: String::new(),
+            cache_key: String::new(),
+        }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct NepakPackageWriteRequestV1 {
+    pub package_ref: String,
+    pub runtime_graph: AssetRuntimeGraphV1,
+    pub entries: Vec<String>,
+    pub entry_payloads: Vec<NepakPackageWriteEntryV1>,
+    pub deterministic_order: bool,
+    pub dry_run: bool,
+    pub requested_capability: String,
+}
+
+impl Default for NepakPackageWriteRequestV1 {
+    fn default() -> Self {
+        Self {
+            package_ref: String::new(),
+            runtime_graph: AssetRuntimeGraphV1::default(),
+            entries: Vec::new(),
+            entry_payloads: Vec::new(),
+            deterministic_order: true,
+            dry_run: false,
+            requested_capability: NEPAK_PACKAGE_WRITER_CAPABILITY_ID.to_owned(),
+        }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(default)]
+pub struct NepakPackageWriteResponseV1 {
+    pub ok: bool,
+    pub package_ref: String,
+    pub written_entries: Vec<String>,
+    pub skipped_entries: Vec<String>,
+    pub package_hash: String,
+    pub diagnostics: Vec<String>,
+}

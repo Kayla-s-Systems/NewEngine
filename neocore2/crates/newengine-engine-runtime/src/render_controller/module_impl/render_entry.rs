@@ -6,8 +6,7 @@ use newengine_core::render::{
     require_render_api, BeginFrameDesc, Extent2D, RectI32, SceneLaunchStatus, Viewport,
 };
 use newengine_core::{EngineResult, ModuleCtx};
-use newengine_ui_api::UiDrawList;
-use newengine_ui_api::UiRuntimeDebugOverlayTelemetry;
+use newengine_ui_api::{UiDrawList, UiRuntimeDebugOverlayTelemetry, UiViewportSlot};
 use crate::scene_bridge::SkyClearColorRuntime;
 
 use super::frame_types::{PlayableFrameOutcome, RenderFrameScope};
@@ -84,6 +83,7 @@ impl RuntimeRenderController {
         drop(r);
 
         let ui: Option<UiDrawList> = ctx.resources_mut().remove::<UiDrawList>();
+        self.apply_editor_viewport_slot(ctx, w, h);
         let mut r = api.lock();
         let dt = ctx.frame().map(|f| f.dt).unwrap_or(0.016);
         let scope_result = self.begin_playable_surface_frame(&mut **r, ui.is_some(), w, h, dt, trace_frame);
@@ -268,6 +268,18 @@ impl RuntimeRenderController {
                 q.push(cmd);
             }
         }
+    }
+
+    fn apply_editor_viewport_slot<E: Send + 'static>(&self, ctx: &ModuleCtx<'_, E>, surface_w: u32, surface_h: u32) {
+        let Some(slot) = ctx.resources().get::<UiViewportSlot>() else { return; };
+        let (mut vp_w, mut vp_h) = slot.extent_px();
+        if vp_w == 0 || vp_h == 0 {
+            self.bridges.viewport.publish_extent(0, 0);
+            return;
+        }
+        vp_w = vp_w.min(surface_w.max(1));
+        vp_h = vp_h.min(surface_h.max(1));
+        self.bridges.viewport.publish_extent(vp_w, vp_h);
     }
 
     fn begin_playable_surface_frame(

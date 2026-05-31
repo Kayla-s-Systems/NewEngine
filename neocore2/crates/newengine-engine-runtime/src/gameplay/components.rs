@@ -361,6 +361,10 @@ impl Default for FpsDemoState {
 pub enum GameReadyWorldLaunchGatePhase {
     WaitingForResidency,
     Released,
+    /// Renderer/world resources are resident and the editor may show a preview,
+    /// but simulation and direct player control remain stopped until explicit
+    /// Simulate or Play In Editor intent.
+    EditorPreviewReady,
     PlayActivated,
 }
 
@@ -393,13 +397,25 @@ impl GameReadyWorldLaunchGate {
     pub const fn is_released(&self) -> bool {
         matches!(
             self.phase,
-            GameReadyWorldLaunchGatePhase::Released | GameReadyWorldLaunchGatePhase::PlayActivated
+            GameReadyWorldLaunchGatePhase::Released
+                | GameReadyWorldLaunchGatePhase::EditorPreviewReady
+                | GameReadyWorldLaunchGatePhase::PlayActivated
         )
     }
 
     #[inline]
     pub const fn is_play_activated(&self) -> bool {
         matches!(self.phase, GameReadyWorldLaunchGatePhase::PlayActivated)
+    }
+
+    #[inline]
+    pub const fn is_editor_preview_ready(&self) -> bool {
+        matches!(self.phase, GameReadyWorldLaunchGatePhase::EditorPreviewReady)
+    }
+
+    #[inline]
+    pub const fn needs_prelaunch_gate(&self) -> bool {
+        matches!(self.phase, GameReadyWorldLaunchGatePhase::WaitingForResidency | GameReadyWorldLaunchGatePhase::Released)
     }
 
     #[inline]
@@ -416,6 +432,15 @@ impl GameReadyWorldLaunchGate {
         self.waiting_textures = waiting;
         self.total_textures = total;
         self.failed_textures = failed;
+    }
+
+    #[inline]
+    pub fn mark_editor_preview_ready(&mut self, frame: u64, reason: impl Into<String>) {
+        self.requested_frame = self.requested_frame.min(frame);
+        self.released_frame = Some(frame);
+        self.phase = GameReadyWorldLaunchGatePhase::EditorPreviewReady;
+        self.reason = reason.into();
+        self.waiting_textures = 0;
     }
 
     #[inline]

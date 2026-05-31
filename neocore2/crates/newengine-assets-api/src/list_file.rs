@@ -389,7 +389,7 @@ pub const fn list_file_content_kind_label(kind: u32) -> &'static str {
 /// This struct is retained for format crates/tools that want a compact local
 /// declaration, but the asset API no longer owns a global `LIST_FILE_FORMAT_SPECS`
 /// table. Concrete formats must publish descriptors from their own crates or
-/// providers and register them with `engine.assets.file_types`.
+/// providers and register them with `engine.assets.types`.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct ListFileFormatSpec {
     pub extension: &'static str,

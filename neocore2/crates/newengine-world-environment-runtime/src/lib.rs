@@ -15,21 +15,30 @@ use newengine_service_kit::{
     EngineGatewayProviderDeclDynamic, JsonServiceRouter, NullEngineGatewayProviderDeclDynamic,
 };
 use newengine_world_environment_api::{
-    AtmosphereStateDto, CelestialBodyDto, CelestialStateDto, CloudLayerDto, CloudStateDto,
-    Color3Dto, EnvironmentDiagnosticsDto, EnvironmentFrameDto, EnvironmentFrameRequest,
-    EnvironmentGameplayModifiersDto, EnvironmentGlobalStateDto, EnvironmentInvokeRequest,
-    EnvironmentLightingIntentDto, EnvironmentPreviewTimeRequest, EnvironmentRestoreRequest,
-    EnvironmentRestoreResponse, EnvironmentSampleAtPositionRequest, EnvironmentSampleAtPositionResponse,
-    EnvironmentServiceInfo, EnvironmentSnapshotRequest, EnvironmentSnapshotResponse, ExposureIntentDto,
-    SkyStateDto, Vec3Dto, WeatherStateDto, WindStateDto, ENGINE_WORLD_ENVIRONMENT_SERVICE_ID,
-    WORLD_ENVIRONMENT_BACKEND_CAPABILITY_ID, WORLD_ENVIRONMENT_DEFAULT_SERVICE_ID,
-    WORLD_ENVIRONMENT_NULL_SERVICE_ID, WORLD_ENVIRONMENT_REQUIRED_METHODS_V1,
-    WORLD_ENVIRONMENT_SERVICE_METHOD_FRAME_JSON_V1, WORLD_ENVIRONMENT_SERVICE_METHOD_INFO,
-    WORLD_ENVIRONMENT_SERVICE_METHOD_INVOKE, WORLD_ENVIRONMENT_SERVICE_METHOD_PREVIEW_TIME_JSON_V1,
+    EnvironmentFrameDto, EnvironmentFrameRequest, EnvironmentInvokeRequest,
+    EnvironmentPreviewTimeRequest, EnvironmentRestoreRequest, EnvironmentRestoreResponse,
+    EnvironmentSampleAtPositionRequest, EnvironmentSampleAtPositionResponse,
+    EnvironmentServiceInfo, EnvironmentSnapshotRequest, EnvironmentSnapshotResponse, Vec3Dto,
+    ENGINE_WORLD_ENVIRONMENT_SERVICE_ID, WORLD_ENVIRONMENT_BACKEND_CAPABILITY_ID,
+    WORLD_ENVIRONMENT_DEFAULT_SERVICE_ID, WORLD_ENVIRONMENT_NULL_SERVICE_ID,
+    WORLD_ENVIRONMENT_REQUIRED_METHODS_V1, WORLD_ENVIRONMENT_SERVICE_METHOD_FRAME_JSON_V1,
+    WORLD_ENVIRONMENT_SERVICE_METHOD_INFO, WORLD_ENVIRONMENT_SERVICE_METHOD_INVOKE,
+    WORLD_ENVIRONMENT_SERVICE_METHOD_PREVIEW_TIME_JSON_V1,
     WORLD_ENVIRONMENT_SERVICE_METHOD_RESTORE_JSON_V1,
     WORLD_ENVIRONMENT_SERVICE_METHOD_SAMPLE_AT_POSITION_JSON_V1,
     WORLD_ENVIRONMENT_SERVICE_METHOD_SHUTDOWN_V1, WORLD_ENVIRONMENT_SERVICE_METHOD_SNAPSHOT_JSON_V1,
 };
+mod celestial;
+mod consumer_packets;
+mod default_provider;
+mod math;
+mod phenomena;
+mod profile_catalog;
+mod visual_asset_catalog;
+mod weather_profile;
+
+use default_provider::{build_default_environment_frame, deterministic_key};
+use math::clamp01;
 
 pub const WORLD_ENVIRONMENT_GATEWAY_OWNER: &str = "newengine-world-environment-runtime.environment-gateway";
 pub const WORLD_ENVIRONMENT_DEFAULT_PROVIDER_ROUTE: &str = "engine.world.default.environment";
@@ -268,241 +277,6 @@ pub fn register_world_environment_gateway_best_effort() {
     );
 }
 
-fn build_default_environment_frame(
-    provider: &str,
-    provider_route: &str,
-    req: EnvironmentFrameRequest,
-) -> EnvironmentFrameDto {
-    let tod = normalized_day_from_time(&req);
-    let day_index = req.time.game.day_index.min(u32::MAX as u64) as u32;
-    let world_time_seconds = req.time.game.day_index as f64 * req.time.game.seconds_per_game_day.max(1.0)
-        + req.time.game.seconds_of_day.max(0.0);
-
-    let sun = sun_body(tod);
-    let moon = moon_body(tod);
-    let night_blend = clamp01_f32(1.0 - sun.intensity_lux_hint / 105_000.0);
-    let dusk_dawn_blend = bell01(((tod - 0.25).abs()).min((tod - 0.75).abs()) * 4.0);
-    let cloud_coverage = baseline_cloud_coverage(req.seed, tod);
-    let overcast = clamp01_f32((cloud_coverage - 0.65) * 2.2);
-    let haze = 0.04 + 0.08 * dusk_dawn_blend + 0.05 * cloud_coverage;
-    let visibility = (20_000.0 * (1.0 - overcast * 0.35) * (1.0 - haze * 0.45)).max(500.0);
-
-    let sky = SkyStateDto {
-        zenith_color_linear: mix_color(Color3Dto::new(0.02, 0.025, 0.045), Color3Dto::new(0.18, 0.34, 0.62), 1.0 - night_blend),
-        horizon_color_linear: mix_color(Color3Dto::new(0.05, 0.055, 0.085), Color3Dto::new(0.48, 0.62, 0.84), 1.0 - night_blend),
-        sun_horizon_color_linear: mix_color(Color3Dto::new(0.16, 0.09, 0.06), Color3Dto::new(1.0, 0.48, 0.18), dusk_dawn_blend),
-        opposite_horizon_color_linear: mix_color(Color3Dto::new(0.03, 0.04, 0.08), Color3Dto::new(0.32, 0.45, 0.68), 1.0 - night_blend),
-        dusk_dawn_blend,
-        night_blend,
-        overcast_blend: overcast,
-        light_pollution: 0.04 * night_blend,
-    };
-
-    let atmosphere = AtmosphereStateDto {
-        fog_density: 0.01 + overcast * 0.04,
-        fog_height_falloff: 0.12,
-        fog_color_linear: mix_color(Color3Dto::new(0.09, 0.10, 0.14), Color3Dto::new(0.56, 0.62, 0.70), 1.0 - night_blend),
-        haze_amount: haze,
-        humidity: 0.30 + cloud_coverage * 0.20,
-        aerosol_density: 0.08 + haze,
-        visibility_distance_meters: visibility,
-    };
-
-    let weather = WeatherStateDto {
-        weather_id: "weather.clear_baseline".to_owned(),
-        intensity: cloud_coverage * 0.15,
-        transition_progress: 1.0,
-        tags: vec![
-            "weather.clear".to_owned(),
-            if night_blend > 0.65 { "time.night" } else { "time.day" }.to_owned(),
-            "visibility.normal".to_owned(),
-        ],
-        ..WeatherStateDto::default()
-    };
-
-    let wind = WindStateDto {
-        global_direction: normalize(Vec3Dto::new(0.92, 0.0, 0.38)),
-        global_speed_mps: 2.0 + cloud_coverage * 1.5,
-        gust_strength: 0.1 + overcast * 0.15,
-        cloud_advection: Vec3Dto::new(2.0 + cloud_coverage, 0.0, 0.8),
-    };
-
-    let clouds = CloudStateDto {
-        coverage: cloud_coverage,
-        overcast,
-        shadow_strength: clamp01_f32(cloud_coverage * 0.45),
-        light_absorption: clamp01_f32(cloud_coverage * 0.25),
-        layers: vec![CloudLayerDto {
-            coverage: cloud_coverage,
-            density: 0.18 + cloud_coverage * 0.35,
-            wind_velocity: wind.cloud_advection,
-            ..CloudLayerDto::default()
-        }],
-        volumes: Vec::new(),
-        storm_cells: Vec::new(),
-    };
-
-    let lighting_intent = EnvironmentLightingIntentDto {
-        sun_lux_hint: sun.intensity_lux_hint * (1.0 - clouds.light_absorption),
-        moon_lux_hint: moon.intensity_lux_hint * (1.0 - clouds.light_absorption),
-        ambient_intensity: 0.05 + (1.0 - night_blend) * 0.22 + cloud_coverage * 0.06,
-        sky_light_intensity: 0.08 + (1.0 - night_blend) * 0.48,
-        cloud_shadow_strength: clouds.shadow_strength,
-        wetness_specular_boost: 0.0,
-    };
-
-    let gameplay_modifiers = EnvironmentGameplayModifiersDto {
-        visibility_multiplier: clamp01_f32(visibility / 20_000.0),
-        audio_masking_multiplier: 0.02 * cloud_coverage,
-        weather_hazard_level: 0.0,
-        shelter_score: 0.05 * cloud_coverage,
-        surface_slipperiness_hint: 0.0,
-    };
-
-    let profile = if req.environment_profile.profile_id.trim().is_empty() {
-        "environment.default".to_owned()
-    } else {
-        req.environment_profile.profile_id.clone()
-    };
-    let key = deterministic_key(&req, provider);
-
-    EnvironmentFrameDto {
-        frame_id: req.frame_id,
-        world_instance_id: req.world_instance_id,
-        world_time_seconds,
-        time_of_day_normalized: tod,
-        day_index,
-        global: EnvironmentGlobalStateDto {
-            active_region: req.active_region,
-            active_biome: req.active_biome,
-            active_weather_profile: weather.weather_id.clone(),
-            active_environment_profile: profile.clone(),
-            environment_seed: req.seed,
-        },
-        celestial: CelestialStateDto {
-            sun,
-            moon,
-            moon_phase: 0.5,
-            stars_visibility: night_blend * (1.0 - cloud_coverage * 0.75),
-            night_sky_visibility: night_blend * (1.0 - cloud_coverage * 0.65),
-        },
-        sky,
-        atmosphere,
-        weather,
-        clouds,
-        wind,
-        lighting_intent,
-        gameplay_modifiers,
-        exposure_intent: ExposureIntentDto {
-            night_adaptation_hint: night_blend,
-            storm_darkening: overcast * 0.15,
-            sun_glare_hint: clamp01_f32(sun.intensity_lux_hint / 105_000.0) * (1.0 - cloud_coverage),
-            interior_exterior_bias: 0.0,
-        },
-        environment_objects: Vec::new(),
-        diagnostics: EnvironmentDiagnosticsDto {
-            provider: provider.to_owned(),
-            provider_route: provider_route.to_owned(),
-            degraded: false,
-            deterministic_key: key,
-            active_profile: profile,
-            reasons: vec![
-                "engine.time provides clock authority".to_owned(),
-                "engine.world.environment resolves environmental meaning".to_owned(),
-                "engine.render remains a consumer of resolved packets".to_owned(),
-            ],
-            warnings: Vec::new(),
-        },
-    }
-}
-
-fn normalized_day_from_time(req: &EnvironmentFrameRequest) -> f32 {
-    let normalized = req.time.game.normalized_day;
-    if normalized.is_finite() && normalized >= 0.0 && normalized <= 1.0 {
-        return normalized as f32;
-    }
-    let seconds_per_day = req.time.game.seconds_per_game_day.max(1.0);
-    let seconds = req.time.game.seconds_of_day.rem_euclid(seconds_per_day);
-    (seconds / seconds_per_day) as f32
-}
-
-fn deterministic_key(req: &EnvironmentFrameRequest, provider: &str) -> String {
-    format!(
-        "{}:{}:{}:{:.6}:{}",
-        provider,
-        req.world_instance_id,
-        req.seed,
-        normalized_day_from_time(req),
-        req.environment_profile.profile_id
-    )
-}
-
-fn sun_body(tod: f32) -> CelestialBodyDto {
-    let tau = std::f32::consts::TAU;
-    let orbit = tau * (tod - 0.25);
-    let altitude = orbit.sin().asin();
-    let visibility = smoothstep(0.0, 0.08, orbit.sin().max(0.0));
-    let direction = normalize(Vec3Dto::new(orbit.cos(), orbit.sin(), (tau * tod).sin() * 0.35));
-    CelestialBodyDto {
-        direction_world: direction,
-        altitude_radians: altitude,
-        azimuth_radians: tau * tod,
-        angular_radius_radians: 0.00465,
-        color_linear: mix_color(Color3Dto::new(1.0, 0.47, 0.22), Color3Dto::new(1.0, 0.95, 0.82), visibility),
-        intensity_lux_hint: 105_000.0 * visibility,
-        visible: visibility > 0.01,
-    }
-}
-
-fn moon_body(tod: f32) -> CelestialBodyDto {
-    let tau = std::f32::consts::TAU;
-    let orbit = tau * (tod + 0.25);
-    let altitude_raw = orbit.sin();
-    let visibility = smoothstep(0.0, 0.08, altitude_raw.max(0.0));
-    CelestialBodyDto {
-        direction_world: normalize(Vec3Dto::new(orbit.cos(), altitude_raw, (tau * (tod + 0.5)).sin() * 0.25)),
-        altitude_radians: altitude_raw.asin(),
-        azimuth_radians: tau * (tod + 0.5),
-        angular_radius_radians: 0.00450,
-        color_linear: Color3Dto::new(0.58, 0.66, 0.86),
-        intensity_lux_hint: 0.25 * visibility,
-        visible: visibility > 0.01,
-    }
-}
-
-fn baseline_cloud_coverage(seed: u64, tod: f32) -> f32 {
-    let seed_phase = ((seed ^ (seed >> 32)) as u32) as f32 / u32::MAX as f32;
-    let wave = ((std::f32::consts::TAU * (tod + seed_phase)).sin() + 1.0) * 0.5;
-    clamp01_f32(0.12 + wave * 0.18)
-}
-
-fn normalize(v: Vec3Dto) -> Vec3Dto {
-    let len_sq = v.x * v.x + v.y * v.y + v.z * v.z;
-    if len_sq <= f32::EPSILON {
-        return Vec3Dto::zero();
-    }
-    let inv = len_sq.sqrt().recip();
-    Vec3Dto::new(v.x * inv, v.y * inv, v.z * inv)
-}
-
-fn mix_color(a: Color3Dto, b: Color3Dto, t: f32) -> Color3Dto {
-    let t = clamp01_f32(t);
-    Color3Dto::new(a.r + (b.r - a.r) * t, a.g + (b.g - a.g) * t, a.b + (b.b - a.b) * t)
-}
-
-fn smoothstep(edge0: f32, edge1: f32, x: f32) -> f32 {
-    let denom = (edge1 - edge0).max(f32::EPSILON);
-    let t = clamp01_f32((x - edge0) / denom);
-    t * t * (3.0 - 2.0 * t)
-}
-
-fn bell01(x: f32) -> f32 {
-    1.0 - smoothstep(0.0, 1.0, clamp01_f32(x))
-}
-
-fn clamp01(value: f64) -> f64 { value.clamp(0.0, 1.0) }
-fn clamp01_f32(value: f32) -> f32 { value.clamp(0.0, 1.0) }
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -517,7 +291,47 @@ mod tests {
         let b = build_default_environment_frame("environment.default", WORLD_ENVIRONMENT_DEFAULT_PROVIDER_ROUTE, req);
         assert_eq!(a.diagnostics.deterministic_key, b.diagnostics.deterministic_key);
         assert_eq!(a.celestial.sun.direction_world, b.celestial.sun.direction_world);
+        assert_eq!(a.weather.state, b.weather.state);
+        assert_eq!(a.environment_objects, b.environment_objects);
+        assert_eq!(a.visual_assets.visual_group_id, "environment.visuals.game_ready_skydome.v1");
+        assert_eq!(a.visual_assets.texture_dictionary_ref, "textures/fps/skydome.ytd");
+        assert_eq!(a.visual_assets.sky_texture_ref, "textures/fps/skydome.ytd@starfield");
+        assert_eq!(a.visual_assets.cloud_density_texture_ref, "textures/fps/skydome.ytd@baseperlinnoise3channel");
+        assert_eq!(a.visual_assets.moon_disk_texture_ref, "textures/fps/skydome.ytd@moon_new");
+        assert!(!a.visual_assets.sun_disk_texture_ref.contains("textures/sky/celestial.ytd"));
+        assert_eq!(a.visual_assets.sky_texture_ref, a.consumer_packets.render.sky_texture_ref);
+        assert_eq!(a.visual_assets.visual_group_id, a.consumer_packets.render.visual_group_id);
+        assert!(!a.consumer_packets.streaming.residency_intents.is_empty() || a.clouds.coverage <= 0.20);
         assert!(!a.diagnostics.degraded);
+    }
+
+    #[test]
+    fn profile_selection_is_exact_descriptor_not_substring_weather_force() {
+        let mut req = EnvironmentFrameRequest::default();
+        req.environment_profile.profile_id = "environment.fake_storm_name_that_is_not_registered".to_owned();
+        req.seed = 7;
+        req.time.game.normalized_day = 0.50;
+        let frame = build_default_environment_frame("environment.default", WORLD_ENVIRONMENT_DEFAULT_PROVIDER_ROUTE, req);
+        assert_eq!(frame.global.active_environment_profile, "environment.default");
+        assert!(frame.diagnostics.warnings.iter().any(|warning| warning.contains("unknown environment profile")));
+        assert!(frame.diagnostics.reasons.iter().any(|reason| reason.contains("weather_table=")));
+    }
+
+
+    #[test]
+    fn visual_asset_refs_use_existing_grouped_skydome_dictionary() {
+        let frame = build_default_environment_frame(
+            "environment.default",
+            WORLD_ENVIRONMENT_DEFAULT_PROVIDER_ROUTE,
+            EnvironmentFrameRequest::default(),
+        );
+        let serialized = serde_json::to_string(&frame.visual_assets).expect("visual assets serialize");
+        assert!(serialized.contains("textures/fps/skydome.ytd"));
+        assert!(!serialized.contains("textures/sky/highlands_sky.ytd"));
+        assert!(!serialized.contains("textures/sky/default_sky.ytd"));
+        assert!(!serialized.contains("textures/sky/alpine_sky.ytd"));
+        assert!(!serialized.contains("textures/sky/desert_sky.ytd"));
+        assert!(!serialized.contains("textures/sky/celestial.ytd"));
     }
 
     #[test]

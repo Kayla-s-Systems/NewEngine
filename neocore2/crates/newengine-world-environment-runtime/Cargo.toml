@@ -17,3 +17,4 @@ newengine-plugin-host = { path = "../newengine-plugin-host" }
 newengine-service-api = { path = "../newengine-service-api" }
 newengine-service-kit = { path = "../newengine-service-kit" }
 newengine-world-environment-api = { path = "../newengine-world-environment-api" }
+newengine-world-api = { path = "../newengine-world-api" }

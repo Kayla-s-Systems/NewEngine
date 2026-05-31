@@ -68,3 +68,4 @@ newengine-ui = { path = "../newengine-ui", default-features = false }
 newengine-ui-api = { path = "../newengine-ui-api" }
 newengine-ui-navigation-api = { path = "../newengine-ui-navigation-api" }
 newengine-viewport = { path = "../newengine-viewport" }
+newengine-world-environment-api = { path = "../newengine-world-environment-api" }

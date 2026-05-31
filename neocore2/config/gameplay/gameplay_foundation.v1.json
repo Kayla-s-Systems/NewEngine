@@ -1,0 +1,39 @@
+{
+  "$schema": "northstar.gameplay_foundation.v1",
+  "policy": "Gameplay systems communicate through tags, tasks and intent DTOs. Providers never mutate ECS/world directly.",
+  "tags": [
+    { "tag": "npc.police", "domain": "Faction", "display_name": "Police NPC", "description": "Agent belongs to a police/authority faction." },
+    { "tag": "faction.city_guard", "domain": "Faction", "display_name": "City Guard", "description": "Generic city guard faction tag." },
+    { "tag": "state.alert", "domain": "State", "display_name": "Alert", "description": "Agent is in alert state." },
+    { "tag": "state.idle", "domain": "State", "display_name": "Idle", "description": "Agent is idle and can accept new tasks." },
+    { "tag": "weapon.firearm", "domain": "Weapon", "display_name": "Firearm", "description": "Entity or loadout uses firearm semantics." },
+    { "tag": "mission.main", "domain": "Mission", "display_name": "Main Mission", "description": "Mission-critical object or task." },
+    { "tag": "animation.locomotion", "domain": "Animation", "display_name": "Locomotion", "description": "Animation graph/category for movement." },
+    { "tag": "navigation.ground", "domain": "Navigation", "display_name": "Ground Navigation", "description": "Ground navigation query domain." }
+  ],
+  "tasks": [
+    { "task": "move_to", "kind": "MoveTo", "display_name": "Move To", "tags": ["navigation.ground"], "required_parameters": ["target_position"], "description": "Request movement toward a world-space target." },
+    { "task": "wait", "kind": "Wait", "display_name": "Wait", "tags": ["state.idle"], "required_parameters": ["duration_seconds"], "description": "Request an agent wait/idles for a duration." },
+    { "task": "play_animation", "kind": "PlayAnimation", "display_name": "Play Animation", "tags": ["animation.locomotion"], "required_parameters": ["clip"], "description": "Request an animation clip or graph transition." },
+    { "task": "attach_entity", "kind": "AttachEntity", "display_name": "Attach Entity", "tags": [], "required_parameters": ["target"], "description": "Request an attachment relationship through the apply stage." },
+    { "task": "request_dialogue", "kind": "RequestDialogue", "display_name": "Request Dialogue", "tags": [], "required_parameters": ["line"], "description": "Request dialogue playback through gameplay/scripting systems." },
+    { "task": "claim_resource", "kind": "ClaimResource", "display_name": "Claim Resource", "tags": [], "required_parameters": ["resource"], "description": "Request ownership of a named gameplay resource." }
+  ],
+  "animation_graphs": [
+    { "graph": "humanoid.locomotion", "display_name": "Humanoid Locomotion", "tags": ["animation.locomotion"], "states": ["idle", "walk", "run", "turn"] },
+    { "graph": "humanoid.upper_body", "display_name": "Humanoid Upper Body", "tags": ["weapon.firearm"], "states": ["relaxed", "aim", "fire", "reload"] }
+  ],
+  "navigation": {
+    "default_domain": "navigation.ground",
+    "provider": "engine.navigation.foundation",
+    "notes": [
+      "Baseline provider returns deterministic straight-line path DTOs until a concrete navmesh provider is active.",
+      "Navigation answers queries only; movement is requested through AI/task/world apply intents."
+    ]
+  },
+  "ai": {
+    "provider": "engine.ai.foundation",
+    "decision_policy": "emit intents only",
+    "forbidden": ["&mut World", "newengine_ecs::World", "newengine_ecs::EntityId", "direct ECS mutation"]
+  }
+}

@@ -21,3 +21,5 @@ newengine-scene-io = { path = "../newengine-scene-io" }
 newengine-service-api = { path = "../newengine-service-api" }
 newengine-service-kit = { path = "../newengine-service-kit" }
 newengine-runtime-host = { path = "../newengine-runtime-host" }
+
+newengine-world-api = { path = "../newengine-world-api" }

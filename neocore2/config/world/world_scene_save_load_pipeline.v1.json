@@ -1,0 +1,37 @@
+{
+  "$schema": "northstar.world_scene_save_load_pipeline.v1",
+  "policy": "Scene declares authored structure; World owns streaming runtime cells, save/load snapshots and apply-stage mutation.",
+  "gateways": {
+    "scene": "engine.scene",
+    "world": "engine.world",
+    "entity": "engine.entity"
+  },
+  "streaming_cells": {
+    "owner_gateway": "engine.world",
+    "method": "world.streaming_cells_json_v1",
+    "capability": "world.streaming.cells",
+    "dto_only": true,
+    "native_entity_id_allowed": false
+  },
+  "instantiation": {
+    "planner_gateway": "engine.scene",
+    "prefab_method": "scene.instantiate_prefab_json_v1",
+    "archetype_method": "scene.instantiate_archetype_json_v1",
+    "planner_mutates_runtime": false,
+    "apply_gateway": "engine.world",
+    "apply_method": "world.apply_stage_json_v1",
+    "apply_stage": "scene.instantiate"
+  },
+  "snapshot": {
+    "save_method": "world.save_snapshot_json_v1",
+    "load_method": "world.load_snapshot_json_v1",
+    "schema": "newengine.world.snapshot.v1",
+    "storage": "caller-owned",
+    "scene_payload_contract": "newengine.scene.asset.v1"
+  },
+  "entity_boundary": {
+    "public_handles": "EntityHandle",
+    "native_entity_id_allowed_in_service_boundary": false,
+    "ecs_world_allowed_in_service_boundary": false
+  }
+}

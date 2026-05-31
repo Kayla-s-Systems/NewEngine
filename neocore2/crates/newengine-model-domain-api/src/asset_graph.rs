@@ -276,7 +276,7 @@ impl AssetGraphResolver {
             graph.debug_log.push(format!("assets.graph.resolve_v1: object='{}' graph nodes={} edges={}", object.name, graph.nodes.len(), graph.edges.len()));
         }
         for warning in &plan.warnings {
-            if warning.to_ascii_lowercase().contains("neytd") {
+            if warning.to_ascii_lowercase().contains("retired texture dictionary") {
                 graph.migration_warnings.push(warning.clone());
             } else {
                 graph.format_warnings.push(warning.clone());

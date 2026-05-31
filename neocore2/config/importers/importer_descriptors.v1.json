@@ -1,0 +1,78 @@
+{
+  "schema": "northstar.assets.importer_descriptors.v1",
+  "importers": [
+    {
+      "importer_id": "northstar.importer.ytyp_xml.v1",
+      "label": "YTYP XML authoring importer",
+      "source_extensions": [
+        "xml",
+        "ytyp.xml"
+      ],
+      "source_content_kinds": [
+        "source.ytyp.xml"
+      ],
+      "runtime_outputs": [
+        ".ytyp@archetype_dictionary"
+      ],
+      "owner_gateway": "engine.assets.definitions",
+      "cache_key_inputs": [
+        "source_path",
+        "source_content_hash",
+        "importer_id",
+        "importer_version",
+        "settings_hash",
+        "target_platform"
+      ],
+      "deterministic": true,
+      "version": "1"
+    },
+    {
+      "importer_id": "northstar.importer.neui.v1",
+      "label": "NEUI import descriptor compiler",
+      "source_extensions": [
+        "neui.import.json"
+      ],
+      "source_content_kinds": [
+        "source.neui.import_descriptor"
+      ],
+      "runtime_outputs": [
+        ".neui@ui_library"
+      ],
+      "owner_gateway": "engine.ui",
+      "cache_key_inputs": [
+        "source_path",
+        "source_content_hash",
+        "importer_id",
+        "importer_version",
+        "settings_hash",
+        "target_platform"
+      ],
+      "deterministic": true,
+      "version": "1"
+    },
+    {
+      "importer_id": "northstar.importer.yft_font.v1",
+      "version": "1",
+      "label": "YFT font dictionary importer",
+      "source_extensions": [
+        "yft.import.json"
+      ],
+      "source_content_kinds": [
+        "source.yft.import_descriptor"
+      ],
+      "runtime_outputs": [
+        ".yft@font_dictionary"
+      ],
+      "owner_gateway": "engine.ui.text",
+      "cache_key_inputs": [
+        "source_path",
+        "source_content_hash",
+        "importer_id",
+        "importer_version",
+        "settings_hash",
+        "target_platform"
+      ],
+      "deterministic": true
+    }
+  ]
+}
