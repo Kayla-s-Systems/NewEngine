@@ -39,7 +39,7 @@ impl FeatureExtractionFrame {
             registry.sync_plugin_capabilities(snapshot);
         }
         if trace_frame {
-            log::debug!("render draw-list providers: {}", registry.labels().join(","));
+            newengine_ulog_api::ulog::debug!("render draw-list providers: {}", registry.labels().join(","));
         }
 
         let providers = registry.providers();

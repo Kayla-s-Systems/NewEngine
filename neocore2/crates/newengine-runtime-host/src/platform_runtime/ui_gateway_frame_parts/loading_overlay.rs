@@ -1,10 +1,12 @@
+use super::*;
+
 pub(crate) fn publish_loading_overlay(
     status: &ScreenOverlayStatus,
     provider: UiProviderBinding,
     frame_index: u64,
 ) {
     if !newengine_core::has_engine_gateway_route(ENGINE_UI_SERVICE_ID) {
-        log::warn!("ui gateway: engine.ui route unavailable; loading overlay skipped without native/special renderer");
+        newengine_ulog_api::ulog::warn!("ui gateway: engine.ui route unavailable; loading overlay skipped without native/special renderer");
         return;
     }
 
@@ -59,8 +61,6 @@ pub(crate) fn publish_loading_overlay(
     publish_surface_node(&node);
 }
 
-
-
 fn loading_overlay_components(
     title: &str,
     status: &str,
@@ -97,7 +97,7 @@ fn loading_overlay_components(
 /// hidden node so `Loading World 100%` cannot remain over the playable frame.
 pub(crate) fn publish_loading_overlay_inactive(frame_index: u64) {
     if !newengine_core::has_engine_gateway_route(ENGINE_UI_SERVICE_ID) {
-        log::warn!("ui gateway: engine.ui route unavailable; loading overlay clear skipped without native/special renderer");
+        newengine_ulog_api::ulog::warn!("ui gateway: engine.ui route unavailable; loading overlay clear skipped without native/special renderer");
         return;
     }
 

@@ -5,6 +5,7 @@ edition = "2021"
 description = "OBJ/MTL model importer for NewEngine model construction"
 
 [dependencies]
+newengine-ulog-api = { path = "../newengine-ulog-api" }
 log = "0.4"
 serde = { version = "1", features = ["derive"] }
 newengine-math = { path = "../newengine-math" }

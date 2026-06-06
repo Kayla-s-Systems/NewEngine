@@ -120,7 +120,7 @@ impl RenderFrameOrchestrator {
         cpu_profile.mark("pipeline");
 
         if let Err(e) = controller.pump_scene_gpu_residency(r, scene) {
-            log::warn!("render residency: terrain gpu upload budget failed: {}", e);
+            newengine_ulog_api::ulog::warn!("render residency: terrain gpu upload budget failed: {}", e);
         }
         cpu_profile.mark("gpu_residency");
 
@@ -149,7 +149,7 @@ impl RenderFrameOrchestrator {
             ) {
                 Ok(plan) => plan,
                 Err(e) => {
-                    log::warn!("render controller: shadow plan disabled for this frame: {}", e);
+                    newengine_ulog_api::ulog::warn!("render controller: shadow plan disabled for this frame: {}", e);
                     let _ = r.discard_recorded_commands();
                     shadows::LightShadowPlan::disabled(lit.white_texture)
                 }
@@ -166,7 +166,7 @@ impl RenderFrameOrchestrator {
             && !controller.shadows.cache_valid
         {
             if scope.trace_frame {
-                log::debug!(
+                newengine_ulog_api::ulog::debug!(
                     "render shadow cache: using unshadowed fallback until first shadow map is rendered frame={} target={:?}",
                     controller.frame.frame_index,
                     shadow_plan.render_target()
@@ -335,7 +335,7 @@ impl RenderFrameOrchestrator {
             Err(e) => {
                 let message = e.to_string();
                 controller.disable_viewport_pass("render_graph.submit_frame", &message);
-                log::error!(
+                newengine_ulog_api::ulog::error!(
                     "render controller: frame graph submit failed; viewport pass disabled and renderer continues in degraded UI/safe-present mode: {}",
                     message
                 );
@@ -656,7 +656,7 @@ impl RenderFrameOrchestrator {
             .light_kind
             .map(|kind| kind.label())
             .unwrap_or("none");
-        log::debug!(
+        newengine_ulog_api::ulog::debug!(
             "render shadow plan: kind={} active={} render_this_frame={} cache_valid={} target={:?} resolution={}",
             shadow_kind,
             shadow_plan.is_active(),
@@ -676,7 +676,7 @@ fn log_gpu_safe_profile_once() {
         .compare_exchange(false, true, Ordering::AcqRel, Ordering::Acquire)
         .is_ok()
     {
-        log::warn!(
+        newengine_ulog_api::ulog::warn!(
             "render controller: legacy conservative GPU profile active; high-cost feature branches are disabled only by explicit runtime profile policy"
         );
         newengine_core::crash::record_breadcrumb(
@@ -692,7 +692,7 @@ fn log_transient_pipeline_wait_once(frame_index: u64, error: &str) {
         .compare_exchange(false, true, Ordering::AcqRel, Ordering::Acquire)
         .is_ok()
     {
-        log::warn!(
+        newengine_ulog_api::ulog::warn!(
             "render controller: material pipeline not ready yet; shader compile remains async and viewport will retry next frame frame={} err='{}'",
             frame_index,
             error
@@ -702,7 +702,7 @@ fn log_transient_pipeline_wait_once(frame_index: u64, error: &str) {
             frame_index, error
         ));
     } else {
-        log::debug!(
+        newengine_ulog_api::ulog::debug!(
             "render controller: material pipeline still pending; retrying next frame frame={} err='{}'",
             frame_index,
             error

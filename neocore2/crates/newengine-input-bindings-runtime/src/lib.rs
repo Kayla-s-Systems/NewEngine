@@ -42,7 +42,7 @@ impl InputBindingsGatewayState {
                 let _ = save_profile_to_config(&profile_path, &default);
                 default
             });
-        log::info!(
+        newengine_ulog_api::ulog::info!(
             "input bindings: initialized profile id='{}' actions={} bindings={} axes={} listeners={} config='{}' default_id='{}' default_actions={} default_bindings={} default_axes={}",
             profile.id,
             profile.actions.len(),
@@ -56,7 +56,7 @@ impl InputBindingsGatewayState {
             default_profile.gamepad_axes.len(),
         );
         if profile.actions.is_empty() || profile.bindings.is_empty() {
-            log::warn!(
+            newengine_ulog_api::ulog::warn!(
                 "input bindings: semantic profile has empty action/binding catalog id='{}' actions={} bindings={} config='{}'",
                 profile.id,
                 profile.actions.len(),
@@ -200,13 +200,13 @@ fn install_or_update_default_profile(default_profile: InputBindingsProfile) -> A
         state.profile = state.profile.clone().canonicalized_with_defaults(&default_profile);
         let path = state.profile_path.clone();
         if let Err(e) = save_profile_to_config(&path, &state.profile) {
-            log::warn!(
+            newengine_ulog_api::ulog::warn!(
                 "input bindings: failed to persist updated default merge config='{}' err='{}'",
                 path.display(),
                 e
             );
         }
-        log::info!(
+        newengine_ulog_api::ulog::info!(
             "input bindings: default profile installed existing_state=true old_default='{}' new_default='{}' profile='{}' actions {}->{} bindings {}->{} axes {}->{} config='{}'",
             old_default_id,
             default_profile.id,
@@ -323,7 +323,7 @@ pub fn register_input_bindings_gateway_best_effort(default_profile: InputBinding
     let state_ref = install_or_update_default_profile(default_profile);
     if newengine_plugin_host::has_service(ENGINE_INPUT_BINDINGS_SERVICE_ID) {
         let state = state_ref.lock();
-        log::info!(
+        newengine_ulog_api::ulog::info!(
             "input bindings gateway: service already registered id='{}' profile='{}' actions={} bindings={} axes={} config='{}'",
             ENGINE_INPUT_BINDINGS_SERVICE_ID,
             state.profile.id,
@@ -351,14 +351,14 @@ pub fn register_input_bindings_gateway_best_effort(default_profile: InputBinding
                 .get()
                 .map(|s| s.lock().profile_path.clone())
                 .unwrap_or_else(profile_path);
-            log::info!(
+            newengine_ulog_api::ulog::info!(
                 "input bindings gateway: engine-runtime route registered id='{}' capability='{}' config='{}'",
                 ENGINE_INPUT_BINDINGS_SERVICE_ID,
                 INPUT_BINDINGS_BACKEND_CAPABILITY_ID,
                 path.display()
             );
         }
-        Err(e) => log::warn!(
+        Err(e) => newengine_ulog_api::ulog::warn!(
             "input bindings gateway: registration skipped id='{}' err='{}'",
             ENGINE_INPUT_BINDINGS_SERVICE_ID,
             e

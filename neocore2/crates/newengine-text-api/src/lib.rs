@@ -1,5 +1,4 @@
 #![forbid(unsafe_op_in_unsafe_fn)]
-
 use serde::{Deserialize, Serialize};
 
 pub const ENGINE_TEXT_SERVICE_ID: &str = "engine.ui.text";
@@ -69,7 +68,7 @@ impl Default for TextServiceInfo {
                 "cjk-rtl-bidi-declared-v1".to_owned(),
                 "emoji-icon-font-fallback-v1".to_owned(),
                 "glyph-atlas-pages-v1".to_owned(),
-                "font-asset-yft-v1".to_owned(),
+                "font-asset-neftd-v1".to_owned(),
                 "harfbuzz-provider-implementation-v1".to_owned(),
                 "imported-face-blob-source-v1".to_owned(),
                 "localization-v1".to_owned(),
@@ -95,16 +94,16 @@ pub const TEXT_SERVICE_METHODS: &[&str] = &[
 #[inline]
 pub const fn text_service_methods() -> &'static [&'static str] { TEXT_SERVICE_METHODS }
 
-/// Canonical editor font dictionary. The file is a NEF8/ListFile `.yft` asset;
+/// Canonical editor font dictionary. The file is a NEF8/ListFile `.neftd` asset;
 /// entries name imported font faces and atlas policy. Runtime code consumes this
 /// reference, not raw `.ttf` or `.otf` files.
-pub const TEXT_FONT_ASSET_EDITOR: &str = "ui/fonts/editor.yft";
-pub const TEXT_FONT_REF_EDITOR_SANS: &str = "ui/fonts/editor.yft@inter_variable";
-pub const TEXT_FONT_REF_EDITOR_DISPLAY: &str = "ui/fonts/editor.yft@granic_slab_medium";
-pub const TEXT_FONT_REF_EDITOR_BOLD: &str = "ui/fonts/editor.yft@granic_sans_bold";
-pub const TEXT_FONT_REF_BRAND_DISPLAY: &str = "ui/fonts/editor.yft@pricedown_display";
-pub const TEXT_FONT_REF_SYMBOLS: &str = "ui/fonts/editor.yft@noto_symbols";
-pub const TEXT_FONT_REF_EMOJI: &str = "ui/fonts/editor.yft@noto_color_emoji";
+pub const TEXT_FONT_ASSET_EDITOR: &str = "assets/ui/fonts/editor.neftd";
+pub const TEXT_FONT_REF_EDITOR_SANS: &str = "assets/ui/fonts/editor.neftd@tt_lakes_neue_trial_bold";
+pub const TEXT_FONT_REF_EDITOR_DISPLAY: &str = "assets/ui/fonts/editor.neftd@tt_lakes_neue_trial_black";
+pub const TEXT_FONT_REF_EDITOR_BOLD: &str = "assets/ui/fonts/editor.neftd@tt_lakes_neue_trial_bold";
+pub const TEXT_FONT_REF_BRAND_DISPLAY: &str = "assets/ui/fonts/editor.neftd@tt_lakes_neue_trial_black";
+pub const TEXT_FONT_REF_SYMBOLS: &str = "Segoe UI Symbol";
+pub const TEXT_FONT_REF_EMOJI: &str = "Segoe UI Emoji";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -191,9 +190,9 @@ pub struct TextFontFaceDescriptor {
     pub family: String,
     pub source_kind: TextFontSourceKind,
     /// Runtime font face reference. For imported North Star fonts this is a
-    /// stable ListFile selector such as `ui/fonts/editor.yft@inter_variable`.
+    /// stable ListFile selector such as `assets/ui/fonts/editor.neftd@tt_lakes_neue_trial_bold`.
     pub source_ref: String,
-    /// Imported face blob reference inside the `.yft` dictionary. This is not an
+    /// Imported face blob reference inside the `.neftd` dictionary. This is not an
     /// authoring `.ttf/.otf` path; providers resolve it through engine.assets.
     pub source_blob_ref: String,
     pub source_blob_len: usize,
@@ -240,7 +239,7 @@ pub struct TextFontManifest {
 impl Default for TextFontManifest {
     fn default() -> Self {
         Self {
-            schema: "newengine.font_dictionary.yft.v1".to_owned(),
+            schema: "newengine.font_dictionary.neftd.v1".to_owned(),
             asset_ref: TEXT_FONT_ASSET_EDITOR.to_owned(),
             faces: Vec::new(),
             fallback_stack: vec![

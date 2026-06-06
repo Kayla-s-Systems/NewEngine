@@ -50,7 +50,7 @@ pub(super) fn step_service_physics(
             .map(|sync| sync.mark_missing_backend_logged())
             .unwrap_or(false);
         if should_log {
-            log::warn!(
+            newengine_ulog_api::ulog::warn!(
                 "physics sync: no PhysicsApiRef registered; physics step skipped (no hidden in-process fallback)"
             );
         }
@@ -72,7 +72,7 @@ pub(super) fn step_service_physics(
             let provider_entities = current_entity_authority_map(world)
                 .map(|map| map.native_to_provider.len())
                 .unwrap_or(0);
-            log::trace!(
+            newengine_ulog_api::ulog::trace!(
                 "physics sync: stepping from native component cache under service authority mode='{}' owner='{}' native_entities={} provider_entities={} source='authority-map'",
                 authority.mode.as_str(),
                 authority.route_snapshot.authority_label(),
@@ -89,7 +89,7 @@ pub(super) fn step_service_physics(
         match api.step_frame(input) {
             Ok(output) => output,
             Err(err) => {
-                log::warn!("physics sync: engine.physics step failed: {}", err);
+                newengine_ulog_api::ulog::warn!("physics sync: engine.physics step failed: {}", err);
                 return;
             }
         }

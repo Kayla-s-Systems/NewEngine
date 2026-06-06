@@ -4,7 +4,8 @@
 mod paths;
 #[path = "content/profile.rs"]
 mod profile;
+#[path = "content_parts/raw_payload.rs"]
+mod raw_payload;
 
-include!("content_parts/raw_payload.rs");
-include!("content_parts/profile_parse.rs");
-include!("content_parts/sanitize_defaults.rs");
+pub(super) use self::profile::*;
+pub(super) use self::raw_payload::load_game_ready_map_profile;

@@ -36,7 +36,7 @@ impl<E: Send + 'static> Module<E> for PhysicsBackendRuntimeModule {
         ) {
             Ok(bound) => bound,
             Err(err) => {
-                log::warn!(
+                newengine_ulog_api::ulog::warn!(
                     "physics backend: unavailable; PhysicsApiRef not registered and physics steps will be skipped: {}",
                     err
                 );
@@ -45,7 +45,7 @@ impl<E: Send + 'static> Module<E> for PhysicsBackendRuntimeModule {
         };
         let protocol_version = info.protocol_version;
 
-        log::info!(
+        newengine_ulog_api::ulog::info!(
             "physics backend: service bridge bound id='{}' name='{}' version='{}' provider='{}' provider_state='{}' matched_by='{}' debug_text='{}' protocol=v{}.{}.{} features={}",
             info.backend_id,
             info.backend_name,

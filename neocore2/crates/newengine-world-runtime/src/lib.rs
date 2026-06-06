@@ -377,7 +377,7 @@ pub fn world_gateway_service(scene: Arc<newengine_scene_runtime::SceneBridge>) -
 
 pub fn register_world_gateway_best_effort(scene: Arc<newengine_scene_runtime::SceneBridge>) {
     if newengine_plugin_host::has_service(ENGINE_WORLD_SERVICE_ID) {
-        log::debug!("engine.world gateway registration skipped; service already available");
+        newengine_ulog_api::ulog::debug!("engine.world gateway registration skipped; service already available");
         return;
     }
 
@@ -392,14 +392,14 @@ pub fn register_world_gateway_best_effort(scene: Arc<newengine_scene_runtime::Sc
         owner: WORLD_GATEWAY_OWNER,
         service,
     }) {
-        Ok(()) => log::info!(
+        Ok(()) => newengine_ulog_api::ulog::info!(
             "engine.world gateway registered source=engine-runtime service='{}' provider_service='{}' capability='{}' owner='{}' semantics='living runtime world; scene remains authored structure'",
             ENGINE_WORLD_SERVICE_ID,
             WORLD_SERVICE_ID,
             WORLD_BACKEND_CAPABILITY_ID,
             WORLD_GATEWAY_OWNER
         ),
-        Err(e) => log::error!(
+        Err(e) => newengine_ulog_api::ulog::error!(
             "engine.world gateway registration failed id='{}' err='{}'",
             ENGINE_WORLD_SERVICE_ID,
             e

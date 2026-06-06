@@ -86,13 +86,13 @@ impl<E: Send + 'static> Engine<E> {
             return;
         }
         if transition.valid {
-            log::info!(
+            newengine_ulog_api::ulog::info!(
                 "engine state: {} -> {}",
                 transition.previous.as_str(),
                 transition.next.as_str()
             );
         } else {
-            log::error!(
+            newengine_ulog_api::ulog::error!(
                 "engine state: invalid transition {} -> {}; forced {}",
                 transition.previous.as_str(),
                 transition.next.as_str(),

@@ -91,7 +91,7 @@ impl RuntimeRenderController {
             self.viewport.pass_disabled = true;
     
             if first {
-                log::error!(
+                newengine_ulog_api::ulog::error!(
                     "render controller: backend disabled after fatal GPU error phase='{}' err='{}'",
                     phase,
                     error

@@ -102,7 +102,7 @@ impl<E: Send + 'static> Engine<E> {
         let mut steps_to_run = time_snapshot.simulation.ticks_to_run;
         if steps_to_run > MAX_ENGINE_FIXED_STEPS_PER_FRAME {
             if self.frame_index % FIXED_CATCHUP_WARN_INTERVAL_FRAMES == 0 {
-                log::warn!(
+                newengine_ulog_api::ulog::warn!(
                     "engine.time: realtime fixed-step debt dropped frame={} requested_ticks={} per_frame_steps={} accumulator_ns={} fixed_delta_ns={}",
                     self.frame_index,
                     steps_to_run,

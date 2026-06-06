@@ -1,6 +1,22 @@
 #![forbid(unsafe_op_in_unsafe_fn)]
 
 mod content;
+#[path = "game_ready_parts/material_source.rs"]
+mod material_source;
+#[path = "game_ready_parts/ytyp_metadata.rs"]
+mod ytyp_metadata;
+#[path = "game_ready_parts/sky.rs"]
+mod sky;
+#[path = "game_ready_parts/materials_terrain.rs"]
+mod materials_terrain;
+#[path = "game_ready_parts/terrain_streaming.rs"]
+mod terrain_streaming;
+#[path = "game_ready_parts/foliage.rs"]
+mod foliage;
+#[path = "game_ready_parts/player_model.rs"]
+mod player_model;
+#[path = "game_ready_parts/assets_bootstrap.rs"]
+mod assets_bootstrap;
 
 use core::f32::consts::TAU;
 
@@ -44,16 +60,15 @@ use super::helpers::{
     apply_exact_material, apply_primitive_instance, ensure_primitive_base, ensure_root, primitive_bounds,
 };
 
-include!("game_ready_parts/material_source.rs");
-include!("game_ready_parts/ytyp_metadata.rs");
-include!("game_ready_parts/sky.rs");
-include!("game_ready_parts/materials_terrain.rs");
-include!("game_ready_parts/terrain_streaming.rs");
-include!("game_ready_parts/foliage/types.rs");
-include!("game_ready_parts/foliage/placement.rs");
-include!("game_ready_parts/foliage/ydd_mesh.rs");
-include!("game_ready_parts/foliage/material_binding.rs");
-include!("game_ready_parts/foliage/diagnostics.rs");
-include!("game_ready_parts/foliage/spawn.rs");
-include!("game_ready_parts/player_model.rs");
-include!("game_ready_parts/assets_bootstrap.rs");
+pub(super) use self::assets_bootstrap::bootstrap_fps_game_ready_scene;
+pub(crate) use self::sky::{
+    tick_game_ready_sky_cycle, SkyClearColorRuntime, SkyDomeRuntime, SkyVisualKind,
+    SkyVisualRuntime,
+};
+pub(crate) use self::terrain_streaming::{
+    tick_game_ready_streaming_terrain, PreparedTerrainPrimitiveMesh, TerrainSurfaceLayers,
+};
+
+use self::material_source::*;
+use self::materials_terrain::*;
+use self::sky::*;

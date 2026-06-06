@@ -108,12 +108,12 @@ pub(crate) extern "C" fn host_step_v1(
         Ok(Ok(v)) => RResult::ROk(v),
         Ok(Err(e)) => {
             let message = e.to_string();
-            log::error!("platform runtime: host.step_v1 returned engine error; entering soft degradation: {message}");
+            newengine_ulog_api::ulog::error!("platform runtime: host.step_v1 returned engine error; entering soft degradation: {message}");
             RResult::ROk(runtime.enter_runtime_soft_degraded_step("host.step_v1", message))
         }
         Err(payload) => {
             let message = panic_payload_message(payload);
-            log::error!("platform runtime: host.step_v1 panic caught at FFI boundary; entering soft degradation: {message}");
+            newengine_ulog_api::ulog::error!("platform runtime: host.step_v1 panic caught at FFI boundary; entering soft degradation: {message}");
             RResult::ROk(runtime.enter_runtime_soft_degraded_step("host.step_v1.panic", message))
         }
     }
@@ -128,7 +128,7 @@ pub(crate) extern "C" fn host_poll_cursor_state_v1(
     match catch_unwind(AssertUnwindSafe(|| runtime.poll_cursor_state())) {
         Ok(poll) => poll,
         Err(payload) => {
-            log::error!(
+            newengine_ulog_api::ulog::error!(
                 "platform runtime: host.poll_cursor_state_v1 panic caught at FFI boundary: {}",
                 panic_payload_message(payload)
             );

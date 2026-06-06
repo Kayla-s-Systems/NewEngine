@@ -71,13 +71,13 @@ impl RenderServiceClient {
                             || detail.contains("not found")
                         {
                             if TRY_BINARY_RENDER_BATCH.swap(false, Ordering::Relaxed) {
-                                log::debug!(
+                                newengine_ulog_api::ulog::debug!(
                                     "render service: binary command batch disabled for this run; falling back to invoke_json err='{}'",
                                     detail
                                 );
                             }
                         } else {
-                            log::debug!(
+                            newengine_ulog_api::ulog::debug!(
                                 "render service: binary command batch failed transiently; falling back to invoke_json err='{}'",
                                 detail
                             );

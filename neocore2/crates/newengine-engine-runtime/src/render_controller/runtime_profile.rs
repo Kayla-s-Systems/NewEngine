@@ -195,7 +195,7 @@ impl RenderRuntimeProfile {
             .unwrap_or_else(|| render_value.clone());
         match serde_json::from_value::<Self>(candidate) {
             Ok(profile) => {
-                log::info!(
+                newengine_ulog_api::ulog::info!(
                     "render runtime profile: loaded id='{}' gpu_safe={} sky={:?} service_physics={} terrain_streaming={} shadows={} hdr={} postfx={} deferred={}",
                     profile.id,
                     profile.gpu_safe,
@@ -210,7 +210,7 @@ impl RenderRuntimeProfile {
                 profile
             }
             Err(e) => {
-                log::warn!(
+                newengine_ulog_api::ulog::warn!(
                     "render runtime profile: failed to decode config; using defaults err='{}' raw={}",
                     e,
                     compact_json(&raw),

@@ -44,10 +44,10 @@
       "importer_version": "1"
     },
     {
-      "source_ref": "NewEngine/neocore2/assets/ui/fonts/editor.yft.import.json",
+      "source_ref": "NewEngine/neocore2/assets/ui/fonts/editor.neftd.import.json",
       "content_hash": "9c93f7558c27530f660734b9452262325e4974c48e6214272e6bc0d6b05551ee",
-      "content_kind": "source.yft.import_descriptor",
-      "importer_id": "northstar.importer.yft_font.v1",
+      "content_kind": "source.neftd.import_descriptor",
+      "importer_id": "northstar.importer.neftd_font.v1",
       "importer_version": "1"
     },
     {
@@ -96,7 +96,7 @@
       "cache_key": "d28e4ab75f204b9ec2db2c1713f37ca5ce847bbf17b85443e731c0450014d267"
     },
     {
-      "asset_ref": "assets/ui/fonts/editor.yft@inter_variable",
+      "asset_ref": "assets/ui/fonts/editor.neftd@tt_lakes_neue_trial_bold",
       "content_kind": "font_dictionary",
       "owner_gateway": "engine.ui.text",
       "cache_key": "8becf9617f1da696db1a3804c9ef95bd7f47ad716c8a125fd375368640bc9849"
@@ -111,7 +111,7 @@
   "dependencies": [
     {
       "from_ref": "assets/ui/editor/editor_shell.neui@surface",
-      "to_ref": "ui/fonts/editor.yft",
+      "to_ref": "assets/ui/fonts/editor.neftd",
       "reason": "import_descriptor_dependency"
     },
     {
@@ -195,73 +195,73 @@
       "reason": "import_descriptor_dependency"
     },
     {
-      "from_ref": "assets/ui/fonts/editor.yft@inter_variable",
+      "from_ref": "assets/ui/fonts/editor.neftd@tt_lakes_neue_trial_bold",
       "to_ref": "source:assets/ui/fonts/source/GranicSans-Bold.ttf",
       "reason": "import_descriptor_dependency"
     },
     {
-      "from_ref": "assets/ui/fonts/editor.yft@inter_variable",
+      "from_ref": "assets/ui/fonts/editor.neftd@tt_lakes_neue_trial_bold",
       "to_ref": "source:assets/ui/fonts/source/GranicSlab-Medium.ttf",
       "reason": "import_descriptor_dependency"
     },
     {
-      "from_ref": "assets/ui/fonts/editor.yft@inter_variable",
+      "from_ref": "assets/ui/fonts/editor.neftd@tt_lakes_neue_trial_bold",
       "to_ref": "source:assets/ui/fonts/source/Inter-VariableFont_opsz,wght.ttf",
       "reason": "import_descriptor_dependency"
     },
     {
-      "from_ref": "assets/ui/fonts/editor.yft@inter_variable",
+      "from_ref": "assets/ui/fonts/editor.neftd@tt_lakes_neue_trial_bold",
       "to_ref": "source:assets/ui/fonts/source/NotoColorEmoji.ttf",
       "reason": "import_descriptor_dependency"
     },
     {
-      "from_ref": "assets/ui/fonts/editor.yft@inter_variable",
+      "from_ref": "assets/ui/fonts/editor.neftd@tt_lakes_neue_trial_bold",
       "to_ref": "source:assets/ui/fonts/source/NotoNaskhArabic-Regular.ttf",
       "reason": "import_descriptor_dependency"
     },
     {
-      "from_ref": "assets/ui/fonts/editor.yft@inter_variable",
+      "from_ref": "assets/ui/fonts/editor.neftd@tt_lakes_neue_trial_bold",
       "to_ref": "source:assets/ui/fonts/source/NotoSansCJK-Regular.otf",
       "reason": "import_descriptor_dependency"
     },
     {
-      "from_ref": "assets/ui/fonts/editor.yft@inter_variable",
+      "from_ref": "assets/ui/fonts/editor.neftd@tt_lakes_neue_trial_bold",
       "to_ref": "source:assets/ui/fonts/source/NotoSansSymbols-Regular.ttf",
       "reason": "import_descriptor_dependency"
     },
     {
-      "from_ref": "assets/ui/fonts/editor.yft@inter_variable",
+      "from_ref": "assets/ui/fonts/editor.neftd@tt_lakes_neue_trial_bold",
       "to_ref": "source:assets/ui/fonts/source/pricedown_bl.otf",
       "reason": "import_descriptor_dependency"
     },
     {
-      "from_ref": "assets/ui/fonts/editor.yft@inter_variable",
-      "to_ref": "ui/fonts/editor.yft@inter_variable",
+      "from_ref": "assets/ui/fonts/editor.neftd@tt_lakes_neue_trial_bold",
+      "to_ref": "assets/ui/fonts/editor.neftd@tt_lakes_neue_trial_bold",
       "reason": "import_descriptor_dependency"
     },
     {
-      "from_ref": "assets/ui/fonts/editor.yft@inter_variable",
-      "to_ref": "ui/fonts/editor.yft@noto_color_emoji",
+      "from_ref": "assets/ui/fonts/editor.neftd@tt_lakes_neue_trial_bold",
+      "to_ref": "assets/ui/fonts/editor.neftd@tt_lakes_neue_trial_bold",
       "reason": "import_descriptor_dependency"
     },
     {
-      "from_ref": "assets/ui/fonts/editor.yft@inter_variable",
-      "to_ref": "ui/fonts/editor.yft@noto_naskh_arabic",
+      "from_ref": "assets/ui/fonts/editor.neftd@tt_lakes_neue_trial_bold",
+      "to_ref": "assets/ui/fonts/editor.neftd@tt_lakes_neue_trial_bold",
       "reason": "import_descriptor_dependency"
     },
     {
-      "from_ref": "assets/ui/fonts/editor.yft@inter_variable",
-      "to_ref": "ui/fonts/editor.yft@noto_sans_cjk",
+      "from_ref": "assets/ui/fonts/editor.neftd@tt_lakes_neue_trial_bold",
+      "to_ref": "assets/ui/fonts/editor.neftd@tt_lakes_neue_trial_bold",
       "reason": "import_descriptor_dependency"
     },
     {
-      "from_ref": "assets/ui/fonts/editor.yft@inter_variable",
-      "to_ref": "ui/fonts/editor.yft@noto_symbols",
+      "from_ref": "assets/ui/fonts/editor.neftd@tt_lakes_neue_trial_bold",
+      "to_ref": "assets/ui/fonts/editor.neftd@tt_lakes_neue_trial_bold",
       "reason": "import_descriptor_dependency"
     },
     {
       "from_ref": "assets/ui/themes/northstar_editor.neui@editor_light",
-      "to_ref": "ui/fonts/editor.yft",
+      "to_ref": "assets/ui/fonts/editor.neftd",
       "reason": "import_descriptor_dependency"
     }
   ],
@@ -328,9 +328,9 @@
     },
     {
       "schema": "northstar.assets.cache_key.v1",
-      "source_ref": "NewEngine/neocore2/assets/ui/fonts/editor.yft.import.json",
+      "source_ref": "NewEngine/neocore2/assets/ui/fonts/editor.neftd.import.json",
       "source_hash": "9c93f7558c27530f660734b9452262325e4974c48e6214272e6bc0d6b05551ee",
-      "importer_id": "northstar.importer.yft_font.v1",
+      "importer_id": "northstar.importer.neftd_font.v1",
       "importer_version": "1",
       "settings_hash": "98cf5963cb5fe2dba13e43b097f104102bc398a4eac4bc77a88883879162d5ac",
       "platform": "linux",
@@ -369,8 +369,8 @@
       "NewEngine/neocore2/assets/ui/editor/viewport_gizmos.neui.import.json": [
         "assets/ui/editor/viewport_gizmos.neui@surface"
       ],
-      "NewEngine/neocore2/assets/ui/fonts/editor.yft.import.json": [
-        "assets/ui/fonts/editor.yft@inter_variable"
+      "NewEngine/neocore2/assets/ui/fonts/editor.neftd.import.json": [
+        "assets/ui/fonts/editor.neftd@tt_lakes_neue_trial_bold"
       ],
       "NewEngine/neocore2/assets/ui/themes/northstar_editor.neui.import.json": [
         "assets/ui/themes/northstar_editor.neui@editor_light"
@@ -399,47 +399,47 @@
         "assets/ui/editor/viewport_gizmos.neui@surface"
       ],
       "source:assets/ui/fonts/source/GranicSans-Bold.ttf": [
-        "assets/ui/fonts/editor.yft@inter_variable"
+        "assets/ui/fonts/editor.neftd@tt_lakes_neue_trial_bold"
       ],
       "source:assets/ui/fonts/source/GranicSlab-Medium.ttf": [
-        "assets/ui/fonts/editor.yft@inter_variable"
+        "assets/ui/fonts/editor.neftd@tt_lakes_neue_trial_bold"
       ],
       "source:assets/ui/fonts/source/Inter-VariableFont_opsz,wght.ttf": [
-        "assets/ui/fonts/editor.yft@inter_variable"
+        "assets/ui/fonts/editor.neftd@tt_lakes_neue_trial_bold"
       ],
       "source:assets/ui/fonts/source/NotoColorEmoji.ttf": [
-        "assets/ui/fonts/editor.yft@inter_variable"
+        "assets/ui/fonts/editor.neftd@tt_lakes_neue_trial_bold"
       ],
       "source:assets/ui/fonts/source/NotoNaskhArabic-Regular.ttf": [
-        "assets/ui/fonts/editor.yft@inter_variable"
+        "assets/ui/fonts/editor.neftd@tt_lakes_neue_trial_bold"
       ],
       "source:assets/ui/fonts/source/NotoSansCJK-Regular.otf": [
-        "assets/ui/fonts/editor.yft@inter_variable"
+        "assets/ui/fonts/editor.neftd@tt_lakes_neue_trial_bold"
       ],
       "source:assets/ui/fonts/source/NotoSansSymbols-Regular.ttf": [
-        "assets/ui/fonts/editor.yft@inter_variable"
+        "assets/ui/fonts/editor.neftd@tt_lakes_neue_trial_bold"
       ],
       "source:assets/ui/fonts/source/pricedown_bl.otf": [
-        "assets/ui/fonts/editor.yft@inter_variable"
+        "assets/ui/fonts/editor.neftd@tt_lakes_neue_trial_bold"
       ],
-      "ui/fonts/editor.yft": [
+      "assets/ui/fonts/editor.neftd": [
         "assets/ui/editor/editor_shell.neui@surface",
         "assets/ui/themes/northstar_editor.neui@editor_light"
       ],
-      "ui/fonts/editor.yft@inter_variable": [
-        "assets/ui/fonts/editor.yft@inter_variable"
+      "assets/ui/fonts/editor.neftd@tt_lakes_neue_trial_bold": [
+        "assets/ui/fonts/editor.neftd@tt_lakes_neue_trial_bold"
       ],
-      "ui/fonts/editor.yft@noto_color_emoji": [
-        "assets/ui/fonts/editor.yft@inter_variable"
+      "assets/ui/fonts/editor.neftd@tt_lakes_neue_trial_bold": [
+        "assets/ui/fonts/editor.neftd@tt_lakes_neue_trial_bold"
       ],
-      "ui/fonts/editor.yft@noto_naskh_arabic": [
-        "assets/ui/fonts/editor.yft@inter_variable"
+      "assets/ui/fonts/editor.neftd@tt_lakes_neue_trial_bold": [
+        "assets/ui/fonts/editor.neftd@tt_lakes_neue_trial_bold"
       ],
-      "ui/fonts/editor.yft@noto_sans_cjk": [
-        "assets/ui/fonts/editor.yft@inter_variable"
+      "assets/ui/fonts/editor.neftd@tt_lakes_neue_trial_bold": [
+        "assets/ui/fonts/editor.neftd@tt_lakes_neue_trial_bold"
       ],
-      "ui/fonts/editor.yft@noto_symbols": [
-        "assets/ui/fonts/editor.yft@inter_variable"
+      "assets/ui/fonts/editor.neftd@tt_lakes_neue_trial_bold": [
+        "assets/ui/fonts/editor.neftd@tt_lakes_neue_trial_bold"
       ],
       "ui/themes/northstar_editor.neui@editor_light": [
         "assets/ui/editor/editor_shell.neui@surface"
@@ -496,9 +496,9 @@
       "detail": "descriptor-driven import worker plan"
     },
     {
-      "worker_id": "northstar.importer.yft_font.v1",
-      "source_ref": "NewEngine/neocore2/assets/ui/fonts/editor.yft.import.json",
-      "target_ref": "assets/ui/fonts/editor.yft@inter_variable",
+      "worker_id": "northstar.importer.neftd_font.v1",
+      "source_ref": "NewEngine/neocore2/assets/ui/fonts/editor.neftd.import.json",
+      "target_ref": "assets/ui/fonts/editor.neftd@tt_lakes_neue_trial_bold",
       "cache_key": "8becf9617f1da696db1a3804c9ef95bd7f47ad716c8a125fd375368640bc9849",
       "status": "planned",
       "detail": "descriptor-driven import worker plan"

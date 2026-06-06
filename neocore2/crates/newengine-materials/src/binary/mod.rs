@@ -1,11 +1,11 @@
 #![forbid(unsafe_op_in_unsafe_fn)]
 
-//! Low-level binary material descriptor payload helpers.
+//! Low-level compact material descriptor payload helpers.
 //!
-//! Public `.nemat` files are NEF8/ListFile material libraries selected as
-//! `file.nemat@entry`. This module is intentionally limited to compact descriptor
-//! payload encoding/decoding for tools or inner entry payloads; it is not the
-//! top-level `.nemat` runtime file contract.
+//! Public `.nemat` files are always NEF8/ListFile material libraries selected as
+//! `file.nemat@entry`. There is no standalone material-file magic in this module;
+//! these helpers only encode/decode renderer-agnostic descriptor payloads and
+//! compact inner named descriptor blobs.
 
 mod codec;
 mod error;
@@ -18,11 +18,7 @@ mod json;
 
 pub use codec::{decode_asset, decode_descriptor, encode_asset, encode_descriptor};
 pub use error::{MaterialBinaryError, MaterialBinaryResult};
-pub use format::{
-    MATERIAL_BINARY_HEADER_SIZE,
-    MATERIAL_BINARY_MAGIC,
-    MATERIAL_BINARY_VERSION,
-};
+pub use format::MATERIAL_BINARY_VERSION;
 pub use types::MaterialBinaryAsset;
 
 #[cfg(feature = "serde")]

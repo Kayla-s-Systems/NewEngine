@@ -53,13 +53,13 @@ impl GameReadyLitMaterialDomainProvider {
         r: &mut dyn MaterialRenderDevice,
     ) -> MaterialDomainResult<LitPipeline> {
         let started_at = Instant::now();
-        log::info!(
+        newengine_ulog_api::ulog::info!(
             "gameready material domain: pipeline build requested key='{}' manifest='{}'",
             GAME_READY_LIT_PIPELINE_KEY.as_str(),
             DEFAULT_SHADER_MANIFEST_PATH
         );
         let manifest = self.require_manifest()?;
-        log::info!(
+        newengine_ulog_api::ulog::info!(
             "gameready material domain: requesting renderer-owned shader builds key='{}' shader_count=8",
             GAME_READY_LIT_PIPELINE_KEY.as_str()
         );
@@ -101,13 +101,13 @@ impl GameReadyLitMaterialDomainProvider {
             &manifest.shaders.shadow_instanced_vs,
             "gameready_sun_shadow_instanced_vs",
         )?;
-        log::info!(
+        newengine_ulog_api::ulog::info!(
             "gameready material domain: renderer-owned shader handles ready key='{}' elapsed_ms={:.2}",
             GAME_READY_LIT_PIPELINE_KEY.as_str(),
             started_at.elapsed().as_secs_f64() * 1000.0
         );
 
-        log::info!(
+        newengine_ulog_api::ulog::info!(
             "gameready material domain: creating bind resources key='{}'",
             GAME_READY_LIT_PIPELINE_KEY.as_str()
         );
@@ -145,7 +145,7 @@ impl GameReadyLitMaterialDomainProvider {
                 .with_address_v(AddressMode::ClampToEdge)
                 .with_address_w(AddressMode::ClampToEdge),
         )?;
-        log::info!(
+        newengine_ulog_api::ulog::info!(
             "gameready material domain: bind resources created key='{}' elapsed_ms={:.2}",
             GAME_READY_LIT_PIPELINE_KEY.as_str(),
             started_at.elapsed().as_secs_f64() * 1000.0
@@ -180,7 +180,7 @@ impl GameReadyLitMaterialDomainProvider {
         )
         .per_instance();
 
-        log::info!(
+        newengine_ulog_api::ulog::info!(
             "gameready material domain: creating GPU pipelines key='{}' pipeline_count=9",
             GAME_READY_LIT_PIPELINE_KEY.as_str()
         );
@@ -287,7 +287,7 @@ impl GameReadyLitMaterialDomainProvider {
             .with_depth(TextureFormat::Depth32Float)
             .with_cull_mode(RasterCullMode::None),
         )?;
-        log::info!(
+        newengine_ulog_api::ulog::info!(
             "gameready material domain: pipeline build completed key='{}' elapsed_ms={:.2}",
             GAME_READY_LIT_PIPELINE_KEY.as_str(),
             started_at.elapsed().as_secs_f64() * 1000.0
@@ -368,7 +368,7 @@ impl GameReadyLitShaderManifest {
             ))
         })?;
         manifest.validate(logical_path)?;
-        log::info!(
+        newengine_ulog_api::ulog::info!(
             "gameready material domain: shader manifest loaded path='{}' schema='{}'",
             logical_path,
             manifest.schema
@@ -472,7 +472,7 @@ fn create_manifest_shader(
 ) -> MaterialDomainResult<ShaderId> {
     let source_kind = shader.source_kind()?;
     let started_at = Instant::now();
-    log::info!(
+    newengine_ulog_api::ulog::info!(
         "gameready material domain: shader build request label='{}' path='{}' stage='{:?}' source_kind='{}' entry='{}' variant='{}'",
         label,
         shader.logical_path,
@@ -490,7 +490,7 @@ fn create_manifest_shader(
             .with_label(label),
     );
     match &result {
-        Ok(id) => log::info!(
+        Ok(id) => newengine_ulog_api::ulog::info!(
             "gameready material domain: shader build accepted label='{}' path='{}' stage='{:?}' shader_id={:?} elapsed_ms={:.2}",
             label,
             shader.logical_path,
@@ -498,7 +498,7 @@ fn create_manifest_shader(
             id,
             started_at.elapsed().as_secs_f64() * 1000.0
         ),
-        Err(e) => log::error!(
+        Err(e) => newengine_ulog_api::ulog::error!(
             "gameready material domain: shader build failed label='{}' path='{}' stage='{:?}' err='{}' elapsed_ms={:.2}",
             label,
             shader.logical_path,
@@ -513,7 +513,7 @@ fn create_manifest_shader(
 fn load_text_asset(rel: &str) -> MaterialDomainResult<String> {
     let assets = AssetServiceClient::new(default_host_api());
 
-    log::trace!("asset text: requesting path='{rel}' through AssetManager.text_v1");
+    newengine_ulog_api::ulog::trace!("asset text: requesting path='{rel}' through AssetManager.text_v1");
     let payload = assets.text_v1(rel).map_err(|e| {
         MaterialDomainError::other(format!("asset.text_v1 failed path='{rel}' err='{e}'"))
     })?;
@@ -522,6 +522,6 @@ fn load_text_asset(rel: &str) -> MaterialDomainResult<String> {
         .map_err(|_| MaterialDomainError::other(format!("asset.text_v1 returned non-utf8 path='{rel}'")))?
         .to_string();
 
-    log::trace!("asset text: loaded path='{rel}' bytes={}", payload.len());
+    newengine_ulog_api::ulog::trace!("asset text: loaded path='{rel}' bytes={}", payload.len());
     Ok(s)
 }

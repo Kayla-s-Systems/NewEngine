@@ -122,7 +122,7 @@ impl RenderRuntimeProfileState {
             return;
         }
         if !self.profile.accepts_hardware_tier_resolution() {
-            log::info!(
+            newengine_ulog_api::ulog::info!(
                 "render runtime profile: startup profile '{}' is explicit; hardware_tier={:?} will not override user-selected config",
                 self.profile.id,
                 tier,
@@ -132,7 +132,7 @@ impl RenderRuntimeProfileState {
         }
         self.profile.apply_hardware_tier(tier);
         self.applied_hardware_tier = Some(tier);
-        log::info!(
+        newengine_ulog_api::ulog::info!(
             "render runtime profile: resolved hardware_tier={:?} effective_profile='{}' gpu_safe={} shadows={} hdr={} postfx={} deferred={} terrain_streaming={}",
             tier,
             self.profile.id,

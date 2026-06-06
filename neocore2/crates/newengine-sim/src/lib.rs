@@ -10,7 +10,6 @@
 //! parallel execution must be routed through `engine.jobs`, not through a crate-
 //! local worker pool or `rayon`, so every batch is visible to diagnostics,
 //! profiler, pause/resume and cancellation control.
-
 mod access;
 mod commands;
 mod components;

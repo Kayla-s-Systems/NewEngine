@@ -41,7 +41,7 @@ impl GameReadySceneBootstrapModule {
             return;
         }
         self.waiting_logged = true;
-        log::info!(
+        newengine_ulog_api::ulog::info!(
             "game-ready runtime: waiting for AssetManager/geometryImporter readiness before scene bootstrap origin='{}'",
             origin
         );
@@ -65,7 +65,7 @@ impl GameReadySceneBootstrapModule {
         let allowed = matches!(mode, UiEditorRuntimeMode::Simulate | UiEditorRuntimeMode::Play);
         if !allowed && !self.editor_deferred_logged {
             self.editor_deferred_logged = true;
-            log::info!(
+            newengine_ulog_api::ulog::info!(
                 "game-ready runtime: scene bootstrap deferred by editor profile origin='{}' mode='{}' policy='no game/world load before Simulate or Play'",
                 origin,
                 mode.id(),
@@ -101,7 +101,7 @@ impl GameReadySceneBootstrapModule {
             Some(player) => {
                 self.bootstrapped = true;
                 let selected_player_authority = self.scene.selection_authority_handle();
-                log::info!(
+                newengine_ulog_api::ulog::info!(
                     "game-ready runtime: CPU scene bootstrapped via lifecycle dispatch origin='{}' selected_player_cache={:?} selected_player_authority={:?}; waiting for launch gate before public Play",
                     origin,
                     player,
@@ -109,7 +109,7 @@ impl GameReadySceneBootstrapModule {
                 );
             }
             None => {
-                log::warn!(
+                newengine_ulog_api::ulog::warn!(
                     "game-ready runtime: scene bootstrap failed after readiness dispatch origin='{}'",
                     origin
                 );

@@ -1,4 +1,6 @@
-fn editor_components(descriptor: &UiScreenProfileDescriptor, runtime_mode: UiEditorRuntimeMode, layout: &EditorLayoutMetrics, active_menu_id: Option<&str>) -> Vec<UiComponentNode> {
+use super::*;
+
+pub(super) fn editor_components(descriptor: &UiScreenProfileDescriptor, runtime_mode: UiEditorRuntimeMode, layout: &EditorLayoutMetrics, active_menu_id: Option<&str>) -> Vec<UiComponentNode> {
     let mut out = Vec::new();
 
     // The editor shell is an absolute screen composition. Without explicit
@@ -200,7 +202,7 @@ fn editor_components(descriptor: &UiScreenProfileDescriptor, runtime_mode: UiEdi
             ("bottom.profiler_diagnostics", "Profiler / Diagnostics", PROFILER_DIAGNOSTICS_NEUI_REF, "route/job/profile diagnostics snapshot"),
         ];
         let mut tab_x = 8.0;
-        for (slot, label, neui_ref, detail) in bottom_tabs {
+        for (slot, _label, neui_ref, detail) in bottom_tabs {
             if let Some(panel) = descriptor.panels.iter().find(|panel| panel.slot_id == slot) {
                 let mut component = panel_component(panel, true, layout.hovered_dock_slot == Some(slot));
                 component.value = Some(neui_ref.to_owned());
@@ -244,7 +246,7 @@ fn editor_components(descriptor: &UiScreenProfileDescriptor, runtime_mode: UiEdi
 
 
 
-fn push_editor_regions(out: &mut Vec<UiComponentNode>, layout: &EditorLayoutMetrics) {
+pub(super) fn push_editor_regions(out: &mut Vec<UiComponentNode>, layout: &EditorLayoutMetrics) {
     out.push(region_panel("editor.region.menu_bar", "", 0.0, 0.0, layout.screen_w, layout.menu_h, [11, 16, 24, 255]));
     out.push(region_panel("editor.region.toolbar", "", 0.0, layout.menu_h, layout.screen_w, layout.toolbar_h, [8, 12, 18, 255]));
     if layout.left_visible {
@@ -260,7 +262,7 @@ fn push_editor_regions(out: &mut Vec<UiComponentNode>, layout: &EditorLayoutMetr
     out.push(region_panel("editor.region.status", "", 0.0, (layout.screen_h - layout.status_h).max(0.0), layout.screen_w, layout.status_h, [9, 13, 19, 255]));
 }
 
-fn region_panel(id: &str, text: &str, x: f32, y: f32, w: f32, h: f32, fill: [u8; 4]) -> UiComponentNode {
+pub(super) fn region_panel(id: &str, text: &str, x: f32, y: f32, w: f32, h: f32, fill: [u8; 4]) -> UiComponentNode {
     let mut component = UiComponentNode::row(id, text)
         .with_tone(UiNodeTone::Normal)
         .tagged("region")
@@ -274,23 +276,23 @@ fn region_panel(id: &str, text: &str, x: f32, y: f32, w: f32, h: f32, fill: [u8;
     with_rect(component, x, y, w, h)
 }
 
-fn with_rect(mut component: UiComponentNode, x: f32, y: f32, w: f32, h: f32) -> UiComponentNode {
+pub(super) fn with_rect(mut component: UiComponentNode, x: f32, y: f32, w: f32, h: f32) -> UiComponentNode {
     set_rect(&mut component, x, y, w, h);
     component
 }
 
-fn set_rect(component: &mut UiComponentNode, x: f32, y: f32, w: f32, h: f32) {
+pub(super) fn set_rect(component: &mut UiComponentNode, x: f32, y: f32, w: f32, h: f32) {
     component.props.insert("x_px".to_owned(), serde_json::json!(x.max(0.0)));
     component.props.insert("y_px".to_owned(), serde_json::json!(y.max(0.0)));
     component.props.insert("w_px".to_owned(), serde_json::json!(w.max(1.0)));
     component.props.insert("h_px".to_owned(), serde_json::json!(h.max(1.0)));
 }
 
-fn menu_width(label: &str) -> f32 {
+pub(super) fn menu_width(label: &str) -> f32 {
     (label.chars().count() as f32 * 8.0 + 24.0).clamp(44.0, 94.0)
 }
 
-fn sort_components_by_layout_y(components: &mut [UiComponentNode]) {
+pub(super) fn sort_components_by_layout_y(components: &mut [UiComponentNode]) {
     components.sort_by(|a, b| {
         let ay = component_layout_number(a, "y_px").unwrap_or(f32::MAX);
         let by = component_layout_number(b, "y_px").unwrap_or(f32::MAX);
@@ -304,14 +306,14 @@ fn sort_components_by_layout_y(components: &mut [UiComponentNode]) {
     });
 }
 
-fn component_paint_rank(component: &UiComponentNode) -> u8 {
+pub(super) fn component_paint_rank(component: &UiComponentNode) -> u8 {
     if component.state_tags.iter().any(|tag| tag == "region" || tag == "panel-region") { 0 } else { 1 }
 }
 
-fn component_layout_number(component: &UiComponentNode, key: &str) -> Option<f32> {
+pub(super) fn component_layout_number(component: &UiComponentNode, key: &str) -> Option<f32> {
     component.props.get(key).and_then(|value| value.as_f64()).map(|value| value as f32)
 }
 
-fn hovered_menu(layout: &EditorLayoutMetrics, id: &str) -> bool {
+pub(super) fn hovered_menu(layout: &EditorLayoutMetrics, id: &str) -> bool {
     layout.hovered_menu_id == Some(id)
 }

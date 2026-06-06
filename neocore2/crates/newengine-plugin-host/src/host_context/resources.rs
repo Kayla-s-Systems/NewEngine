@@ -77,7 +77,7 @@ pub fn register_external_runtime_plugin(
 
     bump_services_generation();
 
-    log::info!(
+    newengine_ulog_api::ulog::info!(
         "plugins: external runtime registered id='{}' ver='{}' kind={:?} origin='{}' path='{}'",
         plugin_id,
         info.version,

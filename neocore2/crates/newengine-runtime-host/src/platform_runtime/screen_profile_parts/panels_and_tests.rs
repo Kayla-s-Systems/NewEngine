@@ -1,4 +1,6 @@
-fn panel_component(panel: &UiScreenPanelDescriptor, visible: bool, hovered: bool) -> UiComponentNode {
+use super::*;
+
+pub(super) fn panel_component(panel: &UiScreenPanelDescriptor, visible: bool, hovered: bool) -> UiComponentNode {
     let mut component = UiComponentNode {
         id: panel.slot_id.clone(),
         component_id: UI_COMPONENT_ROW.to_owned(),
@@ -35,7 +37,7 @@ fn panel_component(panel: &UiScreenPanelDescriptor, visible: bool, hovered: bool
     component
 }
 
-fn screen_panel<const N: usize>(
+pub(super) fn screen_panel<const N: usize>(
     slot_id: &str,
     label: &str,
     surface_id: &str,
@@ -57,7 +59,7 @@ fn screen_panel<const N: usize>(
     }
 }
 
-fn screen_metrics(descriptor: &UiScreenProfileDescriptor, frame_index: u64) -> BTreeMap<String, serde_json::Value> {
+pub(super) fn screen_metrics(descriptor: &UiScreenProfileDescriptor, frame_index: u64) -> BTreeMap<String, serde_json::Value> {
     BTreeMap::from([
         ("frame_index".to_owned(), serde_json::json!(frame_index)),
         ("screen_profile".to_owned(), serde_json::json!(descriptor.profile.id())),

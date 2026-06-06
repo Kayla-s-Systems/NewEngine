@@ -199,11 +199,11 @@ where
 
     for rel in mtllibs {
         let Ok(path) = join_logical_path(base, rel) else {
-            log::warn!("model import obj: MTL rejected relative='{}' base='{}'", rel, base);
+            newengine_ulog_api::ulog::warn!("model import obj: MTL rejected relative='{}' base='{}'", rel, base);
             continue;
         };
         let Some(text) = read_mtl(&path) else {
-            log::warn!("model import obj: MTL unavailable path='{}'", path);
+            newengine_ulog_api::ulog::warn!("model import obj: MTL unavailable path='{}'", path);
             continue;
         };
         out.extend(parse_mtl_text(base, &text));

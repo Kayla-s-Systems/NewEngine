@@ -1,3 +1,5 @@
+use super::*;
+
 // Sky lifecycle applies resolved world-environment frames to the scene.
 // engine.world.environment owns atmospheric meaning, celestial math, weather and clouds;
 // this file only keeps the legacy dome/light bridge alive while render packets mature.
@@ -20,11 +22,6 @@ pub(crate) struct SkyVisualRuntime {
 #[derive(Clone, Copy, Debug)]
 pub(crate) struct SkyClearColorRuntime {
     pub color: [f32; 4],
-}
-
-#[derive(Clone, Debug)]
-pub(crate) struct GameReadyEnvironmentFrameRuntime {
-    pub frame: newengine_world_environment_api::EnvironmentFrameDto,
 }
 
 #[derive(Clone, Debug)]
@@ -107,7 +104,7 @@ pub(super) fn attach_sky_visual_runtime(
 }
 
 #[derive(Clone, Copy, Debug)]
-struct SkyFrameSample {
+pub(super) struct SkyFrameSample {
     to_sun: Vec3,
     sky_tint: [f32; 4],
     cloud_tint: [f32; 4],
@@ -131,7 +128,7 @@ pub(crate) struct SkyCycleRuntime {
 }
 
 
-fn time_snapshot_for_sky_cycle() -> Option<newengine_core::time::TimeSnapshotV1> {
+pub(super) fn time_snapshot_for_sky_cycle() -> Option<newengine_core::time::TimeSnapshotV1> {
     match call_service_v1_optional(
         newengine_core::time::ENGINE_TIME_SERVICE_ID,
         newengine_core::time::time_method::SNAPSHOT_V1,
@@ -140,20 +137,20 @@ fn time_snapshot_for_sky_cycle() -> Option<newengine_core::time::TimeSnapshotV1>
         Ok(Some(bytes)) => match serde_json::from_slice::<newengine_core::time::TimeSnapshotV1>(&bytes) {
             Ok(snapshot) => Some(snapshot),
             Err(e) => {
-                log::warn!("game-ready sky cycle: engine.time snapshot invalid; keeping authored scene.day_night time for this tick err='{e}'");
+                newengine_ulog_api::ulog::warn!("game-ready sky cycle: engine.time snapshot invalid; keeping authored scene.day_night time for this tick err='{e}'");
                 None
             }
         },
         Ok(None) => None,
         Err(e) => {
-            log::warn!("game-ready sky cycle: engine.time snapshot unavailable; keeping authored scene.day_night time for this tick err='{e}'");
+            newengine_ulog_api::ulog::warn!("game-ready sky cycle: engine.time snapshot unavailable; keeping authored scene.day_night time for this tick err='{e}'");
             None
         }
     }
 }
 
 
-fn authored_time_snapshot_for_sky_cycle(cycle: &SkyCycleRuntime) -> newengine_core::time::TimeSnapshotV1 {
+pub(super) fn authored_time_snapshot_for_sky_cycle(cycle: &SkyCycleRuntime) -> newengine_core::time::TimeSnapshotV1 {
     let mut snapshot = newengine_core::time::TimeSnapshotV1::default();
     snapshot.game.seconds_per_game_day = (cycle.day_length_seconds as f64).max(1.0);
     snapshot.game.normalized_day = (cycle.time_of_day_hours as f64 / 24.0).rem_euclid(1.0);
@@ -162,7 +159,7 @@ fn authored_time_snapshot_for_sky_cycle(cycle: &SkyCycleRuntime) -> newengine_co
     snapshot
 }
 
-fn environment_frame_for_sky_cycle(
+pub(super) fn environment_frame_for_sky_cycle(
     cycle: &SkyCycleRuntime,
     snapshot: newengine_core::time::TimeSnapshotV1,
 ) -> Option<newengine_world_environment_api::EnvironmentFrameDto> {
@@ -183,7 +180,7 @@ fn environment_frame_for_sky_cycle(
     let payload = match serde_json::to_vec(&request) {
         Ok(payload) => payload,
         Err(e) => {
-            log::warn!("game-ready environment bridge: failed to encode EnvironmentFrameRequest err='{e}'");
+            newengine_ulog_api::ulog::warn!("game-ready environment bridge: failed to encode EnvironmentFrameRequest err='{e}'");
             return None;
         }
     };
@@ -195,13 +192,13 @@ fn environment_frame_for_sky_cycle(
         Ok(Some(bytes)) => match serde_json::from_slice::<newengine_world_environment_api::EnvironmentFrameDto>(&bytes) {
             Ok(frame) => Some(frame),
             Err(e) => {
-                log::warn!("game-ready environment bridge: EnvironmentFrameDto decode failed; using explicit degraded authored sky frame err='{e}'");
+                newengine_ulog_api::ulog::warn!("game-ready environment bridge: EnvironmentFrameDto decode failed; using explicit degraded authored sky frame err='{e}'");
                 None
             }
         },
         Ok(None) => None,
         Err(e) => {
-            log::warn!("game-ready environment bridge: engine.world.environment unavailable; using explicit degraded authored sky frame err='{e}'");
+            newengine_ulog_api::ulog::warn!("game-ready environment bridge: engine.world.environment unavailable; using explicit degraded authored sky frame err='{e}'");
             None
         }
     }
@@ -209,7 +206,7 @@ fn environment_frame_for_sky_cycle(
 
 
 #[inline]
-fn sync_game_ready_day_night_to_engine_time(day_night: &GameReadyDayNightSpec) {
+pub(super) fn sync_game_ready_day_night_to_engine_time(day_night: &GameReadyDayNightSpec) {
     let request = newengine_core::time::TimeGameClockSetRequestV1 {
         day_index: 0,
         seconds_of_day: (day_night.time_of_day_hours as f64 * 3600.0).rem_euclid(86_400.0),
@@ -217,7 +214,7 @@ fn sync_game_ready_day_night_to_engine_time(day_night: &GameReadyDayNightSpec) {
         time_scale: if day_night.enabled { 1.0 } else { 0.0 },
     };
     let Ok(payload) = serde_json::to_vec(&request) else {
-        log::warn!("game-ready sky cycle: failed to encode engine.time clock request");
+        newengine_ulog_api::ulog::warn!("game-ready sky cycle: failed to encode engine.time clock request");
         return;
     };
     match call_service_v1_optional(
@@ -226,22 +223,22 @@ fn sync_game_ready_day_night_to_engine_time(day_night: &GameReadyDayNightSpec) {
         &payload,
     ) {
         Ok(Some(bytes)) => match serde_json::from_slice::<newengine_core::time::TimeSnapshotV1>(&bytes) {
-            Ok(snapshot) => log::info!(
+            Ok(snapshot) => newengine_ulog_api::ulog::info!(
                 "game-ready sky cycle: engine.time game clock set source='scene.day_night' tod={:.2}h day_len={:.1}s normalized_day={:.6} time_scale={:.3}",
                 day_night.time_of_day_hours,
                 day_night.day_length_seconds,
                 snapshot.game.normalized_day,
                 snapshot.game.time_scale
             ),
-            Err(e) => log::warn!(
+            Err(e) => newengine_ulog_api::ulog::warn!(
                 "game-ready sky cycle: engine.time set_game_clock_v1 returned invalid snapshot err='{}'",
                 e
             ),
         },
-        Ok(None) => log::debug!(
+        Ok(None) => newengine_ulog_api::ulog::debug!(
             "game-ready sky cycle: engine.time route absent; authored scene.day_night time remains fixed until a time provider is active"
         ),
-        Err(e) => log::warn!(
+        Err(e) => newengine_ulog_api::ulog::warn!(
             "game-ready sky cycle: engine.time set_game_clock_v1 failed; authored scene.day_night time remains fixed err='{}'",
             e
         ),
@@ -249,13 +246,13 @@ fn sync_game_ready_day_night_to_engine_time(day_night: &GameReadyDayNightSpec) {
 }
 
 #[inline]
-fn sky_smoothstep(edge0: f32, edge1: f32, x: f32) -> f32 {
+pub(super) fn sky_smoothstep(edge0: f32, edge1: f32, x: f32) -> f32 {
     let t = ((x - edge0) / (edge1 - edge0).max(1.0e-5)).clamp(0.0, 1.0);
     t * t * (3.0 - 2.0 * t)
 }
 
 #[inline]
-fn sky_lerp3(a: [f32; 3], b: [f32; 3], t: f32) -> [f32; 3] {
+pub(super) fn sky_lerp3(a: [f32; 3], b: [f32; 3], t: f32) -> [f32; 3] {
     [
         a[0] + (b[0] - a[0]) * t,
         a[1] + (b[1] - a[1]) * t,
@@ -264,7 +261,7 @@ fn sky_lerp3(a: [f32; 3], b: [f32; 3], t: f32) -> [f32; 3] {
 }
 
 #[inline]
-fn solar_direction_from_cycle(time_hours: f32, latitude_degrees: f32, axial_tilt_degrees: f32) -> Vec3 {
+pub(super) fn solar_direction_from_cycle(time_hours: f32, latitude_degrees: f32, axial_tilt_degrees: f32) -> Vec3 {
     let latitude = latitude_degrees.to_radians().clamp(-1.5533, 1.5533);
     let axial_tilt = axial_tilt_degrees.to_radians();
     let hour_angle = (time_hours / 24.0) * TAU - core::f32::consts::PI;
@@ -277,22 +274,22 @@ fn solar_direction_from_cycle(time_hours: f32, latitude_degrees: f32, axial_tilt
 }
 
 #[inline]
-fn sky_mul3(a: [f32; 3], s: f32) -> [f32; 3] {
+pub(super) fn sky_mul3(a: [f32; 3], s: f32) -> [f32; 3] {
     [a[0] * s, a[1] * s, a[2] * s]
 }
 
 #[inline]
-fn sky_clamp3(a: [f32; 3], lo: f32, hi: f32) -> [f32; 3] {
+pub(super) fn sky_clamp3(a: [f32; 3], lo: f32, hi: f32) -> [f32; 3] {
     [a[0].clamp(lo, hi), a[1].clamp(lo, hi), a[2].clamp(lo, hi)]
 }
 
 #[inline]
-fn sky_color_to_rgba(a: [f32; 3]) -> [f32; 4] {
+pub(super) fn sky_color_to_rgba(a: [f32; 3]) -> [f32; 4] {
     [a[0], a[1], a[2], 1.0]
 }
 
 #[inline]
-fn sky_safe_dir(v: Vec3, fallback: Vec3) -> Vec3 {
+pub(super) fn sky_safe_dir(v: Vec3, fallback: Vec3) -> Vec3 {
     if v.is_finite() && v.length_squared() > 1.0e-6 {
         v.normalize_or_zero()
     } else {
@@ -300,7 +297,7 @@ fn sky_safe_dir(v: Vec3, fallback: Vec3) -> Vec3 {
     }
 }
 
-fn sample_sky_frame(cycle: &SkyCycleRuntime, atmosphere: Option<&SkyAtmosphereRuntime>, to_sun: Vec3) -> SkyFrameSample {
+pub(super) fn sample_sky_frame(cycle: &SkyCycleRuntime, atmosphere: Option<&SkyAtmosphereRuntime>, to_sun: Vec3) -> SkyFrameSample {
     let to_sun = sky_safe_dir(to_sun, Vec3::new(0.0, 1.0, 0.0));
     let elevation = to_sun.y;
 
@@ -373,16 +370,16 @@ fn sample_sky_frame(cycle: &SkyCycleRuntime, atmosphere: Option<&SkyAtmosphereRu
 }
 
 
-fn env_vec_to_vec3(v: newengine_world_environment_api::Vec3Dto, fallback: Vec3) -> Vec3 {
+pub(super) fn env_vec_to_vec3(v: newengine_world_environment_api::Vec3Dto, fallback: Vec3) -> Vec3 {
     sky_safe_dir(Vec3::new(v.x, v.y, v.z), fallback)
 }
 
 #[inline]
-fn env_color_to_rgb(c: newengine_world_environment_api::Color3Dto) -> [f32; 3] {
+pub(super) fn env_color_to_rgb(c: newengine_world_environment_api::Color3Dto) -> [f32; 3] {
     [c.r.clamp(0.0, 1.0), c.g.clamp(0.0, 1.0), c.b.clamp(0.0, 1.0)]
 }
 
-fn sample_sky_frame_from_environment(
+pub(super) fn sample_sky_frame_from_environment(
     cycle: &SkyCycleRuntime,
     environment: &newengine_world_environment_api::EnvironmentFrameDto,
 ) -> SkyFrameSample {
@@ -434,7 +431,7 @@ fn sample_sky_frame_from_environment(
     }
 }
 
-fn apply_sky_visuals(world: &mut newengine_ecs::World, frame: SkyFrameSample, atmosphere: Option<SkyAtmosphereRuntime>) {
+pub(super) fn apply_sky_visuals(world: &mut newengine_ecs::World, frame: SkyFrameSample, atmosphere: Option<SkyAtmosphereRuntime>) {
     let radius = atmosphere.as_ref().map(|a| a.radius).unwrap_or(220.0).max(16.0);
 
     let entities = world
@@ -473,7 +470,7 @@ pub fn tick_game_ready_sky_cycle(world: &mut newengine_ecs::World, dt: f32) {
         if let Some(snapshot) = &time_snapshot {
             cycle.time_of_day_hours = (snapshot.game.normalized_day as f32 * 24.0).rem_euclid(24.0);
         } else if dt > 0.0 {
-            log::debug!(
+            newengine_ulog_api::ulog::debug!(
                 "game-ready sky cycle: engine.time route required for animated time; authored scene.day_night time remains fixed while degraded"
             );
         }
@@ -500,7 +497,7 @@ pub fn tick_game_ready_sky_cycle(world: &mut newengine_ecs::World, dt: f32) {
             .map(|current| current.visual_assets != visual_assets)
             .unwrap_or(true);
         if changed {
-            log::debug!(
+            newengine_ulog_api::ulog::debug!(
                 "game-ready environment bridge: visual asset group='{}' dictionary='{}' sky='{}' sun='{}' moon='{}' cloud_density='{}' weather='{}'",
                 visual_assets.visual_group_id,
                 visual_assets.texture_dictionary_ref,
@@ -512,8 +509,7 @@ pub fn tick_game_ready_sky_cycle(world: &mut newengine_ecs::World, dt: f32) {
             );
         }
         world.insert_resource(GameReadyEnvironmentVisualAssetsRuntime { visual_assets });
-        world.insert_resource(GameReadyEnvironmentFrameRuntime { frame: environment_frame });
-    }
+        }
 
     if let Some(ambient) = world.resource_mut::<AmbientLight>() {
         ambient.color = frame.ambient_color;
@@ -536,7 +532,7 @@ pub fn tick_game_ready_sky_cycle(world: &mut newengine_ecs::World, dt: f32) {
 
 
 #[inline]
-fn configure_game_ready_lighting(world: &mut newengine_ecs::World, spec: &GameReadyLightingSpec) {
+pub(in crate::scene_bridge::game_ready) fn configure_game_ready_lighting(world: &mut newengine_ecs::World, spec: &GameReadyLightingSpec) {
     let ambient = AmbientLight {
         color: spec.ambient_color,
         intensity: spec.ambient_intensity,
@@ -582,7 +578,7 @@ fn configure_game_ready_lighting(world: &mut newengine_ecs::World, spec: &GameRe
     });
     tick_game_ready_sky_cycle(world, 0.0);
 
-    log::info!(
+    newengine_ulog_api::ulog::info!(
         "game-ready sky cycle: tod={:.2}h day_len={:.1}s ambient={:?}/{:.3} sun_dir={:?} sun={:?}/{:.3} shadows={} strength={:.3}",
         spec.day_night.time_of_day_hours,
         spec.day_night.day_length_seconds,

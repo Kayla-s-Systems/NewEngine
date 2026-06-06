@@ -68,7 +68,7 @@ impl RuntimeRenderController {
 
         let Some(job_system) = job_system else {
             let message = "engine.jobs unavailable for material texture decode".to_owned();
-            log::warn!(
+            newengine_ulog_api::ulog::warn!(
                 "render controller: material texture decode skipped path='{}' err='{}'",
                 path,
                 message
@@ -136,7 +136,7 @@ impl RuntimeRenderController {
             .with_deferred_mip_data(mip_data, payload),
         ) {
             Ok(texture) => {
-                log::debug!(
+                newengine_ulog_api::ulog::debug!(
                     "render controller: material texture packet upload queued path='{}' method='assets.textures.entry_runtime_v1' texture={:?} frame={}",
                     path,
                     texture,
@@ -152,7 +152,7 @@ impl RuntimeRenderController {
             }
             Err(e) => {
                 let message = e.to_string();
-                log::warn!(
+                newengine_ulog_api::ulog::warn!(
                     "render controller: material texture create failed path='{}' err='{}'",
                     path,
                     message
@@ -184,7 +184,7 @@ impl RuntimeRenderController {
 
             let Some(result) = job.take_result() else {
                 let message = "material texture decode job completed without result".to_owned();
-                log::warn!(
+                newengine_ulog_api::ulog::warn!(
                     "render controller: material texture decode job completed without result path='{}'",
                     path
                 );
@@ -221,8 +221,8 @@ impl RuntimeRenderController {
                         e,
                     );
                     match e.kind {
-                        AssetErrorKind::DecodeFailed | AssetErrorKind::UnsupportedFormat => log::debug!("{}", line),
-                        _ => log::warn!("{}", line),
+                        AssetErrorKind::DecodeFailed | AssetErrorKind::UnsupportedFormat => newengine_ulog_api::ulog::debug!("{}", line),
+                        _ => newengine_ulog_api::ulog::warn!("{}", line),
                     }
                     self.gpu.material.textures.insert(path, MaterialTextureGpuResidency::Failed { message });
                 }
@@ -301,7 +301,7 @@ impl RuntimeRenderController {
 
             let elapsed_ms = pump_started.elapsed().as_secs_f32() * 1000.0;
             if elapsed_ms >= decode_budget_ms {
-                log::debug!(
+                newengine_ulog_api::ulog::debug!(
                     "render controller: material texture pump yielded started={} active_jobs={} max_jobs={} elapsed_ms={:.2} budget_ms={:.2} remaining={}",
                     started_jobs,
                     self.gpu.material.texture_decode_jobs.len(),
@@ -358,7 +358,7 @@ impl RuntimeRenderController {
                         },
                         "detail": "GPU texture residency confirmed by render controller"
                     }));
-                    log::debug!(
+                    newengine_ulog_api::ulog::debug!(
                         "render controller: asset status gpu resident path='{}' texture={:?} frame={}",
                         path,
                         texture,
@@ -370,7 +370,7 @@ impl RuntimeRenderController {
                     let message = snapshot
                         .message
                         .unwrap_or_else(|| "gpu upload failed".to_string());
-                    log::warn!(
+                    newengine_ulog_api::ulog::warn!(
                         "render controller: material texture upload failed path='{}' err='{}'",
                         path,
                         message
@@ -390,7 +390,7 @@ impl RuntimeRenderController {
             MaterialTextureGpuResidency::CpuDecoding { requested_frame } => {
                 let waited = self.frame.frame_index.saturating_sub(requested_frame);
                 if waited > 180 && waited % 120 == 0 {
-                    log::debug!(
+                    newengine_ulog_api::ulog::debug!(
                         "render controller: material texture still cpu-decoding path='{}' waited_frames={}",
                         path,
                         waited,
@@ -401,7 +401,7 @@ impl RuntimeRenderController {
             MaterialTextureGpuResidency::AssetLoading { id_hex32, requested_frame } => {
                 let waited = self.frame.frame_index.saturating_sub(requested_frame);
                 if waited > 180 && waited % 120 == 0 {
-                    log::debug!(
+                    newengine_ulog_api::ulog::debug!(
                         "render controller: material texture still asset-loading path='{}' id='{}' waited_frames={}",
                         path,
                         id_hex32,
@@ -531,7 +531,7 @@ impl RuntimeRenderController {
                 }
             }
             Err(err) => {
-                log::warn!(
+                newengine_ulog_api::ulog::warn!(
                     "render controller: failed to drain renderer backend events err='{}'",
                     err
                 );

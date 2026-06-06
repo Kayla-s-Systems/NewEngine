@@ -130,12 +130,12 @@ impl GameReadyRuntimeProfile {
             .into_iter()
             .filter(|descriptor| newengine_assets::register_asset_type_descriptor_best_effort(&host_api, descriptor.clone()))
             .count();
-        log::info!(
+        newengine_ulog_api::ulog::info!(
             "asset type descriptors: registered {} provider-owned first-party formats",
             registered_file_types
         );
         let asset_document_routes_ok = newengine_assets::register_asset_document_gateways_best_effort(host_api.clone());
-        log::info!(
+        newengine_ulog_api::ulog::info!(
             "asset document gateways: registered={} routes='engine.assets.inspect,engine.assets.edit'",
             asset_document_routes_ok
         );

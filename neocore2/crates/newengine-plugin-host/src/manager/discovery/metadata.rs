@@ -36,7 +36,7 @@ pub(super) fn probe_plugin_metadata(lib: &Library) -> Result<ScanPluginProbe, St
     out.has_legacy_root = unsafe { lib.get::<unsafe extern "C" fn() -> PluginRootV1Ref>(LEGACY_PLUGIN_ROOT_SYMBOL) }.is_ok();
 
     if out.has_legacy_root && !out.has_canonical_root {
-        log::warn!(
+        newengine_ulog_api::ulog::warn!(
             "plugins: stale plugin ABI detected: found legacy root symbol '{}' but missing canonical root symbol '{}'; rebuild the plugin",
             newengine_plugin_api::LEGACY_PLUGIN_ROOT_SYMBOL_NAME,
             newengine_plugin_api::PLUGIN_ROOT_SYMBOL_NAME,

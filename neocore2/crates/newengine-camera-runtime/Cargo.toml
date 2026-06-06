@@ -8,6 +8,7 @@ readme = "README.md"
 default = []
 
 [dependencies]
+newengine-ulog-api = { path = "../newengine-ulog-api" }
 log = "0.4.29"
 newengine-camera = { path = "../newengine-camera" }
 newengine-camera-api = { path = "../newengine-camera-api" }

@@ -1,5 +1,4 @@
 #![forbid(unsafe_op_in_unsafe_fn)]
-
 mod control;
 mod diagnostics;
 pub mod content_manifest;
@@ -12,6 +11,7 @@ mod paths;
 mod plugin_config_service;
 mod root_observers;
 mod service_gateway;
+pub mod ulog_event;
 
 /// A lightweight snapshot of loaded plugins suitable for UI/telemetry.
 ///

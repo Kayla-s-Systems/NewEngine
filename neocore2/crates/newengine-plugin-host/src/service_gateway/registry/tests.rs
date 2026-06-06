@@ -531,7 +531,6 @@ fn missing_gateway_route_degrades_to_none_instead_of_panic() {
     let registry = ActiveGatewayRegistry::from_facts(&[], &[], &[]);
 
     assert!(registry.resolve_route("engine.render").is_none());
-    assert!(registry.resolve_gateway("engine.render").is_none());
     assert!(!registry.has_gateway_capability("engine.render", "render.backend"));
 }
 
@@ -568,6 +567,16 @@ fn active_and_shadowed_routes_are_diagnostic_visible() {
     let active = registry.resolve_route("engine.camera").expect("engine.camera active route");
 
     assert_eq!(active.provider_route_id.as_deref(), Some("engine.camera.stargazer"));
-    assert_eq!(registry.routes().len(), 2);
-    assert!(registry.routes().iter().any(|route| route.provider_route_id.as_deref() == Some("engine.camera.null")));
+
+    let diagnostics = registry.route_diagnostics("engine.camera");
+    assert_eq!(diagnostics.gateway_id, "engine.camera");
+    assert_eq!(
+        diagnostics.active_route.as_ref().and_then(|route| route.provider_route_id.as_deref()),
+        Some("engine.camera.stargazer")
+    );
+    assert_eq!(diagnostics.shadowed_routes.len(), 1);
+    assert_eq!(
+        diagnostics.shadowed_routes[0].provider_route_id.as_deref(),
+        Some("engine.camera.null")
+    );
 }

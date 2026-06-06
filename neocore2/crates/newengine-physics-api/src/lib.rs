@@ -5,7 +5,6 @@
 //! `newengine-physics-api` is intentionally DTO-oriented: packets contain only
 //! stable values and never expose ECS `World`, component storage or native
 //! backend handles across the service boundary.
-
 use serde::{Deserialize, Serialize};
 
 /// Engine-facing physics service gateway id. Consumers call this facade; the host

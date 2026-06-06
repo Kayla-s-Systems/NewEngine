@@ -23,7 +23,7 @@ pub fn shutdown_services_by_owner(owner_plugin_id: &str, reason: &str) {
     };
 
     if entries.is_empty() {
-        log::debug!(
+        newengine_ulog_api::ulog::debug!(
             "plugins shutdown: no services owned by plugin id='{}' reason='{}'",
             owner_plugin_id,
             reason
@@ -31,7 +31,7 @@ pub fn shutdown_services_by_owner(owner_plugin_id: &str, reason: &str) {
         return;
     }
 
-    log::info!(
+    newengine_ulog_api::ulog::info!(
         "plugins shutdown: service shutdown begin owner='{}' count={} reason='{}'",
         owner_plugin_id,
         entries.len(),
@@ -39,7 +39,7 @@ pub fn shutdown_services_by_owner(owner_plugin_id: &str, reason: &str) {
     );
 
     for (service_id, entry) in entries {
-        log::info!(
+        newengine_ulog_api::ulog::info!(
             "plugins shutdown: service shutdown begin owner='{}' service='{}' method='{}'",
             owner_plugin_id,
             service_id,
@@ -58,7 +58,7 @@ pub fn shutdown_services_by_owner(owner_plugin_id: &str, reason: &str) {
 
         match result {
             Ok(abi_stable::std_types::RResult::ROk(_)) => {
-                log::info!(
+                newengine_ulog_api::ulog::info!(
                     "plugins shutdown: service shutdown complete owner='{}' service='{}'",
                     owner_plugin_id,
                     service_id
@@ -67,14 +67,14 @@ pub fn shutdown_services_by_owner(owner_plugin_id: &str, reason: &str) {
             Ok(abi_stable::std_types::RResult::RErr(err)) => {
                 let err = err.to_string();
                 if err.contains("unknown method") || err.contains("unknown method:") {
-                    log::debug!(
+                    newengine_ulog_api::ulog::debug!(
                         "plugins shutdown: service has no shutdown_v1 owner='{}' service='{}' err='{}'",
                         owner_plugin_id,
                         service_id,
                         err
                     );
                 } else {
-                    log::warn!(
+                    newengine_ulog_api::ulog::warn!(
                         "plugins shutdown: service shutdown_v1 failed owner='{}' service='{}' err='{}'",
                         owner_plugin_id,
                         service_id,
@@ -83,7 +83,7 @@ pub fn shutdown_services_by_owner(owner_plugin_id: &str, reason: &str) {
                 }
             }
             Err(_) => {
-                log::error!(
+                newengine_ulog_api::ulog::error!(
                     "plugins shutdown: service shutdown_v1 panicked owner='{}' service='{}'",
                     owner_plugin_id,
                     service_id
@@ -92,7 +92,7 @@ pub fn shutdown_services_by_owner(owner_plugin_id: &str, reason: &str) {
         }
     }
 
-    log::info!(
+    newengine_ulog_api::ulog::info!(
         "plugins shutdown: service shutdown complete owner='{}' reason='{}'",
         owner_plugin_id,
         reason
@@ -127,7 +127,7 @@ pub fn unregister_by_owner(owner_plugin_id: &str) {
 
     let removed_services = removed_service_ids.len();
     if removed_services > 0 {
-        log::info!(
+        newengine_ulog_api::ulog::info!(
             "plugins shutdown: service unregister owner='{}' count={} services='{}'",
             owner_plugin_id,
             removed_services,
@@ -181,7 +181,7 @@ pub fn unregister_by_owner(owner_plugin_id: &str) {
     bump_services_generation();
 
     if removed_services > 0 || removed_sinks > 0 {
-        log::info!(
+        newengine_ulog_api::ulog::info!(
             "plugins shutdown: unregister complete owner='{}' services={} event_sinks={}",
             owner_plugin_id,
             removed_services,

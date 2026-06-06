@@ -1,8 +1,10 @@
+use super::*;
+
 impl ScreenProfileRuntimeState {
     pub(crate) fn load() -> Self {
         let config = load_screen_profile_config();
         let descriptor = screen_profile_descriptor(config.profile, config.game_ui_root_surface_id.clone());
-        log::info!(
+        newengine_ulog_api::ulog::info!(
             "screen profile: loaded profile='{}' layout='{}' focus={:?} panels={} game_ui_root={}",
             descriptor.profile.id(),
             descriptor.layout_id,
@@ -84,7 +86,7 @@ impl ScreenProfileRuntimeState {
         }
 
         if profile_changed {
-            log::info!(
+            newengine_ulog_api::ulog::info!(
                 "screen profile: active profile='{}' focus={:?} surface='{}' panels={} render_backend='unchanged'",
                 self.descriptor.profile.id(),
                 self.descriptor.input_focus_policy,
@@ -117,7 +119,7 @@ impl ScreenProfileRuntimeState {
         } else {
             self.active_menu_id = Some(menu_id.to_owned());
         }
-        log::info!(
+        newengine_ulog_api::ulog::info!(
             "editor menu: '{}' {} via ui.dispatch_input_v1",
             menu_id,
             if self.active_menu_id.as_deref() == Some(menu_id) { "opened" } else { "closed" }
@@ -155,9 +157,9 @@ impl ScreenProfileRuntimeState {
         if let Some(mode) = requested.filter(|mode| *mode != self.editor_runtime_mode) {
             self.editor_runtime_mode = mode;
             match mode {
-                UiEditorRuntimeMode::Edit => log::info!("editor runtime: mode set to Edit via action route; simulation stopped and viewport remains preview-only"),
-                UiEditorRuntimeMode::Simulate => log::info!("editor runtime: mode set to Simulate via action route; world simulation may run without direct player control"),
-                UiEditorRuntimeMode::Play => log::info!("editor runtime: mode set to Play in Editor via action route; gameplay input may be handed to viewport policy"),
+                UiEditorRuntimeMode::Edit => newengine_ulog_api::ulog::info!("editor runtime: mode set to Edit via action route; simulation stopped and viewport remains preview-only"),
+                UiEditorRuntimeMode::Simulate => newengine_ulog_api::ulog::info!("editor runtime: mode set to Simulate via action route; world simulation may run without direct player control"),
+                UiEditorRuntimeMode::Play => newengine_ulog_api::ulog::info!("editor runtime: mode set to Play in Editor via action route; gameplay input may be handed to viewport policy"),
             }
         }
 
@@ -186,10 +188,10 @@ impl ScreenProfileRuntimeState {
         self.last_dock_click_frame = frame_index;
         if self.hidden_panels.contains(slot_id) {
             self.hidden_panels.remove(slot_id);
-            log::info!("editor dock: panel '{}' shown via ui.dispatch_input_v1", slot_id);
+            newengine_ulog_api::ulog::info!("editor dock: panel '{}' shown via ui.dispatch_input_v1", slot_id);
         } else {
             self.hidden_panels.insert(slot_id.to_owned());
-            log::info!("editor dock: panel '{}' hidden via ui.dispatch_input_v1", slot_id);
+            newengine_ulog_api::ulog::info!("editor dock: panel '{}' hidden via ui.dispatch_input_v1", slot_id);
         }
     }
 

@@ -212,7 +212,7 @@ pub fn entity_gateway_service(
 
 pub fn register_entity_gateway_best_effort(scene: Arc<newengine_scene_runtime::SceneBridge>) {
     if newengine_plugin_host::has_service(ENGINE_ENTITY_SERVICE_ID) {
-        log::debug!("engine.entity gateway registration skipped; service already available");
+        newengine_ulog_api::ulog::debug!("engine.entity gateway registration skipped; service already available");
         return;
     }
 
@@ -227,13 +227,13 @@ pub fn register_entity_gateway_best_effort(scene: Arc<newengine_scene_runtime::S
         owner: ENTITY_GATEWAY_OWNER,
         service,
     }) {
-        Ok(()) => log::info!(
+        Ok(()) => newengine_ulog_api::ulog::info!(
             "engine.entity gateway registered source=engine-runtime service='{}' capability='{}' owner='{}'",
             ENGINE_ENTITY_SERVICE_ID,
             ENTITY_BACKEND_CAPABILITY_ID,
             ENTITY_GATEWAY_OWNER
         ),
-        Err(e) => log::error!(
+        Err(e) => newengine_ulog_api::ulog::error!(
             "engine.entity gateway registration failed id='{}' err='{}'",
             ENGINE_ENTITY_SERVICE_ID,
             e

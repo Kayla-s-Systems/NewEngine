@@ -6,7 +6,6 @@
 //! a product/profile UI composition module: it reads reusable backend data from
 //! `engine.assets` and publishes a generic `UiSurfaceNode` through `engine.ui`.
 //! Rendering remains owned by the selected `engine.ui` provider.
-
 use newengine_assets_api::{
     AssetDecodeRequest, AssetDocumentAction, AssetFileManifest, AssetPatchResult, AssetService, AssetServiceClient,
     ASSET_LIST_FILE_MANIFEST_OUTPUT,
@@ -30,7 +29,7 @@ use newengine_ui_api::{
     UiHitTestResult, UiInputCaptureState, UiDockLayoutState, UiInputCaptureStateManager,
     UiInputFrame, UiNodeEventTrigger, UiNodeMessage, UiNodeMessageSeverity, UiNodeTone,
     UiScreenProfile, UiScreenProfileState, UiSurfaceAnchor, UiSurfaceNode, UiSurfaceStyle,
-    ENGINE_UI_SERVICE_ID, UI_COMPONENT_ACTION, UI_COMPONENT_GRID, UI_COMPONENT_INPUT,
+    ENGINE_UI_SERVICE_ID, UI_COMPONENT_GRID, UI_COMPONENT_INPUT,
     UI_COMPONENT_LIST, UI_COMPONENT_PANEL, UI_COMPONENT_TREE, UI_FONT_ASSET_EDITOR_SANS,
     UI_THEME_ASSET_NORTHSTAR_EDITOR, UI_THEME_NORTHSTAR_EDITOR, UI_SERVICE_METHOD_SURFACE_NODE_V1,
 };
@@ -52,14 +51,6 @@ const ASSETS_CATALOG_INPUT_LISTENER: &str = "asset-browser-ui";
 const ASSETS_CATALOG_THEME_ID: &str = UI_THEME_NORTHSTAR_EDITOR;
 pub(crate) const ASSET_BROWSER_ICON_FOLDER: &str = "ui/icons/assetBrowser.ytd@folder";
 pub(crate) const ASSET_BROWSER_ICON_TEXTURE: &str = "ui/icons/assetBrowser.ytd@texture";
-pub(crate) const ASSET_BROWSER_ICON_MATERIAL: &str = "ui/icons/assetBrowser.ytd@material";
-pub(crate) const ASSET_BROWSER_ICON_MODEL: &str = "ui/icons/assetBrowser.ytd@model";
-pub(crate) const ASSET_BROWSER_ICON_WORLD: &str = "ui/icons/assetBrowser.ytd@world";
-pub(crate) const ASSET_BROWSER_ICON_UI: &str = "ui/icons/assetBrowser.ytd@ui";
-pub(crate) const ASSET_BROWSER_ICON_PACKAGE: &str = "ui/icons/assetBrowser.ytd@package";
-pub(crate) const ASSET_BROWSER_ICON_SCRIPT: &str = "ui/icons/assetBrowser.ytd@script";
-pub(crate) const ASSET_BROWSER_ICON_SHADER: &str = "ui/icons/assetBrowser.ytd@shader";
-pub(crate) const ASSET_BROWSER_ICON_AUDIO: &str = "ui/icons/assetBrowser.ytd@audio";
 pub(crate) const ASSET_BROWSER_ICON_GENERIC: &str = "ui/icons/assetBrowser.ytd@generic";
 pub(crate) const MAX_VISIBLE_ENTRIES: usize = 64;
 const UI_SCROLLBAR_DRAG_ACTION: &str = "ui.scrollbar.drag";
@@ -149,7 +140,7 @@ impl AssetsCatalogUiRuntimeModule {
         let payload = match serde_json::to_vec(&node) {
             Ok(payload) => payload,
             Err(error) => {
-                log::warn!("asset browser UI: surface serialization failed: {error}");
+                newengine_ulog_api::ulog::warn!("asset browser UI: surface serialization failed: {error}");
                 return;
             }
         };
@@ -160,13 +151,13 @@ impl AssetsCatalogUiRuntimeModule {
         ) {
             Ok(Some(_)) => {}
             Ok(None) => {
-                log::warn!(
+                newengine_ulog_api::ulog::warn!(
                     "asset browser UI: engine.ui is unavailable; surface='{}' skipped instead of using a native/special renderer",
                     node.surface_id,
                 );
             }
             Err(error) => {
-                log::warn!("asset browser UI: engine.ui surface publish failed: {error}");
+                newengine_ulog_api::ulog::warn!("asset browser UI: engine.ui surface publish failed: {error}");
             }
         }
     }
@@ -257,7 +248,7 @@ impl AssetsCatalogUiRuntimeModule {
             Err(error) => {
                 let should_log = self.cached_document_action_error.as_deref() != Some(error.as_str());
                 if should_log {
-                    log::warn!(
+                    newengine_ulog_api::ulog::warn!(
                         "asset browser UI: asset document actions unavailable path='{}' err='{}'",
                         entry.logical_path,
                         error,
@@ -272,7 +263,7 @@ impl AssetsCatalogUiRuntimeModule {
 
     fn dispatch_asset_document_action(&mut self, action_id: &str, frame_index: u64, surface_size_px: [u32; 2]) {
         let Some(action) = self.cached_document_actions.iter().find(|action| action.id == action_id).cloned() else {
-            log::warn!("asset browser UI: unknown document action id='{}'", action_id);
+            newengine_ulog_api::ulog::warn!("asset browser UI: unknown document action id='{}'", action_id);
             return;
         };
 
@@ -327,7 +318,7 @@ impl AssetsCatalogUiRuntimeModule {
 
         match self.state.client.apply_patch_json_v1(patch) {
             Ok(result) => {
-                log::info!(
+                newengine_ulog_api::ulog::info!(
                     "asset browser UI: document action dispatched id='{}' accepted={} written={}",
                     action.id,
                     result.accepted,
@@ -468,7 +459,7 @@ impl AssetsCatalogUiRuntimeModule {
                 self.context_menu_open = false;
                 self.invalidate_node();
                 self.refresh_cache(frame_index, surface_size_px);
-                log::info!("asset browser UI: breadcrumb open path='{}' via ui.dispatch_input_v1", display_path(&self.current_path));
+                newengine_ulog_api::ulog::info!("asset browser UI: breadcrumb open path='{}' via ui.dispatch_input_v1", display_path(&self.current_path));
                 true
             }
             "asset_browser.root.open" => {
@@ -481,7 +472,7 @@ impl AssetsCatalogUiRuntimeModule {
                 self.context_menu_open = false;
                 self.invalidate_node();
                 self.refresh_cache(frame_index, surface_size_px);
-                log::info!("asset browser UI: root opened via ui.dispatch_input_v1");
+                newengine_ulog_api::ulog::info!("asset browser UI: root opened via ui.dispatch_input_v1");
                 true
             }
             "asset_browser.folder.open" | "asset_browser.sidebar.select" => {
@@ -569,7 +560,7 @@ impl AssetsCatalogUiRuntimeModule {
         self.context_menu_open = false;
         self.invalidate_node();
         self.refresh_cache(frame_index, surface_size_px);
-        log::info!("asset browser UI: directory opened path='{}' via ui.dispatch_input_v1", display_path(&self.current_path));
+        newengine_ulog_api::ulog::info!("asset browser UI: directory opened path='{}' via ui.dispatch_input_v1", display_path(&self.current_path));
         true
     }
 
@@ -588,7 +579,7 @@ impl AssetsCatalogUiRuntimeModule {
         if was_selected && self.open_asset_as_entry_directory(&entry.logical_path, frame_index, surface_size_px) {
             return true;
         }
-        log::info!(
+        newengine_ulog_api::ulog::info!(
             "asset browser UI: selected asset path='{}' kind='{}' gateway='{}' via ui.dispatch_input_v1",
             entry.logical_path,
             entry.asset_kind,
@@ -656,11 +647,11 @@ impl AssetsCatalogUiRuntimeModule {
                 self.cached_node = None;
                 self.last_refresh_frame = 0;
                 self.refresh_cache(frame_index, surface_size_px);
-                log::info!("asset browser UI: opened NEF8/ListFile as entry directory path='{}'", display_path(&self.current_path));
+                newengine_ulog_api::ulog::info!("asset browser UI: opened NEF8/ListFile as entry directory path='{}'", display_path(&self.current_path));
                 true
             }
             Err(error) => {
-                log::debug!("asset browser UI: asset is not an entry directory path='{}' reason='{}'", display_path(&normalized), error);
+                newengine_ulog_api::ulog::debug!("asset browser UI: asset is not an entry directory path='{}' reason='{}'", display_path(&normalized), error);
                 false
             }
         }
@@ -752,7 +743,7 @@ impl AssetsCatalogUiRuntimeModule {
                     self.focus_scope = CatalogFocusScope::Breadcrumb;
                     self.cached_snapshot = None;
                     changed = true;
-                    log::info!("asset browser UI: navigate parent path='{}'", display_path(&self.current_path));
+                    newengine_ulog_api::ulog::info!("asset browser UI: navigate parent path='{}'", display_path(&self.current_path));
                 } else {
                     self.view_mode = CatalogViewMode::Grid;
                     self.focus_scope = CatalogFocusScope::Grid;
@@ -774,14 +765,14 @@ impl AssetsCatalogUiRuntimeModule {
                     self.view_mode = CatalogViewMode::Grid;
                     self.focus_scope = CatalogFocusScope::Grid;
                     changed = true;
-                    log::info!("asset browser UI: open directory path='{}'", display_path(&self.current_path));
+                    newengine_ulog_api::ulog::info!("asset browser UI: open directory path='{}'", display_path(&self.current_path));
                 } else if self.open_asset_as_entry_directory(&entry.logical_path, frame_index, surface_size_px) {
                     changed = false;
                 } else {
                     self.view_mode = CatalogViewMode::Inspector;
                     self.focus_scope = CatalogFocusScope::Inspector;
                     changed = true;
-                    log::info!(
+                    newengine_ulog_api::ulog::info!(
                         "asset browser UI: selected asset path='{}' kind='{}' gateway='{}'",
                         entry.logical_path,
                         entry.asset_kind,
@@ -820,7 +811,7 @@ impl<E: Send + 'static> Module<E> for AssetsCatalogUiRuntimeModule {
     fn start(&mut self, _ctx: &mut ModuleCtx<'_, E>) -> EngineResult<()> {
         self.input_registered = ensure_assets_catalog_input_registration();
         if !self.input_registered {
-            log::warn!(
+            newengine_ulog_api::ulog::warn!(
                 "asset browser UI: semantic input listener registration incomplete; will continue through engine.input snapshot but F1 may be unavailable"
             );
         }
@@ -842,7 +833,7 @@ impl<E: Send + 'static> Module<E> for AssetsCatalogUiRuntimeModule {
         if toggled && self.last_toggle_frame != frame_index {
             self.last_toggle_frame = frame_index;
             if editor_profile_active {
-                log::info!(
+                newengine_ulog_api::ulog::info!(
                     "asset browser UI: toggle consumed by editor dock surface; profile='editor' visible=true modal=false"
                 );
             } else {
@@ -852,7 +843,7 @@ impl<E: Send + 'static> Module<E> for AssetsCatalogUiRuntimeModule {
                     self.current_path.clear();
                     self.selected_index = 0;
                 }
-                log::info!("asset browser UI: visibility changed open={}", self.open);
+                newengine_ulog_api::ulog::info!("asset browser UI: visibility changed open={}", self.open);
             }
         }
 
@@ -1022,7 +1013,7 @@ fn ensure_assets_catalog_input_registration() -> bool {
         if let Err(error) = newengine_input_bindings_runtime::register_input_key(
             InputKeyRegistration::new(code, identity, label),
         ) {
-            log::warn!("asset browser UI: key registration failed key='{label}': {error}");
+            newengine_ulog_api::ulog::warn!("asset browser UI: key registration failed key='{label}': {error}");
             ok = false;
         }
     }
@@ -1057,7 +1048,7 @@ fn ensure_assets_catalog_input_registration() -> bool {
             .with_effect(InputActionEffect::UiNav { x: 1, y: 0 }),
     ] {
         if let Err(error) = newengine_input_bindings_runtime::register_input_action(action) {
-            log::warn!("asset browser UI: action registration failed: {error}");
+            newengine_ulog_api::ulog::warn!("asset browser UI: action registration failed: {error}");
             ok = false;
         }
     }
@@ -1075,7 +1066,7 @@ fn ensure_assets_catalog_input_registration() -> bool {
         InputBindingRegistration::new(InputBinding::keyboard_pressed(engine_action::UI_NAVIGATION_RIGHT, key_code::ARROW_RIGHT)),
     ] {
         if let Err(error) = newengine_input_bindings_runtime::register_input_binding(registration) {
-            log::warn!("asset browser UI: binding registration failed: {error}");
+            newengine_ulog_api::ulog::warn!("asset browser UI: binding registration failed: {error}");
             ok = false;
         }
     }
@@ -1089,7 +1080,7 @@ fn ensure_assets_catalog_input_registration() -> bool {
         .with_priority(110)
         .consuming(),
     ) {
-        log::warn!("asset browser UI: toggle listener registration failed: {error}");
+        newengine_ulog_api::ulog::warn!("asset browser UI: toggle listener registration failed: {error}");
         ok = false;
     }
 
@@ -1108,12 +1099,12 @@ fn ensure_assets_catalog_input_registration() -> bool {
         ])
         .with_priority(110),
     ) {
-        log::warn!("asset browser UI: navigation listener registration failed: {error}");
+        newengine_ulog_api::ulog::warn!("asset browser UI: navigation listener registration failed: {error}");
         ok = false;
     }
 
     if ok {
-        log::info!(
+        newengine_ulog_api::ulog::info!(
             "asset browser UI: input listeners registered owner='{}' toggle_listener='{}' nav_listener='assets-browser-navigation'",
             ASSETS_CATALOG_UI_OWNER,
             ASSETS_CATALOG_INPUT_LISTENER,
@@ -1143,24 +1134,23 @@ impl CatalogToolbarAction {
 
 #[derive(Clone, Debug)]
 enum CatalogToolbarItem {
-    DocumentAction { id: String, label: String, enabled: bool },
-    ViewAction { action: CatalogToolbarAction, label: &'static str },
+    DocumentAction { label: String, enabled: bool },
+    ViewAction { label: &'static str },
 }
 
 fn catalog_toolbar_items(document_actions: &[AssetDocumentAction]) -> Vec<CatalogToolbarItem> {
     let mut items = document_actions
         .iter()
         .map(|action| CatalogToolbarItem::DocumentAction {
-            id: action.id.clone(),
             label: action.label.clone(),
             enabled: action.enabled,
         })
         .collect::<Vec<_>>();
     items.extend([
-        CatalogToolbarItem::ViewAction { action: CatalogToolbarAction::Tree, label: CatalogToolbarAction::Tree.label() },
-        CatalogToolbarItem::ViewAction { action: CatalogToolbarAction::List, label: CatalogToolbarAction::List.label() },
-        CatalogToolbarItem::ViewAction { action: CatalogToolbarAction::Grid, label: CatalogToolbarAction::Grid.label() },
-        CatalogToolbarItem::ViewAction { action: CatalogToolbarAction::Refresh, label: CatalogToolbarAction::Refresh.label() },
+        CatalogToolbarItem::ViewAction { label: CatalogToolbarAction::Tree.label() },
+        CatalogToolbarItem::ViewAction { label: CatalogToolbarAction::List.label() },
+        CatalogToolbarItem::ViewAction { label: CatalogToolbarAction::Grid.label() },
+        CatalogToolbarItem::ViewAction { label: CatalogToolbarAction::Refresh.label() },
     ]);
     items
 }
@@ -1805,7 +1795,7 @@ fn assets_catalog_node(
         let selected = visible_idx == selected_index;
         let hovered = hovered_entry_index == Some(visible_idx);
         let mut card = UiComponentNode::action(format!("asset_browser.asset_card.{visible_idx:03}"), entry.name.clone(), "asset_browser.asset.select")
-            .with_icon(icon_for_extension(&entry.extension))
+            .with_icon(icon_for_entry(entry))
             .with_value(asset_type_label(entry))
             .with_detail(format!("{} · {}", entry.import_stage, entry.import_action))
             .with_tone(if selected { UiNodeTone::Accent } else { UiNodeTone::Normal })

@@ -99,7 +99,7 @@ fn try_mount(assets: &AssetServiceClient, path: &Path) {
         "mount": "",
         "config": { "root": path_string }
     })) {
-        log::warn!(
+        newengine_ulog_api::ulog::warn!(
             "runtime host: asset.mount_source_json_v1(dir) failed path='{}' err='{}'",
             path.display(),
             e
@@ -119,7 +119,7 @@ pub fn try_load_window_icon_best_effort(
     };
 
     let Some(assets) = assets else {
-        log::info!(
+        newengine_ulog_api::ulog::info!(
             "window icon: AssetManager unavailable; skipping icon path='{}' because runtime assets must not be read directly from filesystem",
             path
         );
@@ -129,20 +129,20 @@ pub fn try_load_window_icon_best_effort(
     let id_hex32 = match assets.import_v1(path) {
         Ok(v) => v,
         Err(e) => {
-            log::warn!("window icon: asset.import_v1 failed path='{path}' err='{e}'");
+            newengine_ulog_api::ulog::warn!("window icon: asset.import_v1 failed path='{path}' err='{e}'");
             return None;
         }
     };
 
     if let Err(e) = wait_ready(assets, &id_hex32, Duration::from_millis(500)) {
-        log::warn!("window icon: wait_ready failed path='{path}' id='{id_hex32}' err='{e:?}'");
+        newengine_ulog_api::ulog::warn!("window icon: wait_ready failed path='{path}' id='{id_hex32}' err='{e:?}'");
         return None;
     }
 
     let texture = match assets.texture_rgba8_v1(&id_hex32) {
         Ok(v) => v,
         Err(e) => {
-            log::warn!("window icon: texture_rgba8_v1 failed path='{path}' id='{id_hex32}' err='{e}'");
+            newengine_ulog_api::ulog::warn!("window icon: texture_rgba8_v1 failed path='{path}' id='{id_hex32}' err='{e}'");
             return None;
         }
     };

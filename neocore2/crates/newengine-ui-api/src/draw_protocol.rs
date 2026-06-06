@@ -62,14 +62,14 @@ pub const UI_THEME_ASSET_NORTHSTAR_EDITOR: &str = "ui/themes/northstar_editor.ne
 
 /// Canonical font asset references used by first-party editor surfaces.
 ///
-/// `.yft` belongs to the NEF8/ListFile family and describes font families,
+/// `.neftd` belongs to the NEF8/ListFile family and describes font families,
 /// faces, source files and atlas policy. The engine stores references here;
 /// concrete font binaries are imported by tooling and must not be hardcoded in
 /// the UI provider.
-pub const UI_FONT_ASSET_EDITOR_SANS: &str = "ui/fonts/editor.yft@inter_variable";
-pub const UI_FONT_ASSET_EDITOR_DISPLAY: &str = "ui/fonts/editor.yft@granic_slab_medium";
-pub const UI_FONT_ASSET_EDITOR_BOLD: &str = "ui/fonts/editor.yft@granic_sans_bold";
-pub const UI_FONT_ASSET_BRAND: &str = "ui/fonts/editor.yft@pricedown_display";
+pub const UI_FONT_ASSET_EDITOR_SANS: &str = "assets/ui/fonts/editor.neftd@tt_lakes_neue_trial_bold";
+pub const UI_FONT_ASSET_EDITOR_DISPLAY: &str = "assets/ui/fonts/editor.neftd@tt_lakes_neue_trial_black";
+pub const UI_FONT_ASSET_EDITOR_BOLD: &str = "assets/ui/fonts/editor.neftd@tt_lakes_neue_trial_bold";
+pub const UI_FONT_ASSET_BRAND: &str = "assets/ui/fonts/editor.neftd@tt_lakes_neue_trial_black";
 
 /// Generic component primitives. These are not screen types: every interface is
 /// the same retained `UiSurfaceNode` tree and may compose the same primitives.
@@ -95,8 +95,6 @@ pub const UI_COMPONENT_TREE: &str = "tree";
 pub const UI_COMPONENT_SPLIT: &str = "split";
 pub const UI_COMPONENT_VIEWPORT: &str = "viewport";
 pub const UI_COMPONENT_EXTERNAL_TEXTURE: &str = "external_texture";
-
-
 
 /// Generic backend-family declaration for UI providers.
 pub const UI_BACKEND_SERVICE_SPEC: newengine_service_api::BackendServiceSpec =
@@ -170,6 +168,9 @@ impl Default for UiServiceInfo {
                 "retained-layout-solver-v1".to_owned(),
                 "shared-layout-hit-test-paint-v1".to_owned(),
                 "retained-surface-node-v1".to_owned(),
+                "ui-frame-input-v1".to_owned(),
+                "ui-frame-diagnostics-v1".to_owned(),
+                "ui-font-resolve-diagnostics-v1".to_owned(),
                 "debug-tree-v1".to_owned(),
                 "debug-tree-layout-state-v2".to_owned(),
                 "ui-devtools-overlays-v1".to_owned(),
@@ -236,14 +237,156 @@ pub struct UiInvokeEnvelope {
     pub payload: serde_json::Value,
 }
 
+/// Live, volatile frame input delivered to the active UI provider.
+///
+/// Providers must derive caret blink, hover animation, pressed animation and
+/// frame diagnostics from this DTO instead of asking products to republish a
+/// retained surface tree every frame.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
+pub struct UiFrameInput {
+    pub version: u32,
+    pub frame_index: u64,
+    pub now_ms: u64,
+    pub dt_sec: f32,
+    pub viewport_px: [u32; 2],
+    pub pixels_per_point: f32,
+    pub render_surface_ids: Vec<String>,
+    pub diagnostics_flags: Vec<String>,
+}
+
+impl Default for UiFrameInput {
+    fn default() -> Self {
+        Self {
+            version: 1,
+            frame_index: 0,
+            now_ms: 0,
+            dt_sec: 0.0,
+            viewport_px: [0, 0],
+            pixels_per_point: 1.0,
+            render_surface_ids: Vec::new(),
+            diagnostics_flags: Vec::new(),
+        }
+    }
+}
+
+impl UiFrameInput {
+    #[inline]
+    pub fn new(frame_index: u64, dt_sec: f32, viewport_px: [u32; 2], pixels_per_point: f32) -> Self {
+        Self {
+            frame_index,
+            dt_sec: dt_sec.max(0.0),
+            viewport_px,
+            pixels_per_point: pixels_per_point.max(0.0001),
+            ..Self::default()
+        }
+    }
+
+    #[inline]
+    pub fn with_now_ms(mut self, now_ms: u64) -> Self {
+        self.now_ms = now_ms;
+        self
+    }
+
+    #[inline]
+    pub fn with_render_surface_ids(mut self, render_surface_ids: Vec<String>) -> Self {
+        self.render_surface_ids = render_surface_ids.into_iter().map(|it| it.trim().to_owned()).filter(|it| !it.is_empty()).collect();
+        self
+    }
+
+    #[inline]
+    pub fn with_diagnostics_flags(mut self, diagnostics_flags: Vec<String>) -> Self {
+        self.diagnostics_flags = diagnostics_flags.into_iter().map(|it| it.trim().to_owned()).filter(|it| !it.is_empty()).collect();
+        self
+    }
+}
+
+/// Provider font resolution diagnostic. Missing requested fonts must be reported
+/// here instead of silently falling back to a debug/bitmap face.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
+pub struct UiFontResolveDiagnostics {
+    pub requested_font_ref: String,
+    pub resolved_font_ref: String,
+    pub resolved_face_name: String,
+    pub fallback_used: bool,
+    pub fallback_face: String,
+    pub glyph_miss_count: u32,
+    pub atlas_page_count: u32,
+    pub diagnostics: Vec<String>,
+}
+
+impl Default for UiFontResolveDiagnostics {
+    fn default() -> Self {
+        Self {
+            requested_font_ref: String::new(),
+            resolved_font_ref: String::new(),
+            resolved_face_name: String::new(),
+            fallback_used: false,
+            fallback_face: String::new(),
+            glyph_miss_count: 0,
+            atlas_page_count: 0,
+            diagnostics: Vec::new(),
+        }
+    }
+}
+
+impl UiFontResolveDiagnostics {
+    #[inline]
+    pub fn missing(requested_font_ref: impl Into<String>, fallback_face: impl Into<String>) -> Self {
+        let requested_font_ref = requested_font_ref.into();
+        Self {
+            diagnostics: vec![format!("font requested ref '{requested_font_ref}' could not be resolved")],
+            requested_font_ref,
+            resolved_font_ref: "<missing>".to_owned(),
+            fallback_used: true,
+            fallback_face: fallback_face.into(),
+            ..Self::default()
+        }
+    }
+}
+
+/// Provider-to-runtime diagnostics for one UI frame.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
+pub struct UiFrameDiagnostics {
+    pub version: u32,
+    pub provider: String,
+    pub frame_index: u64,
+    pub caret_visible: Option<bool>,
+    pub font_resolve: Vec<UiFontResolveDiagnostics>,
+    pub diagnostics: Vec<String>,
+}
+
+impl Default for UiFrameDiagnostics {
+    fn default() -> Self {
+        Self {
+            version: 1,
+            provider: String::new(),
+            frame_index: 0,
+            caret_visible: None,
+            font_resolve: Vec::new(),
+            diagnostics: Vec::new(),
+        }
+    }
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
 pub struct UiFrameRequest {
     pub version: u32,
     pub frame_index: u64,
     pub dt_sec: f32,
     pub surface_size_px: [u32; 2],
     pub pixels_per_point: f32,
+    pub frame_input: UiFrameInput,
+    pub diagnostics_flags: Vec<String>,
+    #[serde(default)]
+    pub render_surface_ids: Vec<String>,
+}
+
+impl Default for UiFrameRequest {
+    fn default() -> Self { Self::new(0, 0.0, [0, 0], 1.0) }
 }
 
 impl UiFrameRequest {
@@ -252,23 +395,77 @@ impl UiFrameRequest {
         Self {
             version: 1,
             frame_index,
-            dt_sec,
+            dt_sec: dt_sec.max(0.0),
             surface_size_px,
             pixels_per_point: pixels_per_point.max(0.0001),
+            frame_input: UiFrameInput::new(frame_index, dt_sec, surface_size_px, pixels_per_point),
+            diagnostics_flags: Vec::new(),
+            render_surface_ids: Vec::new(),
         }
+    }
+
+    #[inline]
+    pub fn with_now_ms(mut self, now_ms: u64) -> Self {
+        self.frame_input.now_ms = now_ms;
+        self
+    }
+
+    #[inline]
+    pub fn with_render_surface_ids(mut self, render_surface_ids: Vec<String>) -> Self {
+        let ids: Vec<String> = render_surface_ids.into_iter().map(|it| it.trim().to_owned()).filter(|it| !it.is_empty()).collect();
+        self.render_surface_ids = ids.clone();
+        self.frame_input.render_surface_ids = ids;
+        self
+    }
+
+    #[inline]
+    pub fn with_diagnostics_flags(mut self, diagnostics_flags: Vec<String>) -> Self {
+        let flags: Vec<String> = diagnostics_flags.into_iter().map(|it| it.trim().to_owned()).filter(|it| !it.is_empty()).collect();
+        self.diagnostics_flags = flags.clone();
+        self.frame_input.diagnostics_flags = flags;
+        self
+    }
+
+    #[inline]
+    pub fn live_input(&self) -> UiFrameInput {
+        let mut input = self.frame_input.clone();
+        input.version = input.version.max(1);
+        if input.frame_index == 0 && self.frame_index != 0 {
+            input.frame_index = self.frame_index;
+        }
+        if input.dt_sec <= 0.0 && self.dt_sec > 0.0 {
+            input.dt_sec = self.dt_sec;
+        }
+        if input.viewport_px == [0, 0] && self.surface_size_px != [0, 0] {
+            input.viewport_px = self.surface_size_px;
+        }
+        input.pixels_per_point = input.pixels_per_point.max(self.pixels_per_point).max(0.0001);
+        if input.render_surface_ids.is_empty() && !self.render_surface_ids.is_empty() {
+            input.render_surface_ids = self.render_surface_ids.clone();
+        }
+        if input.diagnostics_flags.is_empty() && !self.diagnostics_flags.is_empty() {
+            input.diagnostics_flags = self.diagnostics_flags.clone();
+        }
+        input
     }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
 pub struct UiFrameResponse {
     pub version: u32,
     pub draw_list: UiDrawList,
+    pub diagnostics: UiFrameDiagnostics,
+}
+
+impl Default for UiFrameResponse {
+    fn default() -> Self { Self::new(UiDrawList::new()) }
 }
 
 impl UiFrameResponse {
     #[inline]
     pub fn new(draw_list: UiDrawList) -> Self {
-        Self { version: 1, draw_list }
+        Self { version: 1, draw_list, diagnostics: UiFrameDiagnostics::default() }
     }
 }
 

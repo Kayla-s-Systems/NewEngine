@@ -1,3 +1,26 @@
-// Foliage implementation was split into deterministic, testable sections.
-// The game-ready module includes these files directly to preserve the existing
-// single-module private API while avoiding a 700-line god file.
+#![forbid(unsafe_op_in_unsafe_fn)]
+
+use super::*;
+
+#[path = "foliage/types.rs"]
+mod types;
+#[path = "foliage/placement.rs"]
+mod placement;
+#[path = "foliage/ydd_mesh.rs"]
+mod ydd_mesh;
+#[path = "foliage/material_binding.rs"]
+mod material_binding;
+#[path = "foliage/diagnostics.rs"]
+mod diagnostics;
+#[path = "foliage/spawn.rs"]
+mod spawn;
+
+use self::diagnostics::*;
+use self::placement::{choose_foliage_prefab, collect_tree_placements};
+use self::material_binding::*;
+use self::types::*;
+use self::ydd_mesh::*;
+
+pub(super) use self::placement::terrain_height;
+pub(super) use self::spawn::spawn_foliage_prefabs;
+pub(super) use self::types::SKYDOME_PRIMITIVE_ID;

@@ -5,7 +5,6 @@
 //! `.ytd` semantic ownership lives here. The service deliberately uses
 //! `engine.assets` only as the byte/VFS/codec owner, then returns texture-domain
 //! DTOs or stable runtime texture packets to consumers.
-
 use abi_stable::std_types::{RResult, RString};
 use newengine_assets::{AssetDecodeRequest, AssetServiceClient, Rgba8TextureAsset, RuntimeTextureAsset, RuntimeTextureFormat, RuntimeTextureMip};
 use newengine_assets_api::{
@@ -263,7 +262,7 @@ fn validate_texture_ref(state: &mut TextureRuntimeState, request: TextureRefRequ
     let texture_hash = request.texture_hash.or(texture_hash_from_ref);
     let canonical = reference.canonical.clone();
     if let Some(cached) = state.validation_cache.get(&canonical).cloned() {
-        log::debug!(
+        newengine_ulog_api::ulog::debug!(
             "assets.textures.validate_ref_v1: cache hit ref='{}' dictionary='{}' policy='manifest-only validation'",
             canonical,
             reference.logical_path
@@ -378,7 +377,7 @@ fn texture_manifest_metadata_string(entry: &serde_json::Value, key: &str) -> Opt
 fn manifest_json(state: &mut TextureRuntimeState, request: TextureManifestRequest) -> Result<serde_json::Value, String> {
     let path = manifest_source_from_request(&request)?;
     if let Some(cached) = state.manifest_cache.get(&path).cloned() {
-        log::debug!(
+        newengine_ulog_api::ulog::debug!(
             "assets.textures.manifest_v1: cache hit source='{}' policy='manifest-only fast path'",
             path
         );
@@ -480,7 +479,7 @@ fn ensure_runtime_dictionary_cache(state: &mut TextureRuntimeState, dictionary_p
         cache.entry_hash_to_name.insert(meta.name_hash, name_key.clone());
         cache.entries_by_name.insert(name_key, RuntimeTextureAsset { width: meta.width, height: meta.height, format, mips });
     }
-    log::debug!(
+    newengine_ulog_api::ulog::debug!(
         "assets.textures.entry_runtime_v1: dictionary cache loaded path='{}' entries={} policy='decode .ytd once, select many @entries'",
         dictionary_path,
         cache.entries_by_name.len()
@@ -559,7 +558,7 @@ fn entry_runtime_blob(state: &mut TextureRuntimeState, payload: Blob) -> RResult
     let texture_hash = request.texture_hash.or(texture_hash_from_ref);
     let canonical = reference.canonical.clone();
     if let Some(packet) = state.runtime_packet_cache.get(&canonical).cloned() {
-        log::debug!(
+        newengine_ulog_api::ulog::debug!(
             "assets.textures.entry_runtime_v1: cache hit ref='{}' dictionary='{}'",
             canonical,
             reference.logical_path
@@ -591,7 +590,7 @@ fn entry_rgba8_blob(state: &mut TextureRuntimeState, payload: Blob) -> RResult<B
     let texture_hash = request.texture_hash.or(texture_hash_from_ref);
     let canonical = reference.canonical.clone();
     if let Some(packet) = state.rgba8_packet_cache.get(&canonical).cloned() {
-        log::debug!(
+        newengine_ulog_api::ulog::debug!(
             "assets.textures.entry_rgba8_v1: cache hit ref='{}' dictionary='{}'",
             canonical,
             reference.logical_path

@@ -4,7 +4,7 @@
 use std::sync::Arc;
 
 use crate::collections::prelude::NeHashMap;
-use log::debug;
+use newengine_ulog_api::ulog::debug;
 use once_cell::sync::Lazy;
 use parking_lot::RwLock;
 

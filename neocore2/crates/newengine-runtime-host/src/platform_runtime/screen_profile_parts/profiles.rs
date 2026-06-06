@@ -1,3 +1,5 @@
+use super::*;
+
 impl Default for EditorScreen {
     fn default() -> Self {
         Self {
@@ -7,13 +9,13 @@ impl Default for EditorScreen {
 }
 
 impl EditorScreen {
-    fn surface_node(&self, frame_index: u64, runtime_mode: UiEditorRuntimeMode, layout: &EditorLayoutMetrics, active_menu_id: Option<&str>) -> UiSurfaceNode {
+    pub(super) fn surface_node(&self, frame_index: u64, runtime_mode: UiEditorRuntimeMode, layout: &EditorLayoutMetrics, active_menu_id: Option<&str>) -> UiSurfaceNode {
         editor_screen_surface_node(&self.descriptor, frame_index, runtime_mode, layout, active_menu_id)
     }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-struct GameScreen {
+pub(super) struct GameScreen {
     descriptor: UiScreenProfileDescriptor,
 }
 
@@ -26,18 +28,18 @@ impl Default for GameScreen {
 }
 
 impl GameScreen {
-    fn with_game_ui_root(surface_id: impl Into<String>) -> Self {
+    pub(super) fn with_game_ui_root(surface_id: impl Into<String>) -> Self {
         Self {
             descriptor: game_screen_descriptor(Some(surface_id.into())),
         }
     }
 
-    fn surface_node(&self, frame_index: u64) -> Option<UiSurfaceNode> {
+    pub(super) fn surface_node(&self, frame_index: u64) -> Option<UiSurfaceNode> {
         game_screen_surface_node(&self.descriptor, frame_index)
     }
 }
 
-fn screen_profile_descriptor(profile: UiScreenProfile, game_ui_root: Option<String>) -> UiScreenProfileDescriptor {
+pub(super) fn screen_profile_descriptor(profile: UiScreenProfile, game_ui_root: Option<String>) -> UiScreenProfileDescriptor {
     match profile {
         UiScreenProfile::Editor => editor_screen_descriptor(),
         UiScreenProfile::Game => game_screen_descriptor(game_ui_root),
@@ -45,7 +47,7 @@ fn screen_profile_descriptor(profile: UiScreenProfile, game_ui_root: Option<Stri
     }
 }
 
-fn editor_screen_descriptor() -> UiScreenProfileDescriptor {
+pub(super) fn editor_screen_descriptor() -> UiScreenProfileDescriptor {
     UiScreenProfileDescriptor {
         version: 1,
         profile: UiScreenProfile::Editor,
@@ -73,7 +75,7 @@ fn editor_screen_descriptor() -> UiScreenProfileDescriptor {
     }
 }
 
-fn game_screen_descriptor(game_ui_root: Option<String>) -> UiScreenProfileDescriptor {
+pub(super) fn game_screen_descriptor(game_ui_root: Option<String>) -> UiScreenProfileDescriptor {
     let mut panels = Vec::new();
     if let Some(root) = game_ui_root.as_ref().filter(|it| !it.trim().is_empty()) {
         panels.push(screen_panel(
@@ -104,7 +106,7 @@ fn game_screen_descriptor(game_ui_root: Option<String>) -> UiScreenProfileDescri
     }
 }
 
-fn headless_screen_descriptor() -> UiScreenProfileDescriptor {
+pub(super) fn headless_screen_descriptor() -> UiScreenProfileDescriptor {
     UiScreenProfileDescriptor {
         version: 1,
         profile: UiScreenProfile::Headless,
@@ -118,7 +120,7 @@ fn headless_screen_descriptor() -> UiScreenProfileDescriptor {
     }
 }
 
-fn editor_screen_surface_node(descriptor: &UiScreenProfileDescriptor, frame_index: u64, runtime_mode: UiEditorRuntimeMode, layout: &EditorLayoutMetrics, active_menu_id: Option<&str>) -> UiSurfaceNode {
+pub(super) fn editor_screen_surface_node(descriptor: &UiScreenProfileDescriptor, frame_index: u64, runtime_mode: UiEditorRuntimeMode, layout: &EditorLayoutMetrics, active_menu_id: Option<&str>) -> UiSurfaceNode {
     let body_lines = Vec::new();
     let footer_lines = vec![format!("mode={} · 1 Edit · 2 Simulate · 3 Play", runtime_mode.id())];
     let mut metrics = screen_metrics(descriptor, frame_index);
@@ -198,7 +200,7 @@ fn editor_screen_surface_node(descriptor: &UiScreenProfileDescriptor, frame_inde
     }
 }
 
-fn game_screen_surface_node(descriptor: &UiScreenProfileDescriptor, frame_index: u64) -> Option<UiSurfaceNode> {
+pub(super) fn game_screen_surface_node(descriptor: &UiScreenProfileDescriptor, frame_index: u64) -> Option<UiSurfaceNode> {
     let root = descriptor.game_ui_root_surface_id.as_ref()?.trim();
     if root.is_empty() {
         return None;

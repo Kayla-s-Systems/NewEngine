@@ -6,7 +6,6 @@
 //! through `engine.assets.definitions`; dependency graph expansion is read through
 //! `engine.assets.graph`. This crate still hosts the current engine-runtime graph
 //! provider implementation; definition decoding is not part of model API.
-
 use abi_stable::std_types::{RResult, RString};
 use newengine_assets_api::{AssetDecodeRequest, AssetService, AssetServiceClient};
 use newengine_model_domain_api::{

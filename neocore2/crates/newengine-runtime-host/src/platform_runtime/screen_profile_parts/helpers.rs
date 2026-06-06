@@ -1,4 +1,6 @@
-fn editor_layout_metrics(resources: &Resources, hidden_panels: &BTreeSet<String>) -> EditorLayoutMetrics {
+use super::*;
+
+pub(super) fn editor_layout_metrics(resources: &Resources, hidden_panels: &BTreeSet<String>) -> EditorLayoutMetrics {
     let [w_u32, h_u32] = resources
         .get::<WindowInitSize>()
         .map(|size| [size.width.max(1), size.height.max(1)])
@@ -26,7 +28,7 @@ fn editor_layout_metrics(resources: &Resources, hidden_panels: &BTreeSet<String>
     EditorLayoutMetrics { screen_w: w, screen_h: h, menu_h, toolbar_h, status_h, bottom_h, left_w, right_w, gap, viewport_x, viewport_y, viewport_w, viewport_h, bottom_y, left_visible, right_visible, bottom_visible, hovered_dock_slot, hovered_runtime_mode, hovered_menu_id }
 }
 
-fn clicked_dispatch_action(resources: &Resources, prefix: &str) -> Option<String> {
+pub(super) fn clicked_dispatch_action(resources: &Resources, prefix: &str) -> Option<String> {
     resources
         .get::<UiEventDispatchFrame>()?
         .actions
@@ -35,7 +37,7 @@ fn clicked_dispatch_action(resources: &Resources, prefix: &str) -> Option<String
         .map(|action| action.action_id.clone())
 }
 
-fn hovered_action_id(resources: &Resources) -> Option<&str> {
+pub(super) fn hovered_action_id(resources: &Resources) -> Option<&str> {
     resources
         .get::<UiEventDispatchFrame>()?
         .hovered_node
@@ -44,7 +46,7 @@ fn hovered_action_id(resources: &Resources) -> Option<&str> {
         .as_deref()
 }
 
-fn hovered_dock_slot_from_dispatch(resources: &Resources) -> Option<&'static str> {
+pub(super) fn hovered_dock_slot_from_dispatch(resources: &Resources) -> Option<&'static str> {
     let action_id = hovered_action_id(resources)?;
     let slot_id = action_id.strip_prefix("editor.dock.toggle.")?;
     ["left.scene_tree", "right.inspector", "bottom.asset_browser", "bottom.import_queue", "bottom.output_log", "bottom.profiler_diagnostics"]
@@ -52,7 +54,7 @@ fn hovered_dock_slot_from_dispatch(resources: &Resources) -> Option<&'static str
         .find(|slot| *slot == slot_id)
 }
 
-fn hovered_runtime_mode_from_dispatch(resources: &Resources) -> Option<UiEditorRuntimeMode> {
+pub(super) fn hovered_runtime_mode_from_dispatch(resources: &Resources) -> Option<UiEditorRuntimeMode> {
     let action_id = hovered_action_id(resources)?;
     EDITOR_CHROME
         .runtime_actions
@@ -61,7 +63,7 @@ fn hovered_runtime_mode_from_dispatch(resources: &Resources) -> Option<UiEditorR
         .map(|action| action.mode)
 }
 
-fn hovered_menu_id_from_dispatch(resources: &Resources) -> Option<&'static str> {
+pub(super) fn hovered_menu_id_from_dispatch(resources: &Resources) -> Option<&'static str> {
     let action_id = hovered_action_id(resources)?;
     let menu_id = action_id.strip_prefix("editor.menu.")?;
     EDITOR_CHROME
@@ -71,7 +73,7 @@ fn hovered_menu_id_from_dispatch(resources: &Resources) -> Option<&'static str> 
         .map(|menu| menu.id)
 }
 
-fn dock_state(slot_id: &str, visible: bool, disabled: bool, hovered: bool) -> UiDockPanelRuntimeState {
+pub(super) fn dock_state(slot_id: &str, visible: bool, disabled: bool, hovered: bool) -> UiDockPanelRuntimeState {
     UiDockPanelRuntimeState {
         slot_id: slot_id.to_owned(),
         visible,
@@ -85,7 +87,7 @@ fn dock_state(slot_id: &str, visible: bool, disabled: bool, hovered: bool) -> Ui
 }
 
 
-fn dock_slot_label(slot: &str) -> &'static str {
+pub(super) fn dock_slot_label(slot: &str) -> &'static str {
     match slot {
         "left.scene_tree" => "Scene",
         "right.inspector" => "Inspector",
@@ -97,7 +99,7 @@ fn dock_slot_label(slot: &str) -> &'static str {
     }
 }
 
-fn set_input_capture_contribution(resources: &mut Resources, owner: &str, capture: UiInputCaptureState) {
+pub(super) fn set_input_capture_contribution(resources: &mut Resources, owner: &str, capture: UiInputCaptureState) {
     let mut manager = resources.remove::<UiInputCaptureStateManager>().unwrap_or_default();
     manager.add_capture(owner.to_owned(), capture);
     let resolved = manager.resolve_final_capture();
@@ -105,7 +107,7 @@ fn set_input_capture_contribution(resources: &mut Resources, owner: &str, captur
     resources.insert(resolved);
 }
 
-fn remove_input_capture_contribution(resources: &mut Resources, owner: &str, refresh_surface: Option<&str>) {
+pub(super) fn remove_input_capture_contribution(resources: &mut Resources, owner: &str, refresh_surface: Option<&str>) {
     let mut manager = resources.remove::<UiInputCaptureStateManager>().unwrap_or_default();
     manager.remove_capture(owner);
     let mut resolved = manager.resolve_final_capture();
@@ -119,14 +121,14 @@ fn remove_input_capture_contribution(resources: &mut Resources, owner: &str, ref
     resources.insert(resolved);
 }
 
-fn component_id_fragment(value: &str) -> String {
+pub(super) fn component_id_fragment(value: &str) -> String {
     value
         .chars()
         .map(|ch| if ch.is_ascii_alphanumeric() { ch.to_ascii_lowercase() } else { '_' })
         .collect::<String>()
 }
 
-fn asset_document_field_detail(field: &newengine_assets_api::AssetDocumentField) -> String {
+pub(super) fn asset_document_field_detail(field: &newengine_assets_api::AssetDocumentField) -> String {
     let Some(property) = field.schema_property.as_ref() else {
         return field.value_kind.clone();
     };
@@ -135,7 +137,7 @@ fn asset_document_field_detail(field: &newengine_assets_api::AssetDocumentField)
     format!("{} · kind={} · {}", edit_policy, property.value_kind.as_str(), if pointer.is_empty() { "schema pointer pending" } else { pointer })
 }
 
-fn asset_document_value_label(value: &Value) -> String {
+pub(super) fn asset_document_value_label(value: &Value) -> String {
     match value {
         Value::Null => "null".to_owned(),
         Value::Bool(v) => v.to_string(),
@@ -150,15 +152,15 @@ fn asset_document_value_label(value: &Value) -> String {
     }
 }
 
-fn publish_screen_surface_node(node: &UiSurfaceNode) {
+pub(super) fn publish_screen_surface_node(node: &UiSurfaceNode) {
     crate::platform_runtime::ui_gateway_frame::publish_surface_node(node);
 }
 
-fn publish_screen_node_tree_request(request: &UiNodeTreeRequest) {
+pub(super) fn publish_screen_node_tree_request(request: &UiNodeTreeRequest) {
     crate::platform_runtime::ui_gateway_frame::publish_node_tree_request(request);
 }
 
-fn load_screen_profile_config() -> ScreenProfileConfig {
+pub(super) fn load_screen_profile_config() -> ScreenProfileConfig {
     let raw = newengine_plugin_host::get_plugin_overrides_with_env("engine.runtime");
     let value = raw
         .get("ui")
@@ -172,7 +174,7 @@ fn load_screen_profile_config() -> ScreenProfileConfig {
     match parse_config_value(value) {
         Ok(config) => config,
         Err(err) => {
-            log::warn!(
+            newengine_ulog_api::ulog::warn!(
                 "screen profile: invalid engine.runtime.ui.screen_profile config; using Editor profile err='{}' raw={}",
                 err,
                 compact_json(value),
@@ -182,7 +184,7 @@ fn load_screen_profile_config() -> ScreenProfileConfig {
     }
 }
 
-fn parse_config_value(value: &Value) -> Result<ScreenProfileConfig, String> {
+pub(super) fn parse_config_value(value: &Value) -> Result<ScreenProfileConfig, String> {
     match value {
         Value::String(profile) => UiScreenProfile::parse(profile)
             .map(|profile| ScreenProfileConfig { profile, ..ScreenProfileConfig::default() })
@@ -193,12 +195,12 @@ fn parse_config_value(value: &Value) -> Result<ScreenProfileConfig, String> {
     }
 }
 
-fn compact_json(value: &Value) -> String {
+pub(super) fn compact_json(value: &Value) -> String {
     serde_json::to_string(value).unwrap_or_else(|_| "<unprintable-json>".to_owned())
 }
 
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-struct EditorScreen {
-    descriptor: UiScreenProfileDescriptor,
+pub(super) struct EditorScreen {
+    pub(super) descriptor: UiScreenProfileDescriptor,
 }

@@ -44,7 +44,7 @@ pub(super) fn lower_external_draw_list_contribution(
     out: &mut DrawListBuildCtx<'_>,
 ) -> EngineResult<ExternalContributionLoweringReport> {
     for warning in &contribution.warnings {
-        log::warn!(
+        newengine_ulog_api::ulog::warn!(
             "render draw-list provider '{}' contribution '{}': {}",
             provider.id,
             contribution.label,
@@ -171,7 +171,7 @@ fn lower_gpu_mesh_contribution(
             Ok(true)
         }
         RenderInstanceSource::Buffer(binding) => {
-            log::warn!(
+            newengine_ulog_api::ulog::warn!(
                 "render draw-list provider '{}' mesh='{}' supplied instance buffer '{}'; skipped because lit shader instance-buffer vertex layout is not enabled yet",
                 provider.id,
                 mesh_label,
@@ -196,7 +196,7 @@ fn lower_debug_line_list_contribution(
     }
 
     if !matches!(draw_list, RenderDrawListKind::Debug | RenderDrawListKind::OpaqueForward) {
-        log::warn!(
+        newengine_ulog_api::ulog::warn!(
             "render draw-list provider '{}' submitted DebugLineList to mismatched draw-list '{}'",
             provider.id,
             draw_list.label()

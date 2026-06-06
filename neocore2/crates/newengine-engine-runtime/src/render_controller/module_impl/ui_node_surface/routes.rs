@@ -33,7 +33,7 @@ impl RenderUiNodeSurfaceState {
             }
             (_, _) => {
                 if route.target != "UiNodeNavigationRuntime" {
-                    log::warn!(
+                    newengine_ulog_api::ulog::warn!(
                         "UI surface ui node command router: unsupported route target='{}' event='{}' id='{}'",
                         route.target,
                         route.event,
@@ -82,7 +82,7 @@ impl RenderUiNodeSurfaceState {
                 );
             }
             Err(e) => {
-                log::warn!("UI surface ui node command router: reset bindings rejected err='{}'", e);
+                newengine_ulog_api::ulog::warn!("UI surface ui node command router: reset bindings rejected err='{}'", e);
                 self.flash_feedback("Reset failed", e, UiNodeMessageSeverity::Danger);
             }
         }
@@ -107,7 +107,7 @@ impl RenderUiNodeSurfaceState {
                 );
             }
             Err(e) => {
-                log::warn!("UI surface ui node command router: device preference save failed err='{}'", e);
+                newengine_ulog_api::ulog::warn!("UI surface ui node command router: device preference save failed err='{}'", e);
                 self.flash_feedback("Save failed", e, UiNodeMessageSeverity::Danger);
             }
         }

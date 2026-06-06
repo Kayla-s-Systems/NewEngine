@@ -71,7 +71,7 @@ pub fn draw_procedural_terrain_shadow(
         this.gpu.material.per_draw_ubo.insert(key, per);
 
         let mvp = light_viewproj * model;
-        super::super::passes_ubo::write_lit_ubo_ex(
+        super::super::super::passes_ubo::write_lit_ubo_ex(
             r,
             per.ubo,
             mvp,
@@ -196,7 +196,7 @@ pub fn draw_primitives_shadow(
             this.gpu.material.per_draw_ubo.insert(ubo_key, per);
 
             // Shadow instancing also shares one UBO per material/mesh bucket.
-            super::super::passes_ubo::write_lit_ubo_ex(
+            super::super::super::passes_ubo::write_lit_ubo_ex(
                 r,
                 per.ubo,
                 Mat4::IDENTITY,

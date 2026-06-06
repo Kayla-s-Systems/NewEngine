@@ -81,7 +81,7 @@ impl MaterialGpuRegistry {
         let replaced = self.providers.insert(key.as_str(), provider).is_some();
         if replaced {
             self.resolved_pipelines.retain(|cache_key, _| !cache_key.starts_with(key.as_str()));
-            log::warn!(
+            newengine_ulog_api::ulog::warn!(
                 "render material registry: replaced material-domain provider key='{}'; invalidated cached pipelines for this provider",
                 key.as_str()
             );
@@ -107,7 +107,7 @@ impl MaterialGpuRegistry {
         };
 
         let started_at = Instant::now();
-        log::info!(
+        newengine_ulog_api::ulog::info!(
             "render material registry: pipeline request begin key='{}' cache_key='{}' provider_registered=true cache_miss=true",
             key.as_str(),
             cache_key
@@ -116,7 +116,7 @@ impl MaterialGpuRegistry {
         match provider.require_pipeline(profile, &mut device) {
             Ok(pipeline) => {
                 self.resolved_pipelines.insert(cache_key.clone(), pipeline);
-                log::info!(
+                newengine_ulog_api::ulog::info!(
                     "render material registry: pipeline request completed key='{}' cache_key='{}' elapsed_ms={:.2} cached=true",
                     key.as_str(),
                     cache_key,
@@ -126,14 +126,14 @@ impl MaterialGpuRegistry {
             }
             Err(e) => {
                 if is_transient_material_pipeline_error(&e) {
-                    log::warn!(
+                    newengine_ulog_api::ulog::warn!(
                         "render material registry: pipeline request pending key='{}' err='{}' elapsed_ms={:.2} action='retry_next_frame_without_disabling_viewport'",
                         key.as_str(),
                         e,
                         started_at.elapsed().as_secs_f64() * 1000.0
                     );
                 } else {
-                    log::error!(
+                    newengine_ulog_api::ulog::error!(
                         "render material registry: pipeline request failed key='{}' err='{}' elapsed_ms={:.2}",
                         key.as_str(),
                         e,

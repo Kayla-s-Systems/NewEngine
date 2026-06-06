@@ -277,7 +277,7 @@ impl EngineSceneGatewayService {
         {
             let authority = self.scene.authority_snapshot();
             if authority.has_split_world_authority() {
-                log::warn!(
+                newengine_ulog_api::ulog::warn!(
                     "engine.scene load_json_v1 running while world authority is split authority='{}' notes='{}'",
                     authority.authority_label(),
                     authority.notes.join(";")
@@ -488,7 +488,7 @@ pub fn register_scene_gateway_best_effort(
     asset_mounts: Option<SceneGatewayAssetMounts>,
 ) {
     if newengine_plugin_host::has_service(ENGINE_SCENE_SERVICE_ID) {
-        log::debug!("engine.scene gateway registration skipped; service already available");
+        newengine_ulog_api::ulog::debug!("engine.scene gateway registration skipped; service already available");
         return;
     }
 
@@ -503,13 +503,13 @@ pub fn register_scene_gateway_best_effort(
         owner: SCENE_GATEWAY_OWNER,
         service,
     }) {
-        Ok(()) => log::info!(
+        Ok(()) => newengine_ulog_api::ulog::info!(
             "engine.scene gateway registered source=engine-runtime service='{}' capability='{}' owner='{}'",
             ENGINE_SCENE_SERVICE_ID,
             SCENE_BACKEND_CAPABILITY_ID,
             SCENE_GATEWAY_OWNER
         ),
-        Err(e) => log::error!(
+        Err(e) => newengine_ulog_api::ulog::error!(
             "engine.scene gateway registration failed id='{}' err='{}'",
             ENGINE_SCENE_SERVICE_ID,
             e

@@ -44,7 +44,7 @@ impl Default for AssetsUiCompileResponse {
 /// leaves the surface unavailable. It must not invent a hardcoded UI document.
 pub(super) fn try_load_primary_ui_document() -> Result<UiNodeNavigationRuntime, String> {
     let response = compile_primary_surface().map_err(|err| {
-        log::warn!(
+        newengine_ulog_api::ulog::warn!(
             "engine.ui.primary: authored .neui document unavailable; no generated or special UI renderer will be used: {err}"
         );
         err
@@ -60,7 +60,7 @@ fn navigation_from_compiled_response(response: AssetsUiCompileResponse) -> Resul
         ));
     }
     for warning in &response.warnings {
-        log::warn!("engine.ui.primary: .neui compile warning ref='{}' warning='{}'", response.document_ref, warning);
+        newengine_ulog_api::ulog::warn!("engine.ui.primary: .neui compile warning ref='{}' warning='{}'", response.document_ref, warning);
     }
 
     mount_primary_surface_best_effort(&response.compiled_document);
@@ -123,7 +123,7 @@ fn mount_primary_surface_best_effort(compiled_document: &UiCompiledDocument) {
     let payload = match serde_json::to_vec(&request) {
         Ok(payload) => payload,
         Err(e) => {
-            log::warn!("engine.ui.primary: failed to encode ui.mount_surface_v1 request: {e}");
+            newengine_ulog_api::ulog::warn!("engine.ui.primary: failed to encode ui.mount_surface_v1 request: {e}");
             return;
         }
     };
@@ -134,13 +134,13 @@ fn mount_primary_surface_best_effort(compiled_document: &UiCompiledDocument) {
     ) {
         Ok(Some(_)) => {}
         Ok(None) => {
-            log::warn!(
+            newengine_ulog_api::ulog::warn!(
                 "engine.ui.primary: engine.ui service is not registered; compiled surface '{}' remains available as DTO only",
                 compiled_document.surface_id
             );
         }
         Err(e) => {
-            log::warn!(
+            newengine_ulog_api::ulog::warn!(
                 "engine.ui.primary: ui.mount_surface_v1 failed surface='{}' err='{}'",
                 compiled_document.surface_id,
                 e

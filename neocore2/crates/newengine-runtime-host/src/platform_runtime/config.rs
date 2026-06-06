@@ -159,19 +159,19 @@ fn platform_config_from_effective_blob(blob: &ConfigBlobV1) -> Result<PlatformAp
 fn log_platform_config_diags(plugin_id: &str, diags: &[newengine_plugin_api::ConfigDiagV1]) {
     for diag in diags {
         match diag.level {
-            ConfigDiagLevelV1::Info => log::info!(
+            ConfigDiagLevelV1::Info => newengine_ulog_api::ulog::info!(
                 "platform runtime: config info id='{}' {} {}",
                 plugin_id,
                 diag.code,
                 diag.message
             ),
-            ConfigDiagLevelV1::Warn => log::warn!(
+            ConfigDiagLevelV1::Warn => newengine_ulog_api::ulog::warn!(
                 "platform runtime: config warn id='{}' {} {}",
                 plugin_id,
                 diag.code,
                 diag.message
             ),
-            ConfigDiagLevelV1::Error => log::error!(
+            ConfigDiagLevelV1::Error => newengine_ulog_api::ulog::error!(
                 "platform runtime: config error id='{}' {} {}",
                 plugin_id,
                 diag.code,
@@ -396,7 +396,7 @@ fn resolve_platform_runtime_config_without_metadata_probe(
         &plugin_version,
     );
 
-    log::info!(
+    newengine_ulog_api::ulog::info!(
         "platform runtime: metadata probe disabled; using host-side config id='{}' title='{}' size={}x{} placement={:?} icon={}",
         PLATFORM_PLUGIN_ID,
         config.title,
@@ -449,7 +449,7 @@ pub fn resolve_platform_runtime_config(
     } {
         Ok(sym) => sym,
         Err(_) => {
-            log::info!(
+            newengine_ulog_api::ulog::info!(
                 "platform runtime: plugin metadata not exported; using startup window config defaults"
             );
             let plugin_version = platform_runtime_version_from_path(runtime_path);
@@ -506,7 +506,7 @@ pub fn resolve_platform_runtime_config(
             "platform config decode failed: {e}"
         )))?;
 
-    log::info!(
+    newengine_ulog_api::ulog::info!(
         "platform runtime: effective config id='{}' title='{}' size={}x{} placement={:?} icon={}",
         plugin_id,
         config.title,

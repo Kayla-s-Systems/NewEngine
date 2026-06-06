@@ -177,7 +177,7 @@ fn log_service_physics_unavailable_once() {
         .compare_exchange(false, true, Ordering::AcqRel, Ordering::Acquire)
         .is_ok()
     {
-        log::warn!(
+        newengine_ulog_api::ulog::warn!(
             "render world tick: engine.physics provider unavailable; physics step skipped because no explicit ECS fallback profile policy is active"
         );
         newengine_core::crash::record_breadcrumb(
@@ -191,7 +191,7 @@ fn log_physics_skip_once() {
         .compare_exchange(false, true, Ordering::AcqRel, Ordering::Acquire)
         .is_ok()
     {
-        log::warn!(
+        newengine_ulog_api::ulog::warn!(
             "render world tick: physics schedule skipped by explicit profile policy or missing provider; no hidden ECS fallback constructed"
         );
         newengine_core::crash::record_breadcrumb(
@@ -205,7 +205,7 @@ fn log_streaming_skip_once() {
         .compare_exchange(false, true, Ordering::AcqRel, Ordering::Acquire)
         .is_ok()
     {
-        log::warn!(
+        newengine_ulog_api::ulog::warn!(
             "render world tick: runtime terrain streaming skipped by conservative GPU profile; change plugins.engine.runtime.render.runtime_profile.world.runtime_terrain_streaming to 'enabled' to test the original streaming path"
         );
         newengine_core::crash::record_breadcrumb(

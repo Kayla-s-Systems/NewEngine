@@ -127,7 +127,7 @@ impl RuntimeRenderController {
                     return Ok(());
                 }
                 if is_transient_shader_pipeline_error(&e) {
-                    log::warn!(
+                    newengine_ulog_api::ulog::warn!(
                         "render controller: playable frame yielded while shader pipeline is pending; keeping viewport pass retryable: {}",
                         message
                     );
@@ -138,7 +138,7 @@ impl RuntimeRenderController {
                     return Ok(());
                 }
                 self.disable_viewport_pass("render_playable_viewport_frame.error", &message);
-                log::error!(
+                newengine_ulog_api::ulog::error!(
                     "render controller: playable frame returned error; presenting degraded recovery frame instead of aborting: {}",
                     message
                 );
@@ -155,7 +155,7 @@ impl RuntimeRenderController {
             Err(payload) => {
                 let message = panic_payload_message(payload);
                 self.disable_viewport_pass("render_playable_viewport_frame.panic", &message);
-                log::error!(
+                newengine_ulog_api::ulog::error!(
                     "render controller: caught panic during playable frame; presenting degraded recovery frame instead of aborting: {}",
                     message
                 );
@@ -360,7 +360,7 @@ impl RuntimeRenderController {
         } else {
             (requested_vp_w, requested_vp_h)
         };
-        log::debug!(
+        newengine_ulog_api::ulog::debug!(
             "render controller: render begin next_frame={} window={}x{} viewport={}x{} direct_surface={}",
             self.frame.frame_index.saturating_add(1),
             w,
@@ -383,7 +383,7 @@ impl RuntimeRenderController {
         if !trace_frame {
             return;
         }
-        log::debug!(
+        newengine_ulog_api::ulog::debug!(
             "render controller: begin_frame next_frame={} clear={:.3},{:.3},{:.3},{:.3} viewport={}x{}",
             self.frame.frame_index.saturating_add(1),
             self.viewport.clear_color[0],
@@ -399,7 +399,7 @@ impl RuntimeRenderController {
         if !trace_frame {
             return;
         }
-        log::debug!(
+        newengine_ulog_api::ulog::debug!(
             "render controller: begin_frame completed frame={}",
             self.frame.frame_index.saturating_add(1)
         );
@@ -418,7 +418,7 @@ impl RuntimeRenderController {
             return;
         }
         if let Ok(diag) = r.diagnostics_snapshot() {
-            log::debug!(
+            newengine_ulog_api::ulog::debug!(
                 "render diagnostics: frame={} begin_ms={:.3} end_ms={:.3} upload_ms={:.3} pipeline_ms={:.3} buffers={} textures={} pipelines={} upload_jobs={} upload_mb={:.2} queued_uploads={} queued_mb={:.2}",
                 diag.frame.frame_index,
                 diag.frame.last_begin_frame_ms,

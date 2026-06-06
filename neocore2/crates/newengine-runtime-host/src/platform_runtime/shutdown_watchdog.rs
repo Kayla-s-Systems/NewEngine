@@ -79,7 +79,7 @@ impl ShutdownWatchdog {
             );
         });
 
-        log::info!(
+        newengine_ulog_api::ulog::info!(
             "platform runtime: shutdown guard armed through engine.jobs task_id={} origin={} timeout_ms={} exit_code={}",
             task_id,
             origin,
@@ -99,7 +99,7 @@ impl ShutdownWatchdog {
             let _ = ticket.cancel();
         }
         if let Some(task_id) = self.task_id.as_deref() {
-            log::info!(
+            newengine_ulog_api::ulog::info!(
                 "platform runtime: shutdown guard completed through engine.jobs task_id={}",
                 task_id
             );

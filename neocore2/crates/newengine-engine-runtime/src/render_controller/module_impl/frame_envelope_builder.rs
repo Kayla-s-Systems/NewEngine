@@ -24,7 +24,7 @@ pub(super) fn build_runtime_frame_envelope(
             .map(|phase| phase.label())
             .collect::<Vec<_>>()
             .join(" -> ");
-        log::debug!("render frame envelope: frame={} phases={}", frame_index, phases);
+        newengine_ulog_api::ulog::debug!("render frame envelope: frame={} phases={}", frame_index, phases);
     }
 
     let domains = RenderFrameDomainIntent {

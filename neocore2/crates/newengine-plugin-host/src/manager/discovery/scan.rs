@@ -49,7 +49,7 @@ pub(super) fn scan_plugins_dir(dir: &Path) -> Result<DiscoveryGraph, PluginLoadE
         match scan_dynamic_lib(&path) {
             Ok(v) => items.push(v),
             Err(e) => {
-                log::warn!("plugins: scan failed for '{}': {}", display_clean(&path), e);
+                newengine_ulog_api::ulog::warn!("plugins: scan failed for '{}': {}", display_clean(&path), e);
                 scan_errors.push(format!("{}: {}", display_clean(&path), e));
             }
         }
@@ -99,7 +99,7 @@ fn scan_dynamic_lib(path: &Path) -> Result<ScannedDynlib, String> {
     let file_name = file_name_only(path);
 
     if let Some(stem) = deprecated_runtime_artifact_stem(&file_name) {
-        log::warn!(
+        newengine_ulog_api::ulog::warn!(
             "plugins: skipping deprecated runtime DLL name '{}' stem='{}'; rebuild plugins so discovery uses implementation-purpose artifacts instead of stale ABI binaries",
             file_name,
             stem
@@ -112,7 +112,7 @@ fn scan_dynamic_lib(path: &Path) -> Result<ScannedDynlib, String> {
     }
 
     if !metadata_probe_enabled() {
-        log::warn!(
+        newengine_ulog_api::ulog::warn!(
             "plugins: ABI metadata probe disabled; '{}' cannot be classified without opening its descriptor",
             display_clean(path)
         );

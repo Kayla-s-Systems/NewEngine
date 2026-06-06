@@ -1,17 +1,19 @@
+use super::*;
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-enum FoliageMaterialRole {
+pub(super) enum FoliageMaterialRole {
     Bark,
     Branch,
     Leaf,
 }
 
-const FOLIAGE_SLOT_RULES: [(&str, FoliageMaterialRole); 2] = [
+pub(super) const FOLIAGE_SLOT_RULES: [(&str, FoliageMaterialRole); 2] = [
     ("leaf", FoliageMaterialRole::Leaf),
     ("branch", FoliageMaterialRole::Branch),
 ];
 
 #[inline]
-fn foliage_role_for_slot(slot: &str) -> FoliageMaterialRole {
+pub(super) fn foliage_role_for_slot(slot: &str) -> FoliageMaterialRole {
     let slot = slot.to_ascii_lowercase();
     FOLIAGE_SLOT_RULES
         .iter()
@@ -20,11 +22,11 @@ fn foliage_role_for_slot(slot: &str) -> FoliageMaterialRole {
 }
 
 #[inline]
-fn canonical_material_ref(value: &str) -> String {
+pub(super) fn canonical_material_ref(value: &str) -> String {
     value.trim().replace('\\', "/").to_ascii_lowercase()
 }
 
-fn foliage_role_for_material_ref(
+pub(super) fn foliage_role_for_material_ref(
     material_ref: &str,
     material_specs: &GameReadyMaterialSetSpec,
 ) -> Option<FoliageMaterialRole> {
@@ -48,7 +50,7 @@ fn foliage_role_for_material_ref(
     None
 }
 
-fn material_for_slot(
+pub(super) fn material_for_slot(
     slot: &str,
     material_ref: Option<&str>,
     materials: DemoMaterials,
@@ -58,7 +60,7 @@ fn material_for_slot(
     let role = material_ref
         .and_then(|reference| foliage_role_for_material_ref(reference, material_specs))
         .unwrap_or_else(|| {
-            log::warn!(
+            newengine_ulog_api::ulog::warn!(
                 "game-ready foliage: .ydd mesh part material slot='{}' ref={:?} did not resolve through authored .nemat material refs; falling back to slot-name classifier",
                 slot,
                 material_ref

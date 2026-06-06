@@ -23,11 +23,11 @@ impl<E: Send + 'static> Engine<E> {
         T: Any + Clone + Send + Sync + 'static,
     {
         let event_type = std::any::type_name::<T>();
-        log::debug!("dispatch: publish begin event_type='{}'", event_type);
+        newengine_ulog_api::ulog::debug!("dispatch: publish begin event_type='{}'", event_type);
         self.events.publish(event.clone())?;
 
         if let Some(lifecycle_event) = (&event as &dyn Any).downcast_ref::<EngineLifecycleEvent>() {
-            log::info!(
+            newengine_ulog_api::ulog::info!(
                 "dispatch: lifecycle event='{}' origin='{}' readiness_key='{}'",
                 event_type,
                 lifecycle_event.origin(),
@@ -39,7 +39,7 @@ impl<E: Send + 'static> Engine<E> {
 
         if let Some(task_control) = (&event as &dyn Any).downcast_ref::<EngineTaskControlEvent>() {
             let applied = self.job_system.handle().apply_control_event(task_control);
-            log::info!(
+            newengine_ulog_api::ulog::info!(
                 "dispatch: task control action='{}' task_id='{}' applied={}",
                 task_control.action.as_str(),
                 task_control.task_id.as_str(),
@@ -78,7 +78,7 @@ impl<E: Send + 'static> Engine<E> {
         for s in self.modules.iter_mut() {
             if s.state != ModuleState::Running {
                 skipped += 1;
-                log::debug!(
+                newengine_ulog_api::ulog::debug!(
                     "dispatch: skip module='{}' state='{:?}' event_type='{}'",
                     s.id(),
                     s.state,
@@ -87,7 +87,7 @@ impl<E: Send + 'static> Engine<E> {
                 continue;
             }
 
-            log::debug!(
+            newengine_ulog_api::ulog::debug!(
                 "dispatch: deliver module='{}' event_type='{}'",
                 s.id(),
                 event_type,
@@ -128,7 +128,7 @@ impl<E: Send + 'static> Engine<E> {
                     }
                     ModuleFaultTolerance::Resilient => {
                         let reason = format!("event dispatch failed: {e}");
-                        log::error!("engine: disabling module {} ({})", module_id, reason);
+                        newengine_ulog_api::ulog::error!("engine: disabling module {} ({})", module_id, reason);
                         s.disable(reason);
 
                         if !s.shutdown_called {
@@ -151,7 +151,7 @@ impl<E: Send + 'static> Engine<E> {
             delivered += 1;
         }
 
-        log::debug!(
+        newengine_ulog_api::ulog::debug!(
             "dispatch: complete event_type='{}' delivered={} skipped={}",
             event_type,
             delivered,

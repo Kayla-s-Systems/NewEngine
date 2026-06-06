@@ -110,13 +110,13 @@ pub(crate) fn register_platform_window_service_best_effort(initial: PlatformWind
         owner: identity.owner,
         service,
     }) {
-        Ok(()) => log::info!(
+        Ok(()) => newengine_ulog_api::ulog::info!(
             "engine.platform gateway registered source=engine-runtime route='{}' service='{}' capability='{}'",
             identity.provider_route,
             ENGINE_PLATFORM_SERVICE_ID,
             PLATFORM_BACKEND_CAPABILITY_ID
         ),
-        Err(e) => log::error!(
+        Err(e) => newengine_ulog_api::ulog::error!(
             "engine.platform gateway registration failed id='{}' err='{}'",
             ENGINE_PLATFORM_SERVICE_ID,
             e

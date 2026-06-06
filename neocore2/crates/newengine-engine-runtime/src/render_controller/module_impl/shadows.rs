@@ -49,8 +49,8 @@ pub(super) fn build_light_shadow_plan(
     }
 
     let trace_frame = super::trace_policy::should_trace_frame(this.frame.frame_index);
-    if trace_frame && log::log_enabled!(log::Level::Debug) {
-        log::debug!(
+    if trace_frame && newengine_ulog_api::ulog::debug_enabled() {
+        newengine_ulog_api::ulog::debug!(
             "render light extraction providers: {}",
             registry.labels().join(",")
         );
@@ -440,7 +440,7 @@ pub fn warn_unsupported_point_shadow_once(this: &mut RuntimeRenderController) {
         return;
     }
     this.shadows.unsupported_point_warning_emitted = true;
-    log::warn!(
+    newengine_ulog_api::ulog::warn!(
         "render shadows: PointLight is shadow-capable, but point cube-map shadows are not implemented by this Vulkan path yet; falling back to unshadowed point lighting"
     );
 }
@@ -451,7 +451,7 @@ pub fn warn_unsupported_spot_shadow_once(this: &mut RuntimeRenderController) {
         return;
     }
     this.shadows.unsupported_spot_warning_emitted = true;
-    log::warn!(
+    newengine_ulog_api::ulog::warn!(
         "render shadows: Spot shadow maps are planned, but no SpotLight component/backend path is implemented yet; falling back to unshadowed lighting"
     );
 }

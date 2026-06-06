@@ -7,18 +7,18 @@ use newengine_primitives::Primitive;
 use newengine_transform::GlobalTransform;
 use newengine_bounds::Bounds;
 
-use super::super::gpu::{ensure_primitive_gpu, PrimitiveGpu};
-use super::draw_bucket::{BucketedIndexedDrawStream, IndexedDrawPacket};
-use super::instancing::{
+use super::super::super::gpu::{ensure_primitive_gpu, PrimitiveGpu};
+use super::super::draw_bucket::{BucketedIndexedDrawStream, IndexedDrawPacket};
+use super::super::instancing::{
     draw_indexed_instanced_args, InstanceBatchKey, InstanceBatchSet, InstancedReplayState,
     RenderInstanceRaw,
 };
-use super::super::material_bindings::LitMaterialPlan;
+use super::super::super::material_bindings::LitMaterialPlan;
 use newengine_render_feature_api::PackedLights;
 use crate::render_controller::RuntimeRenderController;
 use crate::gameplay::display_visible_in_mode;
 use crate::scene_bridge::{SkyDomeRuntime, SkyVisualKind, SkyVisualRuntime, TerrainSurfaceLayers};
-use self::mesh_visibility::{
+use super::mesh_visibility::{
     distance_sq_to_camera, forward_sphere_visible, primitive_budget, primitive_forward_max_distance,
     primitive_near_accept_distance, primitive_shadow_max_distance, scene_forward_cone_dot,
     shadow_caster_visible, sort_by_distance_then_key, terrain_budget, terrain_forward_max_distance,
@@ -36,7 +36,7 @@ fn draw_authored_sky_background_mesh() -> bool {
     crate::env_config::var_bool("NEWENGINE_RENDER_DRAW_SKY_MESH", false)
 }
 
-pub(super) fn publish_camera_spawn(
+pub(crate) fn publish_camera_spawn(
     bridge: &crate::viewport_bridge::ViewportBridge,
     camera_position: Vec3,
     camera_forward: Vec3,
@@ -270,7 +270,7 @@ pub fn draw_procedural_terrain(
         per.last_seen_frame = this.frame.frame_index;
         this.gpu.material.per_draw_ubo.insert(key, per);
 
-        super::passes_ubo::write_lit_ubo_ex(
+        super::super::passes_ubo::write_lit_ubo_ex(
             r,
             per.ubo,
             mvp,
@@ -386,7 +386,7 @@ pub fn draw_primitives(
         {
             sky_profile_culled += 1;
             if background_sky && this.frame.frame_index <= 2 {
-                log::info!(
+                newengine_ulog_api::ulog::info!(
                     "sky.draw_list: authored background dome skipped policy='clear-color-background until dedicated sky pass' reason='prevents follow-camera dome from covering world frame' env='NEWENGINE_RENDER_DRAW_SKY_MESH=1 to opt in'"
                 );
             }
@@ -436,7 +436,7 @@ pub fn draw_primitives(
     sort_by_distance_then_key(&mut entries);
     entries.truncate(primitive_budget(runtime, false));
     if runtime && (this.frame.frame_index <= 8 || this.frame.frame_index % 240 == 0) {
-        log::debug!(
+        newengine_ulog_api::ulog::debug!(
             "sky.draw_list: seen={} emitted={} profile_culled={} pass='viewport_forward' depth_write=false shadow=false follow_camera=true dome_background_mesh=true opaque_candidates={} opaque_budget={} runtime_profile_sky_native={}",
             sky_seen,
             sky_entries.len(),
@@ -520,7 +520,7 @@ pub fn draw_primitives(
             // buffer. The shared UBO still owns lights, shadow matrix and texture
             // bindings, so one bind group can serve the whole material/mesh bucket.
             // Write it once per unique material/mesh bucket, not once per instance.
-            super::passes_ubo::write_lit_ubo_ex(
+            super::super::passes_ubo::write_lit_ubo_ex(
                 r,
                 per.ubo,
                 Mat4::IDENTITY,

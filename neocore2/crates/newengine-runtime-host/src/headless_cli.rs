@@ -83,7 +83,7 @@ impl HeadlessCliRuntime {
         let reason = reason.as_ref();
         std::env::set_var("NEWENGINE_HEADLESS", "1");
         console_window::ensure_open(reason);
-        log::warn!(
+        newengine_ulog_api::ulog::warn!(
             "headless runtime: entering CLI fallback route='engine.platform.headless' reason='{}' startup_step_limit={} frame_limit={} fixed_dt_sec={:.4}",
             reason,
             self.startup_step_limit,
@@ -100,7 +100,7 @@ impl HeadlessCliRuntime {
         self.publish_headless_window_contract()?;
 
         let plugin_count = self.engine.load_engine_plugins_once()?;
-        log::info!(
+        newengine_ulog_api::ulog::info!(
             "headless runtime: engine plugins loaded count={} mode='platformless-cli'",
             plugin_count
         );
@@ -117,7 +117,7 @@ impl HeadlessCliRuntime {
         newengine_schema_runtime::register_schema_gateway_best_effort();
         newengine_gameplay_runtime::register_gameplay_foundation_gateways_best_effort();
         register_jobs_gateway_service_best_effort(self.engine.job_system(), self.engine.events().clone());
-        log::info!("headless runtime: engine.time, engine.schema, engine.jobs, synthetic engine.platform.headless and visible NullProvider routes registered; loading/status stays an engine.ui projection");
+        newengine_ulog_api::ulog::info!("headless runtime: engine.time, engine.schema, engine.jobs, synthetic engine.platform.headless and visible NullProvider routes registered; loading/status stays an engine.ui projection");
     }
 
     fn publish_headless_window_contract(&mut self) -> EngineResult<()> {
@@ -129,7 +129,7 @@ impl HeadlessCliRuntime {
             width: DEFAULT_HEADLESS_WIDTH,
             height: DEFAULT_HEADLESS_HEIGHT,
         }))?;
-        log::info!(
+        newengine_ulog_api::ulog::info!(
             "headless runtime: synthetic WindowReady emitted size={}x{} no_native_handles=true",
             DEFAULT_HEADLESS_WIDTH,
             DEFAULT_HEADLESS_HEIGHT
@@ -143,7 +143,7 @@ impl HeadlessCliRuntime {
             let outcome = self.engine.start_incremental_step()?;
             let snapshot = outcome.snapshot;
             if step == 1 || outcome.finished || step % 16 == 0 || snapshot.terminal {
-                log::info!(
+                newengine_ulog_api::ulog::info!(
                     "headless startup: step={} phase='{}' status='{}' detail='{}' progress={:.0}% finished={} terminal={}",
                     step,
                     snapshot.phase.as_str(),
@@ -156,7 +156,7 @@ impl HeadlessCliRuntime {
             }
 
             if outcome.finished {
-                log::info!(
+                newengine_ulog_api::ulog::info!(
                     "headless runtime: startup completed elapsed_ms={:.2}",
                     started.elapsed().as_secs_f64() * 1000.0
                 );
@@ -181,7 +181,7 @@ impl HeadlessCliRuntime {
 
     fn run_frames(&mut self) -> EngineResult<()> {
         let Some(frame_limit) = self.frame_limit else {
-            log::info!("headless runtime: entering unlimited frame pump; request shutdown to exit");
+            newengine_ulog_api::ulog::info!("headless runtime: entering unlimited frame pump; request shutdown to exit");
             let mut frames = 0_u64;
             while !self.engine.run_state().is_terminal() {
                 match self.engine.step() {
@@ -191,7 +191,7 @@ impl HeadlessCliRuntime {
                 }
                 frames = frames.wrapping_add(1);
                 if frames % 300 == 0 {
-                    log::info!("headless runtime: frames={} run_state='{}'", frames, self.engine.run_state().as_str());
+                    newengine_ulog_api::ulog::info!("headless runtime: frames={} run_state='{}'", frames, self.engine.run_state().as_str());
                 }
                 // Headless pacing is owned by engine.time / caller event pump, not by a local sleep loop.
             }
@@ -199,7 +199,7 @@ impl HeadlessCliRuntime {
         };
 
         if frame_limit == 0 {
-            log::info!("headless runtime: startup-only CLI mode completed; no frame pump requested");
+            newengine_ulog_api::ulog::info!("headless runtime: startup-only CLI mode completed; no frame pump requested");
             return Ok(());
         }
 
@@ -210,7 +210,7 @@ impl HeadlessCliRuntime {
                 Err(e) => return Err(e),
             }
             if frame == 0 || (frame + 1) % 300 == 0 || frame + 1 == frame_limit {
-                log::info!(
+                newengine_ulog_api::ulog::info!(
                     "headless runtime: frame={}/{} run_state='{}'",
                     frame + 1,
                     frame_limit,
@@ -226,11 +226,11 @@ impl HeadlessCliRuntime {
         if matches!(self.engine.run_state(), EngineRunState::Stopped | EngineRunState::Faulted) {
             return;
         }
-        log::info!("headless runtime: engine.shutdown begin origin={origin}");
+        newengine_ulog_api::ulog::info!("headless runtime: engine.shutdown begin origin={origin}");
         if let Err(e) = self.engine.shutdown() {
-            log::error!("headless runtime: engine.shutdown failed origin={origin}: {e}");
+            newengine_ulog_api::ulog::error!("headless runtime: engine.shutdown failed origin={origin}: {e}");
         } else {
-            log::info!("headless runtime: engine.shutdown completed origin={origin}");
+            newengine_ulog_api::ulog::info!("headless runtime: engine.shutdown completed origin={origin}");
         }
     }
 }

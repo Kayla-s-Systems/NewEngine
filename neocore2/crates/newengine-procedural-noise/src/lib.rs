@@ -6,7 +6,6 @@
 //! plugin hosts, filesystems, clocks, or global RNG. Callers provide explicit
 //! settings and receive deterministic CPU data that can be rendered, cooked,
 //! streamed, or consumed by the physics layer through heightfield residency.
-
 mod graph;
 mod heightfield;
 mod mesh;

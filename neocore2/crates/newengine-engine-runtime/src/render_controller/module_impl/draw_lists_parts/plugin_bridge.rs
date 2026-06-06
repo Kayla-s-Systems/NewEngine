@@ -1,6 +1,7 @@
+use super::*;
 
 #[inline]
-fn parse_plugin_draw_list_provider(
+pub(super) fn parse_plugin_draw_list_provider(
     plugin_id: &str,
     describe_json: &str,
 ) -> Option<ExternalRenderDrawListProviderDesc> {
@@ -24,7 +25,7 @@ fn parse_plugin_draw_list_provider(
                 draw_lists.push(kind);
             }
         } else {
-            log::warn!(
+            newengine_ulog_api::ulog::warn!(
                 "render draw-list provider registry: plugin='{}' provider='{}' declares unknown draw_list='{}'",
                 plugin_id,
                 id,
@@ -40,7 +41,7 @@ fn parse_plugin_draw_list_provider(
         &gateway_id,
         newengine_core::render::RENDER_DRAW_LIST_PROVIDER_SERVICE_KIND,
     ) {
-        log::warn!(
+        newengine_ulog_api::ulog::warn!(
             "render draw-list provider registry: plugin='{}' provider='{}' declares gateway='{}' but expected service_kind='{}'",
             plugin_id,
             id,
@@ -87,7 +88,7 @@ fn parse_draw_list_kind(value: &str) -> Option<RenderDrawListKind> {
 
 
 #[inline]
-fn build_draw_list_provider_request(
+pub(super) fn build_draw_list_provider_request(
     ctx: &SceneExtractionCtx<'_>,
     lists: &RuntimeDrawListSet,
     frame_plan: &newengine_render_frame_graph::RenderFramePlan,

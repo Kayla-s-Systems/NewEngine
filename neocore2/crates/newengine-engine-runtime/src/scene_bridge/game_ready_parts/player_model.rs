@@ -1,16 +1,18 @@
+use super::*;
+
 use newengine_model_domain_api::ModelAssetRequest;
 use newengine_model_runtime::ModelGatewayClient;
 use newengine_model_skeleton_api::ModelSkeletonMetadata;
 
 #[derive(Clone, Debug)]
-struct PlayerRuntimeModelPart {
+pub(super) struct PlayerRuntimeModelPart {
     primitive_id: PrimitiveId,
     material_id: MaterialId,
     material_slot: String,
     color: [f32; 4],
 }
 
-fn ensure_player_runtime_model_parts(
+pub(super) fn ensure_player_runtime_model_parts(
     prims: &mut PrimitiveRegistry,
     mats: &MaterialRegistry,
     spec: &self::content::GameReadyPlayerModelSpec,
@@ -27,7 +29,7 @@ fn ensure_player_runtime_model_parts(
     let bundle = constructor.assemble_bundle(&request)?;
 
     if let Some(metadata) = bundle.skeleton.as_ref() {
-        log::info!(
+        newengine_ulog_api::ulog::info!(
             "game-ready: player skeleton metadata bound source='{}' skeleton='{}' format='{}' bytes={} joints={} status='{}'",
             bundle.source,
             metadata.source,
@@ -65,7 +67,7 @@ fn ensure_player_runtime_model_parts(
             registered_parts += 1;
             registered_vertices += vertex_count;
             registered_indices += index_count;
-            log::debug!(
+            newengine_ulog_api::ulog::debug!(
                 "game-ready: player model part registered source='{}' slot='{}' vertices={} indices={} material='{}' policy='ydd->nemat->ytd'",
                 bundle.source,
                 part.material_slot,
@@ -84,7 +86,7 @@ fn ensure_player_runtime_model_parts(
     }
 
     if registered_parts > 0 {
-        log::info!(
+        newengine_ulog_api::ulog::info!(
             "game-ready: player model registered source='{}' parts={} vertices={} indices={} materials={}",
             bundle.source,
             registered_parts,
@@ -95,7 +97,7 @@ fn ensure_player_runtime_model_parts(
     }
 
     if let Some(dictionary) = bundle.texture_dictionary.as_deref() {
-        log::info!(
+        newengine_ulog_api::ulog::info!(
             "game-ready: player model texture dictionary bound source='{}' dictionary='{}' materials={}",
             bundle.source,
             dictionary,
@@ -104,7 +106,7 @@ fn ensure_player_runtime_model_parts(
     }
 
     if !bundle.collisions.is_empty() {
-        log::info!(
+        newengine_ulog_api::ulog::info!(
             "game-ready: player model collision bindings derived source='{}' collisions={}",
             bundle.source,
             bundle.collisions.len()
@@ -114,7 +116,7 @@ fn ensure_player_runtime_model_parts(
     Ok((bundle.source, out, bundle.skeleton))
 }
 
-fn hide_player_fallback_visuals(world: &mut newengine_ecs::World, player: EntityId) {
+pub(super) fn hide_player_fallback_visuals(world: &mut newengine_ecs::World, player: EntityId) {
     let hidden = world
         .query::<crate::gameplay::PlayerVisualPart>()
         .filter_map(|(entity, part)| {
@@ -127,7 +129,7 @@ fn hide_player_fallback_visuals(world: &mut newengine_ecs::World, player: Entity
     }
 }
 
-fn spawn_game_ready_player_model(
+pub(in crate::scene_bridge::game_ready) fn spawn_game_ready_player_model(
     world: &mut newengine_ecs::World,
     prims: &mut PrimitiveRegistry,
     mats: &MaterialRegistry,
@@ -142,7 +144,7 @@ fn spawn_game_ready_player_model(
     let (model_source, parts, skeleton) = match ensure_player_runtime_model_parts(prims, mats, spec) {
         Ok(model) => model,
         Err(e) => {
-            log::warn!("game-ready: player model binding failed: {}", e);
+            newengine_ulog_api::ulog::warn!("game-ready: player model binding failed: {}", e);
             return false;
         }
     };

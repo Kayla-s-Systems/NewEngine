@@ -147,7 +147,7 @@ impl CameraManagerResource {
                     .with_previous(Some(self.active_director)),
             );
 
-            log::info!(
+            newengine_ulog_api::ulog::info!(
                 "camera runtime: director={:?} mode={:?} view={:?} context={:?} gate_blocked={}",
                 desired_director,
                 desired_mode,

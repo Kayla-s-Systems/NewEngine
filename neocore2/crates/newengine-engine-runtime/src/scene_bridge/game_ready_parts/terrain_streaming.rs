@@ -1,3 +1,5 @@
+use super::*;
+
 // Terrain streaming owns chunk residency, procedural heightfield generation
 // and precomputed render mesh payloads. Material registration and sky
 // lifecycle stay in their own canonical modules.
@@ -14,7 +16,7 @@ pub(crate) struct TerrainSurfaceLayers {
 type TerrainChunkCoord = SceneCellCoord;
 
 #[derive(Clone, Debug)]
-struct TerrainChunkRecord {
+pub(super) struct TerrainChunkRecord {
     terrain: EntityId,
 }
 
@@ -30,12 +32,12 @@ pub(crate) struct PreparedTerrainPrimitiveMesh {
 }
 
 #[derive(Clone, Debug)]
-struct GeneratedTerrainChunk {
+pub(super) struct GeneratedTerrainChunk {
     terrain: ProceduralTerrain,
     mesh: Arc<PrimitiveMesh>,
 }
 
-struct PendingTerrainChunk {
+pub(super) struct PendingTerrainChunk {
     result: Arc<Mutex<Option<GeneratedTerrainChunk>>>,
     ticket: JobTicket,
 }
@@ -55,7 +57,7 @@ pub(crate) struct GameReadyTerrainStreamingState {
 }
 
 #[inline]
-fn terrain_surface_layers(spec: &GameReadyTerrainSpec) -> TerrainSurfaceLayers {
+pub(super) fn terrain_surface_layers(spec: &GameReadyTerrainSpec) -> TerrainSurfaceLayers {
     TerrainSurfaceLayers {
         forest_base_texture: spec.surface.forest_base_texture.clone(),
         sand_base_texture: spec.surface.sand_base_texture.clone(),
@@ -65,7 +67,7 @@ fn terrain_surface_layers(spec: &GameReadyTerrainSpec) -> TerrainSurfaceLayers {
     }
 }
 
-fn terrain_graph_for_chunk(spec: &GameReadyTerrainSpec, coord: TerrainChunkCoord) -> NoiseGraph2D {
+pub(super) fn terrain_graph_for_chunk(spec: &GameReadyTerrainSpec, coord: TerrainChunkCoord) -> NoiseGraph2D {
     let center = coord.center(spec.size_x, spec.size_z);
 
     // GameFirst terrain is intentionally not a mountain generator. The profile
@@ -138,7 +140,7 @@ fn terrain_graph_for_chunk(spec: &GameReadyTerrainSpec, coord: TerrainChunkCoord
     terrain_graph
 }
 
-fn generate_terrain_for_chunk(spec: &GameReadyTerrainSpec, coord: TerrainChunkCoord, color: [f32; 4]) -> GeneratedTerrainChunk {
+pub(super) fn generate_terrain_for_chunk(spec: &GameReadyTerrainSpec, coord: TerrainChunkCoord, color: [f32; 4]) -> GeneratedTerrainChunk {
     let terrain = ProceduralTerrain::generate_descriptor(
         TerrainHeightfieldDescriptor {
             cells_x: spec.cells_x,
@@ -162,7 +164,7 @@ fn generate_terrain_for_chunk(spec: &GameReadyTerrainSpec, coord: TerrainChunkCo
     GeneratedTerrainChunk { terrain, mesh }
 }
 
-fn spawn_generated_terrain_chunk(
+pub(super) fn spawn_generated_terrain_chunk(
     world: &mut newengine_ecs::World,
     root: EntityId,
     mats: &MaterialRegistry,
@@ -195,7 +197,7 @@ fn spawn_generated_terrain_chunk(
     TerrainChunkRecord { terrain: entity }
 }
 
-fn spawn_streamed_terrain_chunk(
+pub(super) fn spawn_streamed_terrain_chunk(
     world: &mut newengine_ecs::World,
     root: EntityId,
     mats: &MaterialRegistry,
@@ -209,7 +211,7 @@ fn spawn_streamed_terrain_chunk(
     spawn_generated_terrain_chunk(world, root, mats, material, spec, surface, color, coord, generated)
 }
 
-fn enqueue_streamed_terrain_chunk(
+pub(super) fn enqueue_streamed_terrain_chunk(
     state: &mut GameReadyTerrainStreamingState,
     job_system: Option<&JobSystemHandle>,
     coord: TerrainChunkCoord,
@@ -250,7 +252,7 @@ fn enqueue_streamed_terrain_chunk(
     true
 }
 
-fn spawn_procedural_terrain(
+pub(in crate::scene_bridge::game_ready) fn spawn_procedural_terrain(
     world: &mut newengine_ecs::World,
     mats: &MaterialRegistry,
     root: EntityId,
@@ -259,7 +261,7 @@ fn spawn_procedural_terrain(
     color: [f32; 4],
     initial_center: TerrainChunkCoord,
 ) -> EntityId {
-    log::info!(
+    newengine_ulog_api::ulog::info!(
         "game-ready: terrain generator id='{}' seed={} cells={}x{} chunk_size={}x{} streaming={} radius={} unload_radius={} surface_layers=[forest='{}', sand='{}', rock='{}']",
         spec.generator.id,
         spec.seed,
@@ -326,7 +328,7 @@ fn spawn_procedural_terrain(
             warmed = warmed.saturating_add(1);
         }
         if warmed > 1 {
-            log::info!(
+            newengine_ulog_api::ulog::info!(
                 "game-ready terrain streaming: initial resident chunks warmed center=[{},{}] radius={} chunks={}",
                 origin.x,
                 origin.z,
@@ -497,7 +499,7 @@ pub(crate) fn tick_game_ready_streaming_terrain(
     }
 
     if created > 0 || scheduled > 0 || removed > 0 {
-        log::debug!(
+        newengine_ulog_api::ulog::debug!(
             "game-ready terrain streaming: center=[{},{}] render_loaded={} render_pending={} created={} scheduled={} removed={} render_loads={} render_unloads={} sim_desired={}",
             center.x,
             center.z,

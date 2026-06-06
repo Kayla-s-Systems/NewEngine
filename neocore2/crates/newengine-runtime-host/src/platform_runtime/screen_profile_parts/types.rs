@@ -1,36 +1,38 @@
+use super::*;
+
 #[derive(Clone, Copy, Debug)]
-struct EditorChromeDescriptor {
-    product_title: &'static str,
-    menu: &'static [EditorChromeMenuItem],
-    runtime_actions: &'static [EditorRuntimeActionDescriptor],
-    empty_outliner_title: &'static str,
-    empty_outliner_detail: &'static str,
-    empty_inspector_title: &'static str,
-    empty_inspector_detail: &'static str,
-    viewport_title: &'static str,
-    viewport_detail_edit: &'static str,
-    viewport_detail_simulate: &'static str,
-    viewport_detail_play: &'static str,
+pub(super) struct EditorChromeDescriptor {
+    pub(super) product_title: &'static str,
+    pub(super) menu: &'static [EditorChromeMenuItem],
+    pub(super) runtime_actions: &'static [EditorRuntimeActionDescriptor],
+    pub(super) empty_outliner_title: &'static str,
+    pub(super) empty_outliner_detail: &'static str,
+    pub(super) empty_inspector_title: &'static str,
+    pub(super) empty_inspector_detail: &'static str,
+    pub(super) viewport_title: &'static str,
+    pub(super) viewport_detail_edit: &'static str,
+    pub(super) viewport_detail_simulate: &'static str,
+    pub(super) viewport_detail_play: &'static str,
 }
 
 #[derive(Clone, Copy, Debug)]
-struct EditorChromeMenuItem {
-    id: &'static str,
-    label: &'static str,
-    tooltip: &'static str,
+pub(super) struct EditorChromeMenuItem {
+    pub(super) id: &'static str,
+    pub(super) label: &'static str,
+    pub(super) tooltip: &'static str,
 }
 
 #[derive(Clone, Copy, Debug)]
-struct EditorRuntimeActionDescriptor {
-    id: &'static str,
-    label: &'static str,
-    action_id: &'static str,
-    hotkey: &'static str,
-    tooltip: &'static str,
-    mode: UiEditorRuntimeMode,
+pub(super) struct EditorRuntimeActionDescriptor {
+    pub(super) id: &'static str,
+    pub(super) label: &'static str,
+    pub(super) action_id: &'static str,
+    pub(super) hotkey: &'static str,
+    pub(super) tooltip: &'static str,
+    pub(super) mode: UiEditorRuntimeMode,
 }
 
-const EDITOR_MENUS: &[EditorChromeMenuItem] = &[
+pub(super) const EDITOR_MENUS: &[EditorChromeMenuItem] = &[
     EditorChromeMenuItem { id: "file", label: "File", tooltip: "Project, scene and source operations" },
     EditorChromeMenuItem { id: "edit", label: "Edit", tooltip: "Undo, redo and selection operations" },
     EditorChromeMenuItem { id: "create", label: "Create", tooltip: "Create entities, assets and authored data" },
@@ -41,13 +43,13 @@ const EDITOR_MENUS: &[EditorChromeMenuItem] = &[
     EditorChromeMenuItem { id: "help", label: "Help", tooltip: "Documentation and runtime diagnostics" },
 ];
 
-const EDITOR_RUNTIME_ACTIONS: &[EditorRuntimeActionDescriptor] = &[
+pub(super) const EDITOR_RUNTIME_ACTIONS: &[EditorRuntimeActionDescriptor] = &[
     EditorRuntimeActionDescriptor { id: "edit", label: "Stop", action_id: "editor.runtime.edit", hotkey: "1", tooltip: "Stop simulation and keep the viewport as an editor preview", mode: UiEditorRuntimeMode::Edit },
     EditorRuntimeActionDescriptor { id: "simulate", label: "Simulate", action_id: "editor.runtime.simulate", hotkey: "2", tooltip: "Run world simulation without direct player possession", mode: UiEditorRuntimeMode::Simulate },
     EditorRuntimeActionDescriptor { id: "play", label: "Play", action_id: "editor.runtime.play", hotkey: "3", tooltip: "Play in editor through the contained viewport", mode: UiEditorRuntimeMode::Play },
 ];
 
-const EDITOR_CHROME: EditorChromeDescriptor = EditorChromeDescriptor {
+pub(super) const EDITOR_CHROME: EditorChromeDescriptor = EditorChromeDescriptor {
     product_title: "North Star",
     menu: EDITOR_MENUS,
     runtime_actions: EDITOR_RUNTIME_ACTIONS,
@@ -61,47 +63,45 @@ const EDITOR_CHROME: EditorChromeDescriptor = EditorChromeDescriptor {
     viewport_detail_play: "Play target · viewport owns gameplay input",
 };
 
-
 #[derive(Clone, Copy, Debug)]
-struct EditorLayoutMetrics {
-    screen_w: f32,
-    screen_h: f32,
-    menu_h: f32,
-    toolbar_h: f32,
-    status_h: f32,
-    bottom_h: f32,
-    left_w: f32,
-    right_w: f32,
-    gap: f32,
-    viewport_x: f32,
-    viewport_y: f32,
-    viewport_w: f32,
-    viewport_h: f32,
-    bottom_y: f32,
-    left_visible: bool,
-    right_visible: bool,
-    bottom_visible: bool,
-    hovered_dock_slot: Option<&'static str>,
-    hovered_runtime_mode: Option<UiEditorRuntimeMode>,
-    hovered_menu_id: Option<&'static str>,
+pub(super) struct EditorLayoutMetrics {
+    pub(super) screen_w: f32,
+    pub(super) screen_h: f32,
+    pub(super) menu_h: f32,
+    pub(super) toolbar_h: f32,
+    pub(super) status_h: f32,
+    pub(super) bottom_h: f32,
+    pub(super) left_w: f32,
+    pub(super) right_w: f32,
+    pub(super) gap: f32,
+    pub(super) viewport_x: f32,
+    pub(super) viewport_y: f32,
+    pub(super) viewport_w: f32,
+    pub(super) viewport_h: f32,
+    pub(super) bottom_y: f32,
+    pub(super) left_visible: bool,
+    pub(super) right_visible: bool,
+    pub(super) bottom_visible: bool,
+    pub(super) hovered_dock_slot: Option<&'static str>,
+    pub(super) hovered_runtime_mode: Option<UiEditorRuntimeMode>,
+    pub(super) hovered_menu_id: Option<&'static str>,
 }
-
 
 #[derive(Clone, Debug, Deserialize)]
 #[serde(default)]
-struct ScreenProfileConfig {
+pub(super) struct ScreenProfileConfig {
     #[serde(default = "default_screen_profile")]
-    profile: UiScreenProfile,
-    game_ui_root_surface_id: Option<String>,
+    pub(super) profile: UiScreenProfile,
+    pub(super) game_ui_root_surface_id: Option<String>,
     #[serde(default = "default_publish_editor_shell")]
-    publish_editor_shell: bool,
+    pub(super) publish_editor_shell: bool,
 }
 
-fn default_screen_profile() -> UiScreenProfile {
+pub(super) fn default_screen_profile() -> UiScreenProfile {
     UiScreenProfile::Editor
 }
 
-fn default_publish_editor_shell() -> bool {
+pub(super) fn default_publish_editor_shell() -> bool {
     true
 }
 
@@ -120,18 +120,17 @@ impl Default for ScreenProfileConfig {
 
 #[derive(Clone, Debug)]
 pub(crate) struct ScreenProfileRuntimeState {
-    config: ScreenProfileConfig,
-    descriptor: UiScreenProfileDescriptor,
-    last_published_profile: Option<UiScreenProfile>,
-    published_surfaces: BTreeSet<String>,
-    last_right_edit_selection_key: String,
-    cached_right_edit_document: Option<AssetDocument>,
-    cached_right_edit_error: Option<String>,
-    editor_runtime_mode: UiEditorRuntimeMode,
-    hidden_panels: BTreeSet<String>,
-    last_runtime_button_pointer_frame: u64,
-    last_dock_click_frame: u64,
-    last_menu_click_frame: u64,
-    active_menu_id: Option<String>,
+    pub(super) config: ScreenProfileConfig,
+    pub(super) descriptor: UiScreenProfileDescriptor,
+    pub(super) last_published_profile: Option<UiScreenProfile>,
+    pub(super) published_surfaces: BTreeSet<String>,
+    pub(super) last_right_edit_selection_key: String,
+    pub(super) cached_right_edit_document: Option<AssetDocument>,
+    pub(super) cached_right_edit_error: Option<String>,
+    pub(super) editor_runtime_mode: UiEditorRuntimeMode,
+    pub(super) hidden_panels: BTreeSet<String>,
+    pub(super) last_runtime_button_pointer_frame: u64,
+    pub(super) last_dock_click_frame: u64,
+    pub(super) last_menu_click_frame: u64,
+    pub(super) active_menu_id: Option<String>,
 }
-

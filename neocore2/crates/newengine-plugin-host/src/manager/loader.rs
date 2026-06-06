@@ -110,7 +110,7 @@ struct LoadTimings {
 impl PluginManager {
     pub(crate) fn load_one(&mut self, path: &Path, host: HostApiV1) -> Result<(), PluginLoadError> {
         let pretty_path = pretty_abs_path(path);
-        log::info!("plugins: loading '{}'", pretty_path.as_str());
+        newengine_ulog_api::ulog::info!("plugins: loading '{}'", pretty_path.as_str());
 
         let mut load_job = LoadProfilerJob::begin(pretty_path.as_str());
         let t_total = Instant::now();
@@ -172,7 +172,7 @@ impl PluginManager {
         }
 
         if self.loaded_ids.contains(&id_str) {
-            log::warn!(
+            newengine_ulog_api::ulog::warn!(
                 "plugins: duplicate id='{}' from '{}' ignored (already loaded)",
                 id_str,
                 pretty_path.as_str()
@@ -194,7 +194,7 @@ impl PluginManager {
         let init_breakdown = init_with_overrides(
             &mut module_any,
             &id_str,
-            host,
+            host.clone(),
             overrides_non_empty,
             &overrides,
         )
@@ -206,7 +206,7 @@ impl PluginManager {
         tm.init_breakdown = Some(init_breakdown);
         tm.total_ms = t_total.elapsed().as_millis();
 
-        log::info!(
+        newengine_ulog_api::ulog::info!(
             "plugins: loaded id='{}' ver='{}' origin='{}' from '{}'",
             info.id,
             info.version,
@@ -214,9 +214,9 @@ impl PluginManager {
             pretty_path.as_str()
         );
 
-        if log::log_enabled!(log::Level::Debug) {
+        if newengine_ulog_api::ulog::debug_enabled() {
             if let Some(ref bd) = tm.init_breakdown {
-                log::debug!(
+                newengine_ulog_api::ulog::debug!(
                     "plugins: load timing id='{}' total_ms={} dlopen_ms={} sym_ms={} root_ms={} module_create_ms={} override_ms={} init_ms={} (cfg_defaults_ms={} cfg_apply_ms={} init_call_ms={})",
                     info.id,
                     tm.total_ms,
@@ -245,6 +245,25 @@ impl PluginManager {
             _lib: lib,
         });
 
+        crate::ulog_event::emit_ulog_event(
+            &host,
+            "engine.provider.registered",
+            "INFO",
+            "Provider registered",
+            serde_json::json!({
+                "provider_id": id_str,
+                "version": ver_str,
+                "origin": provider_origin.as_str(),
+                "path": pretty_path,
+                "total_ms": tm.total_ms,
+                "dlopen_ms": tm.dlopen_ms,
+                "sym_ms": tm.sym_ms,
+                "root_ms": tm.root_ms,
+                "module_create_ms": tm.module_create_ms,
+                "init_total_ms": tm.init_total_ms
+            }),
+        );
+
         record_loaded_plugin_root(LoadedPluginRootSnapshot { plugin_id: id_str.clone(), editor_extensions_v1 });
         load_job.complete_ok(&id_str, &tm);
         Ok(())
@@ -262,7 +281,7 @@ fn select_module(
         version: descriptor.version.clone(),
     };
     let icon_small = extract_plugin_icon(root);
-    log::debug!("plugins: canonical ABI selected id='{}'", info.id);
+    newengine_ulog_api::ulog::debug!("plugins: canonical ABI selected id='{}'", info.id);
     (ModuleAdapterAny::new(module), info, descriptor, icon_small)
 }
 
@@ -285,7 +304,7 @@ fn init_with_overrides(
                 .map_err(|e| e.to_string())?;
             t.config_defaults_ms = t0.elapsed().as_millis();
 
-            log::debug!(
+            newengine_ulog_api::ulog::debug!(
                 "plugins: config defaults id='{}' content_type='{}' len={} fmt_v={} ",
                 id_str,
                 defaults.content_type,
@@ -321,7 +340,7 @@ fn init_with_overrides(
             );
 
             if changed_keys.is_empty() {
-                log::debug!(
+                newengine_ulog_api::ulog::debug!(
                     "plugins: config effective id='{}' content_type='{}' len={} changed={} preview='{}'",
                     id_str,
                     applied.effective.content_type,
@@ -330,7 +349,7 @@ fn init_with_overrides(
                     preview
                 );
             } else {
-                log::debug!(
+                newengine_ulog_api::ulog::debug!(
                     "plugins: config effective id='{}' content_type='{}' len={} changed={} changed_keys=[{}] preview='{}'",
                     id_str,
                     applied.effective.content_type,
@@ -343,19 +362,19 @@ fn init_with_overrides(
 
             for d in applied.diags.iter() {
                 match d.level {
-                    ConfigDiagLevelV1::Info => log::info!(
+                    ConfigDiagLevelV1::Info => newengine_ulog_api::ulog::info!(
                         "plugins: config info id='{}' {} {}",
                         id_str,
                         d.code,
                         d.message
                     ),
-                    ConfigDiagLevelV1::Warn => log::warn!(
+                    ConfigDiagLevelV1::Warn => newengine_ulog_api::ulog::warn!(
                         "plugins: config warn id='{}' {} {}",
                         id_str,
                         d.code,
                         d.message
                     ),
-                    ConfigDiagLevelV1::Error => log::error!(
+                    ConfigDiagLevelV1::Error => newengine_ulog_api::ulog::error!(
                         "plugins: config error id='{}' {} {}",
                         id_str,
                         d.code,

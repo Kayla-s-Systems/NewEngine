@@ -160,7 +160,7 @@ impl ServiceRegistry {
     #[inline]
     fn log_missing(&self, service: ServiceKey, iface: InterfaceId, policy: MissingServicePolicy) {
         if policy == MissingServicePolicy::RequiredHard {
-            log::error!("fatal: missing service={:?} interface={:?}", service, iface);
+            newengine_ulog_api::ulog::error!("fatal: missing service={:?} interface={:?}", service, iface);
             return;
         }
 
@@ -189,13 +189,13 @@ impl ServiceRegistry {
 
         match policy {
             MissingServicePolicy::Optional => {
-                log::warn!(
+                newengine_ulog_api::ulog::warn!(
                     "missing optional service={:?} interface={:?}",
                     service,
                     iface
                 )
             }
-            MissingServicePolicy::RequiredSoft => log::error!(
+            MissingServicePolicy::RequiredSoft => newengine_ulog_api::ulog::error!(
                 "missing required service={:?} interface={:?} (soft)",
                 service,
                 iface

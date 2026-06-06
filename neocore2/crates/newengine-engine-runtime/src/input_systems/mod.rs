@@ -103,7 +103,7 @@ impl InputRuntimeSystems {
         state.enabled = enabled;
         state.reason = reason.clone();
         state.frame_index = frame_index;
-        log::info!(
+        newengine_ulog_api::ulog::info!(
             "input systems: {} system='{}' enabled {}->{} frame={} reason='{}'",
             if enabled { "enabled" } else { "disabled" },
             system.id(),
@@ -251,14 +251,14 @@ impl InputRuntimeSystems {
         if capture.has_runtime_gate() {
             input.gate_runtime_navigation_by_ui();
             if changed {
-                log::debug!(
+                newengine_ulog_api::ulog::debug!(
                     "input systems: runtime navigation gated frame={} reason='{}' contract='listener-alive/navigation-gated'",
                     frame_index,
                     capture.reason,
                 );
             }
         } else if changed {
-            log::debug!(
+            newengine_ulog_api::ulog::debug!(
                 "input systems: runtime controls released frame={} reason='{}'",
                 frame_index,
                 capture.reason,
@@ -279,9 +279,9 @@ impl InputRuntimeSystems {
     }
 
     pub fn log_explicit_snapshot(&self, frame_index: u64, reason: &str) {
-        log::info!("input systems: snapshot frame={} reason='{}'", frame_index, reason);
+        newengine_ulog_api::ulog::info!("input systems: snapshot frame={} reason='{}'", frame_index, reason);
         for state in &self.states {
-            log::info!(
+            newengine_ulog_api::ulog::info!(
                 "input systems: | {:31} | enabled={:<5} active={:<5} captured={:<5} reason='{}' |",
                 state.id(),
                 state.enabled,
@@ -333,15 +333,15 @@ impl InputRuntimeSystems {
             .map(|state| state.id())
             .collect::<Vec<_>>()
             .join(",");
-        log::info!(
+        newengine_ulog_api::ulog::info!(
             "input systems: initialized systems={} enabled={} disabled=[{}]",
             self.states.len(),
             enabled_count,
             disabled,
         );
-        if log::log_enabled!(log::Level::Debug) {
+        if newengine_ulog_api::ulog::debug_enabled() {
             for state in &self.states {
-                log::debug!(
+                newengine_ulog_api::ulog::debug!(
                     "input systems: declared system='{}' enabled={} owner='{}' reason='{}'",
                     state.id(),
                     state.enabled,
@@ -368,7 +368,7 @@ impl InputRuntimeSystems {
         state.frame_index = frame_index;
 
         if state_changed && frame_index % 120 == 0 {
-            log::trace!(
+            newengine_ulog_api::ulog::trace!(
                 "input systems: transition system='{}' active {}->{} captured {}->{} frame={} reason='{}'",
                 system.id(),
                 old_active,
@@ -390,7 +390,7 @@ impl InputRuntimeSystems {
         self.log_state.last_frame_summary = summary.clone();
         self.log_state.last_summary_frame = frame_index;
         if frame_index % 120 == 0 {
-            log::trace!("input systems: frame={} {}", frame_index, summary);
+            newengine_ulog_api::ulog::trace!("input systems: frame={} {}", frame_index, summary);
         }
     }
 

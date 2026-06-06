@@ -243,14 +243,14 @@ pub fn plugin_enabled_by_config(plugin_id: &str) -> bool {
 /// 4. environment overrides
 pub fn init_plugin_config_service(overrides: HashMap<String, Value>) {
     if overrides.is_empty() {
-        log::info!("config: no plugin overrides in startup config");
+        newengine_ulog_api::ulog::info!("config: no plugin overrides in startup config");
     } else {
         let mut ids = BTreeSet::new();
         for (root, value) in &overrides {
             collect_override_ids(root, value, &mut ids);
         }
 
-        log::info!(
+        newengine_ulog_api::ulog::info!(
             "config: plugin overrides loaded (count={}): {}",
             ids.len(),
             ids.into_iter().collect::<Vec<_>>().join(", ")
@@ -335,7 +335,7 @@ fn apply_env_overrides(plugin_id: &str, root: &mut Value) {
 
         let parsed_value = parse_env_value(&raw_value);
 
-        log::debug!(
+        newengine_ulog_api::ulog::debug!(
             "config: env override plugin='{}' key='{}' value='{}'",
             plugin_id,
             suffix,

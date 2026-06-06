@@ -1,4 +1,6 @@
-fn ensure_runtime_prefab_parts(
+use super::*;
+
+pub(super) fn ensure_runtime_prefab_parts(
     prims: &mut PrimitiveRegistry,
     prefab: &GameReadyPrefabSpec,
     materials: DemoMaterials,
@@ -24,14 +26,13 @@ fn ensure_runtime_prefab_parts(
             registered_parts += 1;
             registered_vertices += vertex_count;
             registered_indices += index_count;
-            log::debug!(
-                "game-ready: ydd drawable mesh registered source='{}' asset='{}' part='{}' material='{}' material_ref={:?} vertices={} indices={}",
+            newengine_ulog_api::ulog::debug!(
+                "game-ready: ydd drawable mesh registered source='{}' asset='{}' part='{}' material='{}' vertices={} indices={}",
                 prefab.source,
                 logical_asset,
                 name,
                 material_slot,
-                material_ref,
-                vertex_count,
+                    vertex_count,
                 index_count
             );
         }
@@ -39,13 +40,12 @@ fn ensure_runtime_prefab_parts(
         out.push(RuntimePrefabMeshPart {
             primitive_id,
             material_slot,
-            material_ref,
             material_id,
             color,
         });
     }
     if registered_parts > 0 {
-        log::info!(
+        newengine_ulog_api::ulog::info!(
             "game-ready: ydd drawable registered source='{}' asset='{}' parts={} vertices={} indices={}",
             prefab.source,
             logical_asset,
@@ -57,7 +57,7 @@ fn ensure_runtime_prefab_parts(
     Ok(out)
 }
 
-fn spawn_runtime_ydd_prefab_instance(
+pub(super) fn spawn_runtime_ydd_prefab_instance(
     world: &mut newengine_ecs::World,
     prims: &PrimitiveRegistry,
     mats: &MaterialRegistry,
@@ -88,7 +88,7 @@ fn spawn_runtime_ydd_prefab_instance(
     }
 }
 
-fn spawn_foliage_prefabs(
+pub(in crate::scene_bridge::game_ready) fn spawn_foliage_prefabs(
     world: &mut newengine_ecs::World,
     prims: &mut PrimitiveRegistry,
     mats: &MaterialRegistry,
@@ -103,7 +103,7 @@ fn spawn_foliage_prefabs(
 ) {
     let Some(prefab) = choose_foliage_prefab(prefabs, &foliage.prefab) else {
         if foliage.enabled {
-            log::warn!(
+            newengine_ulog_api::ulog::warn!(
                 "game-ready: foliage enabled but prefab id='{}' is not declared or disabled",
                 foliage.prefab
             );
@@ -114,7 +114,7 @@ fn spawn_foliage_prefabs(
     let runtime_parts = match ensure_runtime_prefab_parts(prims, prefab, materials, material_specs, palette) {
         Ok(parts) => parts,
         Err(e) => {
-            log::error!(
+            newengine_ulog_api::ulog::error!(
                 "game-ready: prefab id='{}' source='{}' proxy='{}' failed to load .ydd runtime mesh through AssetManager; foliage skipped err='{}'",
                 prefab.id,
                 prefab.source,

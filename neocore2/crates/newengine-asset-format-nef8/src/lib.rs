@@ -55,15 +55,15 @@ impl Nef8FormatSpec {
             // Generic inspect providers may expose editable field schema, but
             // write-back requires a concrete format/package writer capability.
             editable: false,
-            schema_editable: matches!(extension.as_str(), "ytyp" | "ydd" | "ytd" | "nemat" | "yft"),
-            write_back_available: matches!(extension.as_str(), "ytyp" | "ydd" | "ytd" | "nemat" | "yft"),
-            writer_capability: if matches!(extension.as_str(), "ytyp" | "ydd" | "ytd" | "nemat" | "yft") {
+            schema_editable: matches!(extension.as_str(), "ytyp" | "ydd" | "ytd" | "nemat" | "neftd"),
+            write_back_available: matches!(extension.as_str(), "ytyp" | "ydd" | "ytd" | "nemat" | "neftd"),
+            writer_capability: if matches!(extension.as_str(), "ytyp" | "ydd" | "ytd" | "nemat" | "neftd") {
                 newengine_assets_api::ASSETS_PACKAGE_WRITER_CAPABILITY_ID.to_owned()
             } else {
                 String::new()
             },
             inspect_contract: format!("asset.inspect.{extension}.v1"),
-            edit_contract: if matches!(extension.as_str(), "ytyp" | "ydd" | "ytd" | "nemat" | "yft") {
+            edit_contract: if matches!(extension.as_str(), "ytyp" | "ydd" | "ytd" | "nemat" | "neftd") {
                 format!("asset.edit.{extension}.v1")
             } else {
                 String::new()
@@ -220,14 +220,14 @@ pub mod yfd {
     pub const CONSUMER_DOMAINS: &[&str] = &["engine.assets.models.skeletons", "engine.assets.models", "engine.scene", "engine.render"];
 }
 
-pub mod yft {
-    pub const EXTENSION: &str = "yft";
+pub mod neftd {
+    pub const EXTENSION: &str = "neftd";
     pub const ASSET_KIND: &str = "font_dictionary";
-    pub const CONTENT_KIND: u32 = newengine_assets_api::LIST_FILE_CONTENT_KIND_YFT;
+    pub const CONTENT_KIND: u32 = newengine_assets_api::LIST_FILE_CONTENT_KIND_NEFTD;
     pub const PURPOSE: &str = "Font Dictionary / Typeface Family";
     pub const SEMANTIC_GATEWAY: &str = "engine.ui.text";
-    pub const HANDLER_SERVICE: &str = "asset.codec.listfile.yft";
-    pub const SELECTOR_SYNTAX: &str = "file.yft@font_face";
+    pub const HANDLER_SERVICE: &str = "asset.codec.listfile.neftd";
+    pub const SELECTOR_SYNTAX: &str = "file.neftd@font_face";
     pub const CONSUMER_DOMAINS: &[&str] = &["engine.ui.text", "engine.ui", "engine.assets.ui", "engine.render", "engine.editor"];
 }
 
@@ -321,13 +321,13 @@ pub mod ytf {
 
 pub mod ytyp {
     pub const EXTENSION: &str = "ytyp";
-    pub const ASSET_KIND: &str = "archetype_dictionary";
+    pub const ASSET_KIND: &str = "generic_metadata_dictionary";
     pub const CONTENT_KIND: u32 = newengine_assets_api::LIST_FILE_CONTENT_KIND_YTYP;
-    pub const PURPOSE: &str = "Archetype Definition Dictionary";
-    pub const SEMANTIC_GATEWAY: &str = "engine.world";
+    pub const PURPOSE: &str = "Generic XML Metadata Dictionary";
+    pub const SEMANTIC_GATEWAY: &str = "engine.assets.metadata";
     pub const HANDLER_SERVICE: &str = "asset.codec.listfile.ytyp";
-    pub const SELECTOR_SYNTAX: &str = "file.ytyp@definition_entry";
-    pub const CONSUMER_DOMAINS: &[&str] = &["engine.world", "engine.scene", "engine.model", "engine.materials", "engine.physics", "engine.ai", "engine.editor", "engine.streaming"];
+    pub const SELECTOR_SYNTAX: &str = "file.ytyp@metadata_entry";
+    pub const CONSUMER_DOMAINS: &[&str] = &["engine.assets.metadata", "engine.assets.graph", "engine.scene", "engine.model", "engine.materials", "engine.physics", "engine.ai", "engine.editor", "engine.streaming", "engine.ui"];
 }
 
 pub mod yvr {
@@ -364,7 +364,7 @@ pub fn specs() -> &'static [Nef8FormatSpec] {
         Nef8FormatSpec { extension: ydr::EXTENSION, asset_kind: ydr::ASSET_KIND, content_kind: Some(ydr::CONTENT_KIND), semantic_gateway: ydr::SEMANTIC_GATEWAY, handler_service: ydr::HANDLER_SERVICE, selector_syntax: Some(ydr::SELECTOR_SYNTAX), purpose: ydr::PURPOSE, consumer_domains: ydr::CONSUMER_DOMAINS },
         Nef8FormatSpec { extension: yed::EXTENSION, asset_kind: yed::ASSET_KIND, content_kind: Some(yed::CONTENT_KIND), semantic_gateway: yed::SEMANTIC_GATEWAY, handler_service: yed::HANDLER_SERVICE, selector_syntax: Some(yed::SELECTOR_SYNTAX), purpose: yed::PURPOSE, consumer_domains: yed::CONSUMER_DOMAINS },
         Nef8FormatSpec { extension: yfd::EXTENSION, asset_kind: yfd::ASSET_KIND, content_kind: Some(yfd::CONTENT_KIND), semantic_gateway: yfd::SEMANTIC_GATEWAY, handler_service: yfd::HANDLER_SERVICE, selector_syntax: Some(yfd::SELECTOR_SYNTAX), purpose: yfd::PURPOSE, consumer_domains: yfd::CONSUMER_DOMAINS },
-        Nef8FormatSpec { extension: yft::EXTENSION, asset_kind: yft::ASSET_KIND, content_kind: Some(yft::CONTENT_KIND), semantic_gateway: yft::SEMANTIC_GATEWAY, handler_service: yft::HANDLER_SERVICE, selector_syntax: Some(yft::SELECTOR_SYNTAX), purpose: yft::PURPOSE, consumer_domains: yft::CONSUMER_DOMAINS },
+        Nef8FormatSpec { extension: neftd::EXTENSION, asset_kind: neftd::ASSET_KIND, content_kind: Some(neftd::CONTENT_KIND), semantic_gateway: neftd::SEMANTIC_GATEWAY, handler_service: neftd::HANDLER_SERVICE, selector_syntax: Some(neftd::SELECTOR_SYNTAX), purpose: neftd::PURPOSE, consumer_domains: neftd::CONSUMER_DOMAINS },
         Nef8FormatSpec { extension: yld::EXTENSION, asset_kind: yld::ASSET_KIND, content_kind: Some(yld::CONTENT_KIND), semantic_gateway: yld::SEMANTIC_GATEWAY, handler_service: yld::HANDLER_SERVICE, selector_syntax: Some(yld::SELECTOR_SYNTAX), purpose: yld::PURPOSE, consumer_domains: yld::CONSUMER_DOMAINS },
         Nef8FormatSpec { extension: ymap::EXTENSION, asset_kind: ymap::ASSET_KIND, content_kind: Some(ymap::CONTENT_KIND), semantic_gateway: ymap::SEMANTIC_GATEWAY, handler_service: ymap::HANDLER_SERVICE, selector_syntax: Some(ymap::SELECTOR_SYNTAX), purpose: ymap::PURPOSE, consumer_domains: ymap::CONSUMER_DOMAINS },
         Nef8FormatSpec { extension: ymf::EXTENSION, asset_kind: ymf::ASSET_KIND, content_kind: Some(ymf::CONTENT_KIND), semantic_gateway: ymf::SEMANTIC_GATEWAY, handler_service: ymf::HANDLER_SERVICE, selector_syntax: Some(ymf::SELECTOR_SYNTAX), purpose: ymf::PURPOSE, consumer_domains: ymf::CONSUMER_DOMAINS },

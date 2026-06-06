@@ -37,12 +37,23 @@ const OUTPUT_LOG_NEUI_REF: &str = "assets/ui/editor/output_log.neui@surface";
 const PROFILER_DIAGNOSTICS_NEUI_REF: &str = "assets/ui/editor/profiler_diagnostics.neui@surface";
 const VIEWPORT_GIZMOS_NEUI_REF: &str = "assets/ui/editor/viewport_gizmos.neui@surface";
 
-// Keep screen_profile.rs as the ownership index only. Large editor-shell code lives
-// in same-scope include parts so private constants/types stay local while the
-// large-module gate can track owner-sized files.
-include!("screen_profile_parts/types.rs");
-include!("screen_profile_parts/state.rs");
-include!("screen_profile_parts/helpers.rs");
-include!("screen_profile_parts/profiles.rs");
-include!("screen_profile_parts/components.rs");
-include!("screen_profile_parts/panels_and_tests.rs");
+#[path = "screen_profile_parts/types.rs"]
+mod types;
+#[path = "screen_profile_parts/helpers.rs"]
+mod helpers;
+#[path = "screen_profile_parts/panels_and_tests.rs"]
+mod panels_and_tests;
+#[path = "screen_profile_parts/components.rs"]
+mod components;
+#[path = "screen_profile_parts/profiles.rs"]
+mod profiles;
+#[path = "screen_profile_parts/state.rs"]
+mod state;
+
+use self::components::*;
+use self::helpers::*;
+use self::panels_and_tests::*;
+use self::profiles::*;
+use self::types::*;
+
+pub(crate) use self::types::ScreenProfileRuntimeState;

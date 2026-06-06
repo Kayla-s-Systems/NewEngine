@@ -134,7 +134,7 @@ pub(super) fn partition_slots_by_resilient_plan<E: Send + 'static>(
             .take()
             .unwrap_or_else(|| "disabled".to_string());
         slot.disable(reason.clone());
-        log::warn!("engine: module disabled: {} ({})", slot.id(), reason);
+        newengine_ulog_api::ulog::warn!("engine: module disabled: {} ({})", slot.id(), reason);
         new_slots.push(slot);
     }
 
@@ -159,7 +159,7 @@ fn index_modules_resilient<E: Send + 'static>(modules: &[ModuleSlot<E>]) -> Hash
     for (i, slot) in modules.iter().enumerate() {
         let id = slot.id();
         if id_to_index.insert(id, i).is_some() {
-            log::error!("engine: duplicate module id: {}", id);
+            newengine_ulog_api::ulog::error!("engine: duplicate module id: {}", id);
         }
     }
     id_to_index

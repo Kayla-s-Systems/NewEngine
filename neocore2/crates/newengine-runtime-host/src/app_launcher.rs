@@ -7,6 +7,9 @@
 //! gateway/module registration, asset bootstrap, platform discovery and host
 //! runtime execution in their binary entrypoint.
 
+mod boot_options;
+pub use boot_options::RuntimeHostBootOption;
+
 use std::{
     fmt,
     io::Write,
@@ -19,6 +22,7 @@ use std::{
 };
 
 use abi_stable::std_types::{ROption, RString};
+use boot_options::{apply_declared_boot_options_env, boot_option_enabled};
 use newengine_assets::AssetServiceClient;
 use newengine_core::{
     ConfigPaths, Engine, EngineError, EngineResult, StartupConfig, StartupLoader,
@@ -26,12 +30,12 @@ use newengine_core::{
 use newengine_ui::{UiBuildFn, UiProviderKind};
 
 use crate::{
-    headless_cli::HeadlessCliRuntime,
     asset_bootstrap::{
         collect_app_asset_roots, mount_asset_roots_best_effort, shard_log_path_by_run_id,
         try_load_window_icon_best_effort,
     },
     engine_factory::{build_engine_from_startup, ui_provider_kind_from_startup},
+    headless_cli::HeadlessCliRuntime,
     path_display::display_abs_path,
     platform_runtime::{
         detect_platform_runtime_path, resolve_platform_runtime_config, HostPlatformRuntime,
@@ -84,6 +88,11 @@ pub trait RuntimeHostAppProfile {
         engine: &mut Engine<()>,
         startup: &StartupConfig,
     ) -> EngineResult<()>;
+
+    #[inline]
+    fn boot_options(&self) -> Option<&'static [RuntimeHostBootOption]> {
+        None
+    }
 
     #[inline]
     fn register_engine_provider_routes_best_effort(&self) {}
@@ -146,13 +155,13 @@ where
                 ));
                 let report = newengine_core::EngineErrorReporter::report_fatal_engine_error(&e);
                 match report {
-                    Some(path) => log::error!(
+                    Some(path) => newengine_ulog_api::ulog::error!(
                         "{} launcher fatal: {} | crash_report='{}'",
                         self.spec.app_name,
                         e,
                         path.display()
                     ),
-                    None => log::error!("{} launcher fatal: {e}", self.spec.app_name),
+                    None => newengine_ulog_api::ulog::error!("{} launcher fatal: {e}", self.spec.app_name),
                 }
                 eprintln!("Error: {e}");
                 std::process::exit(1);
@@ -164,6 +173,14 @@ where
         self.early_log(format_args!("run.begin app={}", self.spec.app_name));
         let run_id = newengine_core::init_run_id().to_owned();
         self.early_log(format_args!("run_id.init.ok run_id={}", run_id));
+        newengine_ulog_api::ulog::info_event!(
+            "engine.startup.run_id",
+            "Run ID initialized",
+            {
+                "app_name": self.spec.app_name,
+                "run_id": run_id.as_str()
+            }
+        );
         newengine_core::crash::record_breadcrumb(format!(
             "{} launcher: run start run_id={}",
             self.spec.app_name, run_id
@@ -171,6 +188,8 @@ where
 
         std::env::set_var("NEWENGINE_RUN_ID", &run_id);
         self.spec.apply_env_defaults();
+        let boot_options = self.profile.boot_options();
+        apply_declared_boot_options_env(self.spec.app_name, boot_options);
 
         self.install_error_reporter();
 
@@ -187,31 +206,26 @@ where
 
         let mut engine = self.build_engine(&startup)?;
         self.profile.register_modules(&mut engine, &startup)?;
-        engine.preload_bootstrap_plugins()?;
+        if boot_option_enabled(boot_options, RuntimeHostBootOption::RuntimePlugins) {
+            engine.preload_bootstrap_plugins()?;
+        }
 
         self.profile.register_engine_provider_routes_best_effort();
         self.profile.bootstrap_content_best_effort();
         newengine_core::crash::record_breadcrumb(format!(
-            "{} launcher: profile registered and bootstrap plugins preloaded",
+            "{} launcher: profile registered and bootstrap plugin phase evaluated",
             self.spec.app_name
         ));
 
         let assets = AssetServiceClient::new(newengine_plugin_host::default_host_api());
-        let assets_available =
-            newengine_core::has_engine_gateway_route(newengine_assets_api::ENGINE_ASSET_SERVICE_ID);
+        let assets_available = false;
 
         if assets_available {
             mount_asset_roots_best_effort(&assets, &asset_roots);
-        } else {
-            log::info!(
-                "{} launcher: AssetManager service '{}' is not available during platform init; loading assets will retry after services are live",
-                self.spec.app_name,
-                newengine_assets_api::ENGINE_ASSET_SERVICE_ID
-            );
         }
 
         if self.headless_mode_requested() {
-            log::warn!(
+            newengine_ulog_api::ulog::warn!(
                 "{} launcher: headless mode requested; skipping platform runtime discovery and entering CLI host",
                 self.spec.app_name
             );
@@ -219,13 +233,14 @@ where
                 "{} launcher: explicit headless mode requested",
                 self.spec.app_name
             ));
-            return HeadlessCliRuntime::new(engine, self.spec.fixed_dt_ms).run("NEWENGINE_HEADLESS requested");
+            return HeadlessCliRuntime::new(engine, self.spec.fixed_dt_ms)
+                .run("NEWENGINE_HEADLESS requested");
         }
 
         let runtime_path = match self.detect_platform_runtime(&startup) {
             Ok(path) => path,
             Err(err) if self.platform_missing_can_fallback_to_headless(&err) => {
-                log::warn!(
+                newengine_ulog_api::ulog::warn!(
                     "{} launcher: platform runtime unavailable; falling back to headless CLI mode: {}",
                     self.spec.app_name,
                     err
@@ -241,7 +256,7 @@ where
         let mut resolved_platform = match self.resolve_platform_runtime(&startup, &runtime_path) {
             Ok(resolved) => resolved,
             Err(err) if self.platform_missing_can_fallback_to_headless(&err) => {
-                log::warn!(
+                newengine_ulog_api::ulog::warn!(
                     "{} launcher: platform runtime could not be resolved; falling back to headless CLI mode: {}",
                     self.spec.app_name,
                     err
@@ -255,7 +270,7 @@ where
             Err(err) => return Err(err),
         };
 
-        log::info!(
+        newengine_ulog_api::ulog::info!(
             "{} launcher: platform runtime plugin id='{}' path='{}'",
             self.spec.app_name,
             resolved_platform.plugin_id,
@@ -292,7 +307,7 @@ where
         runtime.run(&runtime_path, &resolved_platform)?;
         self.early_log(format_args!("runtime.run.returned"));
 
-        log::info!("{} stopped", self.spec.app_name);
+        newengine_ulog_api::ulog::info!("{} stopped", self.spec.app_name);
         Ok(())
     }
 
@@ -317,9 +332,6 @@ where
             "startup.load.begin path={}",
             self.spec.startup_config_path
         ));
-        // StartUpWindow is a core-owned PreStart gate. Do not run the legacy
-        // runtime-host adapter here: StartupLoader::load_json() presents the
-        // window by default and then consumes the canonical config.json.
         let (startup, _report) = StartupLoader::load_json(&paths)?;
         self.early_log(format_args!(
             "startup.load.ok modules_dir={} cache_files={} config={}",
@@ -433,6 +445,36 @@ where
             .duration_since(UNIX_EPOCH)
             .map(|d| d.as_millis())
             .unwrap_or(0);
+        let message = args.to_string();
+        let payload = serde_json::json!({
+            "schema": "northstar.ulog.event.v1",
+            "timestamp_utc": format!("{}.{}Z", now_ms / 1000, now_ms % 1000),
+            "level": "DEBUG",
+            "event_id": "engine.runtime_host.early",
+            "message": message,
+            "source": {
+                "kind": "engine",
+                "name": "newengine-runtime-host"
+            },
+            "context": {
+                "run_id": null,
+                "session_id": null
+            },
+            "location": {
+                "module": "newengine_runtime_host::app_launcher",
+                "file": null,
+                "line": null
+            },
+            "fields": {
+                "app_name": self.spec.app_name,
+                "early_source": self.spec.early_log_file_name,
+                "sequence": seq
+            }
+        });
+        let line = match serde_json::to_string(&payload) {
+            Ok(line) => line,
+            Err(_) => return,
+        };
 
         for path in self.early_log_path_candidates() {
             if let Some(parent) = path.parent() {
@@ -445,7 +487,7 @@ where
             else {
                 continue;
             };
-            let _ = writeln!(file, "[{now_ms}] [{seq:06}] {args}");
+            let _ = writeln!(file, "{line}");
             let _ = file.flush();
             return;
         }
@@ -454,7 +496,7 @@ where
     fn early_log_path_candidates(&self) -> Vec<PathBuf> {
         vec![cache_root_from_env_or_neocore2()
             .join("logs")
-            .join(self.spec.early_log_file_name)]
+            .join("current.ulog.ndjson")]
     }
 }
 

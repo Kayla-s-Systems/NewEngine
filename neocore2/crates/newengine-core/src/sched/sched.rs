@@ -241,7 +241,7 @@ impl Scheduler {
 
             if result.is_err() {
                 self.stats[idx].panicked = self.stats[idx].panicked.saturating_add(1);
-                log::error!(
+                newengine_ulog_api::ulog::error!(
                     "scheduler: task panicked phase='{}' label='{}'",
                     phase.as_str(),
                     label

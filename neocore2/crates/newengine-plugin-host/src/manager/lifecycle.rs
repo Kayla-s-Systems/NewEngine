@@ -26,6 +26,39 @@ impl PluginManager {
         self.loaded.iter().map(|p| p.module.module_ref())
     }
 
+    fn emit_provider_shutdown_started(&self, id: &str, reason: &str) {
+        let host = crate::host_api::default_host_api();
+        crate::ulog_event::emit_ulog_event(
+            &host,
+            "engine.provider.shutdown.started",
+            "INFO",
+            "Provider shutdown started",
+            serde_json::json!({ "provider_id": id, "reason": reason }),
+        );
+    }
+
+    fn emit_provider_shutdown_completed(&self, id: &str, reason: &str, elapsed_ms: f64) {
+        let host = crate::host_api::default_host_api();
+        crate::ulog_event::emit_ulog_event(
+            &host,
+            "engine.provider.shutdown.completed",
+            "INFO",
+            "Provider shutdown completed",
+            serde_json::json!({ "provider_id": id, "reason": reason, "elapsed_ms": elapsed_ms }),
+        );
+    }
+
+    fn emit_provider_shutdown_failed(&self, id: &str, reason: &str, elapsed_ms: f64, error: &str) {
+        let host = crate::host_api::default_host_api();
+        crate::ulog_event::emit_ulog_event(
+            &host,
+            "engine.provider.shutdown.failed",
+            "ERROR",
+            "Provider shutdown failed",
+            serde_json::json!({ "provider_id": id, "reason": reason, "elapsed_ms": elapsed_ms, "error": error }),
+        );
+    }
+
     pub fn start_all(&mut self) -> Result<(), String> {
         for i in 0..self.loaded.len() {
             if self.loaded[i].state != PluginState::Registered {
@@ -47,7 +80,7 @@ impl PluginManager {
 
         let id = self.loaded[idx].info.id.to_string();
         let started = Instant::now();
-        log::info!("plugins: start begin id='{}'", id);
+        newengine_ulog_api::ulog::info!("plugins: start begin id='{}'", id);
 
         // Startup must never depend on synchronous diagnostics/event-sink work.
         // `start` is the transition that runs immediately after loading
@@ -65,18 +98,18 @@ impl PluginManager {
                 if idx < self.loaded.len() && self.loaded[idx].state == PluginState::Registered {
                     self.loaded[idx].state = PluginState::Running;
                 }
-                log::info!(
+                newengine_ulog_api::ulog::info!(
                     "plugins: start complete id='{}' elapsed_ms={:.3}",
                     id,
                     crate::diagnostics::elapsed_ms(started)
                 );
             }
             Ok(Err(e)) => {
-                log::error!("plugins: start failed id='{}': {}", id, e);
+                newengine_ulog_api::ulog::error!("plugins: start failed id='{}': {}", id, e);
                 self.disable_plugin(idx, &id, format!("op 'start' failed: {e}"));
             }
             Err(_) => {
-                log::error!("plugins: panic during start id='{}' (plugin disabled)", id);
+                newengine_ulog_api::ulog::error!("plugins: panic during start id='{}' (plugin disabled)", id);
                 self.disable_plugin(idx, &id, "panic during op 'start'".to_owned());
             }
         }
@@ -116,7 +149,7 @@ impl PluginManager {
 
     pub fn shutdown(&mut self) {
         let retain_libraries = !runtime_dll_unload_enabled();
-        log::info!(
+        newengine_ulog_api::ulog::info!(
             "plugins shutdown: begin count={} dll_policy='{}'",
             self.loaded.len(),
             if retain_libraries { "process_lifetime" } else { "unload" }
@@ -126,21 +159,21 @@ impl PluginManager {
 
         for i in (0..self.loaded.len()).rev() {
             let id = self.loaded[i].info.id.to_string();
-            log::info!("plugins shutdown: plugin begin id='{}'", id);
+            newengine_ulog_api::ulog::info!("plugins shutdown: plugin begin id='{}'", id);
             shutdown_services_by_owner(&id, "plugin-manager.shutdown");
             if call_module_shutdown {
-                log::debug!("plugins shutdown: module.shutdown begin id='{}'", id);
-                self.safe_shutdown_one(i);
-                log::debug!("plugins shutdown: module.shutdown complete id='{}'", id);
+                newengine_ulog_api::ulog::debug!("plugins shutdown: module.shutdown begin id='{}'", id);
+                self.safe_shutdown_one_reason(i, "plugin-manager.shutdown");
+                newengine_ulog_api::ulog::debug!("plugins shutdown: module.shutdown complete id='{}'", id);
             } else {
-                log::debug!(
+                newengine_ulog_api::ulog::debug!(
                     "plugins shutdown: module.shutdown disabled id='{}' reason='NEWENGINE_DISABLE_PLUGIN_MODULE_SHUTDOWN is set'",
                     id
                 );
             }
             self.loaded[i].state = PluginState::Stopped;
             unregister_by_owner(&id);
-            log::info!("plugins shutdown: plugin complete id='{}'", id);
+            newengine_ulog_api::ulog::info!("plugins shutdown: plugin complete id='{}'", id);
         }
 
         let loaded = std::mem::take(&mut self.loaded);
@@ -149,7 +182,7 @@ impl PluginManager {
         }
         self.loaded_ids.clear();
 
-        log::info!(
+        newengine_ulog_api::ulog::info!(
             "plugins shutdown: complete dll_policy='{}'",
             if retain_libraries { "process_lifetime" } else { "unload" }
         );
@@ -165,7 +198,7 @@ impl PluginManager {
         }
 
         shutdown_services_by_owner(id, "plugin-manager.stop_by_id");
-        self.safe_shutdown_one(idx);
+        self.safe_shutdown_one_reason(idx, "plugin-manager.stop_by_id");
         self.loaded[idx].state = PluginState::Stopped;
         unregister_by_owner(id);
         true
@@ -219,7 +252,7 @@ impl PluginManager {
 
         let id = self.loaded[idx].info.id.to_string();
         shutdown_services_by_owner(&id, "plugin-manager.unload_at");
-        self.safe_shutdown_one(idx);
+        self.safe_shutdown_one_reason(idx, "plugin-manager.unload_at");
         unregister_by_owner(&id);
         self.loaded_ids.remove(&id);
         self.loaded.remove(idx);
@@ -254,7 +287,7 @@ impl PluginManager {
             Ok(Ok(())) => {
                 let elapsed_ms = crate::diagnostics::elapsed_ms(started);
                 if elapsed_ms >= 4.0 {
-                    log::debug!(
+                    newengine_ulog_api::ulog::debug!(
                         "plugins: lifecycle slow id='{}' op='{}' elapsed_ms={:.3}",
                         id,
                         op,
@@ -263,7 +296,7 @@ impl PluginManager {
                 }
             }
             Ok(Err(e)) => {
-                log::error!(
+                newengine_ulog_api::ulog::error!(
                     "plugins: op '{}' failed for id='{}' elapsed_ms={:.3}: {}",
                     op,
                     id,
@@ -273,7 +306,7 @@ impl PluginManager {
                 self.disable_plugin(idx, &id, format!("op '{op}' failed: {e}"));
             }
             Err(_) => {
-                log::error!(
+                newengine_ulog_api::ulog::error!(
                     "plugins: panic during op '{}' for id='{}' elapsed_ms={:.3} (plugin disabled)",
                     op,
                     id,
@@ -300,18 +333,31 @@ impl PluginManager {
         self.loaded[idx].disabled_reason = Some(reason);
 
         shutdown_services_by_owner(id, "plugin-manager.disable_plugin");
-        self.safe_shutdown_one(idx);
+        self.safe_shutdown_one_reason(idx, "plugin-manager.disable_plugin");
         unregister_by_owner(id);
     }
 
-    fn safe_shutdown_one(&mut self, idx: usize) {
+    fn safe_shutdown_one_reason(&mut self, idx: usize, reason: &str) -> bool {
         if idx >= self.loaded.len() {
-            return;
+            return false;
         }
 
         let id = self.loaded[idx].info.id.to_string();
-        let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        let started = Instant::now();
+        self.emit_provider_shutdown_started(&id, reason);
+        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
             with_current_plugin_id(&id, || self.loaded[idx].module.shutdown())
         }));
+        let elapsed_ms = crate::diagnostics::elapsed_ms(started);
+        match result {
+            Ok(()) => {
+                self.emit_provider_shutdown_completed(&id, reason, elapsed_ms);
+                true
+            }
+            Err(_) => {
+                self.emit_provider_shutdown_failed(&id, reason, elapsed_ms, "panic during module.shutdown");
+                false
+            }
+        }
     }
 }

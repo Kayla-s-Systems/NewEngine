@@ -12,7 +12,7 @@ pub(super) fn submit_frame_envelope(
     let graph_label = frame.label.clone().unwrap_or_else(|| "<unnamed>".to_owned());
     let report = r.submit_frame(frame)?;
     if trace_frame {
-        log::debug!(
+        newengine_ulog_api::ulog::debug!(
             "render frame envelope: submitted graph='{}' passes={} executed_native={} skipped_native={} barriers(raw={}, war={}, waw={})",
             graph_label,
             report.compile.pass_count,
@@ -45,7 +45,7 @@ pub(super) fn submit_frame_envelope(
                 })
                 .collect::<Vec<_>>()
                 .join(", ");
-            log::debug!("render frame envelope: draw-list replay stats [{}]", draw_lists);
+            newengine_ulog_api::ulog::debug!("render frame envelope: draw-list replay stats [{}]", draw_lists);
         }
     }
     Ok(report)

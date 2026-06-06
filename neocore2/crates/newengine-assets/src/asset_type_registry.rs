@@ -136,7 +136,7 @@ impl AssetTypeRegistryState {
 
 fn warn_if_semantic_gateway_unresolved(desc: &AssetFileTypeDescriptor) {
     if !newengine_service_api::is_engine_service_gateway_id(&desc.semantic_gateway) {
-        log::warn!(
+        newengine_ulog_api::ulog::warn!(
             "asset type registry: invalid semantic_gateway='{}' extension='.{}' asset_kind='{}'; descriptors must target an engine.* gateway",
             desc.semantic_gateway,
             desc.extension,
@@ -147,7 +147,7 @@ fn warn_if_semantic_gateway_unresolved(desc: &AssetFileTypeDescriptor) {
 
     let is_byte_bucket_only = desc.semantic_gateway == newengine_assets_api::ENGINE_ASSET_SERVICE_ID;
     if is_byte_bucket_only && !desc.is_container_codec() {
-        log::warn!(
+        newengine_ulog_api::ulog::warn!(
             "asset type registry: semantic_gateway fell back to engine.assets for non-container extension='.{}' asset_kind='{}'; this is a byte-owner only fallback and must be replaced by a real domain gateway",
             desc.extension,
             desc.asset_kind
@@ -166,7 +166,7 @@ pub fn register_asset_type_descriptor_best_effort(
     let payload = match serde_json::to_vec(&AssetFileTypeRegisterRequest { descriptor }) {
         Ok(payload) => payload,
         Err(e) => {
-            log::warn!("asset type registry: failed to serialize descriptor registration: {e}");
+            newengine_ulog_api::ulog::warn!("asset type registry: failed to serialize descriptor registration: {e}");
             return false;
         }
     };
@@ -178,7 +178,7 @@ pub fn register_asset_type_descriptor_best_effort(
     match result.into_result() {
         Ok(_) => true,
         Err(e) => {
-            log::warn!("asset type registry: descriptor self-registration failed: {e}");
+            newengine_ulog_api::ulog::warn!("asset type registry: descriptor self-registration failed: {e}");
             false
         }
     }

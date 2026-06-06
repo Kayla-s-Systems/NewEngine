@@ -87,6 +87,28 @@ dependencies = [
 ]
 
 [[package]]
+name = "aurelia-ui-test"
+version = "0.1.0"
+dependencies = [
+ "log",
+ "newengine-assets",
+ "newengine-assets-api",
+ "newengine-assets-ui-runtime",
+ "newengine-core",
+ "newengine-engine-runtime",
+ "newengine-plugin-host",
+ "newengine-render-ui-bridge",
+ "newengine-runtime-host",
+ "newengine-scene",
+ "newengine-scene-runtime",
+ "newengine-ui",
+ "newengine-ui-api",
+ "newengine-ulog-api",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "base64"
 version = "0.22.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -439,6 +461,7 @@ dependencies = [
  "newengine-schema-api",
  "newengine-service-api",
  "newengine-service-kit",
+ "newengine-ulog-api",
  "serde",
  "serde_json",
 ]
@@ -452,6 +475,7 @@ dependencies = [
  "newengine-plugin-api",
  "newengine-schema-api",
  "newengine-service-api",
+ "newengine-ulog-api",
  "serde",
  "serde_json",
 ]
@@ -470,6 +494,7 @@ dependencies = [
  "newengine-plugin-api",
  "newengine-plugin-host",
  "newengine-ui-api",
+ "newengine-ulog-api",
  "serde_json",
 ]
 
@@ -557,6 +582,7 @@ dependencies = [
  "newengine-sim",
  "newengine-transform",
  "newengine-transform-api",
+ "newengine-ulog-api",
 ]
 
 [[package]]
@@ -587,6 +613,7 @@ dependencies = [
  "newengine-time-api",
  "newengine-ui-api",
  "newengine-ui-draw",
+ "newengine-ulog-api",
  "newengine-world-api",
  "parking_lot",
  "raw-window-handle",
@@ -644,6 +671,7 @@ dependencies = [
  "newengine-scene-runtime",
  "newengine-service-api",
  "newengine-service-kit",
+ "newengine-ulog-api",
  "serde_json",
 ]
 
@@ -704,6 +732,7 @@ dependencies = [
  "newengine-ui",
  "newengine-ui-api",
  "newengine-ui-navigation-api",
+ "newengine-ulog-api",
  "newengine-viewport",
  "newengine-world-environment-api",
  "parking_lot",
@@ -742,6 +771,7 @@ dependencies = [
  "newengine-scene-runtime",
  "newengine-service-api",
  "newengine-service-kit",
+ "newengine-ulog-api",
  "serde_json",
 ]
 
@@ -777,6 +807,7 @@ dependencies = [
  "newengine-time-runtime",
  "newengine-ui",
  "newengine-ui-api",
+ "newengine-ulog-api",
  "newengine-world-environment-runtime",
  "newengine-world-runtime",
 ]
@@ -841,6 +872,7 @@ dependencies = [
  "newengine-plugin-host",
  "newengine-service-api",
  "newengine-service-kit",
+ "newengine-ulog-api",
  "parking_lot",
  "serde_json",
 ]
@@ -914,6 +946,7 @@ dependencies = [
  "newengine-plugin-host",
  "newengine-primitives",
  "newengine-render-api",
+ "newengine-ulog-api",
  "serde",
  "serde_json",
 ]
@@ -934,6 +967,7 @@ dependencies = [
  "newengine-plugin-api",
  "newengine-service-api",
  "newengine-service-kit",
+ "newengine-ulog-api",
  "serde",
  "serde_json",
 ]
@@ -956,6 +990,7 @@ dependencies = [
  "fxhash",
  "hashbrown",
  "log",
+ "newengine-ulog-api",
  "once_cell",
  "parking_lot",
  "serde",
@@ -989,6 +1024,7 @@ dependencies = [
  "log",
  "newengine-math",
  "newengine-primitives",
+ "newengine-ulog-api",
  "serde",
 ]
 
@@ -1081,6 +1117,7 @@ dependencies = [
  "newengine-math",
  "newengine-plugin-api",
  "newengine-service-api",
+ "newengine-ulog-api",
  "serde",
  "serde_json",
 ]
@@ -1091,6 +1128,7 @@ version = "0.1.0"
 dependencies = [
  "abi_stable",
  "newengine-plugin-api",
+ "serde_json",
 ]
 
 [[package]]
@@ -1136,6 +1174,7 @@ dependencies = [
  "newengine-scene",
  "newengine-transform",
  "newengine-ui",
+ "newengine-ulog-api",
 ]
 
 [[package]]
@@ -1205,6 +1244,7 @@ dependencies = [
  "newengine-transform",
  "newengine-ui",
  "newengine-ui-api",
+ "newengine-ulog-api",
  "raw-window-handle",
  "serde",
  "serde_json",
@@ -1249,6 +1289,7 @@ dependencies = [
  "newengine-scene-io",
  "newengine-service-api",
  "newengine-service-kit",
+ "newengine-ulog-api",
  "newengine-world-api",
  "serde_json",
 ]
@@ -1319,6 +1360,7 @@ dependencies = [
  "newengine-plugin-api",
  "newengine-plugin-host",
  "newengine-service-api",
+ "newengine-ulog-api",
  "parking_lot",
  "serde",
  "serde_json",
@@ -1354,6 +1396,7 @@ dependencies = [
  "newengine-platform-api",
  "newengine-system-contracts",
  "newengine-ui",
+ "newengine-ulog-api",
  "parking_lot",
  "serde_json",
 ]
@@ -1411,6 +1454,7 @@ dependencies = [
  "newengine-service-api",
  "newengine-service-kit",
  "newengine-texture-container",
+ "newengine-ulog-api",
  "serde",
  "serde_json",
 ]
@@ -1435,6 +1479,7 @@ dependencies = [
  "newengine-service-api",
  "newengine-service-kit",
  "newengine-time-api",
+ "newengine-ulog-api",
  "parking_lot",
  "serde",
  "serde_json",
@@ -1509,6 +1554,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "newengine-ulog-api"
+version = "0.1.0"
+dependencies = [
+ "log",
+ "serde_json",
+]
+
+[[package]]
 name = "newengine-viewport"
 version = "0.1.0"
 dependencies = [
@@ -1551,6 +1604,7 @@ dependencies = [
  "newengine-plugin-host",
  "newengine-service-api",
  "newengine-service-kit",
+ "newengine-ulog-api",
  "newengine-world-api",
  "newengine-world-environment-api",
  "parking_lot",
@@ -1570,6 +1624,7 @@ dependencies = [
  "newengine-scene-runtime",
  "newengine-service-api",
  "newengine-service-kit",
+ "newengine-ulog-api",
  "newengine-world-api",
  "parking_lot",
  "serde_json",

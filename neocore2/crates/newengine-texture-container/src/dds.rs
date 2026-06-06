@@ -76,9 +76,15 @@ pub fn write_dds_runtime_mip_chain(width: u32, height: u32, format: &str, mips: 
             write_u32(&mut out, 0xff00_0000);
         }
         TexturePixelFormat::Bc1RgbaUnorm | TexturePixelFormat::Bc1RgbaSrgb => write_fourcc_pf(&mut out, *b"DXT1"),
+        TexturePixelFormat::Bc2RgbaUnorm => write_fourcc_pf(&mut out, *b"DXT3"),
+        TexturePixelFormat::Bc2RgbaSrgb => write_fourcc_pf(&mut out, *b"DX10"),
         TexturePixelFormat::Bc3RgbaUnorm | TexturePixelFormat::Bc3RgbaSrgb => write_fourcc_pf(&mut out, *b"DXT5"),
-        TexturePixelFormat::Bc5RgUnorm | TexturePixelFormat::Bc7RgbaUnorm | TexturePixelFormat::Bc7RgbaSrgb => {
-            // BC5/BC7 require DX10 header for unambiguous tooling import.
+        TexturePixelFormat::Bc5RgUnorm
+        | TexturePixelFormat::Bc6hUf16
+        | TexturePixelFormat::Bc6hSf16
+        | TexturePixelFormat::Bc7RgbaUnorm
+        | TexturePixelFormat::Bc7RgbaSrgb => {
+            // BC5/BC6/BC7 and sRGB BC2 require DX10 header for unambiguous tooling import.
             write_fourcc_pf(&mut out, *b"DX10");
         }
     }
@@ -91,7 +97,15 @@ pub fn write_dds_runtime_mip_chain(width: u32, height: u32, format: &str, mips: 
     write_u32(&mut out, 0);
     write_u32(&mut out, 0);
 
-    if matches!(pixel_format, TexturePixelFormat::Bc5RgUnorm | TexturePixelFormat::Bc7RgbaUnorm | TexturePixelFormat::Bc7RgbaSrgb) {
+    if matches!(
+        pixel_format,
+        TexturePixelFormat::Bc2RgbaSrgb
+            | TexturePixelFormat::Bc5RgUnorm
+            | TexturePixelFormat::Bc6hUf16
+            | TexturePixelFormat::Bc6hSf16
+            | TexturePixelFormat::Bc7RgbaUnorm
+            | TexturePixelFormat::Bc7RgbaSrgb
+    ) {
         write_u32(&mut out, dxgi_format(pixel_format));
         write_u32(&mut out, 3); // DDS_DIMENSION_TEXTURE2D
         write_u32(&mut out, 0);
@@ -128,7 +142,11 @@ fn pitch_or_linear_size(format: TexturePixelFormat, width: u32, height: u32) -> 
 #[inline]
 fn dxgi_format(format: TexturePixelFormat) -> u32 {
     match format {
+        TexturePixelFormat::Bc2RgbaUnorm => 74, // DXGI_FORMAT_BC2_UNORM
+        TexturePixelFormat::Bc2RgbaSrgb => 75, // DXGI_FORMAT_BC2_UNORM_SRGB
         TexturePixelFormat::Bc5RgUnorm => 83, // DXGI_FORMAT_BC5_UNORM
+        TexturePixelFormat::Bc6hUf16 => 95, // DXGI_FORMAT_BC6H_UF16
+        TexturePixelFormat::Bc6hSf16 => 96, // DXGI_FORMAT_BC6H_SF16
         TexturePixelFormat::Bc7RgbaUnorm => 98, // DXGI_FORMAT_BC7_UNORM
         TexturePixelFormat::Bc7RgbaSrgb => 99, // DXGI_FORMAT_BC7_UNORM_SRGB
         _ => 0,

@@ -4,9 +4,13 @@ pub const PIXEL_FORMAT_RGBA8_UNORM: &str = "RGBA8_UNORM";
 pub const PIXEL_FORMAT_RGBA8_SRGB: &str = "RGBA8_SRGB";
 pub const PIXEL_FORMAT_BC1_RGBA_UNORM: &str = "BC1_RGBA_UNORM";
 pub const PIXEL_FORMAT_BC1_RGBA_SRGB: &str = "BC1_RGBA_SRGB";
+pub const PIXEL_FORMAT_BC2_RGBA_UNORM: &str = "BC2_RGBA_UNORM";
+pub const PIXEL_FORMAT_BC2_RGBA_SRGB: &str = "BC2_RGBA_SRGB";
 pub const PIXEL_FORMAT_BC3_RGBA_UNORM: &str = "BC3_RGBA_UNORM";
 pub const PIXEL_FORMAT_BC3_RGBA_SRGB: &str = "BC3_RGBA_SRGB";
 pub const PIXEL_FORMAT_BC5_RG_UNORM: &str = "BC5_RG_UNORM";
+pub const PIXEL_FORMAT_BC6H_UF16: &str = "BC6H_UF16";
+pub const PIXEL_FORMAT_BC6H_SF16: &str = "BC6H_SF16";
 pub const PIXEL_FORMAT_BC7_RGBA_UNORM: &str = "BC7_RGBA_UNORM";
 pub const PIXEL_FORMAT_BC7_RGBA_SRGB: &str = "BC7_RGBA_SRGB";
 
@@ -16,9 +20,13 @@ pub enum TexturePixelFormat {
     Rgba8Srgb,
     Bc1RgbaUnorm,
     Bc1RgbaSrgb,
+    Bc2RgbaUnorm,
+    Bc2RgbaSrgb,
     Bc3RgbaUnorm,
     Bc3RgbaSrgb,
     Bc5RgUnorm,
+    Bc6hUf16,
+    Bc6hSf16,
     Bc7RgbaUnorm,
     Bc7RgbaSrgb,
 }
@@ -31,9 +39,13 @@ impl TexturePixelFormat {
             "RGBA8_SRGB" => Some(Self::Rgba8Srgb),
             "BC1_RGBA_UNORM" | "BC1_UNORM" | "BC1" => Some(Self::Bc1RgbaUnorm),
             "BC1_RGBA_SRGB" | "BC1_SRGB" => Some(Self::Bc1RgbaSrgb),
-            "BC3_RGBA_UNORM" | "BC3_UNORM" | "BC3" => Some(Self::Bc3RgbaUnorm),
+            "BC2_RGBA_UNORM" | "BC2_UNORM" | "BC2" | "DXT3" => Some(Self::Bc2RgbaUnorm),
+            "BC2_RGBA_SRGB" | "BC2_SRGB" => Some(Self::Bc2RgbaSrgb),
+            "BC3_RGBA_UNORM" | "BC3_UNORM" | "BC3" | "DXT5" => Some(Self::Bc3RgbaUnorm),
             "BC3_RGBA_SRGB" | "BC3_SRGB" => Some(Self::Bc3RgbaSrgb),
             "BC5_RG_UNORM" | "BC5_UNORM" | "BC5" => Some(Self::Bc5RgUnorm),
+            "BC6H_UF16" | "BC6H" | "BC6" => Some(Self::Bc6hUf16),
+            "BC6H_SF16" => Some(Self::Bc6hSf16),
             "BC7_RGBA_UNORM" | "BC7_UNORM" | "BC7" => Some(Self::Bc7RgbaUnorm),
             "BC7_RGBA_SRGB" | "BC7_SRGB" => Some(Self::Bc7RgbaSrgb),
             _ => None,
@@ -47,9 +59,13 @@ impl TexturePixelFormat {
             Self::Rgba8Srgb => PIXEL_FORMAT_RGBA8_SRGB,
             Self::Bc1RgbaUnorm => PIXEL_FORMAT_BC1_RGBA_UNORM,
             Self::Bc1RgbaSrgb => PIXEL_FORMAT_BC1_RGBA_SRGB,
+            Self::Bc2RgbaUnorm => PIXEL_FORMAT_BC2_RGBA_UNORM,
+            Self::Bc2RgbaSrgb => PIXEL_FORMAT_BC2_RGBA_SRGB,
             Self::Bc3RgbaUnorm => PIXEL_FORMAT_BC3_RGBA_UNORM,
             Self::Bc3RgbaSrgb => PIXEL_FORMAT_BC3_RGBA_SRGB,
             Self::Bc5RgUnorm => PIXEL_FORMAT_BC5_RG_UNORM,
+            Self::Bc6hUf16 => PIXEL_FORMAT_BC6H_UF16,
+            Self::Bc6hSf16 => PIXEL_FORMAT_BC6H_SF16,
             Self::Bc7RgbaUnorm => PIXEL_FORMAT_BC7_RGBA_UNORM,
             Self::Bc7RgbaSrgb => PIXEL_FORMAT_BC7_RGBA_SRGB,
         }
@@ -61,9 +77,13 @@ impl TexturePixelFormat {
             self,
             Self::Bc1RgbaUnorm
                 | Self::Bc1RgbaSrgb
+                | Self::Bc2RgbaUnorm
+                | Self::Bc2RgbaSrgb
                 | Self::Bc3RgbaUnorm
                 | Self::Bc3RgbaSrgb
                 | Self::Bc5RgUnorm
+                | Self::Bc6hUf16
+                | Self::Bc6hSf16
                 | Self::Bc7RgbaUnorm
                 | Self::Bc7RgbaSrgb
         )
@@ -76,7 +96,7 @@ impl TexturePixelFormat {
 
     #[inline]
     pub const fn is_srgb(self) -> bool {
-        matches!(self, Self::Rgba8Srgb | Self::Bc1RgbaSrgb | Self::Bc3RgbaSrgb | Self::Bc7RgbaSrgb)
+        matches!(self, Self::Rgba8Srgb | Self::Bc1RgbaSrgb | Self::Bc2RgbaSrgb | Self::Bc3RgbaSrgb | Self::Bc7RgbaSrgb)
     }
 
     #[inline]
@@ -84,7 +104,7 @@ impl TexturePixelFormat {
         match self {
             Self::Rgba8Unorm | Self::Rgba8Srgb => 4,
             Self::Bc1RgbaUnorm | Self::Bc1RgbaSrgb => 8,
-            Self::Bc3RgbaUnorm | Self::Bc3RgbaSrgb | Self::Bc5RgUnorm | Self::Bc7RgbaUnorm | Self::Bc7RgbaSrgb => 16,
+            Self::Bc2RgbaUnorm | Self::Bc2RgbaSrgb | Self::Bc3RgbaUnorm | Self::Bc3RgbaSrgb | Self::Bc5RgUnorm | Self::Bc6hUf16 | Self::Bc6hSf16 | Self::Bc7RgbaUnorm | Self::Bc7RgbaSrgb => 16,
         }
     }
 

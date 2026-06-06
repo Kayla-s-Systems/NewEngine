@@ -1,5 +1,4 @@
 #![forbid(unsafe_op_in_unsafe_fn)]
-
 use newengine_schema_api::SchemaBindingManifestV1;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;

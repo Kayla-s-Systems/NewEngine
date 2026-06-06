@@ -261,7 +261,7 @@ impl RenderUiNodeSurfaceState {
         self.document_last_attempt_frame = Some(frame_index);
         match document::try_load_primary_ui_document() {
             Ok(navigation) => {
-                log::info!(
+                newengine_ulog_api::ulog::info!(
                     "engine.ui.primary: compiled .neui UI surface available through engine.ui ref='{}'",
                     newengine_ui_navigation_api::ENGINE_PRIMARY_UI_SURFACE_REF
                 );
@@ -270,7 +270,7 @@ impl RenderUiNodeSurfaceState {
                 true
             }
             Err(err) => {
-                log::warn!(
+                newengine_ulog_api::ulog::warn!(
                     "engine.ui.primary: compiled .neui UI surface unavailable ref='{}' err='{}'",
                     newengine_ui_navigation_api::ENGINE_PRIMARY_UI_SURFACE_REF,
                     err

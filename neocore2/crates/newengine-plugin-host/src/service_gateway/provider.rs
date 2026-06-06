@@ -56,7 +56,7 @@ pub(crate) fn gateway_provider_service_id(
                 descriptor.id, gateway.gateway_id, service_id, gateway.backend_capability_id
             ),
             || {
-                log::warn!(
+                newengine_ulog_api::ulog::warn!(
                     "plugins: ignoring service gateway because contract service is not declared plugin='{}' engine_gateway='{}' contract='{}' capability='{}'",
                     descriptor.id,
                     gateway.gateway_id,
@@ -78,7 +78,7 @@ pub(crate) fn gateway_provider_service_id(
                     descriptor.id, gateway.gateway_id, gateway.backend_capability_id
                 ),
                 || {
-                    log::warn!(
+                    newengine_ulog_api::ulog::warn!(
                         "plugins: ignoring service gateway because provider declares no ServiceV1 plugin='{}' engine_gateway='{}' capability='{}'",
                         descriptor.id,
                         gateway.gateway_id,
@@ -96,7 +96,7 @@ pub(crate) fn gateway_provider_service_id(
                     descriptor.id, gateway.gateway_id, gateway.backend_capability_id, services_joined
                 ),
                 || {
-                    log::warn!(
+                    newengine_ulog_api::ulog::warn!(
                         "plugins: ignoring service gateway because provider declares multiple ServiceV1 entries without contract plugin='{}' engine_gateway='{}' capability='{}' services='{}'",
                         descriptor.id,
                         gateway.gateway_id,

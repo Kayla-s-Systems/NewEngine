@@ -1,6 +1,8 @@
 use std::collections::BTreeSet;
 
-use newengine_core::render::{Extent2D, RectI32, RenderApi, RenderGraphPassKind, Viewport};
+use newengine_core::render::{Extent2D, RectI32, RenderApi, RenderDrawListKind, RenderGraphPassKind, Viewport};
+use newengine_core::EngineResult;
+use newengine_render_feature_api::{RenderDrawListProvider, RuntimeVisibilityPlan, SceneExtractionCtx};
 use newengine_render_frame_graph::DrawListDesc;
 
 use crate::render_controller::RuntimeRenderController;
@@ -11,7 +13,7 @@ pub(crate) struct RuntimeDrawListSet {
 }
 
 impl RuntimeDrawListSet {
-    pub(super) fn extract(
+    pub(crate) fn extract(
         visibility: RuntimeVisibilityPlan,
         ctx: &SceneExtractionCtx<'_>,
         providers: &[&dyn RenderDrawListProvider],
@@ -28,7 +30,7 @@ impl RuntimeDrawListSet {
     }
 
     #[inline]
-    pub(super) fn descriptors(&self) -> Vec<DrawListDesc> {
+    pub(crate) fn descriptors(&self) -> Vec<DrawListDesc> {
         self.lists
             .iter()
             .map(|list| DrawListDesc::standard(list.kind))
@@ -45,7 +47,7 @@ impl RuntimeDrawListSet {
         self.lists.iter().any(|list| list.kind == kind)
     }
 
-    pub(super) fn record_pass_state(
+    pub(crate) fn record_pass_state(
         &self,
         ctx: &SceneExtractionCtx<'_>,
         out: &mut DrawListBuildCtx<'_>,
@@ -109,7 +111,7 @@ impl<'a> DrawListBuildCtx<'a> {
 
         let controller = &mut *self.controller;
         let render = &mut *self.render;
-        let value = super::record_draw_list(render, kind, |r| record(controller, r))?;
+        let value = super::super::record_draw_list(render, kind, |r| record(controller, r))?;
         Ok(Some(value))
     }
 
@@ -124,7 +126,7 @@ impl<'a> DrawListBuildCtx<'a> {
 
         let controller = &mut *self.controller;
         let render = &mut *self.render;
-        let value = super::record_render_phase(render, phase, |r| record(controller, r))?;
+        let value = super::super::record_render_phase(render, phase, |r| record(controller, r))?;
         Ok(Some(value))
     }
 }
@@ -138,7 +140,7 @@ impl<'a> newengine_render_feature_api::DrawListBuildCtx for DrawListBuildCtx<'a>
                     r.set_viewport(cascade.viewport)?;
                     r.set_scissor(cascade.scissor)?;
                     this.set_shadow_caster_cull(Some(cascade.caster_cull));
-                    super::passes::draw_procedural_terrain_shadow(
+                    super::super::passes::draw_procedural_terrain_shadow(
                         this,
                         r,
                         ctx.scene,
@@ -153,7 +155,7 @@ impl<'a> newengine_render_feature_api::DrawListBuildCtx for DrawListBuildCtx<'a>
         }
 
         let _ = self.record(RenderDrawListKind::ShadowCasters, |this, r| {
-            super::passes::draw_procedural_terrain_shadow(
+            super::super::passes::draw_procedural_terrain_shadow(
                 this,
                 r,
                 ctx.scene,
@@ -168,7 +170,7 @@ impl<'a> newengine_render_feature_api::DrawListBuildCtx for DrawListBuildCtx<'a>
 
     fn record_procedural_terrain_forward(&mut self, ctx: &SceneExtractionCtx<'_>) -> EngineResult<()> {
         let _ = self.record(RenderDrawListKind::OpaqueForward, |this, r| {
-            super::passes::draw_procedural_terrain(
+            super::super::passes::draw_procedural_terrain(
                 this,
                 r,
                 ctx.scene,
@@ -192,7 +194,7 @@ impl<'a> newengine_render_feature_api::DrawListBuildCtx for DrawListBuildCtx<'a>
                     r.set_viewport(cascade.viewport)?;
                     r.set_scissor(cascade.scissor)?;
                     this.set_shadow_caster_cull(Some(cascade.caster_cull));
-                    super::passes::draw_primitives_shadow(
+                    super::super::passes::draw_primitives_shadow(
                         this,
                         r,
                         ctx.scene,
@@ -208,7 +210,7 @@ impl<'a> newengine_render_feature_api::DrawListBuildCtx for DrawListBuildCtx<'a>
         }
 
         let _ = self.record(RenderDrawListKind::ShadowCasters, |this, r| {
-            super::passes::draw_primitives_shadow(
+            super::super::passes::draw_primitives_shadow(
                 this,
                 r,
                 ctx.scene,
@@ -224,7 +226,7 @@ impl<'a> newengine_render_feature_api::DrawListBuildCtx for DrawListBuildCtx<'a>
 
     fn record_primitive_mesh_forward(&mut self, ctx: &SceneExtractionCtx<'_>) -> EngineResult<()> {
         let _ = self.record(RenderDrawListKind::OpaqueForward, |this, r| {
-            super::passes::draw_primitives(
+            super::super::passes::draw_primitives(
                 this,
                 r,
                 ctx.scene,

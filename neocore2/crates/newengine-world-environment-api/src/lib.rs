@@ -6,7 +6,6 @@
 //! sky, celestial, atmosphere, weather, clouds, wind, lighting and gameplay
 //! modifiers as DTOs. Providers must not receive native ECS ids, `&mut World`,
 //! renderer handles or GPU history buffers.
-
 use abi_stable::std_types::RString;
 use newengine_plugin_api::{Blob, HostApiV1, MethodName};
 use newengine_time_api::TimeSnapshotV1;

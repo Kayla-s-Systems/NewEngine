@@ -16,7 +16,7 @@ thread_local! {
 
 #[inline]
 fn debug_no_recurse(args: std::fmt::Arguments<'_>) {
-    if !log::log_enabled!(log::Level::Debug) {
+    if !newengine_ulog_api::ulog::debug_enabled() {
         return;
     }
 
@@ -25,21 +25,21 @@ fn debug_no_recurse(args: std::fmt::Arguments<'_>) {
             return;
         }
         f.set(true);
-        log::debug!("{}", args);
+        newengine_ulog_api::ulog::debug!("{}", args);
         f.set(false);
     });
 }
 
 extern "C" fn host_log_info(s: RString) {
-    log::info!("{}", s);
+    newengine_ulog_api::ulog::info!("{}", s);
 }
 
 extern "C" fn host_log_warn(s: RString) {
-    log::warn!("{}", s);
+    newengine_ulog_api::ulog::warn!("{}", s);
 }
 
 extern "C" fn host_log_error(s: RString) {
-    log::error!("{}", s);
+    newengine_ulog_api::ulog::error!("{}", s);
 }
 
 pub fn host_register_service_impl(svc: ServiceV1Dyn<'static>) -> RResult<(), RString> {
@@ -60,10 +60,13 @@ pub fn host_register_service_impl(svc: ServiceV1Dyn<'static>) -> RResult<(), RSt
                 )));
             }
             None => {
-                log::warn!(
-                    "services: plugin has no descriptor; skipping capability validation plugin='{}' service='{}'",
-                    pid,
-                    service_id
+                newengine_ulog_api::ulog::warn_event!(
+                    "engine.services.descriptor_missing",
+                    "Plugin has no descriptor; skipping capability validation",
+                    {
+                        "plugin_id": pid,
+                        "service_id": service_id.as_str()
+                    }
                 );
             }
         }
@@ -161,20 +164,31 @@ pub extern "C" fn call_service_v1(
             crate::host_context::with_current_plugin_id(pid, do_call)
         }))
             .unwrap_or_else(|_| {
-                log::error!(
-                "services: call panicked id='{}' method='{}' owner='{}' (auto-unregister)",
-                id,
-                method,
-                pid
-            );
+                newengine_ulog_api::ulog::error_event!(
+                    "engine.services.call_panicked",
+                    "Service call panicked; auto-unregistering owner",
+                    {
+                        "service_id": id.as_str(),
+                        "requested_id": requested_id.as_str(),
+                        "method": method_string.as_str(),
+                        "owner": pid,
+                        "auto_unregister": true
+                    }
+                );
                 crate::host_context::unregister_by_owner(pid);
                 RResult::RErr(RString::from("service panicked"))
             }),
         None => catch_unwind(AssertUnwindSafe(do_call)).unwrap_or_else(|_| {
-            log::error!(
-                "services: call panicked id='{}' method='{}' owner=<host>",
-                id,
-                method
+            newengine_ulog_api::ulog::error_event!(
+                "engine.services.call_panicked",
+                "Host-owned service call panicked",
+                {
+                    "service_id": id.as_str(),
+                    "requested_id": requested_id.as_str(),
+                    "method": method_string.as_str(),
+                    "owner": "<host>",
+                    "auto_unregister": false
+                }
             );
             RResult::RErr(RString::from("service panicked"))
         }),
@@ -184,28 +198,34 @@ pub extern "C" fn call_service_v1(
     match &res {
         RResult::ROk(b) => {
             if elapsed_ms >= 8.0 {
-                log::debug!(
-                    "services: slow call id='{}' requested='{}' method='{}' owner='{}' payload_bytes={} output_bytes={} elapsed_ms={:.3}",
-                    id,
-                    requested_id,
-                    method_string,
-                    owner.as_deref().unwrap_or("<host>"),
-                    payload_len,
-                    b.len(),
-                    elapsed_ms
+                newengine_ulog_api::ulog::debug_event!(
+                    "engine.services.call_slow",
+                    "Slow service call",
+                    {
+                        "service_id": id.as_str(),
+                        "requested_id": requested_id.as_str(),
+                        "method": method_string.as_str(),
+                        "owner": owner.as_deref().unwrap_or("<host>"),
+                        "payload_bytes": payload_len,
+                        "output_bytes": b.len(),
+                        "elapsed_ms": elapsed_ms
+                    }
                 );
             }
         }
         RResult::RErr(e) => {
-            log::error!(
-                "services: call err id='{}' requested='{}' method='{}' owner='{}' payload_bytes={} elapsed_ms={:.3} err='{}'",
-                id,
-                requested_id,
-                method_string,
-                owner.as_deref().unwrap_or("<host>"),
-                payload_len,
-                elapsed_ms,
-                e
+            newengine_ulog_api::ulog::error_event!(
+                "engine.services.call_failed",
+                "Service call returned error",
+                {
+                    "service_id": id.as_str(),
+                    "requested_id": requested_id.as_str(),
+                    "method": method_string.as_str(),
+                    "owner": owner.as_deref().unwrap_or("<host>"),
+                    "payload_bytes": payload_len,
+                    "elapsed_ms": elapsed_ms,
+                    "error": e.to_string()
+                }
             );
             debug_no_recurse(format_args!(
                 "services: call err id='{}' method='{}' err='{}'",
@@ -235,6 +255,7 @@ extern "C" fn host_subscribe_events_v1(sink: EventSinkV1Dyn<'static>) -> RResult
 }
 
 pub fn default_host_api() -> HostApiV1 {
+    crate::ulog_event::install_structured_ulog_sink_once();
     HostApiV1 {
         log_info: host_log_info,
         log_warn: host_log_warn,

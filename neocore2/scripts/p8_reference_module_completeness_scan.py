@@ -124,12 +124,62 @@ def scan_reference_matrix_shape(matrix: dict) -> list[Finding]:
         "providers_receive_dtos_not_world",
         "runtime_apply_stages_own_mutation",
         "production_gaps_must_be_visible",
+        "all_dataset_archives_must_be_mapped",
     ):
         if policy.get(key) is not True:
             findings.append(Finding("ERROR", "reference-policy", rel(REFERENCE_MATRIX), f"policy.{key} must be true"))
     domains = matrix.get("domains")
     if not isinstance(domains, list) or not domains:
         findings.append(Finding("ERROR", "reference-matrix", rel(REFERENCE_MATRIX), "domains must be a non-empty list"))
+    archive_coverage = matrix.get("archive_coverage")
+    if not isinstance(archive_coverage, list) or not archive_coverage:
+        findings.append(Finding("ERROR", "reference-matrix", rel(REFERENCE_MATRIX), "archive_coverage must list every uploaded dataSet archive"))
+    return findings
+
+
+def scan_archive_coverage(matrix: dict) -> list[Finding]:
+    """Require every known dataSet archive to have an explicit parity status.
+
+    The source tree must not claim reference/dataSet completeness by checking only
+    a hand-picked subset. This gate keeps all uploaded archives visible while
+    still allowing honest `visible_gap` or `missing_gateway` states for systems
+    that have not reached production parity.
+    """
+
+    findings: list[Finding] = []
+    coverage = matrix.get("archive_coverage") or []
+    if not isinstance(coverage, list):
+        return findings
+
+    seen: set[str] = set()
+    valid_status = {"covered", "visible_gap", "missing_gateway", "external_reference"}
+    domain_archives = discover_reference_archives(matrix)
+
+    for idx, item in enumerate(coverage):
+        if not isinstance(item, dict):
+            findings.append(Finding("ERROR", "dataset-archive-coverage", rel(REFERENCE_MATRIX), f"archive_coverage[{idx}] must be an object"))
+            continue
+        archive = str(item.get("reference_archive", "")).strip()
+        if not archive:
+            findings.append(Finding("ERROR", "dataset-archive-coverage", rel(REFERENCE_MATRIX), f"archive_coverage[{idx}] missing reference_archive"))
+            continue
+        if archive in seen:
+            findings.append(Finding("ERROR", "dataset-archive-coverage", rel(REFERENCE_MATRIX), "duplicate archive coverage record", archive))
+        seen.add(archive)
+
+        systems = item.get("mapped_systems")
+        if not isinstance(systems, list) or not systems:
+            findings.append(Finding("ERROR", "dataset-archive-coverage", rel(REFERENCE_MATRIX), f"{archive} must name mapped_systems"))
+        status = str(item.get("northstar_status", "")).strip()
+        if status not in valid_status:
+            findings.append(Finding("ERROR", "dataset-archive-coverage", rel(REFERENCE_MATRIX), f"{archive} has invalid northstar_status", status))
+        if item.get("production_gaps_visible") is not True:
+            findings.append(Finding("ERROR", "dataset-archive-coverage", rel(REFERENCE_MATRIX), f"{archive} must keep production_gaps_visible=true"))
+        if status == "covered" and archive not in domain_archives:
+            findings.append(Finding("ERROR", "dataset-archive-coverage", rel(REFERENCE_MATRIX), f"{archive} cannot be 'covered' without a detailed domains[] contract record"))
+
+    for archive in sorted(domain_archives - seen):
+        findings.append(Finding("ERROR", "dataset-archive-coverage", rel(REFERENCE_MATRIX), "detailed domain archive missing from archive_coverage", archive))
     return findings
 
 
@@ -157,10 +207,6 @@ def scan_domain_routes(matrix: dict, members: set[str]) -> list[Finding]:
             findings.append(Finding("ERROR", "reference-domain", rel(REFERENCE_MATRIX), "duplicate reference archive", archive))
         seen_archives.add(archive)
 
-        # The matrix is declarative, not a hard-coded parity scoreboard. Archive
-        # size, buckets and production gap notes are documentation, not build gates.
-        # The build gate validates only declared North Star contracts: gateways,
-        # capabilities, conformance families, workspace coverage and source seams.
         for gateway in domain.get("northstar_gateways") or []:
             if gateway not in gateways:
                 findings.append(Finding("ERROR", "reference-gateway", rel(CAPABILITY_MATRIX), f"{archive} target gateway is not declared", str(gateway)))
@@ -185,6 +231,7 @@ def discover_reference_archives(matrix: dict) -> set[str]:
         for domain in matrix.get("domains") or []
         if isinstance(domain, dict) and str(domain.get("reference_archive", "")).strip()
     }
+
 
 def scan_source_tokens(matrix: dict) -> list[Finding]:
     findings: list[Finding] = []
@@ -237,6 +284,7 @@ def run_checks(*, strict_reference_parity: bool = False) -> list[Finding]:
     findings.extend(matrix_findings)
     if matrix:
         findings.extend(scan_reference_matrix_shape(matrix))
+        findings.extend(scan_archive_coverage(matrix))
         findings.extend(scan_domain_routes(matrix, members))
         findings.extend(scan_source_tokens(matrix))
     findings.extend(scan_tooling_wiring())
@@ -249,6 +297,15 @@ def run_checks(*, strict_reference_parity: bool = False) -> list[Finding]:
                     rel(REFERENCE_MATRIX),
                     f"{domain.get('reference_archive', 'reference')} declares production gaps",
                     "; ".join(map(str, (domain.get("production_gaps") or [])[:4])),
+                ))
+        for item in matrix.get("archive_coverage") or []:
+            if isinstance(item, dict) and item.get("northstar_status") != "covered":
+                findings.append(Finding(
+                    "ERROR",
+                    "dataset-parity-gap",
+                    rel(REFERENCE_MATRIX),
+                    f"{item.get('reference_archive', 'reference')} is not covered",
+                    str(item.get("northstar_status", "")),
                 ))
     return findings
 

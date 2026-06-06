@@ -111,7 +111,7 @@ impl RenderApi for ServiceBackedRenderApi {
 
     fn set_debug_text(&mut self, text: String) {
         if !text.trim().is_empty() {
-            log::warn!("engine.render: SetDebugText ignored; UI presentation must be published through engine.ui");
+            newengine_ulog_api::ulog::warn!("engine.render: SetDebugText ignored; UI presentation must be published through engine.ui");
         }
     }
 

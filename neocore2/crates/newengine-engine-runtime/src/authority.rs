@@ -171,7 +171,7 @@ impl RuntimeWorldAuthorityBridge {
         if !self.logged_bootstrap.swap(true, Ordering::Relaxed) {
             let snapshot = self.detect();
             let mode = Self::classify(&snapshot);
-            log::info!(
+            newengine_ulog_api::ulog::info!(
                 "world authority: bootstrap phase='{}' mode='{}' authority='{}' notes='{}'",
                 phase,
                 mode.as_str(),
@@ -215,7 +215,7 @@ impl RuntimeWorldAuthorityBridge {
         let spawn = match self.client.spawn_entities(EntitySpawnRequest { count }) {
             Ok(v) => v,
             Err(e) => {
-                log::warn!(
+                newengine_ulog_api::ulog::warn!(
                     "world authority: provider scene declaration failed phase='{}' authority='{}' native_entities={} err='{}'",
                     phase,
                     snapshot.authority_label(),
@@ -252,7 +252,7 @@ impl RuntimeWorldAuthorityBridge {
 
         if !commands.is_empty() {
             if let Err(e) = self.client.command(EcsCommandRequest { commands }) {
-                log::warn!(
+                newengine_ulog_api::ulog::warn!(
                     "world authority: provider semantic component declaration failed phase='{}' authority='{}' err='{}'",
                     phase,
                     snapshot.authority_label(),
@@ -268,7 +268,7 @@ impl RuntimeWorldAuthorityBridge {
             selected_provider,
         });
 
-        log::info!(
+        newengine_ulog_api::ulog::info!(
             "world authority: native scene cache declared phase='{}' authority='{}' native_entities={} provider_entities={} selected_provider={:?}",
             phase,
             snapshot.authority_label(),
@@ -285,7 +285,7 @@ impl RuntimeWorldAuthorityBridge {
             RuntimeWorldAuthorityMode::EngineRuntimeWorld => {}
             RuntimeWorldAuthorityMode::PluginEcsEntityAuthority => {
                 if !self.logged_plugin_authority.swap(true, Ordering::Relaxed) {
-                    log::info!(
+                    newengine_ulog_api::ulog::info!(
                         "world authority: plugin ECS/entity authority active owner='{}' phase='{}' native_world='component-cache' native_entities={} native_storages={}",
                         frame.route_snapshot.authority_label(),
                         frame.phase,
@@ -296,7 +296,7 @@ impl RuntimeWorldAuthorityBridge {
             }
             RuntimeWorldAuthorityMode::SplitAuthority => {
                 if !self.logged_split.swap(true, Ordering::Relaxed) {
-                    log::warn!(
+                    newengine_ulog_api::ulog::warn!(
                         "world authority: split authority detected phase='{}' authority='{}' native_world_entities={} notes='{}'",
                         frame.phase,
                         frame.route_snapshot.authority_label(),

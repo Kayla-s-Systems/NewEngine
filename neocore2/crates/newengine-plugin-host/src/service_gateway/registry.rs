@@ -352,7 +352,7 @@ impl ActiveGatewayRoute {
         policy: Option<&GatewayPolicyFact>,
     ) -> Option<Self> {
         if !route_gateway_matches_declared_kind(&gateway_id, &service_kind, &route_tags) {
-            log::warn!(
+            newengine_ulog_api::ulog::warn!(
                 "gateways: ignoring route with mixed domain levels gateway='{}' service_kind='{}' gateway_domain='{}' service='{}' owner='{}'",
                 gateway_id,
                 service_kind,
@@ -370,7 +370,7 @@ impl ActiveGatewayRoute {
             .unwrap_or(GatewayOverrideMode::Open);
 
         if !route_allowed_by_policy(override_mode, origin) {
-            log::warn!(
+            newengine_ulog_api::ulog::warn!(
                 "gateways: ignoring route blocked by override policy gateway='{}' service='{}' owner='{}' origin='{}' mode='{}' policy_owner='{}' tags='{}'",
                 gateway_id,
                 provider_service_id,
@@ -403,6 +403,13 @@ impl ActiveGatewayRoute {
 #[derive(Debug, Clone, Default)]
 pub(crate) struct ActiveGatewayRegistry {
     routes: Vec<ActiveGatewayRoute>,
+}
+
+#[derive(Debug, Clone, Default)]
+pub(crate) struct GatewayRouteDiagnostics {
+    pub(crate) gateway_id: String,
+    pub(crate) active_route: Option<ActiveGatewayRoute>,
+    pub(crate) shadowed_routes: Vec<ActiveGatewayRoute>,
 }
 
 impl ActiveGatewayRegistry {
@@ -438,7 +445,7 @@ impl ActiveGatewayRegistry {
                 });
                 if !registered {
                     skipped_unregistered += 1;
-                    log::trace!(
+                    newengine_ulog_api::ulog::trace!(
                         "gateways: plugin route skipped because service is not registered plugin='{}' gateway='{}' service='{}' capability='{}'",
                         descriptor_fact.plugin_id,
                         gateway.gateway_id,
@@ -472,7 +479,7 @@ impl ActiveGatewayRegistry {
             });
             if !registered {
                 skipped_unregistered += 1;
-                log::trace!(
+                newengine_ulog_api::ulog::trace!(
                     "gateways: engine-runtime route skipped because service is not registered gateway='{}' service='{}' owner='{}'",
                     gateway.gateway_id,
                     gateway.provider_service_id,
@@ -510,7 +517,7 @@ impl ActiveGatewayRegistry {
         });
 
         let registry = Self { routes };
-        log::debug!(
+        newengine_ulog_api::ulog::debug!(
             "gateways: registry rebuilt descriptors={} services={} host_routes={} policy_facts={} routes={} skipped_unregistered={}",
             descriptors.len(),
             services.len(),
@@ -520,10 +527,11 @@ impl ActiveGatewayRegistry {
             skipped_unregistered
         );
         for gateway_id in registry.gateway_ids() {
-            if let Some(route) = registry.resolve_route(&gateway_id) {
-                log::trace!(
-                    "gateways: active route gateway='{}' service='{}' provider_route='{}' owner='{}' kind='{}' origin='{}' mode='{}' prio={} score={} tags='{}'",
-                    route.gateway_id,
+            let diagnostics = registry.route_diagnostics(&gateway_id);
+            if let Some(route) = diagnostics.active_route.as_ref() {
+                newengine_ulog_api::ulog::trace!(
+                    "gateways: active route gateway='{}' service='{}' provider_route='{}' owner='{}' kind='{}' origin='{}' mode='{}' prio={} score={} tags='{}' shadowed={}",
+                    diagnostics.gateway_id,
                     route.provider_service_id,
                     route.provider_route_id.as_deref().unwrap_or("<provider-route-unset>"),
                     route.provider_owner_id,
@@ -532,7 +540,23 @@ impl ActiveGatewayRegistry {
                     route.override_mode.as_str(),
                     route.backend_priority,
                     route.active_score,
-                    route.system_tags.join(",")
+                    route.system_tags.join(","),
+                    diagnostics.shadowed_routes.len()
+                );
+            }
+            for shadowed in diagnostics.shadowed_routes.iter() {
+                newengine_ulog_api::ulog::trace!(
+                    "gateways: shadowed route gateway='{}' service='{}' provider_route='{}' owner='{}' kind='{}' origin='{}' mode='{}' prio={} score={} tags='{}'",
+                    diagnostics.gateway_id,
+                    shadowed.provider_service_id,
+                    shadowed.provider_route_id.as_deref().unwrap_or("<provider-route-unset>"),
+                    shadowed.provider_owner_id,
+                    shadowed.service_kind,
+                    shadowed.origin.as_str(),
+                    shadowed.override_mode.as_str(),
+                    shadowed.backend_priority,
+                    shadowed.active_score,
+                    shadowed.system_tags.join(",")
                 );
             }
         }
@@ -544,16 +568,34 @@ impl ActiveGatewayRegistry {
         &self.routes
     }
 
+    pub(crate) fn route_diagnostics(&self, gateway_id: &str) -> GatewayRouteDiagnostics {
+        let active_route = self.resolve_route(gateway_id).cloned();
+        let shadowed_routes = self
+            .routes
+            .iter()
+            .filter(|route| route_matches_query(route, gateway_id))
+            .filter(|route| {
+                active_route.as_ref().is_none_or(|active| {
+                    route.provider_service_id != active.provider_service_id
+                        || route.provider_route_id != active.provider_route_id
+                        || route.provider_owner_id != active.provider_owner_id
+                })
+            })
+            .cloned()
+            .collect::<Vec<_>>();
+
+        GatewayRouteDiagnostics {
+            gateway_id: gateway_id.to_owned(),
+            active_route,
+            shadowed_routes,
+        }
+    }
+
     pub(crate) fn gateway_ids(&self) -> Vec<String> {
         let mut out = self.routes.iter().map(|route| route.gateway_id.clone()).collect::<Vec<_>>();
         out.sort();
         out.dedup();
         out
-    }
-
-    pub(crate) fn resolve_gateway(&self, gateway_id: &str) -> Option<String> {
-        self.resolve_route(gateway_id)
-            .map(|route| route.provider_service_id.clone())
     }
 
     pub(crate) fn resolve_route(&self, gateway_id: &str) -> Option<&ActiveGatewayRoute> {

@@ -1,4 +1,6 @@
-fn terrain_height(world: &newengine_ecs::World, terrain: EntityId, x: f32, z: f32) -> f32 {
+use super::*;
+
+pub(in crate::scene_bridge::game_ready) fn terrain_height(world: &newengine_ecs::World, terrain: EntityId, x: f32, z: f32) -> f32 {
     let origin = world
         .get::<Transform>(terrain)
         .map(|t| t.position)
@@ -10,7 +12,7 @@ fn terrain_height(world: &newengine_ecs::World, terrain: EntityId, x: f32, z: f3
 }
 
 #[inline]
-fn hash_cell(seed: u64, x: i32, z: i32, salt: u64) -> u64 {
+pub(super) fn hash_cell(seed: u64, x: i32, z: i32, salt: u64) -> u64 {
     let mut h = 0xcbf2_9ce4_8422_2325_u64 ^ seed ^ salt;
     h = h.wrapping_mul(0x100_0000_01b3) ^ (x as i64 as u64);
     h = h.wrapping_mul(0x100_0000_01b3) ^ (z as i64 as u64);
@@ -18,12 +20,12 @@ fn hash_cell(seed: u64, x: i32, z: i32, salt: u64) -> u64 {
 }
 
 #[inline]
-fn unit_from_hash(h: u64) -> f32 {
+pub(super) fn unit_from_hash(h: u64) -> f32 {
     ((h >> 40) as u32 as f32) / ((1u32 << 24) as f32)
 }
 
 #[inline]
-fn choose_foliage_prefab<'a>(
+pub(super) fn choose_foliage_prefab<'a>(
     prefabs: &'a [GameReadyPrefabSpec],
     id: &str,
 ) -> Option<&'a GameReadyPrefabSpec> {
@@ -34,7 +36,7 @@ fn choose_foliage_prefab<'a>(
     prefabs.iter().find(|p| p.enabled && p.id == id)
 }
 
-fn collect_tree_placements(
+pub(super) fn collect_tree_placements(
     world: &newengine_ecs::World,
     terrain: EntityId,
     spec: &GameReadyFoliageSpec,

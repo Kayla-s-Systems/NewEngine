@@ -43,11 +43,11 @@ pub fn overlay_to_platform_overlay_with_provider(
 ) -> PlatformLoadingOverlayV1 {
     let view_json = serde_json::to_string(&loading_surface_projection(status, provider))
         .or_else(|projection_err| {
-            log::warn!("loading UI surface projection serialization failed: {projection_err}; serializing raw screen overlay status for diagnostics only");
+            newengine_ulog_api::ulog::warn!("loading UI surface projection serialization failed: {projection_err}; serializing raw screen overlay status for diagnostics only");
             serde_json::to_string(status)
         })
         .unwrap_or_else(|e| {
-            log::warn!("screen overlay serialization failed: {e}");
+            newengine_ulog_api::ulog::warn!("screen overlay serialization failed: {e}");
             String::new()
         });
 

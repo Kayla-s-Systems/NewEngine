@@ -22,15 +22,11 @@ impl DefaultHostServices {
 
 impl Services for DefaultHostServices {
     #[inline]
-    fn logger(&self) -> &dyn log::Log {
-        log::logger()
-    }
-
-    #[inline]
     fn service_registry(&self) -> &newengine_core::ServiceRegistry {
         &self.registry
     }
 }
+
 
 #[inline]
 pub fn ui_provider_kind_from_startup(_startup: &StartupConfig) -> UiProviderKind {
@@ -54,6 +50,7 @@ pub fn build_engine_from_startup(
 
     let config = EngineConfig::new(fixed_dt_ms)
         .with_plugins_dir(Some(startup.modules_dir.clone()))
+        .with_plugin_overrides(startup.plugins.clone())
         .with_module_fault_tolerance(ModuleFaultTolerance::Strict)
         .with_plugin_fault_tolerance(PluginFaultTolerance::Strict);
 

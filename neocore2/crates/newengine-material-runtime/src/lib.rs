@@ -4,7 +4,6 @@
 //!
 //! Runtime material gateway for `.nemat@entry -> .ytd@entry` resolution.
 //! Source image names are importer inputs, never runtime texture refs.
-
 use newengine_authored_xml as authored_xml;
 use newengine_materials::{
     validate_authored_material_library, validate_material_texture_reference,
@@ -70,7 +69,7 @@ pub fn strict_runtime_texture_ref(path: &str) -> Option<String> {
     match validate_material_texture_reference(path) {
         Ok(reference) => Some(reference.canonical),
         Err(error) => {
-            log::debug!(
+            newengine_ulog_api::ulog::debug!(
                 "materials.runtime: rejected non-runtime texture ref path='{}' reason='{}' policy='.ytd@entry only'",
                 path,
                 error
@@ -180,7 +179,7 @@ impl MaterialAssetGatewayAdapter {
         if !source.to_ascii_lowercase().ends_with(&format!(".{}", newengine_asset_format_nef8::nemat::EXTENSION)) {
             return Err(format!("materials: expected provider-declared material library path, got '{source}'"));
         }
-        log::debug!(
+        newengine_ulog_api::ulog::debug!(
             "assets.materials.load_descriptor_v1: source='{}' selector='{}' output_kind='{}' policy='NEF8 body from engine.assets; material semantics stay in engine.assets.materials'",
             source,
             selector,
@@ -196,7 +195,7 @@ impl MaterialAssetGatewayAdapter {
             .map_err(|e| format!("engine.assets decode_v1 failed path='{source}' selector='{selector}' output='{ASSET_LIST_FILE_BODY_OUTPUT}' err='{e}'"))?;
         let material = decode_material_entry_payload(&bytes, &selector)
             .map_err(|e| format!("materials: decode .nemat library failed source='{source}' selector='{selector}' err='{e}'"))?;
-        log::debug!(
+        newengine_ulog_api::ulog::debug!(
             "assets.materials.load_descriptor_v1: decoded source='{}' selector='{}' texture_slots={} params={}",
             source,
             selector,
@@ -276,7 +275,7 @@ impl MaterialAssetGatewayAdapter {
         let cache_key = material_cache_key(&source, &selector);
         if let Ok(cache) = self.descriptor_cache.lock() {
             if let Some(cached) = cache.get(&cache_key).cloned() {
-                log::debug!(
+                newengine_ulog_api::ulog::debug!(
                     "assets.materials.load_descriptor_v1: cache hit source='{}' selector='{}' policy='decoded .nemat entry cache'",
                     source,
                     selector
@@ -314,7 +313,7 @@ impl MaterialAssetGatewayAdapter {
         let cache_key = material_cache_key(&source, &selector);
         if let Ok(cache) = self.graph_cache.lock() {
             if let Some(cached) = cache.get(&cache_key).cloned() {
-                log::debug!(
+                newengine_ulog_api::ulog::debug!(
                     "assets.materials.resolve_graph_v1: cache hit source='{}' selector='{}' texture_refs={} warnings={}",
                     source,
                     selector,
@@ -332,7 +331,7 @@ impl MaterialAssetGatewayAdapter {
             if !info.valid { graph.warnings.extend(info.errors.clone()); }
             graph.texture_refs.push(info);
         }
-        log::debug!(
+        newengine_ulog_api::ulog::debug!(
             "assets.materials.resolve_graph_v1: source='{}' texture_refs={} warnings={} cache='store'",
             graph.source,
             graph.texture_refs.len(),
@@ -349,7 +348,7 @@ impl MaterialAssetGatewayAdapter {
         if graph.texture_refs.iter().any(|r| !r.valid) {
             return Err(format!("materials: cannot produce RenderMaterialPacket for '{}' because texture references are invalid", graph.source));
         }
-        log::debug!(
+        newengine_ulog_api::ulog::debug!(
             "assets.materials.to_render_packet_v1: source='{}' name='{}' packet_kind='renderer_agnostic_material_packet'",
             graph.source,
             graph.name

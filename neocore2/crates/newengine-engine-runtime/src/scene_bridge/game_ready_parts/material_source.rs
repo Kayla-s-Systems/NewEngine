@@ -1,3 +1,5 @@
+use super::*;
+
 use newengine_materials::{
     method as material_method, MaterialDescriptor as NeMaterialDescriptor,
     MaterialDescriptorLoadResponse as NeMaterialDescriptorLoadResponse,
@@ -9,15 +11,15 @@ use newengine_materials::{
 use self::content::GameReadyMaterialSpec as NeGameReadyMaterialSpec;
 
 #[inline]
-fn is_nemat_entry_ref(path: &str) -> bool {
+pub(super) fn is_nemat_entry_ref(path: &str) -> bool {
     let value = path.trim().replace('\\', "/");
     newengine_assets::require_asset_reference_extension(&value, &["nemat"], true).is_ok()
 }
 
 #[inline]
-fn load_material_descriptor_asset(path: &str) -> Option<NeMaterialDescriptorLoadResponse> {
+pub(super) fn load_material_descriptor_asset(path: &str) -> Option<NeMaterialDescriptorLoadResponse> {
     if !is_nemat_entry_ref(path) {
-        log::warn!(
+        newengine_ulog_api::ulog::warn!(
             "game-ready material: rejected non-canonical material asset path='{}' expected='<logical-path>.nemat@entry' policy='ytyp->ydd->nemat->ytd' action='skip_asset'",
             path
         );
@@ -28,7 +30,7 @@ fn load_material_descriptor_asset(path: &str) -> Option<NeMaterialDescriptorLoad
     let payload = match serde_json::to_vec(&request) {
         Ok(payload) => payload,
         Err(e) => {
-            log::warn!("game-ready material: .nemat request encode failed path='{}' err='{}'", path, e);
+            newengine_ulog_api::ulog::warn!("game-ready material: .nemat request encode failed path='{}' err='{}'", path, e);
             return None;
         }
     };
@@ -39,7 +41,7 @@ fn load_material_descriptor_asset(path: &str) -> Option<NeMaterialDescriptorLoad
     ) {
         Ok(Some(bytes)) => bytes,
         Ok(None) => {
-            log::debug!(
+            newengine_ulog_api::ulog::debug!(
                 "game-ready material: .nemat descriptor route absent path='{}' gateway='engine.assets.materials' method='{}'",
                 path,
                 material_method::LOAD_DESCRIPTOR_V1
@@ -47,7 +49,7 @@ fn load_material_descriptor_asset(path: &str) -> Option<NeMaterialDescriptorLoad
             return None;
         },
         Err(e) => {
-            log::warn!(
+            newengine_ulog_api::ulog::warn!(
                 "game-ready material: .nemat descriptor unavailable path='{}' gateway='engine.assets.materials' method='{}' err='{}'",
                 path,
                 material_method::LOAD_DESCRIPTOR_V1,
@@ -59,14 +61,14 @@ fn load_material_descriptor_asset(path: &str) -> Option<NeMaterialDescriptorLoad
     match serde_json::from_slice::<NeMaterialDescriptorLoadResponse>(&bytes) {
         Ok(response) => Some(response),
         Err(e) => {
-            log::warn!("game-ready material: .nemat descriptor decode failed path='{}' err='{}'", path, e);
+            newengine_ulog_api::ulog::warn!("game-ready material: .nemat descriptor decode failed path='{}' err='{}'", path, e);
             None
         }
     }
 }
 
 #[inline]
-fn diagnostic_unresolved_material(
+pub(super) fn diagnostic_unresolved_material(
     name: &str,
     base_color: [f32; 4],
     emissive: [f32; 3],
@@ -74,7 +76,7 @@ fn diagnostic_unresolved_material(
     flags: NeMaterialFlags,
     spec: &NeGameReadyMaterialSpec,
 ) -> (NeMaterialDescriptor, NeMaterialTextureBindings) {
-    log::warn!(
+    newengine_ulog_api::ulog::warn!(
         "game-ready material: unresolved material name='{}' asset={:?} policy='runtime requires .nemat@entry from authored graph' action='register_diagnostic_material'",
         name,
         spec.asset
@@ -85,7 +87,7 @@ fn diagnostic_unresolved_material(
         || spec.uv_scale != [1.0, 1.0]
         || spec.uv_offset != [0.0, 0.0]
     {
-        log::debug!(
+        newengine_ulog_api::ulog::debug!(
             "game-ready material: diagnostic material ignores inline texture slots name='{}' base={:?} normal={:?} roughness={:?} uv_scale={:?} uv_offset={:?} policy='inline JSON material slots are not runtime material sources; use .nemat@entry -> .ytd@entry'",
             name,
             spec.base_color_texture,
@@ -117,7 +119,7 @@ fn diagnostic_unresolved_material(
 /// not runtime material sources. Missing/broken content receives an explicit
 /// diagnostic material so the frame can still report what is wrong.
 #[inline]
-fn register_material(
+pub(super) fn register_material(
     mats: &NeMaterialRegistry,
     name: &str,
     base_color: [f32; 4],
@@ -131,7 +133,7 @@ fn register_material(
             response.descriptor.flags = response.descriptor.flags.union(flags);
             response.descriptor.sanitize_in_place();
             let material_name = if response.name.trim().is_empty() { name.to_owned() } else { response.name };
-            log::debug!(
+            newengine_ulog_api::ulog::debug!(
                 "game-ready material: resolved .nemat material name='{}' source='{}' policy='ytyp->ydd->nemat->ytd'",
                 material_name,
                 response.source
@@ -139,7 +141,7 @@ fn register_material(
             return mats.upsert_named_with_textures(&material_name, response.descriptor, response.textures.sanitized());
         }
     } else {
-        log::warn!(
+        newengine_ulog_api::ulog::warn!(
             "game-ready material: missing material asset for name='{}' expected='<logical-path>.nemat@entry' policy='no runtime json/ad-hoc material source'",
             name
         );

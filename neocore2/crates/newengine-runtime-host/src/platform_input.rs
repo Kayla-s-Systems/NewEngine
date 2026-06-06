@@ -23,7 +23,7 @@ pub fn call_service_utf8(service_id: &str, method: &str) -> Option<String> {
 pub fn poll_input_frame() -> Option<UiInputFrame> {
     let Some(state_json) = call_service_utf8(INPUT_SERVICE_ID, newengine_input_api::INPUT_METHOD_STATE_JSON) else {
         if !INPUT_POLL_OFFLINE_LOGGED.swap(true, Ordering::Relaxed) {
-            log::warn!(
+            newengine_ulog_api::ulog::warn!(
                 "input systems: raw input polling unavailable service='{}' method='{}'",
                 INPUT_SERVICE_ID,
                 newengine_input_api::INPUT_METHOD_STATE_JSON,
@@ -32,7 +32,7 @@ pub fn poll_input_frame() -> Option<UiInputFrame> {
         return None;
     };
     if !INPUT_POLL_ONLINE_LOGGED.swap(true, Ordering::Relaxed) {
-        log::info!(
+        newengine_ulog_api::ulog::info!(
             "input systems: raw input polling online service='{}' method='{}'",
             INPUT_SERVICE_ID,
             newengine_input_api::INPUT_METHOD_STATE_JSON,
@@ -47,7 +47,7 @@ pub fn poll_input_frame() -> Option<UiInputFrame> {
     let st: serde_json::Value = match serde_json::from_str(&state_json) {
         Ok(value) => value,
         Err(e) => {
-            log::warn!("input systems: raw input state_json decode failed err='{}'", e);
+            newengine_ulog_api::ulog::warn!("input systems: raw input state_json decode failed err='{}'", e);
             return None;
         }
     };

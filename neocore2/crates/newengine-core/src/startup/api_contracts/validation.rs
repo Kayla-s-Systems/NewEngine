@@ -183,7 +183,7 @@ fn emit_contract_line(report: &ContractReport) {
     match report.status {
         "ok" => {
             let parent = newengine_service_api::engine_gateway_parent_id(&report.service_id).unwrap_or_else(|| "<root>".to_owned());
-            log::debug!(
+            newengine_ulog_api::ulog::debug!(
                 "runtime contract ok: service='{}' parent='{}' provider_service='{}' source='{}' expected='{}'",
                 report.service_id,
                 parent,
@@ -193,7 +193,7 @@ fn emit_contract_line(report: &ContractReport) {
             );
         }
         "fatal" => {
-            log::error!(
+            newengine_ulog_api::ulog::error!(
                 "runtime contract fatal: service='{}' provider='{}' source='{}' expected='{}' reason='{}'",
                 report.service_id,
                 report.provider,
@@ -203,7 +203,7 @@ fn emit_contract_line(report: &ContractReport) {
             );
         }
         _ => {
-            log::warn!(
+            newengine_ulog_api::ulog::warn!(
                 "runtime contract degraded: service='{}' provider='{}' source='{}' expected='{}' reason='{}'",
                 report.service_id,
                 report.provider,
@@ -216,7 +216,7 @@ fn emit_contract_line(report: &ContractReport) {
 }
 
 fn emit_runtime_api_table(reports: &[ContractReport]) {
-    if log::log_enabled!(log::Level::Debug) {
+    if newengine_ulog_api::ulog::debug_enabled() {
         let rows = reports
             .iter()
             .map(|report| {
@@ -262,7 +262,7 @@ fn emit_runtime_api_table(reports: &[ContractReport]) {
     let ok = reports.iter().filter(|report| report.status == "ok").count();
     let degraded = reports.iter().filter(|report| report.status == "degraded").count();
     let fatal = reports.iter().filter(|report| report.status == "fatal").count();
-    log::info!(
+    newengine_ulog_api::ulog::info!(
         "runtime api: contracts total={} ok={} degraded={} fatal={}",
         reports.len(),
         ok,

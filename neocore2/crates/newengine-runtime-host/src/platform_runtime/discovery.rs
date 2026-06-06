@@ -278,7 +278,7 @@ pub fn detect_platform_runtime_path(modules_dir: &Path) -> EngineResult<PathBuf>
             desired_profile,
             allow_mixed_profiles
         );
-        log::warn!(
+        newengine_ulog_api::ulog::warn!(
             "platform runtime discovery: skipped_profile_mismatch={} desired='{}' mixed_allowed={}",
             skipped_profile_mismatch,
             desired_profile,
@@ -294,7 +294,7 @@ pub fn detect_platform_runtime_path(modules_dir: &Path) -> EngineResult<PathBuf>
             desired_profile,
             candidates.len()
         );
-        log::warn!(
+        newengine_ulog_api::ulog::warn!(
             "platform runtime discovery: no '{}' platform DLL found; falling back to available platform runtime profile. Rebuild winit-platform-plugin with matching profile to remove this warning.",
             desired_profile
         );

@@ -14,7 +14,15 @@ impl RuntimeRenderController {
         // before the user pressed Simulate or Play. The pipeline provider remains
         // lazy: render_controller builds it only when a real scene viewport frame is
         // submitted.
-        log::info!(
+        if self.app_policy.ui_only || self.app_policy.viewport_pass == Some(false) {
+            self.viewport.pass_disabled = true;
+            newengine_ulog_api::ulog::info!(
+                "render controller: viewport pass disabled by render app policy ui_only={} viewport_pass={:?}",
+                self.app_policy.ui_only,
+                self.app_policy.viewport_pass,
+            );
+        }
+        newengine_ulog_api::ulog::info!(
             "render controller: scene pipeline warmup deferred until Simulate/Play or game profile viewport"
         );
         Ok(())

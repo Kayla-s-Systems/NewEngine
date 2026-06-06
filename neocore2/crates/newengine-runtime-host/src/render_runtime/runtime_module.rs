@@ -43,7 +43,7 @@ impl<E: Send + 'static> Module<E> for RenderBackendRuntimeModule {
         ) {
             Ok(bound) => bound,
             Err(err) => {
-                log::warn!(
+                newengine_ulog_api::ulog::warn!(
                     "render backend: unavailable; render API not registered and runtime will degrade without rendering: {}",
                     err
                 );
@@ -52,7 +52,7 @@ impl<E: Send + 'static> Module<E> for RenderBackendRuntimeModule {
         };
         let protocol_version = info.protocol_version;
 
-        log::info!(
+        newengine_ulog_api::ulog::info!(
             "render backend: service bridge bound id='{}' name='{}' version='{}' provider='{}' provider_state='{}' matched_by='{}' debug_text='{}' protocol=v{}.{}.{} features={} hardware_tier={:?} upload_budget={}MB/frame",
             info.backend_id,
             info.backend_name,

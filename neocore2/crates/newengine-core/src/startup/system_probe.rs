@@ -192,7 +192,7 @@ fn probe_windows_dxgi_d3d12() -> Option<WinDxInfo> {
         let desc = match unsafe { adapter.GetDesc1() } {
             Ok(desc) => desc,
             Err(err) => {
-                log::debug!(
+                newengine_ulog_api::ulog::debug!(
                     "system probe: dxgi adapter desc failed index={} err='{}'",
                     index,
                     err

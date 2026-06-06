@@ -72,14 +72,14 @@ impl<E: Send + 'static> Engine<E> {
         self.refresh_readiness_snapshot();
 
         if newly_satisfied {
-            log::info!(
+            newengine_ulog_api::ulog::info!(
                 "startup graph: readiness satisfied key='{}' origin='{}' satisfied='{}'",
                 key,
                 event.origin(),
                 self.startup_graph.satisfied_csv(),
             );
         } else {
-            log::debug!(
+            newengine_ulog_api::ulog::debug!(
                 "startup graph: readiness already satisfied key='{}' origin='{}' satisfied='{}'",
                 key,
                 event.origin(),
@@ -126,14 +126,14 @@ impl<E: Send + 'static> Engine<E> {
             })
             .collect();
 
-        log::info!(
+        newengine_ulog_api::ulog::info!(
             "startup graph: phase='{}' satisfied='{}' modules={}",
             phase,
             self.startup_graph.satisfied_csv(),
             self.modules.len(),
         );
 
-        if !rows.is_empty() && log::log_enabled!(log::Level::Debug) {
+        if !rows.is_empty() && newengine_ulog_api::ulog::debug_enabled() {
             emit_prefixed_table(
                 "[startup]",
                 &format!("StartupGraph :: Modules [{}]", phase),

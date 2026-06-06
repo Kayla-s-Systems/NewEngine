@@ -1,129 +1,134 @@
-
 use newengine_math::Vec3;
 use serde::Deserialize;
 
+#[path = "raw_payload_defaults.rs"]
 mod raw_payload_defaults;
+#[path = "profile_parse.rs"]
+mod profile_parse;
+#[path = "sanitize_defaults.rs"]
+mod sanitize_defaults;
 
+pub(in crate::scene_bridge::game_ready) use self::profile_parse::load_game_ready_map_profile;
 
-pub(super) use self::profile::*;
-use self::paths::profile_asset_candidates;
-
+use super::profile::*;
+use self::profile_parse::*;
+use self::sanitize_defaults::*;
 
 #[derive(Debug, Deserialize)]
 struct RawGameReadyPayload {
     #[serde(default = "default_title")]
-    title: String,
+    pub(super) title: String,
     #[serde(default = "default_objective")]
-    objective: String,
+    pub(super) objective: String,
     #[serde(default)]
-    player: RawPlayerSpec,
+    pub(super) player: RawPlayerSpec,
     #[serde(default)]
-    terrain: RawTerrainSpec,
+    pub(super) terrain: RawTerrainSpec,
     #[serde(default)]
-    sky: RawSkySpec,
+    pub(super) sky: RawSkySpec,
     #[serde(default)]
-    materials: RawMaterialSetSpec,
+    pub(super) materials: RawMaterialSetSpec,
     #[serde(default)]
-    lighting: RawLightingSpec,
+    pub(super) lighting: RawLightingSpec,
     #[serde(default)]
-    foliage: RawFoliageSpec,
+    pub(super) foliage: RawFoliageSpec,
     #[serde(default)]
-    prefabs: Vec<RawPrefabSpec>,
+    pub(super) prefabs: Vec<RawPrefabSpec>,
     #[serde(default)]
-    definitions: Vec<RawDefinitionInstanceSpec>,
+    pub(super) definitions: Vec<RawDefinitionInstanceSpec>,
     #[serde(default)]
-    gameplay: RawGameplaySpec,
+    pub(super) gameplay: RawGameplaySpec,
     #[serde(default)]
-    palette: RawPaletteSpec,
+    pub(super) palette: RawPaletteSpec,
 }
 
 #[derive(Debug, Deserialize)]
 struct RawPlayerSpec {
     #[serde(default = "default_player_start")]
-    start: [f32; 3],
+    pub(super) start: [f32; 3],
     #[serde(default = "default_player_yaw")]
-    yaw: f32,
+    pub(super) yaw: f32,
     #[serde(default = "default_move_speed")]
-    move_speed: f32,
+    pub(super) move_speed: f32,
     #[serde(default = "default_look_sens")]
-    look_sens: f32,
+    pub(super) look_sens: f32,
     #[serde(default)]
-    model: RawPlayerModelSpec,
+    pub(super) model: RawPlayerModelSpec,
 }
 
 
 #[derive(Debug, Deserialize)]
 struct RawPlayerModelSpec {
     #[serde(default = "default_player_model_enabled")]
-    enabled: bool,
+    pub(super) enabled: bool,
     #[serde(default = "default_player_model_source")]
-    source: String,
+    pub(super) source: String,
     #[serde(default = "default_player_texture_dictionary")]
-    texture_dictionary: Option<String>,
+    pub(super) texture_dictionary: Option<String>,
     #[serde(default = "default_player_skeleton")]
-    skeleton: Option<String>,
+    pub(super) skeleton: Option<String>,
     #[serde(default = "default_player_model_height")]
-    target_height: f32,
+    pub(super) target_height: f32,
     #[serde(default = "default_player_model_eye_height_ratio")]
-    eye_height_ratio: f32,
+    pub(super) eye_height_ratio: f32,
     #[serde(default = "default_player_model_offset")]
-    local_offset: [f32; 3],
+    pub(super) local_offset: [f32; 3],
     #[serde(default = "default_player_model_yaw_offset")]
-    yaw_offset: f32,
+    pub(super) yaw_offset: f32,
     #[serde(default = "default_player_model_hide_in_first_person")]
-    hide_in_first_person: bool,
+    pub(super) hide_in_first_person: bool,
 }
 
 
 #[derive(Debug, Deserialize)]
 struct RawTerrainSpec {
     #[serde(default = "default_terrain_seed")]
-    seed: u64,
+    pub(super) seed: u64,
     #[serde(default = "default_terrain_cells")]
-    cells_x: u32,
+    pub(super) cells_x: u32,
     #[serde(default = "default_terrain_cells")]
-    cells_z: u32,
+    pub(super) cells_z: u32,
     #[serde(default = "default_terrain_size")]
-    size_x: f32,
+    pub(super) size_x: f32,
     #[serde(default = "default_terrain_size")]
-    size_z: f32,
+    pub(super) size_z: f32,
     #[serde(default = "default_base_height")]
-    base_height: f32,
+    pub(super) base_height: f32,
     #[serde(default = "default_height_scale")]
-    height_scale: f32,
+    pub(super) height_scale: f32,
     #[serde(default)]
-    generator: RawTerrainGeneratorSpec,
+    pub(super) generator: RawTerrainGeneratorSpec,
     #[serde(default)]
-    surface: RawTerrainSurfaceSpec,
+    pub(super) surface: RawTerrainSurfaceSpec,
     #[serde(default)]
-    streaming: RawTerrainStreamingSpec,
+    pub(super) streaming: RawTerrainStreamingSpec,
 }
 
 #[derive(Debug, Deserialize)]
 struct RawTerrainSurfaceSpec {
     #[serde(default = "default_terrain_surface_forest")]
-    forest_base_texture: String,
+    pub(super) forest_base_texture: String,
     #[serde(default = "default_terrain_surface_sand")]
-    sand_base_texture: String,
+    pub(super) sand_base_texture: String,
     #[serde(default = "default_terrain_surface_rock")]
-    rock_base_texture: String,
+    pub(super) rock_base_texture: String,
     #[serde(default = "default_terrain_patch_scale")]
-    patch_scale: f32,
+    pub(super) patch_scale: f32,
     #[serde(default = "default_terrain_blend_softness")]
-    blend_softness: f32,
+    pub(super) blend_softness: f32,
 }
 
 
 #[derive(Debug, Deserialize)]
 struct RawTerrainStreamingSpec {
     #[serde(default = "default_terrain_streaming_enabled")]
-    enabled: bool,
+    pub(super) enabled: bool,
     #[serde(default = "default_terrain_chunk_radius")]
-    chunk_radius: i32,
+    pub(super) chunk_radius: i32,
     #[serde(default = "default_terrain_unload_radius")]
-    unload_radius: i32,
+    pub(super) unload_radius: i32,
     #[serde(default = "default_terrain_max_chunks_per_frame")]
-    max_chunks_per_frame: usize,
+    pub(super) max_chunks_per_frame: usize,
 }
 
 
@@ -131,225 +136,224 @@ struct RawTerrainStreamingSpec {
 #[derive(Debug, Deserialize)]
 struct RawTerrainGeneratorSpec {
     #[serde(default = "default_terrain_generator_id")]
-    id: String,
+    pub(super) id: String,
     #[serde(default = "default_ridged_seed_xor")]
-    ridged_seed_xor: u64,
+    pub(super) ridged_seed_xor: u64,
     #[serde(default = "default_ridged_frequency")]
-    ridged_frequency: f32,
+    pub(super) ridged_frequency: f32,
     #[serde(default = "default_ridged_amplitude")]
-    ridged_amplitude: f32,
+    pub(super) ridged_amplitude: f32,
     #[serde(default = "default_ridged_shape_edge0")]
-    ridged_shape_edge0: f32,
+    pub(super) ridged_shape_edge0: f32,
     #[serde(default = "default_ridged_shape_edge1")]
-    ridged_shape_edge1: f32,
+    pub(super) ridged_shape_edge1: f32,
     #[serde(default = "default_veins_seed_xor")]
-    veins_seed_xor: u64,
+    pub(super) veins_seed_xor: u64,
     #[serde(default = "default_veins_frequency")]
-    veins_frequency: f32,
+    pub(super) veins_frequency: f32,
     #[serde(default = "default_veins_amplitude")]
-    veins_amplitude: f32,
+    pub(super) veins_amplitude: f32,
     #[serde(default = "default_smoothing_passes")]
-    smoothing_passes: u32,
+    pub(super) smoothing_passes: u32,
     #[serde(default = "default_smoothing_strength")]
-    smoothing_strength: f32,
+    pub(super) smoothing_strength: f32,
 }
 
 
 #[derive(Debug, Deserialize)]
 struct RawSkySpec {
     #[serde(default = "default_sky_radius")]
-    radius: f32,
+    pub(super) radius: f32,
     #[serde(default = "default_skydome_mesh")]
-    mesh: String,
+    pub(super) mesh: String,
     #[serde(default = "default_sky_follow_camera")]
-    follow_camera: bool,
+    pub(super) follow_camera: bool,
     #[serde(default = "default_cloud_dictionary")]
-    cloud_dictionary: String,
+    pub(super) cloud_dictionary: String,
     #[serde(default = "default_cloud_profile")]
-    cloud_profile: String,
+    pub(super) cloud_profile: String,
     #[serde(default = "default_sky_sun_radius")]
-    sun_radius: f32,
+    pub(super) sun_radius: f32,
     #[serde(default = "default_sky_moon_radius")]
-    moon_radius: f32,
+    pub(super) moon_radius: f32,
     #[serde(default = "default_moon_texture")]
-    moon_texture: String,
+    pub(super) moon_texture: String,
     #[serde(default)]
-    atmosphere: RawSkyAtmosphereSpec,
+    pub(super) atmosphere: RawSkyAtmosphereSpec,
 }
 
 
 #[derive(Debug, Deserialize)]
 struct RawSkyAtmosphereSpec {
     #[serde(default = "default_sky_day_zenith")]
-    day_zenith: ColorRgb,
+    pub(super) day_zenith: ColorRgb,
     #[serde(default = "default_sky_day_horizon")]
-    day_horizon: ColorRgb,
+    pub(super) day_horizon: ColorRgb,
     #[serde(default = "default_sky_dusk_zenith")]
-    dusk_zenith: ColorRgb,
+    pub(super) dusk_zenith: ColorRgb,
     #[serde(default = "default_sky_dusk_horizon")]
-    dusk_horizon: ColorRgb,
+    pub(super) dusk_horizon: ColorRgb,
     #[serde(default = "default_sky_night_zenith")]
-    night_zenith: ColorRgb,
+    pub(super) night_zenith: ColorRgb,
     #[serde(default = "default_sky_night_horizon")]
-    night_horizon: ColorRgb,
+    pub(super) night_horizon: ColorRgb,
     #[serde(default = "default_sky_cloud_day")]
-    cloud_day: ColorRgb,
+    pub(super) cloud_day: ColorRgb,
     #[serde(default = "default_sky_cloud_night")]
-    cloud_night: ColorRgb,
+    pub(super) cloud_night: ColorRgb,
     #[serde(default = "default_sky_night_strength")]
-    night_sky_strength: f32,
+    pub(super) night_sky_strength: f32,
     #[serde(default = "default_sky_cloud_coverage")]
-    cloud_coverage: f32,
+    pub(super) cloud_coverage: f32,
     #[serde(default = "default_sky_cloud_softness")]
-    cloud_softness: f32,
+    pub(super) cloud_softness: f32,
 }
 
 
 #[derive(Debug, Deserialize)]
 struct RawGameplaySpec {
     #[serde(default = "default_status_text")]
-    default_status: String,
+    pub(super) default_status: String,
     #[serde(default = "default_pickup_status")]
-    pickup_status: String,
+    pub(super) pickup_status: String,
     #[serde(default = "default_hazard_status")]
-    hazard_status: String,
+    pub(super) hazard_status: String,
     #[serde(default = "default_goal_locked_status")]
-    goal_locked_status: String,
+    pub(super) goal_locked_status: String,
     #[serde(default = "default_goal_complete_status")]
-    goal_complete_status: String,
+    pub(super) goal_complete_status: String,
     #[serde(default = "default_failed_progress_label")]
-    failed_progress_label: String,
+    pub(super) failed_progress_label: String,
     #[serde(default = "default_completed_progress_label")]
-    completed_progress_label: String,
+    pub(super) completed_progress_label: String,
     #[serde(default)]
-    player_collision: RawPlayerCollisionSpec,
+    pub(super) player_collision: RawPlayerCollisionSpec,
     #[serde(default)]
-    player_visual: RawPlayerVisualSpec,
+    pub(super) player_visual: RawPlayerVisualSpec,
     #[serde(default)]
-    physics: RawPhysicsSpec,
+    pub(super) physics: RawPhysicsSpec,
 }
 
 
 #[derive(Debug, Deserialize)]
 struct RawPlayerCollisionSpec {
     #[serde(default = "default_player_body_radius")]
-    radius: f32,
+    pub(super) radius: f32,
     #[serde(default = "default_player_body_half_height")]
-    half_height: f32,
+    pub(super) half_height: f32,
 }
 
 
 #[derive(Debug, Deserialize)]
 struct RawPlayerVisualSpec {
     #[serde(default = "default_player_visual_radius")]
-    radius: f32,
+    pub(super) radius: f32,
     #[serde(default = "default_player_visual_half_height")]
-    half_height: f32,
+    pub(super) half_height: f32,
     #[serde(default = "default_camera_eye_height")]
-    camera_eye_height: f32,
+    pub(super) camera_eye_height: f32,
     #[serde(default = "default_sprint_multiplier")]
-    sprint_multiplier: f32,
+    pub(super) sprint_multiplier: f32,
 }
 
 
 #[derive(Debug, Deserialize)]
 struct RawPhysicsSpec {
     #[serde(default = "default_gravity")]
-    gravity: f32,
+    pub(super) gravity: f32,
     #[serde(default = "default_contact_skin")]
-    contact_skin: f32,
+    pub(super) contact_skin: f32,
 }
 
 
 #[derive(Debug, Deserialize)]
 struct RawPaletteSpec {
     #[serde(default = "default_terrain_color")]
-    terrain: ColorRgba,
+    pub(super) terrain: ColorRgba,
     #[serde(default = "default_sky_color")]
-    sky: ColorRgba,
+    pub(super) sky: ColorRgba,
     #[serde(default = "default_sky_emissive")]
-    sky_emissive: ColorRgb,
+    pub(super) sky_emissive: ColorRgb,
     #[serde(default = "default_tree_bark_color")]
-    tree_bark: ColorRgba,
+    pub(super) tree_bark: ColorRgba,
     #[serde(default = "default_tree_leaf_color")]
-    tree_leaf: ColorRgba,
+    pub(super) tree_leaf: ColorRgba,
     #[serde(default = "default_tree_branch_color")]
-    tree_branch: ColorRgba,
+    pub(super) tree_branch: ColorRgba,
 }
 
 
 #[derive(Debug, Deserialize)]
 struct RawMaterialSetSpec {
     #[serde(default = "default_terrain_material")]
-    terrain: RawMaterialSpec,
+    pub(super) terrain: RawMaterialSpec,
     #[serde(default = "default_sky_material")]
-    sky: RawMaterialSpec,
+    pub(super) sky: RawMaterialSpec,
     #[serde(default = "default_sun_material")]
-    sun: RawMaterialSpec,
+    pub(super) sun: RawMaterialSpec,
     #[serde(default = "default_moon_material")]
-    moon: RawMaterialSpec,
+    pub(super) moon: RawMaterialSpec,
     #[serde(default = "default_tree_bark_material")]
-    tree_bark: RawMaterialSpec,
+    pub(super) tree_bark: RawMaterialSpec,
     #[serde(default = "default_tree_leaf_material")]
-    tree_leaf: RawMaterialSpec,
+    pub(super) tree_leaf: RawMaterialSpec,
     #[serde(default = "default_tree_branch_material")]
-    tree_branch: RawMaterialSpec,
+    pub(super) tree_branch: RawMaterialSpec,
 }
 
 
 #[derive(Debug, Clone, Deserialize)]
 struct RawMaterialSpec {
     #[serde(default)]
-    asset: Option<String>,
+    pub(super) asset: Option<String>,
     #[serde(default)]
-    base_color_texture: Option<String>,
+    pub(super) base_color_texture: Option<String>,
     #[serde(default)]
-    normal_texture: Option<String>,
+    pub(super) normal_texture: Option<String>,
     #[serde(default)]
-    roughness_texture: Option<String>,
+    pub(super) roughness_texture: Option<String>,
     #[serde(default = "default_uv_scale")]
-    uv_scale: [f32; 2],
+    pub(super) uv_scale: [f32; 2],
     #[serde(default = "default_uv_offset")]
-    uv_offset: [f32; 2],
+    pub(super) uv_offset: [f32; 2],
     #[serde(default = "default_material_roughness")]
-    roughness: f32,
+    pub(super) roughness: f32,
     #[serde(default = "default_material_normal_scale")]
-    normal_scale: f32,
+    pub(super) normal_scale: f32,
     #[serde(default = "default_material_occlusion_strength")]
-    occlusion_strength: f32,
+    pub(super) occlusion_strength: f32,
 }
 
 
 #[derive(Debug, Deserialize)]
 struct RawLightingSpec {
     #[serde(default = "default_ambient_color")]
-    ambient_color: ColorRgb,
+    pub(super) ambient_color: ColorRgb,
     #[serde(default = "default_ambient_intensity")]
-    ambient_intensity: f32,
+    pub(super) ambient_intensity: f32,
     #[serde(default = "default_sun_direction")]
-    sun_direction: ColorRgb,
+    pub(super) sun_direction: ColorRgb,
     #[serde(default = "default_sun_color")]
-    sun_color: ColorRgb,
+    pub(super) sun_color: ColorRgb,
     #[serde(default = "default_sun_intensity")]
-    sun_intensity: f32,
+    pub(super) sun_intensity: f32,
     #[serde(default)]
-    shadows: RawShadowSpec,
+    pub(super) shadows: RawShadowSpec,
     #[serde(default)]
-    day_night: RawDayNightSpec,
+    pub(super) day_night: RawDayNightSpec,
 }
 
 
 #[derive(Debug, Deserialize)]
 struct RawDayNightSpec {
     #[serde(default = "default_day_night_enabled")]
-    enabled: bool,
+    pub(super) enabled: bool,
     #[serde(default = "default_time_of_day_hours")]
-    time_of_day_hours: f32,
+    pub(super) time_of_day_hours: f32,
     #[serde(default = "default_day_length_seconds")]
-    day_length_seconds: f32,
+    pub(super) day_length_seconds: f32,
     #[serde(default = "default_sun_latitude_degrees")]
-    latitude_degrees: f32,
+    pub(super) latitude_degrees: f32,
     #[serde(default = "default_axial_tilt_degrees")]
-    axial_tilt_degrees: f32,
+    pub(super) axial_tilt_degrees: f32,
 }
-

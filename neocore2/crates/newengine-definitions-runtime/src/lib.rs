@@ -5,7 +5,6 @@
 //! `.ytyp` ownership lives here. The service uses `engine.assets` only as the
 //! VFS/raw-bytes/NEF8-envelope owner and returns Definition Entry DTOs to tools,
 //! scene/map placement loaders and the asset graph resolver.
-
 use std::collections::{BTreeMap, BTreeSet};
 
 use abi_stable::std_types::{RResult, RString};

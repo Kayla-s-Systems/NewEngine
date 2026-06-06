@@ -55,7 +55,7 @@ impl RuntimeRenderController {
             if self.shadows.warmup_defer_frames_remaining > 0 {
                 self.shadows.warmup_defer_frames_remaining =
                     self.shadows.warmup_defer_frames_remaining.saturating_sub(1);
-                log::debug!(
+                newengine_ulog_api::ulog::debug!(
                     "render shadow cache: deferred cold shadow pass remaining={} frame={}",
                     self.shadows.warmup_defer_frames_remaining,
                     self.frame.frame_index

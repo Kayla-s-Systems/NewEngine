@@ -1,5 +1,4 @@
 #![forbid(unsafe_op_in_unsafe_fn)]
-
 use serde::{Deserialize, Serialize};
 
 pub use newengine_input_actions_api::{

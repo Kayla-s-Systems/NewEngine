@@ -7,6 +7,7 @@ description = "Runtime helpers for mapping subsystem state into NewEngine system
 license = "MIT OR Apache-2.0"
 
 [dependencies]
+newengine-ulog-api = { path = "../newengine-ulog-api" }
 log = "0.4.29"
 abi_stable = "0.11"
 newengine-core = { path = "../newengine-core" }

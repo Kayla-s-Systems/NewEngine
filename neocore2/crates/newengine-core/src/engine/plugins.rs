@@ -36,7 +36,7 @@ fn plugin_kind_label(kind: Option<PluginKind>) -> &'static str {
 
 fn emit_startup_logs_after_logger_ready() {
     let rid = crate::run_id::run_id().unwrap_or("<unknown>");
-    log::info!("startup: Run ID: {}", rid);
+    newengine_ulog_api::ulog::info!("startup: Run ID: {}", rid);
     crate::startup::SystemProbe::probe().emit_table("startup");
     if let Some(r) = crate::startup::last_load_report() {
         r.emit_logs();
@@ -75,7 +75,7 @@ impl<E: Send + 'static> Engine<E> {
 
     pub fn load_engine_plugins_once(&mut self) -> EngineResult<usize> {
         if self.engine_plugins_loaded {
-            log::debug!("plugins: engine load skipped (already loaded)");
+            newengine_ulog_api::ulog::debug!("plugins: engine load skipped (already loaded)");
             return Ok(0);
         }
 
@@ -104,7 +104,7 @@ impl<E: Send + 'static> Engine<E> {
                     )));
                 }
                 PluginFaultTolerance::Resilient => {
-                    log::warn!(
+                    newengine_ulog_api::ulog::warn!(
                         "plugins: non-fatal engine load error (phase={} {}): {}",
                         phase,
                         Self::elapsed_since(t0),
@@ -148,7 +148,7 @@ impl<E: Send + 'static> Engine<E> {
     #[inline]
     pub(crate) fn try_load_plugins_once(&mut self) -> EngineResult<()> {
         if self.plugins_loaded {
-            log::debug!("plugins: load skipped (already loaded)");
+            newengine_ulog_api::ulog::debug!("plugins: load skipped (already loaded)");
             return Ok(());
         }
 
@@ -174,7 +174,7 @@ impl<E: Send + 'static> Engine<E> {
                     )));
                 }
                 PluginFaultTolerance::Resilient => {
-                    log::warn!(
+                    newengine_ulog_api::ulog::warn!(
                         "plugins: non-fatal load error (phase={} {}): {}",
                         phase,
                         Self::elapsed_since(t0),
@@ -213,7 +213,7 @@ impl<E: Send + 'static> Engine<E> {
             return;
         }
 
-        let debug_tables = log::log_enabled!(log::Level::Debug);
+        let debug_tables = newengine_ulog_api::ulog::debug_enabled();
         let rows: Vec<Vec<String>> = list
             .iter()
             .map(|p| {
@@ -328,9 +328,9 @@ impl<E: Send + 'static> Engine<E> {
             );
         }
 
-        if log::log_enabled!(log::Level::Debug) {
+        if newengine_ulog_api::ulog::debug_enabled() {
             for p in &list {
-                log::debug!(
+                newengine_ulog_api::ulog::debug!(
                     "plugins: path id='{}' caps={} path='{}'",
                     p.id,
                     p.capabilities.len(),
@@ -393,7 +393,7 @@ impl<E: Send + 'static> Engine<E> {
                                 ));
                             }
 
-                            log::warn!(
+                            newengine_ulog_api::ulog::warn!(
                                 "plugins: non-fatal rescan error (phase={} {}): {}",
                                 phase,
                                 Self::elapsed_since(t0),

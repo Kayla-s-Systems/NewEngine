@@ -1,7 +1,30 @@
 use newengine_plugin_api::{CapabilityKind, CapabilityRole};
+use std::cell::Cell;
 use std::sync::atomic::Ordering;
 
 use super::state::{ctx, bump_services_generation, EngineGatewayRouteSnapshot, GatewayProviderRouteEntry, GatewayRegistryCache};
+
+thread_local! {
+    static IN_GATEWAY_DIAGNOSTIC: Cell<bool> = const { Cell::new(false) };
+}
+
+#[inline]
+fn emit_gateway_diagnostic(f: impl FnOnce()) {
+    IN_GATEWAY_DIAGNOSTIC.with(|c| {
+        if c.get() {
+            return;
+        }
+        c.set(true);
+        struct Restore<'a>(&'a Cell<bool>);
+        impl<'a> Drop for Restore<'a> {
+            fn drop(&mut self) {
+                self.0.set(false);
+            }
+        }
+        let _restore = Restore(c);
+        f();
+    });
+}
 
 fn build_gateway_registry_snapshot() -> crate::service_gateway::ActiveGatewayRegistry {
     let c = ctx();
@@ -123,6 +146,67 @@ fn gateway_registry_snapshot() -> crate::service_gateway::ActiveGatewayRegistry 
     }
 }
 
+fn emit_gateway_route_selected(gateway_id: &str, route: &crate::service_gateway::ActiveGatewayRoute) {
+    emit_gateway_diagnostic(|| {
+    let host = crate::host_api::default_host_api();
+    crate::ulog_event::emit_ulog_event(
+        &host,
+        "engine.gateway.route.selected",
+        "INFO",
+        "Gateway route selected",
+        serde_json::json!({
+            "gateway_id": gateway_id,
+            "provider_service_id": route.provider_service_id,
+            "provider_route_id": route.provider_route_id,
+            "provider_owner_id": route.provider_owner_id,
+            "backend_capability_id": route.backend_capability_id,
+            "backend_priority": route.backend_priority,
+            "origin": route.origin.as_str(),
+            "active_score": route.active_score
+        }),
+    );
+
+    });
+}
+
+fn emit_gateway_route_missing(gateway_id: &str) {
+    emit_gateway_diagnostic(|| {
+    let host = crate::host_api::default_host_api();
+    crate::ulog_event::emit_ulog_event(
+        &host,
+        "engine.gateway.route.missing",
+        "WARN",
+        "Gateway route missing",
+        serde_json::json!({ "gateway_id": gateway_id }),
+    );
+
+    });
+}
+
+fn emit_gateway_route_shadowed(route: &crate::service_gateway::ActiveGatewayRoute, active: &crate::service_gateway::ActiveGatewayRoute) {
+    emit_gateway_diagnostic(|| {
+    let host = crate::host_api::default_host_api();
+    crate::ulog_event::emit_ulog_event(
+        &host,
+        "engine.gateway.route.shadowed",
+        "INFO",
+        "Gateway route shadowed",
+        serde_json::json!({
+            "gateway_id": route.gateway_id,
+            "provider_service_id": route.provider_service_id,
+            "provider_route_id": route.provider_route_id,
+            "provider_owner_id": route.provider_owner_id,
+            "backend_capability_id": route.backend_capability_id,
+            "active_provider_service_id": active.provider_service_id,
+            "active_provider_route_id": active.provider_route_id,
+            "active_provider_owner_id": active.provider_owner_id,
+            "active_score": active.active_score,
+            "shadowed_score": route.active_score
+        }),
+    );
+
+    });
+}
 
 pub(crate) fn active_engine_gateways() -> Vec<String> {
     gateway_registry_snapshot().gateway_ids()
@@ -135,7 +219,18 @@ pub(crate) fn active_engine_gateways() -> Vec<String> {
 /// requested gateway id, resolution returns `None`. It does not branch on
 /// concrete domains such as assets/render/physics/input.
 pub fn resolve_service_for_engine_gateway(gateway_id: &str) -> Option<String> {
-    gateway_registry_snapshot().resolve_gateway(gateway_id)
+    let registry = gateway_registry_snapshot();
+    let route = registry.resolve_route(gateway_id);
+    match route {
+        Some(route) => {
+            emit_gateway_route_selected(gateway_id, route);
+            Some(route.provider_service_id.clone())
+        }
+        None => {
+            emit_gateway_route_missing(gateway_id);
+            None
+        }
+    }
 }
 
 pub fn engine_gateway_has_capability(gateway_id: &str, capability_id: &str) -> bool {
@@ -150,6 +245,13 @@ pub fn list_engine_gateway_routes() -> Vec<EngineGatewayRouteSnapshot> {
         .iter()
         .map(|route| {
             let active_route = registry.resolve_route(&route.gateway_id);
+            if let Some(active_route) = active_route {
+                if active_route.provider_service_id != route.provider_service_id
+                    || active_route.provider_owner_id != route.provider_owner_id
+                {
+                    emit_gateway_route_shadowed(route, active_route);
+                }
+            }
             let active = match active_route {
                 Some(active_route) => {
                     active_route.provider_service_id == route.provider_service_id
@@ -325,7 +427,7 @@ where
     );
 
     bump_services_generation();
-    log::info!(
+    newengine_ulog_api::ulog::info!(
         "gateways: registered provider route gateway='{}' service='{}' provider_route='{}' kind='{}' capability='{}' priority={} owner='{}' origin='{}'",
         gateway_id,
         provider_service_id,
@@ -426,11 +528,81 @@ fn parse_backend_priority(json: &str) -> i64 {
         .unwrap_or(0)
 }
 
-/// Resolve the active registered provider service for a backend capability.
-///
-/// This is the host-owned service gateway primitive: callers ask the engine for
-/// a domain service, while the host selects the concrete provider service from
-/// descriptor facts instead of requiring consumers to know provider ids.
+fn emit_capability_active(capability_id: &str, service_id: &str, owner: &str, active_score: i64, backend_priority: i64, origin: crate::service_gateway::GatewayProviderOrigin) {
+    emit_gateway_diagnostic(|| {
+    let host = crate::host_api::default_host_api();
+    crate::ulog_event::emit_ulog_event(
+        &host,
+        "engine.capability.active",
+        "INFO",
+        "Capability provider active",
+        serde_json::json!({
+            "capability_id": capability_id,
+            "service_id": service_id,
+            "owner": owner,
+            "active_score": active_score,
+            "backend_priority": backend_priority,
+            "origin": origin.as_str()
+        }),
+    );
+
+    });
+}
+
+fn emit_capability_shadowed(capability_id: &str, service_id: &str, owner: &str, active_service_id: &str, active_owner: &str, shadowed_score: i64, active_score: i64) {
+    emit_gateway_diagnostic(|| {
+    let host = crate::host_api::default_host_api();
+    crate::ulog_event::emit_ulog_event(
+        &host,
+        "engine.capability.shadowed",
+        "INFO",
+        "Capability provider shadowed",
+        serde_json::json!({
+            "capability_id": capability_id,
+            "service_id": service_id,
+            "owner": owner,
+            "active_service_id": active_service_id,
+            "active_owner": active_owner,
+            "shadowed_score": shadowed_score,
+            "active_score": active_score
+        }),
+    );
+
+    });
+}
+
+fn emit_capability_missing(capability_id: &str) {
+    emit_gateway_diagnostic(|| {
+    let host = crate::host_api::default_host_api();
+    crate::ulog_event::emit_ulog_event(
+        &host,
+        "engine.capability.missing",
+        "WARN",
+        "Capability provider missing",
+        serde_json::json!({ "capability_id": capability_id }),
+    );
+
+    });
+}
+
+fn emit_capability_conflict(capability_id: &str, score: i64, providers: &[serde_json::Value]) {
+    emit_gateway_diagnostic(|| {
+    let host = crate::host_api::default_host_api();
+    crate::ulog_event::emit_ulog_event(
+        &host,
+        "engine.capability.conflict",
+        "WARN",
+        "Capability provider score conflict",
+        serde_json::json!({
+            "capability_id": capability_id,
+            "score": score,
+            "providers": providers
+        }),
+    );
+
+    });
+}
+
 pub fn resolve_service_for_backend_capability(capability_id: &str) -> Option<String> {
     let c = ctx();
     let services = match c.services.lock() {
@@ -446,7 +618,7 @@ pub fn resolve_service_for_backend_capability(capability_id: &str) -> Option<Str
         Err(e) => e.into_inner(),
     };
 
-    let mut candidates: Vec<(i64, i64, String, String)> = Vec::new();
+    let mut candidates: Vec<(i64, i64, String, String, crate::service_gateway::GatewayProviderOrigin)> = Vec::new();
 
     for (service_id, entry) in services.iter() {
         let Some(owner) = entry.owner_plugin_id.as_deref() else {
@@ -481,6 +653,7 @@ pub fn resolve_service_for_backend_capability(capability_id: &str) -> Option<Str
             backend_priority,
             service_id.clone(),
             owner.to_owned(),
+            origin,
         ));
     }
 
@@ -491,5 +664,48 @@ pub fn resolve_service_for_backend_capability(capability_id: &str) -> Option<Str
             .then_with(|| a.3.cmp(&b.3))
     });
 
-    candidates.into_iter().map(|(_, _, service_id, _)| service_id).next()
+    let Some((active_score, active_priority, active_service_id, active_owner, active_origin)) = candidates.first().cloned() else {
+        emit_capability_missing(capability_id);
+        return None;
+    };
+
+    let tied = candidates
+        .iter()
+        .filter(|(score, _, _, _, _)| *score == active_score)
+        .map(|(score, priority, service_id, owner, origin)| {
+            serde_json::json!({
+                "service_id": service_id,
+                "owner": owner,
+                "score": score,
+                "backend_priority": priority,
+                "origin": origin.as_str()
+            })
+        })
+        .collect::<Vec<_>>();
+    if tied.len() > 1 {
+        emit_capability_conflict(capability_id, active_score, &tied);
+    }
+
+    emit_capability_active(
+        capability_id,
+        &active_service_id,
+        &active_owner,
+        active_score,
+        active_priority,
+        active_origin,
+    );
+
+    for (score, _, service_id, owner, _) in candidates.iter().skip(1) {
+        emit_capability_shadowed(
+            capability_id,
+            service_id,
+            owner,
+            &active_service_id,
+            &active_owner,
+            *score,
+            active_score,
+        );
+    }
+
+    Some(active_service_id)
 }

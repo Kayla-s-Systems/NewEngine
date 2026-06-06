@@ -123,7 +123,7 @@ fn missing_requirements(d: &PluginDescriptor, providers: &HashMap<CapKey, u32>) 
 fn warn_descriptor_retired_capabilities(plugin_id: &str, descriptor: &PluginDescriptor) {
     for capability in descriptor.capabilities.iter() {
         if capability_has_tag(capability, CAPABILITY_TAG_RETIRED) {
-            log::warn!(
+            newengine_ulog_api::ulog::warn!(
                 "plugins: capability id='{}' plugin='{}' tag='retired' kind={} role={:?} version={} -- retire or replace this capability declaration",
                 capability.id,
                 plugin_id,
@@ -181,7 +181,7 @@ impl PluginManager {
             iteration = iteration.saturating_add(1);
             let providers = collect_providers(&self.loaded);
 
-            if log::log_enabled!(log::Level::Debug) {
+            if newengine_ulog_api::ulog::debug_enabled() {
                 let mut checked = 0usize;
                 let mut disabled = 0usize;
                 let mut with_desc = 0usize;
@@ -196,7 +196,7 @@ impl PluginManager {
                     }
                 }
 
-                log::debug!(
+                newengine_ulog_api::ulog::debug!(
                     "plugins: caps validate iter={} providers={} plugins={} disabled={} described={} ",
                     iteration,
                     providers.len(),
@@ -220,9 +220,9 @@ impl PluginManager {
                 let missing = missing_requirements(d, &providers);
                 if !missing.is_empty() {
                     to_disable.push((p.info.id.to_string(), missing));
-                } else if log::log_enabled!(log::Level::Debug) {
+                } else if newengine_ulog_api::ulog::debug_enabled() {
                     let (prov, req) = count_caps(d);
-                    log::debug!(
+                    newengine_ulog_api::ulog::debug!(
                         "plugins: caps ok id='{}' provides={} requires={} ",
                         p.info.id,
                         prov,
@@ -239,7 +239,7 @@ impl PluginManager {
             to_disable.dedup_by(|a, b| a.0 == b.0);
 
             for (id, missing) in to_disable {
-                log::error!(
+                newengine_ulog_api::ulog::error!(
                     "plugins: disable id='{}' reason='missing required capability(s)' missing=[{}]",
                     id,
                     missing.join(", ")
@@ -249,7 +249,7 @@ impl PluginManager {
 
             // Safety valve: avoid accidental infinite loops if state handling changes.
             if iteration > 32 {
-                log::error!(
+                newengine_ulog_api::ulog::error!(
                     "plugins: capability validation exceeded iteration cap ({}), aborting validation",
                     iteration
                 );

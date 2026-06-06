@@ -136,7 +136,7 @@ impl PluginManager {
             .chain(selection.engine_candidates.iter())
         {
             if let Err(e) = self.load_one(path, host.clone()) {
-                log::warn!("plugins: failed to load '{}': {}", display_clean(path), e);
+                newengine_ulog_api::ulog::warn!("plugins: failed to load '{}': {}", display_clean(path), e);
                 load_errors.push(e);
             }
         }
@@ -163,9 +163,9 @@ impl PluginManager {
 
         self.validate_required_capabilities();
 
-        if log::log_enabled!(log::Level::Debug) {
+        if newengine_ulog_api::ulog::debug_enabled() {
             for p in &self.loaded {
-                log::debug!(
+                newengine_ulog_api::ulog::debug!(
                     "plugins: loaded '{}' ver='{}' path='{}'",
                     p.info.id,
                     p.info.version,
@@ -236,7 +236,7 @@ impl PluginManager {
 
         if let Some(graph) = &self.discovery_cache {
             if graph.dir == dir {
-                log::debug!(
+                newengine_ulog_api::ulog::debug!(
                     "plugins: discovery cache hit dir='{}' entries={} dynlibs={}",
                     display_clean(&graph.dir),
                     graph.entries_total,

@@ -6,7 +6,6 @@
 //! UI code: scene bridge, gameplay components/schedules, viewport bridge and the
 //! render controller that talks to `newengine-render-api`. Applications consume
 //! this layer; they must not create backend resources or Vulkan objects directly.
-
 pub(crate) mod env_config;
 
 pub mod authority;

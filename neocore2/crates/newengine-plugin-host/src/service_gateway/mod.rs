@@ -7,7 +7,7 @@ mod registry;
 pub(crate) use metadata::descriptor_gateway_capabilities;
 pub(crate) use provider::gateway_provider_service_id;
 pub(crate) use registry::{
-    descriptor_engine_gateways, descriptor_max_gateway_priority, ActiveGatewayRegistry,
+    descriptor_engine_gateways, descriptor_max_gateway_priority, ActiveGatewayRegistry, ActiveGatewayRoute,
     GatewayProviderRouteFact, GatewayOverrideMode, GatewayProviderOrigin, PluginDescriptorFact,
     RegisteredServiceFact,
 };

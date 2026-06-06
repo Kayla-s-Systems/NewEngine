@@ -28,6 +28,7 @@ PLUGIN_HOST_GATEWAY = ENGINE_ROOT / "crates" / "newengine-plugin-host" / "src" /
 CORE_PLUGIN_DIAGNOSTICS = ENGINE_ROOT / "crates" / "newengine-core" / "src" / "engine" / "plugins.rs"
 NULL_PROVIDERS = ENGINE_ROOT / "crates" / "newengine-runtime-host" / "src" / "null_providers.rs"
 REGISTRY_TESTS = ENGINE_ROOT / "crates" / "newengine-plugin-host" / "src" / "service_gateway" / "registry" / "tests.rs"
+ASSET_BROWSER_PRESENTATION = ENGINE_ROOT / "crates" / "newengine-assets-catalog-ui-runtime" / "src" / "entry_presentation.rs"
 
 P1_REQUIRED_FAMILIES = {"render", "physics", "assets", "input", "ui", "time", "jobs", "scripting"}
 P1_REQUIRED_NULL_ROUTES = {
@@ -60,6 +61,21 @@ REQUIRED_TEST_CASES = {
     "does_not_require_concrete_runtime_internals",
     "route_is_descriptor_driven",
     "active_and_shadowed_routes_visible_in_diagnostics",
+}
+FORBIDDEN_ASSET_BROWSER_EXTENSION_TOKENS = {
+    "ytd",
+    "ydd",
+    "ydr",
+    "ytyp",
+    "ymap",
+    "nemat",
+    "png",
+    "jpg",
+    "jpeg",
+    "dds",
+    "gltf",
+    "glb",
+    "obj",
 }
 
 
@@ -224,12 +240,39 @@ def scan_conformance_matrix() -> list[Finding]:
     return out
 
 
+def scan_asset_browser_contract_policy() -> list[Finding]:
+    """Forbid Asset Browser from guessing semantics by extension/name/hash.
+
+    Icon asset paths may still live in the large catalog runtime module. This
+    check is intentionally focused on the presentation decision module where
+    labels, icons and preview labels are selected for catalog rows.
+    """
+
+    if not ASSET_BROWSER_PRESENTATION.exists():
+        return [Finding("ERROR", "asset-browser-contract", ASSET_BROWSER_PRESENTATION, "entry presentation module is missing")]
+
+    text = ASSET_BROWSER_PRESENTATION.read_text(encoding="utf-8", errors="replace")
+    out: list[Finding] = []
+    if re.search(r"match\s+entry\.extension\b", text) or re.search(r"match\s+ext\b", text):
+        out.append(Finding("ERROR", "asset-browser-contract", ASSET_BROWSER_PRESENTATION, "presentation layer must not branch on extension"))
+    if "preview provider" in text:
+        out.append(Finding("ERROR", "asset-browser-contract", ASSET_BROWSER_PRESENTATION, "preview provider must come from explicit browser contract, not presentation text"))
+    for token in sorted(FORBIDDEN_ASSET_BROWSER_EXTENSION_TOKENS):
+        pattern = rf'"\.?{re.escape(token)}"'
+        if re.search(pattern, text, re.IGNORECASE):
+            out.append(Finding("ERROR", "asset-browser-contract", ASSET_BROWSER_PRESENTATION, "forbidden hardcoded extension token in Asset Browser presentation", token))
+    if "declared provider contract required" not in text:
+        out.append(Finding("WARN", "asset-browser-contract", ASSET_BROWSER_PRESENTATION, "missing degraded-state copy for absent browser explanation"))
+    return out
+
+
 def run_checks() -> list[Finding]:
     findings: list[Finding] = []
     findings.extend(scan_capability_matrix())
     findings.extend(scan_diagnostics_visibility())
     findings.extend(scan_null_providers())
     findings.extend(scan_conformance_matrix())
+    findings.extend(scan_asset_browser_contract_policy())
     return findings
 
 

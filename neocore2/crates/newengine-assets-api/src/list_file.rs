@@ -289,6 +289,9 @@ pub const LIST_FILE_CONTENT_KIND_NEMAT: u32 = 4;
 pub const LIST_FILE_CONTENT_KIND_YMAP: u32 = 5;
 pub const LIST_FILE_CONTENT_KIND_YDR: u32 = 6;
 pub const LIST_FILE_CONTENT_KIND_YFT: u32 = 7;
+/// North Star Font Dictionary: resident NEF8/ListFile font dictionary used by engine.ui.text.
+/// NOTE: currently shares kind 8 with legacy YBN until the historical YBN slot is migrated.
+pub const LIST_FILE_CONTENT_KIND_NEFTD: u32 = 8;
 pub const LIST_FILE_CONTENT_KIND_YBN: u32 = 8;
 pub const LIST_FILE_CONTENT_KIND_YMF: u32 = 9;
 pub const LIST_FILE_CONTENT_KIND_YMT: u32 = 10;

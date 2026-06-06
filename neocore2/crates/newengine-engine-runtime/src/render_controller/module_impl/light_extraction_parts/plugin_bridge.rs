@@ -1,4 +1,6 @@
-fn build_light_provider_request(ctx: &LightExtractionCtx<'_>) -> LightExtractionProviderRequest {
+use super::*;
+
+pub(super) fn build_light_provider_request(ctx: &LightExtractionCtx<'_>) -> LightExtractionProviderRequest {
     LightExtractionProviderRequest {
         scene: LightExtractionSnapshot {
             frame_index: ctx.frame_index,
@@ -37,16 +39,16 @@ fn build_light_provider_request(ctx: &LightExtractionCtx<'_>) -> LightExtraction
 }
 
 #[inline]
-fn light_plan_from_contribution(
+pub(super) fn light_plan_from_contribution(
     ctx: &LightExtractionCtx<'_>,
     contribution: LightPlanContribution,
 ) -> LightShadowPlan {
     let resolution = contribution.resolution.max(1);
     let fallback = ctx.lit.white_texture;
     let kind = match contribution.kind {
-        LightPlanContributionKind::Directional => super::shadows::ShadowLightKind::Directional,
-        LightPlanContributionKind::Point => super::shadows::ShadowLightKind::Point,
-        LightPlanContributionKind::Spot => super::shadows::ShadowLightKind::Spot,
+        LightPlanContributionKind::Directional => super::super::super::shadows::ShadowLightKind::Directional,
+        LightPlanContributionKind::Point => super::super::super::shadows::ShadowLightKind::Point,
+        LightPlanContributionKind::Spot => super::super::super::shadows::ShadowLightKind::Spot,
         LightPlanContributionKind::AmbientOcclusion | LightPlanContributionKind::None => {
             return LightShadowPlan::disabled(fallback);
         }
@@ -65,10 +67,10 @@ fn light_plan_from_contribution(
     let mvp = Mat4::from_cols_array_2d(&contribution.light_mvp_cols);
 
     match kind {
-        super::shadows::ShadowLightKind::Directional => {
+        super::super::super::shadows::ShadowLightKind::Directional => {
             LightShadowPlan::directional(rt, tex, resolution, mvp, contribution.params, contribution.extra, None)
         }
-        super::shadows::ShadowLightKind::Point | super::shadows::ShadowLightKind::Spot => {
+        super::super::super::shadows::ShadowLightKind::Point | super::super::super::shadows::ShadowLightKind::Spot => {
             LightShadowPlan::unsupported(kind, fallback, resolution)
         }
     }
@@ -86,7 +88,7 @@ const fn shadow_method_label(method: ShadowMethod) -> &'static str {
 }
 
 #[inline]
-fn parse_plugin_light_provider(
+pub(super) fn parse_plugin_light_provider(
     plugin_id: &str,
     describe_json: &str,
 ) -> Option<ExternalLightExtractionProviderDesc> {
@@ -111,7 +113,7 @@ fn parse_plugin_light_provider(
         &gateway_id,
         newengine_core::render::RENDER_LIGHT_EXTRACTION_PROVIDER_SERVICE_KIND,
     ) {
-        log::warn!(
+        newengine_ulog_api::ulog::warn!(
             "render light extraction registry: plugin='{}' provider='{}' declares gateway='{}' but expected service_kind='{}'",
             plugin_id,
             id,

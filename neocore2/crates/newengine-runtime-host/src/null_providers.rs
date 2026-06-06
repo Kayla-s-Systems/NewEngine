@@ -18,7 +18,7 @@ use newengine_service_kit::{
     NullEngineGatewayProviderDeclDynamic,
 };
 use newengine_ui_api::{
-    encode_ui_frame_response_bin, UiAck, UiDrawList, UiFrameResponse, UiServiceInfo,
+    decode_ui_frame_request_bin, encode_ui_frame_response_bin, UiAck, UiDrawList, UiFrameResponse, UiServiceInfo,
     UI_SERVICE_METHOD_ACTION_MANIFEST_V1, UI_SERVICE_METHOD_APPLY_NODE_REQUEST_V1, UI_SERVICE_METHOD_APPLY_STATE_PATCH_V1,
     UI_SERVICE_METHOD_DEBUG_BINDINGS_V1, UI_SERVICE_METHOD_DEBUG_TELEMETRY_SCHEMA,
     UI_SERVICE_METHOD_DEBUG_TREE_V1, UI_SERVICE_METHOD_DISPATCH_ACTION_V1,
@@ -261,7 +261,10 @@ fn null_ui_frame_json() -> UiFrameResponse {
     UiFrameResponse::new(UiDrawList::new())
 }
 
-fn null_ui_frame_bin(_state: &mut (), _payload: Blob) -> RResult<Blob, RString> {
+fn null_ui_frame_bin(_state: &mut (), payload: Blob) -> RResult<Blob, RString> {
+    if let Err(e) = decode_ui_frame_request_bin(payload.as_slice()) {
+        return RResult::RErr(RString::from(e));
+    }
     match encode_ui_frame_response_bin(&null_ui_frame_json()) {
         Ok(bytes) => RResult::ROk(Blob::from(bytes)),
         Err(e) => RResult::RErr(RString::from(e)),

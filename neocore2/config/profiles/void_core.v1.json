@@ -1,0 +1,129 @@
+{
+  "$schema": "northstar.profile.void_core.v1",
+  "profile_id": "void.core",
+  "display_name": "Void Core",
+  "description": "North Star Engine host profile with no concrete optional feature providers enabled by default.",
+  "policy": {
+    "distribution_kind": "void_core",
+    "concrete_providers_allowed_by_default": false,
+    "hidden_fallbacks_allowed": false,
+    "missing_optional_routes_are_fatal": false,
+    "null_provider_routes_allowed": true,
+    "provider_identity_by_filename_allowed": false,
+    "legacy_aliases_allowed": false,
+    "runtime_mutation_policy": "dto_apply_stage_only"
+  },
+  "host_plane_required": [
+    "engine.gateway_registry",
+    "engine.capability_validator",
+    "engine.profile_loader",
+    "engine.scheduler.core",
+    "engine.diagnostics",
+    "engine.dto_contracts"
+  ],
+  "capability_policy": {
+    "default_optional_state": "disabled_or_missing",
+    "allowed_active_route_kinds": [
+      "missing",
+      "disabled",
+      "null_provider"
+    ],
+    "forbidden_active_route_kinds": [
+      "concrete_backend",
+      "hidden_fallback",
+      "filename_selected_provider"
+    ],
+    "diagnostics_required": true
+  },
+  "domains": [
+    {
+      "gateway": "engine.render",
+      "capability_id": "render.backend",
+      "state": "disabled_or_null_provider",
+      "missing_route_behavior": "diagnostic_degraded_frame_submission_skipped"
+    },
+    {
+      "gateway": "engine.physics",
+      "capability_id": "physics.backend",
+      "state": "disabled_or_null_provider",
+      "missing_route_behavior": "diagnostic_degraded_physics_apply_skipped"
+    },
+    {
+      "gateway": "engine.ui",
+      "capability_id": "ui.backend",
+      "state": "disabled_or_null_provider",
+      "missing_route_behavior": "diagnostic_degraded_surfaces_not_mounted"
+    },
+    {
+      "gateway": "engine.ui.text",
+      "capability_id": "ui.text.shaping",
+      "state": "disabled_or_null_provider",
+      "missing_route_behavior": "diagnostic_degraded_text_shaping_unavailable"
+    },
+    {
+      "gateway": "engine.audio",
+      "capability_id": "audio.backend",
+      "state": "disabled_or_null_provider",
+      "missing_route_behavior": "diagnostic_degraded_audio_submission_skipped"
+    },
+    {
+      "gateway": "engine.ai",
+      "capability_id": "ai.backend",
+      "state": "disabled_or_null_provider",
+      "missing_route_behavior": "diagnostic_degraded_ai_planning_skipped"
+    },
+    {
+      "gateway": "engine.input",
+      "capability_id": "input.backend",
+      "state": "disabled_or_null_provider",
+      "missing_route_behavior": "diagnostic_degraded_input_ingress_unavailable"
+    },
+    {
+      "gateway": "engine.assets",
+      "capability_id": "asset_manager.backend",
+      "state": "disabled_or_null_provider",
+      "missing_route_behavior": "diagnostic_degraded_asset_bytes_unavailable"
+    },
+    {
+      "gateway": "engine.materials",
+      "capability_id": "materials.backend",
+      "state": "disabled_or_null_provider",
+      "missing_route_behavior": "diagnostic_degraded_material_resolution_unavailable"
+    },
+    {
+      "gateway": "engine.model",
+      "capability_id": "model.backend",
+      "state": "disabled_or_null_provider",
+      "missing_route_behavior": "diagnostic_degraded_model_resolution_unavailable"
+    },
+    {
+      "gateway": "engine.scene",
+      "capability_id": "scene.backend",
+      "state": "disabled_or_null_provider",
+      "missing_route_behavior": "diagnostic_degraded_scene_instantiation_unavailable"
+    },
+    {
+      "gateway": "engine.world",
+      "capability_id": "world.backend",
+      "state": "disabled_or_null_provider",
+      "missing_route_behavior": "diagnostic_degraded_world_runtime_unavailable"
+    }
+  ],
+  "diagnostics": {
+    "must_show_profile_id": true,
+    "must_show_concrete_provider_policy": true,
+    "must_show_gateway_route_state": true,
+    "must_show_missing_route_reason": true,
+    "must_show_degraded_mode_reason": true,
+    "must_show_null_provider_routes": true,
+    "must_show_shadowed_routes": true
+  },
+  "acceptance": [
+    "engine boots with profile_id=void.core",
+    "no optional concrete backend is required by default",
+    "missing optional route emits diagnostic and does not panic",
+    "null backend is a visible provider route when present",
+    "hidden fallback branches are rejected",
+    "demo/headless run reaches deterministic shutdown without render physics UI audio or AI"
+  ]
+}

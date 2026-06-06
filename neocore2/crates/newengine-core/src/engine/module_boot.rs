@@ -405,7 +405,7 @@ impl<E: Send + 'static> Engine<E> {
 
             match init_result {
                 Ok(()) => {
-                    log::info!(
+                    newengine_ulog_api::ulog::info!(
                         "startup fsm: module init complete module='{}' index={} total={} elapsed_ms={}",
                         module_id,
                         index + 1,
@@ -434,7 +434,7 @@ impl<E: Send + 'static> Engine<E> {
                 }
                 Err(err) => match self.module_fault_tolerance {
                     ModuleFaultTolerance::Strict => {
-                        log::error!(
+                        newengine_ulog_api::ulog::error!(
                             "startup fsm: module init failed module='{}' index={} total={} elapsed_ms={} tolerance=strict err='{}'",
                             module_id,
                             index + 1,
@@ -459,7 +459,7 @@ impl<E: Send + 'static> Engine<E> {
                     }
                     ModuleFaultTolerance::Resilient => {
                         let reason = format!("init failed: {err}");
-                        log::error!(
+                        newengine_ulog_api::ulog::error!(
                             "startup fsm: module init failed module='{}' index={} total={} elapsed_ms={} tolerance=resilient err='{}'",
                             module_id,
                             index + 1,
@@ -660,7 +660,7 @@ impl<E: Send + 'static> Engine<E> {
         }
         let error = err.to_string();
         let current_module_for_log = current_module.as_deref().unwrap_or("-");
-        log::error!(
+        newengine_ulog_api::ulog::error!(
             "startup fsm: failed phase='{}' run_state='{}' module='{}' progress={:.2} err='{}'",
             phase.as_str(),
             self.run_state().as_str(),
@@ -694,7 +694,7 @@ impl<E: Send + 'static> Engine<E> {
         let previous = previous_state.phase;
         let initialized = previous_state.initialized;
         if previous != phase {
-            log::debug!(
+            newengine_ulog_api::ulog::debug!(
                 "startup fsm: phase {} -> {} run_state='{}' modules={}/{} plugins={}",
                 previous.as_str(),
                 phase.as_str(),
@@ -756,7 +756,7 @@ impl<E: Send + 'static> Engine<E> {
         })?;
 
         self.refresh_readiness_snapshot();
-        log::debug!(
+        newengine_ulog_api::ulog::debug!(
             "startup graph: after-startup-dispatch satisfied='{}' modules={}",
             self.startup_graph.satisfied_csv(),
             self.modules.len()
@@ -789,7 +789,7 @@ impl<E: Send + 'static> Engine<E> {
                     .map(|key| key.as_str())
                     .collect::<Vec<_>>()
                     .join(",");
-                log::info!(
+                newengine_ulog_api::ulog::info!(
                     "startup graph: module gated module='{}' origin='{}' missing='{}'",
                     module_id,
                     origin,
@@ -798,7 +798,7 @@ impl<E: Send + 'static> Engine<E> {
                 continue;
             }
 
-            log::info!(
+            newengine_ulog_api::ulog::info!(
                 "startup graph: starting module module='{}' origin='{}' requires='{}'",
                 module_id,
                 origin,
@@ -829,7 +829,7 @@ impl<E: Send + 'static> Engine<E> {
                     }
                     ModuleFaultTolerance::Resilient => {
                         let reason = format!("start failed: {err}");
-                        log::error!("engine: module start failed: {} ({})", module_id, reason);
+                        newengine_ulog_api::ulog::error!("engine: module start failed: {} ({})", module_id, reason);
                         self.modules[i].disable(reason);
                         self.shutdown_slot_by_index(i);
                         continue;
@@ -842,7 +842,7 @@ impl<E: Send + 'static> Engine<E> {
         }
 
         if activated_count > 0 {
-            log::info!(
+            newengine_ulog_api::ulog::info!(
                 "startup graph: activated modules origin='{}' count={} satisfied='{}'",
                 origin,
                 activated_count,
@@ -854,7 +854,7 @@ impl<E: Send + 'static> Engine<E> {
         if activated_count > 0 {
             self.log_startup_graph_snapshot(origin);
         } else {
-            log::debug!(
+            newengine_ulog_api::ulog::debug!(
                 "startup graph: no modules activated origin='{}' satisfied='{}' modules={}",
                 origin,
                 self.startup_graph.satisfied_csv(),

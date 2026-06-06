@@ -80,7 +80,7 @@ impl RenderUiNodeSurfaceState {
                 audio(AudioFeedbackKind::UiConfirm, frame_index);
             }
             Err(e) => {
-                log::warn!(
+                newengine_ulog_api::ulog::warn!(
                     "UI surface ui node command router: rebind rejected action='{}' err='{}'",
                     pending.action_id,
                     e

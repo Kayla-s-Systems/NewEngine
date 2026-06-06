@@ -269,7 +269,7 @@ pub fn register_world_environment_gateway_best_effort() {
         });
     }
 
-    log::info!(
+    newengine_ulog_api::ulog::info!(
         "engine.world.environment gateway baseline routes ready methods={} default_service='{}' null_service='{}'",
         WORLD_ENVIRONMENT_REQUIRED_METHODS_V1.len(),
         WORLD_ENVIRONMENT_DEFAULT_SERVICE_ID,

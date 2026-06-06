@@ -6,6 +6,7 @@ readme = "README.md"
 description = "Runtime-hosted scene gateway runtime service for NewEngine"
 
 [dependencies]
+newengine-ulog-api = { path = "../newengine-ulog-api" }
 newengine-asset-format-nef8 = { path = "../newengine-asset-format-nef8" }
 abi_stable = "0.11"
 log = "0.4"

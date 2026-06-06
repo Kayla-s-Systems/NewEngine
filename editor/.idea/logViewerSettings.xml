@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="LogViewerSettings">
+    <option name="columns">
+      <list>
+        <LogTag>
+          <option name="activate" value="true" />
+          <option name="path">
+            <list>
+              <option value="time" />
+            </list>
+          </option>
+        </LogTag>
+        <LogTag>
+          <option name="activate" value="true" />
+          <option name="path">
+            <list>
+              <option value="logger_name" />
+            </list>
+          </option>
+        </LogTag>
+        <LogTag>
+          <option name="activate" value="true" />
+          <option name="path">
+            <list>
+              <option value="level" />
+            </list>
+          </option>
+        </LogTag>
+        <LogTag>
+          <option name="activate" value="true" />
+          <option name="path">
+            <list>
+              <option value="message" />
+            </list>
+          </option>
+        </LogTag>
+      </list>
+    </option>
+  </component>
+</project>

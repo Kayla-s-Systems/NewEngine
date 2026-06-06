@@ -55,7 +55,7 @@ pub(super) fn update_game_ready_launch_gate(
                 gate.reason.clone(),
             )
         };
-        log::info!(
+        newengine_ulog_api::ulog::info!(
             "game-ready launch gate: released frame={} waited_frames={} reason='{}'",
             frame_index,
             waited_frames,
@@ -72,7 +72,7 @@ pub(super) fn update_game_ready_launch_gate(
             if waited_frames >= scene_texture_gate_soft_timeout_frames()
                 && frame_index % 120 == 0
             {
-                log::warn!(
+                newengine_ulog_api::ulog::warn!(
                     "game-ready launch gate: still waiting for visual completeness frame={} waited_frames={} reason='{}'",
                     frame_index,
                     waited_frames,
@@ -83,13 +83,13 @@ pub(super) fn update_game_ready_launch_gate(
             gate.reason = readiness.reason;
             let early_wait_frame = waited_frames <= 8;
             if first_wait || frame_index % 60 == 0 {
-                log::info!(
+                newengine_ulog_api::ulog::info!(
                     "game-ready launch gate: blocked frame={} reason='{}'",
                     frame_index,
                     gate.reason
                 );
             } else if early_wait_frame {
-                log::debug!(
+                newengine_ulog_api::ulog::debug!(
                     "game-ready launch gate: blocked frame={} reason='{}'",
                     frame_index,
                     gate.reason
@@ -401,7 +401,7 @@ fn material_texture_ready_state(
                     let message = snapshot
                         .message
                         .unwrap_or_else(|| "gpu upload failed".to_owned());
-                    log::warn!(
+                    newengine_ulog_api::ulog::warn!(
                         "game-ready launch gate: material texture failed path='{}' err='{}'",
                         path,
                         message
@@ -414,7 +414,7 @@ fn material_texture_ready_state(
                 }
                 Err(e) => {
                     let message = e.to_string();
-                    log::warn!(
+                    newengine_ulog_api::ulog::warn!(
                         "game-ready launch gate: material texture residency query failed path='{}' err='{}'",
                         path,
                         message

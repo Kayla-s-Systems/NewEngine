@@ -101,6 +101,7 @@ impl SceneBridge {
         }
     }
 
+
     #[inline]
     pub fn scene(&self) -> Arc<RwLock<Scene>> {
         Arc::clone(&self.scene)
@@ -144,7 +145,7 @@ impl SceneBridge {
         let mut play_mode = self.play_mode.lock();
         if !play_mode.is_runtime() {
             *play_mode = GameRunMode::Play;
-            log::info!(
+            newengine_ulog_api::ulog::info!(
                 "game-ready runtime: public play mode activated after scene launch gate release"
             );
         }

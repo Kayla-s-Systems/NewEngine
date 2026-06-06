@@ -6,6 +6,7 @@ readme = "README.md"
 description = "Game Ready FPS runtime profile composition for NewEngine"
 
 [dependencies]
+newengine-ulog-api = { path = "../newengine-ulog-api" }
 newengine-asset-format-nef8 = { path = "../newengine-asset-format-nef8" }
 log = "0.4"
 

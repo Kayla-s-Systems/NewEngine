@@ -69,7 +69,7 @@ impl QueuedJob {
         if result.is_err() {
             shared.panicked.fetch_add(1, Ordering::AcqRel);
             self.control.publish(EngineTaskPhase::Failed, "Task failed", "Worker job panicked; worker recovered and continues.", Some(1.0));
-            log::error!(
+            newengine_ulog_api::ulog::error!(
                 "job-system: worker job panicked label='{}' lane='{}' priority={:?}; worker recovered and continues",
                 self.request.label,
                 self.request.lane.as_str(),

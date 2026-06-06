@@ -1,7 +1,9 @@
+use super::*;
+
 
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-enum DemoMaterialRole {
+pub(super) enum DemoMaterialRole {
     Terrain,
     Sky,
     TreeBark,
@@ -10,23 +12,23 @@ enum DemoMaterialRole {
 }
 
 #[derive(Clone, Copy)]
-struct DemoMaterialDefinition<'a> {
-    role: DemoMaterialRole,
-    name: &'static str,
-    base_color: [f32; 4],
-    emissive: [f32; 3],
-    emissive_strength: f32,
-    flags: MaterialFlags,
-    spec: &'a GameReadyMaterialSpec,
+pub(super) struct DemoMaterialDefinition<'a> {
+    pub(in crate::scene_bridge::game_ready) role: DemoMaterialRole,
+    pub(in crate::scene_bridge::game_ready) name: &'static str,
+    pub(in crate::scene_bridge::game_ready) base_color: [f32; 4],
+    pub(in crate::scene_bridge::game_ready) emissive: [f32; 3],
+    pub(in crate::scene_bridge::game_ready) emissive_strength: f32,
+    pub(in crate::scene_bridge::game_ready) flags: MaterialFlags,
+    pub(in crate::scene_bridge::game_ready) spec: &'a GameReadyMaterialSpec,
 }
 
 #[derive(Clone, Copy)]
-struct DemoMaterials {
-    terrain: MaterialId,
-    sky: MaterialId,
-    tree_bark: MaterialId,
-    tree_leaf: MaterialId,
-    tree_branch: MaterialId,
+pub(in crate::scene_bridge::game_ready) struct DemoMaterials {
+    pub(in crate::scene_bridge::game_ready) terrain: MaterialId,
+    pub(in crate::scene_bridge::game_ready) sky: MaterialId,
+    pub(in crate::scene_bridge::game_ready) tree_bark: MaterialId,
+    pub(in crate::scene_bridge::game_ready) tree_leaf: MaterialId,
+    pub(in crate::scene_bridge::game_ready) tree_branch: MaterialId,
 }
 
 impl DemoMaterials {
@@ -48,7 +50,7 @@ impl DemoMaterials {
     }
 
     #[inline]
-    fn sky_visual_material(self, kind: SkyVisualKind) -> MaterialId {
+    pub(in crate::scene_bridge::game_ready) fn sky_visual_material(self, kind: SkyVisualKind) -> MaterialId {
         match kind {
             SkyVisualKind::Dome => self.sky,
         }
@@ -56,18 +58,18 @@ impl DemoMaterials {
 }
 
 #[derive(Clone, Copy)]
-struct PrimitiveSpawnSpec<'a> {
-    parent: EntityId,
-    primitive_id: PrimitiveId,
-    material_id: MaterialId,
-    name: &'a str,
-    position: Vec3,
-    scale: Vec3,
-    color: [f32; 4],
+pub(super) struct PrimitiveSpawnSpec<'a> {
+    pub(in crate::scene_bridge::game_ready) parent: EntityId,
+    pub(in crate::scene_bridge::game_ready) primitive_id: PrimitiveId,
+    pub(in crate::scene_bridge::game_ready) material_id: MaterialId,
+    pub(in crate::scene_bridge::game_ready) name: &'a str,
+    pub(in crate::scene_bridge::game_ready) position: Vec3,
+    pub(in crate::scene_bridge::game_ready) scale: Vec3,
+    pub(in crate::scene_bridge::game_ready) color: [f32; 4],
 }
 
 #[inline]
-fn spawn_game_primitive(
+pub(super) fn spawn_game_primitive(
     world: &mut newengine_ecs::World,
     prims: &PrimitiveRegistry,
     mats: &MaterialRegistry,
@@ -94,7 +96,7 @@ fn spawn_game_primitive(
 
 
 #[inline]
-fn register_demo_material_definition(
+pub(super) fn register_demo_material_definition(
     mats: &MaterialRegistry,
     definition: DemoMaterialDefinition<'_>,
 ) -> (DemoMaterialRole, MaterialId) {
@@ -111,7 +113,7 @@ fn register_demo_material_definition(
 }
 
 #[inline]
-fn register_demo_materials(
+pub(in crate::scene_bridge::game_ready) fn register_demo_materials(
     mats: &MaterialRegistry,
     palette: &GameReadyPaletteSpec,
     materials: &GameReadyMaterialSetSpec,

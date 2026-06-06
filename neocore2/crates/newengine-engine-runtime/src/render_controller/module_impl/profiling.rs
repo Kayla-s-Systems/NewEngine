@@ -153,7 +153,7 @@ pub(super) fn emit_timed_profile(
         return;
     }
 
-    let include_breakdown = trace_frame || slow || log::log_enabled!(log::Level::Debug);
+    let include_breakdown = trace_frame || slow || newengine_ulog_api::ulog::debug_enabled();
     let line = if include_breakdown {
         let suffix = suffix.as_ref();
         if suffix.is_empty() {
@@ -179,9 +179,9 @@ pub(super) fn emit_timed_profile(
     };
 
     if slow {
-        log::warn!("{}", line);
+        newengine_ulog_api::ulog::warn!("{}", line);
     } else {
-        log::debug!("{}", line);
+        newengine_ulog_api::ulog::debug!("{}", line);
     }
 }
 

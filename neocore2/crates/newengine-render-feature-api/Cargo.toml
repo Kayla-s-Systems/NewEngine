@@ -6,6 +6,7 @@ readme = "README.md"
 description = "Profile-owned render feature provider API for NewEngine"
 
 [dependencies]
+newengine-ulog-api = { path = "../newengine-ulog-api" }
 log = "0.4"
 
 newengine-core = { path = "../newengine-core" }

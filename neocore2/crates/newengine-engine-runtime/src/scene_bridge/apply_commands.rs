@@ -32,7 +32,7 @@ impl SceneBridge {
                 SceneCommand::LoadSceneAsset { asset } => {
                     *scene = Scene::new();
                     if let Err(e) = scene.load_asset(&asset) {
-                        log::error!("scene.load_asset failed: {e}");
+                        newengine_ulog_api::ulog::error!("scene.load_asset failed: {e}");
                     }
                     pending_selection = Some(reset_game_runtime_state(&mut *scene));
                     next_mode = Some(GameRunMode::Staging);
@@ -151,7 +151,7 @@ impl SceneBridge {
                 SceneCommand::InstantiateDefinition { definition_ref, position, rotation_ypr, scale } => {
                     let root = ensure_root(&mut *scene);
                     let world = scene.world_mut();
-                    log::debug!(
+                    newengine_ulog_api::ulog::debug!(
                         "definitions.runtime: command RuntimeCommand::InstantiateDefinition definition_ref='{}'",
                         definition_ref
                     );
@@ -168,7 +168,7 @@ impl SceneBridge {
                         transform,
                         graph,
                     );
-                    log::debug!(
+                    newengine_ulog_api::ulog::debug!(
                         "definitions.runtime: trace definition_ref='{}' entity={:?} graph_nodes={} render_drawables={} materials={} textures={} physics_refs={} result='{}'",
                         trace.definition_ref,
                         entity,

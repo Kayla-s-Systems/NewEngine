@@ -6,6 +6,7 @@ readme = "README.md"
 description = "Runtime-hosted runtime service for engine.input.bindings"
 
 [dependencies]
+newengine-ulog-api = { path = "../newengine-ulog-api" }
 abi_stable = { version = "0.11" }
 log = "0.4"
 parking_lot = "0.12"

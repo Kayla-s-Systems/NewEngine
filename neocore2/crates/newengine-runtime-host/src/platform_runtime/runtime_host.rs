@@ -52,6 +52,7 @@ use crate::render_runtime::ResolvedRenderBackendConfig;
 use crate::platform_runtime::ui_provider_selection::{
     log_ui_provider_selection, UiProviderSelection,
 };
+use crate::platform_runtime::ui_gateway_frame::UiGatewayFramePolicy;
 
 pub struct HostPlatformRuntime {
     engine: Engine<()>,
@@ -80,6 +81,8 @@ pub struct HostPlatformRuntime {
     runtime_soft_degraded_origin: Option<&'static str>,
     runtime_soft_degraded_frames: u64,
     cached_provider_ui_draw: Option<UiDrawList>,
+    ui_frame_policy: UiGatewayFramePolicy,
+    runtime_bootstrap_overlay_enabled: bool,
 }
 
 
@@ -121,6 +124,10 @@ impl HostPlatformRuntime {
             runtime_soft_degraded_origin: None,
             runtime_soft_degraded_frames: 0,
             cached_provider_ui_draw: None,
+            ui_frame_policy: UiGatewayFramePolicy::from_startup_config(newengine_core::startup::last_startup_config()),
+            runtime_bootstrap_overlay_enabled: std::env::var("NEWENGINE_RUNTIME_BOOTSTRAP_OVERLAY_DISABLED")
+                .map(|value| value.trim() != "1" && !value.eq_ignore_ascii_case("true"))
+                .unwrap_or(true),
         }
     }
 
@@ -146,7 +153,7 @@ impl HostPlatformRuntime {
         .map_err(EngineError::other)?;
 
         crate::platform_early_log!("host.run.enter runtime_path='{}'", runtime_path.display());
-        log::info!("platform runtime: loading '{}'", runtime_path.display());
+        newengine_ulog_api::ulog::info!("platform runtime: loading '{}'", runtime_path.display());
 
         crate::platform_early_log!("host.dll.load.begin path='{}'", runtime_path.display());
         let lib = unsafe { Library::new(runtime_path) }
@@ -167,7 +174,7 @@ impl HostPlatformRuntime {
                 })?;
         crate::platform_early_log!("host.symbol.resolve.ok symbol='{}'", "newengine_platform_runtime_run_v1");
 
-        log::info!(
+        newengine_ulog_api::ulog::info!(
             "platform runtime: entry resolved symbol='{}' title='{}' size={}x{}",
             "newengine_platform_runtime_run_v1",
             config.title,
@@ -221,8 +228,8 @@ impl HostPlatformRuntime {
         shutdown_watchdog.complete();
 
         match &result {
-            Ok(()) => log::info!("platform runtime: exited cleanly"),
-            Err(e) => log::error!("platform runtime: exited with error: {e}"),
+            Ok(()) => newengine_ulog_api::ulog::info!("platform runtime: exited cleanly"),
+            Err(e) => newengine_ulog_api::ulog::error!("platform runtime: exited with error: {e}"),
         }
 
         crate::platform_early_log!("host.run.exit");
@@ -295,16 +302,16 @@ impl HostPlatformRuntime {
             return;
         }
         self.shutting_down = true;
-        log::info!("platform runtime: engine.shutdown begin origin={origin}");
+        newengine_ulog_api::ulog::info!("platform runtime: engine.shutdown begin origin={origin}");
         newengine_core::crash::record_breadcrumb(format!(
             "platform runtime: engine.shutdown begin origin={origin}"
         ));
         match self.engine.shutdown() {
             Ok(()) => {
-                log::info!("platform runtime: engine.shutdown completed origin={origin}");
+                newengine_ulog_api::ulog::info!("platform runtime: engine.shutdown completed origin={origin}");
             }
             Err(e) => {
-                log::error!("platform runtime: engine.shutdown failed origin={origin}: {e}");
+                newengine_ulog_api::ulog::error!("platform runtime: engine.shutdown failed origin={origin}: {e}");
             }
         }
         newengine_core::crash::record_breadcrumb(format!(
@@ -315,7 +322,7 @@ impl HostPlatformRuntime {
     }
 
     pub(crate) fn on_window_ready(&mut self, ready: PlatformWindowReadyV1) -> EngineResult<()> {
-        log::info!(
+        newengine_ulog_api::ulog::info!(
             "platform runtime: window ready backend={:?} size={}x{} ppp={:.3} vsync={} refresh_millihz={} mode={:?}",
             ready.handles.backend,
             ready.surface.width,
@@ -350,7 +357,7 @@ impl HostPlatformRuntime {
             "Preparing staged engine bootstrap and loading screen.",
             0.10,
         );
-        log::info!(
+        newengine_ulog_api::ulog::info!(
             "platform runtime bootstrap: staged startup armed size={}x{}",
             ready.surface.width,
             ready.surface.height
@@ -363,7 +370,7 @@ impl HostPlatformRuntime {
         &mut self,
         metrics: PlatformSurfaceMetricsV1,
     ) -> EngineResult<()> {
-        log::debug!(
+        newengine_ulog_api::ulog::debug!(
             "platform runtime: resized {}x{} ppp={:.3}",
             metrics.width,
             metrics.height,
@@ -401,7 +408,7 @@ impl HostPlatformRuntime {
     }
 
     pub(crate) fn on_window_focused(&mut self, focused: bool) -> EngineResult<()> {
-        log::debug!("platform runtime: focused={focused}");
+        newengine_ulog_api::ulog::debug!("platform runtime: focused={focused}");
         self.engine
             .emit(HostEvent::Window(WindowHostEvent::Focused(focused)))?;
 
@@ -417,12 +424,12 @@ impl HostPlatformRuntime {
 
     pub(crate) fn on_close_requested(&mut self) -> EngineResult<()> {
         if self.close_requested {
-            log::debug!("platform runtime: close requested ignored; shutdown already requested");
+            newengine_ulog_api::ulog::debug!("platform runtime: close requested ignored; shutdown already requested");
             return Ok(());
         }
 
         self.close_requested = true;
-        log::info!("platform runtime: close requested; native window exit will be performed before engine teardown");
+        newengine_ulog_api::ulog::info!("platform runtime: close requested; native window exit will be performed before engine teardown");
         self.engine
             .emit(HostEvent::Window(WindowHostEvent::CloseRequested))?;
         self.engine.request_exit()?;
@@ -451,7 +458,7 @@ impl HostPlatformRuntime {
                 Ok(step) => step,
                 Err(e) if bootstrap_active => {
                     let message = e.to_string();
-                    log::error!("platform runtime bootstrap: fatal startup error: {message}");
+                    newengine_ulog_api::ulog::error!("platform runtime bootstrap: fatal startup error: {message}");
                     self.fatal_bootstrap_error = Some(message);
                     self.fatal_bootstrap_step_result()
                 }
@@ -486,7 +493,7 @@ impl HostPlatformRuntime {
             RuntimeBootstrapStage::LoadEnginePlugins => {
                 match self.engine.load_engine_plugins_once() {
                     Ok(count) => {
-                        log::info!(
+                        newengine_ulog_api::ulog::info!(
                             "platform runtime: engine plugins init completed loaded_count={}",
                             count
                         );
@@ -501,7 +508,7 @@ impl HostPlatformRuntime {
                         Ok(self.loading_step_result())
                     }
                     Err(e) => {
-                        log::error!("platform runtime: engine plugins init failed: {}", e);
+                        newengine_ulog_api::ulog::error!("platform runtime: engine plugins init failed: {}", e);
                         Err(e)
                     }
                 }
@@ -531,7 +538,7 @@ impl HostPlatformRuntime {
 
                         if outcome.finished {
                             self.started = true;
-                            log::info!("platform runtime: engine.start incremental pump completed");
+                            newengine_ulog_api::ulog::info!("platform runtime: engine.start incremental pump completed");
                             self.set_bootstrap_overlay(
                                 "Engine runtime started.",
                                 "Finalizing gated scene readiness and host window events.",
@@ -543,7 +550,7 @@ impl HostPlatformRuntime {
                         Ok(self.loading_step_result())
                     }
                     Err(e) => {
-                        log::error!("platform runtime: engine.start incremental pump failed: {}", e);
+                        newengine_ulog_api::ulog::error!("platform runtime: engine.start incremental pump failed: {}", e);
                         Err(e)
                     }
                 }
@@ -667,7 +674,8 @@ impl HostPlatformRuntime {
             || screen_profile_refresh
             || ui_dispatch_refresh;
         let provider_gameplay_hud = provider_ui_active && !self.minimized && self.surface.width > 0 && self.surface.height > 0;
-        let provider_ui_refresh = provider_ui_needed
+        let provider_ui_refresh = provider_gameplay_hud
+            || provider_ui_needed
             || screen_profile_refresh
             || ui_dispatch_refresh
             || self.cached_provider_ui_draw.is_none()
@@ -681,6 +689,8 @@ impl HostPlatformRuntime {
                     dt_sec,
                     [self.surface.width, self.surface.height],
                     self.surface.pixels_per_point,
+                    &[],
+                    &self.ui_frame_policy,
                 )? {
                     Some(draw_list) => {
                         let mut cached = draw_list.clone();
@@ -733,7 +743,7 @@ impl HostPlatformRuntime {
                 // platform exit now so winit tears down the window and engine.shutdown
                 // runs, allowing profiler plugins to flush final reports.
                 if self.engine.shutdown_token().is_requested() {
-                    log::info!("platform runtime: shutdown requested by engine module; requesting native exit");
+                    newengine_ulog_api::ulog::info!("platform runtime: shutdown requested by engine module; requesting native exit");
                     return Ok(PlatformStepResultV1 {
                         exit_requested: true,
                         ..PlatformStepResultV1::default()
@@ -762,7 +772,7 @@ impl HostPlatformRuntime {
             }),
             Err(e) => {
                 let message = e.to_string();
-                log::error!("platform runtime: engine.step failed in running state; entering soft degradation instead of exiting: {message}");
+                newengine_ulog_api::ulog::error!("platform runtime: engine.step failed in running state; entering soft degradation instead of exiting: {message}");
                 Ok(self.enter_runtime_soft_degraded_step("engine.step", message))
             }
         }
@@ -778,7 +788,7 @@ impl HostPlatformRuntime {
         newengine_core::crash::record_breadcrumb(format!(
             "platform runtime: soft degradation origin='{origin}' message='{message}'"
         ));
-        log::error!(
+        newengine_ulog_api::ulog::error!(
             "platform runtime: soft degradation activated origin='{}' message='{}'",
             origin,
             message
@@ -797,7 +807,7 @@ impl HostPlatformRuntime {
             .as_deref()
             .unwrap_or("Runtime entered recovery mode without a diagnostic message.");
         if self.runtime_soft_degraded_frames == 1 || self.runtime_soft_degraded_frames % 120 == 1 {
-            log::error!(
+            newengine_ulog_api::ulog::error!(
                 "platform runtime: recovery overlay active origin='{}' frames={} message='{}'",
                 origin,
                 self.runtime_soft_degraded_frames,
@@ -827,7 +837,7 @@ impl HostPlatformRuntime {
                 self.bootstrap_spinner_phase as u64,
             );
             if self.bootstrap_spinner_phase % 120 == 1 {
-                log::info!(
+                newengine_ulog_api::ulog::info!(
                     "platform loading overlay: source=engine.ui provider='{}' platform_overlay_state_only=true",
                     self.ui_provider_binding().id()
                 );
@@ -836,7 +846,7 @@ impl HostPlatformRuntime {
         }
 
         if self.bootstrap_spinner_phase % 120 == 1 {
-            log::warn!(
+            newengine_ulog_api::ulog::warn!(
                 "platform loading overlay: engine.ui provider unavailable; no platform-native UI renderer will be used"
             );
         }
@@ -866,6 +876,15 @@ impl HostPlatformRuntime {
     }
 
     fn loading_overlay_step_result(&self, overlay: &ScreenOverlayStatus, spinner_phase: u32) -> PlatformStepResultV1 {
+        if !self.runtime_bootstrap_overlay_enabled {
+            if spinner_phase % 120 == 1 {
+                newengine_ulog_api::ulog::debug!(
+                    "bootstrap loading overlay: disabled by runtime host boot option; startup continues without visual bootstrap surface"
+                );
+            }
+            return PlatformStepResultV1::default();
+        }
+
         // Bootstrap loading remains data-only at the platform boundary. Visual UI
         // must be rendered through engine.ui when a provider route exists; otherwise
         // the platform keeps stepping startup and logs diagnostics without drawing.
@@ -876,7 +895,7 @@ impl HostPlatformRuntime {
                 spinner_phase as u64,
             );
         } else if spinner_phase % 120 == 1 {
-            log::warn!(
+            newengine_ulog_api::ulog::warn!(
                 "bootstrap loading overlay: engine.ui unavailable; no special/native UI renderer will be used"
             );
         }
@@ -903,7 +922,7 @@ impl HostPlatformRuntime {
     }
 
     fn emit_window_ready_event(&mut self) -> EngineResult<()> {
-        log::info!(
+        newengine_ulog_api::ulog::info!(
             "platform runtime bootstrap: emitting WindowReady width={} height={}",
             self.surface.width,
             self.surface.height
@@ -935,7 +954,7 @@ impl HostPlatformRuntime {
         self.bootstrap_overlay.progress_01 = next_progress;
 
         if text_changed || progress_changed {
-            log::info!(
+            newengine_ulog_api::ulog::info!(
                 "platform runtime bootstrap: overlay status='{}' detail='{}' progress={:.0}%",
                 self.bootstrap_overlay.status,
                 self.bootstrap_overlay.detail,

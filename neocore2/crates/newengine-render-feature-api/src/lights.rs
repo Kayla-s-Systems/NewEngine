@@ -112,7 +112,7 @@ impl PackedLights {
 
         let pts = snapshot.sorted_point_lights();
         if pts.len() > MAX_POINT_LIGHTS {
-            log::warn!(
+            newengine_ulog_api::ulog::warn!(
                 "render: point lights truncated: requested={} max={} (deterministic keep=min stable id)",
                 pts.len(),
                 MAX_POINT_LIGHTS

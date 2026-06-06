@@ -1,5 +1,4 @@
 #![forbid(unsafe_op_in_unsafe_fn)]
-
 use core::time::Duration;
 
 mod asset_error;
@@ -1338,7 +1337,7 @@ pub fn wait_ready<A: AssetAccess + ?Sized>(
         Ok(AssetState::Failed) => Err(WaitReadyError::Failed(id_hex32.to_string())),
         Ok(AssetState::Loading) | Ok(AssetState::Unloaded) => Err(WaitReadyError::Timeout),
         Ok(AssetState::Unknown) => {
-            log::warn!("Unknown asset state id='{}'", id_hex32);
+            newengine_ulog_api::ulog::warn!("Unknown asset state id='{}'", id_hex32);
             Err(WaitReadyError::Timeout)
         }
         Err(e) => Err(WaitReadyError::Transport(e)),

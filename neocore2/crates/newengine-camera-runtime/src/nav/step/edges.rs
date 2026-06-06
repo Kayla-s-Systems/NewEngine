@@ -55,7 +55,7 @@ pub(crate) fn handle_capture_edge(
     //let post_local = world.get::<Transform>(cam_id).copied();
 
     /*
-    log::debug!(
+    newengine_ulog_api::ulog::debug!(
         "camera_nav: capture {} cam={:?} mode={:?} rig_pos={:?} rig_rot={:?} orbit(yaw={:.5} pitch={:.5} dist={:.4} tgt={:?}) fly(yaw={:.5} pitch={:.5}) input(active={} look={} pan={} ui_busy={} move_mask=0x{:X}) local_pre={:?} local_post={:?}",
         if capture_begin { "BEGIN" } else { "END" },
         cam_id,

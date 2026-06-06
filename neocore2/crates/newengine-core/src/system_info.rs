@@ -39,7 +39,7 @@ impl SystemInfo {
 
     #[inline]
     pub fn log(&self) {
-        log::info!(
+        newengine_ulog_api::ulog::info!(
             "system: os='{}' arch='{}' family='{}' pid={}",
             self.os,
             self.arch,
@@ -48,15 +48,15 @@ impl SystemInfo {
         );
 
         if let Some(n) = self.logical_cpus {
-            log::info!("system: logical_cpus={}", n);
+            newengine_ulog_api::ulog::info!("system: logical_cpus={}", n);
         }
 
         if let Some(exe) = &self.exe {
-            log::info!("system: exe='{}'", exe.display());
+            newengine_ulog_api::ulog::info!("system: exe='{}'", exe.display());
         }
 
         if let Some(cwd) = &self.cwd {
-            log::info!("system: cwd='{}'", cwd.display());
+            newengine_ulog_api::ulog::info!("system: cwd='{}'", cwd.display());
         }
     }
 }

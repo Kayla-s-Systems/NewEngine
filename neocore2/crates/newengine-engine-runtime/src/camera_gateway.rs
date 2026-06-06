@@ -2,6 +2,7 @@
 
 use parking_lot::Mutex;
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 
 use abi_stable::std_types::{RResult, RString};
 
@@ -44,6 +45,7 @@ use crate::viewport_bridge::ViewportBridge;
 
 
 const CAMERA_GATEWAY_OWNER: &str = "newengine-engine-runtime.camera-gateway";
+static CAMERA_GATEWAY_REGISTERED: AtomicBool = AtomicBool::new(false);
 
 #[path = "camera_gateway_helpers.rs"]
 mod camera_gateway_helpers;
@@ -120,11 +122,19 @@ fn apply_camera_view_command(
 }
 
 fn register_camera_gateway_service_best_effort(state: Arc<Mutex<CameraGatewayState>>) {
-    if newengine_core::has_engine_gateway_route(ENGINE_CAMERA_SERVICE_ID) {
+    // Early runtime bootstrap must not resolve `engine.camera` through the
+    // gateway registry and must not emit legacy routed logs. The in-process
+    // stargazer provider is idempotently installed once; later providers can
+    // still override by normal gateway priority rules.
+    if CAMERA_GATEWAY_REGISTERED
+        .compare_exchange(false, true, Ordering::AcqRel, Ordering::Acquire)
+        .is_err()
+    {
         return;
     }
+
     let service = camera_gateway_service(state);
-    match register_engine_gateway_provider_service(EngineGatewayProviderDecl {
+    if register_engine_gateway_provider_service(EngineGatewayProviderDecl {
         gateway: ENGINE_CAMERA_SERVICE_ID,
         service_kind: newengine_service_api::EngineServiceKind::Camera,
         provider_service: ENGINE_CAMERA_SERVICE_ID,
@@ -133,19 +143,13 @@ fn register_camera_gateway_service_best_effort(state: Arc<Mutex<CameraGatewaySta
         priority: 0,
         owner: CAMERA_GATEWAY_OWNER,
         service,
-    }) {
-        Ok(()) => log::info!(
-            "camera gateway: engine-runtime route registered id='{}' capability='{}'",
-            ENGINE_CAMERA_SERVICE_ID,
-            CAMERA_BACKEND_CAPABILITY_ID
-        ),
-        Err(e) => log::warn!(
-            "camera gateway: registration skipped id='{}' err='{}'",
-            ENGINE_CAMERA_SERVICE_ID,
-            e
-        ),
+    })
+    .is_err()
+    {
+        CAMERA_GATEWAY_REGISTERED.store(false, Ordering::Release);
     }
 }
+
 
 /// Runtime-hosted camera gateway bridge.
 ///

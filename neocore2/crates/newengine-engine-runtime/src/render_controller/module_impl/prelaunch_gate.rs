@@ -61,7 +61,7 @@ impl RuntimeRenderController {
                 // CPU-prepared terrain chunks waiting for GPU packets, and redraws
                 // may only advance again after unrelated UI input.
                 if let Err(e) = self.pump_scene_gpu_residency(r, &scene) {
-                    log::warn!("render prelaunch: terrain GPU residency pump failed: {}", e);
+                    newengine_ulog_api::ulog::warn!("render prelaunch: terrain GPU residency pump failed: {}", e);
                 }
 
                 self.pump_material_texture_requests(
@@ -77,7 +77,7 @@ impl RuntimeRenderController {
 
                 if world_playable {
                     if let Err(e) = self.prewarm_scene_gpu_resources(r, &scene) {
-                        log::warn!(
+                        newengine_ulog_api::ulog::warn!(
                             "render prewarm: failed during launch gate handoff err='{}'",
                             e
                         );
@@ -110,7 +110,7 @@ impl RuntimeRenderController {
         };
 
         if editor_preview_ready {
-            log::info!(
+            newengine_ulog_api::ulog::info!(
                 "editor launch gate: preview ready frame={} mode='edit' reason='{}'; simulation remains stopped",
                 next_frame,
                 gate.reason
@@ -125,7 +125,7 @@ impl RuntimeRenderController {
         let status = if prelaunch_released {
             self.bridges.scene.activate_profile_play_now();
             self.diagnostics.overlay_metrics.reset_interactive_timing();
-            log::info!(
+            newengine_ulog_api::ulog::info!(
                 "render controller: scene launch gate released; deferring first world present to next frame"
             );
             SceneLaunchStatus::loading(
@@ -136,7 +136,7 @@ impl RuntimeRenderController {
             )
         } else {
             if trace_frame {
-                log::debug!(
+                newengine_ulog_api::ulog::debug!(
                     "render controller: loading gate frame={} reason='{}'",
                     self.frame.frame_index,
                     gate.reason

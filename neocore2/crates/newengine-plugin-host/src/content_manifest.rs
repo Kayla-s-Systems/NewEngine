@@ -124,7 +124,7 @@ pub fn load_plugin_content_catalog_from_dir(
     retain_valid_blobs(&mut manifest.content.materials);
     retain_valid_blobs(&mut manifest.content.generators);
 
-    log::info!(
+    newengine_ulog_api::ulog::info!(
         "plugins: content catalog path='{}' scenes={} prefabs={} materials={} generators={}",
         crate::path_fmt::display_clean(&path),
         manifest.content.scenes.len(),

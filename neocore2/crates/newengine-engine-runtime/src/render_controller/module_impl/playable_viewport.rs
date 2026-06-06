@@ -93,7 +93,7 @@ impl RuntimeRenderController {
             self.restore_playable_view_after_ui_close();
         }
         if primary_ui.exit_requested {
-            log::info!("UI surface: exit requested through declarative menu action");
+            newengine_ulog_api::ulog::info!("UI surface: exit requested through declarative menu action");
             ctx.request_exit();
         }
         {
@@ -237,7 +237,7 @@ impl RuntimeRenderController {
                 }
             }
             Err(e) => {
-                log::warn!("modal ui: same-frame draw-list refresh failed: {e}");
+                newengine_ulog_api::ulog::warn!("modal ui: same-frame draw-list refresh failed: {e}");
                 if needs_clear_packet {
                     *ui = Some(clear_ui_draw_list([scope.w, scope.h]));
                 }
@@ -327,7 +327,7 @@ impl RuntimeRenderController {
             format!("NewEngine | Loading scene\n{}", gate_reason),
         );
         if scope.trace_frame {
-            log::debug!(
+            newengine_ulog_api::ulog::debug!(
                 "render controller: gated loading frame={} reason='{}'",
                 self.frame.frame_index,
                 gate_reason
@@ -348,7 +348,7 @@ impl RuntimeRenderController {
             return;
         }
         if let Ok(diag) = r.diagnostics_snapshot() {
-            log::debug!(
+            newengine_ulog_api::ulog::debug!(
                 "render diagnostics: frame={} gated_loading=true begin_ms={:.3} end_ms={:.3} upload_ms={:.3} pipeline_ms={:.3} buffers={} textures={} pipelines={} upload_jobs={} upload_mb={:.2} queued_uploads={} queued_mb={:.2}",
                 diag.frame.frame_index,
                 diag.frame.last_begin_frame_ms,

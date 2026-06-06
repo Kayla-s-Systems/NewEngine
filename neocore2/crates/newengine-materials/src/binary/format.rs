@@ -3,14 +3,8 @@ use crate::api::{MaterialDescriptor, MaterialDomain, MaterialFlags, ShadingModel
 use super::error::{MaterialBinaryError, MaterialBinaryResult};
 use super::io::{push_f32, push_u16, push_u32, read_f32, read_u16, read_u32, read_u8};
 
-/// Current binary format version.
+/// Current compact descriptor payload version.
 pub const MATERIAL_BINARY_VERSION: u16 = 1;
-
-/// Fixed header size in bytes.
-pub const MATERIAL_BINARY_HEADER_SIZE: usize = 24;
-
-/// Magic bytes (8).
-pub const MATERIAL_BINARY_MAGIC: [u8; 8] = *b"NEMAT\0\0\0";
 
 pub(crate) const MATERIAL_DESCRIPTOR_SIZE: usize = 68;
 

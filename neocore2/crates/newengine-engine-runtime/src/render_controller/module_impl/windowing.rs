@@ -32,7 +32,7 @@ impl RuntimeRenderController {
         if self.viewport.last_w == 0 || self.viewport.last_h == 0 {
             self.viewport.last_w = w;
             self.viewport.last_h = h;
-            log::debug!(
+            newengine_ulog_api::ulog::debug!(
                 "render controller: adopted initial surface size {}x{}; skip first explicit resize",
                 w,
                 h
@@ -47,7 +47,7 @@ impl RuntimeRenderController {
         if w != self.viewport.last_w || h != self.viewport.last_h {
             let old_w = self.viewport.last_w;
             let old_h = self.viewport.last_h;
-            log::debug!(
+            newengine_ulog_api::ulog::debug!(
                 "render controller: resize requested {}x{} -> {}x{}",
                 old_w,
                 old_h,
@@ -63,7 +63,7 @@ impl RuntimeRenderController {
 
             self.viewport.last_w = w;
             self.viewport.last_h = h;
-            log::debug!("render controller: resize completed {}x{}", w, h);
+            newengine_ulog_api::ulog::debug!("render controller: resize completed {}x{}", w, h);
             newengine_core::crash::record_breadcrumb(format!(
                 "render controller: resize completed {}x{}",
                 w, h

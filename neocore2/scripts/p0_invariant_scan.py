@@ -51,6 +51,7 @@ API_ID_CONSTANT_FILES = (
 )
 
 ALLOW_PROVIDER_ID_PARTS = (
+    pathlib.Path("tools/scripts/northstar_bridge"),  # diagnostic tooling scans provider/gateway ids as data
     pathlib.Path("NewEngine/neocore2/scripts"),
     pathlib.Path("NewEngine/neocore2/config/capabilities"),
     pathlib.Path("NewEngine/neocore2/config/conformance"),

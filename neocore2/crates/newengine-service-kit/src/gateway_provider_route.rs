@@ -125,7 +125,7 @@ pub fn register_engine_gateway_provider_service_best_effort(decl: EngineGatewayP
     let owner = decl.owner;
     match register_engine_gateway_provider_service(decl) {
         Ok(()) => {
-            log::info!(
+            newengine_ulog_api::ulog::info!(
                 "engine-runtime route registered gateway='{}' provider_route='{}' capability='{}' owner='{}'",
                 gateway,
                 provider_route,
@@ -135,7 +135,7 @@ pub fn register_engine_gateway_provider_service_best_effort(decl: EngineGatewayP
             true
         }
         Err(e) => {
-            log::warn!(
+            newengine_ulog_api::ulog::warn!(
                 "engine-runtime route registration skipped gateway='{}' provider_route='{}' capability='{}' owner='{}' err='{}'",
                 gateway,
                 provider_route,
@@ -155,7 +155,7 @@ pub fn register_engine_gateway_provider_service_dynamic_best_effort(decl: Engine
     let owner = decl.owner;
     match register_engine_gateway_provider_service_dynamic(decl) {
         Ok(()) => {
-            log::info!(
+            newengine_ulog_api::ulog::info!(
                 "engine-runtime route registered gateway='{}' provider_route='{}' capability='{}' owner='{}'",
                 gateway,
                 provider_route,
@@ -165,7 +165,7 @@ pub fn register_engine_gateway_provider_service_dynamic_best_effort(decl: Engine
             true
         }
         Err(e) => {
-            log::warn!(
+            newengine_ulog_api::ulog::warn!(
                 "engine-runtime route registration skipped gateway='{}' provider_route='{}' capability='{}' owner='{}' err='{}'",
                 gateway,
                 provider_route,
@@ -185,7 +185,7 @@ pub fn register_null_engine_gateway_provider_service_dynamic_best_effort(decl: N
     let owner = decl.owner;
     match register_null_engine_gateway_provider_service_dynamic(decl) {
         Ok(()) => {
-            log::info!(
+            newengine_ulog_api::ulog::info!(
                 "null-provider route registered gateway='{}' provider_route='{}' capability='{}' owner='{}'",
                 gateway,
                 provider_route,
@@ -195,7 +195,7 @@ pub fn register_null_engine_gateway_provider_service_dynamic_best_effort(decl: N
             true
         }
         Err(e) => {
-            log::warn!(
+            newengine_ulog_api::ulog::warn!(
                 "null-provider route registration skipped gateway='{}' provider_route='{}' capability='{}' owner='{}' err='{}'",
                 gateway,
                 provider_route,

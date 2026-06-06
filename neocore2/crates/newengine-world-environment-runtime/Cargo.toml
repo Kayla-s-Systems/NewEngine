@@ -7,6 +7,7 @@ description = "Runtime-hosted baseline providers for engine.world.environment"
 license = "Proprietary"
 
 [dependencies]
+newengine-ulog-api = { path = "../newengine-ulog-api" }
 abi_stable = "0.11"
 log = "0.4"
 parking_lot = "0.12"

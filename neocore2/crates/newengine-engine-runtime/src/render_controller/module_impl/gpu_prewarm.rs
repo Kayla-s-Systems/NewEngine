@@ -25,7 +25,7 @@ impl RuntimeRenderController {
     ) -> EngineResult<()> {
         let started = std::time::Instant::now();
         if let Err(e) = self.gpu.require_primary_lit_pipeline(r) {
-            log::warn!(
+            newengine_ulog_api::ulog::warn!(
                 "render prewarm: material pipeline is not ready; continuing mesh residency and retrying pipeline on later frames err='{}'",
                 e
             );
@@ -60,7 +60,7 @@ impl RuntimeRenderController {
         }
 
         if terrain_uploaded > 0 || primitive_uploaded > 0 {
-            log::info!(
+            newengine_ulog_api::ulog::info!(
                 "render prewarm: gpu resources prepared terrain_meshes={} primitive_meshes={} elapsed_ms={:.2}",
                 terrain_uploaded,
                 primitive_uploaded,
@@ -117,8 +117,8 @@ impl RuntimeRenderController {
             uploaded = uploaded.saturating_add(1);
         }
 
-        if uploaded > 0 && log::log_enabled!(log::Level::Trace) {
-            log::trace!(
+        if uploaded > 0 && newengine_ulog_api::ulog::trace_enabled() {
+            newengine_ulog_api::ulog::trace!(
                 "render residency: terrain gpu uploads frame={} uploaded={} budget={}",
                 self.frame.frame_index,
                 uploaded,

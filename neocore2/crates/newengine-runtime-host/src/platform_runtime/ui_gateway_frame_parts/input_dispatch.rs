@@ -1,3 +1,5 @@
+use super::*;
+
 pub(crate) fn dispatch_input_frame(
     frame_index: u64,
     input: &UiInputFrame,
@@ -43,7 +45,7 @@ fn apply_ui_state_patches(patches: &[UiStatePatch]) {
         let payload = match serde_json::to_vec(patch) {
             Ok(payload) => payload,
             Err(e) => {
-                log::warn!("ui gateway: failed to encode state patch surface='{}': {e}", patch.surface_id);
+                newengine_ulog_api::ulog::warn!("ui gateway: failed to encode state patch surface='{}': {e}", patch.surface_id);
                 continue;
             }
         };
@@ -52,7 +54,7 @@ fn apply_ui_state_patches(patches: &[UiStatePatch]) {
             UI_SERVICE_METHOD_APPLY_STATE_PATCH_V1,
             &payload,
         ) {
-            log::warn!("ui gateway: state patch apply failed surface='{}' err='{e}'", patch.surface_id);
+            newengine_ulog_api::ulog::warn!("ui gateway: state patch apply failed surface='{}' err='{e}'", patch.surface_id);
         }
     }
 }
@@ -60,7 +62,7 @@ fn apply_ui_state_patches(patches: &[UiStatePatch]) {
 fn dispatch_ui_actions(actions: &[UiActionDispatch]) {
     for action in actions {
         if action.target_gateway.trim().is_empty() || action.method.trim().is_empty() {
-            log::warn!(
+            newengine_ulog_api::ulog::warn!(
                 "ui gateway: action dispatch skipped action='{}' target='{}' method='{}'",
                 action.action_id,
                 action.target_gateway,
@@ -72,7 +74,7 @@ fn dispatch_ui_actions(actions: &[UiActionDispatch]) {
         let payload = match action_dispatch_payload(action) {
             Ok(payload) => payload,
             Err(e) => {
-                log::warn!(
+                newengine_ulog_api::ulog::warn!(
                     "ui gateway: failed to encode action dispatch action='{}': {e}",
                     action.action_id
                 );
@@ -82,13 +84,13 @@ fn dispatch_ui_actions(actions: &[UiActionDispatch]) {
 
         match newengine_core::call_service_v1_optional(&action.target_gateway, &action.method, &payload) {
             Ok(Some(_)) => {}
-            Ok(None) => log::warn!(
+            Ok(None) => newengine_ulog_api::ulog::warn!(
                 "ui gateway: action target unavailable action='{}' target='{}' method='{}'",
                 action.action_id,
                 action.target_gateway,
                 action.method
             ),
-            Err(e) => log::warn!(
+            Err(e) => newengine_ulog_api::ulog::warn!(
                 "ui gateway: action dispatch failed action='{}' target='{}' method='{}' err='{e}'",
                 action.action_id,
                 action.target_gateway,
@@ -116,7 +118,7 @@ fn log_ui_dispatch_frame(frame: &UiEventDispatchFrame) {
     if !sampled && !active {
         return;
     }
-    log::debug!(
+    newengine_ulog_api::ulog::debug!(
         "ui.dispatch_input_v1 frame={} hovered={} hovered_action={} focused={} captured={} actions={} first_action={} patches={} capture_active={} diagnostics={}",
         frame.frame_index,
         frame.hovered_node.as_ref().map(|it| it.node_id.as_str()).unwrap_or("none"),

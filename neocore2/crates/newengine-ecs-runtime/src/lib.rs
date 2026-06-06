@@ -209,7 +209,7 @@ pub fn ecs_gateway_service(
 
 pub fn register_ecs_gateway_best_effort(scene: Arc<newengine_scene_runtime::SceneBridge>) {
     if newengine_plugin_host::has_service(ENGINE_ECS_SERVICE_ID) {
-        log::debug!("engine.ecs gateway registration skipped; service already available");
+        newengine_ulog_api::ulog::debug!("engine.ecs gateway registration skipped; service already available");
         return;
     }
 
@@ -224,13 +224,13 @@ pub fn register_ecs_gateway_best_effort(scene: Arc<newengine_scene_runtime::Scen
         owner: ECS_GATEWAY_OWNER,
         service,
     }) {
-        Ok(()) => log::info!(
+        Ok(()) => newengine_ulog_api::ulog::info!(
             "engine.ecs gateway registered source=engine-runtime service='{}' capability='{}' owner='{}'",
             ENGINE_ECS_SERVICE_ID,
             ECS_BACKEND_CAPABILITY_ID,
             ECS_GATEWAY_OWNER
         ),
-        Err(e) => log::error!(
+        Err(e) => newengine_ulog_api::ulog::error!(
             "engine.ecs gateway registration failed id='{}' err='{}'",
             ENGINE_ECS_SERVICE_ID,
             e

@@ -2,6 +2,8 @@
 
 use std::sync::Arc;
 
+use serde::Deserialize;
+
 use crate::plugin_manager::PluginManagerBridge;
 use crate::scene_bridge::SceneBridge;
 use crate::viewport_bridge::ViewportBridge;
@@ -20,6 +22,62 @@ use super::state::{
 /// This type is intentionally a composition root, not a renderer backend. It owns
 /// runtime-facing state, delegates frame orchestration to module_impl, and submits
 /// a typed RenderFrameEnvelope into the backend RenderApi adapter.
+
+#[derive(Clone, Debug, Default)]
+pub(super) struct RenderRuntimeAppPolicy {
+    pub(super) ui_only: bool,
+    pub(super) viewport_pass: Option<bool>,
+}
+
+impl RenderRuntimeAppPolicy {
+    pub(super) fn from_startup_config() -> Self {
+        let mut policy = Self::default();
+        let Some(startup) = newengine_core::startup::last_startup_config() else { return policy; };
+        if let Some(value) = startup.plugins.get("engine.render") {
+            if let Ok(config) = serde_json::from_value::<RenderPolicyConfig>(value.clone()) {
+                policy.merge(config);
+            }
+        }
+        if let Some(value) = startup
+            .plugins
+            .get("engine.runtime")
+            .and_then(|value| value.get("render"))
+        {
+            if let Ok(config) = serde_json::from_value::<RenderPolicyConfig>(value.clone()) {
+                policy.merge(config);
+            }
+        }
+        if policy.ui_only {
+            policy.viewport_pass = Some(false);
+        }
+        policy
+    }
+
+    fn merge(&mut self, config: RenderPolicyConfig) {
+        if let Some(mode) = config.mode.as_deref() {
+            if mode.eq_ignore_ascii_case("ui_only") || mode.eq_ignore_ascii_case("ui-only") {
+                self.ui_only = true;
+            }
+        }
+        if let Some(ui_only) = config.ui_only {
+            self.ui_only = ui_only;
+        }
+        if let Some(viewport_pass) = config.viewport_pass {
+            self.viewport_pass = Some(viewport_pass);
+        }
+    }
+}
+
+#[derive(Debug, Deserialize)]
+struct RenderPolicyConfig {
+    #[serde(default)]
+    mode: Option<String>,
+    #[serde(default)]
+    ui_only: Option<bool>,
+    #[serde(default)]
+    viewport_pass: Option<bool>,
+}
+
 pub struct RuntimeRenderController {
     pub(super) bridges: RenderBridgeState,
     pub(super) viewport: RenderViewportState,
@@ -31,6 +89,7 @@ pub struct RuntimeRenderController {
     pub(super) ui: RenderUiSurfaceRuntimeState,
     pub(super) runtime_profile: RenderRuntimeProfileState,
     pub(super) backend_failure: RenderBackendFailureState,
+    pub(super) app_policy: RenderRuntimeAppPolicy,
 }
 
 impl RuntimeRenderController {
@@ -53,7 +112,7 @@ impl RuntimeRenderController {
         let invalidate_shadow_cache = self.runtime_profile().ui.invalidate_shadow_cache_on_close;
         let restore_input = self.runtime_profile().ui.restore_gameplay_input_on_close;
         if restore_viewport && self.viewport.pass_disabled && !self.backend_render_disabled() {
-            log::warn!(
+            newengine_ulog_api::ulog::warn!(
                 "render controller: UI restore reopened viewport GPU pass after UI close"
             );
             self.viewport.pass_disabled = false;
@@ -170,7 +229,7 @@ impl RuntimeRenderController {
     ) {
         let message = error.to_string();
         if !self.viewport.pass_disabled {
-            log::error!(
+            newengine_ulog_api::ulog::error!(
                 "render controller: viewport GPU pass disabled phase='{}' err='{}'",
                 phase,
                 message
@@ -200,6 +259,7 @@ impl RuntimeRenderController {
             ui: RenderUiSurfaceRuntimeState::new(),
             runtime_profile: RenderRuntimeProfileState::new(),
             backend_failure: RenderBackendFailureState::new(),
+            app_policy: RenderRuntimeAppPolicy::from_startup_config(),
         }
     }
 }

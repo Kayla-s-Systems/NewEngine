@@ -16,6 +16,8 @@ pub const ENGINE_LOG_SERVICE_ID: &str = "engine.logging";
 pub const LOGGING_SINK_SERVICE_ID: &str = "chronicle.logging.sink.v1";
 
 const METHOD_WRITE_JSON: &str = "write_json";
+#[allow(dead_code)]
+const METHOD_WRITE_EVENT_JSON: &str = "write_event_json";
 const METHOD_FLUSH: &str = "flush";
 
 #[derive(Debug, Clone, Serialize)]
@@ -34,6 +36,37 @@ struct LogRecordWire<'a> {
     #[serde(skip_serializing_if = "Option::is_none")]
     line: Option<u32>,
     message: String,
+}
+
+#[allow(dead_code)]
+#[derive(Debug, Clone, Serialize)]
+pub struct UlogEventWire {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub run_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub run_tag: Option<String>,
+    pub level: String,
+    pub target: String,
+    pub message: String,
+    pub event_id: String,
+    #[serde(default)]
+    pub fields: serde_json::Value,
+}
+
+#[allow(dead_code)]
+pub fn emit_ulog_event(host: HostApiV1, event: UlogEventWire) {
+    if !newengine_plugin_host::has_service(ENGINE_LOG_SERVICE_ID) {
+        return;
+    }
+    let json = match serde_json::to_vec(&event) {
+        Ok(v) => v,
+        Err(_) => return,
+    };
+    let _ = (host.call_service_v1)(
+        CapabilityId::from(ENGINE_LOG_SERVICE_ID),
+        MethodName::from(METHOD_WRITE_EVENT_JSON),
+        Blob::from(json),
+    );
 }
 
 struct ForwardToPluginLogger {
@@ -68,6 +101,15 @@ fn with_reentrancy_guard(f: impl FnOnce()) {
 impl ForwardToPluginLogger {
     #[inline]
     fn send_json(&self, method: &str, json: Vec<u8>) {
+        // The process-wide logger outlives plugin services during shutdown.
+        // Once the logging gateway has been unregistered, forwarding log records
+        // through `engine.logging` can recursively produce missing-service logs.
+        // Treat the route as an optional capability on every emit, not only at
+        // installation time.
+        if !newengine_plugin_host::has_service(ENGINE_LOG_SERVICE_ID) {
+            return;
+        }
+
         let _ = (self.host.call_service_v1)(
             self.sink_id.clone(),
             MethodName::from(method),

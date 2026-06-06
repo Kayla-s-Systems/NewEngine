@@ -13,15 +13,17 @@ use newengine_render_feature_api::{
 };
 use newengine_render_frame_graph::DrawListRouteValidationReport;
 use serde::Deserialize;
+#[path = "plugin_bridge.rs"] mod plugin_bridge; use self::plugin_bridge::{build_draw_list_provider_request, parse_plugin_draw_list_provider};
 
-use super::external_contribution_lowering::lower_external_draw_list_contribution;
+use super::extraction::{DrawListBuildCtx, RuntimeDrawListSet};
+use super::super::external_contribution_lowering::lower_external_draw_list_contribution;
 
 pub(super) const PROVIDER_TAG_PLUGIN: &str = "plugin";
 
 #[derive(Clone, Debug)]
 pub(crate) struct ExternalRenderDrawListProviderDesc {
-    pub(super) id: String,
-    pub(super) plugin_id: String,
+    pub(crate) id: String,
+    pub(crate) plugin_id: String,
     pub(super) label: String,
     pub(super) tags: Vec<String>,
     pub(super) capabilities: Vec<String>,
@@ -75,7 +77,7 @@ impl RenderDrawListProviderRegistry {
     pub(crate) fn register_provider(&mut self, provider: Arc<dyn RenderDrawListProvider>) {
         let id = provider.id();
         if self.providers.iter().any(|existing| existing.id() == id) {
-            log::warn!(
+            newengine_ulog_api::ulog::warn!(
                 "render draw-list provider registry: duplicate runtime provider id='{}' ignored",
                 id
             );
@@ -95,7 +97,7 @@ impl RenderDrawListProviderRegistry {
         }
 
         if !newengine_service_api::is_engine_service_gateway_id(&provider.gateway_id) {
-            log::warn!(
+            newengine_ulog_api::ulog::warn!(
                 "render draw-list provider registry: plugin provider id='{}' plugin='{}' declares invalid gateway='{}'; ignored",
                 provider.id,
                 provider.plugin_id,
@@ -125,7 +127,7 @@ impl RenderDrawListProviderRegistry {
 
                 match parse_plugin_draw_list_provider(&plugin.id, capability.describe_json.as_str()) {
                     Some(provider) => self.register_external_provider(provider),
-                    None => log::warn!(
+                    None => newengine_ulog_api::ulog::warn!(
                         "render draw-list provider registry: plugin='{}' capability='{}' has invalid provider metadata JSON",
                         plugin.id,
                         capability.id
@@ -178,7 +180,7 @@ impl RenderDrawListProviderRegistry {
         for provider in &self.external_providers {
             let gateway_id = provider.gateway_id.as_str();
             if !has_service(gateway_id) {
-                log::warn!(
+                newengine_ulog_api::ulog::warn!(
                     "render draw-list provider registry: provider id='{}' plugin='{}' gateway='{}' has no active registered route",
                     provider.id,
                     provider.plugin_id,
@@ -194,7 +196,7 @@ impl RenderDrawListProviderRegistry {
             ) {
                 Ok(bytes) => bytes,
                 Err(err) => {
-                    log::warn!(
+                    newengine_ulog_api::ulog::warn!(
                         "render draw-list provider registry: provider id='{}' plugin='{}' gateway='{}' call failed: {}",
                         provider.id,
                         provider.plugin_id,
@@ -214,7 +216,7 @@ impl RenderDrawListProviderRegistry {
                 })?;
 
             for warning in response.warnings {
-                log::warn!(
+                newengine_ulog_api::ulog::warn!(
                     "render draw-list provider '{}': {}",
                     provider.id,
                     warning
@@ -222,7 +224,7 @@ impl RenderDrawListProviderRegistry {
             }
             for contribution in response.contributions {
                 if !lists.contains(contribution.draw_list) {
-                    log::warn!(
+                    newengine_ulog_api::ulog::warn!(
                         "render draw-list provider '{}' contributed unrouted/inactive draw-list '{}'",
                         provider.id,
                         contribution.draw_list.label()
@@ -230,7 +232,7 @@ impl RenderDrawListProviderRegistry {
                     continue;
                 }
                 let lowering = lower_external_draw_list_contribution(provider, contribution, ctx, out)?;
-                log::debug!(
+                newengine_ulog_api::ulog::debug!(
                     "render draw-list provider '{}' lowered draw_list={} commands={} draw_calls={} skipped={} triangles={}",
                     provider.id,
                     lowering.draw_list.label(),
@@ -276,7 +278,7 @@ impl RenderDrawListProviderRegistry {
         report: &DrawListRouteValidationReport,
     ) -> EngineResult<()> {
         for issue in &report.warnings {
-            log::warn!(
+            newengine_ulog_api::ulog::warn!(
                 "render draw-list route validation: code='{}' {}",
                 issue.code,
                 issue.message

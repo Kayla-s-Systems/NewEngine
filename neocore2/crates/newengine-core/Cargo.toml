@@ -14,6 +14,7 @@ host-probe = ["dep:sysinfo", "dep:windows"]
 native-crash-handlers = ["dep:windows"]
 
 [dependencies]
+newengine-ulog-api = { path = "../newengine-ulog-api" }
 crossbeam-channel = "0.5"
 log = { version = "0.4.29", features = ["std"] }
 raw-window-handle = "0.6.2"

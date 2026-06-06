@@ -9,6 +9,7 @@ description = "Reusable GameFirst runtime scene and render controller layer for 
 default = []
 
 [dependencies]
+newengine-ulog-api = { path = "../newengine-ulog-api" }
 newengine-asset-format-nef8 = { path = "../newengine-asset-format-nef8" }
 abi_stable = { version = "0.11" }
 blake3 = "1"

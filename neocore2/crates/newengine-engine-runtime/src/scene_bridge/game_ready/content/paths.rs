@@ -18,7 +18,7 @@ pub(super) fn profile_asset_candidates() -> Vec<String> {
         }
         let as_path = std::path::Path::new(trimmed);
         if as_path.is_absolute() {
-            log::warn!(
+            newengine_ulog_api::ulog::warn!(
                 "scene profile: ignoring absolute authored map path='{}'; set a logical AssetManager path instead",
                 trimmed
             );
@@ -28,7 +28,7 @@ pub(super) fn profile_asset_candidates() -> Vec<String> {
     }
 
     if out.is_empty() {
-        log::warn!(
+        newengine_ulog_api::ulog::warn!(
             "scene profile: no authored map profile configured; set NEWENGINE_SCENE_PROFILE to a logical .ymap path from the active profile layer"
         );
     }

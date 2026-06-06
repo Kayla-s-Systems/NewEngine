@@ -7,8 +7,8 @@ use newengine_core::EngineResult;
 use newengine_ui_api::{
     decode_ui_frame_response_bin, encode_ui_frame_request_bin, UiComponentNode, UiDrawList,
     UiFrameRequest, UiFrameResponse, UiNodeMessage, UiNodeMessageSeverity, UiNodeTone,
-    UiNodeTreeRequest, UiSurfaceAdmissionPolicy, UiSurfaceAnchor, UiSurfaceNode, UiSurfaceStyle,
-    ENGINE_UI_SERVICE_ID, UI_COMPONENT_PANEL, UI_SERVICE_METHOD_APPLY_NODE_REQUEST_V1,
+    UiSurfaceAdmissionPolicy, UiSurfaceAnchor, UiSurfaceNode, UiSurfaceStyle,
+    ENGINE_UI_SERVICE_ID, UI_COMPONENT_PANEL,
     UI_SERVICE_METHOD_DRAW_FRAME_BIN_V1, UI_SERVICE_METHOD_DRAW_FRAME_V1, UI_SERVICE_METHOD_SURFACE_NODE_V1,
     UI_SURFACE_ENGINE_ERROR_MODAL, UI_THEME_NORTHSTAR_DEFAULT,
 };
@@ -21,7 +21,7 @@ fn log_missing_ui_route_once(operation: &str) {
         .compare_exchange(false, true, Ordering::AcqRel, Ordering::Acquire)
         .is_ok()
     {
-        log::warn!(
+        newengine_ulog_api::ulog::warn!(
             "ui gateway: engine.ui route missing; operation='{}' skipped. Register/sync an engine.ui provider route with ui.backend capability in NewEngine/neocore2/plugins",
             operation
         );
@@ -132,7 +132,7 @@ pub fn publish_surface_node(node: &UiSurfaceNode) {
     let payload = match serde_json::to_vec(node) {
         Ok(payload) => payload,
         Err(e) => {
-            log::warn!(
+            newengine_ulog_api::ulog::warn!(
                 "ui gateway: failed to encode surface node surface='{}': {e}",
                 node.surface_id
             );
@@ -145,14 +145,14 @@ pub fn publish_surface_node(node: &UiSurfaceNode) {
         UI_SERVICE_METHOD_SURFACE_NODE_V1,
         &payload,
     ) {
-        Ok(Some(_)) => log::trace!(
+        Ok(Some(_)) => newengine_ulog_api::ulog::trace!(
             "ui gateway: surface node published surface='{}' source='{}' visible={}",
             node.surface_id,
             node.source,
             node.visible
         ),
         Ok(None) => log_missing_ui_route_once("publish_surface_node"),
-        Err(e) => log::warn!(
+        Err(e) => newengine_ulog_api::ulog::warn!(
             "ui gateway: surface node publish failed surface='{}' err='{}'",
             node.surface_id,
             e
@@ -163,40 +163,7 @@ pub fn publish_surface_node(node: &UiSurfaceNode) {
 /// Publish a provider-neutral runtime UI node request to the active `engine.ui` provider.
 ///
 /// This is the generative sibling of `.neui` mounting. Runtime systems submit
-/// data-only node trees and the provider retains/renders them through the same
-/// `UiSurfaceNode` path.
-pub fn publish_node_tree_request(request: &UiNodeTreeRequest) {
-    let payload = match serde_json::to_vec(request) {
-        Ok(payload) => payload,
-        Err(e) => {
-            log::warn!(
-                "ui gateway: failed to encode node request surface='{}': {e}",
-                request.surface_id
-            );
-            return;
-        }
-    };
-
-    match newengine_core::call_service_v1_optional(
-        ENGINE_UI_SERVICE_ID,
-        UI_SERVICE_METHOD_APPLY_NODE_REQUEST_V1,
-        &payload,
-    ) {
-        Ok(Some(_)) => log::trace!(
-            "ui gateway: node request published surface='{}' source='{}'",
-            request.surface_id,
-            request.source
-        ),
-        Ok(None) => log_missing_ui_route_once("publish_node_tree_request"),
-        Err(e) => log::warn!(
-            "ui gateway: node request publish failed surface='{}' err='{}'",
-            request.surface_id,
-            e
-        ),
-    }
-}
-
-/// Request a current-frame UI draw list through the canonical `engine.ui` gateway.
+/// data-only node trees and the provider retains/renders them through the same/// Request a current-frame UI draw list through the canonical `engine.ui` gateway.
 ///
 /// Runtime-host normally prepares provider UI before `engine.step()`, but retained
 /// UI nodes may be published during that same step. This helper lets a runtime
@@ -220,7 +187,7 @@ pub fn request_draw_list(
             Ok(draw_list) => return Ok(draw_list),
             Err(err) => {
                 if TRY_BINARY_UI_DRAW_FRAME.swap(false, Ordering::Relaxed) {
-                    log::warn!(
+                    newengine_ulog_api::ulog::warn!(
                         "ui gateway: binary draw-frame path unavailable; falling back to JSON control path err='{}'",
                         err
                     );

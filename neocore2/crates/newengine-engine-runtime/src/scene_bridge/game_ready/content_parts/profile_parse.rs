@@ -1,25 +1,28 @@
+use super::*;
+use super::super::paths::profile_asset_candidates;
+
 use newengine_assets::{AssetDecodeRequest, ASSET_LIST_FILE_BODY_OUTPUT};
 use newengine_authored_xml as authored_xml;
 
 
 #[derive(Debug, Deserialize)]
-struct RawShadowSpec {
+pub(super) struct RawShadowSpec {
     #[serde(default = "default_shadow_enabled")]
-    enabled: bool,
+    pub(super) enabled: bool,
     #[serde(default = "default_shadow_resolution")]
-    resolution: u32,
+    pub(super) resolution: u32,
     #[serde(default = "default_shadow_cascade_count")]
-    cascade_count: u32,
+    pub(super) cascade_count: u32,
     #[serde(default = "default_shadow_max_distance")]
-    max_distance: f32,
+    pub(super) max_distance: f32,
     #[serde(default = "default_shadow_softness")]
-    softness: f32,
+    pub(super) softness: f32,
     #[serde(default = "default_shadow_bias")]
-    bias: f32,
+    pub(super) bias: f32,
     #[serde(default = "default_shadow_normal_bias")]
-    normal_bias: f32,
+    pub(super) normal_bias: f32,
     #[serde(default = "default_shadow_contact_strength")]
-    contact_strength: f32,
+    pub(super) contact_strength: f32,
 }
 
 impl Default for RawShadowSpec {
@@ -39,35 +42,35 @@ impl Default for RawShadowSpec {
 
 
 #[derive(Debug, Deserialize)]
-struct RawFoliageSpec {
+pub(super) struct RawFoliageSpec {
     #[serde(default)]
-    enabled: bool,
+    pub(super) enabled: bool,
     #[serde(default = "default_foliage_prefab")]
-    prefab: String,
+    pub(super) prefab: String,
     #[serde(default = "default_foliage_seed")]
-    seed: u64,
+    pub(super) seed: u64,
     #[serde(default = "default_foliage_grid_min")]
-    grid_min: i32,
+    pub(super) grid_min: i32,
     #[serde(default = "default_foliage_grid_max")]
-    grid_max: i32,
+    pub(super) grid_max: i32,
     #[serde(default = "default_foliage_spacing")]
-    spacing: f32,
+    pub(super) spacing: f32,
     #[serde(default = "default_foliage_jitter")]
-    jitter: f32,
+    pub(super) jitter: f32,
     #[serde(default = "default_foliage_gate_threshold")]
-    gate_threshold: f32,
+    pub(super) gate_threshold: f32,
     #[serde(default)]
-    max_count: u32,
+    pub(super) max_count: u32,
     #[serde(default = "default_foliage_min_scale")]
-    min_scale: f32,
+    pub(super) min_scale: f32,
     #[serde(default = "default_foliage_max_scale")]
-    max_scale: f32,
+    pub(super) max_scale: f32,
     #[serde(default = "default_foliage_min_player_distance")]
-    min_player_distance: f32,
+    pub(super) min_player_distance: f32,
     #[serde(default = "default_foliage_edge_margin")]
-    edge_margin: f32,
+    pub(super) edge_margin: f32,
     #[serde(default = "default_foliage_surface_offset")]
-    surface_offset: f32,
+    pub(super) surface_offset: f32,
 }
 
 impl Default for RawFoliageSpec {
@@ -92,35 +95,35 @@ impl Default for RawFoliageSpec {
 }
 
 #[derive(Debug, Deserialize)]
-struct RawPrefabSpec {
+pub(super) struct RawPrefabSpec {
     #[serde(default)]
-    id: String,
+    pub(super) id: String,
     #[serde(default)]
-    source: String,
+    pub(super) source: String,
     #[serde(default = "default_prefab_proxy")]
-    proxy: String,
+    pub(super) proxy: String,
     #[serde(default = "default_prefab_enabled")]
-    enabled: bool,
+    pub(super) enabled: bool,
 }
 
 #[derive(Debug, Deserialize)]
-struct RawDefinitionInstanceSpec {
+pub(super) struct RawDefinitionInstanceSpec {
     #[serde(default)]
-    definition_ref: String,
+    pub(super) definition_ref: String,
     /// Declarative apply behavior for this `.ymap` definition placement.
     /// Default is metadata-only so `.ytyp` dependencies remain graph inputs,
     /// not implicit render/spawn commands.
     #[serde(default = "default_definition_apply_mode")]
-    apply_mode: String,
+    pub(super) apply_mode: String,
     #[serde(default)]
-    position: [f32; 3],
+    pub(super) position: [f32; 3],
     #[serde(default)]
-    rotation_ypr: [f32; 3],
+    pub(super) rotation_ypr: [f32; 3],
     #[serde(default = "default_definition_scale")]
-    scale: [f32; 3],
+    pub(super) scale: [f32; 3],
 }
 
-pub(super) fn load_game_ready_map_profile() -> GameReadyMapProfile {
+pub(in crate::scene_bridge::game_ready) fn load_game_ready_map_profile() -> GameReadyMapProfile {
     load_profile_from_asset_manager().unwrap_or_else(|errors| {
         panic!(
             "game-ready strict data-driven startup failed: authored .ymap was not resolved into a valid XML map profile. Emergency fallback profiles are forbidden; fix VFS mounts, NEF8 envelope, or XML schema. Attempts: {}",
@@ -133,7 +136,7 @@ fn load_profile_from_asset_manager() -> Result<GameReadyMapProfile, Vec<String>>
     use newengine_assets::AssetService;
 
     if !newengine_core::has_engine_gateway_route(newengine_assets_api::ENGINE_ASSET_SERVICE_ID) {
-        log::debug!(
+        newengine_ulog_api::ulog::debug!(
             "game-ready: AssetManager service '{}' unavailable while resolving authored map",
             newengine_assets_api::ENGINE_ASSET_SERVICE_ID
         );
@@ -151,7 +154,7 @@ fn load_profile_from_asset_manager() -> Result<GameReadyMapProfile, Vec<String>>
     for logical_path in profile_asset_candidates() {
         match load_profile_asset(&assets, &logical_path) {
             Ok(profile) => {
-                log::info!(
+                newengine_ulog_api::ulog::info!(
                     "game-ready: loaded authored map asset='{}'",
                     logical_path,
                 );
@@ -163,7 +166,7 @@ fn load_profile_from_asset_manager() -> Result<GameReadyMapProfile, Vec<String>>
                     .map(|v| v.to_string())
                     .unwrap_or_else(|te| format!("{{\"trace_error\":\"{te}\"}}"));
                 let message = format!("path='{logical_path}' err='{e}' trace={trace}");
-                log::debug!("game-ready: map asset unavailable {message}");
+                newengine_ulog_api::ulog::debug!("game-ready: map asset unavailable {message}");
                 errors.push(message);
             }
         }
@@ -196,7 +199,7 @@ fn load_profile_asset(
         ));
     }
     let value = parse_ymap_xml_payload(&payload, logical_path)?;
-    log::info!(
+    newengine_ulog_api::ulog::info!(
         "game-ready: decoded authored .ymap path='{}' output='{}' policy='NEF8/ListFile body from engine.assets; XML map semantics stay outside AssetManager'",
         logical_path,
         output_kind

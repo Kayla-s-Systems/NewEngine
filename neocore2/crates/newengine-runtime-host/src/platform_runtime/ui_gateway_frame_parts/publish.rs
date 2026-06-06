@@ -1,8 +1,9 @@
+use super::*;
 pub(crate) fn publish_surface_node(node: &UiSurfaceNode) {
     let payload = match serde_json::to_vec(node) {
         Ok(payload) => payload,
         Err(e) => {
-            log::warn!("ui gateway: failed to encode surface node surface='{}': {e}", node.surface_id);
+            newengine_ulog_api::ulog::warn!("ui gateway: failed to encode surface node surface='{}': {e}", node.surface_id);
             return;
         }
     };
@@ -12,11 +13,11 @@ pub(crate) fn publish_surface_node(node: &UiSurfaceNode) {
         &payload,
     ) {
         Ok(Some(_)) => {}
-        Ok(None) => log::warn!(
+        Ok(None) => newengine_ulog_api::ulog::warn!(
             "ui gateway: engine.ui route unavailable; surface='{}' skipped without native/special renderer",
             node.surface_id,
         ),
-        Err(e) => log::warn!("ui gateway: surface node publish failed surface='{}' err='{e}'", node.surface_id),
+        Err(e) => newengine_ulog_api::ulog::warn!("ui gateway: surface node publish failed surface='{}' err='{e}'", node.surface_id),
     }
 }
 
@@ -25,7 +26,7 @@ pub(crate) fn publish_node_tree_request(request: &UiNodeTreeRequest) {
     let payload = match serde_json::to_vec(request) {
         Ok(payload) => payload,
         Err(e) => {
-            log::warn!(
+            newengine_ulog_api::ulog::warn!(
                 "ui gateway: failed to encode node tree request surface='{}': {e}",
                 request.surface_id
             );
@@ -39,7 +40,7 @@ pub(crate) fn publish_node_tree_request(request: &UiNodeTreeRequest) {
     ) {
         Ok(Some(bytes)) => {
             if let Ok(ack) = serde_json::from_slice::<UiNodeRequestAck>(&bytes) {
-                log::trace!(
+                newengine_ulog_api::ulog::trace!(
                     "ui gateway: node tree request accepted surface='{}' nodes={} provider={}",
                     ack.surface_id,
                     ack.accepted_nodes,
@@ -47,11 +48,11 @@ pub(crate) fn publish_node_tree_request(request: &UiNodeTreeRequest) {
                 );
             }
         }
-        Ok(None) => log::warn!(
+        Ok(None) => newengine_ulog_api::ulog::warn!(
             "ui gateway: engine.ui route unavailable; node tree surface='{}' skipped",
             request.surface_id,
         ),
-        Err(e) => log::warn!(
+        Err(e) => newengine_ulog_api::ulog::warn!(
             "ui gateway: node tree publish failed surface='{}' err='{e}'",
             request.surface_id
         ),
@@ -122,28 +123,3 @@ pub(crate) fn publish_debug_overlay_telemetry(telemetry: &UiRuntimeDebugOverlayT
 }
 
 
-fn ui_draw_list_stats(draw_list: &UiDrawList) -> String {
-    let texture_set_bytes: usize = draw_list
-        .texture_delta
-        .set
-        .values()
-        .map(|texture| texture.rgba8.len())
-        .sum();
-    let patch_bytes: usize = draw_list
-        .texture_delta
-        .patches
-        .iter()
-        .map(|patch| patch.rgba8.len())
-        .sum();
-    format!(
-        "ui(vertices={} indices={} cmds={} tex_set={} tex_set_bytes={} patches={} patch_bytes={} free={})",
-        draw_list.mesh.vertices.len(),
-        draw_list.mesh.indices.len(),
-        draw_list.mesh.cmds.len(),
-        draw_list.texture_delta.set.len(),
-        texture_set_bytes,
-        draw_list.texture_delta.patches.len(),
-        patch_bytes,
-        draw_list.texture_delta.free.len(),
-    )
-}

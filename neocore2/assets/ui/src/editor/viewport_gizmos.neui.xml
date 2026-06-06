@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes"?>
+<NeUiDictionary schema="newengine.neui.xmlcentral.v1">
+  <Entries>
+    <Entry name="surface" kind="ui_surface" />
+  </Entries>
+  <Dependencies>
+    <ThemeRef ref="assets/ui/themes/northstar_editor.neui@editor_light" />
+    <ComponentRef ref="assets/ui/components/common.neui" />
+    <ComponentRef ref="assets/ui/components/editor_controls.neui" />
+  </Dependencies>
+  <Surface name="engine.ui.editor.viewport_gizmos" kind="editor_panel" root="layout.main" theme="assets/ui/themes/northstar_editor.neui@editor_light" z_order="200" />
+  <Layout name="layout.main" title="Viewport Gizmos" role="editor_panel">
+    <Panel id="panel.root" title="Viewport Gizmos" class="editor-panel">
+      <Text id="panel.contract" text="newengine.ui.editor.viewport_gizmos.node_tree.v1" detail="engine.ui" />
+    </Panel>
+  </Layout>
+</NeUiDictionary>

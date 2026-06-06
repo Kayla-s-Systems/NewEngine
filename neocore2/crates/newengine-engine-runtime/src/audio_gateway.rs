@@ -14,11 +14,13 @@ use newengine_service_kit::{
 use parking_lot::Mutex;
 use std::collections::VecDeque;
 use std::sync::{Arc, OnceLock};
+use std::sync::atomic::{AtomicBool, Ordering};
 
 const AUDIO_EVENT_QUEUE_CAPACITY: usize = 128;
 const AUDIO_GATEWAY_OWNER: &str = "newengine-engine-runtime.audio-gateway";
 
 static AUDIO_GATEWAY: OnceLock<Arc<Mutex<AudioGatewayState>>> = OnceLock::new();
+static AUDIO_GATEWAY_REGISTERED: AtomicBool = AtomicBool::new(false);
 
 #[derive(Debug, Default)]
 struct AudioGatewayState {
@@ -30,13 +32,6 @@ impl AudioGatewayState {
         if self.events.len() >= AUDIO_EVENT_QUEUE_CAPACITY {
             let _ = self.events.pop_front();
         }
-        log::debug!(
-            "audio gateway: semantic event id='{}' source='{}' intensity={:.2} frame={}",
-            event.id,
-            event.source,
-            event.intensity,
-            event.frame_index
-        );
         self.events.push_back(event);
         AudioFeedbackAck {
             accepted: true,
@@ -117,12 +112,21 @@ fn audio_gateway_service(state: Arc<Mutex<AudioGatewayState>>) -> newengine_plug
 }
 
 pub fn register_audio_gateway_best_effort() {
-    if newengine_core::has_engine_gateway_route(ENGINE_AUDIO_SERVICE_ID) {
+    // This bootstrap route is registered from reusable runtime construction,
+    // before gateway diagnostics or routed logging may be safe to use. Do not
+    // call `has_engine_gateway_route(engine.audio)` here: resolving the route can
+    // re-enter the same bootstrap path in early app startup. A local atomic guard
+    // is enough because this built-in queue provider is process-local and can be
+    // shadowed later by normal gateway priority rules.
+    if AUDIO_GATEWAY_REGISTERED
+        .compare_exchange(false, true, Ordering::AcqRel, Ordering::Acquire)
+        .is_err()
+    {
         return;
     }
 
     let service = audio_gateway_service(gateway_state());
-    match register_engine_gateway_provider_service(EngineGatewayProviderDecl {
+    if register_engine_gateway_provider_service(EngineGatewayProviderDecl {
         gateway: ENGINE_AUDIO_SERVICE_ID,
         service_kind: newengine_service_api::EngineServiceKind::Audio,
         provider_service: ENGINE_AUDIO_SERVICE_ID,
@@ -131,17 +135,10 @@ pub fn register_audio_gateway_best_effort() {
         priority: 0,
         owner: AUDIO_GATEWAY_OWNER,
         service,
-    }) {
-        Ok(()) => log::info!(
-            "audio gateway: engine-runtime route registered id='{}' capability='{}'",
-            ENGINE_AUDIO_SERVICE_ID,
-            AUDIO_BACKEND_CAPABILITY_ID
-        ),
-        Err(e) => log::warn!(
-            "audio gateway: registration skipped id='{}' err='{}'",
-            ENGINE_AUDIO_SERVICE_ID,
-            e
-        ),
+    })
+    .is_err()
+    {
+        AUDIO_GATEWAY_REGISTERED.store(false, Ordering::Release);
     }
 }
 
@@ -149,8 +146,7 @@ pub fn emit_audio_feedback(kind: AudioFeedbackKind, frame_index: u64) {
     let event = AudioFeedbackEvent::ui(kind, frame_index);
     let payload = match serde_json::to_vec(&event) {
         Ok(payload) => payload,
-        Err(e) => {
-            log::warn!("audio gateway: failed to encode feedback event: {e}");
+        Err(_e) => {
             return;
         }
     };
@@ -161,6 +157,6 @@ pub fn emit_audio_feedback(kind: AudioFeedbackKind, frame_index: u64) {
         &payload,
     ) {
         Ok(Some(_)) | Ok(None) => {}
-        Err(e) => log::warn!("audio gateway: feedback event publish failed: {e}"),
+        Err(_e) => {}
     }
 }

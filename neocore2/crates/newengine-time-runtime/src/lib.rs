@@ -256,7 +256,7 @@ impl RuntimeHostedTimeState {
             && self.frame_index % 120 == 0
             && !self.paused
         {
-            log::warn!(
+            newengine_ulog_api::ulog::warn!(
                 "time gateway: realtime fixed-step debt dropped frame={} raw_delta_ns={} clamped_ns={} ticks_to_run={} max_ticks={} accumulator_ns={} scale={:.3}",
                 self.frame_index,
                 self.last_raw_delta_ns,

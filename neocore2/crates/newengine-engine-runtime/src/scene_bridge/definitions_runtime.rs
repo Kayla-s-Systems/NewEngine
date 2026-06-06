@@ -122,7 +122,7 @@ pub fn apply_definition_instantiation(
     let trace = build_definition_runtime_trace(&definition_ref, transform, graph, Some(entity));
     let _ = world.insert(entity, DefinitionRuntimeTraceComponent { trace: trace.clone() });
     for line in &trace.debug_log {
-        log::debug!("{line}");
+        newengine_ulog_api::ulog::debug!("{line}");
     }
     (entity, trace)
 }

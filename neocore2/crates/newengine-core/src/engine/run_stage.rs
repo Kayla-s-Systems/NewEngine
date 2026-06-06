@@ -68,7 +68,7 @@ impl<E: Send + 'static> Engine<E> {
                     }
                     ModuleFaultTolerance::Resilient => {
                         let reason = format!("stage {stage:?} failed: {e}");
-                        log::error!("engine: disabling module {} ({})", module_id, reason);
+                        newengine_ulog_api::ulog::error!("engine: disabling module {} ({})", module_id, reason);
 
                         s.disable(reason);
 
@@ -118,7 +118,7 @@ impl<E: Send + 'static> Engine<E> {
                 self.shutdown.clone(),
             );
 
-            log::debug!("engine shutdown: module shutdown begin id='{}'", module_id);
+            newengine_ulog_api::ulog::debug!("engine shutdown: module shutdown begin id='{}'", module_id);
             crate::crash::record_breadcrumb(format!(
                 "engine shutdown: module shutdown begin id={module_id}"
             ));
@@ -127,7 +127,7 @@ impl<E: Send + 'static> Engine<E> {
                 .shutdown(&mut ctx)
                 .map_err(|e| EngineError::with_module_stage(module_id, ModuleStage::Shutdown, e));
 
-            log::debug!("engine shutdown: module shutdown completed id='{}'", module_id);
+            newengine_ulog_api::ulog::debug!("engine shutdown: module shutdown completed id='{}'", module_id);
             crate::crash::record_breadcrumb(format!(
                 "engine shutdown: module shutdown completed id={module_id}"
             ));

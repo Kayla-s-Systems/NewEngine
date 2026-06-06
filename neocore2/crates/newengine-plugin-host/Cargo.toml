@@ -5,6 +5,7 @@ readme = "README.md"
 edition = "2021"
 
 [dependencies]
+newengine-ulog-api = { path = "../newengine-ulog-api" }
 log = "0.4.29"
 abi_stable = "0.11"
 libloading = "0.9.0"

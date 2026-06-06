@@ -1,4 +1,6 @@
-fn canonical_ydd_prefab_ref(prefab: &GameReadyPrefabSpec) -> Result<String, String> {
+use super::*;
+
+pub(super) fn canonical_ydd_prefab_ref(prefab: &GameReadyPrefabSpec) -> Result<String, String> {
     let source = prefab.source.trim().replace('\\', "/");
     if source.is_empty() {
         return Err(format!("prefab id='{}' has no .ydd@entry source", prefab.id));
@@ -13,7 +15,7 @@ fn canonical_ydd_prefab_ref(prefab: &GameReadyPrefabSpec) -> Result<String, Stri
     Ok(source)
 }
 
-fn ydd_body_json(logical_ref: &str) -> Result<serde_json::Value, String> {
+pub(super) fn ydd_body_json(logical_ref: &str) -> Result<serde_json::Value, String> {
     let assets = AssetServiceClient::new(default_host_api());
     let body = assets
         .decode_v1(&newengine_assets::AssetDecodeRequest {
@@ -26,14 +28,14 @@ fn ydd_body_json(logical_ref: &str) -> Result<serde_json::Value, String> {
 }
 
 #[inline]
-fn ydd_array<'a>(value: &'a serde_json::Value, key: &str) -> Result<&'a Vec<serde_json::Value>, String> {
+pub(super) fn ydd_array<'a>(value: &'a serde_json::Value, key: &str) -> Result<&'a Vec<serde_json::Value>, String> {
     value
         .get(key)
         .and_then(|x| x.as_array())
         .ok_or_else(|| format!("ydd runtime mesh part missing array '{key}'"))
 }
 
-fn ydd_vec3(value: &serde_json::Value, key: &str, default: [f32; 3]) -> [f32; 3] {
+pub(super) fn ydd_vec3(value: &serde_json::Value, key: &str, default: [f32; 3]) -> [f32; 3] {
     let Some(values) = value.get(key).and_then(|x| x.as_array()) else { return default; };
     if values.len() < 3 {
         return default;
@@ -45,7 +47,7 @@ fn ydd_vec3(value: &serde_json::Value, key: &str, default: [f32; 3]) -> [f32; 3]
     ]
 }
 
-fn ydd_vec2(value: &serde_json::Value, key: &str, default: [f32; 2]) -> [f32; 2] {
+pub(super) fn ydd_vec2(value: &serde_json::Value, key: &str, default: [f32; 2]) -> [f32; 2] {
     let Some(values) = value.get(key).and_then(|x| x.as_array()) else { return default; };
     if values.len() < 2 {
         return default;
@@ -56,7 +58,7 @@ fn ydd_vec2(value: &serde_json::Value, key: &str, default: [f32; 2]) -> [f32; 2]
     ]
 }
 
-fn recompute_ydd_mesh_bounds(mesh: &mut PrimitiveMesh) {
+pub(super) fn recompute_ydd_mesh_bounds(mesh: &mut PrimitiveMesh) {
     let mut min = Vec3::splat(f32::INFINITY);
     let mut max = Vec3::splat(f32::NEG_INFINITY);
     for v in &mesh.vertices {
@@ -78,7 +80,7 @@ fn recompute_ydd_mesh_bounds(mesh: &mut PrimitiveMesh) {
     mesh.bounds_radius = radius.max(0.001);
 }
 
-fn decode_ydd_runtime_mesh_part(
+pub(super) fn decode_ydd_runtime_mesh_part(
     logical_ref: &str,
     index: usize,
     part: &serde_json::Value,
@@ -157,7 +159,7 @@ fn decode_ydd_runtime_mesh_part(
     })
 }
 
-fn ydd_material_ref_for_runtime_part(body: &serde_json::Value, index: usize) -> Option<String> {
+pub(super) fn ydd_material_ref_for_runtime_part(body: &serde_json::Value, index: usize) -> Option<String> {
     let mesh_part = body.get("mesh_parts")?.as_array()?.get(index)?;
     let slot_index = mesh_part.get("material_slot_index")?.as_u64()? as usize;
     let slot = body.get("material_slots")?.as_array()?.get(slot_index)?;
@@ -165,7 +167,7 @@ fn ydd_material_ref_for_runtime_part(body: &serde_json::Value, index: usize) -> 
     (!reference.is_empty()).then_some(reference)
 }
 
-fn decode_runtime_ydd_prefab(logical_ref: &str) -> Result<Vec<DecodedPrefabMeshPart>, String> {
+pub(super) fn decode_runtime_ydd_prefab(logical_ref: &str) -> Result<Vec<DecodedPrefabMeshPart>, String> {
     let body = ydd_body_json(logical_ref)?;
     let encoding = body
         .get("mesh_encoding")
@@ -185,7 +187,7 @@ fn decode_runtime_ydd_prefab(logical_ref: &str) -> Result<Vec<DecodedPrefabMeshP
     if parts.is_empty() {
         return Err(format!("ydd drawable has no runtime mesh parts path='{logical_ref}'"));
     }
-    log::info!(
+    newengine_ulog_api::ulog::info!(
         "game-ready: ydd drawable decoded path='{}' parts={} policy='.ymap -> .ytyp -> .ydd -> .nemat -> .ytd'",
         logical_ref,
         parts.len()

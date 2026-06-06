@@ -117,7 +117,7 @@ pub(crate) fn gateway_capability_from_capability(
     let value = match serde_json::from_str::<serde_json::Value>(raw) {
         Ok(value) => value,
         Err(err) => {
-            log::warn!(
+            newengine_ulog_api::ulog::warn!(
                 "plugins: ignoring malformed service capability metadata plugin='{}' capability='{}' error='{}'",
                 plugin_id,
                 capability.id,
@@ -132,7 +132,7 @@ pub(crate) fn gateway_capability_from_capability(
     };
 
     if !is_engine_service_gateway_id(&gateway_id) {
-        log::warn!(
+        newengine_ulog_api::ulog::warn!(
             "plugins: ignoring service gateway with invalid id plugin='{}' capability='{}' engine_gateway='{}'",
             plugin_id,
             capability.id,
@@ -142,7 +142,7 @@ pub(crate) fn gateway_capability_from_capability(
     }
 
     let Some(service_kind_text) = json_field_string(&value, SERVICE_KIND_FIELD) else {
-        log::warn!(
+        newengine_ulog_api::ulog::warn!(
             "plugins: ignoring service gateway without service_kind plugin='{}' capability='{}' engine_gateway='{}'",
             plugin_id,
             capability.id,
@@ -152,7 +152,7 @@ pub(crate) fn gateway_capability_from_capability(
     };
 
     let Some(service_kind) = normalize_service_kind(&service_kind_text) else {
-        log::warn!(
+        newengine_ulog_api::ulog::warn!(
             "plugins: ignoring service gateway with invalid service_kind plugin='{}' capability='{}' service_kind='{}' engine_gateway='{}'",
             plugin_id,
             capability.id,
@@ -168,7 +168,7 @@ pub(crate) fn gateway_capability_from_capability(
         if !is_engine_service_gateway_id(provider_route_id)
             || !provider_route_extends_gateway_parent(&gateway_id, provider_route_id)
         {
-            log::warn!(
+            newengine_ulog_api::ulog::warn!(
                 "plugins: ignoring service gateway with invalid provider_route plugin='{}' capability='{}' engine_gateway='{}' provider_route='{}'",
                 plugin_id,
                 capability.id,
@@ -180,7 +180,7 @@ pub(crate) fn gateway_capability_from_capability(
     }
 
     if !service_kind_matches_gateway(&service_kind, &gateway_id, &system_tags) {
-        log::warn!(
+        newengine_ulog_api::ulog::warn!(
             "plugins: ignoring service gateway with mixed domain levels plugin='{}' capability='{}' service_kind='{}' engine_gateway='{}' gateway_domain='{}'",
             plugin_id,
             capability.id,

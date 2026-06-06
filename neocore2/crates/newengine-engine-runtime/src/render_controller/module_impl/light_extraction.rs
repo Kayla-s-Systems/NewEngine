@@ -1,4 +1,6 @@
 #![forbid(unsafe_op_in_unsafe_fn)]
 
-include!("light_extraction_parts/registry.rs");
-include!("light_extraction_parts/plugin_bridge.rs");
+#[path = "light_extraction_parts/registry.rs"]
+mod registry;
+
+pub(crate) use self::registry::LightExtractionProviderRegistry;
