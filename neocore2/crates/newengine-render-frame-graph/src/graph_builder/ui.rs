@@ -1,0 +1,48 @@
+use newengine_render_api::{RenderGraphPassDomain, RenderGraphResourceUsage};
+
+use crate::{DrawListKind, StandardRenderPhase};
+
+use super::{FrameGraphBuilder, RG_SURFACE_COLOR};
+
+impl FrameGraphBuilder {
+    #[inline]
+    pub fn ui_backdrop_blur(mut self, enabled: bool) -> Self {
+        if !enabled {
+            return self;
+        }
+        let Some(input) = self.sampleable_scene_input_resource() else {
+            return self;
+        };
+        self.add_phase_pass(StandardRenderPhase::UiBackdropBlur, |pass| {
+            pass.with_domain(RenderGraphPassDomain::Render2d)
+                .reads(input, RenderGraphResourceUsage::SampledTexture)
+                .writes(RG_SURFACE_COLOR, RenderGraphResourceUsage::ColorAttachment)
+        });
+        self
+    }
+
+    #[inline]
+    pub fn ui_composite(mut self, enabled: bool) -> Self {
+        if !enabled {
+            return self;
+        }
+        self.add_phase_pass(StandardRenderPhase::UiComposite, |pass| {
+            pass.with_domain(RenderGraphPassDomain::Render2d).writes(RG_SURFACE_COLOR, RenderGraphResourceUsage::ColorAttachment)
+                .draw_list(DrawListKind::Ui)
+        });
+        self
+    }
+
+    #[inline]
+    pub fn debug_overlay(mut self, enabled: bool) -> Self {
+        if enabled {
+            self.add_phase_pass(StandardRenderPhase::DebugOverlay, |pass| {
+                pass.with_domain(RenderGraphPassDomain::Render2d).reads(RG_SURFACE_COLOR, RenderGraphResourceUsage::ColorAttachment)
+                    .writes(RG_SURFACE_COLOR, RenderGraphResourceUsage::ColorAttachment)
+                    .draw_list(DrawListKind::Debug)
+            });
+        }
+        self
+    }
+
+}

@@ -96,6 +96,23 @@ impl RenderFramePlan {
             }
         }
 
+        for pass in &self.graph.passes {
+            for routed_draw_list in &pass.draw_lists {
+                if !self.draw_lists.iter().any(|list| list.kind == *routed_draw_list) {
+                    warnings.push(
+                        DrawListRouteValidationIssue::new(
+                            "draw_list.route_without_declared_list",
+                            format!(
+                                "render graph pass '{}' consumes draw-list '{}' but the frame plan did not declare it",
+                                pass.label,
+                                routed_draw_list.label()
+                            ),
+                        )
+                        .with_draw_list(*routed_draw_list),
+                    );
+                }
+            }
+        }
 
         DrawListRouteValidationReport {
             ok: errors.is_empty(),
