@@ -1,8 +1,8 @@
-use std::num::NonZeroIsize;
-
 use newengine_core::{EngineError, EngineResult};
 use newengine_platform_api::{NativeWindowBackendV1, NativeWindowHandlesV1};
 use raw_window_handle::{RawDisplayHandle, RawWindowHandle};
+#[cfg(windows)]
+use std::num::NonZeroIsize;
 
 #[cfg(target_os = "windows")]
 pub(crate) fn raw_to_native_handles(
@@ -57,7 +57,10 @@ pub(crate) fn raw_to_native_handles(
             Ok(NativeWindowHandlesV1 {
                 backend: NativeWindowBackendV1::Xlib,
                 window: window.window,
-                display: display.display.map(|v| v.as_ptr() as u64).unwrap_or_default(),
+                display: display
+                    .display
+                    .map(|v| v.as_ptr() as u64)
+                    .unwrap_or_default(),
                 reserved0: display.screen as u64,
                 reserved1: window.visual_id,
             })
@@ -66,7 +69,10 @@ pub(crate) fn raw_to_native_handles(
             Ok(NativeWindowHandlesV1 {
                 backend: NativeWindowBackendV1::Xcb,
                 window: window.window.get() as u64,
-                display: display.connection.map(|v| v.as_ptr() as u64).unwrap_or_default(),
+                display: display
+                    .connection
+                    .map(|v| v.as_ptr() as u64)
+                    .unwrap_or_default(),
                 reserved0: display.screen as u64,
                 reserved1: window.visual_id.map(|v| v.get() as u64).unwrap_or_default(),
             })
@@ -152,10 +158,7 @@ pub(crate) fn native_to_raw_handles(
                 .ok_or_else(|| EngineError::other("platform runtime returned null XCB window"))?;
             let mut window = XcbWindowHandle::new(window_id);
             window.visual_id = NonZeroU32::new(handles.reserved1 as u32);
-            Ok((
-                RawDisplayHandle::Xcb(display),
-                RawWindowHandle::Xcb(window),
-            ))
+            Ok((RawDisplayHandle::Xcb(display), RawWindowHandle::Xcb(window)))
         }
         other => Err(EngineError::other(format!(
             "unsupported native window backend on Linux/Unix: {:?}",

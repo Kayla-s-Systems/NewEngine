@@ -11,7 +11,8 @@ pub const CAMERA_SERVICE_ID: &str = "camera.api";
 pub const CAMERA_BACKEND_CAPABILITY_ID: &str = "camera.backend";
 pub const CAMERA_SERVICE_METHOD_INVOKE: &str = newengine_service_api::SERVICE_METHOD_INVOKE_JSON;
 pub const CAMERA_SERVICE_METHOD_INFO: &str = newengine_service_api::SERVICE_METHOD_INFO_JSON;
-pub const CAMERA_SERVICE_METHOD_SHUTDOWN_V1: &str = newengine_service_api::SERVICE_METHOD_SHUTDOWN_V1;
+pub const CAMERA_SERVICE_METHOD_SHUTDOWN_V1: &str =
+    newengine_service_api::SERVICE_METHOD_SHUTDOWN_V1;
 pub const CAMERA_SERVICE_METHOD_SNAPSHOT_JSON_V1: &str = "snapshot_json_v1";
 pub const CAMERA_SERVICE_METHOD_VIEW_SET_JSON_V1: &str = "view_set_json_v1";
 pub const CAMERA_SERVICE_METHOD_VIEW_NEXT_JSON_V1: &str = "view_next_json_v1";
@@ -53,7 +54,9 @@ pub enum CameraViewMode {
 
 impl Default for CameraViewMode {
     #[inline]
-    fn default() -> Self { Self::FirstPerson }
+    fn default() -> Self {
+        Self::FirstPerson
+    }
 }
 
 impl CameraViewMode {
@@ -91,7 +94,9 @@ pub struct CameraViewCommandRequest {
 impl CameraViewCommandRequest {
     #[inline]
     pub const fn set(mode: CameraViewMode) -> Self {
-        Self { command: CameraViewCommand::Set(mode) }
+        Self {
+            command: CameraViewCommand::Set(mode),
+        }
     }
 }
 
@@ -99,7 +104,6 @@ impl CameraViewCommandRequest {
 pub struct CameraViewCommandResponse {
     pub active_view: CameraViewMode,
 }
-
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum CameraProjectionKind {
@@ -212,7 +216,10 @@ pub struct CameraPostFxMotionBlurIntent {
 impl Default for CameraPostFxMotionBlurIntent {
     #[inline]
     fn default() -> Self {
-        Self { strength: 0.0, decay_rate: default_motion_blur_decay_rate() }
+        Self {
+            strength: 0.0,
+            decay_rate: default_motion_blur_decay_rate(),
+        }
     }
 }
 
@@ -271,11 +278,11 @@ pub struct CameraFrameSnapshot {
     /// Camera position relative to `world_origin_ws_f64`, expressed as renderer-safe `f32`.
     #[serde(default)]
     pub position_origin_relative_ws: [f32; 3],
-    #[serde(default)]
+    #[serde(default = "default_forward_ws")]
     pub forward_ws: [f32; 3],
-    #[serde(default)]
+    #[serde(default = "default_right_ws")]
     pub right_ws: [f32; 3],
-    #[serde(default)]
+    #[serde(default = "default_up_ws")]
     pub up_ws: [f32; 3],
     #[serde(default)]
     pub viewport: CameraViewportSnapshot,
@@ -360,19 +367,46 @@ pub const fn identity_cols() -> Mat4Cols {
 }
 
 #[inline]
-fn default_true() -> bool { true }
+fn default_true() -> bool {
+    true
+}
 #[inline]
-fn default_width() -> u32 { 1920 }
+fn default_width() -> u32 {
+    1920
+}
 #[inline]
-fn default_height() -> u32 { 1080 }
+fn default_height() -> u32 {
+    1080
+}
 #[inline]
-fn default_aspect() -> f32 { 16.0 / 9.0 }
+fn default_aspect() -> f32 {
+    16.0 / 9.0
+}
 #[inline]
-fn default_near() -> f32 { 0.01 }
+fn default_near() -> f32 {
+    0.01
+}
 #[inline]
-fn default_far() -> f32 { 10_000.0 }
+fn default_far() -> f32 {
+    10_000.0
+}
 #[inline]
-fn default_motion_blur_decay_rate() -> f32 { 0.5 }
+fn default_motion_blur_decay_rate() -> f32 {
+    0.5
+}
+
+#[inline]
+fn default_forward_ws() -> [f32; 3] {
+    [0.0, 0.0, -1.0]
+}
+#[inline]
+fn default_right_ws() -> [f32; 3] {
+    [1.0, 0.0, 0.0]
+}
+#[inline]
+fn default_up_ws() -> [f32; 3] {
+    [0.0, 1.0, 0.0]
+}
 
 #[cfg(test)]
 mod tests {
@@ -380,7 +414,8 @@ mod tests {
 
     #[test]
     fn camera_frame_snapshot_accepts_minimal_payload() {
-        let decoded: CameraFrameSnapshot = serde_json::from_str("{}").expect("defaults must decode");
+        let decoded: CameraFrameSnapshot =
+            serde_json::from_str("{}").expect("defaults must decode");
         assert!(decoded.finite);
         assert_eq!(decoded.forward_ws, [0.0, 0.0, -1.0]);
         assert_eq!(decoded.position_ws_f64, [0.0, 0.0, 0.0]);
@@ -390,7 +425,13 @@ mod tests {
     #[test]
     fn camera_service_ids_are_engine_gateway_first() {
         assert_eq!(ENGINE_CAMERA_SERVICE_ID, "engine.camera");
-        assert_eq!(CAMERA_BACKEND_SERVICE_SPEC.engine_gateway_id, ENGINE_CAMERA_SERVICE_ID);
-        assert_eq!(CAMERA_BACKEND_SERVICE_SPEC.provider_service_id, CAMERA_SERVICE_ID);
+        assert_eq!(
+            CAMERA_BACKEND_SERVICE_SPEC.engine_gateway_id,
+            ENGINE_CAMERA_SERVICE_ID
+        );
+        assert_eq!(
+            CAMERA_BACKEND_SERVICE_SPEC.provider_service_id,
+            CAMERA_SERVICE_ID
+        );
     }
 }

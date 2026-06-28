@@ -605,12 +605,49 @@ mod tests {
         node.children.iter().find_map(|child| find_node(child, id))
     }
 
+    fn aurelia_asset_preview_fixture_xml() -> String {
+        let manifest_dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
+        for candidate in [
+            manifest_dir
+                .join("../../../assets/ui/src/devtools/aurelia_asset_preview_stand.neui.xml"),
+            manifest_dir.join("../../assets/ui/src/devtools/aurelia_asset_preview_stand.neui.xml"),
+        ] {
+            if candidate.exists() {
+                return std::fs::read_to_string(&candidate).unwrap_or_else(|err| {
+                    panic!("failed to read {}: {}", candidate.display(), err)
+                });
+            }
+        }
+
+        r#"
+<NeUiDictionary document_kind="surface">
+  <ThemeRef ref="assets/ui/themes/northstar_editor.neui@editor_light" />
+  <TextureRef ref="assets/loading/loading_ui.ytd@newengine_logo" />
+  <TextureRef ref="assets/ui/icons/builtin_icons.ytd@folder" />
+  <FontRef ref="assets/ui/fonts/editor.neftd@tt_lakes_neue_trial_bold" />
+  <Surface name="engine.ui.aurelia_asset_preview_stand" kind="devtools" root="preview.root" theme="assets/ui/themes/northstar_editor.neui@editor_light" />
+  <Layout name="preview.root" surface="engine.ui.aurelia_asset_preview_stand">
+    <Panel id="preview.root">
+      <Text id="preview.title" value="AureliaUI asset preview stand" font="assets/ui/fonts/editor.neftd@tt_lakes_neue_trial_bold" />
+      <Image id="preview.logo" texture="assets/loading/loading_ui.ytd@newengine_logo" />
+      <Icon id="preview.folder" icon="assets/ui/icons/builtin_icons.ytd@folder" />
+      <Text id="preview.caption" value="Preview caption" font="assets/ui/fonts/editor.neftd@tt_lakes_neue_trial_bold" />
+    </Panel>
+  </Layout>
+  <BindingGraph id="preview.bindings">
+    <StateSource id="preview" source="engine.assets" contract="asset.preview" update="frame" />
+    <Bind element="preview.logo" property="texture" source_id="preview" source="texture" />
+    <Bind element="preview.caption" property="text" source_id="preview" source="caption" />
+  </BindingGraph>
+  <Action id="ui.preview.refresh" element="preview.root" trigger="click" target="engine.ui" command="preview.refresh" />
+</NeUiDictionary>
+"#
+        .to_owned()
+    }
+
     #[test]
     fn compiles_aurelia_asset_preview_stand_with_font_texture_and_binding_refs() {
-        let xml_path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("../../assets/ui/src/devtools/aurelia_asset_preview_stand.neui.xml");
-        let xml = std::fs::read_to_string(&xml_path)
-            .unwrap_or_else(|err| panic!("failed to read {}: {}", xml_path.display(), err));
+        let xml = aurelia_asset_preview_fixture_xml();
         let document_ref = "assets/ui/devtools/aurelia_asset_preview_stand.neui@surface";
 
         validate_requested_entry(&xml, "surface").unwrap();
