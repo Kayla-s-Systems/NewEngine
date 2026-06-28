@@ -316,7 +316,7 @@ fn push_escaped(out: &mut String, value: &str) {
 }
 
 static DEFINITION_ROOT_SNIPPETS: &[XmlSnippet] = &[
-    XmlSnippet { label: "Ytyp Dictionary", insert: "<YtypDefinitionDictionary schema=\"newengine.ytyp.definition_dictionary.v1\" representation=\"xml\" body_format=\"newengine.xml.metadata.v1\">\n  <Entry name=\"entry_name\" kind=\"game_ready_metadata\" entry_kind=\"archetype_definition\">\n  </Entry>\n</YtypDefinitionDictionary>\n", detail: "Root .ytyp Definition Entry dictionary" },
+    XmlSnippet { label: "Ytyp Properties", insert: "<YtypProperties schema=\"newengine.ytyp.properties.v1\" representation=\"xml\" body_format=\"newengine.xml.properties.v1\" name=\"asset_name\" kind=\"game_ready_metadata\" entry_kind=\"archetype_definition\">\n  <Dependencies>\n    <Dependency role=\"drawable_dictionary\" ref=\"models/example.ydd@example\" required=\"true\" />\n  </Dependencies>\n  <Metadata>\n    <Namespace name=\"render\">\n      <Value key=\"mesh.role\" value=\"world_opaque\" />\n    </Namespace>\n  </Metadata>\n</YtypProperties>\n", detail: "Single-asset .ytyp properties document" },
 ];
 static DEFINITION_CHILD_SNIPPETS: &[XmlSnippet] = &[
     XmlSnippet { label: "Entry", insert: "\n  <Entry name=\"entry_name\" kind=\"game_ready_metadata\" entry_kind=\"archetype_definition\">\n    <Dependencies>\n    </Dependencies>\n  </Entry>", detail: "Addressable Definition Entry" },
@@ -442,7 +442,7 @@ pub const NEUI_ROOT_NAMES: &[&str] = &[
 
 #[inline]
 pub fn is_neui_root_name(name: &str) -> bool {
-    NEUI_ROOT_NAMES.iter().any(|candidate| *candidate == name)
+    NEUI_ROOT_NAMES.contains(&name)
 }
 
 static EMPTY_SNIPPETS: &[XmlSnippet] = &[];
@@ -454,7 +454,7 @@ pub fn completion_catalog_for_extension(extension: &str) -> XmlCompletionCatalog
         .as_str()
     {
         "ytyp" => XmlCompletionCatalog {
-            schema_family: "newengine.ytyp.definition_dictionary.v1",
+            schema_family: "newengine.ytyp.properties.v1",
             root_snippets: DEFINITION_ROOT_SNIPPETS,
             child_snippets: DEFINITION_CHILD_SNIPPETS,
         },
@@ -493,7 +493,7 @@ pub fn completion_catalog_for_text_or_extension(
     if let Ok(doc) = parse_xml_document(text, "completion_catalog") {
         let root = doc.root_element();
         match root.tag_name().name() {
-            "YtypDefinitionDictionary" | "DefinitionDictionary" => {
+            "YtypProperties" | "AssetProperties" => {
                 return completion_catalog_for_extension("ytyp")
             }
             "YmapMapDefinition" | "MapDefinition" => {
