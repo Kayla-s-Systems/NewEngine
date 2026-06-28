@@ -54,6 +54,7 @@ pub(super) fn game_sun_postfx_params(
     params.sun = SunPostFxParams {
         screen_position: [screen_x, screen_y],
         color: sun.color,
+        direction: [incoming.x, incoming.y, incoming.z],
         intensity: sun.intensity,
         visibility,
         disk_radius: 0.013 + 0.012 * horizon_grazing,

@@ -1,0 +1,17 @@
+{
+  "schema": "northstar.format_type.v1",
+  "type_id": "asset.type.text.document",
+  "label": "Text Document",
+  "content_kind": "text_document",
+  "extensions": [".txt", ".md", ".json", ".toml", ".cfg", ".ini", ".log", ".rs", ".py", ".h", ".hpp", ".c", ".cpp", ".cs"],
+  "provider_id": "northstar.editor_preview_builtin",
+  "can_read": true,
+  "can_write": false,
+  "can_inspect": true,
+  "can_validate": false,
+  "can_diff": true,
+  "can_preview": true,
+  "can_edit_schema": false,
+  "schema_id": "northstar.schema.text.document.v1",
+  "preview_surface": "text"
+}

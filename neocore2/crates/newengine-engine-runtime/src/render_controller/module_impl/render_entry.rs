@@ -457,11 +457,10 @@ fn runtime_debug_overlay_enabled() -> bool {
 
 fn parse_runtime_debug_overlay_setting(value: Option<&str>) -> bool {
     match value.map(str::trim).filter(|it| !it.is_empty()) {
-        // Keep the runtime statistics overlay enabled by default for the
-        // GameReady/profile-dev runtime. The provider HUD is still available
-        // as an explicit opt-out fallback, but the normal engine UI contract
-        // should continue receiving runtime telemetry after the loading handoff.
-        None => true,
+        // Default game viewport should be a clean HUD-only surface. Enable this
+        // explicitly with NEWENGINE_RUNTIME_DEBUG_OVERLAY=1 when diagnosing frame
+        // metrics; otherwise the retained debug surface churns the UI every frame.
+        None => false,
         Some("0") | Some("false") | Some("FALSE") | Some("False") | Some("no")
         | Some("NO") | Some("No") | Some("off") | Some("OFF") | Some("Off") => false,
         Some("1") | Some("true") | Some("TRUE") | Some("True") | Some("yes")
@@ -475,9 +474,9 @@ mod runtime_debug_overlay_setting_tests {
     use super::parse_runtime_debug_overlay_setting;
 
     #[test]
-    fn runtime_debug_overlay_is_enabled_by_default() {
-        assert!(parse_runtime_debug_overlay_setting(None));
-        assert!(parse_runtime_debug_overlay_setting(Some("")));
+    fn runtime_debug_overlay_is_disabled_by_default() {
+        assert!(!parse_runtime_debug_overlay_setting(None));
+        assert!(!parse_runtime_debug_overlay_setting(Some("")));
     }
 
     #[test]

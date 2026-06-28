@@ -40,13 +40,13 @@ python tools\scripts\takesome.py import-ui-fonts
 Inputs stay local and are not committed by patches:
 
 ```text
-NewEngine/neocore2/assets/ui/fonts/source/
+gameAssets/ui/fonts/source/
 ```
 
 Output:
 
 ```text
-NewEngine/neocore2/assets/ui/fonts/editor.yft
+gameAssets/ui/fonts/editor.yft
 ```
 
 The active UI text provider reports success only when the runtime dictionary contains embedded face bytes:

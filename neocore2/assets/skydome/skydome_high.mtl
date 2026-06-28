@@ -1,8 +1,0 @@
-# Runtime material is supplied by NewEngine MaterialRegistry.
-# This file exists only for OBJ importers/viewers that expect mtllib target.
-newmtl sky_system
-Kd 0.40 0.58 0.92
-Ka 0.08 0.12 0.22
-Ks 0.00 0.00 0.00
-Ns 1.0
-illum 1

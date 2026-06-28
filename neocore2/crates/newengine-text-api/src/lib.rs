@@ -97,11 +97,11 @@ pub const fn text_service_methods() -> &'static [&'static str] { TEXT_SERVICE_ME
 /// Canonical editor font dictionary. The file is a NEF8/ListFile `.neftd` asset;
 /// entries name imported font faces and atlas policy. Runtime code consumes this
 /// reference, not raw `.ttf` or `.otf` files.
-pub const TEXT_FONT_ASSET_EDITOR: &str = "assets/ui/fonts/editor.neftd";
-pub const TEXT_FONT_REF_EDITOR_SANS: &str = "assets/ui/fonts/editor.neftd@tt_lakes_neue_trial_bold";
-pub const TEXT_FONT_REF_EDITOR_DISPLAY: &str = "assets/ui/fonts/editor.neftd@tt_lakes_neue_trial_black";
-pub const TEXT_FONT_REF_EDITOR_BOLD: &str = "assets/ui/fonts/editor.neftd@tt_lakes_neue_trial_bold";
-pub const TEXT_FONT_REF_BRAND_DISPLAY: &str = "assets/ui/fonts/editor.neftd@tt_lakes_neue_trial_black";
+pub const TEXT_FONT_ASSET_EDITOR: &str = "ui/fonts/editor.neftd";
+pub const TEXT_FONT_REF_EDITOR_SANS: &str = "ui/fonts/editor.neftd@tt_lakes_neue_trial_bold";
+pub const TEXT_FONT_REF_EDITOR_DISPLAY: &str = "ui/fonts/editor.neftd@tt_lakes_neue_trial_black";
+pub const TEXT_FONT_REF_EDITOR_BOLD: &str = "ui/fonts/editor.neftd@tt_lakes_neue_trial_bold";
+pub const TEXT_FONT_REF_BRAND_DISPLAY: &str = "ui/fonts/editor.neftd@tt_lakes_neue_trial_black";
 pub const TEXT_FONT_REF_SYMBOLS: &str = "Segoe UI Symbol";
 pub const TEXT_FONT_REF_EMOJI: &str = "Segoe UI Emoji";
 
@@ -109,6 +109,10 @@ pub const TEXT_FONT_REF_EMOJI: &str = "Segoe UI Emoji";
 #[serde(rename_all = "snake_case")]
 pub enum TextFontSourceKind {
     ImportedFace,
+    /// Emergency provider-owned font embedded into a UI backend. This is not an
+    /// asset pipeline route and exists only to keep diagnostics readable when
+    /// engine.assets cannot provide the runtime .neftd dictionary yet.
+    EmbeddedDebugFallback,
     SystemFallback,
     GeneratedAtlas,
 }
@@ -190,7 +194,7 @@ pub struct TextFontFaceDescriptor {
     pub family: String,
     pub source_kind: TextFontSourceKind,
     /// Runtime font face reference. For imported North Star fonts this is a
-    /// stable ListFile selector such as `assets/ui/fonts/editor.neftd@tt_lakes_neue_trial_bold`.
+    /// stable ListFile selector such as `ui/fonts/editor.neftd@tt_lakes_neue_trial_bold`.
     pub source_ref: String,
     /// Imported face blob reference inside the `.neftd` dictionary. This is not an
     /// authoring `.ttf/.otf` path; providers resolve it through engine.assets.

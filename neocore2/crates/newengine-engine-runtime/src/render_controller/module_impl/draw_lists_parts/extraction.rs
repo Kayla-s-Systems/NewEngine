@@ -186,6 +186,30 @@ impl<'a> newengine_render_feature_api::DrawListBuildCtx for DrawListBuildCtx<'a>
         Ok(())
     }
 
+    fn record_procedural_terrain_gbuffer(&mut self, ctx: &SceneExtractionCtx<'_>) -> EngineResult<()> {
+        let _ = self.record_shadow_phase(RenderGraphPassKind::GBuffer, |this, r| {
+            r.set_viewport(Viewport::full(ctx.viewport_extent))?;
+            r.set_scissor(RectI32::new(
+                0,
+                0,
+                ctx.viewport_extent.width as i32,
+                ctx.viewport_extent.height as i32,
+            ))?;
+            super::super::passes::draw_procedural_terrain_gbuffer(
+                this,
+                r,
+                ctx.scene,
+                ctx.lit,
+                ctx.viewproj,
+                &ctx.lights,
+                ctx.runtime,
+                ctx.camera_position,
+                ctx.camera_forward,
+            )
+        })?;
+        Ok(())
+    }
+
     fn record_primitive_mesh_shadow(&mut self, ctx: &SceneExtractionCtx<'_>) -> EngineResult<()> {
         if ctx.shadow_frame.cascade_count > 1 {
             for cascade_index in 0..ctx.shadow_frame.cascade_count as usize {
@@ -219,6 +243,30 @@ impl<'a> newengine_render_feature_api::DrawListBuildCtx for DrawListBuildCtx<'a>
                 &ctx.lights,
                 ctx.runtime,
                 ctx.camera_position,
+            )
+        })?;
+        Ok(())
+    }
+
+    fn record_primitive_mesh_gbuffer(&mut self, ctx: &SceneExtractionCtx<'_>) -> EngineResult<()> {
+        let _ = self.record_shadow_phase(RenderGraphPassKind::GBuffer, |this, r| {
+            r.set_viewport(Viewport::full(ctx.viewport_extent))?;
+            r.set_scissor(RectI32::new(
+                0,
+                0,
+                ctx.viewport_extent.width as i32,
+                ctx.viewport_extent.height as i32,
+            ))?;
+            super::super::passes::draw_primitives_gbuffer(
+                this,
+                r,
+                ctx.scene,
+                ctx.lit,
+                ctx.viewproj,
+                &ctx.lights,
+                ctx.runtime,
+                ctx.camera_position,
+                ctx.camera_forward,
             )
         })?;
         Ok(())

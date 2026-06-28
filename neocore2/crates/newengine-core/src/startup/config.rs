@@ -114,7 +114,7 @@ impl Default for StartupConfig {
 
             window_icon_path: None,
 
-            modules_dir: PathBuf::from("plugins"),
+            modules_dir: PathBuf::from("pluginsRuntime"),
             cache_files: PathBuf::from(crate::cache_files::DEFAULT_CACHE_FILES_DIR),
             config: PathBuf::from(crate::config_root::DEFAULT_CONFIG_DIR),
 

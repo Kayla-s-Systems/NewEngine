@@ -69,9 +69,13 @@ pub(crate) fn is_transient_shader_pipeline_error(error: &EngineError) -> bool {
     let mut text = error.to_string();
     text.make_ascii_lowercase();
     (text.contains("shader compile queued")
+        || text.contains("shader compile pending")
+        || text.contains("shader pending")
         || text.contains("shader is not ready yet")
+        || text.contains("shader compile job is still pending")
         || text.contains("engine.jobs shader admission timeout")
-        || text.contains("leave_pending_and_retry_later"))
+        || text.contains("leave_pending_and_retry_later")
+        || text.contains("pipeline pending_event"))
         && !is_backend_device_lost_error(error)
 }
 

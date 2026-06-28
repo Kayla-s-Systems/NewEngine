@@ -1,0 +1,17 @@
+{
+  "schema": "northstar.format_type.v1",
+  "type_id": "asset.type.image.raster",
+  "label": "Raster Image",
+  "content_kind": "image_asset",
+  "extensions": [".png", ".jpg", ".jpeg", ".webp", ".bmp", ".tga", ".dds"],
+  "provider_id": "northstar.editor_preview_builtin",
+  "can_read": true,
+  "can_write": false,
+  "can_inspect": true,
+  "can_validate": false,
+  "can_diff": false,
+  "can_preview": true,
+  "can_edit_schema": false,
+  "schema_id": "northstar.schema.image.raster.v1",
+  "preview_surface": "image"
+}

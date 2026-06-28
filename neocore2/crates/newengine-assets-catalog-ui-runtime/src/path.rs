@@ -8,7 +8,10 @@ pub(crate) fn parent_path(path: &str) -> String {
     if normalized.is_empty() {
         return String::new();
     }
-    normalized.rsplit_once('/').map(|(parent, _)| parent.to_owned()).unwrap_or_default()
+    normalized
+        .rsplit_once('/')
+        .map(|(parent, _)| parent.to_owned())
+        .unwrap_or_default()
 }
 
 pub(crate) fn normalize_catalog_path(path: &str) -> String {
@@ -27,10 +30,18 @@ pub(crate) fn normalize_catalog_path(path: &str) -> String {
 
 pub(crate) fn display_path(path: &str) -> String {
     let path = normalize_catalog_path(path);
-    if path.is_empty() { "/".to_owned() } else { format!("/{path}") }
+    if path.is_empty() {
+        "/".to_owned()
+    } else {
+        format!("/{path}")
+    }
 }
 
 pub(crate) fn browser_folder_label(path: &str) -> String {
     let path = normalize_catalog_path(path);
-    path.rsplit('/').next().filter(|value| !value.is_empty()).unwrap_or("Content").to_owned()
+    path.rsplit('/')
+        .next()
+        .filter(|value| !value.is_empty())
+        .unwrap_or("Content")
+        .to_owned()
 }

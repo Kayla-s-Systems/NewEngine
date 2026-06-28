@@ -66,10 +66,10 @@ pub const UI_THEME_ASSET_NORTHSTAR_EDITOR: &str = "ui/themes/northstar_editor.ne
 /// faces, source files and atlas policy. The engine stores references here;
 /// concrete font binaries are imported by tooling and must not be hardcoded in
 /// the UI provider.
-pub const UI_FONT_ASSET_EDITOR_SANS: &str = "assets/ui/fonts/editor.neftd@tt_lakes_neue_trial_bold";
-pub const UI_FONT_ASSET_EDITOR_DISPLAY: &str = "assets/ui/fonts/editor.neftd@tt_lakes_neue_trial_black";
-pub const UI_FONT_ASSET_EDITOR_BOLD: &str = "assets/ui/fonts/editor.neftd@tt_lakes_neue_trial_bold";
-pub const UI_FONT_ASSET_BRAND: &str = "assets/ui/fonts/editor.neftd@tt_lakes_neue_trial_black";
+pub const UI_FONT_ASSET_EDITOR_SANS: &str = "ui/fonts/editor.neftd@fselliotpro";
+pub const UI_FONT_ASSET_EDITOR_DISPLAY: &str = "ui/fonts/editor.neftd@intro-black";
+pub const UI_FONT_ASSET_EDITOR_BOLD: &str = "ui/fonts/editor.neftd@fselliotpro";
+pub const UI_FONT_ASSET_BRAND: &str = "ui/fonts/editor.neftd@intro-black";
 
 /// Generic component primitives. These are not screen types: every interface is
 /// the same retained `UiSurfaceNode` tree and may compose the same primitives.
@@ -456,6 +456,11 @@ pub struct UiFrameResponse {
     pub version: u32,
     pub draw_list: UiDrawList,
     pub diagnostics: UiFrameDiagnostics,
+    /// Resolved UI capture contract for this frame. Providers derive this from
+    /// visible retained surfaces; runtime consumes it without knowing product
+    /// surface ids such as main menu, pause menu, console or editor panels.
+    #[serde(default)]
+    pub input_capture: UiInputCaptureState,
 }
 
 impl Default for UiFrameResponse {
@@ -465,7 +470,12 @@ impl Default for UiFrameResponse {
 impl UiFrameResponse {
     #[inline]
     pub fn new(draw_list: UiDrawList) -> Self {
-        Self { version: 1, draw_list, diagnostics: UiFrameDiagnostics::default() }
+        Self {
+            version: 1,
+            draw_list,
+            diagnostics: UiFrameDiagnostics::default(),
+            input_capture: UiInputCaptureState::none(),
+        }
     }
 }
 

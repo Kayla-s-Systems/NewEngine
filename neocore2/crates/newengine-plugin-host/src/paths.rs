@@ -55,10 +55,12 @@ pub(crate) fn default_plugins_dir() -> Result<PathBuf, PluginLoadError> {
         }
     }
 
+    push_unique(&mut candidates, exe_dir.join("pluginsRuntime"));
     push_unique(&mut candidates, exe_dir.join("plugins"));
     push_ancestor_plugin_dirs(&mut candidates, &exe_dir);
 
     if let Ok(cwd) = std::env::current_dir() {
+        push_unique(&mut candidates, cwd.join("pluginsRuntime"));
         push_unique(&mut candidates, cwd.join("plugins"));
         push_ancestor_plugin_dirs(&mut candidates, &cwd);
     }
@@ -112,6 +114,7 @@ fn push_unique(out: &mut Vec<PathBuf>, path: PathBuf) {
 
 fn push_ancestor_plugin_dirs(out: &mut Vec<PathBuf>, start: &Path) {
     for ancestor in start.ancestors() {
+        push_unique(out, ancestor.join("pluginsRuntime"));
         push_unique(out, ancestor.join("plugins"));
     }
 }

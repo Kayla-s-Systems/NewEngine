@@ -142,6 +142,17 @@ impl RenderUiNodeSurfaceState {
         self.exit_requested = false;
         self.tick_feedback(dt_sec);
 
+        if !crate::env_config::var_bool("NEWENGINE_PRIMARY_UI_ENABLED", false) {
+            self.open = false;
+            self.awaiting_rebind = None;
+            self.advance_visual_alpha(dt_sec);
+            return UiNodeSurfaceFrameResult {
+                blocks_gameplay: false,
+                exit_requested: false,
+                state: self.build_ui_state(false),
+            };
+        }
+
         if input.actions.ui_toggle {
             if self.open {
                 self.close(frame_index);

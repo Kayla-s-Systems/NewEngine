@@ -1,0 +1,19 @@
+[package]
+name = "renderer-demo"
+version = "0.1.0"
+edition = "2021"
+description = "NewEngine renderer demo launcher: shaded lit scene smoke target"
+authors = ["Kayla's Systems"]
+license = "Proprietary"
+
+[package.metadata.newengine.winres]
+icon = "assets/editor.ico"
+
+[dependencies]
+newengine-core = { path = "../../crates/newengine-core", features = ["host-probe"] }
+newengine-game-ready-profile = { path = "../../crates/newengine-game-ready-profile" }
+newengine-runtime-host = { path = "../../crates/newengine-runtime-host" }
+newengine-ui = { path = "../../crates/newengine-ui", default-features = false }
+
+[build-dependencies]
+embed-resource = "2"

@@ -31,17 +31,25 @@ pub(crate) fn elements(xml: &str, name: &str) -> Vec<XmlElement> {
     let mut offset = 0usize;
     while let Some(start_rel) = find_open_tag(&xml[offset..], name) {
         let start = offset + start_rel;
-        let Some(open_end_rel) = xml[start..].find('>') else { break; };
+        let Some(open_end_rel) = xml[start..].find('>') else {
+            break;
+        };
         let open_end = start + open_end_rel;
         let open = &xml[start..=open_end];
         let self_closing = open.trim_end().ends_with("/>");
         if self_closing {
-            out.push(XmlElement { name: name.to_owned(), open: open.to_owned(), inner: String::new() });
+            out.push(XmlElement {
+                name: name.to_owned(),
+                open: open.to_owned(),
+                inner: String::new(),
+            });
             offset = open_end + 1;
             continue;
         }
         let close_token = format!("</{}>", name);
-        let Some(close_rel) = xml[open_end + 1..].find(&close_token) else { break; };
+        let Some(close_rel) = xml[open_end + 1..].find(&close_token) else {
+            break;
+        };
         let inner_start = open_end + 1;
         let close_start = inner_start + close_rel;
         let close_end = close_start + close_token.len();
@@ -60,12 +68,19 @@ pub(crate) fn direct_child_elements(xml: &str) -> Vec<XmlElement> {
     let mut offset = 0usize;
     while let Some(start_rel) = xml[offset..].find('<') {
         let start = offset + start_rel;
-        let Some(next) = xml.as_bytes().get(start + 1).copied() else { break; };
+        let Some(next) = xml.as_bytes().get(start + 1).copied() else {
+            break;
+        };
         if matches!(next, b'/' | b'!' | b'?') {
-            offset = xml[start..].find('>').map(|end| start + end + 1).unwrap_or(xml.len());
+            offset = xml[start..]
+                .find('>')
+                .map(|end| start + end + 1)
+                .unwrap_or(xml.len());
             continue;
         }
-        let Some(open_end_rel) = xml[start..].find('>') else { break; };
+        let Some(open_end_rel) = xml[start..].find('>') else {
+            break;
+        };
         let open_end = start + open_end_rel;
         let open = &xml[start..=open_end];
         let Some(name) = element_name_from_open(open) else {
@@ -74,11 +89,17 @@ pub(crate) fn direct_child_elements(xml: &str) -> Vec<XmlElement> {
         };
         let self_closing = open.trim_end().ends_with("/>");
         if self_closing {
-            out.push(XmlElement { name, open: open.to_owned(), inner: String::new() });
+            out.push(XmlElement {
+                name,
+                open: open.to_owned(),
+                inner: String::new(),
+            });
             offset = open_end + 1;
             continue;
         }
-        let Some((close_start, close_end)) = matching_close_tag(xml, &name, open_end + 1) else { break; };
+        let Some((close_start, close_end)) = matching_close_tag(xml, &name, open_end + 1) else {
+            break;
+        };
         out.push(XmlElement {
             name,
             open: open.to_owned(),
@@ -106,8 +127,13 @@ pub(crate) fn matching_close_tag(xml: &str, name: &str, from: usize) -> Option<(
         match (next_open, next_close) {
             (Some(open_pos), Some(close_pos)) if open_pos < close_pos => {
                 let next = xml.as_bytes().get(open_pos + open_token.len()).copied();
-                if matches!(next, Some(b' ') | Some(b'\t') | Some(b'\n') | Some(b'\r') | Some(b'>') | Some(b'/')) {
-                    let Some(open_end_rel) = xml[open_pos..].find('>') else { return None; };
+                if matches!(
+                    next,
+                    Some(b' ') | Some(b'\t') | Some(b'\n') | Some(b'\r') | Some(b'>') | Some(b'/')
+                ) {
+                    let Some(open_end_rel) = xml[open_pos..].find('>') else {
+                        return None;
+                    };
                     let open_end = open_pos + open_end_rel;
                     if !xml[open_pos..=open_end].trim_end().ends_with("/>") {
                         depth += 1;
@@ -136,7 +162,10 @@ pub(crate) fn find_open_tag(haystack: &str, name: &str) -> Option<usize> {
     while let Some(pos_rel) = haystack[search..].find(&needle) {
         let pos = search + pos_rel;
         let next = haystack.as_bytes().get(pos + needle.len()).copied();
-        if matches!(next, Some(b' ') | Some(b'\t') | Some(b'\n') | Some(b'\r') | Some(b'>') | Some(b'/')) {
+        if matches!(
+            next,
+            Some(b' ') | Some(b'\t') | Some(b'\n') | Some(b'\r') | Some(b'>') | Some(b'/')
+        ) {
             return Some(pos);
         }
         search = pos + needle.len();
@@ -145,31 +174,62 @@ pub(crate) fn find_open_tag(haystack: &str, name: &str) -> Option<usize> {
 }
 
 pub(crate) fn attr_value(open: &str, key: &str) -> Option<String> {
-    parse_attrs(open).remove(key).map(|value| xml_unescape(&value))
+    parse_attrs(open)
+        .remove(key)
+        .map(|value| xml_unescape(&value))
 }
 
 pub(crate) fn parse_attrs(open: &str) -> BTreeMap<String, String> {
     let mut attrs = BTreeMap::new();
     let bytes = open.as_bytes();
     let mut i = 0usize;
-    while i < bytes.len() && bytes[i] != b' ' && bytes[i] != b'\t' && bytes[i] != b'\n' && bytes[i] != b'\r' && bytes[i] != b'>' && bytes[i] != b'/' {
+    while i < bytes.len()
+        && bytes[i] != b' '
+        && bytes[i] != b'\t'
+        && bytes[i] != b'\n'
+        && bytes[i] != b'\r'
+        && bytes[i] != b'>'
+        && bytes[i] != b'/'
+    {
         i += 1;
     }
     while i < bytes.len() {
-        while i < bytes.len() && bytes[i].is_ascii_whitespace() { i += 1; }
-        if i >= bytes.len() || bytes[i] == b'>' || bytes[i] == b'/' { break; }
+        while i < bytes.len() && bytes[i].is_ascii_whitespace() {
+            i += 1;
+        }
+        if i >= bytes.len() || bytes[i] == b'>' || bytes[i] == b'/' {
+            break;
+        }
         let key_start = i;
-        while i < bytes.len() && (bytes[i].is_ascii_alphanumeric() || bytes[i] == b'_' || bytes[i] == b'-' || bytes[i] == b'.' || bytes[i] == b':') { i += 1; }
+        while i < bytes.len()
+            && (bytes[i].is_ascii_alphanumeric()
+                || bytes[i] == b'_'
+                || bytes[i] == b'-'
+                || bytes[i] == b'.'
+                || bytes[i] == b':')
+        {
+            i += 1;
+        }
         let key = open[key_start..i].trim();
-        while i < bytes.len() && bytes[i].is_ascii_whitespace() { i += 1; }
-        if i >= bytes.len() || bytes[i] != b'=' { continue; }
+        while i < bytes.len() && bytes[i].is_ascii_whitespace() {
+            i += 1;
+        }
+        if i >= bytes.len() || bytes[i] != b'=' {
+            continue;
+        }
         i += 1;
-        while i < bytes.len() && bytes[i].is_ascii_whitespace() { i += 1; }
-        if i >= bytes.len() || (bytes[i] != b'\"' && bytes[i] != b'\'') { continue; }
+        while i < bytes.len() && bytes[i].is_ascii_whitespace() {
+            i += 1;
+        }
+        if i >= bytes.len() || (bytes[i] != b'\"' && bytes[i] != b'\'') {
+            continue;
+        }
         let quote = bytes[i];
         i += 1;
         let value_start = i;
-        while i < bytes.len() && bytes[i] != quote { i += 1; }
+        while i < bytes.len() && bytes[i] != quote {
+            i += 1;
+        }
         if i <= bytes.len() && !key.is_empty() {
             attrs.insert(key.to_owned(), open[value_start..i].to_owned());
         }

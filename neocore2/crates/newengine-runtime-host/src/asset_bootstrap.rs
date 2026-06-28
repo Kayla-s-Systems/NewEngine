@@ -72,14 +72,28 @@ fn push_asset_roots_from_base(roots: &mut Vec<PathBuf>, base: &Path, app_dir_nam
         roots.push(app_assets);
     }
 
-    // Common monorepo launch shape: commands may run from repository root while
-    // runtime assets live under NewEngine/neocore2/assets. This is still a VFS
-    // mount, not a direct asset read.
-    let neocore_assets = base.join("NewEngine").join("neocore2").join("assets");
-    if neocore_assets.is_dir() {
-        roots.push(neocore_assets);
+    // Canonical outer-root runtime layout: commands may run from the outer
+    // NorthStar directory, from NewEngine, or from an app workspace while game
+    // assets live at NorthStar/gameAssets. This is still a VFS mount, not a
+    // direct asset read.
+    let game_assets = base.join("gameAssets");
+    if game_assets.is_dir() {
+        roots.push(game_assets);
+    }
+
+    // Legacy local layouts kept as explicit compatibility candidates for old
+    // source snapshots, not as the preferred runtime layout.
+    let legacy_newengine_assets = base.join("NewEngine").join("assets");
+    if legacy_newengine_assets.is_dir() {
+        roots.push(legacy_newengine_assets);
+    }
+
+    let legacy_neocore_assets = base.join("NewEngine").join("neocore2").join("assets");
+    if legacy_neocore_assets.is_dir() {
+        roots.push(legacy_neocore_assets);
     }
 }
+
 
 pub fn mount_asset_roots_best_effort(assets: &AssetServiceClient, roots: &[PathBuf]) {
     for root in roots {

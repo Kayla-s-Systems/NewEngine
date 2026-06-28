@@ -171,11 +171,44 @@ fn ui_draw_list_stats(draw_list: &UiDrawList) -> String {
         .iter()
         .map(|patch| patch.rgba8.len())
         .sum();
+    let paint_text = draw_list
+        .paint
+        .commands
+        .iter()
+        .filter(|command| matches!(command, UiPaintCommand::Text(_)))
+        .count();
+    let paint_vector = draw_list
+        .paint
+        .commands
+        .iter()
+        .filter(|command| matches!(command, UiPaintCommand::Vector(_)))
+        .count();
+    let paint_images = draw_list
+        .paint
+        .commands
+        .iter()
+        .filter(|command| matches!(command, UiPaintCommand::Image(_)))
+        .count();
+    let first_font_ref = draw_list.paint.commands.iter().find_map(|command| match command {
+        UiPaintCommand::Text(text) if !text.font_ref.trim().is_empty() => Some(text.font_ref.as_str()),
+        _ => None,
+    });
+    let first_vector_ref = draw_list.paint.commands.iter().find_map(|command| match command {
+        UiPaintCommand::Vector(vector) if !vector.vector.uri.trim().is_empty() => Some(vector.vector.uri.as_str()),
+        _ => None,
+    });
     format!(
-        "ui(vertices={} indices={} cmds={} tex_set={} tex_set_bytes={} patches={} patch_bytes={} free={})",
+        "ui(mesh_vertices={} mesh_indices={} mesh_cmds={} paint_cmds={} paint_text={} paint_vector={} paint_images={} paint_diags={} first_font_ref={:?} first_vector_ref={:?} tex_set={} tex_set_bytes={} patches={} patch_bytes={} free={})",
         draw_list.mesh.vertices.len(),
         draw_list.mesh.indices.len(),
         draw_list.mesh.cmds.len(),
+        draw_list.paint.commands.len(),
+        paint_text,
+        paint_vector,
+        paint_images,
+        draw_list.paint.diagnostics.len(),
+        first_font_ref,
+        first_vector_ref,
         draw_list.texture_delta.set.len(),
         texture_set_bytes,
         draw_list.texture_delta.patches.len(),

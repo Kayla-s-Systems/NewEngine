@@ -190,6 +190,8 @@ pub struct PipelineDesc {
     pub vertex_layouts: Vec<VertexLayout>,
     pub bind_group_layouts: Vec<BindGroupLayoutId>,
     pub color_format: TextureFormat,
+    #[serde(default)]
+    pub color_formats: Vec<TextureFormat>,
     pub depth_format: Option<TextureFormat>,
     #[serde(default)]
     pub depth_mode: PipelineDepthMode,
@@ -214,6 +216,7 @@ impl PipelineDesc {
             vertex_layouts: Vec::new(),
             bind_group_layouts: Vec::new(),
             color_format,
+            color_formats: Vec::new(),
             depth_format: None,
             depth_mode: PipelineDepthMode::default(),
             cull_mode: RasterCullMode::Back,
@@ -251,6 +254,21 @@ impl PipelineDesc {
     pub fn push_bind_group_layout(mut self, layout: BindGroupLayoutId) -> Self {
         self.bind_group_layouts.push(layout);
         self
+    }
+
+    #[inline]
+    pub fn with_color_formats(mut self, formats: Vec<TextureFormat>) -> Self {
+        self.color_formats = formats;
+        self
+    }
+
+    #[inline]
+    pub fn mrt_color_formats(&self) -> &[TextureFormat] {
+        if self.color_formats.is_empty() {
+            std::slice::from_ref(&self.color_format)
+        } else {
+            &self.color_formats
+        }
     }
 
     #[inline]

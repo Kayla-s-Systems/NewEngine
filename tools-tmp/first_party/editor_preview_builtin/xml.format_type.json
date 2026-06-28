@@ -1,0 +1,17 @@
+{
+  "schema": "northstar.format_type.v1",
+  "type_id": "asset.type.xml.document",
+  "label": "XML Document with Syntax Highlighting",
+  "content_kind": "xml_document",
+  "extensions": [".xml", ".ytyp.xml", ".neui.xml", ".nemat.xml"],
+  "provider_id": "northstar.editor_preview_builtin",
+  "can_read": true,
+  "can_write": false,
+  "can_inspect": true,
+  "can_validate": false,
+  "can_diff": true,
+  "can_preview": true,
+  "can_edit_schema": false,
+  "schema_id": "northstar.schema.xml.document.v1",
+  "preview_surface": "xml_highlight"
+}

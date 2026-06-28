@@ -1,0 +1,571 @@
+{
+  "schema": "northstar.quality.scan.v1",
+  "roots": [
+    "editor",
+    "neocore2/crates",
+    "neocore2/apps",
+    "neocore2/scripts",
+    "tools-tmp"
+  ],
+  "files_scanned": 995,
+  "total_lines": 149951,
+  "finding_counts": {
+    "direct_provider_import": 8,
+    "direct_provider_service_id": 21,
+    "direct_world_mut": 92,
+    "hidden_fallback": 684,
+    "monolith_file": 12374,
+    "native_entity_id": 361,
+    "panic_unwrap": 154,
+    "runtime_extension_branch": 2,
+    "std_env_var": 28
+  },
+  "largest_files": [
+    {
+      "path": "editor/northstar-gui-editor/src/ui/mod.rs",
+      "lines": 3293
+    },
+    {
+      "path": "neocore2/crates/newengine-assets-catalog-ui-runtime/src/lib.rs",
+      "lines": 2090
+    },
+    {
+      "path": "neocore2/crates/newengine-assets-api/src/lib.rs",
+      "lines": 1391
+    },
+    {
+      "path": "neocore2/crates/newengine-world-environment-api/src/lib.rs",
+      "lines": 1191
+    },
+    {
+      "path": "neocore2/crates/newengine-runtime-host/src/platform_runtime/runtime_host.rs",
+      "lines": 1129
+    },
+    {
+      "path": "neocore2/crates/newengine-render-api/src/render_graph.rs",
+      "lines": 1102
+    },
+    {
+      "path": "neocore2/crates/newengine-model-runtime/src/lib.rs",
+      "lines": 1063
+    },
+    {
+      "path": "neocore2/crates/newengine-definitions-runtime/src/lib.rs",
+      "lines": 972
+    },
+    {
+      "path": "neocore2/crates/newengine-service-api/src/lib.rs",
+      "lines": 925
+    },
+    {
+      "path": "neocore2/crates/newengine-core/src/engine/module_boot.rs",
+      "lines": 922
+    },
+    {
+      "path": "neocore2/crates/newengine-assets/src/asset_document_service.rs",
+      "lines": 902
+    },
+    {
+      "path": "neocore2/crates/newengine-engine-runtime/src/scene_bridge/game_ready_parts/assets_bootstrap.rs",
+      "lines": 873
+    },
+    {
+      "path": "neocore2/crates/newengine-material-runtime/src/lib.rs",
+      "lines": 817
+    },
+    {
+      "path": "neocore2/crates/newengine-render-api/src/protocol.rs",
+      "lines": 802
+    },
+    {
+      "path": "neocore2/crates/newengine-assets-api/src/asset_service_client.rs",
+      "lines": 772
+    },
+    {
+      "path": "neocore2/crates/newengine-engine-runtime/src/render_controller/module_impl/frame_orchestrator.rs",
+      "lines": 751
+    },
+    {
+      "path": "neocore2/crates/newengine-ui-api/src/node.rs",
+      "lines": 748
+    },
+    {
+      "path": "neocore2/crates/newengine-engine-runtime/src/render_controller/module_impl/passes_parts/mesh_passes.rs",
+      "lines": 741
+    },
+    {
+      "path": "neocore2/crates/newengine-input-bindings-api/src/lib.rs",
+      "lines": 733
+    },
+    {
+      "path": "neocore2/crates/newengine-textures-runtime/src/lib.rs",
+      "lines": 730
+    },
+    {
+      "path": "neocore2/crates/newengine-plugin-host/src/host_context/gateway.rs",
+      "lines": 711
+    },
+    {
+      "path": "neocore2/crates/newengine-assets-ui-runtime/src/lib.rs",
+      "lines": 687
+    },
+    {
+      "path": "neocore2/crates/newengine-runtime-host/src/platform_runtime/jobs_gateway.rs",
+      "lines": 683
+    },
+    {
+      "path": "neocore2/crates/newengine-assets-ui-runtime/src/node_compile.rs",
+      "lines": 678
+    },
+    {
+      "path": "neocore2/crates/newengine-jobs-api/src/lib.rs",
+      "lines": 662
+    },
+    {
+      "path": "neocore2/crates/newengine-ui-navigation-api/src/lib.rs",
+      "lines": 651
+    },
+    {
+      "path": "neocore2/crates/newengine-runtime-host/src/platform_runtime/config.rs",
+      "lines": 645
+    },
+    {
+      "path": "neocore2/crates/newengine-plugin-host/src/service_gateway/registry.rs",
+      "lines": 642
+    },
+    {
+      "path": "neocore2/crates/newengine-material-domain-gameready/src/lib.rs",
+      "lines": 613
+    },
+    {
+      "path": "neocore2/crates/newengine-engine-runtime/src/scene_bridge/game_ready_parts/sky.rs",
+      "lines": 610
+    },
+    {
+      "path": "neocore2/crates/newengine-render-api/src/postfx.rs",
+      "lines": 606
+    },
+    {
+      "path": "neocore2/crates/newengine-loading-api/src/lib.rs",
+      "lines": 599
+    },
+    {
+      "path": "neocore2/crates/newengine-core/src/console/runtime.rs",
+      "lines": 588
+    },
+    {
+      "path": "neocore2/crates/newengine-plugin-host/src/plugin_config_service.rs",
+      "lines": 587
+    },
+    {
+      "path": "neocore2/crates/newengine-plugin-host/src/service_gateway/registry/tests.rs",
+      "lines": 582
+    },
+    {
+      "path": "neocore2/crates/newengine-text-api/src/lib.rs",
+      "lines": 573
+    },
+    {
+      "path": "neocore2/crates/newengine-sim/src/schedule.rs",
+      "lines": 572
+    },
+    {
+      "path": "neocore2/crates/newengine-procedural-noise/src/graph.rs",
+      "lines": 571
+    },
+    {
+      "path": "neocore2/crates/newengine-render-api/src/effects.rs",
+      "lines": 570
+    },
+    {
+      "path": "neocore2/apps/AureliaUiTest/src/surface_module.rs",
+      "lines": 570
+    }
+  ],
+  "samples": {
+    "direct_provider_import": [
+      {
+        "kind": "direct_provider_import",
+        "path": "neocore2/scripts/no_legacy_scan.py",
+        "count": 5,
+        "first_line": null
+      },
+      {
+        "kind": "direct_provider_import",
+        "path": "neocore2/crates/newengine-render-api/src/events.rs",
+        "count": 1,
+        "first_line": null
+      },
+      {
+        "kind": "direct_provider_import",
+        "path": "neocore2/crates/newengine-ui/src/markup/doc.rs",
+        "count": 1,
+        "first_line": null
+      },
+      {
+        "kind": "direct_provider_import",
+        "path": "neocore2/apps/AureliaUiTest/src/surface_module.rs",
+        "count": 1,
+        "first_line": 12
+      }
+    ],
+    "direct_provider_service_id": [
+      {
+        "kind": "direct_provider_service_id",
+        "path": "neocore2/scripts/p0_invariant_scan.py",
+        "count": 5,
+        "first_line": 27
+      },
+      {
+        "kind": "direct_provider_service_id",
+        "path": "neocore2/crates/newengine-plugin-host/src/service_gateway/registry/tests.rs",
+        "count": 4,
+        "first_line": 482
+      },
+      {
+        "kind": "direct_provider_service_id",
+        "path": "neocore2/scripts/gateway_contract_scan.py",
+        "count": 4,
+        "first_line": 16
+      },
+      {
+        "kind": "direct_provider_service_id",
+        "path": "neocore2/crates/newengine-service-api/src/lib.rs",
+        "count": 3,
+        "first_line": 885
+      },
+      {
+        "kind": "direct_provider_service_id",
+        "path": "neocore2/crates/newengine-ai-api/src/lib.rs",
+        "count": 1,
+        "first_line": 17
+      },
+      {
+        "kind": "direct_provider_service_id",
+        "path": "neocore2/crates/newengine-assets-api/src/lib.rs",
+        "count": 1,
+        "first_line": 31
+      },
+      {
+        "kind": "direct_provider_service_id",
+        "path": "neocore2/crates/newengine-physics-api/src/lib.rs",
+        "count": 1,
+        "first_line": 17
+      },
+      {
+        "kind": "direct_provider_service_id",
+        "path": "neocore2/crates/newengine-render-api/src/constants.rs",
+        "count": 1,
+        "first_line": 10
+      }
+    ],
+    "direct_world_mut": [
+      {
+        "kind": "direct_world_mut",
+        "path": "neocore2/crates/newengine-engine-runtime/src/gameplay/player.rs",
+        "count": 10,
+        "first_line": 20
+      },
+      {
+        "kind": "direct_world_mut",
+        "path": "neocore2/crates/newengine-camera-runtime/src/service.rs",
+        "count": 7,
+        "first_line": 53
+      },
+      {
+        "kind": "direct_world_mut",
+        "path": "neocore2/crates/newengine-sim/src/schedule.rs",
+        "count": 6,
+        "first_line": 379
+      },
+      {
+        "kind": "direct_world_mut",
+        "path": "neocore2/crates/newengine-camera-runtime/src/session.rs",
+        "count": 4,
+        "first_line": 88
+      },
+      {
+        "kind": "direct_world_mut",
+        "path": "neocore2/crates/newengine-engine-runtime/src/gameplay/schedule.rs",
+        "count": 4,
+        "first_line": 52
+      },
+      {
+        "kind": "direct_world_mut",
+        "path": "neocore2/crates/newengine-sim/src/commands.rs",
+        "count": 4,
+        "first_line": 38
+      },
+      {
+        "kind": "direct_world_mut",
+        "path": "neocore2/crates/newengine-camera-runtime/src/nav/helpers.rs",
+        "count": 3,
+        "first_line": 13
+      },
+      {
+        "kind": "direct_world_mut",
+        "path": "neocore2/crates/newengine-ecs/src/commands.rs",
+        "count": 3,
+        "first_line": 51
+      }
+    ],
+    "hidden_fallback": [
+      {
+        "kind": "hidden_fallback",
+        "path": "editor/northstar-gui-editor/src/ui/mod.rs",
+        "count": 23,
+        "first_line": 214
+      },
+      {
+        "kind": "hidden_fallback",
+        "path": "editor/northstar-gui-editor-preview/src/preview/mod.rs",
+        "count": 19,
+        "first_line": 27
+      },
+      {
+        "kind": "hidden_fallback",
+        "path": "neocore2/crates/newengine-engine-runtime/src/scene_bridge/game_ready/content_parts/sanitize_defaults.rs",
+        "count": 18,
+        "first_line": 25
+      },
+      {
+        "kind": "hidden_fallback",
+        "path": "neocore2/crates/newengine-text-api/src/lib.rs",
+        "count": 18,
+        "first_line": 13
+      },
+      {
+        "kind": "hidden_fallback",
+        "path": "neocore2/crates/newengine-assets-ui-runtime/src/node_compile.rs",
+        "count": 16,
+        "first_line": 25
+      },
+      {
+        "kind": "hidden_fallback",
+        "path": "neocore2/scripts/no_legacy_scan.py",
+        "count": 15,
+        "first_line": 2
+      },
+      {
+        "kind": "hidden_fallback",
+        "path": "neocore2/crates/newengine-runtime-host/src/platform_input.rs",
+        "count": 14,
+        "first_line": 42
+      },
+      {
+        "kind": "hidden_fallback",
+        "path": "neocore2/scripts/p0_invariant_scan.py",
+        "count": 13,
+        "first_line": 4
+      }
+    ],
+    "monolith_file": [
+      {
+        "kind": "monolith_file",
+        "path": "editor/northstar-gui-editor/src/ui/mod.rs",
+        "count": 2743,
+        "first_line": null
+      },
+      {
+        "kind": "monolith_file",
+        "path": "neocore2/crates/newengine-assets-catalog-ui-runtime/src/lib.rs",
+        "count": 1540,
+        "first_line": null
+      },
+      {
+        "kind": "monolith_file",
+        "path": "neocore2/crates/newengine-assets-api/src/lib.rs",
+        "count": 841,
+        "first_line": null
+      },
+      {
+        "kind": "monolith_file",
+        "path": "neocore2/crates/newengine-world-environment-api/src/lib.rs",
+        "count": 641,
+        "first_line": null
+      },
+      {
+        "kind": "monolith_file",
+        "path": "neocore2/crates/newengine-runtime-host/src/platform_runtime/runtime_host.rs",
+        "count": 579,
+        "first_line": null
+      },
+      {
+        "kind": "monolith_file",
+        "path": "neocore2/crates/newengine-render-api/src/render_graph.rs",
+        "count": 552,
+        "first_line": null
+      },
+      {
+        "kind": "monolith_file",
+        "path": "neocore2/crates/newengine-model-runtime/src/lib.rs",
+        "count": 513,
+        "first_line": null
+      },
+      {
+        "kind": "monolith_file",
+        "path": "neocore2/crates/newengine-definitions-runtime/src/lib.rs",
+        "count": 422,
+        "first_line": null
+      }
+    ],
+    "native_entity_id": [
+      {
+        "kind": "native_entity_id",
+        "path": "neocore2/crates/newengine-ecs/src/world.rs",
+        "count": 20,
+        "first_line": 6
+      },
+      {
+        "kind": "native_entity_id",
+        "path": "neocore2/crates/newengine-engine-runtime/src/gameplay/player.rs",
+        "count": 20,
+        "first_line": 1
+      },
+      {
+        "kind": "native_entity_id",
+        "path": "neocore2/crates/newengine-ecs/src/commands.rs",
+        "count": 14,
+        "first_line": 3
+      },
+      {
+        "kind": "native_entity_id",
+        "path": "neocore2/crates/newengine-ecs/src/query.rs",
+        "count": 13,
+        "first_line": 6
+      },
+      {
+        "kind": "native_entity_id",
+        "path": "neocore2/crates/newengine-ecs/src/storage.rs",
+        "count": 13,
+        "first_line": 5
+      },
+      {
+        "kind": "native_entity_id",
+        "path": "neocore2/crates/newengine-sim/src/transform_cmd.rs",
+        "count": 13,
+        "first_line": 3
+      },
+      {
+        "kind": "native_entity_id",
+        "path": "neocore2/crates/newengine-sim/src/intent.rs",
+        "count": 12,
+        "first_line": 3
+      },
+      {
+        "kind": "native_entity_id",
+        "path": "neocore2/crates/newengine-engine-runtime/src/scene_bridge/commands.rs",
+        "count": 11,
+        "first_line": 3
+      }
+    ],
+    "panic_unwrap": [
+      {
+        "kind": "panic_unwrap",
+        "path": "neocore2/crates/newengine-assets-ui-runtime/src/lib.rs",
+        "count": 15,
+        "first_line": 510
+      },
+      {
+        "kind": "panic_unwrap",
+        "path": "neocore2/crates/newengine-plugin-host/src/service_gateway/registry/tests.rs",
+        "count": 14,
+        "first_line": 67
+      },
+      {
+        "kind": "panic_unwrap",
+        "path": "neocore2/crates/newengine-runtime-host/src/platform_runtime/jobs_gateway.rs",
+        "count": 11,
+        "first_line": 293
+      },
+      {
+        "kind": "panic_unwrap",
+        "path": "neocore2/crates/newengine-render-frame-graph/src/graph_builder/tests.rs",
+        "count": 10,
+        "first_line": 23
+      },
+      {
+        "kind": "panic_unwrap",
+        "path": "neocore2/crates/newengine-math/tests/registry.rs",
+        "count": 8,
+        "first_line": 34
+      },
+      {
+        "kind": "panic_unwrap",
+        "path": "neocore2/crates/newengine-ui-api/src/frame_binary.rs",
+        "count": 8,
+        "first_line": 214
+      },
+      {
+        "kind": "panic_unwrap",
+        "path": "neocore2/crates/newengine-ui-draw/src/paint.rs",
+        "count": 6,
+        "first_line": 376
+      },
+      {
+        "kind": "panic_unwrap",
+        "path": "neocore2/crates/newengine-model-domain-api/src/lib.rs",
+        "count": 5,
+        "first_line": 177
+      }
+    ],
+    "runtime_extension_branch": [
+      {
+        "kind": "runtime_extension_branch",
+        "path": "editor/northstar-gui-editor/src/ui/mod.rs",
+        "count": 2,
+        "first_line": 2149
+      }
+    ],
+    "std_env_var": [
+      {
+        "kind": "std_env_var",
+        "path": "neocore2/crates/newengine-core/src/startup/system_probe.rs",
+        "count": 4,
+        "first_line": 97
+      },
+      {
+        "kind": "std_env_var",
+        "path": "neocore2/crates/newengine-runtime-host/src/platform_runtime/discovery.rs",
+        "count": 4,
+        "first_line": 22
+      },
+      {
+        "kind": "std_env_var",
+        "path": "neocore2/crates/newengine-runtime-host/src/headless_cli.rs",
+        "count": 3,
+        "first_line": 246
+      },
+      {
+        "kind": "std_env_var",
+        "path": "neocore2/crates/newengine-plugin-host/src/manager/lifecycle.rs",
+        "count": 2,
+        "first_line": 11
+      },
+      {
+        "kind": "std_env_var",
+        "path": "neocore2/crates/newengine-plugin-host/src/manager/discovery/selection.rs",
+        "count": 2,
+        "first_line": 79
+      },
+      {
+        "kind": "std_env_var",
+        "path": "neocore2/crates/newengine-runtime-host/src/platform_runtime/shutdown_watchdog.rs",
+        "count": 2,
+        "first_line": 158
+      },
+      {
+        "kind": "std_env_var",
+        "path": "editor/northstar-gui-editor-gateway/src/tools/mod.rs",
+        "count": 1,
+        "first_line": 174
+      },
+      {
+        "kind": "std_env_var",
+        "path": "neocore2/crates/newengine-core/src/engine/plugins.rs",
+        "count": 1,
+        "first_line": 18
+      }
+    ]
+  }
+}

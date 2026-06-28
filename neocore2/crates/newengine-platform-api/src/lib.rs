@@ -201,6 +201,12 @@ impl Default for PlatformAppConfigV1 {
 pub enum NativeWindowBackendV1 {
     Unknown = 0,
     Win32 = 1,
+    /// Wayland: display = wl_display*, window = wl_surface*.
+    Wayland = 2,
+    /// Xlib: display = Display* or 0, window = X11 Window, reserved0 = screen, reserved1 = visual_id.
+    Xlib = 3,
+    /// Xcb: display = xcb_connection_t* or 0, window = xcb_window_t, reserved0 = screen, reserved1 = visual_id or 0.
+    Xcb = 4,
 }
 
 #[repr(C)]

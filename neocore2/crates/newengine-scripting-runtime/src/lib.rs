@@ -325,7 +325,6 @@ mod tests {
 
     #[test]
     fn binary_wire_methods_accept_binary_envelopes() {
-        let mut state = ScriptingRuntimeState::default();
         let load = ScriptingModuleLoadBytesRequest {
             module_ref: ScriptModuleRef::new("scripts/foo.ysc@main"),
             module_bytes: vec![1, 2, 3],

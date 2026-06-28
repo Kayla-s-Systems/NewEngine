@@ -1,0 +1,94 @@
+{
+  "schema": "takesome.tool.v1",
+  "id": "northstar.editor_preview_builtin",
+  "version": "0.2.0",
+  "name": "NorthStar Built-in Editor Preview Provider",
+  "description": "Built-in descriptor-only preview provider for text, XML syntax highlighting, images, 3D model preview routing, viewport DTOs and asset-info surfaces inside NorthStar GUI Editor.",
+  "kind": "editor-builtin-provider",
+  "root": ".",
+  "formats": [
+    ".txt",
+    ".md",
+    ".json",
+    ".toml",
+    ".xml",
+    ".png",
+    ".jpg",
+    ".jpeg",
+    ".webp",
+    ".bmp",
+    ".tga",
+    ".obj",
+    ".gltf",
+    ".glb",
+    ".fbx"
+  ],
+  "content_kinds": [
+    "text_document",
+    "xml_document",
+    "image_asset",
+    "model_asset"
+  ],
+  "format_provider": {
+    "provider_id": "northstar.editor_preview_builtin",
+    "type_ids": [
+      "asset.type.text.document",
+      "asset.type.xml.document",
+      "asset.type.image.raster",
+      "asset.type.model.asset"
+    ],
+    "can_read": true,
+    "can_write": false,
+    "can_inspect": true,
+    "can_validate": false,
+    "can_diff": true,
+    "can_preview": true,
+    "can_edit_schema": false,
+    "preview_surfaces": [
+      "text",
+      "xml_highlight",
+      "image",
+      "model"
+    ],
+    "viewports": [
+      "text_editor",
+      "xml_syntax_highlighter",
+      "image_viewer",
+      "model_viewer_3d"
+    ],
+    "asset_info_fields": [
+      "file_size",
+      "encoding",
+      "line_count",
+      "image_dimensions",
+      "model_counts"
+    ]
+  },
+  "capabilities": [
+    "asset.format.text.read",
+    "asset.format.text.inspect",
+    "asset.format.text.diff",
+    "asset.preview.text",
+    "asset.viewport.text",
+    "asset.info.text.parameters",
+    "asset.format.xml.read",
+    "asset.format.xml.inspect",
+    "asset.format.xml.diff",
+    "asset.preview.xml_highlight",
+    "asset.viewport.xml_highlight",
+    "asset.info.xml.parameters",
+    "asset.format.image.read",
+    "asset.format.image.inspect",
+    "asset.preview.image",
+    "asset.viewport.image",
+    "asset.info.image.parameters",
+    "asset.format.model.read",
+    "asset.format.model.inspect",
+    "asset.preview.model",
+    "asset.viewport.model_3d",
+    "asset.info.model.parameters"
+  ],
+  "build_validation": false,
+  "safe_for_build": true,
+  "maturity": "editor-builtin"
+}

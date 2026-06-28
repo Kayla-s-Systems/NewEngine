@@ -2,7 +2,9 @@
 resolver = "2"
 
 members = [
+    "apps/gameFps",
     "apps/game-ready-fps",
+    "apps/RendererDemo",
     "apps/AureliaUiTest",
     "crates/newengine-assets",
     "crates/newengine-assets-api",

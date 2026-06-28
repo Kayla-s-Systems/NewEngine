@@ -57,7 +57,11 @@ pub fn encode_ui_draw_list_bin_into(out: &mut Vec<u8>, list: &UiDrawList) -> Res
         put_bytes(out, &tex.rgba8, "ui texture rgba8 payload")?;
     }
 
-    put_len(out, list.texture_delta.patches.len(), "ui texture patch count")?;
+    put_len(
+        out,
+        list.texture_delta.patches.len(),
+        "ui texture patch count",
+    )?;
     for patch in &list.texture_delta.patches {
         put_u32(out, patch.id.0);
         put_u32(out, patch.origin[0]);
@@ -71,6 +75,14 @@ pub fn encode_ui_draw_list_bin_into(out: &mut Vec<u8>, list: &UiDrawList) -> Res
     for id in &list.texture_delta.free {
         put_u32(out, id.0);
     }
+
+    // Optional protocol extension: renderer-neutral paint commands live at the
+    // packet tail so older providers that stop after texture_delta remain
+    // readable by newer hosts. Never insert extension fields in the middle of
+    // the hot binary frame format.
+    let paint_bytes = serde_json::to_vec(&list.paint)
+        .map_err(|e| format!("encode ui paint command list failed: {e}"))?;
+    put_bytes(out, &paint_bytes, "ui paint command list payload")?;
 
     Ok(())
 }
@@ -114,7 +126,11 @@ pub fn decode_ui_draw_list_bin(bytes: &[u8]) -> Result<UiDrawList, String> {
         };
         let start = r.u32()?;
         let end = r.u32()?;
-        list.mesh.cmds.push(UiDrawCmd { texture, clip_rect, index_range: start..end });
+        list.mesh.cmds.push(UiDrawCmd {
+            texture,
+            clip_rect,
+            index_range: start..end,
+        });
     }
 
     let set_count = r.u32()? as usize;
@@ -143,6 +159,12 @@ pub fn decode_ui_draw_list_bin(bytes: &[u8]) -> Result<UiDrawList, String> {
     }
 
     if !r.is_eof() {
+        let paint_bytes = r.bytes_vec()?;
+        list.paint = serde_json::from_slice(&paint_bytes)
+            .map_err(|e| format!("decode ui paint command list failed: {e}"))?;
+    }
+
+    if !r.is_eof() {
         return Err("ui draw-list binary packet has trailing bytes".to_owned());
     }
 
@@ -151,7 +173,8 @@ pub fn decode_ui_draw_list_bin(bytes: &[u8]) -> Result<UiDrawList, String> {
 
 #[inline]
 fn put_len(out: &mut Vec<u8>, len: usize, what: &str) -> Result<(), String> {
-    let len = u32::try_from(len).map_err(|_| format!("{what} is too large for ui binary packet"))?;
+    let len =
+        u32::try_from(len).map_err(|_| format!("{what} is too large for ui binary packet"))?;
     put_u32(out, len);
     Ok(())
 }
@@ -164,9 +187,13 @@ fn put_bytes(out: &mut Vec<u8>, bytes: &[u8], what: &str) -> Result<(), String> 
 }
 
 #[inline]
-fn put_u32(out: &mut Vec<u8>, v: u32) { out.extend_from_slice(&v.to_le_bytes()); }
+fn put_u32(out: &mut Vec<u8>, v: u32) {
+    out.extend_from_slice(&v.to_le_bytes());
+}
 #[inline]
-fn put_f32(out: &mut Vec<u8>, v: f32) { out.extend_from_slice(&v.to_le_bytes()); }
+fn put_f32(out: &mut Vec<u8>, v: f32) {
+    out.extend_from_slice(&v.to_le_bytes());
+}
 
 struct BinReader<'a> {
     bytes: &'a [u8],
@@ -175,9 +202,13 @@ struct BinReader<'a> {
 
 impl<'a> BinReader<'a> {
     #[inline]
-    fn new(bytes: &'a [u8]) -> Self { Self { bytes, cursor: 0 } }
+    fn new(bytes: &'a [u8]) -> Self {
+        Self { bytes, cursor: 0 }
+    }
     #[inline]
-    fn is_eof(&self) -> bool { self.cursor == self.bytes.len() }
+    fn is_eof(&self) -> bool {
+        self.cursor == self.bytes.len()
+    }
 
     fn take(&mut self, len: usize) -> Result<&'a [u8], String> {
         let end = self.cursor.saturating_add(len);
@@ -217,14 +248,35 @@ mod tests {
         let mut list = UiDrawList::new();
         list.screen_size_px = [1600, 900];
         list.pixels_per_point = 1.25;
-        list.mesh.vertices.push(UiVertex { pos: [1.0, 2.0], uv: [0.1, 0.2], color: 0xff00ff00 });
+        list.mesh.vertices.push(UiVertex {
+            pos: [1.0, 2.0],
+            uv: [0.1, 0.2],
+            color: 0xff00ff00,
+        });
         list.mesh.indices.push(0);
         list.mesh.cmds.push(UiDrawCmd {
             texture: reserved::FONT_ATLAS,
-            clip_rect: UiRect { min_x: 0.0, min_y: 0.0, max_x: 1600.0, max_y: 900.0 },
+            clip_rect: UiRect {
+                min_x: 0.0,
+                min_y: 0.0,
+                max_x: 1600.0,
+                max_y: 900.0,
+            },
             index_range: 0..1,
         });
-        list.texture_delta.set.insert(reserved::FONT_ATLAS, UiTexture { size: [1, 1], rgba8: vec![255, 255, 255, 255] });
+        list.paint
+            .push(crate::UiPaintCommand::Rect(crate::UiRectPaintCommand {
+                rect: [0.0, 0.0, 16.0, 16.0],
+                color: 0xff00ff00,
+                ..Default::default()
+            }));
+        list.texture_delta.set.insert(
+            reserved::FONT_ATLAS,
+            UiTexture {
+                size: [1, 1],
+                rgba8: vec![255, 255, 255, 255],
+            },
+        );
 
         let bytes = encode_ui_draw_list_bin(&list).unwrap();
         let decoded = decode_ui_draw_list_bin(&bytes).unwrap();
@@ -232,7 +284,11 @@ mod tests {
         assert_eq!(decoded.mesh.vertices.len(), 1);
         assert_eq!(decoded.mesh.indices, vec![0]);
         assert_eq!(decoded.mesh.cmds[0].index_range, 0..1);
-        assert!(decoded.texture_delta.set.contains_key(&reserved::FONT_ATLAS));
+        assert_eq!(decoded.paint.commands.len(), 1);
+        assert!(decoded
+            .texture_delta
+            .set
+            .contains_key(&reserved::FONT_ATLAS));
     }
 
     #[test]

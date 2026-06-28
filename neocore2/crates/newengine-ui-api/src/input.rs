@@ -1,6 +1,47 @@
 // Split from lib.rs to keep the UI API DTO surface navigable.
 // This file is included flat from lib.rs to preserve the existing public API.
 
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum UiTextEditOpKind {
+    InsertText,
+    Backspace,
+    Delete,
+    MoveLeft,
+    MoveRight,
+    MoveStart,
+    MoveEnd,
+    SelectAll,
+    Copy,
+    Cut,
+    Paste,
+}
+
+impl Default for UiTextEditOpKind {
+    fn default() -> Self { Self::InsertText }
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct UiTextEditOp {
+    pub kind: UiTextEditOpKind,
+    pub text: String,
+    pub source: String,
+}
+
+impl UiTextEditOp {
+    #[inline]
+    pub fn new(kind: UiTextEditOpKind, source: impl Into<String>) -> Self {
+        Self { kind, text: String::new(), source: source.into() }
+    }
+
+    #[inline]
+    pub fn with_text(kind: UiTextEditOpKind, text: impl Into<String>, source: impl Into<String>) -> Self {
+        Self { kind, text: text.into(), source: source.into() }
+    }
+}
+
 /// UI input snapshot consumed by engine UI surfaces and runtime overlays.
 ///
 /// This type lives in `newengine-ui-api` so reusable runtime code can exchange
@@ -23,6 +64,7 @@ pub struct UiInputFrame {
     pub text: String,
     pub ime_preedit: String,
     pub ime_commit: String,
+    pub text_edit_ops: Vec<UiTextEditOp>,
 
     pub gamepad_buttons: std::collections::BTreeMap<String, f32>,
     pub gamepad_buttons_pressed: std::collections::BTreeSet<String>,

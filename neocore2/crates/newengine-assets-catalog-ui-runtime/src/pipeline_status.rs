@@ -4,10 +4,10 @@
 //! not a new API domain and does not duplicate import, UID, thumbnail or package
 //! writer ownership.
 
-use crate::{AssetsCatalogEntry, AssetsCatalogRuntimeState, MAX_VISIBLE_ENTRIES};
 use crate::entry_presentation::preview_plan_label;
 use crate::path::normalize_catalog_path;
 use crate::value_helpers::string_field;
+use crate::{AssetsCatalogEntry, AssetsCatalogRuntimeState, MAX_VISIBLE_ENTRIES};
 use newengine_assets_api::AssetService;
 use serde_json::{json, Value};
 
@@ -17,11 +17,18 @@ pub(crate) fn hydrate_preview_plans_for_entries(
     warnings: &mut Vec<String>,
 ) {
     let mut failures = 0usize;
-    for entry in entries.iter_mut().filter(|entry| !entry.is_directory()).take(MAX_VISIBLE_ENTRIES) {
+    for entry in entries
+        .iter_mut()
+        .filter(|entry| !entry.is_directory())
+        .take(MAX_VISIBLE_ENTRIES)
+    {
         if !entry.thumbnail.trim().is_empty() {
             continue;
         }
-        match state.client.thumbnail_json_v1(json!({ "logical_path": entry.logical_path.as_str() })) {
+        match state
+            .client
+            .thumbnail_json_v1(json!({ "logical_path": entry.logical_path.as_str() }))
+        {
             Ok(value) => {
                 entry.thumbnail = thumbnail_label_from_value(&value)
                     .unwrap_or_else(|| preview_plan_label(entry).to_owned());
@@ -29,14 +36,20 @@ pub(crate) fn hydrate_preview_plans_for_entries(
             Err(error) => {
                 failures += 1;
                 if failures <= 2 {
-                    warnings.push(format!("engine.assets.thumbnail_v1 unavailable for '{}': {error}", entry.logical_path));
+                    warnings.push(format!(
+                        "engine.assets.thumbnail_v1 unavailable for '{}': {error}",
+                        entry.logical_path
+                    ));
                 }
                 entry.thumbnail = preview_plan_label(entry).to_owned();
             }
         }
     }
     if failures > 2 {
-        warnings.push(format!("engine.assets.thumbnail_v1 unavailable for {} additional assets", failures - 2));
+        warnings.push(format!(
+            "engine.assets.thumbnail_v1 unavailable for {} additional assets",
+            failures - 2
+        ));
     }
 }
 
@@ -71,13 +84,24 @@ pub(crate) fn apply_import_lifecycle_rows(
             return;
         }
     };
-    let rows = response.get("rows").and_then(Value::as_array).cloned().unwrap_or_default();
+    let rows = response
+        .get("rows")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default();
     for row in rows {
-        let Some(path) = string_field(&row, &["logical_path", "path"]) else { continue; };
+        let Some(path) = string_field(&row, &["logical_path", "path"]) else {
+            continue;
+        };
         let normalized = normalize_catalog_path(&path);
-        if let Some(entry) = entries.iter_mut().find(|entry| entry.logical_path == normalized) {
-            entry.import_stage = string_field(&row, &["stage"]).unwrap_or_else(|| "unknown".to_owned());
-            entry.import_action = string_field(&row, &["recommended_action"]).unwrap_or_else(|| "none".to_owned());
+        if let Some(entry) = entries
+            .iter_mut()
+            .find(|entry| entry.logical_path == normalized)
+        {
+            entry.import_stage =
+                string_field(&row, &["stage"]).unwrap_or_else(|| "unknown".to_owned());
+            entry.import_action =
+                string_field(&row, &["recommended_action"]).unwrap_or_else(|| "none".to_owned());
             entry.dirty = row.get("dirty").and_then(Value::as_bool).unwrap_or(false);
             entry.uid = string_field(&row, &["uid"]).unwrap_or_default();
             entry.thumbnail = row
@@ -88,29 +112,62 @@ pub(crate) fn apply_import_lifecycle_rows(
     }
 }
 
-pub(crate) fn package_writer_summary(state: &mut AssetsCatalogRuntimeState) -> Result<String, String> {
+pub(crate) fn package_writer_summary(
+    state: &mut AssetsCatalogRuntimeState,
+) -> Result<String, String> {
     let value = state.client.package_writer_info_json_v1(json!({}))?;
     let ops = value.get("operations").and_then(Value::as_object);
-    let loose = ops.and_then(|o| o.get("loose_vfs_write_back")).and_then(Value::as_bool).unwrap_or(false);
-    let listfile = ops.and_then(|o| o.get("nef8_listfile_repack")).and_then(Value::as_bool).unwrap_or(false);
-    let nepak = ops.and_then(|o| o.get("nepak_container_write_back")).and_then(Value::as_bool).unwrap_or(false);
-    Ok(format!("package writer: loose={} listfile={} nepak={}", loose, listfile, nepak))
+    let loose = ops
+        .and_then(|o| o.get("loose_vfs_write_back"))
+        .and_then(Value::as_bool)
+        .unwrap_or(false);
+    let listfile = ops
+        .and_then(|o| o.get("nef8_listfile_repack"))
+        .and_then(Value::as_bool)
+        .unwrap_or(false);
+    let nepak = ops
+        .and_then(|o| o.get("nepak_container_write_back"))
+        .and_then(Value::as_bool)
+        .unwrap_or(false);
+    Ok(format!(
+        "package writer: loose={} listfile={} nepak={}",
+        loose, listfile, nepak
+    ))
 }
 
-pub(crate) fn import_queue_summary(state: &mut AssetsCatalogRuntimeState) -> Result<String, String> {
+pub(crate) fn import_queue_summary(
+    state: &mut AssetsCatalogRuntimeState,
+) -> Result<String, String> {
     let value = state.client.import_queue_json_v1(json!({}))?;
     if let Some(summary) = value.get("summary") {
-        let queued = summary.get("queued").or_else(|| summary.get("queue_len")).and_then(Value::as_u64).unwrap_or(0);
+        let queued = summary
+            .get("queued")
+            .or_else(|| summary.get("queue_len"))
+            .and_then(Value::as_u64)
+            .unwrap_or(0);
         let active = summary.get("active").and_then(Value::as_u64).unwrap_or(0);
         return Ok(format!("import queue: queued={} active={}", queued, active));
     }
-    let queued = value.get("queued").and_then(Value::as_array).map(|v| v.len()).unwrap_or(0);
+    let queued = value
+        .get("queued")
+        .and_then(Value::as_array)
+        .map(|v| v.len())
+        .unwrap_or(0);
     Ok(format!("import queue: queued={} active=0", queued))
 }
 
 pub(crate) fn import_summary_for_entries(entries: &[AssetsCatalogEntry]) -> String {
     let dirty = entries.iter().filter(|entry| entry.dirty).count();
-    let reimport = entries.iter().filter(|entry| entry.import_action == "reimport").count();
-    let import = entries.iter().filter(|entry| entry.import_action == "import").count();
-    format!("Import status: {} dirty · {} reimport · {} new import", dirty, reimport, import)
+    let reimport = entries
+        .iter()
+        .filter(|entry| entry.import_action == "reimport")
+        .count();
+    let import = entries
+        .iter()
+        .filter(|entry| entry.import_action == "import")
+        .count();
+    format!(
+        "Import status: {} dirty · {} reimport · {} new import",
+        dirty, reimport, import
+    )
 }

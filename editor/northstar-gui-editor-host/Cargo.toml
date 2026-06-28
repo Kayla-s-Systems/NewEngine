@@ -1,0 +1,11 @@
+[package]
+name = "northstar-gui-editor-host"
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+
+[dependencies]
+northstar-gui-editor-assets = { path = "../northstar-gui-editor-assets" }
+northstar-gui-editor-gateway = { path = "../northstar-gui-editor-gateway" }
+northstar-gui-editor-inspector = { path = "../northstar-gui-editor-inspector" }
+northstar-gui-editor-preview = { path = "../northstar-gui-editor-preview" }

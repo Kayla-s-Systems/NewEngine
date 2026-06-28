@@ -11,7 +11,7 @@ use newengine_core::{EngineResult, JobSystemHandle};
 use newengine_render_feature_api::SceneExtractionCtx;
 use newengine_render_frame_graph::{standard_runtime_frame, StandardRuntimePipelineDesc};
 use newengine_scene::Scene;
-use newengine_ui_api::UiDrawList;
+use newengine_ui_api::{UiDrawList, UiPaintCommand};
 
 use super::draw_lists::DrawListBuildCtx;
 use super::feature_extraction::FeatureExtractionFrame;
@@ -544,11 +544,49 @@ impl RenderFrameOrchestrator {
             .iter()
             .map(|patch| patch.rgba8.len())
             .sum();
+        let paint_text = ui
+            .paint
+            .commands
+            .iter()
+            .filter(|command| matches!(command, UiPaintCommand::Text(_)))
+            .count();
+        let paint_vector = ui
+            .paint
+            .commands
+            .iter()
+            .filter(|command| matches!(command, UiPaintCommand::Vector(_)))
+            .count();
+        let paint_images = ui
+            .paint
+            .commands
+            .iter()
+            .filter(|command| matches!(command, UiPaintCommand::Image(_)))
+            .count();
+        let first_font_ref = ui.paint.commands.iter().find_map(|command| match command {
+            UiPaintCommand::Text(text) if !text.font_ref.trim().is_empty() => {
+                Some(text.font_ref.as_str())
+            }
+            _ => None,
+        });
+        let first_vector_ref = ui.paint.commands.iter().find_map(|command| match command {
+            UiPaintCommand::Vector(vector) if !vector.vector.uri.trim().is_empty() => {
+                Some(vector.vector.uri.as_str())
+            }
+            _ => None,
+        });
+
         format!(
-            "ui(vertices={} indices={} cmds={} tex_set={} tex_set_bytes={} patches={} patch_bytes={} free={})",
+            "ui(mesh_vertices={} mesh_indices={} mesh_cmds={} paint_cmds={} paint_text={} paint_vector={} paint_images={} paint_diags={} first_font_ref={:?} first_vector_ref={:?} tex_set={} tex_set_bytes={} patches={} patch_bytes={} free={})",
             ui.mesh.vertices.len(),
             ui.mesh.indices.len(),
             ui.mesh.cmds.len(),
+            ui.paint.commands.len(),
+            paint_text,
+            paint_vector,
+            paint_images,
+            ui.paint.diagnostics.len(),
+            first_font_ref,
+            first_vector_ref,
             ui.texture_delta.set.len(),
             tex_set_bytes,
             ui.texture_delta.patches.len(),
@@ -686,6 +724,7 @@ fn log_gpu_safe_profile_once() {
 }
 
 static TRANSIENT_SHADER_PIPELINE_WAIT_LOGGED: AtomicBool = AtomicBool::new(false);
+const TRANSIENT_SHADER_PIPELINE_WAIT_HEARTBEAT_FRAMES: u64 = 240;
 
 fn log_transient_pipeline_wait_once(frame_index: u64, error: &str) {
     if TRANSIENT_SHADER_PIPELINE_WAIT_LOGGED
@@ -702,10 +741,11 @@ fn log_transient_pipeline_wait_once(frame_index: u64, error: &str) {
             frame_index, error
         ));
     } else {
-        newengine_ulog_api::ulog::debug!(
-            "render controller: material pipeline still pending; retrying next frame frame={} err='{}'",
-            frame_index,
-            error
-        );
+        if frame_index % TRANSIENT_SHADER_PIPELINE_WAIT_HEARTBEAT_FRAMES == 0 {
+            newengine_ulog_api::ulog::debug!(
+                "render controller: material pipeline still pending heartbeat frame={} waiting_for='renderer.shader_compile_event'",
+                frame_index
+            );
+        }
     }
 }

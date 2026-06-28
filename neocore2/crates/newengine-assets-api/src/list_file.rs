@@ -380,10 +380,30 @@ impl Default for ListFileHeaderMetadata {
 
 #[inline]
 pub const fn list_file_content_kind_label(kind: u32) -> &'static str {
-    if kind == LIST_FILE_CONTENT_KIND_UNKNOWN {
-        "unknown"
-    } else {
-        "provider_declared"
+    match kind {
+        LIST_FILE_CONTENT_KIND_UNKNOWN => "unknown",
+        LIST_FILE_CONTENT_KIND_YTD => "ytd_texture_dictionary",
+        LIST_FILE_CONTENT_KIND_YDD => "ydd_drawable_dictionary",
+        LIST_FILE_CONTENT_KIND_YTYP => "ytyp_archetype_dictionary",
+        LIST_FILE_CONTENT_KIND_NEMAT => "nemat_material_library",
+        LIST_FILE_CONTENT_KIND_YMAP => "ymap_map_data",
+        LIST_FILE_CONTENT_KIND_YDR => "ydr_drawable",
+        LIST_FILE_CONTENT_KIND_YFT => "yft_fragment",
+        LIST_FILE_CONTENT_KIND_NEFTD => "neftd_or_ybn_dictionary",
+        LIST_FILE_CONTENT_KIND_YMF => "ymf_manifest",
+        LIST_FILE_CONTENT_KIND_YMT => "ymt_metadata",
+        LIST_FILE_CONTENT_KIND_YCD => "ycd_clip_dictionary",
+        LIST_FILE_CONTENT_KIND_YED => "yed_expression_dictionary",
+        LIST_FILE_CONTENT_KIND_YFD => "yfd_frame_filter_dictionary",
+        LIST_FILE_CONTENT_KIND_YLD => "yld_cloth_dictionary",
+        LIST_FILE_CONTENT_KIND_YPDB => "ypdb_pose_database",
+        LIST_FILE_CONTENT_KIND_YVR => "yvr_vehicle_record",
+        LIST_FILE_CONTENT_KIND_YWR => "ywr_waypoint_record",
+        LIST_FILE_CONTENT_KIND_YSC => "ysc_script_module",
+        LIST_FILE_CONTENT_KIND_YBD => "ybd_bounds_dictionary",
+        LIST_FILE_CONTENT_KIND_YTF => "ytf_unknown_y_file",
+        LIST_FILE_CONTENT_KIND_NEUI => "neui_ui_dictionary",
+        _ => "provider_declared",
     }
 }
 

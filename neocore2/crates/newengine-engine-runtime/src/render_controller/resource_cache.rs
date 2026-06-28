@@ -527,6 +527,7 @@ impl RuntimeRenderController {
         match r.drain_backend_events() {
             Ok(events) => {
                 for event in events {
+                    self.gpu.material.registry.observe_backend_event(&event);
                     let _ = ctx.events().publish(event);
                 }
             }

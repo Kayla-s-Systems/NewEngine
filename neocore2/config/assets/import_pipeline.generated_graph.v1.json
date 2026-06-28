@@ -2,56 +2,56 @@
   "schema": "northstar.assets.runtime_graph.generated.v1",
   "sources": [
     {
-      "source_ref": "NewEngine/neocore2/assets/ui/editor/editor_chrome.neui.import.json",
+      "source_ref": "gameAssets/ui/editor/editor_chrome.neui.import.json",
       "content_hash": "39cefeaa88f30e86b812676d843d1775820f7adefd1987679a2c6589c99132fd",
       "content_kind": "source.neui.import_descriptor",
       "importer_id": "northstar.importer.neui.v1",
       "importer_version": "1"
     },
     {
-      "source_ref": "NewEngine/neocore2/assets/ui/editor/import_queue.neui.import.json",
+      "source_ref": "gameAssets/ui/editor/import_queue.neui.import.json",
       "content_hash": "06b4548815d07e98531151a9ecadc70e3be20cabc2a1a9f8628574f3abc28259",
       "content_kind": "source.neui.import_descriptor",
       "importer_id": "northstar.importer.neui.v1",
       "importer_version": "1"
     },
     {
-      "source_ref": "NewEngine/neocore2/assets/ui/editor/output_log.neui.import.json",
+      "source_ref": "gameAssets/ui/editor/output_log.neui.import.json",
       "content_hash": "23c272f88bab2e1e9a6f6dbabd8aa553eb87d0a15d369f7fcef0cf704ad27889",
       "content_kind": "source.neui.import_descriptor",
       "importer_id": "northstar.importer.neui.v1",
       "importer_version": "1"
     },
     {
-      "source_ref": "NewEngine/neocore2/assets/ui/editor/profiler_diagnostics.neui.import.json",
+      "source_ref": "gameAssets/ui/editor/profiler_diagnostics.neui.import.json",
       "content_hash": "304736500aaae069cf0763a9f2ec15a81d560d56e1d96099444d877e26676b01",
       "content_kind": "source.neui.import_descriptor",
       "importer_id": "northstar.importer.neui.v1",
       "importer_version": "1"
     },
     {
-      "source_ref": "NewEngine/neocore2/assets/ui/editor/scene_tree.neui.import.json",
+      "source_ref": "gameAssets/ui/editor/scene_tree.neui.import.json",
       "content_hash": "7d0f7727d87e707c50543e2b6c79ba402334f850f159d0474e3b77a38c9ee54c",
       "content_kind": "source.neui.import_descriptor",
       "importer_id": "northstar.importer.neui.v1",
       "importer_version": "1"
     },
     {
-      "source_ref": "NewEngine/neocore2/assets/ui/editor/viewport_gizmos.neui.import.json",
+      "source_ref": "gameAssets/ui/editor/viewport_gizmos.neui.import.json",
       "content_hash": "73ecfb0cbfcb1fd18718892c7ca807437c9891b267b2d9dc3124120fabc09213",
       "content_kind": "source.neui.import_descriptor",
       "importer_id": "northstar.importer.neui.v1",
       "importer_version": "1"
     },
     {
-      "source_ref": "NewEngine/neocore2/assets/ui/fonts/editor.neftd.import.json",
+      "source_ref": "gameAssets/ui/fonts/editor.neftd.import.json",
       "content_hash": "9c93f7558c27530f660734b9452262325e4974c48e6214272e6bc0d6b05551ee",
       "content_kind": "source.neftd.import_descriptor",
       "importer_id": "northstar.importer.neftd_font.v1",
       "importer_version": "1"
     },
     {
-      "source_ref": "NewEngine/neocore2/assets/ui/themes/northstar_editor.neui.import.json",
+      "source_ref": "gameAssets/ui/themes/northstar_editor.neui.import.json",
       "content_hash": "cb1a6df9ec43551befa7591c1c4e9b424a81c63bd917da2166a9990feaade4b3",
       "content_kind": "source.neui.import_descriptor",
       "importer_id": "northstar.importer.neui.v1",
@@ -268,7 +268,7 @@
   "cache_keys": [
     {
       "schema": "northstar.assets.cache_key.v1",
-      "source_ref": "NewEngine/neocore2/assets/ui/editor/editor_chrome.neui.import.json",
+      "source_ref": "gameAssets/ui/editor/editor_chrome.neui.import.json",
       "source_hash": "39cefeaa88f30e86b812676d843d1775820f7adefd1987679a2c6589c99132fd",
       "importer_id": "northstar.importer.neui.v1",
       "importer_version": "1",
@@ -278,7 +278,7 @@
     },
     {
       "schema": "northstar.assets.cache_key.v1",
-      "source_ref": "NewEngine/neocore2/assets/ui/editor/import_queue.neui.import.json",
+      "source_ref": "gameAssets/ui/editor/import_queue.neui.import.json",
       "source_hash": "06b4548815d07e98531151a9ecadc70e3be20cabc2a1a9f8628574f3abc28259",
       "importer_id": "northstar.importer.neui.v1",
       "importer_version": "1",
@@ -288,7 +288,7 @@
     },
     {
       "schema": "northstar.assets.cache_key.v1",
-      "source_ref": "NewEngine/neocore2/assets/ui/editor/output_log.neui.import.json",
+      "source_ref": "gameAssets/ui/editor/output_log.neui.import.json",
       "source_hash": "23c272f88bab2e1e9a6f6dbabd8aa553eb87d0a15d369f7fcef0cf704ad27889",
       "importer_id": "northstar.importer.neui.v1",
       "importer_version": "1",
@@ -298,7 +298,7 @@
     },
     {
       "schema": "northstar.assets.cache_key.v1",
-      "source_ref": "NewEngine/neocore2/assets/ui/editor/profiler_diagnostics.neui.import.json",
+      "source_ref": "gameAssets/ui/editor/profiler_diagnostics.neui.import.json",
       "source_hash": "304736500aaae069cf0763a9f2ec15a81d560d56e1d96099444d877e26676b01",
       "importer_id": "northstar.importer.neui.v1",
       "importer_version": "1",
@@ -308,7 +308,7 @@
     },
     {
       "schema": "northstar.assets.cache_key.v1",
-      "source_ref": "NewEngine/neocore2/assets/ui/editor/scene_tree.neui.import.json",
+      "source_ref": "gameAssets/ui/editor/scene_tree.neui.import.json",
       "source_hash": "7d0f7727d87e707c50543e2b6c79ba402334f850f159d0474e3b77a38c9ee54c",
       "importer_id": "northstar.importer.neui.v1",
       "importer_version": "1",
@@ -318,7 +318,7 @@
     },
     {
       "schema": "northstar.assets.cache_key.v1",
-      "source_ref": "NewEngine/neocore2/assets/ui/editor/viewport_gizmos.neui.import.json",
+      "source_ref": "gameAssets/ui/editor/viewport_gizmos.neui.import.json",
       "source_hash": "73ecfb0cbfcb1fd18718892c7ca807437c9891b267b2d9dc3124120fabc09213",
       "importer_id": "northstar.importer.neui.v1",
       "importer_version": "1",
@@ -328,7 +328,7 @@
     },
     {
       "schema": "northstar.assets.cache_key.v1",
-      "source_ref": "NewEngine/neocore2/assets/ui/fonts/editor.neftd.import.json",
+      "source_ref": "gameAssets/ui/fonts/editor.neftd.import.json",
       "source_hash": "9c93f7558c27530f660734b9452262325e4974c48e6214272e6bc0d6b05551ee",
       "importer_id": "northstar.importer.neftd_font.v1",
       "importer_version": "1",
@@ -338,7 +338,7 @@
     },
     {
       "schema": "northstar.assets.cache_key.v1",
-      "source_ref": "NewEngine/neocore2/assets/ui/themes/northstar_editor.neui.import.json",
+      "source_ref": "gameAssets/ui/themes/northstar_editor.neui.import.json",
       "source_hash": "cb1a6df9ec43551befa7591c1c4e9b424a81c63bd917da2166a9990feaade4b3",
       "importer_id": "northstar.importer.neui.v1",
       "importer_version": "1",
@@ -351,28 +351,28 @@
     "schema": "northstar.assets.invalidation_index.v1",
     "strategy": "reverse_dependency_walk",
     "source_to_runtime": {
-      "NewEngine/neocore2/assets/ui/editor/editor_chrome.neui.import.json": [
+      "gameAssets/ui/editor/editor_chrome.neui.import.json": [
         "assets/ui/editor/editor_shell.neui@surface"
       ],
-      "NewEngine/neocore2/assets/ui/editor/import_queue.neui.import.json": [
+      "gameAssets/ui/editor/import_queue.neui.import.json": [
         "assets/ui/editor/import_queue.neui@surface"
       ],
-      "NewEngine/neocore2/assets/ui/editor/output_log.neui.import.json": [
+      "gameAssets/ui/editor/output_log.neui.import.json": [
         "assets/ui/editor/output_log.neui@surface"
       ],
-      "NewEngine/neocore2/assets/ui/editor/profiler_diagnostics.neui.import.json": [
+      "gameAssets/ui/editor/profiler_diagnostics.neui.import.json": [
         "assets/ui/editor/profiler_diagnostics.neui@surface"
       ],
-      "NewEngine/neocore2/assets/ui/editor/scene_tree.neui.import.json": [
+      "gameAssets/ui/editor/scene_tree.neui.import.json": [
         "assets/ui/editor/scene_tree.neui@surface"
       ],
-      "NewEngine/neocore2/assets/ui/editor/viewport_gizmos.neui.import.json": [
+      "gameAssets/ui/editor/viewport_gizmos.neui.import.json": [
         "assets/ui/editor/viewport_gizmos.neui@surface"
       ],
-      "NewEngine/neocore2/assets/ui/fonts/editor.neftd.import.json": [
+      "gameAssets/ui/fonts/editor.neftd.import.json": [
         "assets/ui/fonts/editor.neftd@tt_lakes_neue_trial_bold"
       ],
-      "NewEngine/neocore2/assets/ui/themes/northstar_editor.neui.import.json": [
+      "gameAssets/ui/themes/northstar_editor.neui.import.json": [
         "assets/ui/themes/northstar_editor.neui@editor_light"
       ]
     },
@@ -449,7 +449,7 @@
   "worker_results": [
     {
       "worker_id": "northstar.importer.neui.v1",
-      "source_ref": "NewEngine/neocore2/assets/ui/editor/editor_chrome.neui.import.json",
+      "source_ref": "gameAssets/ui/editor/editor_chrome.neui.import.json",
       "target_ref": "assets/ui/editor/editor_shell.neui@surface",
       "cache_key": "e0ad7677d113ff9ce7e02fc8ae9b737cd6892e6ab577068790e71a24d219bd12",
       "status": "planned",
@@ -457,7 +457,7 @@
     },
     {
       "worker_id": "northstar.importer.neui.v1",
-      "source_ref": "NewEngine/neocore2/assets/ui/editor/import_queue.neui.import.json",
+      "source_ref": "gameAssets/ui/editor/import_queue.neui.import.json",
       "target_ref": "assets/ui/editor/import_queue.neui@surface",
       "cache_key": "5c86e2f58507f2ffdd500a41b1c7b141ede420b88dbc76d381c5eb80fb1803c7",
       "status": "planned",
@@ -465,7 +465,7 @@
     },
     {
       "worker_id": "northstar.importer.neui.v1",
-      "source_ref": "NewEngine/neocore2/assets/ui/editor/output_log.neui.import.json",
+      "source_ref": "gameAssets/ui/editor/output_log.neui.import.json",
       "target_ref": "assets/ui/editor/output_log.neui@surface",
       "cache_key": "c539410b61c2e43f35d0a25f85eac4736d7650b88754ba0c29ed2587f42392a9",
       "status": "planned",
@@ -473,7 +473,7 @@
     },
     {
       "worker_id": "northstar.importer.neui.v1",
-      "source_ref": "NewEngine/neocore2/assets/ui/editor/profiler_diagnostics.neui.import.json",
+      "source_ref": "gameAssets/ui/editor/profiler_diagnostics.neui.import.json",
       "target_ref": "assets/ui/editor/profiler_diagnostics.neui@surface",
       "cache_key": "e56fb4ec0fa84a320cba0a8f3fcdb7b5529bd48bf1c91d5d69c1dad8ba8cfdd0",
       "status": "planned",
@@ -481,7 +481,7 @@
     },
     {
       "worker_id": "northstar.importer.neui.v1",
-      "source_ref": "NewEngine/neocore2/assets/ui/editor/scene_tree.neui.import.json",
+      "source_ref": "gameAssets/ui/editor/scene_tree.neui.import.json",
       "target_ref": "assets/ui/editor/scene_tree.neui@surface",
       "cache_key": "b488bc5c040e120c0329898c2a2fdbda26b7a1eed60427e0c903cd1e55381d7d",
       "status": "planned",
@@ -489,7 +489,7 @@
     },
     {
       "worker_id": "northstar.importer.neui.v1",
-      "source_ref": "NewEngine/neocore2/assets/ui/editor/viewport_gizmos.neui.import.json",
+      "source_ref": "gameAssets/ui/editor/viewport_gizmos.neui.import.json",
       "target_ref": "assets/ui/editor/viewport_gizmos.neui@surface",
       "cache_key": "d28e4ab75f204b9ec2db2c1713f37ca5ce847bbf17b85443e731c0450014d267",
       "status": "planned",
@@ -497,7 +497,7 @@
     },
     {
       "worker_id": "northstar.importer.neftd_font.v1",
-      "source_ref": "NewEngine/neocore2/assets/ui/fonts/editor.neftd.import.json",
+      "source_ref": "gameAssets/ui/fonts/editor.neftd.import.json",
       "target_ref": "assets/ui/fonts/editor.neftd@tt_lakes_neue_trial_bold",
       "cache_key": "8becf9617f1da696db1a3804c9ef95bd7f47ad716c8a125fd375368640bc9849",
       "status": "planned",
@@ -505,7 +505,7 @@
     },
     {
       "worker_id": "northstar.importer.neui.v1",
-      "source_ref": "NewEngine/neocore2/assets/ui/themes/northstar_editor.neui.import.json",
+      "source_ref": "gameAssets/ui/themes/northstar_editor.neui.import.json",
       "target_ref": "assets/ui/themes/northstar_editor.neui@editor_light",
       "cache_key": "77d399f43f61259d8a74e3e940184743ce6eab56b6a8a89f45ed127d8b1f0703",
       "status": "planned",

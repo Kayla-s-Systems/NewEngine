@@ -2,8 +2,11 @@
 use serde::{Deserialize, Serialize};
 
 pub use newengine_ui_draw::{
-    reserved, UiDrawCmd, UiDrawList, UiMesh, UiRect, UiTexId, UiTexture, UiTextureDelta,
-    UiTexturePatch, UiVertex,
+    reserved, TextureRef, UiBorderPaintCommand, UiClipPaintCommand, UiDrawCmd, UiDrawList,
+    UiIconPaintCommand, UiImagePaintCommand, UiImageRef, UiLayerPaintCommand, UiMesh,
+    UiPaintCommand, UiPaintList, UiPaintNodeRef, UiRect, UiRectPaintCommand,
+    UiRoundedRectPaintCommand, UiScopePaintCommand, UiTexId, UiTextPaintCommand, UiTexture,
+    UiTextureDelta, UiTexturePatch, UiVectorPaintCommand, UiVertex, VectorRef,
 };
 use std::collections::BTreeMap;
 
@@ -33,9 +36,15 @@ mod tests {
     #[test]
     fn ui_service_ids_are_engine_gateway_first() {
         assert_eq!(ENGINE_UI_SERVICE_ID, "engine.ui");
-        assert_eq!(UI_BACKEND_SERVICE_SPEC.engine_gateway_id, ENGINE_UI_SERVICE_ID);
+        assert_eq!(
+            UI_BACKEND_SERVICE_SPEC.engine_gateway_id,
+            ENGINE_UI_SERVICE_ID
+        );
         assert_eq!(UI_BACKEND_SERVICE_SPEC.provider_service_id, UI_SERVICE_ID);
-        assert_eq!(UI_BACKEND_SERVICE_SPEC.backend_capability_id, UI_BACKEND_CAPABILITY_ID);
+        assert_eq!(
+            UI_BACKEND_SERVICE_SPEC.backend_capability_id,
+            UI_BACKEND_CAPABILITY_ID
+        );
     }
 
     #[test]
@@ -72,7 +81,9 @@ mod tests {
             source_kind: UiNodeRequestSourceKind::Generated,
             root: UiNodeRequest::new("root", UiRuntimeNodeKind::Panel)
                 .with_text("Generated")
-                .with_child(UiNodeRequest::new("button.play", UiRuntimeNodeKind::Action).with_text("Play")),
+                .with_child(
+                    UiNodeRequest::new("button.play", UiRuntimeNodeKind::Action).with_text("Play"),
+                ),
             ..UiNodeTreeRequest::default()
         };
         let node = request.to_surface_node();
@@ -83,8 +94,11 @@ mod tests {
 
     #[test]
     fn state_patch_is_surface_scoped() {
-        let patch = UiStatePatch::new(42, UI_SURFACE_ENGINE_LOADING)
-            .with_change("loading", "progress", serde_json::json!(0.5));
+        let patch = UiStatePatch::new(42, UI_SURFACE_ENGINE_LOADING).with_change(
+            "loading",
+            "progress",
+            serde_json::json!(0.5),
+        );
         assert_eq!(patch.surface_id, UI_SURFACE_ENGINE_LOADING);
         assert_eq!(patch.changes.len(), 1);
     }

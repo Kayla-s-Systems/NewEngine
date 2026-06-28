@@ -44,6 +44,7 @@ const GAME_READY_ENV_DEFAULTS: &[(&str, &str)] = &[
 pub const GAME_READY_PROFILE_ENV: &str = "NEWENGINE_SCENE_PROFILE";
 pub const GAME_READY_DEFAULT_PROFILE_ASSET: &str = "game_ready_highlands.ymap";
 
+
 #[derive(Clone)]
 pub struct GameReadyFpsApp {
     profile: GameReadyRuntimeProfile,

@@ -221,6 +221,40 @@ fn default_local_contrast_strength() -> f32 { 0.055 }
 fn default_dither_strength() -> f32 { 1.0 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+pub struct SsaoParams {
+    #[serde(default)]
+    pub enabled: bool,
+    #[serde(default = "default_ssao_radius_ws")]
+    pub radius_ws: f32,
+    #[serde(default = "default_ssao_intensity")]
+    pub intensity: f32,
+    #[serde(default = "default_ssao_quality_steps")]
+    pub quality_steps: u32,
+    #[serde(default = "default_true")]
+    pub half_resolution: bool,
+}
+
+impl Default for SsaoParams {
+    #[inline]
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            radius_ws: default_ssao_radius_ws(),
+            intensity: default_ssao_intensity(),
+            quality_steps: default_ssao_quality_steps(),
+            half_resolution: true,
+        }
+    }
+}
+
+#[inline]
+fn default_ssao_radius_ws() -> f32 { 0.75 }
+#[inline]
+fn default_ssao_intensity() -> f32 { 0.82 }
+#[inline]
+fn default_ssao_quality_steps() -> u32 { 16 }
+
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub struct PostFxQualityParams {
     #[serde(default)]
     pub bloom: BloomParams,
@@ -228,6 +262,8 @@ pub struct PostFxQualityParams {
     pub fxaa: FxaaParams,
     #[serde(default)]
     pub taa: TaaParams,
+    #[serde(default)]
+    pub ssao: SsaoParams,
     #[serde(default)]
     pub color: ColorGradeParams,
     #[serde(default)]
@@ -241,6 +277,7 @@ impl Default for PostFxQualityParams {
             bloom: BloomParams::default(),
             fxaa: FxaaParams::default(),
             taa: TaaParams::default(),
+            ssao: SsaoParams::default(),
             color: ColorGradeParams::default(),
             anti_aliasing: AntiAliasingMode::Fxaa,
         }
@@ -255,6 +292,9 @@ pub struct SunPostFxParams {
     /// Linear RGB sun color from the active gameplay directional light.
     #[serde(default = "default_sun_color")]
     pub color: [f32; 3],
+    /// World-space light direction used by lighting/deferred passes. Must be normalized by the provider.
+    #[serde(default = "default_sun_direction")]
+    pub direction: [f32; 3],
     /// Scalar intensity from the active gameplay directional light.
     #[serde(default)]
     pub intensity: f32,
@@ -278,6 +318,7 @@ impl Default for SunPostFxParams {
         Self {
             screen_position: default_sun_screen_position(),
             color: default_sun_color(),
+            direction: default_sun_direction(),
             intensity: 0.0,
             visibility: 0.0,
             disk_radius: default_sun_disk_radius(),
@@ -293,6 +334,8 @@ fn default_true() -> bool { true }
 fn default_sun_screen_position() -> [f32; 2] { [0.5, 0.5] }
 #[inline]
 fn default_sun_color() -> [f32; 3] { [1.0, 0.94, 0.82] }
+#[inline]
+fn default_sun_direction() -> [f32; 3] { [-0.53590363, -0.7989835, -0.27282366] }
 #[inline]
 fn default_sun_disk_radius() -> f32 { 0.018 }
 #[inline]
@@ -531,6 +574,7 @@ mod tests {
         assert!(decoded.quality.bloom.enabled);
         assert!(decoded.quality.fxaa.enabled);
         assert_eq!(decoded.quality.anti_aliasing, AntiAliasingMode::Fxaa);
+        assert!(!decoded.quality.ssao.enabled);
     }
 
     #[test]

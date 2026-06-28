@@ -3,7 +3,7 @@
 use std::collections::HashMap;
 use std::time::Instant;
 
-use newengine_core::render::RenderApi;
+use newengine_core::render::{RenderApi, RenderBackendEvent, RenderBackendEventKind};
 use newengine_core::{EngineError, EngineResult as CoreResult};
 use newengine_material_domain_api::{
     MaterialDomainError, MaterialGpuPipeline, MaterialGpuPipelineKey, MaterialGpuPipelineProvider,
@@ -73,6 +73,16 @@ impl MaterialRenderDevice for CoreRenderMaterialDevice<'_> {
 pub struct MaterialGpuRegistry {
     providers: HashMap<&'static str, Box<dyn MaterialGpuPipelineProvider>>,
     resolved_pipelines: HashMap<String, MaterialGpuPipeline>,
+    pending_pipelines: HashMap<String, PendingMaterialPipelineState>,
+    shader_event_generation: u64,
+}
+
+#[derive(Clone, Debug)]
+struct PendingMaterialPipelineState {
+    key: MaterialGpuPipelineKey,
+    shader_event_generation: u64,
+    last_error: String,
+    wait_logged: bool,
 }
 
 impl MaterialGpuRegistry {
@@ -81,9 +91,34 @@ impl MaterialGpuRegistry {
         let replaced = self.providers.insert(key.as_str(), provider).is_some();
         if replaced {
             self.resolved_pipelines.retain(|cache_key, _| !cache_key.starts_with(key.as_str()));
+            self.pending_pipelines.retain(|cache_key, _| !cache_key.starts_with(key.as_str()));
             newengine_ulog_api::ulog::warn!(
                 "render material registry: replaced material-domain provider key='{}'; invalidated cached pipelines for this provider",
                 key.as_str()
+            );
+        }
+    }
+
+    pub(crate) fn observe_backend_event(&mut self, event: &RenderBackendEvent) {
+        let readiness_event = matches!(
+            event.kind,
+            RenderBackendEventKind::ShaderCompileCompleted
+                | RenderBackendEventKind::ShaderCompileFailed
+                | RenderBackendEventKind::ShaderCompileDegradedFallback
+        );
+        if !readiness_event {
+            return;
+        }
+
+        self.shader_event_generation = self.shader_event_generation.wrapping_add(1).max(1);
+        if !self.pending_pipelines.is_empty() {
+            newengine_ulog_api::ulog::info!(
+                "render material registry: shader readiness event observed generation={} kind={:?} phase='{}' pending_pipelines={} detail='{}'",
+                self.shader_event_generation,
+                event.kind,
+                event.phase,
+                self.pending_pipelines.len(),
+                event.detail
             );
         }
     }
@@ -96,7 +131,37 @@ impl MaterialGpuRegistry {
     ) -> CoreResult<MaterialGpuPipeline> {
         let cache_key = material_pipeline_cache_key(key, profile);
         if let Some(pipeline) = self.resolved_pipelines.get(&cache_key).copied() {
+            self.pending_pipelines.remove(&cache_key);
             return Ok(pipeline);
+        }
+
+        if let Some(pending) = self.pending_pipelines.get_mut(&cache_key) {
+            if pending.shader_event_generation == self.shader_event_generation {
+                if !pending.wait_logged {
+                    newengine_ulog_api::ulog::warn!(
+                        "render material registry: pipeline pending key='{}' cache_key='{}' waiting_for='renderer.shader_compile_event' generation={} err='{}'",
+                        pending.key.as_str(),
+                        cache_key,
+                        pending.shader_event_generation,
+                        pending.last_error
+                    );
+                    pending.wait_logged = true;
+                }
+                return Err(EngineError::other(format!(
+                    "render material registry: pipeline pending_event key='{}' cache_key='{}' waiting_for='renderer.shader_compile_event' err='{}'",
+                    pending.key.as_str(),
+                    cache_key,
+                    pending.last_error
+                )));
+            }
+
+            newengine_ulog_api::ulog::info!(
+                "render material registry: retrying pending pipeline after shader event key='{}' cache_key='{}' previous_generation={} current_generation={}",
+                pending.key.as_str(),
+                cache_key,
+                pending.shader_event_generation,
+                self.shader_event_generation
+            );
         }
 
         let Some(provider) = self.providers.get_mut(key.as_str()) else {
@@ -116,6 +181,7 @@ impl MaterialGpuRegistry {
         match provider.require_pipeline(profile, &mut device) {
             Ok(pipeline) => {
                 self.resolved_pipelines.insert(cache_key.clone(), pipeline);
+                self.pending_pipelines.remove(&cache_key);
                 newengine_ulog_api::ulog::info!(
                     "render material registry: pipeline request completed key='{}' cache_key='{}' elapsed_ms={:.2} cached=true",
                     key.as_str(),
@@ -126,9 +192,20 @@ impl MaterialGpuRegistry {
             }
             Err(e) => {
                 if is_transient_material_pipeline_error(&e) {
+                    let state = self.pending_pipelines.entry(cache_key.clone()).or_insert_with(|| PendingMaterialPipelineState {
+                        key,
+                        shader_event_generation: self.shader_event_generation,
+                        last_error: String::new(),
+                        wait_logged: false,
+                    });
+                    state.shader_event_generation = self.shader_event_generation;
+                    state.last_error = e.to_string();
+                    state.wait_logged = false;
                     newengine_ulog_api::ulog::warn!(
-                        "render material registry: pipeline request pending key='{}' err='{}' elapsed_ms={:.2} action='retry_next_frame_without_disabling_viewport'",
+                        "render material registry: pipeline request pending key='{}' cache_key='{}' generation={} err='{}' elapsed_ms={:.2} action='wait_for_renderer_shader_event'",
                         key.as_str(),
+                        cache_key,
+                        self.shader_event_generation,
                         e,
                         started_at.elapsed().as_secs_f64() * 1000.0
                     );
@@ -162,7 +239,12 @@ fn is_transient_material_pipeline_error(error: &MaterialDomainError) -> bool {
     let mut text = error.to_string();
     text.make_ascii_lowercase();
     text.contains("shader compile queued")
+        || text.contains("shader compile pending")
+        || text.contains("shader pending")
         || text.contains("shader is not ready yet")
+        || text.contains("shader compile job is still pending")
+        || text.contains("shader compile job is still pending")
         || text.contains("engine.jobs shader admission timeout")
         || text.contains("leave_pending_and_retry_later")
+        || text.contains("pipeline pending_event")
 }

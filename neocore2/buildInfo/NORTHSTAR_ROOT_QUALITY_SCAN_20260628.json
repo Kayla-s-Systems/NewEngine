@@ -1,0 +1,88 @@
+{
+  "schema": "northstar.root_quality_scan.quick",
+  "files_scanned": 1547,
+  "total_lines": 236450,
+  "monolith_overflow_sum": 18928,
+  "largest_files": [
+    {
+      "path": "Plugins/AssetManager/newengine-AssetManager/src/asset_store/store.rs",
+      "lines": 1537
+    },
+    {
+      "path": "Plugins/ProfilerPlugin/newengine-profiler-plugin/src/report.rs",
+      "lines": 1453
+    },
+    {
+      "path": "Plugins/AureliaUI/newengine-ui-provider-aurelia/src/service.rs",
+      "lines": 1450
+    },
+    {
+      "path": "Plugins/VulkanRenderer/newengine-modules-render-vulkan-ash/src/render_api/graph_executor/native_pass_dispatch.rs",
+      "lines": 1417
+    },
+    {
+      "path": "Plugins/VulkanRenderer/newengine-modules-render-vulkan-ash/src/lib.rs",
+      "lines": 1403
+    },
+    {
+      "path": "Plugins/FlecsECS/newengine-ecs-flecs/src/lib.rs",
+      "lines": 1393
+    },
+    {
+      "path": "NewEngine/neocore2/crates/newengine-assets-api/src/lib.rs",
+      "lines": 1391
+    },
+    {
+      "path": "Plugins/ProfilerPlugin/newengine-profiler-plugin/src/runtime.rs",
+      "lines": 1291
+    },
+    {
+      "path": "NewEngine/neocore2/crates/newengine-world-environment-api/src/lib.rs",
+      "lines": 1191
+    },
+    {
+      "path": "Plugins/VulkanRenderer/newengine-modules-render-vulkan-ash/src/render_api/resources.rs",
+      "lines": 1143
+    },
+    {
+      "path": "NewEngine/neocore2/crates/newengine-runtime-host/src/platform_runtime/runtime_host.rs",
+      "lines": 1129
+    },
+    {
+      "path": "NewEngine/neocore2/crates/newengine-render-api/src/render_graph.rs",
+      "lines": 1102
+    },
+    {
+      "path": "NewEngine/neocore2/crates/newengine-model-runtime/src/lib.rs",
+      "lines": 1064
+    },
+    {
+      "path": "NewEngine/neocore2/crates/newengine-definitions-runtime/src/lib.rs",
+      "lines": 972
+    },
+    {
+      "path": "Plugins/AureliaUI/newengine-ui-provider-aurelia/src/interaction/dispatch.rs",
+      "lines": 930
+    },
+    {
+      "path": "NewEngine/neocore2/crates/newengine-service-api/src/lib.rs",
+      "lines": 925
+    },
+    {
+      "path": "NewEngine/neocore2/crates/newengine-core/src/engine/module_boot.rs",
+      "lines": 922
+    },
+    {
+      "path": "NewEngine/neocore2/crates/newengine-assets/src/asset_document_service.rs",
+      "lines": 902
+    },
+    {
+      "path": "Plugins/VulkanRenderer/newengine-modules-render-vulkan-ash/src/render_api/visibility/gpu.rs",
+      "lines": 902
+    },
+    {
+      "path": "Plugins/VulkanRenderer/newengine-modules-render-vulkan-ash/src/render_api/upload_queue.rs",
+      "lines": 893
+    }
+  ]
+}

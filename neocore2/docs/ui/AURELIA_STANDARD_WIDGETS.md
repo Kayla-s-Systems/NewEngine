@@ -2,7 +2,7 @@
 
 Aurelia renders provider-neutral UI atoms from `UiComponentNode` / `UiNodeRequest`.
 
-Supported visual atoms:
+Supported visual atoms today:
 
 - `button`, `action`
 - `input`
@@ -38,4 +38,12 @@ Numeric controls use generic props:
 }
 ```
 
-The provider must not know products such as Asset Browser or EditorScreen. Product modules publish UI nodes and interaction state; Aurelia paints the resulting generic atoms.
+The provider must not know products such as Asset Browser, Log Viewer, Profiler, EditorScreen, Material Browser, Memory Visualizer, Particle Editor, Symbol Tool, or Engine Registry.
+
+Product modules publish UI nodes and interaction state; Aurelia resolves layout/input/hit-test/state and emits generic paint commands for the renderer.
+
+The long-term renderer boundary and editor component target set are defined in:
+
+```text
+docs/ui/VULKAN_UI_RENDERER_CONTRACT.md
+```

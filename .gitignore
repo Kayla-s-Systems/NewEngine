@@ -1,3 +1,5 @@
 /neocore2/target/
 /neocore2/logs/
 /neocore2/cache/
+/editor/target/
+/neocore2/apps/*/cache/

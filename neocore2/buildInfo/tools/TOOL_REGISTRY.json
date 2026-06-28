@@ -1,0 +1,12 @@
+{
+  "schema": "northstar.tool_registry.v1",
+  "ok": true,
+  "summary": {
+    "tool_count": 0,
+    "error_count": 0,
+    "warning_count": 0,
+    "duplicate_tool_ids": []
+  },
+  "tools": [],
+  "validation": []
+}

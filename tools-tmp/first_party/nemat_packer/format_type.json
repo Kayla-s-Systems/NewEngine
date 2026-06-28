@@ -1,0 +1,19 @@
+{
+  "schema": "northstar.format_type.v1",
+  "type_id": "asset.type.nemat.material_library",
+  "label": "NEMAT Material Library",
+  "content_kind": "material_library",
+  "extensions": [".nemat", ".nemat.xml"],
+  "provider_id": "northstar.nemat_packer",
+  "can_read": true,
+  "can_write": true,
+  "can_inspect": true,
+  "can_validate": true,
+  "can_diff": true,
+  "can_preview": true,
+  "can_edit_schema": true,
+  "schema_id": "northstar.schema.nemat.material_library.v1",
+  "preview_surface": "material",
+  "viewport": "material_preview",
+  "asset_info_fields": ["file_size", "material_count", "shader_count", "texture_slot_count", "xml_line_count"]
+}

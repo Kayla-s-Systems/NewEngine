@@ -2,7 +2,7 @@
   "engine": {
     "cache_files": "cache",
     "config": "config",
-    "modules_dir": "plugins"
+    "modules_dir": "pluginsRuntime"
   },
   "plugins": {
     "newengine": {
@@ -57,13 +57,13 @@
             "defaults": {
               "cache_files": "cache",
               "config": "config",
-              "modules_dir": "plugins"
+              "modules_dir": "pluginsRuntime"
             },
             "diagnostics": [],
             "effective": {
               "cache_files": "cache",
               "config": "config",
-              "modules_dir": "plugins"
+              "modules_dir": "pluginsRuntime"
             },
             "enabled": true,
             "live_update_supported": false,
@@ -72,8 +72,8 @@
               "category": "Engine",
               "fields": [
                 {
-                  "current": "plugins",
-                  "default": "plugins",
+                  "current": "pluginsRuntime",
+                  "default": "pluginsRuntime",
                   "key": "modules_dir",
                   "kind": "string",
                   "label": "Modules directory",
@@ -108,7 +108,7 @@
             "user_overrides": {
               "cache_files": "cache",
               "config": "config",
-              "modules_dir": "plugins"
+              "modules_dir": "pluginsRuntime"
             }
           },
           {

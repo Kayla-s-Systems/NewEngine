@@ -1,0 +1,13 @@
+[package]
+name = "northstar-gui-editor"
+version = "0.1.0"
+edition = "2021"
+description = "North Star GUI Editor host shell and UI bootstrap"
+license = "MIT"
+
+# This crate is intentionally outside EngineRepo/NewEngine/neocore2/Cargo.toml.
+# The editor is a product/tool layer, not runtime ballast.
+
+[dependencies]
+northstar-gui-editor-core = { path = "../northstar-gui-editor-core" }
+northstar-gui-editor-ui = { path = "../northstar-gui-editor-ui" }

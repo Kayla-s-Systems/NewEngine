@@ -7,17 +7,26 @@ use smallvec::SmallVec;
 use newengine_math::collections::FxHashMap;
 
 mod binary;
+mod paint;
 pub use binary::{decode_ui_draw_list_bin, encode_ui_draw_list_bin, encode_ui_draw_list_bin_into};
+pub use paint::{
+    TextureRef, UiBorderPaintCommand, UiClipPaintCommand, UiIconPaintCommand, UiImagePaintCommand,
+    UiImageRef, UiLayerPaintCommand, UiPaintCommand, UiPaintList, UiPaintNodeRef,
+    UiRectPaintCommand, UiRoundedRectPaintCommand, UiScopePaintCommand, UiTextPaintCommand,
+    UiVectorPaintCommand, VectorRef,
+};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[repr(transparent)]
 pub struct UiTexId(pub u32);
 
-
 pub mod reserved {
     use super::UiTexId;
 
     pub const FONT_ATLAS: UiTexId = UiTexId(1);
+    /// Engine-owned 1x1 white texture used by renderer-side paint command fallback
+    /// tessellation for rects, borders and temporary vector stubs.
+    pub const SOLID_WHITE: UiTexId = UiTexId(15);
     pub const USER_BEGIN: u32 = 16;
 
     /// Reserved range for external GPU-owned textures.
@@ -115,7 +124,12 @@ impl UiMesh {
 pub struct UiDrawList {
     pub screen_size_px: [u32; 2],
     pub pixels_per_point: f32,
+    /// Legacy/backend-ready triangle mesh stream. Existing render backends may
+    /// keep consuming this while the Vulkan UI renderer migrates to paint commands.
     pub mesh: UiMesh,
+    /// Renderer-neutral command stream. Aurelia owns layout/input/state and emits
+    /// generic primitives here; GPU backends turn this into batches.
+    pub paint: UiPaintList,
     pub texture_delta: UiTextureDelta,
 }
 
@@ -126,6 +140,7 @@ impl UiDrawList {
             screen_size_px: [0, 0],
             pixels_per_point: 1.0,
             mesh: UiMesh::new(),
+            paint: UiPaintList::new(),
             texture_delta: UiTextureDelta::new(),
         }
     }
@@ -133,6 +148,7 @@ impl UiDrawList {
     #[inline]
     pub fn clear(&mut self) {
         self.mesh.clear();
+        self.paint.clear();
         self.texture_delta.clear();
     }
 }

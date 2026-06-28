@@ -17,7 +17,11 @@ pub fn encode_ui_frame_request_bin(request: &UiFrameRequest) -> Result<Vec<u8>, 
     put_u32(&mut out, request.surface_size_px[0]);
     put_u32(&mut out, request.surface_size_px[1]);
     put_f32(&mut out, request.pixels_per_point.max(0.0001));
-    put_string_vec(&mut out, &request.render_surface_ids, "ui frame render surface ids")?;
+    put_string_vec(
+        &mut out,
+        &request.render_surface_ids,
+        "ui frame render surface ids",
+    )?;
     Ok(out)
 }
 
@@ -32,23 +36,32 @@ pub fn decode_ui_frame_request_bin(bytes: &[u8]) -> Result<UiFrameRequest, Strin
     let dt_sec = r.f32()?;
     let surface_size_px = [r.u32()?, r.u32()?];
     let pixels_per_point = r.f32()?.max(0.0001);
-    let render_surface_ids = if r.is_eof() { Vec::new() } else { r.string_vec()? };
+    let render_surface_ids = if r.is_eof() {
+        Vec::new()
+    } else {
+        r.string_vec()?
+    };
     if !r.is_eof() {
         return Err("ui frame request binary packet has trailing bytes".to_owned());
     }
-    Ok(UiFrameRequest::new(frame_index, dt_sec, surface_size_px, pixels_per_point)
-        .with_render_surface_ids(render_surface_ids)
-        .with_diagnostics_flags(Vec::new())
-        .with_version_for_binary(version))
+    Ok(
+        UiFrameRequest::new(frame_index, dt_sec, surface_size_px, pixels_per_point)
+            .with_render_surface_ids(render_surface_ids)
+            .with_diagnostics_flags(Vec::new())
+            .with_version_for_binary(version),
+    )
 }
 
 /// Encodes a provider-produced draw-list response without JSON.
 pub fn encode_ui_frame_response_bin(response: &UiFrameResponse) -> Result<Vec<u8>, String> {
     let draw_list = newengine_ui_draw::encode_ui_draw_list_bin(&response.draw_list)?;
-    let mut out = Vec::with_capacity(16 + draw_list.len());
+    let input_capture = serde_json::to_vec(&response.input_capture)
+        .map_err(|e| format!("encode ui frame response input-capture failed: {e}"))?;
+    let mut out = Vec::with_capacity(20 + draw_list.len() + input_capture.len());
     out.extend_from_slice(UI_FRAME_RESPONSE_BIN_MAGIC);
     put_u32(&mut out, response.version);
     put_bytes(&mut out, &draw_list, "ui frame response draw-list")?;
+    put_bytes(&mut out, &input_capture, "ui frame response input-capture")?;
     Ok(out)
 }
 
@@ -60,12 +73,20 @@ pub fn decode_ui_frame_response_bin(bytes: &[u8]) -> Result<UiFrameResponse, Str
     }
     let version = r.u32()?;
     let draw_list_bytes = r.bytes_vec()?;
-    if !r.is_eof() {
-        return Err("ui frame response binary packet has trailing bytes".to_owned());
-    }
+    let input_capture = if r.is_eof() {
+        crate::UiInputCaptureState::none()
+    } else {
+        let input_capture_bytes = r.bytes_vec()?;
+        if !r.is_eof() {
+            return Err("ui frame response binary packet has trailing bytes".to_owned());
+        }
+        serde_json::from_slice(&input_capture_bytes)
+            .map_err(|e| format!("decode ui frame response input-capture failed: {e}"))?
+    };
     let draw_list = newengine_ui_draw::decode_ui_draw_list_bin(&draw_list_bytes)?;
     let mut response = UiFrameResponse::new(draw_list);
     response.version = version;
+    response.input_capture = input_capture;
     Ok(response)
 }
 
@@ -84,7 +105,8 @@ impl UiFrameRequestBinaryVersionExt for UiFrameRequest {
 
 #[inline]
 fn put_bytes(out: &mut Vec<u8>, bytes: &[u8], what: &str) -> Result<(), String> {
-    let len = u32::try_from(bytes.len()).map_err(|_| format!("{what} is too large for ui frame binary packet"))?;
+    let len = u32::try_from(bytes.len())
+        .map_err(|_| format!("{what} is too large for ui frame binary packet"))?;
     put_u32(out, len);
     out.extend_from_slice(bytes);
     Ok(())
@@ -100,11 +122,17 @@ fn put_string_vec(out: &mut Vec<u8>, values: &[String], what: &str) -> Result<()
 }
 
 #[inline]
-fn put_u32(out: &mut Vec<u8>, v: u32) { out.extend_from_slice(&v.to_le_bytes()); }
+fn put_u32(out: &mut Vec<u8>, v: u32) {
+    out.extend_from_slice(&v.to_le_bytes());
+}
 #[inline]
-fn put_u64(out: &mut Vec<u8>, v: u64) { out.extend_from_slice(&v.to_le_bytes()); }
+fn put_u64(out: &mut Vec<u8>, v: u64) {
+    out.extend_from_slice(&v.to_le_bytes());
+}
 #[inline]
-fn put_f32(out: &mut Vec<u8>, v: f32) { out.extend_from_slice(&v.to_le_bytes()); }
+fn put_f32(out: &mut Vec<u8>, v: f32) {
+    out.extend_from_slice(&v.to_le_bytes());
+}
 
 struct BinReader<'a> {
     bytes: &'a [u8],
@@ -113,9 +141,13 @@ struct BinReader<'a> {
 
 impl<'a> BinReader<'a> {
     #[inline]
-    fn new(bytes: &'a [u8]) -> Self { Self { bytes, cursor: 0 } }
+    fn new(bytes: &'a [u8]) -> Self {
+        Self { bytes, cursor: 0 }
+    }
     #[inline]
-    fn is_eof(&self) -> bool { self.cursor == self.bytes.len() }
+    fn is_eof(&self) -> bool {
+        self.cursor == self.bytes.len()
+    }
 
     fn take(&mut self, len: usize) -> Result<&'a [u8], String> {
         let end = self.cursor.saturating_add(len);
@@ -136,7 +168,9 @@ impl<'a> BinReader<'a> {
     #[inline]
     fn u64(&mut self) -> Result<u64, String> {
         let b = self.take(8)?;
-        Ok(u64::from_le_bytes([b[0], b[1], b[2], b[3], b[4], b[5], b[6], b[7]]))
+        Ok(u64::from_le_bytes([
+            b[0], b[1], b[2], b[3], b[4], b[5], b[6], b[7],
+        ]))
     }
 
     #[inline]
@@ -187,9 +221,18 @@ mod tests {
         let live = decoded.live_input();
         assert_eq!(live.frame_index, 42);
         assert_eq!(live.viewport_px, [1600, 900]);
-        assert_eq!(live.render_surface_ids, vec!["apps.aurelia_ui_test.main".to_owned()]);
-        assert_eq!(live.now_ms, 0, "v1 binary intentionally does not append P2A JSON-only fields");
-        assert!(live.diagnostics_flags.is_empty(), "v1 binary keeps compatibility with existing release providers");
+        assert_eq!(
+            live.render_surface_ids,
+            vec!["apps.aurelia_ui_test.main".to_owned()]
+        );
+        assert_eq!(
+            live.now_ms, 0,
+            "v1 binary intentionally does not append P2A JSON-only fields"
+        );
+        assert!(
+            live.diagnostics_flags.is_empty(),
+            "v1 binary keeps compatibility with existing release providers"
+        );
     }
 
     #[test]
@@ -207,7 +250,10 @@ mod tests {
         assert_eq!(live.viewport_px, [1920, 1080]);
         assert_eq!(live.pixels_per_point, 2.0);
         assert_eq!(live.render_surface_ids, vec!["surface.main".to_owned()]);
-        assert_eq!(live.diagnostics_flags, vec!["font.resolve".to_owned(), "caret".to_owned()]);
+        assert_eq!(
+            live.diagnostics_flags,
+            vec!["font.resolve".to_owned(), "caret".to_owned()]
+        );
     }
 
     #[test]
@@ -218,5 +264,16 @@ mod tests {
         assert_eq!(decoded.version, 1);
         assert_eq!(decoded.draw_list.screen_size_px, [0, 0]);
         assert!(decoded.diagnostics.font_resolve.is_empty());
+        assert!(!decoded.input_capture.requests_capture());
+    }
+
+    #[test]
+    fn ui_frame_response_binary_roundtrips_input_capture() {
+        let mut response = UiFrameResponse::new(newengine_ui_draw::UiDrawList::new());
+        response.input_capture = crate::UiInputCaptureState::modal("surface.main", "test modal");
+        let bytes = encode_ui_frame_response_bin(&response).unwrap();
+        let decoded = decode_ui_frame_response_bin(&bytes).unwrap();
+        assert!(decoded.input_capture.requests_capture());
+        assert_eq!(decoded.input_capture.surfaces, vec!["surface.main".to_owned()]);
     }
 }

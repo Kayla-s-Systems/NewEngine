@@ -225,9 +225,10 @@ impl ModelAssetAdapter {
             .and_then(serde_json::Value::as_array)
             .ok_or_else(|| format!("model.api: .ydd has no runtime_mesh_parts array path='{source}'"))?;
         let mut out = Vec::new();
+        let single_part_selector_fallback = selector.is_some() && parts.len() == 1;
         for part in parts {
             let entry = part.get("entry").or_else(|| part.get("name")).and_then(serde_json::Value::as_str).unwrap_or_default();
-            if selector.map(|needle| !needle.eq_ignore_ascii_case(entry)).unwrap_or(false) {
+            if !single_part_selector_fallback && selector.map(|needle| !needle.eq_ignore_ascii_case(entry)).unwrap_or(false) {
                 continue;
             }
             out.push(self.decode_ydd_runtime_model_part(source, part)?);

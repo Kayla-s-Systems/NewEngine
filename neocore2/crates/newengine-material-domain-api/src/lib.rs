@@ -121,6 +121,11 @@ pub struct LitPipeline {
     pub pipeline: PipelineId,
     pub double_sided_pipeline: PipelineId,
     pub terrain_pipeline: PipelineId,
+    pub gbuffer_terrain_pipeline: PipelineId,
+    pub gbuffer_pipeline: PipelineId,
+    pub gbuffer_double_sided_pipeline: PipelineId,
+    pub gbuffer_instanced_pipeline: PipelineId,
+    pub gbuffer_instanced_double_sided_pipeline: PipelineId,
     pub shadow_pipeline: PipelineId,
     pub shadow_double_sided_pipeline: PipelineId,
     #[allow(dead_code)]

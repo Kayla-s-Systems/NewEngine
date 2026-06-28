@@ -1,6 +1,6 @@
 {
   "id": "newengine.gameready.input.profile",
-  "version": 5,
+  "version": 6,
   "device_preference": "hybrid",
   "keys": [
     {

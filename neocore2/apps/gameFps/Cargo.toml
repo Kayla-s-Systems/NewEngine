@@ -1,0 +1,25 @@
+[package]
+name = "game-fps"
+version = "0.1.0"
+edition = "2021"
+description = "North Star 3D FPS demo launcher"
+authors = ["Kayla's Systems"]
+license = "Proprietary"
+
+[package.metadata.newengine.winres]
+icon = "assets/app.ico"
+# optional overrides:
+# product_name = "North Star"
+# file_description = "North Star gameFps 3D Demo"
+# company_name = "Kayla's Systems"
+# original_filename = "game-fps.exe"
+# internal_name = "game-fps"
+
+[dependencies]
+newengine-core = { path = "../../crates/newengine-core", features = ["host-probe"] }
+newengine-game-ready-profile = { path = "../../crates/newengine-game-ready-profile" }
+newengine-runtime-host = { path = "../../crates/newengine-runtime-host" }
+newengine-ui = { path = "../../crates/newengine-ui", default-features = false }
+
+[build-dependencies]
+embed-resource = "2"

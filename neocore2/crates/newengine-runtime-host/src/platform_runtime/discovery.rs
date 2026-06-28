@@ -229,6 +229,7 @@ pub fn detect_platform_runtime_path(modules_dir: &Path) -> EngineResult<PathBuf>
     }
 
     push_runtime_dirs(&mut search_dirs, &exe_dir.join("platforms"));
+    push_runtime_dirs(&mut search_dirs, &exe_dir.join("pluginsRuntime"));
     push_runtime_dirs(&mut search_dirs, &exe_dir.join("plugins"));
 
     for dir in resolve_module_dir_candidates(modules_dir, &exe_dir) {
@@ -238,6 +239,7 @@ pub fn detect_platform_runtime_path(modules_dir: &Path) -> EngineResult<PathBuf>
     push_ancestor_plugin_dirs(&mut search_dirs, &exe_dir);
     if let Ok(cwd) = std::env::current_dir() {
         push_runtime_dirs(&mut search_dirs, &cwd.join("platforms"));
+        push_runtime_dirs(&mut search_dirs, &cwd.join("pluginsRuntime"));
         push_runtime_dirs(&mut search_dirs, &cwd.join("plugins"));
         push_ancestor_plugin_dirs(&mut search_dirs, &cwd);
     }
@@ -341,7 +343,7 @@ pub fn detect_platform_runtime_path(modules_dir: &Path) -> EngineResult<PathBuf>
     crate::platform_early_log!("host.discovery.failed.no_candidate");
     Err({
         EngineError::other(format!(
-            "platform runtime DLL not found; searched [{}] and expected exported symbol 'newengine_platform_runtime_run_v1'. Build/copy the platform runtime into NEWENGINE_PLUGIN_DIR, NEWENGINE_PLATFORM_RUNTIME_DIR, <engine-root>/plugins, or set NEWENGINE_PLATFORM_RUNTIME to the exact DLL path.",
+            "platform runtime DLL not found; searched [{}] and expected exported symbol 'newengine_platform_runtime_run_v1'. Build/copy the platform runtime into NEWENGINE_PLUGIN_DIR, NEWENGINE_PLATFORM_RUNTIME_DIR, <engine-root>/pluginsRuntime, legacy <engine-root>/plugins, or set NEWENGINE_PLATFORM_RUNTIME to the exact DLL path.",
             search_dirs
                 .iter()
                 .map(|p| p.display().to_string())
@@ -414,6 +416,7 @@ fn runtime_candidate_rank(path: &Path, desired_profile: &'static str) -> (u8, u8
 
 fn push_ancestor_plugin_dirs(out: &mut Vec<PathBuf>, start: &Path) {
     for ancestor in start.ancestors() {
+        push_runtime_dirs(out, &ancestor.join("pluginsRuntime"));
         push_runtime_dirs(out, &ancestor.join("plugins"));
     }
 }

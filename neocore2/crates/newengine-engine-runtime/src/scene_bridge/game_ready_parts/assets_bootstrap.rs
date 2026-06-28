@@ -302,6 +302,9 @@ pub(super) fn select_ydd_runtime_mesh_part<'a>(
         }) {
             return Ok(part);
         }
+        if parts.len() == 1 {
+            return Ok(&parts[0]);
+        }
         return Err(format!("YDD selector '{selector}' was not found in runtime_mesh_parts"));
     }
     Ok(&parts[0])

@@ -1,0 +1,72 @@
+{
+  "window": {
+    "title": "North Star / Aurelia UI Test",
+    "size": [
+      1280,
+      720
+    ],
+    "placement": {
+      "type": "centered"
+    }
+  },
+  "engine": {
+    "modules_dir": "pluginsRuntime",
+    "CACHE_FILES": "cache",
+    "CONFIG": "config"
+  },
+  "plugins": {
+    "engine.platform": {
+      "window": {
+        "title": "North Star / Aurelia UI Test",
+        "width": 1280,
+        "height": 720
+      }
+    },
+    "engine.logging.chronicle": {
+      "network_reader": {
+        "host": "127.0.0.1",
+        "port": 8765,
+        "publish_http_log_url": true
+      }
+    },
+    "engine.render": {
+      "clear_color": [
+        0.025,
+        0.03,
+        0.045,
+        1.0
+      ],
+      "debug_text": "AureliaUiTest",
+      "mode": "ui_only",
+      "viewport_pass": false
+    },
+    "engine.ui": {
+      "surface": "apps.aurelia_ui_test.main",
+      "theme": "northstar_default",
+      "required": true,
+      "required_capabilities": [
+        "ui.backend"
+      ],
+      "allow_json_fallback": false,
+      "document_id": "apps.aurelia_ui_test.debug",
+      "asset_root": "apps/AureliaUiTest/assets",
+      "source_xml": "ui/debug/aurelia_ui_test_debug.neui.xml",
+      "compiled_asset": "ui/debug/aurelia_ui_test_debug.neui",
+      "mount_surface": "apps.aurelia_ui_test.main",
+      "load_mode": "compiled_neui"
+    },
+    "engine.runtime": {
+      "ui": {
+        "screen_profile": {
+          "profile": "headless",
+          "publish_editor_shell": false,
+          "game_ui_root_surface_id": "apps.aurelia_ui_test.main"
+        }
+      },
+      "render": {
+        "ui_only": true,
+        "viewport_pass": false
+      }
+    }
+  }
+}

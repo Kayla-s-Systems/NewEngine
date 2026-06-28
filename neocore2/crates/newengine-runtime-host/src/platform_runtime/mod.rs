@@ -1,11 +1,13 @@
 #![forbid(unsafe_op_in_unsafe_fn)]
 
 mod bootstrap_overlay;
+mod bootstrap_subsystems;
 mod callbacks;
 mod config;
 mod constants;
 mod discovery;
 mod early_log;
+mod fatal_overlay;
 mod handles;
 mod jobs_gateway;
 mod runtime_host;

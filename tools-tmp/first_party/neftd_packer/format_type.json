@@ -1,0 +1,19 @@
+{
+  "schema": "northstar.format_type.v1",
+  "type_id": "asset.type.neftd.font_dictionary",
+  "label": "NEFTD Font Dictionary",
+  "content_kind": "font_dictionary",
+  "extensions": [".neftd"],
+  "provider_id": "northstar.neftd_packer",
+  "can_read": true,
+  "can_write": true,
+  "can_inspect": true,
+  "can_validate": true,
+  "can_diff": true,
+  "can_preview": true,
+  "can_edit_schema": true,
+  "schema_id": "northstar.schema.neftd.font_dictionary.v1",
+  "preview_surface": "tree",
+  "viewport": "font_dictionary_tree",
+  "asset_info_fields": ["file_size", "font_count", "glyph_count", "atlas_count"]
+}

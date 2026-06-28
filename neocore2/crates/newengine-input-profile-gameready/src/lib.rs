@@ -48,6 +48,19 @@ pub fn game_ready_input_profile() -> InputBindingsProfile {
 }
 
 #[inline]
+pub fn game_ready_game_input_profile() -> InputBindingsProfile {
+    let mut profile = game_ready_input_profile();
+    profile.id = "newengine.gameready.game.input.profile".to_owned();
+    profile.version = profile.version.saturating_add(1);
+    profile.actions.retain(|action| action.id != action::ASSET_CATALOG_UI_TOGGLE);
+    profile.listeners.retain(|listener| {
+        listener.id != "asset-browser-ui" && listener.id != "assets-browser-navigation"
+    });
+    profile.bindings.retain(|binding| binding.action != action::ASSET_CATALOG_UI_TOGGLE);
+    profile.canonicalized()
+}
+
+#[inline]
 pub fn gameplay_default_key_registry() -> Vec<InputKeyRegistration> {
     use newengine_input_api::key_code as keys;
     vec![
@@ -270,5 +283,16 @@ mod tests {
         assert!(profile.bindings.iter().any(|b| b.action == action::UI_NAVIGATION_TOGGLE && b.code == engine_default_keybind::PRIMARY_UI_TOGGLE));
         assert!(profile.bindings.iter().any(|b| b.action == action::ASSET_CATALOG_UI_TOGGLE && b.code == engine_default_keybind::ASSET_CATALOG_UI_TOGGLE));
         assert!(!profile.bindings.iter().any(|b| b.action == action::UI_NAVIGATION_BACK && b.code == engine_default_keybind::PRIMARY_UI_TOGGLE));
+    }
+
+    #[test]
+    fn game_profile_excludes_editor_asset_browser() {
+        let profile = game_ready_game_input_profile();
+        assert!(profile.listeners.iter().any(|l| l.id == "ui-navigation"));
+        assert!(!profile.listeners.iter().any(|l| l.id == "asset-browser-ui"));
+        assert!(!profile.listeners.iter().any(|l| l.id == "assets-browser-navigation"));
+        assert!(!profile.actions.iter().any(|a| a.id == action::ASSET_CATALOG_UI_TOGGLE));
+        assert!(!profile.bindings.iter().any(|b| b.action == action::ASSET_CATALOG_UI_TOGGLE));
+        assert!(profile.bindings.iter().any(|b| b.action == action::UI_NAVIGATION_TOGGLE && b.code == engine_default_keybind::PRIMARY_UI_TOGGLE));
     }
 }

@@ -1,7 +1,7 @@
 {
   "schema": "northstar.assets.invalidation_plan.v1",
   "changed_sources": [
-    "NewEngine/neocore2/assets/ui/fonts/source/Inter-VariableFont_opsz,wght.ttf"
+    "gameAssets/ui/fonts/source/Inter-VariableFont_opsz,wght.ttf"
   ],
   "invalidated_cache_keys": [
     "8becf9617f1da696db1a3804c9ef95bd7f47ad716c8a125fd375368640bc9849"

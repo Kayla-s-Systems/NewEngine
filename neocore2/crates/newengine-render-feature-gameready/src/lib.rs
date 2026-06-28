@@ -90,6 +90,7 @@ impl RenderDrawListProvider for GameReadyTerrainProvider {
         if ctx.render_shadow_map {
             out.record_procedural_terrain_shadow(ctx)?;
         }
+        out.record_procedural_terrain_gbuffer(ctx)?;
         out.record_procedural_terrain_forward(ctx)
     }
 }
@@ -116,6 +117,7 @@ impl RenderDrawListProvider for GameReadyPrimitiveMeshProvider {
         if ctx.render_shadow_map {
             out.record_primitive_mesh_shadow(ctx)?;
         }
+        out.record_primitive_mesh_gbuffer(ctx)?;
         out.record_primitive_mesh_forward(ctx)
     }
 }

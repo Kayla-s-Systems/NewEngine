@@ -12,6 +12,17 @@ pub enum RenderBackendEventKind {
     FrameCompleted,
     ResourceRetired,
     BackendDegraded,
+    /// A shader compile/cache job was admitted by the backend. Consumers must
+    /// wait for a later readiness event instead of guessing that the shader will
+    /// be ready before the pipeline is requested again.
+    ShaderCompileQueued,
+    /// A shader compile/cache job produced a usable shader module or cache hit.
+    ShaderCompileCompleted,
+    /// A shader compile/cache job failed and no valid shader module was admitted.
+    ShaderCompileFailed,
+    /// A shader was admitted through a degraded/prebaked fallback while the real
+    /// async compile path is still unavailable.
+    ShaderCompileDegradedFallback,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -46,6 +57,23 @@ impl RenderBackendEvent {
             phase: phase.into(),
             detail: detail.into(),
         }
+    }
+
+
+    #[inline]
+    pub fn shader_compile_event(
+        kind: RenderBackendEventKind,
+        phase: impl Into<String>,
+        detail: impl Into<String>,
+    ) -> Self {
+        Self::new(
+            "engine.render.vulkan",
+            kind,
+            0,
+            0,
+            phase,
+            detail,
+        )
     }
 
     #[inline]

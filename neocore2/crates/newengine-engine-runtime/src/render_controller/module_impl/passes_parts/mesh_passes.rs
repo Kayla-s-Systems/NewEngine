@@ -28,12 +28,14 @@ use newengine_procedural_noise::ProceduralTerrain;
 use newengine_math::collections::FxHashMap;
 
 mod mesh_passes_shadow;
+mod scene_mesh_pass;
 pub use self::mesh_passes_shadow::{draw_primitives_shadow, draw_procedural_terrain_shadow};
+use self::scene_mesh_pass::SceneMeshPass;
 
 
 #[inline]
 fn draw_authored_sky_background_mesh() -> bool {
-    crate::env_config::var_bool("NEWENGINE_RENDER_DRAW_SKY_MESH", false)
+    crate::env_config::var_bool("NEWENGINE_RENDER_DRAW_SKY_MESH", true)
 }
 
 pub(crate) fn publish_camera_spawn(
@@ -130,6 +132,60 @@ pub fn draw_procedural_terrain(
     camera_position: Vec3,
     camera_forward: Vec3,
 ) -> newengine_core::EngineResult<()> {
+    draw_procedural_terrain_for_pass(
+        this,
+        r,
+        scene,
+        lit,
+        SceneMeshPass::Forward,
+        viewproj,
+        lights,
+        shadow_texture,
+        runtime,
+        camera_position,
+        camera_forward,
+    )
+}
+
+pub fn draw_procedural_terrain_gbuffer(
+    this: &mut RuntimeRenderController,
+    r: &mut dyn newengine_core::render::RenderApi,
+    scene: &newengine_scene::Scene,
+    lit: newengine_material_domain_api::LitPipeline,
+    viewproj: Mat4,
+    lights: &PackedLights,
+    runtime: bool,
+    camera_position: Vec3,
+    camera_forward: Vec3,
+) -> newengine_core::EngineResult<()> {
+    draw_procedural_terrain_for_pass(
+        this,
+        r,
+        scene,
+        lit,
+        SceneMeshPass::GBuffer,
+        viewproj,
+        lights,
+        lit.white_texture,
+        runtime,
+        camera_position,
+        camera_forward,
+    )
+}
+
+fn draw_procedural_terrain_for_pass(
+    this: &mut RuntimeRenderController,
+    r: &mut dyn newengine_core::render::RenderApi,
+    scene: &newengine_scene::Scene,
+    lit: newengine_material_domain_api::LitPipeline,
+    pass: SceneMeshPass,
+    viewproj: Mat4,
+    lights: &PackedLights,
+    shadow_texture: TextureId,
+    runtime: bool,
+    camera_position: Vec3,
+    camera_forward: Vec3,
+) -> newengine_core::EngineResult<()> {
     let world = scene.world();
     let mats_lock = this.bridges.scene.materials();
     let mats = mats_lock.read();
@@ -195,7 +251,9 @@ pub fn draw_procedural_terrain(
         let resolved = material.and_then(|mr| mats.resolve(mr.id));
         let material_plan = LitMaterialPlan::from_resolved(resolved.as_ref(), entry.base_color);
 
-        let key = entity_key ^ 0x7e44_1000_0000_0000u64;
+        let key = entity_key
+            ^ 0x7e44_1000_0000_0000u64
+            ^ if pass.is_gbuffer() { 0x0000_0000_0b00_0000u64 } else { 0 };
         let (pipeline, base_tex, normal_tex, roughness_tex, sampler, material_params) =
             if let Some(layers) = surface_layers {
                 let forest_tex = this.material_texture_or_default(
@@ -214,7 +272,7 @@ pub fn draw_procedural_terrain(
                     lit.white_texture,
                 );
                 (
-                    lit.terrain_pipeline,
+                    if pass.is_gbuffer() { lit.gbuffer_terrain_pipeline } else { lit.terrain_pipeline },
                     forest_tex,
                     sand_tex,
                     rock_tex,
@@ -247,8 +305,19 @@ pub fn draw_procedural_terrain(
                 } else {
                     lit.clamp_sampler
                 };
+                let pipeline = if pass.is_gbuffer() {
+                    if material_plan.double_sided {
+                        lit.gbuffer_double_sided_pipeline
+                    } else {
+                        lit.gbuffer_pipeline
+                    }
+                } else if material_plan.double_sided {
+                    lit.double_sided_pipeline
+                } else {
+                    lit.pipeline
+                };
                 (
-                    if material_plan.double_sided { lit.double_sided_pipeline } else { lit.pipeline },
+                    pipeline,
                     base_tex,
                     normal_tex,
                     roughness_tex,
@@ -264,7 +333,7 @@ pub fn draw_procedural_terrain(
             base_tex,
             normal_tex,
             roughness_tex,
-            shadow_texture,
+            if pass.is_gbuffer() { lit.white_texture } else { shadow_texture },
             sampler,
         )?;
         per.last_seen_frame = this.frame.frame_index;
@@ -342,6 +411,60 @@ pub fn draw_primitives(
     r: &mut dyn newengine_core::render::RenderApi,
     scene: &newengine_scene::Scene,
     lit: newengine_material_domain_api::LitPipeline,
+    viewproj: Mat4,
+    lights: &PackedLights,
+    shadow_texture: TextureId,
+    runtime: bool,
+    camera_position: Vec3,
+    camera_forward: Vec3,
+) -> newengine_core::EngineResult<()> {
+    draw_primitives_for_pass(
+        this,
+        r,
+        scene,
+        lit,
+        SceneMeshPass::Forward,
+        viewproj,
+        lights,
+        shadow_texture,
+        runtime,
+        camera_position,
+        camera_forward,
+    )
+}
+
+pub fn draw_primitives_gbuffer(
+    this: &mut RuntimeRenderController,
+    r: &mut dyn newengine_core::render::RenderApi,
+    scene: &newengine_scene::Scene,
+    lit: newengine_material_domain_api::LitPipeline,
+    viewproj: Mat4,
+    lights: &PackedLights,
+    runtime: bool,
+    camera_position: Vec3,
+    camera_forward: Vec3,
+) -> newengine_core::EngineResult<()> {
+    draw_primitives_for_pass(
+        this,
+        r,
+        scene,
+        lit,
+        SceneMeshPass::GBuffer,
+        viewproj,
+        lights,
+        lit.white_texture,
+        runtime,
+        camera_position,
+        camera_forward,
+    )
+}
+
+fn draw_primitives_for_pass(
+    this: &mut RuntimeRenderController,
+    r: &mut dyn newengine_core::render::RenderApi,
+    scene: &newengine_scene::Scene,
+    lit: newengine_material_domain_api::LitPipeline,
+    pass: SceneMeshPass,
     viewproj: Mat4,
     lights: &PackedLights,
     shadow_texture: TextureId,
@@ -461,7 +584,10 @@ pub fn draw_primitives(
         } else {
             model
         };
-        let plan_key = PrimitivePlanKey::new(prim, material_ref, follow_camera_sky, false);
+        if pass.is_gbuffer() && follow_camera_sky {
+            continue;
+        }
+        let plan_key = PrimitivePlanKey::new(prim, material_ref, follow_camera_sky, pass.is_gbuffer());
         let plan = if let Some(plan) = plan_cache.get(&plan_key).copied() {
             plan
         } else {
@@ -479,12 +605,21 @@ pub fn draw_primitives(
             } else {
                 lit.clamp_sampler
             };
-            let material_shadow_texture = if follow_camera_sky || !material_plan.receive_shadows {
+            let material_shadow_texture = if pass.is_gbuffer()
+                || follow_camera_sky
+                || !material_plan.receive_shadows
+            {
                 lit.white_texture
             } else {
                 shadow_texture
             };
-            let pipeline = if follow_camera_sky {
+            let pipeline = if pass.is_gbuffer() {
+                if material_plan.double_sided {
+                    lit.gbuffer_instanced_double_sided_pipeline
+                } else {
+                    lit.gbuffer_instanced_pipeline
+                }
+            } else if follow_camera_sky {
                 lit.sky_instanced_pipeline
             } else if material_plan.double_sided {
                 lit.instanced_double_sided_pipeline

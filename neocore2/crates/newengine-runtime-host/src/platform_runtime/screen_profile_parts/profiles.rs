@@ -205,8 +205,45 @@ pub(super) fn game_screen_surface_node(descriptor: &UiScreenProfileDescriptor, f
     if root.is_empty() {
         return None;
     }
+    let diagnostic_panel_enabled = std::env::var("NEWENGINE_GAME_SCREEN_DIAGNOSTIC_PANEL")
+        .map(|value| matches!(value.trim(), "1" | "true" | "TRUE" | "True" | "on" | "ON" | "On"))
+        .unwrap_or(false);
     let mut metrics = screen_metrics(descriptor, frame_index);
     metrics.insert("game_ui_root_surface_id".to_owned(), serde_json::json!(root));
+    if !diagnostic_panel_enabled {
+        return Some(UiSurfaceNode {
+            version: 1,
+            surface_id: descriptor.surface_id.clone(),
+            source: SCREEN_PROFILE_SOURCE.to_owned(),
+            visible: true,
+            modal: false,
+            z_order: 520,
+            title: String::new(),
+            subtitle: String::new(),
+            body_lines: vec!["+".to_owned()],
+            footer_lines: Vec::new(),
+            style_tags: vec!["retained".to_owned(), "hud".to_owned(), "crosshair".to_owned()],
+            theme_id: UI_THEME_NORTHSTAR_EDITOR.to_owned(),
+            style_ref: Some(UI_THEME_ASSET_NORTHSTAR_EDITOR.to_owned()),
+            component_id: UI_COMPONENT_PANEL.to_owned(),
+            components: Vec::new(),
+            message: None,
+            style: UiSurfaceStyle {
+                anchor: UiSurfaceAnchor::Center,
+                min_size_px: [28.0, 28.0],
+                max_size_px: [44.0, 44.0],
+                margin_px: [0.0, 0.0],
+                padding_px: [0.0, 0.0, 0.0, 0.0],
+                row_pitch_px: 16.0,
+                backdrop_alpha: 0.0,
+                panel_alpha: 0.0,
+                shadow_alpha: 0,
+                ..UiSurfaceStyle::default()
+            },
+            admission_policy: Default::default(),
+            metrics,
+        });
+    }
     Some(UiSurfaceNode {
         version: 1,
         surface_id: descriptor.surface_id.clone(),

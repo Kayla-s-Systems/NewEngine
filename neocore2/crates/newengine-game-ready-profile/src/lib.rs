@@ -32,6 +32,7 @@ pub struct GameReadyRuntimeProfile {
     viewport: Arc<newengine_engine_runtime::ViewportBridge>,
     plugins: Arc<newengine_engine_runtime::PluginManagerBridge>,
     scene: Arc<newengine_scene_runtime::SceneBridge>,
+    editor_tools: bool,
 }
 
 impl Default for GameReadyRuntimeProfile {
@@ -48,7 +49,14 @@ impl GameReadyRuntimeProfile {
             viewport: Arc::new(newengine_engine_runtime::ViewportBridge::new()),
             plugins: Arc::new(newengine_engine_runtime::PluginManagerBridge::new()),
             scene: Arc::new(newengine_scene_runtime::SceneBridge::new(newengine_scene::Scene::new())),
+            editor_tools: true,
         }
+    }
+
+    #[inline]
+    pub fn without_editor_tools(mut self) -> Self {
+        self.editor_tools = false;
+        self
     }
 
     #[inline]
@@ -61,9 +69,12 @@ impl GameReadyRuntimeProfile {
         // RuntimeRenderController owns the retained UI node state, and that state snapshots
         // the active input profile during construction. Initializing the bindings
         // gateway here prevents an empty generic profile from being captured first.
-        newengine_input_bindings_runtime::register_input_bindings_gateway_best_effort(
-            newengine_input_profile_gameready::game_ready_input_profile(),
-        );
+        let input_profile = if self.editor_tools {
+            newengine_input_profile_gameready::game_ready_input_profile()
+        } else {
+            newengine_input_profile_gameready::game_ready_game_input_profile()
+        };
+        newengine_input_bindings_runtime::register_input_bindings_gateway_best_effort(input_profile);
 
         engine.register_module(Box::new(PhysicsBackendRuntimeModule::new(
             startup.modules_dir.clone(),
@@ -73,7 +84,9 @@ impl GameReadyRuntimeProfile {
             startup.modules_dir.clone(),
         )))?;
 
-        engine.register_module(Box::new(newengine_assets_catalog_ui_runtime::AssetsCatalogUiRuntimeModule::new()))?;
+        if self.editor_tools {
+            engine.register_module(Box::new(newengine_assets_catalog_ui_runtime::AssetsCatalogUiRuntimeModule::new()))?;
+        }
 
         let render_features = GameReadyRenderFeaturePack::new();
         let mut render_controller = newengine_engine_runtime::RuntimeRenderController::new(
@@ -116,9 +129,12 @@ impl GameReadyRuntimeProfile {
         newengine_world_environment_runtime::register_world_environment_gateway_best_effort();
         newengine_ecs_runtime::register_ecs_gateway_best_effort(Arc::clone(&self.scene));
         newengine_entity_runtime::register_entity_gateway_best_effort(Arc::clone(&self.scene));
-        newengine_input_bindings_runtime::register_input_bindings_gateway_best_effort(
-            newengine_input_profile_gameready::game_ready_input_profile(),
-        );
+        let input_profile = if self.editor_tools {
+            newengine_input_profile_gameready::game_ready_input_profile()
+        } else {
+            newengine_input_profile_gameready::game_ready_game_input_profile()
+        };
+        newengine_input_bindings_runtime::register_input_bindings_gateway_best_effort(input_profile);
         newengine_time_runtime::register_time_gateway_best_effort();
         newengine_schema_runtime::register_schema_gateway_best_effort();
         newengine_scripting_runtime::register_scripting_gateway_best_effort();

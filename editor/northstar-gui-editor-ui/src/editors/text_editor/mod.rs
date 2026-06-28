@@ -1,0 +1,27 @@
+pub mod buffer;
+pub mod caret;
+pub mod completion;
+pub mod diagnostics;
+pub mod document;
+pub mod folding;
+pub mod gutter;
+pub mod highlighter;
+pub mod lexer;
+pub mod lexers;
+pub mod minimap;
+pub mod outline;
+pub mod search;
+pub mod selection;
+pub mod syntax;
+pub mod theme;
+pub mod token;
+pub mod widget;
+
+pub use buffer::TextBuffer;
+pub use caret::Caret;
+pub use document::TextDocument;
+pub use highlighter::SyntaxHighlighter;
+pub use selection::TextSelection;
+pub use syntax::{SyntaxProfile, SyntaxRegistry};
+pub use token::{TokenKind, TokenSpan};
+pub use widget::TextEditorWidget;

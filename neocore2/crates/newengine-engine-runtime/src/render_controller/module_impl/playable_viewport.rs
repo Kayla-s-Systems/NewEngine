@@ -79,9 +79,7 @@ impl RuntimeRenderController {
             .get::<UiInputCaptureState>()
             .cloned()
             .unwrap_or_else(UiInputCaptureState::none);
-        let modal_blocks_gameplay = primary_ui.blocks_gameplay || external_ui_capture.requests_capture();
-
-        self.refresh_modal_ui_draw_list(
+        let provider_ui_capture = self.refresh_modal_ui_draw_list(
             ctx,
             &mut frame_input.ui,
             &primary_ui.state,
@@ -89,6 +87,11 @@ impl RuntimeRenderController {
             &external_ui_capture,
             scope,
         )?;
+        let published_capture = merge_ui_input_capture(
+            external_ui_capture.merged_with_primary_modal(primary_ui.blocks_gameplay),
+            provider_ui_capture.unwrap_or_else(UiInputCaptureState::none),
+        );
+        let modal_blocks_gameplay = published_capture.requests_capture();
         if primary_was_open && !primary_ui.blocks_gameplay {
             self.restore_playable_view_after_ui_close();
         }
@@ -98,7 +101,6 @@ impl RuntimeRenderController {
         }
         {
             let mut carrier = frame_input.input.action_carrier();
-            let published_capture = external_ui_capture.merged_with_primary_modal(primary_ui.blocks_gameplay);
             self.frame.input_systems.publish_input_capture_state(
                 self.frame.frame_index,
                 InputCaptureState::modal_ui(published_capture.requests_capture()),
@@ -205,7 +207,7 @@ impl RuntimeRenderController {
         primary_was_open: bool,
         external_capture: &UiInputCaptureState,
         scope: RenderFrameScope,
-    ) -> EngineResult<()> {
+    ) -> EngineResult<Option<UiInputCaptureState>> {
         if primary_state.visible || primary_was_open {
             // Publish both visible and hidden states. engine.ui owns retained node
             // lifecycle; if runtime does not send the hidden node on close, the
@@ -216,20 +218,22 @@ impl RuntimeRenderController {
         let external_refresh = external_capture.draw_refresh_requested || external_capture.requests_capture();
 
         if !primary_state.visible && !primary_was_open && !external_refresh {
-            return Ok(());
+            return Ok(None);
         }
 
         let needs_clear_packet = (!primary_state.visible && primary_was_open)
             || (external_capture.draw_refresh_requested && !external_capture.requests_capture());
 
-        match ui_gateway::request_draw_list(
+        let mut provider_capture = None;
+        match ui_gateway::request_frame_output(
             self.frame.frame_index,
             scope.dt,
             [scope.w, scope.h],
             1.0,
         ) {
-            Ok(Some(draw_list)) => {
-                *ui = Some(draw_list);
+            Ok(Some(output)) => {
+                provider_capture = Some(output.input_capture);
+                *ui = Some(output.draw_list);
             }
             Ok(None) => {
                 if needs_clear_packet {
@@ -244,7 +248,7 @@ impl RuntimeRenderController {
             }
         }
 
-        Ok(())
+        Ok(provider_capture)
     }
 
     fn read_viewport_frame_input<E: Send + 'static>(
@@ -367,6 +371,33 @@ impl RuntimeRenderController {
     }
 }
 
+
+fn merge_ui_input_capture(mut out: UiInputCaptureState, incoming: UiInputCaptureState) -> UiInputCaptureState {
+    out.sampling_alive = true;
+    out.camera_navigation_gated |= incoming.camera_navigation_gated;
+    out.gameplay_movement_gated |= incoming.gameplay_movement_gated;
+    out.modal |= incoming.modal;
+    out.draw_refresh_requested |= incoming.draw_refresh_requested;
+    for surface in incoming.surfaces {
+        if !out.surfaces.iter().any(|it| it == &surface) {
+            out.surfaces.push(surface);
+        }
+    }
+    for contributor in incoming.contributors {
+        if !out.contributors.iter().any(|it| it == &contributor) {
+            out.contributors.push(contributor);
+        }
+    }
+    let incoming_reason = incoming.reason.trim();
+    if !incoming_reason.is_empty() && incoming_reason != "none" {
+        if out.reason.trim().is_empty() || out.reason == "none" {
+            out.reason = incoming.reason;
+        } else if out.reason != incoming.reason {
+            out.reason = format!("{} + {}", out.reason, incoming.reason);
+        }
+    }
+    out
+}
 
 fn clear_ui_draw_list(surface_size_px: [u32; 2]) -> UiDrawList {
     let mut draw_list = UiDrawList::new();

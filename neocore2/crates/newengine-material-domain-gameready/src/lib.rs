@@ -9,6 +9,8 @@
 use std::collections::HashMap;
 use std::time::Instant;
 
+mod manifest_root_policy;
+
 use newengine_assets::AssetServiceClient;
 use newengine_material_domain_api::{
     LitPipeline, MaterialDomainError, MaterialDomainResult, MaterialGpuPipeline,
@@ -60,11 +62,23 @@ impl GameReadyLitMaterialDomainProvider {
         );
         let manifest = self.require_manifest()?;
         newengine_ulog_api::ulog::info!(
-            "gameready material domain: requesting renderer-owned shader builds key='{}' shader_count=8",
+            "gameready material domain: requesting renderer-owned shader builds key='{}' shader_count=9",
             GAME_READY_LIT_PIPELINE_KEY.as_str()
         );
         let vs = create_manifest_shader(r, ShaderStage::Vertex, &manifest.shaders.lit_vs, "gameready_lit_vs")?;
         let fs = create_manifest_shader(r, ShaderStage::Fragment, &manifest.shaders.lit_fs, "gameready_lit_fs")?;
+        let gbuffer_fs = create_manifest_shader(
+            r,
+            ShaderStage::Fragment,
+            &manifest.shaders.gbuffer_fs,
+            "gameready_gbuffer_lit_fs",
+        )?;
+        let gbuffer_terrain_fs = create_manifest_shader(
+            r,
+            ShaderStage::Fragment,
+            &manifest.shaders.gbuffer_terrain_fs,
+            "gameready_gbuffer_terrain_fs",
+        )?;
         let terrain_fs = create_manifest_shader(
             r,
             ShaderStage::Fragment,
@@ -180,8 +194,14 @@ impl GameReadyLitMaterialDomainProvider {
         )
         .per_instance();
 
+        let gbuffer_color_formats = vec![
+            TextureFormat::Rgba8Unorm,
+            TextureFormat::Rgba16Float,
+            TextureFormat::Rgba8Unorm,
+        ];
+
         newengine_ulog_api::ulog::info!(
-            "gameready material domain: creating GPU pipelines key='{}' pipeline_count=9",
+            "gameready material domain: creating GPU pipelines key='{}' pipeline_count=14",
             GAME_READY_LIT_PIPELINE_KEY.as_str()
         );
         let pipeline = r.create_pipeline(
@@ -210,6 +230,37 @@ impl GameReadyLitMaterialDomainProvider {
                 .with_vertex_layouts(vec![layout.clone()])
                 .with_bind_group_layouts(vec![bgl])
                 .with_depth(TextureFormat::Depth32Float),
+        )?;
+
+        let gbuffer_terrain_pipeline = r.create_pipeline(
+            PipelineDesc::new(vs, gbuffer_terrain_fs, TextureFormat::Rgba8Unorm)
+                .with_label("gameready_gbuffer_terrain_pipeline")
+                .with_topology(PrimitiveTopology::TriangleList)
+                .with_vertex_layouts(vec![layout.clone()])
+                .with_bind_group_layouts(vec![bgl])
+                .with_color_formats(gbuffer_color_formats.clone())
+                .with_depth(TextureFormat::Depth32Float),
+        )?;
+
+        let gbuffer_pipeline = r.create_pipeline(
+            PipelineDesc::new(vs, gbuffer_fs, TextureFormat::Rgba8Unorm)
+                .with_label("gameready_gbuffer_lit_pipeline")
+                .with_topology(PrimitiveTopology::TriangleList)
+                .with_vertex_layouts(vec![layout.clone()])
+                .with_bind_group_layouts(vec![bgl])
+                .with_color_formats(gbuffer_color_formats.clone())
+                .with_depth(TextureFormat::Depth32Float),
+        )?;
+
+        let gbuffer_double_sided_pipeline = r.create_pipeline(
+            PipelineDesc::new(vs, gbuffer_fs, TextureFormat::Rgba8Unorm)
+                .with_label("gameready_gbuffer_lit_pipeline_double_sided")
+                .with_topology(PrimitiveTopology::TriangleList)
+                .with_vertex_layouts(vec![layout.clone()])
+                .with_bind_group_layouts(vec![bgl])
+                .with_color_formats(gbuffer_color_formats.clone())
+                .with_depth(TextureFormat::Depth32Float)
+                .with_cull_mode(RasterCullMode::None),
         )?;
 
         let shadow_pipeline = r.create_pipeline(
@@ -247,6 +298,27 @@ impl GameReadyLitMaterialDomainProvider {
                 .with_topology(PrimitiveTopology::TriangleList)
                 .with_vertex_layouts(instanced_layouts.clone())
                 .with_bind_group_layouts(vec![bgl])
+                .with_depth(TextureFormat::Depth32Float)
+                .with_cull_mode(RasterCullMode::None),
+        )?;
+
+        let gbuffer_instanced_pipeline = r.create_pipeline(
+            PipelineDesc::new(instanced_vs, gbuffer_fs, TextureFormat::Rgba8Unorm)
+                .with_label("gameready_gbuffer_lit_pipeline_instanced")
+                .with_topology(PrimitiveTopology::TriangleList)
+                .with_vertex_layouts(instanced_layouts.clone())
+                .with_bind_group_layouts(vec![bgl])
+                .with_color_formats(gbuffer_color_formats.clone())
+                .with_depth(TextureFormat::Depth32Float),
+        )?;
+
+        let gbuffer_instanced_double_sided_pipeline = r.create_pipeline(
+            PipelineDesc::new(instanced_vs, gbuffer_fs, TextureFormat::Rgba8Unorm)
+                .with_label("gameready_gbuffer_lit_pipeline_instanced_double_sided")
+                .with_topology(PrimitiveTopology::TriangleList)
+                .with_vertex_layouts(instanced_layouts.clone())
+                .with_bind_group_layouts(vec![bgl])
+                .with_color_formats(gbuffer_color_formats.clone())
                 .with_depth(TextureFormat::Depth32Float)
                 .with_cull_mode(RasterCullMode::None),
         )?;
@@ -307,6 +379,11 @@ impl GameReadyLitMaterialDomainProvider {
             pipeline,
             double_sided_pipeline,
             terrain_pipeline,
+            gbuffer_terrain_pipeline,
+            gbuffer_pipeline,
+            gbuffer_double_sided_pipeline,
+            gbuffer_instanced_pipeline,
+            gbuffer_instanced_double_sided_pipeline,
             shadow_pipeline,
             shadow_double_sided_pipeline,
             instanced_vs,
@@ -390,6 +467,8 @@ impl GameReadyLitShaderManifest {
 struct GameReadyLitShaderSetManifest {
     lit_vs: GameReadyShaderAssetRef,
     lit_fs: GameReadyShaderAssetRef,
+    gbuffer_fs: GameReadyShaderAssetRef,
+    gbuffer_terrain_fs: GameReadyShaderAssetRef,
     terrain_fs: GameReadyShaderAssetRef,
     shadow_vs: GameReadyShaderAssetRef,
     shadow_fs: GameReadyShaderAssetRef,
@@ -403,6 +482,8 @@ impl GameReadyLitShaderSetManifest {
         for (field, shader) in [
             ("lit_vs", &self.lit_vs),
             ("lit_fs", &self.lit_fs),
+            ("gbuffer_fs", &self.gbuffer_fs),
+            ("gbuffer_terrain_fs", &self.gbuffer_terrain_fs),
             ("terrain_fs", &self.terrain_fs),
             ("shadow_vs", &self.shadow_vs),
             ("shadow_fs", &self.shadow_fs),
@@ -435,6 +516,11 @@ impl GameReadyShaderAssetRef {
             )));
         }
         let _ = self.source_kind()?;
+        manifest_root_policy::validate_manifest_shader_path(
+            manifest_path,
+            field,
+            self.logical_path.as_str(),
+        )?;
         Ok(())
     }
 

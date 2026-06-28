@@ -102,8 +102,14 @@ impl<'a> SceneExtractionCtx<'a> {
 pub trait DrawListBuildCtx {
     fn record_procedural_terrain_shadow(&mut self, ctx: &SceneExtractionCtx<'_>) -> EngineResult<()>;
     fn record_procedural_terrain_forward(&mut self, ctx: &SceneExtractionCtx<'_>) -> EngineResult<()>;
+    fn record_procedural_terrain_gbuffer(&mut self, _ctx: &SceneExtractionCtx<'_>) -> EngineResult<()> {
+        Ok(())
+    }
     fn record_primitive_mesh_shadow(&mut self, ctx: &SceneExtractionCtx<'_>) -> EngineResult<()>;
     fn record_primitive_mesh_forward(&mut self, ctx: &SceneExtractionCtx<'_>) -> EngineResult<()>;
+    fn record_primitive_mesh_gbuffer(&mut self, _ctx: &SceneExtractionCtx<'_>) -> EngineResult<()> {
+        Ok(())
+    }
     fn record_ui(&mut self, ctx: &SceneExtractionCtx<'_>) -> EngineResult<()>;
 }
 

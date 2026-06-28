@@ -4,7 +4,6 @@ use abi_stable::std_types::RString;
 use libloading::Library;
 use newengine_core::events::EventSub;
 use newengine_core::render::{RenderBackendStatus, SceneLaunchStatus};
-use newengine_core::EngineStartupPhase;
 use newengine_core::host_events::{
     CursorGrabMode, CursorState, HostEvent, WindowHandles, WindowHostEvent, WindowInitSize,
 };
@@ -15,9 +14,7 @@ use newengine_platform_api::{
     PlatformRuntimeRunFnV1, PlatformStepResultV1, PlatformSurfaceMetricsV1, PlatformWindowReadyV1,
 };
 use newengine_plugin_api::PluginInfo;
-use newengine_system_contracts::{
-    ScreenOverlayReason, ScreenOverlayStatus, ScreenOverlaySubsystem, ScreenOverlaySubsystemId,
-};
+use newengine_system_contracts::{ScreenOverlayReason, ScreenOverlayStatus};
 use newengine_system_runtime::{
     overlay_from_engine_startup_snapshot, overlay_from_render_backend_status,
     overlay_to_step_result_with_provider,
@@ -30,13 +27,17 @@ use newengine_ui::{
 use newengine_ui_api::{UiDrawList, UiEventDispatchFrame, UiInputFrame};
 
 use crate::platform_input::poll_input_frame;
+use crate::platform_runtime::bootstrap_subsystems::{
+    build_bootstrap_subsystems, build_scene_launch_subsystems, BootstrapSubsystemInput,
+    SceneLaunchSubsystemInput,
+};
+use crate::platform_runtime::fatal_overlay::{build_fatal_bootstrap_overlay, FatalOverlayInput};
 use crate::platform_runtime::callbacks::{
     host_on_close_requested_v1, host_on_window_focused_v1, host_on_window_ready_v1,
     host_on_window_resized_v1, host_poll_cursor_state_v1, host_step_v1, host_submit_job_v1,
 };
 use crate::platform_runtime::bootstrap_overlay::{
-    map_engine_startup_progress_to_bootstrap, subsystem_failed, subsystem_ready, subsystem_run,
-    subsystem_wait, RuntimeBootstrapOverlayState, RuntimeBootstrapStage,
+    map_engine_startup_progress_to_bootstrap, RuntimeBootstrapOverlayState, RuntimeBootstrapStage,
     OVERLAY_LOG_PROGRESS_EPSILON, START_ENGINE_BOOTSTRAP_BASE_PROGRESS,
 };
 use crate::platform_runtime::constants::PLATFORM_RUNTIME_SYMBOL;
@@ -821,7 +822,13 @@ impl HostPlatformRuntime {
                 "Origin: {origin}\n{message}\nThe process is still alive; renderer is holding a safe degraded frame instead of aborting."
             ),
         )
-        .with_subsystems(self.bootstrap_subsystems());
+        .with_subsystems(build_bootstrap_subsystems(BootstrapSubsystemInput {
+            fatal_error: self.fatal_bootstrap_error.as_deref(),
+            render_backend: self.render_backend_label(),
+            loaded_engine_plugins: self.loaded_engine_plugins,
+            bootstrap_stage: self.bootstrap_stage,
+            bootstrap_progress: self.bootstrap_overlay.progress_01,
+        }));
         self.loading_overlay_step_result(&overlay, self.runtime_soft_degraded_frames as u32)
     }
 
@@ -859,7 +866,10 @@ impl HostPlatformRuntime {
             status.status.as_str(),
             status.detail.as_str(),
             status.progress_01,
-            self.scene_launch_subsystems(status),
+            build_scene_launch_subsystems(SceneLaunchSubsystemInput {
+                status,
+                render_backend: self.render_backend_label(),
+            }),
         )
     }
 
@@ -978,7 +988,13 @@ impl HostPlatformRuntime {
 
         let status = self.bootstrap_overlay.status.as_str();
         let detail = self.bootstrap_overlay.detail.as_str();
-        let subsystems = self.bootstrap_subsystems();
+        let subsystems = build_bootstrap_subsystems(BootstrapSubsystemInput {
+            fatal_error: self.fatal_bootstrap_error.as_deref(),
+            render_backend: self.render_backend_label(),
+            loaded_engine_plugins: self.loaded_engine_plugins,
+            bootstrap_stage: self.bootstrap_stage,
+            bootstrap_progress: self.bootstrap_overlay.progress_01,
+        });
 
         let overlay = bootstrap_loading_with_subsystems(
             self.bootstrap_overlay.title.as_str(),
@@ -999,22 +1015,21 @@ impl HostPlatformRuntime {
             .unwrap_or("Startup failed before a diagnostic message was published.")
             .to_owned();
         let startup = self.engine.startup_status();
-
-        let overlay = if startup.error.is_some() || startup.phase == EngineStartupPhase::Faulted {
-            overlay_from_engine_startup_snapshot(
-                &startup,
-                self.platform_window_ready(),
-                self.render_backend_label(),
-                self.loaded_engine_plugins,
-            )
-        } else {
-            ScreenOverlayStatus::error(
-                ScreenOverlayReason::Recovery,
-                "Startup failed before playable handoff.",
-                message.as_str(),
-            )
-            .with_subsystems(self.bootstrap_subsystems())
-        };
+        let render_backend_label = self.render_backend_label();
+        let overlay = build_fatal_bootstrap_overlay(FatalOverlayInput {
+            startup: &startup,
+            message: message.as_str(),
+            platform_window_ready: self.platform_window_ready(),
+            render_backend_label: render_backend_label.as_str(),
+            loaded_engine_plugins: self.loaded_engine_plugins,
+            subsystems: build_bootstrap_subsystems(BootstrapSubsystemInput {
+                fatal_error: self.fatal_bootstrap_error.as_deref(),
+                render_backend: self.render_backend_label(),
+                loaded_engine_plugins: self.loaded_engine_plugins,
+                bootstrap_stage: self.bootstrap_stage,
+                bootstrap_progress: self.bootstrap_overlay.progress_01,
+            }),
+        });
 
         self.loading_overlay_step_result(&overlay, self.bootstrap_spinner_phase)
     }
@@ -1024,86 +1039,6 @@ impl HostPlatformRuntime {
         self.surface.width > 0 && self.surface.height > 0 && self.bootstrap_stage != RuntimeBootstrapStage::AwaitingWindow
     }
 
-
-    fn bootstrap_subsystems(&self) -> Vec<ScreenOverlaySubsystem> {
-        if let Some(error) = self.fatal_bootstrap_error.as_deref() {
-            let render_backend = self.render_backend_label();
-            return vec![
-                subsystem_ready(ScreenOverlaySubsystemId::Platform, "READY", "Native window remained alive for safe-stop diagnostics."),
-                subsystem_ready(ScreenOverlaySubsystemId::Assets, "READY", "Asset service state was already published before the failure, or is not the failing gate."),
-                subsystem_run(ScreenOverlaySubsystemId::Renderer, render_backend, "Renderer state is preserved while the loading screen reports the failure.", None),
-                subsystem_failed(ScreenOverlaySubsystemId::Simulation, "ERR", "Engine startup FSM did not reach playable runtime."),
-                subsystem_failed(ScreenOverlaySubsystemId::Diagnostics, "ERR", error),
-            ];
-        }
-
-        let render_backend = self.render_backend_label();
-        let plugin_detail = self
-            .loaded_engine_plugins
-            .map(|count| format!("{count} engine plugin service(s) loaded."))
-            .unwrap_or_else(|| "Engine plugin services are not loaded yet.".to_owned());
-
-        match self.bootstrap_stage {
-            RuntimeBootstrapStage::AwaitingWindow => vec![
-                subsystem_wait(ScreenOverlaySubsystemId::Platform, "WINDOW", "Waiting for the platform window callback."),
-                subsystem_wait(ScreenOverlaySubsystemId::Assets, "WAIT", "AssetManager is not guaranteed to be online yet."),
-                subsystem_wait(ScreenOverlaySubsystemId::Renderer, "WAIT", "Renderer backend starts after window handles are published."),
-                subsystem_wait(ScreenOverlaySubsystemId::Simulation, "WAIT", "Simulation modules are blocked by bootstrap."),
-                subsystem_run(ScreenOverlaySubsystemId::Diagnostics, "BOOT", "Runtime-host bootstrap is alive.", None),
-            ],
-            RuntimeBootstrapStage::AnnounceLoadEnginePlugins | RuntimeBootstrapStage::LoadEnginePlugins => vec![
-                subsystem_ready(ScreenOverlaySubsystemId::Platform, "READY", "Native window and surface metrics are available."),
-                subsystem_run(ScreenOverlaySubsystemId::Assets, "SERVICES", "Loading AssetManager/importer services through plugin host.", Some(self.bootstrap_overlay.progress_01)),
-                subsystem_wait(ScreenOverlaySubsystemId::Renderer, "WAIT", "Renderer backend is waiting for engine plugin services."),
-                subsystem_wait(ScreenOverlaySubsystemId::Simulation, "WAIT", "Simulation starts after engine plugin discovery."),
-                subsystem_run(ScreenOverlaySubsystemId::Diagnostics, "CHECKING", "Plugin discovery and capability checks are running.", None),
-            ],
-            RuntimeBootstrapStage::AnnounceStartEngine | RuntimeBootstrapStage::StartEngine => vec![
-                subsystem_ready(ScreenOverlaySubsystemId::Platform, "READY", "Native window and surface metrics are available."),
-                subsystem_ready(ScreenOverlaySubsystemId::Assets, "READY", plugin_detail),
-                subsystem_run(ScreenOverlaySubsystemId::Renderer, render_backend, "Renderer backend is being bound to runtime resources.", None),
-                subsystem_run(ScreenOverlaySubsystemId::Simulation, "STARTING", "Engine startup graph is dispatching modules.", Some(self.bootstrap_overlay.progress_01)),
-                subsystem_run(ScreenOverlaySubsystemId::Diagnostics, "CHECKING", "Startup readiness gates are being evaluated.", None),
-            ],
-            RuntimeBootstrapStage::AnnounceEnterRuntime | RuntimeBootstrapStage::EmitWindowReady | RuntimeBootstrapStage::ReadyOverlay => vec![
-                subsystem_ready(ScreenOverlaySubsystemId::Platform, "READY", "WindowReady event is emitted to the engine host."),
-                subsystem_ready(ScreenOverlaySubsystemId::Assets, "READY", plugin_detail),
-                subsystem_ready(ScreenOverlaySubsystemId::Renderer, render_backend, "Renderer backend is available for the first world frame."),
-                subsystem_run(ScreenOverlaySubsystemId::Simulation, "HANDOFF", "Scene launch gate owns final playable-world readiness.", Some(self.bootstrap_overlay.progress_01)),
-                subsystem_run(ScreenOverlaySubsystemId::Diagnostics, "CHECKING", "Final handoff diagnostics are collecting runtime status.", None),
-            ],
-            RuntimeBootstrapStage::Running => vec![
-                subsystem_ready(ScreenOverlaySubsystemId::Platform, "READY", "Platform runtime is running."),
-                subsystem_ready(ScreenOverlaySubsystemId::Assets, "READY", "Asset services are online."),
-                subsystem_ready(ScreenOverlaySubsystemId::Renderer, render_backend, "Renderer backend is active."),
-                subsystem_ready(ScreenOverlaySubsystemId::Simulation, "READY", "Simulation is accepting frame ticks."),
-                subsystem_ready(ScreenOverlaySubsystemId::Diagnostics, "READY", "Bootstrap diagnostics are complete."),
-            ],
-        }
-    }
-
-    fn scene_launch_subsystems(&self, status: &SceneLaunchStatus) -> Vec<ScreenOverlaySubsystem> {
-        let progress = status.progress_01.clamp(0.0, 0.995);
-        let render_backend = self.render_backend_label();
-        let assets_ready = progress >= 0.96 || !status.detail.to_ascii_lowercase().contains("waiting");
-        let simulation_ready = progress >= 0.90;
-
-        vec![
-            subsystem_ready(ScreenOverlaySubsystemId::Platform, "READY", "Platform window remains alive while launch gate is active."),
-            if assets_ready {
-                subsystem_ready(ScreenOverlaySubsystemId::Assets, "READY", status.detail.clone())
-            } else {
-                subsystem_run(ScreenOverlaySubsystemId::Assets, "STREAMING", status.detail.clone(), Some(progress))
-            },
-            subsystem_ready(ScreenOverlaySubsystemId::Renderer, render_backend, "Renderer backend accepted the launch scene frame package."),
-            if simulation_ready {
-                subsystem_ready(ScreenOverlaySubsystemId::Simulation, "READY", "Simulation handoff is ready for playable control.")
-            } else {
-                subsystem_run(ScreenOverlaySubsystemId::Simulation, "LOCKED", "Player control is locked until the scene launch gate opens.", Some(progress))
-            },
-            subsystem_run(ScreenOverlaySubsystemId::Diagnostics, "CHECKING", status.status.clone(), Some(progress)),
-        ]
-    }
 
     fn render_backend_label(&self) -> String {
         self.engine

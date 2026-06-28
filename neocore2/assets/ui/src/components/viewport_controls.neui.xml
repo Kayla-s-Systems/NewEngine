@@ -1,9 +1,0 @@
-<?xml version="1.0" encoding="utf-8" standalone="yes"?>
-<NeUiComponentLibrary schema="newengine.neui.components.v1" representation="xmlcentral" owner_scope="shared" document_kind="component_library">
-  <Entries>
-    <Entry name="viewport.toolbar" kind="ui_component" />
-    <Entry name="viewport.gizmo_toggle" kind="ui_component" />
-  </Entries>
-  <Component name="viewport.toolbar" root="viewport.toolbar.root"><Panel id="viewport.toolbar.root" class="viewport-toolbar"><Slot name="tools" /></Panel></Component>
-  <Component name="viewport.gizmo_toggle" root="viewport.gizmo_toggle.root"><Button id="viewport.gizmo_toggle.root" class="viewport-gizmo-toggle"><Slot name="content" /></Button></Component>
-</NeUiComponentLibrary>

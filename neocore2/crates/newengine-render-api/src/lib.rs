@@ -1,6 +1,11 @@
 #![forbid(unsafe_op_in_unsafe_fn)]
+
 pub use newengine_ui_draw::{
-    UiDrawCmd, UiDrawList, UiRect, UiTexId, UiTexture, UiTextureDelta, UiTexturePatch, UiVertex,
+    TextureRef, UiBorderPaintCommand, UiClipPaintCommand, UiDrawCmd, UiDrawList,
+    UiIconPaintCommand, UiImagePaintCommand, UiImageRef, UiLayerPaintCommand, UiMesh,
+    UiPaintCommand, UiPaintList, UiPaintNodeRef, UiRect, UiRectPaintCommand,
+    UiRoundedRectPaintCommand, UiScopePaintCommand, UiTexId, UiTextPaintCommand,
+    UiTexture, UiTextureDelta, UiTexturePatch, UiVectorPaintCommand, UiVertex, VectorRef,
 };
 
 pub mod reserved_textures {

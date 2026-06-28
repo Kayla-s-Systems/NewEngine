@@ -6,7 +6,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use newengine_core::EngineResult;
 use newengine_ui_api::{
     decode_ui_frame_response_bin, encode_ui_frame_request_bin, UiComponentNode, UiDrawList,
-    UiFrameRequest, UiFrameResponse, UiNodeMessage, UiNodeMessageSeverity, UiNodeTone,
+    UiFrameRequest, UiFrameResponse, UiInputCaptureState, UiNodeMessage, UiNodeMessageSeverity, UiNodeTone,
     UiSurfaceAdmissionPolicy, UiSurfaceAnchor, UiSurfaceNode, UiSurfaceStyle,
     ENGINE_UI_SERVICE_ID, UI_COMPONENT_PANEL,
     UI_SERVICE_METHOD_DRAW_FRAME_BIN_V1, UI_SERVICE_METHOD_DRAW_FRAME_V1, UI_SERVICE_METHOD_SURFACE_NODE_V1,
@@ -16,13 +16,19 @@ use newengine_ui_api::{
 static UI_ROUTE_MISSING_LOGGED: AtomicBool = AtomicBool::new(false);
 static TRY_BINARY_UI_DRAW_FRAME: AtomicBool = AtomicBool::new(true);
 
+#[derive(Clone, Debug)]
+pub struct UiFrameOutput {
+    pub draw_list: UiDrawList,
+    pub input_capture: UiInputCaptureState,
+}
+
 fn log_missing_ui_route_once(operation: &str) {
     if UI_ROUTE_MISSING_LOGGED
         .compare_exchange(false, true, Ordering::AcqRel, Ordering::Acquire)
         .is_ok()
     {
         newengine_ulog_api::ulog::warn!(
-            "ui gateway: engine.ui route missing; operation='{}' skipped. Register/sync an engine.ui provider route with ui.backend capability in NewEngine/neocore2/plugins",
+            "ui gateway: engine.ui route missing; operation='{}' skipped. Register/sync an engine.ui provider route with ui.backend capability in pluginsRuntime",
             operation
         );
     }
@@ -169,22 +175,33 @@ pub fn publish_surface_node(node: &UiSurfaceNode) {
 /// UI nodes may be published during that same step. This helper lets a runtime
 /// module publish freshly computed state and immediately request a same-frame draw
 /// packet without depending on any concrete UI provider implementation.
+#[allow(dead_code)]
 pub fn request_draw_list(
     frame_index: u64,
     dt_sec: f32,
     surface_size_px: [u32; 2],
     pixels_per_point: f32,
 ) -> EngineResult<Option<UiDrawList>> {
+    Ok(request_frame_output(frame_index, dt_sec, surface_size_px, pixels_per_point)?
+        .map(|output| output.draw_list))
+}
+
+pub fn request_frame_output(
+    frame_index: u64,
+    dt_sec: f32,
+    surface_size_px: [u32; 2],
+    pixels_per_point: f32,
+) -> EngineResult<Option<UiFrameOutput>> {
     if !newengine_core::has_engine_gateway_route(ENGINE_UI_SERVICE_ID) {
-        log_missing_ui_route_once("request_draw_list");
+        log_missing_ui_route_once("request_frame_output");
         return Ok(None);
     }
 
     let request = UiFrameRequest::new(frame_index, dt_sec, surface_size_px, pixels_per_point);
 
     if TRY_BINARY_UI_DRAW_FRAME.load(Ordering::Relaxed) {
-        match request_draw_list_bin(&request) {
-            Ok(draw_list) => return Ok(draw_list),
+        match request_frame_output_bin(&request) {
+            Ok(output) => return Ok(output),
             Err(err) => {
                 if TRY_BINARY_UI_DRAW_FRAME.swap(false, Ordering::Relaxed) {
                     newengine_ulog_api::ulog::warn!(
@@ -196,10 +213,10 @@ pub fn request_draw_list(
         }
     }
 
-    request_draw_list_json(&request)
+    request_frame_output_json(&request)
 }
 
-fn request_draw_list_bin(request: &UiFrameRequest) -> Result<Option<UiDrawList>, String> {
+fn request_frame_output_bin(request: &UiFrameRequest) -> Result<Option<UiFrameOutput>, String> {
     let payload = encode_ui_frame_request_bin(request)
         .map_err(|e| format!("encode binary ui frame request failed: {e}"))?;
     let Some(bytes) = newengine_core::call_service_v1_optional(
@@ -212,10 +229,10 @@ fn request_draw_list_bin(request: &UiFrameRequest) -> Result<Option<UiDrawList>,
     };
     let response = decode_ui_frame_response_bin(&bytes)
         .map_err(|e| format!("decode binary ui frame response failed: {e}"))?;
-    Ok(non_empty_draw_list(response))
+    Ok(response_to_frame_output(response))
 }
 
-fn request_draw_list_json(request: &UiFrameRequest) -> EngineResult<Option<UiDrawList>> {
+fn request_frame_output_json(request: &UiFrameRequest) -> EngineResult<Option<UiFrameOutput>> {
     let payload = serde_json::to_vec(request)
         .map_err(|e| newengine_core::EngineError::other(format!("encode ui frame request failed: {e}")))?;
 
@@ -230,12 +247,15 @@ fn request_draw_list_json(request: &UiFrameRequest) -> EngineResult<Option<UiDra
 
     let response: UiFrameResponse = serde_json::from_slice(&bytes)
         .map_err(|e| newengine_core::EngineError::other(format!("decode ui frame response failed: {e}")))?;
-    Ok(non_empty_draw_list(response))
+    Ok(response_to_frame_output(response))
 }
 
-fn non_empty_draw_list(response: UiFrameResponse) -> Option<UiDrawList> {
+fn response_to_frame_output(response: UiFrameResponse) -> Option<UiFrameOutput> {
     // Empty draw-lists are valid clear packets. Returning None would keep the
     // previous retained modal/menu UI alive in render backends that consume UI
     // through RenderCommand::SetUiDrawList.
-    Some(response.draw_list)
+    Some(UiFrameOutput {
+        draw_list: response.draw_list,
+        input_capture: response.input_capture,
+    })
 }

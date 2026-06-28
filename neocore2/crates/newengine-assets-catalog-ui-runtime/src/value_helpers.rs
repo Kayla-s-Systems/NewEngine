@@ -51,7 +51,8 @@ pub(crate) fn string_field(value: &Value, keys: &[&str]) -> Option<String> {
 }
 
 pub(crate) fn bool_field(value: &Value, keys: &[&str]) -> bool {
-    keys.iter().any(|key| value.get(*key).and_then(Value::as_bool).unwrap_or(false))
+    keys.iter()
+        .any(|key| value.get(*key).and_then(Value::as_bool).unwrap_or(false))
 }
 
 pub(crate) fn extension_from(name: &str, value: &Value) -> String {
