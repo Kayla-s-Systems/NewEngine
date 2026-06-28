@@ -470,7 +470,7 @@ impl Default for JobServiceCallRequestV1 {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 #[serde(default)]
 pub struct JobServiceCallAcceptedV1 {
     pub job_id: String,
@@ -479,19 +479,6 @@ pub struct JobServiceCallAcceptedV1 {
     pub method: String,
     pub status: String,
     pub detail: String,
-}
-
-impl Default for JobServiceCallAcceptedV1 {
-    fn default() -> Self {
-        Self {
-            job_id: String::new(),
-            accepted: false,
-            gateway: String::new(),
-            method: String::new(),
-            status: String::new(),
-            detail: String::new(),
-        }
-    }
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -609,7 +596,7 @@ impl Default for JobStatusJsonV1 {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 #[serde(default)]
 pub struct JobControlResponseV1 {
     pub job_id: String,
@@ -617,17 +604,7 @@ pub struct JobControlResponseV1 {
     pub accepted: bool,
 }
 
-impl Default for JobControlResponseV1 {
-    fn default() -> Self {
-        Self {
-            job_id: String::new(),
-            action: String::new(),
-            accepted: false,
-        }
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 #[serde(default)]
 pub struct JobsSnapshotJsonV1 {
     pub worker_threads: usize,
@@ -650,36 +627,10 @@ pub struct JobsLaneSnapshotJsonV1 {
     pub completed_jobs: u64,
 }
 
-impl Default for JobsSnapshotJsonV1 {
-    fn default() -> Self {
-        Self {
-            worker_threads: 0,
-            pending_jobs: 0,
-            running_jobs: 0,
-            paused_jobs: 0,
-            submitted_jobs: 0,
-            completed_jobs: 0,
-            cancelled_jobs: 0,
-            panicked_jobs: 0,
-            lanes: BTreeMap::new(),
-        }
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 #[serde(default)]
 pub struct JobTraceJsonV1 {
     pub job_id: String,
     pub status: JobStatusJsonV1,
     pub note: String,
-}
-
-impl Default for JobTraceJsonV1 {
-    fn default() -> Self {
-        Self {
-            job_id: String::new(),
-            status: JobStatusJsonV1::default(),
-            note: String::new(),
-        }
-    }
 }

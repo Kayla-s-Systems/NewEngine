@@ -69,7 +69,7 @@ macro_rules! ne_math_fn {
                 )*
 
                 // Execute.
-                let out = (|| $body)();
+                let out = $body;
                 Ok(Self::to_value(out))
             }
         }

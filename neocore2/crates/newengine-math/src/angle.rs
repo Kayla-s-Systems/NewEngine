@@ -1,11 +1,11 @@
 // Copyright (c) 2026 NewEngine | Kayla's Systems. All rights reserved.
 #![forbid(unsafe_op_in_unsafe_fn)]
 
-/// Angle helpers (radians).
-///
-/// Keep these in `newengine-math` to avoid ad-hoc reimplementations across crates.
-/// Precision matters for long-running editor sessions: if yaw is allowed to grow unbounded,
-/// `sin/cos` will eventually lose precision and the camera will start rotating "unevenly".
+//! Angle helpers (radians).
+//!
+//! Keep these in `newengine-math` to avoid ad-hoc reimplementations across crates.
+//! Precision matters for long-running editor sessions: if yaw is allowed to grow unbounded,
+//! `sin/cos` will eventually lose precision and the camera will start rotating "unevenly".
 
 /// Wraps angle to the `[-PI, PI]` range.
 #[inline]
