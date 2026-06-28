@@ -395,14 +395,8 @@ pub(super) fn game_screen_surface_node(
     if root.is_empty() {
         return None;
     }
-    let diagnostic_panel_enabled = std::env::var("NEWENGINE_GAME_SCREEN_DIAGNOSTIC_PANEL")
-        .map(|value| {
-            matches!(
-                value.trim(),
-                "1" | "true" | "TRUE" | "True" | "on" | "ON" | "On"
-            )
-        })
-        .unwrap_or(false);
+    let diagnostic_panel_enabled =
+        crate::platform_runtime::config::game_screen_diagnostic_panel_enabled();
     let mut metrics = screen_metrics(descriptor, frame_index);
     metrics.insert(
         "game_ui_root_surface_id".to_owned(),

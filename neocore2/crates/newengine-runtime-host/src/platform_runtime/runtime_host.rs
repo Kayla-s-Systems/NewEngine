@@ -131,11 +131,8 @@ impl HostPlatformRuntime {
             ui_frame_policy: UiGatewayFramePolicy::from_startup_config(
                 newengine_core::startup::last_startup_config(),
             ),
-            runtime_bootstrap_overlay_enabled: std::env::var(
-                "NEWENGINE_RUNTIME_BOOTSTRAP_OVERLAY_DISABLED",
-            )
-            .map(|value| value.trim() != "1" && !value.eq_ignore_ascii_case("true"))
-            .unwrap_or(true),
+            runtime_bootstrap_overlay_enabled:
+                crate::platform_runtime::config::runtime_bootstrap_overlay_enabled(),
         }
     }
 

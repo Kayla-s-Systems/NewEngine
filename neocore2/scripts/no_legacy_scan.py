@@ -12,7 +12,7 @@ import pathlib
 import re
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
-SKIP_DIRS = {"target", ".git", "docs", "archive", "research", "third_party", "assets"}
+SKIP_DIRS = {"target", ".git", "docs", "archive", "research", "third_party", "assets", "cache"}
 SKIP_SUFFIXES = {".md", ".txt", ".log"}
 SOURCE_SUFFIXES = {".rs", ".toml", ".json", ".yml", ".yaml", ".py", ".cmd", ".ps1"}
 ALLOW_ENV_PREFIXES = (

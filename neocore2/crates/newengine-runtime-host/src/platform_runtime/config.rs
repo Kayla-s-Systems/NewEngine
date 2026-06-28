@@ -196,6 +196,26 @@ fn strip_host_only_platform_keys(value: &Value) -> Value {
 }
 
 #[inline]
+fn env_flag(key: &str) -> Option<bool> {
+    std::env::var(key).ok().map(|value| {
+        matches!(
+            value.trim().to_ascii_lowercase().as_str(),
+            "1" | "true" | "yes" | "on"
+        )
+    })
+}
+
+#[inline]
+pub(crate) fn runtime_bootstrap_overlay_enabled() -> bool {
+    !env_flag("NEWENGINE_RUNTIME_BOOTSTRAP_OVERLAY_DISABLED").unwrap_or(false)
+}
+
+#[inline]
+pub(crate) fn game_screen_diagnostic_panel_enabled() -> bool {
+    env_flag("NEWENGINE_GAME_SCREEN_DIAGNOSTIC_PANEL").unwrap_or(false)
+}
+
+#[inline]
 fn platform_metadata_probe_enabled() -> bool {
     std::env::var("NEWENGINE_PLATFORM_CONFIG_METADATA_PROBE")
         .ok()

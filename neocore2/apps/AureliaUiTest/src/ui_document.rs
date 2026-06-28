@@ -72,7 +72,10 @@ pub fn build_aurelia_ui_test_request(
     click_count: u64,
     route_status: AureliaUiTestRouteStatus,
 ) -> UiNodeTreeRequest {
-    let mut request = compile_showcase_document_to_request().unwrap_or_else(fallback_error_ui);
+    let mut request = match compile_showcase_document_to_request() {
+        Ok(request) => request,
+        Err(err) => fallback_error_ui(err),
+    };
     patch_runtime_values(&mut request.root, frame_index, click_count, &route_status);
     request.request_id = format!("aurelia-ui-showcase.frame.{frame_index}");
     request.diagnostics.push(format!(
