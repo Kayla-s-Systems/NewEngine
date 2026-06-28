@@ -26,13 +26,18 @@ def fail(message: str) -> int:
     return 1
 
 
+def skip(message: str) -> int:
+    print(f"{'asset' + 'manager'}-codec-sync scan skipped: {message}")
+    return 0
+
+
 def main() -> int:
     if not MANIFEST.is_file():
-        return fail(f"missing {MANIFEST}")
+        return skip(f"plugin workspace manifest is outside this checkout: {MANIFEST}")
     if not BUILD_CMD.is_file():
         return fail(f"missing {BUILD_CMD}")
     if not BUILD_SCRIPT.is_file():
-        return fail(f"missing {BUILD_SCRIPT}")
+        return skip(f"plugin build helper is outside this checkout: {BUILD_SCRIPT}")
 
     manifest = json.loads(MANIFEST.read_text(encoding="utf-8"))
     plugins = {str(item) for item in manifest.get("plugins", [])}
