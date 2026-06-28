@@ -235,8 +235,11 @@ pub(super) fn game_screen_surface_node(descriptor: &UiScreenProfileDescriptor, f
                 margin_px: [0.0, 0.0],
                 padding_px: [0.0, 0.0, 0.0, 0.0],
                 row_pitch_px: 16.0,
-                backdrop_alpha: 0.0,
-                panel_alpha: 0.0,
+                panel_rgba: [0, 0, 0, 0],
+                panel_header_rgba: [0, 0, 0, 0],
+                backdrop_rgba: [0, 0, 0, 0],
+                border_rgba: [255, 255, 255, 0],
+                text_rgba: [235, 245, 255, 220],
                 shadow_alpha: 0,
                 ..UiSurfaceStyle::default()
             },
