@@ -3,9 +3,9 @@
 use crate::host_api;
 
 use abi_stable::std_types::{RResult, RString};
+use newengine_math::collections_prelude::{NeBTreeSet as BTreeSet, NeHashMap as HashMap};
 use newengine_plugin_api::{Blob, CapabilityId, MethodName, ServiceV1, ServiceV1Dyn};
 use serde_json::{json, Map, Value};
-use newengine_math::collections_prelude::{NeBTreeSet as BTreeSet, NeHashMap as HashMap};
 use std::env;
 use std::sync::OnceLock;
 
@@ -54,11 +54,17 @@ fn collect_override_ids(prefix: &str, value: &Value, out: &mut BTreeSet<String>)
     collect_override_ids_inner(prefix, value, out, true);
 }
 
-fn collect_override_ids_inner(prefix: &str, value: &Value, out: &mut BTreeSet<String>, is_root: bool) {
+fn collect_override_ids_inner(
+    prefix: &str,
+    value: &Value,
+    out: &mut BTreeSet<String>,
+    is_root: bool,
+) {
     match value {
         Value::Object(map) => {
-            let is_leaf_override =
-                map.is_empty() || map.keys().any(|key| key.contains('.')) || map.values().any(|v| !v.is_object());
+            let is_leaf_override = map.is_empty()
+                || map.keys().any(|key| key.contains('.'))
+                || map.values().any(|v| !v.is_object());
 
             if is_leaf_override {
                 out.insert(prefix.to_owned());
@@ -119,6 +125,27 @@ impl PluginConfigStore {
             return None;
         }
 
+        if let Some(found) = self.lookup_nested_override_parts(&parts) {
+            return Some(found);
+        }
+
+        // Public engine-facing plugin ids use the `engine.*` gateway namespace,
+        // while profile/config files can group host-owned defaults under the
+        // historical `newengine.*` root. Keep that alias explicit here instead
+        // of forcing every runtime provider to duplicate both key families.
+        if parts.first() == Some(&"engine") {
+            let mut aliased = Vec::with_capacity(parts.len());
+            aliased.push("newengine");
+            aliased.extend_from_slice(&parts[1..]);
+            if let Some(found) = self.lookup_nested_override_parts(&aliased) {
+                return Some(found);
+            }
+        }
+
+        None
+    }
+
+    fn lookup_nested_override_parts(&self, parts: &[&str]) -> Option<&Value> {
         for split_at in (1..parts.len()).rev() {
             let prefix = parts[..split_at].join(".");
             let Some(value) = self.overrides.get(&prefix) else {
@@ -135,6 +162,17 @@ impl PluginConfigStore {
     }
 }
 
+fn value_is_leaf_override(value: &Value) -> bool {
+    match value {
+        Value::Object(map) => {
+            map.is_empty()
+                || map.keys().any(|key| key.contains('.'))
+                || map.values().any(|v| !v.is_object())
+        }
+        _ => true,
+    }
+}
+
 fn lookup_path_flexible<'a>(value: &'a Value, parts: &[&str]) -> Option<&'a Value> {
     if parts.is_empty() {
         return Some(value);
@@ -144,7 +182,9 @@ fn lookup_path_flexible<'a>(value: &'a Value, parts: &[&str]) -> Option<&'a Valu
 
     for split_at in (1..=parts.len()).rev() {
         let candidate_key = parts[..split_at].join(".");
-        let next = object.get(&candidate_key)?;
+        let Some(next) = object.get(&candidate_key) else {
+            continue;
+        };
 
         if split_at == parts.len() {
             return Some(next);
@@ -152,6 +192,13 @@ fn lookup_path_flexible<'a>(value: &'a Value, parts: &[&str]) -> Option<&'a Valu
 
         if let Some(found) = lookup_path_flexible(next, &parts[split_at..]) {
             return Some(found);
+        }
+
+        // `plugins.newengine.logging` is a grouped override for concrete
+        // providers such as `engine.logging.chronicle`. If the next object is
+        // already a leaf override block, treat it as the best prefix match.
+        if value_is_leaf_override(next) {
+            return Some(next);
         }
     }
 
@@ -185,14 +232,16 @@ impl ServiceV1 for ConfigService {
                     "value": "json if parsable, otherwise string"
                 }
             })
-                .to_string(),
+            .to_string(),
         )
     }
 
     fn call(&self, method: MethodName, payload: Blob) -> RResult<Blob, RString> {
         match method.as_str() {
             METHOD_GET_PLUGIN_JSON => {
-                let plugin_id = String::from_utf8_lossy(payload.as_slice()).trim().to_owned();
+                let plugin_id = String::from_utf8_lossy(payload.as_slice())
+                    .trim()
+                    .to_owned();
                 if plugin_id.is_empty() {
                     return RResult::RErr(RString::from("plugin_id is empty"));
                 }
@@ -202,9 +251,7 @@ impl ServiceV1 for ConfigService {
                 match serde_json::to_vec(&resolved) {
                     Ok(bytes) => RResult::ROk(Blob::from(bytes)),
                     Err(error) => {
-                        RResult::RErr(RString::from(format!(
-                            "config json encode failed: {error}"
-                        )))
+                        RResult::RErr(RString::from(format!("config json encode failed: {error}")))
                     }
                 }
             }
@@ -399,7 +446,7 @@ mod tests {
 
     #[test]
     fn log_summary_truncates_multibyte_values_on_char_boundary() {
-        let long_value = "X".repeat(LOG_VALUE_MAX_BYTES);
+        let long_value = "Ж".repeat(LOG_VALUE_MAX_BYTES);
         let summarized = summarize_value_for_log(&json!(long_value));
 
         assert!(summarized.ends_with(LOG_TRUNCATION_SUFFIX));

@@ -85,20 +85,15 @@ fn provider_route_extends_gateway_parent(gateway_id: &str, provider_route_id: &s
     if gateway_parts.len() < 2 || provider_parts.len() <= gateway_parts.len() {
         return false;
     }
-    if gateway_parts.get(0) != Some(&"engine") || provider_parts.get(0) != Some(&"engine") {
+    if gateway_parts.first() != Some(&"engine") || provider_parts.first() != Some(&"engine") {
         return false;
     }
-    if gateway_parts.get(1) != provider_parts.get(1) {
-        return false;
-    }
-    if gateway_parts.len() == 2 {
-        return provider_parts.starts_with(&gateway_parts);
-    }
-    let child_tail = &gateway_parts[2..];
-    let Some(provider_tail) = provider_parts.get(3..) else {
-        return false;
-    };
-    provider_tail.starts_with(child_tail)
+
+    // Provider route is implementation metadata below the declared engine API
+    // gateway. Both root gateways (`engine.render.vulkan`) and child gateways
+    // (`engine.input.bindings.provider`) must extend the declared gateway, not
+    // reshuffle child-domain segments around a provider name.
+    provider_parts.starts_with(&gateway_parts)
 }
 
 pub(crate) fn gateway_capability_from_capability(
