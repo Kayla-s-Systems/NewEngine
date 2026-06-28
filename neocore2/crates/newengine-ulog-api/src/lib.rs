@@ -46,38 +46,21 @@ pub fn structured_event_sink_installed() -> bool {
 }
 
 #[inline]
-pub fn emit_event(
-    event_id: impl Into<String>,
-    level: impl Into<String>,
-    target: &'static str,
-    message: impl Into<String>,
-    module_path: Option<&'static str>,
-    file: Option<&'static str>,
-    line: Option<u32>,
-    fields: serde_json::Value,
-) {
-    let level = normalize_level(level.into());
-    let message = message.into();
-    let event = UlogEvent {
-        event_id: event_id.into(),
-        level: level.clone(),
-        target: target.to_owned(),
-        message: message.clone(),
-        module_path: module_path.map(str::to_owned),
-        file: file.map(str::to_owned),
-        line,
-        fields,
-    };
+pub fn emit_event(mut event: UlogEvent) {
+    event.level = normalize_level(event.level);
 
     if let Some(sink) = EVENT_SINK.get().copied() {
         sink(event);
         return;
     }
 
+    let target = event.target.as_str();
+    let message = event.message.as_str();
+
     // Transitional fallback for very early startup before plugin-host has
     // installed the structured sink. This keeps old visibility without making
     // `log::*` the canonical path.
-    match level.as_str() {
+    match event.level.as_str() {
         "ERROR" => log::error!(target: target, "{}", message),
         "WARN" => log::warn!(target: target, "{}", message),
         "DEBUG" => log::debug!(target: target, "{}", message),
@@ -123,28 +106,28 @@ pub fn trace_enabled() -> bool {
 #[macro_export]
 macro_rules! event {
     ($event_id:expr, $level:ident, $message:expr, { $($fields:tt)* } $(,)?) => {
-        $crate::emit_event(
-            $event_id,
-            stringify!($level),
-            module_path!(),
-            $message,
-            Some(module_path!()),
-            Some(file!()),
-            Some(line!()),
-            $crate::__private::serde_json::json!({ $($fields)* }),
-        )
+        $crate::emit_event($crate::UlogEvent {
+            event_id: ($event_id).into(),
+            level: stringify!($level).to_owned(),
+            target: module_path!().to_owned(),
+            message: ($message).into(),
+            module_path: Some(module_path!().to_owned()),
+            file: Some(file!().to_owned()),
+            line: Some(line!()),
+            fields: $crate::__private::serde_json::json!({ $($fields)* }),
+        })
     };
     ($event_id:expr, $level:ident, $message:expr $(,)?) => {
-        $crate::emit_event(
-            $event_id,
-            stringify!($level),
-            module_path!(),
-            $message,
-            Some(module_path!()),
-            Some(file!()),
-            Some(line!()),
-            $crate::__private::serde_json::json!({}),
-        )
+        $crate::emit_event($crate::UlogEvent {
+            event_id: ($event_id).into(),
+            level: stringify!($level).to_owned(),
+            target: module_path!().to_owned(),
+            message: ($message).into(),
+            module_path: Some(module_path!().to_owned()),
+            file: Some(file!().to_owned()),
+            line: Some(line!()),
+            fields: $crate::__private::serde_json::json!({}),
+        })
     };
 }
 
